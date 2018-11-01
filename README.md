@@ -45,7 +45,7 @@ const backend = rotty.createFromMongo({
   
 // 03. Connect any incoming WebSocket connection to rotty
 const wss = new WebSocket.Server({server: server});
-wss.on('connection', function(ws, req) {
+wss.on('connection', (ws, req) => {
   backend.listen(ws);
 });
 
