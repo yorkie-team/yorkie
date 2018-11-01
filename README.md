@@ -62,17 +62,17 @@ const client = rotty.createClient({
 });
 await client.connect();
 
-// 02. find a document
+// 02. find a document and attach it
 const doc1 = await client.collection('documents').attachOne({_id: 'D-1'});
 
-// 03. subscribe remote change(to render data)
+// 03. subscribe remote change (e.g.: for rendering data)
 doc1.subscribe((change) => {
-  console.log(change); // eg) { message: 'set b to 3', change: {...}, snapshot: {...}}
+  console.log(change); // e.g.: { message: 'set b to 3', change: {...}, doc: { a: 2, b: 3}}
 });
 
 // 04. apply local change
 doc1.change('set a to 2', doc => {
-  doc.set('a', 2);
+  doc.set('a', 2); // { a: 2 }
 });
 
 // 05. close
