@@ -1,4 +1,4 @@
-# rotty
+# Rottie
 
 ## Concept layout
 
@@ -29,7 +29,7 @@ backend
 ```javascript
 const http = require('http');
 const WebSocket = require('ws');
-const rotty = require('rotty');
+const rottie = require('rottie');
 const MongoClient = require('mongodb').MongoClient;
 
 // 01. Create a web server to serve files and listen to WebSocket connections
@@ -37,13 +37,13 @@ const app = express();
 app.use(express.static('static'));
 const server = http.createServer(app);
 
-// 02. create rotty backend
-const backend = rotty.createFromMongo({
+// 02. create rottie backend
+const backend = rottie.createFromMongo({
   client: new MongoClient('mongodb://localhost:27017'),
   dbName: 'myproject'
 });
   
-// 03. Connect any incoming WebSocket connection to rotty
+// 03. Connect any incoming WebSocket connection to rottie
 const wss = new WebSocket.Server({server: server});
 wss.on('connection', (ws, req) => {
   backend.listen(ws);
@@ -57,7 +57,7 @@ frontend
 
 ```javascript
 // 01. create a client and connect to the server with it.
-const client = rotty.createClient({
+const client = rottie.createClient({
   socket: new WebSocket('ws://localhost:8080')
 });
 await client.connect();
