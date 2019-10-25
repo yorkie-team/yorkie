@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package api;
+
+service Rottie {
+    rpc Hello (HelloRequest) returns (HelloResponse) {}
+}
+
+message HelloRequest {
+    string one = 1;
+}
+
+message HelloResponse {
+
+}
