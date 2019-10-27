@@ -26,7 +26,11 @@ fmt:
 	gofmt -w $(GOSRC)
 	goimports -w -local "github.com/hackerwins" $(GOSRC)
 
-test:
-	go test -v -race ./...
+lint:
+	 golint ./...
+	 go vet ./...
 
-.PHONY: proto build fmt test
+test:
+	go test -race ./...
+
+.PHONY: tools proto build fmt lint test

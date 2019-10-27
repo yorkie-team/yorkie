@@ -35,13 +35,12 @@ func (s *RPCServer) Start() error {
 	return s.listenAndServeGRPC()
 }
 
-func (s *RPCServer) Hello(
+func (s *RPCServer) Activate(
 	ctx context.Context,
-	req *api.HelloRequest,
-) (*api.HelloResponse, error) {
-	log.Logger.Info(req.One)
-
-	return &api.HelloResponse{}, nil
+	req *api.ActivateRequest,
+) (*api.ActivateResponse, error) {
+	// TODO impl
+	return &api.ActivateResponse{}, nil
 }
 
 func (s *RPCServer) listenAndServeGRPC() error {

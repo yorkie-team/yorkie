@@ -13,12 +13,13 @@ const (
 	rpcAddr = "localhost:1101"
 )
 
-type RPCClient struct {
+type Client struct {
 	conn   *grpc.ClientConn
 	client api.RottieClient
+	key    string
 }
 
-func NewRPCClient() (*RPCClient, error) {
+func NewClient(key string) (*Client, error) {
 	conn, err := grpc.Dial(rpcAddr, grpc.WithInsecure())
 	if err != nil {
 		log.Logger.Error(err)
@@ -27,13 +28,14 @@ func NewRPCClient() (*RPCClient, error) {
 
 	client := api.NewRottieClient(conn)
 
-	return &RPCClient{
+	return &Client{
 		conn:   conn,
 		client: client,
+		key:    key,
 	}, nil
 }
 
-func (c *RPCClient) Close() error {
+func (c *Client) Close() error {
 	if err := c.conn.Close(); err != nil {
 		log.Logger.Error(err)
 		return err
@@ -41,11 +43,12 @@ func (c *RPCClient) Close() error {
 	return nil
 }
 
-func (c *RPCClient) Hello(body string) error {
-	_, err := c.client.Hello(context.Background(), &api.HelloRequest{
-		One: body,
+func (c *Client) Activate() error {
+	_, err := c.client.Activate(context.Background(), &api.ActivateRequest{
+		ClientKey: c.key,
 	})
 	if err != nil {
+		log.Logger.Error(err)
 		return err
 	}
 
