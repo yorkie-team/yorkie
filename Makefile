@@ -14,10 +14,12 @@ tools:
 
 proto: tools
 	protoc api/rottie.proto \
-  -I=. \
-  -I=$(GOPATH)/src \
-  -I=$(GOPATH)/src/github.com/gogo/protobuf/protobuf \
-  --gofast_out=plugins=grpc,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,:.
+-I=. \
+-I=$(GOPATH)/src \
+-I=$(GOPATH)/src/github.com/gogo/protobuf/protobuf \
+--gofast_out=plugins=grpc,\
+Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
+Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:.
 
 build: proto
 	go build -o $(EXECUTABLE)

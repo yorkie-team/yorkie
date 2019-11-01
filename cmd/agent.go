@@ -11,16 +11,45 @@ import (
 
 	"github.com/hackerwins/rottie/pkg/log"
 	"github.com/hackerwins/rottie/rottie"
+	"github.com/hackerwins/rottie/rottie/backend/mongo"
 )
 
-const gracefulTimeout = 10 * time.Second
+var (
+	defaultConfig = &rottie.Config{
+		RPCPort: 1101,
+		Mongo: &mongo.Config{
+			ConnectionURI:        "mongodb://localhost:27017",
+			ConnectionTimeoutSec: 5,
+			PingTimeoutSec:       5,
+			RottieDatabase:       "rottie-meta",
+		},
+	}
+	gracefulTimeout = 10 * time.Second
+)
+
+var (
+	flagRPCPort  int
+	flagConfPath string
+)
 
 func newAgentCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "agent [options]",
 		Short: "Starts rottie agent.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := rottie.New()
+			conf := defaultConfig
+			if flagConfPath != "" {
+				parsed, err := rottie.NewConfig(flagConfPath)
+				if err != nil {
+					return fmt.Errorf(
+						"fail to create config: %s",
+						flagConfPath,
+					)
+				}
+				conf = parsed
+			}
+
+			r, err := rottie.New(conf)
 			if err != nil {
 				return err
 			}
@@ -78,5 +107,20 @@ func handleSignal(r *rottie.Rottie) int {
 }
 
 func init() {
-	rootCmd.AddCommand(newAgentCmd())
+	cmd := newAgentCmd()
+	cmd.Flags().IntVarP(
+		&flagRPCPort,
+		"port",
+		"P",
+		defaultConfig.RPCPort,
+		"rpc port",
+	)
+	cmd.Flags().StringVarP(
+		&flagConfPath,
+		"config",
+		"C",
+		"",
+		"config path",
+	)
+	rootCmd.AddCommand(cmd)
 }

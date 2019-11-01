@@ -24,11 +24,7 @@ func (c *Context) ID() *ID {
 }
 
 func (c *Context) ToChange() *Change {
-	return &Change{
-		id:         c.id,
-		message:    c.message,
-		operations: c.operations,
-	}
+	return New(c.id, c.message, c.operations)
 }
 
 func (c *Context) HasOperations() bool {

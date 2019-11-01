@@ -40,8 +40,8 @@ func (a *RGA) LastCreatedAt() *time.Ticket {
 	if size == 0 {
 		return nil
 	}
-
-	return a.elements[size-1].CreatedAt()
+	last := a.elements[size-1]
+	return last.CreatedAt()
 }
 
 func NewRGA() *RGA {

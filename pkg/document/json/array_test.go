@@ -3,13 +3,11 @@ package json_test
 import (
 	"testing"
 
-	"github.com/hackerwins/rottie/pkg/document/json/datatype"
-
-	"github.com/hackerwins/rottie/pkg/document/time"
-
 	"github.com/stretchr/testify/assert"
 
 	"github.com/hackerwins/rottie/pkg/document/json"
+	"github.com/hackerwins/rottie/pkg/document/json/datatype"
+	"github.com/hackerwins/rottie/pkg/document/time"
 )
 
 func TestArray(t *testing.T) {

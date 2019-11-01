@@ -63,6 +63,15 @@ func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 	return v.(*ArrayProxy)
 }
 
+func (p *ObjectProxy) GetArray(k string) *ArrayProxy {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	return p.Object.Get(k).(*ArrayProxy)
+}
+
 func (p *ObjectProxy) setInternal(
 	k string,
 	creator func(ticket *time.Ticket) datatype.Element,
@@ -80,3 +89,4 @@ func (p *ObjectProxy) setInternal(
 
 	return value
 }
+

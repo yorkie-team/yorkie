@@ -3,18 +3,17 @@ package operation
 import (
 	"fmt"
 
-	"github.com/hackerwins/rottie/pkg/document/json/datatype"
-
 	"github.com/hackerwins/rottie/pkg/document/json"
+	"github.com/hackerwins/rottie/pkg/document/json/datatype"
 	"github.com/hackerwins/rottie/pkg/document/time"
 	"github.com/hackerwins/rottie/pkg/log"
 )
 
 type Set struct {
-	key             string
-	value           datatype.Element
 	parentCreatedAt *time.Ticket
 	executedAt      *time.Ticket
+	key             string
+	value           datatype.Element
 }
 
 func NewSet(
@@ -46,6 +45,18 @@ func (o *Set) Execute(root *json.Root) error {
 	return nil
 }
 
+func (o *Set) ParentCreatedAt() *time.Ticket {
+	return o.parentCreatedAt
+}
+
 func (o *Set) ExecutedAt() *time.Ticket {
 	return o.executedAt
+}
+
+func (o *Set) Key() string {
+	return o.key
+}
+
+func (o *Set) Value() datatype.Element {
+	return o.value
 }

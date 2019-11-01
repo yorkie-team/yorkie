@@ -7,11 +7,11 @@ import (
 )
 
 type Primitive struct {
-	value     interface{}
+	value     string
 	createdAt *time.Ticket
 }
 
-func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
+func NewPrimitive(value string, createdAt *time.Ticket) *Primitive {
 	return &Primitive{
 		value:     value,
 		createdAt: createdAt,
@@ -19,14 +19,13 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 }
 
 func (p *Primitive) Marshal() string {
-	switch v := p.value.(type) {
-	case string:
-		return fmt.Sprintf("\"%s\"", v)
-	default:
-		return fmt.Sprintf("%s", v)
-	}
+	return fmt.Sprintf("\"%s\"", p.value)
 }
 
 func (p *Primitive) CreatedAt() *time.Ticket {
 	return p.createdAt
+}
+
+func (p *Primitive) Value() []byte {
+	return []byte(p.value)
 }

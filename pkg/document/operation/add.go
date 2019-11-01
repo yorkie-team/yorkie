@@ -3,9 +3,8 @@ package operation
 import (
 	"fmt"
 
-	"github.com/hackerwins/rottie/pkg/document/json/datatype"
-
 	"github.com/hackerwins/rottie/pkg/document/json"
+	"github.com/hackerwins/rottie/pkg/document/json/datatype"
 	"github.com/hackerwins/rottie/pkg/document/time"
 	"github.com/hackerwins/rottie/pkg/log"
 )
@@ -46,6 +45,18 @@ func (o *Add) Execute(root *json.Root) error {
 	return nil
 }
 
+func (o *Add) Value() datatype.Element {
+	return o.value
+}
+
+func (o *Add) ParentCreatedAt() *time.Ticket {
+	return o.parentCreatedAt
+}
+
 func (o *Add) ExecutedAt() *time.Ticket {
 	return o.executedAt
+}
+
+func (o *Add) PrevCreatedAt() *time.Ticket {
+	return o.prevCreatedAt
 }

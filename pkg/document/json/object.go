@@ -32,3 +32,7 @@ func (o *Object) Marshal() string {
 func (o *Object) CreatedAt() *time.Ticket {
 	return o.createdAt
 }
+
+func (o *Object) Get(k string) datatype.Element {
+	return o.members.Get(k)
+}

@@ -1,15 +1,148 @@
 syntax = "proto3";
 
+import "google/protobuf/any.proto";
+
 package api;
 
 service Rottie {
-    rpc Activate (ActivateRequest) returns (ActivateResponse) {}
+    rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
+    rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
+    rpc AttachDocument (AttachDocumentRequest) returns (AttachDocumentResponse) {}
+    rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
+    rpc PushPull (PushPullRequest) returns (PushPullResponse) {}
 }
 
-message ActivateRequest {
-    string client_key = 1;
+/////////////////////////////////////////
+// Messages for RPC                    //
+/////////////////////////////////////////
+
+message RequestHeader {
+    uint32 version = 1;
 }
 
-message ActivateResponse {
+message ActivateClientRequest {
+    RequestHeader header = 1;
+    string client_key = 2;
+}
+
+message ActivateClientResponse {
     string client_key = 1;
+    string client_id = 2;
+}
+
+message DeactivateClientRequest {
+    RequestHeader header = 1;
+    string client_id = 2;
+}
+
+message DeactivateClientResponse {
+    string client_id = 1;
+}
+
+message AttachDocumentRequest {
+    RequestHeader header = 1;
+    string client_id = 2;
+    ChangePack change_pack = 3;
+}
+
+message AttachDocumentResponse {
+    string client_id = 1;
+    ChangePack change_pack = 2;
+}
+
+message DetachDocumentRequest {
+    RequestHeader header = 1;
+    string client_id = 2;
+    ChangePack change_pack = 3;
+}
+
+message DetachDocumentResponse {
+    string client_key = 1;
+    ChangePack change_pack = 2;
+}
+
+message PushPullRequest {
+    RequestHeader header = 1;
+    string client_id = 2;
+    ChangePack change_pack = 3;
+}
+
+message PushPullResponse {
+    string client_id = 1;
+    ChangePack change_pack = 2;
+}
+
+/////////////////////////////////////////
+// Messages for Model                  //
+/////////////////////////////////////////
+message DocumentKey {
+    string collection = 1;
+    string document = 2;
+}
+
+message ChangePack {
+    DocumentKey document_key = 1;
+    Checkpoint checkpoint = 2;
+    repeated Change changes = 3;
+}
+
+message Checkpoint {
+    uint64 server_seq = 1;
+    uint32 client_seq = 2;
+}
+
+message ChangeID {
+    uint32 client_seq = 1;
+    uint64 lamport = 2;
+    string actor_id = 3;
+}
+
+message TimeTicket {
+    uint64 lamport = 1;
+    uint32 delimiter = 2;
+    string actor_id = 3;
+}
+
+enum ValueType {
+    NULL = 0;
+    BOOLEAN = 1;
+    DOUBLE = 2;
+    STRING = 3;
+    BYTES = 4;
+    DATE = 5;
+    JSON_OBJECT = 6;
+    JSON_ARRAY = 7;
+}
+
+message JSONElement {
+    TimeTicket created_at = 1;
+    TimeTicket updated_at = 2;
+    ValueType type = 3;
+    google.protobuf.Any value = 4;
+}
+
+message Operation {
+    message Set {
+        string key = 1;
+        JSONElement value = 2;
+        TimeTicket executed_at = 3;
+        TimeTicket parent_created_at = 4;
+    }
+    message Add {
+        TimeTicket prev_created_at = 1;
+        JSONElement value = 2;
+        TimeTicket executed_at = 3;
+        TimeTicket parent_created_at = 4;
+    }
+
+    oneof body {
+        Set set = 1;
+        Add add = 2;
+    }
+}
+
+message Change {
+    ChangeID id = 1;
+    string message = 2;
+    repeated Operation operations = 3;
 }
