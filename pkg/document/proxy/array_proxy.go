@@ -22,7 +22,7 @@ func ProxyArray(ctx *change.Context, root *json.Array) *ArrayProxy {
 			elements.Add(ProxyObject(ctx, elem))
 		case *json.Array:
 			elements.Add(ProxyArray(ctx, elem))
-		case *json.Primitive:
+		case *datatype.Primitive:
 			elements.Add(elem)
 		}
 	}
@@ -41,13 +41,9 @@ func NewArrayProxy(
 	}
 }
 
-func (p *ArrayProxy) ToOriginal() datatype.Element {
-	return p.Array
-}
-
 func (p *ArrayProxy) AddString(v string) *ArrayProxy {
 	p.addInternal(func(ticket *time.Ticket) datatype.Element {
-		return json.NewPrimitive(v, ticket)
+		return datatype.NewPrimitive(v, ticket)
 	})
 
 	return p
@@ -58,7 +54,6 @@ func (p *ArrayProxy) addInternal(
 ) datatype.Element {
 	ticket := p.context.IssueTimeTicket()
 	value := creator(ticket)
-	p.Add(value)
 
 	p.context.Push(operation.NewAdd(
 		toOriginal(value),
@@ -66,6 +61,8 @@ func (p *ArrayProxy) addInternal(
 		p.Array.LastCreatedAt(),
 		ticket,
 	))
+
+	p.Add(value)
 
 	return value
 }

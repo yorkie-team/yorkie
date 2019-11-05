@@ -134,7 +134,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.
 			"_id": id,
 		}, bson.M{
 			"$set": bson.M{
-				"status":     "deactivate",
+				"status":     types.ClientDeactivated,
 				"updated_at": time.Now(),
 			},
 		})
@@ -193,9 +193,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			"key": clientInfo.Key,
 		}, bson.M{
 			"$set": bson.M{
-				"documents": bson.M{
-					docInfo.ID.Hex(): clientInfo.Documents[docInfo.ID.Hex()],
-				},
+				"documents."+docInfo.ID.Hex(): clientInfo.Documents[docInfo.ID.Hex()],
 				"updated_at": clientInfo.UpdatedAt,
 			},
 		})

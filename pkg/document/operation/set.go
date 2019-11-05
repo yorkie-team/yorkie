@@ -53,6 +53,10 @@ func (o *Set) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
+func (o *Set) SetActor(actorID *time.ActorID) {
+	o.executedAt = o.executedAt.SetActorID(actorID)
+}
+
 func (o *Set) Key() string {
 	return o.key
 }

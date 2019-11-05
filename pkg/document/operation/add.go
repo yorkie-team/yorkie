@@ -40,7 +40,7 @@ func (o *Add) Execute(root *json.Root) error {
 		return err
 	}
 
-	obj.Add(o.value)
+	obj.InsertAfter(o.prevCreatedAt, o.value)
 	root.RegisterElement(o.value)
 	return nil
 }
@@ -55,6 +55,10 @@ func (o *Add) ParentCreatedAt() *time.Ticket {
 
 func (o *Add) ExecutedAt() *time.Ticket {
 	return o.executedAt
+}
+
+func (o *Add) SetActor(actorID *time.ActorID) {
+	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 
 func (o *Add) PrevCreatedAt() *time.Ticket {

@@ -22,7 +22,7 @@ func ProxyObject(ctx *change.Context, root *json.Object) *ObjectProxy {
 			members.Set(key, ProxyObject(ctx, elem))
 		case *json.Array:
 			members.Set(key, ProxyArray(ctx, elem))
-		case *json.Primitive:
+		case *datatype.Primitive:
 			members.Set(key, elem)
 		}
 	}
@@ -43,7 +43,7 @@ func NewObjectProxy(
 
 func (p *ObjectProxy) SetString(k, v string) {
 	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return json.NewPrimitive(v, ticket)
+		return datatype.NewPrimitive(v, ticket)
 	})
 }
 

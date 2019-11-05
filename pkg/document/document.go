@@ -79,6 +79,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		}
 	}
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
+	log.Logger.Infof("after apply pack: %s", d.root.Object().Marshal())
 
 	return nil
 }

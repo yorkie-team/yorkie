@@ -86,7 +86,7 @@ func PushPullDocument(
 		return nil, nil, err
 	}
 
-	if err := clientInfo.PushPullDocument(docInfo.ID); err != nil {
+	if err := clientInfo.CheckDocumentAttached(docInfo.ID.Hex()); err != nil {
 		return nil, nil, err
 	}
 

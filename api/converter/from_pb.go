@@ -97,12 +97,13 @@ func fromElement(pbElement *api.JSONElement) datatype.Element {
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_JSON_ARRAY:
+		createdAt := fromTimeTicket(pbElement.CreatedAt)
 		return json.NewArray(
 			datatype.NewRGA(),
-			fromTimeTicket(pbElement.CreatedAt),
+			createdAt,
 		)
 	case api.ValueType_STRING:
-		return json.NewPrimitive(
+		return datatype.NewPrimitive(
 			string(pbElement.Value.GetValue()),
 			fromTimeTicket(pbElement.CreatedAt),
 		)

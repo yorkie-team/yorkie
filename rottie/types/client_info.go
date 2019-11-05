@@ -50,12 +50,15 @@ func (i *ClientInfo) AttachDocument(docID primitive.ObjectID, cp *checkpoint.Che
 	if i.Documents == nil {
 		i.Documents = make(map[string]*ClientDocInfo)
 	}
-	if _, ok := i.Documents[docID.Hex()]; ok {
+
+	hexDocID := docID.Hex()
+
+	if _, ok := i.Documents[hexDocID]; ok {
 		log.Logger.Error(ErrDocumentAlreadyAttached)
 		return ErrDocumentAlreadyAttached
 	}
 
-	i.Documents[docID.Hex()] = &ClientDocInfo{
+	i.Documents[hexDocID] = &ClientDocInfo{
 		Status:    DocumentAttached,
 		ServerSeq: 0,
 		ClientSeq: 0,
@@ -66,33 +69,12 @@ func (i *ClientInfo) AttachDocument(docID primitive.ObjectID, cp *checkpoint.Che
 }
 
 func (i *ClientInfo) DetachDocument(docID primitive.ObjectID, cp *checkpoint.Checkpoint) error {
-	if i.Status != ClientActivated {
-		log.Logger.Error(ErrClientNotActivated)
-		return ErrClientNotActivated
+	hexDocID := docID.Hex()
+	if err := i.CheckDocumentAttached(hexDocID); err != nil {
+		return err
 	}
 
-	if i.Documents == nil || i.Documents[docID.Hex()] == nil || i.Documents[docID.Hex()].Status == DocumentDetached {
-		log.Logger.Error(ErrDocumentNotAttached)
-		return ErrDocumentNotAttached
-	}
-
-	i.Documents[docID.Hex()].Status = DocumentDetached
-	i.UpdatedAt = time.Now()
-
-	return nil
-}
-
-func (i *ClientInfo) PushPullDocument(docID primitive.ObjectID) error {
-	if i.Status != ClientActivated {
-		log.Logger.Error(ErrClientNotActivated)
-		return ErrClientNotActivated
-	}
-
-	if i.Documents == nil || i.Documents[docID.Hex()] == nil || i.Documents[docID.Hex()].Status == DocumentDetached {
-		log.Logger.Error(ErrDocumentNotAttached)
-		return ErrDocumentNotAttached
-	}
-
+	i.Documents[hexDocID].Status = DocumentDetached
 	i.UpdatedAt = time.Now()
 
 	return nil
@@ -108,19 +90,30 @@ func (i *ClientInfo) GetCheckpoint(id primitive.ObjectID) *checkpoint.Checkpoint
 }
 
 func (i *ClientInfo) UpdateCheckpoint(docID primitive.ObjectID, cp *checkpoint.Checkpoint) error {
+	hexDocID := docID.Hex()
+	if err := i.CheckDocumentAttached(hexDocID); err != nil {
+		return err
+	}
+
+	i.Documents[hexDocID].ServerSeq = cp.ServerSeq
+	i.Documents[hexDocID].ClientSeq = cp.ClientSeq
+	i.UpdatedAt = time.Now()
+
+	return nil
+}
+
+func (i *ClientInfo) CheckDocumentAttached(hexDocID string) error {
 	if i.Status != ClientActivated {
 		log.Logger.Error(ErrClientNotActivated)
 		return ErrClientNotActivated
 	}
 
-	if i.Documents == nil || i.Documents[docID.Hex()] == nil || i.Documents[docID.Hex()].Status == DocumentDetached {
+	if i.Documents == nil ||
+		i.Documents[hexDocID] == nil ||
+		i.Documents[hexDocID].Status == DocumentDetached {
 		log.Logger.Error(ErrDocumentNotAttached)
 		return ErrDocumentNotAttached
 	}
-
-	i.Documents[docID.Hex()].ServerSeq = cp.ServerSeq
-	i.Documents[docID.Hex()].ClientSeq = cp.ClientSeq
-	i.UpdatedAt = time.Now()
 
 	return nil
 }

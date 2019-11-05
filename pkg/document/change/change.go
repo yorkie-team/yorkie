@@ -56,4 +56,7 @@ func (c *Change) ClientSeq() uint32 {
 
 func (c *Change) SetActor(actor *time.ActorID) {
 	c.id = c.id.SetActor(actor)
+	for _, op := range c.operations {
+		op.SetActor(actor)
+	}
 }

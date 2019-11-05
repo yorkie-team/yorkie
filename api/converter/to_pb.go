@@ -75,7 +75,7 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 			pbOperation.Body = &api.Operation_Add_{
 				Add: &api.Operation_Add{
 					Value:           toJSONElement(op.Value()),
-					PrevCreatedAt:   toTimeTicket(op.ParentCreatedAt()),
+					PrevCreatedAt:   toTimeTicket(op.PrevCreatedAt()),
 					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
@@ -99,7 +99,7 @@ func toJSONElement(element datatype.Element) *api.JSONElement {
 			Type:      api.ValueType_JSON_ARRAY,
 			CreatedAt: toTimeTicket(element.CreatedAt()),
 		}
-	case *json.Primitive:
+	case *datatype.Primitive:
 		return &api.JSONElement{
 			Type:      api.ValueType_STRING,
 			CreatedAt: toTimeTicket(element.CreatedAt()),

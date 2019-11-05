@@ -4,12 +4,24 @@ import (
 	"fmt"
 )
 
-var InitialTicket = NewTicket(0, 0, nil)
+var InitialTicket = NewTicket(0, 0, InitialActorID)
 
 type Ticket struct {
 	lamport   uint64
 	delimiter uint32
 	actorID   *ActorID
+}
+
+func NewTicket(
+	lamport uint64,
+	delimiter uint32,
+	actorID *ActorID,
+) *Ticket {
+	return &Ticket{
+		lamport:   lamport,
+		delimiter: delimiter,
+		actorID:   actorID,
+	}
 }
 
 func (t *Ticket) Key() string {
@@ -44,14 +56,10 @@ func (t *Ticket) CompareTo(other *Ticket) int {
 	return t.actorID.CompareTo(other.ActorID())
 }
 
-func NewTicket(
-	lamport uint64,
-	delimiter uint32,
-	actorID *ActorID,
-) *Ticket {
+func (t *Ticket) SetActorID(actorID *ActorID) *Ticket {
 	return &Ticket{
-		lamport:   lamport,
-		delimiter: delimiter,
+		lamport:   t.lamport,
+		delimiter: t.delimiter,
 		actorID:   actorID,
 	}
 }

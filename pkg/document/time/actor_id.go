@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 )
 
+var InitialActorID = &ActorID{}
+
 type ActorID [12]byte
 
 func ActorIDFromHex(str string) *ActorID {

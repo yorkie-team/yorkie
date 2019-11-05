@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	InitialID = NewID(0, 0, nil)
+	InitialID = NewID(0, 0, time.InitialActorID)
 )
 
 type ID struct {

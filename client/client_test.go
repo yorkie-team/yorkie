@@ -36,7 +36,7 @@ func TestClient(t *testing.T) {
 		t.Run("activate/deactivate test", func(t *testing.T) {
 			cli, err := client.NewClient(testRPCAddr)
 			if err != nil {
-				t.Error(err)
+				t.Fatal(err)
 			}
 
 			defer func() {
@@ -178,8 +178,7 @@ func TestClientAndDocument(t *testing.T) {
 				t.Error(err)
 			}
 
-			// TODO impl RGA
-			// assert.Equal(t, doc1.Marshal(), doc2.Marshal())
+			assert.Equal(t, doc1.Marshal(), doc2.Marshal())
 		})
 	})
 }
@@ -201,7 +200,7 @@ func withRottieAndClient(
 		}()
 
 		if err := c.Activate(context.Background()); err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
 
 		f(t, r, c)

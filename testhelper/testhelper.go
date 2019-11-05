@@ -1,6 +1,8 @@
 package testhelper
 
 import (
+	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/hackerwins/rottie/rottie"
@@ -19,7 +21,12 @@ var (
 	}
 )
 
+func randBetween(min, max int) int {
+	return rand.Intn(max - min) + min
+}
+
 func WithRottie(t *testing.T, f func(*testing.T, *rottie.Rottie)) {
+	testConfig.Mongo.RottieDatabase = fmt.Sprintf("rottie-meta-%d", randBetween(0, 9999))
 	r, err := rottie.New(testConfig)
 	if err != nil {
 		t.Fatal(err)

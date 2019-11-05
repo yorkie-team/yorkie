@@ -35,10 +35,9 @@ func (a *Array) CreatedAt() *time.Ticket {
 }
 
 func (a *Array) LastCreatedAt() *time.Ticket {
-	lastCreatedAt := a.elements.LastCreatedAt()
-	if lastCreatedAt == nil {
-		return a.createdAt
-	}
+	return a.elements.LastCreatedAt()
+}
 
-	return lastCreatedAt
+func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element datatype.Element) {
+	a.elements.InsertAfter(prevCreatedAt, element)
 }
