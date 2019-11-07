@@ -7,11 +7,11 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 
-	"github.com/hackerwins/rottie/api"
-	"github.com/hackerwins/rottie/api/converter"
-	"github.com/hackerwins/rottie/pkg/document"
-	"github.com/hackerwins/rottie/pkg/document/time"
-	"github.com/hackerwins/rottie/pkg/log"
+	"github.com/hackerwins/yorkie/api"
+	"github.com/hackerwins/yorkie/api/converter"
+	"github.com/hackerwins/yorkie/pkg/document"
+	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/hackerwins/yorkie/pkg/log"
 )
 
 type status int
@@ -28,7 +28,7 @@ var (
 
 type Client struct {
 	conn   *grpc.ClientConn
-	client api.RottieClient
+	client api.YorkieClient
 
 	id           *time.ActorID
 	key          string
@@ -50,7 +50,7 @@ func NewClient(rpcAddr string, opts ...string) (*Client, error) {
 		return nil, err
 	}
 
-	client := api.NewRottieClient(conn)
+	client := api.NewYorkieClient(conn)
 
 	return &Client{
 		conn:         conn,

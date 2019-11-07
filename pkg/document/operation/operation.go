@@ -1,8 +1,8 @@
 package operation
 
 import (
-	"github.com/hackerwins/rottie/pkg/document/json"
-	"github.com/hackerwins/rottie/pkg/document/time"
+	"github.com/hackerwins/yorkie/pkg/document/json"
+	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
 type Operation interface {

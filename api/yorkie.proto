@@ -4,7 +4,7 @@ import "google/protobuf/any.proto";
 
 package api;
 
-service Rottie {
+service Yorkie {
     rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
     rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
     rpc AttachDocument (AttachDocumentRequest) returns (AttachDocumentResponse) {}

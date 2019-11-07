@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/hackerwins/rottie/pkg/log"
+	"github.com/hackerwins/yorkie/pkg/log"
 )
 
 func unaryInterceptor(

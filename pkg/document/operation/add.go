@@ -3,10 +3,10 @@ package operation
 import (
 	"fmt"
 
-	"github.com/hackerwins/rottie/pkg/document/json"
-	"github.com/hackerwins/rottie/pkg/document/json/datatype"
-	"github.com/hackerwins/rottie/pkg/document/time"
-	"github.com/hackerwins/rottie/pkg/log"
+	"github.com/hackerwins/yorkie/pkg/document/json"
+	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
+	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/hackerwins/yorkie/pkg/log"
 )
 
 type Add struct {

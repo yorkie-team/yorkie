@@ -1,13 +1,13 @@
 package document
 
 import (
-	"github.com/hackerwins/rottie/pkg/document/change"
-	"github.com/hackerwins/rottie/pkg/document/checkpoint"
-	"github.com/hackerwins/rottie/pkg/document/json"
-	"github.com/hackerwins/rottie/pkg/document/key"
-	"github.com/hackerwins/rottie/pkg/document/proxy"
-	"github.com/hackerwins/rottie/pkg/document/time"
-	"github.com/hackerwins/rottie/pkg/log"
+	"github.com/hackerwins/yorkie/pkg/document/change"
+	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
+	"github.com/hackerwins/yorkie/pkg/document/json"
+	"github.com/hackerwins/yorkie/pkg/document/key"
+	"github.com/hackerwins/yorkie/pkg/document/proxy"
+	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/hackerwins/yorkie/pkg/log"
 )
 
 type stateType int

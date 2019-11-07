@@ -1,8 +1,8 @@
 package change
 
 import (
-	"github.com/hackerwins/rottie/pkg/document/checkpoint"
-	"github.com/hackerwins/rottie/pkg/document/key"
+	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
+	"github.com/hackerwins/yorkie/pkg/document/key"
 )
 
 type Pack struct {

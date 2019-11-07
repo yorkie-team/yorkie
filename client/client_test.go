@@ -6,11 +6,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/hackerwins/rottie/client"
-	"github.com/hackerwins/rottie/pkg/document"
-	"github.com/hackerwins/rottie/pkg/document/proxy"
-	"github.com/hackerwins/rottie/rottie"
-	"github.com/hackerwins/rottie/testhelper"
+	"github.com/hackerwins/yorkie/client"
+	"github.com/hackerwins/yorkie/pkg/document"
+	"github.com/hackerwins/yorkie/pkg/document/proxy"
+	"github.com/hackerwins/yorkie/yorkie"
+	"github.com/hackerwins/yorkie/testhelper"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 )
 
 func TestClient(t *testing.T) {
-	testhelper.WithRottie(t, func(t *testing.T, r *rottie.Rottie) {
+	testhelper.WithYorkie(t, func(t *testing.T, r *yorkie.Yorkie) {
 		t.Run("start/close test", func(t *testing.T) {
 			cli, err := client.NewClient(testRPCAddr)
 			if err != nil {
@@ -68,7 +68,7 @@ func TestClient(t *testing.T) {
 }
 
 func TestClientAndDocument(t *testing.T) {
-	withRottieAndClient(t, func(t *testing.T, r *rottie.Rottie, c *client.Client) {
+	withYorkieAndClient(t, func(t *testing.T, r *yorkie.Yorkie, c *client.Client) {
 		t.Run("attach/detach test", func(t *testing.T) {
 			ctx := context.Background()
 			doc := document.New(testCollection, t.Name())
@@ -89,7 +89,7 @@ func TestClientAndDocument(t *testing.T) {
 		})
 	})
 
-	withRottieAndTwoClients(t, func(t *testing.T, r *rottie.Rottie, c1 *client.Client, c2 *client.Client) {
+	withYorkieAndTwoClients(t, func(t *testing.T, r *yorkie.Yorkie, c1 *client.Client, c2 *client.Client) {
 		t.Run("concurrent set test", func(t *testing.T) {
 			ctx1 := context.Background()
 			doc1 := document.New(testCollection, t.Name())
@@ -183,11 +183,11 @@ func TestClientAndDocument(t *testing.T) {
 	})
 }
 
-func withRottieAndClient(
+func withYorkieAndClient(
 	t *testing.T,
-	f func(t *testing.T, r *rottie.Rottie, c *client.Client),
+	f func(t *testing.T, r *yorkie.Yorkie, c *client.Client),
 ) {
-	testhelper.WithRottie(t, func(t *testing.T, r *rottie.Rottie) {
+	testhelper.WithYorkie(t, func(t *testing.T, r *yorkie.Yorkie) {
 		c, err := client.NewClient(testRPCAddr)
 		if err != nil {
 			t.Fatal(err)
@@ -207,11 +207,11 @@ func withRottieAndClient(
 	})
 }
 
-func withRottieAndTwoClients(
+func withYorkieAndTwoClients(
 	t *testing.T,
-	f func(t *testing.T, r *rottie.Rottie, c1 *client.Client, c2 *client.Client),
+	f func(t *testing.T, r *yorkie.Yorkie, c1 *client.Client, c2 *client.Client),
 ) {
-	testhelper.WithRottie(t, func(t *testing.T, r *rottie.Rottie) {
+	testhelper.WithYorkie(t, func(t *testing.T, r *yorkie.Yorkie) {
 		c1, err := client.NewClient(testRPCAddr)
 		if err != nil {
 			t.Fatal(err)

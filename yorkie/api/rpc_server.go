@@ -9,12 +9,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/hackerwins/rottie/api"
-	"github.com/hackerwins/rottie/api/converter"
-	"github.com/hackerwins/rottie/pkg/log"
-	"github.com/hackerwins/rottie/rottie/backend"
-	"github.com/hackerwins/rottie/rottie/clients"
-	"github.com/hackerwins/rottie/rottie/packs"
+	"github.com/hackerwins/yorkie/api"
+	"github.com/hackerwins/yorkie/api/converter"
+	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/hackerwins/yorkie/yorkie/backend"
+	"github.com/hackerwins/yorkie/yorkie/clients"
+	"github.com/hackerwins/yorkie/yorkie/packs"
 )
 
 type RPCServer struct {
@@ -34,7 +34,7 @@ func NewRPCServer(port int, be *backend.Backend) (*RPCServer, error) {
 		grpcServer: grpc.NewServer(opts...),
 		backend:    be,
 	}
-	api.RegisterRottieServer(rpcServer.grpcServer, rpcServer)
+	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
 
 	return rpcServer, nil
 }

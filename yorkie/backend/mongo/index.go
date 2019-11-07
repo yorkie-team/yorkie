@@ -3,7 +3,7 @@ package mongo
 import (
 	"context"
 
-	"github.com/hackerwins/rottie/pkg/log"
+	"github.com/hackerwins/yorkie/pkg/log"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"

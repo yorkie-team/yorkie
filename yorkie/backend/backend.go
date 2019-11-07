@@ -1,7 +1,7 @@
 package backend
 
 import (
-	"github.com/hackerwins/rottie/rottie/backend/mongo"
+	"github.com/hackerwins/yorkie/yorkie/backend/mongo"
 )
 
 type Backend struct {

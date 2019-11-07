@@ -1,4 +1,4 @@
-EXECUTABLE = ./bin/rottie
+EXECUTABLE = ./bin/yorkie
 
 GOSRC := $(shell find . -path ./vendor -prune -o -type f -name '*.go' -print)
 
@@ -13,7 +13,7 @@ tools:
 	go get $(GOTOOLS)
 
 proto: tools
-	protoc api/rottie.proto \
+	protoc api/yorkie.proto \
 -I=. \
 -I=$(GOPATH)/src \
 -I=$(GOPATH)/src/github.com/gogo/protobuf/protobuf \

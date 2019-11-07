@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/hackerwins/rottie/cmd"
+	"github.com/hackerwins/yorkie/cmd"
 )
 
 func main() {

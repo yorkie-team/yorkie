@@ -9,19 +9,19 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/hackerwins/rottie/pkg/log"
-	"github.com/hackerwins/rottie/rottie"
-	"github.com/hackerwins/rottie/rottie/backend/mongo"
+	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/hackerwins/yorkie/yorkie"
+	"github.com/hackerwins/yorkie/yorkie/backend/mongo"
 )
 
 var (
-	defaultConfig = &rottie.Config{
+	defaultConfig = &yorkie.Config{
 		RPCPort: 1101,
 		Mongo: &mongo.Config{
 			ConnectionURI:        "mongodb://localhost:27017",
 			ConnectionTimeoutSec: 5,
 			PingTimeoutSec:       5,
-			RottieDatabase:       "rottie-meta",
+			YorkieDatabase:       "yorkie-meta",
 		},
 	}
 	gracefulTimeout = 10 * time.Second
@@ -35,11 +35,11 @@ var (
 func newAgentCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "agent [options]",
-		Short: "Starts rottie agent.",
+		Short: "Starts yorkie agent.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf := defaultConfig
 			if flagConfPath != "" {
-				parsed, err := rottie.NewConfig(flagConfPath)
+				parsed, err := yorkie.NewConfig(flagConfPath)
 				if err != nil {
 					return fmt.Errorf(
 						"fail to create config: %s",
@@ -49,7 +49,7 @@ func newAgentCmd() *cobra.Command {
 				conf = parsed
 			}
 
-			r, err := rottie.New(conf)
+			r, err := yorkie.New(conf)
 			if err != nil {
 				return err
 			}
@@ -67,7 +67,7 @@ func newAgentCmd() *cobra.Command {
 	}
 }
 
-func handleSignal(r *rottie.Rottie) int {
+func handleSignal(r *yorkie.Yorkie) int {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
@@ -76,7 +76,7 @@ func handleSignal(r *rottie.Rottie) int {
 	case s := <-sigCh:
 		sig = s
 	case <-r.ShutdownCh():
-		// rottie is already shutdown
+		// yorkie is already shutdown
 		return 0
 	}
 

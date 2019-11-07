@@ -1,12 +1,12 @@
-package rottie
+package yorkie
 
 import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
 
-	"github.com/hackerwins/rottie/pkg/log"
-	"github.com/hackerwins/rottie/rottie/backend/mongo"
+	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/hackerwins/yorkie/yorkie/backend/mongo"
 )
 
 type Config struct {

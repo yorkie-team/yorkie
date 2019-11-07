@@ -1,14 +1,14 @@
 package converter
 
 import (
-	"github.com/hackerwins/rottie/api"
-	"github.com/hackerwins/rottie/pkg/document/change"
-	"github.com/hackerwins/rottie/pkg/document/checkpoint"
-	"github.com/hackerwins/rottie/pkg/document/json"
-	"github.com/hackerwins/rottie/pkg/document/json/datatype"
-	"github.com/hackerwins/rottie/pkg/document/key"
-	"github.com/hackerwins/rottie/pkg/document/operation"
-	"github.com/hackerwins/rottie/pkg/document/time"
+	"github.com/hackerwins/yorkie/api"
+	"github.com/hackerwins/yorkie/pkg/document/change"
+	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
+	"github.com/hackerwins/yorkie/pkg/document/json"
+	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
+	"github.com/hackerwins/yorkie/pkg/document/key"
+	"github.com/hackerwins/yorkie/pkg/document/operation"
+	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
 func FromChangePack(pbPack *api.ChangePack) *change.Pack {

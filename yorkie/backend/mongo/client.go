@@ -11,9 +11,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
-	"github.com/hackerwins/rottie/pkg/document/change"
-	"github.com/hackerwins/rottie/pkg/log"
-	"github.com/hackerwins/rottie/rottie/types"
+	"github.com/hackerwins/yorkie/pkg/document/change"
+	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/hackerwins/yorkie/yorkie/types"
 )
 
 var (
@@ -24,7 +24,7 @@ var (
 type Config struct {
 	ConnectionTimeoutSec time.Duration `json:"ConnectionTimeOutSec"`
 	ConnectionURI        string        `json:"ConnectionURI"`
-	RottieDatabase       string        `json:"RottieDatabase"`
+	YorkieDatabase       string        `json:"YorkieDatabase"`
 	PingTimeoutSec       time.Duration `json:"PingTimeoutSec"`
 }
 
@@ -57,7 +57,7 @@ func NewClient(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	if err := ensureIndex(ctx, client.Database(conf.RottieDatabase)); err != nil {
+	if err := ensureIndex(ctx, client.Database(conf.YorkieDatabase)); err != nil {
 		log.Logger.Error(err)
 		return nil, err
 	}
@@ -381,7 +381,7 @@ func (c *Client) withCollection(
 	collection string,
 	callback func(collection *mongo.Collection) error,
 ) error {
-	col := c.client.Database(c.config.RottieDatabase).Collection(collection)
+	col := c.client.Database(c.config.YorkieDatabase).Collection(collection)
 	if err := callback(col); err != nil {
 		return err
 	}

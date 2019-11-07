@@ -1,7 +1,7 @@
 package datatype
 
 import (
-	"github.com/hackerwins/rottie/pkg/document/time"
+	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
 type Element interface {

@@ -3,7 +3,7 @@ package datatype
 import (
 	"fmt"
 
-	"github.com/hackerwins/rottie/pkg/document/time"
+	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
 type Primitive struct {

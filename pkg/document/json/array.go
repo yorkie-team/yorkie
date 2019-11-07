@@ -1,8 +1,8 @@
 package json
 
 import (
-	"github.com/hackerwins/rottie/pkg/document/json/datatype"
-	"github.com/hackerwins/rottie/pkg/document/time"
+	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
+	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
 type Array struct {

@@ -1,13 +1,13 @@
-package rottie
+package yorkie
 
 import (
 	"sync"
 
-	"github.com/hackerwins/rottie/rottie/api"
-	"github.com/hackerwins/rottie/rottie/backend"
+	"github.com/hackerwins/yorkie/yorkie/api"
+	"github.com/hackerwins/yorkie/yorkie/backend"
 )
 
-type Rottie struct {
+type Yorkie struct {
 	lock sync.Mutex
 
 	backend   *backend.Backend
@@ -17,7 +17,7 @@ type Rottie struct {
 	shutdownCh chan struct{}
 }
 
-func New(conf *Config) (*Rottie, error) {
+func New(conf *Config) (*Yorkie, error) {
 	be, err := backend.New(conf.Mongo)
 	if err != nil {
 		return nil, err
@@ -28,21 +28,21 @@ func New(conf *Config) (*Rottie, error) {
 		return nil, err
 	}
 
-	return &Rottie{
+	return &Yorkie{
 		backend:    be,
 		rpcServer:  rpcServer,
 		shutdownCh: make(chan struct{}),
 	}, nil
 }
 
-func (r *Rottie) Start() error {
+func (r *Yorkie) Start() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	return r.rpcServer.Start()
 }
 
-func (r *Rottie) Shutdown(graceful bool) error {
+func (r *Yorkie) Shutdown(graceful bool) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -56,6 +56,6 @@ func (r *Rottie) Shutdown(graceful bool) error {
 	return nil
 }
 
-func (r *Rottie) ShutdownCh() <-chan struct{} {
+func (r *Yorkie) ShutdownCh() <-chan struct{} {
 	return r.shutdownCh
 }

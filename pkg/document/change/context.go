@@ -1,8 +1,8 @@
 package change
 
 import (
-	"github.com/hackerwins/rottie/pkg/document/operation"
-	"github.com/hackerwins/rottie/pkg/document/time"
+	"github.com/hackerwins/yorkie/pkg/document/operation"
+	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
 type Context struct {

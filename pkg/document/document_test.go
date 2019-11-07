@@ -3,9 +3,9 @@ package document_test
 import (
 	"testing"
 
-	"github.com/hackerwins/rottie/pkg/document"
-	"github.com/hackerwins/rottie/pkg/document/checkpoint"
-	"github.com/hackerwins/rottie/pkg/document/proxy"
+	"github.com/hackerwins/yorkie/pkg/document"
+	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
+	"github.com/hackerwins/yorkie/pkg/document/proxy"
 
 	"github.com/stretchr/testify/assert"
 )

@@ -5,7 +5,7 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "rottie [options]",
+	Use:   "yorkie [options]",
 	Short: "Realtime database backend based on MongoDB, CRDT",
 }
 
