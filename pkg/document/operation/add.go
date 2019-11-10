@@ -10,22 +10,22 @@ import (
 )
 
 type Add struct {
-	value           datatype.Element
 	parentCreatedAt *time.Ticket
 	prevCreatedAt   *time.Ticket
+	value           datatype.Element
 	executedAt      *time.Ticket
 }
 
 func NewAdd(
-	value datatype.Element,
 	parentCreatedAt *time.Ticket,
 	prevCreatedAt *time.Ticket,
+	value datatype.Element,
 	executedAt *time.Ticket,
 ) *Add {
 	return &Add{
-		value:           value,
 		parentCreatedAt: parentCreatedAt,
 		prevCreatedAt:   prevCreatedAt,
+		value:           value,
 		executedAt:      executedAt,
 	}
 }

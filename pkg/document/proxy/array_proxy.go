@@ -49,6 +49,14 @@ func (p *ArrayProxy) AddString(v string) *ArrayProxy {
 	return p
 }
 
+func (p *ArrayProxy) AddNewArray() *ArrayProxy {
+	v := p.addInternal(func(ticket *time.Ticket) datatype.Element {
+		return NewArrayProxy(p.context, datatype.NewRGA(), ticket)
+	})
+
+	return v.(*ArrayProxy)
+}
+
 func (p *ArrayProxy) addInternal(
 	creator func(ticket *time.Ticket) datatype.Element,
 ) datatype.Element {
@@ -56,9 +64,9 @@ func (p *ArrayProxy) addInternal(
 	value := creator(ticket)
 
 	p.context.Push(operation.NewAdd(
-		toOriginal(value),
 		p.Array.CreatedAt(),
 		p.Array.LastCreatedAt(),
+		toOriginal(value),
 		ticket,
 	))
 
@@ -66,3 +74,4 @@ func (p *ArrayProxy) addInternal(
 
 	return value
 }
+

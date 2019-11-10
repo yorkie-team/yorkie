@@ -62,18 +62,26 @@ func FromOperations(pbOps []*api.Operation) []operation.Operation {
 		switch decoded := pbOp.Body.(type) {
 		case *api.Operation_Set_:
 			op = operation.NewSet(
+				fromTimeTicket(decoded.Set.ParentCreatedAt),
 				decoded.Set.Key,
 				fromElement(decoded.Set.Value),
-				fromTimeTicket(decoded.Set.ParentCreatedAt),
 				fromTimeTicket(decoded.Set.ExecutedAt),
 			)
 		case *api.Operation_Add_:
 			op = operation.NewAdd(
-				fromElement(decoded.Add.Value),
 				fromTimeTicket(decoded.Add.ParentCreatedAt),
 				fromTimeTicket(decoded.Add.PrevCreatedAt),
+				fromElement(decoded.Add.Value),
 				fromTimeTicket(decoded.Add.ExecutedAt),
 			)
+		case *api.Operation_Remove_:
+			op = operation.NewRemove(
+				fromTimeTicket(decoded.Remove.ParentCreatedAt),
+				fromTimeTicket(decoded.Remove.CreatedAt),
+				fromTimeTicket(decoded.Remove.ExecutedAt),
+			)
+		default:
+			panic("unsupported operation")
 		}
 		ops = append(ops, op)
 	}

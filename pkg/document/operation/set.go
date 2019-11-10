@@ -11,15 +11,15 @@ import (
 
 type Set struct {
 	parentCreatedAt *time.Ticket
-	executedAt      *time.Ticket
 	key             string
 	value           datatype.Element
+	executedAt      *time.Ticket
 }
 
 func NewSet(
+	parentCreatedAt *time.Ticket,
 	key string,
 	value datatype.Element,
-	parentCreatedAt *time.Ticket,
 	executedAt *time.Ticket,
 ) *Set {
 	return &Set{

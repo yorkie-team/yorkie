@@ -53,4 +53,32 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, expected, doc.Marshal())
 		assert.True(t, doc.HasLocalChanges())
 	})
+
+	t.Run("remove test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+		assert.Equal(t, "{}", doc.Marshal())
+		assert.False(t, doc.HasLocalChanges())
+
+		expected := "{\"k1\":\"v1\",\"k2\":{\"k4\":\"v4\"},\"k3\":[\"v5\",\"v6\"]}"
+		if err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetString("k1", "v1")
+			root.SetNewObject("k2").SetString("k4", "v4")
+			root.SetNewArray("k3").AddString("v5").AddString("v6")
+			assert.Equal(t, expected, root.Marshal())
+			return nil
+		}, "updates k1,k2,k3"); err != nil {
+			t.Error(err)
+		}
+		assert.Equal(t, expected, doc.Marshal())
+
+		expected = "{\"k1\":\"v1\",\"k3\":[\"v5\",\"v6\"]}"
+		if err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.Remove("k2")
+			assert.Equal(t, expected, root.Marshal())
+			return nil
+		}, "removes k2"); err != nil {
+			t.Error(err)
+		}
+		assert.Equal(t, expected, doc.Marshal())
+	})
 }

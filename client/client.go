@@ -134,6 +134,7 @@ func (c *Client) AttachDocument(ctx context.Context, doc *document.Document) err
 		return err
 	}
 
+	doc.UpdateState(document.Attached)
 	c.attachedDocs[doc.Key().BSONKey()] = doc
 
 	return nil
@@ -163,6 +164,7 @@ func (c *Client) DetachDocument(ctx context.Context, doc *document.Document) err
 		return err
 	}
 
+	doc.UpdateState(document.Detached)
 	delete(c.attachedDocs, doc.Key().BSONKey())
 
 	return nil
@@ -191,4 +193,8 @@ func (c *Client) PushPull(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (c *Client) IsActive() bool {
+	return c.status == activated
 }

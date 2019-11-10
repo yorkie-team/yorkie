@@ -41,12 +41,6 @@ func NewObjectProxy(
 	}
 }
 
-func (p *ObjectProxy) SetString(k, v string) {
-	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return datatype.NewPrimitive(v, ticket)
-	})
-}
-
 func (p *ObjectProxy) SetNewObject(k string) *ObjectProxy {
 	v := p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
 		return NewObjectProxy(p.context, datatype.NewRHT(), ticket)
@@ -63,6 +57,29 @@ func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 	return v.(*ArrayProxy)
 }
 
+func (p *ObjectProxy) SetString(k, v string) *ObjectProxy{
+	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ObjectProxy) Remove(k string) *ObjectProxy {
+	ticket := p.context.IssueTimeTicket()
+	removed := p.Object.RemoveByKey(k)
+
+	if removed != nil {
+		p.context.Push(operation.NewRemove(
+			p.CreatedAt(),
+			removed.CreatedAt(),
+			ticket,
+		))
+	}
+
+	return p
+}
+
 func (p *ObjectProxy) GetArray(k string) *ArrayProxy {
 	elem := p.Object.Get(k)
 	if elem == nil {
@@ -70,6 +87,15 @@ func (p *ObjectProxy) GetArray(k string) *ArrayProxy {
 	}
 
 	return p.Object.Get(k).(*ArrayProxy)
+}
+
+func (p *ObjectProxy) GetObject(k string) *ObjectProxy {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	return p.Object.Get(k).(*ObjectProxy)
 }
 
 func (p *ObjectProxy) setInternal(
@@ -81,12 +107,11 @@ func (p *ObjectProxy) setInternal(
 	p.Set(k, value)
 
 	p.context.Push(operation.NewSet(
+		p.CreatedAt(),
 		k,
 		toOriginal(value),
-		p.CreatedAt(),
 		ticket,
 	))
 
 	return value
 }
-

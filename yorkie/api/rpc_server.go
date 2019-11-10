@@ -85,8 +85,11 @@ func (s *RPCServer) AttachDocument(
 	req *api.AttachDocumentRequest,
 ) (*api.AttachDocumentResponse, error) {
 	pack := converter.FromChangePack(req.ChangePack)
-	clientInfo, docInfo, err := clients.AttachDocument(ctx, s.backend, req.ClientId, pack)
+	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := clientInfo.AttachDocument(docInfo.ID, pack.Checkpoint); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -105,8 +108,11 @@ func (s *RPCServer) DetachDocument(
 	req *api.DetachDocumentRequest,
 ) (*api.DetachDocumentResponse, error) {
 	pack := converter.FromChangePack(req.ChangePack)
-	clientInfo, docInfo, err := clients.DetachDocument(ctx, s.backend, req.ClientId, pack)
+	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := clientInfo.CheckDocumentAttached(docInfo.ID.Hex()); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -125,8 +131,11 @@ func (s *RPCServer) PushPull(
 	req *api.PushPullRequest,
 ) (*api.PushPullResponse, error) {
 	pack := converter.FromChangePack(req.ChangePack)
-	clientInfo, docInfo, err := clients.PushPullDocument(ctx, s.backend, req.ClientId, pack)
+	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := clientInfo.CheckDocumentAttached(docInfo.ID.Hex()); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 

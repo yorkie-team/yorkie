@@ -13,8 +13,8 @@ import (
 type stateType int
 
 const (
-	detached stateType = 0
-	attached stateType = 1
+	Detached stateType = 0
+	Attached stateType = 1
 )
 
 type Document struct {
@@ -29,7 +29,7 @@ type Document struct {
 func New(collection, document string) *Document {
 	return &Document{
 		key:        &key.Key{Collection: collection, Document: document},
-		state:      detached,
+		state:      Detached,
 		root:       json.NewRoot(),
 		checkpoint: checkpoint.Initial,
 		changeID:   change.InitialID,
@@ -109,4 +109,12 @@ func (d *Document) SetActor(actor *time.ActorID) {
 
 func (d *Document) Actor() *time.ActorID {
 	return d.changeID.Actor()
+}
+
+func (d *Document) UpdateState(state stateType) {
+	d.state = state
+}
+
+func (d *Document) IsAttached() bool {
+	return d.state == Attached
 }

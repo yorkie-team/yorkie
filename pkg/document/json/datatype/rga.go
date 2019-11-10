@@ -107,7 +107,7 @@ func (a *RGA) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
 
 func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket) *Node {
 	node := a.nodeTableByCreatedAt[prevCreatedAt.Key()]
-	for node.next != nil && createdAt.CompareTo(node.next.element.CreatedAt()) < 0 {
+	for node.next != nil && createdAt.After(node.next.element.CreatedAt()) {
 		node = node.next
 	}
 
@@ -124,3 +124,31 @@ func (a *RGA) insertAfterInternal(prev *Node, element Element) {
 	a.nodeTableByCreatedAt[element.CreatedAt().Key()] = newNode
 }
 
+func (a *RGA) Remove(createdAt *time.Ticket) Element {
+	node := a.nodeTableByCreatedAt[createdAt.Key()]
+	return a.unlink(node)
+}
+
+func (a *RGA) unlink(node *Node) Element {
+	element := node.element
+	next := node.next
+	prev := node.prev
+
+	if prev == nil {
+		a.first.next = next
+	} else {
+		prev.next = next
+		node.prev = nil
+	}
+
+	if next == nil {
+		a.last = prev
+	} else {
+		next.prev = prev
+		node.next = nil
+	}
+
+	node.element = nil
+	a.size -= 1
+	return element
+}

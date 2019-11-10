@@ -46,7 +46,11 @@ func (t *Ticket) ActorID() *ActorID {
 	return t.actorID
 }
 
-func (t *Ticket) CompareTo(other *Ticket) int {
+func (t *Ticket) After(other *Ticket) bool {
+	return t.compareTo(other) > 0
+}
+
+func (t *Ticket) compareTo(other *Ticket) int {
 	if t.lamport > other.lamport {
 		return 1
 	} else if t.lamport < other.lamport {

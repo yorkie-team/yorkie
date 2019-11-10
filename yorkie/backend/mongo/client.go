@@ -62,6 +62,8 @@ func NewClient(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
+	log.Logger.Infof("connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
+
 	return &Client{
 		config: conf,
 		client: client,

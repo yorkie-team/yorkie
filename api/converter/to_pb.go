@@ -80,6 +80,16 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
+		case *operation.Remove:
+			pbOperation.Body = &api.Operation_Remove_{
+				Remove: &api.Operation_Remove{
+					CreatedAt:   toTimeTicket(op.CreatedAt()),
+					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
+					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
+				},
+			}
+		default:
+			panic("unsupported operation")
 		}
 		pbOperations = append(pbOperations, pbOperation)
 	}
