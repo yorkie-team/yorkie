@@ -2,6 +2,7 @@ package client_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -94,97 +95,7 @@ func TestClientAndDocument(t *testing.T) {
 			assert.False(t, doc.IsAttached())
 		})
 
-		t.Run("concurrent set test", func(t *testing.T) {
-			ctx1 := context.Background()
-			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx1, doc1); err != nil {
-				t.Error(err)
-			}
-
-			ctx2 := context.Background()
-			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx2, doc2); err != nil {
-				t.Error(err)
-			}
-
-			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
-				root.SetString("k1", "v1")
-				return nil
-			}, "set v1 by c1"); err != nil {
-				t.Error(err)
-			}
-
-			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
-				root.SetString("k1", "v2")
-				return nil
-			}, "set v1 by c2"); err != nil {
-				t.Error(err)
-			}
-			assert.NotEqual(t, doc1.Marshal(), doc2.Marshal())
-
-			if err := c1.PushPull(ctx1); err != nil {
-				t.Error(err)
-			}
-			if err := c2.PushPull(ctx2); err != nil {
-				t.Error(err)
-			}
-			if err := c1.PushPull(ctx1); err != nil {
-				t.Error(err)
-			}
-
-			assert.Equal(t, doc1.Marshal(), doc2.Marshal())
-		})
-
-		t.Run("concurrent add test", func(t *testing.T) {
-			ctx1 := context.Background()
-			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx1, doc1); err != nil {
-				t.Error(err)
-			}
-			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
-				root.SetNewArray("k1").AddString("v1")
-				return nil
-			}, "new array and add v1"); err != nil {
-				t.Error(err)
-			}
-			if err := c1.PushPull(ctx1); err != nil {
-				t.Error(err)
-			}
-
-			ctx2 := context.Background()
-			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx2, doc2); err != nil {
-				t.Error(err)
-			}
-
-			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
-				root.GetArray("k1").AddString("v2").AddString("v4")
-				return nil
-			}, "add v2, vj by c1"); err != nil {
-				t.Error(err)
-			}
-
-			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
-				root.GetArray("k1").AddString("v3").AddString("v5")
-				return nil
-			}, "add v3, v5 by c2"); err != nil {
-				t.Error(err)
-			}
-
-			if err := c1.PushPull(ctx1); err != nil {
-				t.Error(err)
-			}
-			if err := c2.PushPull(ctx2); err != nil {
-				t.Error(err)
-			}
-			if err := c1.PushPull(ctx1); err != nil {
-				t.Error(err)
-			}
-
-			assert.Equal(t, doc1.Marshal(), doc2.Marshal())
-		})
-
-		t.Run("nested array test", func(t *testing.T) {
+		t.Run("causal nested array test", func(t *testing.T) {
 			ctx1 := context.Background()
 			doc1 := document.New(testCollection, t.Name())
 			if err := c1.AttachDocument(ctx1, doc1); err != nil {
@@ -206,20 +117,10 @@ func TestClientAndDocument(t *testing.T) {
 				t.Error(err)
 			}
 
-			if err := c1.PushPull(ctx1); err != nil {
-				t.Error(err)
-			}
-			if err := c2.PushPull(ctx2); err != nil {
-				t.Error(err)
-			}
-			if err := c1.PushPull(ctx1); err != nil {
-				t.Error(err)
-			}
-
-			assert.Equal(t, doc1.Marshal(), doc2.Marshal())
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
 		})
 
-		t.Run("object set and remove test", func(t *testing.T) {
+		t.Run("causal object.set/remove test", func(t *testing.T) {
 			ctx1 := context.Background()
 			ctx2 := context.Background()
 
@@ -245,14 +146,7 @@ func TestClientAndDocument(t *testing.T) {
 			}, "nested update by c1"); err != nil {
 				t.Error(err)
 			}
-
-			if err := c1.PushPull(ctx1); err != nil {
-				t.Error(err)
-			}
-			if err := c2.PushPull(ctx2); err != nil {
-				t.Error(err)
-			}
-			assert.Equal(t, doc1.Marshal(), doc2.Marshal())
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
 
 			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
 				root.Remove("k1")
@@ -261,16 +155,138 @@ func TestClientAndDocument(t *testing.T) {
 			}, "nested update by c1"); err != nil {
 				t.Error(err)
 			}
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		})
 
+		t.Run("concurrent object.set test", func(t *testing.T) {
+			ctx1 := context.Background()
+			doc1 := document.New(testCollection, t.Name())
+			if err := c1.AttachDocument(ctx1, doc1); err != nil {
+				t.Error(err)
+			}
+
+			ctx2 := context.Background()
+			doc2 := document.New(testCollection, t.Name())
+			if err := c2.AttachDocument(ctx2, doc2); err != nil {
+				t.Error(err)
+			}
+
+			// 01. concurrent set on same key
+			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.SetString("k1", "v1")
+				return nil
+			}, "set k1 by c1"); err != nil {
+				t.Error(err)
+			}
+			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
+				root.SetString("k1", "v2")
+				return nil
+			}, "set k1 by c2"); err != nil {
+				t.Error(err)
+			}
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
+
+			// 02. concurrent set between ancestor descendant
+			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.SetNewObject("k2")
+				return nil
+			}, "set k2 by c1"); err != nil {
+				t.Error(err)
+			}
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
+
+			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.SetString("k2", "v2")
+				return nil
+			}, "set k2 by c1"); err != nil {
+				t.Error(err)
+			}
+			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
+				root.GetObject("k2").SetNewObject("k2.1").SetString("k2.1.1", "v2")
+				return nil
+			}, "set k2.1.1 by c2"); err != nil {
+				t.Error(err)
+			}
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
+
+			// 03. concurrent set between independent keys
+			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.SetString("k3", "v3")
+				return nil
+			}, "set k3 by c1"); err != nil {
+				t.Error(err)
+			}
+			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
+				root.SetString("k4", "v4")
+				return nil
+			}, "set k4 by c2"); err != nil {
+				t.Error(err)
+			}
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		})
+
+		t.Run("concurrent array.add/remove test", func(t *testing.T) {
+			ctx1 := context.Background()
+			doc1 := document.New(testCollection, t.Name())
+			if err := c1.AttachDocument(ctx1, doc1); err != nil {
+				t.Error(err)
+			}
+			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.SetNewArray("k1").AddString("v1")
+				return nil
+			}, "new array and add v1"); err != nil {
+				t.Error(err)
+			}
 			if err := c1.PushPull(ctx1); err != nil {
 				t.Error(err)
 			}
-			if err := c2.PushPull(ctx2); err != nil {
+
+			ctx2 := context.Background()
+			doc2 := document.New(testCollection, t.Name())
+			if err := c2.AttachDocument(ctx2, doc2); err != nil {
 				t.Error(err)
 			}
-			assert.Equal(t, doc1.Marshal(), doc2.Marshal())
+
+			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.GetArray("k1").AddString("v2").AddString("v4")
+				root.GetArray("k1").Remove(1)
+				return nil
+			}, "add v2, vj by c1"); err != nil {
+				t.Error(err)
+			}
+			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
+				root.GetArray("k1").AddString("v3").AddString("v5")
+				return nil
+			}, "add v3, v5 by c2"); err != nil {
+				t.Error(err)
+			}
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
 		})
 	})
+}
+
+func syncThenAssertEqual(
+	t *testing.T,
+	c1 *client.Client,
+	c2 *client.Client,
+	doc1 *document.Document,
+	doc2 *document.Document,
+) {
+	ctx := context.Background()
+	fmt.Printf("before doc1: %s\ndoc2: %s\n", doc1.Marshal(), doc2.Marshal())
+
+	if err := c1.PushPull(ctx); err != nil {
+		t.Error(err)
+	}
+	if err := c2.PushPull(ctx); err != nil {
+		t.Error(err)
+	}
+	if err := c1.PushPull(ctx); err != nil {
+		t.Error(err)
+	}
+
+	fmt.Printf("after doc1: %s\ndoc2: %s\n", doc1.Marshal(), doc2.Marshal())
+	assert.Equal(t, doc1.Marshal(), doc2.Marshal())
 }
 
 func withYorkieAndTwoClients(

@@ -42,6 +42,6 @@ func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element datatype.Element
 	a.elements.InsertAfter(prevCreatedAt, element)
 }
 
-func (a *Array) Remove(createdAt *time.Ticket) datatype.Element {
+func (a *Array) RemoveByCreatedAt(createdAt *time.Ticket) datatype.Element {
 	return a.elements.Remove(createdAt)
 }

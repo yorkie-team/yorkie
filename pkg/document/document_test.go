@@ -33,7 +33,7 @@ func TestDocument(t *testing.T) {
 		assert.True(t, doc2.Equals(doc3))
 	})
 
-	t.Run("update test", func(t *testing.T) {
+	t.Run("nested update test", func(t *testing.T) {
 		expected := "{\"k1\":\"v1\",\"k2\":{\"k4\":\"v4\"},\"k3\":[\"v5\",\"v6\"]}"
 
 		doc := document.New("c1", "d1")

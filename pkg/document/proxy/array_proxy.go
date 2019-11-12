@@ -75,3 +75,7 @@ func (p *ArrayProxy) addInternal(
 	return value
 }
 
+func (p *ArrayProxy) Remove(idx int) {
+
+}
+

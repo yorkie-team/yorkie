@@ -37,7 +37,7 @@ func (o *Object) Get(k string) datatype.Element {
 	return o.members.Get(k)
 }
 
-func (o *Object) Remove(createdAt *time.Ticket) datatype.Element {
+func (o *Object) RemoveByCreatedAt(createdAt *time.Ticket) datatype.Element {
 	return o.members.Remove(createdAt)
 }
 
