@@ -57,7 +57,7 @@ func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 	return v.(*ArrayProxy)
 }
 
-func (p *ObjectProxy) SetString(k, v string) *ObjectProxy{
+func (p *ObjectProxy) SetString(k, v string) *ObjectProxy {
 	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
 		return datatype.NewPrimitive(v, ticket)
 	})
@@ -65,11 +65,11 @@ func (p *ObjectProxy) SetString(k, v string) *ObjectProxy{
 	return p
 }
 
-func (p *ObjectProxy) Remove(k string) *ObjectProxy {
-	ticket := p.context.IssueTimeTicket()
-	removed := p.Object.RemoveByKey(k)
+func (p *ObjectProxy) Remove(k string) datatype.Element {
+	removed := p.Object.Remove(k)
 
 	if removed != nil {
+		ticket := p.context.IssueTimeTicket()
 		p.context.Push(operation.NewRemove(
 			p.CreatedAt(),
 			removed.CreatedAt(),
@@ -77,7 +77,7 @@ func (p *ObjectProxy) Remove(k string) *ObjectProxy {
 		))
 	}
 
-	return p
+	return removed
 }
 
 func (p *ObjectProxy) GetArray(k string) *ArrayProxy {

@@ -83,7 +83,7 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 		case *operation.Remove:
 			pbOperation.Body = &api.Operation_Remove_{
 				Remove: &api.Operation_Remove{
-					CreatedAt:   toTimeTicket(op.CreatedAt()),
+					CreatedAt:       toTimeTicket(op.CreatedAt()),
 					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
@@ -97,22 +97,22 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 	return pbOperations
 }
 
-func toJSONElement(element datatype.Element) *api.JSONElement {
-	switch elem := element.(type) {
+func toJSONElement(elem datatype.Element) *api.JSONElement {
+	switch elem := elem.(type) {
 	case *json.Object:
 		return &api.JSONElement{
 			Type:      api.ValueType_JSON_OBJECT,
-			CreatedAt: toTimeTicket(element.CreatedAt()),
+			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}
 	case *json.Array:
 		return &api.JSONElement{
 			Type:      api.ValueType_JSON_ARRAY,
-			CreatedAt: toTimeTicket(element.CreatedAt()),
+			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}
 	case *datatype.Primitive:
 		return &api.JSONElement{
 			Type:      api.ValueType_STRING,
-			CreatedAt: toTimeTicket(element.CreatedAt()),
+			CreatedAt: toTimeTicket(elem.CreatedAt()),
 			Value:     toValue(elem.Value()),
 		}
 	}

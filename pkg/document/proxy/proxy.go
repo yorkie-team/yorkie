@@ -5,8 +5,8 @@ import (
 	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
 )
 
-func toOriginal(element datatype.Element) datatype.Element {
-	switch elem := element.(type) {
+func toOriginal(elem datatype.Element) datatype.Element {
+	switch elem := elem.(type) {
 	case *ObjectProxy:
 		return json.NewObject(datatype.NewRHT(), elem.Object.CreatedAt())
 	case *ArrayProxy:

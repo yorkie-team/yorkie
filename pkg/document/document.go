@@ -1,6 +1,8 @@
 package document
 
 import (
+	"fmt"
+
 	"github.com/hackerwins/yorkie/pkg/document/change"
 	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
 	"github.com/hackerwins/yorkie/pkg/document/json"
@@ -46,9 +48,9 @@ func (d *Document) Checkpoint() *checkpoint.Checkpoint {
 
 func (d *Document) Update(
 	updater func(root *proxy.ObjectProxy) error,
-	message string,
+	msgAndArgs ...interface{},
 ) error {
-	ctx := change.NewContext(d.changeID.Next(), message)
+	ctx := change.NewContext(d.changeID.Next(), messageFromMsgAndArgs(msgAndArgs))
 	if err := updater(proxy.ProxyObject(ctx, d.root.Object())); err != nil {
 		log.Logger.Error(err)
 		return err
@@ -79,7 +81,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		}
 	}
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
-	log.Logger.Infof("after apply pack: %s", d.root.Object().Marshal())
+	log.Logger.Debugf("after apply pack: %s", d.root.Object().Marshal())
 
 	return nil
 }
@@ -117,4 +119,21 @@ func (d *Document) UpdateState(state stateType) {
 
 func (d *Document) IsAttached() bool {
 	return d.state == Attached
+}
+
+func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
+	if len(msgAndArgs) == 0 {
+		return ""
+	}
+	if len(msgAndArgs) == 1 {
+		msg := msgAndArgs[0]
+		if msgAsStr, ok := msg.(string); ok {
+			return msgAsStr
+		}
+		return fmt.Sprintf("%+v", msg)
+	}
+	if len(msgAndArgs) > 1 {
+		return fmt.Sprintf(msgAndArgs[0].(string), msgAndArgs[1:]...)
+	}
+	return ""
 }

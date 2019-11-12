@@ -5,80 +5,92 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hackerwins/yorkie/pkg/log"
+
 	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
-type Pair struct {
-	key string
-	element Element
-}
-
-func NewPair(key string, element Element) *Pair {
-	return &Pair {
-		key,
-		element,
-	}
-}
-
 // RHT is replicated hash table.
 type RHT struct {
-	elementTableByKey       map[string]Element
-	elementTableByCreatedAt map[string]*Pair
+	elementQueueMapByKey map[string]*PriorityQueue
+	itemMapByCreatedAt   map[string]*PQItem
 }
 
 func NewRHT() *RHT {
 	return &RHT{
-		elementTableByKey:       make(map[string]Element),
-		elementTableByCreatedAt: make(map[string]*Pair),
+		elementQueueMapByKey: make(map[string]*PriorityQueue),
+		itemMapByCreatedAt:   make(map[string]*PQItem),
 	}
 }
 
 func (rht *RHT) Get(k string) Element {
-	return rht.elementTableByKey[k]
+	if queue, ok := rht.elementQueueMapByKey[k]; ok {
+		item := queue.Peek()
+		if item.isRemoved {
+			return nil
+		}
+		return item.value
+	}
+
+	return nil
 }
 
 func (rht *RHT) Set(k string, v Element) {
-	prev, ok := rht.elementTableByKey[k]
-	if !ok || v.CreatedAt().After(prev.CreatedAt()) {
-		rht.elementTableByKey[k] = v
-		rht.elementTableByCreatedAt[v.CreatedAt().Key()] = NewPair(k, v)
+	if _, ok := rht.elementQueueMapByKey[k]; !ok {
+		rht.elementQueueMapByKey[k] = NewPriorityQueue()
 	}
+
+	item := rht.elementQueueMapByKey[k].Push(v)
+	rht.itemMapByCreatedAt[v.CreatedAt().Key()] = item
 }
 
-func (rht *RHT) RemoveByKey(k string) Element {
-	removed, ok := rht.elementTableByKey[k]
-	if ok {
-		delete(rht.elementTableByKey, k)
+func (rht *RHT) Remove(k string) Element {
+	if queue, ok := rht.elementQueueMapByKey[k]; ok {
+		item := queue.Peek()
+		item.Remove()
+		return item.value
 	}
-	return removed
+	return nil
 }
 
-func (rht *RHT) Remove(createdAt *time.Ticket) Element {
-	removed, ok := rht.elementTableByCreatedAt[createdAt.Key()]
-	if ok {
-		delete(rht.elementTableByKey, removed.key)
+func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket) Element {
+	if item, ok := rht.itemMapByCreatedAt[createdAt.Key()]; ok {
+		item.Remove()
+		return item.value
 	}
-	return removed.element
+
+	log.Logger.Warn("fail to find " + createdAt.Key())
+	return nil
 }
 
 func (rht *RHT) Members() map[string]Element {
-	return rht.elementTableByKey
+	elementMap := make(map[string]Element)
+	for key, queue := range rht.elementQueueMapByKey {
+		if item := queue.Peek(); !item.isRemoved {
+			elementMap[key] = item.value
+		}
+	}
+
+	return elementMap
 }
 
 func (rht *RHT) Marshal() string {
-	size := len(rht.elementTableByKey)
+	members := rht.Members()
+
+	size := len(members)
 	keys := make([]string, 0, size)
-	for k := range rht.elementTableByKey {
+	for k := range members {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
 	sb := strings.Builder{}
 	sb.WriteString("{")
+
 	idx := 0
 	for _, k := range keys {
-		elem := rht.elementTableByKey[k]
-		sb.WriteString(fmt.Sprintf("\"%s\":%s", k, elem.Marshal()))
+		value := members[k]
+		sb.WriteString(fmt.Sprintf("\"%s\":%s", k, value.Marshal()))
 		if size-1 != idx {
 			sb.WriteString(",")
 		}

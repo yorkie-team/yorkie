@@ -195,8 +195,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			"key": clientInfo.Key,
 		}, bson.M{
 			"$set": bson.M{
-				"documents."+docInfo.ID.Hex(): clientInfo.Documents[docInfo.ID.Hex()],
-				"updated_at": clientInfo.UpdatedAt,
+				"documents." + docInfo.ID.Hex(): clientInfo.Documents[docInfo.ID.Hex()],
+				"updated_at":                    clientInfo.UpdatedAt,
 			},
 		})
 

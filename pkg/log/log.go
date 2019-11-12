@@ -41,7 +41,7 @@ func init() {
 			zapcore.AddSync(os.Stdout),
 			zap.InfoLevel,
 		),
-	), zap.AddStacktrace(zap.ErrorLevel), zap.AddCaller())
+	), zap.AddStacktrace(zap.ErrorLevel))
 
 	Logger = rawLogger.Sugar()
 }

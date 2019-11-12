@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -14,13 +15,12 @@ func unaryInterceptor(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
+	start := time.Now()
 	resp, err := handler(ctx, req)
 	if err == nil {
-		log.Logger.Infof("unary %q(%q) => ok", info.FullMethod, req)
+		log.Logger.Infof("RPC : %q %s: %q => %q", info.FullMethod, time.Since(start), req, resp)
 	} else {
-		log.Logger.Infof(
-			"unary %q(%q) => %q", info.FullMethod, req, err,
-		)
+		log.Logger.Infof("RPC : %q %s) %q => %q", info.FullMethod, time.Since(start), req, err)
 	}
 
 	return resp, err

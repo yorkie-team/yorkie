@@ -22,7 +22,7 @@ var (
 )
 
 func randBetween(min, max int) int {
-	return rand.Intn(max - min) + min
+	return rand.Intn(max-min) + min
 }
 
 func WithYorkie(t *testing.T, f func(*testing.T, *yorkie.Yorkie)) {

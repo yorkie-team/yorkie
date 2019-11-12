@@ -3,23 +3,29 @@ package datatype
 import (
 	"strings"
 
+	"github.com/hackerwins/yorkie/pkg/log"
+
 	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
-type Node struct {
-	element Element
-	prev    *Node
-	next    *Node
+type RGANode struct {
+	prev      *RGANode
+	next      *RGANode
+	value     Element
+	isRemoved bool
 }
 
-func newNode(element Element) *Node {
-	return &Node{
-		element: element,
+func newRGANode(elem Element) *RGANode {
+	return &RGANode{
+		prev:      nil,
+		next:      nil,
+		value:     elem,
+		isRemoved: false,
 	}
 }
 
-func newNodeAfter(prev *Node, element Element) *Node {
-	newNode := newNode(element)
+func newNodeAfter(prev *RGANode, element Element) *RGANode {
+	newNode := newRGANode(element)
 	prevNext := prev.next
 
 	prev.next = newNode
@@ -34,21 +40,22 @@ func newNodeAfter(prev *Node, element Element) *Node {
 
 // RGA is replicated growable array.
 type RGA struct {
-	nodeTableByCreatedAt map[string]*Node
-	first                *Node
-	last                 *Node
-	size                 int
+	nodeMapByCreatedAt map[string]*RGANode
+	first              *RGANode
+	last               *RGANode
+	size               int
 }
 
 func NewRGA() *RGA {
-	nodeTableByCreatedAt := make(map[string]*Node)
-	dummyHead := newNode(NewPrimitive("", time.InitialTicket))
-	nodeTableByCreatedAt[dummyHead.element.CreatedAt().Key()] = dummyHead
+	nodeMapByCreatedAt := make(map[string]*RGANode)
+	dummyHead := newRGANode(NewPrimitive("", time.InitialTicket))
+	nodeMapByCreatedAt[dummyHead.value.CreatedAt().Key()] = dummyHead
 
 	return &RGA{
-		nodeTableByCreatedAt: nodeTableByCreatedAt,
-		first:                dummyHead,
-		last:                 dummyHead,
+		nodeMapByCreatedAt: nodeMapByCreatedAt,
+		first:              dummyHead,
+		last:               dummyHead,
+		size:               0,
 	}
 }
 
@@ -63,13 +70,15 @@ func (a *RGA) Marshal() string {
 			break
 		}
 
-		sb.WriteString(current.element.Marshal())
-		if a.size-1 != idx {
-			sb.WriteString(",")
+		if !current.isRemoved {
+			sb.WriteString(current.value.Marshal())
+			if a.size-1 != idx {
+				sb.WriteString(",")
+			}
+			idx++
 		}
 
 		current = current.next
-		idx++
 	}
 
 	sb.WriteString("]")
@@ -78,7 +87,7 @@ func (a *RGA) Marshal() string {
 }
 
 func (a *RGA) Add(e Element) {
-	a.insertAfterInternal(a.last, e)
+	a.insertAfter(a.last, e)
 }
 
 func (a *RGA) Elements() []Element {
@@ -89,7 +98,10 @@ func (a *RGA) Elements() []Element {
 			break
 		}
 
-		elements = append(elements, current.element)
+		if !current.isRemoved {
+			elements = append(elements, current.value)
+		}
+
 		current = current.next
 	}
 
@@ -97,40 +109,60 @@ func (a *RGA) Elements() []Element {
 }
 
 func (a *RGA) LastCreatedAt() *time.Ticket {
-	return a.last.element.CreatedAt()
+	return a.last.value.CreatedAt()
 }
 
 func (a *RGA) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
 	prevNode := a.findByCreatedAt(prevCreatedAt, element.CreatedAt())
-	a.insertAfterInternal(prevNode, element)
+	a.insertAfter(prevNode, element)
 }
 
-func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket) *Node {
-	node := a.nodeTableByCreatedAt[prevCreatedAt.Key()]
-	for node.next != nil && createdAt.After(node.next.element.CreatedAt()) {
+func (a *RGA) Get(idx int) Element {
+	// TODO introduce LLRBTree for improving upstream performance
+	elements := a.Elements()
+	if len(elements) <= idx {
+		return nil
+	}
+
+	return elements[idx]
+}
+
+func (a *RGA) RemoveByCreatedAt(createdAt *time.Ticket) Element {
+	if node, ok := a.nodeMapByCreatedAt[createdAt.Key()]; ok {
+		node.isRemoved = true
+		a.size--
+		return node.value
+	}
+
+	log.Logger.Warn("fail to find ", createdAt.Key())
+	return nil
+}
+
+func (a *RGA) Len() int {
+	return a.size
+}
+
+func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket) *RGANode {
+	node := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
+	for node.next != nil && createdAt.After(node.next.value.CreatedAt()) {
 		node = node.next
 	}
 
 	return node
 }
 
-func (a *RGA) insertAfterInternal(prev *Node, element Element) {
+func (a *RGA) insertAfter(prev *RGANode, element Element) {
 	newNode := newNodeAfter(prev, element)
 	if prev == a.last {
 		a.last = newNode
 	}
 
 	a.size++
-	a.nodeTableByCreatedAt[element.CreatedAt().Key()] = newNode
+	a.nodeMapByCreatedAt[element.CreatedAt().Key()] = newNode
 }
 
-func (a *RGA) Remove(createdAt *time.Ticket) Element {
-	node := a.nodeTableByCreatedAt[createdAt.Key()]
-	return a.unlink(node)
-}
-
-func (a *RGA) unlink(node *Node) Element {
-	element := node.element
+func (a *RGA) unlink(node *RGANode) Element {
+	element := node.value
 	next := node.next
 	prev := node.prev
 
@@ -148,7 +180,6 @@ func (a *RGA) unlink(node *Node) Element {
 		node.next = nil
 	}
 
-	node.element = nil
-	a.size--
+	node.value = nil
 	return element
 }

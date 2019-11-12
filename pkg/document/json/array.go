@@ -22,6 +22,19 @@ func (a *Array) Add(v datatype.Element) *Array {
 	return a
 }
 
+func (a *Array) Get(idx int) datatype.Element {
+	return a.elements.Get(idx)
+}
+
+func (a *Array) Remove(idx int) datatype.Element {
+	removed := a.elements.Get(idx)
+	if removed != nil {
+		a.elements.RemoveByCreatedAt(removed.CreatedAt())
+	}
+
+	return removed
+}
+
 func (a *Array) Elements() []datatype.Element {
 	return a.elements.Elements()
 }
@@ -43,5 +56,9 @@ func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element datatype.Element
 }
 
 func (a *Array) RemoveByCreatedAt(createdAt *time.Ticket) datatype.Element {
-	return a.elements.Remove(createdAt)
+	return a.elements.RemoveByCreatedAt(createdAt)
+}
+
+func (a *Array) Len() int {
+	return a.elements.Len()
 }

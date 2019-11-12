@@ -57,6 +57,21 @@ func (p *ArrayProxy) AddNewArray() *ArrayProxy {
 	return v.(*ArrayProxy)
 }
 
+func (p *ArrayProxy) Remove(idx int) datatype.Element {
+	removed := p.Array.Remove(idx)
+
+	if removed != nil {
+		ticket := p.context.IssueTimeTicket()
+		p.context.Push(operation.NewRemove(
+			p.CreatedAt(),
+			removed.CreatedAt(),
+			ticket,
+		))
+	}
+
+	return removed
+}
+
 func (p *ArrayProxy) addInternal(
 	creator func(ticket *time.Ticket) datatype.Element,
 ) datatype.Element {
@@ -75,7 +90,6 @@ func (p *ArrayProxy) addInternal(
 	return value
 }
 
-func (p *ArrayProxy) Remove(idx int) {
-
+func (p *ArrayProxy) Len() int {
+	return p.Array.Len()
 }
-

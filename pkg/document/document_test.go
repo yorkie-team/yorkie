@@ -81,4 +81,22 @@ func TestDocument(t *testing.T) {
 		}
 		assert.Equal(t, expected, doc.Marshal())
 	})
+
+	t.Run("array test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+
+		if err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewArray("k1").AddString("1").AddString("2").AddString("3")
+			assert.Equal(t, 3, root.GetArray("k1").Len())
+			assert.Equal(t, "{\"k1\":[\"1\",\"2\",\"3\"]}", root.Marshal())
+
+			root.GetArray("k1").Remove(1)
+			assert.Equal(t, "{\"k1\":[\"1\",\"3\"]}", root.Marshal())
+			assert.Equal(t, 2, root.GetArray("k1").Len())
+			return nil
+		}); err != nil {
+			t.Error(err)
+		}
+
+	})
 }

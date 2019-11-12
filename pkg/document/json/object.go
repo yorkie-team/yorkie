@@ -38,9 +38,9 @@ func (o *Object) Get(k string) datatype.Element {
 }
 
 func (o *Object) RemoveByCreatedAt(createdAt *time.Ticket) datatype.Element {
-	return o.members.Remove(createdAt)
+	return o.members.RemoveByCreatedAt(createdAt)
 }
 
-func (o *Object) RemoveByKey(k string) datatype.Element {
-	return o.members.RemoveByKey(k)
+func (o *Object) Remove(k string) datatype.Element {
+	return o.members.Remove(k)
 }

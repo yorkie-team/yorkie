@@ -27,7 +27,7 @@ var (
 	idxChanges = []mongo.IndexModel{{
 		Keys: bsonx.Doc{
 			{Key: "doc_id", Value: bsonx.Int32(1)},
-			{Key:"server_seq", Value: bsonx.Int32(1)},
+			{Key: "server_seq", Value: bsonx.Int32(1)},
 		},
 		Options: options.Index().SetUnique(true),
 	}}
