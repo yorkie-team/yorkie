@@ -45,6 +45,9 @@ func (r *Yorkie) Start() error {
 func (r *Yorkie) Shutdown(graceful bool) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+	if r.shutdown {
+		return nil
+	}
 
 	if err := r.backend.Close(); err != nil {
 		return err
@@ -53,6 +56,7 @@ func (r *Yorkie) Shutdown(graceful bool) error {
 	r.rpcServer.Shutdown(graceful)
 
 	close(r.shutdownCh)
+	r.shutdown = true
 	return nil
 }
 

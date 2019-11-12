@@ -69,7 +69,7 @@ func (a *RGA) Marshal() string {
 		}
 
 		current = current.next
-		idx += 1
+		idx++
 	}
 
 	sb.WriteString("]")
@@ -120,7 +120,7 @@ func (a *RGA) insertAfterInternal(prev *Node, element Element) {
 		a.last = newNode
 	}
 
-	a.size += 1
+	a.size++
 	a.nodeTableByCreatedAt[element.CreatedAt().Key()] = newNode
 }
 
@@ -149,6 +149,6 @@ func (a *RGA) unlink(node *Node) Element {
 	}
 
 	node.element = nil
-	a.size -= 1
+	a.size--
 	return element
 }

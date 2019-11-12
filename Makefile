@@ -7,7 +7,8 @@ GOTOOLS = \
   github.com/gogo/protobuf/gogoproto \
   github.com/gogo/protobuf/protoc-gen-gogo \
   github.com/gogo/protobuf/protoc-gen-gofast \
-  golang.org/x/tools/cmd/goimports
+  golang.org/x/tools/cmd/goimports \
+  github.com/golangci/golangci-lint
 
 tools:
 	go get $(GOTOOLS)
@@ -31,6 +32,7 @@ fmt:
 lint:
 	 golint ./...
 	 go vet ./...
+	 golangci-lint run ./...
 
 test:
 	go test -race ./...

@@ -17,6 +17,6 @@ type DocInfo struct {
 }
 
 func (info *DocInfo) IncreaseServerSeq() uint64 {
-	info.ServerSeq += 1
+	info.ServerSeq++
 	return info.ServerSeq
 }

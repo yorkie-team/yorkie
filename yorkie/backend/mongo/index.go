@@ -13,21 +13,21 @@ import (
 var (
 	ColClientInfos = "clients"
 	idxClientInfos = []mongo.IndexModel{{
-		Keys:    bsonx.Doc{{"key", bsonx.Int32(1)}},
+		Keys:    bsonx.Doc{{Key: "key", Value: bsonx.Int32(1)}},
 		Options: options.Index().SetUnique(true),
 	}}
 
 	ColDocInfos = "documents"
 	idxDocInfos = []mongo.IndexModel{{
-		Keys:    bsonx.Doc{{"key", bsonx.Int32(1)}},
+		Keys:    bsonx.Doc{{Key: "key", Value: bsonx.Int32(1)}},
 		Options: options.Index().SetUnique(true),
 	}}
 
 	ColChanges = "changes"
 	idxChanges = []mongo.IndexModel{{
 		Keys: bsonx.Doc{
-			{"doc_id", bsonx.Int32(1)},
-			{"server_seq", bsonx.Int32(1)},
+			{Key: "doc_id", Value: bsonx.Int32(1)},
+			{Key:"server_seq", Value: bsonx.Int32(1)},
 		},
 		Options: options.Index().SetUnique(true),
 	}}
