@@ -1,7 +1,5 @@
 syntax = "proto3";
 
-import "google/protobuf/any.proto";
-
 package api;
 
 service Yorkie {
@@ -106,19 +104,21 @@ message TimeTicket {
 enum ValueType {
     NULL = 0;
     BOOLEAN = 1;
-    DOUBLE = 2;
-    STRING = 3;
-    BYTES = 4;
-    DATE = 5;
-    JSON_OBJECT = 6;
-    JSON_ARRAY = 7;
+    INTEGER = 2;
+    LONG = 3;
+    DOUBLE = 4;
+    STRING = 5;
+    BYTES = 6;
+    DATE = 7;
+    JSON_OBJECT = 8;
+    JSON_ARRAY = 9;
 }
 
 message JSONElement {
     TimeTicket created_at = 1;
     TimeTicket updated_at = 2;
     ValueType type = 3;
-    google.protobuf.Any value = 4;
+    bytes value = 4;
 }
 
 message Operation {

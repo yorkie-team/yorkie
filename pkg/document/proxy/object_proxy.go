@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	time2 "time"
+
 	"github.com/hackerwins/yorkie/pkg/document/change"
 	"github.com/hackerwins/yorkie/pkg/document/json"
 	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
@@ -57,7 +59,55 @@ func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 	return v.(*ArrayProxy)
 }
 
+func (p *ObjectProxy) SetBool(k string, v bool) *ObjectProxy {
+	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ObjectProxy) SetInteger(k string, v int) *ObjectProxy {
+	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ObjectProxy) SetLong(k string, v int64) *ObjectProxy {
+	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ObjectProxy) SetDouble(k string, v float64) *ObjectProxy {
+	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
 func (p *ObjectProxy) SetString(k, v string) *ObjectProxy {
+	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ObjectProxy) SetBytes(k string, v []byte) *ObjectProxy {
+	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ObjectProxy) SetDate(k string, v time2.Time) *ObjectProxy {
 	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
 		return datatype.NewPrimitive(v, ticket)
 	})

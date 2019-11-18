@@ -160,26 +160,3 @@ func (a *RGA) insertAfter(prev *RGANode, element Element) {
 	a.size++
 	a.nodeMapByCreatedAt[element.CreatedAt().Key()] = newNode
 }
-
-func (a *RGA) unlink(node *RGANode) Element {
-	element := node.value
-	next := node.next
-	prev := node.prev
-
-	if prev == nil {
-		a.first.next = next
-	} else {
-		prev.next = next
-		node.prev = nil
-	}
-
-	if next == nil {
-		a.last = prev
-	} else {
-		next.prev = prev
-		node.next = nil
-	}
-
-	node.value = nil
-	return element
-}

@@ -105,14 +105,43 @@ func fromElement(pbElement *api.JSONElement) datatype.Element {
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_JSON_ARRAY:
-		createdAt := fromTimeTicket(pbElement.CreatedAt)
 		return json.NewArray(
 			datatype.NewRGA(),
-			createdAt,
+			fromTimeTicket(pbElement.CreatedAt),
+		)
+	case api.ValueType_BOOLEAN:
+		return datatype.NewPrimitive(
+			datatype.ValueFromBytes(datatype.Boolean, pbElement.Value),
+			fromTimeTicket(pbElement.CreatedAt),
+		)
+	case api.ValueType_INTEGER:
+		return datatype.NewPrimitive(
+			datatype.ValueFromBytes(datatype.Integer, pbElement.Value),
+			fromTimeTicket(pbElement.CreatedAt),
+		)
+	case api.ValueType_LONG:
+		return datatype.NewPrimitive(
+			datatype.ValueFromBytes(datatype.Long, pbElement.Value),
+			fromTimeTicket(pbElement.CreatedAt),
+		)
+	case api.ValueType_DOUBLE:
+		return datatype.NewPrimitive(
+			datatype.ValueFromBytes(datatype.Double, pbElement.Value),
+			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_STRING:
 		return datatype.NewPrimitive(
-			string(pbElement.Value.GetValue()),
+			datatype.ValueFromBytes(datatype.String, pbElement.Value),
+			fromTimeTicket(pbElement.CreatedAt),
+		)
+	case api.ValueType_BYTES:
+		return datatype.NewPrimitive(
+			datatype.ValueFromBytes(datatype.Bytes, pbElement.Value),
+			fromTimeTicket(pbElement.CreatedAt),
+		)
+	case api.ValueType_DATE:
+		return datatype.NewPrimitive(
+			datatype.ValueFromBytes(datatype.Date, pbElement.Value),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	}

@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	time2 "time"
+
 	"github.com/hackerwins/yorkie/pkg/document/change"
 	"github.com/hackerwins/yorkie/pkg/document/json"
 	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
@@ -39,6 +41,54 @@ func NewArrayProxy(
 		Array:   json.NewArray(elements, createdAt),
 		context: ctx,
 	}
+}
+
+func (p *ArrayProxy) AddBool(v bool) *ArrayProxy {
+	p.addInternal(func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ArrayProxy) AddInteger(v int) *ArrayProxy {
+	p.addInternal(func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ArrayProxy) AddLong(v int64) *ArrayProxy {
+	p.addInternal(func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ArrayProxy) AddDouble(v float64) *ArrayProxy {
+	p.addInternal(func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ArrayProxy) AddBytes(v []byte) *ArrayProxy {
+	p.addInternal(func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+func (p *ArrayProxy) AddDate(v time2.Time) *ArrayProxy {
+	p.addInternal(func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewPrimitive(v, ticket)
+	})
+
+	return p
 }
 
 func (p *ArrayProxy) AddString(v string) *ArrayProxy {

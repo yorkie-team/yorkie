@@ -1,8 +1,6 @@
 package converter
 
 import (
-	"github.com/gogo/protobuf/types"
-
 	"github.com/hackerwins/yorkie/api"
 	"github.com/hackerwins/yorkie/pkg/document/change"
 	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
@@ -110,19 +108,52 @@ func toJSONElement(elem datatype.Element) *api.JSONElement {
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}
 	case *datatype.Primitive:
-		return &api.JSONElement{
-			Type:      api.ValueType_STRING,
-			CreatedAt: toTimeTicket(elem.CreatedAt()),
-			Value:     toValue(elem.Value()),
+		switch elem.ValueType() {
+		case datatype.Boolean:
+			return &api.JSONElement{
+				Type:      api.ValueType_BOOLEAN,
+				CreatedAt: toTimeTicket(elem.CreatedAt()),
+				Value:     elem.Bytes(),
+			}
+		case datatype.Integer:
+			return &api.JSONElement{
+				Type:      api.ValueType_INTEGER,
+				CreatedAt: toTimeTicket(elem.CreatedAt()),
+				Value:     elem.Bytes(),
+			}
+		case datatype.Long:
+			return &api.JSONElement{
+				Type:      api.ValueType_LONG,
+				CreatedAt: toTimeTicket(elem.CreatedAt()),
+				Value:     elem.Bytes(),
+			}
+		case datatype.Double:
+			return &api.JSONElement{
+				Type:      api.ValueType_DOUBLE,
+				CreatedAt: toTimeTicket(elem.CreatedAt()),
+				Value:     elem.Bytes(),
+			}
+		case datatype.String:
+			return &api.JSONElement{
+				Type:      api.ValueType_STRING,
+				CreatedAt: toTimeTicket(elem.CreatedAt()),
+				Value:     elem.Bytes(),
+			}
+		case datatype.Bytes:
+			return &api.JSONElement{
+				Type:      api.ValueType_BYTES,
+				CreatedAt: toTimeTicket(elem.CreatedAt()),
+				Value:     elem.Bytes(),
+			}
+		case datatype.Date:
+			return &api.JSONElement{
+				Type:      api.ValueType_DATE,
+				CreatedAt: toTimeTicket(elem.CreatedAt()),
+				Value:     elem.Bytes(),
+			}
 		}
 	}
 	panic("fail to encode JSONElement to protobuf")
-}
-
-func toValue(bytes []byte) *types.Any {
-	return &types.Any{
-		Value: bytes,
-	}
 }
 
 func toTimeTicket(ticket *time.Ticket) *api.TimeTicket {
