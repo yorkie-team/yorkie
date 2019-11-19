@@ -417,6 +417,44 @@ func TestClientAndDocument(t *testing.T) {
 
 			syncThenAssertEqual(t, c1, c2, doc1, doc2)
 		})
+
+		t.Run("text test", func(t *testing.T) {
+			ctx := context.Background()
+			doc1 := document.New(testCollection, t.Name())
+			if err := c1.AttachDocument(ctx, doc1); err != nil {
+				t.Error(err)
+			}
+			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.SetNewText("k1")
+				return nil
+			}, "set v1 by c1"); err != nil {
+				t.Error(err)
+			}
+			if err := c1.PushPull(ctx); err != nil {
+				t.Error(err)
+			}
+
+			doc2 := document.New(testCollection, t.Name())
+			if err := c2.AttachDocument(ctx, doc2); err != nil {
+				t.Error(err)
+			}
+
+			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.GetText("k1").Edit(0, 0, "ABCD")
+				return nil
+			}); err != nil {
+				t.Error(err)
+			}
+
+			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
+				root.GetText("k1").Edit(0, 0, "1234")
+				return nil
+			}); err != nil {
+				t.Error(err)
+			}
+
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		})
 	})
 }
 
@@ -454,7 +492,7 @@ func syncThenAssertEqual(
 
 func withYorkieAndTwoClients(
 	t *testing.T,
-	f func(t *testing.T, r *yorkie.Yorkie, c1 *client.Client, c2 *client.Client),
+	f func(t *testing.T, y *yorkie.Yorkie, c1 *client.Client, c2 *client.Client),
 ) {
 	testhelper.WithYorkie(t, func(t *testing.T, r *yorkie.Yorkie) {
 		c1, err := client.NewClient(testRPCAddr)

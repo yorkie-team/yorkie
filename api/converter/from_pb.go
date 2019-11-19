@@ -144,6 +144,10 @@ func fromElement(pbElement *api.JSONElement) datatype.Element {
 			datatype.ValueFromBytes(datatype.Date, pbElement.Value),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
+	case api.ValueType_TEXT:
+		return datatype.NewText(
+			fromTimeTicket(pbElement.CreatedAt),
+		)
 	}
 
 	panic("fail to decode element")

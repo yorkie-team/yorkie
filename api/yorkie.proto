@@ -112,6 +112,7 @@ enum ValueType {
     DATE = 7;
     JSON_OBJECT = 8;
     JSON_ARRAY = 9;
+    TEXT = 10;
 }
 
 message JSONElement {

@@ -152,6 +152,11 @@ func toJSONElement(elem datatype.Element) *api.JSONElement {
 				Value:     elem.Bytes(),
 			}
 		}
+	case *datatype.Text:
+		return &api.JSONElement{
+			Type:      api.ValueType_TEXT,
+			CreatedAt: toTimeTicket(elem.CreatedAt()),
+		}
 	}
 	panic("fail to encode JSONElement to protobuf")
 }

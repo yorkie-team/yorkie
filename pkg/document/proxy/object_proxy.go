@@ -59,6 +59,14 @@ func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 	return v.(*ArrayProxy)
 }
 
+func (p *ObjectProxy) SetNewText(k string) *datatype.Text {
+	v := p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
+		return datatype.NewText(ticket)
+	})
+
+	return v.(*datatype.Text)
+}
+
 func (p *ObjectProxy) SetBool(k string, v bool) *ObjectProxy {
 	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
 		return datatype.NewPrimitive(v, ticket)
@@ -130,6 +138,15 @@ func (p *ObjectProxy) Remove(k string) datatype.Element {
 	return removed
 }
 
+func (p *ObjectProxy) GetObject(k string) *ObjectProxy {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	return p.Object.Get(k).(*ObjectProxy)
+}
+
 func (p *ObjectProxy) GetArray(k string) *ArrayProxy {
 	elem := p.Object.Get(k)
 	if elem == nil {
@@ -139,13 +156,13 @@ func (p *ObjectProxy) GetArray(k string) *ArrayProxy {
 	return p.Object.Get(k).(*ArrayProxy)
 }
 
-func (p *ObjectProxy) GetObject(k string) *ObjectProxy {
+func (p *ObjectProxy) GetText(k string) *datatype.Text {
 	elem := p.Object.Get(k)
 	if elem == nil {
 		return nil
 	}
 
-	return p.Object.Get(k).(*ObjectProxy)
+	return p.Object.Get(k).(*datatype.Text)
 }
 
 func (p *ObjectProxy) setInternal(

@@ -8,15 +8,15 @@ import (
 	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
-type RGANode struct {
-	prev      *RGANode
-	next      *RGANode
+type rgaNode struct {
+	prev      *rgaNode
+	next      *rgaNode
 	value     Element
 	isRemoved bool
 }
 
-func newRGANode(elem Element) *RGANode {
-	return &RGANode{
+func newRGANode(elem Element) *rgaNode {
+	return &rgaNode{
 		prev:      nil,
 		next:      nil,
 		value:     elem,
@@ -24,7 +24,7 @@ func newRGANode(elem Element) *RGANode {
 	}
 }
 
-func newNodeAfter(prev *RGANode, element Element) *RGANode {
+func newNodeAfter(prev *rgaNode, element Element) *rgaNode {
 	newNode := newRGANode(element)
 	prevNext := prev.next
 
@@ -40,14 +40,15 @@ func newNodeAfter(prev *RGANode, element Element) *RGANode {
 
 // RGA is replicated growable array.
 type RGA struct {
-	nodeMapByCreatedAt map[string]*RGANode
-	first              *RGANode
-	last               *RGANode
+	nodeMapByCreatedAt map[string]*rgaNode
+	first              *rgaNode
+	last               *rgaNode
 	size               int
 }
 
+// NewRGA creates a new instance of RGA.
 func NewRGA() *RGA {
-	nodeMapByCreatedAt := make(map[string]*RGANode)
+	nodeMapByCreatedAt := make(map[string]*rgaNode)
 	dummyHead := newRGANode(NewPrimitive("", time.InitialTicket))
 	nodeMapByCreatedAt[dummyHead.value.CreatedAt().Key()] = dummyHead
 
@@ -59,6 +60,7 @@ func NewRGA() *RGA {
 	}
 }
 
+// Marshal returns the JSON encoding of this RGA.
 func (a *RGA) Marshal() string {
 	sb := strings.Builder{}
 	sb.WriteString("[")
@@ -86,10 +88,12 @@ func (a *RGA) Marshal() string {
 	return sb.String()
 }
 
+// Add adds the given element at the last.
 func (a *RGA) Add(e Element) {
 	a.insertAfter(a.last, e)
 }
 
+// Elements returns an array of elements contained in this RGA.
 func (a *RGA) Elements() []Element {
 	var elements []Element
 	current := a.first.next
@@ -108,15 +112,18 @@ func (a *RGA) Elements() []Element {
 	return elements
 }
 
+// LastCreatedAt returns the creation time of last elements.
 func (a *RGA) LastCreatedAt() *time.Ticket {
 	return a.last.value.CreatedAt()
 }
 
+// InsertAfter inserts the given element after the given previous element.
 func (a *RGA) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
 	prevNode := a.findByCreatedAt(prevCreatedAt, element.CreatedAt())
 	a.insertAfter(prevNode, element)
 }
 
+// Get returns the element of the given index.
 func (a *RGA) Get(idx int) Element {
 	// TODO introduce LLRBTree for improving upstream performance
 	elements := a.Elements()
@@ -127,6 +134,7 @@ func (a *RGA) Get(idx int) Element {
 	return elements[idx]
 }
 
+// RemoveByCreatedAt removes the given element.
 func (a *RGA) RemoveByCreatedAt(createdAt *time.Ticket) Element {
 	if node, ok := a.nodeMapByCreatedAt[createdAt.Key()]; ok {
 		node.isRemoved = true
@@ -138,11 +146,12 @@ func (a *RGA) RemoveByCreatedAt(createdAt *time.Ticket) Element {
 	return nil
 }
 
+// Len returns length of this RGA.
 func (a *RGA) Len() int {
 	return a.size
 }
 
-func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket) *RGANode {
+func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket) *rgaNode {
 	node := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
 	for node.next != nil && createdAt.After(node.next.value.CreatedAt()) {
 		node = node.next
@@ -151,7 +160,7 @@ func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket
 	return node
 }
 
-func (a *RGA) insertAfter(prev *RGANode, element Element) {
+func (a *RGA) insertAfter(prev *rgaNode, element Element) {
 	newNode := newNodeAfter(prev, element)
 	if prev == a.last {
 		a.last = newNode

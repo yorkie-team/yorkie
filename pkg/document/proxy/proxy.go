@@ -13,7 +13,9 @@ func toOriginal(elem datatype.Element) datatype.Element {
 		return json.NewArray(datatype.NewRGA(), elem.Array.CreatedAt())
 	case *datatype.Primitive:
 		return elem
+	case *datatype.Text:
+		return elem
 	}
 
-	return nil
+	panic("unsupported element type")
 }

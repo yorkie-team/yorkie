@@ -1,6 +1,7 @@
 package document_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/hackerwins/yorkie/pkg/document"
@@ -8,6 +9,10 @@ import (
 	"github.com/hackerwins/yorkie/pkg/document/proxy"
 
 	"github.com/stretchr/testify/assert"
+)
+
+var (
+	errDummy = errors.New("dummy error")
 )
 
 func TestDocument(t *testing.T) {
@@ -97,6 +102,33 @@ func TestDocument(t *testing.T) {
 		}); err != nil {
 			t.Error(err)
 		}
+	})
 
+	t.Run("rollback test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+
+		if err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
+			return nil
+		}); err != nil {
+			t.Error(err)
+		}
+		assert.Equal(t, "{\"k1\":[1,2,3]}", doc.Marshal())
+
+		if err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.GetArray("k1").AddInteger(4).AddInteger(5)
+			return errDummy
+		}); err != errDummy {
+			t.Error("should returns the dummy error")
+		}
+		assert.Equal(t, "{\"k1\":[1,2,3]}", doc.Marshal())
+
+		if err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.GetArray("k1").AddInteger(4).AddInteger(5)
+			return nil
+		}); err != nil {
+			t.Error(err)
+		}
+		assert.Equal(t, "{\"k1\":[1,2,3,4,5]}", doc.Marshal())
 	})
 }

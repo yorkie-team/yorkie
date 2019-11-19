@@ -27,18 +27,18 @@ func randBetween(min, max int) int {
 
 func WithYorkie(t *testing.T, f func(*testing.T, *yorkie.Yorkie)) {
 	testConfig.Mongo.YorkieDatabase = fmt.Sprintf("yorkie-meta-%d", randBetween(0, 9999))
-	r, err := yorkie.New(testConfig)
+	y, err := yorkie.New(testConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := r.Start(); err != nil {
+	if err := y.Start(); err != nil {
 		t.Fatal(err)
 	}
 
-	f(t, r)
+	f(t, y)
 
-	if err := r.Shutdown(true); err != nil {
+	if err := y.Shutdown(true); err != nil {
 		t.Error(err)
 	}
 }
