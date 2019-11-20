@@ -16,6 +16,7 @@ type RHT struct {
 	itemMapByCreatedAt   map[string]*PQItem
 }
 
+// NewRHT creates a new instance of RHT.
 func NewRHT() *RHT {
 	return &RHT{
 		elementQueueMapByKey: make(map[string]*PriorityQueue),
@@ -23,8 +24,9 @@ func NewRHT() *RHT {
 	}
 }
 
-func (rht *RHT) Get(k string) Element {
-	if queue, ok := rht.elementQueueMapByKey[k]; ok {
+// Get returns the value of the given key.
+func (rht *RHT) Get(key string) Element {
+	if queue, ok := rht.elementQueueMapByKey[key]; ok {
 		item := queue.Peek()
 		if item.isRemoved {
 			return nil
@@ -35,6 +37,7 @@ func (rht *RHT) Get(k string) Element {
 	return nil
 }
 
+// Set sets the value of the given key.
 func (rht *RHT) Set(k string, v Element) {
 	if _, ok := rht.elementQueueMapByKey[k]; !ok {
 		rht.elementQueueMapByKey[k] = NewPriorityQueue()
@@ -44,6 +47,7 @@ func (rht *RHT) Set(k string, v Element) {
 	rht.itemMapByCreatedAt[v.CreatedAt().Key()] = item
 }
 
+// Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string) Element {
 	if queue, ok := rht.elementQueueMapByKey[k]; ok {
 		item := queue.Peek()
@@ -53,6 +57,7 @@ func (rht *RHT) Remove(k string) Element {
 	return nil
 }
 
+// RemoveByCreatedAt removes the Element of the given creation time.
 func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket) Element {
 	if item, ok := rht.itemMapByCreatedAt[createdAt.Key()]; ok {
 		item.Remove()
@@ -63,6 +68,8 @@ func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket) Element {
 	return nil
 }
 
+// Members returns a map of elements because the map easy to use for loop. If we
+// encounter performance issues, we need to replace this with other solution.
 func (rht *RHT) Members() map[string]Element {
 	elementMap := make(map[string]Element)
 	for key, queue := range rht.elementQueueMapByKey {
@@ -74,6 +81,7 @@ func (rht *RHT) Members() map[string]Element {
 	return elementMap
 }
 
+// Marshal returns the JSON encoding of this RHT.
 func (rht *RHT) Marshal() string {
 	members := rht.Members()
 

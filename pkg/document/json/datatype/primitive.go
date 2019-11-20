@@ -22,6 +22,7 @@ const (
 	Date    ValueType = 7
 )
 
+// ValueFromBytes parses the given bytes into value.
 func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 	switch valueType {
 	case Boolean:
@@ -49,12 +50,14 @@ func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 	panic("unsupported type")
 }
 
+// Primitive represents JSON primitive data type including logical lock.
 type Primitive struct {
 	valueType ValueType
 	value     interface{}
 	createdAt *time.Ticket
 }
 
+// NewPrimitive creates a new instance of Primitive.
 func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 	switch val := value.(type) {
 	case bool:
@@ -104,6 +107,7 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 	panic("unsupported type")
 }
 
+// Bytes creates an array representing the value.
 func (p *Primitive) Bytes() []byte {
 	switch val := p.value.(type) {
 	case bool:
@@ -137,6 +141,7 @@ func (p *Primitive) Bytes() []byte {
 	panic("unsupported type")
 }
 
+// Marshal returns the JSON encoding of the value.
 func (p *Primitive) Marshal() string {
 	switch p.valueType {
 	case Boolean:
@@ -160,10 +165,12 @@ func (p *Primitive) Marshal() string {
 	panic("unsupported type")
 }
 
+// CreatedAt returns the creation time.
 func (p *Primitive) CreatedAt() *time.Ticket {
 	return p.createdAt
 }
 
+// ValueType returns the type of the value.
 func (p *Primitive) ValueType() ValueType {
 	return p.valueType
 }

@@ -5,11 +5,14 @@ import (
 	"strings"
 )
 
+// SplayValue is an interface that represents the value of SplayNode.
+// User can extend this interface to use custom value in SplayNode.
 type SplayValue interface {
 	GetLength() int
 	String() string
 }
 
+// SplayNode is a node of SplayTree.
 type SplayNode struct {
 	value  SplayValue
 	weight int
@@ -19,6 +22,7 @@ type SplayNode struct {
 	parent *SplayNode
 }
 
+// NewSplayNode creates a new instance of SplayNode.
 func NewSplayNode(value SplayValue) *SplayNode {
 	n := &SplayNode{
 		value: value,
@@ -49,20 +53,25 @@ func (n *SplayNode) increaseWeight(weight int) {
 	n.weight += weight
 }
 
+// SplayTree is weighted binary search tree which is based on splay tree.
+// original paper: https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
 type SplayTree struct {
 	root *SplayNode
 }
 
+// NewSplayTree creates a new instance of SplayTree.
 func NewSplayTree(root *SplayNode) *SplayTree {
 	return &SplayTree{
 		root: root,
 	}
 }
 
+// Insert inserts the node at the last.
 func (t *SplayTree) Insert(node *SplayNode) *SplayNode {
 	return t.InsertAfter(t.root, node)
 }
 
+// Insert inserts the node after the given previous node.
 func (t *SplayTree) InsertAfter(prev *SplayNode, node *SplayNode) *SplayNode {
 	t.Splay(prev)
 	t.root = node
@@ -80,12 +89,13 @@ func (t *SplayTree) InsertAfter(prev *SplayNode, node *SplayNode) *SplayNode {
 	return node
 }
 
+// Splay moves the given node to the root.
 func (t *SplayTree) Splay(node *SplayNode) {
 	if node == nil {
 		return
 	}
 
-	for true {
+	for {
 		if isLeftChild(node.parent) && isRightChild(node) {
 			// zig-zag
 			t.rotateLeft(node)
@@ -110,6 +120,7 @@ func (t *SplayTree) Splay(node *SplayNode) {
 	}
 }
 
+// IndexOf Find the index of the given node.
 func (t *SplayTree) IndexOf(node *SplayNode) int {
 	if node == nil {
 		return -1
@@ -128,14 +139,17 @@ func (t *SplayTree) IndexOf(node *SplayNode) int {
 	return index - node.value.GetLength()
 }
 
+// String returns a string containing node values.
 func (t *SplayTree) String() string {
-	var metaString []string
+	var str []string
 	traverseInOrder(t.root, func(node *SplayNode) {
-		metaString = append(metaString, node.value.String())
+		str = append(str, node.value.String())
 	})
-	return strings.Join(metaString, "")
+	return strings.Join(str, "")
 }
 
+// MetaString returns a string containing the metadata of the SplayNode
+// for debugging purpose.
 func (t *SplayTree) MetaString() string {
 	var metaString []string
 	traverseInOrder(t.root, func(node *SplayNode) {
@@ -147,18 +161,6 @@ func (t *SplayTree) MetaString() string {
 		))
 	})
 	return strings.Join(metaString, "")
-}
-
-func (t *SplayTree) updateSubtree(node *SplayNode) {
-	node.initWeight()
-
-	if node.left != nil {
-		node.increaseWeight(node.leftWeight())
-	}
-
-	if node.right != nil {
-		node.increaseWeight(node.rightWeight())
-	}
 }
 
 func (t *SplayTree) rotateLeft(pivot *SplayNode) {
@@ -210,6 +212,18 @@ func (t *SplayTree) rotateRight(pivot *SplayNode) {
 
 	t.updateSubtree(root)
 	t.updateSubtree(pivot)
+}
+
+func (t *SplayTree) updateSubtree(node *SplayNode) {
+	node.initWeight()
+
+	if node.left != nil {
+		node.increaseWeight(node.leftWeight())
+	}
+
+	if node.right != nil {
+		node.increaseWeight(node.rightWeight())
+	}
 }
 
 func traverseInOrder(node *SplayNode, callback func(node *SplayNode)) {

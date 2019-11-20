@@ -31,6 +31,7 @@ func TestSplayTree(t *testing.T) {
 		nodeA := newSplayNode("A2")
 		tree := datatype.NewSplayTree(nodeA)
 		assert.Equal(t, "[2,2]A2", tree.MetaString())
+
 		nodeB := tree.Insert(newSplayNode("B23"))
 		assert.Equal(t, "[2,2]A2[5,3]B23", tree.MetaString())
 		nodeC := tree.Insert(newSplayNode("C234"))
@@ -39,6 +40,7 @@ func TestSplayTree(t *testing.T) {
 		assert.Equal(t, "[2,2]A2[5,3]B23[9,4]C234[14,5]D2345", tree.MetaString())
 
 		tree.Splay(nodeB)
+		assert.Equal(t, "[2,2]A2[14,3]B23[9,4]C234[5,5]D2345", tree.MetaString())
 
 		assert.Equal(t, tree.IndexOf(nodeA), 0)
 		assert.Equal(t, tree.IndexOf(nodeB), 2)

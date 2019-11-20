@@ -12,7 +12,7 @@ type Change struct {
 	id *ID
 	// message is used to save a description of the change.
 	message string
-	// operations represent a series of modifications.
+	// operations represent a series of user edits.
 	operations []operation.Operation
 	// serverSeq is optional and only present for changes stored on the server.
 	serverSeq *uint64

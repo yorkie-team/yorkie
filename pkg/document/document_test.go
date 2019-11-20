@@ -34,8 +34,8 @@ func TestDocument(t *testing.T) {
 			t.Error(err)
 		}
 
-		assert.False(t, doc1.Equals(doc2))
-		assert.True(t, doc2.Equals(doc3))
+		assert.NotEqual(t, doc1.Marshal(), doc2.Marshal())
+		assert.Equal(t, doc2.Marshal(), doc3.Marshal())
 	})
 
 	t.Run("nested update test", func(t *testing.T) {

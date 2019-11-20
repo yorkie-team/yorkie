@@ -19,6 +19,7 @@ const (
 	Attached stateType = 1
 )
 
+// Document represents a document in MongoDB and contains logical clocks.
 type Document struct {
 	key          *key.Key
 	state        stateType
@@ -28,6 +29,7 @@ type Document struct {
 	localChanges []*change.Change
 }
 
+// New creates a new instance of Document.
 func New(collection, document string) *Document {
 	return &Document{
 		key:        &key.Key{Collection: collection, Document: document},
@@ -38,14 +40,17 @@ func New(collection, document string) *Document {
 	}
 }
 
+// Key returns the key of this document.
 func (d *Document) Key() *key.Key {
 	return d.key
 }
 
+// Checkpoint returns the checkpoint of this document.
 func (d *Document) Checkpoint() *checkpoint.Checkpoint {
 	return d.checkpoint
 }
 
+// Update executes the given updater to update this document.
 func (d *Document) Update(
 	updater func(root *proxy.ObjectProxy) error,
 	msgAndArgs ...interface{},
@@ -69,10 +74,12 @@ func (d *Document) Update(
 	return nil
 }
 
+// HasLocalChanges returns whether this document has local changes or not.
 func (d *Document) HasLocalChanges() bool {
 	return len(d.localChanges) > 0
 }
 
+// ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	for _, c := range pack.Changes {
 		d.changeID = d.changeID.Sync(c.ID())
@@ -86,14 +93,12 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	return nil
 }
 
-func (d *Document) Equals(other *Document) bool {
-	return d.Marshal() == other.Marshal()
-}
-
+// Marshal returns the JSON encoding of this document.
 func (d *Document) Marshal() string {
 	return d.root.Object().Marshal()
 }
 
+// FlushChangePack flushes the local change pack to send to the remote server.
 func (d *Document) FlushChangePack() *change.Pack {
 	changes := d.localChanges
 	d.localChanges = []*change.Change{}
@@ -102,6 +107,8 @@ func (d *Document) FlushChangePack() *change.Pack {
 	return change.NewPack(d.key, cp, changes)
 }
 
+// SetActor sets actor into this document. This is also applied in the local
+// changes the document has.
 func (d *Document) SetActor(actor *time.ActorID) {
 	for _, c := range d.localChanges {
 		c.SetActor(actor)
@@ -109,14 +116,17 @@ func (d *Document) SetActor(actor *time.ActorID) {
 	d.changeID = d.changeID.SetActor(actor)
 }
 
+// SetActor sets actor.
 func (d *Document) Actor() *time.ActorID {
 	return d.changeID.Actor()
 }
 
+// UpdateState updates the state of this document.
 func (d *Document) UpdateState(state stateType) {
 	d.state = state
 }
 
+// IsAttached returns the whether this document is attached or not.
 func (d *Document) IsAttached() bool {
 	return d.state == Attached
 }
