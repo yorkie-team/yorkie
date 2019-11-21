@@ -80,6 +80,12 @@ func FromOperations(pbOps []*api.Operation) []operation.Operation {
 				fromTimeTicket(decoded.Remove.CreatedAt),
 				fromTimeTicket(decoded.Remove.ExecutedAt),
 			)
+		case *api.Operation_Edit_:
+			op = operation.NewEdit(
+				fromTimeTicket(decoded.Edit.ParentCreatedAt),
+				decoded.Edit.Content,
+				fromTimeTicket(decoded.Edit.ExecutedAt),
+			)
 		default:
 			panic("unsupported operation")
 		}

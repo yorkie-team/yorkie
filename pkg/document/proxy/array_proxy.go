@@ -19,14 +19,15 @@ func ProxyArray(ctx *change.Context, root *json.Array) *ArrayProxy {
 	elements := datatype.NewRGA()
 
 	for _, val := range root.Elements() {
-		switch elem := val.(type) {
+		switch val.(type) {
 		case *json.Object:
-			elements.Add(ProxyObject(ctx, elem))
 		case *json.Array:
-			elements.Add(ProxyArray(ctx, elem))
+		case *datatype.Text:
 		case *datatype.Primitive:
-			elements.Add(elem)
+		default:
+			panic("unsupported type")
 		}
+		elements.Add(val)
 	}
 
 	return NewArrayProxy(ctx, elements, root.CreatedAt())

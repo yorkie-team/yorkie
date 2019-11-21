@@ -19,14 +19,15 @@ func ProxyObject(ctx *change.Context, root *json.Object) *ObjectProxy {
 	members := datatype.NewRHT()
 
 	for key, val := range root.Members() {
-		switch elem := val.(type) {
+		switch val.(type) {
 		case *json.Object:
-			members.Set(key, ProxyObject(ctx, elem))
 		case *json.Array:
-			members.Set(key, ProxyArray(ctx, elem))
+		case *datatype.Text:
 		case *datatype.Primitive:
-			members.Set(key, elem)
+		default:
+			panic("unsupported type")
 		}
+		members.Set(key, val)
 	}
 
 	return NewObjectProxy(ctx, members, root.CreatedAt())
@@ -144,7 +145,14 @@ func (p *ObjectProxy) GetObject(k string) *ObjectProxy {
 		return nil
 	}
 
-	return p.Object.Get(k).(*ObjectProxy)
+	switch elem := p.Object.Get(k).(type) {
+	case *json.Object:
+		return ProxyObject(p.context, elem)
+	case *ObjectProxy:
+		return elem
+	default:
+		panic("unsupported type")
+	}
 }
 
 func (p *ObjectProxy) GetArray(k string) *ArrayProxy {
@@ -153,16 +161,30 @@ func (p *ObjectProxy) GetArray(k string) *ArrayProxy {
 		return nil
 	}
 
-	return p.Object.Get(k).(*ArrayProxy)
+	switch elem := p.Object.Get(k).(type) {
+	case *json.Array:
+		return ProxyArray(p.context, elem)
+	case *ArrayProxy:
+		return elem
+	default:
+		panic("unsupported type")
+	}
 }
 
-func (p *ObjectProxy) GetText(k string) *datatype.Text {
+func (p *ObjectProxy) GetText(k string) *TextProxy {
 	elem := p.Object.Get(k)
 	if elem == nil {
 		return nil
 	}
 
-	return p.Object.Get(k).(*datatype.Text)
+	switch elem := p.Object.Get(k).(type) {
+	case *datatype.Text:
+		return ProxyText(p.context, elem)
+	case *TextProxy:
+		return elem
+	default:
+		panic("unsupported type")
+	}
 }
 
 func (p *ObjectProxy) setInternal(

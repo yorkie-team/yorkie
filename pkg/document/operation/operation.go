@@ -9,4 +9,5 @@ type Operation interface {
 	Execute(root *json.Root) error
 	ExecutedAt() *time.Ticket
 	SetActor(id *time.ActorID)
+	ParentCreatedAt() *time.Ticket
 }

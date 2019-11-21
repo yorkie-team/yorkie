@@ -63,26 +63,34 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 		case *operation.Set:
 			pbOperation.Body = &api.Operation_Set_{
 				Set: &api.Operation_Set{
+					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
 					Key:             op.Key(),
 					Value:           toJSONElement(op.Value()),
-					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
 		case *operation.Add:
 			pbOperation.Body = &api.Operation_Add_{
 				Add: &api.Operation_Add{
-					Value:           toJSONElement(op.Value()),
-					PrevCreatedAt:   toTimeTicket(op.PrevCreatedAt()),
 					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
+					PrevCreatedAt:   toTimeTicket(op.PrevCreatedAt()),
+					Value:           toJSONElement(op.Value()),
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
 		case *operation.Remove:
 			pbOperation.Body = &api.Operation_Remove_{
 				Remove: &api.Operation_Remove{
-					CreatedAt:       toTimeTicket(op.CreatedAt()),
 					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
+					CreatedAt:       toTimeTicket(op.CreatedAt()),
+					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
+				},
+			}
+		case *operation.Edit:
+			pbOperation.Body = &api.Operation_Edit_{
+				Edit: &api.Operation_Edit{
+					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
+					Content:         op.Content(),
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}

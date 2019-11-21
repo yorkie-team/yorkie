@@ -11,11 +11,11 @@ func toOriginal(elem datatype.Element) datatype.Element {
 		return json.NewObject(datatype.NewRHT(), elem.Object.CreatedAt())
 	case *ArrayProxy:
 		return json.NewArray(datatype.NewRGA(), elem.Array.CreatedAt())
-	case *datatype.Primitive:
-		return elem
 	case *datatype.Text:
+		return elem
+	case *datatype.Primitive:
 		return elem
 	}
 
-	panic("unsupported element type")
+	panic("unsupported type")
 }
