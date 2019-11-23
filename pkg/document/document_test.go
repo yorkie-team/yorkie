@@ -104,6 +104,50 @@ func TestDocument(t *testing.T) {
 		}
 	})
 
+	t.Run("text test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+
+		//           ---------- ins links --------
+		//           |                |          |
+		// [init] - [A] - [12] - [BC deleted] - [D]
+		if err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("k1").
+				Edit(0, 0, "ABCD").
+				Edit(1, 3, "12")
+			assert.Equal(t, "{\"k1\":\"A12D\"}", root.Marshal())
+			return nil
+		}); err != nil {
+			t.Error(err)
+		}
+		assert.Equal(t, "{\"k1\":\"A12D\"}", doc.Marshal())
+
+		if err := doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetText("k1")
+			assert.Equal(t,
+				"[0:0:00:0 ][1:2:00:0 A][1:3:00:0 12]{1:2:00:1 BC}[1:2:00:3 D]",
+				text.AnnotatedString(),
+			)
+
+			from, _ := text.FindBoundary(0, 0)
+			assert.Equal(t, "0:0:00:0:0", from.AnnotatedString())
+
+			from, _ = text.FindBoundary(1, 1)
+			assert.Equal(t, "1:2:00:0:1", from.AnnotatedString())
+
+			from, _ = text.FindBoundary(2, 2)
+			assert.Equal(t, "1:3:00:0:1", from.AnnotatedString())
+
+			from, _ = text.FindBoundary(3, 3)
+			assert.Equal(t, "1:3:00:0:2", from.AnnotatedString())
+
+			from, _ = text.FindBoundary(4, 4)
+			assert.Equal(t, "1:2:00:3:1", from.AnnotatedString())
+			return nil
+		}); err != nil {
+			t.Error(err)
+		}
+	})
+
 	t.Run("rollback test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
 

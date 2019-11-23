@@ -89,9 +89,12 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 		case *operation.Edit:
 			pbOperation.Body = &api.Operation_Edit_{
 				Edit: &api.Operation_Edit{
-					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
-					Content:         op.Content(),
-					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
+					ParentCreatedAt:     toTimeTicket(op.ParentCreatedAt()),
+					From:                toTextNodePos(op.From()),
+					To:                  toTextNodePos(op.To()),
+					CreatedAtMapByActor: toCreatedAtMapByActor(op.CreatedAtMapByActor()),
+					Content:             op.Content(),
+					ExecutedAt:          toTimeTicket(op.ExecutedAt()),
 				},
 			}
 		default:
@@ -169,10 +172,28 @@ func toJSONElement(elem datatype.Element) *api.JSONElement {
 	panic("fail to encode JSONElement to protobuf")
 }
 
+func toTextNodePos(pos *datatype.TextNodePos) *api.TextNodePos {
+	return &api.TextNodePos{
+		CreatedAt:      toTimeTicket(pos.ID().CreatedAt()),
+		Offset:         int32(pos.ID().Offset()),
+		RelativeOffset: int32(pos.RelativeOffset()),
+	}
+}
+
+func toCreatedAtMapByActor(
+	createdAtMapByActor map[string]*time.Ticket,
+) map[string]*api.TimeTicket {
+	pbCreatedAtMapByActor := make(map[string]*api.TimeTicket)
+	for actor, createdAt := range createdAtMapByActor {
+		pbCreatedAtMapByActor[actor] = toTimeTicket(createdAt)
+	}
+	return pbCreatedAtMapByActor
+}
+
 func toTimeTicket(ticket *time.Ticket) *api.TimeTicket {
 	return &api.TimeTicket{
 		Lamport:   ticket.Lamport(),
 		Delimiter: ticket.Delimiter(),
-		ActorId:   ticket.ActorID().String(),
+		ActorId:   ticket.ActorIDHex(),
 	}
 }

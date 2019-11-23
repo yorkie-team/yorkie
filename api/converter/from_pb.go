@@ -83,6 +83,9 @@ func FromOperations(pbOps []*api.Operation) []operation.Operation {
 		case *api.Operation_Edit_:
 			op = operation.NewEdit(
 				fromTimeTicket(decoded.Edit.ParentCreatedAt),
+				fromTextNodePos(decoded.Edit.From),
+				fromTextNodePos(decoded.Edit.To),
+				fromCreatedAtMapByActor(decoded.Edit.CreatedAtMapByActor),
 				decoded.Edit.Content,
 				fromTimeTicket(decoded.Edit.ExecutedAt),
 			)
@@ -93,6 +96,23 @@ func FromOperations(pbOps []*api.Operation) []operation.Operation {
 	}
 
 	return ops
+}
+
+func fromCreatedAtMapByActor(
+	pbCreatedAtMapByActor map[string]*api.TimeTicket,
+) map[string]*time.Ticket {
+	createdAtMapByActor := make(map[string]*time.Ticket)
+	for actor, pbTicket := range pbCreatedAtMapByActor {
+		createdAtMapByActor[actor] = fromTimeTicket(pbTicket)
+	}
+	return createdAtMapByActor
+}
+
+func fromTextNodePos(pbPos *api.TextNodePos) *datatype.TextNodePos {
+	return datatype.NewTextNodePos(
+		datatype.NewTextNodeID(fromTimeTicket(pbPos.CreatedAt), int(pbPos.Offset)),
+		int(pbPos.RelativeOffset),
+	)
 }
 
 func fromTimeTicket(pbTicket *api.TimeTicket) *time.Ticket {
@@ -152,6 +172,7 @@ func fromElement(pbElement *api.JSONElement) datatype.Element {
 		)
 	case api.ValueType_TEXT:
 		return datatype.NewText(
+			datatype.NewRGATreeSplit(),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	}

@@ -60,12 +60,12 @@ func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 	return v.(*ArrayProxy)
 }
 
-func (p *ObjectProxy) SetNewText(k string) *datatype.Text {
+func (p *ObjectProxy) SetNewText(k string) *TextProxy {
 	v := p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return datatype.NewText(ticket)
+		return NewTextProxy(p.context, datatype.NewRGATreeSplit(), ticket)
 	})
 
-	return v.(*datatype.Text)
+	return v.(*TextProxy)
 }
 
 func (p *ObjectProxy) SetBool(k string, v bool) *ObjectProxy {

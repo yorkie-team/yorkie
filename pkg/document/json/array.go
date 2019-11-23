@@ -56,7 +56,7 @@ func (a *Array) CreatedAt() *time.Ticket {
 	return a.createdAt
 }
 
-// CreatedAt returns the creation time of the last element.
+// LastCreatedAt returns the creation time of the last element.
 func (a *Array) LastCreatedAt() *time.Ticket {
 	return a.elements.LastCreatedAt()
 }

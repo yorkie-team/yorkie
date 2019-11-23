@@ -442,17 +442,43 @@ func TestClientAndDocument(t *testing.T) {
 			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
 				root.GetText("k1").Edit(0, 0, "ABCD")
 				return nil
-			}); err != nil {
+			}, "edit 0,0 ABCD by c1"); err != nil {
 				t.Error(err)
 			}
-
 			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
 				root.GetText("k1").Edit(0, 0, "1234")
 				return nil
-			}); err != nil {
+			}, "edit 0,0 1234 by c2"); err != nil {
 				t.Error(err)
 			}
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
 
+			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.GetText("k1").Edit(2, 3, "XX")
+				return nil
+			}, "edit 2,3 XX by c1"); err != nil {
+				t.Error(err)
+			}
+			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
+				root.GetText("k1").Edit(2, 3, "YY")
+				return nil
+			}, "edit 2,3 YY by c2"); err != nil {
+				t.Error(err)
+			}
+			syncThenAssertEqual(t, c1, c2, doc1, doc2)
+
+			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.GetText("k1").Edit(4, 5, "ZZ")
+				return nil
+			}, "edit 4,5 ZZ by c1"); err != nil {
+				t.Error(err)
+			}
+			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
+				root.GetText("k1").Edit(2, 3, "TT")
+				return nil
+			}, "edit 2,3 TT by c2"); err != nil {
+				t.Error(err)
+			}
 			syncThenAssertEqual(t, c1, c2, doc1, doc2)
 		})
 	})

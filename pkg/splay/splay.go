@@ -1,78 +1,88 @@
-package datatype
+package splay
 
 import (
 	"fmt"
 	"strings"
 )
 
-// SplayValue is an interface that represents the value of SplayNode.
-// User can extend this interface to use custom value in SplayNode.
-type SplayValue interface {
-	GetLength() int
+// Value is an interface that represents the value of Node.
+// User can extend this interface to use custom value in Node.
+type Value interface {
+	Len() int
 	String() string
 }
 
-// SplayNode is a node of SplayTree.
-type SplayNode struct {
-	value  SplayValue
+// Node is a node of Tree.
+type Node struct {
+	value  Value
 	weight int
 
-	left   *SplayNode
-	right  *SplayNode
-	parent *SplayNode
+	left   *Node
+	right  *Node
+	parent *Node
 }
 
-// NewSplayNode creates a new instance of SplayNode.
-func NewSplayNode(value SplayValue) *SplayNode {
-	n := &SplayNode{
+// NewNode creates a new instance of Node.
+func NewNode(value Value) *Node {
+	n := &Node{
 		value: value,
 	}
 	n.initWeight()
 	return n
 }
 
-func (n *SplayNode) leftWeight() int {
+func (n *Node) Value() Value {
+	return n.value
+}
+
+func (n *Node) leftWeight() int {
 	if n.left == nil {
 		return 0
 	}
 	return n.left.weight
 }
 
-func (n *SplayNode) rightWeight() int {
+func (n *Node) rightWeight() int {
 	if n.right == nil {
 		return 0
 	}
 	return n.right.weight
 }
 
-func (n *SplayNode) initWeight() {
-	n.weight = n.value.GetLength()
+func (n *Node) initWeight() {
+	n.weight = n.value.Len()
 }
 
-func (n *SplayNode) increaseWeight(weight int) {
+func (n *Node) increaseWeight(weight int) {
 	n.weight += weight
 }
 
-// SplayTree is weighted binary search tree which is based on splay tree.
-// original paper: https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
-type SplayTree struct {
-	root *SplayNode
+// Tree is weighted binary search tree which is based on Splay tree.
+// original paper on Splay Trees:
+//  - https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
+type Tree struct {
+	root *Node
 }
 
-// NewSplayTree creates a new instance of SplayTree.
-func NewSplayTree(root *SplayNode) *SplayTree {
-	return &SplayTree{
-		root: root,
+// NewTree creates a new instance of Tree.
+func NewTree() *Tree {
+	return &Tree{
+		root: nil,
 	}
 }
 
 // Insert inserts the node at the last.
-func (t *SplayTree) Insert(node *SplayNode) *SplayNode {
+func (t *Tree) Insert(node *Node) *Node {
+	if t.root == nil {
+		t.root = node
+		return node
+	}
+
 	return t.InsertAfter(t.root, node)
 }
 
-// Insert inserts the node after the given previous node.
-func (t *SplayTree) InsertAfter(prev *SplayNode, node *SplayNode) *SplayNode {
+// InsertAfter inserts the node after the given previous node.
+func (t *Tree) InsertAfter(prev *Node, node *Node) *Node {
 	t.Splay(prev)
 	t.root = node
 	node.right = prev.right
@@ -83,14 +93,14 @@ func (t *SplayTree) InsertAfter(prev *SplayNode, node *SplayNode) *SplayNode {
 	prev.parent = node
 	prev.right = nil
 
-	t.updateSubtree(prev)
-	t.updateSubtree(node)
+	t.UpdateSubtree(prev)
+	t.UpdateSubtree(node)
 
 	return node
 }
 
 // Splay moves the given node to the root.
-func (t *SplayTree) Splay(node *SplayNode) {
+func (t *Tree) Splay(node *Node) {
 	if node == nil {
 		return
 	}
@@ -121,49 +131,70 @@ func (t *SplayTree) Splay(node *SplayNode) {
 }
 
 // IndexOf Find the index of the given node.
-func (t *SplayTree) IndexOf(node *SplayNode) int {
+func (t *Tree) IndexOf(node *Node) int {
 	if node == nil {
 		return -1
 	}
 
 	index := 0
 	current := node
-	var prev *SplayNode
+	var prev *Node
 	for current != nil {
 		if prev == nil || prev == current.right {
-			index += current.value.GetLength() + current.leftWeight()
+			index += current.value.Len() + current.leftWeight()
 		}
 		prev = current
 		current = current.parent
 	}
-	return index - node.value.GetLength()
+	return index - node.value.Len()
+}
+
+func (t *Tree) Find(index int) (*Node, int) {
+	node := t.root
+	for {
+		if node.left != nil && index <= node.leftWeight() {
+			node = node.left
+		} else if node.right != nil && node.leftWeight()+node.value.Len() < index {
+			index -= node.leftWeight() + node.value.Len()
+			node = node.right
+		} else {
+			index -= node.leftWeight()
+			break
+		}
+	}
+
+	if index > node.value.Len() {
+		index = node.value.Len()
+	}
+
+	return node, index
 }
 
 // String returns a string containing node values.
-func (t *SplayTree) String() string {
+func (t *Tree) String() string {
 	var str []string
-	traverseInOrder(t.root, func(node *SplayNode) {
+	traverseInOrder(t.root, func(node *Node) {
 		str = append(str, node.value.String())
 	})
 	return strings.Join(str, "")
 }
 
-// MetaString returns a string containing the metadata of the SplayNode
+// AnnotatedString returns a string containing the meta data of the Node
 // for debugging purpose.
-func (t *SplayTree) MetaString() string {
+func (t *Tree) AnnotatedString() string {
 	var metaString []string
-	traverseInOrder(t.root, func(node *SplayNode) {
+	traverseInOrder(t.root, func(node *Node) {
 		metaString = append(metaString, fmt.Sprintf(
 			"[%d,%d]%s",
 			node.weight,
-			node.value.GetLength(),
+			node.value.Len(),
 			node.value.String(),
 		))
 	})
 	return strings.Join(metaString, "")
 }
 
-func (t *SplayTree) rotateLeft(pivot *SplayNode) {
+func (t *Tree) rotateLeft(pivot *Node) {
 	root := pivot.parent
 	if root.parent != nil {
 		if root == root.parent.left {
@@ -185,11 +216,11 @@ func (t *SplayTree) rotateLeft(pivot *SplayNode) {
 	pivot.left = root
 	pivot.left.parent = pivot
 
-	t.updateSubtree(root)
-	t.updateSubtree(pivot)
+	t.UpdateSubtree(root)
+	t.UpdateSubtree(pivot)
 }
 
-func (t *SplayTree) rotateRight(pivot *SplayNode) {
+func (t *Tree) rotateRight(pivot *Node) {
 	root := pivot.parent
 	if root.parent != nil {
 		if root == root.parent.left {
@@ -210,11 +241,11 @@ func (t *SplayTree) rotateRight(pivot *SplayNode) {
 	pivot.right = root
 	pivot.right.parent = pivot
 
-	t.updateSubtree(root)
-	t.updateSubtree(pivot)
+	t.UpdateSubtree(root)
+	t.UpdateSubtree(pivot)
 }
 
-func (t *SplayTree) updateSubtree(node *SplayNode) {
+func (t *Tree) UpdateSubtree(node *Node) {
 	node.initWeight()
 
 	if node.left != nil {
@@ -226,7 +257,7 @@ func (t *SplayTree) updateSubtree(node *SplayNode) {
 	}
 }
 
-func traverseInOrder(node *SplayNode, callback func(node *SplayNode)) {
+func traverseInOrder(node *Node, callback func(node *Node)) {
 	if node == nil {
 		return
 	}
@@ -236,10 +267,10 @@ func traverseInOrder(node *SplayNode, callback func(node *SplayNode)) {
 	traverseInOrder(node.right, callback)
 }
 
-func isLeftChild(node *SplayNode) bool {
+func isLeftChild(node *Node) bool {
 	return node != nil && node.parent != nil && node.parent.left == node
 }
 
-func isRightChild(node *SplayNode) bool {
+func isRightChild(node *Node) bool {
 	return node != nil && node.parent != nil && node.parent.right == node
 }

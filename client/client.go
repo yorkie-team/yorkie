@@ -22,8 +22,8 @@ const (
 )
 
 var (
-	ErrClientNotActivated  = errors.New("client is not activated")
-	ErrDocumentNotAttached = errors.New("document is not attached")
+	errClientNotActivated  = errors.New("client is not activated")
+	errDocumentNotAttached = errors.New("document is not attached")
 )
 
 type Client struct {
@@ -114,7 +114,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 
 func (c *Client) AttachDocument(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
-		return ErrClientNotActivated
+		return errClientNotActivated
 	}
 
 	doc.SetActor(c.id)
@@ -142,11 +142,11 @@ func (c *Client) AttachDocument(ctx context.Context, doc *document.Document) err
 
 func (c *Client) DetachDocument(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
-		return ErrClientNotActivated
+		return errClientNotActivated
 	}
 
 	if _, ok := c.attachedDocs[doc.Key().BSONKey()]; !ok {
-		return ErrDocumentNotAttached
+		return errDocumentNotAttached
 	}
 
 	res, err := c.client.DetachDocument(ctx, &api.DetachDocumentRequest{
@@ -172,7 +172,7 @@ func (c *Client) DetachDocument(ctx context.Context, doc *document.Document) err
 
 func (c *Client) PushPull(ctx context.Context) error {
 	if c.status != activated {
-		return ErrClientNotActivated
+		return errClientNotActivated
 	}
 
 	for _, doc := range c.attachedDocs {

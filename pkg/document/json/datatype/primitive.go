@@ -28,9 +28,8 @@ func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 	case Boolean:
 		if value[0] == 1 {
 			return true
-		} else {
-			return false
 		}
+		return false
 	case Integer:
 		val := int32(binary.LittleEndian.Uint32(value))
 		return int(val)
@@ -113,9 +112,8 @@ func (p *Primitive) Bytes() []byte {
 	case bool:
 		if val {
 			return []byte{1}
-		} else {
-			return []byte{0}
 		}
+		return []byte{0}
 	case int:
 		bytes := [4]byte{}
 		binary.LittleEndian.PutUint32(bytes[:], uint32(val))

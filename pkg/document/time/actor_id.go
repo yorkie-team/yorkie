@@ -5,7 +5,12 @@ import (
 	"encoding/hex"
 )
 
-var InitialActorID = &ActorID{}
+var (
+	InitialActorID = &ActorID{}
+	MaxActorID     = &ActorID{
+		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+	}
+)
 
 type ActorID [12]byte
 
@@ -31,7 +36,7 @@ func (id *ActorID) String() string {
 	return hex.EncodeToString(id[:])
 }
 
-func (id *ActorID) CompareTo(other *ActorID) int {
+func (id *ActorID) Compare(other *ActorID) int {
 	if id == nil || other == nil {
 		panic("actorID cannot be null")
 	}

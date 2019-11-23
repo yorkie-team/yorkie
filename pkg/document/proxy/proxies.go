@@ -11,8 +11,8 @@ func toOriginal(elem datatype.Element) datatype.Element {
 		return json.NewObject(datatype.NewRHT(), elem.Object.CreatedAt())
 	case *ArrayProxy:
 		return json.NewArray(datatype.NewRGA(), elem.Array.CreatedAt())
-	case *datatype.Text:
-		return elem
+	case *TextProxy:
+		return datatype.NewText(datatype.NewRGATreeSplit(), elem.Text.CreatedAt())
 	case *datatype.Primitive:
 		return elem
 	}

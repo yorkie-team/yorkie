@@ -4,7 +4,18 @@ import (
 	"fmt"
 )
 
-var InitialTicket = NewTicket(0, 0, InitialActorID)
+var (
+	InitialTicket = NewTicket(
+		0,
+		0,
+		InitialActorID,
+	)
+	MaxTicket = NewTicket(
+		18446744073709551615,
+		4294967295,
+		MaxActorID,
+	)
+)
 
 type Ticket struct {
 	lamport   uint64
@@ -22,6 +33,18 @@ func NewTicket(
 		delimiter: delimiter,
 		actorID:   actorID,
 	}
+}
+
+// AnnotatedString returns a string containing the meta data of the ticket
+// for debugging purpose.
+func (t *Ticket) AnnotatedString() string {
+	if t.actorID == nil {
+		return fmt.Sprintf("%d:%d:nil", t.lamport, t.delimiter)
+	}
+
+	return fmt.Sprintf(
+		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.String()[22:24],
+	)
 }
 
 func (t *Ticket) Key() string {
@@ -46,18 +69,22 @@ func (t *Ticket) ActorID() *ActorID {
 	return t.actorID
 }
 
-func (t *Ticket) After(other *Ticket) bool {
-	return t.compareTo(other) > 0
+func (t *Ticket) ActorIDHex() string {
+	return t.actorID.String()
 }
 
-func (t *Ticket) compareTo(other *Ticket) int {
+func (t *Ticket) After(other *Ticket) bool {
+	return t.Compare(other) > 0
+}
+
+func (t *Ticket) Compare(other *Ticket) int {
 	if t.lamport > other.lamport {
 		return 1
 	} else if t.lamport < other.lamport {
 		return -1
 	}
 
-	return t.actorID.CompareTo(other.ActorID())
+	return t.actorID.Compare(other.ActorID())
 }
 
 func (t *Ticket) SetActorID(actorID *ActorID) *Ticket {

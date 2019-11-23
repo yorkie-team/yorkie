@@ -116,7 +116,7 @@ func (d *Document) SetActor(actor *time.ActorID) {
 	d.changeID = d.changeID.SetActor(actor)
 }
 
-// SetActor sets actor.
+// Actor sets actor.
 func (d *Document) Actor() *time.ActorID {
 	return d.changeID.Actor()
 }
