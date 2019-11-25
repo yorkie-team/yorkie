@@ -3,9 +3,8 @@ package datatype
 import (
 	"strings"
 
-	"github.com/hackerwins/yorkie/pkg/log"
-
 	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/hackerwins/yorkie/pkg/log"
 )
 
 type rgaNode struct {

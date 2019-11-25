@@ -4,13 +4,16 @@ import (
 	"fmt"
 )
 
+// Initial is the initial value of the checkpoint.
 var Initial = New(0, 0)
 
+// Checkpoint is used to determine the client received changes.
 type Checkpoint struct {
 	ServerSeq uint64
 	ClientSeq uint32
 }
 
+// New creates a new instance of Checkpoint.
 func New(serverSeq uint64, clientSeq uint32) *Checkpoint {
 	return &Checkpoint{
 		ServerSeq: serverSeq,
@@ -63,11 +66,13 @@ func (cp *Checkpoint) Forward(other *Checkpoint) *Checkpoint {
 	return New(maxServerSeq, maxClientSeq)
 }
 
+// Equals returns whether the given checkpoint is equal to this checkpoint or not.
 func (cp *Checkpoint) Equals(other *Checkpoint) bool {
 	return cp.ServerSeq == other.ServerSeq &&
 		cp.ClientSeq == other.ClientSeq
 }
 
+// String returns the string of infomation about this checkpoint.
 func (cp *Checkpoint) String() string {
 	return fmt.Sprintf("serverSeq=%d, clientSeq=%d", cp.ServerSeq, cp.ClientSeq)
 }

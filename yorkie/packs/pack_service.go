@@ -71,7 +71,6 @@ func pushChanges(
 
 	var pushedChanges []*change.Change
 	for _, c := range pack.Changes {
-		// TODO make the reject algorithm sure
 		if c.ID().ClientSeq() > cp.ClientSeq {
 			serverSeq := docInfo.IncreaseServerSeq()
 			cp = cp.NextServerSeq(serverSeq)

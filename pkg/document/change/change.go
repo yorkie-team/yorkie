@@ -7,7 +7,6 @@ import (
 )
 
 // Change represents a unit of modification in the document.
-// And also Change is mutable struct.
 type Change struct {
 	id *ID
 	// message is used to save a description of the change.

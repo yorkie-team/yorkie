@@ -4,11 +4,11 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/hackerwins/yorkie/pkg/document"
 	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
 	"github.com/hackerwins/yorkie/pkg/document/proxy"
-
-	"github.com/stretchr/testify/assert"
 )
 
 var (

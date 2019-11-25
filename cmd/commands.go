@@ -9,6 +9,7 @@ var rootCmd = &cobra.Command{
 	Short: "Realtime database backend based on MongoDB, CRDT",
 }
 
+// Run executes CLI.
 func Run() int {
 	if err := rootCmd.Execute(); err != nil {
 		return 1

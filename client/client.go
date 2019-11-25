@@ -26,6 +26,9 @@ var (
 	errDocumentNotAttached = errors.New("document is not attached")
 )
 
+// Client is a normal client that can communicate with the agent.
+// It has documents and sends changes of the document in local
+// to the agent to synchronize with other replicas in remote.
 type Client struct {
 	conn   *grpc.ClientConn
 	client api.YorkieClient
@@ -36,6 +39,7 @@ type Client struct {
 	attachedDocs map[string]*document.Document
 }
 
+// NewClient creates an instance of Client.
 func NewClient(rpcAddr string, opts ...string) (*Client, error) {
 	var k string
 	if len(opts) == 0 {
@@ -61,6 +65,7 @@ func NewClient(rpcAddr string, opts ...string) (*Client, error) {
 	}, nil
 }
 
+// Close closes all resources of this client.
 func (c *Client) Close() error {
 	if err := c.Deactivate(context.Background()); err != nil {
 		return err
@@ -74,6 +79,9 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// Activate activates this client. That is, it register itself to the agent
+// and receives a unique ID from the agent. The given ID is used to distinguish
+// different clients.
 func (c *Client) Activate(ctx context.Context) error {
 	if c.status == activated {
 		return nil
@@ -94,6 +102,7 @@ func (c *Client) Activate(ctx context.Context) error {
 	return nil
 }
 
+// Deactivate deactivates this client.
 func (c *Client) Deactivate(ctx context.Context) error {
 	if c.status == deactivated {
 		return nil
@@ -112,6 +121,8 @@ func (c *Client) Deactivate(ctx context.Context) error {
 	return nil
 }
 
+// AttachDocument attaches the given document to this client. It tells the agent that
+// this client will synchronize the given document.
 func (c *Client) AttachDocument(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
 		return errClientNotActivated
@@ -140,6 +151,12 @@ func (c *Client) AttachDocument(ctx context.Context, doc *document.Document) err
 	return nil
 }
 
+// DetachDocument dettaches the given document from this client. It tells the
+// agent that this client will no longer synchronize the given document.
+//
+// To collect garbage things like CRDT tombstones left on the document, all the
+// changes should be applied to other replicas before GC time. For this, if the
+// document is no longer used by this client, it should be detached.
 func (c *Client) DetachDocument(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
 		return errClientNotActivated
@@ -170,6 +187,9 @@ func (c *Client) DetachDocument(ctx context.Context, doc *document.Document) err
 	return nil
 }
 
+// PushPull pushes local changes of the attached documents to the Agent and
+// receives changes of the remote replica from the agent then apply them to
+// local documents.
 func (c *Client) PushPull(ctx context.Context) error {
 	if c.status != activated {
 		return errClientNotActivated
@@ -195,6 +215,7 @@ func (c *Client) PushPull(ctx context.Context) error {
 	return nil
 }
 
+// IsActivate returns whether this client is active or not.
 func (c *Client) IsActive() bool {
 	return c.status == activated
 }
