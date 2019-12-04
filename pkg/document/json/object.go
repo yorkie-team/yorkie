@@ -35,6 +35,17 @@ func (o *Object) Marshal() string {
 	return o.members.Marshal()
 }
 
+// Deepcopy copies itself deeply.
+func (o *Object) Deepcopy() datatype.Element {
+	members := datatype.NewRHT()
+
+	for key, val := range o.members.Members() {
+		members.Set(key, val.Deepcopy())
+	}
+
+	return NewObject(members, o.createdAt)
+}
+
 // CreatedAt returns the creation time of this object.
 func (o *Object) CreatedAt() *time.Ticket {
 	return o.createdAt

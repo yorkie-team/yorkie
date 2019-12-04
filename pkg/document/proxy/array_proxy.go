@@ -16,21 +16,10 @@ type ArrayProxy struct {
 }
 
 func ProxyArray(ctx *change.Context, root *json.Array) *ArrayProxy {
-	elements := datatype.NewRGA()
-
-	for _, val := range root.Elements() {
-		switch val.(type) {
-		case *json.Object:
-		case *json.Array:
-		case *datatype.Text:
-		case *datatype.Primitive:
-		default:
-			panic("unsupported type")
-		}
-		elements.Add(val)
+	return &ArrayProxy{
+		Array:   root,
+		context: ctx,
 	}
-
-	return NewArrayProxy(ctx, elements, root.CreatedAt())
 }
 
 func NewArrayProxy(

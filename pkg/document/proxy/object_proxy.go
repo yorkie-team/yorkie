@@ -15,22 +15,12 @@ type ObjectProxy struct {
 	context *change.Context
 }
 
+// ProxyObject creates an ObjectProxy.
 func ProxyObject(ctx *change.Context, root *json.Object) *ObjectProxy {
-	members := datatype.NewRHT()
-
-	for key, val := range root.Members() {
-		switch val.(type) {
-		case *json.Object:
-		case *json.Array:
-		case *datatype.Text:
-		case *datatype.Primitive:
-		default:
-			panic("unsupported type")
-		}
-		members.Set(key, val)
+	return &ObjectProxy{
+		Object:  root,
+		context: ctx,
 	}
-
-	return NewObjectProxy(ctx, members, root.CreatedAt())
 }
 
 func NewObjectProxy(

@@ -51,6 +51,17 @@ func (a *Array) Marshal() string {
 	return a.elements.Marshal()
 }
 
+// Deepcopy copies itself deeply.
+func (a *Array) Deepcopy() datatype.Element {
+	elements := datatype.NewRGA()
+
+	for _, elem := range a.elements.Elements() {
+		elements.Add(elem.Deepcopy())
+	}
+
+	return NewArray(elements, a.createdAt)
+}
+
 // CreatedAt returns the creation time of this Array.
 func (a *Array) CreatedAt() *time.Ticket {
 	return a.createdAt

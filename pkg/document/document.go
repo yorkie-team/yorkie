@@ -24,6 +24,7 @@ type Document struct {
 	key          *key.Key
 	state        stateType
 	root         *json.Root
+	clone        *json.Object
 	checkpoint   *checkpoint.Checkpoint
 	changeID     *change.ID
 	localChanges []*change.Change
@@ -55,8 +56,14 @@ func (d *Document) Update(
 	updater func(root *proxy.ObjectProxy) error,
 	msgAndArgs ...interface{},
 ) error {
+	if d.clone == nil {
+		d.clone = d.root.Object().Deepcopy().(*json.Object)
+	}
+
 	ctx := change.NewContext(d.changeID.Next(), messageFromMsgAndArgs(msgAndArgs))
-	if err := updater(proxy.ProxyObject(ctx, d.root.Object())); err != nil {
+	if err := updater(proxy.ProxyObject(ctx, d.clone)); err != nil {
+		// drop copy because it is contaminated.
+		d.clone = nil
 		log.Logger.Error(err)
 		return err
 	}
@@ -89,6 +96,9 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	}
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 	log.Logger.Debugf("after apply pack: %s", d.root.Object().Marshal())
+
+	// TODO: remove below line. drop copy because it is contaminated.
+	d.clone = nil
 
 	return nil
 }

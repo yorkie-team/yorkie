@@ -163,6 +163,12 @@ func (p *Primitive) Marshal() string {
 	panic("unsupported type")
 }
 
+// Deepcopy copies itself deeply.
+func (p *Primitive) Deepcopy() Element {
+	// Primitive is immutable.
+	return p
+}
+
 // CreatedAt returns the creation time.
 func (p *Primitive) CreatedAt() *time.Ticket {
 	return p.createdAt

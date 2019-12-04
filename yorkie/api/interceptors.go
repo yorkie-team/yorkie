@@ -18,9 +18,9 @@ func unaryInterceptor(
 	start := time.Now()
 	resp, err := handler(ctx, req)
 	if err == nil {
-		log.Logger.Debug("RPC : %q %s", info.FullMethod, time.Since(start))
+		log.Logger.Infof("RPC : %q %s", info.FullMethod, time.Since(start))
 	} else {
-		log.Logger.Error("RPC : %q %s: %q => %q", info.FullMethod, time.Since(start), req, err)
+		log.Logger.Errorf("RPC : %q %s: %q => %q", info.FullMethod, time.Since(start), req, err)
 	}
 
 	return resp, err

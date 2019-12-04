@@ -14,22 +14,10 @@ type TextProxy struct {
 }
 
 func ProxyText(ctx *change.Context, text *datatype.Text) *TextProxy {
-	rgaTreeSplit := datatype.NewRGATreeSplit()
-
-	current := rgaTreeSplit.InitialHead()
-	for _, textNode := range text.TextNodes() {
-		current = rgaTreeSplit.InsertAfter(current, textNode.DeepCopy())
-		insPrevID := textNode.InsPrevID()
-		if insPrevID != nil {
-			insPrevNode := rgaTreeSplit.FindTextNode(insPrevID)
-			if insPrevNode == nil {
-				log.Logger.Warn("insPrevNode should be presence")
-			}
-			current.SetInsPrev(insPrevNode)
-		}
+	return &TextProxy{
+		Text:    text,
+		context: ctx,
 	}
-
-	return NewTextProxy(ctx, rgaTreeSplit, text.CreatedAt())
 }
 
 func NewTextProxy(

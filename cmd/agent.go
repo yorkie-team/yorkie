@@ -16,7 +16,7 @@ import (
 
 var (
 	defaultConfig = &yorkie.Config{
-		RPCPort: 1101,
+		RPCPort: 9090,
 		Mongo: &mongo.Config{
 			ConnectionURI:        "mongodb://localhost:27017",
 			ConnectionTimeoutSec: 5,

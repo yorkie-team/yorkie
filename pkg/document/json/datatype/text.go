@@ -484,6 +484,25 @@ func (t *Text) Marshal() string {
 	return fmt.Sprintf("\"%s\"", t.rgaTreeSplit.marshal())
 }
 
+func (t *Text) Deepcopy() Element {
+	rgaTreeSplit := NewRGATreeSplit()
+
+	current := rgaTreeSplit.InitialHead()
+	for _, textNode := range t.TextNodes() {
+		current = rgaTreeSplit.InsertAfter(current, textNode.DeepCopy())
+		insPrevID := textNode.InsPrevID()
+		if insPrevID != nil {
+			insPrevNode := rgaTreeSplit.FindTextNode(insPrevID)
+			if insPrevNode == nil {
+				log.Logger.Warn("insPrevNode should be presence")
+			}
+			current.SetInsPrev(insPrevNode)
+		}
+	}
+
+	return NewText(rgaTreeSplit, t.createdAt)
+}
+
 // CreatedAt returns the creation time of this Text.
 func (t *Text) CreatedAt() *time.Ticket {
 	return t.createdAt
