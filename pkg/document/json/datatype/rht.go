@@ -67,8 +67,8 @@ func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket) Element {
 	return nil
 }
 
-// Members returns a map of elements because the map easy to use for loop. If we
-// encounter performance issues, we need to replace this with other solution.
+// Members returns a map of elements because the map easy to use for loop.
+// TODO If we encounter performance issues, we need to replace this with other solution.
 func (rht *RHT) Members() map[string]Element {
 	elementMap := make(map[string]Element)
 	for key, queue := range rht.elementQueueMapByKey {

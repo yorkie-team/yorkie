@@ -35,7 +35,7 @@ func EncodeOperation(operations []operation.Operation) [][]byte {
 	return encodedOps
 }
 
-func EncodeActorID(id time.ActorID) primitive.ObjectID {
+func EncodeActorID(id *time.ActorID) primitive.ObjectID {
 	objectID := primitive.ObjectID{}
 	copy(objectID[:], id[:])
 	return objectID

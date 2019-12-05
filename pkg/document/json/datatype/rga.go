@@ -92,8 +92,8 @@ func (a *RGA) Add(e Element) {
 	a.insertAfter(a.last, e)
 }
 
-// Elements returns an array of elements contained in this RGA. If we encounter
-// performance issues, we need to replace this with other solution.
+// Elements returns an array of elements contained in this RGA.
+// TODO If we encounter performance issues, we need to replace this with other solution.
 func (a *RGA) Elements() []Element {
 	var elements []Element
 	current := a.first.next

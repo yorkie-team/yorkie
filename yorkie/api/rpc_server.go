@@ -84,7 +84,11 @@ func (s *RPCServer) AttachDocument(
 	ctx context.Context,
 	req *api.AttachDocumentRequest,
 ) (*api.AttachDocumentResponse, error) {
-	pack := converter.FromChangePack(req.ChangePack)
+	pack, err := converter.FromChangePack(req.ChangePack)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -107,7 +111,11 @@ func (s *RPCServer) DetachDocument(
 	ctx context.Context,
 	req *api.DetachDocumentRequest,
 ) (*api.DetachDocumentResponse, error) {
-	pack := converter.FromChangePack(req.ChangePack)
+	pack, err := converter.FromChangePack(req.ChangePack)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -130,7 +138,11 @@ func (s *RPCServer) PushPull(
 	ctx context.Context,
 	req *api.PushPullRequest,
 ) (*api.PushPullResponse, error) {
-	pack := converter.FromChangePack(req.ChangePack)
+	pack, err := converter.FromChangePack(req.ChangePack)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())

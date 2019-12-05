@@ -139,7 +139,11 @@ func (c *Client) AttachDocument(ctx context.Context, doc *document.Document) err
 		return err
 	}
 
-	pack := converter.FromChangePack(res.ChangePack)
+	pack, err := converter.FromChangePack(res.ChangePack)
+	if err != nil {
+		return err
+	}
+
 	if err := doc.ApplyChangePack(pack); err != nil {
 		log.Logger.Error(err)
 		return err
@@ -175,7 +179,11 @@ func (c *Client) DetachDocument(ctx context.Context, doc *document.Document) err
 		return err
 	}
 
-	pack := converter.FromChangePack(res.ChangePack)
+	pack, err := converter.FromChangePack(res.ChangePack)
+	if err != nil {
+		return err
+	}
+
 	if err := doc.ApplyChangePack(pack); err != nil {
 		log.Logger.Error(err)
 		return err
@@ -205,7 +213,11 @@ func (c *Client) PushPull(ctx context.Context) error {
 			return err
 		}
 
-		pack := converter.FromChangePack(res.ChangePack)
+		pack, err := converter.FromChangePack(res.ChangePack)
+		if err != nil {
+			return err
+		}
+
 		if err := doc.ApplyChangePack(pack); err != nil {
 			log.Logger.Error(err)
 			return err

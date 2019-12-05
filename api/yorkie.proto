@@ -85,18 +85,18 @@ message ChangePack {
 }
 
 message Checkpoint {
-    uint64 server_seq = 1;
+    uint64 server_seq = 1 [jstype = JS_STRING];
     uint32 client_seq = 2;
 }
 
 message ChangeID {
     uint32 client_seq = 1;
-    uint64 lamport = 2;
+    uint64 lamport = 2 [jstype = JS_STRING];
     string actor_id = 3;
 }
 
 message TimeTicket {
-    uint64 lamport = 1;
+    uint64 lamport = 1 [jstype = JS_STRING];
     uint32 delimiter = 2;
     string actor_id = 3;
 }

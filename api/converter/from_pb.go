@@ -1,6 +1,8 @@
 package converter
 
 import (
+	"errors"
+
 	"github.com/hackerwins/yorkie/api"
 	"github.com/hackerwins/yorkie/pkg/document/change"
 	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
@@ -9,14 +11,31 @@ import (
 	"github.com/hackerwins/yorkie/pkg/document/key"
 	"github.com/hackerwins/yorkie/pkg/document/operation"
 	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/hackerwins/yorkie/pkg/log"
 )
 
-func FromChangePack(pbPack *api.ChangePack) *change.Pack {
+var (
+	errPackRequired       = errors.New("pack required")
+	errCheckpointRequired = errors.New("checkpoint required")
+)
+
+// TODO There is no guarantee that the message sent by the client is perfect.
+//      We should check mandatory fields and change the interface with error return.
+func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
+	if pbPack == nil {
+		log.Logger.Error(errPackRequired)
+		return nil, errPackRequired
+	}
+	if pbPack.Checkpoint == nil {
+		log.Logger.Error(errCheckpointRequired)
+		return nil, errCheckpointRequired
+	}
+
 	return &change.Pack{
 		DocumentKey: fromDocumentKey(pbPack.DocumentKey),
 		Checkpoint:  fromCheckpoint(pbPack.Checkpoint),
 		Changes:     fromChanges(pbPack.Changes),
-	}
+	}, nil
 }
 
 func fromDocumentKey(pbKey *api.DocumentKey) *key.Key {

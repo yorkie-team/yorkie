@@ -277,7 +277,7 @@ func (c *Client) CreateChangeInfos(
 		for _, c := range changes {
 			bsonChanges = append(bsonChanges, bson.M{
 				"doc_id":     docID,
-				"actor":      types.EncodeActorID(*c.ID().Actor()),
+				"actor":      types.EncodeActorID(c.ID().Actor()),
 				"server_seq": c.ServerSeq(),
 				"client_seq": c.ID().ClientSeq(),
 				"lamport":    c.ID().Lamport(),
