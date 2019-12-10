@@ -12,9 +12,12 @@ var (
 
 // ID is for identifying the Change. This struct is immutable.
 type ID struct {
+	// clientSeq is a sequence index of the change on this client.
 	clientSeq uint32
-	lamport   uint64
-	actor     *time.ActorID
+	// lamport is lamport timestamp.
+	lamport uint64
+	// actor is an ID of actor.
+	actor *time.ActorID
 }
 
 // NewID creates a new instance of ID.

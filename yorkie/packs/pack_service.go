@@ -18,6 +18,9 @@ func PushPull(
 	docInfo *types.DocInfo,
 	pack *change.Pack,
 ) (*change.Pack, error) {
+	// TODO Changes may be reordered or missing during communication on the network.
+	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
+
 	initialServerSeq := docInfo.ServerSeq
 
 	// 01. push changes

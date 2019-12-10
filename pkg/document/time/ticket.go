@@ -17,6 +17,10 @@ var (
 	)
 )
 
+/**
+ * Ticket is a timestamp of the logical clock. Ticket is immutable.
+ * It is created by change.ID.
+ */
 type Ticket struct {
 	lamport   uint64
 	delimiter uint32
