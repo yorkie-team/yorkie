@@ -15,10 +15,10 @@ func TestArray(t *testing.T) {
 		a := json.NewArray(datatype.NewRGA(), time.InitialTicket)
 
 		a.Add(datatype.NewPrimitive("1", time.InitialTicket))
-		assert.Equal(t, "[\"1\"]", a.Marshal())
+		assert.Equal(t, `["1"]`, a.Marshal())
 		a.Add(datatype.NewPrimitive("2", time.InitialTicket))
-		assert.Equal(t, "[\"1\",\"2\"]", a.Marshal())
+		assert.Equal(t, `["1","2"]`, a.Marshal())
 		a.Add(datatype.NewPrimitive("3", time.InitialTicket))
-		assert.Equal(t, "[\"1\",\"2\",\"3\"]", a.Marshal())
+		assert.Equal(t, `["1","2","3"]`, a.Marshal())
 	})
 }

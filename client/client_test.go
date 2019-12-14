@@ -208,7 +208,7 @@ func TestClientAndDocument(t *testing.T) {
 			}, "set v1 by c1"); err != nil {
 				t.Error(err)
 			}
-			assert.Equal(t, "{\"k1\":{}}", doc1.Marshal())
+			assert.Equal(t, `{"k1":{}}`, doc1.Marshal())
 			if err := c1.PushPull(ctx); err != nil {
 				t.Error(err)
 			}
@@ -225,7 +225,7 @@ func TestClientAndDocument(t *testing.T) {
 			}, "remove and set v1 by c1"); err != nil {
 				t.Error(err)
 			}
-			assert.Equal(t, "{\"k1\":\"v1\"}", doc1.Marshal())
+			assert.Equal(t, `{"k1":"v1"}`, doc1.Marshal())
 			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
 				root.Remove("k1")
 				root.SetString("k1", "v2")
@@ -233,7 +233,7 @@ func TestClientAndDocument(t *testing.T) {
 			}, "remove and set v2 by c2"); err != nil {
 				t.Error(err)
 			}
-			assert.Equal(t, "{\"k1\":\"v2\"}", doc2.Marshal())
+			assert.Equal(t, `{"k1":"v2"}`, doc2.Marshal())
 			syncThenAssertEqual(t, c1, c2, doc1, doc2)
 		})
 
