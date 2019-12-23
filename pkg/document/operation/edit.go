@@ -10,29 +10,29 @@ import (
 )
 
 type Edit struct {
-	parentCreatedAt        *time.Ticket
-	from                   *datatype.TextNodePos
-	to                     *datatype.TextNodePos
-	maxCreatedAtMapByActor map[string]*time.Ticket
-	content                string
-	executedAt             *time.Ticket
+	parentCreatedAt           *time.Ticket
+	from                      *datatype.TextNodePos
+	to                        *datatype.TextNodePos
+	latestCreatedAtMapByActor map[string]*time.Ticket
+	content                   string
+	executedAt                *time.Ticket
 }
 
 func NewEdit(
 	parentCreatedAt *time.Ticket,
 	from *datatype.TextNodePos,
 	to *datatype.TextNodePos,
-	maxCreatedAtMapByActor map[string]*time.Ticket,
+	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	executedAt *time.Ticket,
 ) *Edit {
 	return &Edit{
-		parentCreatedAt:        parentCreatedAt,
-		from:                   from,
-		to:                     to,
-		maxCreatedAtMapByActor: maxCreatedAtMapByActor,
-		content:                content,
-		executedAt:             executedAt,
+		parentCreatedAt:           parentCreatedAt,
+		from:                      from,
+		to:                        to,
+		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
+		content:                   content,
+		executedAt:                executedAt,
 	}
 }
 
@@ -45,7 +45,7 @@ func (e *Edit) Execute(root *json.Root) error {
 		return err
 	}
 
-	obj.Edit(e.from, e.to, e.maxCreatedAtMapByActor, e.content, e.executedAt)
+	obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.executedAt)
 	return nil
 }
 
@@ -73,5 +73,5 @@ func (e *Edit) Content() string {
 }
 
 func (e *Edit) CreatedAtMapByActor() map[string]*time.Ticket {
-	return e.maxCreatedAtMapByActor
+	return e.latestCreatedAtMapByActor
 }

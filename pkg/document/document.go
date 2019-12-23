@@ -106,7 +106,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		}
 	}
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
-	log.Logger.Debugf("after apply pack: %s", d.root.Object().Marshal())
+	log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.root.Object().Marshal())
 
 	// TODO: remove below line. drop copy because it is contaminated.
 	d.clone = nil

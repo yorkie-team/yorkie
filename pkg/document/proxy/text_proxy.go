@@ -35,7 +35,7 @@ func (p *TextProxy) Edit(from, to int, content string) *TextProxy {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
-	fromPos, toPos := p.Text.FindBoundary(from, to)
+	fromPos, toPos := p.Text.CreateRange(from, to)
 	log.Logger.Debugf(
 		"EDIT: f:%d->%s, t:%d->%s c:%s",
 		from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), content,

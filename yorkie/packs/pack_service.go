@@ -21,6 +21,10 @@ func PushPull(
 	// TODO Changes may be reordered or missing during communication on the network.
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
 
+	// TODO We need to prevent the same document from being modified at the same time.
+	// For this, We may want to consider introducing distributed lock or DB transaction.
+	// To improve read performance, we can also consider something like read-write lock,
+	// because simple read operations do not break consistency.
 	initialServerSeq := docInfo.ServerSeq
 
 	// 01. push changes

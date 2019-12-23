@@ -24,3 +24,8 @@ func NewPack(
 		Changes:     changes,
 	}
 }
+
+// HasChanges returns the whether pack has changes or not.
+func (p *Pack) HasChanges() bool {
+	return len(p.Changes) > 0
+}

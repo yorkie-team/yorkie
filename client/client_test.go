@@ -427,7 +427,7 @@ func TestClientAndDocument(t *testing.T) {
 			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
 				root.SetNewText("k1")
 				return nil
-			}, "set v1 by c1"); err != nil {
+			}, "set a new text by c1"); err != nil {
 				t.Error(err)
 			}
 			if err := c1.PushPull(ctx); err != nil {

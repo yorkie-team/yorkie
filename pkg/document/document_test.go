@@ -128,19 +128,19 @@ func TestDocument(t *testing.T) {
 				text.AnnotatedString(),
 			)
 
-			from, _ := text.FindBoundary(0, 0)
+			from, _ := text.CreateRange(0, 0)
 			assert.Equal(t, "0:0:00:0:0", from.AnnotatedString())
 
-			from, _ = text.FindBoundary(1, 1)
+			from, _ = text.CreateRange(1, 1)
 			assert.Equal(t, "1:2:00:0:1", from.AnnotatedString())
 
-			from, _ = text.FindBoundary(2, 2)
+			from, _ = text.CreateRange(2, 2)
 			assert.Equal(t, "1:3:00:0:1", from.AnnotatedString())
 
-			from, _ = text.FindBoundary(3, 3)
+			from, _ = text.CreateRange(3, 3)
 			assert.Equal(t, "1:3:00:0:2", from.AnnotatedString())
 
-			from, _ = text.FindBoundary(4, 4)
+			from, _ = text.CreateRange(4, 4)
 			assert.Equal(t, "1:2:00:3:1", from.AnnotatedString())
 			return nil
 		}); err != nil {

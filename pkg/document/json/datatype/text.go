@@ -183,8 +183,8 @@ func (t *TextNode) annotatedString() string {
 	return fmt.Sprintf("%s %s", t.id.AnnotatedString(), t.value)
 }
 
-func (t *TextNode) delete(editedAt *time.Ticket, maxCreatedAtByOwner *time.Ticket) bool {
-	if !t.createdAt().After(maxCreatedAtByOwner) &&
+func (t *TextNode) delete(editedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
+	if !t.createdAt().After(latestCreatedAt) &&
 		(t.deletedAt == nil || editedAt.After(t.deletedAt)) {
 		t.deletedAt = editedAt
 		return true
@@ -213,7 +213,7 @@ func NewRGATreeSplit() *RGATreeSplit {
 	}
 }
 
-func (s *RGATreeSplit) findBoundary(from, to int) (*TextNodePos, *TextNodePos) {
+func (s *RGATreeSplit) createRange(from, to int) (*TextNodePos, *TextNodePos) {
 	fromPos := s.findTextNodePos(from)
 	if from == to {
 		return fromPos, fromPos
@@ -336,7 +336,7 @@ func (s *RGATreeSplit) findFloorTextNode(id *TextNodeID) *TextNode {
 func (s *RGATreeSplit) edit(
 	from *TextNodePos,
 	to *TextNodePos,
-	maxCreatedAtMapByActor map[string]*time.Ticket,
+	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	editedAt *time.Ticket,
 ) (*TextNodePos, map[string]*time.Ticket) {
@@ -346,7 +346,7 @@ func (s *RGATreeSplit) edit(
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
-	maxCreatedAtMap := s.deleteNodes(nodesToDelete, maxCreatedAtMapByActor, editedAt)
+	latestCreatedAtMap := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
 
 	var caretID *TextNodeID
 	if toRight == nil {
@@ -362,7 +362,7 @@ func (s *RGATreeSplit) edit(
 		caretPos = NewTextNodePos(inserted.id, inserted.contentLen())
 	}
 
-	return caretPos, maxCreatedAtMap
+	return caretPos, latestCreatedAtMap
 }
 
 func (s *RGATreeSplit) findBetween(from *TextNode, to *TextNode) []*TextNode {
@@ -377,7 +377,7 @@ func (s *RGATreeSplit) findBetween(from *TextNode, to *TextNode) []*TextNode {
 
 func (s *RGATreeSplit) deleteNodes(
 	candidates []*TextNode,
-	maxCreatedAtMapByActor map[string]*time.Ticket,
+	latestCreatedAtMapByActor map[string]*time.Ticket,
 	editedAt *time.Ticket,
 ) map[string]*time.Ticket {
 	createdAtMapByActor := make(map[string]*time.Ticket)
@@ -385,24 +385,24 @@ func (s *RGATreeSplit) deleteNodes(
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
 
-		var maxCreatedAt *time.Ticket
-		if maxCreatedAtMapByActor == nil {
-			maxCreatedAt = time.MaxTicket
+		var latestCreatedAt *time.Ticket
+		if latestCreatedAtMapByActor == nil {
+			latestCreatedAt = time.MaxTicket
 		} else {
-			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
+			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
 			if ok {
-				maxCreatedAt = createdAt
+				latestCreatedAt = createdAt
 			} else {
-				maxCreatedAt = time.InitialTicket
+				latestCreatedAt = time.InitialTicket
 			}
 		}
 
-		if node.delete(editedAt, maxCreatedAt) {
+		if node.delete(editedAt, latestCreatedAt) {
 			s.treeByIndex.Splay(node.indexNode)
 
-			maxCreatedAt := createdAtMapByActor[actorIDHex]
+			latestCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
-			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
+			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt
 			}
 		}
@@ -508,22 +508,22 @@ func (t *Text) CreatedAt() *time.Ticket {
 	return t.createdAt
 }
 
-// FindBoundary returns pair of TextNodePos of the given integer offsets.
-func (t *Text) FindBoundary(from, to int) (*TextNodePos, *TextNodePos) {
-	return t.rgaTreeSplit.findBoundary(from, to)
+// CreateRange returns pair of TextNodePos of the given integer offsets.
+func (t *Text) CreateRange(from, to int) (*TextNodePos, *TextNodePos) {
+	return t.rgaTreeSplit.createRange(from, to)
 }
 
 func (t *Text) Edit(
 	from,
 	to *TextNodePos,
-	maxCreatedAtMapByActor map[string]*time.Ticket,
+	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	editedAt *time.Ticket,
 ) (*TextNodePos, map[string]*time.Ticket) {
-	cursorPos, maxCreatedAtMapByActor := t.rgaTreeSplit.edit(
+	cursorPos, latestCreatedAtMapByActor := t.rgaTreeSplit.edit(
 		from,
 		to,
-		maxCreatedAtMapByActor,
+		latestCreatedAtMapByActor,
 		content,
 		editedAt,
 	)
@@ -532,7 +532,7 @@ func (t *Text) Edit(
 		editedAt.ActorID().String(),
 		t.rgaTreeSplit.AnnotatedString(),
 	)
-	return cursorPos, maxCreatedAtMapByActor
+	return cursorPos, latestCreatedAtMapByActor
 }
 
 func (t *Text) TextNodes() []*TextNode {
