@@ -12,6 +12,7 @@ import (
 	"github.com/hackerwins/yorkie/api"
 	"github.com/hackerwins/yorkie/api/converter"
 	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/hackerwins/yorkie/pkg/sync"
 	"github.com/hackerwins/yorkie/yorkie/backend"
 	"github.com/hackerwins/yorkie/yorkie/clients"
 	"github.com/hackerwins/yorkie/yorkie/packs"
@@ -21,6 +22,7 @@ type RPCServer struct {
 	port       int
 	grpcServer *grpc.Server
 	backend    *backend.Backend
+	muMap      *sync.Map
 }
 
 func NewRPCServer(port int, be *backend.Backend) (*RPCServer, error) {
@@ -33,6 +35,7 @@ func NewRPCServer(port int, be *backend.Backend) (*RPCServer, error) {
 		port:       port,
 		grpcServer: grpc.NewServer(opts...),
 		backend:    be,
+		muMap:      sync.NewMap(),
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
 
@@ -89,6 +92,16 @@ func (s *RPCServer) AttachDocument(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
+	bsonKey := pack.DocumentKey.BSONKey()
+	if err := s.muMap.Lock(bsonKey); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer func() {
+		if err := s.muMap.Unlock(bsonKey); err != nil {
+			log.Logger.Error(err)
+		}
+	}()
+
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -116,6 +129,16 @@ func (s *RPCServer) DetachDocument(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
+	bsonKey := pack.DocumentKey.BSONKey()
+	if err := s.muMap.Lock(bsonKey); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer func() {
+		if err := s.muMap.Unlock(bsonKey); err != nil {
+			log.Logger.Error(err)
+		}
+	}()
+
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -142,6 +165,16 @@ func (s *RPCServer) PushPull(
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
+
+	bsonKey := pack.DocumentKey.BSONKey()
+	if err := s.muMap.Lock(bsonKey); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer func() {
+		if err := s.muMap.Unlock(bsonKey); err != nil {
+			log.Logger.Error(err)
+		}
+	}()
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
