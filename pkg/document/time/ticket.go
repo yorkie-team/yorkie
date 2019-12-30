@@ -88,7 +88,18 @@ func (t *Ticket) Compare(other *Ticket) int {
 		return -1
 	}
 
-	return t.actorID.Compare(other.ActorID())
+	compare := t.actorID.Compare(other.ActorID())
+	if compare != 0 {
+		return compare
+	}
+
+	if t.delimiter > other.delimiter {
+		return 1
+	} else if t.delimiter < other.delimiter {
+		return -1
+	}
+
+	return 0
 }
 
 func (t *Ticket) SetActorID(actorID *ActorID) *Ticket {

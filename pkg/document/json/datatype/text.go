@@ -33,7 +33,13 @@ func (t *TextNodeID) Compare(other llrb.Key) int {
 		return compare
 	}
 
-	return t.offset - o.offset
+	if t.offset > o.offset {
+		return 1
+	} else if t.offset < o.offset {
+		return -1
+	}
+
+	return 0
 }
 
 func (t *TextNodeID) Equal(other *TextNodeID) bool {
