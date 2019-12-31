@@ -115,7 +115,7 @@ func pullChanges(
 	pushedCP *checkpoint.Checkpoint,
 	initialServerSeq uint64,
 ) (*checkpoint.Checkpoint, []*change.Change, error) {
-	pulledChanges, err := be.Mongo.FindChangeInfosBetweenServerSeqs(
+	fetchedChanges, err := be.Mongo.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
 		pack.Checkpoint.ServerSeq+1,
@@ -123,6 +123,15 @@ func pullChanges(
 	)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	var pulledChanges []*change.Change
+	for _, fetchedChange := range fetchedChanges {
+		if fetchedChange.ID().Actor().String() == clientInfo.ID.Hex() {
+			continue
+		}
+
+		pulledChanges = append(pulledChanges, fetchedChange)
 	}
 
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
