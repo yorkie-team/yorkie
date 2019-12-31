@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/hackerwins/yorkie/pkg/document/json"
-	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
 	"github.com/hackerwins/yorkie/pkg/document/time"
 	"github.com/hackerwins/yorkie/pkg/log"
 )
@@ -12,14 +11,14 @@ import (
 type Set struct {
 	parentCreatedAt *time.Ticket
 	key             string
-	value           datatype.Element
+	value           json.Element
 	executedAt      *time.Ticket
 }
 
 func NewSet(
 	parentCreatedAt *time.Ticket,
 	key string,
-	value datatype.Element,
+	value json.Element,
 	executedAt *time.Ticket,
 ) *Set {
 	return &Set{
@@ -61,6 +60,6 @@ func (o *Set) Key() string {
 	return o.key
 }
 
-func (o *Set) Value() datatype.Element {
+func (o *Set) Value() json.Element {
 	return o.value
 }

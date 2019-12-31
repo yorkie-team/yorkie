@@ -5,7 +5,6 @@ import (
 
 	"github.com/hackerwins/yorkie/pkg/document/change"
 	"github.com/hackerwins/yorkie/pkg/document/json"
-	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
 	"github.com/hackerwins/yorkie/pkg/document/operation"
 	"github.com/hackerwins/yorkie/pkg/document/time"
 )
@@ -25,7 +24,7 @@ func ProxyObject(ctx *change.Context, root *json.Object) *ObjectProxy {
 
 func NewObjectProxy(
 	ctx *change.Context,
-	members *datatype.RHT,
+	members *json.RHT,
 	createdAt *time.Ticket,
 ) *ObjectProxy {
 	return &ObjectProxy{
@@ -35,86 +34,86 @@ func NewObjectProxy(
 }
 
 func (p *ObjectProxy) SetNewObject(k string) *ObjectProxy {
-	v := p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return NewObjectProxy(p.context, datatype.NewRHT(), ticket)
+	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return NewObjectProxy(p.context, json.NewRHT(), ticket)
 	})
 
 	return v.(*ObjectProxy)
 }
 
 func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
-	v := p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return NewArrayProxy(p.context, datatype.NewRGA(), ticket)
+	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return NewArrayProxy(p.context, json.NewRGA(), ticket)
 	})
 
 	return v.(*ArrayProxy)
 }
 
 func (p *ObjectProxy) SetNewText(k string) *TextProxy {
-	v := p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return NewTextProxy(p.context, datatype.NewRGATreeSplit(), ticket)
+	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return NewTextProxy(p.context, json.NewRGATreeSplit(), ticket)
 	})
 
 	return v.(*TextProxy)
 }
 
 func (p *ObjectProxy) SetBool(k string, v bool) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return datatype.NewPrimitive(v, ticket)
+	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(v, ticket)
 	})
 
 	return p
 }
 
 func (p *ObjectProxy) SetInteger(k string, v int) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return datatype.NewPrimitive(v, ticket)
+	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(v, ticket)
 	})
 
 	return p
 }
 
 func (p *ObjectProxy) SetLong(k string, v int64) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return datatype.NewPrimitive(v, ticket)
+	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(v, ticket)
 	})
 
 	return p
 }
 
 func (p *ObjectProxy) SetDouble(k string, v float64) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return datatype.NewPrimitive(v, ticket)
+	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(v, ticket)
 	})
 
 	return p
 }
 
 func (p *ObjectProxy) SetString(k, v string) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return datatype.NewPrimitive(v, ticket)
+	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(v, ticket)
 	})
 
 	return p
 }
 
 func (p *ObjectProxy) SetBytes(k string, v []byte) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return datatype.NewPrimitive(v, ticket)
+	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(v, ticket)
 	})
 
 	return p
 }
 
 func (p *ObjectProxy) SetDate(k string, v time2.Time) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) datatype.Element {
-		return datatype.NewPrimitive(v, ticket)
+	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(v, ticket)
 	})
 
 	return p
 }
 
-func (p *ObjectProxy) Remove(k string) datatype.Element {
+func (p *ObjectProxy) Remove(k string) json.Element {
 	removed := p.Object.Remove(k)
 
 	if removed != nil {
@@ -168,7 +167,7 @@ func (p *ObjectProxy) GetText(k string) *TextProxy {
 	}
 
 	switch elem := p.Object.Get(k).(type) {
-	case *datatype.Text:
+	case *json.Text:
 		return ProxyText(p.context, elem)
 	case *TextProxy:
 		return elem
@@ -179,8 +178,8 @@ func (p *ObjectProxy) GetText(k string) *TextProxy {
 
 func (p *ObjectProxy) setInternal(
 	k string,
-	creator func(ticket *time.Ticket) datatype.Element,
-) datatype.Element {
+	creator func(ticket *time.Ticket) json.Element,
+) json.Element {
 	ticket := p.context.IssueTimeTicket()
 	value := creator(ticket)
 	p.Set(k, value)

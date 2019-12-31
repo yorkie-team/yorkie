@@ -2,18 +2,18 @@ package proxy
 
 import (
 	"github.com/hackerwins/yorkie/pkg/document/change"
-	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
+	"github.com/hackerwins/yorkie/pkg/document/json"
 	"github.com/hackerwins/yorkie/pkg/document/operation"
 	"github.com/hackerwins/yorkie/pkg/document/time"
 	"github.com/hackerwins/yorkie/pkg/log"
 )
 
 type TextProxy struct {
-	*datatype.Text
+	*json.Text
 	context *change.Context
 }
 
-func ProxyText(ctx *change.Context, text *datatype.Text) *TextProxy {
+func ProxyText(ctx *change.Context, text *json.Text) *TextProxy {
 	return &TextProxy{
 		Text:    text,
 		context: ctx,
@@ -22,11 +22,11 @@ func ProxyText(ctx *change.Context, text *datatype.Text) *TextProxy {
 
 func NewTextProxy(
 	ctx *change.Context,
-	rgaTreeSplit *datatype.RGATreeSplit,
+	rgaTreeSplit *json.RGATreeSplit,
 	createdAt *time.Ticket,
 ) *TextProxy {
 	return &TextProxy{
-		Text:    datatype.NewText(rgaTreeSplit, createdAt),
+		Text:    json.NewText(rgaTreeSplit, createdAt),
 		context: ctx,
 	}
 }

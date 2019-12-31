@@ -4,15 +4,14 @@ import (
 	"fmt"
 
 	"github.com/hackerwins/yorkie/pkg/document/json"
-	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
 	"github.com/hackerwins/yorkie/pkg/document/time"
 	"github.com/hackerwins/yorkie/pkg/log"
 )
 
 type Edit struct {
 	parentCreatedAt           *time.Ticket
-	from                      *datatype.TextNodePos
-	to                        *datatype.TextNodePos
+	from                      *json.TextNodePos
+	to                        *json.TextNodePos
 	latestCreatedAtMapByActor map[string]*time.Ticket
 	content                   string
 	executedAt                *time.Ticket
@@ -20,8 +19,8 @@ type Edit struct {
 
 func NewEdit(
 	parentCreatedAt *time.Ticket,
-	from *datatype.TextNodePos,
-	to *datatype.TextNodePos,
+	from *json.TextNodePos,
+	to *json.TextNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	executedAt *time.Ticket,
@@ -38,7 +37,7 @@ func NewEdit(
 
 func (e *Edit) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
-	obj, ok := parent.(*datatype.Text)
+	obj, ok := parent.(*json.Text)
 	if !ok {
 		err := fmt.Errorf("fail to execute, only Text can execute Edit")
 		log.Logger.Error(err)
@@ -49,11 +48,11 @@ func (e *Edit) Execute(root *json.Root) error {
 	return nil
 }
 
-func (e *Edit) From() *datatype.TextNodePos {
+func (e *Edit) From() *json.TextNodePos {
 	return e.from
 }
 
-func (e *Edit) To() *datatype.TextNodePos {
+func (e *Edit) To() *json.TextNodePos {
 	return e.to
 }
 

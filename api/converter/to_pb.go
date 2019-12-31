@@ -5,7 +5,6 @@ import (
 	"github.com/hackerwins/yorkie/pkg/document/change"
 	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
 	"github.com/hackerwins/yorkie/pkg/document/json"
-	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
 	"github.com/hackerwins/yorkie/pkg/document/key"
 	"github.com/hackerwins/yorkie/pkg/document/operation"
 	"github.com/hackerwins/yorkie/pkg/document/time"
@@ -106,7 +105,7 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 	return pbOperations
 }
 
-func toJSONElement(elem datatype.Element) *api.JSONElement {
+func toJSONElement(elem json.Element) *api.JSONElement {
 	switch elem := elem.(type) {
 	case *json.Object:
 		return &api.JSONElement{
@@ -118,52 +117,52 @@ func toJSONElement(elem datatype.Element) *api.JSONElement {
 			Type:      api.ValueType_JSON_ARRAY,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}
-	case *datatype.Primitive:
+	case *json.Primitive:
 		switch elem.ValueType() {
-		case datatype.Boolean:
+		case json.Boolean:
 			return &api.JSONElement{
 				Type:      api.ValueType_BOOLEAN,
 				CreatedAt: toTimeTicket(elem.CreatedAt()),
 				Value:     elem.Bytes(),
 			}
-		case datatype.Integer:
+		case json.Integer:
 			return &api.JSONElement{
 				Type:      api.ValueType_INTEGER,
 				CreatedAt: toTimeTicket(elem.CreatedAt()),
 				Value:     elem.Bytes(),
 			}
-		case datatype.Long:
+		case json.Long:
 			return &api.JSONElement{
 				Type:      api.ValueType_LONG,
 				CreatedAt: toTimeTicket(elem.CreatedAt()),
 				Value:     elem.Bytes(),
 			}
-		case datatype.Double:
+		case json.Double:
 			return &api.JSONElement{
 				Type:      api.ValueType_DOUBLE,
 				CreatedAt: toTimeTicket(elem.CreatedAt()),
 				Value:     elem.Bytes(),
 			}
-		case datatype.String:
+		case json.String:
 			return &api.JSONElement{
 				Type:      api.ValueType_STRING,
 				CreatedAt: toTimeTicket(elem.CreatedAt()),
 				Value:     elem.Bytes(),
 			}
-		case datatype.Bytes:
+		case json.Bytes:
 			return &api.JSONElement{
 				Type:      api.ValueType_BYTES,
 				CreatedAt: toTimeTicket(elem.CreatedAt()),
 				Value:     elem.Bytes(),
 			}
-		case datatype.Date:
+		case json.Date:
 			return &api.JSONElement{
 				Type:      api.ValueType_DATE,
 				CreatedAt: toTimeTicket(elem.CreatedAt()),
 				Value:     elem.Bytes(),
 			}
 		}
-	case *datatype.Text:
+	case *json.Text:
 		return &api.JSONElement{
 			Type:      api.ValueType_TEXT,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
@@ -172,7 +171,7 @@ func toJSONElement(elem datatype.Element) *api.JSONElement {
 	panic("fail to encode JSONElement to protobuf")
 }
 
-func toTextNodePos(pos *datatype.TextNodePos) *api.TextNodePos {
+func toTextNodePos(pos *json.TextNodePos) *api.TextNodePos {
 	return &api.TextNodePos{
 		CreatedAt:      toTimeTicket(pos.ID().CreatedAt()),
 		Offset:         int32(pos.ID().Offset()),

@@ -1,7 +1,6 @@
 package json
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
 	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
@@ -13,13 +12,13 @@ import (
 // a particular element.
 type Root struct {
 	object                *Object
-	elementMapByCreatedAt map[string]datatype.Element
+	elementMapByCreatedAt map[string]Element
 }
 
 // NewRoot creates a new instance of Root.
 func NewRoot() *Root {
-	root := NewObject(datatype.NewRHT(), time.InitialTicket)
-	elementMap := make(map[string]datatype.Element)
+	root := NewObject(NewRHT(), time.InitialTicket)
+	elementMap := make(map[string]Element)
 	elementMap[root.CreatedAt().Key()] = root
 
 	return &Root{
@@ -34,11 +33,11 @@ func (r *Root) Object() *Object {
 }
 
 // FindByCreatedAt returns the element of given creation time.
-func (r *Root) FindByCreatedAt(ticket *time.Ticket) datatype.Element {
+func (r *Root) FindByCreatedAt(ticket *time.Ticket) Element {
 	return r.elementMapByCreatedAt[ticket.Key()]
 }
 
 // RegisterElement registers the given element to hash table.
-func (r *Root) RegisterElement(elem datatype.Element) {
+func (r *Root) RegisterElement(elem Element) {
 	r.elementMapByCreatedAt[elem.CreatedAt().Key()] = elem
 }

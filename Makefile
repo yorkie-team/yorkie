@@ -35,6 +35,7 @@ lint:
 	 golangci-lint run ./...
 
 test:
+	go clean -testcache
 	go test -race ./...
 
 .PHONY: tools proto build fmt lint test

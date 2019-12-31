@@ -1,4 +1,4 @@
-package datatype
+package json
 
 import (
 	"strings"

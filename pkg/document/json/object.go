@@ -1,19 +1,18 @@
 package json
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
 	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
 // Object represents a JSON object, but unlike regular JSON, it has time
 // tickets which is created by logical clock.
 type Object struct {
-	members   *datatype.RHT
+	members   *RHT
 	createdAt *time.Ticket
 }
 
 // NewObject creates a new instance of Object.
-func NewObject(members *datatype.RHT, createdAt *time.Ticket) *Object {
+func NewObject(members *RHT, createdAt *time.Ticket) *Object {
 	return &Object{
 		members:   members,
 		createdAt: createdAt,
@@ -21,12 +20,12 @@ func NewObject(members *datatype.RHT, createdAt *time.Ticket) *Object {
 }
 
 // Set sets the given element of the given key.
-func (o *Object) Set(k string, v datatype.Element) {
+func (o *Object) Set(k string, v Element) {
 	o.members.Set(k, v)
 }
 
 // Members returns the member of this object as a map.
-func (o *Object) Members() map[string]datatype.Element {
+func (o *Object) Members() map[string]Element {
 	return o.members.Members()
 }
 
@@ -36,8 +35,8 @@ func (o *Object) Marshal() string {
 }
 
 // Deepcopy copies itself deeply.
-func (o *Object) Deepcopy() datatype.Element {
-	members := datatype.NewRHT()
+func (o *Object) Deepcopy() Element {
+	members := NewRHT()
 
 	for key, val := range o.members.Members() {
 		members.Set(key, val.Deepcopy())
@@ -52,16 +51,16 @@ func (o *Object) CreatedAt() *time.Ticket {
 }
 
 // Get returns the value of the given key.
-func (o *Object) Get(k string) datatype.Element {
+func (o *Object) Get(k string) Element {
 	return o.members.Get(k)
 }
 
 // RemoveByCreatedAt removes the element of the given creation time.
-func (o *Object) RemoveByCreatedAt(createdAt *time.Ticket) datatype.Element {
+func (o *Object) RemoveByCreatedAt(createdAt *time.Ticket) Element {
 	return o.members.RemoveByCreatedAt(createdAt)
 }
 
 // Remove removes the element of the given key.
-func (o *Object) Remove(k string) datatype.Element {
+func (o *Object) Remove(k string) Element {
 	return o.members.Remove(k)
 }

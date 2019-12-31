@@ -7,7 +7,6 @@ import (
 	"github.com/hackerwins/yorkie/pkg/document/change"
 	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
 	"github.com/hackerwins/yorkie/pkg/document/json"
-	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
 	"github.com/hackerwins/yorkie/pkg/document/key"
 	"github.com/hackerwins/yorkie/pkg/document/operation"
 	"github.com/hackerwins/yorkie/pkg/document/time"
@@ -127,9 +126,9 @@ func fromCreatedAtMapByActor(
 	return createdAtMapByActor
 }
 
-func fromTextNodePos(pbPos *api.TextNodePos) *datatype.TextNodePos {
-	return datatype.NewTextNodePos(
-		datatype.NewTextNodeID(fromTimeTicket(pbPos.CreatedAt), int(pbPos.Offset)),
+func fromTextNodePos(pbPos *api.TextNodePos) *json.TextNodePos {
+	return json.NewTextNodePos(
+		json.NewTextNodeID(fromTimeTicket(pbPos.CreatedAt), int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),
 	)
 }
@@ -142,56 +141,56 @@ func fromTimeTicket(pbTicket *api.TimeTicket) *time.Ticket {
 	)
 }
 
-func fromElement(pbElement *api.JSONElement) datatype.Element {
+func fromElement(pbElement *api.JSONElement) json.Element {
 	switch pbElement.Type {
 	case api.ValueType_JSON_OBJECT:
 		return json.NewObject(
-			datatype.NewRHT(),
+			json.NewRHT(),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_JSON_ARRAY:
 		return json.NewArray(
-			datatype.NewRGA(),
+			json.NewRGA(),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_BOOLEAN:
-		return datatype.NewPrimitive(
-			datatype.ValueFromBytes(datatype.Boolean, pbElement.Value),
+		return json.NewPrimitive(
+			json.ValueFromBytes(json.Boolean, pbElement.Value),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_INTEGER:
-		return datatype.NewPrimitive(
-			datatype.ValueFromBytes(datatype.Integer, pbElement.Value),
+		return json.NewPrimitive(
+			json.ValueFromBytes(json.Integer, pbElement.Value),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_LONG:
-		return datatype.NewPrimitive(
-			datatype.ValueFromBytes(datatype.Long, pbElement.Value),
+		return json.NewPrimitive(
+			json.ValueFromBytes(json.Long, pbElement.Value),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_DOUBLE:
-		return datatype.NewPrimitive(
-			datatype.ValueFromBytes(datatype.Double, pbElement.Value),
+		return json.NewPrimitive(
+			json.ValueFromBytes(json.Double, pbElement.Value),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_STRING:
-		return datatype.NewPrimitive(
-			datatype.ValueFromBytes(datatype.String, pbElement.Value),
+		return json.NewPrimitive(
+			json.ValueFromBytes(json.String, pbElement.Value),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_BYTES:
-		return datatype.NewPrimitive(
-			datatype.ValueFromBytes(datatype.Bytes, pbElement.Value),
+		return json.NewPrimitive(
+			json.ValueFromBytes(json.Bytes, pbElement.Value),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_DATE:
-		return datatype.NewPrimitive(
-			datatype.ValueFromBytes(datatype.Date, pbElement.Value),
+		return json.NewPrimitive(
+			json.ValueFromBytes(json.Date, pbElement.Value),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_TEXT:
-		return datatype.NewText(
-			datatype.NewRGATreeSplit(),
+		return json.NewText(
+			json.NewRGATreeSplit(),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/hackerwins/yorkie/pkg/document/json"
-	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
 	"github.com/hackerwins/yorkie/pkg/document/time"
 	"github.com/hackerwins/yorkie/pkg/log"
 )
@@ -12,14 +11,14 @@ import (
 type Add struct {
 	parentCreatedAt *time.Ticket
 	prevCreatedAt   *time.Ticket
-	value           datatype.Element
+	value           json.Element
 	executedAt      *time.Ticket
 }
 
 func NewAdd(
 	parentCreatedAt *time.Ticket,
 	prevCreatedAt *time.Ticket,
-	value datatype.Element,
+	value json.Element,
 	executedAt *time.Ticket,
 ) *Add {
 	return &Add{
@@ -45,7 +44,7 @@ func (o *Add) Execute(root *json.Root) error {
 	return nil
 }
 
-func (o *Add) Value() datatype.Element {
+func (o *Add) Value() json.Element {
 	return o.value
 }
 

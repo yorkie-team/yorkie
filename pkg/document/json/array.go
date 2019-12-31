@@ -1,19 +1,18 @@
 package json
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/json/datatype"
 	"github.com/hackerwins/yorkie/pkg/document/time"
 )
 
 // Array represents JSON array data structure including logical clock.
 // Array implements Element interface.
 type Array struct {
-	elements  *datatype.RGA
+	elements  *RGA
 	createdAt *time.Ticket
 }
 
 // NewArray creates a new instance of Array.
-func NewArray(elements *datatype.RGA, createdAt *time.Ticket) *Array {
+func NewArray(elements *RGA, createdAt *time.Ticket) *Array {
 	return &Array{
 		elements:  elements,
 		createdAt: createdAt,
@@ -21,18 +20,18 @@ func NewArray(elements *datatype.RGA, createdAt *time.Ticket) *Array {
 }
 
 // Add adds the given element at the last.
-func (a *Array) Add(v datatype.Element) *Array {
+func (a *Array) Add(v Element) *Array {
 	a.elements.Add(v)
 	return a
 }
 
 // Get returns the element of the given index.
-func (a *Array) Get(idx int) datatype.Element {
+func (a *Array) Get(idx int) Element {
 	return a.elements.Get(idx)
 }
 
 // Remove removes the element of the given index.
-func (a *Array) Remove(idx int) datatype.Element {
+func (a *Array) Remove(idx int) Element {
 	removed := a.elements.Get(idx)
 	if removed != nil {
 		a.elements.RemoveByCreatedAt(removed.CreatedAt())
@@ -42,7 +41,7 @@ func (a *Array) Remove(idx int) datatype.Element {
 }
 
 // Elements returns an array of elements contained in this RGA.
-func (a *Array) Elements() []datatype.Element {
+func (a *Array) Elements() []Element {
 	return a.elements.Elements()
 }
 
@@ -52,8 +51,8 @@ func (a *Array) Marshal() string {
 }
 
 // Deepcopy copies itself deeply.
-func (a *Array) Deepcopy() datatype.Element {
-	elements := datatype.NewRGA()
+func (a *Array) Deepcopy() Element {
+	elements := NewRGA()
 
 	for _, elem := range a.elements.Elements() {
 		elements.Add(elem.Deepcopy())
@@ -73,12 +72,12 @@ func (a *Array) LastCreatedAt() *time.Ticket {
 }
 
 // InsertAfter inserts the given element after the given previous element.
-func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element datatype.Element) {
+func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
 	a.elements.InsertAfter(prevCreatedAt, element)
 }
 
 // RemoveByCreatedAt removes the given element.
-func (a *Array) RemoveByCreatedAt(createdAt *time.Ticket) datatype.Element {
+func (a *Array) RemoveByCreatedAt(createdAt *time.Ticket) Element {
 	return a.elements.RemoveByCreatedAt(createdAt)
 }
 
