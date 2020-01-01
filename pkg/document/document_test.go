@@ -148,6 +148,25 @@ func TestDocument(t *testing.T) {
 		}
 	})
 
+	t.Run("text composition test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+
+		if err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("k1").
+				Edit(0, 0, "ㅎ").
+				Edit(0, 1, "하").
+				Edit(0, 1, "한").
+				Edit(0, 1, "하").
+				Edit(1, 1, "느").
+				Edit(1, 2, "늘")
+			assert.Equal(t, `{"k1":"하늘"}`, root.Marshal())
+			return nil
+		}); err != nil {
+			t.Error(err)
+		}
+		assert.Equal(t, `{"k1":"하늘"}`, doc.Marshal())
+	})
+
 	t.Run("rollback test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
 

@@ -3,6 +3,7 @@ package json
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/hackerwins/yorkie/pkg/document/time"
 	"github.com/hackerwins/yorkie/pkg/llrb"
@@ -130,7 +131,7 @@ func (t *TextNode) InsPrevID() *TextNodeID {
 }
 
 func (t *TextNode) contentLen() int {
-	return len(t.value)
+	return utf8.RuneCountInString(t.value)
 }
 
 func (t *TextNode) Len() int {
@@ -175,8 +176,9 @@ func (t *TextNode) split(offset int) *TextNode {
 
 func (t *TextNode) splitContent(offset int) string {
 	value := t.value
-	t.value = value[0:offset]
-	return value[offset:]
+	r := []rune(value)
+	t.value = string(r[0:offset])
+	return string(r[offset:])
 }
 
 func (t *TextNode) createdAt() *time.Ticket {

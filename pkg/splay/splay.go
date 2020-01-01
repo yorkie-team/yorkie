@@ -3,6 +3,8 @@ package splay
 import (
 	"fmt"
 	"strings"
+
+	"github.com/hackerwins/yorkie/pkg/log"
 )
 
 // Value is an interface that represents the value of Node.
@@ -164,7 +166,11 @@ func (t *Tree) Find(index int) (*Node, int) {
 	}
 
 	if index > node.value.Len() {
-		index = node.value.Len()
+		log.Logger.Fatalf(
+			"out of bound of text index: node.length %d, pos %d",
+			node.value.Len(),
+			index,
+		)
 	}
 
 	return node, index
