@@ -226,7 +226,7 @@ func removeMin(node *Node) *Node {
 		return nil
 	}
 
-	if isRed(node.left) && !isRed(node.left.left) {
+	if !isRed(node.left) && !isRed(node.left.left) {
 		node = moveRedLeft(node)
 	}
 

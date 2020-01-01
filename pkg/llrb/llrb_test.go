@@ -52,18 +52,17 @@ func rangeArray(min, max int) []int {
 	return a
 }
 
-func shuffle(a []int) {
+func shuffle(a []int) []int {
 	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(a), func(i, j int) { a[i], a[j] = a[j], a[i] })
+	return a
 }
 
 func TestTree(t *testing.T) {
 	t.Run("keeping order test", func(t *testing.T) {
 		tree := llrb.NewTree()
-		array := rangeArray(0, 9)
-		shuffle(array)
 
-		for _, value := range array {
+		for _, value := range shuffle(rangeArray(0, 9)) {
 			tree.Put(newIntKey(value), newIntValue(value))
 		}
 		assert.Equal(t, "0,1,2,3,4,5,6,7,8,9", tree.String())
