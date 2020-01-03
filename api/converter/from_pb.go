@@ -72,6 +72,14 @@ func fromChangeID(id *api.ChangeID) *change.ID {
 	)
 }
 
+func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
+	var keys []*key.Key
+	for _, pbKey := range pbKeys {
+		keys = append(keys, fromDocumentKey(pbKey))
+	}
+	return keys
+}
+
 func FromOperations(pbOps []*api.Operation) []operation.Operation {
 	var ops []operation.Operation
 

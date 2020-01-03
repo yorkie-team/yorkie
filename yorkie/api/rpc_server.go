@@ -11,18 +11,19 @@ import (
 
 	"github.com/hackerwins/yorkie/api"
 	"github.com/hackerwins/yorkie/api/converter"
+	"github.com/hackerwins/yorkie/pkg/document/key"
+	"github.com/hackerwins/yorkie/pkg/document/time"
 	"github.com/hackerwins/yorkie/pkg/log"
-	"github.com/hackerwins/yorkie/pkg/sync"
 	"github.com/hackerwins/yorkie/yorkie/backend"
 	"github.com/hackerwins/yorkie/yorkie/clients"
 	"github.com/hackerwins/yorkie/yorkie/packs"
+	"github.com/hackerwins/yorkie/yorkie/pubsub"
 )
 
 type RPCServer struct {
 	port       int
 	grpcServer *grpc.Server
 	backend    *backend.Backend
-	muMap      *sync.Map
 }
 
 func NewRPCServer(port int, be *backend.Backend) (*RPCServer, error) {
@@ -35,7 +36,6 @@ func NewRPCServer(port int, be *backend.Backend) (*RPCServer, error) {
 		port:       port,
 		grpcServer: grpc.NewServer(opts...),
 		backend:    be,
-		muMap:      sync.NewMap(),
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
 
@@ -92,15 +92,16 @@ func (s *RPCServer) AttachDocument(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	bsonKey := pack.DocumentKey.BSONKey()
-	if err := s.muMap.Lock(bsonKey); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	defer func() {
-		if err := s.muMap.Unlock(bsonKey); err != nil {
-			log.Logger.Error(err)
+	if pack.HasChanges() {
+		if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
 		}
-	}()
+		defer func() {
+			if err := s.backend.Unlock(pack.DocumentKey.BSONKey()); err != nil {
+				log.Logger.Error(err)
+			}
+		}()
+	}
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
@@ -113,6 +114,14 @@ func (s *RPCServer) AttachDocument(
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if pack.HasChanges() {
+		s.backend.Publish(
+			time.ActorIDFromHex(req.ClientId),
+			pack.DocumentKey.BSONKey(),
+			pubsub.Event{Value: pack.DocumentKey.BSONKey()},
+		)
 	}
 
 	return &api.AttachDocumentResponse{
@@ -129,15 +138,16 @@ func (s *RPCServer) DetachDocument(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	bsonKey := pack.DocumentKey.BSONKey()
-	if err := s.muMap.Lock(bsonKey); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	defer func() {
-		if err := s.muMap.Unlock(bsonKey); err != nil {
-			log.Logger.Error(err)
+	if pack.HasChanges() {
+		if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
 		}
-	}()
+		defer func() {
+			if err := s.backend.Unlock(pack.DocumentKey.BSONKey()); err != nil {
+				log.Logger.Error(err)
+			}
+		}()
+	}
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
@@ -150,6 +160,14 @@ func (s *RPCServer) DetachDocument(
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if pack.HasChanges() {
+		s.backend.Publish(
+			time.ActorIDFromHex(req.ClientId),
+			pack.DocumentKey.BSONKey(),
+			pubsub.Event{Value: pack.DocumentKey.BSONKey()},
+		)
 	}
 
 	return &api.DetachDocumentResponse{
@@ -166,15 +184,16 @@ func (s *RPCServer) PushPull(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	bsonKey := pack.DocumentKey.BSONKey()
-	if err := s.muMap.Lock(bsonKey); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	defer func() {
-		if err := s.muMap.Unlock(bsonKey); err != nil {
-			log.Logger.Error(err)
+	if pack.HasChanges() {
+		if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
 		}
-	}()
+		defer func() {
+			if err := s.backend.Unlock(pack.DocumentKey.BSONKey()); err != nil {
+				log.Logger.Error(err)
+			}
+		}()
+	}
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
@@ -187,6 +206,14 @@ func (s *RPCServer) PushPull(
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if pack.HasChanges() {
+		s.backend.Publish(
+			time.ActorIDFromHex(req.ClientId),
+			pack.DocumentKey.BSONKey(),
+			pubsub.Event{Value: pack.DocumentKey.BSONKey()},
+		)
 	}
 
 	return &api.PushPullResponse{
@@ -210,4 +237,47 @@ func (s *RPCServer) listenAndServeGRPC() error {
 	}()
 
 	return nil
+}
+
+func (s *RPCServer) WatchDocuments(
+	req *api.WatchDocumentsRequest,
+	stream api.Yorkie_WatchDocumentsServer,
+) error {
+	var docKeys []string
+	for _, docKey := range converter.FromDocumentKeys(req.DocumentKeys) {
+		docKeys = append(docKeys, docKey.BSONKey())
+	}
+
+	subscription, err := s.backend.Subscribe(
+		time.ActorIDFromHex(req.ClientId),
+		docKeys,
+	)
+	if err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			s.backend.Unsubscribe(docKeys, subscription)
+			return nil
+		case event := <-subscription.Events():
+			k, err := key.FromBSONKey(event.Value)
+			if err != nil {
+				s.backend.Unsubscribe(docKeys, subscription)
+				log.Logger.Error(err)
+				return err
+			}
+
+			if err := stream.Send(&api.WatchDocumentsResponse{
+				ClientId:     req.ClientId,
+				DocumentKeys: converter.ToDocumentKeys(k),
+			}); err != nil {
+				s.backend.Unsubscribe(docKeys, subscription)
+				log.Logger.Error(err)
+				return err
+			}
+		}
+	}
 }

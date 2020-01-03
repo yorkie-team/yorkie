@@ -10,6 +10,7 @@ import (
 	"github.com/hackerwins/yorkie/api"
 	"github.com/hackerwins/yorkie/api/converter"
 	"github.com/hackerwins/yorkie/pkg/document"
+	"github.com/hackerwins/yorkie/pkg/document/key"
 	"github.com/hackerwins/yorkie/pkg/document/time"
 	"github.com/hackerwins/yorkie/pkg/log"
 )
@@ -121,9 +122,9 @@ func (c *Client) Deactivate(ctx context.Context) error {
 	return nil
 }
 
-// AttachDocument attaches the given document to this client. It tells the agent that
+// Attach attaches the given document to this client. It tells the agent that
 // this client will synchronize the given document.
-func (c *Client) AttachDocument(ctx context.Context, doc *document.Document) error {
+func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
 		return errClientNotActivated
 	}
@@ -155,13 +156,13 @@ func (c *Client) AttachDocument(ctx context.Context, doc *document.Document) err
 	return nil
 }
 
-// DetachDocument dettaches the given document from this client. It tells the
+// Detach detaches the given document from this client. It tells the
 // agent that this client will no longer synchronize the given document.
 //
 // To collect garbage things like CRDT tombstones left on the document, all the
 // changes should be applied to other replicas before GC time. For this, if the
 // document is no longer used by this client, it should be detached.
-func (c *Client) DetachDocument(ctx context.Context, doc *document.Document) error {
+func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
 		return errClientNotActivated
 	}
@@ -195,36 +196,97 @@ func (c *Client) DetachDocument(ctx context.Context, doc *document.Document) err
 	return nil
 }
 
-// PushPull pushes local changes of the attached documents to the Agent and
+// Sync pushes local changes of the attached documents to the Agent and
 // receives changes of the remote replica from the agent then apply them to
 // local documents.
-func (c *Client) PushPull(ctx context.Context) error {
-	if c.status != activated {
-		return errClientNotActivated
+func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
+	if len(keys) == 0 {
+		for _, doc := range c.attachedDocs {
+			keys = append(keys, doc.Key())
+		}
 	}
 
-	for _, doc := range c.attachedDocs {
-		res, err := c.client.PushPull(ctx, &api.PushPullRequest{
-			ClientId:   c.id.String(),
-			ChangePack: converter.ToChangePack(doc.FlushChangePack()),
-		})
-		if err != nil {
-			log.Logger.Error(err)
-			return err
-		}
-
-		pack, err := converter.FromChangePack(res.ChangePack)
-		if err != nil {
-			return err
-		}
-
-		if err := doc.ApplyChangePack(pack); err != nil {
-			log.Logger.Error(err)
+	for _, k := range keys {
+		if err := c.sync(ctx, k); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (c *Client) sync(ctx context.Context, key *key.Key) error {
+	if c.status != activated {
+		return errClientNotActivated
+	}
+
+	doc, ok := c.attachedDocs[key.BSONKey()]
+	if !ok {
+		return errDocumentNotAttached
+	}
+
+	res, err := c.client.PushPull(ctx, &api.PushPullRequest{
+		ClientId:   c.id.String(),
+		ChangePack: converter.ToChangePack(doc.FlushChangePack()),
+	})
+	if err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	pack, err := converter.FromChangePack(res.ChangePack)
+	if err != nil {
+		return err
+	}
+
+	if err := doc.ApplyChangePack(pack); err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	return nil
+}
+
+type WatchResponse struct {
+	Keys []*key.Key
+	Err  error
+}
+
+func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan WatchResponse {
+	var keys []*key.Key
+	for _, doc := range docs {
+		keys = append(keys, doc.Key())
+	}
+
+	rch := make(chan WatchResponse)
+	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
+		ClientId:     c.id.String(),
+		DocumentKeys: converter.ToDocumentKeys(keys...),
+	})
+	if err != nil {
+		rch <- WatchResponse{Err: err}
+		close(rch)
+		return rch
+	}
+
+	go func() {
+		for {
+			resp, err := stream.Recv()
+			if err != nil {
+				rch <- WatchResponse{Err: err}
+				close(rch)
+				return
+			}
+
+			if resp != nil {
+				rch <- WatchResponse{
+					Keys: converter.FromDocumentKeys(resp.DocumentKeys),
+				}
+			}
+		}
+	}()
+
+	return rch
 }
 
 // IsActivate returns whether this client is active or not.

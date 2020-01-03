@@ -3,6 +3,8 @@ package client_test
 import (
 	"context"
 	"fmt"
+	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -85,12 +87,12 @@ func TestClientAndDocument(t *testing.T) {
 				t.Error(err)
 			}
 
-			if err := c1.AttachDocument(ctx, doc); err != nil {
+			if err := c1.Attach(ctx, doc); err != nil {
 				t.Error(err)
 			}
 			assert.True(t, doc.IsAttached())
 
-			if err := c1.DetachDocument(ctx, doc); err != nil {
+			if err := c1.Detach(ctx, doc); err != nil {
 				t.Error(err)
 			}
 			assert.False(t, doc.IsAttached())
@@ -99,7 +101,7 @@ func TestClientAndDocument(t *testing.T) {
 		t.Run("causal nested array test", func(t *testing.T) {
 			ctx := context.Background()
 			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx, doc1); err != nil {
+			if err := c1.Attach(ctx, doc1); err != nil {
 				t.Error(err)
 			}
 
@@ -113,7 +115,7 @@ func TestClientAndDocument(t *testing.T) {
 			}
 
 			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx, doc2); err != nil {
+			if err := c2.Attach(ctx, doc2); err != nil {
 				t.Error(err)
 			}
 
@@ -123,7 +125,7 @@ func TestClientAndDocument(t *testing.T) {
 		t.Run("causal primitive data test", func(t *testing.T) {
 			ctx := context.Background()
 			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx, doc1); err != nil {
+			if err := c1.Attach(ctx, doc1); err != nil {
 				t.Error(err)
 			}
 
@@ -152,7 +154,7 @@ func TestClientAndDocument(t *testing.T) {
 			}
 
 			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx, doc2); err != nil {
+			if err := c2.Attach(ctx, doc2); err != nil {
 				t.Error(err)
 			}
 
@@ -163,11 +165,11 @@ func TestClientAndDocument(t *testing.T) {
 			ctx := context.Background()
 
 			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx, doc1); err != nil {
+			if err := c1.Attach(ctx, doc1); err != nil {
 				t.Error(err)
 			}
 			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx, doc2); err != nil {
+			if err := c2.Attach(ctx, doc2); err != nil {
 				t.Error(err)
 			}
 
@@ -199,7 +201,7 @@ func TestClientAndDocument(t *testing.T) {
 		t.Run("concurrent object set/remove simple test", func(t *testing.T) {
 			ctx := context.Background()
 			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx, doc1); err != nil {
+			if err := c1.Attach(ctx, doc1); err != nil {
 				t.Error(err)
 			}
 			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
@@ -209,12 +211,12 @@ func TestClientAndDocument(t *testing.T) {
 				t.Error(err)
 			}
 			assert.Equal(t, `{"k1":{}}`, doc1.Marshal())
-			if err := c1.PushPull(ctx); err != nil {
+			if err := c1.Sync(ctx); err != nil {
 				t.Error(err)
 			}
 
 			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx, doc2); err != nil {
+			if err := c2.Attach(ctx, doc2); err != nil {
 				t.Error(err)
 			}
 
@@ -240,12 +242,12 @@ func TestClientAndDocument(t *testing.T) {
 		t.Run("concurrent object.set test", func(t *testing.T) {
 			ctx := context.Background()
 			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx, doc1); err != nil {
+			if err := c1.Attach(ctx, doc1); err != nil {
 				t.Error(err)
 			}
 
 			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx, doc2); err != nil {
+			if err := c2.Attach(ctx, doc2); err != nil {
 				t.Error(err)
 			}
 
@@ -306,7 +308,7 @@ func TestClientAndDocument(t *testing.T) {
 		t.Run("concurrent array add/remove simple test", func(t *testing.T) {
 			ctx := context.Background()
 			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx, doc1); err != nil {
+			if err := c1.Attach(ctx, doc1); err != nil {
 				t.Error(err)
 			}
 			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
@@ -315,12 +317,12 @@ func TestClientAndDocument(t *testing.T) {
 			}, "add v1, v2 by c1"); err != nil {
 				t.Error(err)
 			}
-			if err := c1.PushPull(ctx); err != nil {
+			if err := c1.Sync(ctx); err != nil {
 				t.Error(err)
 			}
 
 			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx, doc2); err != nil {
+			if err := c2.Attach(ctx, doc2); err != nil {
 				t.Error(err)
 			}
 
@@ -342,7 +344,7 @@ func TestClientAndDocument(t *testing.T) {
 		t.Run("concurrent array add/remove test", func(t *testing.T) {
 			ctx := context.Background()
 			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx, doc1); err != nil {
+			if err := c1.Attach(ctx, doc1); err != nil {
 				t.Error(err)
 			}
 			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
@@ -351,12 +353,12 @@ func TestClientAndDocument(t *testing.T) {
 			}, "new array and add v1"); err != nil {
 				t.Error(err)
 			}
-			if err := c1.PushPull(ctx); err != nil {
+			if err := c1.Sync(ctx); err != nil {
 				t.Error(err)
 			}
 
 			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx, doc2); err != nil {
+			if err := c2.Attach(ctx, doc2); err != nil {
 				t.Error(err)
 			}
 
@@ -380,11 +382,11 @@ func TestClientAndDocument(t *testing.T) {
 			ctx := context.Background()
 
 			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx, doc1); err != nil {
+			if err := c1.Attach(ctx, doc1); err != nil {
 				t.Error(err)
 			}
 			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx, doc2); err != nil {
+			if err := c2.Attach(ctx, doc2); err != nil {
 				t.Error(err)
 			}
 
@@ -421,7 +423,7 @@ func TestClientAndDocument(t *testing.T) {
 		t.Run("text test", func(t *testing.T) {
 			ctx := context.Background()
 			doc1 := document.New(testCollection, t.Name())
-			if err := c1.AttachDocument(ctx, doc1); err != nil {
+			if err := c1.Attach(ctx, doc1); err != nil {
 				t.Error(err)
 			}
 			if err := doc1.Update(func(root *proxy.ObjectProxy) error {
@@ -430,12 +432,12 @@ func TestClientAndDocument(t *testing.T) {
 			}, "set a new text by c1"); err != nil {
 				t.Error(err)
 			}
-			if err := c1.PushPull(ctx); err != nil {
+			if err := c1.Sync(ctx); err != nil {
 				t.Error(err)
 			}
 
 			doc2 := document.New(testCollection, t.Name())
-			if err := c2.AttachDocument(ctx, doc2); err != nil {
+			if err := c2.Attach(ctx, doc2); err != nil {
 				t.Error(err)
 			}
 
@@ -481,6 +483,56 @@ func TestClientAndDocument(t *testing.T) {
 			}
 			syncThenAssertEqual(t, c1, c2, doc1, doc2)
 		})
+
+		t.Run("watch test", func(t *testing.T) {
+			ctx := context.Background()
+
+			doc1 := document.New(testCollection, t.Name())
+			if err := c1.Attach(ctx, doc1); err != nil {
+				t.Error(err)
+			}
+
+			doc2 := document.New(testCollection, t.Name())
+			if err := c2.Attach(ctx, doc2); err != nil {
+				t.Error(err)
+			}
+
+			wg := sync.WaitGroup{}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				rch := c1.Watch(ctx, doc1)
+
+				resp := <- rch
+				if resp.Err == io.EOF {
+					return
+				}
+				if resp.Err != nil {
+					t.Error(resp.Err)
+				}
+
+				if err := c1.Sync(ctx, resp.Keys...); err != nil {
+					t.Error(err)
+				}
+			}()
+
+			time.Sleep(100 * time.Millisecond)
+
+			if err := doc2.Update(func(root *proxy.ObjectProxy) error {
+				root.SetString("key", "value")
+				return nil
+			}); err != nil {
+				t.Error(err)
+			}
+
+			if err := c2.Sync(ctx); err != nil {
+				t.Error(err)
+			}
+
+			wg.Wait()
+
+			assert.Equal(t, doc1.Marshal(), doc2.Marshal())
+		})
 	})
 }
 
@@ -498,13 +550,13 @@ func syncThenAssertEqual(
 		doc2.Marshal(),
 	)
 
-	if err := c1.PushPull(ctx); err != nil {
+	if err := c1.Sync(ctx); err != nil {
 		t.Error(err)
 	}
-	if err := c2.PushPull(ctx); err != nil {
+	if err := c2.Sync(ctx); err != nil {
 		t.Error(err)
 	}
-	if err := c1.PushPull(ctx); err != nil {
+	if err := c1.Sync(ctx); err != nil {
 		t.Error(err)
 	}
 
