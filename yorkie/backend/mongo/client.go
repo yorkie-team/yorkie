@@ -272,21 +272,22 @@ func (c *Client) CreateChangeInfos(
 	}
 
 	return c.withCollection(ColChanges, func(col *mongo.Collection) error {
-		var bsonChanges []interface{}
+		var modelChanges []mongo.WriteModel
 
 		for _, c := range changes {
-			bsonChanges = append(bsonChanges, bson.M{
-				"doc_id":     docID,
-				"actor":      types.EncodeActorID(c.ID().Actor()),
+			modelChanges = append(modelChanges, mongo.NewUpdateOneModel().SetFilter(bson.M{
+				"doc_id": docID,
 				"server_seq": c.ServerSeq(),
+			}).SetUpdate(bson.M{"$set": bson.M{
+				"actor":      types.EncodeActorID(c.ID().Actor()),
 				"client_seq": c.ID().ClientSeq(),
 				"lamport":    c.ID().Lamport(),
 				"message":    c.Message(),
 				"operations": types.EncodeOperation(c.Operations()),
-			})
+			}}).SetUpsert(true))
 		}
 
-		_, err := col.InsertMany(ctx, bsonChanges, options.InsertMany().SetOrdered(true))
+		_, err := col.BulkWrite(ctx, modelChanges, options.BulkWrite().SetOrdered(true))
 		if err != nil {
 			log.Logger.Error(err)
 			return err
