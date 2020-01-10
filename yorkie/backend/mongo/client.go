@@ -57,7 +57,7 @@ func NewClient(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	if err := ensureIndex(ctx, client.Database(conf.YorkieDatabase)); err != nil {
+	if err := ensureIndexes(ctx, client.Database(conf.YorkieDatabase)); err != nil {
 		log.Logger.Error(err)
 		return nil, err
 	}

@@ -115,6 +115,13 @@ func FromOperations(pbOps []*api.Operation) []operation.Operation {
 				decoded.Edit.Content,
 				fromTimeTicket(decoded.Edit.ExecutedAt),
 			)
+		case *api.Operation_Select_:
+			op = operation.NewSelect(
+				fromTimeTicket(decoded.Select.ParentCreatedAt),
+				fromTextNodePos(decoded.Select.From),
+				fromTextNodePos(decoded.Select.To),
+				fromTimeTicket(decoded.Select.ExecutedAt),
+			)
 		default:
 			panic("unsupported operation")
 		}

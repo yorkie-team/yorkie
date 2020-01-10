@@ -92,7 +92,7 @@ func (s *RPCServer) AttachDocument(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	if pack.HasChanges() {
+	// if pack.HasChanges() {
 		if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -101,7 +101,7 @@ func (s *RPCServer) AttachDocument(
 				log.Logger.Error(err)
 			}
 		}()
-	}
+	// }
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
@@ -138,7 +138,7 @@ func (s *RPCServer) DetachDocument(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	if pack.HasChanges() {
+	// if pack.HasChanges() {
 		if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -147,7 +147,7 @@ func (s *RPCServer) DetachDocument(
 				log.Logger.Error(err)
 			}
 		}()
-	}
+	// }
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {
@@ -184,7 +184,8 @@ func (s *RPCServer) PushPull(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	if pack.HasChanges() {
+	// TODO uncomment write lock condition. We need $max operation on client.
+	// if pack.HasChanges() {
 		if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -193,7 +194,7 @@ func (s *RPCServer) PushPull(
 				log.Logger.Error(err)
 			}
 		}()
-	}
+	// }
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
 	if err != nil {

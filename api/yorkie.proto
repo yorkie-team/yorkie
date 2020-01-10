@@ -166,12 +166,19 @@ message Operation {
         string content = 5;
         TimeTicket executed_at = 6;
     }
+    message Select {
+        TimeTicket parent_created_at = 1;
+        TextNodePos from = 2;
+        TextNodePos to = 3;
+        TimeTicket executed_at = 4;
+    }
 
     oneof body {
         Set set = 1;
         Add add = 2;
         Remove remove = 3;
         Edit edit = 4;
+        Select select = 5;
     }
 }
 

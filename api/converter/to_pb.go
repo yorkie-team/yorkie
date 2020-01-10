@@ -104,6 +104,15 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 					ExecutedAt:          toTimeTicket(op.ExecutedAt()),
 				},
 			}
+		case *operation.Select:
+			pbOperation.Body = &api.Operation_Select_{
+				Select: &api.Operation_Select{
+					ParentCreatedAt:     toTimeTicket(op.ParentCreatedAt()),
+					From:                toTextNodePos(op.From()),
+					To:                  toTextNodePos(op.To()),
+					ExecutedAt:          toTimeTicket(op.ExecutedAt()),
+				},
+			}
 		default:
 			panic("unsupported operation")
 		}

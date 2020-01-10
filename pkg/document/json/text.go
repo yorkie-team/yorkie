@@ -474,9 +474,24 @@ func (s *RGATreeSplit) AnnotatedString() string {
 	return strings.Join(result, "")
 }
 
+type Selection struct {
+	from      *TextNodePos
+	to        *TextNodePos
+	updatedAt *time.Ticket
+}
+
+func newSelection(from, to *TextNodePos, updatedAt *time.Ticket) *Selection {
+	return &Selection{
+		from,
+		to,
+		updatedAt,
+	}
+}
+
 // Text is an extended data type for the contents of a text editor.
 type Text struct {
 	rgaTreeSplit *RGATreeSplit
+	selectionMap map[string]*Selection
 	createdAt    *time.Ticket
 }
 
@@ -484,6 +499,7 @@ type Text struct {
 func NewText(elements *RGATreeSplit, createdAt *time.Ticket) *Text {
 	return &Text{
 		rgaTreeSplit: elements,
+		selectionMap: make(map[string]*Selection),
 		createdAt:    createdAt,
 	}
 }
@@ -541,6 +557,28 @@ func (t *Text) Edit(
 		t.rgaTreeSplit.AnnotatedString(),
 	)
 	return cursorPos, latestCreatedAtMapByActor
+}
+
+func (t *Text) Select(
+	from *TextNodePos,
+	to *TextNodePos,
+	updatedAt *time.Ticket,
+) {
+	if _, ok := t.selectionMap[updatedAt.ActorIDHex()]; !ok {
+		t.selectionMap[updatedAt.ActorIDHex()] = newSelection(from, to, updatedAt)
+		return
+	}
+
+	prevSelection := t.selectionMap[updatedAt.ActorIDHex()]
+	if updatedAt.After(prevSelection.updatedAt) {
+		log.Logger.Debugf(
+			"SELT: '%s' selects %s",
+			updatedAt.ActorID().String(),
+			t.rgaTreeSplit.AnnotatedString(),
+		)
+
+		t.selectionMap[updatedAt.ActorIDHex()] = newSelection(from, to, updatedAt)
+	}
 }
 
 func (t *Text) TextNodes() []*TextNode {

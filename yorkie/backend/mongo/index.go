@@ -33,7 +33,7 @@ var (
 	}}
 )
 
-func ensureIndex(ctx context.Context, db *mongo.Database) error {
+func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 	if _, err := db.Collection(ColClientInfos).Indexes().CreateMany(
 		ctx,
 		idxClientInfos,
