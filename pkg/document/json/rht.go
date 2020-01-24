@@ -1,66 +1,89 @@
 package json
 
 import (
-	"fmt"
-	"sort"
-	"strings"
-
 	"github.com/hackerwins/yorkie/pkg/document/time"
 	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/hackerwins/yorkie/pkg/pq"
 )
+
+type rhtNode struct {
+	key       string
+	elem      Element
+	isRemoved bool
+}
+
+func newRHTNode(key string, elem Element) *rhtNode {
+	return &rhtNode{
+		key:       key,
+		elem:      elem,
+		isRemoved: false,
+	}
+}
+
+func (n *rhtNode) Remove() {
+	n.isRemoved = true
+}
+
+func (n *rhtNode) Less(other pq.PQValue) bool {
+	node := other.(*rhtNode)
+	return n.elem.CreatedAt().After(node.elem.CreatedAt())
+}
+
 
 // RHT is replicated hash table.
 type RHT struct {
-	elementQueueMapByKey map[string]*PriorityQueue
-	itemMapByCreatedAt   map[string]*PQItem
+	nodeQueueMapByKey  map[string]*pq.PriorityQueue
+	nodeMapByCreatedAt map[string]*rhtNode
 }
 
 // NewRHT creates a new instance of RHT.
 func NewRHT() *RHT {
 	return &RHT{
-		elementQueueMapByKey: make(map[string]*PriorityQueue),
-		itemMapByCreatedAt:   make(map[string]*PQItem),
+		nodeQueueMapByKey:  make(map[string]*pq.PriorityQueue),
+		nodeMapByCreatedAt: make(map[string]*rhtNode),
 	}
 }
 
 // Get returns the value of the given key.
 func (rht *RHT) Get(key string) Element {
-	if queue, ok := rht.elementQueueMapByKey[key]; ok {
-		item := queue.Peek()
-		if item.isRemoved {
+	if queue, ok := rht.nodeQueueMapByKey[key]; ok {
+		node := queue.Peek().(*rhtNode)
+		if node.isRemoved {
 			return nil
 		}
-		return item.value
+		return node.elem
 	}
 
 	return nil
 }
 
 // Set sets the value of the given key.
-func (rht *RHT) Set(k string, v Element) {
-	if _, ok := rht.elementQueueMapByKey[k]; !ok {
-		rht.elementQueueMapByKey[k] = NewPriorityQueue()
+func (rht *RHT) Set(k string, v Element, isRemoved bool) {
+	if _, ok := rht.nodeQueueMapByKey[k]; !ok {
+		rht.nodeQueueMapByKey[k] = pq.NewPriorityQueue()
 	}
 
-	item := rht.elementQueueMapByKey[k].Push(v)
-	rht.itemMapByCreatedAt[v.CreatedAt().Key()] = item
+	node := newRHTNode(k, v)
+	node.isRemoved = isRemoved
+	rht.nodeQueueMapByKey[k].Push(node)
+	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = node
 }
 
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string) Element {
-	if queue, ok := rht.elementQueueMapByKey[k]; ok {
-		item := queue.Peek()
-		item.Remove()
-		return item.value
+	if queue, ok := rht.nodeQueueMapByKey[k]; ok {
+		node := queue.Peek().(*rhtNode)
+		node.Remove()
+		return node.elem
 	}
 	return nil
 }
 
 // RemoveByCreatedAt removes the Element of the given creation time.
 func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket) Element {
-	if item, ok := rht.itemMapByCreatedAt[createdAt.Key()]; ok {
-		item.Remove()
-		return item.value
+	if node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]; ok {
+		node.Remove()
+		return node.elem
 	}
 
 	log.Logger.Warn("fail to find " + createdAt.Key())
@@ -69,41 +92,28 @@ func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket) Element {
 
 // Members returns a map of elements because the map easy to use for loop.
 // TODO If we encounter performance issues, we need to replace this with other solution.
-func (rht *RHT) Members() map[string]Element {
-	elementMap := make(map[string]Element)
-	for key, queue := range rht.elementQueueMapByKey {
-		if item := queue.Peek(); !item.isRemoved {
-			elementMap[key] = item.value
+func (rht *RHT) Elements() map[string]Element {
+	members := make(map[string]Element)
+	for _, queue := range rht.nodeQueueMapByKey {
+		if node := queue.Peek().(*rhtNode); !node.isRemoved {
+			members[node.key] = node.elem
+
 		}
 	}
 
-	return elementMap
+	return members
 }
 
-// Marshal returns the JSON encoding of this RHT.
-func (rht *RHT) Marshal() string {
-	members := rht.Members()
+// Members returns a map of elements because the map easy to use for loop.
+// TODO If we encounter performance issues, we need to replace this with other solution.
+func (rht *RHT) AllNodes() []*rhtNode {
+	var nodes []*rhtNode
+	for _, queue := range rht.nodeQueueMapByKey {
+		for _, value := range queue.Values() {
+			nodes = append(nodes, value.(*rhtNode))
 
-	size := len(members)
-	keys := make([]string, 0, size)
-	for k := range members {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	sb := strings.Builder{}
-	sb.WriteString("{")
-
-	idx := 0
-	for _, k := range keys {
-		value := members[k]
-		sb.WriteString(fmt.Sprintf("\"%s\":%s", k, value.Marshal()))
-		if size-1 != idx {
-			sb.WriteString(",")
 		}
-		idx++
 	}
-	sb.WriteString("}")
 
-	return sb.String()
+	return nodes
 }

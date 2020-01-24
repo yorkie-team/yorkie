@@ -21,7 +21,7 @@ func NewArray(elements *RGA, createdAt *time.Ticket) *Array {
 
 // Add adds the given element at the last.
 func (a *Array) Add(v Element) *Array {
-	a.elements.Add(v)
+	a.elements.Add(v, false)
 	return a
 }
 
@@ -40,9 +40,17 @@ func (a *Array) Remove(idx int) Element {
 	return removed
 }
 
-// Elements returns an array of elements contained in this RGA.
+// Nodes returns an array of elements contained in this RGA.
 func (a *Array) Elements() []Element {
-	return a.elements.Elements()
+	var elements []Element
+	for _, node := range a.elements.Nodes() {
+		if node.isRemoved {
+			continue
+		}
+		elements = append(elements, node.value)
+	}
+
+	return elements
 }
 
 // Marshal returns the JSON encoding of this Array.
@@ -54,8 +62,8 @@ func (a *Array) Marshal() string {
 func (a *Array) Deepcopy() Element {
 	elements := NewRGA()
 
-	for _, elem := range a.elements.Elements() {
-		elements.Add(elem.Deepcopy())
+	for _, node := range a.elements.Nodes() {
+		elements.Add(node.value.Deepcopy(), node.isRemoved)
 	}
 
 	return NewArray(elements, a.createdAt)
@@ -84,4 +92,16 @@ func (a *Array) RemoveByCreatedAt(createdAt *time.Ticket) Element {
 // Len returns length of this Array.
 func (a *Array) Len() int {
 	return a.elements.Len()
+}
+
+func (a *Array) Descendants(descendants chan Element) {
+	for _, node := range a.elements.Nodes() {
+		switch elem := node.value.(type) {
+		case *Object:
+			elem.Descendants(descendants)
+		case *Array:
+			elem.Descendants(descendants)
+		}
+		descendants <- node.value
+	}
 }

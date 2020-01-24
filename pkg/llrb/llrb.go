@@ -160,7 +160,7 @@ func (t *Tree) remove(node *Node, key Key) *Node {
 			return nil
 		}
 
-		if isRed(node.right) && !isRed(node.right.left) {
+		if !isRed(node.right) && !isRed(node.right.left) {
 			node = moveRedRight(node)
 		}
 

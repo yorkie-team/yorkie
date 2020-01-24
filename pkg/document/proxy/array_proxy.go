@@ -14,20 +14,9 @@ type ArrayProxy struct {
 	context *change.Context
 }
 
-func ProxyArray(ctx *change.Context, root *json.Array) *ArrayProxy {
+func NewArrayProxy(ctx *change.Context, array *json.Array) *ArrayProxy {
 	return &ArrayProxy{
-		Array:   root,
-		context: ctx,
-	}
-}
-
-func NewArrayProxy(
-	ctx *change.Context,
-	elements *json.RGA,
-	createdAt *time.Ticket,
-) *ArrayProxy {
-	return &ArrayProxy{
-		Array:   json.NewArray(elements, createdAt),
+		Array:   array,
 		context: ctx,
 	}
 }
@@ -90,7 +79,7 @@ func (p *ArrayProxy) AddString(v string) *ArrayProxy {
 
 func (p *ArrayProxy) AddNewArray() *ArrayProxy {
 	v := p.addInternal(func(ticket *time.Ticket) json.Element {
-		return NewArrayProxy(p.context, json.NewRGA(), ticket)
+		return NewArrayProxy(p.context, json.NewArray(json.NewRGA(), ticket))
 	})
 
 	return v.(*ArrayProxy)
@@ -115,18 +104,20 @@ func (p *ArrayProxy) addInternal(
 	creator func(ticket *time.Ticket) json.Element,
 ) json.Element {
 	ticket := p.context.IssueTimeTicket()
-	value := creator(ticket)
+	proxy := creator(ticket)
+	value := toOriginal(proxy)
 
 	p.context.Push(operation.NewAdd(
 		p.Array.CreatedAt(),
 		p.Array.LastCreatedAt(),
-		toOriginal(value),
+		value.Deepcopy(),
 		ticket,
 	))
 
 	p.Add(value)
+	p.context.RegisterElement(value)
 
-	return value
+	return proxy
 }
 
 func (p *ArrayProxy) Len() int {

@@ -1,4 +1,4 @@
-package json
+package pq
 
 import "container/heap"
 
@@ -15,35 +15,41 @@ func NewPriorityQueue() *PriorityQueue {
 	}
 }
 
-func (pq *PriorityQueue) Peek() *PQItem {
-	return pq.queue.Peek().(*PQItem)
+func (pq *PriorityQueue) Peek() PQValue {
+	return pq.queue.Peek().(*PQItem).value
 }
 
-func (pq *PriorityQueue) Pop() *PQItem {
-	return heap.Pop(pq.queue).(*PQItem)
+func (pq *PriorityQueue) Pop() PQValue {
+	return heap.Pop(pq.queue).(*PQItem).value
 }
 
-func (pq *PriorityQueue) Push(value Element) *PQItem {
+func (pq *PriorityQueue) Push(value PQValue) {
 	item := NewPQItem(value)
 	heap.Push(pq.queue, item)
-	return item
+}
+
+func (pq *PriorityQueue) Values() []PQValue {
+	var values []PQValue
+	for _, item := range *pq.queue {
+		values = append(values, item.value)
+	}
+	return values
+}
+
+type PQValue interface {
+	Less(other PQValue) bool
 }
 
 // PQItem is something we manage in a priority queue.
 type PQItem struct {
-	value     Element // The value of the item; arbitrary.
-	isRemoved bool    // Whether the item is removed or not.
-	index     int     // The index of the item in the heap.
+	value     PQValue
+	index     int
 }
 
-func (item *PQItem) Remove() {
-	item.isRemoved = true
-}
 
-func NewPQItem(value Element) *PQItem {
+func NewPQItem(value PQValue) *PQItem {
 	return &PQItem{
 		value:     value,
-		isRemoved: false,
 		index:     -1,
 	}
 }
@@ -55,7 +61,7 @@ func (pq internalQueue) Len() int { return len(pq) }
 
 func (pq internalQueue) Less(i, j int) bool {
 	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return pq[i].value.CreatedAt().After(pq[j].value.CreatedAt())
+	return pq[i].value.Less(pq[j].value)
 }
 
 func (pq internalQueue) Swap(i, j int) {

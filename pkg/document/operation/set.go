@@ -39,8 +39,9 @@ func (o *Set) Execute(root *json.Root) error {
 		return err
 	}
 
-	obj.Set(o.key, o.value)
-	root.RegisterElement(o.value)
+	value := o.value.Deepcopy()
+	obj.Set(o.key, value)
+	root.RegisterElement(value)
 	return nil
 }
 

@@ -35,7 +35,7 @@ type Document struct {
 	key          *key.Key
 	state        stateType
 	root         *json.Root
-	clone        *json.Object
+	clone        *json.Root
 	checkpoint   *checkpoint.Checkpoint
 	changeID     *change.ID
 	localChanges []*change.Change
@@ -43,10 +43,12 @@ type Document struct {
 
 // New creates a new instance of Document.
 func New(collection, document string) *Document {
+	root := json.NewObject(json.NewRHT(), time.InitialTicket)
+
 	return &Document{
 		key:        &key.Key{Collection: collection, Document: document},
 		state:      Detached,
-		root:       json.NewRoot(),
+		root:       json.NewRoot(root),
 		checkpoint: checkpoint.Initial,
 		changeID:   change.InitialID,
 	}
@@ -67,12 +69,14 @@ func (d *Document) Update(
 	updater func(root *proxy.ObjectProxy) error,
 	msgAndArgs ...interface{},
 ) error {
-	if d.clone == nil {
-		d.clone = d.root.Object().Deepcopy().(*json.Object)
-	}
+	d.ensureClone()
+	ctx := change.NewContext(
+		d.changeID.Next(),
+		messageFromMsgAndArgs(msgAndArgs),
+		d.clone,
+	)
 
-	ctx := change.NewContext(d.changeID.Next(), messageFromMsgAndArgs(msgAndArgs))
-	if err := updater(proxy.ProxyObject(ctx, d.clone)); err != nil {
+	if err := updater(proxy.NewObjectProxy(ctx, d.clone.Object())); err != nil {
 		// drop copy because it is contaminated.
 		d.clone = nil
 		log.Logger.Error(err)
@@ -99,6 +103,13 @@ func (d *Document) HasLocalChanges() bool {
 
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
+	d.ensureClone()
+	for _, c := range pack.Changes {
+		if err := c.Execute(d.clone); err != nil {
+			return err
+		}
+	}
+
 	for _, c := range pack.Changes {
 		d.changeID = d.changeID.Sync(c.ID())
 		if err := c.Execute(d.root); err != nil {
@@ -107,9 +118,6 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	}
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 	log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.root.Object().Marshal())
-
-	// TODO: remove below line. drop copy because it is contaminated.
-	d.clone = nil
 
 	return nil
 }
@@ -150,6 +158,12 @@ func (d *Document) UpdateState(state stateType) {
 // IsAttached returns the whether this document is attached or not.
 func (d *Document) IsAttached() bool {
 	return d.state == Attached
+}
+
+func (d *Document) ensureClone() {
+	if d.clone == nil {
+		d.clone = d.root.Deepcopy()
+	}
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

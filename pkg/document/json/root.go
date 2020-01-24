@@ -16,15 +16,25 @@ type Root struct {
 }
 
 // NewRoot creates a new instance of Root.
-func NewRoot() *Root {
-	root := NewObject(NewRHT(), time.InitialTicket)
+func NewRoot(root *Object) *Root {
 	elementMap := make(map[string]Element)
-	elementMap[root.CreatedAt().Key()] = root
-
-	return &Root{
+	r := &Root{
 		object:                root,
 		elementMapByCreatedAt: elementMap,
 	}
+
+	r.RegisterElement(root)
+
+	descendants := make(chan Element)
+	go func() {
+		root.Descendants(descendants)
+		close(descendants)
+	}()
+	for descendant := range descendants {
+		r.RegisterElement(descendant)
+	}
+
+	return r
 }
 
 // Object returns the root object of the JSON.
@@ -33,11 +43,15 @@ func (r *Root) Object() *Object {
 }
 
 // FindByCreatedAt returns the element of given creation time.
-func (r *Root) FindByCreatedAt(ticket *time.Ticket) Element {
-	return r.elementMapByCreatedAt[ticket.Key()]
+func (r *Root) FindByCreatedAt(createdAt *time.Ticket) Element {
+	return r.elementMapByCreatedAt[createdAt.Key()]
 }
 
 // RegisterElement registers the given element to hash table.
 func (r *Root) RegisterElement(elem Element) {
 	r.elementMapByCreatedAt[elem.CreatedAt().Key()] = elem
+}
+
+func (r *Root) Deepcopy() *Root {
+	return NewRoot(r.object.Deepcopy().(*Object))
 }

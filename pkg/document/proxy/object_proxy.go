@@ -14,28 +14,16 @@ type ObjectProxy struct {
 	context *change.Context
 }
 
-// ProxyObject creates an ObjectProxy.
-func ProxyObject(ctx *change.Context, root *json.Object) *ObjectProxy {
+func NewObjectProxy(ctx *change.Context, root *json.Object) *ObjectProxy {
 	return &ObjectProxy{
 		Object:  root,
 		context: ctx,
 	}
 }
 
-func NewObjectProxy(
-	ctx *change.Context,
-	members *json.RHT,
-	createdAt *time.Ticket,
-) *ObjectProxy {
-	return &ObjectProxy{
-		Object:  json.NewObject(members, createdAt),
-		context: ctx,
-	}
-}
-
 func (p *ObjectProxy) SetNewObject(k string) *ObjectProxy {
 	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
-		return NewObjectProxy(p.context, json.NewRHT(), ticket)
+		return NewObjectProxy(p.context, json.NewObject(json.NewRHT(), ticket))
 	})
 
 	return v.(*ObjectProxy)
@@ -43,7 +31,7 @@ func (p *ObjectProxy) SetNewObject(k string) *ObjectProxy {
 
 func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
-		return NewArrayProxy(p.context, json.NewRGA(), ticket)
+		return NewArrayProxy(p.context, json.NewArray(json.NewRGA(), ticket))
 	})
 
 	return v.(*ArrayProxy)
@@ -136,7 +124,7 @@ func (p *ObjectProxy) GetObject(k string) *ObjectProxy {
 
 	switch elem := p.Object.Get(k).(type) {
 	case *json.Object:
-		return ProxyObject(p.context, elem)
+		return NewObjectProxy(p.context, elem)
 	case *ObjectProxy:
 		return elem
 	default:
@@ -152,7 +140,7 @@ func (p *ObjectProxy) GetArray(k string) *ArrayProxy {
 
 	switch elem := p.Object.Get(k).(type) {
 	case *json.Array:
-		return ProxyArray(p.context, elem)
+		return NewArrayProxy(p.context, elem)
 	case *ArrayProxy:
 		return elem
 	default:
@@ -181,15 +169,18 @@ func (p *ObjectProxy) setInternal(
 	creator func(ticket *time.Ticket) json.Element,
 ) json.Element {
 	ticket := p.context.IssueTimeTicket()
-	value := creator(ticket)
-	p.Set(k, value)
+	proxy := creator(ticket)
+	value := toOriginal(proxy)
 
 	p.context.Push(operation.NewSet(
 		p.CreatedAt(),
 		k,
-		toOriginal(value),
+		value.Deepcopy(),
 		ticket,
 	))
 
-	return value
+	p.Set(k, value)
+	p.context.RegisterElement(value)
+
+	return proxy
 }

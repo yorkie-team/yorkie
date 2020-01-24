@@ -1,6 +1,7 @@
 package change
 
 import (
+	"github.com/hackerwins/yorkie/pkg/document/json"
 	"github.com/hackerwins/yorkie/pkg/document/operation"
 	"github.com/hackerwins/yorkie/pkg/document/time"
 )
@@ -13,13 +14,15 @@ type Context struct {
 	message    string
 	operations []operation.Operation
 	delimiter  uint32
+	root       *json.Root
 }
 
 // NewContext creates a new instance of Context.
-func NewContext(id *ID, message string) *Context {
+func NewContext(id *ID, message string, root *json.Root) *Context {
 	return &Context{
 		id:      id,
 		message: message,
+		root: root,
 	}
 }
 
@@ -47,4 +50,8 @@ func (c *Context) IssueTimeTicket() *time.Ticket {
 // Push pushes an new operation into context queue.
 func (c *Context) Push(op operation.Operation) {
 	c.operations = append(c.operations, op)
+}
+
+func (c *Context) RegisterElement(elem json.Element) {
+	c.root.RegisterElement(elem)
 }
