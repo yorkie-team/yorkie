@@ -493,6 +493,7 @@ type Text struct {
 	rgaTreeSplit *RGATreeSplit
 	selectionMap map[string]*Selection
 	createdAt    *time.Ticket
+	deletedAt    *time.Ticket
 }
 
 // NewText creates a new instance of Text.
@@ -530,6 +531,16 @@ func (t *Text) Deepcopy() Element {
 // CreatedAt returns the creation time of this Text.
 func (t *Text) CreatedAt() *time.Ticket {
 	return t.createdAt
+}
+
+// DeletedAt returns the deletion time of this Text.
+func (t *Text) DeletedAt() *time.Ticket {
+	return t.deletedAt
+}
+
+// Delete deletes this Text.
+func (t *Text) Delete(deletedAt *time.Ticket) {
+	t.deletedAt = deletedAt
 }
 
 // CreateRange returns pair of TextNodePos of the given integer offsets.

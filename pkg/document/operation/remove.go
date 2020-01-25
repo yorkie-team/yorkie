@@ -31,9 +31,9 @@ func (o *Remove) Execute(root *json.Root) error {
 
 	switch obj := parent.(type) {
 	case *json.Object:
-		_ = obj.RemoveByCreatedAt(o.createdAt)
+		_ = obj.RemoveByCreatedAt(o.createdAt, o.executedAt)
 	case *json.Array:
-		_ = obj.RemoveByCreatedAt(o.createdAt)
+		_ = obj.RemoveByCreatedAt(o.createdAt, o.executedAt)
 	default:
 		err := fmt.Errorf("fail to execute, only Object, Array can execute Remove")
 		log.Logger.Error(err)

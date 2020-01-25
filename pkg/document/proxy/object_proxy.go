@@ -102,17 +102,17 @@ func (p *ObjectProxy) SetDate(k string, v time2.Time) *ObjectProxy {
 }
 
 func (p *ObjectProxy) Remove(k string) json.Element {
-	removed := p.Object.Remove(k)
-
-	if removed != nil {
-		ticket := p.context.IssueTimeTicket()
-		p.context.Push(operation.NewRemove(
-			p.CreatedAt(),
-			removed.CreatedAt(),
-			ticket,
-		))
+	if !p.Object.Has(k) {
+		return nil
 	}
 
+	ticket := p.context.IssueTimeTicket()
+	removed := p.Object.Remove(k, ticket)
+	p.context.Push(operation.NewRemove(
+		p.CreatedAt(),
+		removed.CreatedAt(),
+		ticket,
+	))
 	return removed
 }
 

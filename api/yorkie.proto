@@ -130,8 +130,9 @@ enum ValueType {
 message JSONElement {
     TimeTicket created_at = 1;
     TimeTicket updated_at = 2;
-    ValueType type = 3;
-    bytes value = 4;
+    TimeTicket deleted_at = 3;
+    ValueType type = 4;
+    bytes value = 5;
 }
 
 message TextNodePos {

@@ -8,23 +8,25 @@ import (
 )
 
 type rgaNode struct {
-	prev      *rgaNode
-	next      *rgaNode
-	value     Element
-	isRemoved bool
+	prev *rgaNode
+	next *rgaNode
+	elem Element
 }
 
-func newRGANode(elem Element, isRemoved bool) *rgaNode {
+func (n *rgaNode) isDeleted() bool {
+	return n.elem.DeletedAt() != nil
+}
+
+func newRGANode(elem Element) *rgaNode {
 	return &rgaNode{
-		prev:      nil,
-		next:      nil,
-		value:     elem,
-		isRemoved: isRemoved,
+		prev: nil,
+		next: nil,
+		elem: elem,
 	}
 }
 
-func newNodeAfter(prev *rgaNode, element Element, isRemoved bool) *rgaNode {
-	newNode := newRGANode(element, isRemoved)
+func newNodeAfter(prev *rgaNode, elem Element) *rgaNode {
+	newNode := newRGANode(elem)
 	prevNext := prev.next
 
 	prev.next = newNode
@@ -48,8 +50,8 @@ type RGA struct {
 // NewRGA creates a new instance of RGA.
 func NewRGA() *RGA {
 	nodeMapByCreatedAt := make(map[string]*rgaNode)
-	dummyHead := newRGANode(NewPrimitive("", time.InitialTicket), false)
-	nodeMapByCreatedAt[dummyHead.value.CreatedAt().Key()] = dummyHead
+	dummyHead := newRGANode(NewPrimitive("", time.InitialTicket))
+	nodeMapByCreatedAt[dummyHead.elem.CreatedAt().Key()] = dummyHead
 
 	return &RGA{
 		nodeMapByCreatedAt: nodeMapByCreatedAt,
@@ -71,8 +73,8 @@ func (a *RGA) Marshal() string {
 			break
 		}
 
-		if !current.isRemoved {
-			sb.WriteString(current.value.Marshal())
+		if !current.isDeleted() {
+			sb.WriteString(current.elem.Marshal())
 			if a.size-1 != idx {
 				sb.WriteString(",")
 			}
@@ -88,8 +90,8 @@ func (a *RGA) Marshal() string {
 }
 
 // Add adds the given element at the last.
-func (a *RGA) Add(e Element, isRemoved bool) {
-	a.insertAfter(a.last, e, isRemoved)
+func (a *RGA) Add(elem Element) {
+	a.insertAfter(a.last, elem)
 }
 
 // Nodes returns an array of elements contained in this RGA.
@@ -110,13 +112,13 @@ func (a *RGA) Nodes() []*rgaNode {
 
 // LastCreatedAt returns the creation time of last elements.
 func (a *RGA) LastCreatedAt() *time.Ticket {
-	return a.last.value.CreatedAt()
+	return a.last.elem.CreatedAt()
 }
 
 // InsertAfter inserts the given element after the given previous element.
-func (a *RGA) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
-	prevNode := a.findByCreatedAt(prevCreatedAt, element.CreatedAt())
-	a.insertAfter(prevNode, element, false)
+func (a *RGA) InsertAfter(prevCreatedAt *time.Ticket, elem Element) {
+	prevNode := a.findByCreatedAt(prevCreatedAt, elem.CreatedAt())
+	a.insertAfter(prevNode, elem)
 }
 
 // Get returns the element of the given index.
@@ -128,7 +130,7 @@ func (a *RGA) Get(idx int) Element {
 			break
 		}
 		if idx == 0 {
-			return current.value
+			return current.elem
 		}
 
 		current = current.next
@@ -138,14 +140,14 @@ func (a *RGA) Get(idx int) Element {
 }
 
 // RemoveByCreatedAt removes the given element.
-func (a *RGA) RemoveByCreatedAt(createdAt *time.Ticket) Element {
+func (a *RGA) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
 	if node, ok := a.nodeMapByCreatedAt[createdAt.Key()]; ok {
-		node.isRemoved = true
+		node.elem.Delete(deletedAt)
 		a.size--
-		return node.value
+		return node.elem
 	}
 
-	log.Logger.Warn("fail to find ", createdAt.Key())
+	log.Logger.Warnf("fail to find the given createdAt: %s", createdAt.Key())
 	return nil
 }
 
@@ -161,17 +163,18 @@ func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket
 			"fail to find the given prevCreatedAt: %s",
 			prevCreatedAt.Key(),
 		)
+		return nil
 	}
 
-	for node.next != nil && createdAt.After(node.next.value.CreatedAt()) {
+	for node.next != nil && createdAt.After(node.next.elem.CreatedAt()) {
 		node = node.next
 	}
 
 	return node
 }
 
-func (a *RGA) insertAfter(prev *rgaNode, element Element, isRemoved bool) {
-	newNode := newNodeAfter(prev, element, isRemoved)
+func (a *RGA) insertAfter(prev *rgaNode, element Element) {
+	newNode := newNodeAfter(prev, element)
 	if prev == a.last {
 		a.last = newNode
 	}

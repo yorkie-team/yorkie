@@ -9,24 +9,26 @@ import (
 type rhtNode struct {
 	key       string
 	elem      Element
-	isRemoved bool
 }
 
 func newRHTNode(key string, elem Element) *rhtNode {
 	return &rhtNode{
 		key:       key,
 		elem:      elem,
-		isRemoved: false,
 	}
 }
 
-func (n *rhtNode) Remove() {
-	n.isRemoved = true
+func (n *rhtNode) Delete(deletedAt *time.Ticket) {
+	n.elem.Delete(deletedAt)
 }
 
 func (n *rhtNode) Less(other pq.PQValue) bool {
 	node := other.(*rhtNode)
 	return n.elem.CreatedAt().After(node.elem.CreatedAt())
+}
+
+func (n *rhtNode) isDeleted() bool {
+	return n.elem.DeletedAt() != nil
 }
 
 
@@ -48,7 +50,7 @@ func NewRHT() *RHT {
 func (rht *RHT) Get(key string) Element {
 	if queue, ok := rht.nodeQueueMapByKey[key]; ok {
 		node := queue.Peek().(*rhtNode)
-		if node.isRemoved {
+		if node.isDeleted() {
 			return nil
 		}
 		return node.elem
@@ -57,32 +59,41 @@ func (rht *RHT) Get(key string) Element {
 	return nil
 }
 
+// Has returns whether the element exists of the given key or not.
+func (rht *RHT) Has(key string) bool {
+	if queue, ok := rht.nodeQueueMapByKey[key]; ok {
+		node := queue.Peek().(*rhtNode)
+		return node != nil && !node.isDeleted()
+	}
+
+	return false
+}
+
 // Set sets the value of the given key.
-func (rht *RHT) Set(k string, v Element, isRemoved bool) {
+func (rht *RHT) Set(k string, v Element) {
 	if _, ok := rht.nodeQueueMapByKey[k]; !ok {
 		rht.nodeQueueMapByKey[k] = pq.NewPriorityQueue()
 	}
 
 	node := newRHTNode(k, v)
-	node.isRemoved = isRemoved
 	rht.nodeQueueMapByKey[k].Push(node)
 	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = node
 }
 
 // Remove removes the Element of the given key.
-func (rht *RHT) Remove(k string) Element {
+func (rht *RHT) Remove(k string, deletedAt *time.Ticket) Element {
 	if queue, ok := rht.nodeQueueMapByKey[k]; ok {
 		node := queue.Peek().(*rhtNode)
-		node.Remove()
+		node.Delete(deletedAt)
 		return node.elem
 	}
 	return nil
 }
 
 // RemoveByCreatedAt removes the Element of the given creation time.
-func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket) Element {
+func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
 	if node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]; ok {
-		node.Remove()
+		node.Delete(deletedAt)
 		return node.elem
 	}
 
@@ -95,7 +106,7 @@ func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket) Element {
 func (rht *RHT) Elements() map[string]Element {
 	members := make(map[string]Element)
 	for _, queue := range rht.nodeQueueMapByKey {
-		if node := queue.Peek().(*rhtNode); !node.isRemoved {
+		if node := queue.Peek().(*rhtNode); !node.isDeleted() {
 			members[node.key] = node.elem
 
 		}
@@ -117,3 +128,4 @@ func (rht *RHT) AllNodes() []*rhtNode {
 
 	return nodes
 }
+

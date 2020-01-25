@@ -9,6 +9,7 @@ import (
 type Array struct {
 	elements  *RGA
 	createdAt *time.Ticket
+	deletedAt *time.Ticket
 }
 
 // NewArray creates a new instance of Array.
@@ -20,8 +21,8 @@ func NewArray(elements *RGA, createdAt *time.Ticket) *Array {
 }
 
 // Add adds the given element at the last.
-func (a *Array) Add(v Element) *Array {
-	a.elements.Add(v, false)
+func (a *Array) Add(elem Element) *Array {
+	a.elements.Add(elem)
 	return a
 }
 
@@ -31,10 +32,10 @@ func (a *Array) Get(idx int) Element {
 }
 
 // Remove removes the element of the given index.
-func (a *Array) Remove(idx int) Element {
+func (a *Array) Remove(idx int, deletedAt *time.Ticket) Element {
 	removed := a.elements.Get(idx)
 	if removed != nil {
-		a.elements.RemoveByCreatedAt(removed.CreatedAt())
+		a.elements.RemoveByCreatedAt(removed.CreatedAt(), deletedAt)
 	}
 
 	return removed
@@ -44,10 +45,10 @@ func (a *Array) Remove(idx int) Element {
 func (a *Array) Elements() []Element {
 	var elements []Element
 	for _, node := range a.elements.Nodes() {
-		if node.isRemoved {
+		if node.isDeleted() {
 			continue
 		}
-		elements = append(elements, node.value)
+		elements = append(elements, node.elem)
 	}
 
 	return elements
@@ -63,15 +64,27 @@ func (a *Array) Deepcopy() Element {
 	elements := NewRGA()
 
 	for _, node := range a.elements.Nodes() {
-		elements.Add(node.value.Deepcopy(), node.isRemoved)
+		elements.Add(node.elem.Deepcopy())
 	}
 
-	return NewArray(elements, a.createdAt)
+	array := NewArray(elements, a.createdAt)
+	array.deletedAt = a.deletedAt
+	return array
 }
 
 // CreatedAt returns the creation time of this Array.
 func (a *Array) CreatedAt() *time.Ticket {
 	return a.createdAt
+}
+
+// DeletedAt returns the deletion time of this Array.
+func (a *Array) DeletedAt() *time.Ticket {
+	return a.deletedAt
+}
+
+// Delete deletes this element.
+func (a *Array) Delete(deletedAt *time.Ticket) {
+	a.deletedAt = deletedAt
 }
 
 // LastCreatedAt returns the creation time of the last element.
@@ -85,8 +98,8 @@ func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
 }
 
 // RemoveByCreatedAt removes the given element.
-func (a *Array) RemoveByCreatedAt(createdAt *time.Ticket) Element {
-	return a.elements.RemoveByCreatedAt(createdAt)
+func (a *Array) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+	return a.elements.RemoveByCreatedAt(createdAt, deletedAt)
 }
 
 // Len returns length of this Array.
@@ -96,12 +109,12 @@ func (a *Array) Len() int {
 
 func (a *Array) Descendants(descendants chan Element) {
 	for _, node := range a.elements.Nodes() {
-		switch elem := node.value.(type) {
+		switch elem := node.elem.(type) {
 		case *Object:
 			elem.Descendants(descendants)
 		case *Array:
 			elem.Descendants(descendants)
 		}
-		descendants <- node.value
+		descendants <- node.elem
 	}
 }

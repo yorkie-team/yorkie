@@ -13,6 +13,7 @@ import (
 type Object struct {
 	memberNodes *RHT
 	createdAt   *time.Ticket
+	deletedAt   *time.Ticket
 }
 
 // NewObject creates a new instance of Object.
@@ -25,7 +26,7 @@ func NewObject(memberNodes *RHT, createdAt *time.Ticket) *Object {
 
 // Set sets the given element of the given key.
 func (o *Object) Set(k string, v Element) {
-	o.memberNodes.Set(k, v, false)
+	o.memberNodes.Set(k, v)
 }
 
 // Members returns the member of this object as a map.
@@ -33,24 +34,24 @@ func (o *Object) Members() map[string]Element {
 	return o.memberNodes.Elements()
 }
 
-// CreatedAt returns the creation time of this object.
-func (o *Object) CreatedAt() *time.Ticket {
-	return o.createdAt
-}
-
 // Get returns the value of the given key.
 func (o *Object) Get(k string) Element {
 	return o.memberNodes.Get(k)
 }
 
+// Has returns whether the element exists of the given key or not.
+func (o *Object) Has(k string) bool {
+	return o.memberNodes.Has(k)
+}
+
 // RemoveByCreatedAt removes the element of the given creation time.
-func (o *Object) RemoveByCreatedAt(createdAt *time.Ticket) Element {
-	return o.memberNodes.RemoveByCreatedAt(createdAt)
+func (o *Object) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+	return o.memberNodes.RemoveByCreatedAt(createdAt, deletedAt)
 }
 
 // Remove removes the element of the given key.
-func (o *Object) Remove(k string) Element {
-	return o.memberNodes.Remove(k)
+func (o *Object) Remove(k string, deletedAt *time.Ticket) Element {
+	return o.memberNodes.Remove(k, deletedAt)
 }
 
 func (o *Object) Descendants(descendants chan Element) {
@@ -64,6 +65,7 @@ func (o *Object) Descendants(descendants chan Element) {
 		descendants <- node.elem
 	}
 }
+
 // Marshal returns the JSON encoding of this object.
 func (o *Object) Marshal() string {
 	members := o.memberNodes.Elements()
@@ -97,8 +99,25 @@ func (o *Object) Deepcopy() Element {
 	members := NewRHT()
 
 	for _, node := range o.memberNodes.AllNodes() {
-		members.Set(node.key, node.elem.Deepcopy(), node.isRemoved)
+		members.Set(node.key, node.elem.Deepcopy())
 	}
 
-	return NewObject(members, o.createdAt)
+	obj := NewObject(members, o.createdAt)
+	obj.deletedAt = o.deletedAt
+	return obj
+}
+
+// CreatedAt returns the creation time of this object.
+func (o *Object) CreatedAt() *time.Ticket {
+	return o.createdAt
+}
+
+// RemovedAt returns the deletion time of this object.
+func (o *Object) DeletedAt() *time.Ticket {
+	return o.deletedAt
+}
+
+// Delete deletes this object.
+func (o *Object) Delete(deletedAt *time.Ticket) {
+	o.deletedAt = deletedAt
 }

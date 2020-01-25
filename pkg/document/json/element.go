@@ -14,4 +14,10 @@ type Element interface {
 
 	// CreatedAt returns the creation time of this element.
 	CreatedAt() *time.Ticket
+
+	// DeletedAt returns the deletion time of this element.
+	DeletedAt() *time.Ticket
+
+	// Delete deletes this element.
+	Delete(*time.Ticket)
 }

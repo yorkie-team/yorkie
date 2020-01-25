@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"github.com/hackerwins/yorkie/pkg/log"
 	time2 "time"
 
 	"github.com/hackerwins/yorkie/pkg/document/change"
@@ -86,16 +87,18 @@ func (p *ArrayProxy) AddNewArray() *ArrayProxy {
 }
 
 func (p *ArrayProxy) Remove(idx int) json.Element {
-	removed := p.Array.Remove(idx)
-
-	if removed != nil {
-		ticket := p.context.IssueTimeTicket()
-		p.context.Push(operation.NewRemove(
-			p.CreatedAt(),
-			removed.CreatedAt(),
-			ticket,
-		))
+	if p.Len() <= idx {
+		log.Logger.Warnf("the given index is out of bound: %d", idx)
+		return nil
 	}
+
+	ticket := p.context.IssueTimeTicket()
+	removed := p.Array.Remove(idx, ticket)
+	p.context.Push(operation.NewRemove(
+		p.CreatedAt(),
+		removed.CreatedAt(),
+		ticket,
+	))
 
 	return removed
 }

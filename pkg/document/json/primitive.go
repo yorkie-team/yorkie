@@ -54,6 +54,7 @@ type Primitive struct {
 	valueType ValueType
 	value     interface{}
 	createdAt *time.Ticket
+	deletedAt *time.Ticket
 }
 
 // NewPrimitive creates a new instance of Primitive.
@@ -165,13 +166,22 @@ func (p *Primitive) Marshal() string {
 
 // Deepcopy copies itself deeply.
 func (p *Primitive) Deepcopy() Element {
-	// Primitive is immutable.
 	return p
 }
 
 // CreatedAt returns the creation time.
 func (p *Primitive) CreatedAt() *time.Ticket {
 	return p.createdAt
+}
+
+// DeletedAt returns the deletion time of this element.
+func (p *Primitive) DeletedAt() *time.Ticket {
+	return p.deletedAt
+}
+
+// Delete deletes this element.
+func (p *Primitive) Delete(deletedAt *time.Ticket) {
+	p.deletedAt = deletedAt
 }
 
 // ValueType returns the type of the value.
