@@ -3,12 +3,12 @@ package packs
 import (
 	"context"
 
-	"github.com/hackerwins/yorkie/pkg/document/change"
-	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
-	"github.com/hackerwins/yorkie/pkg/document/key"
-	"github.com/hackerwins/yorkie/pkg/log"
-	"github.com/hackerwins/yorkie/yorkie/backend"
-	"github.com/hackerwins/yorkie/yorkie/types"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/types"
 )
 
 func PushPull(

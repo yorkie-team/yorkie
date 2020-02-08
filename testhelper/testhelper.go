@@ -5,8 +5,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/hackerwins/yorkie/yorkie"
-	"github.com/hackerwins/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/yorkie"
+	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 )
 
 var (

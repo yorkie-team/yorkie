@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 // Value is an interface that represents the value of Node.

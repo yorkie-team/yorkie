@@ -1,9 +1,9 @@
 package change
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/json"
-	"github.com/hackerwins/yorkie/pkg/document/operation"
-	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Context is used to record the context of modification when editing a document.

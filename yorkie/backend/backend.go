@@ -1,10 +1,10 @@
 package backend
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/time"
-	"github.com/hackerwins/yorkie/pkg/sync"
-	"github.com/hackerwins/yorkie/yorkie/backend/mongo"
-	"github.com/hackerwins/yorkie/yorkie/pubsub"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/sync"
+	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 )
 
 type Backend struct {

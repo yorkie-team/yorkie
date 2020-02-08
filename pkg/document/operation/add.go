@@ -3,9 +3,9 @@ package operation
 import (
 	"fmt"
 
-	"github.com/hackerwins/yorkie/pkg/document/json"
-	"github.com/hackerwins/yorkie/pkg/document/time"
-	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 type Add struct {

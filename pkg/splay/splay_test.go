@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/hackerwins/yorkie/pkg/splay"
+	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
 type stringValue struct {

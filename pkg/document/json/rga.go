@@ -3,8 +3,8 @@ package json
 import (
 	"strings"
 
-	"github.com/hackerwins/yorkie/pkg/document/time"
-	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 type rgaNode struct {

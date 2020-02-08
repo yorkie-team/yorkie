@@ -6,8 +6,8 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
-	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
-	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 var (

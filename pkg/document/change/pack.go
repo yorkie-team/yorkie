@@ -1,8 +1,8 @@
 package change
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
-	"github.com/hackerwins/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 // Pack is a unit for delivering changes in a document to the remote.

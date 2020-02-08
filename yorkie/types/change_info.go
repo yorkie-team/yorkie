@@ -3,12 +3,12 @@ package types
 import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
-	"github.com/hackerwins/yorkie/api"
-	"github.com/hackerwins/yorkie/api/converter"
-	"github.com/hackerwins/yorkie/pkg/document/change"
-	"github.com/hackerwins/yorkie/pkg/document/operation"
-	"github.com/hackerwins/yorkie/pkg/document/time"
-	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/api"
+	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 type ChangeInfo struct {

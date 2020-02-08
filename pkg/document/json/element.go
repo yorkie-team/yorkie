@@ -1,7 +1,7 @@
 package json
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Element represents JSON element.

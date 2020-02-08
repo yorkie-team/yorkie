@@ -1,9 +1,9 @@
 package json
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/time"
-	"github.com/hackerwins/yorkie/pkg/log"
-	"github.com/hackerwins/yorkie/pkg/pq"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/pkg/pq"
 )
 
 type rhtNode struct {

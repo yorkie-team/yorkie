@@ -1,9 +1,9 @@
 package change
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/json"
-	"github.com/hackerwins/yorkie/pkg/document/operation"
-	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Change represents a unit of modification in the document.

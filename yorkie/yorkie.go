@@ -3,8 +3,8 @@ package yorkie
 import (
 	"sync"
 
-	"github.com/hackerwins/yorkie/yorkie/api"
-	"github.com/hackerwins/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/api"
+	"github.com/yorkie-team/yorkie/yorkie/backend"
 )
 
 type Yorkie struct {

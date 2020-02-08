@@ -3,11 +3,11 @@ package mongo
 import (
 	"context"
 
-	"github.com/hackerwins/yorkie/pkg/log"
-
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/x/bsonx"
+
+	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 var (

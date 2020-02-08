@@ -5,8 +5,8 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/hackerwins/yorkie/pkg/log"
-	"github.com/hackerwins/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 )
 
 type Config struct {

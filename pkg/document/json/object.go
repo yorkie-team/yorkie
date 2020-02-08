@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Object represents a JSON object, but unlike regular JSON, it has time

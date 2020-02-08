@@ -9,15 +9,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/hackerwins/yorkie/api"
-	"github.com/hackerwins/yorkie/api/converter"
-	"github.com/hackerwins/yorkie/pkg/document/key"
-	"github.com/hackerwins/yorkie/pkg/document/time"
-	"github.com/hackerwins/yorkie/pkg/log"
-	"github.com/hackerwins/yorkie/yorkie/backend"
-	"github.com/hackerwins/yorkie/yorkie/clients"
-	"github.com/hackerwins/yorkie/yorkie/packs"
-	"github.com/hackerwins/yorkie/yorkie/pubsub"
+	"github.com/yorkie-team/yorkie/api"
+	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/clients"
+	"github.com/yorkie-team/yorkie/yorkie/packs"
+	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 )
 
 type RPCServer struct {

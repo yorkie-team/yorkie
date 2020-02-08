@@ -5,10 +5,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/hackerwins/yorkie/pkg/document/time"
-	"github.com/hackerwins/yorkie/pkg/llrb"
-	"github.com/hackerwins/yorkie/pkg/log"
-	"github.com/hackerwins/yorkie/pkg/splay"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/llrb"
+	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
 var (

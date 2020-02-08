@@ -3,9 +3,9 @@ package clients
 import (
 	"context"
 
-	"github.com/hackerwins/yorkie/pkg/document/change"
-	"github.com/hackerwins/yorkie/yorkie/backend"
-	"github.com/hackerwins/yorkie/yorkie/types"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/types"
 )
 
 func Activate(

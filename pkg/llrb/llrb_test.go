@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/hackerwins/yorkie/pkg/llrb"
+	"github.com/yorkie-team/yorkie/pkg/llrb"
 )
 
 type intKey struct {

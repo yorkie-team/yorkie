@@ -27,7 +27,7 @@ build: proto
 
 fmt:
 	gofmt -w $(GOSRC)
-	goimports -w -local "github.com/hackerwins" $(GOSRC)
+	goimports -w -local "github.com/yorkie-team" $(GOSRC)
 
 lint:
 	 golint ./...

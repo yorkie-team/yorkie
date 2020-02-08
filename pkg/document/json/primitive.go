@@ -6,7 +6,7 @@ import (
 	"math"
 	time2 "time"
 
-	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 type ValueType int

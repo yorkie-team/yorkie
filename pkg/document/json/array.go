@@ -1,7 +1,7 @@
 package json
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Array represents JSON array data structure including logical clock.

@@ -11,9 +11,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
-	"github.com/hackerwins/yorkie/pkg/document/change"
-	"github.com/hackerwins/yorkie/pkg/log"
-	"github.com/hackerwins/yorkie/yorkie/types"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/yorkie/types"
 )
 
 var (

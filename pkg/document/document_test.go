@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/hackerwins/yorkie/pkg/document"
-	"github.com/hackerwins/yorkie/pkg/document/checkpoint"
-	"github.com/hackerwins/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 )
 
 var (

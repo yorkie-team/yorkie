@@ -1,7 +1,7 @@
 package json
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Root is a structure represents the root of JSON. It has a hash table of

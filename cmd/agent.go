@@ -9,9 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/hackerwins/yorkie/pkg/log"
-	"github.com/hackerwins/yorkie/yorkie"
-	"github.com/hackerwins/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/yorkie"
+	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 )
 
 var (

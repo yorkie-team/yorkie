@@ -34,9 +34,9 @@ When a network connection is available, Yorkie figures out which changes need to
 If the document was changed concurrently on different devices, Yorkie automatically syncs the changes, so that every replica ends up in the same state with resolving conflict.
 
 ## Agent and SDKs
- - Agent: https://github.com/hackerwins/yorkie
- - JS SDK: https://github.com/hackerwins/yorkie-js-sdk
- - Go Client: https://github.com/hackerwins/yorkie/tree/master/client
+ - Agent: https://github.com/yorkie-team/yorkie
+ - JS SDK: https://github.com/yorkie-team/yorkie-js-sdk
+ - Go Client: https://github.com/yorkie-team/yorkie/tree/master/client
 
 ## Internals
 

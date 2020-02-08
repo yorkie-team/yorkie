@@ -10,11 +10,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/hackerwins/yorkie/client"
-	"github.com/hackerwins/yorkie/pkg/document"
-	"github.com/hackerwins/yorkie/pkg/document/proxy"
-	"github.com/hackerwins/yorkie/testhelper"
-	"github.com/hackerwins/yorkie/yorkie"
+	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/testhelper"
+	"github.com/yorkie-team/yorkie/yorkie"
 )
 
 const (

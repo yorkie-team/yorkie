@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"github.com/hackerwins/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 )
 
 func toOriginal(elem json.Element) json.Element {

@@ -7,12 +7,12 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 
-	"github.com/hackerwins/yorkie/api"
-	"github.com/hackerwins/yorkie/api/converter"
-	"github.com/hackerwins/yorkie/pkg/document"
-	"github.com/hackerwins/yorkie/pkg/document/key"
-	"github.com/hackerwins/yorkie/pkg/document/time"
-	"github.com/hackerwins/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/api"
+	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 type status int
