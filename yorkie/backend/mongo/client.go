@@ -53,7 +53,7 @@ func NewClient(conf *Config) (*Client, error) {
 	defer cancel()
 
 	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
-		log.Logger.Error(err)
+		log.Logger.Errorf("fail to connect to %s in %d sec", conf.ConnectionURI, conf.PingTimeoutSec)
 		return nil, err
 	}
 

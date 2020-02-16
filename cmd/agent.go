@@ -28,7 +28,6 @@ var (
 )
 
 var (
-	flagRPCPort  int
 	flagConfPath string
 )
 
@@ -108,17 +107,10 @@ func handleSignal(r *yorkie.Yorkie) int {
 
 func init() {
 	cmd := newAgentCmd()
-	cmd.Flags().IntVarP(
-		&flagRPCPort,
-		"port",
-		"P",
-		defaultConfig.RPCPort,
-		"rpc port",
-	)
 	cmd.Flags().StringVarP(
 		&flagConfPath,
 		"config",
-		"C",
+		"c",
 		"",
 		"config path",
 	)

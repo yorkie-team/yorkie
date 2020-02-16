@@ -22,8 +22,11 @@ proto: tools
 Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
 Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:.
 
-build: proto
+build:
 	go build -o $(EXECUTABLE)
+
+docker:
+	docker build -t yorkieteam/yorkie:latest .
 
 fmt:
 	gofmt -w $(GOSRC)
