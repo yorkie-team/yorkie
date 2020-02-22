@@ -103,6 +103,7 @@ func (d *Document) HasLocalChanges() bool {
 
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
+	// 01. Apply remote changes to both the clone and the document.
 	d.ensureClone()
 	for _, c := range pack.Changes {
 		if err := c.Execute(d.clone); err != nil {
@@ -116,9 +117,20 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 			return err
 		}
 	}
-	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
-	log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.root.Object().Marshal())
 
+	// 02. Remove local changes applied to server.
+	for d.HasLocalChanges() {
+		c := d.localChanges[0]
+		if c.ClientSeq() > pack.Checkpoint.ClientSeq {
+			break
+		}
+		d.localChanges = d.localChanges[1:]
+	}
+
+	// 03. Update the checkpoint.
+	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
+
+	log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.root.Object().Marshal())
 	return nil
 }
 
@@ -127,10 +139,9 @@ func (d *Document) Marshal() string {
 	return d.root.Object().Marshal()
 }
 
-// FlushChangePack flushes the local change pack to send to the remote server.
-func (d *Document) FlushChangePack() *change.Pack {
+// CreateChangePack creates pack of the local changes to send to the server.
+func (d *Document) CreateChangePack() *change.Pack {
 	changes := d.localChanges
-	d.localChanges = []*change.Change{}
 
 	cp := d.checkpoint.IncreaseClientSeq(uint32(len(changes)))
 	return change.NewPack(d.key, cp, changes)
