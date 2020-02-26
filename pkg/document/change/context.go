@@ -22,7 +22,7 @@ func NewContext(id *ID, message string, root *json.Root) *Context {
 	return &Context{
 		id:      id,
 		message: message,
-		root: root,
+		root:    root,
 	}
 }
 

@@ -42,15 +42,14 @@ type PQValue interface {
 
 // PQItem is something we manage in a priority queue.
 type PQItem struct {
-	value     PQValue
-	index     int
+	value PQValue
+	index int
 }
-
 
 func NewPQItem(value PQValue) *PQItem {
 	return &PQItem{
-		value:     value,
-		index:     -1,
+		value: value,
+		index: -1,
 	}
 }
 

@@ -93,14 +93,14 @@ func (s *RPCServer) AttachDocument(
 	}
 
 	// if pack.HasChanges() {
-		if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+	if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer func() {
+		if err := s.backend.Unlock(pack.DocumentKey.BSONKey()); err != nil {
+			log.Logger.Error(err)
 		}
-		defer func() {
-			if err := s.backend.Unlock(pack.DocumentKey.BSONKey()); err != nil {
-				log.Logger.Error(err)
-			}
-		}()
+	}()
 	// }
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
@@ -139,14 +139,14 @@ func (s *RPCServer) DetachDocument(
 	}
 
 	// if pack.HasChanges() {
-		if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+	if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer func() {
+		if err := s.backend.Unlock(pack.DocumentKey.BSONKey()); err != nil {
+			log.Logger.Error(err)
 		}
-		defer func() {
-			if err := s.backend.Unlock(pack.DocumentKey.BSONKey()); err != nil {
-				log.Logger.Error(err)
-			}
-		}()
+	}()
 	// }
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
@@ -186,14 +186,14 @@ func (s *RPCServer) PushPull(
 
 	// TODO uncomment write lock condition. We need $max operation on client.
 	// if pack.HasChanges() {
-		if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+	if err := s.backend.Lock(pack.DocumentKey.BSONKey()); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer func() {
+		if err := s.backend.Unlock(pack.DocumentKey.BSONKey()); err != nil {
+			log.Logger.Error(err)
 		}
-		defer func() {
-			if err := s.backend.Unlock(pack.DocumentKey.BSONKey()); err != nil {
-				log.Logger.Error(err)
-			}
-		}()
+	}()
 	// }
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)

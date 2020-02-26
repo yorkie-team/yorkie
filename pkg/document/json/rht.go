@@ -7,14 +7,14 @@ import (
 )
 
 type rhtNode struct {
-	key       string
-	elem      Element
+	key  string
+	elem Element
 }
 
 func newRHTNode(key string, elem Element) *rhtNode {
 	return &rhtNode{
-		key:       key,
-		elem:      elem,
+		key:  key,
+		elem: elem,
 	}
 }
 
@@ -30,7 +30,6 @@ func (n *rhtNode) Less(other pq.PQValue) bool {
 func (n *rhtNode) isDeleted() bool {
 	return n.elem.DeletedAt() != nil
 }
-
 
 // RHT is replicated hash table.
 type RHT struct {
@@ -128,4 +127,3 @@ func (rht *RHT) AllNodes() []*rhtNode {
 
 	return nodes
 }
-

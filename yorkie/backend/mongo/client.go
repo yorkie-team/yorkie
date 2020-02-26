@@ -276,7 +276,7 @@ func (c *Client) CreateChangeInfos(
 
 		for _, c := range changes {
 			modelChanges = append(modelChanges, mongo.NewUpdateOneModel().SetFilter(bson.M{
-				"doc_id": docID,
+				"doc_id":     docID,
 				"server_seq": c.ServerSeq(),
 			}).SetUpdate(bson.M{"$set": bson.M{
 				"actor":      types.EncodeActorID(c.ID().Actor()),

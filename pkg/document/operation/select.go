@@ -9,10 +9,10 @@ import (
 )
 
 type Select struct {
-	parentCreatedAt           *time.Ticket
-	from                      *json.TextNodePos
-	to                        *json.TextNodePos
-	executedAt                *time.Ticket
+	parentCreatedAt *time.Ticket
+	from            *json.TextNodePos
+	to              *json.TextNodePos
+	executedAt      *time.Ticket
 }
 
 func NewSelect(
@@ -22,10 +22,10 @@ func NewSelect(
 	executedAt *time.Ticket,
 ) *Select {
 	return &Select{
-		parentCreatedAt:           parentCreatedAt,
-		from:                      from,
-		to:                        to,
-		executedAt:                executedAt,
+		parentCreatedAt: parentCreatedAt,
+		from:            from,
+		to:              to,
+		executedAt:      executedAt,
 	}
 }
 

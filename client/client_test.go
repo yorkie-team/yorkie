@@ -503,7 +503,7 @@ func TestClientAndDocument(t *testing.T) {
 				defer wg.Done()
 				rch := c1.Watch(ctx, doc1)
 
-				resp := <- rch
+				resp := <-rch
 				if resp.Err == io.EOF {
 					return
 				}
