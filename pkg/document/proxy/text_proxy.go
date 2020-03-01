@@ -20,7 +20,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
@@ -29,20 +28,9 @@ type TextProxy struct {
 	context *change.Context
 }
 
-func ProxyText(ctx *change.Context, text *json.Text) *TextProxy {
+func NewTextProxy(ctx *change.Context, text *json.Text) *TextProxy {
 	return &TextProxy{
 		Text:    text,
-		context: ctx,
-	}
-}
-
-func NewTextProxy(
-	ctx *change.Context,
-	rgaTreeSplit *json.RGATreeSplit,
-	createdAt *time.Ticket,
-) *TextProxy {
-	return &TextProxy{
-		Text:    json.NewText(rgaTreeSplit, createdAt),
 		context: ctx,
 	}
 }

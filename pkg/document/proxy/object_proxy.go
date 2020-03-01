@@ -55,7 +55,7 @@ func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 
 func (p *ObjectProxy) SetNewText(k string) *TextProxy {
 	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
-		return NewTextProxy(p.context, json.NewRGATreeSplit(), ticket)
+		return NewTextProxy(p.context, json.NewText(json.NewRGATreeSplit(), ticket))
 	})
 
 	return v.(*TextProxy)
@@ -172,7 +172,7 @@ func (p *ObjectProxy) GetText(k string) *TextProxy {
 
 	switch elem := p.Object.Get(k).(type) {
 	case *json.Text:
-		return ProxyText(p.context, elem)
+		return NewTextProxy(p.context, elem)
 	case *TextProxy:
 		return elem
 	default:
