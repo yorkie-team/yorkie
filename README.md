@@ -2,22 +2,15 @@
 
 Yorkie is a framework for building collaborative editing applications.
 
-  - Optimistic replication style system that ensures eventual consistency
-  - Providing real-time synchronization and offline editing
-  - Using the JSON-like document(CRDT) as the basic data type
-  - Stored documents can be searchable then the documents can be editable after attaching
-
-## How Yorkie works
-
  ```
   +--Client "A" (Go)----+
   | +--Document "D-1"-+ |               +--Agent------------------+
   | | { a: 1, b: {} } | <-- Changes --> | +--Collection "C-1"---+ |
-  | +-----------------+ |               | | +--Document "D-1"-+ | |      +--Mongo DB---------------+
-  +---------------------+               | | | { a: 1, b: {} } | | |      | Changes                 |
-                                        | | +-----------------+ | | <--> | Snapshot with CRDT Meta |
-  +--Client "B" (JS)----+               | | +--Document "D-2"-+ | |      | Snapshot for query      |
-  | +--Document "D-1"-+ |               | | | { a: 1, b: {} } | | |      +-------------------------+
+  | +-----------------+ |               | | +--Document "D-1"-+ | |      +--Mongo DB--+
+  +---------------------+               | | | { a: 1, b: {} } | | |      | Changes    |
+                                        | | +-----------------+ | | <--> | Snapshot   |
+  +--Client "B" (JS)----+               | | +--Document "D-2"-+ | |      +------------+ 
+  | +--Document "D-1"-+ |               | | | { a: 1, b: {} } | | |
   | | { a: 2, b: {} } | <-- Changes --> | | +-----------------+ | |
   | +-----------------+ |               | +---------------------+ |
   +---------------------+               +-------------------------+
@@ -35,6 +28,7 @@ Yorkie is a framework for building collaborative editing applications.
  - If the document was changed concurrently on different devices, Yorkie automatically syncs the changes, so that every replica ends up in the same state with resolving conflict.
 
 ## Agent and SDKs
+
  - Agent: https://github.com/yorkie-team/yorkie
  - JS SDK: https://github.com/yorkie-team/yorkie-js-sdk
  - Go Client: https://github.com/yorkie-team/yorkie/tree/master/client
@@ -57,7 +51,7 @@ Use the -c option to change settings such as the MongoDB connectionURI.
 $ ./bin/yorkie agent -c yorkie.json
 ```
 
-The configuration file with default values ​​is shown below.
+The configuration file with default values is shown below.
 
 ```
 # yorkie.json
@@ -71,6 +65,12 @@ The configuration file with default values ​​is shown below.
    }
 }
 ```
+
+## Documentation
+
+Full, comprehensive documentation is viewable on the Yorkie website:
+
+https://yorkie.dev/docs/master/
 
 ## Developing Yorkie
 
@@ -88,9 +88,3 @@ Tests can be run by typing `make test`.
 *NOTE: `make test` includes integration tests that require a local MongoDB listen on port 27017. To start MongoDB, type `docker-compose up`.*
 
 If you make any changes to the code, run `make fmt` in order to automatically format the code according to Go [standards](https://golang.org/doc/effective_go.html#formatting).
-
-## Internals
-
- - Yorkie is based on [ H.-G. Roh, M. Jeon, J.-S. Kim, and J. Lee, “Replicated abstract
-data types: Building blocks for collaborative applications,” J. Parallel
-Distrib. Comput., vol. 71, no. 3, pp. 354–368, Mar. 2011. [Online]](http://csl.skku.edu/papers/jpdc11.pdf).
