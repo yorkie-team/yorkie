@@ -365,8 +365,8 @@ func (s *RGATreeSplit) edit(
 	editedAt *time.Ticket,
 ) (*TextNodePos, map[string]*time.Ticket) {
 	// 01. split nodes with from and to
-	fromLeft, fromRight := s.findTextNodeWithSplit(from, editedAt)
 	toLeft, toRight := s.findTextNodeWithSplit(to, editedAt)
+	fromLeft, fromRight := s.findTextNodeWithSplit(from, editedAt)
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
