@@ -58,14 +58,14 @@ func (b *Backend) Unlock(k string) error {
 	return b.mutexMap.Unlock(k)
 }
 
-func (b *Backend) Subscribe(actor *time.ActorID, keys []string) (*pubsub.Subscription, error) {
-	return b.pubSub.Subscribe(actor, keys)
+func (b *Backend) Subscribe(actor *time.ActorID, topics []string) (*pubsub.Subscription, error) {
+	return b.pubSub.Subscribe(actor, topics)
 }
 
-func (b *Backend) Unsubscribe(keys []string, subscription *pubsub.Subscription) {
-	b.pubSub.Unsubscribe(keys, subscription)
+func (b *Backend) Unsubscribe(topics []string, subscription *pubsub.Subscription) {
+	b.pubSub.Unsubscribe(topics, subscription)
 }
 
-func (b *Backend) Publish(actor *time.ActorID, key string, event pubsub.Event) {
-	b.pubSub.Publish(actor, key, event)
+func (b *Backend) Publish(actor *time.ActorID, topic string, event pubsub.Event) {
+	b.pubSub.Publish(actor, topic, event)
 }

@@ -24,6 +24,10 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+const (
+	DocumentChangeEvent = "document-change"
+)
+
 type Event struct {
 	Type  string
 	Value string
@@ -49,7 +53,7 @@ func newSubscription(actor *time.ActorID) *Subscription {
 
 type Subscriptions map[string]*Subscription
 
-// TODO: Temporary PubSub.
+// TODO: Temporary Memory PubSub.
 //  - We will need to replace this with distributed pubSub.
 type PubSub struct {
 	mu               *sync.RWMutex
@@ -63,41 +67,43 @@ func NewPubSub() *PubSub {
 	}
 }
 
+// Subscribe subscribes to the given topics.
 func (m *PubSub) Subscribe(
 	actor *time.ActorID,
-	keys []string,
+	topics []string,
 ) (*Subscription, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	subscription := newSubscription(actor)
 
-	for _, key := range keys {
-		if _, ok := m.subscriptionsMap[key]; !ok {
-			m.subscriptionsMap[key] = make(Subscriptions)
+	for _, topic := range topics {
+		if _, ok := m.subscriptionsMap[topic]; !ok {
+			m.subscriptionsMap[topic] = make(Subscriptions)
 		}
-		m.subscriptionsMap[key][subscription.id] = subscription
+		m.subscriptionsMap[topic][subscription.id] = subscription
 	}
 
 	return subscription, nil
 }
 
-func (m *PubSub) Unsubscribe(keys []string, subscription *Subscription) {
+func (m *PubSub) Unsubscribe(topics []string, subscription *Subscription) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for _, key := range keys {
-		if subscriptions, ok := m.subscriptionsMap[key]; ok {
+	for _, topic := range topics {
+		if subscriptions, ok := m.subscriptionsMap[topic]; ok {
 			delete(subscriptions, subscription.id)
 		}
 	}
 }
 
-func (m *PubSub) Publish(actor *time.ActorID, key string, event Event) {
+// Publish publishes the given event to the given topic.
+func (m *PubSub) Publish(actor *time.ActorID, topic string, event Event) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if subscriptions, ok := m.subscriptionsMap[key]; ok {
+	if subscriptions, ok := m.subscriptionsMap[topic]; ok {
 		for _, subscription := range subscriptions {
 			if subscription.actor.Compare(actor) != 0 {
 				subscription.events <- event

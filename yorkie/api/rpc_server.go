@@ -33,7 +33,6 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
-	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 )
 
 type RPCServer struct {
@@ -132,14 +131,6 @@ func (s *RPCServer) AttachDocument(
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if pack.HasChanges() {
-		s.backend.Publish(
-			time.ActorIDFromHex(req.ClientId),
-			pack.DocumentKey.BSONKey(),
-			pubsub.Event{Value: pack.DocumentKey.BSONKey()},
-		)
-	}
-
 	return &api.AttachDocumentResponse{
 		ChangePack: converter.ToChangePack(pulled),
 	}, nil
@@ -176,14 +167,6 @@ func (s *RPCServer) DetachDocument(
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	if pack.HasChanges() {
-		s.backend.Publish(
-			time.ActorIDFromHex(req.ClientId),
-			pack.DocumentKey.BSONKey(),
-			pubsub.Event{Value: pack.DocumentKey.BSONKey()},
-		)
 	}
 
 	return &api.DetachDocumentResponse{
@@ -225,35 +208,9 @@ func (s *RPCServer) PushPull(
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if pack.HasChanges() {
-		s.backend.Publish(
-			time.ActorIDFromHex(req.ClientId),
-			pack.DocumentKey.BSONKey(),
-			pubsub.Event{Value: pack.DocumentKey.BSONKey()},
-		)
-	}
-
 	return &api.PushPullResponse{
 		ChangePack: converter.ToChangePack(pulled),
 	}, nil
-}
-
-func (s *RPCServer) listenAndServeGRPC() error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
-	if err != nil {
-		log.Logger.Error(err)
-		return err
-	}
-
-	go func() {
-		log.Logger.Infof("serving API on %d", s.port)
-
-		if err := s.grpcServer.Serve(lis); err != nil {
-			log.Logger.Error(err)
-		}
-	}()
-
-	return nil
 }
 
 func (s *RPCServer) WatchDocuments(
@@ -298,3 +255,22 @@ func (s *RPCServer) WatchDocuments(
 		}
 	}
 }
+
+func (s *RPCServer) listenAndServeGRPC() error {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
+	if err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	go func() {
+		log.Logger.Infof("serving API on %d", s.port)
+
+		if err := s.grpcServer.Serve(lis); err != nil {
+			log.Logger.Error(err)
+		}
+	}()
+
+	return nil
+}
+

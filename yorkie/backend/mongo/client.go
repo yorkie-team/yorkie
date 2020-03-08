@@ -315,7 +315,6 @@ func (c *Client) CreateChangeInfos(
 
 func (c *Client) UpdateDocInfo(
 	ctx context.Context,
-	clientInfo *types.ClientInfo,
 	docInfo *types.DocInfo,
 ) error {
 	return c.withCollection(ColDocInfos, func(col *mongo.Collection) error {

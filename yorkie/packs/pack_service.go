@@ -22,8 +22,10 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 	"github.com/yorkie-team/yorkie/yorkie/types"
 )
 
@@ -43,13 +45,13 @@ func PushPull(
 	// because simple read operations do not break consistency.
 	initialServerSeq := docInfo.ServerSeq
 
-	// 01. push changes
+	// 01. push changes.
 	pushedCP, pushedChanges, err := pushChanges(clientInfo, docInfo, pack, initialServerSeq)
 	if err != nil {
 		return nil, err
 	}
 
-	// 02. pull changes
+	// 02. pull changes.
 	pulledCP, pulledChanges, err := pullChanges(ctx, be, clientInfo, docInfo, pack, pushedCP, initialServerSeq)
 	if err != nil {
 		return nil, err
@@ -59,17 +61,29 @@ func PushPull(
 		return nil, err
 	}
 
-	// 03. save into MongoDB
+	// 03. save pushed changes, document info and checkpoint of the client to MongoDB.
 	if err := be.Mongo.CreateChangeInfos(ctx, docInfo.ID, pushedChanges); err != nil {
 		return nil, err
 	}
 
-	if err := be.Mongo.UpdateDocInfo(ctx, clientInfo, docInfo); err != nil {
+	if err := be.Mongo.UpdateDocInfo(ctx, docInfo); err != nil {
 		return nil, err
 	}
 
 	if err := be.Mongo.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
 		return nil, err
+	}
+
+	// 04. publish document change event.
+	if pack.HasChanges() {
+		be.Publish(
+			time.ActorIDFromHex(clientInfo.ID.Hex()),
+			pack.DocumentKey.BSONKey(),
+			pubsub.Event{
+				Type: pubsub.DocumentChangeEvent,
+				Value: pack.DocumentKey.BSONKey(),
+			},
+		)
 	}
 
 	docKey, err := key.FromBSONKey(docInfo.Key)
@@ -84,6 +98,7 @@ func PushPull(
 	), nil
 }
 
+// pushChanges returns the changes excluding already saved in MongoDB.
 func pushChanges(
 	clientInfo *types.ClientInfo,
 	docInfo *types.DocInfo,
