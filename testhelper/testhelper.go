@@ -22,19 +22,10 @@ import (
 	"testing"
 
 	"github.com/yorkie-team/yorkie/yorkie"
-	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 )
 
-var (
-	testConfig = &yorkie.Config{
-		RPCPort: 1101,
-		Mongo: &mongo.Config{
-			ConnectionURI:        "mongodb://localhost:27017",
-			ConnectionTimeoutSec: 5,
-			PingTimeoutSec:       5,
-			YorkieDatabase:       "yorkie-meta",
-		},
-	}
+const (
+	testPort = 1101
 )
 
 func randBetween(min, max int) int {
@@ -42,8 +33,9 @@ func randBetween(min, max int) int {
 }
 
 func WithYorkie(t *testing.T, f func(*testing.T, *yorkie.Yorkie)) {
-	testConfig.Mongo.YorkieDatabase = fmt.Sprintf("yorkie-meta-%d", randBetween(0, 9999))
-	y, err := yorkie.New(testConfig)
+	testDBname := fmt.Sprintf("yorkie-meta-%d", randBetween(0, 9999))
+	conf := yorkie.NewConfigForTest(testPort, testDBname)
+	y, err := yorkie.New(conf)
 	if err != nil {
 		t.Fatal(err)
 	}

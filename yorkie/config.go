@@ -18,6 +18,7 @@ package yorkie
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 
@@ -25,12 +26,42 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 )
 
+const (
+	DefaultRPCPort        = 9090
+	DefaultMongoDBURI     = "mongodb://localhost:27017"
+	DefaultYorkieDatabase = "yorkie-meta"
+)
+
 type Config struct {
 	RPCPort int
 	Mongo   *mongo.Config
 }
 
-func NewConfig(path string) (*Config, error) {
+func (c *Config) RPCAddr() string {
+	return fmt.Sprintf("localhost:%d", c.RPCPort)
+}
+
+func newConfig(port int, dbname string) *Config {
+	return &Config{
+		RPCPort: port,
+		Mongo: &mongo.Config{
+			ConnectionURI:        DefaultMongoDBURI,
+			ConnectionTimeoutSec: 5,
+			PingTimeoutSec:       5,
+			YorkieDatabase:       dbname,
+		},
+	}
+}
+
+func NewConfig() *Config {
+	return newConfig(DefaultRPCPort, DefaultYorkieDatabase)
+}
+
+func NewConfigForTest(port int, dbname string) *Config {
+	return newConfig(port, dbname)
+}
+
+func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
 	file, err := os.Open(path)
 	if err != nil {
