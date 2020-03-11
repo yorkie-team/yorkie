@@ -27,6 +27,7 @@ import (
 )
 
 const (
+	DefaultRPCPort        = 9090
 	DefaultMongoDBURI     = "mongodb://localhost:27017"
 	DefaultYorkieDatabase = "yorkie-meta"
 )
@@ -53,8 +54,7 @@ func newConfig(port int, dbname string) *Config {
 }
 
 func NewConfig() *Config {
-	const port = 9090
-	return newConfig(port, DefaultYorkieDatabase)
+	return newConfig(DefaultRPCPort, DefaultYorkieDatabase)
 }
 
 func NewConfigForTest(port int, dbname string) *Config {
