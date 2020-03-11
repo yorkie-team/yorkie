@@ -31,6 +31,7 @@ type Yorkie struct {
 
 	shutdown   bool
 	shutdownCh chan struct{}
+	config     *Config
 }
 
 func New(conf *Config) (*Yorkie, error) {
@@ -48,6 +49,7 @@ func New(conf *Config) (*Yorkie, error) {
 		backend:    be,
 		rpcServer:  rpcServer,
 		shutdownCh: make(chan struct{}),
+		config:     conf,
 	}, nil
 }
 
@@ -78,4 +80,8 @@ func (r *Yorkie) Shutdown(graceful bool) error {
 
 func (r *Yorkie) ShutdownCh() <-chan struct{} {
 	return r.shutdownCh
+}
+
+func (r *Yorkie) RPCAddr() string {
+	return r.config.RPCAddr()
 }

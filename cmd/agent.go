@@ -27,19 +27,9 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie"
-	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 )
 
 var (
-	defaultConfig = &yorkie.Config{
-		RPCPort: 9090,
-		Mongo: &mongo.Config{
-			ConnectionURI:        "mongodb://localhost:27017",
-			ConnectionTimeoutSec: 5,
-			PingTimeoutSec:       5,
-			YorkieDatabase:       "yorkie-meta",
-		},
-	}
 	gracefulTimeout = 10 * time.Second
 )
 
@@ -52,9 +42,9 @@ func newAgentCmd() *cobra.Command {
 		Use:   "agent [options]",
 		Short: "Starts yorkie agent.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conf := defaultConfig
+			conf := yorkie.NewConfig()
 			if flagConfPath != "" {
-				parsed, err := yorkie.NewConfig(flagConfPath)
+				parsed, err := yorkie.NewConfigFromFile(flagConfPath)
 				if err != nil {
 					return fmt.Errorf(
 						"fail to create config: %s",
