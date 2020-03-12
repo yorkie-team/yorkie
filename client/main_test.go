@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
-package testhelper
+package client
 
 import (
 	"fmt"
-	"math/rand"
+	"log"
+	"os"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/yorkie-team/yorkie/yorkie"
 )
@@ -28,25 +31,33 @@ const (
 	testPort = 1101
 )
 
-func randBetween(min, max int) int {
-	return rand.Intn(max-min) + min
+var testYorkie *yorkie.Yorkie
+
+func TestMain(m *testing.M) {
+	setup()
+	code := m.Run()
+	teardown()
+	os.Exit(code)
 }
 
-func WithYorkie(t *testing.T, f func(*testing.T, *yorkie.Yorkie)) {
-	testDBname := fmt.Sprintf("yorkie-meta-%d", randBetween(0, 9999))
+func setup() {
+	testDBname := fmt.Sprintf("test-%s-%s", yorkie.DefaultYorkieDatabase, uuid.New().String())
 	conf := yorkie.NewConfigForTest(testPort, testDBname)
 	y, err := yorkie.New(conf)
 	if err != nil {
-		t.Fatal(err)
+		log.Fatal(err)
 	}
 
 	if err := y.Start(); err != nil {
-		t.Fatal(err)
+		log.Fatal(err)
 	}
+	testYorkie = y
+}
 
-	f(t, y)
-
-	if err := y.Shutdown(true); err != nil {
-		t.Error(err)
+func teardown() {
+	if testYorkie != nil {
+		if err := testYorkie.Shutdown(true); err != nil {
+			log.Println(err)
+		}
 	}
 }
