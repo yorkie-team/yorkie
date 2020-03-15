@@ -32,35 +32,29 @@ const (
 	DefaultYorkieDatabase = "yorkie-meta"
 )
 
+// Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPCPort int
-	Mongo   *mongo.Config
+	RPCPort int           `json:"RPCPort"`
+	Mongo   *mongo.Config `json:"Mongo"`
 }
 
+// RPCAddr returns the RPC address.
 func (c *Config) RPCAddr() string {
 	return fmt.Sprintf("localhost:%d", c.RPCPort)
 }
 
-func newConfig(port int, dbname string) *Config {
-	return &Config{
-		RPCPort: port,
-		Mongo: &mongo.Config{
-			ConnectionURI:        DefaultMongoDBURI,
-			ConnectionTimeoutSec: 5,
-			PingTimeoutSec:       5,
-			YorkieDatabase:       dbname,
-		},
-	}
-}
-
+// NewConfig returns a Config struct that contains reasonable defaults
+// for most of the configurations.
 func NewConfig() *Config {
 	return newConfig(DefaultRPCPort, DefaultYorkieDatabase)
 }
 
+// NewConfigForTest returns a Config struct for the test configurations.
 func NewConfigForTest(port int, dbname string) *Config {
 	return newConfig(port, dbname)
 }
 
+// NewConfigFromFile returns a Config struct for the given config file.
 func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
 	file, err := os.Open(path)
@@ -81,4 +75,16 @@ func NewConfigFromFile(path string) (*Config, error) {
 	}
 
 	return conf, nil
+}
+
+func newConfig(port int, dbname string) *Config {
+	return &Config{
+		RPCPort: port,
+		Mongo: &mongo.Config{
+			ConnectionURI:        DefaultMongoDBURI,
+			ConnectionTimeoutSec: 5,
+			PingTimeoutSec:       5,
+			YorkieDatabase:       dbname,
+		},
+	}
 }

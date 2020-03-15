@@ -34,6 +34,7 @@ var (
 	errCheckpointRequired = errors.New("checkpoint required")
 )
 
+// FromChangePack converts the given Protobuf format to model format.
 // TODO There is no guarantee that the message sent by the client is perfect.
 //      We should check mandatory fields and change the interface with error return.
 func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
@@ -88,6 +89,7 @@ func fromChangeID(id *api.ChangeID) *change.ID {
 	)
 }
 
+// FromDocumentKeys converts the given Protobuf format to model format.
 func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
 	var keys []*key.Key
 	for _, pbKey := range pbKeys {
@@ -96,6 +98,7 @@ func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
 	return keys
 }
 
+// FromOperations converts the given Protobuf format to model format.
 func FromOperations(pbOps []*api.Operation) []operation.Operation {
 	var ops []operation.Operation
 

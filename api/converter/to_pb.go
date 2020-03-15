@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// ToChangePack converts the given model format to Protobuf format.
 func ToChangePack(pack *change.Pack) *api.ChangePack {
 	return &api.ChangePack{
 		DocumentKey: toDocumentKey(pack.DocumentKey),
@@ -69,6 +70,7 @@ func toChangeID(id *change.ID) *api.ChangeID {
 	}
 }
 
+// ToDocumentKeys converts the given model format to Protobuf format.
 func ToDocumentKeys(keys ...*key.Key) []*api.DocumentKey {
 	var pbKeys []*api.DocumentKey
 	for _, k := range keys {
@@ -77,6 +79,7 @@ func ToDocumentKeys(keys ...*key.Key) []*api.DocumentKey {
 	return pbKeys
 }
 
+// ToOperations converts the given model format to Protobuf format.
 func ToOperations(operations []operation.Operation) []*api.Operation {
 	var pbOperations []*api.Operation
 

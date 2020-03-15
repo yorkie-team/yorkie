@@ -128,7 +128,7 @@ func (o *Object) CreatedAt() *time.Ticket {
 	return o.createdAt
 }
 
-// RemovedAt returns the deletion time of this object.
+// DeletedAt returns the deletion time of this object.
 func (o *Object) DeletedAt() *time.Ticket {
 	return o.deletedAt
 }

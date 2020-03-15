@@ -57,7 +57,7 @@ func (a *Array) Remove(idx int, deletedAt *time.Ticket) Element {
 	return removed
 }
 
-// Nodes returns an array of elements contained in this RGA.
+// Elements returns an array of elements contained in this RGA.
 func (a *Array) Elements() []Element {
 	var elements []Element
 	for _, node := range a.elements.Nodes() {

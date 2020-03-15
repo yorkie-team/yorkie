@@ -38,7 +38,7 @@ func (n *rhtNode) Delete(deletedAt *time.Ticket) {
 	n.elem.Delete(deletedAt)
 }
 
-func (n *rhtNode) Less(other pq.PQValue) bool {
+func (n *rhtNode) Less(other pq.Value) bool {
 	node := other.(*rhtNode)
 	return n.elem.CreatedAt().After(node.elem.CreatedAt())
 }
@@ -116,7 +116,7 @@ func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket
 	return nil
 }
 
-// Members returns a map of elements because the map easy to use for loop.
+// Elements returns a map of elements because the map easy to use for loop.
 // TODO If we encounter performance issues, we need to replace this with other solution.
 func (rht *RHT) Elements() map[string]Element {
 	members := make(map[string]Element)
@@ -130,7 +130,7 @@ func (rht *RHT) Elements() map[string]Element {
 	return members
 }
 
-// Members returns a map of elements because the map easy to use for loop.
+// AllNodes returns a map of elements because the map easy to use for loop.
 // TODO If we encounter performance issues, we need to replace this with other solution.
 func (rht *RHT) AllNodes() []*rhtNode {
 	var nodes []*rhtNode

@@ -273,4 +273,3 @@ func (s *RPCServer) listenAndServeGRPC() error {
 
 	return nil
 }
-

@@ -33,10 +33,14 @@ import (
 )
 
 var (
+	// ErrClientNotFound is returned when the client could not be found.
 	ErrClientNotFound   = errors.New("fail to find the client")
+
+	// ErrDocumentNotFound is returned when the document could not be found.
 	ErrDocumentNotFound = errors.New("fail to find the document")
 )
 
+// Config is the configuration for creating a Client instance.
 type Config struct {
 	ConnectionTimeoutSec time.Duration `json:"ConnectionTimeOutSec"`
 	ConnectionURI        string        `json:"ConnectionURI"`
