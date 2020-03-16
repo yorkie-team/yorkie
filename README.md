@@ -9,7 +9,7 @@ Yorkie is a framework for building collaborative editing applications.
   | +-----------------+ |               | | +--Document "D-1"-+ | |      +--Mongo DB--+
   +---------------------+               | | | { a: 1, b: {} } | | |      | Changes    |
                                         | | +-----------------+ | | <--> | Snapshot   |
-  +--Client "B" (JS)----+               | | +--Document "D-2"-+ | |      +------------+ 
+  +--Client "B" (JS)----+               | | +--Document "D-2"-+ | |      +------------+
   | +--Document "D-1"-+ |               | | | { a: 1, b: {} } | | |
   | | { a: 2, b: {} } | <-- Changes --> | | +-----------------+ | |
   | +-----------------+ |               | +---------------------+ |
@@ -78,7 +78,7 @@ For building Yorkie, You'll first need [Go](https://golang.org) installed (versi
 
 Next, clone this repository into some local directory and then just type `make build`. In a few moments, you'll have a working `yorkie` executable:
 ```
-$ make
+$ make build
 ...
 $ bin/yorkie
 ```
