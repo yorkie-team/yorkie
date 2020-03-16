@@ -22,49 +22,49 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/pq"
 )
 
-type rhtNode struct {
+type RHTNode struct {
 	key  string
 	elem Element
 }
 
-func newRHTNode(key string, elem Element) *rhtNode {
-	return &rhtNode{
+func newRHTNode(key string, elem Element) *RHTNode {
+	return &RHTNode{
 		key:  key,
 		elem: elem,
 	}
 }
 
-func (n *rhtNode) Delete(deletedAt *time.Ticket) {
+func (n *RHTNode) Delete(deletedAt *time.Ticket) {
 	n.elem.Delete(deletedAt)
 }
 
-func (n *rhtNode) Less(other pq.Value) bool {
-	node := other.(*rhtNode)
+func (n *RHTNode) Less(other pq.Value) bool {
+	node := other.(*RHTNode)
 	return n.elem.CreatedAt().After(node.elem.CreatedAt())
 }
 
-func (n *rhtNode) isDeleted() bool {
+func (n *RHTNode) isDeleted() bool {
 	return n.elem.DeletedAt() != nil
 }
 
 // RHT is replicated hash table.
 type RHT struct {
 	nodeQueueMapByKey  map[string]*pq.PriorityQueue
-	nodeMapByCreatedAt map[string]*rhtNode
+	nodeMapByCreatedAt map[string]*RHTNode
 }
 
 // NewRHT creates a new instance of RHT.
 func NewRHT() *RHT {
 	return &RHT{
 		nodeQueueMapByKey:  make(map[string]*pq.PriorityQueue),
-		nodeMapByCreatedAt: make(map[string]*rhtNode),
+		nodeMapByCreatedAt: make(map[string]*RHTNode),
 	}
 }
 
 // Get returns the value of the given key.
 func (rht *RHT) Get(key string) Element {
 	if queue, ok := rht.nodeQueueMapByKey[key]; ok {
-		node := queue.Peek().(*rhtNode)
+		node := queue.Peek().(*RHTNode)
 		if node.isDeleted() {
 			return nil
 		}
@@ -77,7 +77,7 @@ func (rht *RHT) Get(key string) Element {
 // Has returns whether the element exists of the given key or not.
 func (rht *RHT) Has(key string) bool {
 	if queue, ok := rht.nodeQueueMapByKey[key]; ok {
-		node := queue.Peek().(*rhtNode)
+		node := queue.Peek().(*RHTNode)
 		return node != nil && !node.isDeleted()
 	}
 
@@ -98,7 +98,7 @@ func (rht *RHT) Set(k string, v Element) {
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string, deletedAt *time.Ticket) Element {
 	if queue, ok := rht.nodeQueueMapByKey[k]; ok {
-		node := queue.Peek().(*rhtNode)
+		node := queue.Peek().(*RHTNode)
 		node.Delete(deletedAt)
 		return node.elem
 	}
@@ -121,7 +121,7 @@ func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket
 func (rht *RHT) Elements() map[string]Element {
 	members := make(map[string]Element)
 	for _, queue := range rht.nodeQueueMapByKey {
-		if node := queue.Peek().(*rhtNode); !node.isDeleted() {
+		if node := queue.Peek().(*RHTNode); !node.isDeleted() {
 			members[node.key] = node.elem
 
 		}
@@ -132,11 +132,11 @@ func (rht *RHT) Elements() map[string]Element {
 
 // AllNodes returns a map of elements because the map easy to use for loop.
 // TODO If we encounter performance issues, we need to replace this with other solution.
-func (rht *RHT) AllNodes() []*rhtNode {
-	var nodes []*rhtNode
+func (rht *RHT) AllNodes() []*RHTNode {
+	var nodes []*RHTNode
 	for _, queue := range rht.nodeQueueMapByKey {
 		for _, value := range queue.Values() {
-			nodes = append(nodes, value.(*rhtNode))
+			nodes = append(nodes, value.(*RHTNode))
 
 		}
 	}

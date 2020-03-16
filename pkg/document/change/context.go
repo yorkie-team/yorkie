@@ -68,6 +68,7 @@ func (c *Context) Push(op operation.Operation) {
 	c.operations = append(c.operations, op)
 }
 
+// RegisterElement registers the given element to the root.
 func (c *Context) RegisterElement(elem json.Element) {
 	c.root.RegisterElement(elem)
 }

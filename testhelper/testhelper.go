@@ -21,6 +21,8 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/yorkie"
 )
 
@@ -33,8 +35,8 @@ func randBetween(min, max int) int {
 }
 
 func WithYorkie(t *testing.T, f func(*testing.T, *yorkie.Yorkie)) {
-	testDBname := fmt.Sprintf("yorkie-meta-%d", randBetween(0, 9999))
-	conf := yorkie.NewConfigForTest(testPort, testDBname)
+	testDBName := fmt.Sprintf("yorkie-meta-%d", randBetween(0, 9999))
+	conf := yorkie.NewConfigForTest(testPort, testDBName)
 	y, err := yorkie.New(conf)
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +48,6 @@ func WithYorkie(t *testing.T, f func(*testing.T, *yorkie.Yorkie)) {
 
 	f(t, y)
 
-	if err := y.Shutdown(true); err != nil {
-		t.Error(err)
-	}
+	err = y.Shutdown(true)
+	assert.Nil(t, err)
 }

@@ -37,10 +37,12 @@ func New(serverSeq uint64, clientSeq uint32) *Checkpoint {
 	}
 }
 
+// NextClientSeq creates a new instance with next client sequence.
 func (cp *Checkpoint) NextClientSeq() *Checkpoint {
-	return New(cp.ServerSeq, cp.ClientSeq+1)
+	return cp.IncreaseClientSeq(1)
 }
 
+// NextClientSeq creates a new instance with next server sequence.
 func (cp *Checkpoint) NextServerSeq(serverSeq uint64) *Checkpoint {
 	if cp.ServerSeq == serverSeq {
 		return cp
@@ -49,6 +51,7 @@ func (cp *Checkpoint) NextServerSeq(serverSeq uint64) *Checkpoint {
 	return New(serverSeq, cp.ClientSeq)
 }
 
+// NextClientSeq creates a new instance with increased client sequence.
 func (cp *Checkpoint) IncreaseClientSeq(inc uint32) *Checkpoint {
 	if inc == 0 {
 		return cp
@@ -88,7 +91,7 @@ func (cp *Checkpoint) Equals(other *Checkpoint) bool {
 		cp.ClientSeq == other.ClientSeq
 }
 
-// String returns the string of infomation about this checkpoint.
+// String returns the string of information about this checkpoint.
 func (cp *Checkpoint) String() string {
 	return fmt.Sprintf("serverSeq=%d, clientSeq=%d", cp.ServerSeq, cp.ClientSeq)
 }
