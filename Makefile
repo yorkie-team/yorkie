@@ -29,7 +29,7 @@ docker:
 	docker build -t yorkieteam/yorkie:latest .
 
 fmt:
-	gofmt -w $(GOSRC)
+	gofmt -s -w $(GOSRC)
 	goimports -w -local "github.com/yorkie-team" $(GOSRC)
 
 lint:

@@ -34,7 +34,7 @@ import (
 
 var (
 	// ErrClientNotFound is returned when the client could not be found.
-	ErrClientNotFound   = errors.New("fail to find the client")
+	ErrClientNotFound = errors.New("fail to find the client")
 
 	// ErrDocumentNotFound is returned when the document could not be found.
 	ErrDocumentNotFound = errors.New("fail to find the document")

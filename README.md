@@ -1,5 +1,7 @@
 # Yorkie
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/yorkie-team/yorkie)](https://goreportcard.com/report/github.com/yorkie-team/yorkie)
+
 Yorkie is a framework for building collaborative editing applications.
 
  ```
