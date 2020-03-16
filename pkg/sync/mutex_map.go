@@ -25,6 +25,7 @@ var (
 	errAlreadyUnlockedKey = errors.New("already unlocked key")
 )
 
+// MutexMap is a memory MutexMap.
 // TODO: Temporary mutex map.
 //  - We will need to replace this with distributed lock later.
 //  - https://github.com/minio/dsync#other-techniques

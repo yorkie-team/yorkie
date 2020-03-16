@@ -231,43 +231,15 @@ func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
 	return nil
 }
 
-func (c *Client) sync(ctx context.Context, key *key.Key) error {
-	if c.status != activated {
-		return errClientNotActivated
-	}
-
-	doc, ok := c.attachedDocs[key.BSONKey()]
-	if !ok {
-		return errDocumentNotAttached
-	}
-
-	res, err := c.client.PushPull(ctx, &api.PushPullRequest{
-		ClientId:   c.id.String(),
-		ChangePack: converter.ToChangePack(doc.CreateChangePack()),
-	})
-	if err != nil {
-		log.Logger.Error(err)
-		return err
-	}
-
-	pack, err := converter.FromChangePack(res.ChangePack)
-	if err != nil {
-		return err
-	}
-
-	if err := doc.ApplyChangePack(pack); err != nil {
-		log.Logger.Error(err)
-		return err
-	}
-
-	return nil
-}
-
+// WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
 	Keys []*key.Key
 	Err  error
 }
 
+// Watch subscribes to events on a given document.
+// If the context "ctx" is canceled or timed out, returned channel is closed,
+// and "WatchResponse" from this closed channel has zero events and nil "Err()".
 func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan WatchResponse {
 	var keys []*key.Key
 	for _, doc := range docs {
@@ -305,7 +277,39 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 	return rch
 }
 
-// IsActivate returns whether this client is active or not.
+// IsActive returns whether this client is active or not.
 func (c *Client) IsActive() bool {
 	return c.status == activated
+}
+
+func (c *Client) sync(ctx context.Context, key *key.Key) error {
+	if c.status != activated {
+		return errClientNotActivated
+	}
+
+	doc, ok := c.attachedDocs[key.BSONKey()]
+	if !ok {
+		return errDocumentNotAttached
+	}
+
+	res, err := c.client.PushPull(ctx, &api.PushPullRequest{
+		ClientId:   c.id.String(),
+		ChangePack: converter.ToChangePack(doc.CreateChangePack()),
+	})
+	if err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	pack, err := converter.FromChangePack(res.ChangePack)
+	if err != nil {
+		return err
+	}
+
+	if err := doc.ApplyChangePack(pack); err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	return nil
 }

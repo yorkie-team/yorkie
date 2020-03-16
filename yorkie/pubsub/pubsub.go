@@ -53,6 +53,8 @@ func newSubscription(actor *time.ActorID) *Subscription {
 
 type Subscriptions map[string]*Subscription
 
+
+// PubSub is a structure to support event publishing/subscription.
 // TODO: Temporary Memory PubSub.
 //  - We will need to replace this with distributed pubSub.
 type PubSub struct {
@@ -87,6 +89,7 @@ func (m *PubSub) Subscribe(
 	return subscription, nil
 }
 
+// Unsubscribe unsubscribes the given topics.
 func (m *PubSub) Unsubscribe(topics []string, subscription *Subscription) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -31,46 +31,46 @@ func NewPriorityQueue() *PriorityQueue {
 	}
 }
 
-func (pq *PriorityQueue) Peek() PQValue {
-	return pq.queue.Peek().(*PQItem).value
+func (pq *PriorityQueue) Peek() Value {
+	return pq.queue.Peek().(*Item).value
 }
 
-func (pq *PriorityQueue) Pop() PQValue {
-	return heap.Pop(pq.queue).(*PQItem).value
+func (pq *PriorityQueue) Pop() Value {
+	return heap.Pop(pq.queue).(*Item).value
 }
 
-func (pq *PriorityQueue) Push(value PQValue) {
-	item := NewPQItem(value)
+func (pq *PriorityQueue) Push(value Value) {
+	item := NewItem(value)
 	heap.Push(pq.queue, item)
 }
 
-func (pq *PriorityQueue) Values() []PQValue {
-	var values []PQValue
+func (pq *PriorityQueue) Values() []Value {
+	var values []Value
 	for _, item := range *pq.queue {
 		values = append(values, item.value)
 	}
 	return values
 }
 
-type PQValue interface {
-	Less(other PQValue) bool
+type Value interface {
+	Less(other Value) bool
 }
 
-// PQItem is something we manage in a priority queue.
-type PQItem struct {
-	value PQValue
+// Item is something we manage in a priority queue.
+type Item struct {
+	value Value
 	index int
 }
 
-func NewPQItem(value PQValue) *PQItem {
-	return &PQItem{
+func NewItem(value Value) *Item {
+	return &Item{
 		value: value,
 		index: -1,
 	}
 }
 
 // A internalQueue implements heap.Interface and holds Items.
-type internalQueue []*PQItem
+type internalQueue []*Item
 
 func (pq internalQueue) Len() int { return len(pq) }
 
@@ -87,7 +87,7 @@ func (pq internalQueue) Swap(i, j int) {
 
 func (pq *internalQueue) Push(x interface{}) {
 	n := len(*pq)
-	item := x.(*PQItem)
+	item := x.(*Item)
 	item.index = n
 	*pq = append(*pq, item)
 }

@@ -23,25 +23,25 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
-type rgaNode struct {
-	prev *rgaNode
-	next *rgaNode
+type RGANode struct {
+	prev *RGANode
+	next *RGANode
 	elem Element
 }
 
-func (n *rgaNode) isDeleted() bool {
+func (n *RGANode) isDeleted() bool {
 	return n.elem.DeletedAt() != nil
 }
 
-func newRGANode(elem Element) *rgaNode {
-	return &rgaNode{
+func newRGANode(elem Element) *RGANode {
+	return &RGANode{
 		prev: nil,
 		next: nil,
 		elem: elem,
 	}
 }
 
-func newNodeAfter(prev *rgaNode, elem Element) *rgaNode {
+func newNodeAfter(prev *RGANode, elem Element) *RGANode {
 	newNode := newRGANode(elem)
 	prevNext := prev.next
 
@@ -57,15 +57,15 @@ func newNodeAfter(prev *rgaNode, elem Element) *rgaNode {
 
 // RGA is replicated growable array.
 type RGA struct {
-	nodeMapByCreatedAt map[string]*rgaNode
-	first              *rgaNode
-	last               *rgaNode
+	nodeMapByCreatedAt map[string]*RGANode
+	first              *RGANode
+	last               *RGANode
 	size               int
 }
 
 // NewRGA creates a new instance of RGA.
 func NewRGA() *RGA {
-	nodeMapByCreatedAt := make(map[string]*rgaNode)
+	nodeMapByCreatedAt := make(map[string]*RGANode)
 	dummyHead := newRGANode(NewPrimitive("", time.InitialTicket))
 	nodeMapByCreatedAt[dummyHead.elem.CreatedAt().Key()] = dummyHead
 
@@ -112,8 +112,8 @@ func (a *RGA) Add(elem Element) {
 
 // Nodes returns an array of elements contained in this RGA.
 // TODO If we encounter performance issues, we need to replace this with other solution.
-func (a *RGA) Nodes() []*rgaNode {
-	var nodes []*rgaNode
+func (a *RGA) Nodes() []*RGANode {
+	var nodes []*RGANode
 	current := a.first.next
 	for {
 		if current == nil {
@@ -172,7 +172,7 @@ func (a *RGA) Len() int {
 	return a.size
 }
 
-func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket) *rgaNode {
+func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket) *RGANode {
 	node := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
 	if node == nil {
 		log.Logger.Fatalf(
@@ -189,7 +189,7 @@ func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket
 	return node
 }
 
-func (a *RGA) insertAfter(prev *rgaNode, element Element) {
+func (a *RGA) insertAfter(prev *RGANode, element Element) {
 	newNode := newNodeAfter(prev, element)
 	if prev == a.last {
 		a.last = newNode

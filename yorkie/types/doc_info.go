@@ -22,6 +22,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// DocInfo is a structure representing information of the document.
 type DocInfo struct {
 	ID         primitive.ObjectID `bson:"_id"`
 	Key        string             `bson:"key"`
@@ -32,6 +33,7 @@ type DocInfo struct {
 	UpdatedAt  time.Time          `bson:"updated_at"`
 }
 
+// IncreaseServerSeq increases server sequence of the document.
 func (info *DocInfo) IncreaseServerSeq() uint64 {
 	info.ServerSeq++
 	return info.ServerSeq

@@ -128,7 +128,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	}
 
 	for _, c := range pack.Changes {
-		d.changeID = d.changeID.Sync(c.ID())
+		d.changeID = d.changeID.SyncLamport(c.ID())
 		if err := c.Execute(d.root); err != nil {
 			return err
 		}

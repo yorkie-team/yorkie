@@ -80,7 +80,7 @@ func PushPull(
 			time.ActorIDFromHex(clientInfo.ID.Hex()),
 			pack.DocumentKey.BSONKey(),
 			pubsub.Event{
-				Type: pubsub.DocumentChangeEvent,
+				Type:  pubsub.DocumentChangeEvent,
 				Value: pack.DocumentKey.BSONKey(),
 			},
 		)
