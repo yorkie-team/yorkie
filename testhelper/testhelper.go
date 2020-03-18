@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -27,15 +28,23 @@ import (
 )
 
 const (
-	testPort = 1101
+	testDBNameFmt = "test-%s-%d"
+	testPort      = 1101
 )
+
+var testStartedAt int64
+
+func init() {
+	now := time.Now()
+	testStartedAt = now.Unix()
+}
 
 func randBetween(min, max int) int {
 	return rand.Intn(max-min) + min
 }
 
 func WithYorkie(t *testing.T, f func(*testing.T, *yorkie.Yorkie)) {
-	testDBName := fmt.Sprintf("yorkie-meta-%d", randBetween(0, 9999))
+	testDBName := fmt.Sprintf(testDBNameFmt, yorkie.DefaultYorkieDatabase, testStartedAt)
 	conf := yorkie.NewConfigForTest(testPort, testDBName)
 	y, err := yorkie.New(conf)
 	if err != nil {
