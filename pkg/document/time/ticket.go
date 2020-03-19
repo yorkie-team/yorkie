@@ -18,6 +18,7 @@ package time
 
 import (
 	"fmt"
+	"math"
 )
 
 var (
@@ -27,8 +28,8 @@ var (
 		InitialActorID,
 	)
 	MaxTicket = NewTicket(
-		18446744073709551615,
-		4294967295,
+		math.MaxUint64,
+		math.MaxUint32,
 		MaxActorID,
 	)
 )
