@@ -19,16 +19,30 @@ package time
 import (
 	"bytes"
 	"encoding/hex"
+	"math"
 )
+
+const actorIDSize = 12
 
 var (
 	InitialActorID = &ActorID{}
 	MaxActorID     = &ActorID{
-		255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
+		math.MaxUint8,
 	}
 )
 
-type ActorID [12]byte
+type ActorID [actorIDSize]byte
 
 func ActorIDFromHex(str string) *ActorID {
 	if str == "" {
@@ -40,7 +54,7 @@ func ActorIDFromHex(str string) *ActorID {
 	if err != nil {
 		panic("fail to decode hex")
 	}
-	copy(actorID[:], decoded[:12])
+	copy(actorID[:], decoded[:actorIDSize])
 	return &actorID
 }
 
