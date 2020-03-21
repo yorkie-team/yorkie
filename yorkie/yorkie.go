@@ -23,6 +23,9 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
+// Yorkie is an agent of Yorkie framework.
+// The agent receives changes from the client, stores them in the repository,
+// and propagates the changes to clients who subscribe to the document.
 type Yorkie struct {
 	lock sync.Mutex
 
@@ -34,6 +37,7 @@ type Yorkie struct {
 	config     *Config
 }
 
+// New creates a new instance of Yorkie.
 func New(conf *Config) (*Yorkie, error) {
 	be, err := backend.New(conf.Mongo)
 	if err != nil {
@@ -82,6 +86,7 @@ func (r *Yorkie) ShutdownCh() <-chan struct{} {
 	return r.shutdownCh
 }
 
+// RPCAddr returns the address of the RPC.
 func (r *Yorkie) RPCAddr() string {
 	return r.config.RPCAddr()
 }

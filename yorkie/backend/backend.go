@@ -23,12 +23,15 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 )
 
+// Backend manages Yorkie's remote states such as data store, distributed lock
+// and etc.
 type Backend struct {
 	Mongo    *mongo.Client
 	mutexMap *sync.MutexMap
 	pubSub   *pubsub.PubSub
 }
 
+// New creates a new instance of Backend.
 func New(conf *mongo.Config) (*Backend, error) {
 	client, err := mongo.NewClient(conf)
 	if err != nil {
@@ -42,6 +45,7 @@ func New(conf *mongo.Config) (*Backend, error) {
 	}, nil
 }
 
+// Close closes all resources of this instance.
 func (b *Backend) Close() error {
 	if err := b.Mongo.Close(); err != nil {
 		return err

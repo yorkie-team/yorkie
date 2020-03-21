@@ -35,20 +35,20 @@ func TestRPCServer(t *testing.T) {
 				context.Background(),
 				&api.ActivateClientRequest{ClientKey: ""},
 			)
-			assert.Equal(t, status.Convert(err).Code(), codes.InvalidArgument)
+			assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
 			_, err = rpcServer.DeactivateClient(
 				context.Background(),
 				&api.DeactivateClientRequest{ClientId: ""},
 			)
-			assert.Equal(t, status.Convert(err).Code(), codes.InvalidArgument)
+			assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
 			// client not found
 			_, err = rpcServer.DeactivateClient(
 				context.Background(),
 				&api.DeactivateClientRequest{ClientId: "000000000000000000000000"},
 			)
-			assert.Equal(t, status.Convert(err).Code(), codes.NotFound)
+			assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 		})
 
 		t.Run("attach/detach document test", func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestRPCServer(t *testing.T) {
 					ChangePack: packWithNoChanges,
 				},
 			)
-			assert.Equal(t, status.Convert(err).Code(), codes.FailedPrecondition)
+			assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 
 			_, err = rpcServer.DetachDocument(
 				context.Background(),
@@ -101,7 +101,7 @@ func TestRPCServer(t *testing.T) {
 					ChangePack: packWithNoChanges,
 				},
 			)
-			assert.Nil(t, err)
+			assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 
 			// document not found
 			_, err = rpcServer.DetachDocument(
@@ -110,13 +110,13 @@ func TestRPCServer(t *testing.T) {
 					ClientId: activateResp.ClientId,
 					ChangePack: &api.ChangePack{
 						DocumentKey: &api.DocumentKey{
-							Collection: "invalid-collection", Document: "invalid-document",
+							Collection: "invalid", Document: "invalid",
 						},
 						Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 					},
 				},
 			)
-			assert.Equal(t, status.Convert(err).Code(), codes.NotFound)
+			assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 
 			_, err = rpcServer.DeactivateClient(
 				context.Background(),
@@ -132,7 +132,7 @@ func TestRPCServer(t *testing.T) {
 					ChangePack: packWithNoChanges,
 				},
 			)
-			assert.Equal(t, status.Convert(err).Code(), codes.FailedPrecondition)
+			assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 		})
 
 		t.Run("push/pull changes test", func(t *testing.T) {
@@ -149,14 +149,6 @@ func TestRPCServer(t *testing.T) {
 			)
 			assert.Nil(t, err)
 
-			defer func() {
-				_, err := rpcServer.DeactivateClient(
-					context.Background(),
-					&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
-				)
-				assert.Nil(t, err)
-			}()
-
 			_, err = rpcServer.AttachDocument(
 				context.Background(),
 				&api.AttachDocumentRequest{
@@ -166,17 +158,6 @@ func TestRPCServer(t *testing.T) {
 			)
 			assert.Nil(t, err)
 
-			defer func() {
-				_, err = rpcServer.DetachDocument(
-					context.Background(),
-					&api.DetachDocumentRequest{
-						ClientId:   activateResp.ClientId,
-						ChangePack: packWithNoChanges,
-					},
-				)
-				assert.Nil(t, err)
-			}()
-
 			_, err = rpcServer.PushPull(
 				context.Background(),
 				&api.PushPullRequest{
@@ -185,6 +166,41 @@ func TestRPCServer(t *testing.T) {
 				},
 			)
 			assert.Nil(t, err)
+
+			_, err = rpcServer.DetachDocument(
+				context.Background(),
+				&api.DetachDocumentRequest{
+					ClientId:   activateResp.ClientId,
+					ChangePack: packWithNoChanges,
+				},
+			)
+			assert.Nil(t, err)
+
+			// try to push/pull with detached document
+			_, err = rpcServer.PushPull(
+				context.Background(),
+				&api.PushPullRequest{
+					ClientId:   activateResp.ClientId,
+					ChangePack: packWithNoChanges,
+				},
+			)
+			assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+
+			_, err = rpcServer.DeactivateClient(
+				context.Background(),
+				&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
+			)
+			assert.Nil(t, err)
+
+			// try to push/pull with deactivated client
+			_, err = rpcServer.PushPull(
+				context.Background(),
+				&api.PushPullRequest{
+					ClientId:   activateResp.ClientId,
+					ChangePack: packWithNoChanges,
+				},
+			)
+			assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 		})
 	})
 }
