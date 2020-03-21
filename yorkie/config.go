@@ -49,8 +49,8 @@ func NewConfig() *Config {
 	return newConfig(DefaultRPCPort, DefaultYorkieDatabase)
 }
 
-// NewConfigForTest returns a Config struct for the test configurations.
-func NewConfigForTest(port int, dbname string) *Config {
+// NewConfigWithPortAndDBName returns a new instance of Config.
+func NewConfigWithPortAndDBName(port int, dbname string) *Config {
 	return newConfig(port, dbname)
 }
 

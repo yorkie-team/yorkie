@@ -42,7 +42,7 @@ func (cp *Checkpoint) NextClientSeq() *Checkpoint {
 	return cp.IncreaseClientSeq(1)
 }
 
-// NextClientSeq creates a new instance with next server sequence.
+// NextServerSeq creates a new instance with next server sequence.
 func (cp *Checkpoint) NextServerSeq(serverSeq uint64) *Checkpoint {
 	if cp.ServerSeq == serverSeq {
 		return cp
@@ -51,7 +51,7 @@ func (cp *Checkpoint) NextServerSeq(serverSeq uint64) *Checkpoint {
 	return New(serverSeq, cp.ClientSeq)
 }
 
-// NextClientSeq creates a new instance with increased client sequence.
+// IncreaseClientSeq creates a new instance with increased client sequence.
 func (cp *Checkpoint) IncreaseClientSeq(inc uint32) *Checkpoint {
 	if inc == 0 {
 		return cp

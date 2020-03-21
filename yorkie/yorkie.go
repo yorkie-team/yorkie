@@ -19,15 +19,15 @@ package yorkie
 import (
 	"sync"
 
-	"github.com/yorkie-team/yorkie/yorkie/api"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
 type Yorkie struct {
 	lock sync.Mutex
 
 	backend   *backend.Backend
-	rpcServer *api.RPCServer
+	rpcServer *rpc.Server
 
 	shutdown   bool
 	shutdownCh chan struct{}
@@ -40,7 +40,7 @@ func New(conf *Config) (*Yorkie, error) {
 		return nil, err
 	}
 
-	rpcServer, err := api.NewRPCServer(conf.RPCPort, be)
+	rpcServer, err := rpc.NewRPCServer(conf.RPCPort, be)
 	if err != nil {
 		return nil, err
 	}

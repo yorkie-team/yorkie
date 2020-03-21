@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-package api
+package rpc
 
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"net"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -35,19 +37,24 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/packs"
 )
 
-type RPCServer struct {
+type fieldViolation struct {
+	field       string
+	description string
+}
+
+type Server struct {
 	port       int
 	grpcServer *grpc.Server
 	backend    *backend.Backend
 }
 
-func NewRPCServer(port int, be *backend.Backend) (*RPCServer, error) {
+func NewRPCServer(port int, be *backend.Backend) (*Server, error) {
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(unaryInterceptor),
 		grpc.StreamInterceptor(streamInterceptor),
 	}
 
-	rpcServer := &RPCServer{
+	rpcServer := &Server{
 		port:       port,
 		grpcServer: grpc.NewServer(opts...),
 		backend:    be,
@@ -57,11 +64,11 @@ func NewRPCServer(port int, be *backend.Backend) (*RPCServer, error) {
 	return rpcServer, nil
 }
 
-func (s *RPCServer) Start() error {
+func (s *Server) Start() error {
 	return s.listenAndServeGRPC()
 }
 
-func (s *RPCServer) Shutdown(graceful bool) {
+func (s *Server) Shutdown(graceful bool) {
 	if graceful {
 		s.grpcServer.GracefulStop()
 	} else {
@@ -69,10 +76,20 @@ func (s *RPCServer) Shutdown(graceful bool) {
 	}
 }
 
-func (s *RPCServer) ActivateClient(
+func (s *Server) ActivateClient(
 	ctx context.Context,
 	req *api.ActivateClientRequest,
 ) (*api.ActivateClientResponse, error) {
+	if req.ClientKey == "" {
+		return nil, toStatusError(
+			codes.InvalidArgument,
+			"invalid client key",
+			[]fieldViolation{{
+				field: "client_key",
+				description: "the client key must not be empty",
+			}},
+		)
+	}
 	client, err := clients.Activate(ctx, s.backend, req.ClientKey)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -84,12 +101,26 @@ func (s *RPCServer) ActivateClient(
 	}, nil
 }
 
-func (s *RPCServer) DeactivateClient(
+func (s *Server) DeactivateClient(
 	ctx context.Context,
 	req *api.DeactivateClientRequest,
 ) (*api.DeactivateClientResponse, error) {
+	if req.ClientId == "" {
+		return nil, toStatusError(
+			codes.InvalidArgument,
+			"invalid client ID",
+			[]fieldViolation{{
+				field: "client_id",
+				description: "the client ID must not be empty",
+			}},
+		)
+	}
+
 	client, err := clients.Deactivate(ctx, s.backend, req.ClientId)
 	if err != nil {
+		if err == mongo.ErrClientNotFound {
+			return nil, status.Error(codes.NotFound, err.Error())
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -98,7 +129,7 @@ func (s *RPCServer) DeactivateClient(
 	}, nil
 }
 
-func (s *RPCServer) AttachDocument(
+func (s *Server) AttachDocument(
 	ctx context.Context,
 	req *api.AttachDocumentRequest,
 ) (*api.AttachDocumentResponse, error) {
@@ -136,7 +167,7 @@ func (s *RPCServer) AttachDocument(
 	}, nil
 }
 
-func (s *RPCServer) DetachDocument(
+func (s *Server) DetachDocument(
 	ctx context.Context,
 	req *api.DetachDocumentRequest,
 ) (*api.DetachDocumentResponse, error) {
@@ -174,7 +205,7 @@ func (s *RPCServer) DetachDocument(
 	}, nil
 }
 
-func (s *RPCServer) PushPull(
+func (s *Server) PushPull(
 	ctx context.Context,
 	req *api.PushPullRequest,
 ) (*api.PushPullResponse, error) {
@@ -213,7 +244,7 @@ func (s *RPCServer) PushPull(
 	}, nil
 }
 
-func (s *RPCServer) WatchDocuments(
+func (s *Server) WatchDocuments(
 	req *api.WatchDocumentsRequest,
 	stream api.Yorkie_WatchDocumentsServer,
 ) error {
@@ -256,7 +287,7 @@ func (s *RPCServer) WatchDocuments(
 	}
 }
 
-func (s *RPCServer) listenAndServeGRPC() error {
+func (s *Server) listenAndServeGRPC() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
 	if err != nil {
 		log.Logger.Error(err)
@@ -272,4 +303,23 @@ func (s *RPCServer) listenAndServeGRPC() error {
 	}()
 
 	return nil
+}
+
+func toStatusError(code codes.Code, msg string, violations []fieldViolation) error {
+	br := &errdetails.BadRequest{}
+
+	for _, violation := range violations {
+		br.FieldViolations = append(br.FieldViolations, &errdetails.BadRequest_FieldViolation{
+			Field:       violation.field,
+			Description: violation.description,
+		})
+	}
+
+	st, err := status.New(code, msg).WithDetails(br)
+	if err != nil {
+		// If this errored, it will always error/ here, so better panic so we can figure
+		// out why than have this silently passing.
+		panic(fmt.Sprintf("unexpected error attaching metadata: %violation", err))
+	}
+	return st.Err()
 }

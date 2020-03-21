@@ -39,7 +39,7 @@ const (
 )
 
 func TestClient(t *testing.T) {
-	testhelper.WithYorkie(t, func(t *testing.T, r *yorkie.Yorkie) {
+	withYorkie(t, func(t *testing.T, r *yorkie.Yorkie) {
 		t.Run("new/close test", func(t *testing.T) {
 			cli, err := client.NewClient(testRPCAddr)
 			assert.Nil(t, err)
@@ -540,7 +540,7 @@ func withYorkieAndTwoClients(
 	t *testing.T,
 	f func(t *testing.T, y *yorkie.Yorkie, c1 *client.Client, c2 *client.Client),
 ) {
-	testhelper.WithYorkie(t, func(t *testing.T, r *yorkie.Yorkie) {
+	withYorkie(t, func(t *testing.T, r *yorkie.Yorkie) {
 		c1, err := client.NewClient(testRPCAddr)
 		if err != nil {
 			t.Fatal(err)
@@ -575,4 +575,21 @@ func withYorkieAndTwoClients(
 
 		f(t, r, c1, c2)
 	})
+}
+
+func withYorkie(t *testing.T, f func(*testing.T, *yorkie.Yorkie)) {
+	conf := yorkie.NewConfigWithPortAndDBName(testhelper.TestPort, testhelper.TestDBName())
+	y, err := yorkie.New(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := y.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	f(t, y)
+
+	err = y.Shutdown(true)
+	assert.Nil(t, err)
 }
