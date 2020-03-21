@@ -152,9 +152,12 @@ func (s *Server) AttachDocument(
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, true)
 	if err != nil {
+		if err == mongo.ErrClientNotFound || err == mongo.ErrDocumentNotFound {
+			return nil, status.Error(codes.NotFound, err.Error())
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if err := clientInfo.AttachDocument(docInfo.ID, pack.Checkpoint); err != nil {
+	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
 		if err == types.ErrClientNotActivated {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
@@ -196,15 +199,18 @@ func (s *Server) DetachDocument(
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, false)
 	if err != nil {
-		if err == mongo.ErrDocumentNotFound {
+		if err == mongo.ErrClientNotFound || err == mongo.ErrDocumentNotFound {
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if err := clientInfo.CheckDocumentAttached(docInfo.ID.Hex()); err != nil {
-		if err == types.ErrClientNotActivated {
+		if err == types.ErrClientNotActivated || err == types.ErrDocumentNotAttached {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -241,9 +247,15 @@ func (s *Server) PushPull(
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, false)
 	if err != nil {
+		if err == mongo.ErrClientNotFound || err == mongo.ErrDocumentNotFound {
+			return nil, status.Error(codes.NotFound, err.Error())
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if err := clientInfo.CheckDocumentAttached(docInfo.ID.Hex()); err != nil {
+		if err == types.ErrClientNotActivated || err == types.ErrDocumentNotAttached {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 

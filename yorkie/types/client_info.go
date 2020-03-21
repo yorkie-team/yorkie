@@ -23,12 +23,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
-	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 var (
 	ErrClientNotActivated      = errors.New("client not activated")
 	ErrDocumentNotAttached     = errors.New("document not attached")
+	ErrDocumentNeverAttached   = errors.New("client has never attached the document")
 	ErrDocumentAlreadyAttached = errors.New("document already attached")
 )
 
@@ -57,7 +57,7 @@ type ClientInfo struct {
 	UpdatedAt time.Time                 `bson:"updated_at"`
 }
 
-func (i *ClientInfo) AttachDocument(docID primitive.ObjectID, cp *checkpoint.Checkpoint) error {
+func (i *ClientInfo) AttachDocument(docID primitive.ObjectID) error {
 	if i.Status != ClientActivated {
 		return ErrClientNotActivated
 	}
@@ -68,7 +68,7 @@ func (i *ClientInfo) AttachDocument(docID primitive.ObjectID, cp *checkpoint.Che
 
 	hexDocID := docID.Hex()
 
-	if _, ok := i.Documents[hexDocID]; ok {
+	if i.hasDocument(hexDocID) {
 		return ErrDocumentAlreadyAttached
 	}
 
@@ -82,7 +82,7 @@ func (i *ClientInfo) AttachDocument(docID primitive.ObjectID, cp *checkpoint.Che
 	return nil
 }
 
-func (i *ClientInfo) DetachDocument(docID primitive.ObjectID, cp *checkpoint.Checkpoint) error {
+func (i *ClientInfo) DetachDocument(docID primitive.ObjectID) error {
 	hexDocID := docID.Hex()
 	if err := i.CheckDocumentAttached(hexDocID); err != nil {
 		return err
@@ -105,8 +105,8 @@ func (i *ClientInfo) GetCheckpoint(id primitive.ObjectID) *checkpoint.Checkpoint
 
 func (i *ClientInfo) UpdateCheckpoint(docID primitive.ObjectID, cp *checkpoint.Checkpoint) error {
 	hexDocID := docID.Hex()
-	if err := i.CheckDocumentAttached(hexDocID); err != nil {
-		return err
+	if !i.hasDocument(hexDocID) {
+		return ErrDocumentNeverAttached
 	}
 
 	i.Documents[hexDocID].ServerSeq = cp.ServerSeq
@@ -118,16 +118,16 @@ func (i *ClientInfo) UpdateCheckpoint(docID primitive.ObjectID, cp *checkpoint.C
 
 func (i *ClientInfo) CheckDocumentAttached(hexDocID string) error {
 	if i.Status != ClientActivated {
-		log.Logger.Error(ErrClientNotActivated)
 		return ErrClientNotActivated
 	}
 
-	if i.Documents == nil ||
-		i.Documents[hexDocID] == nil ||
-		i.Documents[hexDocID].Status == DocumentDetached {
-		log.Logger.Error(ErrDocumentNotAttached)
+	if !i.hasDocument(hexDocID) || i.Documents[hexDocID].Status == DocumentDetached {
 		return ErrDocumentNotAttached
 	}
 
 	return nil
+}
+
+func (i *ClientInfo) hasDocument(hexDocID string) bool {
+	return i.Documents != nil && i.Documents[hexDocID] != nil
 }
