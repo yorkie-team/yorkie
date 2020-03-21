@@ -19,7 +19,6 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"net"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -33,8 +32,10 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
+	"github.com/yorkie-team/yorkie/yorkie/types"
 )
 
 type fieldViolation struct {
@@ -85,7 +86,7 @@ func (s *Server) ActivateClient(
 			codes.InvalidArgument,
 			"invalid client key",
 			[]fieldViolation{{
-				field: "client_key",
+				field:       "client_key",
 				description: "the client key must not be empty",
 			}},
 		)
@@ -110,7 +111,7 @@ func (s *Server) DeactivateClient(
 			codes.InvalidArgument,
 			"invalid client ID",
 			[]fieldViolation{{
-				field: "client_id",
+				field:       "client_id",
 				description: "the client ID must not be empty",
 			}},
 		)
@@ -149,11 +150,17 @@ func (s *Server) AttachDocument(
 	}()
 	// }
 
-	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
+	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, true)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if err := clientInfo.AttachDocument(docInfo.ID, pack.Checkpoint); err != nil {
+		if err == types.ErrClientNotActivated {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
+		if err == types.ErrDocumentAlreadyAttached {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -187,11 +194,17 @@ func (s *Server) DetachDocument(
 	}()
 	// }
 
-	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
+	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, false)
 	if err != nil {
+		if err == mongo.ErrDocumentNotFound {
+			return nil, status.Error(codes.NotFound, err.Error())
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if err := clientInfo.CheckDocumentAttached(docInfo.ID.Hex()); err != nil {
+		if err == types.ErrClientNotActivated {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -226,7 +239,7 @@ func (s *Server) PushPull(
 	}()
 	// }
 
-	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack)
+	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, false)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	TestPort = 1101
+	TestPort               = 1101
 	TestMongoConnectionURI = "mongodb://localhost:27017"
 )
 
