@@ -45,13 +45,19 @@ func FindClientAndDocument(
 	be *backend.Backend,
 	clientID string,
 	pack *change.Pack,
+	createDocIfNotExist bool,
 ) (*types.ClientInfo, *types.DocInfo, error) {
 	clientInfo, err := be.Mongo.FindClientInfoByID(ctx, clientID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	docInfo, err := be.Mongo.FindDocInfoByKey(ctx, clientInfo, pack.DocumentKey.BSONKey())
+	docInfo, err := be.Mongo.FindDocInfoByKey(
+		ctx,
+		clientInfo,
+		pack.DocumentKey.BSONKey(),
+		createDocIfNotExist,
+	)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -18,33 +18,173 @@ import (
 func TestRPCServer(t *testing.T) {
 	withRPCServer(t, func(t *testing.T, rpcServer *rpc.Server) {
 		t.Run("activate/deactivate client test", func(t *testing.T) {
-			// normal case
-			activateResp, err := rpcServer.ActivateClient(context.Background(), &api.ActivateClientRequest{
-				ClientKey: t.Name(),
-			})
+			activateResp, err := rpcServer.ActivateClient(
+				context.Background(),
+				&api.ActivateClientRequest{ClientKey: t.Name()},
+			)
 			assert.Nil(t, err)
 
-			_, err = rpcServer.DeactivateClient(context.Background(), &api.DeactivateClientRequest{
-				ClientId: activateResp.ClientId,
-			})
+			_, err = rpcServer.DeactivateClient(
+				context.Background(),
+				&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
+			)
 			assert.Nil(t, err)
 
 			// invalid argument
-			_, err = rpcServer.ActivateClient(context.Background(), &api.ActivateClientRequest{
-				ClientKey: "",
-			})
+			_, err = rpcServer.ActivateClient(
+				context.Background(),
+				&api.ActivateClientRequest{ClientKey: ""},
+			)
 			assert.Equal(t, status.Convert(err).Code(), codes.InvalidArgument)
 
-			_, err = rpcServer.DeactivateClient(context.Background(), &api.DeactivateClientRequest{
-				ClientId: "",
-			})
+			_, err = rpcServer.DeactivateClient(
+				context.Background(),
+				&api.DeactivateClientRequest{ClientId: ""},
+			)
 			assert.Equal(t, status.Convert(err).Code(), codes.InvalidArgument)
 
 			// client not found
-			_, err = rpcServer.DeactivateClient(context.Background(), &api.DeactivateClientRequest{
-				ClientId: "000000000000000000000000",
-			})
+			_, err = rpcServer.DeactivateClient(
+				context.Background(),
+				&api.DeactivateClientRequest{ClientId: "000000000000000000000000"},
+			)
 			assert.Equal(t, status.Convert(err).Code(), codes.NotFound)
+		})
+
+		t.Run("attach/detach document test", func(t *testing.T) {
+			activateResp, err := rpcServer.ActivateClient(
+				context.Background(),
+				&api.ActivateClientRequest{ClientKey: t.Name()},
+			)
+			assert.Nil(t, err)
+
+			packWithNoChanges := &api.ChangePack{
+				DocumentKey: &api.DocumentKey{
+					Collection: t.Name(), Document: t.Name(),
+				},
+				Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			}
+
+			_, err = rpcServer.AttachDocument(
+				context.Background(),
+				&api.AttachDocumentRequest{
+					ClientId:   activateResp.ClientId,
+					ChangePack: packWithNoChanges,
+				},
+			)
+			assert.Nil(t, err)
+
+			// try to attach already attached document
+			_, err = rpcServer.AttachDocument(
+				context.Background(),
+				&api.AttachDocumentRequest{
+					ClientId:   activateResp.ClientId,
+					ChangePack: packWithNoChanges,
+				},
+			)
+			assert.Equal(t, status.Convert(err).Code(), codes.FailedPrecondition)
+
+			_, err = rpcServer.DetachDocument(
+				context.Background(),
+				&api.DetachDocumentRequest{
+					ClientId:   activateResp.ClientId,
+					ChangePack: packWithNoChanges,
+				},
+			)
+			assert.Nil(t, err)
+
+			// try to detach already detached document
+			_, err = rpcServer.DetachDocument(
+				context.Background(),
+				&api.DetachDocumentRequest{
+					ClientId:   activateResp.ClientId,
+					ChangePack: packWithNoChanges,
+				},
+			)
+			assert.Nil(t, err)
+
+			// document not found
+			_, err = rpcServer.DetachDocument(
+				context.Background(),
+				&api.DetachDocumentRequest{
+					ClientId: activateResp.ClientId,
+					ChangePack: &api.ChangePack{
+						DocumentKey: &api.DocumentKey{
+							Collection: "invalid-collection", Document: "invalid-document",
+						},
+						Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+					},
+				},
+			)
+			assert.Equal(t, status.Convert(err).Code(), codes.NotFound)
+
+			_, err = rpcServer.DeactivateClient(
+				context.Background(),
+				&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
+			)
+			assert.Nil(t, err)
+
+			// try to attach the document with a deactivated client
+			_, err = rpcServer.AttachDocument(
+				context.Background(),
+				&api.AttachDocumentRequest{
+					ClientId:   activateResp.ClientId,
+					ChangePack: packWithNoChanges,
+				},
+			)
+			assert.Equal(t, status.Convert(err).Code(), codes.FailedPrecondition)
+		})
+
+		t.Run("push/pull changes test", func(t *testing.T) {
+			packWithNoChanges := &api.ChangePack{
+				DocumentKey: &api.DocumentKey{
+					Collection: t.Name(), Document: t.Name(),
+				},
+				Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			}
+
+			activateResp, err := rpcServer.ActivateClient(
+				context.Background(),
+				&api.ActivateClientRequest{ClientKey: t.Name()},
+			)
+			assert.Nil(t, err)
+
+			defer func() {
+				_, err := rpcServer.DeactivateClient(
+					context.Background(),
+					&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
+				)
+				assert.Nil(t, err)
+			}()
+
+			_, err = rpcServer.AttachDocument(
+				context.Background(),
+				&api.AttachDocumentRequest{
+					ClientId:   activateResp.ClientId,
+					ChangePack: packWithNoChanges,
+				},
+			)
+			assert.Nil(t, err)
+
+			defer func() {
+				_, err = rpcServer.DetachDocument(
+					context.Background(),
+					&api.DetachDocumentRequest{
+						ClientId:   activateResp.ClientId,
+						ChangePack: packWithNoChanges,
+					},
+				)
+				assert.Nil(t, err)
+			}()
+
+			_, err = rpcServer.PushPull(
+				context.Background(),
+				&api.PushPullRequest{
+					ClientId:   activateResp.ClientId,
+					ChangePack: packWithNoChanges,
+				},
+			)
+			assert.Nil(t, err)
 		})
 	})
 }

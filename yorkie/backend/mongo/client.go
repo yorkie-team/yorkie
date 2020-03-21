@@ -236,6 +236,7 @@ func (c *Client) FindDocInfoByKey(
 	ctx context.Context,
 	clientInfo *types.ClientInfo,
 	bsonDocKey string,
+	createDocIfNotExist bool,
 ) (*types.DocInfo, error) {
 	docInfo := types.DocInfo{}
 
@@ -247,7 +248,7 @@ func (c *Client) FindDocInfoByKey(
 			"$set": bson.M{
 				"accessed_at": now,
 			},
-		}, options.Update().SetUpsert(true))
+		}, options.Update().SetUpsert(createDocIfNotExist))
 		if err != nil {
 			log.Logger.Error(err)
 			return err
@@ -267,6 +268,9 @@ func (c *Client) FindDocInfoByKey(
 			result = col.FindOne(ctx, bson.M{
 				"key": bsonDocKey,
 			})
+			if result.Err() == mongo.ErrNoDocuments {
+				return ErrDocumentNotFound
+			}
 		}
 
 		if err := result.Decode(&docInfo); err != nil {

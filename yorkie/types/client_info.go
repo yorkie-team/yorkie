@@ -59,7 +59,6 @@ type ClientInfo struct {
 
 func (i *ClientInfo) AttachDocument(docID primitive.ObjectID, cp *checkpoint.Checkpoint) error {
 	if i.Status != ClientActivated {
-		log.Logger.Error(ErrClientNotActivated)
 		return ErrClientNotActivated
 	}
 
@@ -70,7 +69,6 @@ func (i *ClientInfo) AttachDocument(docID primitive.ObjectID, cp *checkpoint.Che
 	hexDocID := docID.Hex()
 
 	if _, ok := i.Documents[hexDocID]; ok {
-		log.Logger.Error(ErrDocumentAlreadyAttached)
 		return ErrDocumentAlreadyAttached
 	}
 
