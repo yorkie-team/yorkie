@@ -65,6 +65,7 @@ func NewClient(rpcAddr string, opts ...string) (*Client, error) {
 		k = opts[0]
 	}
 
+	// TODO support TLS
 	conn, err := grpc.Dial(rpcAddr, grpc.WithInsecure())
 	if err != nil {
 		log.Logger.Error(err)

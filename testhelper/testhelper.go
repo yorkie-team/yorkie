@@ -18,45 +18,18 @@ package testhelper
 
 import (
 	"fmt"
-	"math/rand"
-	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/yorkie"
 )
 
 const (
-	testDBNameFmt = "test-%s-%d"
-	testPort      = 1101
+	TestPort = 1101
+	TestMongoConnectionURI = "mongodb://localhost:27017"
 )
 
-var testStartedAt int64
-
-func init() {
+// TestDBName returns the name of test database with timestamp.
+func TestDBName() string {
 	now := time.Now()
-	testStartedAt = now.Unix()
-}
-
-func randBetween(min, max int) int {
-	return rand.Intn(max-min) + min
-}
-
-func WithYorkie(t *testing.T, f func(*testing.T, *yorkie.Yorkie)) {
-	testDBName := fmt.Sprintf(testDBNameFmt, yorkie.DefaultYorkieDatabase, testStartedAt)
-	conf := yorkie.NewConfigForTest(testPort, testDBName)
-	y, err := yorkie.New(conf)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := y.Start(); err != nil {
-		t.Fatal(err)
-	}
-
-	f(t, y)
-
-	err = y.Shutdown(true)
-	assert.Nil(t, err)
+	return fmt.Sprintf("test-%s-%d", yorkie.DefaultYorkieDatabase, now.Unix())
 }
