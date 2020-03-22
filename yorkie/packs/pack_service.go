@@ -19,12 +19,13 @@ package packs
 import (
 	"context"
 
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 	"github.com/yorkie-team/yorkie/yorkie/types"
 )
@@ -86,7 +87,16 @@ func PushPull(
 		)
 	}
 
-	docKey, err := key.FromBSONKey(docInfo.Key)
+	// 05. save snapshot
+	if pack.HasChanges() {
+		go func() {
+			if err := handleSnapshot(context.Background(), be, docInfo); err != nil {
+				log.Logger.Error(err)
+			}
+		}()
+	}
+
+	docKey, err := docInfo.GetKey()
 	if err != nil {
 		return nil, err
 	}
@@ -180,4 +190,58 @@ func pullChanges(
 	}
 
 	return pulledCP, pulledChanges, nil
+}
+
+func handleSnapshot(
+	ctx context.Context,
+	be *backend.Backend,
+	docInfo *types.DocInfo,
+) error {
+	// 01. get the last snapshot of this docInfo
+	snapshotInfo, err := be.Mongo.FindLastSnapshotInfo(ctx, docInfo.ID)
+	if err != nil && err != mongo.ErrSnapshotNotFound {
+		return err
+	}
+
+	// 02. retrieve the changes between last snapshot and current docInfo
+	changes, err := be.Mongo.FindChangeInfosBetweenServerSeqs(
+		ctx,
+		docInfo.ID,
+		snapshotInfo.ServerSeq,
+		docInfo.ServerSeq,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 03. create document instance of the docInfo
+	docKey, err := docInfo.GetKey()
+	if err != nil {
+		return err
+	}
+
+	doc, err := document.FromSnapshot(
+		docKey.Collection,
+		docKey.Document,
+		snapshotInfo.ServerSeq,
+		snapshotInfo.Snapshot,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := doc.ApplyChangePack(change.NewPack(
+		docKey,
+		checkpoint.Initial.NextServerSeq(docInfo.ServerSeq),
+		changes,
+	)); err != nil {
+		return err
+	}
+
+	// 04. save the snapshot of the docInfo
+	if err := be.Mongo.CreateSnapshotInfo(ctx, docInfo.ID, doc); err != nil {
+		return err
+	}
+
+	return nil
 }

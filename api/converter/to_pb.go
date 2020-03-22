@@ -91,7 +91,7 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 				Set: &api.Operation_Set{
 					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
 					Key:             op.Key(),
-					Value:           toJSONElement(op.Value()),
+					Value:           toJSONElementSimple(op.Value()),
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
@@ -100,7 +100,7 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 				Add: &api.Operation_Add{
 					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
 					PrevCreatedAt:   toTimeTicket(op.PrevCreatedAt()),
-					Value:           toJSONElement(op.Value()),
+					Value:           toJSONElementSimple(op.Value()),
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
@@ -141,65 +141,26 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 	return pbOperations
 }
 
-func toJSONElement(elem json.Element) *api.JSONElement {
+func toJSONElementSimple(elem json.Element) *api.JSONElementSimple {
 	switch elem := elem.(type) {
 	case *json.Object:
-		return &api.JSONElement{
+		return &api.JSONElementSimple{
 			Type:      api.ValueType_JSON_OBJECT,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}
 	case *json.Array:
-		return &api.JSONElement{
+		return &api.JSONElementSimple{
 			Type:      api.ValueType_JSON_ARRAY,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}
 	case *json.Primitive:
-		switch elem.ValueType() {
-		case json.Boolean:
-			return &api.JSONElement{
-				Type:      api.ValueType_BOOLEAN,
-				CreatedAt: toTimeTicket(elem.CreatedAt()),
-				Value:     elem.Bytes(),
-			}
-		case json.Integer:
-			return &api.JSONElement{
-				Type:      api.ValueType_INTEGER,
-				CreatedAt: toTimeTicket(elem.CreatedAt()),
-				Value:     elem.Bytes(),
-			}
-		case json.Long:
-			return &api.JSONElement{
-				Type:      api.ValueType_LONG,
-				CreatedAt: toTimeTicket(elem.CreatedAt()),
-				Value:     elem.Bytes(),
-			}
-		case json.Double:
-			return &api.JSONElement{
-				Type:      api.ValueType_DOUBLE,
-				CreatedAt: toTimeTicket(elem.CreatedAt()),
-				Value:     elem.Bytes(),
-			}
-		case json.String:
-			return &api.JSONElement{
-				Type:      api.ValueType_STRING,
-				CreatedAt: toTimeTicket(elem.CreatedAt()),
-				Value:     elem.Bytes(),
-			}
-		case json.Bytes:
-			return &api.JSONElement{
-				Type:      api.ValueType_BYTES,
-				CreatedAt: toTimeTicket(elem.CreatedAt()),
-				Value:     elem.Bytes(),
-			}
-		case json.Date:
-			return &api.JSONElement{
-				Type:      api.ValueType_DATE,
-				CreatedAt: toTimeTicket(elem.CreatedAt()),
-				Value:     elem.Bytes(),
-			}
+		return &api.JSONElementSimple{
+			Type:      toValueType(elem.ValueType()),
+			CreatedAt: toTimeTicket(elem.CreatedAt()),
+			Value:     elem.Bytes(),
 		}
 	case *json.Text:
-		return &api.JSONElement{
+		return &api.JSONElementSimple{
 			Type:      api.ValueType_TEXT,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}
@@ -226,9 +187,34 @@ func toCreatedAtMapByActor(
 }
 
 func toTimeTicket(ticket *time.Ticket) *api.TimeTicket {
+	if ticket == nil {
+		return nil
+	}
+
 	return &api.TimeTicket{
 		Lamport:   ticket.Lamport(),
 		Delimiter: ticket.Delimiter(),
 		ActorId:   ticket.ActorIDHex(),
 	}
+}
+
+func toValueType(valueType json.ValueType) api.ValueType {
+	switch valueType {
+	case json.Boolean:
+		return api.ValueType_BOOLEAN
+	case json.Integer:
+		return api.ValueType_INTEGER
+	case json.Long:
+		return api.ValueType_LONG
+	case json.Double:
+		return api.ValueType_DOUBLE
+	case json.String:
+		return api.ValueType_STRING
+	case json.Bytes:
+		return api.ValueType_BYTES
+	case json.Date:
+		return api.ValueType_DATE
+	}
+
+	panic("unsupported value type")
 }

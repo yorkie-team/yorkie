@@ -180,8 +180,8 @@ func (p *Primitive) Marshal() string {
 	panic("unsupported type")
 }
 
-// Deepcopy copies itself deeply.
-func (p *Primitive) Deepcopy() Element {
+// DeepCopy copies itself deeply.
+func (p *Primitive) DeepCopy() Element {
 	return p
 }
 

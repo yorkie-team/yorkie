@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
+
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 // DocInfo is a structure representing information of the document.
@@ -37,4 +39,14 @@ type DocInfo struct {
 func (info *DocInfo) IncreaseServerSeq() uint64 {
 	info.ServerSeq++
 	return info.ServerSeq
+}
+
+// GetKey creates Key instance of this DocInfo.
+func (info *DocInfo) GetKey() (*key.Key, error) {
+	docKey, err := key.FromBSONKey(info.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	return docKey, nil
 }

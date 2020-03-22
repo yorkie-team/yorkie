@@ -47,6 +47,15 @@ var (
 		},
 		Options: options.Index().SetUnique(true),
 	}}
+
+	ColSnapshots = "snapshots"
+	idxSnapshots = []mongo.IndexModel{{
+		Keys: bsonx.Doc{
+			{Key: "doc_id", Value: bsonx.Int32(1)},
+			{Key: "server_seq", Value: bsonx.Int32(1)},
+		},
+		Options: options.Index().SetUnique(true),
+	}}
 )
 
 func ensureIndexes(ctx context.Context, db *mongo.Database) error {
@@ -69,6 +78,14 @@ func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 	if _, err := db.Collection(ColChanges).Indexes().CreateMany(
 		ctx,
 		idxChanges,
+	); err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	if _, err := db.Collection(ColSnapshots).Indexes().CreateMany(
+		ctx,
+		idxSnapshots,
 	); err != nil {
 		log.Logger.Error(err)
 		return err

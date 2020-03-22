@@ -1,3 +1,19 @@
+/*
+ * Copyright 2020 The Yorkie Authors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 syntax = "proto3";
 
 package api;
@@ -83,12 +99,8 @@ message PushPullResponse {
 }
 
 /////////////////////////////////////////
-// Messages for Model                  //
+// Messages for ChangePack             //
 /////////////////////////////////////////
-message DocumentKey {
-    string collection = 1;
-    string document = 2;
-}
 
 message ChangePack {
     DocumentKey document_key = 1;
@@ -96,9 +108,10 @@ message ChangePack {
     repeated Change changes = 3;
 }
 
-message Checkpoint {
-    uint64 server_seq = 1 [jstype = JS_STRING];
-    uint32 client_seq = 2;
+message Change {
+    ChangeID id = 1;
+    string message = 2;
+    repeated Operation operations = 3;
 }
 
 message ChangeID {
@@ -107,49 +120,15 @@ message ChangeID {
     string actor_id = 3;
 }
 
-message TimeTicket {
-    uint64 lamport = 1 [jstype = JS_STRING];
-    uint32 delimiter = 2;
-    string actor_id = 3;
-}
-
-enum ValueType {
-    NULL = 0;
-    BOOLEAN = 1;
-    INTEGER = 2;
-    LONG = 3;
-    DOUBLE = 4;
-    STRING = 5;
-    BYTES = 6;
-    DATE = 7;
-    JSON_OBJECT = 8;
-    JSON_ARRAY = 9;
-    TEXT = 10;
-}
-
-message JSONElement {
-    TimeTicket created_at = 1;
-    TimeTicket updated_at = 2;
-    TimeTicket deleted_at = 3;
-    ValueType type = 4;
-    bytes value = 5;
-}
-
-message TextNodePos {
-    TimeTicket created_at = 1;
-    int32 offset = 2;
-    int32 relative_offset = 3;
-}
-
 message Operation {
     message Set {
         string key = 1;
-        JSONElement value = 2;
+        JSONElementSimple value = 2;
         TimeTicket parent_created_at = 3;
         TimeTicket executed_at = 4;
     }
     message Add {
-        JSONElement value = 1;
+        JSONElementSimple value = 1;
         TimeTicket parent_created_at = 2;
         TimeTicket prev_created_at = 3;
         TimeTicket executed_at = 4;
@@ -183,8 +162,111 @@ message Operation {
     }
 }
 
-message Change {
-    ChangeID id = 1;
-    string message = 2;
-    repeated Operation operations = 3;
+message JSONElementSimple {
+    TimeTicket created_at = 1;
+    TimeTicket updated_at = 2;
+    TimeTicket deleted_at = 3;
+    ValueType type = 4;
+    bytes value = 5;
+}
+
+/////////////////////////////////////////
+// Messages for JSON                   //
+/////////////////////////////////////////
+
+message JSONElement {
+    message Object {
+        repeated RHTNode nodes = 1;
+        TimeTicket created_at = 2;
+        TimeTicket updated_at = 3;
+        TimeTicket deleted_at = 4;
+    }
+    message Array {
+        repeated RGANode nodes = 1;
+        TimeTicket created_at = 2;
+        TimeTicket updated_at = 3;
+        TimeTicket deleted_at = 4;
+    }
+    message Primitive {
+        ValueType type = 1;
+        bytes value = 2;
+        TimeTicket created_at = 3;
+        TimeTicket updated_at = 4;
+        TimeTicket deleted_at = 5;
+    }
+    message Text {
+        repeated TextNode nodes = 1;
+        TimeTicket created_at = 2;
+        TimeTicket updated_at = 3;
+        TimeTicket deleted_at = 4;
+    }
+
+    oneof Body {
+        Object object = 1;
+        Array array = 2;
+        Primitive primitive = 3;
+        Text text = 4;
+    }
+}
+
+message RHTNode {
+    string key = 1;
+    JSONElement element = 2;
+}
+
+message RGANode {
+    RGANode next = 1;
+    JSONElement element = 2;
+}
+
+message TextNode {
+    TextNodeID id = 1;
+    string value = 2;
+    TimeTicket deleted_at = 3;
+    TextNodeID ins_prev_id = 4;
+}
+
+message TextNodeID {
+    TimeTicket created_at = 1;
+    int32 offset = 2;
+}
+
+/////////////////////////////////////////
+// Messages for Common                 //
+/////////////////////////////////////////
+
+message DocumentKey {
+    string collection = 1;
+    string document = 2;
+}
+
+message Checkpoint {
+    uint64 server_seq = 1 [jstype = JS_STRING];
+    uint32 client_seq = 2;
+}
+
+message TextNodePos {
+    TimeTicket created_at = 1;
+    int32 offset = 2;
+    int32 relative_offset = 3;
+}
+
+message TimeTicket {
+    uint64 lamport = 1 [jstype = JS_STRING];
+    uint32 delimiter = 2;
+    string actor_id = 3;
+}
+
+enum ValueType {
+    NULL = 0;
+    BOOLEAN = 1;
+    INTEGER = 2;
+    LONG = 3;
+    DOUBLE = 4;
+    STRING = 5;
+    BYTES = 6;
+    DATE = 7;
+    JSON_OBJECT = 8;
+    JSON_ARRAY = 9;
+    TEXT = 10;
 }

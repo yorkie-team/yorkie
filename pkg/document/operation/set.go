@@ -55,7 +55,7 @@ func (o *Set) Execute(root *json.Root) error {
 		return err
 	}
 
-	value := o.value.Deepcopy()
+	value := o.value.DeepCopy()
 	obj.Set(o.key, value)
 	root.RegisterElement(value)
 	return nil

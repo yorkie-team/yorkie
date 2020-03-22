@@ -124,7 +124,7 @@ type TextNode struct {
 	insNext *TextNode
 }
 
-func newTextNode(id *TextNodeID, value string) *TextNode {
+func NewTextNode(id *TextNodeID, value string) *TextNode {
 	node := &TextNode{
 		id:    id,
 		value: value,
@@ -157,6 +157,10 @@ func (t *TextNode) Len() int {
 	return t.contentLen()
 }
 
+func (t *TextNode) DeletedAt() *time.Ticket {
+	return t.deletedAt
+}
+
 func (t *TextNode) String() string {
 	return t.value
 }
@@ -184,7 +188,7 @@ func (t *TextNode) setPrev(node *TextNode) {
 }
 
 func (t *TextNode) split(offset int) *TextNode {
-	return newTextNode(
+	return NewTextNode(
 		t.id.split(offset),
 		t.splitContent(offset),
 	)
@@ -207,7 +211,7 @@ func (t *TextNode) annotatedString() string {
 	return fmt.Sprintf("%s %s", t.id.AnnotatedString(), t.value)
 }
 
-func (t *TextNode) delete(editedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
+func (t *TextNode) Delete(editedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
 	if !t.createdAt().After(latestCreatedAt) &&
 		(t.deletedAt == nil || editedAt.After(t.deletedAt)) {
 		t.deletedAt = editedAt
@@ -223,7 +227,7 @@ type RGATreeSplit struct {
 }
 
 func NewRGATreeSplit() *RGATreeSplit {
-	initialHead := newTextNode(initialTextNodeID, "")
+	initialHead := NewTextNode(initialTextNodeID, "")
 	treeByIndex := splay.NewTree()
 	treeByID := llrb.NewTree()
 
@@ -368,7 +372,7 @@ func (s *RGATreeSplit) edit(
 	toLeft, toRight := s.findTextNodeWithSplit(to, editedAt)
 	fromLeft, fromRight := s.findTextNodeWithSplit(from, editedAt)
 
-	// 02. delete between from and to
+	// 02. Delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
 	latestCreatedAtMap := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
 
@@ -382,7 +386,7 @@ func (s *RGATreeSplit) edit(
 
 	// 03. insert a new node
 	if content != "" {
-		inserted := s.InsertAfter(fromLeft, newTextNode(NewTextNodeID(editedAt, 0), content))
+		inserted := s.InsertAfter(fromLeft, NewTextNode(NewTextNodeID(editedAt, 0), content))
 		caretPos = NewTextNodePos(inserted.id, inserted.contentLen())
 	}
 
@@ -421,7 +425,7 @@ func (s *RGATreeSplit) deleteNodes(
 			}
 		}
 
-		if node.delete(editedAt, latestCreatedAt) {
+		if node.Delete(editedAt, latestCreatedAt) {
 			s.treeByIndex.Splay(node.indexNode)
 
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
@@ -525,7 +529,8 @@ func (t *Text) Marshal() string {
 	return fmt.Sprintf("\"%s\"", t.rgaTreeSplit.marshal())
 }
 
-func (t *Text) Deepcopy() Element {
+// DeepCopy copies itself deeply.
+func (t *Text) DeepCopy() Element {
 	rgaTreeSplit := NewRGATreeSplit()
 
 	current := rgaTreeSplit.InitialHead()

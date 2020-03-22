@@ -191,7 +191,7 @@ func (p *ObjectProxy) setInternal(
 	p.context.Push(operation.NewSet(
 		p.CreatedAt(),
 		k,
-		value.Deepcopy(),
+		value.DeepCopy(),
 		ticket,
 	))
 

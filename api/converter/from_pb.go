@@ -168,6 +168,10 @@ func fromTextNodePos(pbPos *api.TextNodePos) *json.TextNodePos {
 }
 
 func fromTimeTicket(pbTicket *api.TimeTicket) *time.Ticket {
+	if pbTicket == nil {
+		return nil
+	}
+
 	return time.NewTicket(
 		pbTicket.Lamport,
 		pbTicket.Delimiter,
@@ -175,8 +179,8 @@ func fromTimeTicket(pbTicket *api.TimeTicket) *time.Ticket {
 	)
 }
 
-func fromElement(pbElement *api.JSONElement) json.Element {
-	switch pbElement.Type {
+func fromElement(pbElement *api.JSONElementSimple) json.Element {
+	switch pbType := pbElement.Type; pbType {
 	case api.ValueType_JSON_OBJECT:
 		return json.NewObject(
 			json.NewRHT(),
@@ -188,38 +192,20 @@ func fromElement(pbElement *api.JSONElement) json.Element {
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_BOOLEAN:
-		return json.NewPrimitive(
-			json.ValueFromBytes(json.Boolean, pbElement.Value),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+		fallthrough
 	case api.ValueType_INTEGER:
-		return json.NewPrimitive(
-			json.ValueFromBytes(json.Integer, pbElement.Value),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+		fallthrough
 	case api.ValueType_LONG:
-		return json.NewPrimitive(
-			json.ValueFromBytes(json.Long, pbElement.Value),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+		fallthrough
 	case api.ValueType_DOUBLE:
-		return json.NewPrimitive(
-			json.ValueFromBytes(json.Double, pbElement.Value),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+		fallthrough
 	case api.ValueType_STRING:
-		return json.NewPrimitive(
-			json.ValueFromBytes(json.String, pbElement.Value),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+		fallthrough
 	case api.ValueType_BYTES:
-		return json.NewPrimitive(
-			json.ValueFromBytes(json.Bytes, pbElement.Value),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+		fallthrough
 	case api.ValueType_DATE:
 		return json.NewPrimitive(
-			json.ValueFromBytes(json.Date, pbElement.Value),
+			json.ValueFromBytes(fromValueType(pbType), pbElement.Value),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_TEXT:
@@ -230,4 +216,25 @@ func fromElement(pbElement *api.JSONElement) json.Element {
 	}
 
 	panic("fail to decode element")
+}
+
+func fromValueType(valueType api.ValueType) json.ValueType {
+	switch valueType {
+	case api.ValueType_BOOLEAN:
+		return json.Boolean
+	case api.ValueType_INTEGER:
+		return json.Integer
+	case api.ValueType_LONG:
+		return json.Long
+	case api.ValueType_DOUBLE:
+		return json.Double
+	case api.ValueType_STRING:
+		return json.String
+	case api.ValueType_BYTES:
+		return json.Bytes
+	case api.ValueType_DATE:
+		return json.Date
+	}
+
+	panic("fail to decode value type")
 }
