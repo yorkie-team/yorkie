@@ -47,6 +47,14 @@ func (n *RHTNode) isDeleted() bool {
 	return n.elem.DeletedAt() != nil
 }
 
+func (n *RHTNode) Key() string {
+	return n.key
+}
+
+func (n *RHTNode) Element() Element {
+	return n.elem
+}
+
 // RHT is replicated hash table.
 type RHT struct {
 	nodeQueueMapByKey  map[string]*pq.PriorityQueue
@@ -123,7 +131,6 @@ func (rht *RHT) Elements() map[string]Element {
 	for _, queue := range rht.nodeQueueMapByKey {
 		if node := queue.Peek().(*RHTNode); !node.isDeleted() {
 			members[node.key] = node.elem
-
 		}
 	}
 
@@ -137,7 +144,6 @@ func (rht *RHT) AllNodes() []*RHTNode {
 	for _, queue := range rht.nodeQueueMapByKey {
 		for _, value := range queue.Values() {
 			nodes = append(nodes, value.(*RHTNode))
-
 		}
 	}
 

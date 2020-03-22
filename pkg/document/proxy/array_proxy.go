@@ -129,7 +129,7 @@ func (p *ArrayProxy) addInternal(
 	p.context.Push(operation.NewAdd(
 		p.Array.CreatedAt(),
 		p.Array.LastCreatedAt(),
-		value.Deepcopy(),
+		value.DeepCopy(),
 		ticket,
 	))
 

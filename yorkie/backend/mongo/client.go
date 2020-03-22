@@ -27,6 +27,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
+	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/types"
@@ -38,6 +40,9 @@ var (
 
 	// ErrDocumentNotFound is returned when the document could not be found.
 	ErrDocumentNotFound = errors.New("fail to find the document")
+
+	// ErrSnapshotNotFound is returned when the snapshot could not be found.
+	ErrSnapshotNotFound = errors.New("fail to find the snapshot")
 )
 
 // Config is the configuration for creating a Client instance.
@@ -167,6 +172,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.
 			}
 
 			log.Logger.Error(err)
+			return err
 		}
 		return nil
 	}); err != nil {
@@ -271,6 +277,10 @@ func (c *Client) FindDocInfoByKey(
 			if result.Err() == mongo.ErrNoDocuments {
 				return ErrDocumentNotFound
 			}
+			if result.Err() != nil {
+				log.Logger.Error(result.Err())
+				return result.Err()
+			}
 		}
 
 		if err := result.Decode(&docInfo); err != nil {
@@ -313,6 +323,31 @@ func (c *Client) CreateChangeInfos(
 
 		_, err := col.BulkWrite(ctx, modelChanges, options.BulkWrite().SetOrdered(true))
 		if err != nil {
+			log.Logger.Error(err)
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (c *Client) CreateSnapshotInfo(
+	ctx context.Context,
+	docID primitive.ObjectID,
+	doc *document.Document,
+) error {
+	snapshot, err := converter.ObjectToBytes(doc.RootObject())
+	if err != nil {
+		return err
+	}
+
+	return c.withCollection(ColSnapshots, func(col *mongo.Collection) error {
+		if _, err := col.InsertOne(ctx, bson.M{
+			"doc_id":     docID,
+			"server_seq": doc.Checkpoint().ServerSeq,
+			"snapshot":   snapshot,
+			"created_at": time.Now(),
+		}); err != nil {
 			log.Logger.Error(err)
 			return err
 		}
@@ -408,9 +443,32 @@ func (c *Client) withCollection(
 	callback func(collection *mongo.Collection) error,
 ) error {
 	col := c.client.Database(c.config.YorkieDatabase).Collection(collection)
-	if err := callback(col); err != nil {
-		return err
+	return callback(col)
+}
+
+func (c *Client) FindLastSnapshotInfo(
+	ctx context.Context,
+	docID primitive.ObjectID,
+) (*types.SnapshotInfo, error) {
+	snapshotInfo := types.SnapshotInfo{}
+
+	if err := c.withCollection(ColSnapshots, func(col *mongo.Collection) error {
+		result := col.FindOne(ctx, bson.M{
+			"doc_id": docID,
+		}, options.FindOne().SetSort(bson.M{
+			"server_seq": 1,
+		}))
+		if result.Err() == mongo.ErrNoDocuments {
+			return nil
+		}
+		if result.Err() != nil {
+			log.Logger.Error(result.Err())
+			return result.Err()
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
-	return nil
+	return &snapshotInfo, nil
 }

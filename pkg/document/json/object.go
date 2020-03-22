@@ -110,12 +110,12 @@ func (o *Object) Marshal() string {
 	return sb.String()
 }
 
-// Deepcopy copies itself deeply.
-func (o *Object) Deepcopy() Element {
+// DeepCopy copies itself deeply.
+func (o *Object) DeepCopy() Element {
 	members := NewRHT()
 
 	for _, node := range o.memberNodes.AllNodes() {
-		members.Set(node.key, node.elem.Deepcopy())
+		members.Set(node.key, node.elem.DeepCopy())
 	}
 
 	obj := NewObject(members, o.createdAt)
@@ -136,4 +136,9 @@ func (o *Object) DeletedAt() *time.Ticket {
 // Delete deletes this object.
 func (o *Object) Delete(deletedAt *time.Ticket) {
 	o.deletedAt = deletedAt
+}
+
+// RHTNodes returns the RHT nodes.
+func (o *Object) RHTNodes() []*RHTNode {
+	return o.memberNodes.AllNodes()
 }

@@ -55,7 +55,7 @@ func (o *Add) Execute(root *json.Root) error {
 		return err
 	}
 
-	value := o.value.Deepcopy()
+	value := o.value.DeepCopy()
 	obj.InsertAfter(o.prevCreatedAt, value)
 	root.RegisterElement(value)
 	return nil

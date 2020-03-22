@@ -529,6 +529,7 @@ func TestClientAndDocument(t *testing.T) {
 		rch := c1.Watch(ctx, doc1)
 		go func() {
 			defer wg.Done()
+
 			resp := <-rch
 			if resp.Err == io.EOF {
 				return

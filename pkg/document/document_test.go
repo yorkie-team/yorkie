@@ -199,4 +199,5 @@ func TestDocument(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, `{"k1":[1,2,3,4,5]}`, doc.Marshal())
 	})
+
 }

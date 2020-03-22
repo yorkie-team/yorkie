@@ -29,10 +29,6 @@ type RGANode struct {
 	elem Element
 }
 
-func (n *RGANode) isDeleted() bool {
-	return n.elem.DeletedAt() != nil
-}
-
 func newRGANode(elem Element) *RGANode {
 	return &RGANode{
 		prev: nil,
@@ -53,6 +49,14 @@ func newNodeAfter(prev *RGANode, elem Element) *RGANode {
 	}
 
 	return prev.next
+}
+
+func (n *RGANode) isDeleted() bool {
+	return n.elem.DeletedAt() != nil
+}
+
+func (n *RGANode) Element() Element {
+	return n.elem
 }
 
 // RGA is replicated growable array.

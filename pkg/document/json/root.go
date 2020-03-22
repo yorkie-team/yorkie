@@ -68,6 +68,7 @@ func (r *Root) RegisterElement(elem Element) {
 	r.elementMapByCreatedAt[elem.CreatedAt().Key()] = elem
 }
 
-func (r *Root) Deepcopy() *Root {
-	return NewRoot(r.object.Deepcopy().(*Object))
+// DeepCopy copies itself deeply.
+func (r *Root) DeepCopy() *Root {
+	return NewRoot(r.object.DeepCopy().(*Object))
 }
