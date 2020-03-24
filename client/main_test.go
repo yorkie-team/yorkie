@@ -14,40 +14,38 @@
  * limitations under the License.
  */
 
-package testhelper
+package client_test
 
 import (
-	"fmt"
 	"log"
-	"time"
+	"os"
+	"testing"
 
+	"github.com/yorkie-team/yorkie/testhelper"
 	"github.com/yorkie-team/yorkie/yorkie"
 )
 
-var testStartedAt int64
+var testYorkie *yorkie.Yorkie
 
-const (
-	TestPort               = 1101
-	TestMongoConnectionURI = "mongodb://localhost:27017"
-)
-
-func init() {
-	now := time.Now()
-	testStartedAt = now.Unix()
+func TestMain(m *testing.M) {
+	setup()
+	code := m.Run()
+	teardown()
+	os.Exit(code)
 }
 
-// TestDBName returns the name of test database with timestamp.
-// timestamp is set only once on first call.
-func TestDBName() string {
-	return fmt.Sprintf("test-%s-%d", yorkie.DefaultYorkieDatabase, testStartedAt)
-}
-
-// TestYorkie is return Yorkie instance for testing.
-func TestYorkie() *yorkie.Yorkie {
-	conf := yorkie.NewConfigWithPortAndDBName(TestPort, TestDBName())
-	y, err := yorkie.New(conf)
-	if err != nil {
+func setup() {
+	y := testhelper.TestYorkie()
+	if err := y.Start(); err != nil {
 		log.Fatal(err)
 	}
-	return y
+	testYorkie = y
+}
+
+func teardown() {
+	if testYorkie != nil {
+		if err := testYorkie.Shutdown(true); err != nil {
+			log.Println(err)
+		}
+	}
 }
