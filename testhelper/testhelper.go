@@ -24,15 +24,22 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie"
 )
 
+var testStartedAt int64
+
 const (
 	TestPort               = 1101
 	TestMongoConnectionURI = "mongodb://localhost:27017"
 )
 
-// TestDBName returns the name of test database with timestamp.
-func TestDBName() string {
+func init() {
 	now := time.Now()
-	return fmt.Sprintf("test-%s-%d", yorkie.DefaultYorkieDatabase, now.Unix())
+	testStartedAt = now.Unix()
+}
+
+// TestDBName returns the name of test database with timestamp.
+// timestamp is set only once on first call.
+func TestDBName() string {
+	return fmt.Sprintf("test-%s-%d", yorkie.DefaultYorkieDatabase, testStartedAt)
 }
 
 // TestYorkie is return Yorkie instance for testing.
