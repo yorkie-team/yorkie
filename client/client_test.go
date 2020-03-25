@@ -525,10 +525,10 @@ func TestClientAndDocument(t *testing.T) {
 
 		wg := sync.WaitGroup{}
 		wg.Add(1)
+
+		rch := c1.Watch(ctx, doc1)
 		go func() {
 			defer wg.Done()
-			rch := c1.Watch(ctx, doc1)
-
 			resp := <-rch
 			if resp.Err == io.EOF {
 				return
@@ -538,8 +538,6 @@ func TestClientAndDocument(t *testing.T) {
 			err := c1.Sync(ctx, resp.Keys...)
 			assert.Nil(t, err)
 		}()
-
-		time.Sleep(100 * time.Millisecond)
 
 		err = doc2.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("key", "value")
