@@ -99,9 +99,7 @@ func TestClient(t *testing.T) {
 
 	t.Run("activate/deactivate test", func(t *testing.T) {
 		cli, err := client.NewClient(testYorkie.RPCAddr())
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.Nil(t, err)
 
 		defer func() {
 			err := cli.Close()

@@ -215,18 +215,14 @@ func withRPCServer(
 		ConnectionTimeoutSec: 5,
 		PingTimeoutSec:       5,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Nil(t, err)
 	defer func() {
 		err := be.Close()
 		assert.Nil(t, err)
 	}()
 
 	rpcServer, err := rpc.NewRPCServer(testhelper.TestPort, be)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Nil(t, err)
 
 	defer func() {
 		rpcServer.Shutdown(true)
