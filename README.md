@@ -39,7 +39,7 @@ Yorkie is a framework for building collaborative editing applications.
 
 For now, we didn't deploy binary yet. So you should [compile Yorkie yourself](#developing-yorkie).
 
-Yorkie uses MongoDB to store it's data. To start MongoDB, type `docker-compose up`.
+Yorkie uses MongoDB to store it's data. To start MongoDB, type `docker-compose up -d`.
 
 Next, let's start a Yorkie agent. Agent runs until they're told to quit and handle the communication of maintenance tasks of Agent. and start the agent:
 
