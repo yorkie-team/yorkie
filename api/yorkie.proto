@@ -105,7 +105,8 @@ message PushPullResponse {
 message ChangePack {
     DocumentKey document_key = 1;
     Checkpoint checkpoint = 2;
-    repeated Change changes = 3;
+    bytes snapshot = 3;
+    repeated Change changes = 4;
 }
 
 message Change {

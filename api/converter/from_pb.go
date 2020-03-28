@@ -51,6 +51,7 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		DocumentKey: fromDocumentKey(pbPack.DocumentKey),
 		Checkpoint:  fromCheckpoint(pbPack.Checkpoint),
 		Changes:     fromChanges(pbPack.Changes),
+		Snapshot:    pbPack.Snapshot,
 	}, nil
 }
 

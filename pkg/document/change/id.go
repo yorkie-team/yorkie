@@ -71,9 +71,9 @@ func (id *ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 
 // SyncLamport syncs lamport timestamp with the given ID.
 //  - receiving: https://en.wikipedia.org/wiki/Lamport_timestamps#Algorithm
-func (id *ID) SyncLamport(other *ID) *ID {
-	if id.lamport < other.lamport {
-		return NewID(id.clientSeq, other.lamport, id.actor)
+func (id *ID) SyncLamport(otherLamport uint64) *ID {
+	if id.lamport < otherLamport {
+		return NewID(id.clientSeq, otherLamport, id.actor)
 	}
 
 	return NewID(id.clientSeq, id.lamport+1, id.actor)

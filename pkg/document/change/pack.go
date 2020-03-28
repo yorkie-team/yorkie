@@ -26,6 +26,7 @@ type Pack struct {
 	DocumentKey *key.Key
 	Checkpoint  *checkpoint.Checkpoint
 	Changes     []*Change
+	Snapshot    []byte
 }
 
 // NewPack creates a new instance of Pack.
@@ -33,11 +34,13 @@ func NewPack(
 	key *key.Key,
 	cp *checkpoint.Checkpoint,
 	changes []*Change,
+	snapshot []byte,
 ) *Pack {
 	return &Pack{
 		DocumentKey: key,
 		Checkpoint:  cp,
 		Changes:     changes,
+		Snapshot:    snapshot,
 	}
 }
 

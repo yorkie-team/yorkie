@@ -18,16 +18,24 @@ package packs
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 	"github.com/yorkie-team/yorkie/yorkie/types"
+)
+
+const (
+	// SnapshotThreshold is the threshold that determines if changes should be
+	// sent with snapshot when the number of changes is greater than this value.
+	// TODO extract this with configuration.
+	SnapshotThreshold = 500
 )
 
 func PushPull(
@@ -35,7 +43,7 @@ func PushPull(
 	be *backend.Backend,
 	clientInfo *types.ClientInfo,
 	docInfo *types.DocInfo,
-	pack *change.Pack,
+	reqPack *change.Pack,
 ) (*change.Pack, error) {
 	// TODO Changes may be reordered or missing during communication on the network.
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
@@ -47,18 +55,18 @@ func PushPull(
 	initialServerSeq := docInfo.ServerSeq
 
 	// 01. push changes.
-	pushedCP, pushedChanges, err := pushChanges(clientInfo, docInfo, pack, initialServerSeq)
+	pushedCP, pushedChanges, err := pushChanges(clientInfo, docInfo, reqPack, initialServerSeq)
 	if err != nil {
 		return nil, err
 	}
 
-	// 02. pull changes.
-	pulledCP, pulledChanges, err := pullChanges(ctx, be, clientInfo, docInfo, pack, pushedCP, initialServerSeq)
+	// 02. pull change pack.
+	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, pushedCP, initialServerSeq)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := clientInfo.UpdateCheckpoint(docInfo.ID, pulledCP); err != nil {
+	if err := clientInfo.UpdateCheckpoint(docInfo.ID, respPack.Checkpoint); err != nil {
 		return nil, err
 	}
 
@@ -75,37 +83,36 @@ func PushPull(
 		return nil, err
 	}
 
-	// 04. publish document change event.
-	if pack.HasChanges() {
+	// 04. publish document change event then store snapshot asynchronously.
+	if reqPack.HasChanges() {
 		be.Publish(
 			time.ActorIDFromHex(clientInfo.ID.Hex()),
-			pack.DocumentKey.BSONKey(),
+			reqPack.DocumentKey.BSONKey(),
 			pubsub.Event{
 				Type:  pubsub.DocumentChangeEvent,
-				Value: pack.DocumentKey.BSONKey(),
+				Value: reqPack.DocumentKey.BSONKey(),
 			},
 		)
-	}
 
-	// 05. save snapshot
-	if pack.HasChanges() {
 		go func() {
-			if err := handleSnapshot(context.Background(), be, docInfo); err != nil {
+			key := fmt.Sprintf("snapshot-%s", clientInfo.Key)
+			if err := be.Lock(key); err != nil {
+				log.Logger.Error(err)
+			}
+			defer func() {
+				if err := be.Unlock(key); err != nil {
+					log.Logger.Error(err)
+				}
+			}()
+
+			// TODO We need to increase interval of storing snapshot.
+			if err := storeSnapshot(context.Background(), be, docInfo); err != nil {
 				log.Logger.Error(err)
 			}
 		}()
 	}
 
-	docKey, err := docInfo.GetKey()
-	if err != nil {
-		return nil, err
-	}
-
-	return change.NewPack(
-		docKey,
-		pulledCP,
-		pulledChanges,
-	), nil
+	return respPack, nil
 }
 
 // pushChanges returns the changes excluding already saved in MongoDB.
@@ -145,6 +152,35 @@ func pushChanges(
 	}
 
 	return cp, pushedChanges, nil
+}
+
+func pullPack(
+	ctx context.Context,
+	be *backend.Backend,
+	clientInfo *types.ClientInfo,
+	docInfo *types.DocInfo,
+	requestPack *change.Pack,
+	pushedCP *checkpoint.Checkpoint,
+	initialServerSeq uint64,
+) (*change.Pack, error) {
+	docKey, err := docInfo.GetKey()
+	if err != nil {
+		return nil, err
+	}
+
+	if initialServerSeq-requestPack.Checkpoint.ServerSeq < SnapshotThreshold {
+		pulledCP, pulledChanges, err := pullChanges(ctx, be, clientInfo, docInfo, requestPack, pushedCP, initialServerSeq)
+		if err != nil {
+			return nil, err
+		}
+		return change.NewPack(docKey, pulledCP, pulledChanges, nil), err
+	}
+
+	pulledCP, snapshot, err := pullSnapshot(ctx, be, clientInfo, docInfo, requestPack, pushedCP, initialServerSeq)
+	if err != nil {
+		return nil, err
+	}
+	return change.NewPack(docKey, pulledCP, nil, snapshot), err
 }
 
 func pullChanges(
@@ -192,22 +228,104 @@ func pullChanges(
 	return pulledCP, pulledChanges, nil
 }
 
-func handleSnapshot(
+func pullSnapshot(
+	ctx context.Context,
+	be *backend.Backend,
+	clientInfo *types.ClientInfo,
+	docInfo *types.DocInfo,
+	pack *change.Pack,
+	pushedCP *checkpoint.Checkpoint,
+	initialServerSeq uint64,
+) (*checkpoint.Checkpoint, []byte, error) {
+	snapshotInfo, err := be.Mongo.FindLastSnapshotInfo(ctx, docInfo.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if snapshotInfo.ServerSeq >= initialServerSeq {
+		pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
+		log.Logger.Infof(
+			"PULL: '%s' pulls snapshot without changes from '%s', cp: %s",
+			clientInfo.ID.Hex(),
+			docInfo.Key,
+			pulledCP.String(),
+		)
+		return pushedCP.NextServerSeq(docInfo.ServerSeq), snapshotInfo.Snapshot, nil
+	}
+
+	docKey, err := docInfo.GetKey()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	doc, err := document.FromSnapshot(
+		docKey.Collection,
+		docKey.Document,
+		snapshotInfo.ServerSeq,
+		snapshotInfo.Snapshot,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	changes, err := be.Mongo.FindChangeInfosBetweenServerSeqs(
+		ctx,
+		docInfo.ID,
+		pack.Checkpoint.ServerSeq+1,
+		initialServerSeq,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := doc.ApplyChangePack(change.NewPack(
+		docKey,
+		checkpoint.Initial.NextServerSeq(docInfo.ServerSeq),
+		changes,
+		nil,
+	)); err != nil {
+		return nil, nil, err
+	}
+
+	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
+
+	log.Logger.Infof(
+		"PULL: '%s' pulls snapshot with changes(%d~%d) from '%s', cp: %s",
+		clientInfo.ID.Hex(),
+		pack.Checkpoint.ServerSeq+1,
+		initialServerSeq,
+		docInfo.Key,
+		pulledCP.String(),
+	)
+
+	snapshot, err := converter.ObjectToBytes(doc.RootObject())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return pulledCP, snapshot, nil
+}
+
+func storeSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *types.DocInfo,
 ) error {
 	// 01. get the last snapshot of this docInfo
 	snapshotInfo, err := be.Mongo.FindLastSnapshotInfo(ctx, docInfo.ID)
-	if err != nil && err != mongo.ErrSnapshotNotFound {
+	if err != nil {
 		return err
+	}
+
+	if snapshotInfo.ServerSeq >= docInfo.ServerSeq {
+		return nil
 	}
 
 	// 02. retrieve the changes between last snapshot and current docInfo
 	changes, err := be.Mongo.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
-		snapshotInfo.ServerSeq,
+		snapshotInfo.ServerSeq+1,
 		docInfo.ServerSeq,
 	)
 	if err != nil {
@@ -234,9 +352,12 @@ func handleSnapshot(
 		docKey,
 		checkpoint.Initial.NextServerSeq(docInfo.ServerSeq),
 		changes,
+		nil,
 	)); err != nil {
 		return err
 	}
+
+	log.Logger.Infof("SNAP: '%s', serverSeq:%d", docInfo.Key, doc.Checkpoint().ServerSeq)
 
 	// 04. save the snapshot of the docInfo
 	if err := be.Mongo.CreateSnapshotInfo(ctx, docInfo.ID, doc); err != nil {

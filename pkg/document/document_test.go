@@ -99,6 +99,19 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, expected, doc.Marshal())
 	})
 
+	t.Run("object test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetString("k1", "v1")
+			assert.Equal(t, `{"k1":"v1"}`, root.Marshal())
+			root.SetString("k1", "v2")
+			assert.Equal(t, `{"k1":"v2"}`, root.Marshal())
+			return nil
+		})
+		assert.Nil(t, err)
+		assert.Equal(t, `{"k1":"v2"}`, doc.Marshal())
+	})
+
 	t.Run("array test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
 

@@ -35,57 +35,6 @@ const (
 	testCollection = "test-col"
 )
 
-func syncThenAssertEqual(
-	t *testing.T,
-	c1 *client.Client,
-	c2 *client.Client,
-	doc1 *document.Document,
-	doc2 *document.Document,
-) {
-	ctx := context.Background()
-	fmt.Printf(
-		"before doc1: %s\nbefore doc2: %s\n",
-		doc1.Marshal(),
-		doc2.Marshal(),
-	)
-
-	err := c1.Sync(ctx)
-	assert.Nil(t, err)
-
-	err = c2.Sync(ctx)
-	assert.Nil(t, err)
-
-	err = c1.Sync(ctx)
-	assert.Nil(t, err)
-
-	fmt.Printf(
-		"after doc1: %s\nafter doc2: %s\n",
-		doc1.Marshal(),
-		doc2.Marshal(),
-	)
-	assert.Equal(t, doc1.Marshal(), doc2.Marshal())
-}
-
-func getActivatedClients(t *testing.T, n int) (clients []*client.Client) {
-	for i := 0; i < n; i++ {
-		c, err := client.NewClient(testYorkie.RPCAddr())
-		assert.Nil(t, err)
-		err = c.Activate(context.Background())
-		assert.Nil(t, err)
-		clients = append(clients, c)
-	}
-	return
-}
-
-func cleanupClients(t *testing.T, clients []*client.Client) {
-	for _, c := range clients {
-		err := c.Deactivate(context.Background())
-		assert.Nil(t, err)
-		err = c.Close()
-		assert.Nil(t, err)
-	}
-}
-
 func TestClient(t *testing.T) {
 	t.Run("new/close test", func(t *testing.T) {
 		cli, err := client.NewClient(testYorkie.RPCAddr())
@@ -553,4 +502,95 @@ func TestClientAndDocument(t *testing.T) {
 
 		assert.Equal(t, doc1.Marshal(), doc2.Marshal())
 	})
+
+	t.Run("snapshot test", func(t *testing.T) {
+		ctx := context.Background()
+
+		doc1 := document.New(testCollection, t.Name())
+		err := c1.Attach(ctx, doc1)
+		assert.Nil(t, err)
+
+		doc2 := document.New(testCollection, t.Name())
+		err = c2.Attach(ctx, doc2)
+		assert.Nil(t, err)
+
+		// 01. Updates 700 changes over snapshot threshold.
+		for i := 0; i < 700; i++ {
+			err := doc1.Update(func(root *proxy.ObjectProxy) error {
+				root.SetInteger(fmt.Sprintf("%d", i), i)
+				return nil
+			})
+			assert.Nil(t, err)
+		}
+		err = c1.Sync(ctx)
+		assert.Nil(t, err)
+
+		// NOTE: waiting for snapshot.
+		time.Sleep(500 * time.Millisecond)
+
+		// 02. Makes local changes then pull a snapshot from the agent.
+		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+			root.SetString("key", "value")
+			return nil
+		})
+		assert.Nil(t, err)
+
+		err = c2.Sync(ctx)
+		assert.Nil(t, err)
+		assert.Equal(t, `"value"`, doc2.RootObject().Get("key").Marshal())
+
+		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+	})
 }
+
+func syncThenAssertEqual(
+	t *testing.T,
+	c1 *client.Client,
+	c2 *client.Client,
+	doc1 *document.Document,
+	doc2 *document.Document,
+) {
+	ctx := context.Background()
+	fmt.Printf(
+		"before doc1: %s\nbefore doc2: %s\n",
+		doc1.Marshal(),
+		doc2.Marshal(),
+	)
+
+	err := c1.Sync(ctx)
+	assert.Nil(t, err)
+
+	err = c2.Sync(ctx)
+	assert.Nil(t, err)
+
+	err = c1.Sync(ctx)
+	assert.Nil(t, err)
+
+	// fmt.Printf(
+	// 	"after doc1: %s\nafter doc2: %s\n",
+	// 	doc1.Marshal(),
+	// 	doc2.Marshal(),
+	// )
+	assert.Equal(t, doc1.Marshal(), doc2.Marshal())
+}
+
+func getActivatedClients(t *testing.T, n int) (clients []*client.Client) {
+	for i := 0; i < n; i++ {
+		c, err := client.NewClient(testYorkie.RPCAddr())
+		assert.Nil(t, err)
+		err = c.Activate(context.Background())
+		assert.Nil(t, err)
+		clients = append(clients, c)
+	}
+	return
+}
+
+func cleanupClients(t *testing.T, clients []*client.Client) {
+	for _, c := range clients {
+		err := c.Deactivate(context.Background())
+		assert.Nil(t, err)
+		err = c.Close()
+		assert.Nil(t, err)
+	}
+}
+

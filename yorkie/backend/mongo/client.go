@@ -40,9 +40,6 @@ var (
 
 	// ErrDocumentNotFound is returned when the document could not be found.
 	ErrDocumentNotFound = errors.New("fail to find the document")
-
-	// ErrSnapshotNotFound is returned when the snapshot could not be found.
-	ErrSnapshotNotFound = errors.New("fail to find the snapshot")
 )
 
 // Config is the configuration for creating a Client instance.
@@ -168,6 +165,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.
 
 		if err := res.Decode(&clientInfo); err != nil {
 			if err == mongo.ErrNoDocuments {
+				log.Logger.Error(err)
 				return ErrClientNotFound
 			}
 
@@ -197,6 +195,7 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID string) (*type
 
 		if err := result.Decode(&client); err != nil {
 			if err == mongo.ErrNoDocuments {
+				log.Logger.Error(result.Err())
 				return ErrClientNotFound
 			}
 			log.Logger.Error(err)
@@ -228,6 +227,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 		if result.Err() != nil {
 			if result.Err() == mongo.ErrNoDocuments {
+				log.Logger.Error(result.Err())
 				return ErrClientNotFound
 			}
 			log.Logger.Error(result.Err())
@@ -275,6 +275,7 @@ func (c *Client) FindDocInfoByKey(
 				"key": bsonDocKey,
 			})
 			if result.Err() == mongo.ErrNoDocuments {
+				log.Logger.Error(err)
 				return ErrDocumentNotFound
 			}
 			if result.Err() != nil {
@@ -373,6 +374,7 @@ func (c *Client) UpdateDocInfo(
 
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
+				log.Logger.Error(err)
 				return ErrDocumentNotFound
 			}
 
@@ -450,25 +452,33 @@ func (c *Client) FindLastSnapshotInfo(
 	ctx context.Context,
 	docID primitive.ObjectID,
 ) (*types.SnapshotInfo, error) {
-	snapshotInfo := types.SnapshotInfo{}
+	snapshotInfo := &types.SnapshotInfo{}
 
 	if err := c.withCollection(ColSnapshots, func(col *mongo.Collection) error {
 		result := col.FindOne(ctx, bson.M{
 			"doc_id": docID,
 		}, options.FindOne().SetSort(bson.M{
-			"server_seq": 1,
+			"server_seq": -1,
 		}))
+
 		if result.Err() == mongo.ErrNoDocuments {
-			return nil
+			return result.Err()
 		}
+
 		if result.Err() != nil {
 			log.Logger.Error(result.Err())
 			return result.Err()
 		}
+
+		if err := result.Decode(&snapshotInfo); err != nil {
+			log.Logger.Error(err)
+			return err
+		}
+
 		return nil
-	}); err != nil {
+	}); err != nil && err != mongo.ErrNoDocuments {
 		return nil, err
 	}
 
-	return &snapshotInfo, nil
+	return snapshotInfo, nil
 }
