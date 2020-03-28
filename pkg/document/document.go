@@ -78,7 +78,7 @@ func FromSnapshot(
 	serverSeq uint64,
 	snapshot []byte,
 ) (*Document, error) {
-	rootObj, err := converter.BytesToRootObject(snapshot)
+	obj, err := converter.BytesToObject(snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func FromSnapshot(
 	return &Document{
 		key:        &key.Key{Collection: collection, Document: document},
 		state:      Detached,
-		root:       json.NewRoot(rootObj),
+		root:       json.NewRoot(obj),
 		checkpoint: checkpoint.Initial.NextServerSeq(serverSeq),
 		changeID:   change.InitialID,
 	}, nil
@@ -115,7 +115,7 @@ func (d *Document) Update(
 	)
 
 	if err := updater(proxy.NewObjectProxy(ctx, d.clone.Object())); err != nil {
-		// drop copy because it is contaminated.
+		// drop clone because it is contaminated.
 		d.clone = nil
 		log.Logger.Error(err)
 		return err
@@ -142,16 +142,12 @@ func (d *Document) HasLocalChanges() bool {
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	// 01. Apply remote changes to both the clone and the document.
-	d.ensureClone()
-	for _, c := range pack.Changes {
-		if err := c.Execute(d.clone); err != nil {
+	if len(pack.Snapshot) > 0 {
+		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
 			return err
 		}
-	}
-
-	for _, c := range pack.Changes {
-		d.changeID = d.changeID.SyncLamport(c.ID())
-		if err := c.Execute(d.root); err != nil {
+	} else {
+		if err := d.applyChanges(pack.Changes); err != nil {
 			return err
 		}
 	}
@@ -168,7 +164,49 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
-	log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.root.Object().Marshal())
+	log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.RootObject().Marshal())
+	return nil
+}
+
+func (d *Document) applySnapshot(snapshot []byte, serverSeq uint64) error {
+	rootObj, err := converter.BytesToObject(snapshot)
+	if err != nil {
+		return err
+	}
+	d.root = json.NewRoot(rootObj)
+
+	if d.HasLocalChanges() {
+		for _, c := range d.localChanges {
+			if err := c.Execute(d.root); err != nil {
+				return err
+			}
+		}
+	}
+	d.changeID = d.changeID.SyncLamport(serverSeq)
+
+	// drop clone because it is contaminated.
+	d.clone = nil
+
+	return nil
+}
+
+// applyChanges applies remote changes to both the clone and the document.
+func (d *Document) applyChanges(changes []*change.Change) error {
+	d.ensureClone()
+
+	for _, c := range changes {
+		if err := c.Execute(d.clone); err != nil {
+			return err
+		}
+	}
+
+	for _, c := range changes {
+		if err := c.Execute(d.root); err != nil {
+			return err
+		}
+		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
+	}
+
 	return nil
 }
 
@@ -182,7 +220,7 @@ func (d *Document) CreateChangePack() *change.Pack {
 	changes := d.localChanges
 
 	cp := d.checkpoint.IncreaseClientSeq(uint32(len(changes)))
-	return change.NewPack(d.key, cp, changes)
+	return change.NewPack(d.key, cp, changes, nil)
 }
 
 // SetActor sets actor into this document. This is also applied in the local

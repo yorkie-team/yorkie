@@ -25,7 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
-func BytesToRootObject(snapshot []byte) (*json.Object, error) {
+func BytesToObject(snapshot []byte) (*json.Object, error) {
 	if snapshot == nil {
 		return json.NewObject(json.NewRHT(), time.InitialTicket), nil
 	}
@@ -64,7 +64,6 @@ func fromJSONObject(pbObj *api.JSONElement_Object) *json.Object {
 		fromTimeTicket(pbObj.CreatedAt),
 	)
 	obj.Delete(fromTimeTicket(pbObj.DeletedAt))
-
 	return obj
 }
 
@@ -79,15 +78,16 @@ func fromJSONArray(pbArr *api.JSONElement_Array) *json.Array {
 		fromTimeTicket(pbArr.CreatedAt),
 	)
 	arr.Delete(fromTimeTicket(pbArr.DeletedAt))
-
 	return arr
 }
 
 func fromJSONPrimitive(pbPrim *api.JSONElement_Primitive) *json.Primitive {
-	return json.NewPrimitive(
+	primitive := json.NewPrimitive(
 		json.ValueFromBytes(fromValueType(pbPrim.Type), pbPrim.Value),
 		fromTimeTicket(pbPrim.CreatedAt),
 	)
+	primitive.Delete(fromTimeTicket(pbPrim.DeletedAt))
+	return primitive
 }
 
 func fromJSONText(pbText *api.JSONElement_Text) *json.Text {

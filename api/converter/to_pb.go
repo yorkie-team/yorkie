@@ -32,6 +32,7 @@ func ToChangePack(pack *change.Pack) *api.ChangePack {
 		DocumentKey: toDocumentKey(pack.DocumentKey),
 		Checkpoint:  toCheckpoint(pack.Checkpoint),
 		Changes:     toChanges(pack.Changes),
+		Snapshot:    pack.Snapshot,
 	}
 }
 

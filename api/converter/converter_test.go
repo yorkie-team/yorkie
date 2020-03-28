@@ -28,10 +28,36 @@ import (
 )
 
 func TestConverter(t *testing.T) {
+	t.Run("snapshot simple test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("k1").Edit(0, 0, "A")
+			return nil
+		})
+		assert.Nil(t, err)
+		assert.Equal(t, `{"k1":"A"}`, doc.Marshal())
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("k1").Edit(0, 0, "B")
+			return nil
+		})
+		assert.Nil(t, err)
+		assert.Equal(t, `{"k1":"B"}`, doc.Marshal())
+
+		bytes, err := converter.ObjectToBytes(doc.RootObject())
+		assert.Nil(t, err)
+
+		obj, err := converter.BytesToObject(bytes)
+		assert.Nil(t, err)
+		assert.Equal(t, `{"k1":"B"}`, obj.Marshal())
+	})
+
 	t.Run("snapshot test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			// an object and primitive types
 			root.SetNewObject("k1").
 				SetBool("k1.1", true).
 				SetInteger("k1.2", 2147483647).
@@ -41,6 +67,7 @@ func TestConverter(t *testing.T) {
 				SetBytes("k1.6", []byte{65, 66}).
 				SetDate("k1.7", time.Now())
 
+			// an array
 			root.SetNewArray("k2").
 				AddBool(true).
 				AddInteger(1).
@@ -50,6 +77,7 @@ func TestConverter(t *testing.T) {
 				AddBytes([]byte{65}).
 				AddDate(time.Now())
 
+			// plain text
 			root.SetNewText("k3").
 				Edit(0, 0, "ㅎ").
 				Edit(0, 1, "하").
@@ -65,7 +93,7 @@ func TestConverter(t *testing.T) {
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
 		assert.Nil(t, err)
 
-		obj, err := converter.BytesToRootObject(bytes)
+		obj, err := converter.BytesToObject(bytes)
 		assert.Nil(t, err)
 		assert.Equal(t, doc.Marshal(), obj.Marshal())
 	})
