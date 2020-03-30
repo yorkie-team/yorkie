@@ -2,7 +2,9 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/yorkie-team/yorkie)](https://goreportcard.com/report/github.com/yorkie-team/yorkie)
 
-Yorkie is a framework for building collaborative editing applications.
+Yorkie is a synchronization solution for building collaborative editing applications.
+
+Yorkie consists of three main components: Client, Document and Agent.
 
  ```
   +--Client "A" (Go)----+
@@ -26,7 +28,7 @@ Yorkie is a framework for building collaborative editing applications.
 
  - Clients can have a replica of the document representing an application model locally on several devices.
  - Each client can independently update the document on their local device, even while offline.
- - When a network connection is available, Yorkie figures out which changes need to be synced from one device to another, and brings them into the same state.
+ - When a network connection is available, the client figures out which changes need to be synced from one device to another, and brings them into the same state.
  - If the document was changed concurrently on different devices, Yorkie automatically syncs the changes, so that every replica ends up in the same state with resolving conflict.
 
 ## Agent and SDKs
