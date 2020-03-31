@@ -123,7 +123,7 @@ func TestClientAndDocument(t *testing.T) {
 		err = c2.Attach(ctx, doc2)
 		assert.Nil(t, err)
 
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 	})
 
 	t.Run("causal primitive data test", func(t *testing.T) {
@@ -159,7 +159,7 @@ func TestClientAndDocument(t *testing.T) {
 		err = c2.Attach(ctx, doc2)
 		assert.Nil(t, err)
 
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 	})
 
 	t.Run("causal object.set/remove test", func(t *testing.T) {
@@ -185,7 +185,7 @@ func TestClientAndDocument(t *testing.T) {
 			return nil
 		}, "nested update by c1")
 		assert.Nil(t, err)
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 
 		err = doc1.Update(func(root *proxy.ObjectProxy) error {
 			root.Remove("k1")
@@ -193,7 +193,7 @@ func TestClientAndDocument(t *testing.T) {
 			return nil
 		}, "nested update by c1")
 		assert.Nil(t, err)
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 	})
 
 	t.Run("concurrent object set/remove simple test", func(t *testing.T) {
@@ -230,7 +230,7 @@ func TestClientAndDocument(t *testing.T) {
 		}, "remove and set v2 by c2")
 		assert.Nil(t, err)
 		assert.Equal(t, `{"k1":"v2"}`, doc2.Marshal())
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 	})
 
 	t.Run("concurrent object.set test", func(t *testing.T) {
@@ -254,7 +254,7 @@ func TestClientAndDocument(t *testing.T) {
 			return nil
 		}, "set k1 by c2")
 		assert.Nil(t, err)
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 
 		// 02. concurrent set between ancestor descendant
 		err = doc1.Update(func(root *proxy.ObjectProxy) error {
@@ -262,7 +262,7 @@ func TestClientAndDocument(t *testing.T) {
 			return nil
 		}, "set k2 by c1")
 		assert.Nil(t, err)
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 
 		err = doc1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k2", "v2")
@@ -274,7 +274,7 @@ func TestClientAndDocument(t *testing.T) {
 			return nil
 		}, "set k2.1.1 by c2")
 		assert.Nil(t, err)
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 
 		// 03. concurrent set between independent keys
 		err = doc1.Update(func(root *proxy.ObjectProxy) error {
@@ -287,7 +287,7 @@ func TestClientAndDocument(t *testing.T) {
 			return nil
 		}, "set k4 by c2")
 		assert.Nil(t, err)
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 	})
 
 	t.Run("concurrent array add/remove simple test", func(t *testing.T) {
@@ -322,7 +322,7 @@ func TestClientAndDocument(t *testing.T) {
 		}, "add v3 by c2")
 		assert.Nil(t, err)
 
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 	})
 
 	t.Run("concurrent array add/remove test", func(t *testing.T) {
@@ -357,7 +357,7 @@ func TestClientAndDocument(t *testing.T) {
 		}, "add v4, v5 by c2")
 		assert.Nil(t, err)
 
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 	})
 
 	t.Run("concurrent complex test", func(t *testing.T) {
@@ -396,7 +396,7 @@ func TestClientAndDocument(t *testing.T) {
 		})
 		assert.Nil(t, err)
 
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 	})
 
 	t.Run("text test", func(t *testing.T) {
@@ -430,7 +430,7 @@ func TestClientAndDocument(t *testing.T) {
 		}, "edit 0,0 1234 by c2")
 		assert.Nil(t, err)
 
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 
 		err = doc1.Update(func(root *proxy.ObjectProxy) error {
 			root.GetText("k1").Edit(2, 3, "XX")
@@ -444,7 +444,7 @@ func TestClientAndDocument(t *testing.T) {
 		}, "edit 2,3 YY by c2")
 		assert.Nil(t, err)
 
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 
 		err = doc1.Update(func(root *proxy.ObjectProxy) error {
 			root.GetText("k1").Edit(4, 5, "ZZ")
@@ -458,7 +458,7 @@ func TestClientAndDocument(t *testing.T) {
 		}, "edit 2,3 TT by c2")
 		assert.Nil(t, err)
 
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 	})
 
 	t.Run("watch test", func(t *testing.T) {
@@ -539,39 +539,40 @@ func TestClientAndDocument(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, `"value"`, doc2.RootObject().Get("key").Marshal())
 
-		syncThenAssertEqual(t, c1, c2, doc1, doc2)
+		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
 	})
 }
 
-func syncThenAssertEqual(
-	t *testing.T,
-	c1 *client.Client,
-	c2 *client.Client,
-	doc1 *document.Document,
-	doc2 *document.Document,
-) {
+type clientAndDocumentPair struct {
+	cl  *client.Client
+	doc *document.Document
+}
+
+func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocumentPair) {
+	assert.True(t, len(pairs) > 1)
 	ctx := context.Background()
-	fmt.Printf(
-		"before doc1: %s\nbefore doc2: %s\n",
-		doc1.Marshal(),
-		doc2.Marshal(),
-	)
+	// Save own changes and get previous changes.
+	for i, pair := range pairs {
+		fmt.Printf("before doc%d: %s\n", i+1, pair.doc.Marshal())
+		err := pair.cl.Sync(ctx)
+		assert.Nil(t, err)
+	}
 
-	err := c1.Sync(ctx)
-	assert.Nil(t, err)
+	// Get last client changes.
+	// Last client get all precede changes in above loop.
+	for _, pair := range pairs[:len(pairs)-1] {
+		err := pair.cl.Sync(ctx)
+		assert.Nil(t, err)
+	}
 
-	err = c2.Sync(ctx)
-	assert.Nil(t, err)
-
-	err = c1.Sync(ctx)
-	assert.Nil(t, err)
-
-	// fmt.Printf(
-	// 	"after doc1: %s\nafter doc2: %s\n",
-	// 	doc1.Marshal(),
-	// 	doc2.Marshal(),
-	// )
-	assert.Equal(t, doc1.Marshal(), doc2.Marshal())
+	// Assert start.
+	expected := pairs[0].doc.Marshal()
+	fmt.Printf("after doc1: %s\n", expected)
+	for i, pair := range pairs[1:] {
+		v := pair.doc.Marshal()
+		fmt.Printf("after doc%d: %s\n", i+2, v)
+		assert.Equal(t, expected, v)
+	}
 }
 
 func getActivatedClients(t *testing.T, n int) (clients []*client.Client) {
