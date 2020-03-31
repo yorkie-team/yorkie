@@ -29,31 +29,31 @@ import (
 type Yorkie struct {
 	lock sync.Mutex
 
+	conf      *Config
 	backend   *backend.Backend
 	rpcServer *rpc.Server
 
 	shutdown   bool
 	shutdownCh chan struct{}
-	config     *Config
 }
 
 // New creates a new instance of Yorkie.
 func New(conf *Config) (*Yorkie, error) {
-	be, err := backend.New(conf.Mongo)
+	be, err := backend.New(conf.Backend, conf.Mongo)
 	if err != nil {
 		return nil, err
 	}
 
-	rpcServer, err := rpc.NewRPCServer(conf.RPCPort, be)
+	rpcServer, err := rpc.NewServer(conf.RPC, be)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Yorkie{
+		conf:       conf,
 		backend:    be,
 		rpcServer:  rpcServer,
 		shutdownCh: make(chan struct{}),
-		config:     conf,
 	}, nil
 }
 
@@ -88,5 +88,5 @@ func (r *Yorkie) ShutdownCh() <-chan struct{} {
 
 // RPCAddr returns the address of the RPC.
 func (r *Yorkie) RPCAddr() string {
-	return r.config.RPCAddr()
+	return r.conf.RPCAddr()
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -39,8 +40,8 @@ const (
 )
 
 var (
-	errClientNotActivated  = errors.New("client is not activated")
-	errDocumentNotAttached = errors.New("document is not attached")
+	ErrClientNotActivated  = errors.New("client is not activated")
+	ErrDocumentNotAttached = errors.New("document is not attached")
 )
 
 // Client is a normal client that can communicate with the agent.
@@ -56,17 +57,43 @@ type Client struct {
 	attachedDocs map[string]*document.Document
 }
 
+// Option configures how we set up the client.
+type Option struct {
+	Key                string
+	CertFile           string
+	ServerNameOverride string
+}
+
 // NewClient creates an instance of Client.
-func NewClient(rpcAddr string, opts ...string) (*Client, error) {
+func NewClient(rpcAddr string, opts ...Option) (*Client, error) {
 	var k string
-	if len(opts) == 0 {
-		k = uuid.New().String()
+	if len(opts) > 0 && opts[0].Key != "" {
+		k = opts[0].Key
 	} else {
-		k = opts[0]
+		k = uuid.New().String()
 	}
 
-	// TODO support TLS
-	conn, err := grpc.Dial(rpcAddr, grpc.WithInsecure())
+	var certFile string
+	if len(opts) > 0 && opts[0].CertFile != "" {
+		certFile = opts[0].CertFile
+	}
+
+	var serverNameOverride string
+	if len(opts) > 0 && opts[0].ServerNameOverride != "" {
+		serverNameOverride = opts[0].ServerNameOverride
+	}
+
+	dialOpts := grpc.WithInsecure()
+	if certFile != "" {
+		creds, err := credentials.NewClientTLSFromFile(certFile, serverNameOverride)
+		if err != nil {
+			log.Logger.Error(err)
+			return nil, err
+		}
+		dialOpts = grpc.WithTransportCredentials(creds)
+	}
+
+	conn, err := grpc.Dial(rpcAddr, dialOpts)
 	if err != nil {
 		log.Logger.Error(err)
 		return nil, err
@@ -143,7 +170,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 // this client will synchronize the given document.
 func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
-		return errClientNotActivated
+		return ErrClientNotActivated
 	}
 
 	doc.SetActor(c.id)
@@ -181,11 +208,11 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 // document is no longer used by this client, it should be detached.
 func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
-		return errClientNotActivated
+		return ErrClientNotActivated
 	}
 
 	if _, ok := c.attachedDocs[doc.Key().BSONKey()]; !ok {
-		return errDocumentNotAttached
+		return ErrDocumentNotAttached
 	}
 
 	res, err := c.client.DetachDocument(ctx, &api.DetachDocumentRequest{
@@ -285,12 +312,12 @@ func (c *Client) IsActive() bool {
 
 func (c *Client) sync(ctx context.Context, key *key.Key) error {
 	if c.status != activated {
-		return errClientNotActivated
+		return ErrClientNotActivated
 	}
 
 	doc, ok := c.attachedDocs[key.BSONKey()]
 	if !ok {
-		return errDocumentNotAttached
+		return ErrDocumentNotAttached
 	}
 
 	res, err := c.client.PushPull(ctx, &api.PushPullRequest{

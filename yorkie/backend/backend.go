@@ -23,22 +23,30 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 )
 
+type Config struct {
+	// SnapshotThreshold is the threshold that determines if changes should be
+	// sent with snapshot when the number of changes is greater than this value.
+	SnapshotThreshold uint64 `json:"SnapshotThreshold"`
+}
+
 // Backend manages Yorkie's remote states such as data store, distributed lock
 // and etc.
 type Backend struct {
+	Config   *Config
 	Mongo    *mongo.Client
 	mutexMap *sync.MutexMap
 	pubSub   *pubsub.PubSub
 }
 
 // New creates a new instance of Backend.
-func New(conf *mongo.Config) (*Backend, error) {
-	client, err := mongo.NewClient(conf)
+func New(conf *Config, mongoConf *mongo.Config) (*Backend, error) {
+	client, err := mongo.NewClient(mongoConf)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Backend{
+		Config:   conf,
 		Mongo:    client,
 		mutexMap: sync.NewMutexMap(),
 		pubSub:   pubsub.NewPubSub(),

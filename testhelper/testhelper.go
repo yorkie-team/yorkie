@@ -22,13 +22,23 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/yorkie"
+	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
 var testStartedAt int64
 
 const (
-	TestPort               = 1101
-	TestMongoConnectionURI = "mongodb://localhost:27017"
+	RPCPort = 1101
+
+	MongoConnectionURI        = "mongodb://localhost:27017"
+	MongoConnectionTimeoutSec = 5
+	MongoPingTimeoutSec       = 5
+
+	SnapshotThreshold = 10
+
+	Collection = "test-collection"
 )
 
 func init() {
@@ -39,13 +49,25 @@ func init() {
 // TestDBName returns the name of test database with timestamp.
 // timestamp is set only once on first call.
 func TestDBName() string {
-	return fmt.Sprintf("test-%s-%d", yorkie.DefaultYorkieDatabase, testStartedAt)
+	return fmt.Sprintf("test-%s-%d", yorkie.DefaultMongoYorkieDatabase, testStartedAt)
 }
 
 // TestYorkie is return Yorkie instance for testing.
 func TestYorkie() *yorkie.Yorkie {
-	conf := yorkie.NewConfigWithPortAndDBName(TestPort, TestDBName())
-	y, err := yorkie.New(conf)
+	y, err := yorkie.New(&yorkie.Config{
+		RPC: &rpc.Config{
+			Port: RPCPort,
+		},
+		Backend: &backend.Config{
+			SnapshotThreshold: SnapshotThreshold,
+		},
+		Mongo: &mongo.Config{
+			ConnectionURI:        MongoConnectionURI,
+			ConnectionTimeoutSec: MongoConnectionTimeoutSec,
+			PingTimeoutSec:       MongoPingTimeoutSec,
+			YorkieDatabase:       TestDBName(),
+		},
+	})
 	if err != nil {
 		log.Fatal(err)
 	}

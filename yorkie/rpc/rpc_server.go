@@ -24,6 +24,7 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api"
@@ -43,20 +44,36 @@ type fieldViolation struct {
 	description string
 }
 
+type Config struct {
+	Port     int
+	CertFile string
+	KeyFile  string
+}
+
 type Server struct {
-	port       int
+	conf       *Config
 	grpcServer *grpc.Server
 	backend    *backend.Backend
 }
 
-func NewRPCServer(port int, be *backend.Backend) (*Server, error) {
+// NewServer creates a new instance of Server.
+func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(unaryInterceptor),
 		grpc.StreamInterceptor(streamInterceptor),
 	}
 
+	if conf.CertFile != "" && conf.KeyFile != "" {
+		creds, err := credentials.NewServerTLSFromFile(conf.CertFile, conf.KeyFile)
+		if err != nil {
+			log.Logger.Error(err)
+			return nil, err
+		}
+		opts = append(opts, grpc.Creds(creds))
+	}
+
 	rpcServer := &Server{
-		port:       port,
+		conf:       conf,
 		grpcServer: grpc.NewServer(opts...),
 		backend:    be,
 	}
@@ -299,7 +316,6 @@ func (s *Server) WatchDocuments(
 			k, err := key.FromBSONKey(event.Value)
 			if err != nil {
 				s.backend.Unsubscribe(docKeys, subscription)
-				log.Logger.Error(err)
 				return err
 			}
 
@@ -316,14 +332,14 @@ func (s *Server) WatchDocuments(
 }
 
 func (s *Server) listenAndServeGRPC() error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
 	if err != nil {
 		log.Logger.Error(err)
 		return err
 	}
 
 	go func() {
-		log.Logger.Infof("serving API on %d", s.port)
+		log.Logger.Infof("serving API on %d", s.conf.Port)
 
 		if err := s.grpcServer.Serve(lis); err != nil {
 			log.Logger.Error(err)

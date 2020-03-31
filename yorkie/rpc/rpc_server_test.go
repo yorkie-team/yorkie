@@ -209,11 +209,13 @@ func withRPCServer(
 	t *testing.T,
 	f func(t *testing.T, rpcServer *rpc.Server),
 ) {
-	be, err := backend.New(&mongo.Config{
-		ConnectionURI:        testhelper.TestMongoConnectionURI,
+	be, err := backend.New(&backend.Config{
+		SnapshotThreshold: testhelper.SnapshotThreshold,
+	}, &mongo.Config{
+		ConnectionURI:        testhelper.MongoConnectionURI,
 		YorkieDatabase:       testhelper.TestDBName(),
-		ConnectionTimeoutSec: 5,
-		PingTimeoutSec:       5,
+		ConnectionTimeoutSec: testhelper.MongoConnectionTimeoutSec,
+		PingTimeoutSec:       testhelper.MongoPingTimeoutSec,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -223,7 +225,9 @@ func withRPCServer(
 		assert.Nil(t, err)
 	}()
 
-	rpcServer, err := rpc.NewRPCServer(testhelper.TestPort, be)
+	rpcServer, err := rpc.NewServer(&rpc.Config{
+		Port: testhelper.RPCPort,
+	}, be)
 	if err != nil {
 		t.Fatal(err)
 	}

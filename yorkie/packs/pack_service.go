@@ -31,13 +31,6 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/types"
 )
 
-const (
-	// SnapshotThreshold is the threshold that determines if changes should be
-	// sent with snapshot when the number of changes is greater than this value.
-	// TODO extract this with configuration.
-	SnapshotThreshold = 500
-)
-
 func PushPull(
 	ctx context.Context,
 	be *backend.Backend,
@@ -168,7 +161,7 @@ func pullPack(
 		return nil, err
 	}
 
-	if initialServerSeq-requestPack.Checkpoint.ServerSeq < SnapshotThreshold {
+	if initialServerSeq-requestPack.Checkpoint.ServerSeq < be.Config.SnapshotThreshold {
 		pulledCP, pulledChanges, err := pullChanges(ctx, be, clientInfo, docInfo, requestPack, pushedCP, initialServerSeq)
 		if err != nil {
 			return nil, err
