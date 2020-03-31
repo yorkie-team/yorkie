@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -29,11 +31,26 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/testhelper"
+	"github.com/yorkie-team/yorkie/yorkie"
 )
 
-const (
-	testCollection = "test-col"
-)
+var testYorkie *yorkie.Yorkie
+
+func TestMain(m *testing.M) {
+	y := testhelper.TestYorkie()
+	if err := y.Start(); err != nil {
+		log.Fatal(err)
+	}
+	testYorkie = y
+	code := m.Run()
+	if testYorkie != nil {
+		if err := testYorkie.Shutdown(true); err != nil {
+			log.Println(err)
+		}
+	}
+	os.Exit(code)
+}
 
 func TestClient(t *testing.T) {
 	t.Run("new/close test", func(t *testing.T) {
@@ -89,7 +106,7 @@ func TestClientAndDocument(t *testing.T) {
 
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
-		doc := document.New(testCollection, t.Name())
+		doc := document.New(testhelper.Collection, t.Name())
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k1", "k1")
 			return nil
@@ -107,11 +124,11 @@ func TestClientAndDocument(t *testing.T) {
 
 	t.Run("causal nested array test", func(t *testing.T) {
 		ctx := context.Background()
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("k1").
 				AddString("v1").
 				AddNewArray().AddString("1").AddString("2").AddString("3")
@@ -119,20 +136,20 @@ func TestClientAndDocument(t *testing.T) {
 		}, "nested update by c1")
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("causal primitive data test", func(t *testing.T) {
 		ctx := context.Background()
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewObject("k1").
 				SetBool("k1.1", true).
 				SetInteger("k1.2", 2147483647).
@@ -155,25 +172,25 @@ func TestClientAndDocument(t *testing.T) {
 		}, "nested update by c1")
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("causal object.set/remove test", func(t *testing.T) {
 		ctx := context.Background()
 
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewObject("k1").
 				SetString("k1.1", "v1").
 				SetString("k1.2", "v2").
@@ -185,119 +202,119 @@ func TestClientAndDocument(t *testing.T) {
 			return nil
 		}, "nested update by c1")
 		assert.Nil(t, err)
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.Remove("k1")
 			root.GetObject("k2").Remove("k2.2")
 			return nil
 		}, "nested update by c1")
 		assert.Nil(t, err)
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("concurrent object set/remove simple test", func(t *testing.T) {
 		ctx := context.Background()
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewObject("k1")
 			return nil
 		}, "set v1 by c1")
 		assert.Nil(t, err)
-		assert.Equal(t, `{"k1":{}}`, doc1.Marshal())
+		assert.Equal(t, `{"k1":{}}`, d1.Marshal())
 		err = c1.Sync(ctx)
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.Remove("k1")
 			root.SetString("k1", "v1")
 			return nil
 		}, "remove and set v1 by c1")
 		assert.Nil(t, err)
-		assert.Equal(t, `{"k1":"v1"}`, doc1.Marshal())
+		assert.Equal(t, `{"k1":"v1"}`, d1.Marshal())
 
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.Remove("k1")
 			root.SetString("k1", "v2")
 			return nil
 		}, "remove and set v2 by c2")
 		assert.Nil(t, err)
-		assert.Equal(t, `{"k1":"v2"}`, doc2.Marshal())
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		assert.Equal(t, `{"k1":"v2"}`, d2.Marshal())
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("concurrent object.set test", func(t *testing.T) {
 		ctx := context.Background()
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
 		// 01. concurrent set on same key
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k1", "v1")
 			return nil
 		}, "set k1 by c1")
 		assert.Nil(t, err)
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k1", "v2")
 			return nil
 		}, "set k1 by c2")
 		assert.Nil(t, err)
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		// 02. concurrent set between ancestor descendant
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewObject("k2")
 			return nil
 		}, "set k2 by c1")
 		assert.Nil(t, err)
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k2", "v2")
 			return nil
 		}, "set k2 by c1")
 		assert.Nil(t, err)
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.GetObject("k2").SetNewObject("k2.1").SetString("k2.1.1", "v2")
 			return nil
 		}, "set k2.1.1 by c2")
 		assert.Nil(t, err)
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		// 03. concurrent set between independent keys
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k3", "v3")
 			return nil
 		}, "set k3 by c1")
 		assert.Nil(t, err)
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k4", "v4")
 			return nil
 		}, "set k4 by c2")
 		assert.Nil(t, err)
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("concurrent array add/remove simple test", func(t *testing.T) {
 		ctx := context.Background()
 
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("k1").AddString("v1").AddString("v2")
 			return nil
 		}, "add v1, v2 by c1")
@@ -306,33 +323,33 @@ func TestClientAndDocument(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.GetArray("k1").Remove(1)
 			return nil
 		}, "remove v2 by c1")
 		assert.Nil(t, err)
 
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.GetArray("k1").AddString("v3")
 			return nil
 		}, "add v3 by c2")
 		assert.Nil(t, err)
 
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("concurrent array add/remove test", func(t *testing.T) {
 		ctx := context.Background()
 
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("k1").AddString("v1")
 			return nil
 		}, "new array and add v1")
@@ -340,73 +357,73 @@ func TestClientAndDocument(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.GetArray("k1").AddString("v2").AddString("v3")
 			root.GetArray("k1").Remove(1)
 			return nil
 		}, "add v2, v3 and remove v2 by c1")
 		assert.Nil(t, err)
 
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.GetArray("k1").AddString("v4").AddString("v5")
 			return nil
 		}, "add v4, v5 by c2")
 		assert.Nil(t, err)
 
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
 
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewObject("k1").SetNewArray("k1.1").AddString("1").AddString("2")
 			return nil
 		})
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("k2").AddString("1").AddString("2").AddString("3")
 			return nil
 		})
 		assert.Nil(t, err)
 
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("k1").AddString("4").AddString("5")
 			root.SetNewArray("k2").AddString("6").AddString("7")
 			return nil
 		})
 		assert.Nil(t, err)
 
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.Remove("k2")
 			return nil
 		})
 		assert.Nil(t, err)
 
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("text test", func(t *testing.T) {
 		ctx := context.Background()
 
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewText("k1")
 			return nil
 		}, "set a new text by c1")
@@ -414,68 +431,68 @@ func TestClientAndDocument(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.GetText("k1").Edit(0, 0, "ABCD")
 			return nil
 		}, "edit 0,0 ABCD by c1")
 		assert.Nil(t, err)
 
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.GetText("k1").Edit(0, 0, "1234")
 			return nil
 		}, "edit 0,0 1234 by c2")
 		assert.Nil(t, err)
 
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.GetText("k1").Edit(2, 3, "XX")
 			return nil
 		}, "edit 2,3 XX by c1")
 		assert.Nil(t, err)
 
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.GetText("k1").Edit(2, 3, "YY")
 			return nil
 		}, "edit 2,3 YY by c2")
 		assert.Nil(t, err)
 
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = doc1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.GetText("k1").Edit(4, 5, "ZZ")
 			return nil
 		}, "edit 4,5 ZZ by c1")
 		assert.Nil(t, err)
 
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.GetText("k1").Edit(2, 3, "TT")
 			return nil
 		}, "edit 2,3 TT by c2")
 		assert.Nil(t, err)
 
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
 	t.Run("watch test", func(t *testing.T) {
 		ctx := context.Background()
 
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 
-		rch := c1.Watch(ctx, doc1)
+		rch := c1.Watch(ctx, d1)
 		go func() {
 			defer wg.Done()
 
@@ -489,7 +506,7 @@ func TestClientAndDocument(t *testing.T) {
 			assert.Nil(t, err)
 		}()
 
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("key", "value")
 			return nil
 		})
@@ -500,23 +517,23 @@ func TestClientAndDocument(t *testing.T) {
 
 		wg.Wait()
 
-		assert.Equal(t, doc1.Marshal(), doc2.Marshal())
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 
 	t.Run("snapshot test", func(t *testing.T) {
 		ctx := context.Background()
 
-		doc1 := document.New(testCollection, t.Name())
-		err := c1.Attach(ctx, doc1)
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
 		assert.Nil(t, err)
 
-		doc2 := document.New(testCollection, t.Name())
-		err = c2.Attach(ctx, doc2)
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
 		assert.Nil(t, err)
 
-		// 01. Updates 700 changes over snapshot threshold.
-		for i := 0; i < 700; i++ {
-			err := doc1.Update(func(root *proxy.ObjectProxy) error {
+		// 01. Updates changes over snapshot threshold.
+		for i := 0; i < testhelper.SnapshotThreshold + 1; i++ {
+			err := d1.Update(func(root *proxy.ObjectProxy) error {
 				root.SetInteger(fmt.Sprintf("%d", i), i)
 				return nil
 			})
@@ -529,7 +546,7 @@ func TestClientAndDocument(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 
 		// 02. Makes local changes then pull a snapshot from the agent.
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("key", "value")
 			return nil
 		})
@@ -537,40 +554,40 @@ func TestClientAndDocument(t *testing.T) {
 
 		err = c2.Sync(ctx)
 		assert.Nil(t, err)
-		assert.Equal(t, `"value"`, doc2.RootObject().Get("key").Marshal())
+		assert.Equal(t, `"value"`, d2.RootObject().Get("key").Marshal())
 
-		syncClientsThenAssertEqual(t, []clientAndDocumentPair{{c1, doc1}, {c2, doc2}})
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 }
 
-type clientAndDocumentPair struct {
-	cl  *client.Client
+type clientAndDocPair struct {
+	cli *client.Client
 	doc *document.Document
 }
 
-func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocumentPair) {
+func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 	assert.True(t, len(pairs) > 1)
 	ctx := context.Background()
 	// Save own changes and get previous changes.
 	for i, pair := range pairs {
 		fmt.Printf("before doc%d: %s\n", i+1, pair.doc.Marshal())
-		err := pair.cl.Sync(ctx)
+		err := pair.cli.Sync(ctx)
 		assert.Nil(t, err)
 	}
 
 	// Get last client changes.
 	// Last client get all precede changes in above loop.
 	for _, pair := range pairs[:len(pairs)-1] {
-		err := pair.cl.Sync(ctx)
+		err := pair.cli.Sync(ctx)
 		assert.Nil(t, err)
 	}
 
 	// Assert start.
 	expected := pairs[0].doc.Marshal()
-	fmt.Printf("after doc1: %s\n", expected)
+	fmt.Printf("after d1: %s\n", expected)
 	for i, pair := range pairs[1:] {
 		v := pair.doc.Marshal()
-		fmt.Printf("after doc%d: %s\n", i+2, v)
+		fmt.Printf("after d%d: %s\n", i+2, v)
 		assert.Equal(t, expected, v)
 	}
 }
@@ -594,4 +611,3 @@ func cleanupClients(t *testing.T, clients []*client.Client) {
 		assert.Nil(t, err)
 	}
 }
-

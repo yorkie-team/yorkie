@@ -44,7 +44,7 @@ var (
 
 // Config is the configuration for creating a Client instance.
 type Config struct {
-	ConnectionTimeoutSec time.Duration `json:"ConnectionTimeOutSec"`
+	ConnectionTimeoutSec time.Duration `json:"ConnectionTimeoutSec"`
 	ConnectionURI        string        `json:"ConnectionURI"`
 	YorkieDatabase       string        `json:"YorkieDatabase"`
 	PingTimeoutSec       time.Duration `json:"PingTimeoutSec"`

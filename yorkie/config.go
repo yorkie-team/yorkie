@@ -23,38 +23,46 @@ import (
 	"os"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
 const (
-	DefaultRPCPort        = 9090
-	DefaultMongoDBURI     = "mongodb://localhost:27017"
-	DefaultYorkieDatabase = "yorkie-meta"
+	DefaultRPCPort = 9090
+
+	DefaultMongoConnectionURI        = "mongodb://localhost:27017"
+	DefaultMongoConnectionTimeoutSec = 5
+	DefaultMongoPingTimeoutSec       = 5
+	DefaultMongoYorkieDatabase       = "yorkie-meta"
+
+	DefaultSnapshotThreshold = 500
 )
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPCPort int           `json:"RPCPort"`
-	Mongo   *mongo.Config `json:"Mongo"`
+	RPC     *rpc.Config     `json:"RPC"`
+	Mongo   *mongo.Config   `json:"Mongo"`
+	Backend *backend.Config `json:"Backend"`
 }
 
 // RPCAddr returns the RPC address.
 func (c *Config) RPCAddr() string {
-	return fmt.Sprintf("localhost:%d", c.RPCPort)
+	return fmt.Sprintf("localhost:%d", c.RPC.Port)
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
 // for most of the configurations.
 func NewConfig() *Config {
-	return newConfig(DefaultRPCPort, DefaultYorkieDatabase)
+	return newConfig(DefaultRPCPort, DefaultMongoYorkieDatabase)
 }
 
 // NewConfigWithPortAndDBName returns a new instance of Config.
-func NewConfigWithPortAndDBName(port int, dbname string) *Config {
-	return newConfig(port, dbname)
+func NewConfigWithPortAndDBName(port int, dbName string) *Config {
+	return newConfig(port, dbName)
 }
 
-// NewConfigFromFile returns a Config struct for the given config file.
+// NewConfigFromFile returns a Config struct for the given conf file.
 func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
 	file, err := os.Open(path)
@@ -77,14 +85,19 @@ func NewConfigFromFile(path string) (*Config, error) {
 	return conf, nil
 }
 
-func newConfig(port int, dbname string) *Config {
+func newConfig(port int, dbName string) *Config {
 	return &Config{
-		RPCPort: port,
+		RPC: &rpc.Config{
+			Port: port,
+		},
+		Backend: &backend.Config{
+			SnapshotThreshold: DefaultSnapshotThreshold,
+		},
 		Mongo: &mongo.Config{
-			ConnectionURI:        DefaultMongoDBURI,
-			ConnectionTimeoutSec: 5,
-			PingTimeoutSec:       5,
-			YorkieDatabase:       dbname,
+			ConnectionURI:        DefaultMongoConnectionURI,
+			ConnectionTimeoutSec: DefaultMongoConnectionTimeoutSec,
+			PingTimeoutSec:       DefaultMongoPingTimeoutSec,
+			YorkieDatabase:       dbName,
 		},
 	}
 }
