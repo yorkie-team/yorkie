@@ -532,7 +532,7 @@ func TestClientAndDocument(t *testing.T) {
 		assert.Nil(t, err)
 
 		// 01. Updates changes over snapshot threshold.
-		for i := 0; i < testhelper.SnapshotThreshold + 1; i++ {
+		for i := 0; i < testhelper.SnapshotThreshold+1; i++ {
 			err := d1.Update(func(root *proxy.ObjectProxy) error {
 				root.SetInteger(fmt.Sprintf("%d", i), i)
 				return nil
@@ -557,6 +557,50 @@ func TestClientAndDocument(t *testing.T) {
 		assert.Equal(t, `"value"`, d2.RootObject().Get("key").Marshal())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("text snapshot test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.Nil(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("k1")
+			return nil
+		})
+
+		var edits = []struct {
+			from    int
+			to      int
+			content string
+		}{
+			{0, 0, "ㅎ"}, {0, 1, "하"},
+			{0, 1, "한"}, {0, 1, "하"},
+			{1, 1, "느"}, {1, 2, "늘"},
+			{2, 2, "ㄱ"}, {2, 3, "구"},
+			{2, 3, "굴"}, {2, 3, "구"},
+			{3, 3, "ㄹ"}, {3, 4, "ㄹ"},
+			{3, 4, "르"}, {3, 4, "름"},
+		}
+
+		for _, edit := range edits {
+			err = d1.Update(func(root *proxy.ObjectProxy) error {
+				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
+				return nil
+			})
+			assert.Nil(t, err)
+		}
+		err = c1.Sync(ctx)
+		assert.Nil(t, err)
+
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.Nil(t, err)
+
+		assert.Equal(t, `{"k1":"하늘구름"}`, d1.Marshal())
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 }
 
