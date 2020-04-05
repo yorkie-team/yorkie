@@ -186,7 +186,7 @@ func (a *RGA) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket
 		return nil
 	}
 
-	for node.next != nil && createdAt.After(node.next.elem.CreatedAt()) {
+	for node.next != nil && node.next.elem.CreatedAt().After(createdAt) {
 		node = node.next
 	}
 

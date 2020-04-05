@@ -94,6 +94,15 @@ func (p *ArrayProxy) AddString(v string) *ArrayProxy {
 	return p
 }
 
+func (p *ArrayProxy) InsertStringAfter(index int, v string) *ArrayProxy {
+	prev := p.Get(index)
+	p.insertAfterInternal(prev.CreatedAt(), func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
 func (p *ArrayProxy) AddNewArray() *ArrayProxy {
 	v := p.addInternal(func(ticket *time.Ticket) json.Element {
 		return NewArrayProxy(p.context, json.NewArray(json.NewRGA(), ticket))
@@ -139,6 +148,28 @@ func (p *ArrayProxy) addInternal(
 	return proxy
 }
 
+func (p *ArrayProxy) insertAfterInternal(
+	prevCreatedAt *time.Ticket,
+	creator func(ticket *time.Ticket) json.Element,
+) json.Element {
+	ticket := p.context.IssueTimeTicket()
+	proxy := creator(ticket)
+	value := toOriginal(proxy)
+
+	p.context.Push(operation.NewAdd(
+		p.Array.CreatedAt(),
+		prevCreatedAt,
+		value.DeepCopy(),
+		ticket,
+	))
+
+	p.InsertAfter(prevCreatedAt, value)
+	p.context.RegisterElement(value)
+
+	return proxy
+}
+
 func (p *ArrayProxy) Len() int {
 	return p.Array.Len()
 }
+
