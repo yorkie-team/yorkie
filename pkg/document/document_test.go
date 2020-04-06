@@ -127,6 +127,10 @@ func TestDocument(t *testing.T) {
 			root.GetArray("k1").InsertStringAfter(0, "2")
 			assert.Equal(t, `{"k1":["1","2","3"]}`, root.Marshal())
 			assert.Equal(t, 3, root.GetArray("k1").Len())
+
+			root.GetArray("k1").InsertStringAfter(2, "4")
+			assert.Equal(t, `{"k1":["1","2","3","4"]}`, root.Marshal())
+			assert.Equal(t, 4, root.GetArray("k1").Len())
 			return nil
 		})
 		assert.Nil(t, err)

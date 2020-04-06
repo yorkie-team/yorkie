@@ -149,12 +149,14 @@ func (a *RGA) Get(idx int) Element {
 		if current == nil {
 			break
 		}
-		if idx == 0 {
+		if idx == 0 && !current.isDeleted() {
 			return current.elem
 		}
 
 		current = current.next
-		idx--
+		if !current.isDeleted() {
+			idx--
+		}
 	}
 	return nil
 }
