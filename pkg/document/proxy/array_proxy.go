@@ -131,21 +131,7 @@ func (p *ArrayProxy) Remove(idx int) json.Element {
 func (p *ArrayProxy) addInternal(
 	creator func(ticket *time.Ticket) json.Element,
 ) json.Element {
-	ticket := p.context.IssueTimeTicket()
-	proxy := creator(ticket)
-	value := toOriginal(proxy)
-
-	p.context.Push(operation.NewAdd(
-		p.Array.CreatedAt(),
-		p.Array.LastCreatedAt(),
-		value.DeepCopy(),
-		ticket,
-	))
-
-	p.Add(value)
-	p.context.RegisterElement(value)
-
-	return proxy
+	return p.insertAfterInternal(p.Array.LastCreatedAt(), creator)
 }
 
 func (p *ArrayProxy) insertAfterInternal(
