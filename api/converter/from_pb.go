@@ -189,7 +189,7 @@ func fromElement(pbElement *api.JSONElementSimple) json.Element {
 		)
 	case api.ValueType_JSON_ARRAY:
 		return json.NewArray(
-			json.NewRGA(),
+			json.NewRGATreeList(),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_BOOLEAN:

@@ -103,7 +103,7 @@ func toRHTNodes(rhtNodes []*json.RHTNode) []*api.RHTNode {
 	return pbRHTNodes
 }
 
-func toRGANodes(rgaNodes []*json.RGANode) []*api.RGANode {
+func toRGANodes(rgaNodes []*json.RGATreeListNode) []*api.RGANode {
 	var pbRGANodes []*api.RGANode
 	for _, rgaNode := range rgaNodes {
 		pbRGANodes = append(pbRGANodes, &api.RGANode{

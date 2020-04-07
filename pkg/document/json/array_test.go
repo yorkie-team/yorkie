@@ -27,7 +27,7 @@ import (
 
 func TestArray(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
-		a := json.NewArray(json.NewRGA(), time.InitialTicket)
+		a := json.NewArray(json.NewRGATreeList(), time.InitialTicket)
 
 		a.Add(json.NewPrimitive("1", time.InitialTicket))
 		assert.Equal(t, `["1"]`, a.Marshal())

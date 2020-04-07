@@ -35,5 +35,5 @@ type Element interface {
 	DeletedAt() *time.Ticket
 
 	// Delete deletes this element.
-	Delete(*time.Ticket)
+	Delete(*time.Ticket) bool
 }

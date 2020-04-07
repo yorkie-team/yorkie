@@ -23,13 +23,13 @@ import (
 // Array represents JSON array data structure including logical clock.
 // Array implements Element interface.
 type Array struct {
-	elements  *RGA
+	elements  *RGATreeList
 	createdAt *time.Ticket
 	deletedAt *time.Ticket
 }
 
 // NewArray creates a new instance of Array.
-func NewArray(elements *RGA, createdAt *time.Ticket) *Array {
+func NewArray(elements *RGATreeList, createdAt *time.Ticket) *Array {
 	return &Array{
 		elements:  elements,
 		createdAt: createdAt,
@@ -44,20 +44,15 @@ func (a *Array) Add(elem Element) *Array {
 
 // Get returns the element of the given index.
 func (a *Array) Get(idx int) Element {
-	return a.elements.Get(idx)
+	return a.elements.Get(idx).elem
 }
 
 // Remove removes the element of the given index.
 func (a *Array) Remove(idx int, deletedAt *time.Ticket) Element {
-	removed := a.elements.Get(idx)
-	if removed != nil {
-		a.elements.RemoveByCreatedAt(removed.CreatedAt(), deletedAt)
-	}
-
-	return removed
+	return a.elements.Remove(idx, deletedAt).elem
 }
 
-// Elements returns an array of elements contained in this RGA.
+// Elements returns an array of elements contained in this RGATreeList.
 func (a *Array) Elements() []Element {
 	var elements []Element
 	for _, node := range a.elements.Nodes() {
@@ -75,9 +70,13 @@ func (a *Array) Marshal() string {
 	return a.elements.Marshal()
 }
 
+func (a *Array) AnnotatedString() string {
+	return a.elements.AnnotatedString()
+}
+
 // DeepCopy copies itself deeply.
 func (a *Array) DeepCopy() Element {
-	elements := NewRGA()
+	elements := NewRGATreeList()
 
 	for _, node := range a.elements.Nodes() {
 		elements.Add(node.elem.DeepCopy())
@@ -99,8 +98,12 @@ func (a *Array) DeletedAt() *time.Ticket {
 }
 
 // Delete deletes this element.
-func (a *Array) Delete(deletedAt *time.Ticket) {
-	a.deletedAt = deletedAt
+func (a *Array) Delete(deletedAt *time.Ticket) bool {
+	if a.deletedAt == nil || deletedAt.After(a.deletedAt) {
+		a.deletedAt = deletedAt
+		return true
+	}
+	return false
 }
 
 // LastCreatedAt returns the creation time of the last element.
@@ -115,7 +118,7 @@ func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
 
 // RemoveByCreatedAt removes the given element.
 func (a *Array) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
-	return a.elements.RemoveByCreatedAt(createdAt, deletedAt)
+	return a.elements.RemoveByCreatedAt(createdAt, deletedAt).elem
 }
 
 // Len returns length of this Array.
@@ -135,6 +138,6 @@ func (a *Array) Descendants(descendants chan Element) {
 	}
 }
 
-func (a *Array) RGANodes() []*RGANode {
+func (a *Array) RGANodes() []*RGATreeListNode {
 	return a.elements.Nodes()
 }

@@ -55,45 +55,47 @@ func (n *RHTNode) Element() Element {
 	return n.elem
 }
 
-// RHT is replicated hash table.
-type RHT struct {
+// RHTPriorityQueueMap is replicated hash table.
+type RHTPriorityQueueMap struct {
 	nodeQueueMapByKey  map[string]*pq.PriorityQueue
 	nodeMapByCreatedAt map[string]*RHTNode
 }
 
-// NewRHT creates a new instance of RHT.
-func NewRHT() *RHT {
-	return &RHT{
+// NewRHT creates a new instance of RHTPriorityQueueMap.
+func NewRHT() *RHTPriorityQueueMap {
+	return &RHTPriorityQueueMap{
 		nodeQueueMapByKey:  make(map[string]*pq.PriorityQueue),
 		nodeMapByCreatedAt: make(map[string]*RHTNode),
 	}
 }
 
 // Get returns the value of the given key.
-func (rht *RHT) Get(key string) Element {
-	if queue, ok := rht.nodeQueueMapByKey[key]; ok {
-		node := queue.Peek().(*RHTNode)
-		if node.isDeleted() {
-			return nil
-		}
-		return node.elem
+func (rht *RHTPriorityQueueMap) Get(key string) Element {
+	queue, ok := rht.nodeQueueMapByKey[key]
+	if !ok {
+		return nil
 	}
 
-	return nil
+	node := queue.Peek().(*RHTNode)
+	if node.isDeleted() {
+		return nil
+	}
+	return node.elem
 }
 
 // Has returns whether the element exists of the given key or not.
-func (rht *RHT) Has(key string) bool {
-	if queue, ok := rht.nodeQueueMapByKey[key]; ok {
-		node := queue.Peek().(*RHTNode)
-		return node != nil && !node.isDeleted()
+func (rht *RHTPriorityQueueMap) Has(key string) bool {
+	queue, ok := rht.nodeQueueMapByKey[key]
+	if !ok {
+		return false
 	}
 
-	return false
+	node := queue.Peek().(*RHTNode)
+	return node != nil && !node.isDeleted()
 }
 
 // Set sets the value of the given key.
-func (rht *RHT) Set(k string, v Element) {
+func (rht *RHTPriorityQueueMap) Set(k string, v Element) {
 	if _, ok := rht.nodeQueueMapByKey[k]; !ok {
 		rht.nodeQueueMapByKey[k] = pq.NewPriorityQueue()
 	}
@@ -104,29 +106,32 @@ func (rht *RHT) Set(k string, v Element) {
 }
 
 // Remove removes the Element of the given key.
-func (rht *RHT) Remove(k string, deletedAt *time.Ticket) Element {
-	if queue, ok := rht.nodeQueueMapByKey[k]; ok {
-		node := queue.Peek().(*RHTNode)
-		node.Delete(deletedAt)
-		return node.elem
+func (rht *RHTPriorityQueueMap) Remove(k string, deletedAt *time.Ticket) Element {
+	queue, ok := rht.nodeQueueMapByKey[k]
+	if !ok {
+		return nil
 	}
-	return nil
+
+	node := queue.Peek().(*RHTNode)
+	node.Delete(deletedAt)
+	return node.elem
 }
 
 // RemoveByCreatedAt removes the Element of the given creation time.
-func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
-	if node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]; ok {
-		node.Delete(deletedAt)
-		return node.elem
+func (rht *RHTPriorityQueueMap) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+	node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]
+	if !ok {
+		log.Logger.Warn("fail to find " + createdAt.Key())
+		return nil
 	}
 
-	log.Logger.Warn("fail to find " + createdAt.Key())
-	return nil
+	node.Delete(deletedAt)
+	return node.elem
 }
 
 // Elements returns a map of elements because the map easy to use for loop.
 // TODO If we encounter performance issues, we need to replace this with other solution.
-func (rht *RHT) Elements() map[string]Element {
+func (rht *RHTPriorityQueueMap) Elements() map[string]Element {
 	members := make(map[string]Element)
 	for _, queue := range rht.nodeQueueMapByKey {
 		if node := queue.Peek().(*RHTNode); !node.isDeleted() {
@@ -139,7 +144,7 @@ func (rht *RHT) Elements() map[string]Element {
 
 // AllNodes returns a map of elements because the map easy to use for loop.
 // TODO If we encounter performance issues, we need to replace this with other solution.
-func (rht *RHT) AllNodes() []*RHTNode {
+func (rht *RHTPriorityQueueMap) AllNodes() []*RHTNode {
 	var nodes []*RHTNode
 	for _, queue := range rht.nodeQueueMapByKey {
 		for _, value := range queue.Values() {
