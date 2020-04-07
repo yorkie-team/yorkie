@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	nilCliendID = "000000000000000000000000"
+	nilClientID = "000000000000000000000000"
 	testRPCPort = testhelper.RPCPort + 1
 )
 
@@ -37,20 +37,22 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	conf := &rpc.Config{
+	testRPCServer, err = rpc.NewServer(&rpc.Config{
 		Port: testRPCPort,
-	}
-	testRPCServer, err = rpc.NewServer(conf, be)
+	}, be)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	if err := testRPCServer.Start(); err != nil {
 		log.Fatalf("failed rpc listen: %s\n", err)
 	}
 
 	code := m.Run()
 
-	be.Close()
+	if err := be.Close(); err != nil {
+		log.Fatal(err)
+	}
 	testRPCServer.Shutdown(true)
 	os.Exit(code)
 }
@@ -85,7 +87,7 @@ func TestRPCServerBackend(t *testing.T) {
 		// client not found
 		_, err = testRPCServer.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: nilCliendID},
+			&api.DeactivateClientRequest{ClientId: nilClientID},
 		)
 		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 	})
