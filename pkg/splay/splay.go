@@ -136,6 +136,10 @@ func (t *Tree) Splay(node *Node) {
 			// zig-zig
 			t.rotateRight(node.parent)
 			t.rotateRight(node)
+		} else if isRightChild(node.parent) && isRightChild(node) {
+			// zig-zig
+			t.rotateLeft(node.parent)
+			t.rotateLeft(node)
 		} else {
 			// zig
 			if isLeftChild(node) {

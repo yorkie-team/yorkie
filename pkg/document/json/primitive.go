@@ -196,8 +196,12 @@ func (p *Primitive) DeletedAt() *time.Ticket {
 }
 
 // Delete deletes this element.
-func (p *Primitive) Delete(deletedAt *time.Ticket) {
-	p.deletedAt = deletedAt
+func (p *Primitive) Delete(deletedAt *time.Ticket) bool {
+	if p.deletedAt == nil || deletedAt.After(p.deletedAt) {
+		p.deletedAt = deletedAt
+		return true
+	}
+	return false
 }
 
 // ValueType returns the type of the value.

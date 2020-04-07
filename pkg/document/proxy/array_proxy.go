@@ -94,6 +94,14 @@ func (p *ArrayProxy) AddString(v string) *ArrayProxy {
 	return p
 }
 
+func (p *ArrayProxy) AddNewArray() *ArrayProxy {
+	v := p.addInternal(func(ticket *time.Ticket) json.Element {
+		return NewArrayProxy(p.context, json.NewArray(json.NewRGATreeList(), ticket))
+	})
+
+	return v.(*ArrayProxy)
+}
+
 func (p *ArrayProxy) InsertStringAfter(index int, v string) *ArrayProxy {
 	prev := p.Get(index)
 	p.insertAfterInternal(prev.CreatedAt(), func(ticket *time.Ticket) json.Element {
@@ -103,12 +111,13 @@ func (p *ArrayProxy) InsertStringAfter(index int, v string) *ArrayProxy {
 	return p
 }
 
-func (p *ArrayProxy) AddNewArray() *ArrayProxy {
-	v := p.addInternal(func(ticket *time.Ticket) json.Element {
-		return NewArrayProxy(p.context, json.NewArray(json.NewRGA(), ticket))
+func (p *ArrayProxy) InsertIntegerAfter(index int, v int) *ArrayProxy {
+	prev := p.Get(index)
+	p.insertAfterInternal(prev.CreatedAt(), func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(v, ticket)
 	})
 
-	return v.(*ArrayProxy)
+	return p
 }
 
 func (p *ArrayProxy) Remove(idx int) json.Element {

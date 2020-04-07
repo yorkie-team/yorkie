@@ -68,7 +68,7 @@ func fromJSONObject(pbObj *api.JSONElement_Object) *json.Object {
 }
 
 func fromJSONArray(pbArr *api.JSONElement_Array) *json.Array {
-	elements := json.NewRGA()
+	elements := json.NewRGATreeList()
 	for _, pbNode := range pbArr.Nodes {
 		elements.Add(fromJSONElement(pbNode.Element))
 	}

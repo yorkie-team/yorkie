@@ -18,6 +18,7 @@ package document_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -116,23 +117,37 @@ func TestDocument(t *testing.T) {
 		doc := document.New("c1", "d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetNewArray("k1").AddString("1").AddString("2").AddString("3")
+			root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
 			assert.Equal(t, 3, root.GetArray("k1").Len())
-			assert.Equal(t, `{"k1":["1","2","3"]}`, root.Marshal())
+			assert.Equal(t, `{"k1":[1,2,3]}`, root.Marshal())
+			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[3,1]3", root.GetArray("k1").AnnotatedString())
 
 			root.GetArray("k1").Remove(1)
-			assert.Equal(t, `{"k1":["1","3"]}`, root.Marshal())
+			assert.Equal(t, `{"k1":[1,3]}`, root.Marshal())
 			assert.Equal(t, 2, root.GetArray("k1").Len())
+			assert.Equal(t, "[0,0]0[1,1]1[2,0]2[1,1]3", root.GetArray("k1").AnnotatedString())
 
-			root.GetArray("k1").InsertStringAfter(0, "2")
-			assert.Equal(t, `{"k1":["1","2","3"]}`, root.Marshal())
+			root.GetArray("k1").InsertIntegerAfter(0, 2)
+			assert.Equal(t, `{"k1":[1,2,3]}`, root.Marshal())
 			assert.Equal(t, 3, root.GetArray("k1").Len())
+			assert.Equal(t, "[0,0]0[1,1]1[3,1]2[1,0]2[1,1]3", root.GetArray("k1").AnnotatedString())
 
-			root.GetArray("k1").InsertStringAfter(2, "4")
-			assert.Equal(t, `{"k1":["1","2","3","4"]}`, root.Marshal())
+			root.GetArray("k1").InsertIntegerAfter(2, 4)
+			assert.Equal(t, `{"k1":[1,2,3,4]}`, root.Marshal())
 			assert.Equal(t, 4, root.GetArray("k1").Len())
+			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", root.GetArray("k1").AnnotatedString())
+
+			for i := 0; i < root.GetArray("k1").Len(); i++ {
+				assert.Equal(
+					t,
+					fmt.Sprintf("%d", i + 1),
+					root.GetArray("k1").Get(i).Marshal(),
+				)
+			}
+
 			return nil
 		})
+
 		assert.NoError(t, err)
 	})
 

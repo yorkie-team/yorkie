@@ -47,7 +47,7 @@ func (p *ObjectProxy) SetNewObject(k string) *ObjectProxy {
 
 func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
-		return NewArrayProxy(p.context, json.NewArray(json.NewRGA(), ticket))
+		return NewArrayProxy(p.context, json.NewArray(json.NewRGATreeList(), ticket))
 	})
 
 	return v.(*ArrayProxy)

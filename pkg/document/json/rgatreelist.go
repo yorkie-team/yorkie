@@ -1,0 +1,248 @@
+/*
+ * Copyright 2020 The Yorkie Authors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package json
+
+import (
+	"github.com/yorkie-team/yorkie/pkg/splay"
+	"strings"
+
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/log"
+)
+
+type RGATreeListNode struct {
+	indexNode *splay.Node
+	elem      Element
+
+	prev *RGATreeListNode
+	next *RGATreeListNode
+}
+
+func newRGATreeListNode(elem Element) *RGATreeListNode {
+	node := &RGATreeListNode{
+		prev: nil,
+		next: nil,
+		elem: elem,
+	}
+	node.indexNode = splay.NewNode(node)
+
+	return node
+}
+
+func newRGATreeListNodeAfter(prev *RGATreeListNode, elem Element) *RGATreeListNode {
+	newNode := newRGATreeListNode(elem)
+	prevNext := prev.next
+
+	prev.next = newNode
+	newNode.prev = prev
+	newNode.next = prevNext
+	if prevNext != nil {
+		prevNext.prev = newNode
+	}
+
+	return prev.next
+}
+
+func (n *RGATreeListNode) isDeleted() bool {
+	return n.elem.DeletedAt() != nil
+}
+
+func (n *RGATreeListNode) Element() Element {
+	return n.elem
+}
+
+func (n *RGATreeListNode) Len() int {
+	if n.isDeleted() {
+		return 0
+	}
+	return 1
+}
+
+func (n *RGATreeListNode) String() string {
+	return n.elem.Marshal()
+}
+
+type RGATreeList struct {
+	dummyHead          *RGATreeListNode
+	last               *RGATreeListNode
+	size               int
+	nodeMapByIndex     *splay.Tree
+	nodeMapByCreatedAt map[string]*RGATreeListNode
+}
+
+// NewRGATreeList creates a new instance of RGATreeList.
+func NewRGATreeList() *RGATreeList {
+	dummyValue := NewPrimitive(0, time.InitialTicket)
+	dummyValue.Delete(time.InitialTicket)
+	dummyHead := newRGATreeListNode(dummyValue)
+	nodeMapByCreatedAt := make(map[string]*RGATreeListNode)
+	nodeMapByIndex := splay.NewTree()
+
+	nodeMapByIndex.Insert(dummyHead.indexNode)
+	nodeMapByCreatedAt[dummyHead.elem.CreatedAt().Key()] = dummyHead
+
+	return &RGATreeList{
+		dummyHead:          dummyHead,
+		last:               dummyHead,
+		size:               0,
+		nodeMapByIndex:     nodeMapByIndex,
+		nodeMapByCreatedAt: nodeMapByCreatedAt,
+	}
+}
+
+// Marshal returns the JSON encoding of this RGATreeList.
+func (a *RGATreeList) Marshal() string {
+	sb := strings.Builder{}
+	sb.WriteString("[")
+
+	current := a.dummyHead.next
+	for {
+		if current == nil {
+			break
+		}
+
+		if !current.isDeleted() {
+			sb.WriteString(current.elem.Marshal())
+			if current != a.last {
+				sb.WriteString(",")
+			}
+		}
+
+		current = current.next
+	}
+
+	sb.WriteString("]")
+
+	return sb.String()
+}
+
+// Add adds the given element at the last.
+func (a *RGATreeList) Add(elem Element) {
+	a.insertAfter(a.last, elem)
+}
+
+// Nodes returns an array of elements contained in this RGATreeList.
+// TODO If we encounter performance issues, we need to replace this with other solution.
+func (a *RGATreeList) Nodes() []*RGATreeListNode {
+	var nodes []*RGATreeListNode
+	current := a.dummyHead.next
+	for {
+		if current == nil {
+			break
+		}
+		nodes = append(nodes, current)
+		current = current.next
+	}
+
+	return nodes
+}
+
+// LastCreatedAt returns the creation time of last elements.
+func (a *RGATreeList) LastCreatedAt() *time.Ticket {
+	return a.last.elem.CreatedAt()
+}
+
+// InsertAfter inserts the given element after the given previous element.
+func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element) {
+	prevNode := a.findByCreatedAt(prevCreatedAt, elem.CreatedAt())
+	a.insertAfter(prevNode, elem)
+}
+
+// Get returns the element of the given index.
+func (a *RGATreeList) Get(idx int) *RGATreeListNode {
+	splayNode, offset := a.nodeMapByIndex.Find(idx)
+	node := splayNode.Value().(*RGATreeListNode)
+
+	if idx == 0 && splayNode == a.dummyHead.indexNode {
+		for {
+			node = node.next
+			if !node.isDeleted() {
+				break
+			}
+		}
+	} else if offset > 0 {
+		for {
+			node = node.next
+			if !node.isDeleted() {
+				break
+			}
+		}
+	}
+
+	return node
+}
+
+// RemoveByCreatedAt removes the given element.
+func (a *RGATreeList) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) *RGATreeListNode {
+	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
+	if !ok {
+		log.Logger.Fatalf(
+			"fail to find the given createdAt: %s",
+			createdAt.Key(),
+		)
+
+	}
+
+	if node.elem.Delete(deletedAt) {
+		a.nodeMapByIndex.Splay(node.indexNode)
+		a.size--
+	}
+	return node
+}
+
+// Len returns length of this RGATreeList.
+func (a *RGATreeList) Len() int {
+	return a.size
+}
+
+func (a *RGATreeList) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket) *RGATreeListNode {
+	node, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
+	if !ok {
+		log.Logger.Fatalf(
+			"fail to find the given prevCreatedAt: %s",
+			prevCreatedAt.Key(),
+		)
+		return nil
+	}
+
+	for node.next != nil && node.next.elem.CreatedAt().After(createdAt) {
+		node = node.next
+	}
+
+	return node
+}
+
+func (a *RGATreeList) insertAfter(prev *RGATreeListNode, element Element) {
+	node := newRGATreeListNodeAfter(prev, element)
+	if prev == a.last {
+		a.last = node
+	}
+
+	a.nodeMapByIndex.InsertAfter(prev.indexNode, node.indexNode)
+	a.nodeMapByCreatedAt[element.CreatedAt().Key()] = node
+
+	a.size++
+}
+
+func (a *RGATreeList) AnnotatedString() string {
+	return a.nodeMapByIndex.AnnotatedString()
+}
+
+func (a *RGATreeList) Remove(idx int, deletedAt *time.Ticket) *RGATreeListNode {
+	target := a.Get(idx)
+	return a.RemoveByCreatedAt(target.elem.CreatedAt(), deletedAt)
+}

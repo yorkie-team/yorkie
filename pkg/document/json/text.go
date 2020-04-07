@@ -560,8 +560,12 @@ func (t *Text) DeletedAt() *time.Ticket {
 }
 
 // Delete deletes this Text.
-func (t *Text) Delete(deletedAt *time.Ticket) {
-	t.deletedAt = deletedAt
+func (t *Text) Delete(deletedAt *time.Ticket) bool {
+	if t.deletedAt == nil || deletedAt.After(t.deletedAt) {
+		t.deletedAt = deletedAt
+		return true
+	}
+	return false
 }
 
 // CreateRange returns pair of TextNodePos of the given integer offsets.

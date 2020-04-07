@@ -27,13 +27,13 @@ import (
 // Object represents a JSON object, but unlike regular JSON, it has time
 // tickets which is created by logical clock.
 type Object struct {
-	memberNodes *RHT
+	memberNodes *RHTPriorityQueueMap
 	createdAt   *time.Ticket
 	deletedAt   *time.Ticket
 }
 
 // NewObject creates a new instance of Object.
-func NewObject(memberNodes *RHT, createdAt *time.Ticket) *Object {
+func NewObject(memberNodes *RHTPriorityQueueMap, createdAt *time.Ticket) *Object {
 	return &Object{
 		memberNodes: memberNodes,
 		createdAt:   createdAt,
@@ -134,11 +134,15 @@ func (o *Object) DeletedAt() *time.Ticket {
 }
 
 // Delete deletes this object.
-func (o *Object) Delete(deletedAt *time.Ticket) {
-	o.deletedAt = deletedAt
+func (o *Object) Delete(deletedAt *time.Ticket) bool {
+	if o.deletedAt == nil || deletedAt.After(o.deletedAt) {
+		o.deletedAt = deletedAt
+		return true
+	}
+	return false
 }
 
-// RHTNodes returns the RHT nodes.
+// RHTNodes returns the RHTPriorityQueueMap nodes.
 func (o *Object) RHTNodes() []*RHTNode {
 	return o.memberNodes.AllNodes()
 }
