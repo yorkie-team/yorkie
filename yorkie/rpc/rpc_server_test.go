@@ -63,13 +63,13 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.ActivateClientRequest{ClientKey: t.Name()},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		_, err = testRPCServer.DeactivateClient(
 			context.Background(),
 			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		// invalid argument
 		_, err = testRPCServer.ActivateClient(
@@ -97,7 +97,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.ActivateClientRequest{ClientKey: t.Name()},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
 			DocumentKey: &api.DocumentKey{
@@ -113,7 +113,7 @@ func TestRPCServerBackend(t *testing.T) {
 				ChangePack: packWithNoChanges,
 			},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		// try to attach already attached document
 		_, err = testRPCServer.AttachDocument(
@@ -132,7 +132,7 @@ func TestRPCServerBackend(t *testing.T) {
 				ChangePack: packWithNoChanges,
 			},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		// try to detach already detached document
 		_, err = testRPCServer.DetachDocument(
@@ -163,7 +163,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		// try to attach the document with a deactivated client
 		_, err = testRPCServer.AttachDocument(
@@ -188,7 +188,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.ActivateClientRequest{ClientKey: t.Name()},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		_, err = testRPCServer.AttachDocument(
 			context.Background(),
@@ -197,7 +197,7 @@ func TestRPCServerBackend(t *testing.T) {
 				ChangePack: packWithNoChanges,
 			},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		_, err = testRPCServer.PushPull(
 			context.Background(),
@@ -206,7 +206,7 @@ func TestRPCServerBackend(t *testing.T) {
 				ChangePack: packWithNoChanges,
 			},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		_, err = testRPCServer.DetachDocument(
 			context.Background(),
@@ -215,7 +215,7 @@ func TestRPCServerBackend(t *testing.T) {
 				ChangePack: packWithNoChanges,
 			},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		// try to push/pull with detached document
 		_, err = testRPCServer.PushPull(
@@ -231,7 +231,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
 		)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		// try to push/pull with deactivated client
 		_, err = testRPCServer.PushPull(
