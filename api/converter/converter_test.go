@@ -35,21 +35,21 @@ func TestConverter(t *testing.T) {
 			root.SetNewText("k1").Edit(0, 0, "A")
 			return nil
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"A"}`, doc.Marshal())
 
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewText("k1").Edit(0, 0, "B")
 			return nil
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"B"}`, doc.Marshal())
 
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		obj, err := converter.BytesToObject(bytes)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"B"}`, obj.Marshal())
 	})
 
@@ -88,13 +88,13 @@ func TestConverter(t *testing.T) {
 
 			return nil
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		obj, err := converter.BytesToObject(bytes)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, doc.Marshal(), obj.Marshal())
 	})
 }

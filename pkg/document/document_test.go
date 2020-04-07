@@ -47,7 +47,7 @@ func TestDocument(t *testing.T) {
 			root.SetString("k1", "v1")
 			return nil
 		}, "updates k1")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		assert.NotEqual(t, doc1.Marshal(), doc2.Marshal())
 		assert.Equal(t, doc2.Marshal(), doc3.Marshal())
@@ -67,7 +67,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(t, expected, root.Marshal())
 			return nil
 		}, "updates k1,k2,k3")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		assert.Equal(t, expected, doc.Marshal())
 		assert.True(t, doc.HasLocalChanges())
@@ -86,7 +86,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(t, expected, root.Marshal())
 			return nil
 		}, "updates k1,k2,k3")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, expected, doc.Marshal())
 
 		expected = `{"k1":"v1","k3":["v5","v6"]}`
@@ -95,7 +95,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(t, expected, root.Marshal())
 			return nil
 		}, "removes k2")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, expected, doc.Marshal())
 	})
 
@@ -108,7 +108,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(t, `{"k1":"v2"}`, root.Marshal())
 			return nil
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"v2"}`, doc.Marshal())
 	})
 
@@ -133,7 +133,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(t, 4, root.GetArray("k1").Len())
 			return nil
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("text test", func(t *testing.T) {
@@ -149,7 +149,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(t, `{"k1":"A12D"}`, root.Marshal())
 			return nil
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"A12D"}`, doc.Marshal())
 
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
@@ -175,7 +175,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(t, "1:2:00:3:1", from.AnnotatedString())
 			return nil
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 
 	t.Run("text composition test", func(t *testing.T) {
@@ -192,7 +192,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(t, `{"k1":"하늘"}`, root.Marshal())
 			return nil
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"하늘"}`, doc.Marshal())
 	})
 
@@ -203,7 +203,7 @@ func TestDocument(t *testing.T) {
 			root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
 			return nil
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[1,2,3]}`, doc.Marshal())
 
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
@@ -217,7 +217,7 @@ func TestDocument(t *testing.T) {
 			root.GetArray("k1").AddInteger(4).AddInteger(5)
 			return nil
 		})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[1,2,3,4,5]}`, doc.Marshal())
 	})
 
