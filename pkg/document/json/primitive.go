@@ -70,7 +70,7 @@ type Primitive struct {
 	valueType ValueType
 	value     interface{}
 	createdAt *time.Ticket
-	deletedAt *time.Ticket
+	removedAt *time.Ticket
 }
 
 // NewPrimitive creates a new instance of Primitive.
@@ -190,15 +190,15 @@ func (p *Primitive) CreatedAt() *time.Ticket {
 	return p.createdAt
 }
 
-// DeletedAt returns the deletion time of this element.
-func (p *Primitive) DeletedAt() *time.Ticket {
-	return p.deletedAt
+// RemovedAt returns the removal time of this element.
+func (p *Primitive) RemovedAt() *time.Ticket {
+	return p.removedAt
 }
 
-// Delete deletes this element.
-func (p *Primitive) Delete(deletedAt *time.Ticket) bool {
-	if p.deletedAt == nil || deletedAt.After(p.deletedAt) {
-		p.deletedAt = deletedAt
+// Remove removes this element.
+func (p *Primitive) Remove(removedAt *time.Ticket) bool {
+	if p.removedAt == nil || removedAt.After(p.removedAt) {
+		p.removedAt = removedAt
 		return true
 	}
 	return false

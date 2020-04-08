@@ -54,7 +54,7 @@ func toJSONObject(obj *json.Object) *api.JSONElement {
 		Body: &api.JSONElement_Object_{Object: &api.JSONElement_Object{
 			Nodes:     toRHTNodes(obj.RHTNodes()),
 			CreatedAt: toTimeTicket(obj.CreatedAt()),
-			DeletedAt: toTimeTicket(obj.DeletedAt()),
+			RemovedAt: toTimeTicket(obj.RemovedAt()),
 		}},
 	}
 	return pbElem
@@ -65,7 +65,7 @@ func toJSONArray(arr *json.Array) *api.JSONElement {
 		Body: &api.JSONElement_Array_{Array: &api.JSONElement_Array{
 			Nodes:     toRGANodes(arr.RGANodes()),
 			CreatedAt: toTimeTicket(arr.CreatedAt()),
-			DeletedAt: toTimeTicket(arr.DeletedAt()),
+			RemovedAt: toTimeTicket(arr.RemovedAt()),
 		}},
 	}
 	return pbElem
@@ -77,7 +77,7 @@ func toPrimitive(primitive *json.Primitive) *api.JSONElement {
 			Type:      toValueType(primitive.ValueType()),
 			Value:     primitive.Bytes(),
 			CreatedAt: toTimeTicket(primitive.CreatedAt()),
-			DeletedAt: toTimeTicket(primitive.DeletedAt()),
+			RemovedAt: toTimeTicket(primitive.RemovedAt()),
 		}},
 	}
 }
@@ -87,7 +87,7 @@ func toText(text *json.Text) *api.JSONElement {
 		Body: &api.JSONElement_Text_{Text: &api.JSONElement_Text{
 			Nodes:     toTextNodes(text.TextNodes()),
 			CreatedAt: toTimeTicket(text.CreatedAt()),
-			DeletedAt: toTimeTicket(text.DeletedAt()),
+			RemovedAt: toTimeTicket(text.RemovedAt()),
 		}},
 	}
 }
@@ -119,7 +119,7 @@ func toTextNodes(textNodes []*json.TextNode) []*api.TextNode {
 		pbTextNode := &api.TextNode{
 			Id:        toTextNodeID(textNode.ID()),
 			Value:     textNode.String(),
-			DeletedAt: toTimeTicket(textNode.DeletedAt()),
+			RemovedAt: toTimeTicket(textNode.RemovedAt()),
 		}
 
 		if textNode.InsPrevID() != nil {

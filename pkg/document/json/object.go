@@ -29,7 +29,7 @@ import (
 type Object struct {
 	memberNodes *RHTPriorityQueueMap
 	createdAt   *time.Ticket
-	deletedAt   *time.Ticket
+	removedAt   *time.Ticket
 }
 
 // NewObject creates a new instance of Object.
@@ -60,14 +60,14 @@ func (o *Object) Has(k string) bool {
 	return o.memberNodes.Has(k)
 }
 
-// RemoveByCreatedAt removes the element of the given creation time.
-func (o *Object) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
-	return o.memberNodes.RemoveByCreatedAt(createdAt, deletedAt)
+// DeleteByCreatedAt deletes the element of the given creation time.
+func (o *Object) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+	return o.memberNodes.DeleteByCreatedAt(createdAt, deletedAt)
 }
 
-// Remove removes the element of the given key.
-func (o *Object) Remove(k string, deletedAt *time.Ticket) Element {
-	return o.memberNodes.Remove(k, deletedAt)
+// Remove deletes the element of the given key.
+func (o *Object) Delete(k string, deletedAt *time.Ticket) Element {
+	return o.memberNodes.Delete(k, deletedAt)
 }
 
 func (o *Object) Descendants(descendants chan Element) {
@@ -119,7 +119,7 @@ func (o *Object) DeepCopy() Element {
 	}
 
 	obj := NewObject(members, o.createdAt)
-	obj.deletedAt = o.deletedAt
+	obj.removedAt = o.removedAt
 	return obj
 }
 
@@ -128,15 +128,15 @@ func (o *Object) CreatedAt() *time.Ticket {
 	return o.createdAt
 }
 
-// DeletedAt returns the deletion time of this object.
-func (o *Object) DeletedAt() *time.Ticket {
-	return o.deletedAt
+// RemovedAt returns the removal time of this object.
+func (o *Object) RemovedAt() *time.Ticket {
+	return o.removedAt
 }
 
-// Delete deletes this object.
-func (o *Object) Delete(deletedAt *time.Ticket) bool {
-	if o.deletedAt == nil || deletedAt.After(o.deletedAt) {
-		o.deletedAt = deletedAt
+// Remove removes this object.
+func (o *Object) Remove(removedAt *time.Ticket) bool {
+	if o.removedAt == nil || removedAt.After(o.removedAt) {
+		o.removedAt = removedAt
 		return true
 	}
 	return false

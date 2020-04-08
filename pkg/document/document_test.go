@@ -74,7 +74,7 @@ func TestDocument(t *testing.T) {
 		assert.True(t, doc.HasLocalChanges())
 	})
 
-	t.Run("remove test", func(t *testing.T) {
+	t.Run("delete test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
@@ -92,10 +92,10 @@ func TestDocument(t *testing.T) {
 
 		expected = `{"k1":"v1","k3":["v5","v6"]}`
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
-			root.Remove("k2")
+			root.Delete("k2")
 			assert.Equal(t, expected, root.Marshal())
 			return nil
-		}, "removes k2")
+		}, "deletes k2")
 		assert.NoError(t, err)
 		assert.Equal(t, expected, doc.Marshal())
 	})
@@ -122,7 +122,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(t, `{"k1":[1,2,3]}`, root.Marshal())
 			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[3,1]3", root.GetArray("k1").AnnotatedString())
 
-			root.GetArray("k1").Remove(1)
+			root.GetArray("k1").Delete(1)
 			assert.Equal(t, `{"k1":[1,3]}`, root.Marshal())
 			assert.Equal(t, 2, root.GetArray("k1").Len())
 			assert.Equal(t, "[0,0]0[1,1]1[2,0]2[1,1]3", root.GetArray("k1").AnnotatedString())

@@ -34,8 +34,8 @@ func newRHTNode(key string, elem Element) *RHTNode {
 	}
 }
 
-func (n *RHTNode) Delete(deletedAt *time.Ticket) {
-	n.elem.Delete(deletedAt)
+func (n *RHTNode) Remove(removedAt *time.Ticket) {
+	n.elem.Remove(removedAt)
 }
 
 func (n *RHTNode) Less(other pq.Value) bool {
@@ -43,8 +43,8 @@ func (n *RHTNode) Less(other pq.Value) bool {
 	return n.elem.CreatedAt().After(node.elem.CreatedAt())
 }
 
-func (n *RHTNode) isDeleted() bool {
-	return n.elem.DeletedAt() != nil
+func (n *RHTNode) isRemoved() bool {
+	return n.elem.RemovedAt() != nil
 }
 
 func (n *RHTNode) Key() string {
@@ -77,7 +77,7 @@ func (rht *RHTPriorityQueueMap) Get(key string) Element {
 	}
 
 	node := queue.Peek().(*RHTNode)
-	if node.isDeleted() {
+	if node.isRemoved() {
 		return nil
 	}
 	return node.elem
@@ -91,7 +91,7 @@ func (rht *RHTPriorityQueueMap) Has(key string) bool {
 	}
 
 	node := queue.Peek().(*RHTNode)
-	return node != nil && !node.isDeleted()
+	return node != nil && !node.isRemoved()
 }
 
 // Set sets the value of the given key.
@@ -105,27 +105,27 @@ func (rht *RHTPriorityQueueMap) Set(k string, v Element) {
 	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = node
 }
 
-// Remove removes the Element of the given key.
-func (rht *RHTPriorityQueueMap) Remove(k string, deletedAt *time.Ticket) Element {
+// Remove deletes the Element of the given key.
+func (rht *RHTPriorityQueueMap) Delete(k string, deletedAt *time.Ticket) Element {
 	queue, ok := rht.nodeQueueMapByKey[k]
 	if !ok {
 		return nil
 	}
 
 	node := queue.Peek().(*RHTNode)
-	node.Delete(deletedAt)
+	node.Remove(deletedAt)
 	return node.elem
 }
 
-// RemoveByCreatedAt removes the Element of the given creation time.
-func (rht *RHTPriorityQueueMap) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+// DeleteByCreatedAt deletes the Element of the given creation time.
+func (rht *RHTPriorityQueueMap) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
 	node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
 		log.Logger.Warn("fail to find " + createdAt.Key())
 		return nil
 	}
 
-	node.Delete(deletedAt)
+	node.Remove(deletedAt)
 	return node.elem
 }
 
@@ -134,7 +134,7 @@ func (rht *RHTPriorityQueueMap) RemoveByCreatedAt(createdAt *time.Ticket, delete
 func (rht *RHTPriorityQueueMap) Elements() map[string]Element {
 	members := make(map[string]Element)
 	for _, queue := range rht.nodeQueueMapByKey {
-		if node := queue.Peek().(*RHTNode); !node.isDeleted() {
+		if node := queue.Peek().(*RHTNode); !node.isRemoved() {
 			members[node.key] = node.elem
 		}
 	}

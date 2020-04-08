@@ -179,7 +179,7 @@ func TestClientAndDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("causal object.set/remove test", func(t *testing.T) {
+	t.Run("causal object.set/delete test", func(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(testhelper.Collection, t.Name())
@@ -205,15 +205,15 @@ func TestClientAndDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.Remove("k1")
-			root.GetObject("k2").Remove("k2.2")
+			root.Delete("k1")
+			root.GetObject("k2").Delete("k2.2")
 			return nil
 		}, "nested update by c1")
 		assert.NoError(t, err)
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("concurrent object set/remove simple test", func(t *testing.T) {
+	t.Run("concurrent object set/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(testhelper.Collection, t.Name())
 		err := c1.Attach(ctx, d1)
@@ -233,18 +233,18 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.Remove("k1")
+			root.Delete("k1")
 			root.SetString("k1", "v1")
 			return nil
-		}, "remove and set v1 by c1")
+		}, "delete and set v1 by c1")
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"v1"}`, d1.Marshal())
 
 		err = d2.Update(func(root *proxy.ObjectProxy) error {
-			root.Remove("k1")
+			root.Delete("k1")
 			root.SetString("k1", "v2")
 			return nil
-		}, "remove and set v2 by c2")
+		}, "delete and set v2 by c2")
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"v2"}`, d2.Marshal())
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
@@ -307,7 +307,7 @@ func TestClientAndDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("concurrent array add/remove simple test", func(t *testing.T) {
+	t.Run("concurrent array add/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(testhelper.Collection, t.Name())
@@ -328,9 +328,9 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.GetArray("k1").Remove(1)
+			root.GetArray("k1").Delete(1)
 			return nil
-		}, "remove v2 by c1")
+		}, "delete v2 by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *proxy.ObjectProxy) error {
@@ -342,7 +342,7 @@ func TestClientAndDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("concurrent array add/remove test", func(t *testing.T) {
+	t.Run("concurrent array add/delete test", func(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(testhelper.Collection, t.Name())
@@ -363,9 +363,9 @@ func TestClientAndDocument(t *testing.T) {
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.GetArray("k1").AddString("v2").AddString("v3")
-			root.GetArray("k1").Remove(1)
+			root.GetArray("k1").Delete(1)
 			return nil
-		}, "add v2, v3 and remove v2 by c1")
+		}, "add v2, v3 and delete v2 by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *proxy.ObjectProxy) error {
@@ -408,7 +408,7 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *proxy.ObjectProxy) error {
-			root.Remove("k2")
+			root.Delete("k2")
 			return nil
 		})
 		assert.NoError(t, err)

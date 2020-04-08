@@ -63,7 +63,7 @@ func fromJSONObject(pbObj *api.JSONElement_Object) *json.Object {
 		members,
 		fromTimeTicket(pbObj.CreatedAt),
 	)
-	obj.Delete(fromTimeTicket(pbObj.DeletedAt))
+	obj.Remove(fromTimeTicket(pbObj.RemovedAt))
 	return obj
 }
 
@@ -77,7 +77,7 @@ func fromJSONArray(pbArr *api.JSONElement_Array) *json.Array {
 		elements,
 		fromTimeTicket(pbArr.CreatedAt),
 	)
-	arr.Delete(fromTimeTicket(pbArr.DeletedAt))
+	arr.Remove(fromTimeTicket(pbArr.RemovedAt))
 	return arr
 }
 
@@ -86,7 +86,7 @@ func fromJSONPrimitive(pbPrim *api.JSONElement_Primitive) *json.Primitive {
 		json.ValueFromBytes(fromValueType(pbPrim.Type), pbPrim.Value),
 		fromTimeTicket(pbPrim.CreatedAt),
 	)
-	primitive.Delete(fromTimeTicket(pbPrim.DeletedAt))
+	primitive.Remove(fromTimeTicket(pbPrim.RemovedAt))
 	return primitive
 }
 
@@ -111,7 +111,7 @@ func fromJSONText(pbText *api.JSONElement_Text) *json.Text {
 		rgaTreeSplit,
 		fromTimeTicket(pbText.CreatedAt),
 	)
-	text.Delete(fromTimeTicket(pbText.DeletedAt))
+	text.Remove(fromTimeTicket(pbText.RemovedAt))
 
 	return text
 }
@@ -121,8 +121,8 @@ func fromTextNode(pbTextNode *api.TextNode) *json.TextNode {
 		fromTextNodeID(pbTextNode.Id),
 		pbTextNode.Value,
 	)
-	if pbTextNode.DeletedAt != nil {
-		textNode.Delete(fromTimeTicket(pbTextNode.DeletedAt), time.MaxTicket)
+	if pbTextNode.RemovedAt != nil {
+		textNode.Remove(fromTimeTicket(pbTextNode.RemovedAt), time.MaxTicket)
 	}
 	return textNode
 }
