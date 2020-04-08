@@ -116,7 +116,7 @@ type TextNode struct {
 	id        *TextNodeID
 	indexNode *splay.Node
 	value     string
-	deletedAt *time.Ticket
+	removedAt *time.Ticket
 
 	prev    *TextNode
 	next    *TextNode
@@ -151,14 +151,14 @@ func (t *TextNode) contentLen() int {
 }
 
 func (t *TextNode) Len() int {
-	if t.deletedAt != nil {
+	if t.removedAt != nil {
 		return 0
 	}
 	return t.contentLen()
 }
 
-func (t *TextNode) DeletedAt() *time.Ticket {
-	return t.deletedAt
+func (t *TextNode) RemovedAt() *time.Ticket {
+	return t.removedAt
 }
 
 func (t *TextNode) String() string {
@@ -170,7 +170,7 @@ func (t *TextNode) DeepCopy() *TextNode {
 	node := &TextNode{
 		id:        t.id,
 		value:     t.value,
-		deletedAt: t.deletedAt,
+		removedAt: t.removedAt,
 	}
 	node.indexNode = splay.NewNode(node)
 
@@ -211,10 +211,10 @@ func (t *TextNode) annotatedString() string {
 	return fmt.Sprintf("%s %s", t.id.AnnotatedString(), t.value)
 }
 
-func (t *TextNode) Delete(editedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
+func (t *TextNode) Remove(removedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
 	if !t.createdAt().After(latestCreatedAt) &&
-		(t.deletedAt == nil || editedAt.After(t.deletedAt)) {
-		t.deletedAt = editedAt
+		(t.removedAt == nil || removedAt.After(t.removedAt)) {
+		t.removedAt = removedAt
 		return true
 	}
 	return false
@@ -372,7 +372,7 @@ func (s *RGATreeSplit) edit(
 	toLeft, toRight := s.findTextNodeWithSplit(to, editedAt)
 	fromLeft, fromRight := s.findTextNodeWithSplit(from, editedAt)
 
-	// 02. Delete between from and to
+	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
 	latestCreatedAtMap := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
 
@@ -425,7 +425,7 @@ func (s *RGATreeSplit) deleteNodes(
 			}
 		}
 
-		if node.Delete(editedAt, latestCreatedAt) {
+		if node.Remove(editedAt, latestCreatedAt) {
 			s.treeByIndex.Splay(node.indexNode)
 
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
@@ -444,7 +444,7 @@ func (s *RGATreeSplit) marshal() string {
 
 	node := s.initialHead.next
 	for node != nil {
-		if node.deletedAt == nil {
+		if node.removedAt == nil {
 			values = append(values, node.value)
 		}
 		node = node.next
@@ -476,7 +476,7 @@ func (s *RGATreeSplit) AnnotatedString() string {
 			log.Logger.Warn("insPrev should be presence")
 		}
 
-		if node.deletedAt != nil {
+		if node.removedAt != nil {
 			result = append(result, fmt.Sprintf(
 				"{%s}",
 				node.annotatedString(),
@@ -513,7 +513,7 @@ type Text struct {
 	rgaTreeSplit *RGATreeSplit
 	selectionMap map[string]*Selection
 	createdAt    *time.Ticket
-	deletedAt    *time.Ticket
+	removedAt    *time.Ticket
 }
 
 // NewText creates a new instance of Text.
@@ -554,15 +554,15 @@ func (t *Text) CreatedAt() *time.Ticket {
 	return t.createdAt
 }
 
-// DeletedAt returns the deletion time of this Text.
-func (t *Text) DeletedAt() *time.Ticket {
-	return t.deletedAt
+// RemovedAt returns the removal time of this Text.
+func (t *Text) RemovedAt() *time.Ticket {
+	return t.removedAt
 }
 
-// Delete deletes this Text.
-func (t *Text) Delete(deletedAt *time.Ticket) bool {
-	if t.deletedAt == nil || deletedAt.After(t.deletedAt) {
-		t.deletedAt = deletedAt
+// Remove removes this Text.
+func (t *Text) Remove(removedAt *time.Ticket) bool {
+	if t.removedAt == nil || removedAt.After(t.removedAt) {
+		t.removedAt = removedAt
 		return true
 	}
 	return false

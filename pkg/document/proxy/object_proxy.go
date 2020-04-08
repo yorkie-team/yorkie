@@ -117,19 +117,19 @@ func (p *ObjectProxy) SetDate(k string, v time2.Time) *ObjectProxy {
 	return p
 }
 
-func (p *ObjectProxy) Remove(k string) json.Element {
+func (p *ObjectProxy) Delete(k string) json.Element {
 	if !p.Object.Has(k) {
 		return nil
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	removed := p.Object.Remove(k, ticket)
+	deleted := p.Object.Delete(k, ticket)
 	p.context.Push(operation.NewRemove(
 		p.CreatedAt(),
-		removed.CreatedAt(),
+		deleted.CreatedAt(),
 		ticket,
 	))
-	return removed
+	return deleted
 }
 
 func (p *ObjectProxy) GetObject(k string) *ObjectProxy {

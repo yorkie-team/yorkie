@@ -120,21 +120,21 @@ func (p *ArrayProxy) InsertIntegerAfter(index int, v int) *ArrayProxy {
 	return p
 }
 
-func (p *ArrayProxy) Remove(idx int) json.Element {
+func (p *ArrayProxy) Delete(idx int) json.Element {
 	if p.Len() <= idx {
 		log.Logger.Warnf("the given index is out of bound: %d", idx)
 		return nil
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	removed := p.Array.Remove(idx, ticket)
+	deleted := p.Array.Delete(idx, ticket)
 	p.context.Push(operation.NewRemove(
 		p.CreatedAt(),
-		removed.CreatedAt(),
+		deleted.CreatedAt(),
 		ticket,
 	))
 
-	return removed
+	return deleted
 }
 
 func (p *ArrayProxy) addInternal(

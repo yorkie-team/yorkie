@@ -57,8 +57,8 @@ func newRGATreeListNodeAfter(prev *RGATreeListNode, elem Element) *RGATreeListNo
 	return prev.next
 }
 
-func (n *RGATreeListNode) isDeleted() bool {
-	return n.elem.DeletedAt() != nil
+func (n *RGATreeListNode) isRemoved() bool {
+	return n.elem.RemovedAt() != nil
 }
 
 func (n *RGATreeListNode) Element() Element {
@@ -66,7 +66,7 @@ func (n *RGATreeListNode) Element() Element {
 }
 
 func (n *RGATreeListNode) Len() int {
-	if n.isDeleted() {
+	if n.isRemoved() {
 		return 0
 	}
 	return 1
@@ -87,7 +87,7 @@ type RGATreeList struct {
 // NewRGATreeList creates a new instance of RGATreeList.
 func NewRGATreeList() *RGATreeList {
 	dummyValue := NewPrimitive(0, time.InitialTicket)
-	dummyValue.Delete(time.InitialTicket)
+	dummyValue.Remove(time.InitialTicket)
 	dummyHead := newRGATreeListNode(dummyValue)
 	nodeMapByCreatedAt := make(map[string]*RGATreeListNode)
 	nodeMapByIndex := splay.NewTree()
@@ -115,7 +115,7 @@ func (a *RGATreeList) Marshal() string {
 			break
 		}
 
-		if !current.isDeleted() {
+		if !current.isRemoved() {
 			sb.WriteString(current.elem.Marshal())
 			if current != a.last {
 				sb.WriteString(",")
@@ -170,14 +170,14 @@ func (a *RGATreeList) Get(idx int) *RGATreeListNode {
 	if idx == 0 && splayNode == a.dummyHead.indexNode {
 		for {
 			node = node.next
-			if !node.isDeleted() {
+			if !node.isRemoved() {
 				break
 			}
 		}
 	} else if offset > 0 {
 		for {
 			node = node.next
-			if !node.isDeleted() {
+			if !node.isRemoved() {
 				break
 			}
 		}
@@ -186,8 +186,8 @@ func (a *RGATreeList) Get(idx int) *RGATreeListNode {
 	return node
 }
 
-// RemoveByCreatedAt removes the given element.
-func (a *RGATreeList) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) *RGATreeListNode {
+// DeleteByCreatedAt deletes the given element.
+func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) *RGATreeListNode {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
 		log.Logger.Fatalf(
@@ -197,7 +197,7 @@ func (a *RGATreeList) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.
 
 	}
 
-	if node.elem.Delete(deletedAt) {
+	if node.elem.Remove(deletedAt) {
 		a.nodeMapByIndex.Splay(node.indexNode)
 		a.size--
 	}
@@ -242,7 +242,7 @@ func (a *RGATreeList) AnnotatedString() string {
 	return a.nodeMapByIndex.AnnotatedString()
 }
 
-func (a *RGATreeList) Remove(idx int, deletedAt *time.Ticket) *RGATreeListNode {
+func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) *RGATreeListNode {
 	target := a.Get(idx)
-	return a.RemoveByCreatedAt(target.elem.CreatedAt(), deletedAt)
+	return a.DeleteByCreatedAt(target.elem.CreatedAt(), deletedAt)
 }

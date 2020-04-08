@@ -25,7 +25,7 @@ import (
 type Array struct {
 	elements  *RGATreeList
 	createdAt *time.Ticket
-	deletedAt *time.Ticket
+	removedAt *time.Ticket
 }
 
 // NewArray creates a new instance of Array.
@@ -47,16 +47,16 @@ func (a *Array) Get(idx int) Element {
 	return a.elements.Get(idx).elem
 }
 
-// Remove removes the element of the given index.
-func (a *Array) Remove(idx int, deletedAt *time.Ticket) Element {
-	return a.elements.Remove(idx, deletedAt).elem
+// Remove deletes the element of the given index.
+func (a *Array) Delete(idx int, deletedAt *time.Ticket) Element {
+	return a.elements.Delete(idx, deletedAt).elem
 }
 
 // Elements returns an array of elements contained in this RGATreeList.
 func (a *Array) Elements() []Element {
 	var elements []Element
 	for _, node := range a.elements.Nodes() {
-		if node.isDeleted() {
+		if node.isRemoved() {
 			continue
 		}
 		elements = append(elements, node.elem)
@@ -83,7 +83,7 @@ func (a *Array) DeepCopy() Element {
 	}
 
 	array := NewArray(elements, a.createdAt)
-	array.deletedAt = a.deletedAt
+	array.removedAt = a.removedAt
 	return array
 }
 
@@ -92,15 +92,15 @@ func (a *Array) CreatedAt() *time.Ticket {
 	return a.createdAt
 }
 
-// DeletedAt returns the deletion time of this Array.
-func (a *Array) DeletedAt() *time.Ticket {
-	return a.deletedAt
+// RemovedAt returns the removal time of this Array.
+func (a *Array) RemovedAt() *time.Ticket {
+	return a.removedAt
 }
 
-// Delete deletes this element.
-func (a *Array) Delete(deletedAt *time.Ticket) bool {
-	if a.deletedAt == nil || deletedAt.After(a.deletedAt) {
-		a.deletedAt = deletedAt
+// Remove removes this element.
+func (a *Array) Remove(removedAt *time.Ticket) bool {
+	if a.removedAt == nil || removedAt.After(a.removedAt) {
+		a.removedAt = removedAt
 		return true
 	}
 	return false
@@ -116,9 +116,9 @@ func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
 	a.elements.InsertAfter(prevCreatedAt, element)
 }
 
-// RemoveByCreatedAt removes the given element.
-func (a *Array) RemoveByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
-	return a.elements.RemoveByCreatedAt(createdAt, deletedAt).elem
+// DeleteByCreatedAt deletes the given element.
+func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+	return a.elements.DeleteByCreatedAt(createdAt, deletedAt).elem
 }
 
 // Len returns length of this Array.
