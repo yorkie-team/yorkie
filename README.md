@@ -57,18 +57,7 @@ $ ./bin/yorkie agent -c yorkie.json
 
 The configuration file with default values is shown below.
 
-```
-# yorkie.json
-{
-   "RPCPort":9090,
-   "Mongo":{
-      "ConnectionURI":"mongodb://mongo:27017",
-      "ConnectionTimeoutSec":5,
-      "PingTimeoutSec":5,
-      "YorkieDatabase":"yorkie-meta"
-   }
-}
-```
+https://github.com/yorkie-team/yorkie/blob/master/yorkie/config.sample.json
 
 ## Documentation
 
