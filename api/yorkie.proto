@@ -123,15 +123,21 @@ message ChangeID {
 
 message Operation {
     message Set {
-        string key = 1;
-        JSONElementSimple value = 2;
-        TimeTicket parent_created_at = 3;
+        TimeTicket parent_created_at = 1;
+        string key = 2;
+        JSONElementSimple value = 3;
         TimeTicket executed_at = 4;
     }
     message Add {
-        JSONElementSimple value = 1;
-        TimeTicket parent_created_at = 2;
+        TimeTicket parent_created_at = 1;
+        TimeTicket prev_created_at = 2;
+        JSONElementSimple value = 3;
+        TimeTicket executed_at = 4;
+    }
+    message Move {
+        TimeTicket parent_created_at = 1;
         TimeTicket prev_created_at = 3;
+        TimeTicket created_at = 2;
         TimeTicket executed_at = 4;
     }
     message Remove {
@@ -157,9 +163,10 @@ message Operation {
     oneof body {
         Set set = 1;
         Add add = 2;
-        Remove remove = 3;
-        Edit edit = 4;
-        Select select = 5;
+        Move move = 3;
+        Remove remove = 4;
+        Edit edit = 5;
+        Select select = 6;
     }
 }
 

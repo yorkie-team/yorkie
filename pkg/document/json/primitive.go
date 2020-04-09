@@ -70,6 +70,7 @@ type Primitive struct {
 	valueType ValueType
 	value     interface{}
 	createdAt *time.Ticket
+	updatedAt *time.Ticket
 	removedAt *time.Ticket
 }
 
@@ -188,6 +189,16 @@ func (p *Primitive) DeepCopy() Element {
 // CreatedAt returns the creation time.
 func (p *Primitive) CreatedAt() *time.Ticket {
 	return p.createdAt
+}
+
+// UpdatedAt returns the update time of this element.
+func (p *Primitive) UpdatedAt() *time.Ticket {
+	return p.updatedAt
+}
+
+// SetUpdatedAt sets the update time of this element.
+func (p *Primitive) SetUpdatedAt(updatedAt *time.Ticket) {
+	p.updatedAt = updatedAt
 }
 
 // RemovedAt returns the removal time of this element.

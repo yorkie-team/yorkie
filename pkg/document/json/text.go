@@ -228,10 +228,8 @@ type RGATreeSplit struct {
 
 func NewRGATreeSplit() *RGATreeSplit {
 	initialHead := NewTextNode(initialTextNodeID, "")
-	treeByIndex := splay.NewTree()
+	treeByIndex := splay.NewTree(initialHead.indexNode)
 	treeByID := llrb.NewTree()
-
-	treeByIndex.Insert(initialHead.indexNode)
 	treeByID.Put(initialHead.ID(), initialHead)
 
 	return &RGATreeSplit{
@@ -261,7 +259,7 @@ func (s *RGATreeSplit) findTextNodePos(index int) *TextNodePos {
 
 func (s *RGATreeSplit) findTextNodeWithSplit(
 	pos *TextNodePos,
-	editedAt *time.Ticket,
+	updatedAt *time.Ticket,
 ) (*TextNode, *TextNode) {
 	absoluteID := pos.getAbsoluteID()
 	node := s.findFloorTextNodePreferToLeft(absoluteID)
@@ -270,7 +268,7 @@ func (s *RGATreeSplit) findTextNodeWithSplit(
 
 	s.splitTextNode(node, relativeOffset)
 
-	for node.next != nil && node.next.createdAt().After(editedAt) {
+	for node.next != nil && node.next.createdAt().After(updatedAt) {
 		node = node.next
 	}
 
@@ -513,6 +511,7 @@ type Text struct {
 	rgaTreeSplit *RGATreeSplit
 	selectionMap map[string]*Selection
 	createdAt    *time.Ticket
+	updatedAt    *time.Ticket
 	removedAt    *time.Ticket
 }
 
@@ -557,6 +556,16 @@ func (t *Text) CreatedAt() *time.Ticket {
 // RemovedAt returns the removal time of this Text.
 func (t *Text) RemovedAt() *time.Ticket {
 	return t.removedAt
+}
+
+// UpdatedAt returns the update time of this Text.
+func (t *Text) UpdatedAt() *time.Ticket {
+	return t.updatedAt
+}
+
+// SetUpdatedAt sets the update time of this Text.
+func (t *Text) SetUpdatedAt(updatedAt *time.Ticket) {
+	t.updatedAt = updatedAt
 }
 
 // Remove removes this Text.

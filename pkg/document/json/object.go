@@ -29,6 +29,7 @@ import (
 type Object struct {
 	memberNodes *RHTPriorityQueueMap
 	createdAt   *time.Ticket
+	updatedAt   *time.Ticket
 	removedAt   *time.Ticket
 }
 
@@ -126,6 +127,16 @@ func (o *Object) DeepCopy() Element {
 // CreatedAt returns the creation time of this object.
 func (o *Object) CreatedAt() *time.Ticket {
 	return o.createdAt
+}
+
+// UpdatedAt returns the update time of this object.
+func (o *Object) UpdatedAt() *time.Ticket {
+	return o.updatedAt
+}
+
+// SetUpdatedAt sets the update time of this object.
+func (o *Object) SetUpdatedAt(updatedAt *time.Ticket) {
+	o.updatedAt = updatedAt
 }
 
 // RemovedAt returns the removal time of this object.

@@ -97,4 +97,52 @@ func TestConverter(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, doc.Marshal(), obj.Marshal())
 	})
+
+	t.Run("change pack test", func(t *testing.T) {
+		d1 := document.New("c1", "d1")
+
+		err := d1.Update(func(root *proxy.ObjectProxy) error {
+			// an object and primitive types
+			root.SetNewObject("k1").
+				SetBool("k1.1", true).
+				SetInteger("k1.2", 2147483647).
+				SetLong("k1.3", 9223372036854775807).
+				SetDouble("1.4", 1.79).
+				SetString("k1.5", "4").
+				SetBytes("k1.6", []byte{65, 66}).
+				SetDate("k1.7", time.Now())
+
+			// an array
+			root.SetNewArray("k2").
+				AddBool(true).
+				AddInteger(1).
+				AddLong(2).
+				AddDouble(3.0).
+				AddString("4").
+				AddBytes([]byte{65}).
+				AddDate(time.Now())
+
+			// plain text
+			root.SetNewText("k3").
+				Edit(0, 0, "ㅎ").
+				Edit(0, 1, "하").
+				Edit(0, 1, "한").
+				Edit(0, 1, "하").
+				Edit(1, 1, "느").
+				Edit(1, 2, "늘")
+
+			return nil
+		})
+		assert.NoError(t, err)
+
+		pbPack := converter.ToChangePack(d1.CreateChangePack())
+		pack, err := converter.FromChangePack(pbPack)
+		assert.NoError(t, err)
+
+		d2 := document.New("c1", "d1")
+		err = d2.ApplyChangePack(pack)
+		assert.NoError(t, err)
+
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
+	})
 }

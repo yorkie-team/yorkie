@@ -142,6 +142,13 @@ func FromOperations(pbOps []*api.Operation) []operation.Operation {
 				fromTextNodePos(decoded.Select.To),
 				fromTimeTicket(decoded.Select.ExecutedAt),
 			)
+		case *api.Operation_Move_:
+			op = operation.NewMove(
+				fromTimeTicket(decoded.Move.ParentCreatedAt),
+				fromTimeTicket(decoded.Move.PrevCreatedAt),
+				fromTimeTicket(decoded.Move.CreatedAt),
+				fromTimeTicket(decoded.Move.ExecutedAt),
+			)
 		default:
 			panic("unsupported operation")
 		}

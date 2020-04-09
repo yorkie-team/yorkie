@@ -133,6 +133,15 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
+		case *operation.Move:
+			pbOperation.Body = &api.Operation_Move_{
+				Move: &api.Operation_Move{
+					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
+					PrevCreatedAt:   toTimeTicket(op.PrevCreatedAt()),
+					CreatedAt:       toTimeTicket(op.CreatedAt()),
+					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
+				},
+			}
 		default:
 			panic("unsupported operation")
 		}

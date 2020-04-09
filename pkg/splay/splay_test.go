@@ -44,7 +44,7 @@ func (v *stringValue) String() string {
 
 func TestSplayTree(t *testing.T) {
 	t.Run("insert and splay test", func(t *testing.T) {
-		tree := splay.NewTree()
+		tree := splay.NewTree(nil)
 
 		nodeA := tree.Insert(newSplayNode("A2"))
 		assert.Equal(t, "[2,2]A2", tree.AnnotatedString())

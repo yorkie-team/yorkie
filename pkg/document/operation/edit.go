@@ -17,11 +17,8 @@
 package operation
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 type Edit struct {
@@ -55,9 +52,7 @@ func (e *Edit) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*json.Text)
 	if !ok {
-		err := fmt.Errorf("fail to execute, only Text can execute Edit")
-		log.Logger.Error(err)
-		return err
+		return ErrNotApplicableDataType
 	}
 
 	obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.executedAt)
