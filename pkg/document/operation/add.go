@@ -17,11 +17,8 @@
 package operation
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 type Add struct {
@@ -50,13 +47,12 @@ func (o *Add) Execute(root *json.Root) error {
 
 	obj, ok := parent.(*json.Array)
 	if !ok {
-		err := fmt.Errorf("fail to execute, only Array can execute Set")
-		log.Logger.Error(err)
-		return err
+		return ErrNotApplicableDataType
 	}
 
 	value := o.value.DeepCopy()
 	obj.InsertAfter(o.prevCreatedAt, value)
+
 	root.RegisterElement(value)
 	return nil
 }

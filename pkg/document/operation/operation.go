@@ -17,8 +17,14 @@
 package operation
 
 import (
+	"errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+)
+
+var (
+	ErrNotApplicableDataType = errors.New("fail to execute this operation")
 )
 
 type Operation interface {

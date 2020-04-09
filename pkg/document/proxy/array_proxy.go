@@ -38,58 +38,72 @@ func NewArrayProxy(ctx *change.Context, array *json.Array) *ArrayProxy {
 	}
 }
 
-func (p *ArrayProxy) AddBool(v bool) *ArrayProxy {
-	p.addInternal(func(ticket *time.Ticket) json.Element {
-		return json.NewPrimitive(v, ticket)
-	})
+func (p *ArrayProxy) AddBool(values ...bool) *ArrayProxy {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) json.Element {
+			return json.NewPrimitive(value, ticket)
+		})
+	}
 
 	return p
 }
 
-func (p *ArrayProxy) AddInteger(v int) *ArrayProxy {
-	p.addInternal(func(ticket *time.Ticket) json.Element {
-		return json.NewPrimitive(v, ticket)
-	})
+func (p *ArrayProxy) AddInteger(values ...int) *ArrayProxy {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) json.Element {
+			return json.NewPrimitive(value, ticket)
+		})
+	}
 
 	return p
 }
 
-func (p *ArrayProxy) AddLong(v int64) *ArrayProxy {
-	p.addInternal(func(ticket *time.Ticket) json.Element {
-		return json.NewPrimitive(v, ticket)
-	})
+func (p *ArrayProxy) AddLong(values ...int64) *ArrayProxy {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) json.Element {
+			return json.NewPrimitive(value, ticket)
+		})
+	}
 
 	return p
 }
 
-func (p *ArrayProxy) AddDouble(v float64) *ArrayProxy {
-	p.addInternal(func(ticket *time.Ticket) json.Element {
-		return json.NewPrimitive(v, ticket)
-	})
+func (p *ArrayProxy) AddDouble(values ...float64) *ArrayProxy {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) json.Element {
+			return json.NewPrimitive(value, ticket)
+		})
+	}
 
 	return p
 }
 
-func (p *ArrayProxy) AddBytes(v []byte) *ArrayProxy {
-	p.addInternal(func(ticket *time.Ticket) json.Element {
-		return json.NewPrimitive(v, ticket)
-	})
+func (p *ArrayProxy) AddString(values ...string) *ArrayProxy {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) json.Element {
+			return json.NewPrimitive(value, ticket)
+		})
+	}
 
 	return p
 }
 
-func (p *ArrayProxy) AddDate(v time2.Time) *ArrayProxy {
-	p.addInternal(func(ticket *time.Ticket) json.Element {
-		return json.NewPrimitive(v, ticket)
-	})
+func (p *ArrayProxy) AddBytes(values ...[]byte) *ArrayProxy {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) json.Element {
+			return json.NewPrimitive(value, ticket)
+		})
+	}
 
 	return p
 }
 
-func (p *ArrayProxy) AddString(v string) *ArrayProxy {
-	p.addInternal(func(ticket *time.Ticket) json.Element {
-		return json.NewPrimitive(v, ticket)
-	})
+func (p *ArrayProxy) AddDate(values ...time2.Time) *ArrayProxy {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) json.Element {
+			return json.NewPrimitive(value, ticket)
+		})
+	}
 
 	return p
 }
@@ -102,18 +116,13 @@ func (p *ArrayProxy) AddNewArray() *ArrayProxy {
 	return v.(*ArrayProxy)
 }
 
-func (p *ArrayProxy) InsertStringAfter(index int, v string) *ArrayProxy {
-	prev := p.Get(index)
-	p.insertAfterInternal(prev.CreatedAt(), func(ticket *time.Ticket) json.Element {
-		return json.NewPrimitive(v, ticket)
-	})
-
-	return p
+// MoveBefore moves the given element to its new position before the given next element.
+func (p *ArrayProxy) MoveBefore(nextCreatedAt, createdAt *time.Ticket) {
+	p.moveBeforeInternal(nextCreatedAt, createdAt)
 }
 
 func (p *ArrayProxy) InsertIntegerAfter(index int, v int) *ArrayProxy {
-	prev := p.Get(index)
-	p.insertAfterInternal(prev.CreatedAt(), func(ticket *time.Ticket) json.Element {
+	p.insertAfterInternal(p.Get(index).CreatedAt(), func(ticket *time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
 	})
 
@@ -135,6 +144,10 @@ func (p *ArrayProxy) Delete(idx int) json.Element {
 	))
 
 	return deleted
+}
+
+func (p *ArrayProxy) Len() int {
+	return p.Array.Len()
 }
 
 func (p *ArrayProxy) addInternal(
@@ -164,7 +177,17 @@ func (p *ArrayProxy) insertAfterInternal(
 	return proxy
 }
 
-func (p *ArrayProxy) Len() int {
-	return p.Array.Len()
-}
+func (p *ArrayProxy) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
+	ticket := p.context.IssueTimeTicket()
 
+	prevCreatedAt := p.FindPrevCreatedAt(nextCreatedAt)
+
+	p.context.Push(operation.NewMove(
+		p.Array.CreatedAt(),
+		prevCreatedAt,
+		createdAt,
+		ticket,
+	))
+
+	p.MoveAfter(prevCreatedAt, createdAt, ticket)
+}

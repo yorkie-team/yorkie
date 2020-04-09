@@ -25,6 +25,7 @@ import (
 type Array struct {
 	elements  *RGATreeList
 	createdAt *time.Ticket
+	updatedAt *time.Ticket
 	removedAt *time.Ticket
 }
 
@@ -47,9 +48,17 @@ func (a *Array) Get(idx int) Element {
 	return a.elements.Get(idx).elem
 }
 
+func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
+	return a.elements.FindPrevCreatedAt(createdAt)
+}
+
 // Remove deletes the element of the given index.
 func (a *Array) Delete(idx int, deletedAt *time.Ticket) Element {
 	return a.elements.Delete(idx, deletedAt).elem
+}
+
+func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) {
+	a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt)
 }
 
 // Elements returns an array of elements contained in this RGATreeList.
@@ -70,6 +79,8 @@ func (a *Array) Marshal() string {
 	return a.elements.Marshal()
 }
 
+// AnnotatedString returns a string containing the meta data of the elements
+// for debugging purpose.
 func (a *Array) AnnotatedString() string {
 	return a.elements.AnnotatedString()
 }
@@ -87,17 +98,27 @@ func (a *Array) DeepCopy() Element {
 	return array
 }
 
-// CreatedAt returns the creation time of this Array.
+// CreatedAt returns the creation time of this array.
 func (a *Array) CreatedAt() *time.Ticket {
 	return a.createdAt
 }
 
-// RemovedAt returns the removal time of this Array.
+// UpdatedAt returns the update time of this array.
+func (a *Array) UpdatedAt() *time.Ticket {
+	return a.updatedAt
+}
+
+// SetUpdatedAt sets the update time of this array.
+func (a *Array) SetUpdatedAt(updatedAt *time.Ticket) {
+	a.updatedAt = updatedAt
+}
+
+// RemovedAt returns the removal time of this array.
 func (a *Array) RemovedAt() *time.Ticket {
 	return a.removedAt
 }
 
-// Remove removes this element.
+// Remove removes this array.
 func (a *Array) Remove(removedAt *time.Ticket) bool {
 	if a.removedAt == nil || removedAt.After(a.removedAt) {
 		a.removedAt = removedAt

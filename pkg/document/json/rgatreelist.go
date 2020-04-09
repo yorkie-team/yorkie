@@ -17,11 +17,11 @@
 package json
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/splay"
 	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
 type RGATreeListNode struct {
@@ -57,10 +57,6 @@ func newRGATreeListNodeAfter(prev *RGATreeListNode, elem Element) *RGATreeListNo
 	return prev.next
 }
 
-func (n *RGATreeListNode) isRemoved() bool {
-	return n.elem.RemovedAt() != nil
-}
-
 func (n *RGATreeListNode) Element() Element {
 	return n.elem
 }
@@ -76,6 +72,10 @@ func (n *RGATreeListNode) String() string {
 	return n.elem.Marshal()
 }
 
+func (n *RGATreeListNode) isRemoved() bool {
+	return n.elem.RemovedAt() != nil
+}
+
 type RGATreeList struct {
 	dummyHead          *RGATreeListNode
 	last               *RGATreeListNode
@@ -89,10 +89,8 @@ func NewRGATreeList() *RGATreeList {
 	dummyValue := NewPrimitive(0, time.InitialTicket)
 	dummyValue.Remove(time.InitialTicket)
 	dummyHead := newRGATreeListNode(dummyValue)
+	nodeMapByIndex := splay.NewTree(dummyHead.indexNode)
 	nodeMapByCreatedAt := make(map[string]*RGATreeListNode)
-	nodeMapByIndex := splay.NewTree()
-
-	nodeMapByIndex.Insert(dummyHead.indexNode)
 	nodeMapByCreatedAt[dummyHead.elem.CreatedAt().Key()] = dummyHead
 
 	return &RGATreeList{
@@ -209,6 +207,60 @@ func (a *RGATreeList) Len() int {
 	return a.size
 }
 
+// AnnotatedString returns a string containing the meta data of the node id
+// for debugging purpose.
+func (a *RGATreeList) AnnotatedString() string {
+	return a.nodeMapByIndex.AnnotatedString()
+}
+
+func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) *RGATreeListNode {
+	target := a.Get(idx)
+	return a.DeleteByCreatedAt(target.elem.CreatedAt(), deletedAt)
+}
+
+func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) {
+	prevNode, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
+	if !ok {
+		log.Logger.Fatalf(
+			"fail to find the given prevCreatedAt: %s",
+			prevCreatedAt.Key(),
+		)
+	}
+
+	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
+	if !ok {
+		log.Logger.Fatalf(
+			"fail to find the given createdAt: %s",
+			createdAt.Key(),
+		)
+	}
+
+	if node.elem.UpdatedAt() == nil || executedAt.After(node.elem.UpdatedAt()) {
+		a.release(node)
+		a.insertAfter(prevNode, node.elem)
+		node.elem.SetUpdatedAt(executedAt)
+	}
+}
+
+func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
+	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
+	if !ok {
+		log.Logger.Fatalf(
+			"fail to find the given prevCreatedAt: %s",
+			createdAt.Key(),
+		)
+	}
+
+	for {
+		node = node.prev
+		if a.dummyHead == node || !node.isRemoved() {
+			break
+		}
+	}
+
+	return node.elem.CreatedAt()
+}
+
 func (a *RGATreeList) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket) *RGATreeListNode {
 	node, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
 	if !ok {
@@ -226,6 +278,21 @@ func (a *RGATreeList) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *tim
 	return node
 }
 
+func (a *RGATreeList) release(node *RGATreeListNode) {
+	if a.last == node {
+		a.last = node.prev
+	}
+
+	node.prev.next = node.next
+	if node.next != nil {
+		node.next.prev = node.prev
+	}
+	a.nodeMapByIndex.Delete(node.indexNode)
+	delete(a.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
+
+	a.size--
+}
+
 func (a *RGATreeList) insertAfter(prev *RGATreeListNode, element Element) {
 	node := newRGATreeListNodeAfter(prev, element)
 	if prev == a.last {
@@ -236,13 +303,4 @@ func (a *RGATreeList) insertAfter(prev *RGATreeListNode, element Element) {
 	a.nodeMapByCreatedAt[element.CreatedAt().Key()] = node
 
 	a.size++
-}
-
-func (a *RGATreeList) AnnotatedString() string {
-	return a.nodeMapByIndex.AnnotatedString()
-}
-
-func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) *RGATreeListNode {
-	target := a.Get(idx)
-	return a.DeleteByCreatedAt(target.elem.CreatedAt(), deletedAt)
 }

@@ -64,7 +64,7 @@ func TestDocument(t *testing.T) {
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k1", "v1")
 			root.SetNewObject("k2").SetString("k4", "v4")
-			root.SetNewArray("k3").AddString("v5").AddString("v6")
+			root.SetNewArray("k3").AddString("v5", "v6")
 			assert.Equal(t, expected, root.Marshal())
 			return nil
 		}, "updates k1,k2,k3")
@@ -83,7 +83,7 @@ func TestDocument(t *testing.T) {
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k1", "v1")
 			root.SetNewObject("k2").SetString("k4", "v4")
-			root.SetNewArray("k3").AddString("v5").AddString("v6")
+			root.SetNewArray("k3").AddString("v5", "v6")
 			assert.Equal(t, expected, root.Marshal())
 			return nil
 		}, "updates k1,k2,k3")
@@ -140,7 +140,7 @@ func TestDocument(t *testing.T) {
 			for i := 0; i < root.GetArray("k1").Len(); i++ {
 				assert.Equal(
 					t,
-					fmt.Sprintf("%d", i + 1),
+					fmt.Sprintf("%d", i+1),
 					root.GetArray("k1").Get(i).Marshal(),
 				)
 			}
@@ -215,25 +215,24 @@ func TestDocument(t *testing.T) {
 		doc := document.New("c1", "d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
+			root.SetNewArray("k1").AddInteger(1, 2, 3)
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[1,2,3]}`, doc.Marshal())
 
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
-			root.GetArray("k1").AddInteger(4).AddInteger(5)
+			root.GetArray("k1").AddInteger(4, 5)
 			return errDummy
 		})
 		assert.Equal(t, err, errDummy, "should returns the dummy error")
 		assert.Equal(t, `{"k1":[1,2,3]}`, doc.Marshal())
 
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
-			root.GetArray("k1").AddInteger(4).AddInteger(5)
+			root.GetArray("k1").AddInteger(4, 5)
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[1,2,3,4,5]}`, doc.Marshal())
 	})
-
 }

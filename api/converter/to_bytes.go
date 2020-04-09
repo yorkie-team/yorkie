@@ -54,6 +54,7 @@ func toJSONObject(obj *json.Object) *api.JSONElement {
 		Body: &api.JSONElement_Object_{Object: &api.JSONElement_Object{
 			Nodes:     toRHTNodes(obj.RHTNodes()),
 			CreatedAt: toTimeTicket(obj.CreatedAt()),
+			UpdatedAt: toTimeTicket(obj.UpdatedAt()),
 			RemovedAt: toTimeTicket(obj.RemovedAt()),
 		}},
 	}
@@ -65,6 +66,7 @@ func toJSONArray(arr *json.Array) *api.JSONElement {
 		Body: &api.JSONElement_Array_{Array: &api.JSONElement_Array{
 			Nodes:     toRGANodes(arr.RGANodes()),
 			CreatedAt: toTimeTicket(arr.CreatedAt()),
+			UpdatedAt: toTimeTicket(arr.UpdatedAt()),
 			RemovedAt: toTimeTicket(arr.RemovedAt()),
 		}},
 	}
@@ -77,6 +79,7 @@ func toPrimitive(primitive *json.Primitive) *api.JSONElement {
 			Type:      toValueType(primitive.ValueType()),
 			Value:     primitive.Bytes(),
 			CreatedAt: toTimeTicket(primitive.CreatedAt()),
+			UpdatedAt: toTimeTicket(primitive.UpdatedAt()),
 			RemovedAt: toTimeTicket(primitive.RemovedAt()),
 		}},
 	}
@@ -87,6 +90,7 @@ func toText(text *json.Text) *api.JSONElement {
 		Body: &api.JSONElement_Text_{Text: &api.JSONElement_Text{
 			Nodes:     toTextNodes(text.TextNodes()),
 			CreatedAt: toTimeTicket(text.CreatedAt()),
+			UpdatedAt: toTimeTicket(text.UpdatedAt()),
 			RemovedAt: toTimeTicket(text.RemovedAt()),
 		}},
 	}

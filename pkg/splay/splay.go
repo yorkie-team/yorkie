@@ -83,9 +83,9 @@ type Tree struct {
 }
 
 // NewTree creates a new instance of Tree.
-func NewTree() *Tree {
+func NewTree(root *Node) *Tree {
 	return &Tree{
-		root: nil,
+		root: root,
 	}
 }
 
@@ -220,6 +220,41 @@ func (t *Tree) AnnotatedString() string {
 	return strings.Join(metaString, "")
 }
 
+func (t *Tree) UpdateSubtree(node *Node) {
+	node.initWeight()
+
+	if node.left != nil {
+		node.increaseWeight(node.leftWeight())
+	}
+
+	if node.right != nil {
+		node.increaseWeight(node.rightWeight())
+	}
+}
+
+func (t *Tree) Delete(node *Node) {
+	t.Splay(node)
+
+	leftTree := NewTree(node.left)
+	if leftTree.root != nil {
+		leftTree.root.parent = nil
+	}
+
+	rightTree := NewTree(node.right)
+	if rightTree.root != nil {
+		rightTree.root.parent = nil
+	}
+
+	if leftTree.root != nil {
+		maxNode := leftTree.maximum()
+		leftTree.Splay(maxNode)
+		leftTree.root.right = rightTree.root
+		t.root = leftTree.root
+	} else {
+		t.root = rightTree.root
+	}
+}
+
 func (t *Tree) rotateLeft(pivot *Node) {
 	root := pivot.parent
 	if root.parent != nil {
@@ -271,16 +306,12 @@ func (t *Tree) rotateRight(pivot *Node) {
 	t.UpdateSubtree(pivot)
 }
 
-func (t *Tree) UpdateSubtree(node *Node) {
-	node.initWeight()
-
-	if node.left != nil {
-		node.increaseWeight(node.leftWeight())
+func (t *Tree) maximum() *Node {
+	node := t.root
+	for node.right != nil {
+		node = node.right
 	}
-
-	if node.right != nil {
-		node.increaseWeight(node.rightWeight())
-	}
+	return node
 }
 
 func traverseInOrder(node *Node, callback func(node *Node)) {

@@ -21,7 +21,7 @@ import (
 )
 
 // Root is a structure represents the root of JSON. It has a hash table of
-// all JSON elements to find a specific element when appling remote changes
+// all JSON elements to find a specific element when applying remote changes
 // received from agent.
 //
 // Every element has a unique time ticket at creation, which allows us to find

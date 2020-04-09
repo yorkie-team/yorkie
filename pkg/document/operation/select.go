@@ -17,11 +17,8 @@
 package operation
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 type Select struct {
@@ -49,9 +46,7 @@ func (s *Select) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(s.parentCreatedAt)
 	obj, ok := parent.(*json.Text)
 	if !ok {
-		err := fmt.Errorf("fail to execute, only Text can execute Edit")
-		log.Logger.Error(err)
-		return err
+		return ErrNotApplicableDataType
 	}
 
 	obj.Select(s.from, s.to, s.executedAt)

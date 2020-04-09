@@ -17,11 +17,8 @@
 package operation
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 type Set struct {
@@ -50,9 +47,7 @@ func (o *Set) Execute(root *json.Root) error {
 
 	obj, ok := parent.(*json.Object)
 	if !ok {
-		err := fmt.Errorf("fail to execute, only Object can execute Set")
-		log.Logger.Error(err)
-		return err
+		return ErrNotApplicableDataType
 	}
 
 	value := o.value.DeepCopy()

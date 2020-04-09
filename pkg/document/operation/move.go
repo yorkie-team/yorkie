@@ -21,51 +21,56 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-type Remove struct {
+type Move struct {
 	parentCreatedAt *time.Ticket
+	prevCreatedAt   *time.Ticket
 	createdAt       *time.Ticket
 	executedAt      *time.Ticket
 }
 
-func NewRemove(
+func NewMove(
 	parentCreatedAt *time.Ticket,
+	prevCreatedAt *time.Ticket,
 	createdAt *time.Ticket,
 	executedAt *time.Ticket,
-) *Remove {
-	return &Remove{
+) *Move {
+	return &Move{
 		parentCreatedAt: parentCreatedAt,
+		prevCreatedAt:   prevCreatedAt,
 		createdAt:       createdAt,
 		executedAt:      executedAt,
 	}
 }
 
-func (o *Remove) Execute(root *json.Root) error {
+func (o *Move) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
-	switch obj := parent.(type) {
-	case *json.Object:
-		_ = obj.DeleteByCreatedAt(o.createdAt, o.executedAt)
-	case *json.Array:
-		_ = obj.DeleteByCreatedAt(o.createdAt, o.executedAt)
-	default:
+	obj, ok := parent.(*json.Array)
+	if !ok {
 		return ErrNotApplicableDataType
 	}
+
+	obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
 
 	return nil
 }
 
-func (o *Remove) ParentCreatedAt() *time.Ticket {
+func (o *Move) CreatedAt() *time.Ticket {
+	return o.createdAt
+}
+
+func (o *Move) ParentCreatedAt() *time.Ticket {
 	return o.parentCreatedAt
 }
 
-func (o *Remove) ExecutedAt() *time.Ticket {
+func (o *Move) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
-func (o *Remove) SetActor(actorID *time.ActorID) {
+func (o *Move) SetActor(actorID *time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 
-func (o *Remove) CreatedAt() *time.Ticket {
-	return o.createdAt
+func (o *Move) PrevCreatedAt() *time.Ticket {
+	return o.prevCreatedAt
 }

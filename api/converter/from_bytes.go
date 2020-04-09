@@ -63,6 +63,7 @@ func fromJSONObject(pbObj *api.JSONElement_Object) *json.Object {
 		members,
 		fromTimeTicket(pbObj.CreatedAt),
 	)
+	obj.SetUpdatedAt(fromTimeTicket(pbObj.UpdatedAt))
 	obj.Remove(fromTimeTicket(pbObj.RemovedAt))
 	return obj
 }
@@ -77,6 +78,7 @@ func fromJSONArray(pbArr *api.JSONElement_Array) *json.Array {
 		elements,
 		fromTimeTicket(pbArr.CreatedAt),
 	)
+	arr.SetUpdatedAt(fromTimeTicket(pbArr.UpdatedAt))
 	arr.Remove(fromTimeTicket(pbArr.RemovedAt))
 	return arr
 }
@@ -86,6 +88,7 @@ func fromJSONPrimitive(pbPrim *api.JSONElement_Primitive) *json.Primitive {
 		json.ValueFromBytes(fromValueType(pbPrim.Type), pbPrim.Value),
 		fromTimeTicket(pbPrim.CreatedAt),
 	)
+	primitive.SetUpdatedAt(fromTimeTicket(pbPrim.UpdatedAt))
 	primitive.Remove(fromTimeTicket(pbPrim.RemovedAt))
 	return primitive
 }
@@ -111,6 +114,7 @@ func fromJSONText(pbText *api.JSONElement_Text) *json.Text {
 		rgaTreeSplit,
 		fromTimeTicket(pbText.CreatedAt),
 	)
+	text.SetUpdatedAt(fromTimeTicket(pbText.UpdatedAt))
 	text.Remove(fromTimeTicket(pbText.RemovedAt))
 
 	return text
