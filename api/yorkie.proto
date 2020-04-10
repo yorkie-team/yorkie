@@ -136,8 +136,8 @@ message Operation {
     }
     message Move {
         TimeTicket parent_created_at = 1;
-        TimeTicket prev_created_at = 3;
-        TimeTicket created_at = 2;
+        TimeTicket prev_created_at = 2;
+        TimeTicket created_at = 3;
         TimeTicket executed_at = 4;
     }
     message Remove {
