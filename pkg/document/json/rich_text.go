@@ -18,56 +18,69 @@ package json
 
 import (
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
-func InitialTextNode() *RGATreeSplitNode {
-	return NewRGATreeSplitNode(initialNodeID, &TextValue{
+func InitialRichTextNode() *RGATreeSplitNode {
+	return NewRGATreeSplitNode(initialNodeID, &RichTextValue{
+		attrs: NewRHT(),
 		value: "",
 	})
 }
 
-type TextValue struct {
+type RichTextValue struct {
+	attrs *RHT
 	value string
 }
 
-func NewTextValue(value string) *TextValue {
-	return &TextValue{
+func NewRichTextValue(attrs *RHT, value string) *RichTextValue {
+	return &RichTextValue{
+		attrs: attrs,
 		value: value,
 	}
 }
 
-func (t *TextValue) Len() int {
+func (t *RichTextValue) Attrs() *RHT {
+	return t.attrs
+}
+
+func (t *RichTextValue) Value() string {
+	return t.value
+}
+
+func (t *RichTextValue) Len() int {
 	return utf8.RuneCountInString(t.value)
 }
 
-func (t *TextValue) String() string {
-	return t.value
+func (t *RichTextValue) String() string {
+	return fmt.Sprintf(`{"attrs":%s,"val":"%s"}`, t.attrs.Marshal(), t.value)
 }
 
-func (t *TextValue) AnnotatedString() string {
-	return t.value
+func (t *RichTextValue) AnnotatedString() string {
+	return fmt.Sprintf(`%s "%s"`, t.attrs.Marshal(), t.value)
 }
 
-func (t *TextValue) Split(offset int) RGATreeSplitValue {
+func (t *RichTextValue) Split(offset int) RGATreeSplitValue {
 	value := t.value
 	r := []rune(value)
 	t.value = string(r[0:offset])
-	return NewTextValue(string(r[offset:]))
+	return NewRichTextValue(t.attrs.DeepCopy(), string(r[offset:]))
 }
 
 // DeepCopy copies itself deeply.
-func (t *TextValue) DeepCopy() RGATreeSplitValue {
-	return &TextValue{
+func (t *RichTextValue) DeepCopy() RGATreeSplitValue {
+	return &RichTextValue{
+		attrs: t.attrs.DeepCopy(),
 		value: t.value,
 	}
 }
 
-// Text is an extended data type for the contents of a text editor.
-type Text struct {
+// RichText is an extended data type for the contents of a text editor.
+type RichText struct {
 	rgaTreeSplit *RGATreeSplit
 	selectionMap map[string]*Selection
 	createdAt    *time.Ticket
@@ -76,21 +89,31 @@ type Text struct {
 }
 
 // NewText creates a new instance of Text.
-func NewText(elements *RGATreeSplit, createdAt *time.Ticket) *Text {
-	return &Text{
+func NewRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
+	return &RichText{
 		rgaTreeSplit: elements,
 		selectionMap: make(map[string]*Selection),
 		createdAt:    createdAt,
 	}
 }
 
-func (t *Text) Marshal() string {
-	return fmt.Sprintf("\"%s\"", t.rgaTreeSplit.marshal())
+func (t *RichText) Marshal() string {
+	var values []string
+
+	node := t.rgaTreeSplit.initialHead.next
+	for node != nil {
+		if node.removedAt == nil {
+			values = append(values, node.String())
+		}
+		node = node.next
+	}
+
+	return fmt.Sprintf("[%s]", strings.Join(values, ","))
 }
 
 // DeepCopy copies itself deeply.
-func (t *Text) DeepCopy() Element {
-	rgaTreeSplit := NewRGATreeSplit(InitialTextNode())
+func (t *RichText) DeepCopy() Element {
+	rgaTreeSplit := NewRGATreeSplit(InitialRichTextNode())
 
 	current := rgaTreeSplit.InitialHead()
 	for _, node := range t.Nodes() {
@@ -105,31 +128,31 @@ func (t *Text) DeepCopy() Element {
 		}
 	}
 
-	return NewText(rgaTreeSplit, t.createdAt)
+	return NewRichText(rgaTreeSplit, t.createdAt)
 }
 
 // CreatedAt returns the creation time of this Text.
-func (t *Text) CreatedAt() *time.Ticket {
+func (t *RichText) CreatedAt() *time.Ticket {
 	return t.createdAt
 }
 
 // RemovedAt returns the removal time of this Text.
-func (t *Text) RemovedAt() *time.Ticket {
+func (t *RichText) RemovedAt() *time.Ticket {
 	return t.removedAt
 }
 
 // UpdatedAt returns the update time of this Text.
-func (t *Text) UpdatedAt() *time.Ticket {
+func (t *RichText) UpdatedAt() *time.Ticket {
 	return t.updatedAt
 }
 
 // SetUpdatedAt sets the update time of this Text.
-func (t *Text) SetUpdatedAt(updatedAt *time.Ticket) {
+func (t *RichText) SetUpdatedAt(updatedAt *time.Ticket) {
 	t.updatedAt = updatedAt
 }
 
 // Remove removes this Text.
-func (t *Text) Remove(removedAt *time.Ticket) bool {
+func (t *RichText) Remove(removedAt *time.Ticket) bool {
 	if t.removedAt == nil || removedAt.After(t.removedAt) {
 		t.removedAt = removedAt
 		return true
@@ -138,11 +161,11 @@ func (t *Text) Remove(removedAt *time.Ticket) bool {
 }
 
 // CreateRange returns pair of RGATreeSplitNodePos of the given integer offsets.
-func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
+func (t *RichText) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
 	return t.rgaTreeSplit.createRange(from, to)
 }
 
-func (t *Text) Edit(
+func (t *RichText) Edit(
 	from,
 	to *RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
@@ -153,7 +176,7 @@ func (t *Text) Edit(
 		from,
 		to,
 		latestCreatedAtMapByActor,
-		NewTextValue(content),
+		NewRichTextValue(NewRHT(), content),
 		editedAt,
 	)
 	log.Logger.Debugf(
@@ -164,7 +187,33 @@ func (t *Text) Edit(
 	return cursorPos, latestCreatedAtMapByActor
 }
 
-func (t *Text) Select(
+func (t *RichText) SetStyle(
+	from,
+	to *RGATreeSplitNodePos,
+	key string,
+	value string,
+	editedAt *time.Ticket,
+) {
+	// 01. Split nodes with from and to
+	_, toRight := t.rgaTreeSplit.findNodeWithSplit(to, editedAt)
+	_, fromRight := t.rgaTreeSplit.findNodeWithSplit(from, editedAt)
+
+	// 02. style nodes between from and to
+	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
+
+	for _, node := range nodes {
+		val := node.value.(*RichTextValue)
+		val.attrs.Set(key, value, editedAt)
+	}
+
+	log.Logger.Debugf(
+		"STYL: '%s' styles %s",
+		editedAt.ActorID().String(),
+		t.rgaTreeSplit.AnnotatedString(),
+	)
+}
+
+func (t *RichText) Select(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
 	updatedAt *time.Ticket,
@@ -186,12 +235,12 @@ func (t *Text) Select(
 	}
 }
 
-func (t *Text) Nodes() []*RGATreeSplitNode {
+func (t *RichText) Nodes() []*RGATreeSplitNode {
 	return t.rgaTreeSplit.nodes()
 }
 
 // AnnotatedString returns a String containing the meta data of the text
 // for debugging purpose.
-func (t *Text) AnnotatedString() string {
+func (t *RichText) AnnotatedString() string {
 	return t.rgaTreeSplit.AnnotatedString()
 }

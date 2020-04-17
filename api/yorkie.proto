@@ -159,6 +159,14 @@ message Operation {
         TextNodePos to = 3;
         TimeTicket executed_at = 4;
     }
+    message Style {
+        TimeTicket parent_created_at = 1;
+        TextNodePos from = 2;
+        TextNodePos to = 3;
+        string key = 4;
+        string value = 5;
+        TimeTicket executed_at = 6;
+    }
 
     oneof body {
         Set set = 1;
@@ -167,6 +175,7 @@ message Operation {
         Remove remove = 4;
         Edit edit = 5;
         Select select = 6;
+        Style style = 7;
     }
 }
 
@@ -208,12 +217,19 @@ message JSONElement {
         TimeTicket updated_at = 3;
         TimeTicket removed_at = 4;
     }
+    message RichText {
+        repeated RichTextNode nodes = 1;
+        TimeTicket created_at = 2;
+        TimeTicket updated_at = 3;
+        TimeTicket removed_at = 4;
+    }
 
     oneof Body {
         Object object = 1;
         Array array = 2;
         Primitive primitive = 3;
         Text text = 4;
+        RichText rich_text = 5;
     }
 }
 
@@ -232,6 +248,20 @@ message TextNode {
     string value = 2;
     TimeTicket removed_at = 3;
     TextNodeID ins_prev_id = 4;
+}
+
+message RichTextNodeAttr {
+    string key = 1;
+    string value = 2;
+    TimeTicket updated_at = 3;
+}
+
+message RichTextNode {
+    TextNodeID id = 1;
+    map<string, RichTextNodeAttr> attributes = 2;
+    string value = 3;
+    TimeTicket removed_at = 4;
+    TextNodeID ins_prev_id = 5;
 }
 
 message TextNodeID {
@@ -277,4 +307,5 @@ enum ValueType {
     JSON_OBJECT = 8;
     JSON_ARRAY = 9;
     TEXT = 10;
+    RICH_TEXT = 11;
 }

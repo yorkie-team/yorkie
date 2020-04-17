@@ -17,55 +17,58 @@
 package json
 
 import (
+	"fmt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/pq"
+	"sort"
+	"strings"
 )
 
-type RHTNode struct {
+type RHTPQMapNode struct {
 	key  string
 	elem Element
 }
 
-func newRHTNode(key string, elem Element) *RHTNode {
-	return &RHTNode{
+func newRHTPQMapNode(key string, elem Element) *RHTPQMapNode {
+	return &RHTPQMapNode{
 		key:  key,
 		elem: elem,
 	}
 }
 
-func (n *RHTNode) Remove(removedAt *time.Ticket) {
+func (n *RHTPQMapNode) Remove(removedAt *time.Ticket) {
 	n.elem.Remove(removedAt)
 }
 
-func (n *RHTNode) Less(other pq.Value) bool {
-	node := other.(*RHTNode)
+func (n *RHTPQMapNode) Less(other pq.Value) bool {
+	node := other.(*RHTPQMapNode)
 	return n.elem.CreatedAt().After(node.elem.CreatedAt())
 }
 
-func (n *RHTNode) isRemoved() bool {
+func (n *RHTPQMapNode) isRemoved() bool {
 	return n.elem.RemovedAt() != nil
 }
 
-func (n *RHTNode) Key() string {
+func (n *RHTPQMapNode) Key() string {
 	return n.key
 }
 
-func (n *RHTNode) Element() Element {
+func (n *RHTPQMapNode) Element() Element {
 	return n.elem
 }
 
 // RHTPriorityQueueMap is replicated hash table.
 type RHTPriorityQueueMap struct {
 	nodeQueueMapByKey  map[string]*pq.PriorityQueue
-	nodeMapByCreatedAt map[string]*RHTNode
+	nodeMapByCreatedAt map[string]*RHTPQMapNode
 }
 
-// NewRHT creates a new instance of RHTPriorityQueueMap.
-func NewRHT() *RHTPriorityQueueMap {
+// NewRHTPriorityQueueMap creates a new instance of RHTPriorityQueueMap.
+func NewRHTPriorityQueueMap() *RHTPriorityQueueMap {
 	return &RHTPriorityQueueMap{
 		nodeQueueMapByKey:  make(map[string]*pq.PriorityQueue),
-		nodeMapByCreatedAt: make(map[string]*RHTNode),
+		nodeMapByCreatedAt: make(map[string]*RHTPQMapNode),
 	}
 }
 
@@ -76,7 +79,7 @@ func (rht *RHTPriorityQueueMap) Get(key string) Element {
 		return nil
 	}
 
-	node := queue.Peek().(*RHTNode)
+	node := queue.Peek().(*RHTPQMapNode)
 	if node.isRemoved() {
 		return nil
 	}
@@ -90,7 +93,7 @@ func (rht *RHTPriorityQueueMap) Has(key string) bool {
 		return false
 	}
 
-	node := queue.Peek().(*RHTNode)
+	node := queue.Peek().(*RHTPQMapNode)
 	return node != nil && !node.isRemoved()
 }
 
@@ -100,7 +103,7 @@ func (rht *RHTPriorityQueueMap) Set(k string, v Element) {
 		rht.nodeQueueMapByKey[k] = pq.NewPriorityQueue()
 	}
 
-	node := newRHTNode(k, v)
+	node := newRHTPQMapNode(k, v)
 	rht.nodeQueueMapByKey[k].Push(node)
 	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = node
 }
@@ -112,7 +115,7 @@ func (rht *RHTPriorityQueueMap) Delete(k string, deletedAt *time.Ticket) Element
 		return nil
 	}
 
-	node := queue.Peek().(*RHTNode)
+	node := queue.Peek().(*RHTPQMapNode)
 	node.Remove(deletedAt)
 	return node.elem
 }
@@ -134,7 +137,7 @@ func (rht *RHTPriorityQueueMap) DeleteByCreatedAt(createdAt *time.Ticket, delete
 func (rht *RHTPriorityQueueMap) Elements() map[string]Element {
 	members := make(map[string]Element)
 	for _, queue := range rht.nodeQueueMapByKey {
-		if node := queue.Peek().(*RHTNode); !node.isRemoved() {
+		if node := queue.Peek().(*RHTPQMapNode); !node.isRemoved() {
 			members[node.key] = node.elem
 		}
 	}
@@ -144,13 +147,40 @@ func (rht *RHTPriorityQueueMap) Elements() map[string]Element {
 
 // AllNodes returns a map of elements because the map easy to use for loop.
 // TODO If we encounter performance issues, we need to replace this with other solution.
-func (rht *RHTPriorityQueueMap) AllNodes() []*RHTNode {
-	var nodes []*RHTNode
+func (rht *RHTPriorityQueueMap) AllNodes() []*RHTPQMapNode {
+	var nodes []*RHTPQMapNode
 	for _, queue := range rht.nodeQueueMapByKey {
 		for _, value := range queue.Values() {
-			nodes = append(nodes, value.(*RHTNode))
+			nodes = append(nodes, value.(*RHTPQMapNode))
 		}
 	}
 
 	return nodes
+}
+
+// Marshal returns the JSON encoding of this map.
+func (rht *RHTPriorityQueueMap) Marshal() string {
+	members := rht.Elements()
+
+	size := len(members)
+
+	// Extract and sort the keys
+	keys := make([]string, 0, size)
+	for k := range members {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	sb := strings.Builder{}
+	sb.WriteString("{")
+	for idx, k := range keys {
+		if idx > 0 {
+			sb.WriteString(",")
+		}
+		value := members[k]
+		sb.WriteString(fmt.Sprintf(`"%s":%s`, k, value.Marshal()))
+	}
+	sb.WriteString("}")
+
+	return sb.String()
 }

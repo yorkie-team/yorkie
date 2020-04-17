@@ -60,7 +60,7 @@ type Document struct {
 
 // New creates a new instance of Document.
 func New(collection, document string) *Document {
-	root := json.NewObject(json.NewRHT(), time.InitialTicket)
+	root := json.NewObject(json.NewRHTPriorityQueueMap(), time.InitialTicket)
 
 	return &Document{
 		key:        &key.Key{Collection: collection, Document: document},

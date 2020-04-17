@@ -207,7 +207,7 @@ func (a *RGATreeList) Len() int {
 	return a.size
 }
 
-// AnnotatedString returns a string containing the meta data of the node id
+// AnnotatedString returns a String containing the meta data of the node id
 // for debugging purpose.
 func (a *RGATreeList) AnnotatedString() string {
 	return a.nodeMapByIndex.AnnotatedString()

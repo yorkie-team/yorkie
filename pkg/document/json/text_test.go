@@ -14,25 +14,28 @@
  * limitations under the License.
  */
 
-package proxy
+package json_test
 
 import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/testhelper"
 )
 
-func toOriginal(elem json.Element) json.Element {
-	switch elem := elem.(type) {
-	case *ObjectProxy:
-		return elem.Object
-	case *ArrayProxy:
-		return elem.Array
-	case *TextProxy:
-		return elem.Text
-	case *RichTextProxy:
-		return elem.RichText
-	case *json.Primitive:
-		return elem
-	}
+func TestText(t *testing.T) {
+	t.Run("marshal test", func(t *testing.T) {
+		ctx := testhelper.TextChangeContext()
+		text := json.NewText(json.NewRGATreeSplit(json.InitialTextNode()), ctx.IssueTimeTicket())
 
-	panic("unsupported type")
+		fromPos, toPos := text.CreateRange(0, 0)
+		text.Edit(fromPos, toPos, nil, "Hello World", ctx.IssueTimeTicket())
+		assert.Equal(t, `"Hello World"`, text.Marshal())
+
+		fromPos, toPos = text.CreateRange(6, 11)
+		text.Edit(fromPos, toPos, nil, "Yorkie", ctx.IssueTimeTicket())
+		assert.Equal(t, `"Hello Yorkie"`, text.Marshal())
+	})
 }

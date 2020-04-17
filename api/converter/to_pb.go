@@ -105,6 +105,15 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
+		case *operation.Move:
+			pbOperation.Body = &api.Operation_Move_{
+				Move: &api.Operation_Move{
+					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
+					PrevCreatedAt:   toTimeTicket(op.PrevCreatedAt()),
+					CreatedAt:       toTimeTicket(op.CreatedAt()),
+					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
+				},
+			}
 		case *operation.Remove:
 			pbOperation.Body = &api.Operation_Remove_{
 				Remove: &api.Operation_Remove{
@@ -133,12 +142,14 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
-		case *operation.Move:
-			pbOperation.Body = &api.Operation_Move_{
-				Move: &api.Operation_Move{
+		case *operation.Style:
+			pbOperation.Body = &api.Operation_Style_{
+				Style: &api.Operation_Style{
 					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
-					PrevCreatedAt:   toTimeTicket(op.PrevCreatedAt()),
-					CreatedAt:       toTimeTicket(op.CreatedAt()),
+					From:            toTextNodePos(op.From()),
+					To:              toTextNodePos(op.To()),
+					Key:             op.Key(),
+					Value:           op.Value(),
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
@@ -174,11 +185,16 @@ func toJSONElementSimple(elem json.Element) *api.JSONElementSimple {
 			Type:      api.ValueType_TEXT,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}
+	case *json.RichText:
+		return &api.JSONElementSimple{
+			Type:      api.ValueType_RICH_TEXT,
+			CreatedAt: toTimeTicket(elem.CreatedAt()),
+		}
 	}
 	panic("fail to encode JSONElement to protobuf")
 }
 
-func toTextNodePos(pos *json.TextNodePos) *api.TextNodePos {
+func toTextNodePos(pos *json.RGATreeSplitNodePos) *api.TextNodePos {
 	return &api.TextNodePos{
 		CreatedAt:      toTimeTicket(pos.ID().CreatedAt()),
 		Offset:         int32(pos.ID().Offset()),

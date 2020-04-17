@@ -25,17 +25,22 @@ import (
 	"github.com/yorkie-team/yorkie/testhelper"
 )
 
-func TestArray(t *testing.T) {
+func TestRichText(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
 		ctx := testhelper.TextChangeContext()
 
-		a := json.NewArray(json.NewRGATreeList(), ctx.IssueTimeTicket())
+		text := json.NewRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ctx.IssueTimeTicket())
 
-		a.Add(json.NewPrimitive("1", ctx.IssueTimeTicket()))
-		assert.Equal(t, `["1"]`, a.Marshal())
-		a.Add(json.NewPrimitive("2", ctx.IssueTimeTicket()))
-		assert.Equal(t, `["1","2"]`, a.Marshal())
-		a.Add(json.NewPrimitive("3", ctx.IssueTimeTicket()))
-		assert.Equal(t, `["1","2","3"]`, a.Marshal())
+		fromPos, toPos := text.CreateRange(0, 0)
+		text.Edit(fromPos, toPos, nil, "Hello World", ctx.IssueTimeTicket())
+		assert.Equal(t, `[{"attrs":{},"val":"Hello World"}]`, text.Marshal())
+
+		fromPos, toPos = text.CreateRange(6, 11)
+		text.Edit(fromPos, toPos, nil, "Yorkie", ctx.IssueTimeTicket())
+		assert.Equal(t, `[{"attrs":{},"val":"Hello "},{"attrs":{},"val":"Yorkie"}]`, text.Marshal())
+
+		fromPos, toPos = text.CreateRange(0, 1)
+		text.SetStyle(fromPos, toPos, "b", "1", ctx.IssueTimeTicket())
+		assert.Equal(t, `[{"attrs":{"b":"1"},"val":"H"},{"attrs":{},"val":"ello "},{"attrs":{},"val":"Yorkie"}]`, text.Marshal())
 	})
 }

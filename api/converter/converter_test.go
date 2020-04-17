@@ -86,6 +86,11 @@ func TestConverter(t *testing.T) {
 				Edit(1, 1, "느").
 				Edit(1, 2, "늘")
 
+			// rich text
+			root.SetNewRichText("k4").
+				Edit(0, 0, "Hello world").
+				SetStyle(0, 5, "b", "1")
+
 			return nil
 		})
 		assert.NoError(t, err)
@@ -130,6 +135,11 @@ func TestConverter(t *testing.T) {
 				Edit(0, 1, "하").
 				Edit(1, 1, "느").
 				Edit(1, 2, "늘")
+
+			// plain text
+			root.SetNewRichText("k3").
+				Edit(0, 0, "Hello World").
+				SetStyle(0, 5, "b", "1")
 
 			return nil
 		})

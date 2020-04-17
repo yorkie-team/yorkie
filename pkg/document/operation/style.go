@@ -21,57 +21,67 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-type Select struct {
+type Style struct {
 	parentCreatedAt *time.Ticket
 	from            *json.RGATreeSplitNodePos
 	to              *json.RGATreeSplitNodePos
+	key             string
+	value           string
 	executedAt      *time.Ticket
 }
 
-func NewSelect(
+func NewStyle(
 	parentCreatedAt *time.Ticket,
 	from *json.RGATreeSplitNodePos,
 	to *json.RGATreeSplitNodePos,
+	key,
+	value string,
 	executedAt *time.Ticket,
-) *Select {
-	return &Select{
+) *Style {
+	return &Style{
 		parentCreatedAt: parentCreatedAt,
 		from:            from,
 		to:              to,
+		key:             key,
+		value:           value,
 		executedAt:      executedAt,
 	}
 }
 
-func (s *Select) Execute(root *json.Root) error {
-	parent := root.FindByCreatedAt(s.parentCreatedAt)
-
-	switch obj := parent.(type) {
-	case *json.Text:
-		obj.Select(s.from, s.to, s.executedAt)
-	case *json.RichText:
-		obj.Select(s.from, s.to, s.executedAt)
-	default:
+func (e *Style) Execute(root *json.Root) error {
+	parent := root.FindByCreatedAt(e.parentCreatedAt)
+	obj, ok := parent.(*json.RichText)
+	if !ok {
 		return ErrNotApplicableDataType
 	}
 
+	obj.SetStyle(e.from, e.to, e.key, e.value, e.executedAt)
 	return nil
 }
 
-func (s *Select) From() *json.RGATreeSplitNodePos {
-	return s.from
+func (e *Style) From() *json.RGATreeSplitNodePos {
+	return e.from
 }
 
-func (s *Select) To() *json.RGATreeSplitNodePos {
-	return s.to
+func (e *Style) To() *json.RGATreeSplitNodePos {
+	return e.to
 }
 
-func (s *Select) ExecutedAt() *time.Ticket {
-	return s.executedAt
+func (e *Style) ExecutedAt() *time.Ticket {
+	return e.executedAt
 }
 
-func (s *Select) SetActor(actorID *time.ActorID) {
-	s.executedAt = s.executedAt.SetActorID(actorID)
+func (e *Style) SetActor(actorID *time.ActorID) {
+	e.executedAt = e.executedAt.SetActorID(actorID)
 }
-func (s *Select) ParentCreatedAt() *time.Ticket {
-	return s.parentCreatedAt
+func (e *Style) ParentCreatedAt() *time.Ticket {
+	return e.parentCreatedAt
+}
+
+func (e *Style) Key() string {
+	return e.key
+}
+
+func (e *Style) Value() string {
+	return e.value
 }
