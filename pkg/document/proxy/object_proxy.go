@@ -39,7 +39,7 @@ func NewObjectProxy(ctx *change.Context, root *json.Object) *ObjectProxy {
 
 func (p *ObjectProxy) SetNewObject(k string) *ObjectProxy {
 	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
-		return NewObjectProxy(p.context, json.NewObject(json.NewRHT(), ticket))
+		return NewObjectProxy(p.context, json.NewObject(json.NewRHTPriorityQueueMap(), ticket))
 	})
 
 	return v.(*ObjectProxy)
@@ -55,10 +55,24 @@ func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 
 func (p *ObjectProxy) SetNewText(k string) *TextProxy {
 	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
-		return NewTextProxy(p.context, json.NewText(json.NewRGATreeSplit(), ticket))
+		return NewTextProxy(
+			p.context,
+			json.NewText(json.NewRGATreeSplit(json.InitialTextNode()), ticket),
+		)
 	})
 
 	return v.(*TextProxy)
+}
+
+func (p *ObjectProxy) SetNewRichText(k string) *RichTextProxy {
+	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return NewRichTextProxy(
+			p.context,
+			json.NewRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ticket),
+		)
+	})
+
+	return v.(*RichTextProxy)
 }
 
 func (p *ObjectProxy) SetBool(k string, v bool) *ObjectProxy {
@@ -174,6 +188,22 @@ func (p *ObjectProxy) GetText(k string) *TextProxy {
 	case *json.Text:
 		return NewTextProxy(p.context, elem)
 	case *TextProxy:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+func (p *ObjectProxy) GetRichText(k string) *RichTextProxy {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	switch elem := p.Object.Get(k).(type) {
+	case *json.RichText:
+		return NewRichTextProxy(p.context, elem)
+	case *RichTextProxy:
 		return elem
 	default:
 		panic("unsupported type")

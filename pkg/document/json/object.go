@@ -17,10 +17,6 @@
 package json
 
 import (
-	"fmt"
-	"sort"
-	"strings"
-
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -85,35 +81,12 @@ func (o *Object) Descendants(descendants chan Element) {
 
 // Marshal returns the JSON encoding of this object.
 func (o *Object) Marshal() string {
-	members := o.memberNodes.Elements()
-
-	size := len(members)
-	keys := make([]string, 0, size)
-	for k := range members {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	sb := strings.Builder{}
-	sb.WriteString("{")
-
-	idx := 0
-	for _, k := range keys {
-		value := members[k]
-		sb.WriteString(fmt.Sprintf("\"%s\":%s", k, value.Marshal()))
-		if size-1 != idx {
-			sb.WriteString(",")
-		}
-		idx++
-	}
-	sb.WriteString("}")
-
-	return sb.String()
+	return o.memberNodes.Marshal()
 }
 
 // DeepCopy copies itself deeply.
 func (o *Object) DeepCopy() Element {
-	members := NewRHT()
+	members := NewRHTPriorityQueueMap()
 
 	for _, node := range o.memberNodes.AllNodes() {
 		members.Set(node.key, node.elem.DeepCopy())
@@ -154,6 +127,6 @@ func (o *Object) Remove(removedAt *time.Ticket) bool {
 }
 
 // RHTNodes returns the RHTPriorityQueueMap nodes.
-func (o *Object) RHTNodes() []*RHTNode {
+func (o *Object) RHTNodes() []*RHTPQMapNode {
 	return o.memberNodes.AllNodes()
 }

@@ -21,6 +21,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	logicalTime "github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
@@ -50,6 +53,15 @@ func init() {
 // timestamp is set only once on first call.
 func TestDBName() string {
 	return fmt.Sprintf("test-%s-%d", yorkie.DefaultMongoYorkieDatabase, testStartedAt)
+}
+
+// TestChangeContext returns the context of test change.
+func TextChangeContext() *change.Context {
+	return change.NewContext(
+		change.InitialID,
+		"",
+		json.NewRoot(json.NewObject(json.NewRHTPriorityQueueMap(), logicalTime.InitialTicket)),
+	)
 }
 
 // TestYorkie is return Yorkie instance for testing.

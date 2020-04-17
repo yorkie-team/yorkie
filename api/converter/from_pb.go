@@ -120,6 +120,13 @@ func FromOperations(pbOps []*api.Operation) []operation.Operation {
 				fromElement(decoded.Add.Value),
 				fromTimeTicket(decoded.Add.ExecutedAt),
 			)
+		case *api.Operation_Move_:
+			op = operation.NewMove(
+				fromTimeTicket(decoded.Move.ParentCreatedAt),
+				fromTimeTicket(decoded.Move.PrevCreatedAt),
+				fromTimeTicket(decoded.Move.CreatedAt),
+				fromTimeTicket(decoded.Move.ExecutedAt),
+			)
 		case *api.Operation_Remove_:
 			op = operation.NewRemove(
 				fromTimeTicket(decoded.Remove.ParentCreatedAt),
@@ -142,12 +149,14 @@ func FromOperations(pbOps []*api.Operation) []operation.Operation {
 				fromTextNodePos(decoded.Select.To),
 				fromTimeTicket(decoded.Select.ExecutedAt),
 			)
-		case *api.Operation_Move_:
-			op = operation.NewMove(
-				fromTimeTicket(decoded.Move.ParentCreatedAt),
-				fromTimeTicket(decoded.Move.PrevCreatedAt),
-				fromTimeTicket(decoded.Move.CreatedAt),
-				fromTimeTicket(decoded.Move.ExecutedAt),
+		case *api.Operation_Style_:
+			op = operation.NewStyle(
+				fromTimeTicket(decoded.Style.ParentCreatedAt),
+				fromTextNodePos(decoded.Style.From),
+				fromTextNodePos(decoded.Style.To),
+				decoded.Style.Key,
+				decoded.Style.Value,
+				fromTimeTicket(decoded.Style.ExecutedAt),
 			)
 		default:
 			panic("unsupported operation")
@@ -168,9 +177,9 @@ func fromCreatedAtMapByActor(
 	return createdAtMapByActor
 }
 
-func fromTextNodePos(pbPos *api.TextNodePos) *json.TextNodePos {
-	return json.NewTextNodePos(
-		json.NewTextNodeID(fromTimeTicket(pbPos.CreatedAt), int(pbPos.Offset)),
+func fromTextNodePos(pbPos *api.TextNodePos) *json.RGATreeSplitNodePos {
+	return json.NewRGATreeSplitNodePos(
+		json.NewRGATreeSplitNodeID(fromTimeTicket(pbPos.CreatedAt), int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),
 	)
 }
@@ -191,7 +200,7 @@ func fromElement(pbElement *api.JSONElementSimple) json.Element {
 	switch pbType := pbElement.Type; pbType {
 	case api.ValueType_JSON_OBJECT:
 		return json.NewObject(
-			json.NewRHT(),
+			json.NewRHTPriorityQueueMap(),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_JSON_ARRAY:
@@ -218,7 +227,12 @@ func fromElement(pbElement *api.JSONElementSimple) json.Element {
 		)
 	case api.ValueType_TEXT:
 		return json.NewText(
-			json.NewRGATreeSplit(),
+			json.NewRGATreeSplit(json.InitialTextNode()),
+			fromTimeTicket(pbElement.CreatedAt),
+		)
+	case api.ValueType_RICH_TEXT:
+		return json.NewRichText(
+			json.NewRGATreeSplit(json.InitialRichTextNode()),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	}

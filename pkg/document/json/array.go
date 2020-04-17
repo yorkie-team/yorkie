@@ -79,7 +79,7 @@ func (a *Array) Marshal() string {
 	return a.elements.Marshal()
 }
 
-// AnnotatedString returns a string containing the meta data of the elements
+// AnnotatedString returns a String containing the meta data of the elements
 // for debugging purpose.
 func (a *Array) AnnotatedString() string {
 	return a.elements.AnnotatedString()

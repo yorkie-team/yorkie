@@ -519,6 +519,42 @@ func TestClientAndDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
+	t.Run("rich text test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewRichText("k1").Edit(0, 0, "Hello world")
+			return nil
+		}, `set a new text with "Hello world" by c1`)
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetRichText("k1")
+			text.SetStyle(0, 1, "b", "1")
+			return nil
+		}, `set style b to "H" by c1`)
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetRichText("k1")
+			text.SetStyle(0, 5, "i", "1")
+			return nil
+		}, `set style i to "Hello" by c2`)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
 	t.Run("watch test", func(t *testing.T) {
 		ctx := context.Background()
 

@@ -23,8 +23,8 @@ import (
 
 type Edit struct {
 	parentCreatedAt           *time.Ticket
-	from                      *json.TextNodePos
-	to                        *json.TextNodePos
+	from                      *json.RGATreeSplitNodePos
+	to                        *json.RGATreeSplitNodePos
 	latestCreatedAtMapByActor map[string]*time.Ticket
 	content                   string
 	executedAt                *time.Ticket
@@ -32,8 +32,8 @@ type Edit struct {
 
 func NewEdit(
 	parentCreatedAt *time.Ticket,
-	from *json.TextNodePos,
-	to *json.TextNodePos,
+	from *json.RGATreeSplitNodePos,
+	to *json.RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	executedAt *time.Ticket,
@@ -50,20 +50,24 @@ func NewEdit(
 
 func (e *Edit) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
-	obj, ok := parent.(*json.Text)
-	if !ok {
+
+	switch obj := parent.(type) {
+	case *json.Text:
+		obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.executedAt)
+	case *json.RichText:
+		obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.executedAt)
+	default:
 		return ErrNotApplicableDataType
 	}
 
-	obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.executedAt)
 	return nil
 }
 
-func (e *Edit) From() *json.TextNodePos {
+func (e *Edit) From() *json.RGATreeSplitNodePos {
 	return e.from
 }
 
-func (e *Edit) To() *json.TextNodePos {
+func (e *Edit) To() *json.RGATreeSplitNodePos {
 	return e.to
 }
 
