@@ -88,8 +88,8 @@ func TestConverter(t *testing.T) {
 
 			// rich text
 			root.SetNewRichText("k4").
-				Edit(0, 0, "Hello world").
-				SetStyle(0, 5, "b", "1")
+				Edit(0, 0, "Hello world", nil).
+				SetStyle(0, 5, map[string]string{"b": "1"})
 
 			return nil
 		})
@@ -138,8 +138,8 @@ func TestConverter(t *testing.T) {
 
 			// plain text
 			root.SetNewRichText("k3").
-				Edit(0, 0, "Hello World").
-				SetStyle(0, 5, "b", "1")
+				Edit(0, 0, "Hello World", nil).
+				SetStyle(0, 5, map[string]string{"b": "1"})
 
 			return nil
 		})

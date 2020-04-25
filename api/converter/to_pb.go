@@ -142,14 +142,25 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
+		case *operation.RichEdit:
+			pbOperation.Body = &api.Operation_RichEdit_{
+				RichEdit: &api.Operation_RichEdit{
+					ParentCreatedAt:     toTimeTicket(op.ParentCreatedAt()),
+					From:                toTextNodePos(op.From()),
+					To:                  toTextNodePos(op.To()),
+					CreatedAtMapByActor: toCreatedAtMapByActor(op.CreatedAtMapByActor()),
+					Content:             op.Content(),
+					Attributes:          op.Attributes(),
+					ExecutedAt:          toTimeTicket(op.ExecutedAt()),
+				},
+			}
 		case *operation.Style:
 			pbOperation.Body = &api.Operation_Style_{
 				Style: &api.Operation_Style{
 					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
 					From:            toTextNodePos(op.From()),
 					To:              toTextNodePos(op.To()),
-					Key:             op.Key(),
-					Value:           op.Value(),
+					Attributes:      op.Attributes(),
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}

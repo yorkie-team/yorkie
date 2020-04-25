@@ -25,7 +25,7 @@ type Style struct {
 	parentCreatedAt *time.Ticket
 	from            *json.RGATreeSplitNodePos
 	to              *json.RGATreeSplitNodePos
-	key             string
+	attributes      map[string]string
 	value           string
 	executedAt      *time.Ticket
 }
@@ -34,16 +34,14 @@ func NewStyle(
 	parentCreatedAt *time.Ticket,
 	from *json.RGATreeSplitNodePos,
 	to *json.RGATreeSplitNodePos,
-	key,
-	value string,
+	attributes map[string]string,
 	executedAt *time.Ticket,
 ) *Style {
 	return &Style{
 		parentCreatedAt: parentCreatedAt,
 		from:            from,
 		to:              to,
-		key:             key,
-		value:           value,
+		attributes:      attributes,
 		executedAt:      executedAt,
 	}
 }
@@ -55,7 +53,7 @@ func (e *Style) Execute(root *json.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	obj.SetStyle(e.from, e.to, e.key, e.value, e.executedAt)
+	obj.SetStyle(e.from, e.to, e.attributes, e.executedAt)
 	return nil
 }
 
@@ -78,10 +76,6 @@ func (e *Style) ParentCreatedAt() *time.Ticket {
 	return e.parentCreatedAt
 }
 
-func (e *Style) Key() string {
-	return e.key
-}
-
-func (e *Style) Value() string {
-	return e.value
+func (e *Style) Attributes() map[string]string {
+	return e.attributes
 }

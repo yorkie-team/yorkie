@@ -216,7 +216,7 @@ func TestDocument(t *testing.T) {
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.SetNewRichText("k1")
-			text.Edit(0, 0, "Hello world")
+			text.Edit(0, 0, "Hello world", nil)
 			assert.Equal(
 				t,
 				`[0:0:00:0 {} ""][1:2:00:0 {} "Hello world"]`,
@@ -229,7 +229,7 @@ func TestDocument(t *testing.T) {
 
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetRichText("k1")
-			text.SetStyle(0, 5, "b", "1")
+			text.SetStyle(0, 5, map[string]string{"b": "1"})
 			assert.Equal(t,
 				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
 				text.AnnotatedString(),
@@ -245,14 +245,14 @@ func TestDocument(t *testing.T) {
 
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetRichText("k1")
-			text.SetStyle(0, 5, "b", "1")
+			text.SetStyle(0, 5, map[string]string{"b": "1"})
 			assert.Equal(
 				t,
 				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
 				text.AnnotatedString(),
 			)
 
-			text.SetStyle(3, 5, "i", "1")
+			text.SetStyle(3, 5, map[string]string{"i": "1"})
 			assert.Equal(
 				t,
 				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][1:2:00:5 {} " world"]`,
@@ -269,7 +269,7 @@ func TestDocument(t *testing.T) {
 
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetRichText("k1")
-			text.Edit(5, 11, " Yorkie")
+			text.Edit(5, 11, " Yorkie", nil)
 			assert.Equal(
 				t,
 				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
@@ -281,6 +281,25 @@ func TestDocument(t *testing.T) {
 		assert.Equal(
 			t,
 			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{},"val":" Yorkie"}]}`,
+			doc.Marshal(),
+		)
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetRichText("k1")
+			text.Edit(5, 5, "\n", map[string]string{"list": "true"})
+			assert.Equal(
+				t,
+				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][5:1:00:0 {"list":"true"} "
+"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
+				text.AnnotatedString(),
+			)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(
+			t,
+			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{"list":"true"},"val":"
+"},{"attrs":{},"val":" Yorkie"}]}`,
 			doc.Marshal(),
 		)
 	})

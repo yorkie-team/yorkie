@@ -149,13 +149,22 @@ func FromOperations(pbOps []*api.Operation) []operation.Operation {
 				fromTextNodePos(decoded.Select.To),
 				fromTimeTicket(decoded.Select.ExecutedAt),
 			)
+		case *api.Operation_RichEdit_:
+			op = operation.NewRichEdit(
+				fromTimeTicket(decoded.RichEdit.ParentCreatedAt),
+				fromTextNodePos(decoded.RichEdit.From),
+				fromTextNodePos(decoded.RichEdit.To),
+				fromCreatedAtMapByActor(decoded.RichEdit.CreatedAtMapByActor),
+				decoded.RichEdit.Content,
+				decoded.RichEdit.Attributes,
+				fromTimeTicket(decoded.RichEdit.ExecutedAt),
+			)
 		case *api.Operation_Style_:
 			op = operation.NewStyle(
 				fromTimeTicket(decoded.Style.ParentCreatedAt),
 				fromTextNodePos(decoded.Style.From),
 				fromTextNodePos(decoded.Style.To),
-				decoded.Style.Key,
-				decoded.Style.Value,
+				decoded.Style.Attributes,
 				fromTimeTicket(decoded.Style.ExecutedAt),
 			)
 		default:

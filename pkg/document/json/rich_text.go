@@ -170,13 +170,19 @@ func (t *RichText) Edit(
 	to *RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
+	attributes map[string]string,
 	editedAt *time.Ticket,
 ) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
+	val := NewRichTextValue(NewRHT(), content)
+	for key, value := range attributes {
+		val.attrs.Set(key, value, editedAt)
+	}
+
 	cursorPos, latestCreatedAtMapByActor := t.rgaTreeSplit.edit(
 		from,
 		to,
 		latestCreatedAtMapByActor,
-		NewRichTextValue(NewRHT(), content),
+		val,
 		editedAt,
 	)
 	log.Logger.Debugf(
@@ -190,8 +196,7 @@ func (t *RichText) Edit(
 func (t *RichText) SetStyle(
 	from,
 	to *RGATreeSplitNodePos,
-	key string,
-	value string,
+	attributes map[string]string,
 	editedAt *time.Ticket,
 ) {
 	// 01. Split nodes with from and to
@@ -203,7 +208,9 @@ func (t *RichText) SetStyle(
 
 	for _, node := range nodes {
 		val := node.value.(*RichTextValue)
-		val.attrs.Set(key, value, editedAt)
+		for key, value := range attributes {
+			val.attrs.Set(key, value, editedAt)
+		}
 	}
 
 	log.Logger.Debugf(

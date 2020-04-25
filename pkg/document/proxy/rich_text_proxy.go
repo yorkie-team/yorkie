@@ -35,13 +35,13 @@ func NewRichTextProxy(ctx *change.Context, text *json.RichText) *RichTextProxy {
 	}
 }
 
-func (p *RichTextProxy) Edit(from, to int, content string) *RichTextProxy {
+func (p *RichTextProxy) Edit(from, to int, content string, attributes map[string]string) *RichTextProxy {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
 	fromPos, toPos := p.RichText.CreateRange(from, to)
 	log.Logger.Debugf(
-		"EDIT: f:%d->%s, t:%d->%s c:%s",
+		"EDIT: f:%d->%s, t:%d->%s, c:%s, attrs:%v",
 		from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), content,
 	)
 
@@ -51,37 +51,38 @@ func (p *RichTextProxy) Edit(from, to int, content string) *RichTextProxy {
 		toPos,
 		nil,
 		content,
+		attributes,
 		ticket,
 	)
 
-	p.context.Push(operation.NewEdit(
+	p.context.Push(operation.NewRichEdit(
 		p.CreatedAt(),
 		fromPos,
 		toPos,
 		maxCreationMapByActor,
 		content,
+		attributes,
 		ticket,
 	))
 
 	return p
 }
 
-func (p *RichTextProxy) SetStyle(from, to int, key, value string) *RichTextProxy {
+func (p *RichTextProxy) SetStyle(from, to int, attributes map[string]string) *RichTextProxy {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
 	fromPos, toPos := p.RichText.CreateRange(from, to)
 	log.Logger.Debugf(
-		"STYL: f:%d->%s, t:%d->%s k:%s, v:%s",
-		from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), key, value,
+		"STYL: f:%d->%s, t:%d->%s, attrs:%v",
+		from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), attributes,
 	)
 
 	ticket := p.context.IssueTimeTicket()
 	p.RichText.SetStyle(
 		fromPos,
 		toPos,
-		key,
-		value,
+		attributes,
 		ticket,
 	)
 
@@ -89,8 +90,7 @@ func (p *RichTextProxy) SetStyle(from, to int, key, value string) *RichTextProxy
 		p.CreatedAt(),
 		fromPos,
 		toPos,
-		key,
-		value,
+		attributes,
 		ticket,
 	))
 
