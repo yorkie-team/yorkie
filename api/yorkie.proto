@@ -159,13 +159,21 @@ message Operation {
         TextNodePos to = 3;
         TimeTicket executed_at = 4;
     }
+    message RichEdit {
+        TimeTicket parent_created_at = 1;
+        TextNodePos from = 2;
+        TextNodePos to = 3;
+        map<string, TimeTicket> created_at_map_by_actor = 4;
+        string content = 5;
+        map<string, string> attributes = 6;
+        TimeTicket executed_at = 7;
+    }
     message Style {
         TimeTicket parent_created_at = 1;
         TextNodePos from = 2;
         TextNodePos to = 3;
-        string key = 4;
-        string value = 5;
-        TimeTicket executed_at = 6;
+        map<string, string> attributes = 4;
+        TimeTicket executed_at = 5;
     }
 
     oneof body {
@@ -175,7 +183,8 @@ message Operation {
         Remove remove = 4;
         Edit edit = 5;
         Select select = 6;
-        Style style = 7;
+        RichEdit rich_edit = 7;
+        Style style = 8;
     }
 }
 

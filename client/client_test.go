@@ -527,7 +527,7 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.SetNewRichText("k1").Edit(0, 0, "Hello world")
+			root.SetNewRichText("k1").Edit(0, 0, "Hello world", nil)
 			return nil
 		}, `set a new text with "Hello world" by c1`)
 		assert.NoError(t, err)
@@ -540,14 +540,14 @@ func TestClientAndDocument(t *testing.T) {
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetRichText("k1")
-			text.SetStyle(0, 1, "b", "1")
+			text.SetStyle(0, 1, map[string]string{"b": "1"})
 			return nil
 		}, `set style b to "H" by c1`)
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetRichText("k1")
-			text.SetStyle(0, 5, "i", "1")
+			text.SetStyle(0, 5, map[string]string{"i": "1"})
 			return nil
 		}, `set style i to "Hello" by c2`)
 		assert.NoError(t, err)

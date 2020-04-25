@@ -32,15 +32,15 @@ func TestRichText(t *testing.T) {
 		text := json.NewRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)
-		text.Edit(fromPos, toPos, nil, "Hello World", ctx.IssueTimeTicket())
+		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		assert.Equal(t, `[{"attrs":{},"val":"Hello World"}]`, text.Marshal())
 
 		fromPos, toPos = text.CreateRange(6, 11)
-		text.Edit(fromPos, toPos, nil, "Yorkie", ctx.IssueTimeTicket())
+		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		assert.Equal(t, `[{"attrs":{},"val":"Hello "},{"attrs":{},"val":"Yorkie"}]`, text.Marshal())
 
 		fromPos, toPos = text.CreateRange(0, 1)
-		text.SetStyle(fromPos, toPos, "b", "1", ctx.IssueTimeTicket())
+		text.SetStyle(fromPos, toPos, map[string]string{"b": "1"}, ctx.IssueTimeTicket())
 		assert.Equal(t, `[{"attrs":{"b":"1"},"val":"H"},{"attrs":{},"val":"ello "},{"attrs":{},"val":"Yorkie"}]`, text.Marshal())
 	})
 }
