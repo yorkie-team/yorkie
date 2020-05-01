@@ -100,19 +100,21 @@ func (rht *RHT) Has(key string) bool {
 }
 
 // Set sets the value of the given key.
-func (rht *RHT) Set(k, v string, updatedAt *time.Ticket) {
-	// TODO check updatedAt
-	node := newRHTNode(k, v, updatedAt)
-	rht.nodeMapByKey[k] = node
-	rht.nodeMapByCreatedAt[updatedAt.Key()] = node
+func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
+	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
+		newNode := newRHTNode(k, v, executedAt)
+		rht.nodeMapByKey[k] = newNode
+		rht.nodeMapByCreatedAt[executedAt.Key()] = newNode
+	}
 }
 
 // Remove removes the Element of the given key.
-func (rht *RHT) Remove(k string, removedAt *time.Ticket) string {
-	if node, ok := rht.nodeMapByKey[k]; ok {
-		node.Remove(removedAt)
+func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
+	if node, ok := rht.nodeMapByKey[k]; ok && executedAt.After(node.removedAt) {
+		node.Remove(executedAt)
 		return node.val
 	}
+
 	return ""
 }
 

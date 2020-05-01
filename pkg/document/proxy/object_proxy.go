@@ -68,7 +68,7 @@ func (p *ObjectProxy) SetNewRichText(k string) *RichTextProxy {
 	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
 		return NewRichTextProxy(
 			p.context,
-			json.NewRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ticket),
+			json.NewInitialRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ticket),
 		)
 	})
 

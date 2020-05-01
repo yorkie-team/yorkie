@@ -88,7 +88,7 @@ type RichText struct {
 	removedAt    *time.Ticket
 }
 
-// NewText creates a new instance of Text.
+// NewRichText creates a new instance of RichText.
 func NewRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
 	return &RichText{
 		rgaTreeSplit: elements,
@@ -97,12 +97,22 @@ func NewRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
 	}
 }
 
+//  NewInitialRichText creates a new instance of RichText.
+func NewInitialRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
+	text := NewRichText(elements, createdAt)
+	fromPos, toPos := text.CreateRange(0, 0)
+	text.Edit(fromPos, toPos, nil, "\n", nil, createdAt)
+	return text
+}
+
 func (t *RichText) Marshal() string {
 	var values []string
 
 	node := t.rgaTreeSplit.initialHead.next
 	for node != nil {
-		if node.removedAt == nil {
+		if node.createdAt().Compare(t.createdAt) == 0 {
+			// last line
+		} else if node.removedAt == nil {
 			values = append(values, node.String())
 		}
 		node = node.next
@@ -152,9 +162,9 @@ func (t *RichText) SetUpdatedAt(updatedAt *time.Ticket) {
 }
 
 // Remove removes this Text.
-func (t *RichText) Remove(removedAt *time.Ticket) bool {
-	if t.removedAt == nil || removedAt.After(t.removedAt) {
-		t.removedAt = removedAt
+func (t *RichText) Remove(executedAt *time.Ticket) bool {
+	if t.removedAt == nil || executedAt.After(t.removedAt) {
+		t.removedAt = executedAt
 		return true
 	}
 	return false
@@ -171,11 +181,11 @@ func (t *RichText) Edit(
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	attributes map[string]string,
-	editedAt *time.Ticket,
+	executedAt *time.Ticket,
 ) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
 	val := NewRichTextValue(NewRHT(), content)
 	for key, value := range attributes {
-		val.attrs.Set(key, value, editedAt)
+		val.attrs.Set(key, value, executedAt)
 	}
 
 	cursorPos, latestCreatedAtMapByActor := t.rgaTreeSplit.edit(
@@ -183,13 +193,15 @@ func (t *RichText) Edit(
 		to,
 		latestCreatedAtMapByActor,
 		val,
-		editedAt,
+		executedAt,
 	)
+
 	log.Logger.Debugf(
 		"EDIT: '%s' edits %s",
-		editedAt.ActorID().String(),
+		executedAt.ActorID().String(),
 		t.rgaTreeSplit.AnnotatedString(),
 	)
+
 	return cursorPos, latestCreatedAtMapByActor
 }
 
@@ -197,25 +209,24 @@ func (t *RichText) SetStyle(
 	from,
 	to *RGATreeSplitNodePos,
 	attributes map[string]string,
-	editedAt *time.Ticket,
+	executedAt *time.Ticket,
 ) {
 	// 01. Split nodes with from and to
-	_, toRight := t.rgaTreeSplit.findNodeWithSplit(to, editedAt)
-	_, fromRight := t.rgaTreeSplit.findNodeWithSplit(from, editedAt)
+	_, toRight := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
+	_, fromRight := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
-
 	for _, node := range nodes {
 		val := node.value.(*RichTextValue)
 		for key, value := range attributes {
-			val.attrs.Set(key, value, editedAt)
+			val.attrs.Set(key, value, executedAt)
 		}
 	}
 
 	log.Logger.Debugf(
 		"STYL: '%s' styles %s",
-		editedAt.ActorID().String(),
+		executedAt.ActorID().String(),
 		t.rgaTreeSplit.AnnotatedString(),
 	)
 }
@@ -223,22 +234,16 @@ func (t *RichText) SetStyle(
 func (t *RichText) Select(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
-	updatedAt *time.Ticket,
+	executedAt *time.Ticket,
 ) {
-	if _, ok := t.selectionMap[updatedAt.ActorIDHex()]; !ok {
-		t.selectionMap[updatedAt.ActorIDHex()] = newSelection(from, to, updatedAt)
-		return
-	}
+	if prev, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok || executedAt.After(prev.updatedAt) {
+		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
 
-	prevSelection := t.selectionMap[updatedAt.ActorIDHex()]
-	if updatedAt.After(prevSelection.updatedAt) {
 		log.Logger.Debugf(
 			"SELT: '%s' selects %s",
-			updatedAt.ActorID().String(),
+			executedAt.ActorID().String(),
 			t.rgaTreeSplit.AnnotatedString(),
 		)
-
-		t.selectionMap[updatedAt.ActorIDHex()] = newSelection(from, to, updatedAt)
 	}
 }
 

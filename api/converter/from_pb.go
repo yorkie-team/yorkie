@@ -240,7 +240,7 @@ func fromElement(pbElement *api.JSONElementSimple) json.Element {
 			fromTimeTicket(pbElement.CreatedAt),
 		)
 	case api.ValueType_RICH_TEXT:
-		return json.NewRichText(
+		return json.NewInitialRichText(
 			json.NewRGATreeSplit(json.InitialRichTextNode()),
 			fromTimeTicket(pbElement.CreatedAt),
 		)

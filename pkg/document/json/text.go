@@ -129,9 +129,9 @@ func (t *Text) SetUpdatedAt(updatedAt *time.Ticket) {
 }
 
 // Remove removes this Text.
-func (t *Text) Remove(removedAt *time.Ticket) bool {
-	if t.removedAt == nil || removedAt.After(t.removedAt) {
-		t.removedAt = removedAt
+func (t *Text) Remove(executedAt *time.Ticket) bool {
+	if t.removedAt == nil || executedAt.After(t.removedAt) {
+		t.removedAt = executedAt
 		return true
 	}
 	return false
@@ -147,18 +147,18 @@ func (t *Text) Edit(
 	to *RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
-	editedAt *time.Ticket,
+	executedAt *time.Ticket,
 ) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
 	cursorPos, latestCreatedAtMapByActor := t.rgaTreeSplit.edit(
 		from,
 		to,
 		latestCreatedAtMapByActor,
 		NewTextValue(content),
-		editedAt,
+		executedAt,
 	)
 	log.Logger.Debugf(
 		"EDIT: '%s' edits %s",
-		editedAt.ActorID().String(),
+		executedAt.ActorID().String(),
 		t.rgaTreeSplit.AnnotatedString(),
 	)
 	return cursorPos, latestCreatedAtMapByActor
@@ -167,22 +167,22 @@ func (t *Text) Edit(
 func (t *Text) Select(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
-	updatedAt *time.Ticket,
+	executedAt *time.Ticket,
 ) {
-	if _, ok := t.selectionMap[updatedAt.ActorIDHex()]; !ok {
-		t.selectionMap[updatedAt.ActorIDHex()] = newSelection(from, to, updatedAt)
+	if _, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok {
+		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
 		return
 	}
 
-	prevSelection := t.selectionMap[updatedAt.ActorIDHex()]
-	if updatedAt.After(prevSelection.updatedAt) {
+	prevSelection := t.selectionMap[executedAt.ActorIDHex()]
+	if executedAt.After(prevSelection.updatedAt) {
 		log.Logger.Debugf(
 			"SELT: '%s' selects %s",
-			updatedAt.ActorID().String(),
+			executedAt.ActorID().String(),
 			t.rgaTreeSplit.AnnotatedString(),
 		)
 
-		t.selectionMap[updatedAt.ActorIDHex()] = newSelection(from, to, updatedAt)
+		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
 	}
 }
 

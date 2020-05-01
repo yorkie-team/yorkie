@@ -219,7 +219,8 @@ func TestDocument(t *testing.T) {
 			text.Edit(0, 0, "Hello world", nil)
 			assert.Equal(
 				t,
-				`[0:0:00:0 {} ""][1:2:00:0 {} "Hello world"]`,
+				`[0:0:00:0 {} ""][1:2:00:0 {} "Hello world"][1:1:00:0 {} "
+"]`,
 				text.AnnotatedString(),
 			)
 			return nil
@@ -231,7 +232,8 @@ func TestDocument(t *testing.T) {
 			text := root.GetRichText("k1")
 			text.SetStyle(0, 5, map[string]string{"b": "1"})
 			assert.Equal(t,
-				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
+				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"][1:1:00:0 {} "
+"]`,
 				text.AnnotatedString(),
 			)
 			return nil
@@ -248,14 +250,16 @@ func TestDocument(t *testing.T) {
 			text.SetStyle(0, 5, map[string]string{"b": "1"})
 			assert.Equal(
 				t,
-				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
+				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"][1:1:00:0 {} "
+"]`,
 				text.AnnotatedString(),
 			)
 
 			text.SetStyle(3, 5, map[string]string{"i": "1"})
 			assert.Equal(
 				t,
-				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][1:2:00:5 {} " world"]`,
+				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][1:2:00:5 {} " world"][1:1:00:0 {} "
+"]`,
 				text.AnnotatedString(),
 			)
 			return nil
@@ -272,7 +276,8 @@ func TestDocument(t *testing.T) {
 			text.Edit(5, 11, " Yorkie", nil)
 			assert.Equal(
 				t,
-				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
+				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}[1:1:00:0 {} "
+"]`,
 				text.AnnotatedString(),
 			)
 			return nil
@@ -290,7 +295,8 @@ func TestDocument(t *testing.T) {
 			assert.Equal(
 				t,
 				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][5:1:00:0 {"list":"true"} "
-"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
+"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}[1:1:00:0 {} "
+"]`,
 				text.AnnotatedString(),
 			)
 			return nil

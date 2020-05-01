@@ -29,7 +29,7 @@ func TestRichText(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
 		ctx := testhelper.TextChangeContext()
 
-		text := json.NewRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ctx.IssueTimeTicket())
+		text := json.NewInitialRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)
 		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
