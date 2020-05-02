@@ -125,7 +125,7 @@ func pushChanges(
 			c.SetServerSeq(serverSeq)
 			pushedChanges = append(pushedChanges, c)
 		} else {
-			log.Logger.Warnf("change is rejected: %v", c)
+			log.Logger.Warnf("change is rejected: %d vs %d ", c.ID().ClientSeq(), cp.ClientSeq)
 		}
 
 		cp = cp.SyncClientSeq(c.ClientSeq())

@@ -157,7 +157,7 @@ func (s *Server) AttachDocument(
 	}
 
 	// if pack.HasChanges() {
-	lockKey := fmt.Sprintf("pushpull-%s", req.ClientId)
+	lockKey := fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())
 	if err := s.backend.Lock(lockKey); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -205,7 +205,7 @@ func (s *Server) DetachDocument(
 	}
 
 	// if pack.HasChanges() {
-	lockKey := fmt.Sprintf("pushpull-%s", req.ClientId)
+	lockKey := fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())
 	if err := s.backend.Lock(lockKey); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -254,7 +254,7 @@ func (s *Server) PushPull(
 
 	// TODO uncomment write lock condition. We need $max operation on client.
 	// if pack.HasChanges() {
-	lockKey := fmt.Sprintf("pushpull-%s", req.ClientId)
+	lockKey := fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())
 	if err := s.backend.Lock(lockKey); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
