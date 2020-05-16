@@ -30,8 +30,8 @@ type RichTextProxy struct {
 
 func NewRichTextProxy(ctx *change.Context, text *json.RichText) *RichTextProxy {
 	return &RichTextProxy{
-		RichText:    text,
-		context: ctx,
+		RichText: text,
+		context:  ctx,
 	}
 }
 

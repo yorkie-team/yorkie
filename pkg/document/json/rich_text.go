@@ -97,7 +97,7 @@ func NewRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
 	}
 }
 
-//  NewInitialRichText creates a new instance of RichText.
+// NewInitialRichText creates a new instance of RichText.
 func NewInitialRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
 	text := NewRichText(elements, createdAt)
 	fromPos, toPos := text.CreateRange(0, 0)

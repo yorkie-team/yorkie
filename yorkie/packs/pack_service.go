@@ -91,6 +91,7 @@ func PushPull(
 			key := fmt.Sprintf("snapshot-%s", clientInfo.Key)
 			if err := be.Lock(key); err != nil {
 				log.Logger.Error(err)
+				return
 			}
 			defer func() {
 				if err := be.Unlock(key); err != nil {
@@ -331,7 +332,7 @@ func storeSnapshot(
 		return err
 	}
 
-	doc, err := document.FromSnapshot(
+	doc, err := document.NewInternalDocumentFromSnapshot(
 		docKey.Collection,
 		docKey.Document,
 		snapshotInfo.ServerSeq,

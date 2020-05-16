@@ -647,6 +647,7 @@ func TestClientAndDocument(t *testing.T) {
 			root.SetNewText("k1")
 			return nil
 		})
+		assert.NoError(t, err)
 
 		var edits = []struct {
 			from    int

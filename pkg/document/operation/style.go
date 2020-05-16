@@ -26,7 +26,6 @@ type Style struct {
 	from            *json.RGATreeSplitNodePos
 	to              *json.RGATreeSplitNodePos
 	attributes      map[string]string
-	value           string
 	executedAt      *time.Ticket
 }
 
