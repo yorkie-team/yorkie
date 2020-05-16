@@ -55,7 +55,7 @@ func TestDBName() string {
 	return fmt.Sprintf("test-%s-%d", yorkie.DefaultMongoYorkieDatabase, testStartedAt)
 }
 
-// TestChangeContext returns the context of test change.
+// TextChangeContext returns the context of test change.
 func TextChangeContext() *change.Context {
 	return change.NewContext(
 		change.InitialID,

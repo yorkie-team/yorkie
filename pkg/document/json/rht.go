@@ -23,17 +23,18 @@ import (
 	"sort"
 	"strings"
 )
+
 type RHTNode struct {
-	key  string
-	val string
+	key       string
+	val       string
 	updatedAt *time.Ticket
 	removedAt *time.Ticket
 }
 
 func newRHTNode(key, val string, updatedAt *time.Ticket) *RHTNode {
 	return &RHTNode{
-		key:  key,
-		val: val,
+		key:       key,
+		val:       val,
 		updatedAt: updatedAt,
 	}
 }

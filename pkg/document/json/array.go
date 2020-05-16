@@ -52,7 +52,7 @@ func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 	return a.elements.FindPrevCreatedAt(createdAt)
 }
 
-// Remove deletes the element of the given index.
+// Delete deletes the element of the given index.
 func (a *Array) Delete(idx int, deletedAt *time.Ticket) Element {
 	return a.elements.Delete(idx, deletedAt).elem
 }

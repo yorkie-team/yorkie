@@ -335,7 +335,7 @@ func (c *Client) CreateChangeInfos(
 func (c *Client) CreateSnapshotInfo(
 	ctx context.Context,
 	docID primitive.ObjectID,
-	doc *document.Document,
+	doc *document.InternalDocument,
 ) error {
 	snapshot, err := converter.ObjectToBytes(doc.RootObject())
 	if err != nil {

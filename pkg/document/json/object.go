@@ -62,7 +62,7 @@ func (o *Object) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticke
 	return o.memberNodes.DeleteByCreatedAt(createdAt, deletedAt)
 }
 
-// Remove deletes the element of the given key.
+// Delete deletes the element of the given key.
 func (o *Object) Delete(k string, deletedAt *time.Ticket) Element {
 	return o.memberNodes.Delete(k, deletedAt)
 }

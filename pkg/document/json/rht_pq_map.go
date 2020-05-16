@@ -108,7 +108,7 @@ func (rht *RHTPriorityQueueMap) Set(k string, v Element) {
 	rht.nodeMapByCreatedAt[v.CreatedAt().Key()] = node
 }
 
-// Remove deletes the Element of the given key.
+// Delete deletes the Element of the given key.
 func (rht *RHTPriorityQueueMap) Delete(k string, deletedAt *time.Ticket) Element {
 	queue, ok := rht.nodeQueueMapByKey[k]
 	if !ok {
