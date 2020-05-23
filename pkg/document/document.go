@@ -192,6 +192,11 @@ func (d *Document) ensureClone() {
 	}
 }
 
+// GarbageCollect purge elements that were removed before the given time.
+func (d *Document) GarbageCollect(ticket *time.Ticket) int {
+	return d.doc.GarbageCollect(ticket)
+}
+
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 	if len(msgAndArgs) == 0 {
 		return ""

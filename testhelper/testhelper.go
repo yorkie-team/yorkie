@@ -19,6 +19,7 @@ package testhelper
 import (
 	"fmt"
 	"log"
+	"runtime"
 	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -62,6 +63,35 @@ func TextChangeContext() *change.Context {
 		"",
 		json.NewRoot(json.NewObject(json.NewRHTPriorityQueueMap(), logicalTime.InitialTicket)),
 	)
+}
+
+// PrintMemStats prints memory stats.
+func PrintMemStats() {
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+
+	fmt.Println("mem.Alloc:", ByteCountIEC(mem.Alloc))
+	fmt.Println("mem.TotalAlloc:", ByteCountIEC(mem.TotalAlloc))
+	fmt.Println("mem.HeapAlloc:", ByteCountIEC(mem.HeapAlloc))
+	fmt.Println("mem.NumGC:", mem.NumGC)
+}
+
+func PrintBytesSize(bytes []byte) {
+	byteSize := len(bytes)
+	fmt.Println("sna.Bytes:", ByteCountIEC(uint64(byteSize)))
+}
+
+func ByteCountIEC(b uint64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := uint64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 // TestYorkie is return Yorkie instance for testing.

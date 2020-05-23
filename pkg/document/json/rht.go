@@ -18,10 +18,11 @@ package json
 
 import (
 	"fmt"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 	"sort"
 	"strings"
+
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 type RHTNode struct {
@@ -143,9 +144,9 @@ func (rht *RHT) Elements() map[string]string {
 	return members
 }
 
-// AllNodes returns a map of elements because the map easy to use for loop.
+// Nodes returns a map of elements because the map easy to use for loop.
 // TODO If we encounter performance issues, we need to replace this with other solution.
-func (rht *RHT) AllNodes() []*RHTNode {
+func (rht *RHT) Nodes() []*RHTNode {
 	var nodes []*RHTNode
 	for _, node := range rht.nodeMapByKey {
 		nodes = append(nodes, node)
@@ -158,7 +159,7 @@ func (rht *RHT) AllNodes() []*RHTNode {
 func (rht *RHT) DeepCopy() *RHT {
 	instance := NewRHT()
 
-	for _, node := range rht.AllNodes() {
+	for _, node := range rht.Nodes() {
 		instance.Set(node.key, node.val, node.updatedAt)
 	}
 	return instance

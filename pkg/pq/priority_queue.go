@@ -16,7 +16,9 @@
 
 package pq
 
-import "container/heap"
+import (
+	"container/heap"
+)
 
 type PriorityQueue struct {
 	queue *internalQueue
@@ -42,6 +44,19 @@ func (pq *PriorityQueue) Pop() Value {
 func (pq *PriorityQueue) Push(value Value) {
 	item := NewItem(value)
 	heap.Push(pq.queue, item)
+}
+
+func (pq *PriorityQueue) Release(value Value) {
+	queue := &internalQueue{}
+	heap.Init(queue)
+
+	for _, item := range *pq.queue {
+		if item.value != value {
+			heap.Push(queue, item)
+		}
+	}
+
+	pq.queue = queue
 }
 
 func (pq *PriorityQueue) Values() []Value {

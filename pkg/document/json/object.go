@@ -37,6 +37,11 @@ func NewObject(memberNodes *RHTPriorityQueueMap, createdAt *time.Ticket) *Object
 	}
 }
 
+// Purge physically purge child element.
+func (o *Object) Purge(elem Element) {
+	o.memberNodes.purge(elem)
+}
+
 // Set sets the given element of the given key.
 func (o *Object) Set(k string, v Element) {
 	o.memberNodes.Set(k, v)
@@ -67,15 +72,18 @@ func (o *Object) Delete(k string, deletedAt *time.Ticket) Element {
 	return o.memberNodes.Delete(k, deletedAt)
 }
 
-func (o *Object) Descendants(descendants chan Element) {
-	for _, node := range o.memberNodes.AllNodes() {
+func (o *Object) Descendants(callback func(elem Element, parent Container) bool) {
+	for _, node := range o.memberNodes.Nodes() {
+		if callback(node.elem, o) {
+			return
+		}
+
 		switch elem := node.elem.(type) {
 		case *Object:
-			elem.Descendants(descendants)
+			elem.Descendants(callback)
 		case *Array:
-			elem.Descendants(descendants)
+			elem.Descendants(callback)
 		}
-		descendants <- node.elem
 	}
 }
 
@@ -88,7 +96,7 @@ func (o *Object) Marshal() string {
 func (o *Object) DeepCopy() Element {
 	members := NewRHTPriorityQueueMap()
 
-	for _, node := range o.memberNodes.AllNodes() {
+	for _, node := range o.memberNodes.Nodes() {
 		members.Set(node.key, node.elem.DeepCopy())
 	}
 
@@ -128,5 +136,5 @@ func (o *Object) Remove(removedAt *time.Ticket) bool {
 
 // RHTNodes returns the RHTPriorityQueueMap nodes.
 func (o *Object) RHTNodes() []*RHTPQMapNode {
-	return o.memberNodes.AllNodes()
+	return o.memberNodes.Nodes()
 }

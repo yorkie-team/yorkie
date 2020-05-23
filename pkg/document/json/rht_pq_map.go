@@ -18,11 +18,12 @@ package json
 
 import (
 	"fmt"
+	"sort"
+	"strings"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/pq"
-	"sort"
-	"strings"
 )
 
 type RHTPQMapNode struct {
@@ -145,9 +146,9 @@ func (rht *RHTPriorityQueueMap) Elements() map[string]Element {
 	return members
 }
 
-// AllNodes returns a map of elements because the map easy to use for loop.
+// Nodes returns a map of elements because the map easy to use for loop.
 // TODO If we encounter performance issues, we need to replace this with other solution.
-func (rht *RHTPriorityQueueMap) AllNodes() []*RHTPQMapNode {
+func (rht *RHTPriorityQueueMap) Nodes() []*RHTPQMapNode {
 	var nodes []*RHTPQMapNode
 	for _, queue := range rht.nodeQueueMapByKey {
 		for _, value := range queue.Values() {
@@ -156,6 +157,22 @@ func (rht *RHTPriorityQueueMap) AllNodes() []*RHTPQMapNode {
 	}
 
 	return nodes
+}
+
+// purge physically purge child element.
+func (rht *RHTPriorityQueueMap) purge(elem Element) {
+	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
+	if !ok {
+		log.Logger.Fatalf("fail to find " + elem.CreatedAt().Key())
+	}
+
+	queue, ok := rht.nodeQueueMapByKey[node.key]
+	if !ok {
+		log.Logger.Fatalf("fail to find queue of " + elem.CreatedAt().Key())
+	}
+
+	queue.Release(node)
+	delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
 }
 
 // Marshal returns the JSON encoding of this map.

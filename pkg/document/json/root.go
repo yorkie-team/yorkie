@@ -33,22 +33,17 @@ type Root struct {
 
 // NewRoot creates a new instance of Root.
 func NewRoot(root *Object) *Root {
-	elementMap := make(map[string]Element)
 	r := &Root{
-		object:                root,
-		elementMapByCreatedAt: elementMap,
+		elementMapByCreatedAt: make(map[string]Element),
 	}
 
+	r.object = root
 	r.RegisterElement(root)
 
-	descendants := make(chan Element)
-	go func() {
-		root.Descendants(descendants)
-		close(descendants)
-	}()
-	for descendant := range descendants {
-		r.RegisterElement(descendant)
-	}
+	root.Descendants(func(elem Element, parent Container) bool {
+		r.RegisterElement(elem)
+		return false
+	})
 
 	return r
 }
@@ -68,7 +63,49 @@ func (r *Root) RegisterElement(elem Element) {
 	r.elementMapByCreatedAt[elem.CreatedAt().Key()] = elem
 }
 
+// DeregisterElement deregister the given element from hash table.
+func (r *Root) DeregisterElement(elem Element) {
+	delete(r.elementMapByCreatedAt, elem.CreatedAt().Key())
+}
+
 // DeepCopy copies itself deeply.
 func (r *Root) DeepCopy() *Root {
 	return NewRoot(r.object.DeepCopy().(*Object))
+}
+
+// GarbageCollect purge elements that were removed before the given time.
+func (r *Root) GarbageCollect(ticket *time.Ticket) int {
+	count := 0
+
+	r.object.Descendants(func(elem Element, parent Container) bool {
+		shouldGC := elem.RemovedAt() != nil && ticket.After(elem.RemovedAt())
+		if shouldGC {
+			parent.Purge(elem)
+			count += r.garbageCollect(elem)
+		}
+
+		return shouldGC
+	})
+
+	return count
+}
+
+func (r *Root) garbageCollect(elem Element) int {
+	count := 0
+
+	callback := func(elem Element, parent Container) bool {
+		r.DeregisterElement(elem)
+		count++
+		return false
+	}
+
+	callback(elem, nil)
+	switch elem := elem.(type) {
+	case *Object:
+		elem.Descendants(callback)
+	case *Array:
+		elem.Descendants(callback)
+	}
+
+	return count
 }

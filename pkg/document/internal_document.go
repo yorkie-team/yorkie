@@ -126,36 +126,9 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	return nil
 }
 
-func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq uint64) error {
-	rootObj, err := converter.BytesToObject(snapshot)
-	if err != nil {
-		return err
-	}
-
-	d.root = json.NewRoot(rootObj)
-
-	if d.HasLocalChanges() {
-		for _, c := range d.localChanges {
-			if err := c.Execute(d.root); err != nil {
-				return err
-			}
-		}
-	}
-	d.changeID = d.changeID.SyncLamport(serverSeq)
-
-	return nil
-}
-
-// applyChanges applies remote changes to both the clone and the document.
-func (d *InternalDocument) applyChanges(changes []*change.Change) error {
-	for _, c := range changes {
-		if err := c.Execute(d.root); err != nil {
-			return err
-		}
-		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
-	}
-
-	return nil
+// GarbageCollect purge elements that were removed before the given time.
+func (d *InternalDocument) GarbageCollect(ticket *time.Ticket) int {
+	return d.root.GarbageCollect(ticket)
 }
 
 // Marshal returns the JSON encoding of this document.
@@ -198,4 +171,36 @@ func (d *InternalDocument) IsAttached() bool {
 // RootObject returns the root object.
 func (d *InternalDocument) RootObject() *json.Object {
 	return d.root.Object()
+}
+
+func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq uint64) error {
+	rootObj, err := converter.BytesToObject(snapshot)
+	if err != nil {
+		return err
+	}
+
+	d.root = json.NewRoot(rootObj)
+
+	if d.HasLocalChanges() {
+		for _, c := range d.localChanges {
+			if err := c.Execute(d.root); err != nil {
+				return err
+			}
+		}
+	}
+	d.changeID = d.changeID.SyncLamport(serverSeq)
+
+	return nil
+}
+
+// applyChanges applies remote changes to both the clone and the document.
+func (d *InternalDocument) applyChanges(changes []*change.Change) error {
+	for _, c := range changes {
+		if err := c.Execute(d.root); err != nil {
+			return err
+		}
+		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
+	}
+
+	return nil
 }

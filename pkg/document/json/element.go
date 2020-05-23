@@ -20,6 +20,12 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// Container represents Array or Object.
+type Container interface {
+	Element
+	Purge(child Element)
+}
+
 // Element represents JSON element.
 type Element interface {
 	// Marshal returns the JSON encoding of this element.
