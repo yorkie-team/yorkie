@@ -23,9 +23,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/testhelper"
 )
 
 var (
@@ -98,6 +101,72 @@ func TestDocument(t *testing.T) {
 		}, "deletes k2")
 		assert.NoError(t, err)
 		assert.Equal(t, expected, doc.Marshal())
+	})
+
+	t.Run("garbage collection test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+		assert.Equal(t, "{}", doc.Marshal())
+
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetInteger("1", 1)
+			root.SetNewArray("2").AddInteger(1, 2, 3)
+			root.SetInteger("3", 3)
+			return nil
+		}, "sets 1,2,3")
+		assert.NoError(t, err)
+		assert.Equal(t, `{"1":1,"2":[1,2,3],"3":3}`, doc.Marshal())
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			root.Delete("2")
+			return nil
+		}, "deletes 2")
+		assert.NoError(t, err)
+		assert.Equal(t, `{"1":1,"3":3}`, doc.Marshal())
+
+		assert.Equal(t, 4, doc.GarbageCollect(time.MaxTicket))
+	})
+
+	t.Run("garbage collection test 2", func(t *testing.T) {
+		size := 10_000
+
+		// 01. initial
+		doc := document.New("c1", "d1")
+		fmt.Println("-----Initial")
+		bytes, err := converter.ObjectToBytes(doc.RootObject())
+		assert.NoError(t, err)
+		testhelper.PrintBytesSize(bytes)
+		testhelper.PrintMemStats()
+
+		// 02. 10,000 integers
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewArray("1")
+			for i := 0; i < size; i++ {
+				root.GetArray("1").AddInteger(i)
+			}
+
+			return nil
+		}, "sets big array")
+		assert.NoError(t, err)
+
+		// 03. deletes integers
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			root.Delete("1")
+			return nil
+		}, "deletes the array")
+		assert.NoError(t, err)
+		fmt.Println("-----Integers")
+		bytes, err = converter.ObjectToBytes(doc.RootObject())
+		assert.NoError(t, err)
+		testhelper.PrintBytesSize(bytes)
+		testhelper.PrintMemStats()
+
+		// 04. after garbage collection
+		assert.Equal(t, size+1, doc.GarbageCollect(time.MaxTicket))
+		fmt.Println("-----After garbage collection")
+		bytes, err = converter.ObjectToBytes(doc.RootObject())
+		assert.NoError(t, err)
+		testhelper.PrintBytesSize(bytes)
+		testhelper.PrintMemStats()
 	})
 
 	t.Run("object test", func(t *testing.T) {

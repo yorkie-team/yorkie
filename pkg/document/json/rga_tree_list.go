@@ -261,6 +261,19 @@ func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 	return node.elem.CreatedAt()
 }
 
+// purge physically purge child element.
+func (a *RGATreeList) purge(elem Element) {
+	node, ok := a.nodeMapByCreatedAt[elem.CreatedAt().Key()]
+	if !ok {
+		log.Logger.Fatalf(
+			"fail to find the given createdAt: %s",
+			elem.CreatedAt().Key(),
+		)
+	}
+
+	a.release(node)
+}
+
 func (a *RGATreeList) findByCreatedAt(prevCreatedAt *time.Ticket, createdAt *time.Ticket) *RGATreeListNode {
 	node, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
 	if !ok {
@@ -290,7 +303,9 @@ func (a *RGATreeList) release(node *RGATreeListNode) {
 	a.nodeMapByIndex.Delete(node.indexNode)
 	delete(a.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
 
-	a.size--
+	if !node.isRemoved() {
+		a.size--
+	}
 }
 
 func (a *RGATreeList) insertAfter(prev *RGATreeListNode, element Element) {

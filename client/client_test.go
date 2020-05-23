@@ -692,7 +692,7 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 	ctx := context.Background()
 	// Save own changes and get previous changes.
 	for i, pair := range pairs {
-		fmt.Printf("before doc%d: %s\n", i+1, pair.doc.Marshal())
+		fmt.Printf("before d%d: %s\n", i+1, pair.doc.Marshal())
 		err := pair.cli.Sync(ctx)
 		assert.NoError(t, err)
 	}

@@ -37,6 +37,11 @@ func NewArray(elements *RGATreeList, createdAt *time.Ticket) *Array {
 	}
 }
 
+// Purge physically purge child element.
+func (a *Array) Purge(elem Element) {
+	a.elements.purge(elem)
+}
+
 // Add adds the given element at the last.
 func (a *Array) Add(elem Element) *Array {
 	a.elements.Add(elem)
@@ -147,15 +152,18 @@ func (a *Array) Len() int {
 	return a.elements.Len()
 }
 
-func (a *Array) Descendants(descendants chan Element) {
+func (a *Array) Descendants(callback func(elem Element, parent Container) bool) {
 	for _, node := range a.elements.Nodes() {
+		if callback(node.elem, a) {
+			return
+		}
+
 		switch elem := node.elem.(type) {
 		case *Object:
-			elem.Descendants(descendants)
+			elem.Descendants(callback)
 		case *Array:
-			elem.Descendants(descendants)
+			elem.Descendants(callback)
 		}
-		descendants <- node.elem
 	}
 }
 
