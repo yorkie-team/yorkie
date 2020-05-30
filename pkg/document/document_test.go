@@ -122,8 +122,10 @@ func TestDocument(t *testing.T) {
 		}, "deletes 2")
 		assert.NoError(t, err)
 		assert.Equal(t, `{"1":1,"3":3}`, doc.Marshal())
+		assert.Equal(t, 4, doc.GarbageLen())
 
 		assert.Equal(t, 4, doc.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 0, doc.GarbageLen())
 	})
 
 	t.Run("garbage collection test 2", func(t *testing.T) {

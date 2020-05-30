@@ -138,6 +138,9 @@ func (rht *RHTPriorityQueueMap) DeleteByCreatedAt(createdAt *time.Ticket, delete
 func (rht *RHTPriorityQueueMap) Elements() map[string]Element {
 	members := make(map[string]Element)
 	for _, queue := range rht.nodeQueueMapByKey {
+		if queue.Len() == 0 {
+			continue
+		}
 		if node := queue.Peek().(*RHTPQMapNode); !node.isRemoved() {
 			members[node.key] = node.elem
 		}

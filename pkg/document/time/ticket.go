@@ -21,6 +21,11 @@ import (
 	"math"
 )
 
+const (
+	MaxLamport   = math.MaxUint64
+	MaxDelimiter = math.MaxUint32
+)
+
 var (
 	InitialTicket = NewTicket(
 		0,
@@ -28,8 +33,8 @@ var (
 		InitialActorID,
 	)
 	MaxTicket = NewTicket(
-		math.MaxUint64,
-		math.MaxUint32,
+		MaxLamport,
+		MaxDelimiter,
 		MaxActorID,
 	)
 )

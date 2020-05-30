@@ -38,7 +38,7 @@ type Pack struct {
 
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
-	MinSyncedTicket time.Ticket
+	MinSyncedTicket *time.Ticket
 }
 
 // NewPack creates a new instance of Pack.

@@ -46,6 +46,10 @@ func (pq *PriorityQueue) Push(value Value) {
 	heap.Push(pq.queue, item)
 }
 
+func (pq *PriorityQueue) Len() int {
+	return pq.queue.Len()
+}
+
 func (pq *PriorityQueue) Release(value Value) {
 	queue := &internalQueue{}
 	heap.Init(queue)

@@ -20,6 +20,11 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+type ElementPair struct {
+	parent Container
+	elem   Element
+}
+
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
 // received from agent.
@@ -27,14 +32,16 @@ import (
 // Every element has a unique time ticket at creation, which allows us to find
 // a particular element.
 type Root struct {
-	object                *Object
-	elementMapByCreatedAt map[string]Element
+	object                           *Object
+	elementMapByCreatedAt            map[string]Element
+	removedElementPairMapByCreatedAt map[string]ElementPair
 }
 
 // NewRoot creates a new instance of Root.
 func NewRoot(root *Object) *Root {
 	r := &Root{
-		elementMapByCreatedAt: make(map[string]Element),
+		elementMapByCreatedAt:            make(map[string]Element),
+		removedElementPairMapByCreatedAt: make(map[string]ElementPair),
 	}
 
 	r.object = root
@@ -63,9 +70,19 @@ func (r *Root) RegisterElement(elem Element) {
 	r.elementMapByCreatedAt[elem.CreatedAt().Key()] = elem
 }
 
-// DeregisterElement deregister the given element from hash table.
+// DeregisterElement deregister the given element from hash tables.
 func (r *Root) DeregisterElement(elem Element) {
-	delete(r.elementMapByCreatedAt, elem.CreatedAt().Key())
+	createdAt := elem.CreatedAt().Key()
+	delete(r.elementMapByCreatedAt, createdAt)
+	delete(r.removedElementPairMapByCreatedAt, createdAt)
+}
+
+// DeregisterElementPair register the given element pair to hash table.
+func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
+	r.removedElementPairMapByCreatedAt[elem.CreatedAt().Key()] = ElementPair{
+		parent,
+		elem,
+	}
 }
 
 // DeepCopy copies itself deeply.
@@ -77,15 +94,31 @@ func (r *Root) DeepCopy() *Root {
 func (r *Root) GarbageCollect(ticket *time.Ticket) int {
 	count := 0
 
-	r.object.Descendants(func(elem Element, parent Container) bool {
-		shouldGC := elem.RemovedAt() != nil && ticket.After(elem.RemovedAt())
-		if shouldGC {
-			parent.Purge(elem)
-			count += r.garbageCollect(elem)
+	for _, pair := range r.removedElementPairMapByCreatedAt {
+		if pair.elem.RemovedAt() != nil && ticket.Compare(pair.elem.RemovedAt()) >= 0 {
+			pair.parent.Purge(pair.elem)
+			count += r.garbageCollect(pair.elem)
 		}
+	}
 
-		return shouldGC
-	})
+	return count
+}
+
+// GarbageLen returns the count of removed elements.
+func (r *Root) GarbageLen() int {
+	count := 0
+
+	for _, pair := range r.removedElementPairMapByCreatedAt {
+		count++
+
+		switch elem := pair.elem.(type) {
+		case Container:
+			elem.Descendants(func(elem Element, parent Container) bool {
+				count++
+				return false
+			})
+		}
+	}
 
 	return count
 }

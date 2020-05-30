@@ -24,6 +24,7 @@ import (
 type Container interface {
 	Element
 	Purge(child Element)
+	Descendants(callback func(elem Element, parent Container) bool)
 }
 
 // Element represents JSON element.

@@ -77,18 +77,31 @@ func PushPull(
 		return nil, err
 	}
 
-	// 04. publish document change event then store snapshot asynchronously.
-	if reqPack.HasChanges() {
-		be.Publish(
-			time.ActorIDFromHex(clientInfo.ID.Hex()),
-			reqPack.DocumentKey.BSONKey(),
-			pubsub.Event{
-				Type:  pubsub.DocumentChangeEvent,
-				Value: reqPack.DocumentKey.BSONKey(),
-			},
-		)
+	// 04. update and find min synced ticket for garbage collection.
+	// NOTE Since the client could not receive the PushPull response,
+	//      the requested seq(reqPack) is stored instead of the response seq(resPack).
+	respPack.MinSyncedTicket, err = be.Mongo.UpdateAndFindMinSyncedTicket(
+		ctx,
+		clientInfo.ID,
+		docInfo.ID,
+		reqPack.Checkpoint.ServerSeq,
+	)
+	if err != nil {
+		return nil, err
+	}
 
+	// 05. publish document change event then store snapshot asynchronously.
+	if reqPack.HasChanges() {
 		be.AttachGoroutine(func() {
+			be.Publish(
+				time.ActorIDFromHex(clientInfo.ID.Hex()),
+				reqPack.DocumentKey.BSONKey(),
+				pubsub.Event{
+					Type:  pubsub.DocumentChangeEvent,
+					Value: reqPack.DocumentKey.BSONKey(),
+				},
+			)
+
 			key := fmt.Sprintf("snapshot-%s", docInfo.Key)
 			if err := be.Lock(key); err != nil {
 				log.Logger.Error(err)
