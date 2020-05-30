@@ -19,6 +19,7 @@ package packs
 import (
 	"context"
 	"fmt"
+	defaultTime "time"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -87,8 +88,8 @@ func PushPull(
 			},
 		)
 
-		go func() {
-			key := fmt.Sprintf("snapshot-%s", clientInfo.Key)
+		be.AttachGoroutine(func() {
+			key := fmt.Sprintf("snapshot-%s", docInfo.Key)
 			if err := be.Lock(key); err != nil {
 				log.Logger.Error(err)
 				return
@@ -99,11 +100,10 @@ func PushPull(
 				}
 			}()
 
-			// TODO We need to increase interval of storing snapshot.
 			if err := storeSnapshot(context.Background(), be, docInfo); err != nil {
 				log.Logger.Error(err)
 			}
-		}()
+		})
 	}
 
 	return respPack, nil
@@ -265,7 +265,7 @@ func pullSnapshot(
 	changes, err := be.Mongo.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
-		pack.Checkpoint.ServerSeq+1,
+		snapshotInfo.ServerSeq+1,
 		initialServerSeq,
 	)
 	if err != nil {
@@ -305,13 +305,19 @@ func storeSnapshot(
 	be *backend.Backend,
 	docInfo *types.DocInfo,
 ) error {
+	start := defaultTime.Now()
+
 	// 01. get the last snapshot of this docInfo
+	// TODO For performance, we only need to read the snapshot's metadata.
 	snapshotInfo, err := be.Mongo.FindLastSnapshotInfo(ctx, docInfo.ID)
 	if err != nil {
 		return err
 	}
 
 	if snapshotInfo.ServerSeq >= docInfo.ServerSeq {
+		return nil
+	}
+	if docInfo.ServerSeq-snapshotInfo.ServerSeq < be.Config.SnapshotInterval {
 		return nil
 	}
 
@@ -351,12 +357,16 @@ func storeSnapshot(
 		return err
 	}
 
-	log.Logger.Infof("SNAP: '%s', serverSeq:%d", docInfo.Key, doc.Checkpoint().ServerSeq)
-
 	// 04. save the snapshot of the docInfo
 	if err := be.Mongo.CreateSnapshotInfo(ctx, docInfo.ID, doc); err != nil {
 		return err
 	}
 
+	log.Logger.Infof(
+		"SNAP: '%s', serverSeq:%d %s",
+		docInfo.Key,
+		doc.Checkpoint().ServerSeq,
+		defaultTime.Since(start),
+	)
 	return nil
 }

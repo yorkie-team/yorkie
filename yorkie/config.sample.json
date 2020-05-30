@@ -11,6 +11,7 @@
         "PingTimeoutSec": 5
     },
     "Backend": {
-        "SnapshotThreshold": 500
+        "SnapshotThreshold": 500,
+        "SnapshotInterval": 100
     }
 }
