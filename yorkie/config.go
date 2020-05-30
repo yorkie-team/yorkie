@@ -37,6 +37,7 @@ const (
 	DefaultMongoYorkieDatabase       = "yorkie-meta"
 
 	DefaultSnapshotThreshold = 500
+	DefaultSnapshotInterval  = 100
 )
 
 // Config is the configuration for creating a Yorkie instance.
@@ -55,11 +56,6 @@ func (c *Config) RPCAddr() string {
 // for most of the configurations.
 func NewConfig() *Config {
 	return newConfig(DefaultRPCPort, DefaultMongoYorkieDatabase)
-}
-
-// NewConfigWithPortAndDBName returns a new instance of Config.
-func NewConfigWithPortAndDBName(port int, dbName string) *Config {
-	return newConfig(port, dbName)
 }
 
 // NewConfigFromFile returns a Config struct for the given conf file.
@@ -92,6 +88,7 @@ func newConfig(port int, dbName string) *Config {
 		},
 		Backend: &backend.Config{
 			SnapshotThreshold: DefaultSnapshotThreshold,
+			SnapshotInterval:  DefaultSnapshotInterval,
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:        DefaultMongoConnectionURI,

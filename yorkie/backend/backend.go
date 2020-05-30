@@ -17,7 +17,10 @@
 package backend
 
 import (
+	defaultSync "sync"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
@@ -27,15 +30,29 @@ type Config struct {
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold uint64 `json:"SnapshotThreshold"`
+
+	// SnapshotInterval is the interval of changes to create a snapshot.
+	SnapshotInterval uint64 `json:"SnapshotInterval"`
 }
 
 // Backend manages Yorkie's remote states such as data store, distributed lock
 // and etc.
 type Backend struct {
-	Config   *Config
-	Mongo    *mongo.Client
+	Config *Config
+	Mongo  *mongo.Client
+
 	mutexMap *sync.MutexMap
 	pubSub   *pubsub.PubSub
+
+	// closing is closed by backend close.
+	closing chan struct{}
+
+	// wgMu blocks concurrent WaitGroup mutation while backend closing
+	wgMu defaultSync.RWMutex
+
+	// wg is used to wait for the goroutines that depends on the backend state
+	// to exit when closing the backend.
+	wg defaultSync.WaitGroup
 }
 
 // New creates a new instance of Backend.
@@ -50,11 +67,19 @@ func New(conf *Config, mongoConf *mongo.Config) (*Backend, error) {
 		Mongo:    client,
 		mutexMap: sync.NewMutexMap(),
 		pubSub:   pubsub.NewPubSub(),
+		closing:  make(chan struct{}),
 	}, nil
 }
 
 // Close closes all resources of this instance.
 func (b *Backend) Close() error {
+	b.wgMu.Lock()
+	close(b.closing)
+	b.wgMu.Unlock()
+
+	// wait for goroutines before closing backend
+	b.wg.Wait()
+
 	if err := b.Mongo.Close(); err != nil {
 		return err
 	}
@@ -80,4 +105,24 @@ func (b *Backend) Unsubscribe(topics []string, subscription *pubsub.Subscription
 
 func (b *Backend) Publish(actor *time.ActorID, topic string, event pubsub.Event) {
 	b.pubSub.Publish(actor, topic, event)
+}
+
+// AttachGoroutine creates a goroutine on a given function and tracks it using
+// the backend's WaitGroup.
+func (b *Backend) AttachGoroutine(f func()) {
+	b.wgMu.RLock() // this blocks with ongoing close(b.closing)
+	defer b.wgMu.RUnlock()
+	select {
+	case <-b.closing:
+		log.Logger.Warn("backend has closed; skipping AttachGoroutine")
+		return
+	default:
+	}
+
+	// now safe to add since WaitGroup wait has not started yet
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		f()
+	}()
 }

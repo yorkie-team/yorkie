@@ -19,14 +19,26 @@ package change
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Pack is a unit for delivering changes in a document to the remote.
 type Pack struct {
+	// DocumentKey is key of the document.
 	DocumentKey *key.Key
-	Checkpoint  *checkpoint.Checkpoint
-	Changes     []*Change
-	Snapshot    []byte
+
+	// Checkpoint is used to determine the client received changes.
+	Checkpoint *checkpoint.Checkpoint
+
+	// Change represents a unit of modification in the document.
+	Changes []*Change
+
+	// Snapshot is a byte array that encode the document.
+	Snapshot []byte
+
+	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
+	// It used to collect garbage on the replica on the client.
+	MinSyncedTicket time.Ticket
 }
 
 // NewPack creates a new instance of Pack.
