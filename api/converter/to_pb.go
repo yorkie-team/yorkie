@@ -29,10 +29,11 @@ import (
 // ToChangePack converts the given model format to Protobuf format.
 func ToChangePack(pack *change.Pack) *api.ChangePack {
 	return &api.ChangePack{
-		DocumentKey: toDocumentKey(pack.DocumentKey),
-		Checkpoint:  toCheckpoint(pack.Checkpoint),
-		Changes:     toChanges(pack.Changes),
-		Snapshot:    pack.Snapshot,
+		DocumentKey:     toDocumentKey(pack.DocumentKey),
+		Checkpoint:      toCheckpoint(pack.Checkpoint),
+		Changes:         toChanges(pack.Changes),
+		Snapshot:        pack.Snapshot,
+		MinSyncedTicket: toTimeTicket(pack.MinSyncedTicket),
 	}
 }
 

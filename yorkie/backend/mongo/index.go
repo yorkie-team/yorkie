@@ -27,14 +27,14 @@ import (
 )
 
 var (
-	ColClientInfos = "clients"
+	ColClients     = "clients"
 	idxClientInfos = []mongo.IndexModel{{
 		Keys:    bsonx.Doc{{Key: "key", Value: bsonx.Int32(1)}},
 		Options: options.Index().SetUnique(true),
 	}}
 
-	ColDocInfos = "documents"
-	idxDocInfos = []mongo.IndexModel{{
+	ColDocuments = "documents"
+	idxDocInfos  = []mongo.IndexModel{{
 		Keys:    bsonx.Doc{{Key: "key", Value: bsonx.Int32(1)}},
 		Options: options.Index().SetUnique(true),
 	}}
@@ -56,10 +56,24 @@ var (
 		},
 		Options: options.Index().SetUnique(true),
 	}}
+
+	ColSyncedSeqs = "syncedseqs"
+	idxSyncedSeqs = []mongo.IndexModel{{
+		Keys: bsonx.Doc{
+			{Key: "doc_id", Value: bsonx.Int32(1)},
+			{Key: "client_id", Value: bsonx.Int32(1)},
+		},
+		Options: options.Index().SetUnique(true),
+	}, {
+		Keys: bsonx.Doc{
+			{Key: "doc_id", Value: bsonx.Int32(1)},
+			{Key: "server_seq", Value: bsonx.Int32(1)},
+		},
+	}}
 )
 
 func ensureIndexes(ctx context.Context, db *mongo.Database) error {
-	if _, err := db.Collection(ColClientInfos).Indexes().CreateMany(
+	if _, err := db.Collection(ColClients).Indexes().CreateMany(
 		ctx,
 		idxClientInfos,
 	); err != nil {
@@ -67,7 +81,7 @@ func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 		return err
 	}
 
-	if _, err := db.Collection(ColDocInfos).Indexes().CreateMany(
+	if _, err := db.Collection(ColDocuments).Indexes().CreateMany(
 		ctx,
 		idxDocInfos,
 	); err != nil {
@@ -86,6 +100,14 @@ func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 	if _, err := db.Collection(ColSnapshots).Indexes().CreateMany(
 		ctx,
 		idxSnapshots,
+	); err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	if _, err := db.Collection(ColSyncedSeqs).Indexes().CreateMany(
+		ctx,
+		idxSyncedSeqs,
 	); err != nil {
 		log.Logger.Error(err)
 		return err

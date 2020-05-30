@@ -131,6 +131,9 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	// 03. Update the checkpoint.
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
+	// 04. Do Garbage collection.
+	d.doc.GarbageCollect(pack.MinSyncedTicket)
+
 	log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.RootObject().Marshal())
 	return nil
 }
@@ -195,6 +198,11 @@ func (d *Document) ensureClone() {
 // GarbageCollect purge elements that were removed before the given time.
 func (d *Document) GarbageCollect(ticket *time.Ticket) int {
 	return d.doc.GarbageCollect(ticket)
+}
+
+// GarbageLen returns the count of removed elements.
+func (d *Document) GarbageLen() int {
+	return d.doc.GarbageLen()
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

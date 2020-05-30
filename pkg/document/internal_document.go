@@ -131,6 +131,11 @@ func (d *InternalDocument) GarbageCollect(ticket *time.Ticket) int {
 	return d.root.GarbageCollect(ticket)
 }
 
+// GarbageLen returns the count of removed elements.
+func (d *InternalDocument) GarbageLen() int {
+	return d.root.GarbageLen()
+}
+
 // Marshal returns the JSON encoding of this document.
 func (d *InternalDocument) Marshal() string {
 	return d.root.Object().Marshal()

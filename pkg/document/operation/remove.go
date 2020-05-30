@@ -40,13 +40,15 @@ func NewRemove(
 }
 
 func (o *Remove) Execute(root *json.Root) error {
-	parent := root.FindByCreatedAt(o.parentCreatedAt)
+	parentElem := root.FindByCreatedAt(o.parentCreatedAt)
 
-	switch obj := parent.(type) {
+	switch parent := parentElem.(type) {
 	case *json.Object:
-		_ = obj.DeleteByCreatedAt(o.createdAt, o.executedAt)
+		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
+		root.RegisterRemovedElementPair(parent, elem)
 	case *json.Array:
-		_ = obj.DeleteByCreatedAt(o.createdAt, o.executedAt)
+		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
+		root.RegisterRemovedElementPair(parent, elem)
 	default:
 		return ErrNotApplicableDataType
 	}

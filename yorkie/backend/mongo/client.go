@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	logicalTime "github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/types"
 )
@@ -103,7 +104,7 @@ func (c *Client) Close() error {
 
 func (c *Client) ActivateClient(ctx context.Context, key string) (*types.ClientInfo, error) {
 	clientInfo := types.ClientInfo{}
-	if err := c.withCollection(ColClientInfos, func(col *mongo.Collection) error {
+	if err := c.withCollection(ColClients, func(col *mongo.Collection) error {
 		now := time.Now()
 		res, err := col.UpdateOne(ctx, bson.M{
 			"key": key,
@@ -148,7 +149,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*types.ClientI
 
 func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.ClientInfo, error) {
 	clientInfo := types.ClientInfo{}
-	if err := c.withCollection(ColClientInfos, func(col *mongo.Collection) error {
+	if err := c.withCollection(ColClients, func(col *mongo.Collection) error {
 		id, err := primitive.ObjectIDFromHex(clientID)
 		if err != nil {
 			log.Logger.Error(err)
@@ -183,7 +184,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.
 func (c *Client) FindClientInfoByID(ctx context.Context, clientID string) (*types.ClientInfo, error) {
 	var client types.ClientInfo
 
-	if err := c.withCollection(ColClientInfos, func(col *mongo.Collection) error {
+	if err := c.withCollection(ColClients, func(col *mongo.Collection) error {
 		id, err := primitive.ObjectIDFromHex(clientID)
 		if err != nil {
 			log.Logger.Error(err)
@@ -215,7 +216,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	clientInfo *types.ClientInfo,
 	docInfo *types.DocInfo,
 ) error {
-	return c.withCollection(ColClientInfos, func(col *mongo.Collection) error {
+	return c.withCollection(ColClients, func(col *mongo.Collection) error {
 		result := col.FindOneAndUpdate(ctx, bson.M{
 			"key": clientInfo.Key,
 		}, bson.M{
@@ -246,7 +247,7 @@ func (c *Client) FindDocInfoByKey(
 ) (*types.DocInfo, error) {
 	docInfo := types.DocInfo{}
 
-	if err := c.withCollection(ColDocInfos, func(col *mongo.Collection) error {
+	if err := c.withCollection(ColDocuments, func(col *mongo.Collection) error {
 		now := time.Now()
 		res, err := col.UpdateOne(ctx, bson.M{
 			"key": bsonDocKey,
@@ -361,7 +362,7 @@ func (c *Client) UpdateDocInfo(
 	ctx context.Context,
 	docInfo *types.DocInfo,
 ) error {
-	return c.withCollection(ColDocInfos, func(col *mongo.Collection) error {
+	return c.withCollection(ColDocuments, func(col *mongo.Collection) error {
 		now := time.Now()
 		_, err := col.UpdateOne(ctx, bson.M{
 			"_id": docInfo.ID,
@@ -440,12 +441,62 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	return changes, nil
 }
 
-func (c *Client) withCollection(
-	collection string,
-	callback func(collection *mongo.Collection) error,
-) error {
-	col := c.client.Database(c.config.YorkieDatabase).Collection(collection)
-	return callback(col)
+func (c *Client) UpdateAndFindMinSyncedTicket(
+	ctx context.Context,
+	clientID primitive.ObjectID,
+	docID primitive.ObjectID,
+	serverSeq uint64,
+) (*logicalTime.Ticket, error) {
+	// TODO We need to find a way to reduce the number of
+	//      collection accesses(`syncedseqs`, `changes`, `clients`).
+	syncedSeqInfo := types.SyncedSeqInfo{}
+
+	if err := c.withCollection(ColSyncedSeqs, func(col *mongo.Collection) error {
+		_, err := col.UpdateOne(ctx, bson.M{
+			"doc_id":    docID,
+			"client_id": clientID,
+		}, bson.M{
+			"$set": bson.M{
+				"server_seq": serverSeq,
+			},
+		}, options.Update().SetUpsert(true))
+		if err != nil {
+			log.Logger.Error(err)
+			return err
+		}
+
+		result := col.FindOne(ctx, bson.M{
+			"doc_id": docID,
+		}, options.FindOne().SetSort(bson.M{
+			"server_seq": 1,
+		}))
+		if result.Err() == mongo.ErrNoDocuments {
+			return result.Err()
+		}
+
+		if result.Err() != nil {
+			log.Logger.Error(result.Err())
+			return result.Err()
+		}
+		if err := result.Decode(&syncedSeqInfo); err != nil {
+			log.Logger.Error(err)
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if syncedSeqInfo.ServerSeq == 0 {
+		return logicalTime.InitialTicket, nil
+	}
+
+	ticket, err := c.findTicketByServerSeq(ctx, docID, syncedSeqInfo.ServerSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	return ticket, nil
 }
 
 func (c *Client) FindLastSnapshotInfo(
@@ -481,4 +532,72 @@ func (c *Client) FindLastSnapshotInfo(
 	}
 
 	return snapshotInfo, nil
+}
+
+func (c *Client) findTicketByServerSeq(
+	ctx context.Context,
+	docID primitive.ObjectID,
+	serverSeq uint64,
+) (*logicalTime.Ticket, error) {
+	changeInfo := types.ChangeInfo{}
+	if err := c.withCollection(ColChanges, func(col *mongo.Collection) error {
+		result := col.FindOne(ctx, bson.M{
+			"doc_id":     docID,
+			"server_seq": serverSeq,
+		})
+		if result.Err() == mongo.ErrNoDocuments {
+			return result.Err()
+		}
+
+		if result.Err() != nil {
+			log.Logger.Error(result.Err())
+			return result.Err()
+		}
+
+		if err := result.Decode(&changeInfo); err != nil {
+			log.Logger.Error(err)
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	clientInfo := types.ClientInfo{}
+	if err := c.withCollection(ColClients, func(collection *mongo.Collection) error {
+		result := collection.FindOne(ctx, bson.M{
+			"_id": changeInfo.Actor,
+		})
+
+		if result.Err() == mongo.ErrNoDocuments {
+			return result.Err()
+		}
+
+		if result.Err() != nil {
+			log.Logger.Error(result.Err())
+			return result.Err()
+		}
+
+		if err := result.Decode(&clientInfo); err != nil {
+			log.Logger.Error(err)
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return logicalTime.NewTicket(
+		changeInfo.Lamport,
+		logicalTime.MaxDelimiter,
+		logicalTime.ActorIDFromHex(clientInfo.ID.Hex()),
+	), nil
+}
+
+func (c *Client) withCollection(
+	collection string,
+	callback func(collection *mongo.Collection) error,
+) error {
+	col := c.client.Database(c.config.YorkieDatabase).Collection(collection)
+	return callback(col)
 }
