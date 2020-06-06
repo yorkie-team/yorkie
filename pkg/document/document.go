@@ -189,12 +189,6 @@ func (d *Document) RootObject() *json.Object {
 	return d.doc.RootObject()
 }
 
-func (d *Document) ensureClone() {
-	if d.clone == nil {
-		d.clone = d.doc.root.DeepCopy()
-	}
-}
-
 // GarbageCollect purge elements that were removed before the given time.
 func (d *Document) GarbageCollect(ticket *time.Ticket) int {
 	return d.doc.GarbageCollect(ticket)
@@ -203,6 +197,12 @@ func (d *Document) GarbageCollect(ticket *time.Ticket) int {
 // GarbageLen returns the count of removed elements.
 func (d *Document) GarbageLen() int {
 	return d.doc.GarbageLen()
+}
+
+func (d *Document) ensureClone() {
+	if d.clone == nil {
+		d.clone = d.doc.root.DeepCopy()
+	}
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

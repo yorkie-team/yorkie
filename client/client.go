@@ -261,8 +261,9 @@ func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
 
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
-	Keys []*key.Key
-	Err  error
+	EventType string
+	Keys      []*key.Key
+	Err       error
 }
 
 // Watch subscribes to events on a given document.
@@ -285,20 +286,37 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 		return rch
 	}
 
+	handleResponse := func(pbResp *api.WatchDocumentsResponse) {
+		switch resp := pbResp.Body.(type) {
+		case *api.WatchDocumentsResponse_Event_:
+			rch <- WatchResponse{
+				EventType: converter.FromEventType(resp.Event.EventType),
+				Keys:      converter.FromDocumentKeys(resp.Event.DocumentKeys),
+			}
+		case *api.WatchDocumentsResponse_State_:
+			// continue
+		}
+	}
+
+	// waiting for starting watch
+	pbResp, err := stream.Recv()
+	if err != nil {
+		rch <- WatchResponse{Err: err}
+		close(rch)
+		return rch
+	}
+	handleResponse(pbResp)
+
+	// starting to watch documents
 	go func() {
 		for {
-			resp, err := stream.Recv()
+			pbResp, err := stream.Recv()
 			if err != nil {
 				rch <- WatchResponse{Err: err}
 				close(rch)
 				return
 			}
-
-			if resp != nil {
-				rch <- WatchResponse{
-					Keys: converter.FromDocumentKeys(resp.DocumentKeys),
-				}
-			}
+			handleResponse(pbResp)
 		}
 	}()
 

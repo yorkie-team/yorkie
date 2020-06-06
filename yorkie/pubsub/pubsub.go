@@ -24,12 +24,16 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+type EventType string
+
 const (
-	DocumentChangeEvent = "document-change"
+	DocumentChangeEvent    EventType = "document-change"
+	DocumentWatchedEvent             = "document-watched"
+	DocumentUnwatchedEvent           = "document-unwatched"
 )
 
 type Event struct {
-	Type  string
+	Type  EventType
 	Value string
 }
 
@@ -39,8 +43,12 @@ type Subscription struct {
 	events chan Event
 }
 
-func (s Subscription) Events() <-chan Event {
+func (s *Subscription) Events() <-chan Event {
 	return s.events
+}
+
+func (s *Subscription) Actor() *time.ActorID {
+	return s.actor
 }
 
 func newSubscription(actor *time.ActorID) *Subscription {

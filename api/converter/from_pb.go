@@ -100,6 +100,19 @@ func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
 	return keys
 }
 
+func FromEventType(eventType api.EventType) string {
+	switch eventType {
+	case api.EventType_DocumentChanged:
+		return "document-change"
+	case api.EventType_DocumentWatched:
+		return "document-watched"
+	case api.EventType_DocumentUnwatched:
+		return "document-unwatched"
+	default:
+		panic("unsupported type")
+	}
+}
+
 // FromOperations converts the given Protobuf format to model format.
 func FromOperations(pbOps []*api.Operation) []operation.Operation {
 	var ops []operation.Operation
