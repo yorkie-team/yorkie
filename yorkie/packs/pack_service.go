@@ -82,7 +82,7 @@ func PushPull(
 	//      the requested seq(reqPack) is stored instead of the response seq(resPack).
 	respPack.MinSyncedTicket, err = be.Mongo.UpdateAndFindMinSyncedTicket(
 		ctx,
-		clientInfo.ID,
+		clientInfo,
 		docInfo.ID,
 		reqPack.Checkpoint.ServerSeq,
 	)

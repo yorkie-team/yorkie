@@ -94,6 +94,16 @@ func (i *ClientInfo) DetachDocument(docID primitive.ObjectID) error {
 	return nil
 }
 
+func (i *ClientInfo) IsAttached(docID primitive.ObjectID) (bool, error) {
+	hexDocID := docID.Hex()
+
+	if !i.hasDocument(hexDocID) {
+		return false, ErrDocumentNeverAttached
+	}
+
+	return i.Documents[hexDocID].Status == DocumentAttached, nil
+}
+
 func (i *ClientInfo) GetCheckpoint(id primitive.ObjectID) *checkpoint.Checkpoint {
 	clientDocInfo := i.Documents[id.Hex()]
 	if clientDocInfo == nil {

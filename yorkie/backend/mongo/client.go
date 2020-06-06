@@ -19,7 +19,7 @@ package mongo
 import (
 	"context"
 	"errors"
-	"time"
+	defaultTime "time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -30,7 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	logicalTime "github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/types"
 )
@@ -45,10 +45,10 @@ var (
 
 // Config is the configuration for creating a Client instance.
 type Config struct {
-	ConnectionTimeoutSec time.Duration `json:"ConnectionTimeoutSec"`
+	ConnectionTimeoutSec defaultTime.Duration `json:"ConnectionTimeoutSec"`
 	ConnectionURI        string        `json:"ConnectionURI"`
 	YorkieDatabase       string        `json:"YorkieDatabase"`
-	PingTimeoutSec       time.Duration `json:"PingTimeoutSec"`
+	PingTimeoutSec       defaultTime.Duration `json:"PingTimeoutSec"`
 }
 
 type Client struct {
@@ -59,7 +59,7 @@ type Client struct {
 func NewClient(conf *Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
-		conf.ConnectionTimeoutSec*time.Second,
+		conf.ConnectionTimeoutSec*defaultTime.Second,
 	)
 	defer cancel()
 
@@ -72,7 +72,7 @@ func NewClient(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	ctxPing, cancel := context.WithTimeout(ctx, conf.PingTimeoutSec*time.Second)
+	ctxPing, cancel := context.WithTimeout(ctx, conf.PingTimeoutSec*defaultTime.Second)
 	defer cancel()
 
 	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
@@ -105,7 +105,7 @@ func (c *Client) Close() error {
 func (c *Client) ActivateClient(ctx context.Context, key string) (*types.ClientInfo, error) {
 	clientInfo := types.ClientInfo{}
 	if err := c.withCollection(ColClients, func(col *mongo.Collection) error {
-		now := time.Now()
+		now := defaultTime.Now()
 		res, err := col.UpdateOne(ctx, bson.M{
 			"key": key,
 		}, bson.M{
@@ -160,7 +160,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.
 		}, bson.M{
 			"$set": bson.M{
 				"status":     types.ClientDeactivated,
-				"updated_at": time.Now(),
+				"updated_at": defaultTime.Now(),
 			},
 		})
 
@@ -248,7 +248,7 @@ func (c *Client) FindDocInfoByKey(
 	docInfo := types.DocInfo{}
 
 	if err := c.withCollection(ColDocuments, func(col *mongo.Collection) error {
-		now := time.Now()
+		now := defaultTime.Now()
 		res, err := col.UpdateOne(ctx, bson.M{
 			"key": bsonDocKey,
 		}, bson.M{
@@ -348,7 +348,7 @@ func (c *Client) CreateSnapshotInfo(
 			"doc_id":     docID,
 			"server_seq": doc.Checkpoint().ServerSeq,
 			"snapshot":   snapshot,
-			"created_at": time.Now(),
+			"created_at": defaultTime.Now(),
 		}); err != nil {
 			log.Logger.Error(err)
 			return err
@@ -363,7 +363,7 @@ func (c *Client) UpdateDocInfo(
 	docInfo *types.DocInfo,
 ) error {
 	return c.withCollection(ColDocuments, func(col *mongo.Collection) error {
-		now := time.Now()
+		now := defaultTime.Now()
 		_, err := col.UpdateOne(ctx, bson.M{
 			"_id": docInfo.ID,
 		}, bson.M{
@@ -443,39 +443,54 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 
 func (c *Client) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
-	clientID primitive.ObjectID,
+	clientInfo *types.ClientInfo,
 	docID primitive.ObjectID,
 	serverSeq uint64,
-) (*logicalTime.Ticket, error) {
-	// TODO We need to find a way to reduce the number of
-	//      collection accesses(`syncedseqs`, `changes`, `clients`).
-	syncedSeqInfo := types.SyncedSeqInfo{}
+) (*time.Ticket, error) {
+	// 01. update synced seq of the given client.
+	isAttached, err := clientInfo.IsAttached(docID)
+	if err != nil {
+		return nil, err
+	}
 
+	clientID := clientInfo.ID
 	if err := c.withCollection(ColSyncedSeqs, func(col *mongo.Collection) error {
-		_, err := col.UpdateOne(ctx, bson.M{
-			"doc_id":    docID,
-			"client_id": clientID,
-		}, bson.M{
-			"$set": bson.M{
-				"server_seq": serverSeq,
-			},
-		}, options.Update().SetUpsert(true))
-		if err != nil {
-			log.Logger.Error(err)
+		if isAttached {
+			_, err = col.UpdateOne(ctx, bson.M{
+				"doc_id":    docID,
+				"client_id": clientID,
+			}, bson.M{
+				"$set": bson.M{
+					"server_seq": serverSeq,
+				},
+			}, options.Update().SetUpsert(true))
 			return err
 		}
+		_, err = col.DeleteOne(ctx, bson.M{
+			"doc_id":    docID,
+			"client_id": clientID,
+		}, options.Delete())
+		return err
+	}); err != nil {
+		log.Logger.Error(err)
+		return nil, err
+	}
 
+	// TODO We need to find a way to reduce the number of
+	//      collection accesses(`syncedseqs`, `changes`, `clients`).
+	// 02. find min synced seq of the given document.
+	syncedSeqInfo := types.SyncedSeqInfo{}
+	if err := c.withCollection(ColSyncedSeqs, func(col *mongo.Collection) error {
 		result := col.FindOne(ctx, bson.M{
 			"doc_id": docID,
 		}, options.FindOne().SetSort(bson.M{
 			"server_seq": 1,
 		}))
-		if result.Err() == mongo.ErrNoDocuments {
-			return result.Err()
-		}
 
 		if result.Err() != nil {
-			log.Logger.Error(result.Err())
+			if result.Err() != mongo.ErrNoDocuments {
+				log.Logger.Error(result.Err())
+			}
 			return result.Err()
 		}
 		if err := result.Decode(&syncedSeqInfo); err != nil {
@@ -484,13 +499,17 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		}
 		return nil
 	}); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return time.InitialTicket, nil
+		}
 		return nil, err
 	}
 
 	if syncedSeqInfo.ServerSeq == 0 {
-		return logicalTime.InitialTicket, nil
+		return time.InitialTicket, nil
 	}
 
+	// 03. find ticket by seq.
 	ticket, err := c.findTicketByServerSeq(ctx, docID, syncedSeqInfo.ServerSeq)
 	if err != nil {
 		return nil, err
@@ -538,7 +557,7 @@ func (c *Client) findTicketByServerSeq(
 	ctx context.Context,
 	docID primitive.ObjectID,
 	serverSeq uint64,
-) (*logicalTime.Ticket, error) {
+) (*time.Ticket, error) {
 	changeInfo := types.ChangeInfo{}
 	if err := c.withCollection(ColChanges, func(col *mongo.Collection) error {
 		result := col.FindOne(ctx, bson.M{
@@ -587,10 +606,10 @@ func (c *Client) findTicketByServerSeq(
 		return nil, err
 	}
 
-	return logicalTime.NewTicket(
+	return time.NewTicket(
 		changeInfo.Lamport,
-		logicalTime.MaxDelimiter,
-		logicalTime.ActorIDFromHex(clientInfo.ID.Hex()),
+		time.MaxDelimiter,
+		time.ActorIDFromHex(clientInfo.ID.Hex()),
 	), nil
 }
 
