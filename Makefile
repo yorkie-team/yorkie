@@ -1,4 +1,4 @@
-VERSION := 0.0.9
+VERSION := 0.0.10
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 

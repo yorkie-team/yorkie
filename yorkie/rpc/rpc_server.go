@@ -36,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
+	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 	"github.com/yorkie-team/yorkie/yorkie/types"
 )
 
@@ -298,11 +299,18 @@ func (s *Server) WatchDocuments(
 		docKeys = append(docKeys, docKey.BSONKey())
 	}
 
-	subscription, err := s.backend.Subscribe(
-		time.ActorIDFromHex(req.ClientId),
-		docKeys,
-	)
+	subscription, err := s.watchDocs(req.ClientId, docKeys)
 	if err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	if err := stream.Send(&api.WatchDocumentsResponse{
+		Body: &api.WatchDocumentsResponse_State_{
+			State: api.WatchDocumentsResponse_Started,
+		},
+	}); err != nil {
+		s.unwatchDocs(docKeys, subscription)
 		log.Logger.Error(err)
 		return err
 	}
@@ -310,21 +318,27 @@ func (s *Server) WatchDocuments(
 	for {
 		select {
 		case <-stream.Context().Done():
-			s.backend.Unsubscribe(docKeys, subscription)
+			s.unwatchDocs(docKeys, subscription)
 			return nil
 		case event := <-subscription.Events():
 			k, err := key.FromBSONKey(event.Value)
 			if err != nil {
-				s.backend.Unsubscribe(docKeys, subscription)
+				log.Logger.Error(err)
+				s.unwatchDocs(docKeys, subscription)
 				return err
 			}
 
 			if err := stream.Send(&api.WatchDocumentsResponse{
-				ClientId:     req.ClientId,
-				DocumentKeys: converter.ToDocumentKeys(k),
+				Body: &api.WatchDocumentsResponse_Event_{
+					Event: &api.WatchDocumentsResponse_Event{
+						ClientId:     req.ClientId,
+						EventType:    converter.ToEventType(event.Type),
+						DocumentKeys: converter.ToDocumentKeys(k),
+					},
+				},
 			}); err != nil {
-				s.backend.Unsubscribe(docKeys, subscription)
 				log.Logger.Error(err)
+				s.unwatchDocs(docKeys, subscription)
 				return err
 			}
 		}
@@ -347,6 +361,45 @@ func (s *Server) listenAndServeGRPC() error {
 	}()
 
 	return nil
+}
+
+func (s *Server) watchDocs(clientID string, docKeys []string) (*pubsub.Subscription, error) {
+	subscription, err := s.backend.Subscribe(
+		time.ActorIDFromHex(clientID),
+		docKeys,
+	)
+	if err != nil {
+		log.Logger.Error(err)
+		return nil, err
+	}
+
+	for _, docKey := range docKeys {
+		s.backend.Publish(
+			subscription.Actor(),
+			docKey,
+			pubsub.Event{
+				Type:  pubsub.DocumentWatchedEvent,
+				Value: docKey,
+			},
+		)
+	}
+
+	return subscription, nil
+}
+
+func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription) {
+	s.backend.Unsubscribe(docKeys, subscription)
+
+	for _, docKey := range docKeys {
+		s.backend.Publish(
+			subscription.Actor(),
+			docKey,
+			pubsub.Event{
+				Type:  pubsub.DocumentUnwatchedEvent,
+				Value: docKey,
+			},
+		)
+	}
 }
 
 func toStatusError(code codes.Code, msg string, violations []fieldViolation) error {

@@ -83,8 +83,20 @@ message WatchDocumentsRequest {
 }
 
 message WatchDocumentsResponse {
-    string client_id = 1;
-    repeated DocumentKey document_keys = 2;
+    enum State {
+        Started = 0;
+    }
+
+    message Event {
+        string client_id = 1;
+        EventType event_type = 2;
+        repeated DocumentKey document_keys = 3;
+    }
+
+    oneof body {
+        State state = 1;
+        Event event = 2;
+    }
 }
 
 message PushPullRequest {
@@ -318,4 +330,10 @@ enum ValueType {
     JSON_ARRAY = 9;
     TEXT = 10;
     RICH_TEXT = 11;
+}
+
+enum EventType {
+    DocumentChanged = 0;
+    DocumentWatched = 1;
+    DocumentUnwatched = 2;
 }

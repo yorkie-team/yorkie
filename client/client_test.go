@@ -20,17 +20,19 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/testhelper"
 	"github.com/yorkie-team/yorkie/yorkie"
 )
@@ -40,13 +42,13 @@ var testYorkie *yorkie.Yorkie
 func TestMain(m *testing.M) {
 	y := testhelper.TestYorkie()
 	if err := y.Start(); err != nil {
-		log.Fatal(err)
+		log.Logger.Fatal(err)
 	}
 	testYorkie = y
 	code := m.Run()
 	if testYorkie != nil {
 		if err := testYorkie.Shutdown(true); err != nil {
-			log.Println(err)
+			log.Logger.Error(err)
 		}
 	}
 	os.Exit(code)
@@ -555,7 +557,7 @@ func TestClientAndDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("watch test", func(t *testing.T) {
+	t.Run("watch document changed event test", func(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(testhelper.Collection, t.Name())
@@ -567,12 +569,14 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		wg := sync.WaitGroup{}
-		wg.Add(1)
 
+		// 01. cli1 watches doc1.
+		wg.Add(1)
 		rch := c1.Watch(ctx, d1)
 		go func() {
 			defer wg.Done()
 
+			// receive changed event.
 			resp := <-rch
 			if resp.Err == io.EOF {
 				return
@@ -583,6 +587,7 @@ func TestClientAndDocument(t *testing.T) {
 			assert.NoError(t, err)
 		}()
 
+		// 02. cli2 updates doc2.
 		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("key", "value")
 			return nil
@@ -595,6 +600,52 @@ func TestClientAndDocument(t *testing.T) {
 		wg.Wait()
 
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
+	})
+
+	t.Run("watch document watched/unwatched events test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		wg := sync.WaitGroup{}
+		watch1Ctx, cancel1 := context.WithCancel(ctx)
+		rch := c1.Watch(watch1Ctx, d1)
+		defer cancel1()
+
+		go func() {
+			for {
+				select {
+				case <- ctx.Done():
+					assert.Fail(t, "unexpected ctx done")
+					break
+				case resp := <- rch:
+					if resp.Err == io.EOF || status.Code(resp.Err) == codes.Canceled {
+						return
+					}
+					assert.NoError(t, resp.Err)
+
+					if resp.EventType == "document-watched" ||
+						resp.EventType == "document-unwatched" {
+						wg.Done()
+					}
+				}
+			}
+		}()
+
+		watch2Ctx, cancel2 := context.WithCancel(ctx)
+		wg.Add(1)
+		_ = c2.Watch(watch2Ctx, d2)
+
+		wg.Add(1)
+		cancel2()
+
+		wg.Wait()
 	})
 
 	t.Run("snapshot test", func(t *testing.T) {

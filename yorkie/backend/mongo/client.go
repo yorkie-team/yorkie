@@ -46,8 +46,8 @@ var (
 // Config is the configuration for creating a Client instance.
 type Config struct {
 	ConnectionTimeoutSec defaultTime.Duration `json:"ConnectionTimeoutSec"`
-	ConnectionURI        string        `json:"ConnectionURI"`
-	YorkieDatabase       string        `json:"YorkieDatabase"`
+	ConnectionURI        string               `json:"ConnectionURI"`
+	YorkieDatabase       string               `json:"YorkieDatabase"`
 	PingTimeoutSec       defaultTime.Duration `json:"PingTimeoutSec"`
 }
 
