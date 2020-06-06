@@ -20,11 +20,11 @@ import (
 	"fmt"
 	"log"
 	"runtime"
-	"time"
+	defaultTime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	logicalTime "github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
@@ -46,7 +46,7 @@ const (
 )
 
 func init() {
-	now := time.Now()
+	now := defaultTime.Now()
 	testStartedAt = now.Unix()
 }
 
@@ -61,7 +61,7 @@ func TextChangeContext() *change.Context {
 	return change.NewContext(
 		change.InitialID,
 		"",
-		json.NewRoot(json.NewObject(json.NewRHTPriorityQueueMap(), logicalTime.InitialTicket)),
+		json.NewRoot(json.NewObject(json.NewRHTPriorityQueueMap(), time.InitialTicket)),
 	)
 }
 

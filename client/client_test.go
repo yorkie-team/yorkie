@@ -748,6 +748,65 @@ func TestClientAndDocument(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 	})
+
+	t.Run("garbage collection with detached document test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetInteger("1", 1)
+			root.SetNewArray("2").AddInteger(1, 2, 3)
+			root.SetInteger("3", 3)
+			return nil
+		}, "sets 1,2,3")
+		assert.NoError(t, err)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		// (0, 0) -> (1, 0): syncedseqs:(0, 0)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		// (1, 0) -> (1, 1): syncedseqs:(0, 0)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.Delete("2")
+			return nil
+		}, "removes 2")
+		assert.NoError(t, err)
+		assert.Equal(t, 4, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		// (1, 1) -> (2, 1): syncedseqs:(1, 0)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 4, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		err = c2.Detach(ctx, d2)
+		assert.NoError(t, err)
+
+		// (2, 1) -> (2, 2): syncedseqs:(1, x)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 4, d1.GarbageLen())
+		assert.Equal(t, 4, d2.GarbageLen())
+
+		// (2, 2) -> (2, 2): syncedseqs:(2, x): meet GC condition
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 4, d2.GarbageLen())
+	})
 }
 
 type clientAndDocPair struct {
