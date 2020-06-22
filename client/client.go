@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 type status int
@@ -261,7 +262,7 @@ func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
 
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
-	EventType string
+	EventType types.EventType
 	Keys      []*key.Key
 	Err       error
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
+	pkgTypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 	"github.com/yorkie-team/yorkie/yorkie/types"
@@ -97,7 +98,7 @@ func PushPull(
 				time.ActorIDFromHex(clientInfo.ID.Hex()),
 				reqPack.DocumentKey.BSONKey(),
 				pubsub.Event{
-					Type:  pubsub.DocumentChangeEvent,
+					Type:  pkgTypes.DocumentChangeEvent,
 					Value: reqPack.DocumentKey.BSONKey(),
 				},
 			)

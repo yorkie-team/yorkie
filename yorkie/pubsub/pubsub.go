@@ -22,18 +22,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-)
-
-type EventType string
-
-const (
-	DocumentChangeEvent    EventType = "document-change"
-	DocumentWatchedEvent             = "document-watched"
-	DocumentUnwatchedEvent           = "document-unwatched"
+	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 type Event struct {
-	Type  EventType
+	Type  types.EventType
 	Value string
 }
 

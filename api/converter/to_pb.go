@@ -24,7 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/yorkie/pubsub"
+	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 // ToChangePack converts the given model format to Protobuf format.
@@ -83,13 +83,13 @@ func ToDocumentKeys(keys ...*key.Key) []*api.DocumentKey {
 }
 
 // ToEventType converts the given model format to Protobuf format.
-func ToEventType(eventType pubsub.EventType) api.EventType {
+func ToEventType(eventType types.EventType) api.EventType {
 	switch eventType {
-	case pubsub.DocumentChangeEvent:
+	case types.DocumentChangeEvent:
 		return api.EventType_DocumentChanged
-	case pubsub.DocumentWatchedEvent:
+	case types.DocumentWatchedEvent:
 		return api.EventType_DocumentWatched
-	case pubsub.DocumentUnwatchedEvent:
+	case types.DocumentUnwatchedEvent:
 		return api.EventType_DocumentUnwatched
 	default:
 		panic("unsupported event")
