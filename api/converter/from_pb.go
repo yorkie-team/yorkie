@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 var (
@@ -100,14 +101,14 @@ func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
 	return keys
 }
 
-func FromEventType(eventType api.EventType) string {
+func FromEventType(eventType api.EventType) types.EventType {
 	switch eventType {
 	case api.EventType_DocumentChanged:
-		return "document-change"
+		return types.DocumentChangeEvent
 	case api.EventType_DocumentWatched:
-		return "document-watched"
+		return types.DocumentWatchedEvent
 	case api.EventType_DocumentUnwatched:
-		return "document-unwatched"
+		return types.DocumentUnwatchedEvent
 	default:
 		panic("unsupported type")
 	}

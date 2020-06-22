@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
+	pkgTypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
@@ -378,7 +379,7 @@ func (s *Server) watchDocs(clientID string, docKeys []string) (*pubsub.Subscript
 			subscription.Actor(),
 			docKey,
 			pubsub.Event{
-				Type:  pubsub.DocumentWatchedEvent,
+				Type:  pkgTypes.DocumentWatchedEvent,
 				Value: docKey,
 			},
 		)
@@ -395,7 +396,7 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription
 			subscription.Actor(),
 			docKey,
 			pubsub.Event{
-				Type:  pubsub.DocumentUnwatchedEvent,
+				Type:  pkgTypes.DocumentUnwatchedEvent,
 				Value: docKey,
 			},
 		)

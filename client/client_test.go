@@ -33,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/testhelper"
 	"github.com/yorkie-team/yorkie/yorkie"
 )
@@ -621,17 +622,17 @@ func TestClientAndDocument(t *testing.T) {
 		go func() {
 			for {
 				select {
-				case <- ctx.Done():
+				case <-ctx.Done():
 					assert.Fail(t, "unexpected ctx done")
 					break
-				case resp := <- rch:
+				case resp := <-rch:
 					if resp.Err == io.EOF || status.Code(resp.Err) == codes.Canceled {
 						return
 					}
 					assert.NoError(t, resp.Err)
 
-					if resp.EventType == "document-watched" ||
-						resp.EventType == "document-unwatched" {
+					if resp.EventType == types.DocumentWatchedEvent ||
+						resp.EventType == types.DocumentUnwatchedEvent {
 						wg.Done()
 					}
 				}
