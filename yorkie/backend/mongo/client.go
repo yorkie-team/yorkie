@@ -477,7 +477,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	}
 
 	// TODO We need to find a way to reduce the number of
-	//      collection accesses(`syncedseqs`, `changes`, `clients`).
+	//      collection accesses(`syncedseqs`, `changes`).
 	// 02. find min synced seq of the given document.
 	syncedSeqInfo := types.SyncedSeqInfo{}
 	if err := c.withCollection(ColSyncedSeqs, func(col *mongo.Collection) error {
@@ -582,34 +582,10 @@ func (c *Client) findTicketByServerSeq(
 		return nil, err
 	}
 
-	clientInfo := types.ClientInfo{}
-	if err := c.withCollection(ColClients, func(collection *mongo.Collection) error {
-		result := collection.FindOne(ctx, bson.M{
-			"_id": changeInfo.Actor,
-		})
-
-		if result.Err() == mongo.ErrNoDocuments {
-			return result.Err()
-		}
-
-		if result.Err() != nil {
-			log.Logger.Error(result.Err())
-			return result.Err()
-		}
-
-		if err := result.Decode(&clientInfo); err != nil {
-			log.Logger.Error(err)
-			return err
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
 	return time.NewTicket(
 		changeInfo.Lamport,
 		time.MaxDelimiter,
-		time.ActorIDFromHex(clientInfo.ID.Hex()),
+		time.ActorIDFromHex(changeInfo.Actor.Hex()),
 	), nil
 }
 
