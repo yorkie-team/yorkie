@@ -103,12 +103,12 @@ func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
 
 func FromEventType(eventType api.EventType) types.EventType {
 	switch eventType {
-	case api.EventType_DocumentChanged:
-		return types.DocumentChangeEvent
-	case api.EventType_DocumentWatched:
-		return types.DocumentWatchedEvent
-	case api.EventType_DocumentUnwatched:
-		return types.DocumentUnwatchedEvent
+	case api.EventType_DOCUMENTS_CHANGED:
+		return types.DocumentsChangeEvent
+	case api.EventType_DOCUMENTS_WATCHED:
+		return types.DocumentsWatchedEvent
+	case api.EventType_DOCUMENTS_UNWATCHED:
+		return types.DocumentsUnwatchedEvent
 	default:
 		panic("unsupported type")
 	}

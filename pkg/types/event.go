@@ -3,7 +3,7 @@ package types
 type EventType string
 
 const (
-	DocumentChangeEvent    EventType = "document-change"
-	DocumentWatchedEvent             = "document-watched"
-	DocumentUnwatchedEvent           = "document-unwatched"
+	DocumentsChangeEvent    EventType = "documents-change"
+	DocumentsWatchedEvent             = "documents-watched"
+	DocumentsUnwatchedEvent           = "documents-unwatched"
 )

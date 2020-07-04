@@ -19,7 +19,6 @@ package backend
 import (
 	defaultSync "sync"
 
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
@@ -36,13 +35,13 @@ type Config struct {
 }
 
 // Backend manages Yorkie's remote states such as data store, distributed lock
-// and etc.
+// and etc. And it has the server status like the configuration.
 type Backend struct {
 	Config *Config
-	Mongo  *mongo.Client
 
-	mutexMap *sync.MutexMap
-	pubSub   *pubsub.PubSub
+	Mongo  *mongo.Client
+	MutexMap *sync.MutexMap
+	PubSub   *pubsub.PubSub
 
 	// closing is closed by backend close.
 	closing chan struct{}
@@ -65,8 +64,8 @@ func New(conf *Config, mongoConf *mongo.Config) (*Backend, error) {
 	return &Backend{
 		Config:   conf,
 		Mongo:    client,
-		mutexMap: sync.NewMutexMap(),
-		pubSub:   pubsub.NewPubSub(),
+		MutexMap: sync.NewMutexMap(),
+		PubSub:   pubsub.New(),
 		closing:  make(chan struct{}),
 	}, nil
 }
@@ -85,26 +84,6 @@ func (b *Backend) Close() error {
 	}
 
 	return nil
-}
-
-func (b *Backend) Lock(k string) error {
-	return b.mutexMap.Lock(k)
-}
-
-func (b *Backend) Unlock(k string) error {
-	return b.mutexMap.Unlock(k)
-}
-
-func (b *Backend) Subscribe(actor *time.ActorID, topics []string) (*pubsub.Subscription, error) {
-	return b.pubSub.Subscribe(actor, topics)
-}
-
-func (b *Backend) Unsubscribe(topics []string, subscription *pubsub.Subscription) {
-	b.pubSub.Unsubscribe(topics, subscription)
-}
-
-func (b *Backend) Publish(actor *time.ActorID, topic string, event pubsub.Event) {
-	b.pubSub.Publish(actor, topic, event)
 }
 
 // AttachGoroutine creates a goroutine on a given function and tracks it using

@@ -21,7 +21,7 @@ require (
 	go.uber.org/zap v1.11.0
 	golang.org/x/crypto v0.0.0-20191117063200-497ca9f6d64f // indirect
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
-	golang.org/x/tools v0.0.0-20200604183345-4d5ea46c79fe // indirect
+	golang.org/x/tools v0.0.0-20200702044944-0cc1aa72b347 // indirect
 	google.golang.org/genproto v0.0.0-20190508193815-b515fa19cec8
 	google.golang.org/grpc v1.24.0
 	honnef.co/go/tools v0.0.1-2020.1.3 // indirect

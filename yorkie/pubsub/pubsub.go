@@ -25,18 +25,29 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
-type Event struct {
-	Type  types.EventType
-	Value string
+type DocEvent struct {
+	Type    types.EventType
+	DocKey  string
+	ActorID *time.ActorID
 }
+
+type SubscriptionID string
 
 type Subscription struct {
 	id     string
 	actor  *time.ActorID
-	events chan Event
+	events chan DocEvent
 }
 
-func (s *Subscription) Events() <-chan Event {
+func newSubscription(actor *time.ActorID) *Subscription {
+	return &Subscription{
+		id:     uuid.New().String(),
+		actor:  actor,
+		events: make(chan DocEvent),
+	}
+}
+
+func (s *Subscription) Events() <-chan DocEvent {
 	return s.events
 }
 
@@ -44,13 +55,7 @@ func (s *Subscription) Actor() *time.ActorID {
 	return s.actor
 }
 
-func newSubscription(actor *time.ActorID) *Subscription {
-	return &Subscription{
-		id:     uuid.New().String(),
-		actor:  actor,
-		events: make(chan Event),
-	}
-}
+type Topic string
 
 type Subscriptions map[string]*Subscription
 
@@ -62,7 +67,7 @@ type PubSub struct {
 	subscriptionsMap map[string]Subscriptions
 }
 
-func NewPubSub() *PubSub {
+func New() *PubSub {
 	return &PubSub{
 		mu:               &sync.RWMutex{},
 		subscriptionsMap: make(map[string]Subscriptions),
@@ -73,20 +78,27 @@ func NewPubSub() *PubSub {
 func (m *PubSub) Subscribe(
 	actor *time.ActorID,
 	topics []string,
-) (*Subscription, error) {
+) (*Subscription, map[string][]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	subscription := newSubscription(actor)
+	peersMap := make(map[string][]string)
 
 	for _, topic := range topics {
 		if _, ok := m.subscriptionsMap[topic]; !ok {
 			m.subscriptionsMap[topic] = make(Subscriptions)
 		}
 		m.subscriptionsMap[topic][subscription.id] = subscription
+
+		var peers []string
+		for _, subscription := range m.subscriptionsMap[topic] {
+			peers = append(peers, subscription.actor.String())
+		}
+		peersMap[topic] = peers
 	}
 
-	return subscription, nil
+	return subscription, peersMap, nil
 }
 
 // Unsubscribe unsubscribes the given topics.
@@ -101,8 +113,8 @@ func (m *PubSub) Unsubscribe(topics []string, subscription *Subscription) {
 	}
 }
 
-// Publish publishes the given event to the given topic.
-func (m *PubSub) Publish(actor *time.ActorID, topic string, event Event) {
+// Publish publishes the given event to the given Topic.
+func (m *PubSub) Publish(actor *time.ActorID, topic string, event DocEvent) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
