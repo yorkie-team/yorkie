@@ -476,8 +476,6 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		return nil, err
 	}
 
-	// TODO We need to find a way to reduce the number of
-	//      collection accesses(`syncedseqs`, `changes`).
 	// 02. find min synced seq of the given document.
 	syncedSeqInfo := types.SyncedSeqInfo{}
 	if err := c.withCollection(ColSyncedSeqs, func(col *mongo.Collection) error {
@@ -510,6 +508,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	}
 
 	// 03. find ticket by seq.
+	// TODO We need to find a way to not access `changes` collection.
 	ticket, err := c.findTicketByServerSeq(ctx, docID, syncedSeqInfo.ServerSeq)
 	if err != nil {
 		return nil, err

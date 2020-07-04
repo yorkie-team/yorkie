@@ -82,9 +82,13 @@ message WatchDocumentsRequest {
     repeated DocumentKey document_keys = 3;
 }
 
+message Clients {
+    repeated string client_ids = 1;
+}
+
 message WatchDocumentsResponse {
-    enum State {
-        Started = 0;
+    message Initialization {
+        map<string, Clients> peers_map_by_doc = 1;
     }
 
     message Event {
@@ -94,7 +98,7 @@ message WatchDocumentsResponse {
     }
 
     oneof body {
-        State state = 1;
+        Initialization initialization = 1;
         Event event = 2;
     }
 }
@@ -333,7 +337,7 @@ enum ValueType {
 }
 
 enum EventType {
-    DocumentChanged = 0;
-    DocumentWatched = 1;
-    DocumentUnwatched = 2;
+    DOCUMENTS_CHANGED = 0;
+    DOCUMENTS_WATCHED = 1;
+    DOCUMENTS_UNWATCHED = 2;
 }

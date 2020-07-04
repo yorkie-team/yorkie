@@ -23,7 +23,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
-// Value is an interface that represents the value of Node.
+// DocKey is an interface that represents the value of Node.
 // User can extend this interface to use custom value in Node.
 type Value interface {
 	Len() int

@@ -631,8 +631,8 @@ func TestClientAndDocument(t *testing.T) {
 					}
 					assert.NoError(t, resp.Err)
 
-					if resp.EventType == types.DocumentWatchedEvent ||
-						resp.EventType == types.DocumentUnwatchedEvent {
+					if resp.EventType == types.DocumentsWatchedEvent ||
+						resp.EventType == types.DocumentsUnwatchedEvent {
 						wg.Done()
 					}
 				}

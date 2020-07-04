@@ -82,15 +82,32 @@ func ToDocumentKeys(keys ...*key.Key) []*api.DocumentKey {
 	return pbKeys
 }
 
+func ToClientsMap(clientsMap map[string][]string) map[string]*api.Clients {
+	pbClientsMap := make(map[string]*api.Clients)
+
+	for k, clients := range clientsMap {
+		var clientIds []string
+		for _, client := range clients {
+			clientIds = append(clientIds, client)
+		}
+
+		pbClientsMap[k] = &api.Clients{
+			ClientIds: clientIds,
+		}
+	}
+
+	return pbClientsMap
+}
+
 // ToEventType converts the given model format to Protobuf format.
 func ToEventType(eventType types.EventType) api.EventType {
 	switch eventType {
-	case types.DocumentChangeEvent:
-		return api.EventType_DocumentChanged
-	case types.DocumentWatchedEvent:
-		return api.EventType_DocumentWatched
-	case types.DocumentUnwatchedEvent:
-		return api.EventType_DocumentUnwatched
+	case types.DocumentsChangeEvent:
+		return api.EventType_DOCUMENTS_CHANGED
+	case types.DocumentsWatchedEvent:
+		return api.EventType_DOCUMENTS_WATCHED
+	case types.DocumentsUnwatchedEvent:
+		return api.EventType_DOCUMENTS_UNWATCHED
 	default:
 		panic("unsupported event")
 	}

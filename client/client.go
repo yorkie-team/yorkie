@@ -294,7 +294,7 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 				EventType: converter.FromEventType(resp.Event.EventType),
 				Keys:      converter.FromDocumentKeys(resp.Event.DocumentKeys),
 			}
-		case *api.WatchDocumentsResponse_State_:
+		case *api.WatchDocumentsResponse_Initialization_:
 			// continue
 		}
 	}
