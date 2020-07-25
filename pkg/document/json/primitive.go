@@ -183,7 +183,8 @@ func (p *Primitive) Marshal() string {
 
 // DeepCopy copies itself deeply.
 func (p *Primitive) DeepCopy() Element {
-	return p
+	primitive := *p
+	return &primitive
 }
 
 // CreatedAt returns the creation time.
