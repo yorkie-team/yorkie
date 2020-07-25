@@ -405,4 +405,24 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[1,2,3,4,5]}`, doc.Marshal())
 	})
+
+	t.Run("rollback test, primitive deepcopy", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewObject("k1").
+				SetInteger("k1.1", 1).
+				SetInteger("k1.2", 2)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":{"k1.1":1,"k1.2":2}}`, doc.Marshal())
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			root.GetObject("k1").Delete("k1.1")
+			return errDummy
+		})
+		assert.Equal(t, err, errDummy, "should returns the dummy error")
+		assert.Equal(t, `{"k1":{"k1.1":1,"k1.2":2}}`, doc.Marshal())
+	})
 }
