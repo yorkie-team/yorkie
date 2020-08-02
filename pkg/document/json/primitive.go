@@ -220,3 +220,20 @@ func (p *Primitive) Remove(removedAt *time.Ticket) bool {
 func (p *Primitive) ValueType() ValueType {
 	return p.valueType
 }
+
+// Increase increase integer or long
+func (p *Primitive) Increase(v *Primitive) *Primitive {
+	pType := p.valueType
+	vType := v.valueType
+	if pType != Integer && pType != Long && vType == Integer && vType != Long {
+		panic("unsupported type")
+	}
+	switch pType {
+	case Integer:
+		p.value = p.value.(int) + v.value.(int)
+	case Long:
+		p.value = p.value.(int64) + v.value.(int64)
+	}
+
+	return p
+}

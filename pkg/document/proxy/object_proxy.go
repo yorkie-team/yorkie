@@ -85,7 +85,10 @@ func (p *ObjectProxy) SetBool(k string, v bool) *ObjectProxy {
 
 func (p *ObjectProxy) SetInteger(k string, v int) *ObjectProxy {
 	p.setInternal(k, func(ticket *time.Ticket) json.Element {
-		return json.NewPrimitive(v, ticket)
+		return NewNumberProxy(
+			p.context,
+			json.NewPrimitive(v, ticket),
+		)
 	})
 
 	return p
@@ -204,6 +207,44 @@ func (p *ObjectProxy) GetRichText(k string) *RichTextProxy {
 	case *json.RichText:
 		return NewRichTextProxy(p.context, elem)
 	case *RichTextProxy:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+func (p *ObjectProxy) GetInteger(k string) *NumberProxy {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	switch elem := p.Object.Get(k).(type) {
+	case *json.Primitive:
+		if elem.ValueType() != json.Integer {
+			panic("unsupported type")
+		}
+		return NewNumberProxy(p.context, elem)
+	case *NumberProxy:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+func (p *ObjectProxy) GetLong(k string) *NumberProxy {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	switch elem := p.Object.Get(k).(type) {
+	case *json.Primitive:
+		if elem.ValueType() != json.Long {
+			panic("unsupported type")
+		}
+		return NewNumberProxy(p.context, elem)
+	case *NumberProxy:
 		return elem
 	default:
 		panic("unsupported type")

@@ -381,6 +381,26 @@ func TestDocument(t *testing.T) {
 		)
 	})
 
+	t.Run("number types test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetInteger("age", 5)
+			root.GetInteger("age").Increase(5).Increase(10).Increase(-3)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"age":17}`, doc.Marshal())
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetLong("price", 9000000000000000000)
+			root.GetLong("price").Increase(5).Increase(-2)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"age":17,"price":9000000000000000003}`, doc.Marshal())
+	})
+
 	t.Run("rollback test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
 
