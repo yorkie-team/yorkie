@@ -64,10 +64,7 @@ type Tree struct {
 }
 
 func NewTree() *Tree {
-	return &Tree{
-		root: nil,
-		size: 0,
-	}
+	return &Tree{}
 }
 
 func (t *Tree) Put(k Key, v Value) Value {
