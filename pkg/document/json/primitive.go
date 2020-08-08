@@ -221,11 +221,11 @@ func (p *Primitive) ValueType() ValueType {
 	return p.valueType
 }
 
-// Increase increase integer or long
+// Increase increase integer, long or double.
 func (p *Primitive) Increase(v *Primitive) *Primitive {
 	pType := p.valueType
 	vType := v.valueType
-	if pType != Integer && pType != Long && vType == Integer && vType != Long {
+	if pType != Integer && pType != Long && pType != Double && vType != Integer && vType != Long && vType != Double {
 		panic("unsupported type")
 	}
 	switch pType {
@@ -233,6 +233,8 @@ func (p *Primitive) Increase(v *Primitive) *Primitive {
 		p.value = p.value.(int) + v.value.(int)
 	case Long:
 		p.value = p.value.(int64) + v.value.(int64)
+	case Double:
+		p.value = p.value.(float64) + v.value.(float64)
 	}
 
 	return p
