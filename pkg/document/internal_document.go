@@ -31,11 +31,11 @@ type stateType int
 const (
 	// Detached means that the document is not attached to the client.
 	// The actor of the ticket is created without being assigned.
-	Detached stateType = 0
+	Detached stateType = iota
 
 	// Attached means that this document is attached to the client.
 	// The actor of the ticket is created with being assigned by the client.
-	Attached stateType = 1
+	Attached
 )
 
 // InternalDocument represents a document in MongoDB and contains logical clocks.

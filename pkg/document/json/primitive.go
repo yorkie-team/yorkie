@@ -28,14 +28,14 @@ import (
 type ValueType int
 
 const (
-	Null    ValueType = 0
-	Boolean ValueType = 1
-	Integer ValueType = 2
-	Long    ValueType = 3
-	Double  ValueType = 4
-	String  ValueType = 5
-	Bytes   ValueType = 6
-	Date    ValueType = 7
+	Null ValueType = iota
+	Boolean
+	Integer
+	Long
+	Double
+	String
+	Bytes
+	Date
 )
 
 // ValueFromBytes parses the given bytes into value.

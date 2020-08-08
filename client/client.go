@@ -36,8 +36,8 @@ import (
 type status int
 
 const (
-	deactivated status = 0
-	activated   status = 1
+	deactivated status = iota
+	activated
 )
 
 var (
