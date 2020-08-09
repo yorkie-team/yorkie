@@ -197,6 +197,14 @@ func ToOperations(operations []operation.Operation) []*api.Operation {
 					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
 				},
 			}
+		case *operation.Increase:
+			pbOperation.Body = &api.Operation_Increase_{
+				Increase: &api.Operation_Increase{
+					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
+					Value:           toJSONElementSimple(op.Value()),
+					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
+				},
+			}
 		default:
 			panic("unsupported operation")
 		}

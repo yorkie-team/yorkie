@@ -49,28 +49,28 @@ func (p *NumberProxy) Increase(v interface{}) *NumberProxy {
 		panic("unsupported type")
 	}
 	var primitive *json.Primitive
-	tickect := p.context.IssueTimeTicket()
+	ticket := p.context.IssueTimeTicket()
 
 	value, kind := convertAssertableOperand(v)
 	isInt := kind == reflect.Int
 	switch p.ValueType() {
 	case json.Long:
 		if isInt {
-			primitive = json.NewPrimitive(int64(value.(int)), tickect)
+			primitive = json.NewPrimitive(int64(value.(int)), ticket)
 		} else {
-			primitive = json.NewPrimitive(int64(value.(float64)), tickect)
+			primitive = json.NewPrimitive(int64(value.(float64)), ticket)
 		}
 	case json.Integer:
 		if isInt {
-			primitive = json.NewPrimitive(value, tickect)
+			primitive = json.NewPrimitive(value, ticket)
 		} else {
-			primitive = json.NewPrimitive(int(value.(float64)), tickect)
+			primitive = json.NewPrimitive(int(value.(float64)), ticket)
 		}
 	case json.Double:
 		if isInt {
-			primitive = json.NewPrimitive(float64(value.(int)), tickect)
+			primitive = json.NewPrimitive(float64(value.(int)), ticket)
 		} else {
-			primitive = json.NewPrimitive(value, tickect)
+			primitive = json.NewPrimitive(value, ticket)
 		}
 	default:
 		panic("unsupported type")
@@ -79,7 +79,7 @@ func (p *NumberProxy) Increase(v interface{}) *NumberProxy {
 	p.context.Push(operation.NewIncrease(
 		p.CreatedAt(),
 		primitive,
-		tickect,
+		ticket,
 	))
 
 	return p

@@ -859,6 +859,26 @@ func TestClientAndDocument(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 	})
+
+	t.Run("increase test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetInteger("value", 1)
+			root.GetInteger("value").Increase(2)
+			return nil
+		})
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
 }
 
 type clientAndDocPair struct {
