@@ -223,19 +223,48 @@ func (p *Primitive) ValueType() ValueType {
 
 // Increase increase integer, long or double.
 func (p *Primitive) Increase(v *Primitive) *Primitive {
-	pType := p.valueType
-	vType := v.valueType
-	if pType != Integer && pType != Long && pType != Double && vType != Integer && vType != Long && vType != Double {
+	if !isNumericType(p) || !isNumericType(v) {
 		panic("unsupported type")
 	}
-	switch pType {
+	switch p.valueType {
 	case Integer:
-		p.value = p.value.(int) + v.value.(int)
+		switch v.valueType {
+		case Long:
+			p.value = p.value.(int) + int(v.value.(int64))
+		case Double:
+			p.value = p.value.(int) + int(v.value.(float64))
+		default:
+			p.value = p.value.(int) + v.value.(int)
+		}
 	case Long:
-		p.value = p.value.(int64) + v.value.(int64)
+		switch v.valueType {
+		case Integer:
+			p.value = p.value.(int64) + int64(v.value.(int))
+		case Double:
+			p.value = p.value.(int64) + int64(v.value.(float64))
+		default:
+			p.value = p.value.(int64) + v.value.(int64)
+		}
 	case Double:
-		p.value = p.value.(float64) + v.value.(float64)
+		switch v.valueType {
+		case Integer:
+			p.value = p.value.(float64) + float64(v.value.(int))
+		case Long:
+			p.value = p.value.(float64) + float64(v.value.(int64))
+		default:
+			p.value = p.value.(float64) + v.value.(float64)
+		}
 	}
 
 	return p
+}
+
+// isNumericType checks for numeric types.
+func isNumericType(v *Primitive) bool {
+	t := v.valueType
+	if t == Integer || t == Long || t == Double {
+		return true
+	}
+
+	return false
 }

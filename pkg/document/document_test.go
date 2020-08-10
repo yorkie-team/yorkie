@@ -454,7 +454,9 @@ func TestDocument(t *testing.T) {
 		// when 'Remove panic from server code (#50)' is completed.
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			defer func() {
-				recover()
+				r := recover()
+				assert.NotNil(t, r)
+				assert.Equal(t, r, "unsupported type")
 			}()
 
 			var notAllowType uint64 = 18300000000000000000
