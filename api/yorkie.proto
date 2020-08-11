@@ -192,6 +192,11 @@ message Operation {
         map<string, string> attributes = 4;
         TimeTicket executed_at = 5;
     }
+    message Increase {
+        TimeTicket parent_created_at = 1;
+        JSONElementSimple value = 2;
+        TimeTicket executed_at = 3;
+    }
 
     oneof body {
         Set set = 1;
@@ -202,6 +207,7 @@ message Operation {
         Select select = 6;
         RichEdit rich_edit = 7;
         Style style = 8;
+        Increase increase = 9;
     }
 }
 

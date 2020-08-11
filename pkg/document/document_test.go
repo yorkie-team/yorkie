@@ -381,6 +381,93 @@ func TestDocument(t *testing.T) {
 		)
 	})
 
+	t.Run("number types test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+		var integer int = 10
+		var long int64 = 5
+		var uinteger uint = 100
+		var float float32 = 3.14
+		var double float64 = 5.66
+
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetInteger("age", 5)
+
+			age := root.GetInteger("age")
+			age.Increase(long)
+			age.Increase(double)
+			age.Increase(float)
+			age.Increase(uinteger)
+			age.Increase(integer)
+
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"age":128}`, doc.Marshal())
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetLong("price", 9000000000000000000)
+			price := root.GetLong("price")
+			price.Increase(long)
+			price.Increase(double)
+			price.Increase(float)
+			price.Increase(uinteger)
+			price.Increase(integer)
+
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"age":128,"price":9000000000000000123}`, doc.Marshal())
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetDouble("width", 10.5)
+			width := root.GetDouble("width")
+			width.Increase(long)
+			width.Increase(double)
+			width.Increase(float)
+			width.Increase(uinteger)
+			width.Increase(integer)
+
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"age":128,"price":9000000000000000123,"width":134.300000}`, doc.Marshal())
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			age := root.GetInteger("age")
+			age.Increase(-5)
+			age.Increase(-3.14)
+
+			price := root.GetLong("price")
+			price.Increase(-100)
+			price.Increase(-20.5)
+
+			width := root.GetDouble("width")
+			width.Increase(-4)
+			width.Increase(-0.3)
+
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"age":120,"price":9000000000000000003,"width":130.000000}`, doc.Marshal())
+
+		// TODO it should be modified to error check
+		// when 'Remove panic from server code (#50)' is completed.
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			defer func() {
+				r := recover()
+				assert.NotNil(t, r)
+				assert.Equal(t, r, "unsupported type")
+			}()
+
+			var notAllowType uint64 = 18300000000000000000
+			age := root.GetInteger("age")
+			age.Increase(notAllowType)
+
+			return nil
+		})
+		assert.Equal(t, `{"age":120,"price":9000000000000000003,"width":130.000000}`, doc.Marshal())
+	})
+
 	t.Run("rollback test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
 

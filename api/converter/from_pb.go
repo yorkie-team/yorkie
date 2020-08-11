@@ -182,6 +182,12 @@ func FromOperations(pbOps []*api.Operation) []operation.Operation {
 				decoded.Style.Attributes,
 				fromTimeTicket(decoded.Style.ExecutedAt),
 			)
+		case *api.Operation_Increase_:
+			op = operation.NewIncrease(
+				fromTimeTicket(decoded.Increase.ParentCreatedAt),
+				fromElement(decoded.Increase.Value),
+				fromTimeTicket(decoded.Increase.ExecutedAt),
+			)
 		default:
 			panic("unsupported operation")
 		}
