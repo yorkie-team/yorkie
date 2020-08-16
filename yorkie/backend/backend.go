@@ -39,7 +39,7 @@ type Config struct {
 type Backend struct {
 	Config *Config
 
-	Mongo  *mongo.Client
+	Mongo    *mongo.Client
 	MutexMap *sync.MutexMap
 	PubSub   *pubsub.PubSub
 
