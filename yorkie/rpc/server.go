@@ -334,7 +334,7 @@ func (s *Server) WatchDocuments(
 			if err := stream.Send(&api.WatchDocumentsResponse{
 				Body: &api.WatchDocumentsResponse_Event_{
 					Event: &api.WatchDocumentsResponse_Event{
-						ClientId:     event.ActorID.String(),
+						ClientId:     event.Publisher.String(),
 						EventType:    converter.ToEventType(event.Type),
 						DocumentKeys: converter.ToDocumentKeys(k),
 					},
@@ -381,12 +381,12 @@ func (s *Server) watchDocs(
 
 	for _, docKey := range docKeys {
 		s.backend.PubSub.Publish(
-			subscription.Actor(),
+			subscription.Subscriber(),
 			docKey,
 			pubsub.DocEvent{
-				Type:   pkgTypes.DocumentsWatchedEvent,
-				DocKey: docKey,
-				ActorID: subscription.Actor(),
+				Type:      pkgTypes.DocumentsWatchedEvent,
+				DocKey:    docKey,
+				Publisher: subscription.Subscriber(),
 			},
 		)
 	}
@@ -399,12 +399,12 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription
 
 	for _, docKey := range docKeys {
 		s.backend.PubSub.Publish(
-			subscription.Actor(),
+			subscription.Subscriber(),
 			docKey,
 			pubsub.DocEvent{
-				Type:   pkgTypes.DocumentsUnwatchedEvent,
-				DocKey: docKey,
-				ActorID: subscription.Actor(),
+				Type:      pkgTypes.DocumentsUnwatchedEvent,
+				DocKey:    docKey,
+				Publisher: subscription.Subscriber(),
 			},
 		)
 	}

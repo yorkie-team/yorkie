@@ -1,4 +1,4 @@
-VERSION := 0.0.10
+YORKIE_VERSION := 0.0.11
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 
@@ -19,7 +19,7 @@ GO_LDFLAGS ?=
 
 # inject the version number into the golang version package using the -X linker flag
 GO_LDFLAGS += -X ${GO_PROJECT}/pkg/version.GitCommit=${GIT_COMMIT}
-GO_LDFLAGS += -X ${GO_PROJECT}/pkg/version.Version=${VERSION}
+GO_LDFLAGS += -X ${GO_PROJECT}/pkg/version.Version=${YORKIE_VERSION}
 
 EXECUTABLE = ./bin/yorkie
 
@@ -54,4 +54,4 @@ test:
 	go clean -testcache
 	go test -race ./...
 
-.PHONY: tools proto build fmt lint test
+.PHONY: tools proto build docker fmt lint test
