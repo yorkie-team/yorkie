@@ -38,6 +38,7 @@ type DocEvent struct {
 type Subscription struct {
 	id         string
 	subscriber *time.ActorID
+	closed     bool
 	events     chan DocEvent
 }
 
@@ -67,6 +68,16 @@ func (s *Subscription) SubscriberID() string {
 	return s.subscriber.String()
 }
 
+// Close closes all resources of this Subscription.
+func (s *Subscription) Close() {
+	if s.closed {
+		return
+	}
+
+	s.closed = true
+	close(s.events)
+}
+
 // Subscriptions is a collection of subscriptions that subscribe to a specific
 // topic.
 type Subscriptions struct {
@@ -92,7 +103,7 @@ func (s *Subscriptions) Map() map[string]*Subscription {
 // Delete deletes the subscription of the given id.
 func (s *Subscriptions) Delete(id string) {
 	if subscription, ok := s.internalMap[id]; ok {
-		close(subscription.events)
+		subscription.Close()
 	}
 	delete(s.internalMap, id)
 }

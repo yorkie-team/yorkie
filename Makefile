@@ -1,4 +1,4 @@
-YORKIE_VERSION := 0.0.11
+YORKIE_VERSION := 0.0.12
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 
