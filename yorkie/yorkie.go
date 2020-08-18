@@ -86,6 +86,7 @@ func (r *Yorkie) Shutdown(graceful bool) error {
 		return nil
 	}
 
+	r.metricsServer.Shutdown(graceful)
 	r.rpcServer.Shutdown(graceful)
 
 	if err := r.backend.Close(); err != nil {
