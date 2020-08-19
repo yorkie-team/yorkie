@@ -9,6 +9,8 @@ We use the [Projects](https://github.com/yorkie-team/yorkie/projects) feature in
 
 ## Yorkie v0.1
 
+Yorkie's first release version, v0.1, aims to implement the basic features of the document store for building collaborative editing applications. And it should be reliably available for services used in production environments.
+
 ### 2019
  - Nov: Start the project with adding basic structure(Agent, Client, Document)
  - Dec: JS-SDK(Client, Document) [yorkie-js-sdk](https://github.com/yorkie-team/yorkie-js-sdk)
@@ -19,11 +21,15 @@ We use the [Projects](https://github.com/yorkie-team/yorkie/projects) feature in
  - Mar: https://yorkie.dev [yorkie-team.github.io](https://github.com/yorkie-team/yorkie-team.github.io)
  - Apr: Change hook
  - May: Snapshot API to reduce payload [#9](https://github.com/yorkie-team/yorkie/issues/9)
- - Jul: RichText datatype [#7](https://github.com/yorkie-team/yorkie/issues/7)
- - Aug: Garbage collection to clean CRDT meta [#3](https://github.com/yorkie-team/yorkie/issues/3)
- - Sep: Support for TLS and Auth webhook to secure Yorkie [#6](https://github.com/yorkie-team/yorkie/issues/6)
+ - Jun: Garbage collection to clean CRDT meta [#3](https://github.com/yorkie-team/yorkie/issues/3)
+ - Aug:
+   - Peer Awareness [#48](https://github.com/yorkie-team/yorkie/issues/48)
+   - Introducing Prometheus metrics [#76](https://github.com/yorkie-team/yorkie/issues/76)
+ - Sep: Supporting TLS and Auth webhook to secure Yorkie [#6](https://github.com/yorkie-team/yorkie/issues/6)
  - Nov: Introducing HA [#11](https://github.com/yorkie-team/yorkie/issues/11)
- - Dec: Integrate prometheus monitoring
+ - Dec: Redo/Undo API [#49](https://github.com/yorkie-team/yorkie/issues/49)
+
+## Yorkie v0.2
 
 ### 2021
  - Jan: Speed up push/pull changes and snapshot
