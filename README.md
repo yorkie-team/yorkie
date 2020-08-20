@@ -42,7 +42,7 @@ Yorkie consists of three main components: Client, Document and Agent.
 
 For now, we didn't deploy binary yet. So you should [compile Yorkie yourself](#developing-yorkie).
 
-Yorkie uses MongoDB to store it's data. To start MongoDB, type `docker-compose up -d`.
+Yorkie uses MongoDB to store it's data. To start MongoDB, type `cd docker && docker-compose up -d`.
 
 Next, let's start a Yorkie agent. Agent runs until they're told to quit and handle the communication of maintenance tasks of Agent. and start the agent:
 
