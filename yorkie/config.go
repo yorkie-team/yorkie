@@ -25,11 +25,13 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
 const (
-	DefaultRPCPort = 9090
+	DefaultRPCPort     = 9090
+	DefaultMetricsPort = 2112
 
 	DefaultMongoConnectionURI        = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeoutSec = 5
@@ -43,6 +45,7 @@ const (
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
 	RPC     *rpc.Config     `json:"RPC"`
+	Metrics *metrics.Config `json:"Metrics"`
 	Mongo   *mongo.Config   `json:"Mongo"`
 	Backend *backend.Config `json:"Backend"`
 }
@@ -55,7 +58,7 @@ func (c *Config) RPCAddr() string {
 // NewConfig returns a Config struct that contains reasonable defaults
 // for most of the configurations.
 func NewConfig() *Config {
-	return newConfig(DefaultRPCPort, DefaultMongoYorkieDatabase)
+	return newConfig(DefaultRPCPort, DefaultMetricsPort, DefaultMongoYorkieDatabase)
 }
 
 // NewConfigFromFile returns a Config struct for the given conf file.
@@ -81,10 +84,13 @@ func NewConfigFromFile(path string) (*Config, error) {
 	return conf, nil
 }
 
-func newConfig(port int, dbName string) *Config {
+func newConfig(port int, metricsPort int, dbName string) *Config {
 	return &Config{
 		RPC: &rpc.Config{
 			Port: port,
+		},
+		Metrics: &metrics.Config{
+			Port: metricsPort,
 		},
 		Backend: &backend.Config{
 			SnapshotThreshold: DefaultSnapshotThreshold,

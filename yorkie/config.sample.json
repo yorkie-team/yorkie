@@ -4,6 +4,9 @@
         "CertFile": "",
         "KeyFile": ""
     },
+    "Metrics": {
+        "Port": 2112
+    },
     "Mongo": {
         "ConnectionTimeoutSec": 5,
         "ConnectionURI": "mongodb://localhost:27017",

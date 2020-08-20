@@ -19,7 +19,9 @@ package yorkie
 import (
 	"sync"
 
+	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
@@ -29,9 +31,10 @@ import (
 type Yorkie struct {
 	lock sync.Mutex
 
-	conf      *Config
-	backend   *backend.Backend
-	rpcServer *rpc.Server
+	conf          *Config
+	backend       *backend.Backend
+	rpcServer     *rpc.Server
+	metricsServer *metrics.Server
 
 	shutdown   bool
 	shutdownCh chan struct{}
@@ -49,10 +52,17 @@ func New(conf *Config) (*Yorkie, error) {
 		return nil, err
 	}
 
+	metricsServer, err := metrics.NewServer(conf.Metrics)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Yorkie{
-		conf:       conf,
-		backend:    be,
-		rpcServer:  rpcServer,
+		conf:          conf,
+		backend:       be,
+		rpcServer:     rpcServer,
+		metricsServer: metricsServer,
+
 		shutdownCh: make(chan struct{}),
 	}, nil
 }
@@ -61,6 +71,11 @@ func (r *Yorkie) Start() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
+	err := r.metricsServer.Start()
+	if err != nil {
+		log.Logger.Error(err)
+		return err
+	}
 	return r.rpcServer.Start()
 }
 
@@ -72,6 +87,7 @@ func (r *Yorkie) Shutdown(graceful bool) error {
 	}
 
 	r.rpcServer.Shutdown(graceful)
+	r.metricsServer.Shutdown(graceful)
 
 	if err := r.backend.Close(); err != nil {
 		return err
