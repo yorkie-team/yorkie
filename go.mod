@@ -10,6 +10,8 @@ require (
 	github.com/golangci/golangci-lint v1.27.0 // indirect
 	github.com/google/go-cmp v0.3.0 // indirect
 	github.com/google/uuid v1.1.1
+	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
+	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/prometheus/client_golang v0.9.3
 	github.com/securego/gosec v0.0.0-20200103095621-79fbf3af8d83 // indirect
 	github.com/spf13/cobra v0.0.5
