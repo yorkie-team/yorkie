@@ -45,7 +45,7 @@ const (
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
 	RPC     *rpc.Config     `json:"RPC"`
-	Metrics *metrics.Config `json:Metrics`
+	Metrics *metrics.Config `json:"Metrics"`
 	Mongo   *mongo.Config   `json:"Mongo"`
 	Backend *backend.Config `json:"Backend"`
 }
