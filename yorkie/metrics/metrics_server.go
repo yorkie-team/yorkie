@@ -12,18 +12,18 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/version"
 )
 
-// Config exposed port
+// Config is the configuration for creating a Server instance.
 type Config struct {
 	Port int
 }
 
-// Server config and http server
+// Server provides application-specific and Go metrics.
 type Server struct {
 	conf          *Config
 	metricsServer *http.Server
 }
 
-// NewServer create new http server
+// NewServer creates an instance of Server.
 func NewServer(conf *Config) (*Server, error) {
 	return &Server{
 		conf: conf,
@@ -61,13 +61,13 @@ func recordMetrics() {
 	}).Set(1)
 }
 
-// Start Register application specific metrics and start the http server.
+// Start registers application-specific metrics and starts the HTTP server.
 func (s *Server) Start() error {
 	recordMetrics()
 	return s.listenAndServe()
 }
 
-// Shutdown shutdown or close server
+// Shutdown closes the server.
 func (s *Server) Shutdown(graceful bool) {
 	if graceful {
 		if err := s.metricsServer.Shutdown(context.Background()); err != nil {
