@@ -36,7 +36,7 @@ var testStartedAt int64
 
 const (
 	RPCPort     = 1101
-	MetricsPort = 2202
+	MetricsPort = 1102
 
 	MongoConnectionURI        = "mongodb://localhost:27017"
 	MongoConnectionTimeoutSec = 5

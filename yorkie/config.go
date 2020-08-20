@@ -30,8 +30,8 @@ import (
 )
 
 const (
-	DefaultRPCPort     = 9090
-	DefaultMetricsPort = 2112
+	DefaultRPCPort     = 11101
+	DefaultMetricsPort = 11102
 
 	DefaultMongoConnectionURI        = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeoutSec = 5

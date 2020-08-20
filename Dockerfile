@@ -21,8 +21,9 @@ COPY . .
 # Build the yorkie
 RUN make build
 
-# Expose port 9090 to the outside world
-EXPOSE 9090
+# Expose port 11101, 11102 to the outside world
+EXPOSE 11101
+EXPOSE 11102
 
 # Command to run the executable
 ENTRYPOINT ["/app/bin/yorkie", "agent"]
