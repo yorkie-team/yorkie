@@ -28,13 +28,15 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
 var testStartedAt int64
 
 const (
-	RPCPort = 1101
+	RPCPort     = 1101
+	MetricsPort = 1102
 
 	MongoConnectionURI        = "mongodb://localhost:27017"
 	MongoConnectionTimeoutSec = 5
@@ -99,6 +101,9 @@ func TestYorkie() *yorkie.Yorkie {
 	y, err := yorkie.New(&yorkie.Config{
 		RPC: &rpc.Config{
 			Port: RPCPort,
+		},
+		Metrics: &metrics.Config{
+			Port: MetricsPort,
 		},
 		Backend: &backend.Config{
 			SnapshotThreshold: SnapshotThreshold,

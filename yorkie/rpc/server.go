@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"net"
 
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -61,8 +63,14 @@ type Server struct {
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(unaryInterceptor),
-		grpc.StreamInterceptor(streamInterceptor),
+		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
+			unaryInterceptor,
+			grpc_prometheus.UnaryServerInterceptor,
+		)),
+		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer(
+			streamInterceptor,
+			grpc_prometheus.StreamServerInterceptor,
+		)),
 	}
 
 	if conf.CertFile != "" && conf.KeyFile != "" {
@@ -80,6 +88,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		backend:    be,
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
+	grpc_prometheus.Register(rpcServer.grpcServer)
 
 	return rpcServer, nil
 }
