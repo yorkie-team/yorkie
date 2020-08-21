@@ -82,3 +82,6 @@ Tests can be run by typing `make test`.
 *NOTE: `make test` includes integration tests that require a local MongoDB listen on port 27017. To start MongoDB, type `docker-compose up`.*
 
 If you make any changes to the code, run `make fmt` in order to automatically format the code according to Go [standards](https://golang.org/doc/effective_go.html#formatting).
+
+## Contributing
+See [CONTRIBUTING](CONTRIBUTING.md) for details on submitting patches and the contribution workflow.
