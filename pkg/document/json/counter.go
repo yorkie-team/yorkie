@@ -46,7 +46,7 @@ func CounterValueFromBytes(counterType CounterType, value []byte) interface{} {
 	panic("unsupported type")
 }
 
-// Counter represents counter data type including logical lock.
+// Counter represents changeable number data type.
 type Counter struct {
 	valueType CounterType
 	value     interface{}

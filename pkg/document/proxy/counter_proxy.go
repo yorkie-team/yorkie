@@ -24,13 +24,13 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 )
 
-// NumberProxy is a proxy representing number types.
+// CounterProxy is a proxy representing counter.
 type CounterProxy struct {
 	*json.Counter
 	context *change.Context
 }
 
-// NewNumberProxy create NumberProxy instance.
+// NewCounterProxy create CounterProxy instance.
 func NewCounterProxy(ctx *change.Context, counter *json.Counter) *CounterProxy{
 	valueType := counter.ValueType()
 	if valueType != json.IntegerCnt && valueType != json.LongCnt && valueType != json.DoubleCnt {
