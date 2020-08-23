@@ -19,103 +19,60 @@ package json
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
-	time2 "time"
-
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"math"
 )
 
-type ValueType int
+type CounterType int
 
 const (
-	Null ValueType = iota
-	Boolean
-	Integer
-	Long
-	Double
-	String
-	Bytes
-	Date
+	IntegerCnt CounterType = iota
+	LongCnt
+	DoubleCnt
 )
 
-// ValueFromBytes parses the given bytes into value.
-func ValueFromBytes(valueType ValueType, value []byte) interface{} {
-	switch valueType {
-	case Boolean:
-		if value[0] == 1 {
-			return true
-		}
-		return false
-	case Integer:
+// CounterValueFromBytes parses the given bytes into value.
+func CounterValueFromBytes(counterType CounterType, value []byte) interface{} {
+	switch counterType {
+	case IntegerCnt:
 		val := int32(binary.LittleEndian.Uint32(value))
 		return int(val)
-	case Long:
+	case LongCnt:
 		return int64(binary.LittleEndian.Uint64(value))
-	case Double:
+	case DoubleCnt:
 		return math.Float64frombits(binary.LittleEndian.Uint64(value))
-	case String:
-		return string(value)
-	case Bytes:
-		return value
-	case Date:
-		v := int64(binary.LittleEndian.Uint64(value))
-		return time2.Unix(v, 0)
 	}
 
 	panic("unsupported type")
 }
 
-// Primitive represents JSON primitive data type including logical lock.
-type Primitive struct {
-	valueType ValueType
+// Counter represents counter data type including logical lock.
+type Counter struct {
+	valueType CounterType
 	value     interface{}
 	createdAt *time.Ticket
 	updatedAt *time.Ticket
 	removedAt *time.Ticket
 }
 
-// NewPrimitive creates a new instance of Primitive.
-func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
+// NewCounter creates a new instance of Counter.
+func NewCounter(value interface{}, createdAt *time.Ticket) *Counter {
 	switch val := value.(type) {
-	case bool:
-		return &Primitive{
-			valueType: Boolean,
-			value:     val,
-			createdAt: createdAt,
-		}
 	case int:
-		return &Primitive{
-			valueType: Integer,
+		return &Counter{
+			valueType: IntegerCnt,
 			value:     val,
 			createdAt: createdAt,
 		}
 	case int64:
-		return &Primitive{
-			valueType: Long,
+		return &Counter{
+			valueType: LongCnt,
 			value:     val,
 			createdAt: createdAt,
 		}
 	case float64:
-		return &Primitive{
-			valueType: Double,
-			value:     val,
-			createdAt: createdAt,
-		}
-	case string:
-		return &Primitive{
-			valueType: String,
-			value:     val,
-			createdAt: createdAt,
-		}
-	case []byte:
-		return &Primitive{
-			valueType: Bytes,
-			value:     val,
-			createdAt: createdAt,
-		}
-	case time2.Time:
-		return &Primitive{
-			valueType: Date,
+		return &Counter{
+			valueType: DoubleCnt,
 			value:     val,
 			createdAt: createdAt,
 		}
@@ -125,13 +82,8 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 }
 
 // Bytes creates an array representing the value.
-func (p *Primitive) Bytes() []byte {
+func (p *Counter) Bytes() []byte {
 	switch val := p.value.(type) {
-	case bool:
-		if val {
-			return []byte{1}
-		}
-		return []byte{0}
 	case int:
 		bytes := [4]byte{}
 		binary.LittleEndian.PutUint32(bytes[:], uint32(val))
@@ -144,71 +96,53 @@ func (p *Primitive) Bytes() []byte {
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], math.Float64bits(val))
 		return bytes[:]
-	case string:
-		return []byte(val)
-	case []byte:
-		return val
-	case time2.Time:
-		bytes := [8]byte{}
-		binary.LittleEndian.PutUint64(bytes[:], uint64(val.UTC().Unix()))
-		return bytes[:]
 	}
 
 	panic("unsupported type")
 }
 
 // Marshal returns the JSON encoding of the value.
-func (p *Primitive) Marshal() string {
+func (p *Counter) Marshal() string {
 	switch p.valueType {
-	case Boolean:
-		return fmt.Sprintf("%t", p.value)
-	case Integer:
+	case IntegerCnt:
 		return fmt.Sprintf("%d", p.value)
-	case Long:
+	case LongCnt:
 		return fmt.Sprintf("%d", p.value)
-	case Double:
+	case DoubleCnt:
 		return fmt.Sprintf("%f", p.value)
-	case String:
-		return fmt.Sprintf("\"%s\"", p.value)
-	case Bytes:
-		// TODO: JSON.stringify({a: new Uint8Array([1,2]), b: 2})
-		// {"a":{"0":1,"1":2},"b":2}
-		return fmt.Sprintf("\"%s\"", p.value)
-	case Date:
-		return p.value.(time2.Time).Format(time2.RFC3339)
 	}
 
 	panic("unsupported type")
 }
 
 // DeepCopy copies itself deeply.
-func (p *Primitive) DeepCopy() Element {
-	primitive := *p
-	return &primitive
+func (p *Counter) DeepCopy() Element {
+	counter := *p
+	return &counter
 }
 
 // CreatedAt returns the creation time.
-func (p *Primitive) CreatedAt() *time.Ticket {
+func (p *Counter) CreatedAt() *time.Ticket {
 	return p.createdAt
 }
 
 // UpdatedAt returns the update time of this element.
-func (p *Primitive) UpdatedAt() *time.Ticket {
+func (p *Counter) UpdatedAt() *time.Ticket {
 	return p.updatedAt
 }
 
 // SetUpdatedAt sets the update time of this element.
-func (p *Primitive) SetUpdatedAt(updatedAt *time.Ticket) {
+func (p *Counter) SetUpdatedAt(updatedAt *time.Ticket) {
 	p.updatedAt = updatedAt
 }
 
 // RemovedAt returns the removal time of this element.
-func (p *Primitive) RemovedAt() *time.Ticket {
+func (p *Counter) RemovedAt() *time.Ticket {
 	return p.removedAt
 }
 
 // Remove removes this element.
-func (p *Primitive) Remove(removedAt *time.Ticket) bool {
+func (p *Counter) Remove(removedAt *time.Ticket) bool {
 	if p.removedAt == nil || removedAt.After(p.removedAt) {
 		p.removedAt = removedAt
 		return true
@@ -217,7 +151,54 @@ func (p *Primitive) Remove(removedAt *time.Ticket) bool {
 }
 
 // ValueType returns the type of the value.
-func (p *Primitive) ValueType() ValueType {
+func (p *Counter) ValueType() CounterType {
 	return p.valueType
 }
 
+// Increase increase integer, long or double.
+func (p *Counter) Increase(v *Counter) *Counter {
+	if !isNumericType(p) || !isNumericType(v) {
+		panic("unsupported type")
+	}
+	switch p.valueType {
+	case IntegerCnt:
+		switch v.valueType {
+		case LongCnt:
+			p.value = p.value.(int) + int(v.value.(int64))
+		case DoubleCnt:
+			p.value = p.value.(int) + int(v.value.(float64))
+		default:
+			p.value = p.value.(int) + v.value.(int)
+		}
+	case LongCnt:
+		switch v.valueType {
+		case IntegerCnt:
+			p.value = p.value.(int64) + int64(v.value.(int))
+		case DoubleCnt:
+			p.value = p.value.(int64) + int64(v.value.(float64))
+		default:
+			p.value = p.value.(int64) + v.value.(int64)
+		}
+	case DoubleCnt:
+		switch v.valueType {
+		case IntegerCnt:
+			p.value = p.value.(float64) + float64(v.value.(int))
+		case LongCnt:
+			p.value = p.value.(float64) + float64(v.value.(int64))
+		default:
+			p.value = p.value.(float64) + v.value.(float64)
+		}
+	}
+
+	return p
+}
+
+// isNumericType checks for numeric types.
+func isNumericType(v *Counter) bool {
+	t := v.valueType
+	if t == IntegerCnt || t == LongCnt || t == DoubleCnt {
+		return true
+	}
+
+	return false
+}

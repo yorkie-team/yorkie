@@ -25,52 +25,52 @@ import (
 )
 
 // NumberProxy is a proxy representing number types.
-type NumberProxy struct {
-	*json.Primitive
+type CounterProxy struct {
+	*json.Counter
 	context *change.Context
 }
 
 // NewNumberProxy create NumberProxy instance.
-func NewNumberProxy(ctx *change.Context, primitive *json.Primitive) *NumberProxy {
-	valueType := primitive.ValueType()
-	if valueType != json.Integer && valueType != json.Long && valueType != json.Double {
+func NewCounterProxy(ctx *change.Context, counter *json.Counter) *CounterProxy{
+	valueType := counter.ValueType()
+	if valueType != json.IntegerCnt && valueType != json.LongCnt && valueType != json.DoubleCnt {
 		panic("unsupported type")
 	}
-	return &NumberProxy{
-		Primitive: primitive,
+	return &CounterProxy{
+		Counter: counter,
 		context:   ctx,
 	}
 }
 
 // Increase adds an increase operation.
 // Only numeric types are allowed as operand values, excluding uint64 and uintptr.
-func (p *NumberProxy) Increase(v interface{}) *NumberProxy {
+func (p *CounterProxy) Increase(v interface{}) *CounterProxy{
 	if !isAllowedOperand(v) {
 		panic("unsupported type")
 	}
-	var primitive *json.Primitive
+	var counter *json.Counter
 	ticket := p.context.IssueTimeTicket()
 
 	value, kind := convertAssertableOperand(v)
 	isInt := kind == reflect.Int
 	switch p.ValueType() {
-	case json.Long:
+	case json.LongCnt:
 		if isInt {
-			primitive = json.NewPrimitive(int64(value.(int)), ticket)
+			counter = json.NewCounter(int64(value.(int)), ticket)
 		} else {
-			primitive = json.NewPrimitive(int64(value.(float64)), ticket)
+			counter = json.NewCounter(int64(value.(float64)), ticket)
 		}
-	case json.Integer:
+	case json.IntegerCnt:
 		if isInt {
-			primitive = json.NewPrimitive(value, ticket)
+			counter = json.NewCounter(value, ticket)
 		} else {
-			primitive = json.NewPrimitive(int(value.(float64)), ticket)
+			counter = json.NewCounter(int(value.(float64)), ticket)
 		}
-	case json.Double:
+	case json.DoubleCnt:
 		if isInt {
-			primitive = json.NewPrimitive(float64(value.(int)), ticket)
+			counter = json.NewCounter(float64(value.(int)), ticket)
 		} else {
-			primitive = json.NewPrimitive(value, ticket)
+			counter = json.NewCounter(value, ticket)
 		}
 	default:
 		panic("unsupported type")
@@ -78,7 +78,7 @@ func (p *NumberProxy) Increase(v interface{}) *NumberProxy {
 
 	p.context.Push(operation.NewIncrease(
 		p.CreatedAt(),
-		primitive,
+		counter,
 		ticket,
 	))
 

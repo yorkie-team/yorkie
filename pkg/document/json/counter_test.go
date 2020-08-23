@@ -25,18 +25,18 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-func TestPrimitive(t *testing.T) {
+func TestCounter(t *testing.T) {
 	t.Run("increase test", func(t *testing.T) {
 		var x int = 5
 		var y int64 = 10
 		var z float64 = 3.14
-		integer := json.NewPrimitive(x, time.InitialTicket)
-		long := json.NewPrimitive(y, time.InitialTicket)
-		double := json.NewPrimitive(z, time.InitialTicket)
+		integer := json.NewCounter(x, time.InitialTicket)
+		long := json.NewCounter(y, time.InitialTicket)
+		double := json.NewCounter(z, time.InitialTicket)
 
-		integerOperand := integer.DeepCopy().(*json.Primitive)
-		longOperand := long.DeepCopy().(*json.Primitive)
-		doubleOperand := double.DeepCopy().(*json.Primitive)
+		integerOperand := integer.DeepCopy().(*json.Counter)
+		longOperand := long.DeepCopy().(*json.Counter)
+		doubleOperand := double.DeepCopy().(*json.Counter)
 
 		// normal process test
 		integer.Increase(integerOperand)
@@ -62,23 +62,14 @@ func TestPrimitive(t *testing.T) {
 			assert.NotNil(t, r)
 			assert.Equal(t, r, "unsupported type")
 		}
-		unsupportedTest := func(primitive, operand *json.Primitive) {
+		unsupportedTest := func(v interface{}) {
 			defer unsupportedTypePanicTest()
-			primitive.Increase(operand)
+			json.NewCounter(v, time.InitialTicket)
 		}
-		str := json.NewPrimitive("str", time.InitialTicket)
-		boolean := json.NewPrimitive(true, time.InitialTicket)
-		bytes := json.NewPrimitive([]byte{2}, time.InitialTicket)
-		date := json.NewPrimitive(time2.Now(), time.InitialTicket)
-		unsupportedTest(integer, str)
-		unsupportedTest(integer, boolean)
-		unsupportedTest(integer, bytes)
-		unsupportedTest(integer, date)
-
-		unsupportedTest(str, integer)
-		unsupportedTest(boolean, integer)
-		unsupportedTest(bytes, integer)
-		unsupportedTest(date, integer)
+		unsupportedTest("str")
+		unsupportedTest(true)
+		unsupportedTest([]byte{2})
+		unsupportedTest(time2.Now())
 
 		assert.Equal(t, integer.Marshal(), "23")
 		assert.Equal(t, long.Marshal(), "28")

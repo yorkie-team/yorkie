@@ -872,8 +872,8 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.SetInteger("value", 1)
-			root.GetInteger("value").Increase(2)
+			root.SetCounter("value", 1)
+			root.GetCounter("value").Increase(2)
 			return nil
 		})
 
