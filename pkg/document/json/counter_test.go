@@ -17,6 +17,7 @@
 package json_test
 
 import (
+	"math"
 	"testing"
 	time2 "time"
 
@@ -27,6 +28,17 @@ import (
 )
 
 func TestCounter(t *testing.T) {
+	t.Run("new counter test", func(t *testing.T) {
+		integer := json.NewCounter(math.MaxInt32, time.InitialTicket)
+		assert.Equal(t, json.IntegerCnt, integer.ValueType())
+
+		long := json.NewCounter(math.MaxInt32+1, time.InitialTicket)
+		assert.Equal(t, json.LongCnt, long.ValueType())
+
+		double := json.NewCounter(0.5, time.InitialTicket)
+		assert.Equal(t, json.DoubleCnt, double.ValueType())
+	})
+
 	t.Run("increase test", func(t *testing.T) {
 		var x int = 5
 		var y int64 = 10
