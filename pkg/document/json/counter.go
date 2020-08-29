@@ -60,6 +60,13 @@ type Counter struct {
 func NewCounter(value interface{}, createdAt *time.Ticket) *Counter {
 	switch val := value.(type) {
 	case int:
+		if math.MaxInt32 < val {
+			return &Counter{
+				valueType: LongCnt,
+				value:     int64(val),
+				createdAt: createdAt,
+			}
+		}
 		return &Counter{
 			valueType: IntegerCnt,
 			value:     val,

@@ -216,6 +216,29 @@ func TestClientAndDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
+	t.Run("causal counter.increase test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetCounter("age", 1).
+				Increase(2).
+				Increase(2.5).
+				Increase(9223372036854775000)
+
+			return nil
+		}, "nested update by c1")
+		assert.NoError(t, err)
+
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
 	t.Run("concurrent object set/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(testhelper.Collection, t.Name())
@@ -858,26 +881,6 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
-	})
-
-	t.Run("increase test", func(t *testing.T) {
-		ctx := context.Background()
-
-		d1 := document.New(testhelper.Collection, t.Name())
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-
-		d2 := document.New(testhelper.Collection, t.Name())
-		err = c2.Attach(ctx, d2)
-		assert.NoError(t, err)
-
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.SetCounter("value", 1)
-			root.GetCounter("value").Increase(2)
-			return nil
-		})
-
-		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 }
 
