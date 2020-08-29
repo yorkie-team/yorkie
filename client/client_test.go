@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sync"
 	"testing"
@@ -226,6 +227,7 @@ func TestClientAndDocument(t *testing.T) {
 			root.SetCounter("age", 1).
 				Increase(2).
 				Increase(2.5).
+				Increase(-100000000).
 				Increase(9223372036854775000)
 
 			return nil
@@ -476,6 +478,45 @@ func TestClientAndDocument(t *testing.T) {
 
 		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.Delete("k2")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("concurrent counter increase test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetCounter("age", 1).
+				Increase(2).
+				Increase(-2).
+				Increase(-.25)
+			return nil
+		})
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetCounter("width", math.MaxInt32+100).
+				Increase(10)
+			return nil
+		})
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
+			root.SetCounter("age", 20)
+			root.SetCounter("width", 100).
+				Increase(200)
+			root.SetCounter("height", 50)
 			return nil
 		})
 		assert.NoError(t, err)
