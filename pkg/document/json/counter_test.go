@@ -21,6 +21,7 @@ import (
 	time2 "time"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )

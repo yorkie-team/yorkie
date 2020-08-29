@@ -19,8 +19,9 @@ package json
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"math"
+
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 type CounterType int
@@ -157,7 +158,7 @@ func (p *Counter) ValueType() CounterType {
 
 // Increase increase integer, long or double.
 func (p *Counter) Increase(v *Counter) *Counter {
-	if !isNumericType(p) || !isNumericType(v) {
+	if !IsNumericType(p) || !IsNumericType(v) {
 		panic("unsupported type")
 	}
 	switch p.valueType {
@@ -193,8 +194,8 @@ func (p *Counter) Increase(v *Counter) *Counter {
 	return p
 }
 
-// isNumericType checks for numeric types.
-func isNumericType(v *Counter) bool {
+// IsNumericType checks for numeric types.
+func IsNumericType(v *Counter) bool {
 	t := v.valueType
 	if t == IntegerCnt || t == LongCnt || t == DoubleCnt {
 		return true

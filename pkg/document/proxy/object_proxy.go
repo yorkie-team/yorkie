@@ -222,7 +222,7 @@ func (p *ObjectProxy) GetRichText(k string) *RichTextProxy {
 }
 
 // GetCounter gets a CounterProxy.
-func (p *ObjectProxy) GetCounter(k string) *CounterProxy{
+func (p *ObjectProxy) GetCounter(k string) *CounterProxy {
 	elem := p.Object.Get(k)
 	if elem == nil {
 		return nil

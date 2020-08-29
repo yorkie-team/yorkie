@@ -244,9 +244,9 @@ func toJSONElementSimple(elem json.Element) *api.JSONElementSimple {
 		}
 	case *json.Counter:
 		return &api.JSONElementSimple{
-			Type: toCounterType(elem.ValueType()),
+			Type:      toCounterType(elem.ValueType()),
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
-			Value: elem.Bytes(),
+			Value:     elem.Bytes(),
 		}
 	}
 	panic("fail to encode JSONElement to protobuf")

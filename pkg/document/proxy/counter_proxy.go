@@ -31,20 +31,19 @@ type CounterProxy struct {
 }
 
 // NewCounterProxy create CounterProxy instance.
-func NewCounterProxy(ctx *change.Context, counter *json.Counter) *CounterProxy{
-	valueType := counter.ValueType()
-	if valueType != json.IntegerCnt && valueType != json.LongCnt && valueType != json.DoubleCnt {
+func NewCounterProxy(ctx *change.Context, counter *json.Counter) *CounterProxy {
+	if !json.IsNumericType(counter) {
 		panic("unsupported type")
 	}
 	return &CounterProxy{
 		Counter: counter,
-		context:   ctx,
+		context: ctx,
 	}
 }
 
 // Increase adds an increase operation.
 // Only numeric types are allowed as operand values, excluding uint64 and uintptr.
-func (p *CounterProxy) Increase(v interface{}) *CounterProxy{
+func (p *CounterProxy) Increase(v interface{}) *CounterProxy {
 	if !isAllowedOperand(v) {
 		panic("unsupported type")
 	}

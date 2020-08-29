@@ -220,4 +220,3 @@ func (p *Primitive) Remove(removedAt *time.Ticket) bool {
 func (p *Primitive) ValueType() ValueType {
 	return p.valueType
 }
-
