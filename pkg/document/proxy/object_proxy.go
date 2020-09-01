@@ -75,7 +75,7 @@ func (p *ObjectProxy) SetNewRichText(k string) *RichTextProxy {
 	return v.(*RichTextProxy)
 }
 
-func (p *ObjectProxy) SetCounter(k string, n interface{}) *CounterProxy {
+func (p *ObjectProxy) SetNewCounter(k string, n interface{}) *CounterProxy {
 	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
 		return NewCounterProxy(
 			p.context,

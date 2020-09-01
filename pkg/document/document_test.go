@@ -391,7 +391,7 @@ func TestDocument(t *testing.T) {
 
 		// integer type test
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetCounter("age", 5)
+			root.SetNewCounter("age", 5)
 
 			age := root.GetCounter("age")
 			age.Increase(long)
@@ -407,7 +407,7 @@ func TestDocument(t *testing.T) {
 
 		// long type test
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetCounter("price", 9000000000000000000)
+			root.SetNewCounter("price", 9000000000000000000)
 			price := root.GetCounter("price")
 			price.Increase(long)
 			price.Increase(double)
@@ -422,7 +422,7 @@ func TestDocument(t *testing.T) {
 
 		// double type test
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetCounter("width", 10.5)
+			root.SetNewCounter("width", 10.5)
 			width := root.GetCounter("width")
 			width.Increase(long)
 			width.Increase(double)

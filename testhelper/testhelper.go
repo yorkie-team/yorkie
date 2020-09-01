@@ -35,7 +35,7 @@ import (
 var testStartedAt int64
 
 const (
-	RPCPort     = 1100
+	RPCPort     = 1101
 	MetricsPort = 1102
 
 	MongoConnectionURI        = "mongodb://localhost:27017"

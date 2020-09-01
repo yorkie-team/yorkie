@@ -224,7 +224,7 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.SetCounter("age", 1).
+			root.SetNewCounter("age", 1).
 				Increase(2).
 				Increase(2.5).
 				Increase(-100000000).
@@ -492,12 +492,23 @@ func TestClientAndDocument(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewCounter("age", 0)
+			root.SetNewCounter("width", 0)
+			root.SetNewCounter("height", 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
 		d2 := document.New(testhelper.Collection, t.Name())
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.SetCounter("age", 1).
+			root.GetCounter("age").
+				Increase(1).
 				Increase(2).
 				Increase(-2).
 				Increase(-.25)
@@ -506,17 +517,15 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.SetCounter("width", math.MaxInt32+100).
-				Increase(10)
+			root.GetCounter("width").Increase(math.MaxInt32+100).Increase(10)
 			return nil
 		})
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *proxy.ObjectProxy) error {
-			root.SetCounter("age", 20)
-			root.SetCounter("width", 100).
-				Increase(200)
-			root.SetCounter("height", 50)
+			root.GetCounter("age").Increase(20)
+			root.GetCounter("width").Increase(100).Increase(200)
+			root.GetCounter("height").Increase(50)
 			return nil
 		})
 		assert.NoError(t, err)
