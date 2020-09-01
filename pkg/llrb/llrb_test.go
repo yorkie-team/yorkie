@@ -18,9 +18,7 @@ package llrb_test
 
 import (
 	"fmt"
-	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -60,36 +58,33 @@ func (v *intValue) String() string {
 	return fmt.Sprintf("%d", v.value)
 }
 
-func rangeArray(min, max int) []int {
-	a := make([]int, max-min+1)
-	for i := range a {
-		a[i] = min + i
-	}
-	return a
-}
-
-func shuffle(a []int) []int {
-	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(len(a), func(i, j int) { a[i], a[j] = a[j], a[i] })
-	return a
-}
-
 func TestTree(t *testing.T) {
 	t.Run("keeping order test", func(t *testing.T) {
-		tree := llrb.NewTree()
-
-		for _, value := range shuffle(rangeArray(0, 9)) {
-			tree.Put(newIntKey(value), newIntValue(value))
+		arrays := [][]int{
+			{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+			{8, 5, 7, 9, 1, 3, 6, 0, 4, 2},
+			{7, 2, 0, 3, 1, 9, 8, 4, 6, 5},
+			{2, 0, 3, 5, 8, 6, 4, 1, 9, 7},
+			{8, 4, 7, 9, 2, 6, 0, 3, 1, 5},
+			{7, 1, 5, 2, 8, 6, 3, 4, 0, 9},
+			{9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
 		}
-		assert.Equal(t, "0,1,2,3,4,5,6,7,8,9", tree.String())
 
-		tree.Remove(newIntKey(8))
-		assert.Equal(t, "0,1,2,3,4,5,6,7,9", tree.String())
+		for _, array := range arrays {
+			tree := llrb.NewTree()
+			for _, value := range array {
+				tree.Put(newIntKey(value), newIntValue(value))
+			}
+			assert.Equal(t, "0,1,2,3,4,5,6,7,8,9", tree.String())
 
-		tree.Remove(newIntKey(2))
-		assert.Equal(t, "0,1,3,4,5,6,7,9", tree.String())
+			tree.Remove(newIntKey(8))
+			assert.Equal(t, "0,1,2,3,4,5,6,7,9", tree.String())
 
-		tree.Remove(newIntKey(5))
-		assert.Equal(t, "0,1,3,4,6,7,9", tree.String())
+			tree.Remove(newIntKey(2))
+			assert.Equal(t, "0,1,3,4,5,6,7,9", tree.String())
+
+			tree.Remove(newIntKey(5))
+			assert.Equal(t, "0,1,3,4,6,7,9", tree.String())
+		}
 	})
 }
