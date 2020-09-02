@@ -164,16 +164,16 @@ func (p *Counter) ValueType() CounterType {
 }
 
 // Increase increase integer, long or double.
-func (p *Counter) Increase(v *Counter) *Counter {
-	if !IsNumericType(p) || !IsNumericType(v) {
+func (p *Counter) Increase(v *Primitive) *Counter {
+	if !p.IsNumericType() || !v.IsNumericType() {
 		panic("unsupported type")
 	}
 	switch p.valueType {
 	case IntegerCnt:
 		switch v.valueType {
-		case LongCnt:
+		case Long:
 			p.value = p.value.(int) + int(v.value.(int64))
-		case DoubleCnt:
+		case Double:
 			p.value = p.value.(int) + int(v.value.(float64))
 		default:
 			p.value = p.value.(int) + v.value.(int)
@@ -185,18 +185,18 @@ func (p *Counter) Increase(v *Counter) *Counter {
 		}
 	case LongCnt:
 		switch v.valueType {
-		case IntegerCnt:
+		case Integer:
 			p.value = p.value.(int64) + int64(v.value.(int))
-		case DoubleCnt:
+		case Double:
 			p.value = p.value.(int64) + int64(v.value.(float64))
 		default:
 			p.value = p.value.(int64) + v.value.(int64)
 		}
 	case DoubleCnt:
 		switch v.valueType {
-		case IntegerCnt:
+		case Integer:
 			p.value = p.value.(float64) + float64(v.value.(int))
-		case LongCnt:
+		case Long:
 			p.value = p.value.(float64) + float64(v.value.(int64))
 		default:
 			p.value = p.value.(float64) + v.value.(float64)
@@ -207,11 +207,7 @@ func (p *Counter) Increase(v *Counter) *Counter {
 }
 
 // IsNumericType checks for numeric types.
-func IsNumericType(v *Counter) bool {
-	t := v.valueType
-	if t == IntegerCnt || t == LongCnt || t == DoubleCnt {
-		return true
-	}
-
-	return false
+func (p *Counter) IsNumericType() bool {
+	t := p.valueType
+	return t == IntegerCnt || t == LongCnt || t == DoubleCnt
 }

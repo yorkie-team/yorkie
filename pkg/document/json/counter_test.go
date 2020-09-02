@@ -47,9 +47,9 @@ func TestCounter(t *testing.T) {
 		long := json.NewCounter(y, time.InitialTicket)
 		double := json.NewCounter(z, time.InitialTicket)
 
-		integerOperand := integer.DeepCopy().(*json.Counter)
-		longOperand := long.DeepCopy().(*json.Counter)
-		doubleOperand := double.DeepCopy().(*json.Counter)
+		integerOperand := json.NewPrimitive(x, time.InitialTicket)
+		longOperand := json.NewPrimitive(y, time.InitialTicket)
+		doubleOperand := json.NewPrimitive(z, time.InitialTicket)
 
 		// normal process test
 		integer.Increase(integerOperand)

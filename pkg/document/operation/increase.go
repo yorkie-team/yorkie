@@ -50,7 +50,7 @@ func (o *Increase) Execute(root *json.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	value := o.value.(*json.Counter)
+	value := o.value.(*json.Primitive)
 	cnt.Increase(value)
 
 	return nil

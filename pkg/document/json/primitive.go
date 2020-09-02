@@ -84,10 +84,18 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 			createdAt: createdAt,
 		}
 	case int:
-		return &Primitive{
-			valueType: Integer,
-			value:     val,
-			createdAt: createdAt,
+		if val > math.MaxInt32 || val < math.MinInt32 {
+			return &Primitive{
+				valueType: Long,
+				value:     int64(val),
+				createdAt: createdAt,
+			}
+		} else {
+			return &Primitive{
+				valueType: Integer,
+				value:     val,
+				createdAt: createdAt,
+			}
 		}
 	case int64:
 		return &Primitive{
@@ -219,4 +227,10 @@ func (p *Primitive) Remove(removedAt *time.Ticket) bool {
 // ValueType returns the type of the value.
 func (p *Primitive) ValueType() ValueType {
 	return p.valueType
+}
+
+// IsNumericType checks for numeric types.
+func (p *Primitive) IsNumericType() bool {
+	t := p.valueType
+	return t == Integer || t == Long || t == Double
 }
