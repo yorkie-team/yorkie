@@ -93,7 +93,7 @@ func TestConverter(t *testing.T) {
 				SetStyle(0, 5, map[string]string{"b": "1"})
 
 			// a counter
-			root.SetNewCounter("k4", 0).
+			root.SetNewCounter("k5", 0).
 				Increase(10).
 				Increase(math.MaxInt64)
 

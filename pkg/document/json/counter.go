@@ -60,7 +60,7 @@ type Counter struct {
 func NewCounter(value interface{}, createdAt *time.Ticket) *Counter {
 	switch val := value.(type) {
 	case int:
-		if math.MaxInt32 < val {
+		if math.MaxInt32 < val || math.MinInt32 > val {
 			return &Counter{
 				valueType: LongCnt,
 				value:     int64(val),
@@ -177,6 +177,11 @@ func (p *Counter) Increase(v *Counter) *Counter {
 			p.value = p.value.(int) + int(v.value.(float64))
 		default:
 			p.value = p.value.(int) + v.value.(int)
+		}
+
+		if p.value.(int) > math.MaxInt32 || p.value.(int) < math.MinInt32 {
+			p.value = int64(p.value.(int))
+			p.valueType = LongCnt
 		}
 	case LongCnt:
 		switch v.valueType {
