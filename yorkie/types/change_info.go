@@ -17,6 +17,8 @@
 package types
 
 import (
+	"errors"
+
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/yorkie-team/yorkie/api"
@@ -37,18 +39,19 @@ type ChangeInfo struct {
 	Operations [][]byte           `bson:"operations"`
 }
 
-func EncodeOperation(operations []operation.Operation) [][]byte {
+func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
 	var encodedOps [][]byte
 
 	for _, pbOp := range converter.ToOperations(operations) {
 		encodedOp, err := pbOp.Marshal()
 		if err != nil {
-			panic("fail to encode operation")
+			log.Logger.Error(err)
+			return nil, errors.New("fail to encode operation")
 		}
 		encodedOps = append(encodedOps, encodedOp)
 	}
 
-	return encodedOps
+	return encodedOps, nil
 }
 
 func EncodeActorID(id *time.ActorID) primitive.ObjectID {
