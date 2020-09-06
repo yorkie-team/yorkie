@@ -311,6 +311,11 @@ func (c *Client) CreateChangeInfos(
 		var modelChanges []mongo.WriteModel
 
 		for _, c := range changes {
+			encodedOperations, err := types.EncodeOperations(c.Operations())
+			if err != nil {
+				return err
+			}
+
 			modelChanges = append(modelChanges, mongo.NewUpdateOneModel().SetFilter(bson.M{
 				"doc_id":     docID,
 				"server_seq": c.ServerSeq(),
@@ -319,7 +324,7 @@ func (c *Client) CreateChangeInfos(
 				"client_seq": c.ID().ClientSeq(),
 				"lamport":    c.ID().Lamport(),
 				"message":    c.Message(),
-				"operations": types.EncodeOperation(c.Operations()),
+				"operations": encodedOperations,
 			}}).SetUpsert(true))
 		}
 
