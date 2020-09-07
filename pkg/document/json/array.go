@@ -25,7 +25,7 @@ import (
 type Array struct {
 	elements  *RGATreeList
 	createdAt *time.Ticket
-	updatedAt *time.Ticket
+	movedAt   *time.Ticket
 	removedAt *time.Ticket
 }
 
@@ -108,14 +108,14 @@ func (a *Array) CreatedAt() *time.Ticket {
 	return a.createdAt
 }
 
-// UpdatedAt returns the update time of this array.
-func (a *Array) UpdatedAt() *time.Ticket {
-	return a.updatedAt
+// MovedAt returns the move time of this array.
+func (a *Array) MovedAt() *time.Ticket {
+	return a.movedAt
 }
 
-// SetUpdatedAt sets the update time of this array.
-func (a *Array) SetUpdatedAt(updatedAt *time.Ticket) {
-	a.updatedAt = updatedAt
+// SetMovedAt sets the move time of this array.
+func (a *Array) SetMovedAt(movedAt *time.Ticket) {
+	a.movedAt = movedAt
 }
 
 // RemovedAt returns the removal time of this array.

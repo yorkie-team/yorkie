@@ -70,7 +70,7 @@ type Primitive struct {
 	valueType ValueType
 	value     interface{}
 	createdAt *time.Ticket
-	updatedAt *time.Ticket
+	movedAt   *time.Ticket
 	removedAt *time.Ticket
 }
 
@@ -192,14 +192,14 @@ func (p *Primitive) CreatedAt() *time.Ticket {
 	return p.createdAt
 }
 
-// UpdatedAt returns the update time of this element.
-func (p *Primitive) UpdatedAt() *time.Ticket {
-	return p.updatedAt
+// MovedAt returns the move time of this element.
+func (p *Primitive) MovedAt() *time.Ticket {
+	return p.movedAt
 }
 
-// SetUpdatedAt sets the update time of this element.
-func (p *Primitive) SetUpdatedAt(updatedAt *time.Ticket) {
-	p.updatedAt = updatedAt
+// SetMovedAt sets the move time of this element.
+func (p *Primitive) SetMovedAt(movedAt *time.Ticket) {
+	p.movedAt = movedAt
 }
 
 // RemovedAt returns the removal time of this element.

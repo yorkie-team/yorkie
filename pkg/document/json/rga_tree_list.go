@@ -235,10 +235,10 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 		)
 	}
 
-	if node.elem.UpdatedAt() == nil || executedAt.After(node.elem.UpdatedAt()) {
+	if node.elem.MovedAt() == nil || executedAt.After(node.elem.MovedAt()) {
 		a.release(node)
 		a.insertAfter(prevNode, node.elem)
-		node.elem.SetUpdatedAt(executedAt)
+		node.elem.SetMovedAt(executedAt)
 	}
 }
 

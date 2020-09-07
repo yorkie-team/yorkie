@@ -65,7 +65,7 @@ func fromJSONObject(pbObj *api.JSONElement_Object) *json.Object {
 		members,
 		fromTimeTicket(pbObj.CreatedAt),
 	)
-	obj.SetUpdatedAt(fromTimeTicket(pbObj.UpdatedAt))
+	obj.SetMovedAt(fromTimeTicket(pbObj.MovedAt))
 	obj.Remove(fromTimeTicket(pbObj.RemovedAt))
 	return obj
 }
@@ -80,7 +80,7 @@ func fromJSONArray(pbArr *api.JSONElement_Array) *json.Array {
 		elements,
 		fromTimeTicket(pbArr.CreatedAt),
 	)
-	arr.SetUpdatedAt(fromTimeTicket(pbArr.UpdatedAt))
+	arr.SetMovedAt(fromTimeTicket(pbArr.MovedAt))
 	arr.Remove(fromTimeTicket(pbArr.RemovedAt))
 	return arr
 }
@@ -90,7 +90,7 @@ func fromJSONPrimitive(pbPrim *api.JSONElement_Primitive) *json.Primitive {
 		json.ValueFromBytes(fromValueType(pbPrim.Type), pbPrim.Value),
 		fromTimeTicket(pbPrim.CreatedAt),
 	)
-	primitive.SetUpdatedAt(fromTimeTicket(pbPrim.UpdatedAt))
+	primitive.SetMovedAt(fromTimeTicket(pbPrim.MovedAt))
 	primitive.Remove(fromTimeTicket(pbPrim.RemovedAt))
 	return primitive
 }
@@ -116,7 +116,7 @@ func fromJSONText(pbText *api.JSONElement_Text) *json.Text {
 		rgaTreeSplit,
 		fromTimeTicket(pbText.CreatedAt),
 	)
-	text.SetUpdatedAt(fromTimeTicket(pbText.UpdatedAt))
+	text.SetMovedAt(fromTimeTicket(pbText.MovedAt))
 	text.Remove(fromTimeTicket(pbText.RemovedAt))
 
 	return text
@@ -143,7 +143,7 @@ func fromJSONRichText(pbText *api.JSONElement_RichText) *json.RichText {
 		rgaTreeSplit,
 		fromTimeTicket(pbText.CreatedAt),
 	)
-	text.SetUpdatedAt(fromTimeTicket(pbText.UpdatedAt))
+	text.SetMovedAt(fromTimeTicket(pbText.MovedAt))
 	text.Remove(fromTimeTicket(pbText.RemovedAt))
 
 	return text
@@ -163,7 +163,7 @@ func fromTextNode(pbTextNode *api.TextNode) *json.RGATreeSplitNode {
 func fromRichTextNode(pbNode *api.RichTextNode) *json.RGATreeSplitNode {
 	attrs := json.NewRHT()
 	for _, pbAttr := range pbNode.Attributes {
-		attrs.Set(pbAttr.Key, pbAttr.Value, fromTimeTicket(pbAttr.UpdatedAt))
+		attrs.Set(pbAttr.Key, pbAttr.Value, fromTimeTicket(pbAttr.MovedAt))
 	}
 
 	textNode := json.NewRGATreeSplitNode(
