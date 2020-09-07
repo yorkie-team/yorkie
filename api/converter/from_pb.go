@@ -265,6 +265,15 @@ func fromElement(pbElement *api.JSONElementSimple) json.Element {
 			json.NewRGATreeSplit(json.InitialRichTextNode()),
 			fromTimeTicket(pbElement.CreatedAt),
 		)
+	case api.ValueType_INTEGER_CNT:
+		fallthrough
+	case api.ValueType_LONG_CNT:
+		fallthrough
+	case api.ValueType_DOUBLE_CNT:
+		return json.NewCounter(
+			json.CounterValueFromBytes(fromCounterType(pbType), pbElement.Value),
+			fromTimeTicket(pbElement.CreatedAt),
+		)
 	}
 
 	panic("fail to decode element")
@@ -286,6 +295,19 @@ func fromValueType(valueType api.ValueType) json.ValueType {
 		return json.Bytes
 	case api.ValueType_DATE:
 		return json.Date
+	}
+
+	panic("fail to decode value type")
+}
+
+func fromCounterType(valueType api.ValueType) json.CounterType {
+	switch valueType {
+	case api.ValueType_INTEGER_CNT:
+		return json.IntegerCnt
+	case api.ValueType_LONG_CNT:
+		return json.LongCnt
+	case api.ValueType_DOUBLE_CNT:
+		return json.DoubleCnt
 	}
 
 	panic("fail to decode value type")

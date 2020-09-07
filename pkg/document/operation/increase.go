@@ -22,7 +22,7 @@ import (
 )
 
 // Increase can be used to increment data of numerical type.
-// It can be used in primitive type Integer, Long, and Double data.
+// It can be used in counter type Integer, Long, and Double data.
 type Increase struct {
 	parentCreatedAt *time.Ticket
 	value           json.Element
@@ -45,13 +45,13 @@ func NewIncrease(
 // Execute executes operation.
 func (o *Increase) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
-	obj, ok := parent.(*json.Primitive)
+	cnt, ok := parent.(*json.Counter)
 	if !ok {
 		return ErrNotApplicableDataType
 	}
 
 	value := o.value.(*json.Primitive)
-	obj.Increase(value)
+	cnt.Increase(value)
 
 	return nil
 }

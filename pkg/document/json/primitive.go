@@ -84,10 +84,18 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 			createdAt: createdAt,
 		}
 	case int:
-		return &Primitive{
-			valueType: Integer,
-			value:     val,
-			createdAt: createdAt,
+		if val > math.MaxInt32 || val < math.MinInt32 {
+			return &Primitive{
+				valueType: Long,
+				value:     int64(val),
+				createdAt: createdAt,
+			}
+		} else {
+			return &Primitive{
+				valueType: Integer,
+				value:     val,
+				createdAt: createdAt,
+			}
 		}
 	case int64:
 		return &Primitive{
@@ -221,50 +229,8 @@ func (p *Primitive) ValueType() ValueType {
 	return p.valueType
 }
 
-// Increase increase integer, long or double.
-func (p *Primitive) Increase(v *Primitive) *Primitive {
-	if !isNumericType(p) || !isNumericType(v) {
-		panic("unsupported type")
-	}
-	switch p.valueType {
-	case Integer:
-		switch v.valueType {
-		case Long:
-			p.value = p.value.(int) + int(v.value.(int64))
-		case Double:
-			p.value = p.value.(int) + int(v.value.(float64))
-		default:
-			p.value = p.value.(int) + v.value.(int)
-		}
-	case Long:
-		switch v.valueType {
-		case Integer:
-			p.value = p.value.(int64) + int64(v.value.(int))
-		case Double:
-			p.value = p.value.(int64) + int64(v.value.(float64))
-		default:
-			p.value = p.value.(int64) + v.value.(int64)
-		}
-	case Double:
-		switch v.valueType {
-		case Integer:
-			p.value = p.value.(float64) + float64(v.value.(int))
-		case Long:
-			p.value = p.value.(float64) + float64(v.value.(int64))
-		default:
-			p.value = p.value.(float64) + v.value.(float64)
-		}
-	}
-
-	return p
-}
-
-// isNumericType checks for numeric types.
-func isNumericType(v *Primitive) bool {
-	t := v.valueType
-	if t == Integer || t == Long || t == Double {
-		return true
-	}
-
-	return false
+// IsNumericType checks for numeric types.
+func (p *Primitive) IsNumericType() bool {
+	t := p.valueType
+	return t == Integer || t == Long || t == Double
 }

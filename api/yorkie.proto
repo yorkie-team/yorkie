@@ -255,6 +255,13 @@ message JSONElement {
         TimeTicket updated_at = 3;
         TimeTicket removed_at = 4;
     }
+    message Counter {
+        ValueType type = 1;
+        bytes value = 2;
+        TimeTicket created_at = 3;
+        TimeTicket updated_at = 4;
+        TimeTicket removed_at = 5;
+    }
 
     oneof Body {
         Object object = 1;
@@ -262,6 +269,7 @@ message JSONElement {
         Primitive primitive = 3;
         Text text = 4;
         RichText rich_text = 5;
+        Counter counter = 6;
     }
 }
 
@@ -340,6 +348,9 @@ enum ValueType {
     JSON_ARRAY = 9;
     TEXT = 10;
     RICH_TEXT = 11;
+    INTEGER_CNT = 12;
+    LONG_CNT = 13;
+    DOUBLE_CNT = 14;
 }
 
 enum EventType {

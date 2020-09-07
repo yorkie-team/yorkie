@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sync"
 	"testing"
@@ -213,6 +214,30 @@ func TestClientAndDocument(t *testing.T) {
 			return nil
 		}, "nested update by c1")
 		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("causal counter.increase test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewCounter("age", 1).
+				Increase(2).
+				Increase(2.5).
+				Increase(-100000000).
+				Increase(9223372036854775000)
+
+			return nil
+		}, "nested update by c1")
+		assert.NoError(t, err)
+
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
@@ -453,6 +478,54 @@ func TestClientAndDocument(t *testing.T) {
 
 		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.Delete("k2")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("concurrent counter increase test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(testhelper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewCounter("age", 0)
+			root.SetNewCounter("width", 0)
+			root.SetNewCounter("height", 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(testhelper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.GetCounter("age").
+				Increase(1).
+				Increase(2).
+				Increase(-2).
+				Increase(-.25)
+			return nil
+		})
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.GetCounter("width").Increase(math.MaxInt32+100).Increase(10)
+			return nil
+		})
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
+			root.GetCounter("age").Increase(20)
+			root.GetCounter("width").Increase(100).Increase(200)
+			root.GetCounter("height").Increase(50)
 			return nil
 		})
 		assert.NoError(t, err)
@@ -858,26 +931,6 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
-	})
-
-	t.Run("increase test", func(t *testing.T) {
-		ctx := context.Background()
-
-		d1 := document.New(testhelper.Collection, t.Name())
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-
-		d2 := document.New(testhelper.Collection, t.Name())
-		err = c2.Attach(ctx, d2)
-		assert.NoError(t, err)
-
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.SetInteger("value", 1)
-			root.GetInteger("value").Increase(2)
-			return nil
-		})
-
-		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 }
 

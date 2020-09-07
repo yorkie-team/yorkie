@@ -46,6 +46,8 @@ func toJSONElement(elem json.Element) *api.JSONElement {
 		return toText(elem)
 	case *json.RichText:
 		return toRichText(elem)
+	case *json.Counter:
+		return toCounter(elem)
 	}
 
 	panic("fail to encode JSONElement to protobuf")
@@ -105,6 +107,18 @@ func toRichText(text *json.RichText) *api.JSONElement {
 			CreatedAt: toTimeTicket(text.CreatedAt()),
 			UpdatedAt: toTimeTicket(text.UpdatedAt()),
 			RemovedAt: toTimeTicket(text.RemovedAt()),
+		}},
+	}
+}
+
+func toCounter(counter *json.Counter) *api.JSONElement {
+	return &api.JSONElement{
+		Body: &api.JSONElement_Counter_{Counter: &api.JSONElement_Counter{
+			Type:      toCounterType(counter.ValueType()),
+			Value:     counter.Bytes(),
+			CreatedAt: toTimeTicket(counter.CreatedAt()),
+			UpdatedAt: toTimeTicket(counter.UpdatedAt()),
+			RemovedAt: toTimeTicket(counter.RemovedAt()),
 		}},
 	}
 }

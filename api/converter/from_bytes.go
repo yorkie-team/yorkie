@@ -50,6 +50,8 @@ func fromJSONElement(pbElem *api.JSONElement) json.Element {
 		return fromJSONText(decoded.Text)
 	case *api.JSONElement_RichText_:
 		return fromJSONRichText(decoded.RichText)
+	case *api.JSONElement_Counter_:
+		return fromJSONCounter(decoded.Counter)
 	default:
 		panic("unsupported element")
 	}
@@ -147,6 +149,16 @@ func fromJSONRichText(pbText *api.JSONElement_RichText) *json.RichText {
 	text.Remove(fromTimeTicket(pbText.RemovedAt))
 
 	return text
+}
+
+func fromJSONCounter(pbCnt *api.JSONElement_Counter) *json.Counter {
+	counter := json.NewCounter(
+		json.CounterValueFromBytes(fromCounterType(pbCnt.Type), pbCnt.Value),
+		fromTimeTicket(pbCnt.CreatedAt),
+	)
+	counter.SetUpdatedAt(fromTimeTicket(pbCnt.UpdatedAt))
+	counter.Remove(fromTimeTicket(pbCnt.RemovedAt))
+	return counter
 }
 
 func fromTextNode(pbTextNode *api.TextNode) *json.RGATreeSplitNode {

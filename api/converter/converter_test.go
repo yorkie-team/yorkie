@@ -17,6 +17,7 @@
 package converter_test
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -90,6 +91,11 @@ func TestConverter(t *testing.T) {
 			root.SetNewRichText("k4").
 				Edit(0, 0, "Hello world", nil).
 				SetStyle(0, 5, map[string]string{"b": "1"})
+
+			// a counter
+			root.SetNewCounter("k5", 0).
+				Increase(10).
+				Increase(math.MaxInt64)
 
 			return nil
 		})
