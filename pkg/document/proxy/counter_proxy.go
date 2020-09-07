@@ -42,7 +42,8 @@ func NewCounterProxy(ctx *change.Context, counter *json.Counter) *CounterProxy {
 }
 
 // Increase adds an increase operation.
-// Only numeric types are allowed as operand values, excluding uint64 and uintptr.
+// Only numeric types are allowed as operand values, excluding
+// uint64 and uintptr.
 func (p *CounterProxy) Increase(v interface{}) *CounterProxy {
 	if !isAllowedOperand(v) {
 		panic("unsupported type")

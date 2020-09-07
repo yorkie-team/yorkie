@@ -164,6 +164,10 @@ func (p *Counter) ValueType() CounterType {
 }
 
 // Increase increase integer, long or double.
+// If the result of the operation is greater than MaxInt32 or less
+// than MinInt32, Counter's value type can be changed Integer to Long.
+// Because in golang, int can be either int32 or int64.
+// So we need to assert int to int32.
 func (p *Counter) Increase(v *Primitive) *Counter {
 	if !p.IsNumericType() || !v.IsNumericType() {
 		panic("unsupported type")

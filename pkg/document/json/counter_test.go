@@ -88,4 +88,13 @@ func TestCounter(t *testing.T) {
 		assert.Equal(t, long.Marshal(), "28")
 		assert.Equal(t, double.Marshal(), "21.280000")
 	})
+
+	t.Run("Counter's value type changed Integer to Long test", func(t *testing.T) {
+		integer := json.NewCounter(math.MaxInt32, time.InitialTicket)
+		assert.Equal(t, integer.ValueType(), json.IntegerCnt)
+
+		operand := json.NewPrimitive(1, time.InitialTicket)
+		integer.Increase(operand)
+		assert.Equal(t, integer.ValueType(), json.LongCnt)
+	})
 }
