@@ -58,7 +58,7 @@ func toJSONObject(obj *json.Object) *api.JSONElement {
 		Body: &api.JSONElement_Object_{Object: &api.JSONElement_Object{
 			Nodes:     toRHTNodes(obj.RHTNodes()),
 			CreatedAt: toTimeTicket(obj.CreatedAt()),
-			UpdatedAt: toTimeTicket(obj.UpdatedAt()),
+			MovedAt:   toTimeTicket(obj.MovedAt()),
 			RemovedAt: toTimeTicket(obj.RemovedAt()),
 		}},
 	}
@@ -70,7 +70,7 @@ func toJSONArray(arr *json.Array) *api.JSONElement {
 		Body: &api.JSONElement_Array_{Array: &api.JSONElement_Array{
 			Nodes:     toRGANodes(arr.RGANodes()),
 			CreatedAt: toTimeTicket(arr.CreatedAt()),
-			UpdatedAt: toTimeTicket(arr.UpdatedAt()),
+			MovedAt:   toTimeTicket(arr.MovedAt()),
 			RemovedAt: toTimeTicket(arr.RemovedAt()),
 		}},
 	}
@@ -83,7 +83,7 @@ func toPrimitive(primitive *json.Primitive) *api.JSONElement {
 			Type:      toValueType(primitive.ValueType()),
 			Value:     primitive.Bytes(),
 			CreatedAt: toTimeTicket(primitive.CreatedAt()),
-			UpdatedAt: toTimeTicket(primitive.UpdatedAt()),
+			MovedAt:   toTimeTicket(primitive.MovedAt()),
 			RemovedAt: toTimeTicket(primitive.RemovedAt()),
 		}},
 	}
@@ -94,7 +94,7 @@ func toText(text *json.Text) *api.JSONElement {
 		Body: &api.JSONElement_Text_{Text: &api.JSONElement_Text{
 			Nodes:     toTextNodes(text.Nodes()),
 			CreatedAt: toTimeTicket(text.CreatedAt()),
-			UpdatedAt: toTimeTicket(text.UpdatedAt()),
+			MovedAt:   toTimeTicket(text.MovedAt()),
 			RemovedAt: toTimeTicket(text.RemovedAt()),
 		}},
 	}
@@ -105,7 +105,7 @@ func toRichText(text *json.RichText) *api.JSONElement {
 		Body: &api.JSONElement_RichText_{RichText: &api.JSONElement_RichText{
 			Nodes:     toRichTextNodes(text.Nodes()),
 			CreatedAt: toTimeTicket(text.CreatedAt()),
-			UpdatedAt: toTimeTicket(text.UpdatedAt()),
+			MovedAt:   toTimeTicket(text.MovedAt()),
 			RemovedAt: toTimeTicket(text.RemovedAt()),
 		}},
 	}
@@ -117,7 +117,7 @@ func toCounter(counter *json.Counter) *api.JSONElement {
 			Type:      toCounterType(counter.ValueType()),
 			Value:     counter.Bytes(),
 			CreatedAt: toTimeTicket(counter.CreatedAt()),
-			UpdatedAt: toTimeTicket(counter.UpdatedAt()),
+			MovedAt:   toTimeTicket(counter.MovedAt()),
 			RemovedAt: toTimeTicket(counter.RemovedAt()),
 		}},
 	}
@@ -170,9 +170,9 @@ func toRichTextNodes(textNodes []*json.RGATreeSplitNode) []*api.RichTextNode {
 		attrs := make(map[string]*api.RichTextNodeAttr)
 		for _, node := range value.Attrs().Nodes() {
 			attrs[node.Key()] = &api.RichTextNodeAttr{
-				Key:       node.Key(),
-				Value:     node.Value(),
-				UpdatedAt: toTimeTicket(node.UpdatedAt()),
+				Key:     node.Key(),
+				Value:   node.Value(),
+				MovedAt: toTimeTicket(node.MovedAt()),
 			}
 		}
 

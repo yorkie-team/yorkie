@@ -71,7 +71,7 @@ type Text struct {
 	rgaTreeSplit *RGATreeSplit
 	selectionMap map[string]*Selection
 	createdAt    *time.Ticket
-	updatedAt    *time.Ticket
+	movedAt      *time.Ticket
 	removedAt    *time.Ticket
 }
 
@@ -118,14 +118,14 @@ func (t *Text) RemovedAt() *time.Ticket {
 	return t.removedAt
 }
 
-// UpdatedAt returns the update time of this Text.
-func (t *Text) UpdatedAt() *time.Ticket {
-	return t.updatedAt
+// MovedAt returns the move time of this Text.
+func (t *Text) MovedAt() *time.Ticket {
+	return t.movedAt
 }
 
-// SetUpdatedAt sets the update time of this Text.
-func (t *Text) SetUpdatedAt(updatedAt *time.Ticket) {
-	t.updatedAt = updatedAt
+// SetMovedAt sets the move time of this Text.
+func (t *Text) SetMovedAt(movedAt *time.Ticket) {
+	t.movedAt = movedAt
 }
 
 // Remove removes this Text.

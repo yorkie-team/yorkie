@@ -52,7 +52,7 @@ type Counter struct {
 	valueType CounterType
 	value     interface{}
 	createdAt *time.Ticket
-	updatedAt *time.Ticket
+	movedAt   *time.Ticket
 	removedAt *time.Ticket
 }
 
@@ -134,14 +134,14 @@ func (p *Counter) CreatedAt() *time.Ticket {
 	return p.createdAt
 }
 
-// UpdatedAt returns the update time of this element.
-func (p *Counter) UpdatedAt() *time.Ticket {
-	return p.updatedAt
+// MovedAt returns the move time of this element.
+func (p *Counter) MovedAt() *time.Ticket {
+	return p.movedAt
 }
 
-// SetUpdatedAt sets the update time of this element.
-func (p *Counter) SetUpdatedAt(updatedAt *time.Ticket) {
-	p.updatedAt = updatedAt
+// SetMovedAt sets the move time of this element.
+func (p *Counter) SetMovedAt(movedAt *time.Ticket) {
+	p.movedAt = movedAt
 }
 
 // RemovedAt returns the removal time of this element.

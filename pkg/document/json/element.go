@@ -38,11 +38,11 @@ type Element interface {
 	// CreatedAt returns the creation time of this element.
 	CreatedAt() *time.Ticket
 
-	// UpdatedAt returns the update time of this element.
-	UpdatedAt() *time.Ticket
+	// MovedAt returns the move time of this element.
+	MovedAt() *time.Ticket
 
-	// SetUpdatedAt sets the update time of this element.
-	SetUpdatedAt(*time.Ticket)
+	// SetMovedAt sets the move time of this element.
+	SetMovedAt(*time.Ticket)
 
 	// RemovedAt returns the removal time of this element.
 	RemovedAt() *time.Ticket

@@ -25,7 +25,7 @@ import (
 type Object struct {
 	memberNodes *RHTPriorityQueueMap
 	createdAt   *time.Ticket
-	updatedAt   *time.Ticket
+	movedAt     *time.Ticket
 	removedAt   *time.Ticket
 }
 
@@ -110,14 +110,14 @@ func (o *Object) CreatedAt() *time.Ticket {
 	return o.createdAt
 }
 
-// UpdatedAt returns the update time of this object.
-func (o *Object) UpdatedAt() *time.Ticket {
-	return o.updatedAt
+// MovedAt returns the move time of this object.
+func (o *Object) MovedAt() *time.Ticket {
+	return o.movedAt
 }
 
-// SetUpdatedAt sets the update time of this object.
-func (o *Object) SetUpdatedAt(updatedAt *time.Ticket) {
-	o.updatedAt = updatedAt
+// SetMovedAt sets the move time of this object.
+func (o *Object) SetMovedAt(movedAt *time.Ticket) {
+	o.movedAt = movedAt
 }
 
 // RemovedAt returns the removal time of this object.
