@@ -24,27 +24,27 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 )
 
-// NumberProxy is a proxy representing number types.
-type NumberProxy struct {
-	*json.Primitive
+// CounterProxy is a proxy representing counter.
+type CounterProxy struct {
+	*json.Counter
 	context *change.Context
 }
 
-// NewNumberProxy create NumberProxy instance.
-func NewNumberProxy(ctx *change.Context, primitive *json.Primitive) *NumberProxy {
-	valueType := primitive.ValueType()
-	if valueType != json.Integer && valueType != json.Long && valueType != json.Double {
+// NewCounterProxy create CounterProxy instance.
+func NewCounterProxy(ctx *change.Context, counter *json.Counter) *CounterProxy {
+	if !counter.IsNumericType() {
 		panic("unsupported type")
 	}
-	return &NumberProxy{
-		Primitive: primitive,
-		context:   ctx,
+	return &CounterProxy{
+		Counter: counter,
+		context: ctx,
 	}
 }
 
 // Increase adds an increase operation.
-// Only numeric types are allowed as operand values, excluding uint64 and uintptr.
-func (p *NumberProxy) Increase(v interface{}) *NumberProxy {
+// Only numeric types are allowed as operand values, excluding
+// uint64 and uintptr.
+func (p *CounterProxy) Increase(v interface{}) *CounterProxy {
 	if !isAllowedOperand(v) {
 		panic("unsupported type")
 	}
@@ -54,19 +54,19 @@ func (p *NumberProxy) Increase(v interface{}) *NumberProxy {
 	value, kind := convertAssertableOperand(v)
 	isInt := kind == reflect.Int
 	switch p.ValueType() {
-	case json.Long:
+	case json.LongCnt:
 		if isInt {
 			primitive = json.NewPrimitive(int64(value.(int)), ticket)
 		} else {
 			primitive = json.NewPrimitive(int64(value.(float64)), ticket)
 		}
-	case json.Integer:
+	case json.IntegerCnt:
 		if isInt {
 			primitive = json.NewPrimitive(value, ticket)
 		} else {
 			primitive = json.NewPrimitive(int(value.(float64)), ticket)
 		}
-	case json.Double:
+	case json.DoubleCnt:
 		if isInt {
 			primitive = json.NewPrimitive(float64(value.(int)), ticket)
 		} else {

@@ -381,7 +381,7 @@ func TestDocument(t *testing.T) {
 		)
 	})
 
-	t.Run("number types test", func(t *testing.T) {
+	t.Run("counter test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
 		var integer int = 10
 		var long int64 = 5
@@ -389,10 +389,11 @@ func TestDocument(t *testing.T) {
 		var float float32 = 3.14
 		var double float64 = 5.66
 
+		// integer type test
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetInteger("age", 5)
+			root.SetNewCounter("age", 5)
 
-			age := root.GetInteger("age")
+			age := root.GetCounter("age")
 			age.Increase(long)
 			age.Increase(double)
 			age.Increase(float)
@@ -404,9 +405,10 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"age":128}`, doc.Marshal())
 
+		// long type test
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetLong("price", 9000000000000000000)
-			price := root.GetLong("price")
+			root.SetNewCounter("price", 9000000000000000000)
+			price := root.GetCounter("price")
 			price.Increase(long)
 			price.Increase(double)
 			price.Increase(float)
@@ -418,9 +420,10 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"age":128,"price":9000000000000000123}`, doc.Marshal())
 
+		// double type test
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetDouble("width", 10.5)
-			width := root.GetDouble("width")
+			root.SetNewCounter("width", 10.5)
+			width := root.GetCounter("width")
 			width.Increase(long)
 			width.Increase(double)
 			width.Increase(float)
@@ -432,16 +435,17 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"age":128,"price":9000000000000000123,"width":134.300000}`, doc.Marshal())
 
+		// negative operator test
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
-			age := root.GetInteger("age")
+			age := root.GetCounter("age")
 			age.Increase(-5)
 			age.Increase(-3.14)
 
-			price := root.GetLong("price")
+			price := root.GetCounter("price")
 			price.Increase(-100)
 			price.Increase(-20.5)
 
-			width := root.GetDouble("width")
+			width := root.GetCounter("width")
 			width.Increase(-4)
 			width.Increase(-0.3)
 
@@ -460,7 +464,7 @@ func TestDocument(t *testing.T) {
 			}()
 
 			var notAllowType uint64 = 18300000000000000000
-			age := root.GetInteger("age")
+			age := root.GetCounter("age")
 			age.Increase(notAllowType)
 
 			return nil

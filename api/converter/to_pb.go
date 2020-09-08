@@ -242,6 +242,12 @@ func toJSONElementSimple(elem json.Element) *api.JSONElementSimple {
 			Type:      api.ValueType_RICH_TEXT,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}
+	case *json.Counter:
+		return &api.JSONElementSimple{
+			Type:      toCounterType(elem.ValueType()),
+			CreatedAt: toTimeTicket(elem.CreatedAt()),
+			Value:     elem.Bytes(),
+		}
 	}
 	panic("fail to encode JSONElement to protobuf")
 }
@@ -292,6 +298,19 @@ func toValueType(valueType json.ValueType) api.ValueType {
 		return api.ValueType_BYTES
 	case json.Date:
 		return api.ValueType_DATE
+	}
+
+	panic("unsupported value type")
+}
+
+func toCounterType(valueType json.CounterType) api.ValueType {
+	switch valueType {
+	case json.IntegerCnt:
+		return api.ValueType_INTEGER_CNT
+	case json.LongCnt:
+		return api.ValueType_LONG_CNT
+	case json.DoubleCnt:
+		return api.ValueType_DOUBLE_CNT
 	}
 
 	panic("unsupported value type")

@@ -17,26 +17,39 @@
 package json_test
 
 import (
+	"math"
 	"testing"
 	time2 "time"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-func TestPrimitive(t *testing.T) {
+func TestCounter(t *testing.T) {
+	t.Run("new counter test", func(t *testing.T) {
+		integer := json.NewCounter(math.MaxInt32, time.InitialTicket)
+		assert.Equal(t, json.IntegerCnt, integer.ValueType())
+
+		long := json.NewCounter(math.MaxInt32+1, time.InitialTicket)
+		assert.Equal(t, json.LongCnt, long.ValueType())
+
+		double := json.NewCounter(0.5, time.InitialTicket)
+		assert.Equal(t, json.DoubleCnt, double.ValueType())
+	})
+
 	t.Run("increase test", func(t *testing.T) {
 		var x int = 5
 		var y int64 = 10
 		var z float64 = 3.14
-		integer := json.NewPrimitive(x, time.InitialTicket)
-		long := json.NewPrimitive(y, time.InitialTicket)
-		double := json.NewPrimitive(z, time.InitialTicket)
+		integer := json.NewCounter(x, time.InitialTicket)
+		long := json.NewCounter(y, time.InitialTicket)
+		double := json.NewCounter(z, time.InitialTicket)
 
-		integerOperand := integer.DeepCopy().(*json.Primitive)
-		longOperand := long.DeepCopy().(*json.Primitive)
-		doubleOperand := double.DeepCopy().(*json.Primitive)
+		integerOperand := json.NewPrimitive(x, time.InitialTicket)
+		longOperand := json.NewPrimitive(y, time.InitialTicket)
+		doubleOperand := json.NewPrimitive(z, time.InitialTicket)
 
 		// normal process test
 		integer.Increase(integerOperand)
@@ -62,26 +75,26 @@ func TestPrimitive(t *testing.T) {
 			assert.NotNil(t, r)
 			assert.Equal(t, r, "unsupported type")
 		}
-		unsupportedTest := func(primitive, operand *json.Primitive) {
+		unsupportedTest := func(v interface{}) {
 			defer unsupportedTypePanicTest()
-			primitive.Increase(operand)
+			json.NewCounter(v, time.InitialTicket)
 		}
-		str := json.NewPrimitive("str", time.InitialTicket)
-		boolean := json.NewPrimitive(true, time.InitialTicket)
-		bytes := json.NewPrimitive([]byte{2}, time.InitialTicket)
-		date := json.NewPrimitive(time2.Now(), time.InitialTicket)
-		unsupportedTest(integer, str)
-		unsupportedTest(integer, boolean)
-		unsupportedTest(integer, bytes)
-		unsupportedTest(integer, date)
-
-		unsupportedTest(str, integer)
-		unsupportedTest(boolean, integer)
-		unsupportedTest(bytes, integer)
-		unsupportedTest(date, integer)
+		unsupportedTest("str")
+		unsupportedTest(true)
+		unsupportedTest([]byte{2})
+		unsupportedTest(time2.Now())
 
 		assert.Equal(t, integer.Marshal(), "23")
 		assert.Equal(t, long.Marshal(), "28")
 		assert.Equal(t, double.Marshal(), "21.280000")
+	})
+
+	t.Run("Counter's value type changed Integer to Long test", func(t *testing.T) {
+		integer := json.NewCounter(math.MaxInt32, time.InitialTicket)
+		assert.Equal(t, integer.ValueType(), json.IntegerCnt)
+
+		operand := json.NewPrimitive(1, time.InitialTicket)
+		integer.Increase(operand)
+		assert.Equal(t, integer.ValueType(), json.LongCnt)
 	})
 }
