@@ -26,6 +26,9 @@ import (
 )
 
 func TestNewConfigFromFile(t *testing.T) {
+	_, err := yorkie.NewConfigFromFile("nowhere.json")
+	assert.Error(t, err)
+
 	filePath := "config.sample.json"
 	conf, err := yorkie.NewConfigFromFile(filePath)
 	assert.NoError(t, err)
