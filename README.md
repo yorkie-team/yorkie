@@ -85,3 +85,12 @@ If you make any changes to the code, run `make fmt` in order to automatically fo
 
 ## Contributing
 See [CONTRIBUTING](CONTRIBUTING.md) for details on submitting patches and the contribution workflow.
+
+## Sponsors
+
+Is your company using Yorkie? Ask your boss to support us. It will help us dedicate more time to maintain this project and to make it even better for all our users. Also your company logo will show up on here and on our website :-) [[Become a sponsor](https://opencollective.com/yorkie#sponsor)]
+<a href="https://opencollective.com/yorkie#sponsor" target="_blank"><img src="https://opencollective.com/yorkie/sponsor.svg?width=890"></a>
+
+### Backers
+Please be our [Backers](https://opencollective.com/yorkie#backers).
+<a href="https://opencollective.com/yorkie#backers" target="_blank"><img src="https://opencollective.com/yorkie/backers.svg?width=890"></a>
