@@ -79,11 +79,7 @@ func (b *Backend) Close() error {
 	// wait for goroutines before closing backend
 	b.wg.Wait()
 
-	if err := b.Mongo.Close(); err != nil {
-		return err
-	}
-
-	return nil
+	return b.Mongo.Close()
 }
 
 // AttachGoroutine creates a goroutine on a given function and tracks it using
