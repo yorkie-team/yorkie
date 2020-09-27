@@ -175,7 +175,7 @@ func fromTextNode(pbTextNode *api.TextNode) *json.RGATreeSplitNode {
 func fromRichTextNode(pbNode *api.RichTextNode) *json.RGATreeSplitNode {
 	attrs := json.NewRHT()
 	for _, pbAttr := range pbNode.Attributes {
-		attrs.Set(pbAttr.Key, pbAttr.Value, fromTimeTicket(pbAttr.MovedAt))
+		attrs.Set(pbAttr.Key, pbAttr.Value, fromTimeTicket(pbAttr.UpdatedAt))
 	}
 
 	textNode := json.NewRGATreeSplitNode(
