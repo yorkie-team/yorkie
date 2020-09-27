@@ -28,15 +28,15 @@ import (
 type RHTNode struct {
 	key       string
 	val       string
-	movedAt   *time.Ticket
+	updatedAt *time.Ticket
 	removedAt *time.Ticket
 }
 
-func newRHTNode(key, val string, movedAt *time.Ticket) *RHTNode {
+func newRHTNode(key, val string, updatedAt *time.Ticket) *RHTNode {
 	return &RHTNode{
 		key:     key,
 		val:     val,
-		movedAt: movedAt,
+		updatedAt: updatedAt,
 	}
 }
 
@@ -58,8 +58,8 @@ func (n *RHTNode) Value() string {
 	return n.val
 }
 
-func (n *RHTNode) MovedAt() *time.Ticket {
-	return n.movedAt
+func (n *RHTNode) UpdatedAt() *time.Ticket {
+	return n.updatedAt
 }
 
 func (n *RHTNode) RemovedAt() *time.Ticket {
@@ -103,7 +103,7 @@ func (rht *RHT) Has(key string) bool {
 
 // Set sets the value of the given key.
 func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
-	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.movedAt) {
+	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
 		newNode := newRHTNode(k, v, executedAt)
 		rht.nodeMapByKey[k] = newNode
 		rht.nodeMapByCreatedAt[executedAt.Key()] = newNode
@@ -160,7 +160,7 @@ func (rht *RHT) DeepCopy() *RHT {
 	instance := NewRHT()
 
 	for _, node := range rht.Nodes() {
-		instance.Set(node.key, node.val, node.movedAt)
+		instance.Set(node.key, node.val, node.updatedAt)
 	}
 	return instance
 }

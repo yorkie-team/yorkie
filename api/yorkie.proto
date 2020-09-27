@@ -293,7 +293,7 @@ message TextNode {
 message RichTextNodeAttr {
     string key = 1;
     string value = 2;
-    TimeTicket moved_at = 3;
+    TimeTicket updated_at = 3;
 }
 
 message RichTextNode {
