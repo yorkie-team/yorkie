@@ -22,15 +22,27 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"strconv"
+
 	"github.com/yorkie-team/yorkie/yorkie"
 )
 
 func TestNewConfigFromFile(t *testing.T) {
+	conf := yorkie.NewConfig()
+	assert.Equal(t, conf.RPCAddr(), "localhost:"+strconv.Itoa(yorkie.DefaultRPCPort))
 	_, err := yorkie.NewConfigFromFile("nowhere.json")
 	assert.Error(t, err)
+	assert.Equal(t, conf.RPC.Port, yorkie.DefaultRPCPort)
+	assert.Equal(t, conf.RPC.CertFile, "")
+	assert.Equal(t, conf.RPC.KeyFile, "")
+	assert.Equal(t, conf.Mongo.ConnectionTimeoutSec, time.Duration(yorkie.DefaultMongoConnectionTimeoutSec))
+	assert.Equal(t, conf.Mongo.ConnectionURI, yorkie.DefaultMongoConnectionURI)
+	assert.Equal(t, conf.Mongo.YorkieDatabase, yorkie.DefaultMongoYorkieDatabase)
+	assert.Equal(t, conf.Mongo.PingTimeoutSec, time.Duration(yorkie.DefaultMongoPingTimeoutSec))
+	assert.Equal(t, conf.Backend.SnapshotThreshold, uint64(yorkie.DefaultSnapshotThreshold))
 
 	filePath := "config.sample.json"
-	conf, err := yorkie.NewConfigFromFile(filePath)
+	conf, err = yorkie.NewConfigFromFile(filePath)
 	assert.NoError(t, err)
 
 	assert.Equal(t, conf.RPC.Port, yorkie.DefaultRPCPort)
