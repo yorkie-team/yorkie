@@ -170,8 +170,8 @@ func toRichTextNodes(textNodes []*json.RGATreeSplitNode) []*api.RichTextNode {
 		attrs := make(map[string]*api.RichTextNodeAttr)
 		for _, node := range value.Attrs().Nodes() {
 			attrs[node.Key()] = &api.RichTextNodeAttr{
-				Key:     node.Key(),
-				Value:   node.Value(),
+				Key:       node.Key(),
+				Value:     node.Value(),
 				UpdatedAt: toTimeTicket(node.UpdatedAt()),
 			}
 		}

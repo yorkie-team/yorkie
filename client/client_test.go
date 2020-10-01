@@ -517,7 +517,7 @@ func TestClientAndDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
-			root.GetCounter("width").Increase(math.MaxInt32+100).Increase(10)
+			root.GetCounter("width").Increase(math.MaxInt32 + 100).Increase(10)
 			return nil
 		})
 		assert.NoError(t, err)
