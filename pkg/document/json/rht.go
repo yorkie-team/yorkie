@@ -34,8 +34,8 @@ type RHTNode struct {
 
 func newRHTNode(key, val string, updatedAt *time.Ticket) *RHTNode {
 	return &RHTNode{
-		key:     key,
-		val:     val,
+		key:       key,
+		val:       val,
 		updatedAt: updatedAt,
 	}
 }
