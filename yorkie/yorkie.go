@@ -71,10 +71,12 @@ func (r *Yorkie) Start() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	err := r.metricsServer.Start()
-	if err != nil {
-		log.Logger.Error(err)
-		return err
+	if r.metricsServer != nil {
+		err := r.metricsServer.Start()
+		if err != nil {
+			log.Logger.Error(err)
+			return err
+		}
 	}
 	return r.rpcServer.Start()
 }
@@ -87,7 +89,9 @@ func (r *Yorkie) Shutdown(graceful bool) error {
 	}
 
 	r.rpcServer.Shutdown(graceful)
-	r.metricsServer.Shutdown(graceful)
+	if r.metricsServer != nil {
+		r.metricsServer.Shutdown(graceful)
+	}
 
 	if err := r.backend.Close(); err != nil {
 		return err
