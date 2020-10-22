@@ -25,6 +25,9 @@ type Server struct {
 
 // NewServer creates an instance of Server.
 func NewServer(conf *Config) (*Server, error) {
+	if conf == nil {
+		return nil, nil
+	}
 	return &Server{
 		conf: conf,
 		metricsServer: &http.Server{
