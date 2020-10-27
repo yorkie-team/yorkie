@@ -21,18 +21,14 @@ func TestMetricsServer(t *testing.T) {
 		testMetricsServer, err := metrics.NewServer(&metrics.Config{
 			Port: testMetricsPort,
 		})
-		if err != nil {
-			log.Fatal(err)
-		}
+		assert.NoError(t, err)
 		assert.NotNil(t, testMetricsServer)
 		testMetricsServer.Shutdown(true)
 	})
 
 	t.Run("new server without config test", func(t *testing.T) {
 		testMetricsServer, err := metrics.NewServer(nil)
-		if err != nil {
-			log.Fatal(err)
-		}
+		assert.NoError(t, err)
 		assert.Nil(t, testMetricsServer)
 	})
 }
