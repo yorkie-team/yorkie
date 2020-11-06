@@ -7,4 +7,7 @@ var (
 
 	// The main version number that is being run at the moment.
 	Version = "0.0.0"
+
+	// The date the executable was built.
+	BuildDate string
 )
