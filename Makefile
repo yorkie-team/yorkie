@@ -42,7 +42,7 @@ build:
 	go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}"
 
 docker:
-	docker build -t yorkieteam/yorkie:latest .
+	docker build -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .
 
 fmt:
 	gofmt -s -w $(GO_SRC)
