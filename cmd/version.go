@@ -17,6 +17,7 @@ func newVersionCmd() *cobra.Command {
 			fmt.Printf("Yorkie: %s\n", version.Version)
 			fmt.Printf("Commit: %s\n", version.GitCommit)
 			fmt.Printf("Go: %s\n", runtime.Version())
+			fmt.Printf("Build date: %s\n", version.BuildDate)
 			return nil
 		},
 	}
