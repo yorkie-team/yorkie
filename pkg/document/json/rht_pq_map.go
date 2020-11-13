@@ -76,7 +76,7 @@ func NewRHTPriorityQueueMap() *RHTPriorityQueueMap {
 // Get returns the value of the given key.
 func (rht *RHTPriorityQueueMap) Get(key string) Element {
 	queue, ok := rht.nodeQueueMapByKey[key]
-	if !ok {
+	if !ok || queue.Len() == 0 {
 		return nil
 	}
 

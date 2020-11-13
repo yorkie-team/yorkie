@@ -142,7 +142,7 @@ func (p *ArrayProxy) Delete(idx int) json.Element {
 		deleted.CreatedAt(),
 		ticket,
 	))
-
+	p.context.RegisterRemovedElementPair(p, deleted)
 	return deleted
 }
 

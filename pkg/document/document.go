@@ -36,7 +36,11 @@ import (
 // root. This is to protect the base json from errors that may occur while user
 // edit the document.
 type Document struct {
+	// doc is the original data of the actual document.
 	doc   *InternalDocument
+
+	// clone is a copy of `doc` to be exposed to the user and is used to
+	// protect `doc`.
 	clone *json.Root
 }
 
@@ -132,7 +136,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	d.doc.GarbageCollect(pack.MinSyncedTicket)
+	d.GarbageCollect(pack.MinSyncedTicket)
 
 	log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.RootObject().Marshal())
 	return nil
@@ -191,6 +195,9 @@ func (d *Document) RootObject() *json.Object {
 
 // GarbageCollect purge elements that were removed before the given time.
 func (d *Document) GarbageCollect(ticket *time.Ticket) int {
+	if d.clone != nil {
+		d.clone.GarbageCollect(ticket)
+	}
 	return d.doc.GarbageCollect(ticket)
 }
 

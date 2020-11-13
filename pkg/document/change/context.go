@@ -72,3 +72,8 @@ func (c *Context) Push(op operation.Operation) {
 func (c *Context) RegisterElement(elem json.Element) {
 	c.root.RegisterElement(elem)
 }
+
+// RegisterRemovedElementPair registers the given element pair to hash table.
+func (c *Context) RegisterRemovedElementPair(parent json.Container, deleted json.Element) {
+	c.root.RegisterRemovedElementPair(parent, deleted)
+}
