@@ -77,7 +77,7 @@ func (r *Root) DeregisterElement(elem Element) {
 	delete(r.removedElementPairMapByCreatedAt, createdAt)
 }
 
-// DeregisterElementPair register the given element pair to hash table.
+// RegisterRemovedElementPair register the given element pair to hash table.
 func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	r.removedElementPairMapByCreatedAt[elem.CreatedAt().Key()] = ElementPair{
 		parent,

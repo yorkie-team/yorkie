@@ -154,6 +154,7 @@ func (p *ObjectProxy) Delete(k string) json.Element {
 		deleted.CreatedAt(),
 		ticket,
 	))
+	p.context.RegisterRemovedElementPair(p, deleted)
 	return deleted
 }
 
