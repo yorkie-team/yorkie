@@ -109,8 +109,11 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) int {
 	}
 
 	for _, text := range r.editedTextElementMapByCreatedAt {
-		count += text.cleanupRemovedNodes(ticket)
-		delete(r.editedTextElementMapByCreatedAt, text.CreatedAt().Key())
+		removedNodeCnt := text.cleanupRemovedNodes(ticket)
+		if removedNodeCnt > 0 {
+			delete(r.editedTextElementMapByCreatedAt, text.CreatedAt().Key())
+		}
+		count += removedNodeCnt
 	}
 
 	return count
