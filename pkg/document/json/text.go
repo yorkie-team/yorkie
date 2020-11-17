@@ -195,3 +195,14 @@ func (t *Text) Nodes() []*RGATreeSplitNode {
 func (t *Text) AnnotatedString() string {
 	return t.rgaTreeSplit.AnnotatedString()
 }
+
+// removedNodesLen returns length of removed nodes
+func (t *Text) removedNodesLen() int {
+	return t.rgaTreeSplit.removedNodesLen()
+}
+
+// cleanupRemovedNodes cleans up nodes that have been removed.
+// The cleaned nodes are subject to garbage collector collection.
+func (t *Text) cleanupRemovedNodes(ticket *time.Ticket) int {
+	return t.rgaTreeSplit.cleanupRemovedNodes(ticket)
+}

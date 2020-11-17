@@ -54,6 +54,7 @@ func (e *Edit) Execute(root *json.Root) error {
 	switch obj := parent.(type) {
 	case *json.Text:
 		obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.executedAt)
+		root.RegisterEditedTextElement(obj)
 	default:
 		return ErrNotApplicableDataType
 	}

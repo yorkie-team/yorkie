@@ -222,10 +222,22 @@ func (t *RGATreeSplitNode) Value() RGATreeSplitValue {
 	return t.value
 }
 
+// removedNodeMapKey is a key of removedNodeMap.
+// The shape of the key is '{createdAt.Key()}:{offset}'.
+type removedNodeMapKey string
+
+// createRemovedNodeMapKey generates keys for removedNodes.
+func createRemovedNodeMapKey(createdAtKey string, offset int) removedNodeMapKey {
+	key := fmt.Sprintf("%s:%d", createdAtKey, offset)
+	return removedNodeMapKey(key)
+}
+
 type RGATreeSplit struct {
 	initialHead *RGATreeSplitNode
 	treeByIndex *splay.Tree
 	treeByID    *llrb.Tree
+
+	removedNodeMap map[removedNodeMapKey]*RGATreeSplitNode
 }
 
 func NewRGATreeSplit(initialHead *RGATreeSplitNode) *RGATreeSplit {
@@ -234,9 +246,10 @@ func NewRGATreeSplit(initialHead *RGATreeSplitNode) *RGATreeSplit {
 	treeByID.Put(initialHead.ID(), initialHead)
 
 	return &RGATreeSplit{
-		initialHead: initialHead,
-		treeByIndex: treeByIndex,
-		treeByID:    treeByID,
+		initialHead:    initialHead,
+		treeByIndex:    treeByIndex,
+		treeByID:       treeByID,
+		removedNodeMap: make(map[removedNodeMapKey]*RGATreeSplitNode),
 	}
 }
 
@@ -373,7 +386,7 @@ func (s *RGATreeSplit) edit(
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
-	latestCreatedAtMap := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
+	latestCreatedAtMap, removedNodeMapByCreatedAt := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
 
 	var caretID *RGATreeSplitNodeID
 	if toRight == nil {
@@ -387,6 +400,11 @@ func (s *RGATreeSplit) edit(
 	if content.Len() > 0 {
 		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content))
 		caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
+	}
+
+	// 04. add removed node
+	for key, removedNode := range removedNodeMapByCreatedAt {
+		s.removedNodeMap[key] = removedNode
 	}
 
 	return caretPos, latestCreatedAtMap
@@ -406,8 +424,9 @@ func (s *RGATreeSplit) deleteNodes(
 	candidates []*RGATreeSplitNode,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	editedAt *time.Ticket,
-) map[string]*time.Ticket {
+) (map[string]*time.Ticket, map[removedNodeMapKey]*RGATreeSplitNode) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
+	removedNodeMap := make(map[removedNodeMapKey]*RGATreeSplitNode)
 
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
@@ -426,16 +445,18 @@ func (s *RGATreeSplit) deleteNodes(
 
 		if node.Remove(editedAt, latestCreatedAt) {
 			s.treeByIndex.Splay(node.indexNode)
-
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt
 			}
+
+			key := createRemovedNodeMapKey(createdAt.Key(), node.id.offset)
+			removedNodeMap[key] = node
 		}
 	}
 
-	return createdAtMapByActor
+	return createdAtMapByActor, removedNodeMap
 }
 
 func (s *RGATreeSplit) marshal() string {
@@ -491,4 +512,46 @@ func (s *RGATreeSplit) AnnotatedString() string {
 	}
 
 	return strings.Join(result, "")
+}
+
+// removedNodesLen returns length of removed nodes
+func (s *RGATreeSplit) removedNodesLen() int {
+	return len(s.removedNodeMap)
+}
+
+// cleanupRemovedNodes cleans up nodes that have been removed.
+// The cleaned nodes are subject to garbage collector collection.
+func (s *RGATreeSplit) cleanupRemovedNodes(ticket *time.Ticket) int {
+	count := 0
+	for _, node := range s.removedNodeMap {
+		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {
+			s.treeByIndex.Delete(node.indexNode)
+			s.purge(node)
+			s.treeByID.Remove(node.id)
+			delete(s.removedNodeMap, removedNodeMapKey(node.createdAt().Key()))
+			count++
+		}
+	}
+
+	return count
+}
+
+// purge removes the node passed as a parameter from RGATreeSplit.
+func (s *RGATreeSplit) purge(node *RGATreeSplitNode) {
+	if node.prev != nil {
+		node.prev.next = node.next
+		if node.next != nil {
+			node.next.prev = node.prev
+		}
+	} else {
+		s.initialHead, node.next.prev = node.next, nil
+	}
+	node.next, node.prev = nil, nil
+
+	if node.insPrev != nil {
+		node.insPrev.insNext, node.insPrev = nil, nil
+	}
+	if node.insNext != nil {
+		node.insNext.insPrev, node.insNext = nil, nil
+	}
 }

@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	time2 "github.com/yorkie-team/yorkie/pkg/document/time"
+
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -153,6 +155,7 @@ func TestConverter(t *testing.T) {
 
 		pbPack := converter.ToChangePack(d1.CreateChangePack())
 		pack, err := converter.FromChangePack(pbPack)
+		pack.MinSyncedTicket = time2.MaxTicket
 		assert.NoError(t, err)
 
 		d2 := document.New("c1", "d1")

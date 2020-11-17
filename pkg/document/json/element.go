@@ -27,6 +27,13 @@ type Container interface {
 	Descendants(callback func(elem Element, parent Container) bool)
 }
 
+// TextType represents Text or RichText.
+type TextElement interface {
+	Element
+	removedNodesLen() int
+	cleanupRemovedNodes(ticket *time.Ticket) int
+}
+
 // Element represents JSON element.
 type Element interface {
 	// Marshal returns the JSON encoding of this element.

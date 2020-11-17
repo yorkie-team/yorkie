@@ -62,6 +62,7 @@ func (p *TextProxy) Edit(from, to int, content string) *TextProxy {
 		content,
 		ticket,
 	))
+	p.context.RegisterEditedTextElement(p)
 
 	return p
 }
