@@ -249,7 +249,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
 
-		textSize := 10
+		textSize := 1000
 		// 01. initial
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.SetNewText("k1")
