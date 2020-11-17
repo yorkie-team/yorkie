@@ -208,6 +208,42 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, expectedGarbageLen, doc.GarbageCollect(time.MaxTicket))
 	})
 
+	t.Run("garbage collection for rich text test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+		assert.Equal(t, "{}", doc.Marshal())
+		assert.False(t, doc.HasLocalChanges())
+
+		// check garbage length
+		expected := `{"k1":[{"attrs":{"b":"1"},"val":"Hello "},{"attrs":{},"val":"mario"}]}`
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewRichText("k1").
+				Edit(0, 0, "Hello world", map[string]string{"b": "1"}).
+				Edit(6, 11, "mario", nil)
+			assert.Equal(t, expected, root.Marshal())
+			return nil
+		}, "edit text k1")
+		assert.NoError(t, err)
+		assert.Equal(t, expected, doc.Marshal())
+		assert.Equal(t, 1, doc.GarbageLen())
+
+		expected = `{"k1":[{"attrs":{"b":"1"},"val":"Hi"},{"attrs":{"b":"1"},"val":" "},{"attrs":{},"val":"j"},{"attrs":{"b":"1"},"val":"ane"}]}`
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetRichText("k1")
+			text.Edit(0, 5, "Hi", map[string]string{"b": "1"})
+			text.Edit(3, 4, "j", nil)
+			text.Edit(4, 8, "ane", map[string]string{"b": "1"})
+			assert.Equal(t, expected, root.Marshal())
+			return nil
+		}, "edit text k1")
+		assert.NoError(t, err)
+		assert.Equal(t, expected, doc.Marshal())
+
+		expectedGarbageLen := 4
+		assert.Equal(t, expectedGarbageLen, doc.GarbageLen())
+		// garbage collect
+		assert.Equal(t, expectedGarbageLen, doc.GarbageCollect(time.MaxTicket))
+	})
+
 	t.Run("garbage collection for large size of text garbage test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
 		assert.Equal(t, "{}", doc.Marshal())
@@ -244,6 +280,7 @@ func TestDocument(t *testing.T) {
 		testhelper.PrintMemStats()
 		assert.Equal(t, textSize, doc.GarbageLen())
 
+		// 03. GC
 		assert.Equal(t, textSize, doc.GarbageCollect(time.MaxTicket))
 		runtime.GC()
 		fmt.Println("-----Garbage collect")
@@ -251,7 +288,7 @@ func TestDocument(t *testing.T) {
 		testhelper.PrintMemStats()
 		assert.NoError(t, err)
 
-		// 03. long text by one node
+		// 04. long text by one node
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.SetNewText("k2")
 			str := ""
@@ -265,7 +302,7 @@ func TestDocument(t *testing.T) {
 		testhelper.PrintBytesSize(bytes)
 		testhelper.PrintMemStats()
 
-		// 04. Modify one node multiple times
+		// 05. Modify one node multiple times
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetText("k2")
 			for i := 0; i < textSize; i++ {
@@ -281,6 +318,7 @@ func TestDocument(t *testing.T) {
 		testhelper.PrintBytesSize(bytes)
 		testhelper.PrintMemStats()
 
+		// 06. GC
 		assert.Equal(t, textSize, doc.GarbageLen())
 		assert.Equal(t, textSize, doc.GarbageCollect(time.MaxTicket))
 		runtime.GC()

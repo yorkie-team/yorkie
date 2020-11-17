@@ -57,6 +57,7 @@ func (e *RichEdit) Execute(root *json.Root) error {
 	switch obj := parent.(type) {
 	case *json.RichText:
 		obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
+		root.RegisterEditedTextElement(obj)
 	default:
 		return ErrNotApplicableDataType
 	}

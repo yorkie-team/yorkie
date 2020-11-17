@@ -64,6 +64,7 @@ func (p *RichTextProxy) Edit(from, to int, content string, attributes map[string
 		attributes,
 		ticket,
 	))
+	p.context.RegisterEditedTextElement(p)
 
 	return p
 }
