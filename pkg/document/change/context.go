@@ -78,6 +78,6 @@ func (c *Context) RegisterRemovedElementPair(parent json.Container, deleted json
 	c.root.RegisterRemovedElementPair(parent, deleted)
 }
 
-func (c *Context) RegisterEditedTextElement(textType json.TextElement) {
-	c.root.RegisterEditedTextElement(textType)
+func (c *Context) RegisterRemovedNodeTextElement(textType json.TextElement) {
+	c.root.RegisterRemovedNodeTextElement(textType)
 }

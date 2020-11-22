@@ -32,18 +32,18 @@ type ElementPair struct {
 // Every element has a unique time ticket at creation, which allows us to find
 // a particular element.
 type Root struct {
-	object                           *Object
-	elementMapByCreatedAt            map[string]Element
-	removedElementPairMapByCreatedAt map[string]ElementPair
-	editedTextElementMapByCreatedAt  map[string]TextElement
+	object                               *Object
+	elementMapByCreatedAt                map[string]Element
+	removedElementPairMapByCreatedAt     map[string]ElementPair
+	removedNodeTextElementMapByCreatedAt map[string]TextElement
 }
 
 // NewRoot creates a new instance of Root.
 func NewRoot(root *Object) *Root {
 	r := &Root{
-		elementMapByCreatedAt:            make(map[string]Element),
-		removedElementPairMapByCreatedAt: make(map[string]ElementPair),
-		editedTextElementMapByCreatedAt:  make(map[string]TextElement),
+		elementMapByCreatedAt:                make(map[string]Element),
+		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
+		removedNodeTextElementMapByCreatedAt: make(map[string]TextElement),
 	}
 
 	r.object = root
@@ -87,9 +87,9 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	}
 }
 
-// RegisterEditedTextElement register the given text element to hash table.
-func (r *Root) RegisterEditedTextElement(textType TextElement) {
-	r.editedTextElementMapByCreatedAt[textType.CreatedAt().Key()] = textType
+// RegisterRemovedNodeTextElement register the given text element to hash table.
+func (r *Root) RegisterRemovedNodeTextElement(textType TextElement) {
+	r.removedNodeTextElementMapByCreatedAt[textType.CreatedAt().Key()] = textType
 }
 
 // DeepCopy copies itself deeply.
@@ -108,10 +108,10 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) int {
 		}
 	}
 
-	for _, text := range r.editedTextElementMapByCreatedAt {
+	for _, text := range r.removedNodeTextElementMapByCreatedAt {
 		removedNodeCnt := text.cleanupRemovedNodes(ticket)
 		if removedNodeCnt > 0 {
-			delete(r.editedTextElementMapByCreatedAt, text.CreatedAt().Key())
+			delete(r.removedNodeTextElementMapByCreatedAt, text.CreatedAt().Key())
 		}
 		count += removedNodeCnt
 	}
@@ -135,7 +135,7 @@ func (r *Root) GarbageLen() int {
 		}
 	}
 
-	for _, text := range r.editedTextElementMapByCreatedAt {
+	for _, text := range r.removedNodeTextElementMapByCreatedAt {
 		count += text.removedNodesLen()
 	}
 

@@ -103,6 +103,17 @@ func (pos *RGATreeSplitNodePos) RelativeOffset() int {
 	return pos.relativeOffset
 }
 
+// Compare compares the offset between RGATreeSplitNodePos.
+func (pos *RGATreeSplitNodePos) Compare(other *RGATreeSplitNodePos) int {
+	if pos.relativeOffset > other.relativeOffset {
+		return 1
+	} else if pos.relativeOffset < other.relativeOffset {
+		return -1
+	}
+
+	return 0
+}
+
 type Selection struct {
 	from      *RGATreeSplitNodePos
 	to        *RGATreeSplitNodePos
