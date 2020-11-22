@@ -21,13 +21,12 @@ import (
 	"testing"
 	"time"
 
-	time2 "github.com/yorkie-team/yorkie/pkg/document/time"
-
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	time2 "github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 func TestConverter(t *testing.T) {
