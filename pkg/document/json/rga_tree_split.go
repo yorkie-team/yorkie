@@ -222,14 +222,14 @@ func (t *RGATreeSplitNode) Value() RGATreeSplitValue {
 	return t.value
 }
 
-// removedNodesMapKey is a key of removedNodesMap.
+// removedNodeMapKey is a key of removedNodeMap.
 // The shape of the key is '{createdAt.Key()}:{offset}'.
-type removedNodesMapKey string
+type removedNodeMapKey string
 
-// createRemovedNodesMapKey generates keys for removedNodes.
-func createRemovedNodesMapKey(createdAtKey string, offset int) removedNodesMapKey {
+// createRemovedNodeMapKey generates keys for removedNodes.
+func createRemovedNodeMapKey(createdAtKey string, offset int) removedNodeMapKey {
 	key := fmt.Sprintf("%s:%d", createdAtKey, offset)
-	return removedNodesMapKey(key)
+	return removedNodeMapKey(key)
 }
 
 type RGATreeSplit struct {
@@ -237,7 +237,7 @@ type RGATreeSplit struct {
 	treeByIndex *splay.Tree
 	treeByID    *llrb.Tree
 
-	removedNodesMap map[removedNodesMapKey]*RGATreeSplitNode
+	removedNodeMap map[removedNodeMapKey]*RGATreeSplitNode
 }
 
 func NewRGATreeSplit(initialHead *RGATreeSplitNode) *RGATreeSplit {
@@ -246,10 +246,10 @@ func NewRGATreeSplit(initialHead *RGATreeSplitNode) *RGATreeSplit {
 	treeByID.Put(initialHead.ID(), initialHead)
 
 	return &RGATreeSplit{
-		initialHead:     initialHead,
-		treeByIndex:     treeByIndex,
-		treeByID:        treeByID,
-		removedNodesMap: make(map[removedNodesMapKey]*RGATreeSplitNode),
+		initialHead:    initialHead,
+		treeByIndex:    treeByIndex,
+		treeByID:       treeByID,
+		removedNodeMap: make(map[removedNodeMapKey]*RGATreeSplitNode),
 	}
 }
 
@@ -386,7 +386,7 @@ func (s *RGATreeSplit) edit(
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
-	latestCreatedAtMap, removedNodesMapByCreatedAt := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
+	latestCreatedAtMap, removedNodeMapByCreatedAt := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
 
 	var caretID *RGATreeSplitNodeID
 	if toRight == nil {
@@ -403,8 +403,8 @@ func (s *RGATreeSplit) edit(
 	}
 
 	// 04. add removed node
-	for key, removedNode := range removedNodesMapByCreatedAt {
-		s.removedNodesMap[key] = removedNode
+	for key, removedNode := range removedNodeMapByCreatedAt {
+		s.removedNodeMap[key] = removedNode
 	}
 
 	return caretPos, latestCreatedAtMap
@@ -424,9 +424,9 @@ func (s *RGATreeSplit) deleteNodes(
 	candidates []*RGATreeSplitNode,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	editedAt *time.Ticket,
-) (map[string]*time.Ticket, map[removedNodesMapKey]*RGATreeSplitNode) {
+) (map[string]*time.Ticket, map[removedNodeMapKey]*RGATreeSplitNode) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
-	removedNodesMap := make(map[removedNodesMapKey]*RGATreeSplitNode)
+	removedNodeMap := make(map[removedNodeMapKey]*RGATreeSplitNode)
 
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
@@ -451,12 +451,12 @@ func (s *RGATreeSplit) deleteNodes(
 				createdAtMapByActor[actorIDHex] = createdAt
 			}
 
-			key := createRemovedNodesMapKey(createdAt.Key(), node.id.offset)
-			removedNodesMap[key] = node
+			key := createRemovedNodeMapKey(createdAt.Key(), node.id.offset)
+			removedNodeMap[key] = node
 		}
 	}
 
-	return createdAtMapByActor, removedNodesMap
+	return createdAtMapByActor, removedNodeMap
 }
 
 func (s *RGATreeSplit) marshal() string {
@@ -516,19 +516,19 @@ func (s *RGATreeSplit) AnnotatedString() string {
 
 // removedNodesLen returns length of removed nodes
 func (s *RGATreeSplit) removedNodesLen() int {
-	return len(s.removedNodesMap)
+	return len(s.removedNodeMap)
 }
 
 // cleanupRemovedNodes cleans up nodes that have been removed.
 // The cleaned nodes are subject to garbage collector collection.
 func (s *RGATreeSplit) cleanupRemovedNodes(ticket *time.Ticket) int {
 	count := 0
-	for _, node := range s.removedNodesMap {
+	for _, node := range s.removedNodeMap {
 		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {
 			s.treeByIndex.Delete(node.indexNode)
 			s.purge(node)
 			s.treeByID.Remove(node.id)
-			delete(s.removedNodesMap, removedNodesMapKey(node.createdAt().Key()))
+			delete(s.removedNodeMap, removedNodeMapKey(node.createdAt().Key()))
 			count++
 		}
 	}
