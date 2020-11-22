@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
@@ -64,7 +65,7 @@ func NewConfig() *Config {
 // NewConfigFromFile returns a Config struct for the given conf file.
 func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
-	file, err := os.Open(path)
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		log.Logger.Error(err)
 		return nil, err

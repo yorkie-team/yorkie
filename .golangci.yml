@@ -1,0 +1,15 @@
+linters:
+  enable:
+    - bodyclose
+    - goconst
+    - gocyclo
+    - gofmt
+    - goimports
+# TODO: When adding a rule to force comments on exported methods, be sure to uncomment below.
+#    - golint
+    - goprintffuncname
+    - gosec
+    - interfacer
+    - lll
+    - misspell
+    - nakedret

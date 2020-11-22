@@ -23,6 +23,7 @@ import (
 
 const (
 	BSONSplitter = "$"
+	TokenLen     = 2
 )
 
 type Key struct {
@@ -32,7 +33,7 @@ type Key struct {
 
 func FromBSONKey(bsonKey string) (*Key, error) {
 	splits := strings.Split(bsonKey, BSONSplitter)
-	if len(splits) != 2 {
+	if len(splits) != TokenLen {
 		return nil, errors.New("fail to create key from bson key")
 	}
 

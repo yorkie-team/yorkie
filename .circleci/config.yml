@@ -14,6 +14,7 @@ jobs:
       - checkout
 
       # specify any bash command here prefixed with `run: `
+      - run: make lint
       - run: go get -v -t -d ./...
       - run: go test -race -coverprofile=coverage.txt -covermode=atomic -v ./...
       - codecov/upload:

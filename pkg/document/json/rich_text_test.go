@@ -41,6 +41,10 @@ func TestRichText(t *testing.T) {
 
 		fromPos, toPos = text.CreateRange(0, 1)
 		text.SetStyle(fromPos, toPos, map[string]string{"b": "1"}, ctx.IssueTimeTicket())
-		assert.Equal(t, `[{"attrs":{"b":"1"},"val":"H"},{"attrs":{},"val":"ello "},{"attrs":{},"val":"Yorkie"}]`, text.Marshal())
+		assert.Equal(
+			t,
+			`[{"attrs":{"b":"1"},"val":"H"},{"attrs":{},"val":"ello "},{"attrs":{},"val":"Yorkie"}]`,
+			text.Marshal(),
+		)
 	})
 }

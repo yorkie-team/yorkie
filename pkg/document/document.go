@@ -37,7 +37,7 @@ import (
 // edit the document.
 type Document struct {
 	// doc is the original data of the actual document.
-	doc   *InternalDocument
+	doc *InternalDocument
 
 	// clone is a copy of `doc` to be exposed to the user and is used to
 	// protect `doc`.
