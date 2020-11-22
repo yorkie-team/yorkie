@@ -4,6 +4,6 @@ type EventType string
 
 const (
 	DocumentsChangeEvent    EventType = "documents-change"
-	DocumentsWatchedEvent             = "documents-watched"
-	DocumentsUnwatchedEvent           = "documents-unwatched"
+	DocumentsWatchedEvent   EventType = "documents-watched"
+	DocumentsUnwatchedEvent EventType = "documents-unwatched"
 )

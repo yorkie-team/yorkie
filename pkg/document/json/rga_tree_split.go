@@ -50,7 +50,7 @@ func (t *RGATreeSplitNodeID) Compare(other llrb.Key) int {
 	return 0
 }
 
-func (t *RGATreeSplitNodeID) Equal(other *RGATreeSplitNodeID) bool {
+func (t *RGATreeSplitNodeID) Equal(other llrb.Key) bool {
 	return t.Compare(other) == 0
 }
 

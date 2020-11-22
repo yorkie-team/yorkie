@@ -14,7 +14,7 @@ GO_TOOLS = \
   github.com/gogo/protobuf/protoc-gen-gogo \
   github.com/gogo/protobuf/protoc-gen-gofast \
   golang.org/x/tools/cmd/goimports \
-  github.com/golangci/golangci-lint \
+  github.com/golangci/golangci-lint/cmd/golangci-lint@v1.32.2 \
   golang.org/x/lint/golint
 
 GO_LDFLAGS ?=
@@ -49,8 +49,6 @@ fmt:
 	goimports -w -local "github.com/yorkie-team" $(GO_SRC)
 
 lint: tools
-	 golint ./...
-	 go vet ./...
 	 golangci-lint run ./...
 
 test:

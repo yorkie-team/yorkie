@@ -87,9 +87,7 @@ func ToClientsMap(clientsMap map[string][]string) map[string]*api.Clients {
 
 	for k, clients := range clientsMap {
 		var clientIds []string
-		for _, client := range clients {
-			clientIds = append(clientIds, client)
-		}
+		clientIds = append(clientIds, clients...)
 
 		pbClientsMap[k] = &api.Clients{
 			ClientIds: clientIds,
