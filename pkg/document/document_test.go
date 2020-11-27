@@ -136,7 +136,7 @@ func TestDocument(t *testing.T) {
 		fmt.Println("-----Initial")
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
-		testhelper.PrintBytesSize(bytes)
+		testhelper.PrintSnapshotBytesSize(bytes)
 		testhelper.PrintMemStats()
 
 		// 02. 10,000 integers
@@ -159,7 +159,7 @@ func TestDocument(t *testing.T) {
 		fmt.Println("-----Integers")
 		bytes, err = converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
-		testhelper.PrintBytesSize(bytes)
+		testhelper.PrintSnapshotBytesSize(bytes)
 		testhelper.PrintMemStats()
 
 		// 04. after garbage collection
@@ -167,7 +167,7 @@ func TestDocument(t *testing.T) {
 		fmt.Println("-----After garbage collection")
 		bytes, err = converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
-		testhelper.PrintBytesSize(bytes)
+		testhelper.PrintSnapshotBytesSize(bytes)
 		testhelper.PrintMemStats()
 	})
 

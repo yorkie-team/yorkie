@@ -23,11 +23,13 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
+// RichTextProxy is a proxy representing RichText.
 type RichTextProxy struct {
 	*json.RichText
 	context *change.Context
 }
 
+// NewRichTextProxy creates a new instance of RichTextProxy.
 func NewRichTextProxy(ctx *change.Context, text *json.RichText) *RichTextProxy {
 	return &RichTextProxy{
 		RichText: text,
@@ -35,6 +37,7 @@ func NewRichTextProxy(ctx *change.Context, text *json.RichText) *RichTextProxy {
 	}
 }
 
+// Edit edits the given range with the given content and attributes.
 func (p *RichTextProxy) Edit(from, to int, content string, attributes map[string]string) *RichTextProxy {
 	if from > to {
 		panic("from should be less than or equal to to")
@@ -68,6 +71,7 @@ func (p *RichTextProxy) Edit(from, to int, content string, attributes map[string
 	return p
 }
 
+// SetStyle applies the style of the given range.
 func (p *RichTextProxy) SetStyle(from, to int, attributes map[string]string) *RichTextProxy {
 	if from > to {
 		panic("from should be less than or equal to to")

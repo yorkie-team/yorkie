@@ -48,12 +48,14 @@ type fieldViolation struct {
 	description string
 }
 
+// Config is the configuration for creating a Server instance.
 type Config struct {
 	Port     int
 	CertFile string
 	KeyFile  string
 }
 
+// Server is a normal server that processes the logic requested by the client.
 type Server struct {
 	conf       *Config
 	grpcServer *grpc.Server
@@ -93,10 +95,12 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	return rpcServer, nil
 }
 
+// Start starts this server by opening the rpc port.
 func (s *Server) Start() error {
 	return s.listenAndServeGRPC()
 }
 
+// Shutdown shuts down this server.
 func (s *Server) Shutdown(graceful bool) {
 	if graceful {
 		s.grpcServer.GracefulStop()
@@ -105,6 +109,7 @@ func (s *Server) Shutdown(graceful bool) {
 	}
 }
 
+// ActivateClient activates the given client.
 func (s *Server) ActivateClient(
 	ctx context.Context,
 	req *api.ActivateClientRequest,
@@ -130,6 +135,7 @@ func (s *Server) ActivateClient(
 	}, nil
 }
 
+// DeactivateClient deactivates the given client.
 func (s *Server) DeactivateClient(
 	ctx context.Context,
 	req *api.DeactivateClientRequest,
@@ -158,6 +164,7 @@ func (s *Server) DeactivateClient(
 	}, nil
 }
 
+// AttachDocument attaches the given document to the client.
 func (s *Server) AttachDocument(
 	ctx context.Context,
 	req *api.AttachDocumentRequest,
@@ -206,6 +213,7 @@ func (s *Server) AttachDocument(
 	}, nil
 }
 
+// DetachDocument detaches the given document to the client.
 func (s *Server) DetachDocument(
 	ctx context.Context,
 	req *api.DetachDocumentRequest,
@@ -234,7 +242,7 @@ func (s *Server) DetachDocument(
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if err := clientInfo.CheckDocumentAttached(docInfo.ID.Hex()); err != nil {
+	if err := clientInfo.EnsureDocumentAttached(docInfo.ID.Hex()); err != nil {
 		if err == types.ErrClientNotActivated || err == types.ErrDocumentNotAttached {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
@@ -254,6 +262,8 @@ func (s *Server) DetachDocument(
 	}, nil
 }
 
+// PushPull stores the changes sent by the client and delivers the changes
+// accumulated in the agent to the client.
 func (s *Server) PushPull(
 	ctx context.Context,
 	req *api.PushPullRequest,
@@ -283,7 +293,7 @@ func (s *Server) PushPull(
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if err := clientInfo.CheckDocumentAttached(docInfo.ID.Hex()); err != nil {
+	if err := clientInfo.EnsureDocumentAttached(docInfo.ID.Hex()); err != nil {
 		if err == types.ErrClientNotActivated || err == types.ErrDocumentNotAttached {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
@@ -300,6 +310,8 @@ func (s *Server) PushPull(
 	}, nil
 }
 
+// WatchDocuments connects the stream to deliver events from the given documents
+// to the requesting client.
 func (s *Server) WatchDocuments(
 	req *api.WatchDocumentsRequest,
 	stream api.Yorkie_WatchDocumentsServer,

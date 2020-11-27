@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 )
 
+// Config is the configuration for creating a Backend instance.
 type Config struct {
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.

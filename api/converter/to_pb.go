@@ -82,6 +82,7 @@ func ToDocumentKeys(keys ...*key.Key) []*api.DocumentKey {
 	return pbKeys
 }
 
+// ToClientsMap converts the given model to Protobuf format.
 func ToClientsMap(clientsMap map[string][]string) map[string]*api.Clients {
 	pbClientsMap := make(map[string]*api.Clients)
 

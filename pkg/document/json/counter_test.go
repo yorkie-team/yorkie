@@ -19,7 +19,7 @@ package json_test
 import (
 	"math"
 	"testing"
-	time2 "time"
+	defaultTime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -82,7 +82,7 @@ func TestCounter(t *testing.T) {
 		unsupportedTest("str")
 		unsupportedTest(true)
 		unsupportedTest([]byte{2})
-		unsupportedTest(time2.Now())
+		unsupportedTest(defaultTime.Now())
 
 		assert.Equal(t, integer.Marshal(), "23")
 		assert.Equal(t, long.Marshal(), "28")

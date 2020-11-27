@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/pq"
 )
 
+// RHTPQMapNode is a node of RHTPQMap.
 type RHTPQMapNode struct {
 	key  string
 	elem Element
@@ -38,10 +39,13 @@ func newRHTPQMapNode(key string, elem Element) *RHTPQMapNode {
 	}
 }
 
+// Remove removes this node. It only marks the deleted time (tombstone).
 func (n *RHTPQMapNode) Remove(removedAt *time.Ticket) {
 	n.elem.Remove(removedAt)
 }
 
+// Less is the implementation of the PriorityQueue Value interface. In RHTPQMap,
+// elements inserted later must be exposed above.
 func (n *RHTPQMapNode) Less(other pq.Value) bool {
 	node := other.(*RHTPQMapNode)
 	return n.elem.CreatedAt().After(node.elem.CreatedAt())
@@ -51,15 +55,20 @@ func (n *RHTPQMapNode) isRemoved() bool {
 	return n.elem.RemovedAt() != nil
 }
 
+// Key returns the key of this node.
 func (n *RHTPQMapNode) Key() string {
 	return n.key
 }
 
+// Element returns the element of this node.
 func (n *RHTPQMapNode) Element() Element {
 	return n.elem
 }
 
-// RHTPriorityQueueMap is replicated hash table.
+// RHTPriorityQueueMap is a hashtable with logical clock(Replicated hashtable).
+// The difference from RHT is that it keeps multiple values in one key. Using
+// Max Heap, the recently inserted value from the logical clock is returned
+// to the outside.
 type RHTPriorityQueueMap struct {
 	nodeQueueMapByKey  map[string]*pq.PriorityQueue
 	nodeMapByCreatedAt map[string]*RHTPQMapNode

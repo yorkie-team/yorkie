@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
+// BytesToObject creates an Object from the given byte array.
 func BytesToObject(snapshot []byte) (*json.Object, error) {
 	if snapshot == nil {
 		return json.NewObject(json.NewRHTPriorityQueueMap(), time.InitialTicket), nil

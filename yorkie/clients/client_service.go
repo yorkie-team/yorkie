@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/types"
 )
 
+// Activate activates the given client.
 func Activate(
 	ctx context.Context,
 	be *backend.Backend,
@@ -32,6 +33,7 @@ func Activate(
 	return be.Mongo.ActivateClient(ctx, clientKey)
 }
 
+// Deactivate deactivates the given client.
 func Deactivate(
 	ctx context.Context,
 	be *backend.Backend,
@@ -40,6 +42,7 @@ func Deactivate(
 	return be.Mongo.DeactivateClient(ctx, clientID)
 }
 
+// FindClientAndDocument finds the client and the document.
 func FindClientAndDocument(
 	ctx context.Context,
 	be *backend.Backend,

@@ -25,8 +25,11 @@ import (
 const actorIDSize = 12
 
 var (
+	// InitialActorID represents the initial value of ActorID.
 	InitialActorID = &ActorID{}
-	MaxActorID     = &ActorID{
+
+	// MaxActorID represents the maximum value of ActorID.
+	MaxActorID = &ActorID{
 		math.MaxUint8,
 		math.MaxUint8,
 		math.MaxUint8,

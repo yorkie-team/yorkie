@@ -51,11 +51,13 @@ type Config struct {
 	PingTimeoutSec       defaultTime.Duration `json:"PingTimeoutSec"`
 }
 
+// Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
 	config *Config
 	client *mongo.Client
 }
 
+// NewClient creates an instance of Client.
 func NewClient(conf *Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
@@ -93,6 +95,7 @@ func NewClient(conf *Config) (*Client, error) {
 	}, nil
 }
 
+// Close all resources of this client.
 func (c *Client) Close() error {
 	if err := c.client.Disconnect(context.Background()); err != nil {
 		log.Logger.Error(err)
@@ -102,6 +105,7 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// ActivateClient activates the client of the given key.
 func (c *Client) ActivateClient(ctx context.Context, key string) (*types.ClientInfo, error) {
 	clientInfo := types.ClientInfo{}
 	if err := c.withCollection(ColClients, func(col *mongo.Collection) error {
@@ -147,6 +151,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*types.ClientI
 	return &clientInfo, nil
 }
 
+// DeactivateClient deactivates the client of the given ID.
 func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.ClientInfo, error) {
 	clientInfo := types.ClientInfo{}
 	if err := c.withCollection(ColClients, func(col *mongo.Collection) error {
@@ -181,6 +186,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.
 	return &clientInfo, nil
 }
 
+// FindClientInfoByID finds the client of the given ID.
 func (c *Client) FindClientInfoByID(ctx context.Context, clientID string) (*types.ClientInfo, error) {
 	var client types.ClientInfo
 
@@ -211,18 +217,21 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID string) (*type
 	return &client, nil
 }
 
+// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
+// after handling PushPull.
 func (c *Client) UpdateClientInfoAfterPushPull(
 	ctx context.Context,
 	clientInfo *types.ClientInfo,
 	docInfo *types.DocInfo,
 ) error {
 	return c.withCollection(ColClients, func(col *mongo.Collection) error {
+		docID := docInfo.ID.Hex()
 		result := col.FindOneAndUpdate(ctx, bson.M{
 			"key": clientInfo.Key,
 		}, bson.M{
 			"$set": bson.M{
-				"documents." + docInfo.ID.Hex(): clientInfo.Documents[docInfo.ID.Hex()],
-				"updated_at":                    clientInfo.UpdatedAt,
+				"documents." + docID: clientInfo.Documents[docID],
+				"updated_at":         clientInfo.UpdatedAt,
 			},
 		})
 
@@ -239,6 +248,9 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	})
 }
 
+// FindDocInfoByKey finds the document of the given key. If the
+// createDocIfNotExist condition is true, create the document if it does not
+// exist.
 func (c *Client) FindDocInfoByKey(
 	ctx context.Context,
 	clientInfo *types.ClientInfo,
@@ -298,6 +310,7 @@ func (c *Client) FindDocInfoByKey(
 	return &docInfo, nil
 }
 
+// CreateChangeInfos stores the given changes.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
 	docID primitive.ObjectID,
@@ -338,6 +351,7 @@ func (c *Client) CreateChangeInfos(
 	})
 }
 
+// CreateSnapshotInfo stores the snapshot of the given document.
 func (c *Client) CreateSnapshotInfo(
 	ctx context.Context,
 	docID primitive.ObjectID,
@@ -363,6 +377,7 @@ func (c *Client) CreateSnapshotInfo(
 	})
 }
 
+// UpdateDocInfo updates the given document.
 func (c *Client) UpdateDocInfo(
 	ctx context.Context,
 	docInfo *types.DocInfo,
@@ -392,6 +407,7 @@ func (c *Client) UpdateDocInfo(
 	})
 }
 
+// FindChangeInfosBetweenServerSeqs returns the changes between two server sequences.
 func (c *Client) FindChangeInfosBetweenServerSeqs(
 	ctx context.Context,
 	docID primitive.ObjectID,
@@ -446,6 +462,8 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	return changes, nil
 }
 
+// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
+// and returns the min synced ticket.
 func (c *Client) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
 	clientInfo *types.ClientInfo,
@@ -522,6 +540,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	return ticket, nil
 }
 
+// FindLastSnapshotInfo finds the last snapshot of the given document.
 func (c *Client) FindLastSnapshotInfo(
 	ctx context.Context,
 	docID primitive.ObjectID,

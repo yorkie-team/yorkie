@@ -20,13 +20,15 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	time2 "time"
+	defaultTime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// ValueType represents the type of Primitive value.
 type ValueType int
 
+// The types of values that Primitive can have are as follows.
 const (
 	Null ValueType = iota
 	Boolean
@@ -59,7 +61,7 @@ func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 		return value
 	case Date:
 		v := int64(binary.LittleEndian.Uint64(value))
-		return time2.Unix(v, 0)
+		return defaultTime.Unix(v, 0)
 	}
 
 	panic("unsupported type")
@@ -90,12 +92,11 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 				value:     int64(val),
 				createdAt: createdAt,
 			}
-		} else {
-			return &Primitive{
-				valueType: Integer,
-				value:     val,
-				createdAt: createdAt,
-			}
+		}
+		return &Primitive{
+			valueType: Integer,
+			value:     val,
+			createdAt: createdAt,
 		}
 	case int64:
 		return &Primitive{
@@ -121,7 +122,7 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 			value:     val,
 			createdAt: createdAt,
 		}
-	case time2.Time:
+	case defaultTime.Time:
 		return &Primitive{
 			valueType: Date,
 			value:     val,
@@ -156,7 +157,7 @@ func (p *Primitive) Bytes() []byte {
 		return []byte(val)
 	case []byte:
 		return val
-	case time2.Time:
+	case defaultTime.Time:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], uint64(val.UTC().Unix()))
 		return bytes[:]
@@ -183,7 +184,7 @@ func (p *Primitive) Marshal() string {
 		// {"a":{"0":1,"1":2},"b":2}
 		return fmt.Sprintf("\"%s\"", p.value)
 	case Date:
-		return p.value.(time2.Time).Format(time2.RFC3339)
+		return p.value.(defaultTime.Time).Format(defaultTime.RFC3339)
 	}
 
 	panic("unsupported type")

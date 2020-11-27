@@ -33,6 +33,8 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/types"
 )
 
+// PushPull stores the given changes and returns accumulated changes of the
+// given document.
 func PushPull(
 	ctx context.Context,
 	be *backend.Backend,
@@ -132,7 +134,7 @@ func pushChanges(
 	pack *change.Pack,
 	initialServerSeq uint64,
 ) (*checkpoint.Checkpoint, []*change.Change, error) {
-	cp := clientInfo.GetCheckpoint(docInfo.ID)
+	cp := clientInfo.Checkpoint(docInfo.ID)
 
 	var pushedChanges []*change.Change
 	for _, c := range pack.Changes {
