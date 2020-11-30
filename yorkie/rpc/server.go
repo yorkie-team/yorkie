@@ -309,7 +309,7 @@ func (s *Server) WatchDocuments(
 		docKeys = append(docKeys, docKey.BSONKey())
 	}
 
-	subscription, peersMap, err := s.watchDocs(req.ClientId, docKeys)
+	subscription, peersMap, err := s.watchDocs(req.ClientId, req.ClientMeta, docKeys)
 	if err != nil {
 		log.Logger.Error(err)
 		return err
@@ -344,6 +344,7 @@ func (s *Server) WatchDocuments(
 				Body: &api.WatchDocumentsResponse_Event_{
 					Event: &api.WatchDocumentsResponse_Event{
 						ClientId:     event.Publisher.String(),
+						ClientMeta:   event.Meta,
 						EventType:    converter.ToEventType(event.Type),
 						DocumentKeys: converter.ToDocumentKeys(k),
 					},
@@ -377,11 +378,13 @@ func (s *Server) listenAndServeGRPC() error {
 
 func (s *Server) watchDocs(
 	clientID string,
+	clientMeta map[string]string,
 	docKeys []string,
-) (*pubsub.Subscription, map[string][]string, error) {
+) (*pubsub.Subscription, map[string][]pkgTypes.Client, error) {
 	subscription, peersMap, err := s.backend.PubSub.Subscribe(
 		time.ActorIDFromHex(clientID),
 		docKeys,
+		clientMeta,
 	)
 	if err != nil {
 		log.Logger.Error(err)
@@ -396,6 +399,7 @@ func (s *Server) watchDocs(
 				Type:      pkgTypes.DocumentsWatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
+				Meta:      subscription.Meta(),
 			},
 		)
 	}
@@ -414,6 +418,7 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription
 				Type:      pkgTypes.DocumentsUnwatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
+				Meta:      subscription.Meta(),
 			},
 		)
 	}

@@ -17,6 +17,7 @@
 package pubsub
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/google/uuid"
@@ -26,11 +27,16 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
+var (
+	ErrEmptyTopics = errors.New("empty topics")
+)
+
 // DocEvent represents events that occur related to the document.
 type DocEvent struct {
 	Type      types.EventType
 	DocKey    string
 	Publisher *time.ActorID
+	Meta      map[string]string
 }
 
 // Subscription represents the subscription of a subscriber. It is used across
@@ -38,14 +44,16 @@ type DocEvent struct {
 type Subscription struct {
 	id         string
 	subscriber *time.ActorID
+	meta       map[string]string
 	closed     bool
 	events     chan DocEvent
 }
 
-func newSubscription(subscriber *time.ActorID) *Subscription {
+func newSubscription(subscriber *time.ActorID, meta map[string]string) *Subscription {
 	return &Subscription{
 		id:         uuid.New().String(),
 		subscriber: subscriber,
+		meta:       meta,
 		// [Workaround] The channel buffer size below avoids stopping during
 		//   event issuing to the events channel. This bug occurs in the order
 		//   of Publish and Unsubscribe.
@@ -66,6 +74,11 @@ func (s *Subscription) Subscriber() *time.ActorID {
 // Subscriber returns string representation of the subscriber.
 func (s *Subscription) SubscriberID() string {
 	return s.subscriber.String()
+}
+
+// Meta returns metadata associated with this subscription.
+func (s *Subscription) Meta() map[string]string {
+	return s.meta
 }
 
 // Close closes all resources of this Subscription.
@@ -128,14 +141,19 @@ func New() *PubSub {
 func (m *PubSub) Subscribe(
 	subscriber *time.ActorID,
 	topics []string,
-) (*Subscription, map[string][]string, error) {
+	meta map[string]string,
+) (*Subscription, map[string][]types.Client, error) {
+	if len(topics) < 1 {
+		return nil, nil, ErrEmptyTopics
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	log.Logger.Debugf(`Subscribe(%s,%s) Start`, topics[0], subscriber.String())
 
-	subscription := newSubscription(subscriber)
-	peersMap := make(map[string][]string)
+	subscription := newSubscription(subscriber, meta)
+	peersMap := make(map[string][]types.Client)
 
 	for _, topic := range topics {
 		if _, ok := m.subscriptionsMap[topic]; !ok {
@@ -143,9 +161,12 @@ func (m *PubSub) Subscribe(
 		}
 		m.subscriptionsMap[topic].Add(subscription)
 
-		var peers []string
+		var peers []types.Client
 		for _, sub := range m.subscriptionsMap[topic].Map() {
-			peers = append(peers, sub.subscriber.String())
+			peers = append(peers, types.Client{
+				ID:   sub.subscriber.String(),
+				Meta: sub.meta,
+			})
 		}
 		peersMap[topic] = peers
 	}

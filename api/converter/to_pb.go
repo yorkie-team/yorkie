@@ -82,15 +82,20 @@ func ToDocumentKeys(keys ...*key.Key) []*api.DocumentKey {
 	return pbKeys
 }
 
-func ToClientsMap(clientsMap map[string][]string) map[string]*api.Clients {
+func ToClientsMap(clientsMap map[string][]types.Client) map[string]*api.Clients {
 	pbClientsMap := make(map[string]*api.Clients)
 
 	for k, clients := range clientsMap {
-		var clientIds []string
-		clientIds = append(clientIds, clients...)
+		var apiClients []*api.Client
+		for _, client := range clients {
+			apiClients = append(apiClients, &api.Client{
+				ClientId:   client.ID,
+				ClientMeta: client.Meta,
+			})
+		}
 
 		pbClientsMap[k] = &api.Clients{
-			ClientIds: clientIds,
+			Clients: apiClients,
 		}
 	}
 
