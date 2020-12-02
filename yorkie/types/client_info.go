@@ -68,7 +68,7 @@ func (i *ClientInfo) AttachDocument(docID primitive.ObjectID) error {
 
 	hexDocID := docID.Hex()
 
-	if i.hasDocument(hexDocID) {
+	if i.hasDocument(hexDocID) && i.Documents[hexDocID].Status == DocumentAttached {
 		return ErrDocumentAlreadyAttached
 	}
 
