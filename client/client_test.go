@@ -124,6 +124,14 @@ func TestClientAndDocument(t *testing.T) {
 		err = c1.Detach(ctx, doc)
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
+
+		err = c1.Attach(ctx, doc)
+		assert.NoError(t, err)
+		assert.True(t, doc.IsAttached())
+
+		err = c1.Detach(ctx, doc)
+		assert.NoError(t, err)
+		assert.False(t, doc.IsAttached())
 	})
 
 	t.Run("causal nested array test", func(t *testing.T) {
