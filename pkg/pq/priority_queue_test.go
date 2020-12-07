@@ -53,6 +53,7 @@ func exist(toFind int, values []pq.Value) bool {
 func TestPQ(t *testing.T) {
 	t.Run("priority queue test", func(t *testing.T) {
 		pq := pq.NewPriorityQueue()
+
 		testNums := []int{10, 7, 1, 9, 4, 11, 5, 3, 6, 12, 8, 2}
 		for _, testNum := range testNums {
 			pq.Push(newTestValue(testNum))
@@ -74,6 +75,40 @@ func TestPQ(t *testing.T) {
 		for i := 4; i <= 12; i++ {
 			assert.Equal(t, newTestValue(i), pq.Peek())
 			assert.Equal(t, newTestValue(i), pq.Pop())
+		}
+		assert.Equal(t, 0, pq.Len())
+
+		// Release
+		for i := 1; i <= 12; i++ {
+			pq.Push(NewTestValue(i))
+		}
+
+		for i := 1; i <= 12; i++ {
+			pq.Release(NewTestValue(i))
+			assert.False(t, exist(i, pq.Values()))
+		}
+		assert.Equal(t, 0, pq.Len())
+
+		for i := 1; i <= 12; i++ {
+			pq.Push(NewTestValue(i))
+		}
+
+		for i := 12; i >= 1; i-- {
+			pq.Release(NewTestValue(i))
+			assert.False(t, exist(i, pq.Values()))
+		}
+		assert.Equal(t, 0, pq.Len())
+
+		for i := 1; i <= 12; i++ {
+			pq.Push(NewTestValue(i))
+		}
+
+		pq.Release(NewTestValue(13))
+		assert.Equal(t, len(testNums), len(pq.Values()))
+
+		for _, testNum := range testNums {
+			pq.Release(NewTestValue(testNum))
+			assert.False(t, exist(testNum, pq.Values()))
 		}
 
 		assert.Equal(t, 0, pq.Len())
