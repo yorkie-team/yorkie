@@ -33,3 +33,7 @@ Please use the following format for linking documentation:
 ```docs
 
 ```
+
+**Checklist**:
+- [ ] Added relevant tests or not required
+- [ ] Didn't break anything
