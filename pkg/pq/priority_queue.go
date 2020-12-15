@@ -67,21 +67,14 @@ func (pq *PriorityQueue) Release(value Value) {
 		return
 	}
 
-	// Item to replace
-	lastIdx := (*pq.queue).Len() - 1
+	lastItem := pq.queue.Pop().(*Item)
 
-	lastItem := (*pq.queue)[lastIdx]
-	lastItem.index = idx
+	if (*pq.queue).Len() == 0 || idx == (*pq.queue).Len() {
+		return
+	}
 
 	(*pq.queue)[idx] = lastItem
 	heap.Fix(pq.queue, idx)
-
-	(*pq.queue)[lastIdx] = nil
-	(*pq.queue) = (*pq.queue)[:lastIdx]
-
-	if (*pq.queue).Len() == 0 {
-		pq.queue = &internalQueue{}
-	}
 }
 
 func (pq *PriorityQueue) findIdx(fn func(*Item) bool) int {
