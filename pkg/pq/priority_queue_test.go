@@ -50,38 +50,51 @@ func exist(toFind int, values []pq.Value) bool {
 	return ret
 }
 
-func TestPQ(t *testing.T) {
-	t.Run("priority queue test", func(t *testing.T) {
-		pq := pq.NewPriorityQueue()
+func setUpTestNums() *pq.PriorityQueue {
+	pq := pq.NewPriorityQueue()
+	testNums := []int{10, 7, 1, 9, 4, 11, 5, 3, 6, 12, 8, 2}
+	for _, testNum := range testNums {
+		pq.Push(NewTestValue(testNum))
+	}
 
-		testNums := []int{10, 7, 1, 9, 4, 11, 5, 3, 6, 12, 8, 2}
-		for _, testNum := range testNums {
-			pq.Push(newTestValue(testNum))
-		}
-		for _, testNum := range testNums {
+	return pq
+}
+
+func TestPQ(t *testing.T) {
+	t.Run("priority queue push", func(t *testing.T) {
+		pq := setUpTestNums()
+
+		for _, testNum := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} {
 			assert.True(t, exist(testNum, pq.Values()))
 		}
+	})
+
+	t.Run("priority queue peek", func(t *testing.T) {
+		pq := setUpTestNums()
+
 		assert.Equal(t, 12, pq.Len())
-		assert.Equal(t, newTestValue(1), pq.Peek())
-		assert.Equal(t, newTestValue(1), pq.Pop())
-		assert.Equal(t, 11, pq.Len())
-		assert.False(t, exist(1, pq.Values()))
-		assert.Equal(t, newTestValue(2), pq.Peek())
+		assert.Equal(t, NewTestValue(1), pq.Peek())
+		assert.Equal(t, 12, pq.Len())
+		assert.True(t, exist(1, pq.Values()))
+	})
+
+	t.Run("priority queue pop", func(t *testing.T) {
+		pq := setUpTestNums()
+
+		assert.Equal(t, NewTestValue(1), pq.Pop())
 		assert.Equal(t, pq.Peek(), pq.Pop())
+		assert.Equal(t, 10, pq.Len())
 
-		pq.Release(newTestValue(3))
-		assert.False(t, exist(3, pq.Values()))
-
-		for i := 4; i <= 12; i++ {
-			assert.Equal(t, newTestValue(i), pq.Peek())
-			assert.Equal(t, newTestValue(i), pq.Pop())
+		tmp := []int{}
+		for pq.Len() != 0 {
+			tmp = append(tmp, (pq.Pop()).(testValue).value)
 		}
-		assert.Equal(t, 0, pq.Len())
 
-		// Release
-		for i := 1; i <= 12; i++ {
-			pq.Push(NewTestValue(i))
-		}
+		assert.EqualValues(t, tmp, []int{3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+	})
+
+	t.Run("priority queue release", func(t *testing.T) {
+		pq := setUpTestNums()
 
 		for i := 1; i <= 12; i++ {
 			pq.Release(NewTestValue(i))
@@ -89,9 +102,7 @@ func TestPQ(t *testing.T) {
 		}
 		assert.Equal(t, 0, pq.Len())
 
-		for i := 1; i <= 12; i++ {
-			pq.Push(NewTestValue(i))
-		}
+		pq = setUpTestNums()
 
 		for i := 12; i >= 1; i-- {
 			pq.Release(NewTestValue(i))
@@ -99,18 +110,10 @@ func TestPQ(t *testing.T) {
 		}
 		assert.Equal(t, 0, pq.Len())
 
-		for i := 1; i <= 12; i++ {
-			pq.Push(NewTestValue(i))
-		}
+		pq = setUpTestNums()
 
+		pqLen := len(pq.Values())
 		pq.Release(NewTestValue(13))
-		assert.Equal(t, len(testNums), len(pq.Values()))
-
-		for _, testNum := range testNums {
-			pq.Release(NewTestValue(testNum))
-			assert.False(t, exist(testNum, pq.Values()))
-		}
-
-		assert.Equal(t, 0, pq.Len())
+		assert.Equal(t, pqLen, len(pq.Values()))
 	})
 }
