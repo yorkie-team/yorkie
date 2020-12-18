@@ -1,35 +1,22 @@
 YORKIE_VERSION := 0.1.0
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
-
-DATE := $(shell date "+%Y-%m-%d")
-
+BUILD_DATE := $(shell date "+%Y-%m-%d")
 GO_PROJECT = github.com/yorkie-team/yorkie
-
 GO_SRC := $(shell find . -path ./vendor -prune -o -type f -name '*.go' -print)
 
-GO_TOOLS = \
-  github.com/gogo/protobuf/proto \
-  github.com/gogo/protobuf/gogoproto \
-  github.com/gogo/protobuf/protoc-gen-gogo \
-  github.com/gogo/protobuf/protoc-gen-gofast \
-  golang.org/x/tools/cmd/goimports \
-  github.com/golangci/golangci-lint/cmd/golangci-lint@v1.32.2 \
-  golang.org/x/lint/golint
-
-GO_LDFLAGS ?=
-
 # inject the version number into the golang version package using the -X linker flag
+GO_LDFLAGS ?=
 GO_LDFLAGS += -X ${GO_PROJECT}/pkg/version.GitCommit=${GIT_COMMIT}
 GO_LDFLAGS += -X ${GO_PROJECT}/pkg/version.Version=${YORKIE_VERSION}
-GO_LDFLAGS += -X ${GO_PROJECT}/pkg/version.BuildDate=${DATE}
+GO_LDFLAGS += -X ${GO_PROJECT}/pkg/version.BuildDate=${BUILD_DATE}
 
 EXECUTABLE = ./bin/yorkie
 
 tools:
-	go get $(GO_TOOLS)
+	go generate -tags tools tools/tools.go
 
-proto: tools
+proto:
 	protoc api/yorkie.proto \
 -I=. \
 -I=$(GOPATH)/src \
@@ -46,9 +33,8 @@ docker:
 
 fmt:
 	gofmt -s -w $(GO_SRC)
-	goimports -w -local "github.com/yorkie-team" $(GO_SRC)
 
-lint: tools
+lint:
 	 golangci-lint run ./...
 
 test:
