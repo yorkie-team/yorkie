@@ -23,8 +23,13 @@ import (
 // Container represents Array or Object.
 type Container interface {
 	Element
+
 	Purge(child Element)
+
 	Descendants(callback func(elem Element, parent Container) bool)
+
+	// DeleteByCreatedAt removes the given element from this container.
+	DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element
 }
 
 // Element represents JSON element.

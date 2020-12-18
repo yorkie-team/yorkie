@@ -21,13 +21,22 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// Move is an operation representing moving an element to an Array.
 type Move struct {
+	// parentCreatedAt is the creation time of the Array that executes Move.
 	parentCreatedAt *time.Ticket
-	prevCreatedAt   *time.Ticket
-	createdAt       *time.Ticket
-	executedAt      *time.Ticket
+
+	// prevCreatedAt is the creation time of the previous element.
+	prevCreatedAt *time.Ticket
+
+	// createdAt is the creation time of the target element to move.
+	createdAt *time.Ticket
+
+	// executedAt is the time the operation was executed.
+	executedAt *time.Ticket
 }
 
+// NewMove creates a new instance of Move.
 func NewMove(
 	parentCreatedAt *time.Ticket,
 	prevCreatedAt *time.Ticket,
@@ -42,6 +51,7 @@ func NewMove(
 	}
 }
 
+// Execute executes this operation on the given document(`root`).
 func (o *Move) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
@@ -55,22 +65,27 @@ func (o *Move) Execute(root *json.Root) error {
 	return nil
 }
 
+// CreatedAt returns the creation time of the target element.
 func (o *Move) CreatedAt() *time.Ticket {
 	return o.createdAt
 }
 
+// ParentCreatedAt returns the creation time of the Array.
 func (o *Move) ParentCreatedAt() *time.Ticket {
 	return o.parentCreatedAt
 }
 
+// ExecutedAt returns execution time of this operation.
 func (o *Move) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
+// SetActor sets the given actor to this operation.
 func (o *Move) SetActor(actorID *time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 
+// PrevCreatedAt returns the creation time of previous element.
 func (o *Move) PrevCreatedAt() *time.Ticket {
 	return o.prevCreatedAt
 }

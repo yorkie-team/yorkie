@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"net"
 
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -34,7 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
-	pkgTypes "github.com/yorkie-team/yorkie/pkg/types"
+	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
@@ -48,12 +48,14 @@ type fieldViolation struct {
 	description string
 }
 
+// Config is the configuration for creating a Server instance.
 type Config struct {
 	Port     int
 	CertFile string
 	KeyFile  string
 }
 
+// Server is a normal server that processes the logic requested by the client.
 type Server struct {
 	conf       *Config
 	grpcServer *grpc.Server
@@ -63,13 +65,13 @@ type Server struct {
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
+		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			unaryInterceptor,
-			grpc_prometheus.UnaryServerInterceptor,
+			grpcprometheus.UnaryServerInterceptor,
 		)),
-		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer(
+		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			streamInterceptor,
-			grpc_prometheus.StreamServerInterceptor,
+			grpcprometheus.StreamServerInterceptor,
 		)),
 	}
 
@@ -88,15 +90,17 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		backend:    be,
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
-	grpc_prometheus.Register(rpcServer.grpcServer)
+	grpcprometheus.Register(rpcServer.grpcServer)
 
 	return rpcServer, nil
 }
 
+// Start starts this server by opening the rpc port.
 func (s *Server) Start() error {
 	return s.listenAndServeGRPC()
 }
 
+// Shutdown shuts down this server.
 func (s *Server) Shutdown(graceful bool) {
 	if graceful {
 		s.grpcServer.GracefulStop()
@@ -105,6 +109,7 @@ func (s *Server) Shutdown(graceful bool) {
 	}
 }
 
+// ActivateClient activates the given client.
 func (s *Server) ActivateClient(
 	ctx context.Context,
 	req *api.ActivateClientRequest,
@@ -130,6 +135,7 @@ func (s *Server) ActivateClient(
 	}, nil
 }
 
+// DeactivateClient deactivates the given client.
 func (s *Server) DeactivateClient(
 	ctx context.Context,
 	req *api.DeactivateClientRequest,
@@ -158,6 +164,7 @@ func (s *Server) DeactivateClient(
 	}, nil
 }
 
+// AttachDocument attaches the given document to the client.
 func (s *Server) AttachDocument(
 	ctx context.Context,
 	req *api.AttachDocumentRequest,
@@ -206,6 +213,7 @@ func (s *Server) AttachDocument(
 	}, nil
 }
 
+// DetachDocument detaches the given document to the client.
 func (s *Server) DetachDocument(
 	ctx context.Context,
 	req *api.DetachDocumentRequest,
@@ -234,7 +242,7 @@ func (s *Server) DetachDocument(
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if err := clientInfo.CheckDocumentAttached(docInfo.ID.Hex()); err != nil {
+	if err := clientInfo.EnsureDocumentAttached(docInfo.ID.Hex()); err != nil {
 		if err == types.ErrClientNotActivated || err == types.ErrDocumentNotAttached {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
@@ -254,6 +262,8 @@ func (s *Server) DetachDocument(
 	}, nil
 }
 
+// PushPull stores the changes sent by the client and delivers the changes
+// accumulated in the agent to the client.
 func (s *Server) PushPull(
 	ctx context.Context,
 	req *api.PushPullRequest,
@@ -283,7 +293,7 @@ func (s *Server) PushPull(
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if err := clientInfo.CheckDocumentAttached(docInfo.ID.Hex()); err != nil {
+	if err := clientInfo.EnsureDocumentAttached(docInfo.ID.Hex()); err != nil {
 		if err == types.ErrClientNotActivated || err == types.ErrDocumentNotAttached {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
@@ -300,6 +310,8 @@ func (s *Server) PushPull(
 	}, nil
 }
 
+// WatchDocuments connects the stream to deliver events from the given documents
+// to the requesting client.
 func (s *Server) WatchDocuments(
 	req *api.WatchDocumentsRequest,
 	stream api.Yorkie_WatchDocumentsServer,
@@ -393,7 +405,7 @@ func (s *Server) watchDocs(
 			subscription.Subscriber(),
 			docKey,
 			pubsub.DocEvent{
-				Type:      pkgTypes.DocumentsWatchedEvent,
+				Type:      pkgtypes.DocumentsWatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
 			},
@@ -411,7 +423,7 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription
 			subscription.Subscriber(),
 			docKey,
 			pubsub.DocEvent{
-				Type:      pkgTypes.DocumentsUnwatchedEvent,
+				Type:      pkgtypes.DocumentsUnwatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
 			},

@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
+// RHTNode is a node of RHT(Replicated Hashtable).
 type RHTNode struct {
 	key       string
 	val       string
@@ -40,6 +41,7 @@ func newRHTNode(key, val string, updatedAt *time.Ticket) *RHTNode {
 	}
 }
 
+// Remove removes this node. It only marks the deleted time (tombstone).
 func (n *RHTNode) Remove(removedAt *time.Ticket) {
 	if n.removedAt == nil || removedAt.After(n.removedAt) {
 		n.removedAt = removedAt
@@ -50,23 +52,28 @@ func (n *RHTNode) isRemoved() bool {
 	return n.removedAt != nil
 }
 
+// Key returns the key of this node.
 func (n *RHTNode) Key() string {
 	return n.key
 }
 
+// Value returns the value of this node.
 func (n *RHTNode) Value() string {
 	return n.val
 }
 
+// UpdatedAt returns the last update time.
 func (n *RHTNode) UpdatedAt() *time.Ticket {
 	return n.updatedAt
 }
 
+// RemovedAt returns the deletion time of this node.
 func (n *RHTNode) RemovedAt() *time.Ticket {
 	return n.removedAt
 }
 
-// RHT is replicated hash table.
+// RHT is a hashtable with logical clock(Replicated hashtable).
+// For more details about RHT: http://csl.skku.edu/papers/jpdc11.pdf
 type RHT struct {
 	nodeMapByKey       map[string]*RHTNode
 	nodeMapByCreatedAt map[string]*RHTNode
@@ -165,7 +172,8 @@ func (rht *RHT) DeepCopy() *RHT {
 	return instance
 }
 
-func (rht *RHT) Marshal() interface{} {
+// Marshal returns the JSON encoding of this hashtable.
+func (rht *RHT) Marshal() string {
 	members := rht.Elements()
 
 	size := len(members)

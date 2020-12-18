@@ -21,16 +21,34 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// RichEdit is an operation representing editing RichText. Most of the same as
+// Edit, but with additional style properties, attributes.
 type RichEdit struct {
-	parentCreatedAt           *time.Ticket
-	from                      *json.RGATreeSplitNodePos
-	to                        *json.RGATreeSplitNodePos
+	// parentCreatedAt is the creation time of the RichText that executes
+	// RichEdit.
+	parentCreatedAt *time.Ticket
+
+	// from represents the start point of the editing range.
+	from *json.RGATreeSplitNodePos
+
+	// to represents the end point of the editing range.
+	to *json.RGATreeSplitNodePos
+
+	// latestCreatedAtMapByActor is a map that stores the latest creation time
+	// by actor for the nodes included in the editing range.
 	latestCreatedAtMapByActor map[string]*time.Ticket
-	content                   string
-	attributes                map[string]string
-	executedAt                *time.Ticket
+
+	// content is the content of text added when editing.
+	content string
+
+	// attributes represents the text style.
+	attributes map[string]string
+
+	// executedAt is the time the operation was executed.
+	executedAt *time.Ticket
 }
 
+// NewRichEdit creates a new instance of RichEdit.
 func NewRichEdit(
 	parentCreatedAt *time.Ticket,
 	from *json.RGATreeSplitNodePos,
@@ -51,6 +69,7 @@ func NewRichEdit(
 	}
 }
 
+// Execute executes this operation on the given document(`root`).
 func (e *RichEdit) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
@@ -64,33 +83,43 @@ func (e *RichEdit) Execute(root *json.Root) error {
 	return nil
 }
 
+// From returns the start point of the editing range.
 func (e *RichEdit) From() *json.RGATreeSplitNodePos {
 	return e.from
 }
 
+// To returns the end point of the editing range.
 func (e *RichEdit) To() *json.RGATreeSplitNodePos {
 	return e.to
 }
 
+// ExecutedAt returns execution time of this operation.
 func (e *RichEdit) ExecutedAt() *time.Ticket {
 	return e.executedAt
 }
 
+// SetActor sets the given actor to this operation.
 func (e *RichEdit) SetActor(actorID *time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
 }
+
+// ParentCreatedAt returns the creation time of the RichText.
 func (e *RichEdit) ParentCreatedAt() *time.Ticket {
 	return e.parentCreatedAt
 }
 
+// Content returns the content of RichEdit.
 func (e *RichEdit) Content() string {
 	return e.content
 }
 
+// Attributes returns the attributes of this Edit.
 func (e *RichEdit) Attributes() map[string]string {
 	return e.attributes
 }
 
+// CreatedAtMapByActor returns the map that stores the latest creation time
+// by actor for the nodes included in the editing range.
 func (e *RichEdit) CreatedAtMapByActor() map[string]*time.Ticket {
 	return e.latestCreatedAtMapByActor
 }

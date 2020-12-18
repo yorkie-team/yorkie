@@ -17,7 +17,7 @@
 package backend
 
 import (
-	defaultSync "sync"
+	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/sync"
@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 )
 
+// Config is the configuration for creating a Backend instance.
 type Config struct {
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
@@ -47,11 +48,11 @@ type Backend struct {
 	closing chan struct{}
 
 	// wgMu blocks concurrent WaitGroup mutation while backend closing
-	wgMu defaultSync.RWMutex
+	wgMu gosync.RWMutex
 
 	// wg is used to wait for the goroutines that depends on the backend state
 	// to exit when closing the backend.
-	wg defaultSync.WaitGroup
+	wg gosync.WaitGroup
 }
 
 // New creates a new instance of Backend.

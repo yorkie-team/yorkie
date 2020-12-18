@@ -23,8 +23,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
-// DocKey is an interface that represents the value of Node.
-// User can extend this interface to use custom value in Node.
+// Value represents the data stored in the nodes of Tree.
 type Value interface {
 	Len() int
 	String() string
@@ -49,6 +48,7 @@ func NewNode(value Value) *Node {
 	return n
 }
 
+// Value returns the value of this Node.
 func (n *Node) Value() Value {
 	return n.value
 }
@@ -171,29 +171,31 @@ func (t *Tree) IndexOf(node *Node) int {
 	return index - node.value.Len()
 }
 
+// Find returns the Node and offset of the given index.
 func (t *Tree) Find(index int) (*Node, int) {
 	node := t.root
+	offset := index
 	for {
-		if node.left != nil && index <= node.leftWeight() {
+		if node.left != nil && offset <= node.leftWeight() {
 			node = node.left
-		} else if node.right != nil && node.leftWeight()+node.value.Len() < index {
-			index -= node.leftWeight() + node.value.Len()
+		} else if node.right != nil && node.leftWeight()+node.value.Len() < offset {
+			offset -= node.leftWeight() + node.value.Len()
 			node = node.right
 		} else {
-			index -= node.leftWeight()
+			offset -= node.leftWeight()
 			break
 		}
 	}
 
-	if index > node.value.Len() {
+	if offset > node.value.Len() {
 		log.Logger.Fatalf(
 			"out of bound of text index: node.length %d, pos %d",
 			node.value.Len(),
-			index,
+			offset,
 		)
 	}
 
-	return node, index
+	return node, offset
 }
 
 // String returns a string containing node values.
@@ -220,6 +222,7 @@ func (t *Tree) AnnotatedString() string {
 	return strings.Join(metaString, "")
 }
 
+// UpdateSubtree recalculates the weight of this node with the value and children.
 func (t *Tree) UpdateSubtree(node *Node) {
 	node.initWeight()
 
@@ -232,6 +235,7 @@ func (t *Tree) UpdateSubtree(node *Node) {
 	}
 }
 
+// Delete deletes the given node from this Tree.
 func (t *Tree) Delete(node *Node) {
 	t.Splay(node)
 

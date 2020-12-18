@@ -58,9 +58,21 @@ func TestSplayTree(t *testing.T) {
 		tree.Splay(nodeB)
 		assert.Equal(t, "[2,2]A2[14,3]B23[9,4]C234[5,5]D2345", tree.AnnotatedString())
 
-		assert.Equal(t, tree.IndexOf(nodeA), 0)
-		assert.Equal(t, tree.IndexOf(nodeB), 2)
-		assert.Equal(t, tree.IndexOf(nodeC), 5)
-		assert.Equal(t, tree.IndexOf(nodeD), 9)
+		assert.Equal(t, 0, tree.IndexOf(nodeA))
+		assert.Equal(t, 2, tree.IndexOf(nodeB))
+		assert.Equal(t, 5, tree.IndexOf(nodeC))
+		assert.Equal(t, 9, tree.IndexOf(nodeD))
+
+		node, offset := tree.Find(1)
+		assert.Equal(t, nodeA, node)
+		assert.Equal(t, 1, offset)
+
+		node, offset = tree.Find(7)
+		assert.Equal(t, nodeC, node)
+		assert.Equal(t, 2, offset)
+
+		node, offset = tree.Find(11)
+		assert.Equal(t, nodeD, node)
+		assert.Equal(t, 2, offset)
 	})
 }

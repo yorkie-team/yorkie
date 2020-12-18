@@ -23,6 +23,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// Logger is the default logger used by Yorkie.
 var Logger *zap.SugaredLogger
 var rawLogger *zap.Logger
 

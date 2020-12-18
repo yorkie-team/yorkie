@@ -21,13 +21,22 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// Select represents an operation that selects an area in the text.
 type Select struct {
+	// parentCreatedAt is the creation time of the Text that executes Select.
 	parentCreatedAt *time.Ticket
-	from            *json.RGATreeSplitNodePos
-	to              *json.RGATreeSplitNodePos
-	executedAt      *time.Ticket
+
+	// from represents the start point of the selection.
+	from *json.RGATreeSplitNodePos
+
+	// to represents the end point of the selection.
+	to *json.RGATreeSplitNodePos
+
+	// executedAt is the time the operation was executed.
+	executedAt *time.Ticket
 }
 
+// NewSelect creates a new instance of Select.
 func NewSelect(
 	parentCreatedAt *time.Ticket,
 	from *json.RGATreeSplitNodePos,
@@ -42,6 +51,7 @@ func NewSelect(
 	}
 }
 
+// Execute executes this operation on the given document(`root`).
 func (s *Select) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(s.parentCreatedAt)
 
@@ -57,21 +67,27 @@ func (s *Select) Execute(root *json.Root) error {
 	return nil
 }
 
+// From returns the start point of the selection.
 func (s *Select) From() *json.RGATreeSplitNodePos {
 	return s.from
 }
 
+// To returns the end point of the selection.
 func (s *Select) To() *json.RGATreeSplitNodePos {
 	return s.to
 }
 
+// ExecutedAt returns execution time of this operation.
 func (s *Select) ExecutedAt() *time.Ticket {
 	return s.executedAt
 }
 
+// SetActor sets the given actor to this operation.
 func (s *Select) SetActor(actorID *time.ActorID) {
 	s.executedAt = s.executedAt.SetActorID(actorID)
 }
+
+// ParentCreatedAt returns the creation time of the Text.
 func (s *Select) ParentCreatedAt() *time.Ticket {
 	return s.parentCreatedAt
 }

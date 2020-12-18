@@ -24,34 +24,43 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
+// InitialTextNode creates a initial node of Text. The text is edited
+// as this node is split into multiple nodes.
 func InitialTextNode() *RGATreeSplitNode {
 	return NewRGATreeSplitNode(initialNodeID, &TextValue{
 		value: "",
 	})
 }
 
+// TextValue is a value of Text.
 type TextValue struct {
 	value string
 }
 
+// NewTextValue creates a value of Text.
 func NewTextValue(value string) *TextValue {
 	return &TextValue{
 		value: value,
 	}
 }
 
+// Len returns the length of this value.
 func (t *TextValue) Len() int {
 	return utf8.RuneCountInString(t.value)
 }
 
+// String returns the string representation of this value.
 func (t *TextValue) String() string {
 	return t.value
 }
 
+// AnnotatedString returns a String containing the meta data of this value
+// for debugging purpose.
 func (t *TextValue) AnnotatedString() string {
 	return t.value
 }
 
+// Split splits this value by the given offset.
 func (t *TextValue) Split(offset int) RGATreeSplitValue {
 	value := t.value
 	r := []rune(value)
@@ -84,6 +93,7 @@ func NewText(elements *RGATreeSplit, createdAt *time.Ticket) *Text {
 	}
 }
 
+// Marshal returns the JSON encoding of this text.
 func (t *Text) Marshal() string {
 	return fmt.Sprintf("\"%s\"", t.rgaTreeSplit.marshal())
 }
@@ -142,6 +152,7 @@ func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNod
 	return t.rgaTreeSplit.createRange(from, to)
 }
 
+// Edit edits the given range with the given content.
 func (t *Text) Edit(
 	from,
 	to *RGATreeSplitNodePos,
@@ -164,6 +175,7 @@ func (t *Text) Edit(
 	return cursorPos, latestCreatedAtMapByActor
 }
 
+// Select stores that the given range has been selected.
 func (t *Text) Select(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
@@ -186,6 +198,7 @@ func (t *Text) Select(
 	}
 }
 
+// Nodes returns the internal nodes of this text.
 func (t *Text) Nodes() []*RGATreeSplitNode {
 	return t.rgaTreeSplit.nodes()
 }

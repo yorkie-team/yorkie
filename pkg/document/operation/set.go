@@ -21,13 +21,23 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// Set represents an operation that stores the value corresponding to the
+// given key in the Object.
 type Set struct {
+	// parentCreatedAt is the creation time of the Object that executes Set.
 	parentCreatedAt *time.Ticket
-	key             string
-	value           json.Element
-	executedAt      *time.Ticket
+
+	// key corresponds to the key of the object to set the value.
+	key string
+
+	// value is the value of this operation.
+	value json.Element
+
+	// executedAt is the time the operation was executed.
+	executedAt *time.Ticket
 }
 
+// NewSet creates a new instance of Set.
 func NewSet(
 	parentCreatedAt *time.Ticket,
 	key string,
@@ -42,6 +52,7 @@ func NewSet(
 	}
 }
 
+// Execute executes this operation on the given document(`root`).
 func (o *Set) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
@@ -56,22 +67,27 @@ func (o *Set) Execute(root *json.Root) error {
 	return nil
 }
 
+// ParentCreatedAt returns the creation time of the Object.
 func (o *Set) ParentCreatedAt() *time.Ticket {
 	return o.parentCreatedAt
 }
 
+// ExecutedAt returns execution time of this operation.
 func (o *Set) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
+// SetActor sets the given actor to this operation.
 func (o *Set) SetActor(actorID *time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 
+// Key returns the key of this operation.
 func (o *Set) Key() string {
 	return o.key
 }
 
+// Value returns the value of this operation.
 func (o *Set) Value() json.Element {
 	return o.value
 }

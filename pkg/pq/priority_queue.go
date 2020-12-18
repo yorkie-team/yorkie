@@ -20,10 +20,12 @@ import (
 	"container/heap"
 )
 
+// PriorityQueue is a priority queue implemented with max heap.
 type PriorityQueue struct {
 	queue *internalQueue
 }
 
+// NewPriorityQueue creates an instance of NewPriorityQueue.
 func NewPriorityQueue() *PriorityQueue {
 	pq := &internalQueue{}
 	heap.Init(pq)
@@ -33,23 +35,29 @@ func NewPriorityQueue() *PriorityQueue {
 	}
 }
 
+// Peek returns the maximum element from this PriorityQueue.
 func (pq *PriorityQueue) Peek() Value {
-	return pq.queue.Peek().(*Item).value
+	return pq.queue.Peek().(*pqItem).value
 }
 
+// Pop removes and returns the maximum element from this PriorityQueue.
 func (pq *PriorityQueue) Pop() Value {
-	return heap.Pop(pq.queue).(*Item).value
+	return heap.Pop(pq.queue).(*pqItem).value
 }
 
+// Push pushes the element x onto this PriorityQueue.
 func (pq *PriorityQueue) Push(value Value) {
-	item := NewItem(value)
+	item := newPQItem(value)
 	heap.Push(pq.queue, item)
 }
 
+// Len is the number of elements in this PriorityQueue.
 func (pq *PriorityQueue) Len() int {
 	return pq.queue.Len()
 }
 
+// Release deletes the given value from this PriorityQueue.
+// TODO: It has to be reimplemented in-place.
 func (pq *PriorityQueue) Release(value Value) {
 	queue := &internalQueue{}
 	heap.Init(queue)
@@ -63,6 +71,7 @@ func (pq *PriorityQueue) Release(value Value) {
 	pq.queue = queue
 }
 
+// Values returns the values of this PriorityQueue.
 func (pq *PriorityQueue) Values() []Value {
 	var values []Value
 	for _, item := range *pq.queue {
@@ -71,46 +80,53 @@ func (pq *PriorityQueue) Values() []Value {
 	return values
 }
 
+// Value represents the data stored by PriorityQueue.
 type Value interface {
 	Less(other Value) bool
 }
 
-// Item is something we manage in a priority queue.
-type Item struct {
+// pqItem is something we manage in a priority queue.
+type pqItem struct {
 	value Value
 	index int
 }
 
-func NewItem(value Value) *Item {
-	return &Item{
+func newPQItem(value Value) *pqItem {
+	return &pqItem{
 		value: value,
 		index: -1,
 	}
 }
 
 // A internalQueue implements heap.Interface and holds Items.
-type internalQueue []*Item
+type internalQueue []*pqItem
 
+// Len is the number of elements in this internalQueue.
 func (pq internalQueue) Len() int { return len(pq) }
 
+// Less reports whether the element with
+// index i should sort before the element with index j.
 func (pq internalQueue) Less(i, j int) bool {
 	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
 	return pq[i].value.Less(pq[j].value)
 }
 
+// Swap swaps the elements with indexes i and j.
 func (pq internalQueue) Swap(i, j int) {
 	pq[i], pq[j] = pq[j], pq[i]
 	pq[i].index = i
 	pq[j].index = j
 }
 
+// Push pushes the element x onto this internalQueue.
 func (pq *internalQueue) Push(x interface{}) {
 	n := len(*pq)
-	item := x.(*Item)
+	item := x.(*pqItem)
 	item.index = n
 	*pq = append(*pq, item)
 }
 
+// Pop removes and returns the maximum element from this internalQueue.
 func (pq *internalQueue) Pop() interface{} {
 	old := *pq
 	n := len(old)
@@ -121,6 +137,7 @@ func (pq *internalQueue) Pop() interface{} {
 	return item
 }
 
+// Peek returns the maximum element from this internalQueue.
 func (pq *internalQueue) Peek() interface{} {
 	return (*pq)[0]
 }

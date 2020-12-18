@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
+// RGATreeListNode is a node of RGATreeList.
 type RGATreeListNode struct {
 	indexNode *splay.Node
 	elem      Element
@@ -57,10 +58,12 @@ func newRGATreeListNodeAfter(prev *RGATreeListNode, elem Element) *RGATreeListNo
 	return prev.next
 }
 
+// Element returns the element of this node.
 func (n *RGATreeListNode) Element() Element {
 	return n.elem
 }
 
+// Len returns the length of this node.
 func (n *RGATreeListNode) Len() int {
 	if n.isRemoved() {
 		return 0
@@ -68,6 +71,7 @@ func (n *RGATreeListNode) Len() int {
 	return 1
 }
 
+// String returns the string representation of this node.
 func (n *RGATreeListNode) String() string {
 	return n.elem.Marshal()
 }
@@ -76,6 +80,10 @@ func (n *RGATreeListNode) isRemoved() bool {
 	return n.elem.RemovedAt() != nil
 }
 
+// RGATreeList is a list with improved index-based lookup in RGA. RGA is a
+// linked list that has a logical clock and tombstone. Since RGA is composed as
+// a linked list, index-based element search is slow, O(n). To optimise for fast
+// insertions and removals at any index in the list, RGATreeList has a tree.
 type RGATreeList struct {
 	dummyHead          *RGATreeListNode
 	last               *RGATreeListNode
@@ -213,11 +221,14 @@ func (a *RGATreeList) AnnotatedString() string {
 	return a.nodeMapByIndex.AnnotatedString()
 }
 
+// Delete deletes the node of the given index.
 func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) *RGATreeListNode {
 	target := a.Get(idx)
 	return a.DeleteByCreatedAt(target.elem.CreatedAt(), deletedAt)
 }
 
+// MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
+// element.
 func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) {
 	prevNode, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
 	if !ok {
@@ -242,6 +253,8 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 	}
 }
 
+// FindPrevCreatedAt returns the creation time of the previous element of the
+// given element.
 func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {

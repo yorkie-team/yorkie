@@ -22,24 +22,29 @@ import (
 )
 
 const (
+	// BSONSplitter is used to separate collection and document in a string.
 	BSONSplitter = "$"
-	TokenLen     = 2
+
+	tokenLen = 2
 )
 
+// Key represents the key of the Document.
 type Key struct {
 	Collection string
 	Document   string
 }
 
+// FromBSONKey creates an instance of Key from the received bsonKey.
 func FromBSONKey(bsonKey string) (*Key, error) {
 	splits := strings.Split(bsonKey, BSONSplitter)
-	if len(splits) != TokenLen {
+	if len(splits) != tokenLen {
 		return nil, errors.New("fail to create key from bson key")
 	}
 
 	return &Key{Collection: splits[0], Document: splits[1]}, nil
 }
 
+// BSONKey returns the string of this key.
 func (k *Key) BSONKey() string {
 	return k.Collection + BSONSplitter + k.Document
 }

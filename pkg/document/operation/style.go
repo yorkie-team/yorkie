@@ -21,14 +21,25 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// Style is an operation applies the style of the given range to RichText.
 type Style struct {
+	// parentCreatedAt is the creation time of the RichText that executes Style.
 	parentCreatedAt *time.Ticket
-	from            *json.RGATreeSplitNodePos
-	to              *json.RGATreeSplitNodePos
-	attributes      map[string]string
-	executedAt      *time.Ticket
+
+	// from is the starting point of the range to apply the style to.
+	from *json.RGATreeSplitNodePos
+
+	// to is the end point of the range to apply the style to.
+	to *json.RGATreeSplitNodePos
+
+	// attributes represents the text style.
+	attributes map[string]string
+
+	// executedAt is the time the operation was executed.
+	executedAt *time.Ticket
 }
 
+// NewStyle creates a new instance of Style.
 func NewStyle(
 	parentCreatedAt *time.Ticket,
 	from *json.RGATreeSplitNodePos,
@@ -45,6 +56,7 @@ func NewStyle(
 	}
 }
 
+// Execute executes this operation on the given document(`root`).
 func (e *Style) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*json.RichText)
@@ -56,25 +68,32 @@ func (e *Style) Execute(root *json.Root) error {
 	return nil
 }
 
+// From returns the start point of the editing range.
 func (e *Style) From() *json.RGATreeSplitNodePos {
 	return e.from
 }
 
+// To returns the end point of the editing range.
 func (e *Style) To() *json.RGATreeSplitNodePos {
 	return e.to
 }
 
+// ExecutedAt returns execution time of this operation.
 func (e *Style) ExecutedAt() *time.Ticket {
 	return e.executedAt
 }
 
+// SetActor sets the given actor to this operation.
 func (e *Style) SetActor(actorID *time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
 }
+
+// ParentCreatedAt returns the creation time of the RichText.
 func (e *Style) ParentCreatedAt() *time.Ticket {
 	return e.parentCreatedAt
 }
 
+// Attributes returns the attributes of this operation.
 func (e *Style) Attributes() map[string]string {
 	return e.attributes
 }

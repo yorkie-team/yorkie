@@ -5,11 +5,12 @@ linters:
     - gocyclo
     - gofmt
     - goimports
-# TODO: When adding a rule to force comments on exported methods, be sure to uncomment below.
-#    - golint
+    - golint
     - goprintffuncname
     - gosec
     - interfacer
     - lll
     - misspell
     - nakedret
+issues:
+  exclude-use-default: false

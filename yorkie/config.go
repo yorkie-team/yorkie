@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
+// Below are the values of the default values of Yorkie config.
 const (
 	DefaultRPCPort     = 11101
 	DefaultMetricsPort = 11102

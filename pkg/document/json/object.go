@@ -72,6 +72,7 @@ func (o *Object) Delete(k string, deletedAt *time.Ticket) Element {
 	return o.memberNodes.Delete(k, deletedAt)
 }
 
+// Descendants traverse the descendants of this object.
 func (o *Object) Descendants(callback func(elem Element, parent Container) bool) {
 	for _, node := range o.memberNodes.Nodes() {
 		if callback(node.elem, o) {

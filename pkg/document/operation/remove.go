@@ -21,12 +21,20 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// Remove is an operation representing removes an element from Container.
 type Remove struct {
+	// parentCreatedAt is the creation time of the Container that executes
+	// Remove.
 	parentCreatedAt *time.Ticket
-	createdAt       *time.Ticket
-	executedAt      *time.Ticket
+
+	// createdAt is the creation time of the target element to remove.
+	createdAt *time.Ticket
+
+	// executedAt is the time the operation was executed.
+	executedAt *time.Ticket
 }
 
+// NewRemove creates a new instance of Remove.
 func NewRemove(
 	parentCreatedAt *time.Ticket,
 	createdAt *time.Ticket,
@@ -39,14 +47,12 @@ func NewRemove(
 	}
 }
 
+// Execute executes this operation on the given document(`root`).
 func (o *Remove) Execute(root *json.Root) error {
 	parentElem := root.FindByCreatedAt(o.parentCreatedAt)
 
 	switch parent := parentElem.(type) {
-	case *json.Object:
-		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
-		root.RegisterRemovedElementPair(parent, elem)
-	case *json.Array:
+	case json.Container:
 		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
 		root.RegisterRemovedElementPair(parent, elem)
 	default:
@@ -56,18 +62,22 @@ func (o *Remove) Execute(root *json.Root) error {
 	return nil
 }
 
+// ParentCreatedAt returns the creation time of the Container.
 func (o *Remove) ParentCreatedAt() *time.Ticket {
 	return o.parentCreatedAt
 }
 
+// ExecutedAt returns execution time of this operation.
 func (o *Remove) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
+// SetActor sets the given actor to this operation.
 func (o *Remove) SetActor(actorID *time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 
+// CreatedAt returns the creation time of the target element.
 func (o *Remove) CreatedAt() *time.Ticket {
 	return o.createdAt
 }

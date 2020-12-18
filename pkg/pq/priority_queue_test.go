@@ -32,7 +32,7 @@ func (value testValue) Less(other pq.Value) bool {
 	return value.value < other.(testValue).value
 }
 
-func NewTestValue(value int) testValue {
+func newTestValue(value int) testValue {
 	return testValue{
 		value: value,
 	}
@@ -55,25 +55,25 @@ func TestPQ(t *testing.T) {
 		pq := pq.NewPriorityQueue()
 		testNums := []int{10, 7, 1, 9, 4, 11, 5, 3, 6, 12, 8, 2}
 		for _, testNum := range testNums {
-			pq.Push(NewTestValue(testNum))
+			pq.Push(newTestValue(testNum))
 		}
 		for _, testNum := range testNums {
 			assert.True(t, exist(testNum, pq.Values()))
 		}
 		assert.Equal(t, 12, pq.Len())
-		assert.Equal(t, NewTestValue(1), pq.Peek())
-		assert.Equal(t, NewTestValue(1), pq.Pop())
+		assert.Equal(t, newTestValue(1), pq.Peek())
+		assert.Equal(t, newTestValue(1), pq.Pop())
 		assert.Equal(t, 11, pq.Len())
 		assert.False(t, exist(1, pq.Values()))
-		assert.Equal(t, NewTestValue(2), pq.Peek())
+		assert.Equal(t, newTestValue(2), pq.Peek())
 		assert.Equal(t, pq.Peek(), pq.Pop())
 
-		pq.Release(NewTestValue(3))
+		pq.Release(newTestValue(3))
 		assert.False(t, exist(3, pq.Values()))
 
 		for i := 4; i <= 12; i++ {
-			assert.Equal(t, NewTestValue(i), pq.Peek())
-			assert.Equal(t, NewTestValue(i), pq.Pop())
+			assert.Equal(t, newTestValue(i), pq.Peek())
+			assert.Equal(t, newTestValue(i), pq.Pop())
 		}
 
 		assert.Equal(t, 0, pq.Len())

@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
+// ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
 	DocID      primitive.ObjectID `bson:"doc_id"`
 	ServerSeq  uint64             `bson:"server_seq"`
@@ -39,6 +40,7 @@ type ChangeInfo struct {
 	Operations [][]byte           `bson:"operations"`
 }
 
+// EncodeOperations encodes the given operations into bytes array.
 func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
 	var encodedOps [][]byte
 
@@ -54,12 +56,14 @@ func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
 	return encodedOps, nil
 }
 
+// EncodeActorID encodes the given ActorID into object ID.
 func EncodeActorID(id *time.ActorID) primitive.ObjectID {
 	objectID := primitive.ObjectID{}
 	copy(objectID[:], id[:])
 	return objectID
 }
 
+// ToChange creates Change model from this ChangeInfo.
 func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	actorID := time.ActorID{}
 	copy(actorID[:], i.Actor[:])

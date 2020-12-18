@@ -21,8 +21,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// Increase can be used to increment data of numerical type.
-// It can be used in counter type Integer, Long, and Double data.
+// Increase represents an operation that increments a numeric value to Counter.
+// Among Primitives, numeric types Integer, Long, and Double are used as values.
 type Increase struct {
 	parentCreatedAt *time.Ticket
 	value           json.Element
@@ -42,7 +42,7 @@ func NewIncrease(
 	}
 }
 
-// Execute executes operation.
+// Execute executes this operation on the given document(`root`).
 func (o *Increase) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	cnt, ok := parent.(*json.Counter)
@@ -56,22 +56,22 @@ func (o *Increase) Execute(root *json.Root) error {
 	return nil
 }
 
-// Value gets a value
+// Value return the value of this operation.
 func (o *Increase) Value() json.Element {
 	return o.value
 }
 
-// ParentCreatedAt gets a parentCreatedAt
+// ParentCreatedAt returns the creation time of Counter.
 func (o *Increase) ParentCreatedAt() *time.Ticket {
 	return o.parentCreatedAt
 }
 
-// ExecutedAt gets an executedAt
+// ExecutedAt returns execution time of this operation.
 func (o *Increase) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
-// SetActor sets executedAt by actorID.
+// SetActor sets the given actor to this operation.
 func (o *Increase) SetActor(actorID *time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
