@@ -19,7 +19,7 @@ package packs
 import (
 	"context"
 	"fmt"
-	defaultTime "time"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -27,7 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
-	pkgTypes "github.com/yorkie-team/yorkie/pkg/types"
+	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 	"github.com/yorkie-team/yorkie/yorkie/types"
@@ -101,7 +101,7 @@ func PushPull(
 				publisher,
 				reqPack.DocumentKey.BSONKey(),
 				pubsub.DocEvent{
-					Type:      pkgTypes.DocumentsChangeEvent,
+					Type:      pkgtypes.DocumentsChangeEvent,
 					DocKey:    reqPack.DocumentKey.BSONKey(),
 					Publisher: publisher,
 				},
@@ -323,7 +323,7 @@ func storeSnapshot(
 	be *backend.Backend,
 	docInfo *types.DocInfo,
 ) error {
-	start := defaultTime.Now()
+	start := gotime.Now()
 
 	// 01. get the last snapshot of this docInfo
 	// TODO For performance, we only need to read the snapshot's metadata.
@@ -384,7 +384,7 @@ func storeSnapshot(
 		"SNAP: '%s', serverSeq:%d %s",
 		docInfo.Key,
 		doc.Checkpoint().ServerSeq,
-		defaultTime.Since(start),
+		gotime.Since(start),
 	)
 	return nil
 }

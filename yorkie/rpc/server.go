@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"net"
 
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -34,7 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
-	pkgTypes "github.com/yorkie-team/yorkie/pkg/types"
+	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
@@ -65,13 +65,13 @@ type Server struct {
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
+		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			unaryInterceptor,
-			grpc_prometheus.UnaryServerInterceptor,
+			grpcprometheus.UnaryServerInterceptor,
 		)),
-		grpc.StreamInterceptor(grpc_middleware.ChainStreamServer(
+		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			streamInterceptor,
-			grpc_prometheus.StreamServerInterceptor,
+			grpcprometheus.StreamServerInterceptor,
 		)),
 	}
 
@@ -90,7 +90,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		backend:    be,
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
-	grpc_prometheus.Register(rpcServer.grpcServer)
+	grpcprometheus.Register(rpcServer.grpcServer)
 
 	return rpcServer, nil
 }
@@ -405,7 +405,7 @@ func (s *Server) watchDocs(
 			subscription.Subscriber(),
 			docKey,
 			pubsub.DocEvent{
-				Type:      pkgTypes.DocumentsWatchedEvent,
+				Type:      pkgtypes.DocumentsWatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
 			},
@@ -423,7 +423,7 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription
 			subscription.Subscriber(),
 			docKey,
 			pubsub.DocEvent{
-				Type:      pkgTypes.DocumentsUnwatchedEvent,
+				Type:      pkgtypes.DocumentsUnwatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
 			},

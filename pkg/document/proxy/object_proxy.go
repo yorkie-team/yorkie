@@ -17,7 +17,7 @@
 package proxy
 
 import (
-	defaultTime "time"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -148,7 +148,7 @@ func (p *ObjectProxy) SetBytes(k string, v []byte) *ObjectProxy {
 }
 
 // SetDate sets the given date for the given key.
-func (p *ObjectProxy) SetDate(k string, v defaultTime.Time) *ObjectProxy {
+func (p *ObjectProxy) SetDate(k string, v gotime.Time) *ObjectProxy {
 	p.setInternal(k, func(ticket *time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
 	})

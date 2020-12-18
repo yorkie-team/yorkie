@@ -17,7 +17,7 @@
 package proxy
 
 import (
-	defaultTime "time"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -107,7 +107,7 @@ func (p *ArrayProxy) AddBytes(values ...[]byte) *ArrayProxy {
 }
 
 // AddDate adds the given date at the last.
-func (p *ArrayProxy) AddDate(values ...defaultTime.Time) *ArrayProxy {
+func (p *ArrayProxy) AddDate(values ...gotime.Time) *ArrayProxy {
 	for _, value := range values {
 		p.addInternal(func(ticket *time.Ticket) json.Element {
 			return json.NewPrimitive(value, ticket)

@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
-	defaultTime "time"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -46,7 +46,7 @@ const (
 )
 
 func init() {
-	now := defaultTime.Now()
+	now := gotime.Now()
 	testStartedAt = now.Unix()
 }
 

@@ -19,7 +19,7 @@ package mongo
 import (
 	"context"
 	"errors"
-	defaultTime "time"
+	gotime "time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -45,10 +45,10 @@ var (
 
 // Config is the configuration for creating a Client instance.
 type Config struct {
-	ConnectionTimeoutSec defaultTime.Duration `json:"ConnectionTimeoutSec"`
-	ConnectionURI        string               `json:"ConnectionURI"`
-	YorkieDatabase       string               `json:"YorkieDatabase"`
-	PingTimeoutSec       defaultTime.Duration `json:"PingTimeoutSec"`
+	ConnectionTimeoutSec gotime.Duration `json:"ConnectionTimeoutSec"`
+	ConnectionURI        string          `json:"ConnectionURI"`
+	YorkieDatabase       string          `json:"YorkieDatabase"`
+	PingTimeoutSec       gotime.Duration `json:"PingTimeoutSec"`
 }
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
@@ -61,7 +61,7 @@ type Client struct {
 func NewClient(conf *Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
-		conf.ConnectionTimeoutSec*defaultTime.Second,
+		conf.ConnectionTimeoutSec*gotime.Second,
 	)
 	defer cancel()
 
@@ -74,7 +74,7 @@ func NewClient(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	ctxPing, cancel := context.WithTimeout(ctx, conf.PingTimeoutSec*defaultTime.Second)
+	ctxPing, cancel := context.WithTimeout(ctx, conf.PingTimeoutSec*gotime.Second)
 	defer cancel()
 
 	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
@@ -109,7 +109,7 @@ func (c *Client) Close() error {
 func (c *Client) ActivateClient(ctx context.Context, key string) (*types.ClientInfo, error) {
 	clientInfo := types.ClientInfo{}
 	if err := c.withCollection(ColClients, func(col *mongo.Collection) error {
-		now := defaultTime.Now()
+		now := gotime.Now()
 		res, err := col.UpdateOne(ctx, bson.M{
 			"key": key,
 		}, bson.M{
@@ -165,7 +165,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.
 		}, bson.M{
 			"$set": bson.M{
 				"status":     types.ClientDeactivated,
-				"updated_at": defaultTime.Now(),
+				"updated_at": gotime.Now(),
 			},
 		})
 
@@ -260,7 +260,7 @@ func (c *Client) FindDocInfoByKey(
 	docInfo := types.DocInfo{}
 
 	if err := c.withCollection(ColDocuments, func(col *mongo.Collection) error {
-		now := defaultTime.Now()
+		now := gotime.Now()
 		res, err := col.UpdateOne(ctx, bson.M{
 			"key": bsonDocKey,
 		}, bson.M{
@@ -367,7 +367,7 @@ func (c *Client) CreateSnapshotInfo(
 			"doc_id":     docID,
 			"server_seq": doc.Checkpoint().ServerSeq,
 			"snapshot":   snapshot,
-			"created_at": defaultTime.Now(),
+			"created_at": gotime.Now(),
 		}); err != nil {
 			log.Logger.Error(err)
 			return err
@@ -383,7 +383,7 @@ func (c *Client) UpdateDocInfo(
 	docInfo *types.DocInfo,
 ) error {
 	return c.withCollection(ColDocuments, func(col *mongo.Collection) error {
-		now := defaultTime.Now()
+		now := gotime.Now()
 		_, err := col.UpdateOne(ctx, bson.M{
 			"_id": docInfo.ID,
 		}, bson.M{

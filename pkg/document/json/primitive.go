@@ -20,7 +20,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	defaultTime "time"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -61,7 +61,7 @@ func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 		return value
 	case Date:
 		v := int64(binary.LittleEndian.Uint64(value))
-		return defaultTime.Unix(v, 0)
+		return gotime.Unix(v, 0)
 	}
 
 	panic("unsupported type")
@@ -122,7 +122,7 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 			value:     val,
 			createdAt: createdAt,
 		}
-	case defaultTime.Time:
+	case gotime.Time:
 		return &Primitive{
 			valueType: Date,
 			value:     val,
@@ -157,7 +157,7 @@ func (p *Primitive) Bytes() []byte {
 		return []byte(val)
 	case []byte:
 		return val
-	case defaultTime.Time:
+	case gotime.Time:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], uint64(val.UTC().Unix()))
 		return bytes[:]
@@ -184,7 +184,7 @@ func (p *Primitive) Marshal() string {
 		// {"a":{"0":1,"1":2},"b":2}
 		return fmt.Sprintf("\"%s\"", p.value)
 	case Date:
-		return p.value.(defaultTime.Time).Format(defaultTime.RFC3339)
+		return p.value.(gotime.Time).Format(gotime.RFC3339)
 	}
 
 	panic("unsupported type")

@@ -17,7 +17,7 @@
 package backend
 
 import (
-	defaultSync "sync"
+	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/sync"
@@ -48,11 +48,11 @@ type Backend struct {
 	closing chan struct{}
 
 	// wgMu blocks concurrent WaitGroup mutation while backend closing
-	wgMu defaultSync.RWMutex
+	wgMu gosync.RWMutex
 
 	// wg is used to wait for the goroutines that depends on the backend state
 	// to exit when closing the backend.
-	wg defaultSync.WaitGroup
+	wg gosync.WaitGroup
 }
 
 // New creates a new instance of Backend.
