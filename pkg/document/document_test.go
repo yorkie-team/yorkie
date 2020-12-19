@@ -22,6 +22,8 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -249,7 +251,14 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
 
-		textSize := 1000
+		printMemStats := func(root *json.Object) {
+			bytes, err := converter.ObjectToBytes(doc.RootObject())
+			assert.NoError(t, err)
+			testhelper.PrintBytesSize(bytes)
+			testhelper.PrintMemStats()
+		}
+
+		textSize := 1_000
 		// 01. initial
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.SetNewText("k1")
@@ -259,11 +268,8 @@ func TestDocument(t *testing.T) {
 			return nil
 		}, "initial")
 		assert.NoError(t, err)
-		bytes, err := converter.ObjectToBytes(doc.RootObject())
-		assert.NoError(t, err)
 		fmt.Println("-----initial")
-		testhelper.PrintBytesSize(bytes)
-		testhelper.PrintMemStats()
+		printMemStats(doc.RootObject())
 
 		// 02. 1000 nodes modified
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
@@ -274,19 +280,15 @@ func TestDocument(t *testing.T) {
 			return nil
 		}, "1000 nodes modified")
 		assert.NoError(t, err)
-		assert.NoError(t, err)
 		fmt.Println("-----1000 nodes modified")
-		testhelper.PrintBytesSize(bytes)
-		testhelper.PrintMemStats()
+		printMemStats(doc.RootObject())
 		assert.Equal(t, textSize, doc.GarbageLen())
 
 		// 03. GC
 		assert.Equal(t, textSize, doc.GarbageCollect(time.MaxTicket))
 		runtime.GC()
 		fmt.Println("-----Garbage collect")
-		testhelper.PrintBytesSize(bytes)
-		testhelper.PrintMemStats()
-		assert.NoError(t, err)
+		printMemStats(doc.RootObject())
 
 		// 04. long text by one node
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
@@ -299,8 +301,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		}, "initial")
 		fmt.Println("-----long text by one node")
-		testhelper.PrintBytesSize(bytes)
-		testhelper.PrintMemStats()
+		printMemStats(doc.RootObject())
 
 		// 05. Modify one node multiple times
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
@@ -313,18 +314,15 @@ func TestDocument(t *testing.T) {
 			return nil
 		}, "Modify one node multiple times")
 		assert.NoError(t, err)
-		assert.NoError(t, err)
 		fmt.Println("-----Modify one node multiple times")
-		testhelper.PrintBytesSize(bytes)
-		testhelper.PrintMemStats()
+		printMemStats(doc.RootObject())
 
 		// 06. GC
 		assert.Equal(t, textSize, doc.GarbageLen())
 		assert.Equal(t, textSize, doc.GarbageCollect(time.MaxTicket))
 		runtime.GC()
 		fmt.Println("-----Garbage collect")
-		testhelper.PrintBytesSize(bytes)
-		testhelper.PrintMemStats()
+		printMemStats(doc.RootObject())
 	})
 
 	t.Run("object test", func(t *testing.T) {
