@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Print the version number of Yorkie.",
+		Short: "Print the version number of Yorkie",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Yorkie: %s\n", version.Version)
 			fmt.Printf("Commit: %s\n", version.GitCommit)
