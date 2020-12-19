@@ -58,12 +58,16 @@ func TestDBName() string {
 	return fmt.Sprintf("test-%s-%d", yorkie.DefaultMongoYorkieDatabase, testStartedAt)
 }
 
+func TestRoot() *json.Root {
+	return json.NewRoot(json.NewObject(json.NewRHTPriorityQueueMap(), time.InitialTicket))
+}
+
 // TextChangeContext returns the context of test change.
-func TextChangeContext() *change.Context {
+func TextChangeContext(root *json.Root) *change.Context {
 	return change.NewContext(
 		change.InitialID,
 		"",
-		json.NewRoot(json.NewObject(json.NewRHTPriorityQueueMap(), time.InitialTicket)),
+		root,
 	)
 }
 

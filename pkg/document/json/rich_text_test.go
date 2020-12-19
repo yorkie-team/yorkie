@@ -27,7 +27,8 @@ import (
 
 func TestRichText(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
-		ctx := testhelper.TextChangeContext()
+		root := testhelper.TestRoot()
+		ctx := testhelper.TextChangeContext(root)
 
 		text := json.NewInitialRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ctx.IssueTimeTicket())
 
