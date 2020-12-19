@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -40,7 +40,7 @@ var (
 func newAgentCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "agent [options]",
-		Short: "Starts yorkie agent.",
+		Short: "Starts yorkie agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf := yorkie.NewConfig()
 			if flagConfPath != "" {

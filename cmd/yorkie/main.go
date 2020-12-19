@@ -14,22 +14,12 @@
  * limitations under the License.
  */
 
-package cmd
+package main
 
 import (
-	"github.com/spf13/cobra"
+	"github.com/yorkie-team/yorkie/pkg/cli"
 )
 
-var rootCmd = &cobra.Command{
-	Use:   "yorkie [options]",
-	Short: "Realtime database backend based on MongoDB, CRDT",
-}
-
-// Run executes CLI.
-func Run() int {
-	if err := rootCmd.Execute(); err != nil {
-		return 1
-	}
-
-	return 0
+func main() {
+	cli.Run()
 }
