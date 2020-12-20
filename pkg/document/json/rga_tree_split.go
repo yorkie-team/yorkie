@@ -76,6 +76,10 @@ func (t *RGATreeSplitNodeID) hasSameCreatedAt(id *RGATreeSplitNodeID) bool {
 	return t.createdAt.Compare(id.createdAt) == 0
 }
 
+func (t *RGATreeSplitNodeID) key() string {
+	return fmt.Sprintf("%s:%d", t.createdAt.Key(), t.offset)
+}
+
 type RGATreeSplitNodePos struct {
 	id             *RGATreeSplitNodeID
 	relativeOffset int
@@ -233,22 +237,14 @@ func (t *RGATreeSplitNode) Value() RGATreeSplitValue {
 	return t.value
 }
 
-// removedNodeMapKey is a key of removedNodeMap.
-// The shape of the key is '{createdAt.Key()}:{offset}'.
-type removedNodeMapKey string
-
-// createRemovedNodeMapKey generates keys for removedNodes.
-func createRemovedNodeMapKey(createdAtKey string, offset int) removedNodeMapKey {
-	key := fmt.Sprintf("%s:%d", createdAtKey, offset)
-	return removedNodeMapKey(key)
-}
-
 type RGATreeSplit struct {
 	initialHead *RGATreeSplitNode
 	treeByIndex *splay.Tree
 	treeByID    *llrb.Tree
 
-	removedNodeMap map[removedNodeMapKey]*RGATreeSplitNode
+	// removedNodeMap is a map that holds tombstone nodes
+	// when the edit operation is executed.
+	removedNodeMap map[string]*RGATreeSplitNode
 }
 
 func NewRGATreeSplit(initialHead *RGATreeSplitNode) *RGATreeSplit {
@@ -260,7 +256,7 @@ func NewRGATreeSplit(initialHead *RGATreeSplitNode) *RGATreeSplit {
 		initialHead:    initialHead,
 		treeByIndex:    treeByIndex,
 		treeByID:       treeByID,
-		removedNodeMap: make(map[removedNodeMapKey]*RGATreeSplitNode),
+		removedNodeMap: make(map[string]*RGATreeSplitNode),
 	}
 }
 
@@ -397,7 +393,7 @@ func (s *RGATreeSplit) edit(
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
-	latestCreatedAtMap, removedNodeMapByCreatedAt := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
+	latestCreatedAtMap, removedNodeMapByNodeKey := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
 
 	var caretID *RGATreeSplitNodeID
 	if toRight == nil {
@@ -414,7 +410,7 @@ func (s *RGATreeSplit) edit(
 	}
 
 	// 04. add removed node
-	for key, removedNode := range removedNodeMapByCreatedAt {
+	for key, removedNode := range removedNodeMapByNodeKey {
 		s.removedNodeMap[key] = removedNode
 	}
 
@@ -435,9 +431,9 @@ func (s *RGATreeSplit) deleteNodes(
 	candidates []*RGATreeSplitNode,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	editedAt *time.Ticket,
-) (map[string]*time.Ticket, map[removedNodeMapKey]*RGATreeSplitNode) {
+) (map[string]*time.Ticket, map[string]*RGATreeSplitNode) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
-	removedNodeMap := make(map[removedNodeMapKey]*RGATreeSplitNode)
+	removedNodeMap := make(map[string]*RGATreeSplitNode)
 
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
@@ -462,8 +458,7 @@ func (s *RGATreeSplit) deleteNodes(
 				createdAtMapByActor[actorIDHex] = createdAt
 			}
 
-			key := createRemovedNodeMapKey(createdAt.Key(), node.id.offset)
-			removedNodeMap[key] = node
+			removedNodeMap[node.id.key()] = node
 		}
 	}
 
@@ -539,7 +534,7 @@ func (s *RGATreeSplit) cleanupRemovedNodes(ticket *time.Ticket) int {
 			s.treeByIndex.Delete(node.indexNode)
 			s.purge(node)
 			s.treeByID.Remove(node.id)
-			delete(s.removedNodeMap, removedNodeMapKey(node.createdAt().Key()))
+			delete(s.removedNodeMap, node.id.key())
 			count++
 		}
 	}
