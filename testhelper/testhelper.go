@@ -56,6 +56,7 @@ func TestDBName() string {
 	return fmt.Sprintf("test-%s-%d", yorkie.DefaultMongoYorkieDatabase, testStartedAt)
 }
 
+// TestRoot returns the root
 func TestRoot() *json.Root {
 	return json.NewRoot(json.NewObject(json.NewRHTPriorityQueueMap(), time.InitialTicket))
 }

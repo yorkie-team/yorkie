@@ -227,7 +227,8 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, expected, doc.Marshal())
 		assert.Equal(t, 1, doc.GarbageLen())
 
-		expected = `{"k1":[{"attrs":{"b":"1"},"val":"Hi"},{"attrs":{"b":"1"},"val":" "},{"attrs":{},"val":"j"},{"attrs":{"b":"1"},"val":"ane"}]}`
+		expected = `{"k1":[{"attrs":{"b":"1"},"val":"Hi"},{"attrs":{"b":"1"},"val":" "},` +
+			`{"attrs":{},"val":"j"},{"attrs":{"b":"1"},"val":"ane"}]}`
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetRichText("k1")
 			text.Edit(0, 5, "Hi", map[string]string{"b": "1"})
@@ -300,6 +301,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		}, "initial")
 		fmt.Println("-----long text by one node")
+		assert.NoError(t, err)
 		printMemStats(doc.RootObject())
 
 		// 05. Modify one node multiple times
