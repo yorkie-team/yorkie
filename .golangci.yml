@@ -1,0 +1,21 @@
+linters-settings:
+  goimports:
+    local-prefixes: github.com/yorkie-team/yorkie
+
+linters:
+  enable:
+    - bodyclose
+    - goconst
+    - gocyclo
+    - gofmt
+    - goimports
+    - golint
+    - goprintffuncname
+    - gosec
+    - interfacer
+    - lll
+    - misspell
+    - nakedret
+
+issues:
+  exclude-use-default: false

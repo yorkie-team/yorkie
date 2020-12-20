@@ -24,8 +24,10 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// CounterType represents any type that can be used as a counter.
 type CounterType int
 
+// The values below are the types that can be used as counters.
 const (
 	IntegerCnt CounterType = iota
 	LongCnt

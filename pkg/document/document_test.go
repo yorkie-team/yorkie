@@ -138,7 +138,7 @@ func TestDocument(t *testing.T) {
 		fmt.Println("-----Initial")
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
-		testhelper.PrintBytesSize(bytes)
+		testhelper.PrintSnapshotBytesSize(bytes)
 		testhelper.PrintMemStats()
 
 		// 02. 10,000 integers
@@ -161,7 +161,7 @@ func TestDocument(t *testing.T) {
 		fmt.Println("-----Integers")
 		bytes, err = converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
-		testhelper.PrintBytesSize(bytes)
+		testhelper.PrintSnapshotBytesSize(bytes)
 		testhelper.PrintMemStats()
 
 		// 04. after garbage collection
@@ -169,7 +169,7 @@ func TestDocument(t *testing.T) {
 		fmt.Println("-----After garbage collection")
 		bytes, err = converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
-		testhelper.PrintBytesSize(bytes)
+		testhelper.PrintSnapshotBytesSize(bytes)
 		testhelper.PrintMemStats()
 	})
 
@@ -253,7 +253,7 @@ func TestDocument(t *testing.T) {
 		printMemStats := func(root *json.Object) {
 			bytes, err := converter.ObjectToBytes(doc.RootObject())
 			assert.NoError(t, err)
-			testhelper.PrintBytesSize(bytes)
+			testhelper.PrintSnapshotBytesSize(bytes)
 			testhelper.PrintMemStats()
 		}
 
@@ -500,7 +500,8 @@ func TestDocument(t *testing.T) {
 			text.Edit(5, 11, " Yorkie", nil)
 			assert.Equal(
 				t,
-				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}[1:1:00:0 {} "
+				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"]`+
+					`[4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}[1:1:00:0 {} "
 "]`,
 				text.AnnotatedString(),
 			)
@@ -622,6 +623,7 @@ func TestDocument(t *testing.T) {
 
 			return nil
 		})
+		assert.NoError(t, err)
 		assert.Equal(t, `{"age":120,"price":9000000000000000003,"width":130.000000}`, doc.Marshal())
 	})
 

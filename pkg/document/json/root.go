@@ -20,6 +20,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// ElementPair represents pair that has a parent element and child element.
 type ElementPair struct {
 	parent Container
 	elem   Element

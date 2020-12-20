@@ -124,6 +124,14 @@ func TestClientAndDocument(t *testing.T) {
 		err = c1.Detach(ctx, doc)
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
+
+		err = c1.Attach(ctx, doc)
+		assert.NoError(t, err)
+		assert.True(t, doc.IsAttached())
+
+		err = c1.Detach(ctx, doc)
+		assert.NoError(t, err)
+		assert.False(t, doc.IsAttached())
 	})
 
 	t.Run("causal nested array test", func(t *testing.T) {
@@ -697,7 +705,6 @@ func TestClientAndDocument(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					assert.Fail(t, "unexpected ctx done")
-					break
 				case resp := <-rch:
 					if resp.Err == io.EOF || status.Code(resp.Err) == codes.Canceled {
 						return

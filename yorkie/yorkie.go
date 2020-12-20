@@ -67,6 +67,7 @@ func New(conf *Config) (*Yorkie, error) {
 	}, nil
 }
 
+// Start starts the agent by opening the rpc port.
 func (r *Yorkie) Start() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -81,6 +82,7 @@ func (r *Yorkie) Start() error {
 	return r.rpcServer.Start()
 }
 
+// Shutdown shuts down this Yorkie agent.
 func (r *Yorkie) Shutdown(graceful bool) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -102,6 +104,7 @@ func (r *Yorkie) Shutdown(graceful bool) error {
 	return nil
 }
 
+// ShutdownCh returns the shutdown channel.
 func (r *Yorkie) ShutdownCh() <-chan struct{} {
 	return r.shutdownCh
 }

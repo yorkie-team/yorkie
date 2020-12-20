@@ -41,7 +41,12 @@ const (
 )
 
 var (
-	ErrClientNotActivated  = errors.New("client is not activated")
+	// ErrClientNotActivated occurs when an inactive client executes a function
+	// that can only be executed when activated.
+	ErrClientNotActivated = errors.New("client is not activated")
+
+	// ErrDocumentNotAttached occurs when the given document is not attached to
+	// this client.
 	ErrDocumentNotAttached = errors.New("document is not attached")
 )
 

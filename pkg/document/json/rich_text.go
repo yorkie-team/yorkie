@@ -25,6 +25,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
+// InitialRichTextNode creates a initial node of RichText. The text is edited
+// as this node is split into multiple nodes.
 func InitialRichTextNode() *RGATreeSplitNode {
 	return NewRGATreeSplitNode(initialNodeID, &RichTextValue{
 		attrs: NewRHT(),
@@ -32,11 +34,14 @@ func InitialRichTextNode() *RGATreeSplitNode {
 	})
 }
 
+// RichTextValue is a value of RichText which has a attributes that expresses
+// the text style.
 type RichTextValue struct {
 	attrs *RHT
 	value string
 }
 
+// NewRichTextValue creates a value of RichText.
 func NewRichTextValue(attrs *RHT, value string) *RichTextValue {
 	return &RichTextValue{
 		attrs: attrs,
@@ -44,26 +49,33 @@ func NewRichTextValue(attrs *RHT, value string) *RichTextValue {
 	}
 }
 
+// Attrs returns the attributes of this value.
 func (t *RichTextValue) Attrs() *RHT {
 	return t.attrs
 }
 
+// Value returns the value of this rich text value.
 func (t *RichTextValue) Value() string {
 	return t.value
 }
 
+// Len returns the length of this value.
 func (t *RichTextValue) Len() int {
 	return utf8.RuneCountInString(t.value)
 }
 
+// String returns the string representation of this value.
 func (t *RichTextValue) String() string {
 	return fmt.Sprintf(`{"attrs":%s,"val":"%s"}`, t.attrs.Marshal(), t.value)
 }
 
+// AnnotatedString returns a String containing the meta data of this value
+// for debugging purpose.
 func (t *RichTextValue) AnnotatedString() string {
 	return fmt.Sprintf(`%s "%s"`, t.attrs.Marshal(), t.value)
 }
 
+// Split splits this value by the given offset.
 func (t *RichTextValue) Split(offset int) RGATreeSplitValue {
 	value := t.value
 	r := []rune(value)
@@ -105,6 +117,7 @@ func NewInitialRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichTex
 	return text
 }
 
+// Marshal returns the JSON encoding of this rich text.
 func (t *RichText) Marshal() string {
 	var values []string
 
@@ -175,6 +188,7 @@ func (t *RichText) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSpli
 	return t.rgaTreeSplit.createRange(from, to)
 }
 
+// Edit edits the given range with the given content and attributes.
 func (t *RichText) Edit(
 	from,
 	to *RGATreeSplitNodePos,
@@ -205,6 +219,7 @@ func (t *RichText) Edit(
 	return cursorPos, latestCreatedAtMapByActor
 }
 
+// SetStyle applies the style of the given range.
 func (t *RichText) SetStyle(
 	from,
 	to *RGATreeSplitNodePos,
@@ -231,6 +246,7 @@ func (t *RichText) SetStyle(
 	)
 }
 
+// Select stores that the given range has been selected.
 func (t *RichText) Select(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
@@ -247,6 +263,7 @@ func (t *RichText) Select(
 	}
 }
 
+// Nodes returns the internal nodes of this rich text.
 func (t *RichText) Nodes() []*RGATreeSplitNode {
 	return t.rgaTreeSplit.nodes()
 }

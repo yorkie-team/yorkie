@@ -23,11 +23,13 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
+// TextProxy is a proxy representing Text.
 type TextProxy struct {
 	*json.Text
 	context *change.Context
 }
 
+// NewTextProxy creates a new instance of TextProxy.
 func NewTextProxy(ctx *change.Context, text *json.Text) *TextProxy {
 	return &TextProxy{
 		Text:    text,
@@ -35,6 +37,7 @@ func NewTextProxy(ctx *change.Context, text *json.Text) *TextProxy {
 	}
 }
 
+// Edit edits the given range with the given content.
 func (p *TextProxy) Edit(from, to int, content string) *TextProxy {
 	if from > to {
 		panic("from should be less than or equal to to")

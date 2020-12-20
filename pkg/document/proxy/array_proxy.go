@@ -17,7 +17,7 @@
 package proxy
 
 import (
-	time2 "time"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -26,11 +26,13 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
+// ArrayProxy is a proxy representing Array.
 type ArrayProxy struct {
 	*json.Array
 	context *change.Context
 }
 
+// NewArrayProxy creates a new instance of ArrayProxy.
 func NewArrayProxy(ctx *change.Context, array *json.Array) *ArrayProxy {
 	return &ArrayProxy{
 		Array:   array,
@@ -38,6 +40,7 @@ func NewArrayProxy(ctx *change.Context, array *json.Array) *ArrayProxy {
 	}
 }
 
+// AddBool adds the given boolean at the last.
 func (p *ArrayProxy) AddBool(values ...bool) *ArrayProxy {
 	for _, value := range values {
 		p.addInternal(func(ticket *time.Ticket) json.Element {
@@ -48,6 +51,7 @@ func (p *ArrayProxy) AddBool(values ...bool) *ArrayProxy {
 	return p
 }
 
+// AddInteger adds the given integer at the last.
 func (p *ArrayProxy) AddInteger(values ...int) *ArrayProxy {
 	for _, value := range values {
 		p.addInternal(func(ticket *time.Ticket) json.Element {
@@ -58,6 +62,7 @@ func (p *ArrayProxy) AddInteger(values ...int) *ArrayProxy {
 	return p
 }
 
+// AddLong adds the given long at the last.
 func (p *ArrayProxy) AddLong(values ...int64) *ArrayProxy {
 	for _, value := range values {
 		p.addInternal(func(ticket *time.Ticket) json.Element {
@@ -68,6 +73,7 @@ func (p *ArrayProxy) AddLong(values ...int64) *ArrayProxy {
 	return p
 }
 
+// AddDouble adds the given double at the last.
 func (p *ArrayProxy) AddDouble(values ...float64) *ArrayProxy {
 	for _, value := range values {
 		p.addInternal(func(ticket *time.Ticket) json.Element {
@@ -78,6 +84,7 @@ func (p *ArrayProxy) AddDouble(values ...float64) *ArrayProxy {
 	return p
 }
 
+// AddString adds the given string at the last.
 func (p *ArrayProxy) AddString(values ...string) *ArrayProxy {
 	for _, value := range values {
 		p.addInternal(func(ticket *time.Ticket) json.Element {
@@ -88,6 +95,7 @@ func (p *ArrayProxy) AddString(values ...string) *ArrayProxy {
 	return p
 }
 
+// AddBytes adds the given bytes at the last.
 func (p *ArrayProxy) AddBytes(values ...[]byte) *ArrayProxy {
 	for _, value := range values {
 		p.addInternal(func(ticket *time.Ticket) json.Element {
@@ -98,7 +106,8 @@ func (p *ArrayProxy) AddBytes(values ...[]byte) *ArrayProxy {
 	return p
 }
 
-func (p *ArrayProxy) AddDate(values ...time2.Time) *ArrayProxy {
+// AddDate adds the given date at the last.
+func (p *ArrayProxy) AddDate(values ...gotime.Time) *ArrayProxy {
 	for _, value := range values {
 		p.addInternal(func(ticket *time.Ticket) json.Element {
 			return json.NewPrimitive(value, ticket)
@@ -108,6 +117,7 @@ func (p *ArrayProxy) AddDate(values ...time2.Time) *ArrayProxy {
 	return p
 }
 
+// AddNewArray adds a new array at the last.
 func (p *ArrayProxy) AddNewArray() *ArrayProxy {
 	v := p.addInternal(func(ticket *time.Ticket) json.Element {
 		return NewArrayProxy(p.context, json.NewArray(json.NewRGATreeList(), ticket))
@@ -121,6 +131,8 @@ func (p *ArrayProxy) MoveBefore(nextCreatedAt, createdAt *time.Ticket) {
 	p.moveBeforeInternal(nextCreatedAt, createdAt)
 }
 
+// InsertIntegerAfter inserts the given integer after the given previous
+// element.
 func (p *ArrayProxy) InsertIntegerAfter(index int, v int) *ArrayProxy {
 	p.insertAfterInternal(p.Get(index).CreatedAt(), func(ticket *time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
@@ -129,6 +141,7 @@ func (p *ArrayProxy) InsertIntegerAfter(index int, v int) *ArrayProxy {
 	return p
 }
 
+// Delete deletes the element of the given index.
 func (p *ArrayProxy) Delete(idx int) json.Element {
 	if p.Len() <= idx {
 		log.Logger.Warnf("the given index is out of bound: %d", idx)
@@ -146,6 +159,7 @@ func (p *ArrayProxy) Delete(idx int) json.Element {
 	return deleted
 }
 
+// Len returns length of this Array.
 func (p *ArrayProxy) Len() int {
 	return p.Array.Len()
 }

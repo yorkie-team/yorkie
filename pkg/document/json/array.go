@@ -53,6 +53,8 @@ func (a *Array) Get(idx int) Element {
 	return a.elements.Get(idx).elem
 }
 
+// FindPrevCreatedAt returns the creation time of the previous element of the
+// given element.
 func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 	return a.elements.FindPrevCreatedAt(createdAt)
 }
@@ -62,6 +64,8 @@ func (a *Array) Delete(idx int, deletedAt *time.Ticket) Element {
 	return a.elements.Delete(idx, deletedAt).elem
 }
 
+// MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
+// element.
 func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) {
 	a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt)
 }
@@ -152,6 +156,7 @@ func (a *Array) Len() int {
 	return a.elements.Len()
 }
 
+// Descendants traverse the descendants of this array.
 func (a *Array) Descendants(callback func(elem Element, parent Container) bool) {
 	for _, node := range a.elements.Nodes() {
 		if callback(node.elem, a) {
@@ -167,6 +172,7 @@ func (a *Array) Descendants(callback func(elem Element, parent Container) bool) 
 	}
 }
 
+// RGANodes returns the slices of RGATreeListNode.
 func (a *Array) RGANodes() []*RGATreeListNode {
 	return a.elements.Nodes()
 }

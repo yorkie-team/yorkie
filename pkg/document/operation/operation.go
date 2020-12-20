@@ -24,12 +24,24 @@ import (
 )
 
 var (
+	// ErrNotApplicableDataType occurs when attempting to execute an operation
+	// on a data type that cannot be executed.
 	ErrNotApplicableDataType = errors.New("fail to execute this operation")
 )
 
+// Operation represents an operation to be executed on a document.
 type Operation interface {
+
+	// Execute executes this operation on the given document(`root`).
 	Execute(root *json.Root) error
+
+	// ExecutedAt returns execution time of this operation.
 	ExecutedAt() *time.Ticket
+
+	// SetActor sets the given actor to this operation.
 	SetActor(id *time.ActorID)
+
+	// ParentCreatedAt returns the creation time of the target element to
+	// execute the operation.
 	ParentCreatedAt() *time.Ticket
 }

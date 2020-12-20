@@ -1,7 +1,8 @@
 # Dockerfile References: https://docs.docker.com/engine/reference/builder/
 
+# Stage 1: build binary
 # Start from the latest golang base image
-FROM golang:latest
+FROM golang:1-buster AS builder
 
 # Add Maintainer Info
 LABEL maintainer="hackerwins <susukang98@gmail.com>"
@@ -21,9 +22,17 @@ COPY . .
 # Build the yorkie
 RUN make build
 
+# Stage 2: copy binary
+FROM debian:buster-slim
+
+# Get and place binary to /bin
+COPY --from=builder /app/bin/yorkie /bin/
+
+# Set default config (overridable via mounting to /config.json)
+COPY --from=builder /app/yorkie/config.sample.json /config.json
+
 # Expose port 11101, 11102 to the outside world
 EXPOSE 11101
 EXPOSE 11102
 
-# Command to run the executable
-ENTRYPOINT ["/app/bin/yorkie", "agent"]
+ENTRYPOINT ["yorkie", "agent", "-c", "/config.json"]

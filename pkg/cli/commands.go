@@ -14,12 +14,22 @@
  * limitations under the License.
  */
 
-package main
+package cli
 
 import (
-	"github.com/yorkie-team/yorkie/cmd"
+	"github.com/spf13/cobra"
 )
 
-func main() {
-	cmd.Run()
+var rootCmd = &cobra.Command{
+	Use:   "yorkie [options]",
+	Short: "Document store for collaborative applications based on CRDT",
+}
+
+// Run executes CLI.
+func Run() int {
+	if err := rootCmd.Execute(); err != nil {
+		return 1
+	}
+
+	return 0
 }

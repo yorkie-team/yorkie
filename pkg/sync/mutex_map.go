@@ -33,12 +33,14 @@ type MutexMap struct {
 	mutexMap *sync.Map
 }
 
+// NewMutexMap creates an instance of MutexMap.
 func NewMutexMap() *MutexMap {
 	return &MutexMap{
 		mutexMap: &sync.Map{},
 	}
 }
 
+// Unlock unlocks the given key's mutex.
 func (m *MutexMap) Unlock(key string) error {
 	value, ok := m.mutexMap.Load(key)
 	if !ok {
@@ -52,6 +54,7 @@ func (m *MutexMap) Unlock(key string) error {
 	return nil
 }
 
+// Lock locks the given key's mutex.
 func (m *MutexMap) Lock(key string) error {
 	mu := sync.Mutex{}
 	value, _ := m.mutexMap.LoadOrStore(key, &mu)

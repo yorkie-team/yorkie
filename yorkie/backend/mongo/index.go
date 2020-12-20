@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
+// Below are names and indexes information of collections that stores Yorkie data.
 var (
 	ColClients     = "clients"
 	idxClientInfos = []mongo.IndexModel{{

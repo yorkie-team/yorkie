@@ -59,6 +59,8 @@ func (cp *Checkpoint) IncreaseClientSeq(inc uint32) *Checkpoint {
 	return New(cp.ServerSeq, cp.ClientSeq+inc)
 }
 
+// SyncClientSeq updates the given clientSeq if it is greater than the internal
+// value.
 func (cp *Checkpoint) SyncClientSeq(clientSeq uint32) *Checkpoint {
 	if cp.ClientSeq < clientSeq {
 		return New(cp.ServerSeq, clientSeq)
@@ -67,6 +69,8 @@ func (cp *Checkpoint) SyncClientSeq(clientSeq uint32) *Checkpoint {
 	return cp
 }
 
+// Forward updates the given checkpoint with those values when it is greater
+// than the values of internal properties.
 func (cp *Checkpoint) Forward(other *Checkpoint) *Checkpoint {
 	if cp.Equals(other) {
 		return cp

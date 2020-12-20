@@ -63,7 +63,7 @@ func (s *Subscription) Subscriber() *time.ActorID {
 	return s.subscriber
 }
 
-// Subscriber returns string representation of the subscriber.
+// SubscriberID returns string representation of the subscriber.
 func (s *Subscription) SubscriberID() string {
 	return s.subscriber.String()
 }
