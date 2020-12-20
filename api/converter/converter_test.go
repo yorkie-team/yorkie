@@ -19,14 +19,14 @@ package converter_test
 import (
 	"math"
 	"testing"
-	"time"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
-	time2 "github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 func TestConverter(t *testing.T) {
@@ -67,7 +67,7 @@ func TestConverter(t *testing.T) {
 				SetDouble("1.4", 1.79).
 				SetString("k1.5", "4").
 				SetBytes("k1.6", []byte{65, 66}).
-				SetDate("k1.7", time.Now())
+				SetDate("k1.7", gotime.Now())
 
 			// an array
 			root.SetNewArray("k2").
@@ -77,7 +77,7 @@ func TestConverter(t *testing.T) {
 				AddDouble(3.0).
 				AddString("4").
 				AddBytes([]byte{65}).
-				AddDate(time.Now())
+				AddDate(gotime.Now())
 
 			// plain text
 			root.SetNewText("k3").
@@ -122,7 +122,7 @@ func TestConverter(t *testing.T) {
 				SetDouble("1.4", 1.79).
 				SetString("k1.5", "4").
 				SetBytes("k1.6", []byte{65, 66}).
-				SetDate("k1.7", time.Now())
+				SetDate("k1.7", gotime.Now())
 
 			// an array
 			root.SetNewArray("k2").
@@ -132,7 +132,7 @@ func TestConverter(t *testing.T) {
 				AddDouble(3.0).
 				AddString("4").
 				AddBytes([]byte{65}).
-				AddDate(time.Now())
+				AddDate(gotime.Now())
 
 			// plain text
 			root.SetNewText("k3").
@@ -154,7 +154,7 @@ func TestConverter(t *testing.T) {
 
 		pbPack := converter.ToChangePack(d1.CreateChangePack())
 		pack, err := converter.FromChangePack(pbPack)
-		pack.MinSyncedTicket = time2.MaxTicket
+		pack.MinSyncedTicket = time.MaxTicket
 		assert.NoError(t, err)
 
 		d2 := document.New("c1", "d1")

@@ -22,13 +22,12 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/yorkie-team/yorkie/pkg/document/json"
-
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/testhelper"
