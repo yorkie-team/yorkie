@@ -10,14 +10,14 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [0.1.1] - 2020-12-20
 
 ### Added
- - Add version tag when pushing image #102
+ - Add version tag when pushing image: #102
 
 ### Changed
- - Use multi-stage build for docker image #107
+ - Use multi-stage build for docker image: #107
  
 ### Fixed
- - Fix check already attached document #111
- - Delete removed elements from the clone while running GC #103
+ - Fix check already attached document: #111
+ - Delete removed elements from the clone while running GC: #103
 
 ## [0.1.0] - 2020-11-07
 
