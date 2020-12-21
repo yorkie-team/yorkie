@@ -19,11 +19,10 @@ package json_test
 import (
 	"testing"
 
-	"github.com/yorkie-team/yorkie/pkg/document/time"
-
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/testhelper"
 )
 
