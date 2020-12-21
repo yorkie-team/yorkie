@@ -57,7 +57,6 @@ func (pq *PriorityQueue) Len() int {
 }
 
 // Release deletes the given value from this PriorityQueue.
-// TODO: It has to be reimplemented in-place.
 func (pq *PriorityQueue) Release(value Value) {
 	idx := -1
 	for i, item := range *pq.queue {
