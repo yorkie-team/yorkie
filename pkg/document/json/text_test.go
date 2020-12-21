@@ -27,7 +27,8 @@ import (
 
 func TestText(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
-		ctx := testhelper.TextChangeContext()
+		root := testhelper.TestRoot()
+		ctx := testhelper.TextChangeContext(root)
 		text := json.NewText(json.NewRGATreeSplit(json.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)

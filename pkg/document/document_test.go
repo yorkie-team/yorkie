@@ -19,6 +19,7 @@ package document_test
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/testhelper"
@@ -169,6 +171,159 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		testhelper.PrintSnapshotBytesSize(bytes)
 		testhelper.PrintMemStats()
+	})
+
+	t.Run("garbage collection for text test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+		assert.Equal(t, "{}", doc.Marshal())
+		assert.False(t, doc.HasLocalChanges())
+
+		// check garbage length
+		expected := `{"k1":"Hello mario"}`
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("k1").
+				Edit(0, 0, "Hello world").
+				Edit(6, 11, "mario")
+			assert.Equal(t, expected, root.Marshal())
+			return nil
+		}, "edit text k1")
+		assert.NoError(t, err)
+		assert.Equal(t, expected, doc.Marshal())
+		assert.Equal(t, 1, doc.GarbageLen())
+
+		expected = `{"k1":"Hi jane"}`
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetText("k1")
+			text.Edit(0, 5, "Hi")
+			text.Edit(3, 4, "j")
+			text.Edit(4, 8, "ane")
+			assert.Equal(t, expected, root.Marshal())
+			return nil
+		}, "edit text k1")
+		assert.NoError(t, err)
+		assert.Equal(t, expected, doc.Marshal())
+
+		expectedGarbageLen := 4
+		assert.Equal(t, expectedGarbageLen, doc.GarbageLen())
+		// garbage collect
+		assert.Equal(t, expectedGarbageLen, doc.GarbageCollect(time.MaxTicket))
+	})
+
+	t.Run("garbage collection for rich text test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+		assert.Equal(t, "{}", doc.Marshal())
+		assert.False(t, doc.HasLocalChanges())
+
+		// check garbage length
+		expected := `{"k1":[{"attrs":{"b":"1"},"val":"Hello "},{"attrs":{},"val":"mario"}]}`
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewRichText("k1").
+				Edit(0, 0, "Hello world", map[string]string{"b": "1"}).
+				Edit(6, 11, "mario", nil)
+			assert.Equal(t, expected, root.Marshal())
+			return nil
+		}, "edit text k1")
+		assert.NoError(t, err)
+		assert.Equal(t, expected, doc.Marshal())
+		assert.Equal(t, 1, doc.GarbageLen())
+
+		expected = `{"k1":[{"attrs":{"b":"1"},"val":"Hi"},{"attrs":{"b":"1"},"val":" "},` +
+			`{"attrs":{},"val":"j"},{"attrs":{"b":"1"},"val":"ane"}]}`
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetRichText("k1")
+			text.Edit(0, 5, "Hi", map[string]string{"b": "1"})
+			text.Edit(3, 4, "j", nil)
+			text.Edit(4, 8, "ane", map[string]string{"b": "1"})
+			assert.Equal(t, expected, root.Marshal())
+			return nil
+		}, "edit text k1")
+		assert.NoError(t, err)
+		assert.Equal(t, expected, doc.Marshal())
+
+		expectedGarbageLen := 4
+		assert.Equal(t, expectedGarbageLen, doc.GarbageLen())
+		// garbage collect
+		assert.Equal(t, expectedGarbageLen, doc.GarbageCollect(time.MaxTicket))
+	})
+
+	t.Run("garbage collection for large size of text garbage test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+		assert.Equal(t, "{}", doc.Marshal())
+		assert.False(t, doc.HasLocalChanges())
+
+		printMemStats := func(root *json.Object) {
+			bytes, err := converter.ObjectToBytes(doc.RootObject())
+			assert.NoError(t, err)
+			testhelper.PrintSnapshotBytesSize(bytes)
+			testhelper.PrintMemStats()
+		}
+
+		textSize := 1_000
+		// 01. initial
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.SetNewText("k1")
+			for i := 0; i < textSize; i++ {
+				text.Edit(i, i, "a")
+			}
+			return nil
+		}, "initial")
+		assert.NoError(t, err)
+		fmt.Println("-----initial")
+		printMemStats(doc.RootObject())
+
+		// 02. 1000 nodes modified
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetText("k1")
+			for i := 0; i < textSize; i++ {
+				text.Edit(i, i+1, "b")
+			}
+			return nil
+		}, "1000 nodes modified")
+		assert.NoError(t, err)
+		fmt.Println("-----1000 nodes modified")
+		printMemStats(doc.RootObject())
+		assert.Equal(t, textSize, doc.GarbageLen())
+
+		// 03. GC
+		assert.Equal(t, textSize, doc.GarbageCollect(time.MaxTicket))
+		runtime.GC()
+		fmt.Println("-----Garbage collect")
+		printMemStats(doc.RootObject())
+
+		// 04. long text by one node
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.SetNewText("k2")
+			str := ""
+			for i := 0; i < textSize; i++ {
+				str += "a"
+			}
+			text.Edit(0, 0, str)
+			return nil
+		}, "initial")
+		fmt.Println("-----long text by one node")
+		assert.NoError(t, err)
+		printMemStats(doc.RootObject())
+
+		// 05. Modify one node multiple times
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetText("k2")
+			for i := 0; i < textSize; i++ {
+				if i != textSize {
+					text.Edit(i, i+1, "b")
+				}
+			}
+			return nil
+		}, "Modify one node multiple times")
+		assert.NoError(t, err)
+		fmt.Println("-----Modify one node multiple times")
+		printMemStats(doc.RootObject())
+
+		// 06. GC
+		assert.Equal(t, textSize, doc.GarbageLen())
+		assert.Equal(t, textSize, doc.GarbageCollect(time.MaxTicket))
+		runtime.GC()
+		fmt.Println("-----Garbage collect")
+		printMemStats(doc.RootObject())
 	})
 
 	t.Run("object test", func(t *testing.T) {

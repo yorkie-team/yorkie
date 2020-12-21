@@ -77,3 +77,8 @@ func (c *Context) RegisterElement(elem json.Element) {
 func (c *Context) RegisterRemovedElementPair(parent json.Container, deleted json.Element) {
 	c.root.RegisterRemovedElementPair(parent, deleted)
 }
+
+// RegisterRemovedNodeTextElement registers a given text type element to hash table.
+func (c *Context) RegisterRemovedNodeTextElement(textType json.TextElement) {
+	c.root.RegisterRemovedNodeTextElement(textType)
+}

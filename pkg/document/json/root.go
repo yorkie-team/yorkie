@@ -33,16 +33,18 @@ type ElementPair struct {
 // Every element has a unique time ticket at creation, which allows us to find
 // a particular element.
 type Root struct {
-	object                           *Object
-	elementMapByCreatedAt            map[string]Element
-	removedElementPairMapByCreatedAt map[string]ElementPair
+	object                               *Object
+	elementMapByCreatedAt                map[string]Element
+	removedElementPairMapByCreatedAt     map[string]ElementPair
+	removedNodeTextElementMapByCreatedAt map[string]TextElement
 }
 
 // NewRoot creates a new instance of Root.
 func NewRoot(root *Object) *Root {
 	r := &Root{
-		elementMapByCreatedAt:            make(map[string]Element),
-		removedElementPairMapByCreatedAt: make(map[string]ElementPair),
+		elementMapByCreatedAt:                make(map[string]Element),
+		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
+		removedNodeTextElementMapByCreatedAt: make(map[string]TextElement),
 	}
 
 	r.object = root
@@ -86,6 +88,11 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	}
 }
 
+// RegisterRemovedNodeTextElement register the given text element to hash table.
+func (r *Root) RegisterRemovedNodeTextElement(textType TextElement) {
+	r.removedNodeTextElementMapByCreatedAt[textType.CreatedAt().Key()] = textType
+}
+
 // DeepCopy copies itself deeply.
 func (r *Root) DeepCopy() *Root {
 	return NewRoot(r.object.DeepCopy().(*Object))
@@ -100,6 +107,14 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) int {
 			pair.parent.Purge(pair.elem)
 			count += r.garbageCollect(pair.elem)
 		}
+	}
+
+	for _, text := range r.removedNodeTextElementMapByCreatedAt {
+		removedNodeCnt := text.cleanupRemovedNodes(ticket)
+		if removedNodeCnt > 0 {
+			delete(r.removedNodeTextElementMapByCreatedAt, text.CreatedAt().Key())
+		}
+		count += removedNodeCnt
 	}
 
 	return count
@@ -119,6 +134,10 @@ func (r *Root) GarbageLen() int {
 				return false
 			})
 		}
+	}
+
+	for _, text := range r.removedNodeTextElementMapByCreatedAt {
+		count += text.removedNodesLen()
 	}
 
 	return count

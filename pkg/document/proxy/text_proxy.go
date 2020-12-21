@@ -65,6 +65,8 @@ func (p *TextProxy) Edit(from, to int, content string) *TextProxy {
 		content,
 		ticket,
 	))
-
+	if fromPos.Compare(toPos) != 0 {
+		p.context.RegisterRemovedNodeTextElement(p)
+	}
 	return p
 }

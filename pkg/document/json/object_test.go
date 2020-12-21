@@ -11,7 +11,8 @@ import (
 
 func TestObject(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
-		ctx := testhelper.TextChangeContext()
+		root := testhelper.TestRoot()
+		ctx := testhelper.TextChangeContext(root)
 
 		obj := json.NewObject(json.NewRHTPriorityQueueMap(), ctx.IssueTimeTicket())
 

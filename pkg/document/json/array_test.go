@@ -27,7 +27,8 @@ import (
 
 func TestArray(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
-		ctx := testhelper.TextChangeContext()
+		root := testhelper.TestRoot()
+		ctx := testhelper.TextChangeContext(root)
 
 		a := json.NewArray(json.NewRGATreeList(), ctx.IssueTimeTicket())
 
