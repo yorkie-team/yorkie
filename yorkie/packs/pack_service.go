@@ -270,7 +270,7 @@ func pullSnapshot(
 		return nil, nil, err
 	}
 
-	doc, err := document.FromSnapshot(
+	doc, err := document.NewInternalDocumentFromSnapshot(
 		docKey.Collection,
 		docKey.Document,
 		snapshotInfo.ServerSeq,
