@@ -17,6 +17,7 @@
 package pq_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,32 +51,109 @@ func exist(toFind int, values []pq.Value) bool {
 	return ret
 }
 
+func setUpTestNums() *pq.PriorityQueue {
+	queue := pq.NewPriorityQueue()
+	testNums := []int{10, 7, 1, 9, 4, 11, 5, 3, 6, 12, 8, 2}
+	for _, testNum := range testNums {
+		queue.Push(newTestValue(testNum))
+	}
+
+	return queue
+}
+
 func TestPQ(t *testing.T) {
-	t.Run("priority queue test", func(t *testing.T) {
-		pq := pq.NewPriorityQueue()
-		testNums := []int{10, 7, 1, 9, 4, 11, 5, 3, 6, 12, 8, 2}
-		for _, testNum := range testNums {
-			pq.Push(newTestValue(testNum))
-		}
-		for _, testNum := range testNums {
-			assert.True(t, exist(testNum, pq.Values()))
-		}
-		assert.Equal(t, 12, pq.Len())
-		assert.Equal(t, newTestValue(1), pq.Peek())
-		assert.Equal(t, newTestValue(1), pq.Pop())
-		assert.Equal(t, 11, pq.Len())
-		assert.False(t, exist(1, pq.Values()))
-		assert.Equal(t, newTestValue(2), pq.Peek())
-		assert.Equal(t, pq.Peek(), pq.Pop())
+	t.Run("priority queue push", func(t *testing.T) {
+		queue := setUpTestNums()
 
-		pq.Release(newTestValue(3))
-		assert.False(t, exist(3, pq.Values()))
+		for _, testNum := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} {
+			assert.True(t, exist(testNum, queue.Values()))
+		}
+	})
 
-		for i := 4; i <= 12; i++ {
-			assert.Equal(t, newTestValue(i), pq.Peek())
-			assert.Equal(t, newTestValue(i), pq.Pop())
+	t.Run("priority queue peek", func(t *testing.T) {
+		queue := setUpTestNums()
+
+		assert.Equal(t, 12, queue.Len())
+		assert.Equal(t, newTestValue(1), queue.Peek())
+		assert.Equal(t, 12, queue.Len())
+		assert.True(t, exist(1, queue.Values()))
+	})
+
+	t.Run("priority queue pop", func(t *testing.T) {
+		queue := setUpTestNums()
+
+		assert.Equal(t, newTestValue(1), queue.Pop())
+		assert.Equal(t, queue.Peek(), queue.Pop())
+		assert.Equal(t, 10, queue.Len())
+
+		var tmp []int
+		for queue.Len() != 0 {
+			tmp = append(tmp, (queue.Pop()).(testValue).value)
 		}
 
-		assert.Equal(t, 0, pq.Len())
+		assert.EqualValues(t, tmp, []int{3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
+	})
+
+}
+
+func TestPQRelease(t *testing.T) {
+	t.Run("priority queue release", func(t *testing.T) {
+		queue := setUpTestNums()
+		for i := 1; i <= 12; i++ {
+			queue.Release(newTestValue(i))
+			assert.False(t, exist(i, queue.Values()))
+		}
+		assert.Equal(t, 0, queue.Len())
+
+		queue = setUpTestNums()
+		for i := 12; i >= 1; i-- {
+			queue.Release(newTestValue(i))
+			assert.False(t, exist(i, queue.Values()))
+		}
+		assert.Equal(t, 0, queue.Len())
+
+		queue = setUpTestNums()
+		queueLen := len(queue.Values())
+		queue.Release(newTestValue(13))
+		assert.Equal(t, queueLen, len(queue.Values()))
+	})
+
+	t.Run("root node is deleted test", func(t *testing.T) {
+		queue := setUpTestNums()
+		root := newTestValue(11)
+		queue.Release(root)
+
+		expected := "[{1} {3} {2} {4} {8} {5} {7} {10} {6} {12} {9}]"
+		assert.Equal(t, expected, fmt.Sprint(queue.Values()))
+	})
+
+	t.Run("if parent node is deleted", func(t *testing.T) {
+		queue := setUpTestNums()
+		parent := newTestValue(5)
+
+		queue.Release(parent)
+
+		expected := "[{1} {3} {2} {4} {8} {11} {7} {10} {6} {12} {9}]"
+		assert.Equal(t, expected, fmt.Sprint(queue.Values()))
+	})
+
+	t.Run("if leaf node is deleted", func(t *testing.T) {
+		queue := setUpTestNums()
+		leaf := newTestValue(9)
+
+		queue.Release(leaf)
+
+		expected := "[{1} {3} {2} {4} {8} {5} {7} {10} {6} {12} {11}]"
+		assert.Equal(t, expected, fmt.Sprint(queue.Values()))
+	})
+
+	t.Run("if a heap has one node", func(t *testing.T) {
+		queue := pq.NewPriorityQueue()
+		node := newTestValue(0)
+
+		queue.Push(node)
+		queue.Release(node)
+
+		assert.Equal(t, 0, queue.Len())
 	})
 }

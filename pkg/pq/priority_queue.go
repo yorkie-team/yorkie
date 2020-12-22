@@ -57,18 +57,20 @@ func (pq *PriorityQueue) Len() int {
 }
 
 // Release deletes the given value from this PriorityQueue.
-// TODO: It has to be reimplemented in-place.
 func (pq *PriorityQueue) Release(value Value) {
-	queue := &internalQueue{}
-	heap.Init(queue)
-
-	for _, item := range *pq.queue {
-		if item.value != value {
-			heap.Push(queue, item)
+	idx := -1
+	for i, item := range *pq.queue {
+		if item.value == value {
+			idx = i
+			break
 		}
 	}
 
-	pq.queue = queue
+	if idx == -1 {
+		return
+	}
+
+	heap.Remove(pq.queue, idx)
 }
 
 // Values returns the values of this PriorityQueue.
