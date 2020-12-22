@@ -17,6 +17,7 @@
 package pq_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -93,9 +94,11 @@ func TestPQ(t *testing.T) {
 		assert.EqualValues(t, tmp, []int{3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
 	})
 
+}
+
+func TestPQRelease(t *testing.T) {
 	t.Run("priority queue release", func(t *testing.T) {
 		queue := setUpTestNums()
-
 		for i := 1; i <= 12; i++ {
 			queue.Release(newTestValue(i))
 			assert.False(t, exist(i, queue.Values()))
@@ -103,7 +106,6 @@ func TestPQ(t *testing.T) {
 		assert.Equal(t, 0, queue.Len())
 
 		queue = setUpTestNums()
-
 		for i := 12; i >= 1; i-- {
 			queue.Release(newTestValue(i))
 			assert.False(t, exist(i, queue.Values()))
@@ -111,9 +113,47 @@ func TestPQ(t *testing.T) {
 		assert.Equal(t, 0, queue.Len())
 
 		queue = setUpTestNums()
-
 		queueLen := len(queue.Values())
 		queue.Release(newTestValue(13))
 		assert.Equal(t, queueLen, len(queue.Values()))
+	})
+
+	t.Run("root node is deleted test", func(t *testing.T) {
+		queue := setUpTestNums()
+		root := newTestValue(11)
+		queue.Release(root)
+
+		expected := "[{1} {3} {2} {4} {8} {5} {7} {10} {6} {12} {9}]"
+		assert.Equal(t, expected, fmt.Sprint(queue.Values()))
+	})
+
+	t.Run("if parent node is deleted", func(t *testing.T) {
+		queue := setUpTestNums()
+		parent := newTestValue(5)
+
+		queue.Release(parent)
+
+		expected := "[{1} {3} {2} {4} {8} {11} {7} {10} {6} {12} {9}]"
+		assert.Equal(t, expected, fmt.Sprint(queue.Values()))
+	})
+
+	t.Run("if leaf node is deleted", func(t *testing.T) {
+		queue := setUpTestNums()
+		leaf := newTestValue(9)
+
+		queue.Release(leaf)
+
+		expected := "[{1} {3} {2} {4} {8} {5} {7} {10} {6} {12} {11}]"
+		assert.Equal(t, expected, fmt.Sprint(queue.Values()))
+	})
+
+	t.Run("if a heap has one node", func(t *testing.T) {
+		queue := pq.NewPriorityQueue()
+		node := newTestValue(0)
+
+		queue.Push(node)
+		queue.Release(node)
+
+		assert.Equal(t, 0, queue.Len())
 	})
 }
