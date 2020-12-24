@@ -23,7 +23,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/testhelper"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func registerRemovedNodeTextElement(fromPos, toPos *json.RGATreeSplitNodePos, root *json.Root, text json.TextElement) {
@@ -34,8 +34,8 @@ func registerRemovedNodeTextElement(fromPos, toPos *json.RGATreeSplitNodePos, ro
 
 func TestRoot(t *testing.T) {
 	t.Run("garbage collection for array test", func(t *testing.T) {
-		root := testhelper.TestRoot()
-		ctx := testhelper.TextChangeContext(root)
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
 		array := json.NewArray(json.NewRGATreeList(), ctx.IssueTimeTicket())
 
 		array.Add(json.NewPrimitive(0, ctx.IssueTimeTicket()))
@@ -54,8 +54,8 @@ func TestRoot(t *testing.T) {
 	})
 
 	t.Run("garbage collection for text test", func(t *testing.T) {
-		root := testhelper.TestRoot()
-		ctx := testhelper.TextChangeContext(root)
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
 		text := json.NewText(json.NewRGATreeSplit(json.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)
@@ -94,8 +94,8 @@ func TestRoot(t *testing.T) {
 	})
 
 	t.Run("garbage collection for rich text test", func(t *testing.T) {
-		root := testhelper.TestRoot()
-		ctx := testhelper.TextChangeContext(root)
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
 		richText := json.NewRichText(json.NewRGATreeSplit(json.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := richText.CreateRange(0, 0)
