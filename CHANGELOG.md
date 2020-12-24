@@ -7,10 +7,11 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## [0.1.1] - 2020-12-20
+## [0.1.1] - 2020-12-23
 
 ### Added
  - Add version tag when pushing image: #102
+ - Add garbage collection for TextElement: #104
 
 ### Changed
  - Use multi-stage build for docker image: #107
@@ -18,6 +19,7 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Fixed
  - Fix check already attached document: #111
  - Delete removed elements from the clone while running GC: #103
+ - Fix to use internal document when pulling snapshot from agent: #120
 
 ## [0.1.0] - 2020-11-07
 
