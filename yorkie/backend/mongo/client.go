@@ -288,7 +288,7 @@ func (c *Client) FindDocInfoByKey(
 				"key": bsonDocKey,
 			})
 			if result.Err() == mongo.ErrNoDocuments {
-				log.Logger.Error(err)
+				log.Logger.Error(result.Err())
 				return ErrDocumentNotFound
 			}
 			if result.Err() != nil {
