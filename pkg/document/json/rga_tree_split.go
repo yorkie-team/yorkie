@@ -580,22 +580,19 @@ func (s *RGATreeSplit) cleanupRemovedNodes(ticket *time.Ticket) int {
 	return count
 }
 
-// purge removes the node passed as a parameter from RGATreeSplit.
+// purge physically purge the given node from RGATreeSplit.
 func (s *RGATreeSplit) purge(node *RGATreeSplitNode) {
-	if node.prev != nil {
-		node.prev.next = node.next
-		if node.next != nil {
-			node.next.prev = node.prev
-		}
-	} else {
-		s.initialHead, node.next.prev = node.next, nil
+	node.prev.next = node.next
+	if node.next != nil {
+		node.next.prev = node.prev
 	}
-	node.next, node.prev = nil, nil
+	node.prev, node.next = nil, nil
 
 	if node.insPrev != nil {
-		node.insPrev.insNext, node.insPrev = nil, nil
+		node.insPrev.insNext = node.insNext
 	}
 	if node.insNext != nil {
-		node.insNext.insPrev, node.insNext = nil, nil
+		node.insNext.insPrev = node.insPrev
 	}
+	node.insPrev, node.insNext = nil, nil
 }
