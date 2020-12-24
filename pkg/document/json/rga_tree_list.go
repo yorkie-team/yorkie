@@ -313,6 +313,8 @@ func (a *RGATreeList) release(node *RGATreeListNode) {
 	if node.next != nil {
 		node.next.prev = node.prev
 	}
+	node.prev, node.next = nil, nil
+
 	a.nodeMapByIndex.Delete(node.indexNode)
 	delete(a.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
 
