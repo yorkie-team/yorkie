@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 
@@ -115,7 +116,7 @@ func (s *Server) ActivateClient(
 	req *api.ActivateClientRequest,
 ) (*api.ActivateClientResponse, error) {
 	if req.ClientKey == "" {
-		return nil, toStatusError(
+		return nil, statusErrorWithDetails(
 			codes.InvalidArgument,
 			"invalid client key",
 			[]fieldViolation{{
@@ -126,7 +127,7 @@ func (s *Server) ActivateClient(
 	}
 	client, err := clients.Activate(ctx, s.backend, req.ClientKey)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	return &api.ActivateClientResponse{
@@ -141,7 +142,7 @@ func (s *Server) DeactivateClient(
 	req *api.DeactivateClientRequest,
 ) (*api.DeactivateClientResponse, error) {
 	if req.ClientId == "" {
-		return nil, toStatusError(
+		return nil, statusErrorWithDetails(
 			codes.InvalidArgument,
 			"invalid client ID",
 			[]fieldViolation{{
@@ -153,10 +154,7 @@ func (s *Server) DeactivateClient(
 
 	client, err := clients.Deactivate(ctx, s.backend, req.ClientId)
 	if err != nil {
-		if err == mongo.ErrClientNotFound {
-			return nil, status.Error(codes.NotFound, err.Error())
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	return &api.DeactivateClientResponse{
@@ -177,7 +175,7 @@ func (s *Server) AttachDocument(
 	// if pack.HasChanges() {
 	lockKey := fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())
 	if err := s.backend.MutexMap.Lock(lockKey); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 	defer func() {
 		if err := s.backend.MutexMap.Unlock(lockKey); err != nil {
@@ -188,24 +186,15 @@ func (s *Server) AttachDocument(
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, true)
 	if err != nil {
-		if err == mongo.ErrClientNotFound || err == mongo.ErrDocumentNotFound {
-			return nil, status.Error(codes.NotFound, err.Error())
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
-		if err == types.ErrClientNotActivated {
-			return nil, status.Error(codes.FailedPrecondition, err.Error())
-		}
-		if err == types.ErrDocumentAlreadyAttached {
-			return nil, status.Error(codes.FailedPrecondition, err.Error())
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	return &api.AttachDocumentResponse{
@@ -226,7 +215,7 @@ func (s *Server) DetachDocument(
 	// if pack.HasChanges() {
 	lockKey := fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())
 	if err := s.backend.MutexMap.Lock(lockKey); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 	defer func() {
 		if err := s.backend.MutexMap.Unlock(lockKey); err != nil {
@@ -237,24 +226,18 @@ func (s *Server) DetachDocument(
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, false)
 	if err != nil {
-		if err == mongo.ErrClientNotFound || err == mongo.ErrDocumentNotFound {
-			return nil, status.Error(codes.NotFound, err.Error())
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID.Hex()); err != nil {
-		if err == types.ErrClientNotActivated || err == types.ErrDocumentNotAttached {
-			return nil, status.Error(codes.FailedPrecondition, err.Error())
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	return &api.DetachDocumentResponse{
@@ -277,7 +260,7 @@ func (s *Server) PushPull(
 	// if pack.HasChanges() {
 	lockKey := fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())
 	if err := s.backend.MutexMap.Lock(lockKey); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 	defer func() {
 		if err := s.backend.MutexMap.Unlock(lockKey); err != nil {
@@ -288,21 +271,15 @@ func (s *Server) PushPull(
 
 	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, false)
 	if err != nil {
-		if err == mongo.ErrClientNotFound || err == mongo.ErrDocumentNotFound {
-			return nil, status.Error(codes.NotFound, err.Error())
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID.Hex()); err != nil {
-		if err == types.ErrClientNotActivated || err == types.ErrDocumentNotAttached {
-			return nil, status.Error(codes.FailedPrecondition, err.Error())
-		}
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	return &api.PushPullResponse{
@@ -431,7 +408,29 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription
 	}
 }
 
-func toStatusError(code codes.Code, msg string, violations []fieldViolation) error {
+// toStatusError returns a status.Error from the given logic error. If an error
+// occurs while executing logic in API handler, gRPC status.error should be
+// returned so that the client can know more about the status of the request.
+func toStatusError(err error) error {
+	if errors.Is(err, mongo.ErrInvalidID) {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	if errors.Is(err, mongo.ErrClientNotFound) ||
+		errors.Is(err, mongo.ErrDocumentNotFound) {
+		return status.Error(codes.NotFound, err.Error())
+	}
+
+	if err == types.ErrClientNotActivated ||
+		err == types.ErrDocumentNotAttached ||
+		err == types.ErrDocumentAlreadyAttached {
+		return status.Error(codes.FailedPrecondition, err.Error())
+	}
+
+	return status.Error(codes.Internal, err.Error())
+}
+
+func statusErrorWithDetails(code codes.Code, msg string, violations []fieldViolation) error {
 	br := &errdetails.BadRequest{}
 
 	for _, violation := range violations {
