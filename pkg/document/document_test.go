@@ -26,7 +26,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 var (
@@ -99,31 +98,6 @@ func TestDocument(t *testing.T) {
 		}, "deletes k2")
 		assert.NoError(t, err)
 		assert.Equal(t, expected, doc.Marshal())
-	})
-
-	t.Run("garbage collection test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
-		assert.Equal(t, "{}", doc.Marshal())
-
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetInteger("1", 1)
-			root.SetNewArray("2").AddInteger(1, 2, 3)
-			root.SetInteger("3", 3)
-			return nil
-		}, "sets 1,2,3")
-		assert.NoError(t, err)
-		assert.Equal(t, `{"1":1,"2":[1,2,3],"3":3}`, doc.Marshal())
-
-		err = doc.Update(func(root *proxy.ObjectProxy) error {
-			root.Delete("2")
-			return nil
-		}, "deletes 2")
-		assert.NoError(t, err)
-		assert.Equal(t, `{"1":1,"3":3}`, doc.Marshal())
-		assert.Equal(t, 4, doc.GarbageLen())
-
-		assert.Equal(t, 4, doc.GarbageCollect(time.MaxTicket))
-		assert.Equal(t, 0, doc.GarbageLen())
 	})
 
 	t.Run("object test", func(t *testing.T) {

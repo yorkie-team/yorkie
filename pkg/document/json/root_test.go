@@ -127,4 +127,35 @@ func TestRoot(t *testing.T) {
 		nodeLen = len(richText.Nodes())
 		assert.Equal(t, 1, nodeLen)
 	})
+
+	t.Run("garbage collection for container test", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		obj := root.Object()
+		obj.Set("1", json.NewPrimitive(1, ctx.IssueTimeTicket()))
+		arr := json.NewArray(json.NewRGATreeList(), ctx.IssueTimeTicket()).
+			Add(json.NewPrimitive(1, ctx.IssueTimeTicket())).
+			Add(json.NewPrimitive(2, ctx.IssueTimeTicket())).
+			Add(json.NewPrimitive(3, ctx.IssueTimeTicket()))
+		obj.Set("2", arr)
+		obj.Set("3", json.NewPrimitive(3, ctx.IssueTimeTicket()))
+		assert.Equal(t, `{"1":1,"2":[1,2,3],"3":3}`, root.Object().Marshal())
+
+		deleted := obj.Delete("2", ctx.IssueTimeTicket())
+		root.RegisterRemovedElementPair(obj, deleted)
+		assert.Equal(t, `{"1":1,"3":3}`, obj.Marshal())
+		assert.Equal(t, 4, root.GarbageLen())
+
+		assert.Equal(t, 4, root.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 0, root.GarbageLen())
+
+		deleted = obj.Delete("3", ctx.IssueTimeTicket())
+		root.RegisterRemovedElementPair(obj, deleted)
+		assert.Equal(t, `{"1":1}`, obj.Marshal())
+		assert.Equal(t, 1, root.GarbageLen())
+
+		assert.Equal(t, 1, root.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 0, root.GarbageLen())
+	})
 }
