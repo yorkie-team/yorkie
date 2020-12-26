@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api"
-	"github.com/yorkie-team/yorkie/testhelper"
+	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
@@ -20,19 +20,19 @@ import (
 const (
 	nilClientID = "000000000000000000000000"
 	// to avoid conflict with rpc port used for client test
-	testRPCPort = testhelper.RPCPort + 100
+	testRPCPort = helper.RPCPort + 100
 )
 
 var testRPCServer *rpc.Server
 
 func TestMain(m *testing.M) {
 	be, err := backend.New(&backend.Config{
-		SnapshotThreshold: testhelper.SnapshotThreshold,
+		SnapshotThreshold: helper.SnapshotThreshold,
 	}, &mongo.Config{
-		ConnectionURI:        testhelper.MongoConnectionURI,
-		YorkieDatabase:       testhelper.TestDBName(),
-		ConnectionTimeoutSec: testhelper.MongoConnectionTimeoutSec,
-		PingTimeoutSec:       testhelper.MongoPingTimeoutSec,
+		ConnectionURI:        helper.MongoConnectionURI,
+		YorkieDatabase:       helper.TestDBName(),
+		ConnectionTimeoutSec: helper.MongoConnectionTimeoutSec,
+		PingTimeoutSec:       helper.MongoPingTimeoutSec,
 	})
 	if err != nil {
 		log.Fatal(err)

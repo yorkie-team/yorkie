@@ -39,6 +39,6 @@ lint:
 
 test:
 	go clean -testcache
-	go test -race ./...
+	go test -tags integration -race ./...
 
 .PHONY: tools proto build docker fmt lint test

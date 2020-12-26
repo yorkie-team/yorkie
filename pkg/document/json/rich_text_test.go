@@ -22,13 +22,13 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/testhelper"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestRichText(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
-		root := testhelper.TestRoot()
-		ctx := testhelper.TextChangeContext(root)
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
 
 		text := json.NewInitialRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ctx.IssueTimeTicket())
 

@@ -6,13 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/testhelper"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestObject(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
-		root := testhelper.TestRoot()
-		ctx := testhelper.TextChangeContext(root)
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
 
 		obj := json.NewObject(json.NewRHTPriorityQueueMap(), ctx.IssueTimeTicket())
 

@@ -5,13 +5,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/testhelper"
+	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
 )
 
 const (
 	// to avoid conflict with metrics port used for client test
-	testMetricsPort = testhelper.MetricsPort + 100
+	testMetricsPort = helper.MetricsPort + 100
 )
 
 func TestMetricsServer(t *testing.T) {
