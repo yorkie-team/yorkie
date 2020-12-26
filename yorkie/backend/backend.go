@@ -21,7 +21,8 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/sync"
-	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 )
 
@@ -40,7 +41,7 @@ type Config struct {
 type Backend struct {
 	Config *Config
 
-	Mongo    *mongo.Client
+	DB       db.DB
 	MutexMap *sync.MutexMap
 	PubSub   *pubsub.PubSub
 
@@ -64,7 +65,7 @@ func New(conf *Config, mongoConf *mongo.Config) (*Backend, error) {
 
 	return &Backend{
 		Config:   conf,
-		Mongo:    client,
+		DB:       client,
 		MutexMap: sync.NewMutexMap(),
 		PubSub:   pubsub.New(),
 		closing:  make(chan struct{}),
@@ -80,7 +81,7 @@ func (b *Backend) Close() error {
 	// wait for goroutines before closing backend
 	b.wg.Wait()
 
-	return b.Mongo.Close()
+	return b.DB.Close()
 }
 
 // AttachGoroutine creates a goroutine on a given function and tracks it using

@@ -37,7 +37,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
 	"github.com/yorkie-team/yorkie/yorkie/pubsub"
@@ -412,12 +412,12 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription
 // occurs while executing logic in API handler, gRPC status.error should be
 // returned so that the client can know more about the status of the request.
 func toStatusError(err error) error {
-	if errors.Is(err, mongo.ErrInvalidID) {
+	if errors.Is(err, db.ErrInvalidID) {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	if errors.Is(err, mongo.ErrClientNotFound) ||
-		errors.Is(err, mongo.ErrDocumentNotFound) {
+	if errors.Is(err, db.ErrClientNotFound) ||
+		errors.Is(err, db.ErrDocumentNotFound) {
 		return status.Error(codes.NotFound, err.Error())
 	}
 

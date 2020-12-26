@@ -13,7 +13,7 @@ import (
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
