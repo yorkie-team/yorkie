@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package testhelper
+package helper
 
 import (
 	"fmt"
@@ -101,7 +101,7 @@ func ByteCountIEC(b uint64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
-// TestYorkie is return Yorkie instance for testing.
+// TestYorkie returns Yorkie instance for testing.
 func TestYorkie() *yorkie.Yorkie {
 	y, err := yorkie.New(&yorkie.Config{
 		RPC: &rpc.Config{

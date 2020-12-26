@@ -17,6 +17,6 @@ jobs:
       - run: make tools
       - run: make lint
       - run: make build
-      - run: go test -race -coverprofile=coverage.txt -covermode=atomic -v ./...
+      - run: go test -tags integration,stress -race -coverprofile=coverage.txt -covermode=atomic -v ./...
       - codecov/upload:
           file: coverage.txt
