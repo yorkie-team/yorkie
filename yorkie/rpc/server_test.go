@@ -116,6 +116,26 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
+		// try to attach with invalid client ID
+		_, err = testRPCServer.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   "invalid",
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+
+		// try to attach with invalid client
+		_, err = testRPCServer.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   nilClientID,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+
 		// try to attach already attached document
 		_, err = testRPCServer.AttachDocument(
 			context.Background(),
