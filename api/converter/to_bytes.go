@@ -50,6 +50,9 @@ func toJSONElement(elem json.Element) *api.JSONElement {
 		return toCounter(elem)
 	}
 
+	// It occurs when the implementation is omitted in the converter after
+	// adding a new data type during development. So we explicitly fire the
+	// panic.
 	panic("fail to encode JSONElement to protobuf")
 }
 

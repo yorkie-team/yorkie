@@ -96,7 +96,12 @@ func PushPull(
 	// 05. publish document change event then store snapshot asynchronously.
 	if reqPack.HasChanges() {
 		be.AttachGoroutine(func() {
-			publisher := time.ActorIDFromHex(clientInfo.ID.Hex())
+			publisher, err := time.ActorIDFromHex(clientInfo.ID.Hex())
+			if err != nil {
+				log.Logger.Error(err)
+				return
+			}
+
 			be.PubSub.Publish(
 				publisher,
 				reqPack.DocumentKey.BSONKey(),

@@ -169,7 +169,7 @@ func (s *Server) AttachDocument(
 ) (*api.AttachDocumentResponse, error) {
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	// if pack.HasChanges() {
@@ -209,7 +209,7 @@ func (s *Server) DetachDocument(
 ) (*api.DetachDocumentResponse, error) {
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	// if pack.HasChanges() {
@@ -253,7 +253,7 @@ func (s *Server) PushPull(
 ) (*api.PushPullResponse, error) {
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, toStatusError(err)
 	}
 
 	// TODO uncomment write lock condition. We need $max operation on client.
@@ -368,8 +368,13 @@ func (s *Server) watchDocs(
 	clientID string,
 	docKeys []string,
 ) (*pubsub.Subscription, map[string][]string, error) {
+	actorID, err := time.ActorIDFromHex(clientID)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	subscription, peersMap, err := s.backend.PubSub.Subscribe(
-		time.ActorIDFromHex(clientID),
+		actorID,
 		docKeys,
 	)
 	if err != nil {
@@ -412,8 +417,19 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription
 // occurs while executing logic in API handler, gRPC status.error should be
 // returned so that the client can know more about the status of the request.
 func toStatusError(err error) error {
-	if errors.Is(err, db.ErrInvalidID) {
+	if errors.Is(err, converter.ErrPackRequired) ||
+		errors.Is(err, converter.ErrCheckpointRequired) ||
+		errors.Is(err, time.ErrInvalidHexString) ||
+		errors.Is(err, db.ErrInvalidID) {
 		return status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	if errors.Is(err, converter.ErrUnsupportedOperation) ||
+		errors.Is(err, converter.ErrUnsupportedElement) ||
+		errors.Is(err, converter.ErrUnsupportedEventType) ||
+		errors.Is(err, converter.ErrUnsupportedValueType) ||
+		errors.Is(err, converter.ErrUnsupportedCounterType) {
+		return status.Error(codes.Unimplemented, err.Error())
 	}
 
 	if errors.Is(err, db.ErrClientNotFound) ||

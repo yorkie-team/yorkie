@@ -79,7 +79,12 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		pbOps = append(pbOps, &pbOp)
 	}
 
-	c := change.New(changeID, i.Message, converter.FromOperations(pbOps))
+	ops, err := converter.FromOperations(pbOps)
+	if err != nil {
+		return nil, err
+	}
+
+	c := change.New(changeID, i.Message, ops)
 	c.SetServerSeq(i.ServerSeq)
 
 	return c, nil

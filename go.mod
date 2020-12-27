@@ -12,7 +12,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/prometheus/client_golang v0.9.3
 	github.com/spf13/cobra v1.0.0
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.6.2-0.20201103103935-92707c0b2d50
 	github.com/tidwall/pretty v1.0.0 // indirect
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c // indirect
 	github.com/xdg/stringprep v1.0.0 // indirect

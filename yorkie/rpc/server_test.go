@@ -23,7 +23,16 @@ const (
 	testRPCPort = helper.RPCPort + 100
 )
 
-var testRPCServer *rpc.Server
+var (
+	testRPCServer *rpc.Server
+
+	invalidChangePack = &api.ChangePack{
+		DocumentKey: &api.DocumentKey{
+			Collection: "invalid", Document: "invalid",
+		},
+		Checkpoint: nil,
+	}
+)
 
 func TestMain(m *testing.M) {
 	be, err := backend.New(&backend.Config{
@@ -146,6 +155,16 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 
+		// try to attach invalid change pack
+		_, err = testRPCServer.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: invalidChangePack,
+			},
+		)
+		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+
 		_, err = testRPCServer.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
@@ -164,6 +183,15 @@ func TestRPCServerBackend(t *testing.T) {
 			},
 		)
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+
+		_, err = testRPCServer.DetachDocument(
+			context.Background(),
+			&api.DetachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: invalidChangePack,
+			},
+		)
+		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
 		// document not found
 		_, err = testRPCServer.DetachDocument(
@@ -247,6 +275,16 @@ func TestRPCServerBackend(t *testing.T) {
 			},
 		)
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+
+		// try to push/pull with invalid pack
+		_, err = testRPCServer.PushPull(
+			context.Background(),
+			&api.PushPullRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: invalidChangePack,
+			},
+		)
+		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
 		_, err = testRPCServer.DeactivateClient(
 			context.Background(),

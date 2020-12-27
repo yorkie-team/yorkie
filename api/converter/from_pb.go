@@ -17,7 +17,7 @@
 package converter
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -26,34 +26,34 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
-var (
-	errPackRequired       = errors.New("pack required")
-	errCheckpointRequired = errors.New("checkpoint required")
-)
-
 // FromChangePack converts the given Protobuf format to model format.
-// TODO There is no guarantee that the message sent by the client is perfect.
-//      We should check mandatory fields and change the interface with error return.
 func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	if pbPack == nil {
-		log.Logger.Error(errPackRequired)
-		return nil, errPackRequired
+		return nil, ErrPackRequired
 	}
 	if pbPack.Checkpoint == nil {
-		log.Logger.Error(errCheckpointRequired)
-		return nil, errCheckpointRequired
+		return nil, ErrCheckpointRequired
+	}
+
+	changes, err := fromChanges(pbPack.Changes)
+	if err != nil {
+		return nil, err
+	}
+
+	minSyncedTicket, err := fromTimeTicket(pbPack.MinSyncedTicket)
+	if err != nil {
+		return nil, err
 	}
 
 	return &change.Pack{
 		DocumentKey:     fromDocumentKey(pbPack.DocumentKey),
 		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
-		Changes:         fromChanges(pbPack.Changes),
+		Changes:         changes,
 		Snapshot:        pbPack.Snapshot,
-		MinSyncedTicket: fromTimeTicket(pbPack.MinSyncedTicket),
+		MinSyncedTicket: minSyncedTicket,
 	}, nil
 }
 
@@ -71,25 +71,37 @@ func fromCheckpoint(pbCheckpoint *api.Checkpoint) *checkpoint.Checkpoint {
 	)
 }
 
-func fromChanges(pbChanges []*api.Change) []*change.Change {
+func fromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 	var changes []*change.Change
 	for _, pbChange := range pbChanges {
+		changeID, err := fromChangeID(pbChange.Id)
+		if err != nil {
+			return nil, err
+		}
+		operations, err := FromOperations(pbChange.Operations)
+		if err != nil {
+			return nil, err
+		}
 		changes = append(changes, change.New(
-			fromChangeID(pbChange.Id),
+			changeID,
 			pbChange.Message,
-			FromOperations(pbChange.Operations),
+			operations,
 		))
 	}
 
-	return changes
+	return changes, nil
 }
 
-func fromChangeID(id *api.ChangeID) *change.ID {
+func fromChangeID(id *api.ChangeID) (*change.ID, error) {
+	actorID, err := time.ActorIDFromHex(id.ActorId)
+	if err != nil {
+		return nil, err
+	}
 	return change.NewID(
 		id.ClientSeq,
 		id.Lamport,
-		time.ActorIDFromHex(id.ActorId),
-	)
+		actorID,
+	), nil
 }
 
 // FromDocumentKeys converts the given Protobuf format to model format.
@@ -102,143 +114,348 @@ func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
 }
 
 // FromEventType converts the given Protobuf format to model format.
-func FromEventType(pbEventType api.EventType) types.EventType {
+func FromEventType(pbEventType api.EventType) (types.EventType, error) {
 	switch pbEventType {
 	case api.EventType_DOCUMENTS_CHANGED:
-		return types.DocumentsChangeEvent
+		return types.DocumentsChangeEvent, nil
 	case api.EventType_DOCUMENTS_WATCHED:
-		return types.DocumentsWatchedEvent
+		return types.DocumentsWatchedEvent, nil
 	case api.EventType_DOCUMENTS_UNWATCHED:
-		return types.DocumentsUnwatchedEvent
-	default:
-		panic("unsupported type")
+		return types.DocumentsUnwatchedEvent, nil
 	}
+	return "", fmt.Errorf("%v: %w", pbEventType, ErrUnsupportedEventType)
 }
 
 // FromOperations converts the given Protobuf format to model format.
-func FromOperations(pbOps []*api.Operation) []operation.Operation {
+func FromOperations(pbOps []*api.Operation) ([]operation.Operation, error) {
 	var ops []operation.Operation
-
 	for _, pbOp := range pbOps {
 		var op operation.Operation
+		var err error
 		switch decoded := pbOp.Body.(type) {
 		case *api.Operation_Set_:
-			op = operation.NewSet(
-				fromTimeTicket(decoded.Set.ParentCreatedAt),
-				decoded.Set.Key,
-				fromElement(decoded.Set.Value),
-				fromTimeTicket(decoded.Set.ExecutedAt),
-			)
+			op, err = fromSet(decoded.Set)
 		case *api.Operation_Add_:
-			op = operation.NewAdd(
-				fromTimeTicket(decoded.Add.ParentCreatedAt),
-				fromTimeTicket(decoded.Add.PrevCreatedAt),
-				fromElement(decoded.Add.Value),
-				fromTimeTicket(decoded.Add.ExecutedAt),
-			)
+			op, err = fromAdd(decoded.Add)
 		case *api.Operation_Move_:
-			op = operation.NewMove(
-				fromTimeTicket(decoded.Move.ParentCreatedAt),
-				fromTimeTicket(decoded.Move.PrevCreatedAt),
-				fromTimeTicket(decoded.Move.CreatedAt),
-				fromTimeTicket(decoded.Move.ExecutedAt),
-			)
+			op, err = fromMove(decoded.Move)
 		case *api.Operation_Remove_:
-			op = operation.NewRemove(
-				fromTimeTicket(decoded.Remove.ParentCreatedAt),
-				fromTimeTicket(decoded.Remove.CreatedAt),
-				fromTimeTicket(decoded.Remove.ExecutedAt),
-			)
+			op, err = fromRemove(decoded.Remove)
 		case *api.Operation_Edit_:
-			op = operation.NewEdit(
-				fromTimeTicket(decoded.Edit.ParentCreatedAt),
-				fromTextNodePos(decoded.Edit.From),
-				fromTextNodePos(decoded.Edit.To),
-				fromCreatedAtMapByActor(decoded.Edit.CreatedAtMapByActor),
-				decoded.Edit.Content,
-				fromTimeTicket(decoded.Edit.ExecutedAt),
-			)
+			op, err = fromEdit(decoded.Edit)
 		case *api.Operation_Select_:
-			op = operation.NewSelect(
-				fromTimeTicket(decoded.Select.ParentCreatedAt),
-				fromTextNodePos(decoded.Select.From),
-				fromTextNodePos(decoded.Select.To),
-				fromTimeTicket(decoded.Select.ExecutedAt),
-			)
+			op, err = fromSelect(decoded.Select)
 		case *api.Operation_RichEdit_:
-			op = operation.NewRichEdit(
-				fromTimeTicket(decoded.RichEdit.ParentCreatedAt),
-				fromTextNodePos(decoded.RichEdit.From),
-				fromTextNodePos(decoded.RichEdit.To),
-				fromCreatedAtMapByActor(decoded.RichEdit.CreatedAtMapByActor),
-				decoded.RichEdit.Content,
-				decoded.RichEdit.Attributes,
-				fromTimeTicket(decoded.RichEdit.ExecutedAt),
-			)
+			op, err = fromRichEdit(decoded.RichEdit)
 		case *api.Operation_Style_:
-			op = operation.NewStyle(
-				fromTimeTicket(decoded.Style.ParentCreatedAt),
-				fromTextNodePos(decoded.Style.From),
-				fromTextNodePos(decoded.Style.To),
-				decoded.Style.Attributes,
-				fromTimeTicket(decoded.Style.ExecutedAt),
-			)
+			op, err = fromStyle(decoded.Style)
 		case *api.Operation_Increase_:
-			op = operation.NewIncrease(
-				fromTimeTicket(decoded.Increase.ParentCreatedAt),
-				fromElement(decoded.Increase.Value),
-				fromTimeTicket(decoded.Increase.ExecutedAt),
-			)
+			op, err = fromIncrease(decoded.Increase)
 		default:
-			panic("unsupported operation")
+			return nil, ErrUnsupportedOperation
+		}
+		if err != nil {
+			return nil, err
 		}
 		ops = append(ops, op)
 	}
 
-	return ops
+	return ops, nil
+}
+
+func fromSet(pbSet *api.Operation_Set) (*operation.Set, error) {
+	parentCreatedAt, err := fromTimeTicket(pbSet.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbSet.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	elem, err := fromElement(pbSet.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	return operation.NewSet(
+		parentCreatedAt,
+		pbSet.Key,
+		elem,
+		executedAt,
+	), nil
+}
+
+func fromAdd(pbAdd *api.Operation_Add) (*operation.Add, error) {
+	parentCreatedAt, err := fromTimeTicket(pbAdd.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	prevCreatedAt, err := fromTimeTicket(pbAdd.PrevCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	elem, err := fromElement(pbAdd.Value)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbAdd.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operation.NewAdd(
+		parentCreatedAt,
+		prevCreatedAt,
+		elem,
+		executedAt,
+	), nil
+}
+
+func fromMove(pbMove *api.Operation_Move) (*operation.Move, error) {
+	parentCreatedAt, err := fromTimeTicket(pbMove.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	prevCreatedAt, err := fromTimeTicket(pbMove.PrevCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	createdAt, err := fromTimeTicket(pbMove.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbMove.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operation.NewMove(
+		parentCreatedAt,
+		prevCreatedAt,
+		createdAt,
+		executedAt,
+	), nil
+}
+
+func fromRemove(pbRemove *api.Operation_Remove) (*operation.Remove, error) {
+	parentCreatedAt, err := fromTimeTicket(pbRemove.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	createdAt, err := fromTimeTicket(pbRemove.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbRemove.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operation.NewRemove(
+		parentCreatedAt,
+		createdAt,
+		executedAt,
+	), nil
+}
+
+func fromEdit(pbEdit *api.Operation_Edit) (*operation.Edit, error) {
+	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	from, err := fromTextNodePos(pbEdit.From)
+	if err != nil {
+		return nil, err
+	}
+	to, err := fromTextNodePos(pbEdit.To)
+	if err != nil {
+		return nil, err
+	}
+	createdAtMapByActor, err := fromCreatedAtMapByActor(
+		pbEdit.CreatedAtMapByActor,
+	)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbEdit.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operation.NewEdit(
+		parentCreatedAt,
+		from,
+		to,
+		createdAtMapByActor,
+		pbEdit.Content,
+		executedAt,
+	), nil
+}
+
+func fromSelect(pbSelect *api.Operation_Select) (*operation.Select, error) {
+	parentCreatedAt, err := fromTimeTicket(pbSelect.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	from, err := fromTextNodePos(pbSelect.From)
+	if err != nil {
+		return nil, err
+	}
+	to, err := fromTextNodePos(pbSelect.To)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbSelect.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operation.NewSelect(
+		parentCreatedAt,
+		from,
+		to,
+		executedAt,
+	), nil
+}
+
+func fromRichEdit(pbEdit *api.Operation_RichEdit) (*operation.RichEdit, error) {
+	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	from, err := fromTextNodePos(pbEdit.From)
+	if err != nil {
+		return nil, err
+	}
+	to, err := fromTextNodePos(pbEdit.To)
+	if err != nil {
+		return nil, err
+	}
+	createdAtMapByActor, err := fromCreatedAtMapByActor(
+		pbEdit.CreatedAtMapByActor,
+	)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbEdit.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operation.NewRichEdit(
+		parentCreatedAt,
+		from,
+		to,
+		createdAtMapByActor,
+		pbEdit.Content,
+		pbEdit.Attributes,
+		executedAt,
+	), nil
+}
+
+func fromStyle(pbStyle *api.Operation_Style) (*operation.Style, error) {
+	parentCreatedAt, err := fromTimeTicket(pbStyle.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	from, err := fromTextNodePos(pbStyle.From)
+	if err != nil {
+		return nil, err
+	}
+	to, err := fromTextNodePos(pbStyle.To)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbStyle.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operation.NewStyle(
+		parentCreatedAt,
+		from,
+		to,
+		pbStyle.Attributes,
+		executedAt,
+	), nil
+}
+
+func fromIncrease(pbInc *api.Operation_Increase) (*operation.Increase, error) {
+	parentCreatedAt, err := fromTimeTicket(pbInc.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	elem, err := fromElement(pbInc.Value)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbInc.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operation.NewIncrease(
+		parentCreatedAt,
+		elem,
+		executedAt,
+	), nil
 }
 
 func fromCreatedAtMapByActor(
 	pbCreatedAtMapByActor map[string]*api.TimeTicket,
-) map[string]*time.Ticket {
+) (map[string]*time.Ticket, error) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	for actor, pbTicket := range pbCreatedAtMapByActor {
-		createdAtMapByActor[actor] = fromTimeTicket(pbTicket)
+		ticket, err := fromTimeTicket(pbTicket)
+		if err != nil {
+			return nil, err
+		}
+		createdAtMapByActor[actor] = ticket
 	}
-	return createdAtMapByActor
+	return createdAtMapByActor, nil
 }
 
-func fromTextNodePos(pbPos *api.TextNodePos) *json.RGATreeSplitNodePos {
+func fromTextNodePos(
+	pbPos *api.TextNodePos,
+) (*json.RGATreeSplitNodePos, error) {
+	createdAt, err := fromTimeTicket(pbPos.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
 	return json.NewRGATreeSplitNodePos(
-		json.NewRGATreeSplitNodeID(fromTimeTicket(pbPos.CreatedAt), int(pbPos.Offset)),
+		json.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),
-	)
+	), nil
 }
 
-func fromTimeTicket(pbTicket *api.TimeTicket) *time.Ticket {
+func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	if pbTicket == nil {
-		return nil
+		return nil, nil
 	}
 
+	actorID, err := time.ActorIDFromHex(pbTicket.ActorId)
+	if err != nil {
+		return nil, err
+	}
 	return time.NewTicket(
 		pbTicket.Lamport,
 		pbTicket.Delimiter,
-		time.ActorIDFromHex(pbTicket.ActorId),
-	)
+		actorID,
+	), nil
 }
 
-func fromElement(pbElement *api.JSONElementSimple) json.Element {
+func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 	switch pbType := pbElement.Type; pbType {
 	case api.ValueType_JSON_OBJECT:
+		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
 		return json.NewObject(
 			json.NewRHTPriorityQueueMap(),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+			createdAt,
+		), nil
 	case api.ValueType_JSON_ARRAY:
+		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
 		return json.NewArray(
 			json.NewRGATreeList(),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+			createdAt,
+		), nil
 	case api.ValueType_BOOLEAN:
 		fallthrough
 	case api.ValueType_INTEGER:
@@ -252,64 +469,88 @@ func fromElement(pbElement *api.JSONElementSimple) json.Element {
 	case api.ValueType_BYTES:
 		fallthrough
 	case api.ValueType_DATE:
+		valueType, err := fromPrimitiveValueType(pbElement.Type)
+		if err != nil {
+			return nil, err
+		}
+		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
 		return json.NewPrimitive(
-			json.ValueFromBytes(fromValueType(pbType), pbElement.Value),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+			json.ValueFromBytes(valueType, pbElement.Value),
+			createdAt,
+		), nil
 	case api.ValueType_TEXT:
+		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
 		return json.NewText(
 			json.NewRGATreeSplit(json.InitialTextNode()),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+			createdAt,
+		), nil
 	case api.ValueType_RICH_TEXT:
+		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
 		return json.NewInitialRichText(
 			json.NewRGATreeSplit(json.InitialRichTextNode()),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+			createdAt,
+		), nil
 	case api.ValueType_INTEGER_CNT:
 		fallthrough
 	case api.ValueType_LONG_CNT:
 		fallthrough
 	case api.ValueType_DOUBLE_CNT:
+		counterType, err := fromCounterType(pbType)
+		if err != nil {
+			return nil, err
+		}
+		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
 		return json.NewCounter(
-			json.CounterValueFromBytes(fromCounterType(pbType), pbElement.Value),
-			fromTimeTicket(pbElement.CreatedAt),
-		)
+			json.CounterValueFromBytes(counterType, pbElement.Value),
+			createdAt,
+		), nil
 	}
 
-	panic("fail to decode element")
+	return nil, fmt.Errorf("%d, %w", pbElement.Type, ErrUnsupportedElement)
 }
 
-func fromValueType(valueType api.ValueType) json.ValueType {
+func fromPrimitiveValueType(valueType api.ValueType) (json.ValueType, error) {
 	switch valueType {
 	case api.ValueType_BOOLEAN:
-		return json.Boolean
+		return json.Boolean, nil
 	case api.ValueType_INTEGER:
-		return json.Integer
+		return json.Integer, nil
 	case api.ValueType_LONG:
-		return json.Long
+		return json.Long, nil
 	case api.ValueType_DOUBLE:
-		return json.Double
+		return json.Double, nil
 	case api.ValueType_STRING:
-		return json.String
+		return json.String, nil
 	case api.ValueType_BYTES:
-		return json.Bytes
+		return json.Bytes, nil
 	case api.ValueType_DATE:
-		return json.Date
+		return json.Date, nil
 	}
 
-	panic("fail to decode value type")
+	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
 }
 
-func fromCounterType(valueType api.ValueType) json.CounterType {
+func fromCounterType(valueType api.ValueType) (json.CounterType, error) {
 	switch valueType {
 	case api.ValueType_INTEGER_CNT:
-		return json.IntegerCnt
+		return json.IntegerCnt, nil
 	case api.ValueType_LONG_CNT:
-		return json.LongCnt
+		return json.LongCnt, nil
 	case api.ValueType_DOUBLE_CNT:
-		return json.DoubleCnt
+		return json.DoubleCnt, nil
 	}
 
-	panic("fail to decode value type")
+	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
 }

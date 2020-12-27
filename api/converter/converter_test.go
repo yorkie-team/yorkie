@@ -23,6 +23,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
@@ -31,9 +32,13 @@ import (
 
 func TestConverter(t *testing.T) {
 	t.Run("snapshot simple test", func(t *testing.T) {
+		obj, err := converter.BytesToObject(nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "{}", obj.Marshal())
+
 		doc := document.New("c1", "d1")
 
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewText("k1").Edit(0, 0, "A")
 			return nil
 		})
@@ -50,7 +55,7 @@ func TestConverter(t *testing.T) {
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
 
-		obj, err := converter.BytesToObject(bytes)
+		obj, err = converter.BytesToObject(bytes)
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"B"}`, obj.Marshal())
 	})
@@ -67,7 +72,8 @@ func TestConverter(t *testing.T) {
 				SetDouble("1.4", 1.79).
 				SetString("k1.5", "4").
 				SetBytes("k1.6", []byte{65, 66}).
-				SetDate("k1.7", gotime.Now())
+				SetDate("k1.7", gotime.Now()).
+				Delete("k1.5")
 
 			// an array
 			root.SetNewArray("k2").
@@ -77,7 +83,8 @@ func TestConverter(t *testing.T) {
 				AddDouble(3.0).
 				AddString("4").
 				AddBytes([]byte{65}).
-				AddDate(gotime.Now())
+				AddDate(gotime.Now()).
+				Delete(4)
 
 			// plain text
 			root.SetNewText("k3").
@@ -86,11 +93,14 @@ func TestConverter(t *testing.T) {
 				Edit(0, 1, "한").
 				Edit(0, 1, "하").
 				Edit(1, 1, "느").
-				Edit(1, 2, "늘")
+				Edit(1, 2, "늘").
+				Edit(2, 2, "구름").
+				Edit(2, 3, "뭉게구")
 
 			// rich text
 			root.SetNewRichText("k4").
 				Edit(0, 0, "Hello world", nil).
+				Edit(6, 11, "sky", nil).
 				SetStyle(0, 5, map[string]string{"b": "1"})
 
 			// a counter
@@ -122,7 +132,8 @@ func TestConverter(t *testing.T) {
 				SetDouble("1.4", 1.79).
 				SetString("k1.5", "4").
 				SetBytes("k1.6", []byte{65, 66}).
-				SetDate("k1.7", gotime.Now())
+				SetDate("k1.7", gotime.Now()).
+				Delete("k1.5")
 
 			// an array
 			root.SetNewArray("k2").
@@ -132,7 +143,12 @@ func TestConverter(t *testing.T) {
 				AddDouble(3.0).
 				AddString("4").
 				AddBytes([]byte{65}).
-				AddDate(gotime.Now())
+				AddDate(gotime.Now()).
+				Delete(4)
+
+			nextCreatedAt := root.GetArray("k2").Get(0).CreatedAt()
+			targetCreatedAt := root.GetArray("k2").Get(1).CreatedAt()
+			root.GetArray("k2").MoveBefore(nextCreatedAt, targetCreatedAt)
 
 			// plain text
 			root.SetNewText("k3").
@@ -141,12 +157,16 @@ func TestConverter(t *testing.T) {
 				Edit(0, 1, "한").
 				Edit(0, 1, "하").
 				Edit(1, 1, "느").
-				Edit(1, 2, "늘")
+				Edit(1, 2, "늘").
+				Select(1, 2)
 
 			// plain text
 			root.SetNewRichText("k3").
 				Edit(0, 0, "Hello World", nil).
 				SetStyle(0, 5, map[string]string{"b": "1"})
+
+			// counter
+			root.SetNewCounter("k4", 0).Increase(5)
 
 			return nil
 		})
@@ -154,13 +174,21 @@ func TestConverter(t *testing.T) {
 
 		pbPack := converter.ToChangePack(d1.CreateChangePack())
 		pack, err := converter.FromChangePack(pbPack)
-		pack.MinSyncedTicket = time.MaxTicket
 		assert.NoError(t, err)
+		pack.MinSyncedTicket = time.MaxTicket
 
 		d2 := document.New("c1", "d1")
 		err = d2.ApplyChangePack(pack)
 		assert.NoError(t, err)
 
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
+	})
+
+	t.Run("change pack error test", func(t *testing.T) {
+		_, err := converter.FromChangePack(nil)
+		assert.ErrorIs(t, err, converter.ErrPackRequired)
+
+		_, err = converter.FromChangePack(&api.ChangePack{})
+		assert.ErrorIs(t, err, converter.ErrCheckpointRequired)
 	})
 }
