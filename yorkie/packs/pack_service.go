@@ -68,22 +68,22 @@ func PushPull(
 	}
 
 	// 03. save pushed changes, document info and checkpoint of the client to MongoDB.
-	if err := be.Mongo.CreateChangeInfos(ctx, docInfo.ID, pushedChanges); err != nil {
+	if err := be.DB.CreateChangeInfos(ctx, docInfo.ID, pushedChanges); err != nil {
 		return nil, err
 	}
 
-	if err := be.Mongo.UpdateDocInfo(ctx, docInfo); err != nil {
+	if err := be.DB.UpdateDocInfo(ctx, docInfo); err != nil {
 		return nil, err
 	}
 
-	if err := be.Mongo.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
+	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
 		return nil, err
 	}
 
 	// 04. update and find min synced ticket for garbage collection.
 	// NOTE Since the client could not receive the PushPull response,
 	//      the requested seq(reqPack) is stored instead of the response seq(resPack).
-	respPack.MinSyncedTicket, err = be.Mongo.UpdateAndFindMinSyncedTicket(
+	respPack.MinSyncedTicket, err = be.DB.UpdateAndFindMinSyncedTicket(
 		ctx,
 		clientInfo,
 		docInfo.ID,
@@ -204,7 +204,7 @@ func pullChanges(
 	pushedCP *checkpoint.Checkpoint,
 	initialServerSeq uint64,
 ) (*checkpoint.Checkpoint, []*change.Change, error) {
-	fetchedChanges, err := be.Mongo.FindChangeInfosBetweenServerSeqs(
+	fetchedChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
 		pack.Checkpoint.ServerSeq+1,
@@ -249,7 +249,7 @@ func pullSnapshot(
 	pushedCP *checkpoint.Checkpoint,
 	initialServerSeq uint64,
 ) (*checkpoint.Checkpoint, []byte, error) {
-	snapshotInfo, err := be.Mongo.FindLastSnapshotInfo(ctx, docInfo.ID)
+	snapshotInfo, err := be.DB.FindLastSnapshotInfo(ctx, docInfo.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -280,7 +280,7 @@ func pullSnapshot(
 		return nil, nil, err
 	}
 
-	changes, err := be.Mongo.FindChangeInfosBetweenServerSeqs(
+	changes, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
 		snapshotInfo.ServerSeq+1,
@@ -327,7 +327,7 @@ func storeSnapshot(
 
 	// 01. get the last snapshot of this docInfo
 	// TODO For performance, we only need to read the snapshot's metadata.
-	snapshotInfo, err := be.Mongo.FindLastSnapshotInfo(ctx, docInfo.ID)
+	snapshotInfo, err := be.DB.FindLastSnapshotInfo(ctx, docInfo.ID)
 	if err != nil {
 		return err
 	}
@@ -340,7 +340,7 @@ func storeSnapshot(
 	}
 
 	// 02. retrieve the changes between last snapshot and current docInfo
-	changes, err := be.Mongo.FindChangeInfosBetweenServerSeqs(
+	changes, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
 		snapshotInfo.ServerSeq+1,
@@ -376,7 +376,7 @@ func storeSnapshot(
 	}
 
 	// 04. save the snapshot of the docInfo
-	if err := be.Mongo.CreateSnapshotInfo(ctx, docInfo.ID, doc); err != nil {
+	if err := be.DB.CreateSnapshotInfo(ctx, docInfo.ID, doc); err != nil {
 		return err
 	}
 

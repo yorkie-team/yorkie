@@ -30,7 +30,7 @@ func Activate(
 	be *backend.Backend,
 	clientKey string,
 ) (*types.ClientInfo, error) {
-	return be.Mongo.ActivateClient(ctx, clientKey)
+	return be.DB.ActivateClient(ctx, clientKey)
 }
 
 // Deactivate deactivates the given client.
@@ -39,7 +39,7 @@ func Deactivate(
 	be *backend.Backend,
 	clientID string,
 ) (*types.ClientInfo, error) {
-	return be.Mongo.DeactivateClient(ctx, clientID)
+	return be.DB.DeactivateClient(ctx, clientID)
 }
 
 // FindClientAndDocument finds the client and the document.
@@ -50,12 +50,12 @@ func FindClientAndDocument(
 	pack *change.Pack,
 	createDocIfNotExist bool,
 ) (*types.ClientInfo, *types.DocInfo, error) {
-	clientInfo, err := be.Mongo.FindClientInfoByID(ctx, clientID)
+	clientInfo, err := be.DB.FindClientInfoByID(ctx, clientID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	docInfo, err := be.Mongo.FindDocInfoByKey(
+	docInfo, err := be.DB.FindDocInfoByKey(
 		ctx,
 		clientInfo,
 		pack.DocumentKey.BSONKey(),

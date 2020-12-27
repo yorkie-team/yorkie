@@ -18,7 +18,6 @@ package mongo
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	gotime "time"
 
@@ -33,18 +32,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/types"
-)
-
-var (
-	// ErrInvalidID is returned when the given ID is not ObjectID.
-	ErrInvalidID = errors.New("invalid ID")
-
-	// ErrClientNotFound is returned when the client could not be found.
-	ErrClientNotFound = errors.New("client not found")
-
-	// ErrDocumentNotFound is returned when the document could not be found.
-	ErrDocumentNotFound = errors.New("document not found")
 )
 
 // Config is the configuration for creating a Client instance.
@@ -162,7 +151,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.
 		id, err := primitive.ObjectIDFromHex(clientID)
 		if err != nil {
 			log.Logger.Error(err)
-			return fmt.Errorf("%s: %w", clientID, ErrInvalidID)
+			return fmt.Errorf("%s: %w", clientID, db.ErrInvalidID)
 		}
 		res := col.FindOneAndUpdate(ctx, bson.M{
 			"_id": id,
@@ -176,7 +165,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID string) (*types.
 		if err := res.Decode(&clientInfo); err != nil {
 			if err == mongo.ErrNoDocuments {
 				log.Logger.Error(err)
-				return fmt.Errorf("%s: %w", clientID, ErrClientNotFound)
+				return fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
 			}
 
 			log.Logger.Error(err)
@@ -198,7 +187,7 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID string) (*type
 		id, err := primitive.ObjectIDFromHex(clientID)
 		if err != nil {
 			log.Logger.Error(err)
-			return fmt.Errorf("%s: %w", clientID, ErrInvalidID)
+			return fmt.Errorf("%s: %w", clientID, db.ErrInvalidID)
 		}
 		result := col.FindOne(ctx, bson.M{
 			"_id": id,
@@ -207,7 +196,7 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID string) (*type
 		if err := result.Decode(&client); err != nil {
 			if err == mongo.ErrNoDocuments {
 				log.Logger.Error(result.Err())
-				return fmt.Errorf("%s: %w", clientID, ErrClientNotFound)
+				return fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
 			}
 			log.Logger.Error(err)
 			return err
@@ -242,7 +231,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		if result.Err() != nil {
 			if result.Err() == mongo.ErrNoDocuments {
 				log.Logger.Error(result.Err())
-				return fmt.Errorf("%s: %w", clientInfo.Key, ErrClientNotFound)
+				return fmt.Errorf("%s: %w", clientInfo.Key,
+					db.ErrClientNotFound)
 			}
 			log.Logger.Error(result.Err())
 			return result.Err()
@@ -293,7 +283,7 @@ func (c *Client) FindDocInfoByKey(
 			})
 			if result.Err() == mongo.ErrNoDocuments {
 				log.Logger.Error(result.Err())
-				return fmt.Errorf("%s: %w", bsonDocKey, ErrDocumentNotFound)
+				return fmt.Errorf("%s: %w", bsonDocKey, db.ErrDocumentNotFound)
 			}
 			if result.Err() != nil {
 				log.Logger.Error(result.Err())
@@ -400,7 +390,7 @@ func (c *Client) UpdateDocInfo(
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				log.Logger.Error(err)
-				return fmt.Errorf("%s: %w", docInfo.ID, ErrDocumentNotFound)
+				return fmt.Errorf("%s: %w", docInfo.ID, db.ErrDocumentNotFound)
 			}
 
 			log.Logger.Error(err)

@@ -27,7 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/backend/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
