@@ -14,25 +14,23 @@
  * limitations under the License.
  */
 
-package types
+package db
 
 import (
 	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 // DocInfo is a structure representing information of the document.
 type DocInfo struct {
-	ID         primitive.ObjectID `bson:"_id"`
-	Key        string             `bson:"key"`
-	ServerSeq  uint64             `bson:"server_seq"`
-	Owner      primitive.ObjectID `bson:"owner"`
-	CreatedAt  time.Time          `bson:"created_at"`
-	AccessedAt time.Time          `bson:"accessed_at"`
-	UpdatedAt  time.Time          `bson:"updated_at"`
+	ID         ID        `bson:"_id_fake"`
+	Key        string    `bson:"key"`
+	ServerSeq  uint64    `bson:"server_seq"`
+	Owner      ID        `bson:"owner_fake"`
+	CreatedAt  time.Time `bson:"created_at"`
+	AccessedAt time.Time `bson:"accessed_at"`
+	UpdatedAt  time.Time `bson:"updated_at"`
 }
 
 // IncreaseServerSeq increases server sequence of the document.

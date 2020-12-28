@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-package types
+package db
 
 import (
 	"errors"
 	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 )
@@ -54,31 +52,29 @@ type ClientDocInfo struct {
 
 // ClientInfo is a structure representing information of a client.
 type ClientInfo struct {
-	ID        primitive.ObjectID        `bson:"_id"`
-	Key       string                    `bson:"key"`
-	Status    string                    `bson:"status"`
-	Documents map[string]*ClientDocInfo `bson:"documents"`
-	CreatedAt time.Time                 `bson:"created_at"`
-	UpdatedAt time.Time                 `bson:"updated_at"`
+	ID        ID                    `bson:"_id_fake"`
+	Key       string                `bson:"key"`
+	Status    string                `bson:"status"`
+	Documents map[ID]*ClientDocInfo `bson:"documents"`
+	CreatedAt time.Time             `bson:"created_at"`
+	UpdatedAt time.Time             `bson:"updated_at"`
 }
 
 // AttachDocument attaches the given document to this client.
-func (i *ClientInfo) AttachDocument(docID primitive.ObjectID) error {
+func (i *ClientInfo) AttachDocument(docID ID) error {
 	if i.Status != ClientActivated {
 		return ErrClientNotActivated
 	}
 
 	if i.Documents == nil {
-		i.Documents = make(map[string]*ClientDocInfo)
+		i.Documents = make(map[ID]*ClientDocInfo)
 	}
 
-	hexDocID := docID.Hex()
-
-	if i.hasDocument(hexDocID) && i.Documents[hexDocID].Status == documentAttached {
+	if i.hasDocument(docID) && i.Documents[docID].Status == documentAttached {
 		return ErrDocumentAlreadyAttached
 	}
 
-	i.Documents[hexDocID] = &ClientDocInfo{
+	i.Documents[docID] = &ClientDocInfo{
 		Status:    documentAttached,
 		ServerSeq: 0,
 		ClientSeq: 0,
@@ -89,32 +85,29 @@ func (i *ClientInfo) AttachDocument(docID primitive.ObjectID) error {
 }
 
 // DetachDocument detaches the given document from this client.
-func (i *ClientInfo) DetachDocument(docID primitive.ObjectID) error {
-	hexDocID := docID.Hex()
-	if err := i.EnsureDocumentAttached(hexDocID); err != nil {
+func (i *ClientInfo) DetachDocument(docID ID) error {
+	if err := i.EnsureDocumentAttached(docID); err != nil {
 		return err
 	}
 
-	i.Documents[hexDocID].Status = documentDetached
+	i.Documents[docID].Status = documentDetached
 	i.UpdatedAt = time.Now()
 
 	return nil
 }
 
 // IsAttached returns whether the given document is attached to this client.
-func (i *ClientInfo) IsAttached(docID primitive.ObjectID) (bool, error) {
-	hexDocID := docID.Hex()
-
-	if !i.hasDocument(hexDocID) {
+func (i *ClientInfo) IsAttached(docID ID) (bool, error) {
+	if !i.hasDocument(docID) {
 		return false, ErrDocumentNeverAttached
 	}
 
-	return i.Documents[hexDocID].Status == documentAttached, nil
+	return i.Documents[docID].Status == documentAttached, nil
 }
 
 // Checkpoint returns the checkpoint of the given document.
-func (i *ClientInfo) Checkpoint(docID primitive.ObjectID) *checkpoint.Checkpoint {
-	clientDocInfo := i.Documents[docID.Hex()]
+func (i *ClientInfo) Checkpoint(docID ID) *checkpoint.Checkpoint {
+	clientDocInfo := i.Documents[docID]
 	if clientDocInfo == nil {
 		return checkpoint.Initial
 	}
@@ -124,23 +117,22 @@ func (i *ClientInfo) Checkpoint(docID primitive.ObjectID) *checkpoint.Checkpoint
 
 // UpdateCheckpoint updates the checkpoint of the given document.
 func (i *ClientInfo) UpdateCheckpoint(
-	docID primitive.ObjectID,
+	docID ID,
 	cp *checkpoint.Checkpoint,
 ) error {
-	hexDocID := docID.Hex()
-	if !i.hasDocument(hexDocID) {
+	if !i.hasDocument(docID) {
 		return ErrDocumentNeverAttached
 	}
 
-	i.Documents[hexDocID].ServerSeq = cp.ServerSeq
-	i.Documents[hexDocID].ClientSeq = cp.ClientSeq
+	i.Documents[docID].ServerSeq = cp.ServerSeq
+	i.Documents[docID].ClientSeq = cp.ClientSeq
 	i.UpdatedAt = time.Now()
 
 	return nil
 }
 
 // EnsureDocumentAttached ensures the given document is attached.
-func (i *ClientInfo) EnsureDocumentAttached(docID string) error {
+func (i *ClientInfo) EnsureDocumentAttached(docID ID) error {
 	if i.Status != ClientActivated {
 		return ErrClientNotActivated
 	}
@@ -152,6 +144,6 @@ func (i *ClientInfo) EnsureDocumentAttached(docID string) error {
 	return nil
 }
 
-func (i *ClientInfo) hasDocument(docID string) bool {
+func (i *ClientInfo) hasDocument(docID ID) bool {
 	return i.Documents != nil && i.Documents[docID] != nil
 }
