@@ -38,9 +38,9 @@ import (
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
+	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
-	"github.com/yorkie-team/yorkie/yorkie/pubsub"
 )
 
 type fieldViolation struct {

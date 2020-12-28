@@ -30,7 +30,7 @@ import (
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
-	"github.com/yorkie-team/yorkie/yorkie/pubsub"
+	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
 )
 
 // PushPull stores the given changes and returns accumulated changes of the
@@ -96,7 +96,7 @@ func PushPull(
 	// 05. publish document change event then store snapshot asynchronously.
 	if reqPack.HasChanges() {
 		be.AttachGoroutine(func() {
-			publisher, err := time.ActorIDFromHex(string(clientInfo.ID))
+			publisher, err := time.ActorIDFromHex(clientInfo.ID.String())
 			if err != nil {
 				log.Logger.Error(err)
 				return

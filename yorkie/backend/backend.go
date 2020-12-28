@@ -20,10 +20,10 @@ import (
 	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
-	"github.com/yorkie-team/yorkie/pkg/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
-	"github.com/yorkie-team/yorkie/yorkie/pubsub"
+	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
 // Config is the configuration for creating a Backend instance.

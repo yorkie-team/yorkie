@@ -129,7 +129,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 			})
 		}
 
-		if err = c.decodeClientInfo(result, &clientInfo); err != nil {
+		if err = decodeClientInfo(result, &clientInfo); err != nil {
 			return err
 		}
 
@@ -143,7 +143,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 
 // DeactivateClient deactivates the client of the given ID.
 func (c *Client) DeactivateClient(ctx context.Context, clientID db.ID) (*db.ClientInfo, error) {
-	encodedClientID, err := c.encodeID(clientID)
+	encodedClientID, err := encodeID(clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID db.ID) (*db.Clie
 			},
 		})
 
-		if err := c.decodeClientInfo(res, &clientInfo); err != nil {
+		if err := decodeClientInfo(res, &clientInfo); err != nil {
 			if err == mongo.ErrNoDocuments {
 				return fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
 			}
@@ -176,7 +176,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID db.ID) (*db.Clie
 
 // FindClientInfoByID finds the client of the given ID.
 func (c *Client) FindClientInfoByID(ctx context.Context, clientID db.ID) (*db.ClientInfo, error) {
-	encodeClientID, err := c.encodeID(clientID)
+	encodedClientID, err := encodeID(clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -184,9 +184,9 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID db.ID) (*db.Cl
 	clientInfo := db.ClientInfo{}
 	if err := c.withCollection(ColClients, func(col *mongo.Collection) error {
 		result := col.FindOne(ctx, bson.M{
-			"_id": encodeClientID,
+			"_id": encodedClientID,
 		})
-		if err := c.decodeClientInfo(result, &clientInfo); err != nil {
+		if err := decodeClientInfo(result, &clientInfo); err != nil {
 			if err == mongo.ErrNoDocuments {
 				return fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
 			}
@@ -212,8 +212,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			"key": clientInfo.Key,
 		}, bson.M{
 			"$set": bson.M{
-				"documents." + string(docID): clientInfo.Documents[docID],
-				"updated_at":                 clientInfo.UpdatedAt,
+				"documents." + docID.String(): clientInfo.Documents[docID],
+				"updated_at":                  clientInfo.UpdatedAt,
 			},
 		})
 
@@ -239,7 +239,7 @@ func (c *Client) FindDocInfoByKey(
 	bsonDocKey string,
 	createDocIfNotExist bool,
 ) (*db.DocInfo, error) {
-	encodedOwnerID, err := c.encodeID(clientInfo.ID)
+	encodedOwnerID, err := encodeID(clientInfo.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (c *Client) FindDocInfoByKey(
 				return result.Err()
 			}
 		}
-		if err := c.decodeDocInfo(result, &docInfo); err != nil {
+		if err := decodeDocInfo(result, &docInfo); err != nil {
 			return err
 		}
 
@@ -303,7 +303,7 @@ func (c *Client) CreateChangeInfos(
 	if len(changes) == 0 {
 		return nil
 	}
-	encodedDocID, err := c.encodeID(docID)
+	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return err
 	}
@@ -321,7 +321,7 @@ func (c *Client) CreateChangeInfos(
 				"doc_id":     encodedDocID,
 				"server_seq": cn.ServerSeq(),
 			}).SetUpdate(bson.M{"$set": bson.M{
-				"actor":      c.encodeActorID(cn.ID().Actor()),
+				"actor":      encodeActorID(cn.ID().Actor()),
 				"client_seq": cn.ID().ClientSeq(),
 				"lamport":    cn.ID().Lamport(),
 				"message":    cn.Message(),
@@ -345,7 +345,7 @@ func (c *Client) CreateSnapshotInfo(
 	docID db.ID,
 	doc *document.InternalDocument,
 ) error {
-	encodedDocID, err := c.encodeID(docID)
+	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return err
 	}
@@ -374,7 +374,7 @@ func (c *Client) UpdateDocInfo(
 	ctx context.Context,
 	docInfo *db.DocInfo,
 ) error {
-	encodedDocID, err := c.encodeID(docInfo.ID)
+	encodedDocID, err := encodeID(docInfo.ID)
 	if err != nil {
 		return err
 	}
@@ -411,7 +411,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	from uint64,
 	to uint64,
 ) ([]*change.Change, error) {
-	encodedDocID, err := c.encodeID(docID)
+	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return nil, err
 	}
@@ -438,7 +438,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 
 		for cursor.Next(ctx) {
 			var changeInfo db.ChangeInfo
-			if err := c.decodeChangeInfo(cursor, &changeInfo); err != nil {
+			if err := decodeChangeInfo(cursor, &changeInfo); err != nil {
 				return err
 			}
 			c, err := changeInfo.ToChange()
@@ -469,11 +469,11 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	docID db.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
-	encodedDocID, err := c.encodeID(docID)
+	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return nil, err
 	}
-	encodedClientID, err := c.encodeID(clientInfo.ID)
+	encodedClientID, err := encodeID(clientInfo.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +521,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 			}
 			return result.Err()
 		}
-		if err := c.decodeSyncedSeqInfo(result, &syncedSeqInfo); err != nil {
+		if err := decodeSyncedSeqInfo(result, &syncedSeqInfo); err != nil {
 			return err
 		}
 
@@ -552,7 +552,7 @@ func (c *Client) FindLastSnapshotInfo(
 	ctx context.Context,
 	docID db.ID,
 ) (*db.SnapshotInfo, error) {
-	encodedDocID, err := c.encodeID(docID)
+	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return nil, err
 	}
@@ -574,7 +574,7 @@ func (c *Client) FindLastSnapshotInfo(
 			return result.Err()
 		}
 
-		if err := c.decodeSnapshotInfo(result, snapshotInfo); err != nil {
+		if err := decodeSnapshotInfo(result, snapshotInfo); err != nil {
 			return err
 		}
 
@@ -591,7 +591,7 @@ func (c *Client) findTicketByServerSeq(
 	docID db.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
-	encodedDocID, err := c.encodeID(docID)
+	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return nil, err
 	}
@@ -611,7 +611,7 @@ func (c *Client) findTicketByServerSeq(
 			return result.Err()
 		}
 
-		if err := c.decodeChangeInfo(result, &changeInfo); err != nil {
+		if err := decodeChangeInfo(result, &changeInfo); err != nil {
 			return err
 		}
 

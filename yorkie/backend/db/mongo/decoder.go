@@ -11,7 +11,7 @@ type decoder interface {
 	Decode(val interface{}) error
 }
 
-func (c *Client) decodeClientInfo(
+func decodeClientInfo(
 	result decoder,
 	clientInfo *db.ClientInfo,
 ) error {
@@ -26,11 +26,11 @@ func (c *Client) decodeClientInfo(
 		log.Logger.Error(err)
 		return err
 	}
-	clientInfo.ID = c.decodeID(idHolder.ID)
+	clientInfo.ID = decodeID(idHolder.ID)
 	return nil
 }
 
-func (c *Client) decodeDocInfo(
+func decodeDocInfo(
 	result decoder,
 	docInfo *db.DocInfo,
 ) error {
@@ -46,12 +46,12 @@ func (c *Client) decodeDocInfo(
 		log.Logger.Error(err)
 		return err
 	}
-	docInfo.ID = c.decodeID(idHolder.ID)
-	docInfo.Owner = c.decodeID(idHolder.Owner)
+	docInfo.ID = decodeID(idHolder.ID)
+	docInfo.Owner = decodeID(idHolder.Owner)
 	return nil
 }
 
-func (c *Client) decodeChangeInfo(
+func decodeChangeInfo(
 	cursor decoder,
 	changeInfo *db.ChangeInfo,
 ) error {
@@ -67,12 +67,12 @@ func (c *Client) decodeChangeInfo(
 		log.Logger.Error(err)
 		return err
 	}
-	changeInfo.DocID = c.decodeID(idHolder.DocID)
-	changeInfo.Actor = c.decodeID(idHolder.Actor)
+	changeInfo.DocID = decodeID(idHolder.DocID)
+	changeInfo.Actor = decodeID(idHolder.Actor)
 	return nil
 }
 
-func (c *Client) decodeSyncedSeqInfo(
+func decodeSyncedSeqInfo(
 	result decoder,
 	syncedSeqInfo *db.SyncedSeqInfo,
 ) error {
@@ -88,12 +88,12 @@ func (c *Client) decodeSyncedSeqInfo(
 		log.Logger.Error(err)
 		return err
 	}
-	syncedSeqInfo.DocID = c.decodeID(idHolder.DocID)
-	syncedSeqInfo.ClientID = c.decodeID(idHolder.ClientID)
+	syncedSeqInfo.DocID = decodeID(idHolder.DocID)
+	syncedSeqInfo.ClientID = decodeID(idHolder.ClientID)
 	return nil
 }
 
-func (c *Client) decodeSnapshotInfo(
+func decodeSnapshotInfo(
 	result decoder,
 	snapshotInfo *db.SnapshotInfo,
 ) error {
@@ -109,11 +109,11 @@ func (c *Client) decodeSnapshotInfo(
 		log.Logger.Error(err)
 		return err
 	}
-	snapshotInfo.ID = c.decodeID(idHolder.ID)
-	snapshotInfo.DocID = c.decodeID(idHolder.DocID)
+	snapshotInfo.ID = decodeID(idHolder.ID)
+	snapshotInfo.DocID = decodeID(idHolder.DocID)
 	return nil
 }
 
-func (c *Client) decodeID(id primitive.ObjectID) db.ID {
+func decodeID(id primitive.ObjectID) db.ID {
 	return db.ID(id.Hex())
 }

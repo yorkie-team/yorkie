@@ -10,14 +10,14 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
 
-func (c *Client) encodeActorID(id *time.ActorID) primitive.ObjectID {
+func encodeActorID(id *time.ActorID) primitive.ObjectID {
 	objectID := primitive.ObjectID{}
 	copy(objectID[:], id[:])
 	return objectID
 }
 
-func (c *Client) encodeID(id db.ID) (primitive.ObjectID, error) {
-	objectID, err := primitive.ObjectIDFromHex(string(id))
+func encodeID(id db.ID) (primitive.ObjectID, error) {
+	objectID, err := primitive.ObjectIDFromHex(id.String())
 	if err != nil {
 		log.Logger.Error(err)
 		return objectID, fmt.Errorf("%s: %w", id, db.ErrInvalidID)
