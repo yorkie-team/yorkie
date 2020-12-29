@@ -37,6 +37,14 @@ func TestDocument(t *testing.T) {
 		doc := document.New("c1", "d1")
 		assert.Equal(t, doc.Checkpoint(), checkpoint.Initial)
 		assert.False(t, doc.HasLocalChanges())
+		assert.False(t, doc.IsAttached())
+	})
+
+	t.Run("status test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+		assert.False(t, doc.IsAttached())
+		doc.SetStatus(document.Attached)
+		assert.True(t, doc.IsAttached())
 	})
 
 	t.Run("equals test", func(t *testing.T) {

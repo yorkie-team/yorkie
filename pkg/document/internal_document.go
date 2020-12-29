@@ -26,12 +26,12 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
-type stateType int
+type statusType int
 
 const (
 	// Detached means that the document is not attached to the client.
 	// The actor of the ticket is created without being assigned.
-	Detached stateType = iota
+	Detached statusType = iota
 
 	// Attached means that this document is attached to the client.
 	// The actor of the ticket is created with being assigned by the client.
@@ -41,7 +41,7 @@ const (
 // InternalDocument represents a document in MongoDB and contains logical clocks.
 type InternalDocument struct {
 	key          *key.Key
-	state        stateType
+	status       statusType
 	root         *json.Root
 	checkpoint   *checkpoint.Checkpoint
 	changeID     *change.ID
@@ -54,7 +54,7 @@ func NewInternalDocument(collection, document string) *InternalDocument {
 
 	return &InternalDocument{
 		key:        &key.Key{Collection: collection, Document: document},
-		state:      Detached,
+		status:     Detached,
 		root:       json.NewRoot(root),
 		checkpoint: checkpoint.Initial,
 		changeID:   change.InitialID,
@@ -75,7 +75,7 @@ func NewInternalDocumentFromSnapshot(
 
 	return &InternalDocument{
 		key:        &key.Key{Collection: collection, Document: document},
-		state:      Detached,
+		status:     Detached,
 		root:       json.NewRoot(obj),
 		checkpoint: checkpoint.Initial.NextServerSeq(serverSeq),
 		changeID:   change.InitialID,
@@ -163,14 +163,14 @@ func (d *InternalDocument) Actor() *time.ActorID {
 	return d.changeID.Actor()
 }
 
-// UpdateState updates the state of this document.
-func (d *InternalDocument) UpdateState(state stateType) {
-	d.state = state
+// SetStatus sets the status of this document.
+func (d *InternalDocument) SetStatus(status statusType) {
+	d.status = status
 }
 
 // IsAttached returns the whether this document is attached or not.
 func (d *InternalDocument) IsAttached() bool {
-	return d.state == Attached
+	return d.status == Attached
 }
 
 // RootObject returns the root object.

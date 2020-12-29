@@ -200,7 +200,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
-	doc.UpdateState(document.Attached)
+	doc.SetStatus(document.Attached)
 	c.attachedDocs[doc.Key().BSONKey()] = doc
 
 	return nil
@@ -240,7 +240,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
-	doc.UpdateState(document.Detached)
+	doc.SetStatus(document.Detached)
 	delete(c.attachedDocs, doc.Key().BSONKey())
 
 	return nil

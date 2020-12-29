@@ -51,23 +51,6 @@ func New(collection, document string) *Document {
 	}
 }
 
-// FromSnapshot creates a new instance of Document with the snapshot.
-func FromSnapshot(
-	collection string,
-	document string,
-	serverSeq uint64,
-	snapshot []byte,
-) (*Document, error) {
-	doc, err := NewInternalDocumentFromSnapshot(collection, document, serverSeq, snapshot)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Document{
-		doc: doc,
-	}, nil
-}
-
 // Update executes the given updater to update this document.
 func (d *Document) Update(
 	updater func(root *proxy.ObjectProxy) error,
@@ -178,9 +161,9 @@ func (d *Document) Actor() *time.ActorID {
 	return d.doc.Actor()
 }
 
-// UpdateState updates the state of this document.
-func (d *Document) UpdateState(state stateType) {
-	d.doc.UpdateState(state)
+// SetStatus updates the status of this document.
+func (d *Document) SetStatus(status statusType) {
+	d.doc.SetStatus(status)
 }
 
 // IsAttached returns the whether this document is attached or not.
