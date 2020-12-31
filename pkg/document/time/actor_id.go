@@ -19,6 +19,8 @@ package time
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"math"
 )
 
@@ -43,6 +45,9 @@ var (
 		math.MaxUint8,
 		math.MaxUint8,
 	}
+
+	// ErrInvalidHexString is returned when the given string is not valid hex.
+	ErrInvalidHexString = errors.New("invalid hex string")
 )
 
 // ActorID is bytes represented by the hexadecimal string.
@@ -50,18 +55,18 @@ var (
 type ActorID [actorIDSize]byte
 
 // ActorIDFromHex returns the bytes represented by the hexadecimal string str.
-func ActorIDFromHex(str string) *ActorID {
+func ActorIDFromHex(str string) (*ActorID, error) {
 	if str == "" {
-		return nil
+		return nil, nil
 	}
 
 	actorID := ActorID{}
 	decoded, err := hex.DecodeString(str)
 	if err != nil {
-		panic("fail to decode hex")
+		return nil, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
 	}
 	copy(actorID[:], decoded[:actorIDSize])
-	return &actorID
+	return &actorID, nil
 }
 
 // String returns the hexadecimal encoding of ActorID.

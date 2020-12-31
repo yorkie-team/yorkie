@@ -17,6 +17,8 @@
 package converter
 
 import (
+	"fmt"
+
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/yorkie-team/yorkie/api"
@@ -36,10 +38,15 @@ func BytesToObject(snapshot []byte) (*json.Object, error) {
 		return nil, err
 	}
 
-	return fromJSONObject(pbElem.GetObject()), nil
+	obj, err := fromJSONObject(pbElem.GetObject())
+	if err != nil {
+		return nil, err
+	}
+
+	return obj, nil
 }
 
-func fromJSONElement(pbElem *api.JSONElement) json.Element {
+func fromJSONElement(pbElem *api.JSONElement) (json.Element, error) {
 	switch decoded := pbElem.Body.(type) {
 	case *api.JSONElement_Object_:
 		return fromJSONObject(decoded.Object)
@@ -54,58 +61,133 @@ func fromJSONElement(pbElem *api.JSONElement) json.Element {
 	case *api.JSONElement_Counter_:
 		return fromJSONCounter(decoded.Counter)
 	default:
-		panic("unsupported element")
+		return nil, fmt.Errorf("%s: %w", decoded, ErrUnsupportedElement)
 	}
 }
 
-func fromJSONObject(pbObj *api.JSONElement_Object) *json.Object {
+func fromJSONObject(pbObj *api.JSONElement_Object) (*json.Object, error) {
 	members := json.NewRHTPriorityQueueMap()
 	for _, pbNode := range pbObj.Nodes {
-		members.Set(pbNode.Key, fromJSONElement(pbNode.Element))
+		elem, err := fromJSONElement(pbNode.Element)
+		if err != nil {
+			return nil, err
+		}
+		members.Set(pbNode.Key, elem)
+	}
+
+	createdAt, err := fromTimeTicket(pbObj.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	movedAt, err := fromTimeTicket(pbObj.MovedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	removedAt, err := fromTimeTicket(pbObj.RemovedAt)
+	if err != nil {
+		return nil, err
 	}
 
 	obj := json.NewObject(
 		members,
-		fromTimeTicket(pbObj.CreatedAt),
+		createdAt,
 	)
-	obj.SetMovedAt(fromTimeTicket(pbObj.MovedAt))
-	obj.Remove(fromTimeTicket(pbObj.RemovedAt))
-	return obj
+	obj.SetMovedAt(movedAt)
+	obj.Remove(removedAt)
+
+	return obj, nil
 }
 
-func fromJSONArray(pbArr *api.JSONElement_Array) *json.Array {
+func fromJSONArray(pbArr *api.JSONElement_Array) (*json.Array, error) {
 	elements := json.NewRGATreeList()
 	for _, pbNode := range pbArr.Nodes {
-		elements.Add(fromJSONElement(pbNode.Element))
+		elem, err := fromJSONElement(pbNode.Element)
+		if err != nil {
+			return nil, err
+		}
+		elements.Add(elem)
+	}
+
+	createdAt, err := fromTimeTicket(pbArr.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	movedAt, err := fromTimeTicket(pbArr.MovedAt)
+	if err != nil {
+		return nil, err
+	}
+	removedAt, err := fromTimeTicket(pbArr.RemovedAt)
+	if err != nil {
+		return nil, err
 	}
 
 	arr := json.NewArray(
 		elements,
-		fromTimeTicket(pbArr.CreatedAt),
+		createdAt,
 	)
-	arr.SetMovedAt(fromTimeTicket(pbArr.MovedAt))
-	arr.Remove(fromTimeTicket(pbArr.RemovedAt))
-	return arr
+	arr.SetMovedAt(movedAt)
+	arr.Remove(removedAt)
+	return arr, nil
 }
 
-func fromJSONPrimitive(pbPrim *api.JSONElement_Primitive) *json.Primitive {
+func fromJSONPrimitive(
+	pbPrim *api.JSONElement_Primitive,
+) (*json.Primitive, error) {
+	createdAt, err := fromTimeTicket(pbPrim.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	movedAt, err := fromTimeTicket(pbPrim.MovedAt)
+	if err != nil {
+		return nil, err
+	}
+	removedAt, err := fromTimeTicket(pbPrim.RemovedAt)
+	if err != nil {
+		return nil, err
+	}
+	valueType, err := fromPrimitiveValueType(pbPrim.Type)
+	if err != nil {
+		return nil, err
+	}
+
 	primitive := json.NewPrimitive(
-		json.ValueFromBytes(fromValueType(pbPrim.Type), pbPrim.Value),
-		fromTimeTicket(pbPrim.CreatedAt),
+		json.ValueFromBytes(valueType, pbPrim.Value),
+		createdAt,
 	)
-	primitive.SetMovedAt(fromTimeTicket(pbPrim.MovedAt))
-	primitive.Remove(fromTimeTicket(pbPrim.RemovedAt))
-	return primitive
+	primitive.SetMovedAt(movedAt)
+	primitive.Remove(removedAt)
+	return primitive, nil
 }
 
-func fromJSONText(pbText *api.JSONElement_Text) *json.Text {
+func fromJSONText(pbText *api.JSONElement_Text) (*json.Text, error) {
+	createdAt, err := fromTimeTicket(pbText.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	movedAt, err := fromTimeTicket(pbText.MovedAt)
+	if err != nil {
+		return nil, err
+	}
+	removedAt, err := fromTimeTicket(pbText.RemovedAt)
+	if err != nil {
+		return nil, err
+	}
+
 	rgaTreeSplit := json.NewRGATreeSplit(json.InitialTextNode())
 
 	current := rgaTreeSplit.InitialHead()
 	for _, pbNode := range pbText.Nodes {
-		textNode := fromTextNode(pbNode)
+		textNode, err := fromTextNode(pbNode)
+		if err != nil {
+			return nil, err
+		}
 		current = rgaTreeSplit.InsertAfter(current, textNode)
-		insPrevID := fromTextNodeID(pbNode.InsPrevId)
+		insPrevID, err := fromTextNodeID(pbNode.InsPrevId)
+		if err != nil {
+			return nil, err
+		}
 		if insPrevID != nil {
 			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
 			if insPrevNode == nil {
@@ -117,22 +199,43 @@ func fromJSONText(pbText *api.JSONElement_Text) *json.Text {
 
 	text := json.NewText(
 		rgaTreeSplit,
-		fromTimeTicket(pbText.CreatedAt),
+		createdAt,
 	)
-	text.SetMovedAt(fromTimeTicket(pbText.MovedAt))
-	text.Remove(fromTimeTicket(pbText.RemovedAt))
+	text.SetMovedAt(movedAt)
+	text.Remove(removedAt)
 
-	return text
+	return text, nil
 }
 
-func fromJSONRichText(pbText *api.JSONElement_RichText) *json.RichText {
+func fromJSONRichText(
+	pbText *api.JSONElement_RichText,
+) (*json.RichText, error) {
+	createdAt, err := fromTimeTicket(pbText.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	movedAt, err := fromTimeTicket(pbText.MovedAt)
+	if err != nil {
+		return nil, err
+	}
+	removedAt, err := fromTimeTicket(pbText.RemovedAt)
+	if err != nil {
+		return nil, err
+	}
+
 	rgaTreeSplit := json.NewRGATreeSplit(json.InitialRichTextNode())
 
 	current := rgaTreeSplit.InitialHead()
 	for _, pbNode := range pbText.Nodes {
-		textNode := fromRichTextNode(pbNode)
+		textNode, err := fromRichTextNode(pbNode)
+		if err != nil {
+			return nil, err
+		}
 		current = rgaTreeSplit.InsertAfter(current, textNode)
-		insPrevID := fromTextNodeID(pbNode.InsPrevId)
+		insPrevID, err := fromTextNodeID(pbNode.InsPrevId)
+		if err != nil {
+			return nil, err
+		}
 		if insPrevID != nil {
 			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
 			if insPrevNode == nil {
@@ -144,58 +247,106 @@ func fromJSONRichText(pbText *api.JSONElement_RichText) *json.RichText {
 
 	text := json.NewRichText(
 		rgaTreeSplit,
-		fromTimeTicket(pbText.CreatedAt),
+		createdAt,
 	)
-	text.SetMovedAt(fromTimeTicket(pbText.MovedAt))
-	text.Remove(fromTimeTicket(pbText.RemovedAt))
+	text.SetMovedAt(movedAt)
+	text.Remove(removedAt)
 
-	return text
+	return text, nil
 }
 
-func fromJSONCounter(pbCnt *api.JSONElement_Counter) *json.Counter {
+func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*json.Counter, error) {
+	createdAt, err := fromTimeTicket(pbCnt.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	movedAt, err := fromTimeTicket(pbCnt.MovedAt)
+	if err != nil {
+		return nil, err
+	}
+	removedAt, err := fromTimeTicket(pbCnt.RemovedAt)
+	if err != nil {
+		return nil, err
+	}
+	counterType, err := fromCounterType(pbCnt.Type)
+	if err != nil {
+		return nil, err
+	}
+
 	counter := json.NewCounter(
-		json.CounterValueFromBytes(fromCounterType(pbCnt.Type), pbCnt.Value),
-		fromTimeTicket(pbCnt.CreatedAt),
+		json.CounterValueFromBytes(counterType, pbCnt.Value),
+		createdAt,
 	)
-	counter.SetMovedAt(fromTimeTicket(pbCnt.MovedAt))
-	counter.Remove(fromTimeTicket(pbCnt.RemovedAt))
-	return counter
+	counter.SetMovedAt(movedAt)
+	counter.Remove(removedAt)
+
+	return counter, nil
 }
 
-func fromTextNode(pbTextNode *api.TextNode) *json.RGATreeSplitNode {
+func fromTextNode(pbTextNode *api.TextNode) (*json.RGATreeSplitNode, error) {
+	id, err := fromTextNodeID(pbTextNode.Id)
+	if err != nil {
+		return nil, err
+	}
 	textNode := json.NewRGATreeSplitNode(
-		fromTextNodeID(pbTextNode.Id),
+		id,
 		json.NewTextValue(pbTextNode.Value),
 	)
 	if pbTextNode.RemovedAt != nil {
-		textNode.Remove(fromTimeTicket(pbTextNode.RemovedAt), time.MaxTicket)
+		removedAt, err := fromTimeTicket(pbTextNode.RemovedAt)
+		if err != nil {
+			return nil, err
+		}
+		textNode.Remove(removedAt, time.MaxTicket)
 	}
-	return textNode
+	return textNode, nil
 }
 
-func fromRichTextNode(pbNode *api.RichTextNode) *json.RGATreeSplitNode {
+func fromRichTextNode(
+	pbNode *api.RichTextNode,
+) (*json.RGATreeSplitNode, error) {
+	id, err := fromTextNodeID(pbNode.Id)
+	if err != nil {
+		return nil, err
+	}
+
 	attrs := json.NewRHT()
 	for _, pbAttr := range pbNode.Attributes {
-		attrs.Set(pbAttr.Key, pbAttr.Value, fromTimeTicket(pbAttr.UpdatedAt))
+		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		attrs.Set(pbAttr.Key, pbAttr.Value, updatedAt)
 	}
 
 	textNode := json.NewRGATreeSplitNode(
-		fromTextNodeID(pbNode.Id),
+		id,
 		json.NewRichTextValue(attrs, pbNode.Value),
 	)
 	if pbNode.RemovedAt != nil {
-		textNode.Remove(fromTimeTicket(pbNode.RemovedAt), time.MaxTicket)
+		removedAt, err := fromTimeTicket(pbNode.RemovedAt)
+		if err != nil {
+			return nil, err
+		}
+		textNode.Remove(removedAt, time.MaxTicket)
 	}
-	return textNode
+	return textNode, nil
 }
 
-func fromTextNodeID(pbTextNodeID *api.TextNodeID) *json.RGATreeSplitNodeID {
+func fromTextNodeID(
+	pbTextNodeID *api.TextNodeID,
+) (*json.RGATreeSplitNodeID, error) {
 	if pbTextNodeID == nil {
-		return nil
+		return nil, nil
+	}
+
+	createdAt, err := fromTimeTicket(pbTextNodeID.CreatedAt)
+	if err != nil {
+		return nil, err
 	}
 
 	return json.NewRGATreeSplitNodeID(
-		fromTimeTicket(pbTextNodeID.CreatedAt),
+		createdAt,
 		int(pbTextNodeID.Offset),
-	)
+	), nil
 }

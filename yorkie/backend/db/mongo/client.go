@@ -599,10 +599,15 @@ func (c *Client) findTicketByServerSeq(
 		return nil, err
 	}
 
+	actorID, err := time.ActorIDFromHex(changeInfo.Actor.Hex())
+	if err != nil {
+		return nil, err
+	}
+
 	return time.NewTicket(
 		changeInfo.Lamport,
 		time.MaxDelimiter,
-		time.ActorIDFromHex(changeInfo.Actor.Hex()),
+		actorID,
 	), nil
 }
 

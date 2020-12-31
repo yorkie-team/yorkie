@@ -123,6 +123,9 @@ func (a *RGATreeList) Marshal() string {
 
 		if !current.isRemoved() {
 			sb.WriteString(current.elem.Marshal())
+
+			// FIXME: When the last element of the array is deleted, it does not
+			// work properly.
 			if current != a.last {
 				sb.WriteString(",")
 			}

@@ -138,7 +138,7 @@ func (c *Client) Activate(ctx context.Context) error {
 		return nil
 	}
 
-	reply, err := c.client.ActivateClient(ctx, &api.ActivateClientRequest{
+	response, err := c.client.ActivateClient(ctx, &api.ActivateClientRequest{
 		ClientKey: c.key,
 	})
 
@@ -147,8 +147,13 @@ func (c *Client) Activate(ctx context.Context) error {
 		return err
 	}
 
+	clientID, err := time.ActorIDFromHex(response.ClientId)
+	if err != nil {
+		return err
+	}
+
 	c.status = activated
-	c.id = time.ActorIDFromHex(reply.ClientId)
+	c.id = clientID
 
 	return nil
 }
@@ -292,16 +297,21 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 		return rch
 	}
 
-	handleResponse := func(pbResp *api.WatchDocumentsResponse) {
+	handleResponse := func(pbResp *api.WatchDocumentsResponse) error {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentsResponse_Event_:
+			eventType, err := converter.FromEventType(resp.Event.EventType)
+			if err != nil {
+				return err
+			}
 			rch <- WatchResponse{
-				EventType: converter.FromEventType(resp.Event.EventType),
+				EventType: eventType,
 				Keys:      converter.FromDocumentKeys(resp.Event.DocumentKeys),
 			}
 		case *api.WatchDocumentsResponse_Initialization_:
 			// continue
 		}
+		return nil
 	}
 
 	// waiting for starting watch
@@ -311,7 +321,11 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 		close(rch)
 		return rch
 	}
-	handleResponse(pbResp)
+	if err := handleResponse(pbResp); err != nil {
+		rch <- WatchResponse{Err: err}
+		close(rch)
+		return rch
+	}
 
 	// starting to watch documents
 	go func() {
@@ -322,7 +336,11 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 				close(rch)
 				return
 			}
-			handleResponse(pbResp)
+			if err := handleResponse(pbResp); err != nil {
+				rch <- WatchResponse{Err: err}
+				close(rch)
+				return
+			}
 		}
 	}()
 

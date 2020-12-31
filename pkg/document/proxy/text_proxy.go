@@ -70,3 +70,30 @@ func (p *TextProxy) Edit(from, to int, content string) *TextProxy {
 	}
 	return p
 }
+
+// Select stores that the given range has been selected.
+func (p *TextProxy) Select(from, to int) *TextProxy {
+	if from > to {
+		panic("from should be less than or equal to to")
+	}
+	fromPos, toPos := p.Text.CreateRange(from, to)
+	log.Logger.Debugf(
+		"SELT: f:%d->%s, t:%d->%s",
+		from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(),
+	)
+
+	ticket := p.context.IssueTimeTicket()
+	p.Text.Select(
+		fromPos,
+		toPos,
+		ticket,
+	)
+
+	p.context.Push(operation.NewSelect(
+		p.CreatedAt(),
+		fromPos,
+		toPos,
+		ticket,
+	))
+	return p
+}
