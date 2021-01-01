@@ -21,7 +21,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/types"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
 
 // Activate activates the given client.
@@ -29,7 +29,7 @@ func Activate(
 	ctx context.Context,
 	be *backend.Backend,
 	clientKey string,
-) (*types.ClientInfo, error) {
+) (*db.ClientInfo, error) {
 	return be.DB.ActivateClient(ctx, clientKey)
 }
 
@@ -38,8 +38,8 @@ func Deactivate(
 	ctx context.Context,
 	be *backend.Backend,
 	clientID string,
-) (*types.ClientInfo, error) {
-	return be.DB.DeactivateClient(ctx, clientID)
+) (*db.ClientInfo, error) {
+	return be.DB.DeactivateClient(ctx, db.ID(clientID))
 }
 
 // FindClientAndDocument finds the client and the document.
@@ -49,8 +49,8 @@ func FindClientAndDocument(
 	clientID string,
 	pack *change.Pack,
 	createDocIfNotExist bool,
-) (*types.ClientInfo, *types.DocInfo, error) {
-	clientInfo, err := be.DB.FindClientInfoByID(ctx, clientID)
+) (*db.ClientInfo, *db.DocInfo, error) {
+	clientInfo, err := be.DB.FindClientInfoByID(ctx, db.ID(clientID))
 	if err != nil {
 		return nil, nil, err
 	}

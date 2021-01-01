@@ -38,10 +38,9 @@ import (
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
+	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
-	"github.com/yorkie-team/yorkie/yorkie/pubsub"
-	"github.com/yorkie-team/yorkie/yorkie/types"
 )
 
 type fieldViolation struct {
@@ -132,7 +131,7 @@ func (s *Server) ActivateClient(
 
 	return &api.ActivateClientResponse{
 		ClientKey: client.Key,
-		ClientId:  client.ID.Hex(),
+		ClientId:  client.ID.String(),
 	}, nil
 }
 
@@ -158,7 +157,7 @@ func (s *Server) DeactivateClient(
 	}
 
 	return &api.DeactivateClientResponse{
-		ClientId: client.ID.Hex(),
+		ClientId: client.ID.String(),
 	}, nil
 }
 
@@ -228,7 +227,7 @@ func (s *Server) DetachDocument(
 	if err != nil {
 		return nil, toStatusError(err)
 	}
-	if err := clientInfo.EnsureDocumentAttached(docInfo.ID.Hex()); err != nil {
+	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
 		return nil, toStatusError(err)
 	}
 	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
@@ -273,7 +272,7 @@ func (s *Server) PushPull(
 	if err != nil {
 		return nil, toStatusError(err)
 	}
-	if err := clientInfo.EnsureDocumentAttached(docInfo.ID.Hex()); err != nil {
+	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
 		return nil, toStatusError(err)
 	}
 
@@ -437,9 +436,9 @@ func toStatusError(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	}
 
-	if err == types.ErrClientNotActivated ||
-		err == types.ErrDocumentNotAttached ||
-		err == types.ErrDocumentAlreadyAttached {
+	if err == db.ErrClientNotActivated ||
+		err == db.ErrDocumentNotAttached ||
+		err == db.ErrDocumentAlreadyAttached {
 		return status.Error(codes.FailedPrecondition, err.Error())
 	}
 

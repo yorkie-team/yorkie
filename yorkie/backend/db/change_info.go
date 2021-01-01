@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-package types
+package db
 
 import (
 	"errors"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -31,13 +29,13 @@ import (
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	DocID      primitive.ObjectID `bson:"doc_id"`
-	ServerSeq  uint64             `bson:"server_seq"`
-	ClientSeq  uint32             `bson:"client_seq"`
-	Lamport    uint64             `bson:"lamport"`
-	Actor      primitive.ObjectID `bson:"actor"`
-	Message    string             `bson:"message"`
-	Operations [][]byte           `bson:"operations"`
+	DocID      ID       `bson:"doc_id_fake"`
+	ServerSeq  uint64   `bson:"server_seq"`
+	ClientSeq  uint32   `bson:"client_seq"`
+	Lamport    uint64   `bson:"lamport"`
+	Actor      ID       `bson:"actor_fake"`
+	Message    string   `bson:"message"`
+	Operations [][]byte `bson:"operations"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -54,13 +52,6 @@ func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
 	}
 
 	return encodedOps, nil
-}
-
-// EncodeActorID encodes the given ActorID into object ID.
-func EncodeActorID(id *time.ActorID) primitive.ObjectID {
-	objectID := primitive.ObjectID{}
-	copy(objectID[:], id[:])
-	return objectID
 }
 
 // ToChange creates Change model from this ChangeInfo.

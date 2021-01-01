@@ -29,8 +29,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/pubsub"
-	"github.com/yorkie-team/yorkie/yorkie/types"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db"
+	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
 )
 
 // PushPull stores the given changes and returns accumulated changes of the
@@ -38,8 +38,8 @@ import (
 func PushPull(
 	ctx context.Context,
 	be *backend.Backend,
-	clientInfo *types.ClientInfo,
-	docInfo *types.DocInfo,
+	clientInfo *db.ClientInfo,
+	docInfo *db.DocInfo,
 	reqPack *change.Pack,
 ) (*change.Pack, error) {
 	// TODO Changes may be reordered or missing during communication on the network.
@@ -96,7 +96,7 @@ func PushPull(
 	// 05. publish document change event then store snapshot asynchronously.
 	if reqPack.HasChanges() {
 		be.AttachGoroutine(func() {
-			publisher, err := time.ActorIDFromHex(clientInfo.ID.Hex())
+			publisher, err := time.ActorIDFromHex(clientInfo.ID.String())
 			if err != nil {
 				log.Logger.Error(err)
 				return
@@ -134,8 +134,8 @@ func PushPull(
 
 // pushChanges returns the changes excluding already saved in MongoDB.
 func pushChanges(
-	clientInfo *types.ClientInfo,
-	docInfo *types.DocInfo,
+	clientInfo *db.ClientInfo,
+	docInfo *db.DocInfo,
 	pack *change.Pack,
 	initialServerSeq uint64,
 ) (*checkpoint.Checkpoint, []*change.Change, error) {
@@ -158,7 +158,7 @@ func pushChanges(
 	if len(pack.Changes) > 0 {
 		log.Logger.Infof(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
-			clientInfo.ID.Hex(),
+			clientInfo.ID,
 			len(pushedChanges),
 			docInfo.Key,
 			len(pack.Changes)-len(pushedChanges),
@@ -174,8 +174,8 @@ func pushChanges(
 func pullPack(
 	ctx context.Context,
 	be *backend.Backend,
-	clientInfo *types.ClientInfo,
-	docInfo *types.DocInfo,
+	clientInfo *db.ClientInfo,
+	docInfo *db.DocInfo,
 	requestPack *change.Pack,
 	pushedCP *checkpoint.Checkpoint,
 	initialServerSeq uint64,
@@ -203,8 +203,8 @@ func pullPack(
 func pullChanges(
 	ctx context.Context,
 	be *backend.Backend,
-	clientInfo *types.ClientInfo,
-	docInfo *types.DocInfo,
+	clientInfo *db.ClientInfo,
+	docInfo *db.DocInfo,
 	pack *change.Pack,
 	pushedCP *checkpoint.Checkpoint,
 	initialServerSeq uint64,
@@ -221,7 +221,7 @@ func pullChanges(
 
 	var pulledChanges []*change.Change
 	for _, fetchedChange := range fetchedChanges {
-		if fetchedChange.ID().Actor().String() == clientInfo.ID.Hex() {
+		if clientInfo.ID.String() == fetchedChange.ID().Actor().String() {
 			continue
 		}
 
@@ -233,7 +233,7 @@ func pullChanges(
 	if len(pulledChanges) > 0 {
 		log.Logger.Infof(
 			"PULL: '%s' pulls %d changes(%d~%d) from '%s', cp: %s",
-			clientInfo.ID.Hex(),
+			clientInfo.ID,
 			len(pulledChanges),
 			pulledChanges[0].ServerSeq(),
 			pulledChanges[len(pulledChanges)-1].ServerSeq(),
@@ -248,8 +248,8 @@ func pullChanges(
 func pullSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
-	clientInfo *types.ClientInfo,
-	docInfo *types.DocInfo,
+	clientInfo *db.ClientInfo,
+	docInfo *db.DocInfo,
 	pack *change.Pack,
 	pushedCP *checkpoint.Checkpoint,
 	initialServerSeq uint64,
@@ -263,7 +263,7 @@ func pullSnapshot(
 		pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
 		log.Logger.Infof(
 			"PULL: '%s' pulls snapshot without changes from '%s', cp: %s",
-			clientInfo.ID.Hex(),
+			clientInfo.ID,
 			docInfo.Key,
 			pulledCP.String(),
 		)
@@ -308,7 +308,7 @@ func pullSnapshot(
 
 	log.Logger.Infof(
 		"PULL: '%s' pulls snapshot with changes(%d~%d) from '%s', cp: %s",
-		clientInfo.ID.Hex(),
+		clientInfo.ID,
 		pack.Checkpoint.ServerSeq+1,
 		initialServerSeq,
 		docInfo.Key,
@@ -326,7 +326,7 @@ func pullSnapshot(
 func storeSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
-	docInfo *types.DocInfo,
+	docInfo *db.DocInfo,
 ) error {
 	start := gotime.Now()
 
