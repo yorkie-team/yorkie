@@ -18,6 +18,7 @@ package converter
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -121,7 +122,7 @@ func ToEventType(eventType types.EventType) (api.EventType, error) {
 	case types.DocumentsUnwatchedEvent:
 		return api.EventType_DOCUMENTS_UNWATCHED, nil
 	default:
-		return 0, fmt.Errorf("%v: %w", eventType, ErrUnsupportedEventType)
+		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}
 }
 
@@ -327,7 +328,7 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("%d, %w", elem, ErrUnsupportedElement)
+	return nil, fmt.Errorf("%v, %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 }
 
 func toTextNodePos(pos *json.RGATreeSplitNodePos) *api.TextNodePos {

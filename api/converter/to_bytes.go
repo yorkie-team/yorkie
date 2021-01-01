@@ -18,6 +18,7 @@ package converter
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -56,7 +57,7 @@ func toJSONElement(elem json.Element) (*api.JSONElement, error) {
 	case *json.Counter:
 		return toCounter(elem)
 	default:
-		return nil, fmt.Errorf("%s: %w", elem, ErrUnsupportedElement)
+		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 	}
 }
 
