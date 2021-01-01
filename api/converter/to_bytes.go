@@ -17,6 +17,9 @@
 package converter
 
 import (
+	"fmt"
+	"reflect"
+
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/yorkie-team/yorkie/api"
@@ -26,7 +29,12 @@ import (
 
 // ObjectToBytes converts the given object to byte array.
 func ObjectToBytes(obj *json.Object) ([]byte, error) {
-	bytes, err := proto.Marshal(toJSONElement(obj))
+	pbElem, err := toJSONElement(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	bytes, err := proto.Marshal(pbElem)
 	if err != nil {
 		log.Logger.Error(err)
 		return nil, err
@@ -34,7 +42,7 @@ func ObjectToBytes(obj *json.Object) ([]byte, error) {
 	return bytes, nil
 }
 
-func toJSONElement(elem json.Element) *api.JSONElement {
+func toJSONElement(elem json.Element) (*api.JSONElement, error) {
 	switch elem := elem.(type) {
 	case *json.Object:
 		return toJSONObject(elem)
@@ -43,53 +51,65 @@ func toJSONElement(elem json.Element) *api.JSONElement {
 	case *json.Primitive:
 		return toPrimitive(elem)
 	case *json.Text:
-		return toText(elem)
+		return toText(elem), nil
 	case *json.RichText:
-		return toRichText(elem)
+		return toRichText(elem), nil
 	case *json.Counter:
 		return toCounter(elem)
+	default:
+		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 	}
-
-	// It occurs when the implementation is omitted in the converter after
-	// adding a new data type during development. So we explicitly fire the
-	// panic.
-	panic("fail to encode JSONElement to protobuf")
 }
 
-func toJSONObject(obj *json.Object) *api.JSONElement {
+func toJSONObject(obj *json.Object) (*api.JSONElement, error) {
+	pbRHTNodes, err := toRHTNodes(obj.RHTNodes())
+	if err != nil {
+		return nil, err
+	}
+
 	pbElem := &api.JSONElement{
 		Body: &api.JSONElement_Object_{Object: &api.JSONElement_Object{
-			Nodes:     toRHTNodes(obj.RHTNodes()),
+			Nodes:     pbRHTNodes,
 			CreatedAt: toTimeTicket(obj.CreatedAt()),
 			MovedAt:   toTimeTicket(obj.MovedAt()),
 			RemovedAt: toTimeTicket(obj.RemovedAt()),
 		}},
 	}
-	return pbElem
+	return pbElem, nil
 }
 
-func toJSONArray(arr *json.Array) *api.JSONElement {
+func toJSONArray(arr *json.Array) (*api.JSONElement, error) {
+	pbRGANodes, err := toRGANodes(arr.RGANodes())
+	if err != nil {
+		return nil, err
+	}
+
 	pbElem := &api.JSONElement{
 		Body: &api.JSONElement_Array_{Array: &api.JSONElement_Array{
-			Nodes:     toRGANodes(arr.RGANodes()),
+			Nodes:     pbRGANodes,
 			CreatedAt: toTimeTicket(arr.CreatedAt()),
 			MovedAt:   toTimeTicket(arr.MovedAt()),
 			RemovedAt: toTimeTicket(arr.RemovedAt()),
 		}},
 	}
-	return pbElem
+	return pbElem, nil
 }
 
-func toPrimitive(primitive *json.Primitive) *api.JSONElement {
+func toPrimitive(primitive *json.Primitive) (*api.JSONElement, error) {
+	pbValueType, err := toValueType(primitive.ValueType())
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.JSONElement{
 		Body: &api.JSONElement_Primitive_{Primitive: &api.JSONElement_Primitive{
-			Type:      toValueType(primitive.ValueType()),
+			Type:      pbValueType,
 			Value:     primitive.Bytes(),
 			CreatedAt: toTimeTicket(primitive.CreatedAt()),
 			MovedAt:   toTimeTicket(primitive.MovedAt()),
 			RemovedAt: toTimeTicket(primitive.RemovedAt()),
 		}},
-	}
+	}, nil
 }
 
 func toText(text *json.Text) *api.JSONElement {
@@ -114,37 +134,52 @@ func toRichText(text *json.RichText) *api.JSONElement {
 	}
 }
 
-func toCounter(counter *json.Counter) *api.JSONElement {
+func toCounter(counter *json.Counter) (*api.JSONElement, error) {
+	pbCounterType, err := toCounterType(counter.ValueType())
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.JSONElement{
 		Body: &api.JSONElement_Counter_{Counter: &api.JSONElement_Counter{
-			Type:      toCounterType(counter.ValueType()),
+			Type:      pbCounterType,
 			Value:     counter.Bytes(),
 			CreatedAt: toTimeTicket(counter.CreatedAt()),
 			MovedAt:   toTimeTicket(counter.MovedAt()),
 			RemovedAt: toTimeTicket(counter.RemovedAt()),
 		}},
-	}
+	}, nil
 }
 
-func toRHTNodes(rhtNodes []*json.RHTPQMapNode) []*api.RHTNode {
+func toRHTNodes(rhtNodes []*json.RHTPQMapNode) ([]*api.RHTNode, error) {
 	var pbRHTNodes []*api.RHTNode
 	for _, rhtNode := range rhtNodes {
+		pbElem, err := toJSONElement(rhtNode.Element())
+		if err != nil {
+			return nil, err
+		}
+
 		pbRHTNodes = append(pbRHTNodes, &api.RHTNode{
 			Key:     rhtNode.Key(),
-			Element: toJSONElement(rhtNode.Element()),
+			Element: pbElem,
 		})
 	}
-	return pbRHTNodes
+	return pbRHTNodes, nil
 }
 
-func toRGANodes(rgaNodes []*json.RGATreeListNode) []*api.RGANode {
+func toRGANodes(rgaNodes []*json.RGATreeListNode) ([]*api.RGANode, error) {
 	var pbRGANodes []*api.RGANode
 	for _, rgaNode := range rgaNodes {
+		pbElem, err := toJSONElement(rgaNode.Element())
+		if err != nil {
+			return nil, err
+		}
+
 		pbRGANodes = append(pbRGANodes, &api.RGANode{
-			Element: toJSONElement(rgaNode.Element()),
+			Element: pbElem,
 		})
 	}
-	return pbRGANodes
+	return pbRGANodes, nil
 }
 
 func toTextNodes(textNodes []*json.RGATreeSplitNode) []*api.TextNode {

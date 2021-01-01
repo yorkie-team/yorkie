@@ -196,8 +196,13 @@ func (s *Server) AttachDocument(
 		return nil, toStatusError(err)
 	}
 
+	pbChangePack, err := converter.ToChangePack(pulled)
+	if err != nil {
+		return nil, toStatusError(err)
+	}
+
 	return &api.AttachDocumentResponse{
-		ChangePack: converter.ToChangePack(pulled),
+		ChangePack: pbChangePack,
 	}, nil
 }
 
@@ -239,8 +244,13 @@ func (s *Server) DetachDocument(
 		return nil, toStatusError(err)
 	}
 
+	pbChangePack, err := converter.ToChangePack(pulled)
+	if err != nil {
+		return nil, toStatusError(err)
+	}
+
 	return &api.DetachDocumentResponse{
-		ChangePack: converter.ToChangePack(pulled),
+		ChangePack: pbChangePack,
 	}, nil
 }
 
@@ -281,8 +291,13 @@ func (s *Server) PushPull(
 		return nil, toStatusError(err)
 	}
 
+	pbChangePack, err := converter.ToChangePack(pulled)
+	if err != nil {
+		return nil, toStatusError(err)
+	}
+
 	return &api.PushPullResponse{
-		ChangePack: converter.ToChangePack(pulled),
+		ChangePack: pbChangePack,
 	}, nil
 }
 
@@ -328,11 +343,16 @@ func (s *Server) WatchDocuments(
 				return err
 			}
 
+			eventType, err := converter.ToEventType(event.Type)
+			if err != nil {
+				return err
+			}
+
 			if err := stream.Send(&api.WatchDocumentsResponse{
 				Body: &api.WatchDocumentsResponse_Event_{
 					Event: &api.WatchDocumentsResponse_Event{
 						ClientId:     event.Publisher.String(),
-						EventType:    converter.ToEventType(event.Type),
+						EventType:    eventType,
 						DocumentKeys: converter.ToDocumentKeys(k),
 					},
 				},

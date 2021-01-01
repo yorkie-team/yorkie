@@ -172,7 +172,9 @@ func TestConverter(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		pbPack := converter.ToChangePack(d1.CreateChangePack())
+		pbPack, err := converter.ToChangePack(d1.CreateChangePack())
+		assert.NoError(t, err)
+
 		pack, err := converter.FromChangePack(pbPack)
 		assert.NoError(t, err)
 		pack.MinSyncedTicket = time.MaxTicket
