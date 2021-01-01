@@ -17,6 +17,8 @@
 package converter
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
@@ -28,14 +30,19 @@ import (
 )
 
 // ToChangePack converts the given model format to Protobuf format.
-func ToChangePack(pack *change.Pack) *api.ChangePack {
+func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
+	changes, err := toChanges(pack.Changes)
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.ChangePack{
 		DocumentKey:     toDocumentKey(pack.DocumentKey),
 		Checkpoint:      toCheckpoint(pack.Checkpoint),
-		Changes:         toChanges(pack.Changes),
+		Changes:         changes,
 		Snapshot:        pack.Snapshot,
 		MinSyncedTicket: toTimeTicket(pack.MinSyncedTicket),
-	}
+	}, nil
 }
 
 func toDocumentKey(key *key.Key) *api.DocumentKey {
@@ -52,17 +59,23 @@ func toCheckpoint(cp *checkpoint.Checkpoint) *api.Checkpoint {
 	}
 }
 
-func toChanges(changes []*change.Change) []*api.Change {
+func toChanges(changes []*change.Change) ([]*api.Change, error) {
 	var pbChanges []*api.Change
+
 	for _, c := range changes {
+		operations, err := ToOperations(c.Operations())
+		if err != nil {
+			return nil, err
+		}
+
 		pbChanges = append(pbChanges, &api.Change{
 			Id:         toChangeID(c.ID()),
 			Message:    c.Message(),
-			Operations: ToOperations(c.Operations()),
+			Operations: operations,
 		})
 	}
 
-	return pbChanges
+	return pbChanges, nil
 }
 
 func toChangeID(id *change.ID) *api.ChangeID {
@@ -99,156 +112,222 @@ func ToClientsMap(clientsMap map[string][]string) map[string]*api.Clients {
 }
 
 // ToEventType converts the given model format to Protobuf format.
-func ToEventType(eventType types.EventType) api.EventType {
+func ToEventType(eventType types.EventType) (api.EventType, error) {
 	switch eventType {
 	case types.DocumentsChangeEvent:
-		return api.EventType_DOCUMENTS_CHANGED
+		return api.EventType_DOCUMENTS_CHANGED, nil
 	case types.DocumentsWatchedEvent:
-		return api.EventType_DOCUMENTS_WATCHED
+		return api.EventType_DOCUMENTS_WATCHED, nil
 	case types.DocumentsUnwatchedEvent:
-		return api.EventType_DOCUMENTS_UNWATCHED
+		return api.EventType_DOCUMENTS_UNWATCHED, nil
 	default:
-		panic("unsupported event")
+		return 0, fmt.Errorf("%v: %w", eventType, ErrUnsupportedEventType)
 	}
 }
 
 // ToOperations converts the given model format to Protobuf format.
-func ToOperations(operations []operation.Operation) []*api.Operation {
+func ToOperations(operations []operation.Operation) ([]*api.Operation, error) {
 	var pbOperations []*api.Operation
 
 	for _, o := range operations {
 		pbOperation := &api.Operation{}
+		var err error
 		switch op := o.(type) {
 		case *operation.Set:
-			pbOperation.Body = &api.Operation_Set_{
-				Set: &api.Operation_Set{
-					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
-					Key:             op.Key(),
-					Value:           toJSONElementSimple(op.Value()),
-					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
-				},
-			}
+			pbOperation.Body, err = toSet(op)
 		case *operation.Add:
-			pbOperation.Body = &api.Operation_Add_{
-				Add: &api.Operation_Add{
-					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
-					PrevCreatedAt:   toTimeTicket(op.PrevCreatedAt()),
-					Value:           toJSONElementSimple(op.Value()),
-					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
-				},
-			}
+			pbOperation.Body, err = toAdd(op)
 		case *operation.Move:
-			pbOperation.Body = &api.Operation_Move_{
-				Move: &api.Operation_Move{
-					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
-					PrevCreatedAt:   toTimeTicket(op.PrevCreatedAt()),
-					CreatedAt:       toTimeTicket(op.CreatedAt()),
-					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
-				},
-			}
+			pbOperation.Body, err = toMove(op)
 		case *operation.Remove:
-			pbOperation.Body = &api.Operation_Remove_{
-				Remove: &api.Operation_Remove{
-					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
-					CreatedAt:       toTimeTicket(op.CreatedAt()),
-					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
-				},
-			}
+			pbOperation.Body, err = toRemove(op)
 		case *operation.Edit:
-			pbOperation.Body = &api.Operation_Edit_{
-				Edit: &api.Operation_Edit{
-					ParentCreatedAt:     toTimeTicket(op.ParentCreatedAt()),
-					From:                toTextNodePos(op.From()),
-					To:                  toTextNodePos(op.To()),
-					CreatedAtMapByActor: toCreatedAtMapByActor(op.CreatedAtMapByActor()),
-					Content:             op.Content(),
-					ExecutedAt:          toTimeTicket(op.ExecutedAt()),
-				},
-			}
+			pbOperation.Body, err = toEdit(op)
 		case *operation.Select:
-			pbOperation.Body = &api.Operation_Select_{
-				Select: &api.Operation_Select{
-					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
-					From:            toTextNodePos(op.From()),
-					To:              toTextNodePos(op.To()),
-					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
-				},
-			}
+			pbOperation.Body, err = toSelect(op)
 		case *operation.RichEdit:
-			pbOperation.Body = &api.Operation_RichEdit_{
-				RichEdit: &api.Operation_RichEdit{
-					ParentCreatedAt:     toTimeTicket(op.ParentCreatedAt()),
-					From:                toTextNodePos(op.From()),
-					To:                  toTextNodePos(op.To()),
-					CreatedAtMapByActor: toCreatedAtMapByActor(op.CreatedAtMapByActor()),
-					Content:             op.Content(),
-					Attributes:          op.Attributes(),
-					ExecutedAt:          toTimeTicket(op.ExecutedAt()),
-				},
-			}
+			pbOperation.Body, err = toRichEdit(op)
 		case *operation.Style:
-			pbOperation.Body = &api.Operation_Style_{
-				Style: &api.Operation_Style{
-					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
-					From:            toTextNodePos(op.From()),
-					To:              toTextNodePos(op.To()),
-					Attributes:      op.Attributes(),
-					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
-				},
-			}
+			pbOperation.Body, err = toStyle(op)
 		case *operation.Increase:
-			pbOperation.Body = &api.Operation_Increase_{
-				Increase: &api.Operation_Increase{
-					ParentCreatedAt: toTimeTicket(op.ParentCreatedAt()),
-					Value:           toJSONElementSimple(op.Value()),
-					ExecutedAt:      toTimeTicket(op.ExecutedAt()),
-				},
-			}
+			pbOperation.Body, err = toIncrease(op)
 		default:
-			panic("unsupported operation")
+			return nil, ErrUnsupportedOperation
+		}
+		if err != nil {
+			return nil, err
 		}
 		pbOperations = append(pbOperations, pbOperation)
 	}
 
-	return pbOperations
+	return pbOperations, nil
 }
 
-func toJSONElementSimple(elem json.Element) *api.JSONElementSimple {
+func toSet(set *operation.Set) (*api.Operation_Set_, error) {
+	elem, err := toJSONElementSimple(set.Value())
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.Operation_Set_{
+		Set: &api.Operation_Set{
+			ParentCreatedAt: toTimeTicket(set.ParentCreatedAt()),
+			Key:             set.Key(),
+			Value:           elem,
+			ExecutedAt:      toTimeTicket(set.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toAdd(add *operation.Add) (*api.Operation_Add_, error) {
+	elem, err := toJSONElementSimple(add.Value())
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.Operation_Add_{
+		Add: &api.Operation_Add{
+			ParentCreatedAt: toTimeTicket(add.ParentCreatedAt()),
+			PrevCreatedAt:   toTimeTicket(add.PrevCreatedAt()),
+			Value:           elem,
+			ExecutedAt:      toTimeTicket(add.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toMove(move *operation.Move) (*api.Operation_Move_, error) {
+	return &api.Operation_Move_{
+		Move: &api.Operation_Move{
+			ParentCreatedAt: toTimeTicket(move.ParentCreatedAt()),
+			PrevCreatedAt:   toTimeTicket(move.PrevCreatedAt()),
+			CreatedAt:       toTimeTicket(move.CreatedAt()),
+			ExecutedAt:      toTimeTicket(move.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toRemove(remove *operation.Remove) (*api.Operation_Remove_, error) {
+	return &api.Operation_Remove_{
+		Remove: &api.Operation_Remove{
+			ParentCreatedAt: toTimeTicket(remove.ParentCreatedAt()),
+			CreatedAt:       toTimeTicket(remove.CreatedAt()),
+			ExecutedAt:      toTimeTicket(remove.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toEdit(edit *operation.Edit) (*api.Operation_Edit_, error) {
+	return &api.Operation_Edit_{
+		Edit: &api.Operation_Edit{
+			ParentCreatedAt:     toTimeTicket(edit.ParentCreatedAt()),
+			From:                toTextNodePos(edit.From()),
+			To:                  toTextNodePos(edit.To()),
+			CreatedAtMapByActor: toCreatedAtMapByActor(edit.CreatedAtMapByActor()),
+			Content:             edit.Content(),
+			ExecutedAt:          toTimeTicket(edit.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toSelect(s *operation.Select) (*api.Operation_Select_, error) {
+	return &api.Operation_Select_{
+		Select: &api.Operation_Select{
+			ParentCreatedAt: toTimeTicket(s.ParentCreatedAt()),
+			From:            toTextNodePos(s.From()),
+			To:              toTextNodePos(s.To()),
+			ExecutedAt:      toTimeTicket(s.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toRichEdit(richEdit *operation.RichEdit) (*api.Operation_RichEdit_, error) {
+	return &api.Operation_RichEdit_{
+		RichEdit: &api.Operation_RichEdit{
+			ParentCreatedAt:     toTimeTicket(richEdit.ParentCreatedAt()),
+			From:                toTextNodePos(richEdit.From()),
+			To:                  toTextNodePos(richEdit.To()),
+			CreatedAtMapByActor: toCreatedAtMapByActor(richEdit.CreatedAtMapByActor()),
+			Content:             richEdit.Content(),
+			Attributes:          richEdit.Attributes(),
+			ExecutedAt:          toTimeTicket(richEdit.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toStyle(style *operation.Style) (*api.Operation_Style_, error) {
+	return &api.Operation_Style_{
+		Style: &api.Operation_Style{
+			ParentCreatedAt: toTimeTicket(style.ParentCreatedAt()),
+			From:            toTextNodePos(style.From()),
+			To:              toTextNodePos(style.To()),
+			Attributes:      style.Attributes(),
+			ExecutedAt:      toTimeTicket(style.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toIncrease(increase *operation.Increase) (*api.Operation_Increase_, error) {
+	elem, err := toJSONElementSimple(increase.Value())
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.Operation_Increase_{
+		Increase: &api.Operation_Increase{
+			ParentCreatedAt: toTimeTicket(increase.ParentCreatedAt()),
+			Value:           elem,
+			ExecutedAt:      toTimeTicket(increase.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 	switch elem := elem.(type) {
 	case *json.Object:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_JSON_OBJECT,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
-		}
+		}, nil
 	case *json.Array:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_JSON_ARRAY,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
-		}
+		}, nil
 	case *json.Primitive:
+		valueType, err := toValueType(elem.ValueType())
+		if err != nil {
+			return nil, err
+		}
+
 		return &api.JSONElementSimple{
-			Type:      toValueType(elem.ValueType()),
+			Type:      valueType,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
-		}
+		}, nil
 	case *json.Text:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_TEXT,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
-		}
+		}, nil
 	case *json.RichText:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_RICH_TEXT,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
-		}
+		}, nil
 	case *json.Counter:
+		counterType, err := toCounterType(elem.ValueType())
+		if err != nil {
+			return nil, err
+		}
+
 		return &api.JSONElementSimple{
-			Type:      toCounterType(elem.ValueType()),
+			Type:      counterType,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
-		}
+		}, nil
 	}
-	panic("fail to encode JSONElement to protobuf")
+
+	return nil, fmt.Errorf("%d, %w", elem, ErrUnsupportedElement)
 }
 
 func toTextNodePos(pos *json.RGATreeSplitNodePos) *api.TextNodePos {
@@ -281,36 +360,36 @@ func toTimeTicket(ticket *time.Ticket) *api.TimeTicket {
 	}
 }
 
-func toValueType(valueType json.ValueType) api.ValueType {
+func toValueType(valueType json.ValueType) (api.ValueType, error) {
 	switch valueType {
 	case json.Boolean:
-		return api.ValueType_BOOLEAN
+		return api.ValueType_BOOLEAN, nil
 	case json.Integer:
-		return api.ValueType_INTEGER
+		return api.ValueType_INTEGER, nil
 	case json.Long:
-		return api.ValueType_LONG
+		return api.ValueType_LONG, nil
 	case json.Double:
-		return api.ValueType_DOUBLE
+		return api.ValueType_DOUBLE, nil
 	case json.String:
-		return api.ValueType_STRING
+		return api.ValueType_STRING, nil
 	case json.Bytes:
-		return api.ValueType_BYTES
+		return api.ValueType_BYTES, nil
 	case json.Date:
-		return api.ValueType_DATE
+		return api.ValueType_DATE, nil
 	}
 
-	panic("unsupported value type")
+	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
 }
 
-func toCounterType(valueType json.CounterType) api.ValueType {
+func toCounterType(valueType json.CounterType) (api.ValueType, error) {
 	switch valueType {
 	case json.IntegerCnt:
-		return api.ValueType_INTEGER_CNT
+		return api.ValueType_INTEGER_CNT, nil
 	case json.LongCnt:
-		return api.ValueType_LONG_CNT
+		return api.ValueType_LONG_CNT, nil
 	case json.DoubleCnt:
-		return api.ValueType_DOUBLE_CNT
+		return api.ValueType_DOUBLE_CNT, nil
 	}
 
-	panic("unsupported value type")
+	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
 }

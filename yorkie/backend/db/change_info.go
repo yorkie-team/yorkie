@@ -42,7 +42,12 @@ type ChangeInfo struct {
 func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
 	var encodedOps [][]byte
 
-	for _, pbOp := range converter.ToOperations(operations) {
+	changes, err := converter.ToOperations(operations)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pbOp := range changes {
 		encodedOp, err := pbOp.Marshal()
 		if err != nil {
 			log.Logger.Error(err)
