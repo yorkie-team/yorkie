@@ -196,13 +196,13 @@ func (s *Server) AttachDocument(
 		return nil, toStatusError(err)
 	}
 
-	changePack, err := converter.ToChangePack(pulled)
+	pbChangePack, err := converter.ToChangePack(pulled)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
 
 	return &api.AttachDocumentResponse{
-		ChangePack: changePack,
+		ChangePack: pbChangePack,
 	}, nil
 }
 
@@ -244,13 +244,13 @@ func (s *Server) DetachDocument(
 		return nil, toStatusError(err)
 	}
 
-	changePack, err := converter.ToChangePack(pulled)
+	pbChangePack, err := converter.ToChangePack(pulled)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
 
 	return &api.DetachDocumentResponse{
-		ChangePack: changePack,
+		ChangePack: pbChangePack,
 	}, nil
 }
 
@@ -291,13 +291,13 @@ func (s *Server) PushPull(
 		return nil, toStatusError(err)
 	}
 
-	changePack, err := converter.ToChangePack(pulled)
+	pbChangePack, err := converter.ToChangePack(pulled)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
 
 	return &api.PushPullResponse{
-		ChangePack: changePack,
+		ChangePack: pbChangePack,
 	}, nil
 }
 

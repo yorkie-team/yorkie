@@ -28,12 +28,12 @@ import (
 
 // ObjectToBytes converts the given object to byte array.
 func ObjectToBytes(obj *json.Object) ([]byte, error) {
-	elem, err := toJSONElement(obj)
+	pbElem, err := toJSONElement(obj)
 	if err != nil {
 		return nil, err
 	}
 
-	bytes, err := proto.Marshal(elem)
+	bytes, err := proto.Marshal(pbElem)
 	if err != nil {
 		log.Logger.Error(err)
 		return nil, err
@@ -61,14 +61,14 @@ func toJSONElement(elem json.Element) (*api.JSONElement, error) {
 }
 
 func toJSONObject(obj *json.Object) (*api.JSONElement, error) {
-	rhtNodes, err := toRHTNodes(obj.RHTNodes())
+	pbRHTNodes, err := toRHTNodes(obj.RHTNodes())
 	if err != nil {
 		return nil, err
 	}
 
 	pbElem := &api.JSONElement{
 		Body: &api.JSONElement_Object_{Object: &api.JSONElement_Object{
-			Nodes:     rhtNodes,
+			Nodes:     pbRHTNodes,
 			CreatedAt: toTimeTicket(obj.CreatedAt()),
 			MovedAt:   toTimeTicket(obj.MovedAt()),
 			RemovedAt: toTimeTicket(obj.RemovedAt()),
@@ -78,14 +78,14 @@ func toJSONObject(obj *json.Object) (*api.JSONElement, error) {
 }
 
 func toJSONArray(arr *json.Array) (*api.JSONElement, error) {
-	rgaNodes, err := toRGANodes(arr.RGANodes())
+	pbRGANodes, err := toRGANodes(arr.RGANodes())
 	if err != nil {
 		return nil, err
 	}
 
 	pbElem := &api.JSONElement{
 		Body: &api.JSONElement_Array_{Array: &api.JSONElement_Array{
-			Nodes:     rgaNodes,
+			Nodes:     pbRGANodes,
 			CreatedAt: toTimeTicket(arr.CreatedAt()),
 			MovedAt:   toTimeTicket(arr.MovedAt()),
 			RemovedAt: toTimeTicket(arr.RemovedAt()),
@@ -95,14 +95,14 @@ func toJSONArray(arr *json.Array) (*api.JSONElement, error) {
 }
 
 func toPrimitive(primitive *json.Primitive) (*api.JSONElement, error) {
-	valueType, err := toValueType(primitive.ValueType())
+	pbValueType, err := toValueType(primitive.ValueType())
 	if err != nil {
 		return nil, err
 	}
 
 	return &api.JSONElement{
 		Body: &api.JSONElement_Primitive_{Primitive: &api.JSONElement_Primitive{
-			Type:      valueType,
+			Type:      pbValueType,
 			Value:     primitive.Bytes(),
 			CreatedAt: toTimeTicket(primitive.CreatedAt()),
 			MovedAt:   toTimeTicket(primitive.MovedAt()),
@@ -134,14 +134,14 @@ func toRichText(text *json.RichText) *api.JSONElement {
 }
 
 func toCounter(counter *json.Counter) (*api.JSONElement, error) {
-	counterType, err := toCounterType(counter.ValueType())
+	pbCounterType, err := toCounterType(counter.ValueType())
 	if err != nil {
 		return nil, err
 	}
 
 	return &api.JSONElement{
 		Body: &api.JSONElement_Counter_{Counter: &api.JSONElement_Counter{
-			Type:      counterType,
+			Type:      pbCounterType,
 			Value:     counter.Bytes(),
 			CreatedAt: toTimeTicket(counter.CreatedAt()),
 			MovedAt:   toTimeTicket(counter.MovedAt()),
@@ -153,14 +153,14 @@ func toCounter(counter *json.Counter) (*api.JSONElement, error) {
 func toRHTNodes(rhtNodes []*json.RHTPQMapNode) ([]*api.RHTNode, error) {
 	var pbRHTNodes []*api.RHTNode
 	for _, rhtNode := range rhtNodes {
-		elem, err := toJSONElement(rhtNode.Element())
+		pbElem, err := toJSONElement(rhtNode.Element())
 		if err != nil {
 			return nil, err
 		}
 
 		pbRHTNodes = append(pbRHTNodes, &api.RHTNode{
 			Key:     rhtNode.Key(),
-			Element: elem,
+			Element: pbElem,
 		})
 	}
 	return pbRHTNodes, nil
@@ -169,13 +169,13 @@ func toRHTNodes(rhtNodes []*json.RHTPQMapNode) ([]*api.RHTNode, error) {
 func toRGANodes(rgaNodes []*json.RGATreeListNode) ([]*api.RGANode, error) {
 	var pbRGANodes []*api.RGANode
 	for _, rgaNode := range rgaNodes {
-		elem, err := toJSONElement(rgaNode.Element())
+		pbElem, err := toJSONElement(rgaNode.Element())
 		if err != nil {
 			return nil, err
 		}
 
 		pbRGANodes = append(pbRGANodes, &api.RGANode{
-			Element: elem,
+			Element: pbElem,
 		})
 	}
 	return pbRGANodes, nil

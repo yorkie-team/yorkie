@@ -31,7 +31,7 @@ import (
 
 // ToChangePack converts the given model format to Protobuf format.
 func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
-	changes, err := toChanges(pack.Changes)
+	pbChanges, err := toChanges(pack.Changes)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 	return &api.ChangePack{
 		DocumentKey:     toDocumentKey(pack.DocumentKey),
 		Checkpoint:      toCheckpoint(pack.Checkpoint),
-		Changes:         changes,
+		Changes:         pbChanges,
 		Snapshot:        pack.Snapshot,
 		MinSyncedTicket: toTimeTicket(pack.MinSyncedTicket),
 	}, nil
@@ -63,7 +63,7 @@ func toChanges(changes []*change.Change) ([]*api.Change, error) {
 	var pbChanges []*api.Change
 
 	for _, c := range changes {
-		operations, err := ToOperations(c.Operations())
+		pbOperations, err := ToOperations(c.Operations())
 		if err != nil {
 			return nil, err
 		}
@@ -71,7 +71,7 @@ func toChanges(changes []*change.Change) ([]*api.Change, error) {
 		pbChanges = append(pbChanges, &api.Change{
 			Id:         toChangeID(c.ID()),
 			Message:    c.Message(),
-			Operations: operations,
+			Operations: pbOperations,
 		})
 	}
 
@@ -164,7 +164,7 @@ func ToOperations(operations []operation.Operation) ([]*api.Operation, error) {
 }
 
 func toSet(set *operation.Set) (*api.Operation_Set_, error) {
-	elem, err := toJSONElementSimple(set.Value())
+	pbElem, err := toJSONElementSimple(set.Value())
 	if err != nil {
 		return nil, err
 	}
@@ -173,14 +173,14 @@ func toSet(set *operation.Set) (*api.Operation_Set_, error) {
 		Set: &api.Operation_Set{
 			ParentCreatedAt: toTimeTicket(set.ParentCreatedAt()),
 			Key:             set.Key(),
-			Value:           elem,
+			Value:           pbElem,
 			ExecutedAt:      toTimeTicket(set.ExecutedAt()),
 		},
 	}, nil
 }
 
 func toAdd(add *operation.Add) (*api.Operation_Add_, error) {
-	elem, err := toJSONElementSimple(add.Value())
+	pbElem, err := toJSONElementSimple(add.Value())
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func toAdd(add *operation.Add) (*api.Operation_Add_, error) {
 		Add: &api.Operation_Add{
 			ParentCreatedAt: toTimeTicket(add.ParentCreatedAt()),
 			PrevCreatedAt:   toTimeTicket(add.PrevCreatedAt()),
-			Value:           elem,
+			Value:           pbElem,
 			ExecutedAt:      toTimeTicket(add.ExecutedAt()),
 		},
 	}, nil
@@ -267,7 +267,7 @@ func toStyle(style *operation.Style) (*api.Operation_Style_, error) {
 }
 
 func toIncrease(increase *operation.Increase) (*api.Operation_Increase_, error) {
-	elem, err := toJSONElementSimple(increase.Value())
+	pbElem, err := toJSONElementSimple(increase.Value())
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +275,7 @@ func toIncrease(increase *operation.Increase) (*api.Operation_Increase_, error) 
 	return &api.Operation_Increase_{
 		Increase: &api.Operation_Increase{
 			ParentCreatedAt: toTimeTicket(increase.ParentCreatedAt()),
-			Value:           elem,
+			Value:           pbElem,
 			ExecutedAt:      toTimeTicket(increase.ExecutedAt()),
 		},
 	}, nil
@@ -294,13 +294,13 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Primitive:
-		valueType, err := toValueType(elem.ValueType())
+		pbValueType, err := toValueType(elem.ValueType())
 		if err != nil {
 			return nil, err
 		}
 
 		return &api.JSONElementSimple{
-			Type:      valueType,
+			Type:      pbValueType,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
 		}, nil
@@ -315,13 +315,13 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Counter:
-		counterType, err := toCounterType(elem.ValueType())
+		pbCounterType, err := toCounterType(elem.ValueType())
 		if err != nil {
 			return nil, err
 		}
 
 		return &api.JSONElementSimple{
-			Type:      counterType,
+			Type:      pbCounterType,
 			CreatedAt: toTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
 		}, nil

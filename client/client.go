@@ -186,14 +186,14 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 
 	doc.SetActor(c.id)
 
-	changePack, err := converter.ToChangePack(doc.CreateChangePack())
+	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
 		return err
 	}
 
 	res, err := c.client.AttachDocument(ctx, &api.AttachDocumentRequest{
 		ClientId:   c.id.String(),
-		ChangePack: changePack,
+		ChangePack: pbChangePack,
 	})
 	if err != nil {
 		log.Logger.Error(err)
@@ -231,14 +231,14 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return ErrDocumentNotAttached
 	}
 
-	changePack, err := converter.ToChangePack(doc.CreateChangePack())
+	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
 		return err
 	}
 
 	res, err := c.client.DetachDocument(ctx, &api.DetachDocumentRequest{
 		ClientId:   c.id.String(),
-		ChangePack: changePack,
+		ChangePack: pbChangePack,
 	})
 	if err != nil {
 		log.Logger.Error(err)
@@ -372,14 +372,14 @@ func (c *Client) sync(ctx context.Context, key *key.Key) error {
 		return ErrDocumentNotAttached
 	}
 
-	changePack, err := converter.ToChangePack(doc.CreateChangePack())
+	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
 		return err
 	}
 
 	res, err := c.client.PushPull(ctx, &api.PushPullRequest{
 		ClientId:   c.id.String(),
-		ChangePack: changePack,
+		ChangePack: pbChangePack,
 	})
 	if err != nil {
 		log.Logger.Error(err)
