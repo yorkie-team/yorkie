@@ -7,7 +7,7 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## [0.1.1] - 2020-12-23
+## [0.1.1] - 2021-01-01
 
 ### Added
  - Add version tag when pushing image: #102
@@ -15,6 +15,9 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
  - Use multi-stage build for docker image: #107
+ - Wrap additional information to sentinel errors: #129
+ - Use status for one-dimensional value: #131
+ - Remove panics in the converter: #132, #135
  
 ### Fixed
  - Fix check already attached document: #111
