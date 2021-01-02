@@ -108,7 +108,7 @@ func PushPull(
 				pubsub.DocEvent{
 					Type:      pkgtypes.DocumentsChangeEvent,
 					DocKey:    reqPack.DocumentKey.BSONKey(),
-					Publisher: publisher,
+					Publisher: pkgtypes.Client{ID: publisher},
 				},
 			)
 

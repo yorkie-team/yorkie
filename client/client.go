@@ -298,7 +298,7 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 
 	rch := make(chan WatchResponse)
 	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
-		ClientId:     c.id.String(),
+		Client:       converter.ToClient(types.Client{ID: c.id}),
 		DocumentKeys: converter.ToDocumentKeys(keys...),
 	})
 	if err != nil {
