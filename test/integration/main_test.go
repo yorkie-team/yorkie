@@ -84,7 +84,12 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 
 func getActivatedClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
-		c, err := client.NewClient(testYorkie.RPCAddr())
+		c, err := client.Dial(
+			testYorkie.RPCAddr(),
+			client.Option{Metadata: map[string]string{
+				"name": fmt.Sprintf("name-%d", i),
+			}},
+		)
 		assert.NoError(t, err)
 		err = c.Activate(context.Background())
 		assert.NoError(t, err)

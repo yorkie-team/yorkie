@@ -181,6 +181,7 @@ func TestDocument(t *testing.T) {
 
 					if resp.EventType == types.DocumentsWatchedEvent ||
 						resp.EventType == types.DocumentsUnwatchedEvent {
+						assert.Equal(t, c2.Metadata(), resp.Publisher.Metadata)
 						wg.Done()
 					}
 				}

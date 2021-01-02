@@ -7,4 +7,3 @@ type Client struct {
 	ID       *time.ActorID
 	Metadata map[string]string
 }
-

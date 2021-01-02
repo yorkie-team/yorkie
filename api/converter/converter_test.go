@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 func TestConverter(t *testing.T) {
@@ -192,5 +193,28 @@ func TestConverter(t *testing.T) {
 
 		_, err = converter.FromChangePack(&api.ChangePack{})
 		assert.ErrorIs(t, err, converter.ErrCheckpointRequired)
+	})
+
+	t.Run("client test", func(t *testing.T) {
+		cli := types.Client{
+			ID:       time.InitialActorID,
+			Metadata: map[string]string{"Name": "ClientName"},
+		}
+
+		pbCli := converter.ToClient(cli)
+		decodedCli, err := converter.FromClient(pbCli)
+		assert.NoError(t, err)
+		assert.Equal(t, cli.ID, decodedCli.ID)
+		assert.Equal(t, cli.Metadata, decodedCli.Metadata)
+
+		pbClientsMap := converter.ToClientsMap(map[string][]types.Client{
+			"test": {cli},
+		})
+
+		pbCli = pbClientsMap["test"].Clients[0]
+		decodedCli, err = converter.FromClient(pbCli)
+		assert.NoError(t, err)
+		assert.Equal(t, cli.ID, decodedCli.ID)
+		assert.Equal(t, cli.Metadata, decodedCli.Metadata)
 	})
 }

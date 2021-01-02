@@ -111,10 +111,7 @@ func ToClientsMap(clientsMap map[string][]types.Client) map[string]*api.Clients 
 	for k, clients := range clientsMap {
 		var pbClients []*api.Client
 		for _, client := range clients {
-			pbClients = append(pbClients, &api.Client{
-				Id:       client.ID.String(),
-				Metadata: client.Metadata,
-			})
+			pbClients = append(pbClients, ToClient(client))
 		}
 
 		pbClientsMap[k] = &api.Clients{

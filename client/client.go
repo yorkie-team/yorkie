@@ -54,11 +54,13 @@ var (
 // It has documents and sends changes of the document in local
 // to the agent to synchronize with other replicas in remote.
 type Client struct {
-	conn   *grpc.ClientConn
-	client api.YorkieClient
+	conn       *grpc.ClientConn
+	client     api.YorkieClient
+	dialOption grpc.DialOption
 
 	id           *time.ActorID
 	key          string
+	metadata     map[string]string
 	status       status
 	attachedDocs map[string]*document.Document
 }
@@ -66,17 +68,23 @@ type Client struct {
 // Option configures how we set up the client.
 type Option struct {
 	Key                string
+	Metadata           map[string]string
 	CertFile           string
 	ServerNameOverride string
 }
 
 // NewClient creates an instance of Client.
-func NewClient(rpcAddr string, opts ...Option) (*Client, error) {
+func NewClient(opts ...Option) (*Client, error) {
 	var k string
 	if len(opts) > 0 && opts[0].Key != "" {
 		k = opts[0].Key
 	} else {
 		k = uuid.New().String()
+	}
+
+	metadata := map[string]string{}
+	if len(opts) > 0 && opts[0].Metadata != nil {
+		metadata = opts[0].Metadata
 	}
 
 	var certFile string
@@ -89,31 +97,54 @@ func NewClient(rpcAddr string, opts ...Option) (*Client, error) {
 		serverNameOverride = opts[0].ServerNameOverride
 	}
 
-	dialOpts := grpc.WithInsecure()
+	dialOption := grpc.WithInsecure()
 	if certFile != "" {
-		creds, err := credentials.NewClientTLSFromFile(certFile, serverNameOverride)
+		creds, err := credentials.NewClientTLSFromFile(
+			certFile,
+			serverNameOverride,
+		)
 		if err != nil {
 			log.Logger.Error(err)
 			return nil, err
 		}
-		dialOpts = grpc.WithTransportCredentials(creds)
+		dialOption = grpc.WithTransportCredentials(creds)
 	}
-
-	conn, err := grpc.Dial(rpcAddr, dialOpts)
-	if err != nil {
-		log.Logger.Error(err)
-		return nil, err
-	}
-
-	client := api.NewYorkieClient(conn)
 
 	return &Client{
-		conn:         conn,
-		client:       client,
 		key:          k,
+		metadata:     metadata,
+		dialOption:   dialOption,
 		status:       deactivated,
 		attachedDocs: make(map[string]*document.Document),
 	}, nil
+}
+
+// Dial creates an instance of Client and dials the given rpcAddr.
+func Dial(rpcAddr string, opts ...Option) (*Client, error) {
+	cli, err := NewClient(opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cli.Dial(rpcAddr); err != nil {
+		return nil, err
+	}
+
+	return cli, nil
+}
+
+// Dial dials the given rpcAddr.
+func (c *Client) Dial(rpcAddr string) error {
+	conn, err := grpc.Dial(rpcAddr, c.dialOption)
+	if err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	c.conn = conn
+	c.client = api.NewYorkieClient(conn)
+
+	return nil
 }
 
 // Close closes all resources of this client.
@@ -280,8 +311,14 @@ func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
 	return nil
 }
 
+// Metadata returns the metadata of this client.
+func (c *Client) Metadata() map[string]string {
+	return c.metadata
+}
+
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
+	Publisher *types.Client
 	EventType types.EventType
 	Keys      []*key.Key
 	Err       error
@@ -298,7 +335,10 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 
 	rch := make(chan WatchResponse)
 	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
-		Client:       converter.ToClient(types.Client{ID: c.id}),
+		Client: converter.ToClient(types.Client{
+			ID:       c.id,
+			Metadata: c.metadata,
+		}),
 		DocumentKeys: converter.ToDocumentKeys(keys...),
 	})
 	if err != nil {
@@ -310,11 +350,17 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 	handleResponse := func(pbResp *api.WatchDocumentsResponse) error {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentsResponse_Event_:
+			publisher, err := converter.FromClient(resp.Event.Client)
+			if err != nil {
+				return err
+			}
 			eventType, err := converter.FromEventType(resp.Event.EventType)
 			if err != nil {
 				return err
 			}
+
 			rch <- WatchResponse{
+				Publisher: publisher,
 				EventType: eventType,
 				Keys:      converter.FromDocumentKeys(resp.Event.DocumentKeys),
 			}

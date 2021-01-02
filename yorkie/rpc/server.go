@@ -307,14 +307,13 @@ func (s *Server) WatchDocuments(
 	req *api.WatchDocumentsRequest,
 	stream api.Yorkie_WatchDocumentsServer,
 ) error {
+	client, err := converter.FromClient(req.Client)
+	if err != nil {
+		return err
+	}
 	var docKeys []string
 	for _, docKey := range converter.FromDocumentKeys(req.DocumentKeys) {
 		docKeys = append(docKeys, docKey.BSONKey())
-	}
-
-	client, err := converter.FromClient(req.Client);
-	if err != nil {
-		return err
 	}
 
 	subscription, peersMap, err := s.watchDocs(
@@ -359,7 +358,7 @@ func (s *Server) WatchDocuments(
 			if err := stream.Send(&api.WatchDocumentsResponse{
 				Body: &api.WatchDocumentsResponse_Event_{
 					Event: &api.WatchDocumentsResponse_Event{
-						Client: converter.ToClient(event.Publisher),
+						Client:       converter.ToClient(event.Publisher),
 						EventType:    eventType,
 						DocumentKeys: converter.ToDocumentKeys(k),
 					},
