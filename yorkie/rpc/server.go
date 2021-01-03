@@ -307,12 +307,19 @@ func (s *Server) WatchDocuments(
 	req *api.WatchDocumentsRequest,
 	stream api.Yorkie_WatchDocumentsServer,
 ) error {
+	client, err := converter.FromClient(req.Client)
+	if err != nil {
+		return err
+	}
 	var docKeys []string
 	for _, docKey := range converter.FromDocumentKeys(req.DocumentKeys) {
 		docKeys = append(docKeys, docKey.BSONKey())
 	}
 
-	subscription, peersMap, err := s.watchDocs(req.ClientId, docKeys)
+	subscription, peersMap, err := s.watchDocs(
+		*client,
+		docKeys,
+	)
 	if err != nil {
 		log.Logger.Error(err)
 		return err
@@ -351,7 +358,7 @@ func (s *Server) WatchDocuments(
 			if err := stream.Send(&api.WatchDocumentsResponse{
 				Body: &api.WatchDocumentsResponse_Event_{
 					Event: &api.WatchDocumentsResponse_Event{
-						ClientId:     event.Publisher.String(),
+						Client:       converter.ToClient(event.Publisher),
 						EventType:    eventType,
 						DocumentKeys: converter.ToDocumentKeys(k),
 					},
@@ -384,16 +391,11 @@ func (s *Server) listenAndServeGRPC() error {
 }
 
 func (s *Server) watchDocs(
-	clientID string,
+	client pkgtypes.Client,
 	docKeys []string,
-) (*pubsub.Subscription, map[string][]string, error) {
-	actorID, err := time.ActorIDFromHex(clientID)
-	if err != nil {
-		return nil, nil, err
-	}
-
+) (*pubsub.Subscription, map[string][]pkgtypes.Client, error) {
 	subscription, peersMap, err := s.backend.PubSub.Subscribe(
-		actorID,
+		client,
 		docKeys,
 	)
 	if err != nil {
@@ -403,7 +405,7 @@ func (s *Server) watchDocs(
 
 	for _, docKey := range docKeys {
 		s.backend.PubSub.Publish(
-			subscription.Subscriber(),
+			subscription.Subscriber().ID,
 			docKey,
 			pubsub.DocEvent{
 				Type:      pkgtypes.DocumentsWatchedEvent,
@@ -421,7 +423,7 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription
 
 	for _, docKey := range docKeys {
 		s.backend.PubSub.Publish(
-			subscription.Subscriber(),
+			subscription.Subscriber().ID,
 			docKey,
 			pubsub.DocEvent{
 				Type:      pkgtypes.DocumentsUnwatchedEvent,

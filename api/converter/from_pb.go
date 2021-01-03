@@ -29,6 +29,19 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
+// FromClient converts the given Protobuf format to model format.
+func FromClient(pbClient *api.Client) (*types.Client, error) {
+	id, err := time.ActorIDFromHex(pbClient.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.Client{
+		ID:       id,
+		Metadata: pbClient.Metadata,
+	}, nil
+}
+
 // FromChangePack converts the given Protobuf format to model format.
 func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	if pbPack == nil {

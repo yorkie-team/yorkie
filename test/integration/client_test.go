@@ -26,8 +26,8 @@ import (
 )
 
 func TestClient(t *testing.T) {
-	t.Run("new/close test", func(t *testing.T) {
-		cli, err := client.NewClient(testYorkie.RPCAddr())
+	t.Run("dial and close test", func(t *testing.T) {
+		cli, err := client.Dial(testYorkie.RPCAddr())
 		assert.NoError(t, err)
 
 		defer func() {
@@ -37,11 +37,8 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("activate/deactivate test", func(t *testing.T) {
-		cli, err := client.NewClient(testYorkie.RPCAddr())
-		if err != nil {
-			t.Fatal(err)
-		}
-
+		cli, err := client.Dial(testYorkie.RPCAddr())
+		assert.NoError(t, err)
 		defer func() {
 			err := cli.Close()
 			assert.NoError(t, err)

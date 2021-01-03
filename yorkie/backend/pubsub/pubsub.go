@@ -17,6 +17,7 @@
 package pubsub
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/google/uuid"
@@ -26,23 +27,28 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
+var (
+	// ErrEmptyTopics is returned when the given topic is empty.
+	ErrEmptyTopics = errors.New("empty topics")
+)
+
 // DocEvent represents events that occur related to the document.
 type DocEvent struct {
 	Type      types.EventType
 	DocKey    string
-	Publisher *time.ActorID
+	Publisher types.Client
 }
 
 // Subscription represents the subscription of a subscriber. It is used across
 // several topics.
 type Subscription struct {
 	id         string
-	subscriber *time.ActorID
+	subscriber types.Client
 	closed     bool
 	events     chan DocEvent
 }
 
-func newSubscription(subscriber *time.ActorID) *Subscription {
+func newSubscription(subscriber types.Client) *Subscription {
 	return &Subscription{
 		id:         uuid.New().String(),
 		subscriber: subscriber,
@@ -59,13 +65,13 @@ func (s *Subscription) Events() <-chan DocEvent {
 }
 
 // Subscriber returns the subscriber of this subscription.
-func (s *Subscription) Subscriber() *time.ActorID {
+func (s *Subscription) Subscriber() types.Client {
 	return s.subscriber
 }
 
 // SubscriberID returns string representation of the subscriber.
 func (s *Subscription) SubscriberID() string {
-	return s.subscriber.String()
+	return s.subscriber.ID.String()
 }
 
 // Close closes all resources of this Subscription.
@@ -126,16 +132,24 @@ func New() *PubSub {
 
 // Subscribe subscribes to the given topics.
 func (m *PubSub) Subscribe(
-	subscriber *time.ActorID,
+	subscriber types.Client,
 	topics []string,
-) (*Subscription, map[string][]string, error) {
+) (*Subscription, map[string][]types.Client, error) {
+	if len(topics) == 0 {
+		return nil, nil, ErrEmptyTopics
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	log.Logger.Debugf(`Subscribe(%s,%s) Start`, topics[0], subscriber.String())
+	log.Logger.Debugf(
+		`Subscribe(%s,%s) Start`,
+		topics[0],
+		subscriber.ID.String(),
+	)
 
 	subscription := newSubscription(subscriber)
-	peersMap := make(map[string][]string)
+	peersMap := make(map[string][]types.Client)
 
 	for _, topic := range topics {
 		if _, ok := m.subscriptionsMap[topic]; !ok {
@@ -143,14 +157,18 @@ func (m *PubSub) Subscribe(
 		}
 		m.subscriptionsMap[topic].Add(subscription)
 
-		var peers []string
+		var peers []types.Client
 		for _, sub := range m.subscriptionsMap[topic].Map() {
-			peers = append(peers, sub.subscriber.String())
+			peers = append(peers, sub.subscriber)
 		}
 		peersMap[topic] = peers
 	}
 
-	log.Logger.Debugf(`Subscribe(%s,%s) End`, topics[0], subscriber.String())
+	log.Logger.Debugf(
+		`Subscribe(%s,%s) End`,
+		topics[0],
+		subscriber.ID.String(),
+	)
 	return subscription, peersMap, nil
 }
 
@@ -171,22 +189,22 @@ func (m *PubSub) Unsubscribe(topics []string, sub *Subscription) {
 
 // Publish publishes the given event to the given Topic.
 func (m *PubSub) Publish(
-	publisher *time.ActorID,
+	publisherID *time.ActorID,
 	topic string,
 	event DocEvent,
 ) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	log.Logger.Debugf(`Publish(%s,%s) Start`, event.DocKey, publisher.String())
+	log.Logger.Debugf(`Publish(%s,%s) Start`, event.DocKey, publisherID.String())
 
 	if subscriptions, ok := m.subscriptionsMap[topic]; ok {
 		for _, sub := range subscriptions.Map() {
-			if sub.subscriber.Compare(publisher) != 0 {
+			if sub.subscriber.ID.Compare(publisherID) != 0 {
 				log.Logger.Debugf(
 					`Publish(%s,%s) to %s`,
 					event.DocKey,
-					publisher.String(),
+					publisherID.String(),
 					sub.SubscriberID(),
 				)
 				sub.events <- event
@@ -194,5 +212,5 @@ func (m *PubSub) Publish(
 		}
 	}
 
-	log.Logger.Debugf(`Publish(%s,%s) End`, event.DocKey, publisher.String())
+	log.Logger.Debugf(`Publish(%s,%s) End`, event.DocKey, publisherID.String())
 }

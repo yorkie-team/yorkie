@@ -30,6 +30,14 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
+// ToClient converts the given model to Protobuf format.
+func ToClient(client types.Client) *api.Client {
+	return &api.Client{
+		Id:       client.ID.String(),
+		Metadata: client.Metadata,
+	}
+}
+
 // ToChangePack converts the given model format to Protobuf format.
 func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 	pbChanges, err := toChanges(pack.Changes)
@@ -97,15 +105,17 @@ func ToDocumentKeys(keys ...*key.Key) []*api.DocumentKey {
 }
 
 // ToClientsMap converts the given model to Protobuf format.
-func ToClientsMap(clientsMap map[string][]string) map[string]*api.Clients {
+func ToClientsMap(clientsMap map[string][]types.Client) map[string]*api.Clients {
 	pbClientsMap := make(map[string]*api.Clients)
 
 	for k, clients := range clientsMap {
-		var clientIds []string
-		clientIds = append(clientIds, clients...)
+		var pbClients []*api.Client
+		for _, client := range clients {
+			pbClients = append(pbClients, ToClient(client))
+		}
 
 		pbClientsMap[k] = &api.Clients{
-			ClientIds: clientIds,
+			Clients: pbClients,
 		}
 	}
 
