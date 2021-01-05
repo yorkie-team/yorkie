@@ -1,12 +1,30 @@
+---
+title: peer-awareness
+target-version: 0.1.2
+---
+
 # Peer Awareness
 
-Target version: Yorkie 0.1.2
+## Summary
 
-## Use case
+We will provide Peer Awareness which is a simple algorithm that manages end-user
+status like who is connected and metadata like username or email address and etc.
+For example, users can implement a list of people participating in the editing,
+such as a box in the top right of Google Docs.
 
-When multiple users edit a single document, the users want to know who is connected and what is being edited by the peers. For example, in Google Docs, the ID and profile of the user editing together are displayed in the upper-right.
+### Goals
 
-## How to use
+Implement Peer Awareness and provide API to users to use the feature. The goal of
+the first version is to implement simple functionality and check usability.
+
+### Non-Goals
+
+The first version does not implement complex features such as dynamic metadata
+updates.
+
+## Proposal details
+
+### How to use
 
 Users can pass metadata along with client options when creating a client.
 
@@ -25,7 +43,8 @@ const doc = yorkie.createDocument('examples', 'codemirror');
 await client.attach(doc);
 ```
 
-When a new peer registers or leaves, `peers-changed` event is fired, and the other peer's clientID and metadata can be obtained from the event.
+When a new peer registers or leaves, `peers-changed` event is fired, and the
+other peer's clientID and metadata can be obtained from the event.
 
 ```typescript
 client.subscribe((event) => {
@@ -38,7 +57,7 @@ client.subscribe((event) => {
 });
 ```
 
-## How does it work?
+### How does it work?
 
 ```
  +--Client "A"----+                      +--Agent-----------------+
@@ -54,11 +73,23 @@ client.subscribe((event) => {
  +----------------+                      +------------------------+
 ```
 
-When a client attaches documents, a stream is connected between agent and the client through WatchDocuments API. This will update the map of clients that are watching the documents in PubSub. When the stream disconnects or a new connection is made, `DOCUMENTS_UNWATCHED` or `DOCUMENTS_WATCHED` event is delivered to other clients who are watching the document together.
+When a client attaches documents, a stream is connected between agent and
+the client through WatchDocuments API. This will update the map of clients that
+are watching the documents in PubSub. When the stream disconnects or a new connection
+is made, `DOCUMENTS_UNWATCHED` or `DOCUMENTS_WATCHED` event is delivered to other clients
+who are watching the document together.
 
-Client Metadata is managed inside the instance of the Client and is not stored persistently in Yorkie. The reasons are as follows:
+### Risks and Mitigation
 
+The first version is missing the ability to dynamically update metadata and
+propagate it to other peers. Client Metadata is managed inside the instance of the Client
+and is not stored persistently in Yorkie. The reasons are as follows:
+
+ - The goal of the first version is to check the usability of the feature.
  - Metadata's primary "source of truth" location is user's DB, and it is simply passed to Yorkie.
  - All other locations of the metadata in Yorkie just refer back to the primary "source of truth" location.
  - We can prevent increasing management points caused by storing metadata in MongoDB.
 
+In the future, if the users needs arise, we may need to implement the ability to
+dynamically update metadata and propagates it to peers. We might consider
+treating it as a Yorkie Document that has logical clocks, not a normal map in PubSub.
