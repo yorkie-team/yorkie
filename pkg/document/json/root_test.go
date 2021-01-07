@@ -93,6 +93,38 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, 1, nodeLen)
 	})
 
+	t.Run("garbage collection for fragments of text", func(t *testing.T) {
+		type test struct {
+			from    int
+			to      int
+			content string
+			want    string
+			garbage int
+		}
+
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+		text := json.NewText(json.NewRGATreeSplit(json.InitialTextNode()), ctx.IssueTimeTicket())
+
+		tests := []test{
+			{from: 0, to: 0, content: "Yorkie", want: `"Yorkie"`, garbage: 0},
+			{from: 4, to: 5, content: "", want: `"Yorke"`, garbage: 1},
+			{from: 2, to: 3, content: "", want: `"Yoke"`, garbage: 2},
+			{from: 0, to: 1, content: "", want: `"oke"`, garbage: 3},
+		}
+
+		for _, tc := range tests {
+			fromPos, toPos := text.CreateRange(tc.from, tc.to)
+			text.Edit(fromPos, toPos, nil, tc.content, ctx.IssueTimeTicket())
+			registerRemovedNodeTextElement(fromPos, toPos, root, text)
+			assert.Equal(t, tc.want, text.Marshal())
+			assert.Equal(t, tc.garbage, root.GarbageLen())
+		}
+
+		assert.Equal(t, 3, root.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 0, root.GarbageLen())
+	})
+
 	t.Run("garbage collection for rich text test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
