@@ -18,12 +18,10 @@ package pubsub
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/google/uuid"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
@@ -48,7 +46,8 @@ type Subscription struct {
 	events     chan DocEvent
 }
 
-func newSubscription(subscriber types.Client) *Subscription {
+// NewSubscription creates a new instance of Subscription.
+func NewSubscription(subscriber types.Client) *Subscription {
 	return &Subscription{
 		id:         uuid.New().String(),
 		subscriber: subscriber,
@@ -59,8 +58,13 @@ func newSubscription(subscriber types.Client) *Subscription {
 	}
 }
 
+// ID returns the id of this subscription.
+func (s *Subscription) ID() string {
+	return s.id
+}
+
 // Events returns the DocEvent channel of this subscription.
-func (s *Subscription) Events() <-chan DocEvent {
+func (s *Subscription) Events() chan DocEvent {
 	return s.events
 }
 
@@ -84,133 +88,17 @@ func (s *Subscription) Close() {
 	close(s.events)
 }
 
-// Subscriptions is a collection of subscriptions that subscribe to a specific
-// topic.
-type Subscriptions struct {
-	internalMap map[string]*Subscription
-}
-
-func newSubscriptions() *Subscriptions {
-	return &Subscriptions{
-		internalMap: make(map[string]*Subscription),
-	}
-}
-
-// Add adds the given subscription.
-func (s *Subscriptions) Add(sub *Subscription) {
-	s.internalMap[sub.id] = sub
-}
-
-// Map returns the internal map of this Subscriptions.
-func (s *Subscriptions) Map() map[string]*Subscription {
-	return s.internalMap
-}
-
-// Delete deletes the subscription of the given id.
-func (s *Subscriptions) Delete(id string) {
-	if subscription, ok := s.internalMap[id]; ok {
-		subscription.Close()
-	}
-	delete(s.internalMap, id)
-}
-
 // PubSub is a structure to support event publishing/subscription.
-// TODO: Temporary Memory PubSub.
-//  - We will need to replace this with distributed pubSub.
-type PubSub struct {
-	mu               *sync.RWMutex
-	subscriptionsMap map[string]*Subscriptions
-}
+type PubSub interface {
+	// Subscribe subscribes to the given topics.
+	Subscribe(
+		subscriber types.Client,
+		topics []string,
+	) (*Subscription, map[string][]types.Client, error)
 
-// New creates an instance of Pubsub.
-func New() *PubSub {
-	return &PubSub{
-		mu:               &sync.RWMutex{},
-		subscriptionsMap: make(map[string]*Subscriptions),
-	}
-}
+	// Unsubscribe unsubscribes the given topics.
+	Unsubscribe(topics []string, sub *Subscription)
 
-// Subscribe subscribes to the given topics.
-func (m *PubSub) Subscribe(
-	subscriber types.Client,
-	topics []string,
-) (*Subscription, map[string][]types.Client, error) {
-	if len(topics) == 0 {
-		return nil, nil, ErrEmptyTopics
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	log.Logger.Debugf(
-		`Subscribe(%s,%s) Start`,
-		topics[0],
-		subscriber.ID.String(),
-	)
-
-	subscription := newSubscription(subscriber)
-	peersMap := make(map[string][]types.Client)
-
-	for _, topic := range topics {
-		if _, ok := m.subscriptionsMap[topic]; !ok {
-			m.subscriptionsMap[topic] = newSubscriptions()
-		}
-		m.subscriptionsMap[topic].Add(subscription)
-
-		var peers []types.Client
-		for _, sub := range m.subscriptionsMap[topic].Map() {
-			peers = append(peers, sub.subscriber)
-		}
-		peersMap[topic] = peers
-	}
-
-	log.Logger.Debugf(
-		`Subscribe(%s,%s) End`,
-		topics[0],
-		subscriber.ID.String(),
-	)
-	return subscription, peersMap, nil
-}
-
-// Unsubscribe unsubscribes the given topics.
-func (m *PubSub) Unsubscribe(topics []string, sub *Subscription) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	log.Logger.Debugf(`Unsubscribe(%s,%s) Start`, topics[0], sub.SubscriberID())
-
-	for _, topic := range topics {
-		if subscriptions, ok := m.subscriptionsMap[topic]; ok {
-			subscriptions.Delete(sub.id)
-		}
-	}
-	log.Logger.Debugf(`Unsubscribe(%s,%s) End`, topics[0], sub.SubscriberID())
-}
-
-// Publish publishes the given event to the given Topic.
-func (m *PubSub) Publish(
-	publisherID *time.ActorID,
-	topic string,
-	event DocEvent,
-) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	log.Logger.Debugf(`Publish(%s,%s) Start`, event.DocKey, publisherID.String())
-
-	if subscriptions, ok := m.subscriptionsMap[topic]; ok {
-		for _, sub := range subscriptions.Map() {
-			if sub.subscriber.ID.Compare(publisherID) != 0 {
-				log.Logger.Debugf(
-					`Publish(%s,%s) to %s`,
-					event.DocKey,
-					publisherID.String(),
-					sub.SubscriberID(),
-				)
-				sub.events <- event
-			}
-		}
-	}
-
-	log.Logger.Debugf(`Publish(%s,%s) End`, event.DocKey, publisherID.String())
+	// Publish publishes the given event to the given Topic.
+	Publish(publisherID *time.ActorID, topic string, event DocEvent)
 }

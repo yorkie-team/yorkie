@@ -23,6 +23,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
+	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub/mempubsub"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
@@ -43,7 +44,7 @@ type Backend struct {
 
 	DB       db.DB
 	MutexMap *sync.MutexMap
-	PubSub   *pubsub.PubSub
+	PubSub   pubsub.PubSub
 
 	// closing is closed by backend close.
 	closing chan struct{}
@@ -67,7 +68,7 @@ func New(conf *Config, mongoConf *mongo.Config) (*Backend, error) {
 		Config:   conf,
 		DB:       client,
 		MutexMap: sync.NewMutexMap(),
-		PubSub:   pubsub.New(),
+		PubSub:   mempubsub.New(),
 		closing:  make(chan struct{}),
 	}, nil
 }
