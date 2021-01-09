@@ -25,30 +25,30 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
 )
 
-// Subscriptions is a collection of subscriptions that subscribe to a specific
+// subscriptions is a collection of subscriptions that subscribe to a specific
 // topic.
-type Subscriptions struct {
+type subscriptions struct {
 	internalMap map[string]*pubsub.Subscription
 }
 
-func newSubscriptions() *Subscriptions {
-	return &Subscriptions{
+func newSubscriptions() *subscriptions {
+	return &subscriptions{
 		internalMap: make(map[string]*pubsub.Subscription),
 	}
 }
 
 // Add adds the given subscription.
-func (s *Subscriptions) Add(sub *pubsub.Subscription) {
+func (s *subscriptions) Add(sub *pubsub.Subscription) {
 	s.internalMap[sub.ID()] = sub
 }
 
-// Map returns the internal map of this Subscriptions.
-func (s *Subscriptions) Map() map[string]*pubsub.Subscription {
+// Map returns the internal map of this subscriptions.
+func (s *subscriptions) Map() map[string]*pubsub.Subscription {
 	return s.internalMap
 }
 
 // Delete deletes the subscription of the given id.
-func (s *Subscriptions) Delete(id string) {
+func (s *subscriptions) Delete(id string) {
 	if subscription, ok := s.internalMap[id]; ok {
 		subscription.Close()
 	}
@@ -59,14 +59,14 @@ func (s *Subscriptions) Delete(id string) {
 // tests.
 type MemPubSub struct {
 	mu               *sync.RWMutex
-	subscriptionsMap map[string]*Subscriptions
+	subscriptionsMap map[string]*subscriptions
 }
 
 // New creates an instance of MemoryPubSub.
 func New() *MemPubSub {
 	return &MemPubSub{
 		mu:               &sync.RWMutex{},
-		subscriptionsMap: make(map[string]*Subscriptions),
+		subscriptionsMap: make(map[string]*subscriptions),
 	}
 }
 
@@ -88,14 +88,14 @@ func (m *MemPubSub) Subscribe(
 		subscriber.ID.String(),
 	)
 
-	subscription := pubsub.NewSubscription(subscriber)
+	sub := pubsub.NewSubscription(subscriber)
 	peersMap := make(map[string][]types.Client)
 
 	for _, topic := range topics {
 		if _, ok := m.subscriptionsMap[topic]; !ok {
 			m.subscriptionsMap[topic] = newSubscriptions()
 		}
-		m.subscriptionsMap[topic].Add(subscription)
+		m.subscriptionsMap[topic].Add(sub)
 
 		var peers []types.Client
 		for _, sub := range m.subscriptionsMap[topic].Map() {
@@ -109,7 +109,7 @@ func (m *MemPubSub) Subscribe(
 		topics[0],
 		subscriber.ID.String(),
 	)
-	return subscription, peersMap, nil
+	return sub, peersMap, nil
 }
 
 // Unsubscribe unsubscribes the given topics.
@@ -120,8 +120,8 @@ func (m *MemPubSub) Unsubscribe(topics []string, sub *pubsub.Subscription) {
 	log.Logger.Debugf(`Unsubscribe(%s,%s) Start`, topics[0], sub.SubscriberID())
 
 	for _, topic := range topics {
-		if subscriptions, ok := m.subscriptionsMap[topic]; ok {
-			subscriptions.Delete(sub.ID())
+		if subs, ok := m.subscriptionsMap[topic]; ok {
+			subs.Delete(sub.ID())
 		}
 	}
 	log.Logger.Debugf(`Unsubscribe(%s,%s) End`, topics[0], sub.SubscriberID())
@@ -138,8 +138,8 @@ func (m *MemPubSub) Publish(
 
 	log.Logger.Debugf(`Publish(%s,%s) Start`, event.DocKey, publisherID.String())
 
-	if subscriptions, ok := m.subscriptionsMap[topic]; ok {
-		for _, sub := range subscriptions.Map() {
+	if subs, ok := m.subscriptionsMap[topic]; ok {
+		for _, sub := range subs.Map() {
 			if sub.Subscriber().ID.Compare(publisherID) != 0 {
 				log.Logger.Debugf(
 					`Publish(%s,%s) to %s`,
