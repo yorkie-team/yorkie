@@ -19,7 +19,7 @@ package pubsub
 import (
 	"errors"
 
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
@@ -49,7 +49,7 @@ type Subscription struct {
 // NewSubscription creates a new instance of Subscription.
 func NewSubscription(subscriber types.Client) *Subscription {
 	return &Subscription{
-		id:         uuid.New().String(),
+		id:         xid.New().String(),
 		subscriber: subscriber,
 		// [Workaround] The channel buffer size below avoids stopping during
 		//   event issuing to the events channel. This bug occurs in the order

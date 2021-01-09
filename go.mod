@@ -11,6 +11,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/prometheus/client_golang v0.9.3
+	github.com/rs/xid v1.2.1
 	github.com/spf13/cobra v1.1.1
 	github.com/stretchr/testify v1.6.2-0.20201103103935-92707c0b2d50
 	github.com/tidwall/pretty v1.0.0 // indirect
