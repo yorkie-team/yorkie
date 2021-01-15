@@ -7,14 +7,15 @@ target-version: 0.1.1
 
 ## Summary
 
-Text and RichText use `RgaTreeSplit`. And when the text is removed, it marks a tombstone on the node corresponding to the text.  
-We provide garbage collection to clean up nodes of text type data that have been removed.
-
-### Goals
-
 When all synchronization between clients is complete, the node marked tombstone is no longer needed.
 As the number of nodes marked tombstone increases, unnecessary memory waste occurs.
 So it provides garbage collection to solve the problem of wasting memory.
+
+### Goals
+
+Implements garbage collection for text types, Text, and RichText. When
+executing garbage collection of a document, text nodes marked with
+tombstones are also deleted.
 
 ### Non-Goals
 
