@@ -20,7 +20,7 @@ tombstones are also deleted.
 ### Non-Goals
 
 1. It does not directly control the garbage collection provided by the programming language. It simply removes the relationship of the nodes connected to the linked list and makes it a collection target.
-2. It is not a function that can be called directly by the yorkie user.
+2. It is not a feature that Yorkie users can use directly.
 
 ## Proposal details
 
@@ -89,5 +89,4 @@ Must also do the work to connect the relationship between `insPrev` and `insNext
 
 > `insPrev` and `insNext` are used to remember other nodes connected to the insert.
 > For example, when `abc` is divided into `a`, `b`, `c`, it looks like this: [abc] divided to [a]<->[b]<->[c]
-
 
