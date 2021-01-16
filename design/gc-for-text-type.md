@@ -28,7 +28,7 @@ tombstones are also deleted.
 
 #### Save changed text
 
-Text nodes that are deleted when editing text become tombstones and are stored in the `RGATreeSplit` instance.
+Text nodes that are deleted during editing are marked as tombstones and stored in the `RGATreeSplit` instance.
 Additionally, text elements with text nodes that are deleted during the editing process are stored in the `Root` instance.
 And the `Root` instance is managed by the `Document` instance.
 
