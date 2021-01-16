@@ -16,7 +16,7 @@ If you have any questions along the way, please don’t hesitate to ask us
 
 This is a rough outline of what a contributor's workflow looks like:
 
-- Create a topic branch from where to base the contribution. This is usually master
+- Create a topic branch from where to base the contribution. This is usually main
 - Make commits of logical units
 - Make sure commit messages are in the proper format
 - Push changes in a topic branch to a personal fork of the repository

@@ -42,7 +42,7 @@ Yorkie consists of three main components: Client, Document and Agent.
 
  - Agent: https://github.com/yorkie-team/yorkie
  - JS SDK: https://github.com/yorkie-team/yorkie-js-sdk
- - Go Client: https://github.com/yorkie-team/yorkie/tree/master/client
+ - Go Client: https://github.com/yorkie-team/yorkie/tree/main/client
 
 ## Quick Start
 
@@ -64,13 +64,13 @@ $ ./bin/yorkie agent -c yorkie.json
 
 The configuration file with default values is shown below.
 
-https://github.com/yorkie-team/yorkie/blob/master/yorkie/config.sample.json
+https://github.com/yorkie-team/yorkie/blob/main/yorkie/config.sample.json
 
 ## Documentation
 
 Full, comprehensive documentation is viewable on the Yorkie website:
 
-https://yorkie.dev/docs/master/
+https://yorkie.dev/docs/main/
 
 ## Developing Yorkie
 
