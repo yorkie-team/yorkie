@@ -50,11 +50,11 @@ type Document struct {
 
 When garbage collection is enabled, both the original and copied data are checked to collect garbage.
 
-#### Garbage collection run
+#### Garbage Collection run
 
 When the client syncs, Yorkie's garbage collection runs automatically.
->The important thing is that the user does not call it directly. If the user calls it directly, it may cause unintended behavior and lead to problems for the entire program.
->Currently, `Document.GarbageCollect` is exposed to users as a public method, so it may be misunderstood. We are aware of this issue and are working through issue [#125](https://github.com/yorkie-team/yorkie/issues/125).
+> The important thing is that the user does not call it directly. If the user calls it directly, it may cause unintended behavior and lead to problems for the entire program.
+> Currently, `Document.GarbageCollect` is exposed to users as a public method, so it may be misunderstood. We are aware of this issue and are working through issue [#125](https://github.com/yorkie-team/yorkie/issues/125).
 
 It cleans up tombstone-marked nodes by traversing the modified text elements stored in the `Root` instance.
 Organized nodes are excluded from the linked list and are subject to garbage collection provided by the programming language.
@@ -82,7 +82,7 @@ Organized nodes are excluded from the linked list and are subject to garbage col
                 | 'b' |
                 +-----+
 ```
->It only makes it a garbage collection target. If we use `runtime.GC()` directly, performance degradation will occur due to frequent `GC` calls.
+> It only makes it a garbage collection target. If we use `runtime.GC()` directly, performance degradation will occur due to frequent `GC` calls.
 
 What you need to know at this time is that `RGATreeSplitNode` has `insPrev` and `insNext`.
 It must also do the work to connect the relationship between `insPrev` and `insNext`.
