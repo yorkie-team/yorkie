@@ -7,7 +7,7 @@ target-version: 0.1.1
 
 ## Summary
 
-When all synchronization between clients is complete, the node marked tombstones is no longer needed.
+When synchronization between clients is complete, the nodes marked as tombstones are no longer needed.
 As the number of nodes marked tombstones increases, unnecessary memory waste occurs.
 So it provides garbage collection to solve the problem of wasting memory.
 
