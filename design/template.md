@@ -18,7 +18,7 @@ List the specific goals of the proposal. How will we know that this has succeede
 What is out of scope for this proposal? Listing non-goals helps to focus discussion
 and make progress.
 
-## Proposal details
+## Proposal Details
 
 This is where we detail how to use the feature with snippet or API and describe
 the internal implementation.
