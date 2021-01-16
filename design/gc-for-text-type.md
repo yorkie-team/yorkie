@@ -7,9 +7,7 @@ target-version: 0.1.1
 
 ## Summary
 
-When synchronization between clients is complete, the nodes marked as tombstones are no longer needed.
-Increasing the number of nodes marked as tombstones lead to unnecessary waste of memory.
-So it provides garbage collection to solve the problem of wasting memory.
+We only implemented garbage collection for elements marked as tombstones to reduce unnecessary waste of memory. This feature implements a garbage collection for text nodes marked as tombstones that occur within elements of text type.
 
 ### Goals
 
