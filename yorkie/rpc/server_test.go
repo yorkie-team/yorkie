@@ -24,8 +24,8 @@ const (
 )
 
 var (
-	nilClientID, _ = hex.DecodeString("000000000000000000000000")
-	emptyClientID, _ = hex.DecodeString("")
+	nilClientID, _     = hex.DecodeString("000000000000000000000000")
+	emptyClientID, _   = hex.DecodeString("")
 	invalidClientID, _ = hex.DecodeString("invalid")
 
 	testRPCServer *rpc.Server

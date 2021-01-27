@@ -131,7 +131,7 @@ func (s *Server) ActivateClient(
 
 	return &api.ActivateClientResponse{
 		ClientKey: client.Key,
-		ClientId: client.ID.Bytes(),
+		ClientId:  client.ID.Bytes(),
 	}, nil
 }
 
