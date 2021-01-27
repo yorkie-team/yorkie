@@ -65,6 +65,11 @@ func ActorIDFromHex(str string) (*ActorID, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
 	}
+
+	if len(decoded) != actorIDSize {
+		return nil, fmt.Errorf("decoded length %d: %w", len(decoded), ErrInvalidHexString)
+	}
+
 	copy(actorID[:], decoded[:actorIDSize])
 	return &actorID, nil
 }

@@ -61,9 +61,12 @@ func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
 
 // ToChange creates Change model from this ChangeInfo.
 func (i *ChangeInfo) ToChange() (*change.Change, error) {
-	actorID := time.ActorID{}
-	copy(actorID[:], i.Actor[:])
-	changeID := change.NewID(i.ClientSeq, i.Lamport, &actorID)
+	actorID, err := time.ActorIDFromHex(i.Actor.String())
+	if err != nil {
+		return nil, err
+	}
+
+	changeID := change.NewID(i.ClientSeq, i.Lamport, actorID)
 
 	var pbOps []*api.Operation
 	for _, bytesOp := range i.Operations {
