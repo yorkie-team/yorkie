@@ -178,7 +178,7 @@ func (c *Client) Activate(ctx context.Context) error {
 		return err
 	}
 
-	clientID, err := time.ActorIDFromHex(response.ClientId)
+	clientID, err := time.ActorIDFromBytes(response.ClientId)
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 	}
 
 	_, err := c.client.DeactivateClient(ctx, &api.DeactivateClientRequest{
-		ClientId: c.id.String(),
+		ClientId: c.id.Bytes(),
 	})
 	if err != nil {
 		log.Logger.Error(err)
@@ -223,7 +223,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	}
 
 	res, err := c.client.AttachDocument(ctx, &api.AttachDocumentRequest{
-		ClientId:   c.id.String(),
+		ClientId:   c.id.Bytes(),
 		ChangePack: pbChangePack,
 	})
 	if err != nil {
@@ -268,7 +268,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	}
 
 	res, err := c.client.DetachDocument(ctx, &api.DetachDocumentRequest{
-		ClientId:   c.id.String(),
+		ClientId:   c.id.Bytes(),
 		ChangePack: pbChangePack,
 	})
 	if err != nil {
@@ -424,7 +424,7 @@ func (c *Client) sync(ctx context.Context, key *key.Key) error {
 	}
 
 	res, err := c.client.PushPull(ctx, &api.PushPullRequest{
-		ClientId:   c.id.String(),
+		ClientId:   c.id.Bytes(),
 		ChangePack: pbChangePack,
 	})
 	if err != nil {

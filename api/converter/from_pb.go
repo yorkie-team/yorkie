@@ -31,7 +31,7 @@ import (
 
 // FromClient converts the given Protobuf format to model format.
 func FromClient(pbClient *api.Client) (*types.Client, error) {
-	id, err := time.ActorIDFromHex(pbClient.Id)
+	id, err := time.ActorIDFromBytes(pbClient.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func fromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 }
 
 func fromChangeID(id *api.ChangeID) (*change.ID, error) {
-	actorID, err := time.ActorIDFromHex(id.ActorId)
+	actorID, err := time.ActorIDFromBytes(id.ActorId)
 	if err != nil {
 		return nil, err
 	}
@@ -438,7 +438,7 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 		return nil, nil
 	}
 
-	actorID, err := time.ActorIDFromHex(pbTicket.ActorId)
+	actorID, err := time.ActorIDFromBytes(pbTicket.ActorId)
 	if err != nil {
 		return nil, err
 	}

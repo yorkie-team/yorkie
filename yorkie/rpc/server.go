@@ -131,7 +131,7 @@ func (s *Server) ActivateClient(
 
 	return &api.ActivateClientResponse{
 		ClientKey: client.Key,
-		ClientId:  client.ID.String(),
+		ClientId: client.ID.Bytes(),
 	}, nil
 }
 
@@ -140,7 +140,7 @@ func (s *Server) DeactivateClient(
 	ctx context.Context,
 	req *api.DeactivateClientRequest,
 ) (*api.DeactivateClientResponse, error) {
-	if req.ClientId == "" {
+	if len(req.ClientId) == 0 {
 		return nil, statusErrorWithDetails(
 			codes.InvalidArgument,
 			"invalid client ID",
@@ -157,7 +157,7 @@ func (s *Server) DeactivateClient(
 	}
 
 	return &api.DeactivateClientResponse{
-		ClientId: client.ID.String(),
+		ClientId: client.ID.Bytes(),
 	}, nil
 }
 

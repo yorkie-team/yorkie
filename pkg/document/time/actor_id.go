@@ -69,6 +69,17 @@ func ActorIDFromHex(str string) (*ActorID, error) {
 	return &actorID, nil
 }
 
+// ActorIDFromBytes returns the bytes represented by the bytes of decoded hexadecimal string itself.
+func ActorIDFromBytes(bytes []byte) (*ActorID, error) {
+	if len(bytes) == 0 {
+		return nil, nil
+	}
+
+	actorID := ActorID{}
+	copy(actorID[:], bytes)
+	return &actorID, nil
+}
+
 // String returns the hexadecimal encoding of ActorID.
 // If the receiver is nil, it would return empty string.
 func (id *ActorID) String() string {
@@ -77,6 +88,16 @@ func (id *ActorID) String() string {
 	}
 
 	return hex.EncodeToString(id[:])
+}
+
+// Bytes returns the bytes of ActorID itself.
+// If the receiver is nil, it would return empty array of byte.
+func (id *ActorID) Bytes() []byte {
+	if id == nil {
+		return []byte{}
+	}
+
+	return id[:]
 }
 
 // Compare returns an integer comparing two ActorID lexicographically.
