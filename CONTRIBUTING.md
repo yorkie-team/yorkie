@@ -29,6 +29,25 @@ Thanks for contributing!
 
 The coding style suggested by the Golang community is used in Yorkie. See the [style doc](https://github.com/golang/go/wiki/CodeReviewComments) for details.
 
+### Test
+
+Code that is written needs to be tested to ensure that it achieves the desired behavior.
+And organize our tests to fit the responsibilities of our test cases.
+
+It is recommended to write tests in a `given / when / then` structure, and it is recommended to write them in order from success case to exception case.
+
+#### Unit test
+
+Test the implemented source code. Write in the package that implements the source code.  
+
+#### Integration test
+
+Test the interface exposed to the user. Usability can be checked. Write in test/integration.
+
+#### Stress test
+
+Test performance. Write in test/stress.
+
 ### Format of the commit message
 
 We follow a rough convention for commit messages that is designed to answer two questions: what changed and why. The subject line should feature the what and the body of the commit should describe the why.
