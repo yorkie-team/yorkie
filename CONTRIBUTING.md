@@ -34,7 +34,7 @@ The coding style suggested by the Golang community is used in Yorkie. See the [s
 Code that is written needs to be tested to ensure that it achieves the desired behavior.
 And organize our tests to fit the responsibilities of our test cases.
 
-It is recommended to write tests in a `given / when / then` structure, and it is recommended to write them in order from success case to exception case.
+it is recommended to write them in order from success case to exception case.
 
 #### Unit test
 
