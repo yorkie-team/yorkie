@@ -80,6 +80,10 @@ func ActorIDFromBytes(bytes []byte) (*ActorID, error) {
 		return nil, nil
 	}
 
+	if len(bytes) != actorIDSize {
+		return nil, fmt.Errorf("bytes length %d: %w", len(bytes), ErrInvalidHexString)
+	}
+
 	actorID := ActorID{}
 	copy(actorID[:], bytes)
 	return &actorID, nil
@@ -99,7 +103,7 @@ func (id *ActorID) String() string {
 // If the receiver is nil, it would return empty array of byte.
 func (id *ActorID) Bytes() []byte {
 	if id == nil {
-		return []byte{}
+		return nil
 	}
 
 	return id[:]
