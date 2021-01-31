@@ -1,11 +1,15 @@
 ## How to contribute
 
-Yorkie is Apache 2.0 licensed and accepts contributions via GitHub pull requests. This document outlines some of the conventions on commit message formatting, contact points for developers, and other resources to help get contributions into Yorkie.
+Yorkie is Apache 2.0 licensed and accepts contributions via GitHub pull requests
+. This document outlines some of the conventions on commit message formatting,
+contact points for developers, and other resources to help get contributions
+into Yorkie.
 
 ### Contacts
 
 If you have any questions along the way, please don’t hesitate to ask us
-- Slack: [Dev Yorkie](https://dev-yorkie.slack.com/): You can sign up for our [Slack here](https://communityinviter.com/apps/dev-yorkie/yorkie-framework).
+- Slack: [Dev Yorkie](https://dev-yorkie.slack.com/): You can sign up for our
+ [Slack here](https://communityinviter.com/apps/dev-yorkie/yorkie-framework).
 
 ### Getting started
 
@@ -16,41 +20,43 @@ If you have any questions along the way, please don’t hesitate to ask us
 
 This is a rough outline of what a contributor's workflow looks like:
 
-- Create a topic branch from where to base the contribution. This is usually main
-- Make commits of logical units
-- Make sure commit messages are in the proper format
-- Push changes in a topic branch to a personal fork of the repository
-- Submit a pull request to yorkie-team/yorkie
-- The PR must receive a LGTM from maintainers
+- Create a topic branch from where to base the contribution (usually main).
+- Make commits of logical units.
+- Make sure commit messages are in the proper format (see below).
+- Push changes in a topic branch to a personal fork of the repository.
+- Make sure all tests pass, and add any new tests as appropriate.
+- Submit a pull request to the original repository.
+- The PR must receive a LGTM from maintainers.
 
 Thanks for contributing!
 
 ### Code style
 
-The coding style suggested by the Golang community is used in Yorkie. See the [style doc](https://github.com/golang/go/wiki/CodeReviewComments) for details.
+The coding style suggested by the Golang community is used in Yorkie. See the
+[style doc](https://github.com/golang/go/wiki/CodeReviewComments) for details.
+And we recommended referring to
+[Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md).
 
-### Test
+### Testing
 
-Code that is written needs to be tested to ensure that it achieves the desired behavior.
-And organize our tests to fit the responsibilities of our test cases.
+Testing is the responsibility of all contributors and but is also coordinated by
+maintainers. It is recommended to write them in order from success case to
+ exceptional case.
 
-it is recommended to write them in order from success case to exception case.
+There are multiple types of tests. The location of the test code varies with
+type, as do the specifics of the environment needed to successfully run the test:
 
-#### Unit test
-
-Test the implemented source code. Write in the package that implements the source code.  
-
-#### Integration test
-
-Test the interface exposed to the user. Usability can be checked. Write in test/integration.
-
-#### Stress test
-
-Test performance. Write in test/stress.
+- Unit: These confirm that a particular function behaves as intended. 
+- Integration: These tests cover interactions of package components or
+ interactions between Yorkie packages and some other non-Yorkie system resource
+  (eg: MongoDB, ETCD).
+- Stress: These confirm that the performance of the implemented function.  
 
 ### Format of the commit message
 
-We follow a rough convention for commit messages that is designed to answer two questions: what changed and why. The subject line should feature the what and the body of the commit should describe the why.
+We follow a rough convention for commit messages that is designed to answer two
+questions: what changed and why. The subject line should feature the what and
+the body of the commit should describe the why.
 
 ```
 Remove the synced seq when detaching the document
@@ -61,4 +67,7 @@ the changes should be applied to other replicas before GC. For this
 detached.
 ```
 
-The first line is the subject and should be no longer than 70 characters, the second line is always blank, and other lines should be wrapped at 80 characters. This allows the message to be easier to read on GitHub as well as in various git tools.
+The first line is the subject and should be no longer than 70 characters, the
+second line is always blank, and other lines should be wrapped at 80 characters.
+This allows the message to be easier to read on GitHub as well as in various git
+tools.
