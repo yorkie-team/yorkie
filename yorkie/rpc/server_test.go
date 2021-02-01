@@ -2,6 +2,7 @@ package rpc_test
 
 import (
 	"context"
+	"encoding/hex"
 	"log"
 	"os"
 	"testing"
@@ -18,12 +19,15 @@ import (
 )
 
 const (
-	nilClientID = "000000000000000000000000"
 	// to avoid conflict with rpc port used for client test
 	testRPCPort = helper.RPCPort + 100
 )
 
 var (
+	nilClientID, _     = hex.DecodeString("000000000000000000000000")
+	emptyClientID, _   = hex.DecodeString("")
+	invalidClientID, _ = hex.DecodeString("invalid")
+
 	testRPCServer *rpc.Server
 
 	invalidChangePack = &api.ChangePack{
@@ -90,7 +94,7 @@ func TestRPCServerBackend(t *testing.T) {
 
 		_, err = testRPCServer.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: ""},
+			&api.DeactivateClientRequest{ClientId: emptyClientID},
 		)
 		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
@@ -129,7 +133,7 @@ func TestRPCServerBackend(t *testing.T) {
 		_, err = testRPCServer.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
-				ClientId:   "invalid",
+				ClientId:   invalidClientID,
 				ChangePack: packWithNoChanges,
 			},
 		)

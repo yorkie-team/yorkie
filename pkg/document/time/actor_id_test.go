@@ -38,4 +38,22 @@ func TestActorID(t *testing.T) {
 		_, err = time.ActorIDFromHex(invalidID)
 		assert.ErrorIs(t, err, time.ErrInvalidHexString)
 	})
+
+	t.Run("get ActorID from bytes test", func(t *testing.T) {
+		actorID := time.ActorID{}
+		_, err := rand.Read(actorID[:])
+		assert.NoError(t, err)
+
+		expectedBytes := actorID.Bytes()
+		actualID, err := time.ActorIDFromBytes(expectedBytes)
+
+		assert.NoError(t, err)
+		assert.Equal(t, expectedBytes, actualID.Bytes())
+	})
+
+	t.Run("get ActorID from bytes on invalid length test", func(t *testing.T) {
+		invalidBytes := make([]byte, 5)
+		_, err := time.ActorIDFromBytes(invalidBytes)
+		assert.ErrorIs(t, err, time.ErrInvalidHexString)
+	})
 }

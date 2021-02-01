@@ -33,7 +33,7 @@ import (
 // ToClient converts the given model to Protobuf format.
 func ToClient(client types.Client) *api.Client {
 	return &api.Client{
-		Id:       client.ID.String(),
+		Id:       client.ID.Bytes(),
 		Metadata: client.Metadata,
 	}
 }
@@ -91,7 +91,7 @@ func toChangeID(id *change.ID) *api.ChangeID {
 	return &api.ChangeID{
 		ClientSeq: id.ClientSeq(),
 		Lamport:   id.Lamport(),
-		ActorId:   id.Actor().String(),
+		ActorId:   id.Actor().Bytes(),
 	}
 }
 
@@ -367,7 +367,7 @@ func toTimeTicket(ticket *time.Ticket) *api.TimeTicket {
 	return &api.TimeTicket{
 		Lamport:   ticket.Lamport(),
 		Delimiter: ticket.Delimiter(),
-		ActorId:   ticket.ActorIDHex(),
+		ActorId:   ticket.ActorIDBytes(),
 	}
 }
 

@@ -37,20 +37,20 @@ func Activate(
 func Deactivate(
 	ctx context.Context,
 	be *backend.Backend,
-	clientID string,
+	clientID []byte,
 ) (*db.ClientInfo, error) {
-	return be.DB.DeactivateClient(ctx, db.ID(clientID))
+	return be.DB.DeactivateClient(ctx, db.IDFromBytes(clientID))
 }
 
 // FindClientAndDocument finds the client and the document.
 func FindClientAndDocument(
 	ctx context.Context,
 	be *backend.Backend,
-	clientID string,
+	clientID []byte,
 	pack *change.Pack,
 	createDocIfNotExist bool,
 ) (*db.ClientInfo, *db.DocInfo, error) {
-	clientInfo, err := be.DB.FindClientInfoByID(ctx, db.ID(clientID))
+	clientInfo, err := be.DB.FindClientInfoByID(ctx, db.IDFromBytes(clientID))
 	if err != nil {
 		return nil, nil, err
 	}

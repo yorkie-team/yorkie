@@ -42,32 +42,32 @@ message ActivateClientRequest {
 
 message ActivateClientResponse {
     string client_key = 1;
-    string client_id = 2;
+    bytes client_id = 2;
 }
 
 message DeactivateClientRequest {
     RequestHeader header = 1;
-    string client_id = 2;
+    bytes client_id = 2;
 }
 
 message DeactivateClientResponse {
-    string client_id = 1;
+    bytes client_id = 1;
 }
 
 message AttachDocumentRequest {
     RequestHeader header = 1;
-    string client_id = 2;
+    bytes client_id = 2;
     ChangePack change_pack = 3;
 }
 
 message AttachDocumentResponse {
-    string client_id = 1;
+    bytes client_id = 1;
     ChangePack change_pack = 2;
 }
 
 message DetachDocumentRequest {
     RequestHeader header = 1;
-    string client_id = 2;
+    bytes client_id = 2;
     ChangePack change_pack = 3;
 }
 
@@ -101,12 +101,12 @@ message WatchDocumentsResponse {
 
 message PushPullRequest {
     RequestHeader header = 1;
-    string client_id = 2;
+    bytes client_id = 2;
     ChangePack change_pack = 3;
 }
 
 message PushPullResponse {
-    string client_id = 1;
+    bytes client_id = 1;
     ChangePack change_pack = 2;
 }
 
@@ -131,7 +131,7 @@ message Change {
 message ChangeID {
     uint32 client_seq = 1;
     uint64 lamport = 2 [jstype = JS_STRING];
-    string actor_id = 3;
+    bytes actor_id = 3;
 }
 
 message Operation {
@@ -310,7 +310,7 @@ message TextNodeID {
 /////////////////////////////////////////
 
 message Client {
-    string id = 1;
+    bytes id = 1;
     map<string, string> metadata = 2;
 }
 
@@ -337,7 +337,7 @@ message TextNodePos {
 message TimeTicket {
     uint64 lamport = 1 [jstype = JS_STRING];
     uint32 delimiter = 2;
-    string actor_id = 3;
+    bytes actor_id = 3;
 }
 
 enum ValueType {

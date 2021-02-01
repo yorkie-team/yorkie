@@ -109,6 +109,11 @@ func (t *Ticket) ActorIDHex() string {
 	return t.actorID.String()
 }
 
+// ActorIDBytes returns the actorID's bytes value.
+func (t *Ticket) ActorIDBytes() []byte {
+	return t.actorID.Bytes()
+}
+
 // After returns whether the given ticket was created later.
 func (t *Ticket) After(other *Ticket) bool {
 	return t.Compare(other) > 0
