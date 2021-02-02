@@ -28,9 +28,6 @@ Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:.
 build:
 	go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie
 
-docker:
-	docker build -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .
-
 fmt:
 	gofmt -s -w $(GO_SRC)
 
@@ -41,4 +38,10 @@ test:
 	go clean -testcache
 	go test -tags integration -race ./...
 
-.PHONY: tools proto build docker fmt lint test
+docker-version:
+	docker build -t yorkieteam/yorkie:$(YORKIE_VERSION) .
+
+docker-latest:
+	docker build -t yorkieteam/yorkie:latest .
+
+.PHONY: tools proto build fmt lint test docker-version docker-latest
