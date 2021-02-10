@@ -19,6 +19,9 @@ var (
 
 	// ErrDocumentNotFound is returned when the document could not be found.
 	ErrDocumentNotFound = errors.New("document not found")
+
+	// ErrConflictOnUpdate is returned when a conflict occurs during update.
+	ErrConflictOnUpdate = errors.New("conflict on update")
 )
 
 // ID represents ID of entity.
@@ -71,14 +74,16 @@ type DB interface {
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
-	// CreateChangeInfos stores the given changes.
-	CreateChangeInfos(ctx context.Context, docID ID, changes []*change.Change) error
+	// StoreChangeInfos stores the given changes then updates the given docInfo.
+	StoreChangeInfos(
+		ctx context.Context,
+		docInfo *DocInfo,
+		initialServerSeq uint64,
+		changes []*change.Change,
+	) error
 
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(ctx context.Context, docID ID, doc *document.InternalDocument) error
-
-	// UpdateDocInfo updates the given document.
-	UpdateDocInfo(ctx context.Context, docInfo *DocInfo) error
 
 	// FindChangeInfosBetweenServerSeqs returns the changes between two server sequences.
 	FindChangeInfosBetweenServerSeqs(

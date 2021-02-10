@@ -18,6 +18,7 @@ package packs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	gotime "time"
 
@@ -30,7 +31,13 @@ import (
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
-	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
+)
+
+var (
+	// ErrInvalidServerSeq is returned when the given server seq greater than
+	// the initial server seq.
+	ErrInvalidServerSeq = errors.New("invalid server seq")
 )
 
 // PushPull stores the given changes and returns accumulated changes of the
@@ -42,13 +49,8 @@ func PushPull(
 	docInfo *db.DocInfo,
 	reqPack *change.Pack,
 ) (*change.Pack, error) {
-	// TODO Changes may be reordered or missing during communication on the network.
+	// TODO: Changes may be reordered or missing during communication on the network.
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
-
-	// TODO We need to prevent the same document from being modified at the same time.
-	// For this, We may want to consider introducing distributed lock or DB transaction.
-	// To improve read performance, we can also consider something like read-write lock,
-	// because simple read operations do not break consistency.
 	initialServerSeq := docInfo.ServerSeq
 
 	// 01. push changes.
@@ -67,13 +69,11 @@ func PushPull(
 		return nil, err
 	}
 
-	// 03. save pushed changes, document info and checkpoint of the client to MongoDB.
-	if err := be.DB.CreateChangeInfos(ctx, docInfo.ID, pushedChanges); err != nil {
-		return nil, err
-	}
-
-	if err := be.DB.UpdateDocInfo(ctx, docInfo); err != nil {
-		return nil, err
+	// 03. store pushed changes, document info and checkpoint of the client to DB.
+	if reqPack.HasChanges() {
+		if err := be.DB.StoreChangeInfos(ctx, docInfo, initialServerSeq, pushedChanges); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
@@ -102,28 +102,45 @@ func PushPull(
 				return
 			}
 
+			ctx := context.Background()
+			// TODO(hackerwins): We need to replace Lock with TryLock.
+			// If the snapshot is already being created by another routine, it
+			// is not necessary to recreate it, so we can skip it.
+			locker, err := be.LockerMap.NewLocker(
+				ctx,
+				sync.NewKey(fmt.Sprintf("snapshot-%s", docInfo.Key)),
+			)
+			if err != nil {
+				log.Logger.Error(err)
+				return
+			}
+			if err := locker.Lock(ctx); err != nil {
+				log.Logger.Error(err)
+				return
+			}
+
+			defer func() {
+				if err := locker.Unlock(ctx); err != nil {
+					log.Logger.Error(err)
+					return
+				}
+			}()
+
 			be.PubSub.Publish(
 				publisherID,
 				reqPack.DocumentKey.BSONKey(),
-				pubsub.DocEvent{
+				sync.DocEvent{
 					Type:      pkgtypes.DocumentsChangeEvent,
 					DocKey:    reqPack.DocumentKey.BSONKey(),
 					Publisher: pkgtypes.Client{ID: publisherID},
 				},
 			)
 
-			key := fmt.Sprintf("snapshot-%s", docInfo.Key)
-			if err := be.MutexMap.Lock(key); err != nil {
-				log.Logger.Error(err)
-				return
-			}
-			defer func() {
-				if err := be.MutexMap.Unlock(key); err != nil {
-					log.Logger.Error(err)
-				}
-			}()
-
-			if err := storeSnapshot(context.Background(), be, docInfo); err != nil {
+			if err := storeSnapshot(
+				ctx,
+				be,
+				docInfo,
+			); err != nil {
 				log.Logger.Error(err)
 			}
 		})
@@ -132,7 +149,7 @@ func PushPull(
 	return respPack, nil
 }
 
-// pushChanges returns the changes excluding already saved in MongoDB.
+// pushChanges returns the changes excluding already saved in DB.
 func pushChanges(
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
@@ -183,6 +200,15 @@ func pullPack(
 	docKey, err := docInfo.GetKey()
 	if err != nil {
 		return nil, err
+	}
+
+	if initialServerSeq < requestPack.Checkpoint.ServerSeq {
+		return nil, fmt.Errorf(
+			"server seq(initial %d, request pack %d): %w",
+			initialServerSeq,
+			requestPack.Checkpoint.ServerSeq,
+			ErrInvalidServerSeq,
+		)
 	}
 
 	if initialServerSeq-requestPack.Checkpoint.ServerSeq < be.Config.SnapshotThreshold {
@@ -331,7 +357,7 @@ func storeSnapshot(
 	start := gotime.Now()
 
 	// 01. get the last snapshot of this docInfo
-	// TODO For performance, we only need to read the snapshot's metadata.
+	// TODO: For performance issue, we only need to read the snapshot's metadata.
 	snapshotInfo, err := be.DB.FindLastSnapshotInfo(ctx, docInfo.ID)
 	if err != nil {
 		return err

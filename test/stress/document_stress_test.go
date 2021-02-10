@@ -34,7 +34,7 @@ import (
 )
 
 func TestDocumentStress(t *testing.T) {
-	t.Run("garbage collection test 2", func(t *testing.T) {
+	t.Run("garbage collection test", func(t *testing.T) {
 		size := 10_000
 
 		// 01. initial

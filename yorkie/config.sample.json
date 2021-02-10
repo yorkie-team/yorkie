@@ -13,6 +13,11 @@
     "YorkieDatabase": "yorkie-meta",
     "PingTimeoutSec": 5
   },
+  "ETCD": {
+    "Endpoints": [
+      "localhost:2379"
+    ]
+  },
   "Backend": {
     "SnapshotThreshold": 500,
     "SnapshotInterval": 100

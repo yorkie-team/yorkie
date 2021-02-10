@@ -68,7 +68,7 @@ func TestCounter(t *testing.T) {
 		assert.Equal(t, double.Marshal(), "21.280000")
 
 		// error process test
-		// TODO it should be modified to error check
+		// TODO: it should be modified to error check
 		// when 'Remove panic from server code (#50)' is completed.
 		unsupportedTypePanicTest := func() {
 			r := recover()

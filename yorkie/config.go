@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
@@ -49,6 +50,7 @@ type Config struct {
 	RPC     *rpc.Config     `json:"RPC"`
 	Metrics *metrics.Config `json:"Metrics"`
 	Mongo   *mongo.Config   `json:"Mongo"`
+	ETCD    *etcd.Config    `json:"ETCD"`
 	Backend *backend.Config `json:"Backend"`
 }
 

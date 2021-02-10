@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package pubsub
+package sync
 
 import (
 	"errors"

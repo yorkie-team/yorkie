@@ -15,6 +15,7 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
@@ -46,6 +47,8 @@ func TestMain(m *testing.M) {
 		YorkieDatabase:       helper.TestDBName(),
 		ConnectionTimeoutSec: helper.MongoConnectionTimeoutSec,
 		PingTimeoutSec:       helper.MongoPingTimeoutSec,
+	}, &etcd.Config{
+		Endpoints: helper.ETCDEndpoints,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -246,8 +249,20 @@ func TestRPCServerBackend(t *testing.T) {
 		_, err = testRPCServer.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				ChangePack: packWithNoChanges,
+				ClientId: activateResp.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: &api.DocumentKey{
+						Collection: t.Name(), Document: t.Name(),
+					},
+					Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*api.Change{{
+						Id: &api.ChangeID{
+							ClientSeq: 1,
+							Lamport:   1,
+							ActorId:   activateResp.ClientId,
+						},
+					}},
+				},
 			},
 		)
 		assert.NoError(t, err)
@@ -255,8 +270,20 @@ func TestRPCServerBackend(t *testing.T) {
 		_, err = testRPCServer.PushPull(
 			context.Background(),
 			&api.PushPullRequest{
-				ClientId:   activateResp.ClientId,
-				ChangePack: packWithNoChanges,
+				ClientId: activateResp.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: &api.DocumentKey{
+						Collection: t.Name(), Document: t.Name(),
+					},
+					Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
+					Changes: []*api.Change{{
+						Id: &api.ChangeID{
+							ClientSeq: 2,
+							Lamport:   2,
+							ActorId:   activateResp.ClientId,
+						},
+					}},
+				},
 			},
 		)
 		assert.NoError(t, err)
@@ -264,8 +291,20 @@ func TestRPCServerBackend(t *testing.T) {
 		_, err = testRPCServer.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				ChangePack: packWithNoChanges,
+				ClientId: activateResp.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: &api.DocumentKey{
+						Collection: t.Name(), Document: t.Name(),
+					},
+					Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
+					Changes: []*api.Change{{
+						Id: &api.ChangeID{
+							ClientSeq: 3,
+							Lamport:   3,
+							ActorId:   activateResp.ClientId,
+						},
+					}},
+				},
 			},
 		)
 		assert.NoError(t, err)
