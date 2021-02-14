@@ -38,10 +38,10 @@ test:
 	go clean -testcache
 	go test -tags integration -race ./...
 
-docker-version:
-	docker build -t yorkieteam/yorkie:$(YORKIE_VERSION) .
+docker:
+	docker build -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .
 
 docker-latest:
 	docker build -t yorkieteam/yorkie:latest .
 
-.PHONY: tools proto build fmt lint test docker-version docker-latest
+.PHONY: tools proto build fmt lint test docker docker-latest
