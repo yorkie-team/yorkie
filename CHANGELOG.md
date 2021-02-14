@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.2] - 2021-02-14
+
+### Added
+- Add customizable metadata for peer awareness: #138
+
+### Changed
+- Use Xid instead of UUID for SubscriptionID: #142
+- Replace the type of client_id to a byte array to reduce payload: #145
+ 
+### Fixed
+- Fix actorID loss while converting Change to ChangeInfo: #144
+
 ## [0.1.1] - 2021-01-01
 
 ### Added
