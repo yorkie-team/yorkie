@@ -38,7 +38,7 @@ func BytesToObject(snapshot []byte) (*json.Object, error) {
 		return nil, err
 	}
 
-	obj, err := fromJSONObject(pbElem.GetObject())
+	obj, err := fromJSONObject(pbElem.GetJsonObject())
 	if err != nil {
 		return nil, err
 	}
@@ -48,10 +48,10 @@ func BytesToObject(snapshot []byte) (*json.Object, error) {
 
 func fromJSONElement(pbElem *api.JSONElement) (json.Element, error) {
 	switch decoded := pbElem.Body.(type) {
-	case *api.JSONElement_Object_:
-		return fromJSONObject(decoded.Object)
-	case *api.JSONElement_Array_:
-		return fromJSONArray(decoded.Array)
+	case *api.JSONElement_JsonObject:
+		return fromJSONObject(decoded.JsonObject)
+	case *api.JSONElement_JsonArray:
+		return fromJSONArray(decoded.JsonArray)
 	case *api.JSONElement_Primitive_:
 		return fromJSONPrimitive(decoded.Primitive)
 	case *api.JSONElement_Text_:
@@ -65,7 +65,7 @@ func fromJSONElement(pbElem *api.JSONElement) (json.Element, error) {
 	}
 }
 
-func fromJSONObject(pbObj *api.JSONElement_Object) (*json.Object, error) {
+func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*json.Object, error) {
 	members := json.NewRHTPriorityQueueMap()
 	for _, pbNode := range pbObj.Nodes {
 		elem, err := fromJSONElement(pbNode.Element)
@@ -100,7 +100,7 @@ func fromJSONObject(pbObj *api.JSONElement_Object) (*json.Object, error) {
 	return obj, nil
 }
 
-func fromJSONArray(pbArr *api.JSONElement_Array) (*json.Array, error) {
+func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*json.Array, error) {
 	elements := json.NewRGATreeList()
 	for _, pbNode := range pbArr.Nodes {
 		elem, err := fromJSONElement(pbNode.Element)

@@ -220,13 +220,13 @@ message JSONElementSimple {
 /////////////////////////////////////////
 
 message JSONElement {
-    message Object {
+    message JSONObject {
         repeated RHTNode nodes = 1;
         TimeTicket created_at = 2;
         TimeTicket moved_at = 3;
         TimeTicket removed_at = 4;
     }
-    message Array {
+    message JSONArray {
         repeated RGANode nodes = 1;
         TimeTicket created_at = 2;
         TimeTicket moved_at = 3;
@@ -260,8 +260,8 @@ message JSONElement {
     }
 
     oneof Body {
-        Object object = 1;
-        Array array = 2;
+        JSONObject json_object = 1;
+        JSONArray json_array = 2;
         Primitive primitive = 3;
         Text text = 4;
         RichText rich_text = 5;
