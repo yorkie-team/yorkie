@@ -68,7 +68,7 @@ func toJSONObject(obj *json.Object) (*api.JSONElement, error) {
 	}
 
 	pbElem := &api.JSONElement{
-		Body: &api.JSONElement_Object_{Object: &api.JSONElement_Object{
+		Body: &api.JSONElement_JsonObject{JsonObject: &api.JSONElement_JSONObject{
 			Nodes:     pbRHTNodes,
 			CreatedAt: toTimeTicket(obj.CreatedAt()),
 			MovedAt:   toTimeTicket(obj.MovedAt()),
@@ -85,7 +85,7 @@ func toJSONArray(arr *json.Array) (*api.JSONElement, error) {
 	}
 
 	pbElem := &api.JSONElement{
-		Body: &api.JSONElement_Array_{Array: &api.JSONElement_Array{
+		Body: &api.JSONElement_JsonArray{JsonArray: &api.JSONElement_JSONArray{
 			Nodes:     pbRGANodes,
 			CreatedAt: toTimeTicket(arr.CreatedAt()),
 			MovedAt:   toTimeTicket(arr.MovedAt()),
