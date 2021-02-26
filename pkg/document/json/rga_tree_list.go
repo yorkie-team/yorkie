@@ -145,7 +145,7 @@ func (a *RGATreeList) Add(elem Element) {
 }
 
 // Nodes returns an array of elements contained in this RGATreeList.
-// TODO If we encounter performance issues, we need to replace this with other solution.
+// TODO: If we encounter performance issues, we need to replace this with other solution.
 func (a *RGATreeList) Nodes() []*RGATreeListNode {
 	var nodes []*RGATreeListNode
 	current := a.dummyHead.next

@@ -22,9 +22,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
-	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
-	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub/mempubsub"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 )
 
 // Config is the configuration for creating a Backend instance.
@@ -42,9 +42,9 @@ type Config struct {
 type Backend struct {
 	Config *Config
 
-	DB       db.DB
-	MutexMap *sync.MutexMap
-	PubSub   pubsub.PubSub
+	DB        db.DB
+	LockerMap sync.LockerMap
+	PubSub    sync.PubSub
 
 	// closing is closed by backend close.
 	closing chan struct{}
@@ -58,18 +58,37 @@ type Backend struct {
 }
 
 // New creates a new instance of Backend.
-func New(conf *Config, mongoConf *mongo.Config) (*Backend, error) {
-	client, err := mongo.NewClient(mongoConf)
+func New(
+	conf *Config,
+	mongoConf *mongo.Config,
+	etcdConf *etcd.Config,
+) (*Backend, error) {
+	mongoClient, err := mongo.Dial(mongoConf)
 	if err != nil {
 		return nil, err
 	}
 
+	var pubSub sync.PubSub
+	var lockerMap sync.LockerMap
+	if etcdConf != nil {
+		etcdClient, err := etcd.Dial(etcdConf)
+		if err != nil {
+			return nil, err
+		}
+		lockerMap = etcdClient
+		// TODO(hackerwins): We need to replace pubsub with etcdClient.
+		pubSub = memory.NewPubSub()
+	} else {
+		lockerMap = memory.NewLockerMap()
+		pubSub = memory.NewPubSub()
+	}
+
 	return &Backend{
-		Config:   conf,
-		DB:       client,
-		MutexMap: sync.NewMutexMap(),
-		PubSub:   mempubsub.New(),
-		closing:  make(chan struct{}),
+		Config:    conf,
+		DB:        mongoClient,
+		LockerMap: lockerMap,
+		PubSub:    pubSub,
+		closing:   make(chan struct{}),
 	}, nil
 }
 
@@ -81,6 +100,10 @@ func (b *Backend) Close() error {
 
 	// wait for goroutines before closing backend
 	b.wg.Wait()
+
+	if err := b.LockerMap.Close(); err != nil {
+		log.Logger.Error(err)
+	}
 
 	return b.DB.Close()
 }

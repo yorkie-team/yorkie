@@ -392,7 +392,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"age":120,"price":9000000000000000003,"width":130.000000}`, doc.Marshal())
 
-		// TODO it should be modified to error check
+		// TODO: it should be modified to error check
 		// when 'Remove panic from server code (#50)' is completed.
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			defer func() {

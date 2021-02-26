@@ -48,7 +48,7 @@ Yorkie consists of three main components: Client, Document and Agent.
 
 For now, we didn't deploy binary yet. So you should [compile Yorkie yourself](#developing-yorkie).
 
-Yorkie uses MongoDB to store it's data. To start MongoDB, type `cd docker && docker-compose up -d`.
+Yorkie uses MongoDB to store it's data. To start MongoDB, type `docker-compose -f docker/docker-compose.yml up -d`.
 
 Next, let's start a Yorkie agent. Agent runs until they're told to quit and handle the communication of maintenance tasks of Agent. and start the agent:
 
@@ -87,7 +87,9 @@ $ bin/yorkie
 
 Tests can be run by typing `make test`.
 
-*NOTE: `make test` includes integration tests that require a local MongoDB listen on port 27017. To start MongoDB, type `docker-compose up`.*
+*NOTE: `make test` includes integration tests that require local applications
+ such as MongoDB, etcd and Prometheus. To start them, type `docker-compose -f
+  docker/docker-compose-cluster-mode.yml up`.*
 
 If you make any changes to the code, run `make fmt` in order to automatically format the code according to Go [standards](https://golang.org/doc/effective_go.html#formatting).
 

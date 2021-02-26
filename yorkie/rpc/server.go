@@ -38,7 +38,7 @@ import (
 	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
-	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
 )
@@ -171,19 +171,32 @@ func (s *Server) AttachDocument(
 		return nil, toStatusError(err)
 	}
 
-	// if pack.HasChanges() {
-	lockKey := fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())
-	if err := s.backend.MutexMap.Lock(lockKey); err != nil {
-		return nil, toStatusError(err)
-	}
-	defer func() {
-		if err := s.backend.MutexMap.Unlock(lockKey); err != nil {
-			log.Logger.Error(err)
+	if pack.HasChanges() {
+		locker, err := s.backend.LockerMap.NewLocker(
+			ctx,
+			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
+		)
+		if err != nil {
+			return nil, toStatusError(err)
 		}
-	}()
-	// }
 
-	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, true)
+		if err := locker.Lock(ctx); err != nil {
+			return nil, toStatusError(err)
+		}
+		defer func() {
+			if err := locker.Unlock(ctx); err != nil {
+				log.Logger.Error(err)
+			}
+		}()
+	}
+
+	clientInfo, docInfo, err := clients.FindClientAndDocument(
+		ctx,
+		s.backend,
+		req.ClientId,
+		pack,
+		true,
+	)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
@@ -216,19 +229,32 @@ func (s *Server) DetachDocument(
 		return nil, toStatusError(err)
 	}
 
-	// if pack.HasChanges() {
-	lockKey := fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())
-	if err := s.backend.MutexMap.Lock(lockKey); err != nil {
-		return nil, toStatusError(err)
-	}
-	defer func() {
-		if err := s.backend.MutexMap.Unlock(lockKey); err != nil {
-			log.Logger.Error(err)
+	if pack.HasChanges() {
+		locker, err := s.backend.LockerMap.NewLocker(
+			ctx,
+			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
+		)
+		if err != nil {
+			return nil, toStatusError(err)
 		}
-	}()
-	// }
 
-	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, false)
+		if err := locker.Lock(ctx); err != nil {
+			return nil, toStatusError(err)
+		}
+		defer func() {
+			if err := locker.Unlock(ctx); err != nil {
+				log.Logger.Error(err)
+			}
+		}()
+	}
+
+	clientInfo, docInfo, err := clients.FindClientAndDocument(
+		ctx,
+		s.backend,
+		req.ClientId,
+		pack,
+		false,
+	)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
@@ -265,20 +291,33 @@ func (s *Server) PushPull(
 		return nil, toStatusError(err)
 	}
 
-	// TODO uncomment write lock condition. We need $max operation on client.
-	// if pack.HasChanges() {
-	lockKey := fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())
-	if err := s.backend.MutexMap.Lock(lockKey); err != nil {
-		return nil, toStatusError(err)
-	}
-	defer func() {
-		if err := s.backend.MutexMap.Unlock(lockKey); err != nil {
-			log.Logger.Error(err)
+	if pack.HasChanges() {
+		locker, err := s.backend.LockerMap.NewLocker(
+			ctx,
+			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
+		)
+		if err != nil {
+			return nil, toStatusError(err)
 		}
-	}()
-	// }
 
-	clientInfo, docInfo, err := clients.FindClientAndDocument(ctx, s.backend, req.ClientId, pack, false)
+		if err := locker.Lock(ctx); err != nil {
+			log.Logger.Error(err)
+			return nil, toStatusError(err)
+		}
+		defer func() {
+			if err := locker.Unlock(ctx); err != nil {
+				log.Logger.Error(err)
+			}
+		}()
+	}
+
+	clientInfo, docInfo, err := clients.FindClientAndDocument(
+		ctx,
+		s.backend,
+		req.ClientId,
+		pack,
+		false,
+	)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
@@ -393,7 +432,7 @@ func (s *Server) listenAndServeGRPC() error {
 func (s *Server) watchDocs(
 	client pkgtypes.Client,
 	docKeys []string,
-) (*pubsub.Subscription, map[string][]pkgtypes.Client, error) {
+) (*sync.Subscription, map[string][]pkgtypes.Client, error) {
 	subscription, peersMap, err := s.backend.PubSub.Subscribe(
 		client,
 		docKeys,
@@ -407,7 +446,7 @@ func (s *Server) watchDocs(
 		s.backend.PubSub.Publish(
 			subscription.Subscriber().ID,
 			docKey,
-			pubsub.DocEvent{
+			sync.DocEvent{
 				Type:      pkgtypes.DocumentsWatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
@@ -418,14 +457,14 @@ func (s *Server) watchDocs(
 	return subscription, peersMap, nil
 }
 
-func (s *Server) unwatchDocs(docKeys []string, subscription *pubsub.Subscription) {
+func (s *Server) unwatchDocs(docKeys []string, subscription *sync.Subscription) {
 	s.backend.PubSub.Unsubscribe(docKeys, subscription)
 
 	for _, docKey := range docKeys {
 		s.backend.PubSub.Publish(
 			subscription.Subscriber().ID,
 			docKey,
-			pubsub.DocEvent{
+			sync.DocEvent{
 				Type:      pkgtypes.DocumentsUnwatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
@@ -460,7 +499,9 @@ func toStatusError(err error) error {
 
 	if err == db.ErrClientNotActivated ||
 		err == db.ErrDocumentNotAttached ||
-		err == db.ErrDocumentAlreadyAttached {
+		err == db.ErrDocumentAlreadyAttached ||
+		errors.Is(err, packs.ErrInvalidServerSeq) ||
+		errors.Is(err, db.ErrConflictOnUpdate) {
 		return status.Error(codes.FailedPrecondition, err.Error())
 	}
 

@@ -14,36 +14,36 @@
  * limitations under the License.
  */
 
-package mempubsub
+package memory
 
 import (
-	"sync"
+	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/types"
-	"github.com/yorkie-team/yorkie/yorkie/backend/pubsub"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
 // subscriptions is a collection of subscriptions that subscribe to a specific
 // topic.
 type subscriptions struct {
-	internalMap map[string]*pubsub.Subscription
+	internalMap map[string]*sync.Subscription
 }
 
 func newSubscriptions() *subscriptions {
 	return &subscriptions{
-		internalMap: make(map[string]*pubsub.Subscription),
+		internalMap: make(map[string]*sync.Subscription),
 	}
 }
 
 // Add adds the given subscription.
-func (s *subscriptions) Add(sub *pubsub.Subscription) {
+func (s *subscriptions) Add(sub *sync.Subscription) {
 	s.internalMap[sub.ID()] = sub
 }
 
 // Map returns the internal map of this subscriptions.
-func (s *subscriptions) Map() map[string]*pubsub.Subscription {
+func (s *subscriptions) Map() map[string]*sync.Subscription {
 	return s.internalMap
 }
 
@@ -55,28 +55,28 @@ func (s *subscriptions) Delete(id string) {
 	delete(s.internalMap, id)
 }
 
-// MemPubSub is the memory implementation of MemPubSub, used for single agent or
+// PubSub is the memory implementation of PubSub, used for single agent or
 // tests.
-type MemPubSub struct {
-	mu               *sync.RWMutex
+type PubSub struct {
+	mu               *gosync.RWMutex
 	subscriptionsMap map[string]*subscriptions
 }
 
-// New creates an instance of MemoryPubSub.
-func New() *MemPubSub {
-	return &MemPubSub{
-		mu:               &sync.RWMutex{},
+// NewPubSub creates an instance of PubSub.
+func NewPubSub() *PubSub {
+	return &PubSub{
+		mu:               &gosync.RWMutex{},
 		subscriptionsMap: make(map[string]*subscriptions),
 	}
 }
 
 // Subscribe subscribes to the given topics.
-func (m *MemPubSub) Subscribe(
+func (m *PubSub) Subscribe(
 	subscriber types.Client,
 	topics []string,
-) (*pubsub.Subscription, map[string][]types.Client, error) {
+) (*sync.Subscription, map[string][]types.Client, error) {
 	if len(topics) == 0 {
-		return nil, nil, pubsub.ErrEmptyTopics
+		return nil, nil, sync.ErrEmptyTopics
 	}
 
 	m.mu.Lock()
@@ -88,7 +88,7 @@ func (m *MemPubSub) Subscribe(
 		subscriber.ID.String(),
 	)
 
-	sub := pubsub.NewSubscription(subscriber)
+	sub := sync.NewSubscription(subscriber)
 	peersMap := make(map[string][]types.Client)
 
 	for _, topic := range topics {
@@ -113,7 +113,7 @@ func (m *MemPubSub) Subscribe(
 }
 
 // Unsubscribe unsubscribes the given topics.
-func (m *MemPubSub) Unsubscribe(topics []string, sub *pubsub.Subscription) {
+func (m *PubSub) Unsubscribe(topics []string, sub *sync.Subscription) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -128,10 +128,10 @@ func (m *MemPubSub) Unsubscribe(topics []string, sub *pubsub.Subscription) {
 }
 
 // Publish publishes the given event to the given Topic.
-func (m *MemPubSub) Publish(
+func (m *PubSub) Publish(
 	publisherID *time.ActorID,
 	topic string,
-	event pubsub.DocEvent,
+	event sync.DocEvent,
 ) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

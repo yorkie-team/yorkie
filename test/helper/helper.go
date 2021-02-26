@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
@@ -43,6 +44,11 @@ const (
 	MongoPingTimeoutSec       = 5
 	SnapshotThreshold         = 10
 	Collection                = "test-collection"
+)
+
+// Below are the values of the related ETCD config.
+var (
+	ETCDEndpoints = []string{"localhost:2379"}
 )
 
 func init() {
@@ -118,6 +124,9 @@ func TestYorkie() *yorkie.Yorkie {
 			ConnectionTimeoutSec: MongoConnectionTimeoutSec,
 			PingTimeoutSec:       MongoPingTimeoutSec,
 			YorkieDatabase:       TestDBName(),
+		},
+		ETCD: &etcd.Config{
+			Endpoints: ETCDEndpoints,
 		},
 	})
 	if err != nil {

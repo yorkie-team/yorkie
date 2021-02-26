@@ -42,7 +42,7 @@ type Yorkie struct {
 
 // New creates a new instance of Yorkie.
 func New(conf *Config) (*Yorkie, error) {
-	be, err := backend.New(conf.Backend, conf.Mongo)
+	be, err := backend.New(conf.Backend, conf.Mongo, conf.ETCD)
 	if err != nil {
 		return nil, err
 	}

@@ -143,7 +143,7 @@ func (rht *RHTPriorityQueueMap) DeleteByCreatedAt(createdAt *time.Ticket, delete
 }
 
 // Elements returns a map of elements because the map easy to use for loop.
-// TODO If we encounter performance issues, we need to replace this with other solution.
+// TODO: If we encounter performance issues, we need to replace this with other solution.
 func (rht *RHTPriorityQueueMap) Elements() map[string]Element {
 	members := make(map[string]Element)
 	for _, queue := range rht.nodeQueueMapByKey {
@@ -159,7 +159,7 @@ func (rht *RHTPriorityQueueMap) Elements() map[string]Element {
 }
 
 // Nodes returns a map of elements because the map easy to use for loop.
-// TODO If we encounter performance issues, we need to replace this with other solution.
+// TODO: If we encounter performance issues, we need to replace this with other solution.
 func (rht *RHTPriorityQueueMap) Nodes() []*RHTPQMapNode {
 	var nodes []*RHTPQMapNode
 	for _, queue := range rht.nodeQueueMapByKey {
