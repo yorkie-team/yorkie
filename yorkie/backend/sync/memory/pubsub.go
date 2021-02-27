@@ -55,6 +55,11 @@ func (s *subscriptions) Delete(id string) {
 	delete(s.internalMap, id)
 }
 
+// Len returns the length of this subscriptions.
+func (s *subscriptions) Len() int {
+	return len(s.internalMap)
+}
+
 // PubSub is the memory implementation of PubSub, used for single agent or
 // tests.
 type PubSub struct {
@@ -122,6 +127,10 @@ func (m *PubSub) Unsubscribe(topics []string, sub *sync.Subscription) {
 	for _, topic := range topics {
 		if subs, ok := m.subscriptionsMap[topic]; ok {
 			subs.Delete(sub.ID())
+
+			if subs.Len() == 0 {
+				delete(m.subscriptionsMap, topic)
+			}
 		}
 	}
 	log.Logger.Debugf(`Unsubscribe(%s,%s) End`, topics[0], sub.SubscriberID())
