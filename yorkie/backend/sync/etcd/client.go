@@ -102,34 +102,6 @@ func (c *Client) Close() error {
 	return c.client.Close()
 }
 
-type internalLocker struct {
-	session *concurrency.Session
-	mu      *concurrency.Mutex
-}
-
-// Lock locks a mutex.
-func (il *internalLocker) Lock(ctx context.Context) error {
-	if err := il.mu.Lock(ctx); err != nil {
-		log.Logger.Error(err)
-		return err
-	}
-
-	return nil
-}
-
-// Unlock unlocks the mutex.
-func (il *internalLocker) Unlock(ctx context.Context) error {
-	if err := il.mu.Unlock(ctx); err != nil {
-		log.Logger.Error(err)
-		return err
-	}
-	if err := il.session.Close(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // NewLocker creates locker of the given key.
 func (c *Client) NewLocker(
 	ctx context.Context,
