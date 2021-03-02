@@ -31,7 +31,7 @@ jobs:
       run: make build
 
     - name: Stack
-      run: docker-compose -f docker/docker-compose-cluster-mode.yml up --build -d
+      run: docker-compose -f docker/docker-compose-ci.yml up --build -d
 
     - name: Test
       run: go test -tags integration,stress -race -coverprofile=coverage.txt -covermode=atomic -v ./...
