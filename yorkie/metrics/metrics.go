@@ -1,6 +1,6 @@
 package metrics
 
-import yorkieprometheus "github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
+import "github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 
 type metrics struct {
 	Server    ServerMetrics
@@ -9,8 +9,8 @@ type metrics struct {
 
 func newMetrics() *metrics {
 	return &metrics{
-		Server:    yorkieprometheus.NewServerMetrics(),
-		RPCServer: yorkieprometheus.NewRPCServerMetrics(),
+		Server:    prometheus.NewServerMetrics(),
+		RPCServer: prometheus.NewRPCServerMetrics(),
 	}
 }
 

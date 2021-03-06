@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -298,6 +300,8 @@ func (s *Server) PushPull(
 	}
 
 	if pack.HasChanges() {
+		s.addPushpullReceivedChangesMetric(pack.Changes)
+
 		locker, err := s.backend.LockerMap.NewLocker(
 			ctx,
 			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
@@ -341,8 +345,7 @@ func (s *Server) PushPull(
 		return nil, toStatusError(err)
 	}
 
-	duration := timer.Split().Seconds()
-	s.metrics.ObservePushpullResponseSeconds(duration)
+	s.observePushpullResponseSecondsMetric(timer)
 
 	return &api.PushPullResponse{
 		ChangePack: pbChangePack,
@@ -480,6 +483,16 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *sync.Subscription) 
 			},
 		)
 	}
+}
+
+func (s *Server) addPushpullReceivedChangesMetric(changes []*change.Change) {
+	changesCount := float64(len(changes))
+	s.metrics.AddPushpullReceivedChanges(changesCount)
+}
+
+func (s *Server) observePushpullResponseSecondsMetric(timer *util.Timer) {
+	duration := timer.Split().Seconds()
+	s.metrics.ObservePushpullResponseSeconds(duration)
 }
 
 // toStatusError returns a status.Error from the given logic error. If an error
