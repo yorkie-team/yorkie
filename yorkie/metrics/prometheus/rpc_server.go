@@ -5,20 +5,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-const (
-	namespace = "yorkie"
-	subsystem = "rpcserver"
-)
-
 type RPCServerMetrics struct {
-	namespace string
+	subsystem string
 
 	pushpullResponseSeconds prometheus.Histogram
 }
 
 func NewRPCServerMetrics() *RPCServerMetrics {
 	metrics := &RPCServerMetrics{
-		namespace: namespace,
+		subsystem: "rpcserver",
 	}
 	metrics.recordMetrics()
 	return metrics
@@ -27,7 +22,7 @@ func NewRPCServerMetrics() *RPCServerMetrics {
 func (r *RPCServerMetrics) recordMetrics() {
 	r.pushpullResponseSeconds = promauto.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,
-		Subsystem: subsystem,
+		Subsystem: r.subsystem,
 		Name:      "pushpull_response_seconds",
 		Help:      "Response time of PushPull API.",
 	})

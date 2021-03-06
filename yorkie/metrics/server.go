@@ -5,23 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/version"
-	yorkieprometheus "github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 )
-
-type metrics struct {
-	RPCServer RPCServer
-}
-
-func newMetrics() *metrics {
-	return &metrics{
-		RPCServer: yorkieprometheus.NewRPCServerMetrics(),
-	}
-}
 
 // Config is the configuration for creating a Server instance.
 type Config struct {
@@ -60,26 +48,9 @@ func (s *Server) listenAndServe() error {
 	return nil
 }
 
-var (
-	currentVersion = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: "yorkie",
-		Subsystem: "server",
-		Name:      "version",
-		Help:      "Which version is running. 1 for 'server_version' label with current version.",
-	}, []string{"server_version"})
-)
-
-func recordMetrics() {
-	prometheus.MustRegister(currentVersion)
-
-	currentVersion.With(prometheus.Labels{
-		"server_version": version.Version,
-	}).Set(1)
-}
-
 // Start registers application-specific metrics and starts the HTTP server.
 func (s *Server) Start() error {
-	recordMetrics()
+	s.metrics.Server.WithServerVersion(version.Version)
 	return s.listenAndServe()
 }
 
@@ -97,6 +68,6 @@ func (s *Server) Shutdown(graceful bool) {
 	}
 }
 
-func (s *Server) RPCServerMetrics() RPCServer {
+func (s *Server) RPCServerMetrics() RPCServerMetrics {
 	return s.metrics.RPCServer
 }
