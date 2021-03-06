@@ -42,11 +42,25 @@ func TestRPCServerMetrics(t *testing.T) {
 		rpcServerMetrics.AddPushpullReceivedChanges(3)
 
 		expected := `
-			# HELP yorkie_rpcserver_pushpull_received_changes The number of changes included in a response pack in PushPull API.
+			# HELP yorkie_rpcserver_pushpull_received_changes The number of changes included in a request pack in PushPull API.
             # TYPE yorkie_rpcserver_pushpull_received_changes counter
             yorkie_rpcserver_pushpull_received_changes 5
 		`
 		if err := testutil.CollectAndCompare(rpcServerMetrics.pushpullReceivedChanges, strings.NewReader(expected)); err != nil {
+			t.Errorf("unexpected collecting result:\n%s", err)
+		}
+	})
+
+	t.Run("add pushpull sent changes", func(t *testing.T) {
+		rpcServerMetrics.AddPushpullSentChanges(2)
+		rpcServerMetrics.AddPushpullSentChanges(3)
+
+		expected := `
+			# HELP yorkie_rpcserver_pushpull_sent_changes The number of changes included in a response pack in PushPull API.
+            # TYPE yorkie_rpcserver_pushpull_sent_changes counter
+            yorkie_rpcserver_pushpull_sent_changes 5
+		`
+		if err := testutil.CollectAndCompare(rpcServerMetrics.pushpullSentChanges, strings.NewReader(expected)); err != nil {
 			t.Errorf("unexpected collecting result:\n%s", err)
 		}
 	})

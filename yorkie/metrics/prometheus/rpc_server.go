@@ -10,6 +10,7 @@ type RPCServerMetrics struct {
 
 	pushpullResponseSeconds prometheus.Histogram
 	pushpullReceivedChanges prometheus.Counter
+	pushpullSentChanges     prometheus.Counter
 }
 
 func NewRPCServerMetrics() *RPCServerMetrics {
@@ -32,6 +33,12 @@ func (r *RPCServerMetrics) recordMetrics() {
 		Namespace: namespace,
 		Subsystem: r.subsystem,
 		Name:      "pushpull_received_changes",
+		Help:      "The number of changes included in a request pack in PushPull API.",
+	})
+	r.pushpullSentChanges = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: r.subsystem,
+		Name:      "pushpull_sent_changes",
 		Help:      "The number of changes included in a response pack in PushPull API.",
 	})
 }
@@ -45,7 +52,7 @@ func (r *RPCServerMetrics) AddPushpullReceivedChanges(count float64) {
 }
 
 func (r *RPCServerMetrics) AddPushpullSentChanges(count float64) {
-
+	r.pushpullSentChanges.Add(count)
 }
 
 func (r *RPCServerMetrics) ObservePushpullSnapshotDurationSeconds(seconds float64) {
