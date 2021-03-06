@@ -10,7 +10,18 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/version"
+	yorkieprometheus "github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 )
+
+type metrics struct {
+	RPCServer RPCServer
+}
+
+func newMetrics() *metrics {
+	return &metrics{
+		RPCServer: yorkieprometheus.NewRPCServerMetrics(),
+	}
+}
 
 // Config is the configuration for creating a Server instance.
 type Config struct {
@@ -21,6 +32,7 @@ type Config struct {
 type Server struct {
 	conf          *Config
 	metricsServer *http.Server
+	metrics       *metrics
 }
 
 // NewServer creates an instance of Server.
@@ -33,6 +45,7 @@ func NewServer(conf *Config) (*Server, error) {
 		metricsServer: &http.Server{
 			Addr: fmt.Sprintf(":%d", conf.Port),
 		},
+		metrics: newMetrics(),
 	}, nil
 }
 
@@ -76,9 +89,14 @@ func (s *Server) Shutdown(graceful bool) {
 		if err := s.metricsServer.Shutdown(context.Background()); err != nil {
 			log.Logger.Error("HTTP server Shutdown: %v", err)
 		}
-	} else {
-		if err := s.metricsServer.Close(); err != nil {
-			log.Logger.Error("HTTP server Close: %v", err)
-		}
+		return
 	}
+
+	if err := s.metricsServer.Close(); err != nil {
+		log.Logger.Error("HTTP server Close: %v", err)
+	}
+}
+
+func (s *Server) RPCServerMetrics() RPCServer {
+	return s.metrics.RPCServer
 }

@@ -47,12 +47,12 @@ func New(conf *Config) (*Yorkie, error) {
 		return nil, err
 	}
 
-	rpcServer, err := rpc.NewServer(conf.RPC, be)
+	metricsServer, err := metrics.NewServer(conf.Metrics)
 	if err != nil {
 		return nil, err
 	}
 
-	metricsServer, err := metrics.NewServer(conf.Metrics)
+	rpcServer, err := rpc.NewServer(conf.RPC, be, metricsServer.RPCServerMetrics())
 	if err != nil {
 		return nil, err
 	}

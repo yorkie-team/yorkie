@@ -16,6 +16,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
@@ -54,9 +55,14 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
+	metricsServer, err := metrics.NewServer(&metrics.Config{Port: helper.MetricsPort})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
 		Port: testRPCPort,
-	}, be)
+	}, be, metricsServer.RPCServerMetrics())
 	if err != nil {
 		log.Fatal(err)
 	}

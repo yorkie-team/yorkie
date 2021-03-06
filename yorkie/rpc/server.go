@@ -40,7 +40,9 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
+	"github.com/yorkie-team/yorkie/yorkie/util"
 )
 
 type fieldViolation struct {
@@ -60,10 +62,12 @@ type Server struct {
 	conf       *Config
 	grpcServer *grpc.Server
 	backend    *backend.Backend
+
+	metrics metrics.RPCServer
 }
 
 // NewServer creates a new instance of Server.
-func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
+func NewServer(conf *Config, be *backend.Backend, metrics metrics.RPCServer) (*Server, error) {
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			unaryInterceptor,
@@ -88,6 +92,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		conf:       conf,
 		grpcServer: grpc.NewServer(opts...),
 		backend:    be,
+		metrics:    metrics,
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
 	grpcprometheus.Register(rpcServer.grpcServer)
@@ -286,6 +291,7 @@ func (s *Server) PushPull(
 	ctx context.Context,
 	req *api.PushPullRequest,
 ) (*api.PushPullResponse, error) {
+	timer := util.NewTimer()
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
 		return nil, toStatusError(err)
@@ -334,6 +340,9 @@ func (s *Server) PushPull(
 	if err != nil {
 		return nil, toStatusError(err)
 	}
+
+	duration := timer.Split().Seconds()
+	s.metrics.ObservePushpullResponseSeconds(duration)
 
 	return &api.PushPullResponse{
 		ChangePack: pbChangePack,
