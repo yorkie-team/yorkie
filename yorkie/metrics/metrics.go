@@ -52,8 +52,6 @@ type RPCServerMetrics interface {
 	// AddPushpullSentChanges adds the number of changes metric
 	// included in the response pack of the PushPull API.
 	AddPushpullSentChanges(count float64)
-
-	AddPushpullSnapshotBytes(byte float64)
 }
 
 // DBMetrics can add metrics for DB.
