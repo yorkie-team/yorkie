@@ -41,6 +41,11 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	metricsServer, err := metrics.NewServer(&metrics.Config{Port: helper.MetricsPort})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	be, err := backend.New(&backend.Config{
 		SnapshotThreshold: helper.SnapshotThreshold,
 	}, &mongo.Config{
@@ -50,12 +55,7 @@ func TestMain(m *testing.M) {
 		PingTimeoutSec:       helper.MongoPingTimeoutSec,
 	}, &etcd.Config{
 		Endpoints: helper.ETCDEndpoints,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	metricsServer, err := metrics.NewServer(&metrics.Config{Port: helper.MetricsPort})
+	}, metricsServer.DBMetrics())
 	if err != nil {
 		log.Fatal(err)
 	}

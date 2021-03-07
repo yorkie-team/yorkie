@@ -71,3 +71,7 @@ func (s *Server) Shutdown(graceful bool) {
 func (s *Server) RPCServerMetrics() RPCServerMetrics {
 	return s.metrics.RPCServer
 }
+
+func (s *Server) DBMetrics() DBMetrics {
+	return s.metrics.DB
+}

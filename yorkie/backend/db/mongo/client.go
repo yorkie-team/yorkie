@@ -21,6 +21,10 @@ import (
 	"fmt"
 	gotime "time"
 
+	"github.com/yorkie-team/yorkie/yorkie/util"
+
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -46,10 +50,12 @@ type Config struct {
 type Client struct {
 	config *Config
 	client *mongo.Client
+
+	metrics metrics.DBMetrics
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
-func Dial(conf *Config) (*Client, error) {
+func Dial(conf *Config, metrics metrics.DBMetrics) (*Client, error) {
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
 		conf.ConnectionTimeoutSec*gotime.Second,
@@ -82,8 +88,9 @@ func Dial(conf *Config) (*Client, error) {
 		conf.YorkieDatabase)
 
 	return &Client{
-		config: conf,
-		client: client,
+		config:  conf,
+		client:  client,
+		metrics: metrics,
 	}, nil
 }
 
@@ -342,6 +349,7 @@ func (c *Client) CreateSnapshotInfo(
 	docID db.ID,
 	doc *document.InternalDocument,
 ) error {
+	timer := util.NewTimer()
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return err
@@ -360,6 +368,7 @@ func (c *Client) CreateSnapshotInfo(
 		log.Logger.Error(err)
 		return err
 	}
+	c.observePushpullSnapshotDurationSeconds(timer)
 
 	return nil
 }
@@ -572,4 +581,9 @@ func (c *Client) collection(
 	return c.client.
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
+}
+
+func (c *Client) observePushpullSnapshotDurationSeconds(timer *util.Timer) {
+	duration := timer.Split().Seconds()
+	c.metrics.ObservePushpullSnapshotDurationSeconds(duration)
 }

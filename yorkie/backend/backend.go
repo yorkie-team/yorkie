@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
 )
 
 // Config is the configuration for creating a Backend instance.
@@ -62,8 +63,9 @@ func New(
 	conf *Config,
 	mongoConf *mongo.Config,
 	etcdConf *etcd.Config,
+	metrics metrics.DBMetrics,
 ) (*Backend, error) {
-	mongoClient, err := mongo.Dial(mongoConf)
+	mongoClient, err := mongo.Dial(mongoConf, metrics)
 	if err != nil {
 		return nil, err
 	}

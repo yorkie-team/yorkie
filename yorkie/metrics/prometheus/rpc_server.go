@@ -55,10 +55,6 @@ func (r *RPCServerMetrics) AddPushpullSentChanges(count float64) {
 	r.pushpullSentChanges.Add(count)
 }
 
-func (r *RPCServerMetrics) ObservePushpullSnapshotDurationSeconds(seconds float64) {
-
-}
-
 func (r *RPCServerMetrics) AddPushpullSnapshotBytes(byte float64) {
 
 }
