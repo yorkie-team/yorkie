@@ -5,12 +5,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+// ServerMetrics can add metrics for Yorkie Server.
 type ServerMetrics struct {
 	subsystem string
 
 	currentVersion *prometheus.GaugeVec
 }
 
+// NewServerMetrics creates an instance of ServerMetrics.
 func NewServerMetrics() *ServerMetrics {
 	metrics := &ServerMetrics{
 		subsystem: "server",
@@ -29,6 +31,7 @@ func (s *ServerMetrics) recordMetrics() {
 	}, []string{"server_version"})
 }
 
+// WithServerVersion adds a server's version information metric.
 func (s *ServerMetrics) WithServerVersion(version string) {
 	s.currentVersion.With(prometheus.Labels{
 		"server_version": version,
