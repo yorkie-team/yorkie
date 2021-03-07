@@ -347,9 +347,6 @@ func (s *Server) PushPull(
 	s.addPushpullSentChangesMetric(pbChangePack.Changes)
 	s.observePushpullResponseSecondsMetric(timer)
 
-	fmt.Println(pbChangePack.Snapshot)
-	//s.metrics.AddPushpullSnapshotBytes(float64(len(pbChangePack.Snapshot)))
-
 	return &api.PushPullResponse{
 		ChangePack: pbChangePack,
 	}, nil

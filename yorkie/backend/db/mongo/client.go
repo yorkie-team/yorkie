@@ -21,10 +21,6 @@ import (
 	"fmt"
 	gotime "time"
 
-	"github.com/yorkie-team/yorkie/yorkie/util"
-
-	"github.com/yorkie-team/yorkie/yorkie/metrics"
-
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -36,6 +32,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
+	"github.com/yorkie-team/yorkie/yorkie/util"
 )
 
 // Config is the configuration for creating a Client instance.
