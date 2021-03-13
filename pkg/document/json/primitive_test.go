@@ -22,21 +22,28 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/test/helper"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-func TestObject(t *testing.T) {
-	t.Run("marshal test", func(t *testing.T) {
-		root := helper.TestRoot()
-		ctx := helper.TextChangeContext(root)
+func TestPrimitive(t *testing.T) {
+	tests := []struct {
+		value     interface{}
+		valueType json.ValueType
+		marshal   string
+	}{
+		{nil, json.Null, "null"},
+		{false, json.Boolean, "false"},
+		{0, json.Integer, "0"},
+		{"0", json.String, `"0"`},
+		{[]byte{}, json.Bytes, `""`},
+	}
 
-		obj := json.NewObject(json.NewRHTPriorityQueueMap(), ctx.IssueTimeTicket())
-
-		obj.Set("k1", json.NewPrimitive("v1", ctx.IssueTimeTicket()))
-		assert.Equal(t, `{"k1":"v1"}`, obj.Marshal())
-		obj.Set("k2", json.NewPrimitive("v2", ctx.IssueTimeTicket()))
-		assert.Equal(t, `{"k1":"v1","k2":"v2"}`, obj.Marshal())
-		obj.Delete("k1", ctx.IssueTimeTicket())
-		assert.Equal(t, `{"k2":"v2"}`, obj.Marshal())
+	t.Run("creation test", func(t *testing.T) {
+		for _, test := range tests {
+			prim := json.NewPrimitive(test.value, time.InitialTicket)
+			assert.Equal(t, prim.ValueType(), prim.ValueType())
+			assert.Equal(t, prim.Value(), json.ValueFromBytes(prim.ValueType(), prim.Bytes()))
+			assert.Equal(t, prim.Marshal(), test.marshal)
+		}
 	})
 }

@@ -373,6 +373,8 @@ func toTimeTicket(ticket *time.Ticket) *api.TimeTicket {
 
 func toValueType(valueType json.ValueType) (api.ValueType, error) {
 	switch valueType {
+	case json.Null:
+		return api.ValueType_NULL, nil
 	case json.Boolean:
 		return api.ValueType_BOOLEAN, nil
 	case json.Integer:

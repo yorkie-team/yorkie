@@ -43,6 +43,8 @@ const (
 // ValueFromBytes parses the given bytes into value.
 func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 	switch valueType {
+	case Null:
+		return nil
 	case Boolean:
 		if value[0] == 1 {
 			return true
@@ -78,6 +80,14 @@ type Primitive struct {
 
 // NewPrimitive creates a new instance of Primitive.
 func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
+	if value == nil {
+		return &Primitive{
+			valueType: Null,
+			value:     nil,
+			createdAt: createdAt,
+		}
+	}
+
 	switch val := value.(type) {
 	case bool:
 		return &Primitive{
@@ -135,6 +145,10 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 
 // Bytes creates an array representing the value.
 func (p *Primitive) Bytes() []byte {
+	if p.valueType == Null {
+		return nil
+	}
+
 	switch val := p.value.(type) {
 	case bool:
 		if val {
@@ -169,6 +183,8 @@ func (p *Primitive) Bytes() []byte {
 // Marshal returns the JSON encoding of the value.
 func (p *Primitive) Marshal() string {
 	switch p.valueType {
+	case Null:
+		return "null"
 	case Boolean:
 		return fmt.Sprintf("%t", p.value)
 	case Integer:
@@ -223,6 +239,11 @@ func (p *Primitive) Remove(removedAt *time.Ticket) bool {
 		return true
 	}
 	return false
+}
+
+// Value returns the value.
+func (p *Primitive) Value() interface{} {
+	return p.value
 }
 
 // ValueType returns the type of the value.
