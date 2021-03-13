@@ -241,7 +241,7 @@ func (p *Primitive) Remove(removedAt *time.Ticket) bool {
 	return false
 }
 
-// Value returns the value.
+// Value returns the value of Primitive.
 func (p *Primitive) Value() interface{} {
 	return p.value
 }

@@ -67,7 +67,7 @@ func TestConverter(t *testing.T) {
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			// an object and primitive types
 			root.SetNewObject("k1").
-				SetNull("k.1.0").
+				SetNull("k1.0").
 				SetBool("k1.1", true).
 				SetInteger("k1.2", 2147483647).
 				SetLong("k1.3", 9223372036854775807).
