@@ -1,6 +1,6 @@
 module github.com/yorkie-team/yorkie
 
-go 1.13
+go 1.16
 
 require (
 	github.com/gogo/protobuf v1.3.1
