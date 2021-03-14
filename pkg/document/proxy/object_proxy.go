@@ -93,6 +93,15 @@ func (p *ObjectProxy) SetNewCounter(k string, n interface{}) *CounterProxy {
 	return v.(*CounterProxy)
 }
 
+// SetNull sets the null for the given key.
+func (p *ObjectProxy) SetNull(k string) *ObjectProxy {
+	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(nil, ticket)
+	})
+
+	return p
+}
+
 // SetBool sets the given boolean for the given key.
 func (p *ObjectProxy) SetBool(k string, v bool) *ObjectProxy {
 	p.setInternal(k, func(ticket *time.Ticket) json.Element {

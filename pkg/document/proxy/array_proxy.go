@@ -40,6 +40,15 @@ func NewArrayProxy(ctx *change.Context, array *json.Array) *ArrayProxy {
 	}
 }
 
+// AddNull adds the null at the last.
+func (p *ArrayProxy) AddNull() *ArrayProxy {
+	p.addInternal(func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(nil, ticket)
+	})
+
+	return p
+}
+
 // AddBool adds the given boolean at the last.
 func (p *ArrayProxy) AddBool(values ...bool) *ArrayProxy {
 	for _, value := range values {

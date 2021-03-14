@@ -469,6 +469,8 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.NewRGATreeList(),
 			createdAt,
 		), nil
+	case api.ValueType_NULL:
+		fallthrough
 	case api.ValueType_BOOLEAN:
 		fallthrough
 	case api.ValueType_INTEGER:
@@ -536,6 +538,8 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 
 func fromPrimitiveValueType(valueType api.ValueType) (json.ValueType, error) {
 	switch valueType {
+	case api.ValueType_NULL:
+		return json.Null, nil
 	case api.ValueType_BOOLEAN:
 		return json.Boolean, nil
 	case api.ValueType_INTEGER:
