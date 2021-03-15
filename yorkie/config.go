@@ -19,7 +19,7 @@ package yorkie
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -74,7 +74,7 @@ func NewConfigFromFile(path string) (*Config, error) {
 		return nil, err
 	}
 
-	bytes, err := ioutil.ReadAll(file)
+	bytes, err := io.ReadAll(file)
 	if err != nil {
 		log.Logger.Error(err)
 		return nil, err
