@@ -12,20 +12,26 @@ We use the [Projects](https://github.com/orgs/yorkie-team/projects) feature in G
 Yorkie v0.2 should be reliably available for services used in production environments.
 
 ### 2021
- - Jan: Introducing HA [#11](https://github.com/yorkie-team/yorkie/issues/11)
- - Feb: Supporting TLS and Auth webhook to secure Yorkie [#6](https://github.com/yorkie-team/yorkie/issues/6)
- - Apr: Redo/Undo API [#49](https://github.com/yorkie-team/yorkie/issues/49)
+
+ - Mar: Monitoring [#155](https://github.com/yorkie-team/yorkie/issues/155)
+ - Apr: Introducing HA [#11](https://github.com/yorkie-team/yorkie/issues/11)
+ - May: Improved Peer Awareness [#153](https://github.com/yorkie-team/yorkie/issues/153)
+ - June: Supporting TLS and Auth webhook to secure Yorkie [#6](https://github.com/yorkie-team/yorkie/issues/6)
+ - July: Limits [#158](https://github.com/yorkie-team/yorkie/issues/158)
+ - Aug: History [#52](https://github.com/yorkie-team/yorkie/issues/52)
+ - Nov: Redo/Undo [#49](https://github.com/yorkie-team/yorkie/issues/49)
 
 ## Yorkie v0.1
 
 Yorkie's first release version, v0.1, aims to implement the basic features of the document store for building collaborative editing applications.
 
 ### 2020
+
  - Jan: Text datatype for supporting text based collaboration editor [#2](https://github.com/yorkie-team/yorkie/issues/2)
- - Feb: Realtime event stream API [#5](https://github.com/yorkie-team/yorkie/issues/5)
+ - Feb: Realtime event stream [#5](https://github.com/yorkie-team/yorkie/issues/5)
  - Mar: https://yorkie.dev [yorkie-team.github.io](https://github.com/yorkie-team/yorkie-team.github.io)
  - Apr: Change hook
- - May: Snapshot API to reduce payload [#9](https://github.com/yorkie-team/yorkie/issues/9)
+ - May: Snapshot to reduce payload [#9](https://github.com/yorkie-team/yorkie/issues/9)
  - Jun: Garbage collection to clean CRDT meta [#3](https://github.com/yorkie-team/yorkie/issues/3)
  - Aug:
    - Peer Awareness [#48](https://github.com/yorkie-team/yorkie/issues/48)
