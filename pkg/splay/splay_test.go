@@ -75,4 +75,25 @@ func TestSplayTree(t *testing.T) {
 		assert.Equal(t, nodeD, node)
 		assert.Equal(t, 2, offset)
 	})
+
+	t.Run("deletion test", func(t *testing.T) {
+		tree := splay.NewTree(nil)
+
+		nodeH := tree.Insert(newSplayNode("H"))
+		assert.Equal(t, "[1,1]H", tree.AnnotatedString())
+		nodeE := tree.Insert(newSplayNode("E"))
+		assert.Equal(t, "[1,1]H[2,1]E", tree.AnnotatedString())
+		nodeL := tree.Insert(newSplayNode("LL"))
+		assert.Equal(t, "[1,1]H[2,1]E[4,2]LL", tree.AnnotatedString())
+		nodeO := tree.Insert(newSplayNode("O"))
+		assert.Equal(t, "[1,1]H[2,1]E[4,2]LL[5,1]O", tree.AnnotatedString())
+
+		tree.Delete(nodeE)
+		assert.Equal(t, "[4,1]H[3,2]LL[1,1]O", tree.AnnotatedString())
+
+		assert.Equal(t, tree.IndexOf(nodeH), 0)
+		assert.Equal(t, tree.IndexOf(nodeE), -1)
+		assert.Equal(t, tree.IndexOf(nodeL), 1)
+		assert.Equal(t, tree.IndexOf(nodeO), 3)
+	})
 }

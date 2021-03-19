@@ -75,6 +75,16 @@ func (n *Node) increaseWeight(weight int) {
 	n.weight += weight
 }
 
+func (n *Node) unlink() {
+	n.parent = nil
+	n.right = nil
+	n.left = nil
+}
+
+func (n *Node) hasLinks() bool {
+	return n.parent != nil || n.left != nil || n.right != nil
+}
+
 // Tree is weighted binary search tree which is based on Splay tree.
 // original paper on Splay Trees:
 //  - https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
@@ -154,7 +164,7 @@ func (t *Tree) Splay(node *Node) {
 
 // IndexOf Find the index of the given node.
 func (t *Tree) IndexOf(node *Node) int {
-	if node == nil {
+	if node == nil || !node.hasLinks() {
 		return -1
 	}
 
@@ -253,9 +263,17 @@ func (t *Tree) Delete(node *Node) {
 		maxNode := leftTree.maximum()
 		leftTree.Splay(maxNode)
 		leftTree.root.right = rightTree.root
+		if rightTree.root != nil {
+			rightTree.root.parent = leftTree.root
+		}
 		t.root = leftTree.root
 	} else {
 		t.root = rightTree.root
+	}
+
+	node.unlink()
+	if t.root != nil {
+		t.UpdateSubtree(t.root)
 	}
 }
 
