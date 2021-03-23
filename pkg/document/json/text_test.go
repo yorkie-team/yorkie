@@ -39,4 +39,26 @@ func TestText(t *testing.T) {
 		text.Edit(fromPos, toPos, nil, "Yorkie", ctx.IssueTimeTicket())
 		assert.Equal(t, `"Hello Yorkie"`, text.Marshal())
 	})
+
+	t.Run("grapheme cluster test", func(t *testing.T) {
+		tests := []struct {
+			length int
+			value  string
+		}{
+			{4, "abcd"},
+			{2, "한글"},
+			{5, "अनुच्छेद"},
+			{6, "🌷🎁💩😜👍🏳"},
+			{5, "Ĺo͂řȩm̅"},
+		}
+		for _, test := range tests {
+			val := json.NewTextValue(test.value)
+			assert.Equal(t, test.length, val.Len())
+			assert.Equal(t, test.length-2, val.Split(2).Len())
+
+			richVal := json.NewRichTextValue(json.NewRHT(), test.value)
+			assert.Equal(t, test.length, richVal.Len())
+			assert.Equal(t, test.length-2, richVal.Split(2).Len())
+		}
+	})
 }

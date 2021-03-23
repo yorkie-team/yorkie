@@ -19,7 +19,8 @@ package json
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
+
+	"github.com/rivo/uniseg"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
@@ -61,7 +62,7 @@ func (t *RichTextValue) Value() string {
 
 // Len returns the length of this value.
 func (t *RichTextValue) Len() int {
-	return utf8.RuneCountInString(t.value)
+	return uniseg.GraphemeClusterCount(t.value)
 }
 
 // String returns the string representation of this value.
@@ -77,10 +78,15 @@ func (t *RichTextValue) AnnotatedString() string {
 
 // Split splits this value by the given offset.
 func (t *RichTextValue) Split(offset int) RGATreeSplitValue {
-	value := t.value
-	r := []rune(value)
-	t.value = string(r[0:offset])
-	return NewRichTextValue(t.attrs.DeepCopy(), string(r[offset:]))
+	grapheme := uniseg.NewGraphemes(t.value)
+
+	var split []string
+	for idx := 0; grapheme.Next(); idx++ {
+		split = append(split, grapheme.Str())
+	}
+
+	t.value = strings.Join(split[0:offset], "")
+	return NewRichTextValue(t.attrs.DeepCopy(), strings.Join(split[offset:], ""))
 }
 
 // DeepCopy copies itself deeply.

@@ -18,7 +18,9 @@ package json
 
 import (
 	"fmt"
-	"unicode/utf8"
+	"strings"
+
+	"github.com/rivo/uniseg"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
@@ -46,7 +48,7 @@ func NewTextValue(value string) *TextValue {
 
 // Len returns the length of this value.
 func (t *TextValue) Len() int {
-	return utf8.RuneCountInString(t.value)
+	return uniseg.GraphemeClusterCount(t.value)
 }
 
 // String returns the string representation of this value.
@@ -62,10 +64,15 @@ func (t *TextValue) AnnotatedString() string {
 
 // Split splits this value by the given offset.
 func (t *TextValue) Split(offset int) RGATreeSplitValue {
-	value := t.value
-	r := []rune(value)
-	t.value = string(r[0:offset])
-	return NewTextValue(string(r[offset:]))
+	grapheme := uniseg.NewGraphemes(t.value)
+
+	var split []string
+	for idx := 0; grapheme.Next(); idx++ {
+		split = append(split, grapheme.Str())
+	}
+
+	t.value = strings.Join(split[0:offset], "")
+	return NewTextValue(strings.Join(split[offset:], ""))
 }
 
 // DeepCopy copies itself deeply.
