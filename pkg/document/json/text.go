@@ -67,7 +67,7 @@ func (t *TextValue) Split(offset int) RGATreeSplitValue {
 	grapheme := uniseg.NewGraphemes(t.value)
 
 	var split []string
-	for idx := 0; grapheme.Next(); idx++ {
+	for grapheme.Next() {
 		split = append(split, grapheme.Str())
 	}
 
