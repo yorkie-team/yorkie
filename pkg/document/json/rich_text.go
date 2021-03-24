@@ -19,7 +19,7 @@ package json
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
+	"unicode/utf16"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
@@ -60,8 +60,10 @@ func (t *RichTextValue) Value() string {
 }
 
 // Len returns the length of this value.
+// It is calculated in UTF-16 code units.
 func (t *RichTextValue) Len() int {
-	return utf8.RuneCountInString(t.value)
+	encoded := utf16.Encode([]rune(t.value))
+	return len(encoded)
 }
 
 // String returns the string representation of this value.
@@ -78,9 +80,9 @@ func (t *RichTextValue) AnnotatedString() string {
 // Split splits this value by the given offset.
 func (t *RichTextValue) Split(offset int) RGATreeSplitValue {
 	value := t.value
-	r := []rune(value)
-	t.value = string(r[0:offset])
-	return NewRichTextValue(t.attrs.DeepCopy(), string(r[offset:]))
+	encoded := utf16.Encode([]rune(value))
+	t.value = string(utf16.Decode(encoded[0:offset]))
+	return NewRichTextValue(t.attrs.DeepCopy(), string(utf16.Decode(encoded[offset:])))
 }
 
 // DeepCopy copies itself deeply.
