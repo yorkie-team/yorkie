@@ -339,9 +339,9 @@ func (s *RGATreeSplit) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) *RGATre
 	}
 
 	if id.offset > 0 && node.id.offset == id.offset {
+		// NOTE: InsPrev may not be present due to GC.
 		if node.insPrev == nil {
-			log.Logger.Error(s.AnnotatedString())
-			panic("insPrev should be presence")
+			return node
 		}
 		node = node.insPrev
 	}
@@ -536,10 +536,6 @@ func (s *RGATreeSplit) AnnotatedString() string {
 
 	node := s.initialHead
 	for node != nil {
-		if node.id.offset > 0 && node.insPrev == nil {
-			log.Logger.Warn("insPrev should be presence")
-		}
-
 		if node.removedAt != nil {
 			result = append(result, fmt.Sprintf(
 				"{%s}",

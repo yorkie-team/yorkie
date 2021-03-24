@@ -183,6 +183,10 @@ func (t *Tree) IndexOf(node *Node) int {
 
 // Find returns the Node and offset of the given index.
 func (t *Tree) Find(index int) (*Node, int) {
+	if t.root == nil {
+		return nil, 0
+	}
+
 	node := t.root
 	offset := index
 	for {

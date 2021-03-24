@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 var (
@@ -454,5 +455,42 @@ func TestDocument(t *testing.T) {
 		})
 		assert.Equal(t, err, errDummy, "should returns the dummy error")
 		assert.Equal(t, `{"k1":{"k1.1":1,"k1.2":2}}`, doc.Marshal())
+	})
+
+	t.Run("text garbage collection test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("text")
+			root.GetText("text").Edit(0, 0, "ABCD")
+			root.GetText("text").Edit(0, 2, "12")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(
+			t,
+			`[0:0:00:0 ][1:3:00:0 12]{1:2:00:0 AB}[1:2:00:2 CD]`,
+			doc.Root().GetText("text").AnnotatedString(),
+		)
+
+		assert.Equal(t, 1, doc.GarbageLen())
+		doc.GarbageCollect(time.MaxTicket)
+		assert.Equal(t, 0, doc.GarbageLen())
+		assert.Equal(
+			t,
+			`[0:0:00:0 ][1:3:00:0 12][1:2:00:2 CD]`,
+			doc.Root().GetText("text").AnnotatedString(),
+		)
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			root.GetText("text").Edit(2, 4, "")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(
+			t,
+			`[0:0:00:0 ][1:3:00:0 12]{1:2:00:2 CD}`,
+			doc.Root().GetText("text").AnnotatedString(),
+		)
 	})
 }

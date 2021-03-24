@@ -46,6 +46,10 @@ func TestSplayTree(t *testing.T) {
 	t.Run("insert and splay test", func(t *testing.T) {
 		tree := splay.NewTree(nil)
 
+		node, idx := tree.Find(0)
+		assert.Nil(t, node)
+		assert.Equal(t, 0, idx)
+
 		nodeA := tree.Insert(newSplayNode("A2"))
 		assert.Equal(t, "[2,2]A2", tree.AnnotatedString())
 		nodeB := tree.Insert(newSplayNode("B23"))
