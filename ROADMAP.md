@@ -5,7 +5,7 @@ Community and contributor involvement is vital for successfully implementing all
 We hope that the items listed below will inspire further engagement from the community to keep Yorkie progressing and shipping exciting and valuable features.
 
 Any dates listed below and the specific issues that will ship in a given milestone are subject to change but should give a general idea of what we are planning.
-We use the [Projects](https://github.com/orgs/yorkie-team/projects) feature in Github so look there for the most up-to-date and issue plan.
+We use the [Projects](https://github.com/orgs/yorkie-team/projects) feature in GitHub so look there for the most up-to-date and issue plan.
 
 ## Yorkie v0.2
 
