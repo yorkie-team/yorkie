@@ -176,6 +176,14 @@ func (d *Document) RootObject() *json.Object {
 	return d.doc.RootObject()
 }
 
+// Root returns the proxy of the root object.
+func (d *Document) Root() *proxy.ObjectProxy {
+	d.ensureClone()
+
+	ctx := change.NewContext(d.doc.changeID.Next(), "", d.clone)
+	return proxy.NewObjectProxy(ctx, d.clone.Object())
+}
+
 // GarbageCollect purge elements that were removed before the given time.
 func (d *Document) GarbageCollect(ticket *time.Ticket) int {
 	if d.clone != nil {
