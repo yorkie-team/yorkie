@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	gotime "time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -43,7 +44,6 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
-	"github.com/yorkie-team/yorkie/yorkie/util"
 )
 
 type fieldViolation struct {
@@ -292,7 +292,7 @@ func (s *Server) PushPull(
 	ctx context.Context,
 	req *api.PushPullRequest,
 ) (*api.PushPullResponse, error) {
-	timer := util.NewTimer()
+	start := gotime.Now()
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
 		return nil, toStatusError(err)
@@ -345,7 +345,7 @@ func (s *Server) PushPull(
 	}
 
 	s.addPushpullSentChangesMetric(pbChangePack.Changes)
-	s.observePushpullResponseSecondsMetric(timer)
+	s.observePushpullResponseSecondsMetric(start)
 
 	return &api.PushPullResponse{
 		ChangePack: pbChangePack,
@@ -485,8 +485,8 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *sync.Subscription) 
 	}
 }
 
-func (s *Server) observePushpullResponseSecondsMetric(timer *util.Timer) {
-	duration := timer.Split().Seconds()
+func (s *Server) observePushpullResponseSecondsMetric(start gotime.Time) {
+	duration := gotime.Since(start).Seconds()
 	s.metrics.ObservePushpullResponseSeconds(duration)
 }
 

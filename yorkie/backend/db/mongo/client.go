@@ -33,7 +33,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
-	"github.com/yorkie-team/yorkie/yorkie/util"
 )
 
 // Config is the configuration for creating a Client instance.
@@ -347,7 +346,7 @@ func (c *Client) CreateSnapshotInfo(
 	docID db.ID,
 	doc *document.InternalDocument,
 ) error {
-	timer := util.NewTimer()
+	start := gotime.Now()
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return err
@@ -366,7 +365,7 @@ func (c *Client) CreateSnapshotInfo(
 		log.Logger.Error(err)
 		return err
 	}
-	c.observePushpullSnapshotDurationSeconds(timer)
+	c.observePushpullSnapshotDurationSeconds(start)
 
 	return nil
 }
@@ -581,7 +580,7 @@ func (c *Client) collection(
 		Collection(name, opts...)
 }
 
-func (c *Client) observePushpullSnapshotDurationSeconds(timer *util.Timer) {
-	duration := timer.Split().Seconds()
+func (c *Client) observePushpullSnapshotDurationSeconds(start gotime.Time) {
+	duration := gotime.Since(start).Seconds()
 	c.metrics.ObservePushpullSnapshotDurationSeconds(duration)
 }
