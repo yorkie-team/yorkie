@@ -33,7 +33,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
@@ -299,7 +298,8 @@ func (s *Server) PushPull(
 	}
 
 	if pack.HasChanges() {
-		s.addPushpullReceivedChangesMetric(pack.Changes)
+		changesCount := float64(len(pack.Changes))
+		s.metrics.AddPushpullReceivedChanges(changesCount)
 
 		locker, err := s.backend.LockerMap.NewLocker(
 			ctx,
@@ -344,8 +344,11 @@ func (s *Server) PushPull(
 		return nil, toStatusError(err)
 	}
 
-	s.addPushpullSentChangesMetric(pbChangePack.Changes)
-	s.observePushpullResponseSecondsMetric(start)
+	changesCount := float64(len(pbChangePack.Changes))
+	s.metrics.AddPushpullSentChanges(changesCount)
+
+	duration := gotime.Since(start).Seconds()
+	s.metrics.ObservePushpullResponseSeconds(duration)
 
 	return &api.PushPullResponse{
 		ChangePack: pbChangePack,
@@ -483,21 +486,6 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *sync.Subscription) 
 			},
 		)
 	}
-}
-
-func (s *Server) observePushpullResponseSecondsMetric(start gotime.Time) {
-	duration := gotime.Since(start).Seconds()
-	s.metrics.ObservePushpullResponseSeconds(duration)
-}
-
-func (s *Server) addPushpullReceivedChangesMetric(changes []*change.Change) {
-	changesCount := float64(len(changes))
-	s.metrics.AddPushpullReceivedChanges(changesCount)
-}
-
-func (s *Server) addPushpullSentChangesMetric(changes []*api.Change) {
-	changesCount := float64(len(changes))
-	s.metrics.AddPushpullSentChanges(changesCount)
 }
 
 // toStatusError returns a status.Error from the given logic error. If an error

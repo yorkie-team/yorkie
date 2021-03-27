@@ -365,7 +365,9 @@ func (c *Client) CreateSnapshotInfo(
 		log.Logger.Error(err)
 		return err
 	}
-	c.observePushpullSnapshotDurationSeconds(start)
+
+	duration := gotime.Since(start).Seconds()
+	c.metrics.ObservePushpullSnapshotDurationSeconds(duration)
 
 	return nil
 }
@@ -578,9 +580,4 @@ func (c *Client) collection(
 	return c.client.
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
-}
-
-func (c *Client) observePushpullSnapshotDurationSeconds(start gotime.Time) {
-	duration := gotime.Since(start).Seconds()
-	c.metrics.ObservePushpullSnapshotDurationSeconds(duration)
 }
