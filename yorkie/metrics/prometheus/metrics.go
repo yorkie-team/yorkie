@@ -1,8 +1,26 @@
+/*
+ * Copyright 2021 The Yorkie Authors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package prometheus
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/yorkie-team/yorkie/pkg/version"
 )
 
 const (
@@ -11,89 +29,88 @@ const (
 
 // Metrics manages the metric information that Yorkie is trying to measure.
 type Metrics struct {
-	currentVersion *prometheus.GaugeVec
+	agentVersion *prometheus.GaugeVec
 
-	pushpullResponseSeconds prometheus.Histogram
-	pushpullReceivedChanges prometheus.Counter
-	pushpullSentChanges     prometheus.Counter
+	pushPullResponseSeconds prometheus.Histogram
+	pushPullReceivedChanges prometheus.Counter
+	pushPullSentChanges     prometheus.Counter
 
-	pushpullSnapshotDurationSeconds prometheus.Histogram
-	pushpullSnapshotBytes           prometheus.Gauge
+	pushPullSnapshotDurationSeconds prometheus.Histogram
+	pushPullSnapshotBytes           prometheus.Gauge
 }
 
 // NewMetrics creates a new instance of Metrics.
 func NewMetrics() *Metrics {
-	return &Metrics{
-		currentVersion: promauto.NewGaugeVec(prometheus.GaugeOpts{
+	metrics := &Metrics{
+		agentVersion: promauto.NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: "yorkie",
-			Subsystem: "server",
+			Subsystem: "agent",
 			Name:      "version",
-			Help:      "Which version is running. 1 for 'server_version' label with current version.",
-		}, []string{"server_version"}),
-		pushpullResponseSeconds: promauto.NewHistogram(prometheus.HistogramOpts{
+			Help:      "Which version is running. 1 for 'agent_version' label with current version.",
+		}, []string{"agent_version"}),
+		pushPullResponseSeconds: promauto.NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
 			Subsystem: "rpcserver",
 			Name:      "pushpull_response_seconds",
 			Help:      "Response time of PushPull API.",
 		}),
-		pushpullReceivedChanges: promauto.NewCounter(prometheus.CounterOpts{
+		pushPullReceivedChanges: promauto.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: "rpcserver",
 			Name:      "pushpull_received_changes",
 			Help:      "The number of changes included in a request pack in PushPull API.",
 		}),
-		pushpullSentChanges: promauto.NewCounter(prometheus.CounterOpts{
+		pushPullSentChanges: promauto.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: "rpcserver",
 			Name:      "pushpull_sent_changes",
 			Help:      "The number of changes included in a response pack in PushPull API.",
 		}),
-		pushpullSnapshotDurationSeconds: promauto.NewHistogram(prometheus.HistogramOpts{
+		pushPullSnapshotDurationSeconds: promauto.NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
 			Subsystem: "db",
 			Name:      "pushpull_snapshot_duration_seconds",
 			Help:      "The creation time of snapshot in PushPull API.",
 		}),
-		pushpullSnapshotBytes: promauto.NewGauge(prometheus.GaugeOpts{
+		pushPullSnapshotBytes: promauto.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: "db",
 			Name:      "pushpull_snapshot_bytes",
 			Help:      "The number of bytes of Snapshot.",
 		}),
 	}
-}
 
-// WithServerVersion adds a server's version information metric.
-func (m *Metrics) WithServerVersion(version string) {
-	m.currentVersion.With(prometheus.Labels{
-		"server_version": version,
+	metrics.agentVersion.With(prometheus.Labels{
+		"agent_version": version.Version,
 	}).Set(1)
+
+	return metrics
 }
 
-// ObservePushpullResponseSeconds adds response time metrics for PushPull API.
-func (m *Metrics) ObservePushpullResponseSeconds(seconds float64) {
-	m.pushpullResponseSeconds.Observe(seconds)
+// ObservePushPullResponseSeconds adds response time metrics for PushPull API.
+func (m *Metrics) ObservePushPullResponseSeconds(seconds float64) {
+	m.pushPullResponseSeconds.Observe(seconds)
 }
 
-// AddPushpullReceivedChanges adds the number of changes metric
+// AddPushPullReceivedChanges adds the number of changes metric
 // included in the request pack of the PushPull API.
-func (m *Metrics) AddPushpullReceivedChanges(count float64) {
-	m.pushpullReceivedChanges.Add(count)
+func (m *Metrics) AddPushPullReceivedChanges(count int) {
+	m.pushPullReceivedChanges.Add(float64(count))
 }
 
-// AddPushpullSentChanges adds the number of changes metric
+// AddPushPullSentChanges adds the number of changes metric
 // included in the response pack of the PushPull API.
-func (m *Metrics) AddPushpullSentChanges(count float64) {
-	m.pushpullSentChanges.Add(count)
+func (m *Metrics) AddPushPullSentChanges(count int) {
+	m.pushPullSentChanges.Add(float64(count))
 }
 
-// ObservePushpullSnapshotDurationSeconds adds the time
+// ObservePushPullSnapshotDurationSeconds adds the time
 // spent metric when taking snapshots.
-func (m *Metrics) ObservePushpullSnapshotDurationSeconds(seconds float64) {
-	m.pushpullSnapshotDurationSeconds.Observe(seconds)
+func (m *Metrics) ObservePushPullSnapshotDurationSeconds(seconds float64) {
+	m.pushPullSnapshotDurationSeconds.Observe(seconds)
 }
 
-// SetPushpullSnapshotBytes sets the snapshot byte size.
-func (m *Metrics) SetPushpullSnapshotBytes(bytes []byte) {
-	m.pushpullSnapshotBytes.Set(float64(len(bytes)))
+// SetPushPullSnapshotBytes sets the snapshot byte size.
+func (m *Metrics) SetPushPullSnapshotBytes(bytes int) {
+	m.pushPullSnapshotBytes.Set(float64(bytes))
 }

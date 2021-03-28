@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The Yorkie Authors. All rights reserved.
+ * Copyright 2021 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,24 +18,21 @@ package metrics
 
 // Metrics manages the metric information that Yorkie is trying to measure.
 type Metrics interface {
-	// WithServerVersion adds a server's version information metric.
-	WithServerVersion(version string)
+	// ObservePushPullResponseSeconds adds response time metrics for PushPull API.
+	ObservePushPullResponseSeconds(seconds float64)
 
-	// ObservePushpullResponseSeconds adds response time metrics for PushPull API.
-	ObservePushpullResponseSeconds(seconds float64)
-
-	// AddPushpullReceivedChanges adds the number of changes metric
+	// AddPushPullReceivedChanges adds the number of changes metric
 	// included in the request pack of the PushPull API.
-	AddPushpullReceivedChanges(count float64)
+	AddPushPullReceivedChanges(count int)
 
-	// AddPushpullSentChanges adds the number of changes metric
+	// AddPushPullSentChanges adds the number of changes metric
 	// included in the response pack of the PushPull API.
-	AddPushpullSentChanges(count float64)
+	AddPushPullSentChanges(count int)
 
-	// ObservePushpullSnapshotDurationSeconds adds the time
+	// ObservePushPullSnapshotDurationSeconds adds the time
 	// spent metric when taking snapshots.
-	ObservePushpullSnapshotDurationSeconds(seconds float64)
+	ObservePushPullSnapshotDurationSeconds(seconds float64)
 
-	// SetPushpullSnapshotBytes sets the snapshot byte size.
-	SetPushpullSnapshotBytes(bytes []byte)
+	// SetPushPullSnapshotBytes sets the snapshot byte size.
+	SetPushPullSnapshotBytes(bytes int)
 }

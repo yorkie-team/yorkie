@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The Yorkie Authors. All rights reserved.
+ * Copyright 2021 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package metrics
+package prometheus
 
 import (
 	"context"
@@ -24,8 +24,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
-	"github.com/yorkie-team/yorkie/pkg/version"
-	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 )
 
 // Config is the configuration for creating a Server instance.
@@ -37,8 +35,6 @@ type Config struct {
 type Server struct {
 	conf          *Config
 	metricsServer *http.Server
-
-	Metrics Metrics
 }
 
 // NewServer creates an instance of Server.
@@ -51,7 +47,6 @@ func NewServer(conf *Config) (*Server, error) {
 		metricsServer: &http.Server{
 			Addr: fmt.Sprintf(":%d", conf.Port),
 		},
-		Metrics: prometheus.NewMetrics(),
 	}, nil
 }
 
@@ -68,7 +63,6 @@ func (s *Server) listenAndServe() error {
 
 // Start registers application-specific metrics and starts the HTTP server.
 func (s *Server) Start() error {
-	s.Metrics.WithServerVersion(version.Version)
 	return s.listenAndServe()
 }
 

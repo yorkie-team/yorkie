@@ -224,7 +224,7 @@ func pullPack(
 		return nil, err
 	}
 
-	be.DB.Metrics().SetPushpullSnapshotBytes(snapshot)
+	be.Metrics.SetPushPullSnapshotBytes(len(snapshot))
 
 	return change.NewPack(docKey, pulledCP, nil, snapshot), err
 }
@@ -420,5 +420,6 @@ func storeSnapshot(
 		doc.Checkpoint().ServerSeq,
 		gotime.Since(start),
 	)
+	be.Metrics.ObservePushPullSnapshotDurationSeconds(gotime.Since(start).Seconds())
 	return nil
 }

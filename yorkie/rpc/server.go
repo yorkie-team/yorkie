@@ -41,7 +41,6 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
-	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
 )
 
@@ -62,12 +61,10 @@ type Server struct {
 	conf       *Config
 	grpcServer *grpc.Server
 	backend    *backend.Backend
-
-	metrics metrics.Metrics
 }
 
 // NewServer creates a new instance of Server.
-func NewServer(conf *Config, be *backend.Backend, metrics metrics.Metrics) (*Server, error) {
+func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			unaryInterceptor,
@@ -92,7 +89,6 @@ func NewServer(conf *Config, be *backend.Backend, metrics metrics.Metrics) (*Ser
 		conf:       conf,
 		grpcServer: grpc.NewServer(opts...),
 		backend:    be,
-		metrics:    metrics,
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
 	grpcprometheus.Register(rpcServer.grpcServer)
@@ -298,8 +294,7 @@ func (s *Server) PushPull(
 	}
 
 	if pack.HasChanges() {
-		changesCount := float64(len(pack.Changes))
-		s.metrics.AddPushpullReceivedChanges(changesCount)
+		s.backend.Metrics.AddPushPullReceivedChanges(len(pack.Changes))
 
 		locker, err := s.backend.LockerMap.NewLocker(
 			ctx,
@@ -344,11 +339,8 @@ func (s *Server) PushPull(
 		return nil, toStatusError(err)
 	}
 
-	changesCount := float64(len(pbChangePack.Changes))
-	s.metrics.AddPushpullSentChanges(changesCount)
-
-	duration := gotime.Since(start).Seconds()
-	s.metrics.ObservePushpullResponseSeconds(duration)
+	s.backend.Metrics.AddPushPullSentChanges(len(pbChangePack.Changes))
+	s.backend.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 
 	return &api.PushPullResponse{
 		ChangePack: pbChangePack,

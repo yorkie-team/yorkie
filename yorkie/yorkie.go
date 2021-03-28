@@ -21,7 +21,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/metrics"
+	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
@@ -34,7 +34,7 @@ type Yorkie struct {
 	conf          *Config
 	backend       *backend.Backend
 	rpcServer     *rpc.Server
-	metricsServer *metrics.Server
+	metricsServer *prometheus.Server
 
 	shutdown   bool
 	shutdownCh chan struct{}
@@ -42,7 +42,7 @@ type Yorkie struct {
 
 // New creates a new instance of Yorkie.
 func New(conf *Config) (*Yorkie, error) {
-	metricsServer, err := metrics.NewServer(conf.Metrics)
+	metricsServer, err := prometheus.NewServer(conf.Metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -51,13 +51,12 @@ func New(conf *Config) (*Yorkie, error) {
 		conf.Backend,
 		conf.Mongo,
 		conf.ETCD,
-		metricsServer.Metrics,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	rpcServer, err := rpc.NewServer(conf.RPC, be, metricsServer.Metrics)
+	rpcServer, err := rpc.NewServer(conf.RPC, be)
 	if err != nil {
 		return nil, err
 	}

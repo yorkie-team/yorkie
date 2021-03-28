@@ -32,7 +32,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
-	"github.com/yorkie-team/yorkie/yorkie/metrics"
 )
 
 // Config is the configuration for creating a Client instance.
@@ -47,12 +46,10 @@ type Config struct {
 type Client struct {
 	config *Config
 	client *mongo.Client
-
-	metrics metrics.Metrics
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
-func Dial(conf *Config, metrics metrics.Metrics) (*Client, error) {
+func Dial(conf *Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
 		conf.ConnectionTimeoutSec*gotime.Second,
@@ -85,9 +82,8 @@ func Dial(conf *Config, metrics metrics.Metrics) (*Client, error) {
 		conf.YorkieDatabase)
 
 	return &Client{
-		config:  conf,
-		client:  client,
-		metrics: metrics,
+		config: conf,
+		client: client,
 	}, nil
 }
 
@@ -346,7 +342,6 @@ func (c *Client) CreateSnapshotInfo(
 	docID db.ID,
 	doc *document.InternalDocument,
 ) error {
-	start := gotime.Now()
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return err
@@ -365,9 +360,6 @@ func (c *Client) CreateSnapshotInfo(
 		log.Logger.Error(err)
 		return err
 	}
-
-	duration := gotime.Since(start).Seconds()
-	c.metrics.ObservePushpullSnapshotDurationSeconds(duration)
 
 	return nil
 }
@@ -580,9 +572,4 @@ func (c *Client) collection(
 	return c.client.
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
-}
-
-// Metrics returns a metrics.
-func (c *Client) Metrics() metrics.Metrics {
-	return c.metrics
 }

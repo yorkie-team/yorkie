@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
+	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 )
 
 // Config is the configuration for creating a Backend instance.
@@ -46,6 +47,7 @@ type Backend struct {
 	DB        db.DB
 	LockerMap sync.LockerMap
 	PubSub    sync.PubSub
+	Metrics   metrics.Metrics
 
 	// closing is closed by backend close.
 	closing chan struct{}
@@ -63,9 +65,10 @@ func New(
 	conf *Config,
 	mongoConf *mongo.Config,
 	etcdConf *etcd.Config,
-	metrics metrics.Metrics,
 ) (*Backend, error) {
-	mongoClient, err := mongo.Dial(mongoConf, metrics)
+	met := prometheus.NewMetrics()
+
+	mongoClient, err := mongo.Dial(mongoConf)
 	if err != nil {
 		return nil, err
 	}
@@ -90,6 +93,7 @@ func New(
 		DB:        mongoClient,
 		LockerMap: lockerMap,
 		PubSub:    pubSub,
+		Metrics:   met,
 		closing:   make(chan struct{}),
 	}, nil
 }
