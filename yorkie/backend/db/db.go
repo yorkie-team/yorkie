@@ -106,6 +106,6 @@ type DB interface {
 	// FindLastSnapshotInfo finds the last snapshot of the given document.
 	FindLastSnapshotInfo(ctx context.Context, docID ID) (*SnapshotInfo, error)
 
-	// Metrics returns a metrics of DB.
-	Metrics() metrics.DBMetrics
+	// Metrics returns a metrics.
+	Metrics() metrics.Metrics
 }

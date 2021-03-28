@@ -16,31 +16,10 @@
 
 package metrics
 
-import "github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
-
-// metrics manages the metric information that Yorkie is trying to measure.
-type metrics struct {
-	Server    ServerMetrics
-	RPCServer RPCServerMetrics
-	DB        DBMetrics
-}
-
-func newMetrics() *metrics {
-	return &metrics{
-		Server:    prometheus.NewServerMetrics(),
-		RPCServer: prometheus.NewRPCServerMetrics(),
-		DB:        prometheus.NewDBMetrics(),
-	}
-}
-
-// ServerMetrics can add metrics for Yorkie Server.
-type ServerMetrics interface {
+// Metrics manages the metric information that Yorkie is trying to measure.
+type Metrics interface {
 	// WithServerVersion adds a server's version information metric.
 	WithServerVersion(version string)
-}
-
-// RPCServerMetrics can add metrics for RPC Server.
-type RPCServerMetrics interface {
 
 	// ObservePushpullResponseSeconds adds response time metrics for PushPull API.
 	ObservePushpullResponseSeconds(seconds float64)
@@ -52,10 +31,6 @@ type RPCServerMetrics interface {
 	// AddPushpullSentChanges adds the number of changes metric
 	// included in the response pack of the PushPull API.
 	AddPushpullSentChanges(count float64)
-}
-
-// DBMetrics can add metrics for DB.
-type DBMetrics interface {
 
 	// ObservePushpullSnapshotDurationSeconds adds the time
 	// spent metric when taking snapshots.

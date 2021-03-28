@@ -63,11 +63,11 @@ type Server struct {
 	grpcServer *grpc.Server
 	backend    *backend.Backend
 
-	metrics metrics.RPCServerMetrics
+	metrics metrics.Metrics
 }
 
 // NewServer creates a new instance of Server.
-func NewServer(conf *Config, be *backend.Backend, metrics metrics.RPCServerMetrics) (*Server, error) {
+func NewServer(conf *Config, be *backend.Backend, metrics metrics.Metrics) (*Server, error) {
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			unaryInterceptor,

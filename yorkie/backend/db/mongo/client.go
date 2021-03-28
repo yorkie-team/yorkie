@@ -48,11 +48,11 @@ type Client struct {
 	config *Config
 	client *mongo.Client
 
-	metrics metrics.DBMetrics
+	metrics metrics.Metrics
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
-func Dial(conf *Config, metrics metrics.DBMetrics) (*Client, error) {
+func Dial(conf *Config, metrics metrics.Metrics) (*Client, error) {
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
 		conf.ConnectionTimeoutSec*gotime.Second,
@@ -582,7 +582,7 @@ func (c *Client) collection(
 		Collection(name, opts...)
 }
 
-// Metrics returns a metrics of DB.
-func (c *Client) Metrics() metrics.DBMetrics {
+// Metrics returns a metrics.
+func (c *Client) Metrics() metrics.Metrics {
 	return c.metrics
 }

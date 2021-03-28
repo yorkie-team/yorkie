@@ -63,7 +63,7 @@ func New(
 	conf *Config,
 	mongoConf *mongo.Config,
 	etcdConf *etcd.Config,
-	metrics metrics.DBMetrics,
+	metrics metrics.Metrics,
 ) (*Backend, error) {
 	mongoClient, err := mongo.Dial(mongoConf, metrics)
 	if err != nil {

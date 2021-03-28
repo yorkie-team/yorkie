@@ -25,6 +25,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/version"
+	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 )
 
 // Config is the configuration for creating a Server instance.
@@ -36,7 +37,8 @@ type Config struct {
 type Server struct {
 	conf          *Config
 	metricsServer *http.Server
-	metrics       *metrics
+
+	Metrics Metrics
 }
 
 // NewServer creates an instance of Server.
@@ -49,7 +51,7 @@ func NewServer(conf *Config) (*Server, error) {
 		metricsServer: &http.Server{
 			Addr: fmt.Sprintf(":%d", conf.Port),
 		},
-		metrics: newMetrics(),
+		Metrics: prometheus.NewMetrics(),
 	}, nil
 }
 
@@ -66,7 +68,7 @@ func (s *Server) listenAndServe() error {
 
 // Start registers application-specific metrics and starts the HTTP server.
 func (s *Server) Start() error {
-	s.metrics.Server.WithServerVersion(version.Version)
+	s.Metrics.WithServerVersion(version.Version)
 	return s.listenAndServe()
 }
 
@@ -82,14 +84,4 @@ func (s *Server) Shutdown(graceful bool) {
 	if err := s.metricsServer.Close(); err != nil {
 		log.Logger.Error("HTTP server Close: %v", err)
 	}
-}
-
-// RPCServerMetrics returns the RPCServer metrics.
-func (s *Server) RPCServerMetrics() RPCServerMetrics {
-	return s.metrics.RPCServer
-}
-
-// DBMetrics returns the DB metrics.
-func (s *Server) DBMetrics() DBMetrics {
-	return s.metrics.DB
 }

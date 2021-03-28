@@ -55,14 +55,14 @@ func TestMain(m *testing.M) {
 		PingTimeoutSec:       helper.MongoPingTimeoutSec,
 	}, &etcd.Config{
 		Endpoints: helper.ETCDEndpoints,
-	}, metricsServer.DBMetrics())
+	}, metricsServer.Metrics)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
 		Port: testRPCPort,
-	}, be, metricsServer.RPCServerMetrics())
+	}, be, metricsServer.Metrics)
 	if err != nil {
 		log.Fatal(err)
 	}

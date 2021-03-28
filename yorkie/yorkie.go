@@ -51,13 +51,13 @@ func New(conf *Config) (*Yorkie, error) {
 		conf.Backend,
 		conf.Mongo,
 		conf.ETCD,
-		metricsServer.DBMetrics(),
+		metricsServer.Metrics,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	rpcServer, err := rpc.NewServer(conf.RPC, be, metricsServer.RPCServerMetrics())
+	rpcServer, err := rpc.NewServer(conf.RPC, be, metricsServer.Metrics)
 	if err != nil {
 		return nil, err
 	}
