@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	gotime "time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -286,12 +287,15 @@ func (s *Server) PushPull(
 	ctx context.Context,
 	req *api.PushPullRequest,
 ) (*api.PushPullResponse, error) {
+	start := gotime.Now()
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
 
 	if pack.HasChanges() {
+		s.backend.Metrics.AddPushPullReceivedChanges(len(pack.Changes))
+
 		locker, err := s.backend.LockerMap.NewLocker(
 			ctx,
 			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
@@ -334,6 +338,9 @@ func (s *Server) PushPull(
 	if err != nil {
 		return nil, toStatusError(err)
 	}
+
+	s.backend.Metrics.AddPushPullSentChanges(len(pbChangePack.Changes))
+	s.backend.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 
 	return &api.PushPullResponse{
 		ChangePack: pbChangePack,

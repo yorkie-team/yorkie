@@ -29,7 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/yorkie/metrics"
+	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
@@ -113,7 +113,7 @@ func TestYorkie() *yorkie.Yorkie {
 		RPC: &rpc.Config{
 			Port: RPCPort,
 		},
-		Metrics: &metrics.Config{
+		Metrics: &prometheus.Config{
 			Port: MetricsPort,
 		},
 		Backend: &backend.Config{

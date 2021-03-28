@@ -27,7 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/yorkie/metrics"
+	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
@@ -47,11 +47,11 @@ const (
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPC     *rpc.Config     `json:"RPC"`
-	Metrics *metrics.Config `json:"Metrics"`
-	Mongo   *mongo.Config   `json:"Mongo"`
-	ETCD    *etcd.Config    `json:"ETCD"`
-	Backend *backend.Config `json:"Backend"`
+	RPC     *rpc.Config        `json:"RPC"`
+	Metrics *prometheus.Config `json:"Metrics"`
+	Mongo   *mongo.Config      `json:"Mongo"`
+	ETCD    *etcd.Config       `json:"ETCD"`
+	Backend *backend.Config    `json:"Backend"`
 }
 
 // RPCAddr returns the RPC address.
@@ -93,7 +93,7 @@ func newConfig(port int, metricsPort int, dbName string) *Config {
 		RPC: &rpc.Config{
 			Port: port,
 		},
-		Metrics: &metrics.Config{
+		Metrics: &prometheus.Config{
 			Port: metricsPort,
 		},
 		Backend: &backend.Config{
