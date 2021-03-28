@@ -16,6 +16,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
@@ -40,6 +41,11 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	metricsServer, err := metrics.NewServer(&metrics.Config{Port: helper.MetricsPort})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	be, err := backend.New(&backend.Config{
 		SnapshotThreshold: helper.SnapshotThreshold,
 	}, &mongo.Config{
@@ -49,14 +55,14 @@ func TestMain(m *testing.M) {
 		PingTimeoutSec:       helper.MongoPingTimeoutSec,
 	}, &etcd.Config{
 		Endpoints: helper.ETCDEndpoints,
-	})
+	}, metricsServer.Metrics)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
 		Port: testRPCPort,
-	}, be)
+	}, be, metricsServer.Metrics)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
 )
 
 var (
@@ -104,4 +105,7 @@ type DB interface {
 
 	// FindLastSnapshotInfo finds the last snapshot of the given document.
 	FindLastSnapshotInfo(ctx context.Context, docID ID) (*SnapshotInfo, error)
+
+	// Metrics returns a metrics.
+	Metrics() metrics.Metrics
 }

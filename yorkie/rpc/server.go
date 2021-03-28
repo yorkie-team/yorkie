@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	gotime "time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -40,6 +41,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
+	"github.com/yorkie-team/yorkie/yorkie/metrics"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
 )
 
@@ -60,10 +62,12 @@ type Server struct {
 	conf       *Config
 	grpcServer *grpc.Server
 	backend    *backend.Backend
+
+	metrics metrics.Metrics
 }
 
 // NewServer creates a new instance of Server.
-func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
+func NewServer(conf *Config, be *backend.Backend, metrics metrics.Metrics) (*Server, error) {
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			unaryInterceptor,
@@ -88,6 +92,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		conf:       conf,
 		grpcServer: grpc.NewServer(opts...),
 		backend:    be,
+		metrics:    metrics,
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
 	grpcprometheus.Register(rpcServer.grpcServer)
@@ -286,12 +291,16 @@ func (s *Server) PushPull(
 	ctx context.Context,
 	req *api.PushPullRequest,
 ) (*api.PushPullResponse, error) {
+	start := gotime.Now()
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
 		return nil, toStatusError(err)
 	}
 
 	if pack.HasChanges() {
+		changesCount := float64(len(pack.Changes))
+		s.metrics.AddPushpullReceivedChanges(changesCount)
+
 		locker, err := s.backend.LockerMap.NewLocker(
 			ctx,
 			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
@@ -334,6 +343,12 @@ func (s *Server) PushPull(
 	if err != nil {
 		return nil, toStatusError(err)
 	}
+
+	changesCount := float64(len(pbChangePack.Changes))
+	s.metrics.AddPushpullSentChanges(changesCount)
+
+	duration := gotime.Since(start).Seconds()
+	s.metrics.ObservePushpullResponseSeconds(duration)
 
 	return &api.PushPullResponse{
 		ChangePack: pbChangePack,

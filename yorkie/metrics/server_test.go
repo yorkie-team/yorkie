@@ -21,6 +21,7 @@ func TestMetricsServer(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.NotNil(t, server)
+		assert.NotNil(t, server.Metrics)
 		server.Shutdown(true)
 	})
 
