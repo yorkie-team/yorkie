@@ -581,3 +581,8 @@ func (c *Client) collection(
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
 }
+
+// Metrics returns a metrics of DB.
+func (c *Client) Metrics() metrics.DBMetrics {
+	return c.metrics
+}

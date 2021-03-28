@@ -26,6 +26,7 @@ type DBMetrics struct {
 	subsystem string
 
 	pushpullSnapshotDurationSeconds prometheus.Histogram
+	pushpullSnapshotBytes           prometheus.Gauge
 }
 
 // NewDBMetrics creates an instance of DBMetrics.
@@ -45,10 +46,21 @@ func (d *DBMetrics) recordMetrics() {
 		Name:      "pushpull_snapshot_duration_seconds",
 		Help:      "The creation time of snapshot in PushPull API.",
 	})
+	d.pushpullSnapshotBytes = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: d.subsystem,
+		Name:      "pushpull_snapshot_bytes",
+		Help:      "The number of bytes of Snapshot.",
+	})
 }
 
 // ObservePushpullSnapshotDurationSeconds adds the time
 // spent metric when taking snapshots.
 func (d *DBMetrics) ObservePushpullSnapshotDurationSeconds(seconds float64) {
 	d.pushpullSnapshotDurationSeconds.Observe(seconds)
+}
+
+// SetPushpullSnapshotBytes sets the snapshot byte size.
+func (d *DBMetrics) SetPushpullSnapshotBytes(bytes []byte) {
+	d.pushpullSnapshotBytes.Set(float64(len(bytes)))
 }

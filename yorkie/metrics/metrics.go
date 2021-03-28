@@ -60,4 +60,7 @@ type DBMetrics interface {
 	// ObservePushpullSnapshotDurationSeconds adds the time
 	// spent metric when taking snapshots.
 	ObservePushpullSnapshotDurationSeconds(seconds float64)
+
+	// SetPushpullSnapshotBytes sets the snapshot byte size.
+	SetPushpullSnapshotBytes(bytes []byte)
 }
