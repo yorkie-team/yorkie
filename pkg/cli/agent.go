@@ -54,7 +54,7 @@ func newAgentCmd() *cobra.Command {
 					Endpoints: etcdEndpoints,
 				}
 			}
-			//if config file is given, command-line argumentes will be overwritten
+			// If config file is given, command-line arguments will be overwritten.
 			if flagConfPath != "" {
 				parsed, err := yorkie.NewConfigFromFile(flagConfPath)
 				if err != nil {
@@ -130,7 +130,7 @@ func init() {
 		"config",
 		"c",
 		"",
-		"config path",
+		"Config path",
 	)
 	cmd.Flags().IntVar(
 		&conf.RPC.Port,
@@ -154,7 +154,7 @@ func init() {
 		&conf.Metrics.Port,
 		"metrics-port",
 		yorkie.DefaultMetricsPort,
-		"metrics port",
+		"Metrics port",
 	)
 	cmd.Flags().IntVar(
 		&mongoConnectionTimeoutSec,
@@ -171,8 +171,8 @@ func init() {
 	cmd.Flags().StringVar(
 		&conf.Mongo.YorkieDatabase,
 		"mongo-yorkie-database",
-		yorkie.DefaultMongoConnectionURI,
-		"MongoDB's connection URI",
+		yorkie.DefaultMongoYorkieDatabase,
+		"Yorkie's database name in MongoDB",
 	)
 	cmd.Flags().IntVar(
 		&mongoPingTimeoutSec,
