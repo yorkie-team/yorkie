@@ -1,6 +1,6 @@
 ---
 title: cluster-mode
-target-version: 0.1.3
+target-version: 0.1.4
 ---
 
 # Cluster Mode
