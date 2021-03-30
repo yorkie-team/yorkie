@@ -27,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 )
 
 var (
@@ -34,7 +35,11 @@ var (
 )
 
 var (
-	flagConfPath string
+	flagConfPath              string
+	mongoConnectionTimeoutSec int
+	mongoPingTimeoutSec       int
+	etcdEndpoints             []string
+	conf                      = yorkie.NewConfig()
 )
 
 func newAgentCmd() *cobra.Command {
@@ -42,7 +47,14 @@ func newAgentCmd() *cobra.Command {
 		Use:   "agent [options]",
 		Short: "Starts yorkie agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conf := yorkie.NewConfig()
+			conf.Mongo.ConnectionTimeoutSec = time.Duration(mongoConnectionTimeoutSec)
+			conf.Mongo.PingTimeoutSec = time.Duration(mongoPingTimeoutSec)
+			if etcdEndpoints != nil {
+				conf.ETCD = &etcd.Config{
+					Endpoints: etcdEndpoints,
+				}
+			}
+			// If config file is given, command-line arguments will be overwritten.
 			if flagConfPath != "" {
 				parsed, err := yorkie.NewConfigFromFile(flagConfPath)
 				if err != nil {
@@ -118,7 +130,75 @@ func init() {
 		"config",
 		"c",
 		"",
-		"config path",
+		"Config path",
 	)
+	cmd.Flags().IntVar(
+		&conf.RPC.Port,
+		"rpc-port",
+		yorkie.DefaultRPCPort,
+		"RPC port",
+	)
+	cmd.Flags().StringVar(
+		&conf.RPC.CertFile,
+		"rpc-cert-file",
+		"",
+		"RPC certification file's path",
+	)
+	cmd.Flags().StringVar(
+		&conf.RPC.CertFile,
+		"rpc-key-file",
+		"",
+		"RPC key file's path",
+	)
+	cmd.Flags().IntVar(
+		&conf.Metrics.Port,
+		"metrics-port",
+		yorkie.DefaultMetricsPort,
+		"Metrics port",
+	)
+	cmd.Flags().IntVar(
+		&mongoConnectionTimeoutSec,
+		"mongo-connection-timeout-sec",
+		yorkie.DefaultMongoConnectionTimeoutSec,
+		"Mongo DB's connection timeout in seconds",
+	)
+	cmd.Flags().StringVar(
+		&conf.Mongo.ConnectionURI,
+		"mongo-connection-uri",
+		yorkie.DefaultMongoConnectionURI,
+		"MongoDB's connection URI",
+	)
+	cmd.Flags().StringVar(
+		&conf.Mongo.YorkieDatabase,
+		"mongo-yorkie-database",
+		yorkie.DefaultMongoYorkieDatabase,
+		"Yorkie's database name in MongoDB",
+	)
+	cmd.Flags().IntVar(
+		&mongoPingTimeoutSec,
+		"mongo-ping-timeout-sec",
+		yorkie.DefaultMongoPingTimeoutSec,
+		"Mongo DB's ping timeout in seconds",
+	)
+	cmd.Flags().StringSliceVar(
+		&etcdEndpoints,
+		"etcd-endpoints",
+		nil,
+		"Comma separated list of etcd endpoints",
+	)
+	cmd.Flags().Uint64Var(
+		&conf.Backend.SnapshotThreshold,
+		"backend-snapshot-threshold",
+		yorkie.DefaultSnapshotThreshold,
+		"Threshold that determines if changes should be sent with snapshot when the number "+
+			"of changes is greater than this value.",
+	)
+	cmd.Flags().Uint64Var(
+		&conf.Backend.SnapshotInterval,
+		"backend-snapshot-interval",
+		yorkie.DefaultSnapshotInterval,
+		"Interval of changes to create a snapshot",
+	)
+
 	rootCmd.AddCommand(cmd)
 }
