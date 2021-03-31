@@ -21,13 +21,13 @@ type Metrics interface {
 	// ObservePushPullResponseSeconds adds response time metrics for PushPull API.
 	ObservePushPullResponseSeconds(seconds float64)
 
-	// AddPushPullReceivedChanges adds the number of changes metric
+	// SetPushPullReceivedChanges sets the number of changes metric
 	// included in the request pack of the PushPull API.
-	AddPushPullReceivedChanges(count int)
+	SetPushPullReceivedChanges(count int)
 
-	// AddPushPullSentChanges adds the number of changes metric
+	// SetPushPullSentChanges sets the number of changes metric
 	// included in the response pack of the PushPull API.
-	AddPushPullSentChanges(count int)
+	SetPushPullSentChanges(count int)
 
 	// ObservePushPullSnapshotDurationSeconds adds the time
 	// spent metric when taking snapshots.

@@ -294,7 +294,7 @@ func (s *Server) PushPull(
 	}
 
 	if pack.HasChanges() {
-		s.backend.Metrics.AddPushPullReceivedChanges(len(pack.Changes))
+		s.backend.Metrics.SetPushPullReceivedChanges(len(pack.Changes))
 
 		locker, err := s.backend.LockerMap.NewLocker(
 			ctx,
@@ -339,7 +339,7 @@ func (s *Server) PushPull(
 		return nil, toStatusError(err)
 	}
 
-	s.backend.Metrics.AddPushPullSentChanges(len(pbChangePack.Changes))
+	s.backend.Metrics.SetPushPullSentChanges(len(pbChangePack.Changes))
 	s.backend.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 
 	return &api.PushPullResponse{
