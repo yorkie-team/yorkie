@@ -32,8 +32,8 @@ type Metrics struct {
 	agentVersion *prometheus.GaugeVec
 
 	pushPullResponseSeconds prometheus.Histogram
-	pushPullReceivedChanges prometheus.Counter
-	pushPullSentChanges     prometheus.Counter
+	pushPullReceivedChanges prometheus.Gauge
+	pushPullSentChanges     prometheus.Gauge
 
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytes           prometheus.Gauge
@@ -54,13 +54,13 @@ func NewMetrics() *Metrics {
 			Name:      "pushpull_response_seconds",
 			Help:      "Response time of PushPull API.",
 		}),
-		pushPullReceivedChanges: promauto.NewCounter(prometheus.CounterOpts{
+		pushPullReceivedChanges: promauto.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: "rpcserver",
 			Name:      "pushpull_received_changes",
 			Help:      "The number of changes included in a request pack in PushPull API.",
 		}),
-		pushPullSentChanges: promauto.NewCounter(prometheus.CounterOpts{
+		pushPullSentChanges: promauto.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: "rpcserver",
 			Name:      "pushpull_sent_changes",
@@ -92,16 +92,16 @@ func (m *Metrics) ObservePushPullResponseSeconds(seconds float64) {
 	m.pushPullResponseSeconds.Observe(seconds)
 }
 
-// AddPushPullReceivedChanges adds the number of changes metric
+// SetPushPullReceivedChanges sets the number of changes metric
 // included in the request pack of the PushPull API.
-func (m *Metrics) AddPushPullReceivedChanges(count int) {
-	m.pushPullReceivedChanges.Add(float64(count))
+func (m *Metrics) SetPushPullReceivedChanges(count int) {
+	m.pushPullReceivedChanges.Set(float64(count))
 }
 
-// AddPushPullSentChanges adds the number of changes metric
+// SetPushPullSentChanges sets the number of changes metric
 // included in the response pack of the PushPull API.
-func (m *Metrics) AddPushPullSentChanges(count int) {
-	m.pushPullSentChanges.Add(float64(count))
+func (m *Metrics) SetPushPullSentChanges(count int) {
+	m.pushPullSentChanges.Set(float64(count))
 }
 
 // ObservePushPullSnapshotDurationSeconds adds the time
