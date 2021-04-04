@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.3] - 2021-04-04
+
+### Added
+- Add more metrics related to PushPull API: #166
+- Add command-line flags for agent command: #167
+- Support for null values: #160
+
+### Changed
+- Update Go version to 1.16: #161
+- Calculate the size of Text in UTF-16 code units: #165
+ 
+### Fixed
+- Fix invalid states of SplayTree: #162
+- Remove errors that occur when insPrev does not exist: #164
+
 ## [0.1.2] - 2021-02-14
 
 ### Added
