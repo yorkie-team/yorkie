@@ -70,7 +70,7 @@ func PushPull(
 	}
 
 	// 03. store pushed changes, document info and checkpoint of the client to DB.
-	if reqPack.HasChanges() {
+	if len(pushedChanges) > 0 {
 		if err := be.DB.StoreChangeInfos(ctx, docInfo, initialServerSeq, pushedChanges); err != nil {
 			return nil, err
 		}

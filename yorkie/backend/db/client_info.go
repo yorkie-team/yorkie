@@ -91,6 +91,8 @@ func (i *ClientInfo) DetachDocument(docID ID) error {
 	}
 
 	i.Documents[docID].Status = documentDetached
+	i.Documents[docID].ClientSeq = 0
+	i.Documents[docID].ServerSeq = 0
 	i.UpdatedAt = time.Now()
 
 	return nil

@@ -193,9 +193,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 ) error {
 	clientDocInfoKey := "documents." + docInfo.ID.String() + "."
 	clientDocInfo := clientInfo.Documents[docInfo.ID]
-	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"key": clientInfo.Key,
-	}, bson.M{
+
+	updater := bson.M{
 		"$max": bson.M{
 			clientDocInfoKey + "server_seq": clientDocInfo.ServerSeq,
 			clientDocInfoKey + "client_seq": clientDocInfo.ClientSeq,
@@ -204,7 +203,27 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			clientDocInfoKey + "status": clientDocInfo.Status,
 			"updated_at":                clientInfo.UpdatedAt,
 		},
-	})
+	}
+
+	attached, err := clientInfo.IsAttached(docInfo.ID)
+	if err != nil {
+		return err
+	}
+
+	if !attached {
+		updater = bson.M{
+			"$set": bson.M{
+				clientDocInfoKey + "server_seq": 0,
+				clientDocInfoKey + "client_seq": 0,
+				clientDocInfoKey + "status":     clientDocInfo.Status,
+				"updated_at":                    clientInfo.UpdatedAt,
+			},
+		}
+	}
+
+	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+		"key": clientInfo.Key,
+	}, updater)
 
 	if result.Err() != nil {
 		if result.Err() == mongo.ErrNoDocuments {
@@ -314,6 +333,7 @@ func (c *Client) StoreChangeInfos(
 		models,
 		options.BulkWrite().SetOrdered(true),
 	); err != nil {
+		log.Logger.Error(err)
 		return err
 	}
 
@@ -327,6 +347,7 @@ func (c *Client) StoreChangeInfos(
 		},
 	})
 	if err != nil {
+		log.Logger.Error(err)
 		return err
 	}
 	if res.MatchedCount == 0 {
