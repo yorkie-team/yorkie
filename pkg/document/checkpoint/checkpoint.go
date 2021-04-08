@@ -18,10 +18,14 @@ package checkpoint
 
 import (
 	"fmt"
+	"math"
 )
 
 // Initial is the initial value of the checkpoint.
 var Initial = New(0, 0)
+
+// Max is the max value of the checkpoint.
+var Max = New(math.MaxUint64, math.MaxUint32)
 
 // Checkpoint is used to determine the client received changes.
 type Checkpoint struct {

@@ -70,7 +70,7 @@ func PushPull(
 	}
 
 	// 03. store pushed changes, document info and checkpoint of the client to DB.
-	if reqPack.HasChanges() {
+	if len(pushedChanges) > 0 {
 		if err := be.DB.StoreChangeInfos(ctx, docInfo, initialServerSeq, pushedChanges); err != nil {
 			return nil, err
 		}
@@ -234,27 +234,18 @@ func pullChanges(
 	be *backend.Backend,
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
-	pack *change.Pack,
+	requestPack *change.Pack,
 	pushedCP *checkpoint.Checkpoint,
 	initialServerSeq uint64,
 ) (*checkpoint.Checkpoint, []*change.Change, error) {
-	fetchedChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
+	pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
-		pack.Checkpoint.ServerSeq+1,
+		requestPack.Checkpoint.ServerSeq+1,
 		initialServerSeq,
 	)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	var pulledChanges []*change.Change
-	for _, fetchedChange := range fetchedChanges {
-		if clientInfo.ID.String() == fetchedChange.ID().Actor().String() {
-			continue
-		}
-
-		pulledChanges = append(pulledChanges, fetchedChange)
 	}
 
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)

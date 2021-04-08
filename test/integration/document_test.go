@@ -46,9 +46,9 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 		doc := document.New(helper.Collection, t.Name())
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetString("k1", "k1")
+			root.SetString("k1", "v1")
 			return nil
-		}, "update k1 with k1")
+		}, "update k1 with v1")
 		assert.NoError(t, err)
 
 		err = c1.Attach(ctx, doc)
@@ -59,13 +59,16 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 
-		err = c1.Attach(ctx, doc)
-		assert.NoError(t, err)
-		assert.True(t, doc.IsAttached())
+		doc2 := document.New(helper.Collection, t.Name())
+		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+			root.SetString("k1", "v2")
+			return nil
+		}, "update k1 with v2")
 
-		err = c1.Detach(ctx, doc)
+		err = c1.Attach(ctx, doc2)
 		assert.NoError(t, err)
-		assert.False(t, doc.IsAttached())
+		assert.True(t, doc2.IsAttached())
+		assert.Equal(t, `{"k1":"v2"}`, doc2.Marshal())
 	})
 
 	t.Run("concurrent complex test", func(t *testing.T) {
