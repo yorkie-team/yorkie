@@ -22,8 +22,15 @@ COPY . .
 # Build the yorkie
 RUN make build
 
-# Stage 2: copy binary
+# Stage 2: get ca-certificates
+FROM alpine:3 as certs
+RUN apk --no-cache add ca-certificates
+
+# Stage 3: copy ca-certificates and binary
 FROM debian:buster-slim
+
+# Get and place ca-certificates to /etc/ssl/certs
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 # Get and place binary to /bin
 COPY --from=builder /app/bin/yorkie /bin/
