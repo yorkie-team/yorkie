@@ -28,11 +28,8 @@ FROM debian:buster-slim
 # Get and place binary to /bin
 COPY --from=builder /app/bin/yorkie /bin/
 
-# Set default config (overridable via mounting to /config.json)
-COPY --from=builder /app/yorkie/config.sample.json /config.json
-
 # Expose port 11101, 11102 to the outside world
-EXPOSE 11101
-EXPOSE 11102
+EXPOSE 11101 11102
 
-ENTRYPOINT ["yorkie", "agent", "-c", "/config.json"]
+# Define default entrypoint.
+ENTRYPOINT ["yorkie"]
