@@ -1,0 +1,8 @@
+.git
+.gitignore
+.github
+.golangci.yml
+*.md
+design
+LICENSE
+test
