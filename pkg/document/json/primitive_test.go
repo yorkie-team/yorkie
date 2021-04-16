@@ -41,7 +41,7 @@ func TestPrimitive(t *testing.T) {
 	t.Run("creation test", func(t *testing.T) {
 		for _, test := range tests {
 			prim := json.NewPrimitive(test.value, time.InitialTicket)
-			assert.Equal(t, prim.ValueType(), prim.ValueType())
+			assert.Equal(t, prim.ValueType(), test.valueType)
 			assert.Equal(t, prim.Value(), json.ValueFromBytes(prim.ValueType(), prim.Bytes()))
 			assert.Equal(t, prim.Marshal(), test.marshal)
 		}
