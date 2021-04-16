@@ -29,7 +29,7 @@ import (
 )
 
 func TestGarbageCollection(t *testing.T) {
-	clients := getActivatedClients(t, 2)
+	clients := createActivatedClients(t, 2)
 	c1 := clients[0]
 	c2 := clients[1]
 	defer func() {

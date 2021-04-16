@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -82,7 +83,16 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 	}
 }
 
-func getActivatedClients(t *testing.T, n int) (clients []*client.Client) {
+func createConn() (*grpc.ClientConn, error) {
+	conn, err := grpc.Dial(testYorkie.RPCAddr(), grpc.WithInsecure())
+	if err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
+
+func createActivatedClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
 			testYorkie.RPCAddr(),
