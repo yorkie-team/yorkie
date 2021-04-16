@@ -21,11 +21,11 @@ package integration
 import (
 	"context"
 	"fmt"
-	"google.golang.org/grpc"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"

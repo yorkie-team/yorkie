@@ -88,8 +88,8 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	}
 
 	grpcServer := grpc.NewServer(opts...)
-	hsrv := health.NewServer()
-	healthpb.RegisterHealthServer(grpcServer, hsrv)
+	healthServer := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, healthServer)
 
 	rpcServer := &Server{
 		conf:       conf,
