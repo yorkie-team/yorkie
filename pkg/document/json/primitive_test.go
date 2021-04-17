@@ -17,7 +17,9 @@
 package json_test
 
 import (
+	"math"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -33,17 +35,32 @@ func TestPrimitive(t *testing.T) {
 	}{
 		{nil, json.Null, "null"},
 		{false, json.Boolean, "false"},
+		{true, json.Boolean, "true"},
 		{0, json.Integer, "0"},
+		{int64(0), json.Long, "0"},
+		{float64(0), json.Double, "0.000000"},
 		{"0", json.String, `"0"`},
 		{[]byte{}, json.Bytes, `""`},
+		{gotime.Unix(0, 0), json.Date, gotime.Unix(0, 0).Format(gotime.RFC3339)},
 	}
 
-	t.Run("creation test", func(t *testing.T) {
+	t.Run("creation and deep copy test", func(t *testing.T) {
 		for _, test := range tests {
 			prim := json.NewPrimitive(test.value, time.InitialTicket)
-			assert.Equal(t, prim.ValueType(), prim.ValueType())
+			assert.Equal(t, prim.ValueType(), test.valueType)
 			assert.Equal(t, prim.Value(), json.ValueFromBytes(prim.ValueType(), prim.Bytes()))
 			assert.Equal(t, prim.Marshal(), test.marshal)
+
+			copied := prim.DeepCopy()
+			assert.Equal(t, prim.CreatedAt(), copied.CreatedAt())
+			assert.Equal(t, prim.MovedAt(), copied.MovedAt())
+			assert.Equal(t, prim.Marshal(), copied.Marshal())
+
+			actorID, _ := time.ActorIDFromHex("0")
+			prim.SetMovedAt(time.NewTicket(0, 0, actorID))
+			assert.NotEqual(t, prim.MovedAt(), copied.MovedAt())
 		}
+		longPrim := json.NewPrimitive(math.MaxInt32+1, time.InitialTicket)
+		assert.Equal(t, longPrim.ValueType(), json.Long)
 	})
 }
