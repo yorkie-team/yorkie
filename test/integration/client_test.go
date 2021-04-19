@@ -20,9 +20,11 @@ package integration
 
 import (
 	"context"
-	"github.com/stretchr/testify/assert"
-	"github.com/yorkie-team/yorkie/client"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/yorkie-team/yorkie/client"
 )
 
 func TestClient(t *testing.T) {
