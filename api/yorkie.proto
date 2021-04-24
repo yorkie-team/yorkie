@@ -25,6 +25,7 @@ service Yorkie {
     rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
     rpc WatchDocuments (WatchDocumentsRequest) returns (stream WatchDocumentsResponse) {}
     rpc PushPull (PushPullRequest) returns (PushPullResponse) {}
+    rpc UpdateMetadata (UpdateMetadataRequest) returns (UpdateMetadataResponse) {}
 }
 
 /////////////////////////////////////////
@@ -109,6 +110,14 @@ message PushPullResponse {
     bytes client_id = 1;
     ChangePack change_pack = 2;
 }
+
+message UpdateMetadataRequest {
+    RequestHeader header = 1;
+    Client client = 2;
+    repeated DocumentKey document_keys = 3;
+}
+
+message UpdateMetadataResponse {}
 
 /////////////////////////////////////////
 // Messages for ChangePack             //
@@ -362,4 +371,5 @@ enum EventType {
     DOCUMENTS_CHANGED = 0;
     DOCUMENTS_WATCHED = 1;
     DOCUMENTS_UNWATCHED = 2;
+    CLIENT_CHANGED = 3;
 }

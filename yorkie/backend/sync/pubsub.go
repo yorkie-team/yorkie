@@ -78,6 +78,11 @@ func (s *Subscription) SubscriberID() string {
 	return s.subscriber.ID.String()
 }
 
+// UpdateMetadata updates metadata of subscriber.
+func (s *Subscription) UpdateMetadata(subscriber types.Client) {
+	s.subscriber.Metadata = subscriber.Metadata
+}
+
 // Close closes all resources of this Subscription.
 func (s *Subscription) Close() {
 	if s.closed {
@@ -101,4 +106,8 @@ type PubSub interface {
 
 	// Publish publishes the given event to the given Topic.
 	Publish(publisherID *time.ActorID, topic string, event DocEvent)
+
+	// UpdateSubscriber updates the subscriber's metadata information across topics
+	// that contain the subscriber. And it returns the updated topics.
+	UpdateSubscriber(subscriber types.Client, topics []string) ([]string, error)
 }

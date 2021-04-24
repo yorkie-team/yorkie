@@ -163,3 +163,44 @@ func (m *PubSub) Publish(
 
 	log.Logger.Debugf(`Publish(%s,%s) End`, event.DocKey, publisherID.String())
 }
+
+// UpdateSubscriber updates the subscriber's metadata information across topics
+// that contain the subscriber. And it returns the updated topics.
+func (m *PubSub) UpdateSubscriber(
+	subscriber types.Client,
+	topics []string,
+) ([]string, error) {
+	if len(topics) == 0 {
+		return nil, sync.ErrEmptyTopics
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	log.Logger.Debugf(
+		`UpdateSubscriber(%s,%s) Start`,
+		topics[0],
+		subscriber.ID.String(),
+	)
+
+	var updatedTopics []string
+	for _, topic := range topics {
+		if subs, ok := m.subscriptionsMap[topic]; ok {
+			for _, sub := range subs.Map() {
+				if sub.Subscriber().ID.Compare(subscriber.ID) == 0 {
+					updatedTopics = append(updatedTopics, topic)
+					sub.UpdateMetadata(subscriber)
+					break
+				}
+			}
+		}
+	}
+
+	log.Logger.Debugf(
+		`UpdateSubscriber(%s,%s) End`,
+		topics[0],
+		subscriber.ID.String(),
+	)
+
+	return updatedTopics, nil
+}

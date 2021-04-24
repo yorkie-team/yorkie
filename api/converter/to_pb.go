@@ -131,6 +131,8 @@ func ToEventType(eventType types.EventType) (api.EventType, error) {
 		return api.EventType_DOCUMENTS_WATCHED, nil
 	case types.DocumentsUnwatchedEvent:
 		return api.EventType_DOCUMENTS_UNWATCHED, nil
+	case types.ClientChangedEvent:
+		return api.EventType_CLIENT_CHANGED, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}

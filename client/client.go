@@ -19,7 +19,6 @@ package client
 import (
 	"context"
 	"errors"
-
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -401,6 +400,35 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 	}()
 
 	return rch
+}
+
+// UpdateMetadata updates the client's metadata.
+// If the client is active and there is a attached document,
+// it notifies other clients of the changed client's information.
+func (c *Client) UpdateMetadata(ctx context.Context, metadata map[string]string) error {
+	if c.IsActive() {
+		var keys []*key.Key
+		if len(c.attachedDocs) > 0 {
+			for _, doc := range c.attachedDocs {
+				keys = append(keys, doc.Key())
+			}
+			_, err := c.client.UpdateMetadata(ctx, &api.UpdateMetadataRequest{
+				Client: converter.ToClient(types.Client{
+					ID:       c.id,
+					Metadata: metadata,
+				}),
+				DocumentKeys: converter.ToDocumentKeys(keys...),
+			})
+			if err != nil {
+				log.Logger.Error(err)
+				return err
+			}
+		}
+	}
+
+	c.metadata = metadata
+
+	return nil
 }
 
 // IsActive returns whether this client is active or not.

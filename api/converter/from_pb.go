@@ -135,6 +135,8 @@ func FromEventType(pbEventType api.EventType) (types.EventType, error) {
 		return types.DocumentsWatchedEvent, nil
 	case api.EventType_DOCUMENTS_UNWATCHED:
 		return types.DocumentsUnwatchedEvent, nil
+	case api.EventType_CLIENT_CHANGED:
+		return types.ClientChangedEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbEventType, ErrUnsupportedEventType)
 }

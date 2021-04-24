@@ -353,6 +353,46 @@ func (s *Server) PushPull(
 	}, nil
 }
 
+// UpdateMetadata updates the Subscriber information
+// corresponding to the client whose metadata is to be changed,
+// and notifies other Subscribers of the changed client information.
+func (s *Server) UpdateMetadata(
+	_ context.Context,
+	req *api.UpdateMetadataRequest,
+) (*api.UpdateMetadataResponse, error) {
+	client, err := converter.FromClient(req.Client)
+	if err != nil {
+		return nil, err
+	}
+
+	var docKeys []string
+	for _, docKey := range converter.FromDocumentKeys(req.DocumentKeys) {
+		docKeys = append(docKeys, docKey.BSONKey())
+	}
+
+	if len(docKeys) > 0 {
+		updatedDocKeys, err := s.backend.PubSub.UpdateSubscriber(*client, docKeys)
+		if err != nil {
+			log.Logger.Error(err)
+			return nil, err
+		}
+
+		for _, docKey := range updatedDocKeys {
+			s.backend.PubSub.Publish(
+				client.ID,
+				docKey,
+				sync.DocEvent{
+					Type:      pkgtypes.ClientChangedEvent,
+					DocKey:    docKey,
+					Publisher: *client,
+				},
+			)
+		}
+	}
+
+	return &api.UpdateMetadataResponse{}, nil
+}
+
 // WatchDocuments connects the stream to deliver events from the given documents
 // to the requesting client.
 func (s *Server) WatchDocuments(
