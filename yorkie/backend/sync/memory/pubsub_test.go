@@ -69,4 +69,42 @@ func TestPubSub(t *testing.T) {
 			assert.Len(t, subs[t.Name()], i+1)
 		}
 	})
+
+	t.Run("update subscriber test", func(t *testing.T) {
+		pubsub := memory.NewPubSub()
+
+		// empty topic error
+		_, err := pubsub.UpdateSubscriber(
+			actorA,
+			[]string{},
+		)
+		assert.ErrorIs(t, sync.ErrEmptyTopics, err)
+
+		// when there is no topic subscribed
+		updatedTopics, err := pubsub.UpdateSubscriber(
+			actorA,
+			[]string{"ab"},
+		)
+		assert.NoError(t, err)
+		assert.Empty(t, updatedTopics)
+
+		// update metadata
+		actor := types.Client{
+			ID:       &time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2},
+			Metadata: map[string]string{"name": "actor"},
+		}
+
+		topics := []string{t.Name()}
+		sub, _, err := pubsub.Subscribe(actor, topics)
+		assert.NoError(t, err)
+
+		actor.Metadata = map[string]string{"name": "Yorkie"}
+		updatedTopics, err = pubsub.UpdateSubscriber(
+			actor,
+			[]string{t.Name()},
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, updatedTopics, topics)
+		assert.Equal(t, actor.Metadata, sub.Subscriber().Metadata)
+	})
 }
