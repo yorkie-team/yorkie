@@ -16,6 +16,6 @@ const (
 	// unwatched by other clients.
 	DocumentsUnwatchedEvent EventType = "documents-unwatched"
 
-	// ClientChangeEvent is an event that occurs when changed client information.
+	// ClientChangedEvent is an event that occurs when changed client information.
 	ClientChangedEvent EventType = "client-changed"
 )
