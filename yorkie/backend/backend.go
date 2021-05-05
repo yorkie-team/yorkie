@@ -78,9 +78,12 @@ func New(
 		if err != nil {
 			return nil, err
 		}
+		if err := etcdClient.Initialize(); err != nil {
+			return nil, err
+		}
+
 		lockerMap = etcdClient
-		// TODO(hackerwins): We need to replace pubsub with etcdClient.
-		pubSub = memory.NewPubSub()
+		pubSub = etcdClient
 	} else {
 		lockerMap = memory.NewLockerMap()
 		pubSub = memory.NewPubSub()

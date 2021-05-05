@@ -37,7 +37,7 @@ import (
 var testYorkie *yorkie.Yorkie
 
 func TestMain(m *testing.M) {
-	y := helper.TestYorkie()
+	y := helper.TestYorkie(0)
 	if err := y.Start(); err != nil {
 		log.Logger.Fatal(err)
 	}

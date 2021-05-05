@@ -435,7 +435,9 @@ func (s *Server) listenAndServeGRPC() error {
 		log.Logger.Infof("serving API on %d", s.conf.Port)
 
 		if err := s.grpcServer.Serve(lis); err != nil {
-			log.Logger.Error(err)
+			if err != grpc.ErrServerStopped {
+				log.Logger.Error(err)
+			}
 		}
 	}()
 

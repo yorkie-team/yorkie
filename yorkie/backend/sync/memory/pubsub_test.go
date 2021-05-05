@@ -32,8 +32,8 @@ func TestPubSub(t *testing.T) {
 	actorA := types.Client{ID: &time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
 	actorB := types.Client{ID: &time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 
-	t.Run("subscribe publish test", func(t *testing.T) {
-		pubsub := memory.NewPubSub()
+	t.Run("publish subscribe test", func(t *testing.T) {
+		pubSub := memory.NewPubSub()
 		event := sync.DocEvent{
 			Type:      types.DocumentsWatchedEvent,
 			DocKey:    t.Name(),
@@ -41,10 +41,10 @@ func TestPubSub(t *testing.T) {
 		}
 
 		// subscribe the topic by actorA
-		subA, _, err := pubsub.Subscribe(actorA, []string{t.Name()})
+		subA, _, err := pubSub.Subscribe(actorA, []string{t.Name()})
 		assert.NoError(t, err)
 		defer func() {
-			pubsub.Unsubscribe([]string{t.Name()}, subA)
+			pubSub.Unsubscribe([]string{t.Name()}, subA)
 		}()
 
 		var wg gosync.WaitGroup
@@ -56,15 +56,15 @@ func TestPubSub(t *testing.T) {
 		}()
 
 		// publish the event to the topic by actorB
-		pubsub.Publish(actorB.ID, t.Name(), event)
+		pubSub.Publish(actorB.ID, t.Name(), event)
 		wg.Wait()
 	})
 
 	t.Run("subscriptions map test", func(t *testing.T) {
-		pubsub := memory.NewPubSub()
+		pubSub := memory.NewPubSub()
 
 		for i := 0; i < 5; i++ {
-			_, subs, err := pubsub.Subscribe(actorA, []string{t.Name()})
+			_, subs, err := pubSub.Subscribe(actorA, []string{t.Name()})
 			assert.NoError(t, err)
 			assert.Len(t, subs[t.Name()], i+1)
 		}
