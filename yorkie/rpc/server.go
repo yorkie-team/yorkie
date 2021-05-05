@@ -357,7 +357,7 @@ func (s *Server) PushPull(
 // corresponding to the client whose metadata is to be changed,
 // and notifies other Subscribers of the changed client information.
 func (s *Server) UpdateMetadata(
-	_ context.Context,
+	ctx context.Context,
 	req *api.UpdateMetadataRequest,
 ) (*api.UpdateMetadataResponse, error) {
 	client, err := converter.FromClient(req.Client)
@@ -371,6 +371,24 @@ func (s *Server) UpdateMetadata(
 	}
 
 	if len(docKeys) > 0 {
+		locker, err := s.backend.LockerMap.NewLocker(
+			ctx,
+			sync.NewKey(fmt.Sprintf("updateMetadata-%s", client.ID)),
+		)
+		if err != nil {
+			return nil, toStatusError(err)
+		}
+
+		if err := locker.Lock(ctx); err != nil {
+			log.Logger.Error(err)
+			return nil, toStatusError(err)
+		}
+		defer func() {
+			if err := locker.Unlock(ctx); err != nil {
+				log.Logger.Error(err)
+			}
+		}()
+
 		updatedDocKeys, err := s.backend.PubSub.UpdateSubscriber(*client, docKeys)
 		if err != nil {
 			log.Logger.Error(err)

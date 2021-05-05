@@ -1,4 +1,5 @@
 // +build integration
+// +build !race
 
 /*
  * Copyright 2020 The Yorkie Authors. All rights reserved.
@@ -21,6 +22,7 @@ package integration
 import (
 	"context"
 	"io"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -142,5 +144,80 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, err)
 
 		wg.Wait()
+	})
+
+	t.Run("update metadata at the same time test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clients := createActivatedClients(t, 2)
+		c1 := clients[0]
+		c2 := clients[1]
+		defer func() {
+			cleanupClients(t, clients)
+		}()
+
+		doc := document.New(helper.Collection, t.Name())
+		err := c1.Attach(ctx, doc)
+		assert.NoError(t, err)
+
+		err = c2.Attach(ctx, doc)
+		assert.NoError(t, err)
+
+		wg := sync.WaitGroup{}
+		rch := c1.Watch(ctx, doc)
+
+		var expectedChan = make(chan map[string]string)
+		var actualChan = make(chan map[string]string)
+		var expected map[string]string
+		var actual map[string]string
+
+		go func() {
+			for {
+				select {
+				case e := <-expectedChan:
+					expected = e
+					wg.Done()
+				case a := <-actualChan:
+					actual = a
+					wg.Done()
+				}
+			}
+		}()
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					assert.Fail(t, "unexpected ctx done")
+				case resp := <-rch:
+					errCode := status.Code(resp.Err)
+					if resp.Err == io.EOF || errCode == codes.Canceled || errCode == codes.Unavailable {
+						return
+					}
+					assert.NoError(t, resp.Err)
+
+					if resp.EventType == types.ClientChangedEvent {
+						actualChan <- resp.Publisher.Metadata
+					}
+				}
+			}
+		}()
+
+		c2.Watch(ctx, doc)
+
+		for i := 0; i < 5; i++ {
+			wg.Add(2)
+			go func(idx int) {
+				metadata := map[string]string{
+					"idx": strconv.Itoa(idx),
+				}
+				err = c2.UpdateMetadata(ctx, metadata)
+				assert.NoError(t, err)
+				expectedChan <- metadata
+			}(i)
+		}
+
+		wg.Wait()
+
+		assert.Equal(t, expected, actual)
 	})
 }
