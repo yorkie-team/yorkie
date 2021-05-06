@@ -34,17 +34,17 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie"
 )
 
-var testYorkie *yorkie.Yorkie
+var defaultYorkie *yorkie.Yorkie
 
 func TestMain(m *testing.M) {
 	y := helper.TestYorkie(0)
 	if err := y.Start(); err != nil {
 		log.Logger.Fatal(err)
 	}
-	testYorkie = y
+	defaultYorkie = y
 	code := m.Run()
-	if testYorkie != nil {
-		if err := testYorkie.Shutdown(true); err != nil {
+	if defaultYorkie != nil {
+		if err := defaultYorkie.Shutdown(true); err != nil {
 			log.Logger.Error(err)
 		}
 	}
@@ -84,7 +84,7 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 }
 
 func createConn() (*grpc.ClientConn, error) {
-	conn, err := grpc.Dial(testYorkie.RPCAddr(), grpc.WithInsecure())
+	conn, err := grpc.Dial(defaultYorkie.RPCAddr(), grpc.WithInsecure())
 	if err != nil {
 		return nil, err
 	}
@@ -95,16 +95,19 @@ func createConn() (*grpc.ClientConn, error) {
 func createActivatedClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
-			testYorkie.RPCAddr(),
+			defaultYorkie.RPCAddr(),
 			client.Option{Metadata: map[string]string{
 				"name": fmt.Sprintf("name-%d", i),
 			}},
 		)
 		assert.NoError(t, err)
+
 		err = c.Activate(context.Background())
 		assert.NoError(t, err)
+
 		clients = append(clients, c)
 	}
+
 	return
 }
 
@@ -112,6 +115,7 @@ func cleanupClients(t *testing.T, clients []*client.Client) {
 	for _, c := range clients {
 		err := c.Deactivate(context.Background())
 		assert.NoError(t, err)
+
 		err = c.Close()
 		assert.NoError(t, err)
 	}

@@ -3,6 +3,7 @@ package rpc_test
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -31,6 +32,7 @@ var (
 	invalidClientID, _ = hex.DecodeString("invalid")
 
 	testRPCServer *rpc.Server
+	testRPCAddr   = fmt.Sprintf("localhost:%d", testRPCPort)
 
 	invalidChangePack = &api.ChangePack{
 		DocumentKey: &api.DocumentKey{
@@ -50,7 +52,7 @@ func TestMain(m *testing.M) {
 		PingTimeoutSec:       helper.MongoPingTimeoutSec,
 	}, &etcd.Config{
 		Endpoints: helper.ETCDEndpoints,
-	}, prometheus.NewMetrics())
+	}, testRPCAddr, prometheus.NewMetrics())
 	if err != nil {
 		log.Fatal(err)
 	}

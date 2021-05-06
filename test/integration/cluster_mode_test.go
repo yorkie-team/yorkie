@@ -19,22 +19,30 @@
 package integration
 
 import (
-	"github.com/stretchr/testify/assert"
-	"github.com/yorkie-team/yorkie/test/helper"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestClusterMode(t *testing.T) {
-	t.Run("agent list test", func(t *testing.T) {
+	t.Run("member list test", func(t *testing.T) {
 		agentA := helper.TestYorkie(100)
 		agentB := helper.TestYorkie(200)
 
 		assert.NoError(t, agentA.Start())
 		assert.NoError(t, agentB.Start())
 
-		defer func() {
-			assert.NoError(t, agentA.Shutdown(true))
-			assert.NoError(t, agentB.Shutdown(true))
-		}()
+		time.Sleep(time.Second)
+
+		assert.Len(t, defaultYorkie.Members(), 3)
+		assert.Equal(t, agentA.Members(), agentB.Members())
+
+		assert.NoError(t, agentA.Shutdown(true))
+		assert.Len(t, defaultYorkie.Members(), 2)
+		assert.NoError(t, agentB.Shutdown(true))
+		assert.Len(t, defaultYorkie.Members(), 1)
 	})
 }

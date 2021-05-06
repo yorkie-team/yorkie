@@ -17,7 +17,11 @@
 package backend
 
 import (
+	"os"
 	gosync "sync"
+	"time"
+
+	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
@@ -41,7 +45,8 @@ type Config struct {
 // Backend manages Yorkie's remote states such as data store, distributed lock
 // and etc. And it has the server status like the configuration.
 type Backend struct {
-	Config *Config
+	Config    *Config
+	agentInfo *sync.AgentInfo
 
 	DB        db.DB
 	LockerMap sync.LockerMap
@@ -64,8 +69,21 @@ func New(
 	conf *Config,
 	mongoConf *mongo.Config,
 	etcdConf *etcd.Config,
+	rpcAddr string,
 	met metrics.Metrics,
 ) (*Backend, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+
+	agentInfo := &sync.AgentInfo{
+		ID:        xid.New().String(),
+		Hostname:  hostname,
+		RPCAddr:   rpcAddr,
+		UpdatedAt: time.Now(),
+	}
+
 	mongoClient, err := mongo.Dial(mongoConf)
 	if err != nil {
 		return nil, err
@@ -74,7 +92,7 @@ func New(
 	var pubSub sync.PubSub
 	var lockerMap sync.LockerMap
 	if etcdConf != nil {
-		etcdClient, err := etcd.Dial(etcdConf)
+		etcdClient, err := etcd.Dial(etcdConf, agentInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -86,11 +104,12 @@ func New(
 		pubSub = etcdClient
 	} else {
 		lockerMap = memory.NewLockerMap()
-		pubSub = memory.NewPubSub()
+		pubSub = memory.NewPubSub(agentInfo)
 	}
 
 	return &Backend{
 		Config:    conf,
+		agentInfo: agentInfo,
 		DB:        mongoClient,
 		LockerMap: lockerMap,
 		PubSub:    pubSub,
@@ -133,4 +152,9 @@ func (b *Backend) AttachGoroutine(f func()) {
 		defer b.wg.Done()
 		f()
 	}()
+}
+
+// Members returns the members of this cluster.
+func (b *Backend) Members() map[string]*sync.AgentInfo {
+	return b.PubSub.Members()
 }

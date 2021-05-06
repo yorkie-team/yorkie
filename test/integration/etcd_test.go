@@ -31,7 +31,7 @@ func TestETCD(t *testing.T) {
 	t.Run("new and close test", func(t *testing.T) {
 		cli, err := etcd.Dial(&etcd.Config{
 			Endpoints: helper.ETCDEndpoints,
-		})
+		}, nil)
 		assert.NoError(t, err)
 
 		defer func() {

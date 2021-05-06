@@ -36,7 +36,7 @@ func TestETCDStress(t *testing.T) {
 	t.Run("lock/unlock stress test", func(t *testing.T) {
 		cli, err := etcd.Dial(&etcd.Config{
 			Endpoints: helper.ETCDEndpoints,
-		})
+		}, nil)
 		assert.NoError(t, err)
 		defer func() {
 			err := cli.Close()

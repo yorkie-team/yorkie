@@ -63,15 +63,17 @@ func (s *subscriptions) Len() int {
 // PubSub is the memory implementation of PubSub, used for single agent or
 // tests.
 type PubSub struct {
-	mu               *gosync.RWMutex
-	subscriptionsMap map[string]*subscriptions
+	AgentInfo          *sync.AgentInfo
+	subscriptionsMapMu *gosync.RWMutex
+	subscriptionsMap   map[string]*subscriptions
 }
 
 // NewPubSub creates an instance of PubSub.
-func NewPubSub() *PubSub {
+func NewPubSub(info *sync.AgentInfo) *PubSub {
 	return &PubSub{
-		mu:               &gosync.RWMutex{},
-		subscriptionsMap: make(map[string]*subscriptions),
+		AgentInfo:          info,
+		subscriptionsMapMu: &gosync.RWMutex{},
+		subscriptionsMap:   make(map[string]*subscriptions),
 	}
 }
 
@@ -84,8 +86,8 @@ func (m *PubSub) Subscribe(
 		return nil, nil, sync.ErrEmptyTopics
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.subscriptionsMapMu.Lock()
+	defer m.subscriptionsMapMu.Unlock()
 
 	log.Logger.Debugf(
 		`Subscribe(%s,%s) Start`,
@@ -119,8 +121,8 @@ func (m *PubSub) Subscribe(
 
 // Unsubscribe unsubscribes the given topics.
 func (m *PubSub) Unsubscribe(topics []string, sub *sync.Subscription) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.subscriptionsMapMu.Lock()
+	defer m.subscriptionsMapMu.Unlock()
 
 	log.Logger.Debugf(`Unsubscribe(%s,%s) Start`, topics[0], sub.SubscriberID())
 
@@ -133,6 +135,8 @@ func (m *PubSub) Unsubscribe(topics []string, sub *sync.Subscription) {
 			}
 		}
 	}
+	sub.Close()
+
 	log.Logger.Debugf(`Unsubscribe(%s,%s) End`, topics[0], sub.SubscriberID())
 }
 
@@ -142,8 +146,8 @@ func (m *PubSub) Publish(
 	topic string,
 	event sync.DocEvent,
 ) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.subscriptionsMapMu.RLock()
+	defer m.subscriptionsMapMu.RUnlock()
 
 	log.Logger.Debugf(`Publish(%s,%s) Start`, event.DocKey, publisherID.String())
 
@@ -162,4 +166,11 @@ func (m *PubSub) Publish(
 	}
 
 	log.Logger.Debugf(`Publish(%s,%s) End`, event.DocKey, publisherID.String())
+}
+
+// Members returns the members of this cluster.
+func (m *PubSub) Members() map[string]*sync.AgentInfo {
+	members := make(map[string]*sync.AgentInfo)
+	members[m.AgentInfo.ID] = m.AgentInfo
+	return members
 }

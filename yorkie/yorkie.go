@@ -17,10 +17,11 @@
 package yorkie
 
 import (
-	"sync"
+	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
@@ -29,7 +30,7 @@ import (
 // The agent receives changes from the client, stores them in the repository,
 // and propagates the changes to clients who subscribe to the document.
 type Yorkie struct {
-	lock sync.Mutex
+	lock gosync.Mutex
 
 	conf          *Config
 	backend       *backend.Backend
@@ -48,6 +49,7 @@ func New(conf *Config) (*Yorkie, error) {
 		conf.Backend,
 		conf.Mongo,
 		conf.ETCD,
+		conf.RPCAddr(),
 		met,
 	)
 	if err != nil {
@@ -119,4 +121,9 @@ func (r *Yorkie) ShutdownCh() <-chan struct{} {
 // RPCAddr returns the address of the RPC.
 func (r *Yorkie) RPCAddr() string {
 	return r.conf.RPCAddr()
+}
+
+// Members returns the members of this cluster.
+func (r *Yorkie) Members() map[string]*sync.AgentInfo {
+	return r.backend.Members()
 }

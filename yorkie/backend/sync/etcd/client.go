@@ -18,8 +18,7 @@ package etcd
 
 import (
 	"context"
-	"fmt"
-	"os"
+	gosync "sync"
 	"time"
 
 	"go.etcd.io/etcd/clientv3"
@@ -39,11 +38,6 @@ const (
 	DefaultLockLeaseTimeSec = 30
 )
 
-var (
-	putAgentPeriod = 5 * time.Second
-	agentValueTTL  = 7 * time.Second
-)
-
 // Config is the configuration for creating a Client instance.
 type Config struct {
 	Endpoints      []string      `json:"Endpoints"`
@@ -56,14 +50,19 @@ type Config struct {
 
 // Client is a client that connects to ETCD.
 type Client struct {
-	config  *Config
-	client  *clientv3.Client
-	pubSub  *memory.PubSub
+	config *Config
+	client *clientv3.Client
+
+	pubSub *memory.PubSub
+
+	memberMapMu *gosync.RWMutex
+	memberMap   map[string]*sync.AgentInfo
+
 	closing chan struct{}
 }
 
 // newClient creates a new instance of Client.
-func newClient(conf *Config) *Client {
+func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 	if conf.DialTimeoutSec == 0 {
 		conf.DialTimeoutSec = DefaultDialTimeoutSec
 	}
@@ -72,15 +71,20 @@ func newClient(conf *Config) *Client {
 	}
 
 	return &Client{
-		config:  conf,
-		pubSub:  memory.NewPubSub(),
+		config: conf,
+
+		pubSub: memory.NewPubSub(agentInfo),
+
+		memberMapMu: &gosync.RWMutex{},
+		memberMap:   make(map[string]*sync.AgentInfo),
+
 		closing: make(chan struct{}),
 	}
 }
 
 // Dial creates a new instance of Client and dials the given ETCD.
-func Dial(conf *Config) (*Client, error) {
-	c := newClient(conf)
+func Dial(conf *Config, agentInfo *sync.AgentInfo) (*Client, error) {
+	c := newClient(conf, agentInfo)
 
 	if err := c.Dial(); err != nil {
 		return nil, err
@@ -112,6 +116,11 @@ func (c *Client) Dial() error {
 // Close all resources of this client.
 func (c *Client) Close() error {
 	close(c.closing)
+
+	if err := c.removeAgent(context.Background()); err != nil {
+		log.Logger.Error(err)
+	}
+
 	return c.client.Close()
 }
 
@@ -134,56 +143,4 @@ func (c *Client) NewLocker(
 		session,
 		concurrency.NewMutex(session, key.String()),
 	}, nil
-}
-
-// Initialize put this agent to etcd with TTL periodically.
-func (c *Client) Initialize() error {
-	hostname, err := os.Hostname()
-	if err != nil {
-		return err
-	}
-
-	go func() {
-		for {
-			if err := c.putAgent(hostname); err != nil {
-				log.Logger.Error(err)
-			}
-
-			select {
-			case <-time.After(putAgentPeriod):
-			case <-c.closing:
-				return
-			}
-		}
-	}()
-
-	go c.watchAgents()
-
-	return nil
-}
-
-func (c *Client) putAgent(hostname string) error {
-	ctx := context.Background()
-	grantResponse, err := c.client.Grant(ctx, int64(agentValueTTL))
-	if err != nil {
-		return fmt.Errorf("grant %s: %w", hostname, err)
-	}
-
-	_, err = c.client.Put(ctx, hostname, time.Now().String(), clientv3.WithLease(grantResponse.ID))
-	if err != nil {
-		return fmt.Errorf("put %s: %w", fmt.Sprintf("/agents/%s", hostname), err)
-	}
-	return nil
-}
-
-func (c *Client) watchAgents() {
-	watchCh := c.client.Watch(context.Background(), "/agents", clientv3.WithPrefix())
-	for {
-		select {
-		case watchResponse := <-watchCh:
-			fmt.Printf("%v", watchResponse)
-		case <-c.closing:
-			return
-		}
-	}
 }

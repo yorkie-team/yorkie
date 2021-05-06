@@ -44,4 +44,7 @@ func (c *Client) Publish(
 	c.pubSub.Publish(publisherID, topic, event)
 
 	// TODO(hackerwins): broadcast the event to other agents.
+	// for _, member := range c.Members() {
+	// member.RPCAddr
+	// }
 }
