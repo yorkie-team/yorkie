@@ -29,50 +29,52 @@ const (
 
 // Metrics manages the metric information that Yorkie is trying to measure.
 type Metrics struct {
+	registry *prometheus.Registry
+
 	agentVersion *prometheus.GaugeVec
 
-	pushPullResponseSeconds prometheus.Histogram
-	pushPullReceivedChanges prometheus.Gauge
-	pushPullSentChanges     prometheus.Gauge
-
+	pushPullResponseSeconds         prometheus.Histogram
+	pushPullReceivedChanges         prometheus.Gauge
+	pushPullSentChanges             prometheus.Gauge
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytes           prometheus.Gauge
 }
 
 // NewMetrics creates a new instance of Metrics.
 func NewMetrics() *Metrics {
+	reg := prometheus.NewRegistry()
 	metrics := &Metrics{
-		agentVersion: promauto.NewGaugeVec(prometheus.GaugeOpts{
+		agentVersion: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: "yorkie",
 			Subsystem: "agent",
 			Name:      "version",
 			Help:      "Which version is running. 1 for 'agent_version' label with current version.",
 		}, []string{"agent_version"}),
-		pushPullResponseSeconds: promauto.NewHistogram(prometheus.HistogramOpts{
+		pushPullResponseSeconds: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
 			Subsystem: "rpcserver",
 			Name:      "pushpull_response_seconds",
 			Help:      "Response time of PushPull API.",
 		}),
-		pushPullReceivedChanges: promauto.NewGauge(prometheus.GaugeOpts{
+		pushPullReceivedChanges: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: "rpcserver",
 			Name:      "pushpull_received_changes",
 			Help:      "The number of changes included in a request pack in PushPull API.",
 		}),
-		pushPullSentChanges: promauto.NewGauge(prometheus.GaugeOpts{
+		pushPullSentChanges: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: "rpcserver",
 			Name:      "pushpull_sent_changes",
 			Help:      "The number of changes included in a response pack in PushPull API.",
 		}),
-		pushPullSnapshotDurationSeconds: promauto.NewHistogram(prometheus.HistogramOpts{
+		pushPullSnapshotDurationSeconds: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
 			Subsystem: "db",
 			Name:      "pushpull_snapshot_duration_seconds",
 			Help:      "The creation time of snapshot in PushPull API.",
 		}),
-		pushPullSnapshotBytes: promauto.NewGauge(prometheus.GaugeOpts{
+		pushPullSnapshotBytes: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: "db",
 			Name:      "pushpull_snapshot_bytes",
@@ -113,4 +115,9 @@ func (m *Metrics) ObservePushPullSnapshotDurationSeconds(seconds float64) {
 // SetPushPullSnapshotBytes sets the snapshot byte size.
 func (m *Metrics) SetPushPullSnapshotBytes(bytes int) {
 	m.pushPullSnapshotBytes.Set(float64(bytes))
+}
+
+// Registry returns the registry of this metrics.
+func (m *Metrics) Registry() *prometheus.Registry {
+	return m.registry
 }

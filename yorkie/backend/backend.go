@@ -26,7 +26,6 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
-	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 )
 
 // Config is the configuration for creating a Backend instance.
@@ -65,9 +64,8 @@ func New(
 	conf *Config,
 	mongoConf *mongo.Config,
 	etcdConf *etcd.Config,
+	met metrics.Metrics,
 ) (*Backend, error) {
-	met := prometheus.NewMetrics()
-
 	mongoClient, err := mongo.Dial(mongoConf)
 	if err != nil {
 		return nil, err

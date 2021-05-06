@@ -42,16 +42,19 @@ type Yorkie struct {
 
 // New creates a new instance of Yorkie.
 func New(conf *Config) (*Yorkie, error) {
-	metricsServer, err := prometheus.NewServer(conf.Metrics)
-	if err != nil {
-		return nil, err
-	}
+	met := prometheus.NewMetrics()
 
 	be, err := backend.New(
 		conf.Backend,
 		conf.Mongo,
 		conf.ETCD,
+		met,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	metricsServer, err := prometheus.NewServer(conf.Metrics, met)
 	if err != nil {
 		return nil, err
 	}
