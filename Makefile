@@ -19,8 +19,8 @@ tools:
 proto:
 	protoc api/yorkie.proto \
 -I=. \
--I=$(GOPATH)/src \
--I=$(GOPATH)/src/github.com/gogo/protobuf/protobuf \
+-I=./api \
+-I=$(GOPATH)/pkg/mod/github.com/gogo/protobuf@v1.3.1 \
 --gofast_out=plugins=grpc,\
 Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
 Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:.
