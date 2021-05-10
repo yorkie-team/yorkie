@@ -63,17 +63,17 @@ func (s *subscriptions) Len() int {
 // PubSub is the memory implementation of PubSub, used for single agent or
 // tests.
 type PubSub struct {
-	AgentInfo          *sync.AgentInfo
-	subscriptionsMapMu *gosync.RWMutex
-	subscriptionsMap   map[string]*subscriptions
+	AgentInfo               *sync.AgentInfo
+	subscriptionsMapMu      *gosync.RWMutex
+	subscriptionsMapByTopic map[string]*subscriptions
 }
 
 // NewPubSub creates an instance of PubSub.
 func NewPubSub(info *sync.AgentInfo) *PubSub {
 	return &PubSub{
-		AgentInfo:          info,
-		subscriptionsMapMu: &gosync.RWMutex{},
-		subscriptionsMap:   make(map[string]*subscriptions),
+		AgentInfo:               info,
+		subscriptionsMapMu:      &gosync.RWMutex{},
+		subscriptionsMapByTopic: make(map[string]*subscriptions),
 	}
 }
 
@@ -99,13 +99,13 @@ func (m *PubSub) Subscribe(
 	peersMap := make(map[string][]types.Client)
 
 	for _, topic := range topics {
-		if _, ok := m.subscriptionsMap[topic]; !ok {
-			m.subscriptionsMap[topic] = newSubscriptions()
+		if _, ok := m.subscriptionsMapByTopic[topic]; !ok {
+			m.subscriptionsMapByTopic[topic] = newSubscriptions()
 		}
-		m.subscriptionsMap[topic].Add(sub)
+		m.subscriptionsMapByTopic[topic].Add(sub)
 
 		var peers []types.Client
-		for _, sub := range m.subscriptionsMap[topic].Map() {
+		for _, sub := range m.subscriptionsMapByTopic[topic].Map() {
 			peers = append(peers, sub.Subscriber())
 		}
 		peersMap[topic] = peers
@@ -127,11 +127,11 @@ func (m *PubSub) Unsubscribe(topics []string, sub *sync.Subscription) {
 	log.Logger.Debugf(`Unsubscribe(%s,%s) Start`, topics[0], sub.SubscriberID())
 
 	for _, topic := range topics {
-		if subs, ok := m.subscriptionsMap[topic]; ok {
+		if subs, ok := m.subscriptionsMapByTopic[topic]; ok {
 			subs.Delete(sub.ID())
 
 			if subs.Len() == 0 {
-				delete(m.subscriptionsMap, topic)
+				delete(m.subscriptionsMapByTopic, topic)
 			}
 		}
 	}
@@ -151,7 +151,7 @@ func (m *PubSub) Publish(
 
 	log.Logger.Debugf(`Publish(%s,%s) Start`, event.DocKey, publisherID.String())
 
-	if subs, ok := m.subscriptionsMap[topic]; ok {
+	if subs, ok := m.subscriptionsMapByTopic[topic]; ok {
 		for _, sub := range subs.Map() {
 			if sub.Subscriber().ID.Compare(publisherID) != 0 {
 				log.Logger.Debugf(

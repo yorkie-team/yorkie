@@ -27,6 +27,7 @@ func (c *Client) Subscribe(
 	subscriber types.Client,
 	topics []string,
 ) (*sync.Subscription, map[string][]types.Client, error) {
+	// TODO(hackerwins): build peersMap.
 	return c.pubSub.Subscribe(subscriber, topics)
 }
 
