@@ -89,6 +89,7 @@ func New(
 		return nil, err
 	}
 
+	// TODO(hackerwins): Merge these instances into Coordinator.
 	var pubSub sync.PubSub
 	var lockerMap sync.LockerMap
 	if etcdConf != nil {

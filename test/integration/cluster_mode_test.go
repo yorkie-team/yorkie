@@ -19,30 +19,102 @@
 package integration
 
 import (
+	"context"
+	"io"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestClusterMode(t *testing.T) {
 	t.Run("member list test", func(t *testing.T) {
-		agentA := helper.TestYorkie(100)
-		agentB := helper.TestYorkie(200)
-
+		agentA := helper.TestYorkie(1000)
+		agentB := helper.TestYorkie(2000)
 		assert.NoError(t, agentA.Start())
 		assert.NoError(t, agentB.Start())
 
 		time.Sleep(time.Second)
 
-		assert.Len(t, defaultYorkie.Members(), 3)
 		assert.Equal(t, agentA.Members(), agentB.Members())
+		assert.Len(t, defaultYorkie.Members(), 3)
 
 		assert.NoError(t, agentA.Shutdown(true))
 		assert.Len(t, defaultYorkie.Members(), 2)
+
 		assert.NoError(t, agentB.Shutdown(true))
 		assert.Len(t, defaultYorkie.Members(), 1)
+	})
+
+	t.Run("watch document across agents test", func(t *testing.T) {
+		agentA := helper.TestYorkie(1000)
+		agentB := helper.TestYorkie(2000)
+		assert.NoError(t, agentA.Start())
+		assert.NoError(t, agentB.Start())
+
+		defer func() {
+			assert.NoError(t, agentA.Shutdown(true))
+			assert.NoError(t, agentB.Shutdown(true))
+		}()
+
+		ctx := context.Background()
+		clientA, err := client.Dial(agentA.RPCAddr())
+		assert.NoError(t, err)
+		clientB, err := client.Dial(agentB.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, clientA.Activate(ctx))
+		assert.NoError(t, clientB.Activate(ctx))
+
+		docA := document.New(helper.Collection, t.Name())
+		docB := document.New(helper.Collection, t.Name())
+
+		assert.NoError(t, clientA.Attach(ctx, docA))
+		assert.NoError(t, clientB.Attach(ctx, docB))
+
+		wg := sync.WaitGroup{}
+
+		wg.Add(1)
+		rch := clientA.Watch(ctx, docA)
+		go func() {
+			defer wg.Done()
+
+			select {
+			case resp := <-rch:
+				if resp.Err == io.EOF {
+					return
+				}
+				assert.NoError(t, resp.Err)
+
+				err := clientA.Sync(ctx, resp.Keys...)
+				assert.NoError(t, err)
+			case <-time.After(time.Second):
+				return
+			}
+		}()
+
+		err = docB.Update(func(root *proxy.ObjectProxy) error {
+			root.SetString("hello", "world")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		wg.Wait()
+
+		// TODO(hackerwins): uncomment below test
+		// assert.Equal(t, docA.Marshal(), docB.Marshal())
+
+		defer func() {
+			assert.NoError(t, clientA.Deactivate(ctx))
+			assert.NoError(t, clientA.Close())
+
+			assert.NoError(t, clientB.Deactivate(ctx))
+			assert.NoError(t, clientB.Close())
+		}()
 	})
 }
