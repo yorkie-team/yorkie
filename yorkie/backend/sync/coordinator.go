@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The Yorkie Authors. All rights reserved.
+ * Copyright 2021 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package sync
 
 import (
+	"context"
 	"errors"
 	gotime "time"
 
@@ -44,8 +45,14 @@ type AgentInfo struct {
 	UpdatedAt gotime.Time `json:"updated_at"`
 }
 
-// PubSub is a structure to support event publishing/subscription.
-type PubSub interface {
+// Coordinator provides synchronization functions such as locks and event Pub/Sub.
+type Coordinator interface {
+	// Close closes all resources of this Coordinator.
+	Close() error
+
+	// NewLocker creates a sync.Locker.
+	NewLocker(ctx context.Context, key Key) (Locker, error)
+
 	// Subscribe subscribes to the given topics.
 	Subscribe(
 		subscriber types.Client,

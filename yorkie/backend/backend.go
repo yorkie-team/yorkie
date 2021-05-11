@@ -48,10 +48,9 @@ type Backend struct {
 	Config    *Config
 	agentInfo *sync.AgentInfo
 
-	DB        db.DB
-	LockerMap sync.LockerMap
-	PubSub    sync.PubSub
-	Metrics   metrics.Metrics
+	DB          db.DB
+	Coordinator sync.Coordinator
+	Metrics     metrics.Metrics
 
 	// closing is closed by backend close.
 	closing chan struct{}
@@ -89,9 +88,7 @@ func New(
 		return nil, err
 	}
 
-	// TODO(hackerwins): Merge these instances into Coordinator.
-	var pubSub sync.PubSub
-	var lockerMap sync.LockerMap
+	var coordinator sync.Coordinator
 	if etcdConf != nil {
 		etcdClient, err := etcd.Dial(etcdConf, agentInfo)
 		if err != nil {
@@ -101,21 +98,18 @@ func New(
 			return nil, err
 		}
 
-		lockerMap = etcdClient
-		pubSub = etcdClient
+		coordinator = etcdClient
 	} else {
-		lockerMap = memory.NewLockerMap()
-		pubSub = memory.NewPubSub(agentInfo)
+		coordinator = memory.NewCoordinator(agentInfo)
 	}
 
 	return &Backend{
-		Config:    conf,
-		agentInfo: agentInfo,
-		DB:        mongoClient,
-		LockerMap: lockerMap,
-		PubSub:    pubSub,
-		Metrics:   met,
-		closing:   make(chan struct{}),
+		Config:      conf,
+		agentInfo:   agentInfo,
+		DB:          mongoClient,
+		Coordinator: coordinator,
+		Metrics:     met,
+		closing:     make(chan struct{}),
 	}, nil
 }
 
@@ -128,7 +122,7 @@ func (b *Backend) Close() error {
 	// wait for goroutines before closing backend
 	b.wg.Wait()
 
-	if err := b.LockerMap.Close(); err != nil {
+	if err := b.Coordinator.Close(); err != nil {
 		log.Logger.Error(err)
 	}
 
@@ -157,5 +151,5 @@ func (b *Backend) AttachGoroutine(f func()) {
 
 // Members returns the members of this cluster.
 func (b *Backend) Members() map[string]*sync.AgentInfo {
-	return b.PubSub.Members()
+	return b.Coordinator.Members()
 }

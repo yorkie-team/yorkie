@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
@@ -35,7 +36,9 @@ func TestSyncStress(t *testing.T) {
 	t.Run("lock/unlock stress test", func(t *testing.T) {
 		start := time.Now()
 
-		lockerMap := memory.NewLockerMap()
+		lockerMap := memory.NewCoordinator(&sync.AgentInfo{
+			ID: xid.New().String(),
+		})
 
 		size := 100
 		sum := 0

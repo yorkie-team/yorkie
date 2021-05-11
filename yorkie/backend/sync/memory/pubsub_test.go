@@ -33,7 +33,7 @@ func TestPubSub(t *testing.T) {
 	actorB := types.Client{ID: &time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 
 	t.Run("publish subscribe test", func(t *testing.T) {
-		pubSub := memory.NewPubSub(nil)
+		pubSub := memory.NewCoordinator(nil)
 		event := sync.DocEvent{
 			Type:      types.DocumentsWatchedEvent,
 			DocKey:    t.Name(),
@@ -61,7 +61,7 @@ func TestPubSub(t *testing.T) {
 	})
 
 	t.Run("subscriptions map test", func(t *testing.T) {
-		pubSub := memory.NewPubSub(nil)
+		pubSub := memory.NewCoordinator(nil)
 
 		for i := 0; i < 5; i++ {
 			_, subs, err := pubSub.Subscribe(actorA, []string{t.Name()})

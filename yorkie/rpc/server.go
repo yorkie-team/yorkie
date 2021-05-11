@@ -179,7 +179,7 @@ func (s *Server) AttachDocument(
 	}
 
 	if pack.HasChanges() {
-		locker, err := s.backend.LockerMap.NewLocker(
+		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
 			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
 		)
@@ -237,7 +237,7 @@ func (s *Server) DetachDocument(
 	}
 
 	if pack.HasChanges() {
-		locker, err := s.backend.LockerMap.NewLocker(
+		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
 			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
 		)
@@ -302,7 +302,7 @@ func (s *Server) PushPull(
 	if pack.HasChanges() {
 		s.backend.Metrics.SetPushPullReceivedChanges(len(pack.Changes))
 
-		locker, err := s.backend.LockerMap.NewLocker(
+		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
 			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
 		)
@@ -448,7 +448,7 @@ func (s *Server) watchDocs(
 	client pkgtypes.Client,
 	docKeys []string,
 ) (*sync.Subscription, map[string][]pkgtypes.Client, error) {
-	subscription, peersMap, err := s.backend.PubSub.Subscribe(
+	subscription, peersMap, err := s.backend.Coordinator.Subscribe(
 		client,
 		docKeys,
 	)
@@ -458,7 +458,7 @@ func (s *Server) watchDocs(
 	}
 
 	for _, docKey := range docKeys {
-		s.backend.PubSub.Publish(
+		s.backend.Coordinator.Publish(
 			subscription.Subscriber().ID,
 			docKey,
 			sync.DocEvent{
@@ -473,10 +473,10 @@ func (s *Server) watchDocs(
 }
 
 func (s *Server) unwatchDocs(docKeys []string, subscription *sync.Subscription) {
-	s.backend.PubSub.Unsubscribe(docKeys, subscription)
+	s.backend.Coordinator.Unsubscribe(docKeys, subscription)
 
 	for _, docKey := range docKeys {
-		s.backend.PubSub.Publish(
+		s.backend.Coordinator.Publish(
 			subscription.Subscriber().ID,
 			docKey,
 			sync.DocEvent{

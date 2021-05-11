@@ -21,9 +21,11 @@ package integration
 import (
 	"testing"
 
+	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/test/helper"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 )
 
@@ -31,7 +33,9 @@ func TestETCD(t *testing.T) {
 	t.Run("new and close test", func(t *testing.T) {
 		cli, err := etcd.Dial(&etcd.Config{
 			Endpoints: helper.ETCDEndpoints,
-		}, nil)
+		}, &sync.AgentInfo{
+			ID: xid.New().String(),
+		})
 		assert.NoError(t, err)
 
 		defer func() {

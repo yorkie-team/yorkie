@@ -36,10 +36,7 @@ func NewSubscription(subscriber types.Client) *Subscription {
 	return &Subscription{
 		id:         xid.New().String(),
 		subscriber: subscriber,
-		// [Workaround] The channel buffer size below avoids stopping during
-		//   event issuing to the events channel. This bug occurs in the order
-		//   of Publish and Unsubscribe.
-		events: make(chan DocEvent, 10),
+		events:     make(chan DocEvent, 1),
 	}
 }
 
@@ -71,4 +68,9 @@ func (s *Subscription) Close() {
 
 	s.closed = true
 	close(s.events)
+}
+
+// IsClosed returns whether this subscription is closed or not.
+func (s *Subscription) IsClosed() bool {
+	return s.closed
 }

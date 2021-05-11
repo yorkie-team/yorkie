@@ -25,54 +25,16 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
-// subscriptions is a collection of subscriptions that subscribe to a specific
-// topic.
-type subscriptions struct {
-	internalMap map[string]*sync.Subscription
-}
-
-func newSubscriptions() *subscriptions {
-	return &subscriptions{
-		internalMap: make(map[string]*sync.Subscription),
-	}
-}
-
-// Add adds the given subscription.
-func (s *subscriptions) Add(sub *sync.Subscription) {
-	s.internalMap[sub.ID()] = sub
-}
-
-// Map returns the internal map of this subscriptions.
-func (s *subscriptions) Map() map[string]*sync.Subscription {
-	return s.internalMap
-}
-
-// Delete deletes the subscription of the given id.
-func (s *subscriptions) Delete(id string) {
-	if subscription, ok := s.internalMap[id]; ok {
-		subscription.Close()
-	}
-	delete(s.internalMap, id)
-}
-
-// Len returns the length of this subscriptions.
-func (s *subscriptions) Len() int {
-	return len(s.internalMap)
-}
-
-// PubSub is the memory implementation of PubSub, used for single agent or
-// tests.
+// PubSub is a structure to support event publishing/subscription.
 type PubSub struct {
-	AgentInfo               *sync.AgentInfo
-	subscriptionsMapMu      *gosync.RWMutex
+	mu                      *gosync.RWMutex
 	subscriptionsMapByTopic map[string]*subscriptions
 }
 
-// NewPubSub creates an instance of PubSub.
-func NewPubSub(info *sync.AgentInfo) *PubSub {
+// NewPubSub creates a new instance of PubSub.
+func NewPubSub() *PubSub {
 	return &PubSub{
-		AgentInfo:               info,
-		subscriptionsMapMu:      &gosync.RWMutex{},
+		mu:                      &gosync.RWMutex{},
 		subscriptionsMapByTopic: make(map[string]*subscriptions),
 	}
 }
@@ -86,8 +48,8 @@ func (m *PubSub) Subscribe(
 		return nil, nil, sync.ErrEmptyTopics
 	}
 
-	m.subscriptionsMapMu.Lock()
-	defer m.subscriptionsMapMu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	log.Logger.Debugf(
 		`Subscribe(%s,%s) Start`,
@@ -121,8 +83,8 @@ func (m *PubSub) Subscribe(
 
 // Unsubscribe unsubscribes the given topics.
 func (m *PubSub) Unsubscribe(topics []string, sub *sync.Subscription) {
-	m.subscriptionsMapMu.Lock()
-	defer m.subscriptionsMapMu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	log.Logger.Debugf(`Unsubscribe(%s,%s) Start`, topics[0], sub.SubscriberID())
 
@@ -146,31 +108,61 @@ func (m *PubSub) Publish(
 	topic string,
 	event sync.DocEvent,
 ) {
-	m.subscriptionsMapMu.RLock()
-	defer m.subscriptionsMapMu.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
 	log.Logger.Debugf(`Publish(%s,%s) Start`, event.DocKey, publisherID.String())
 
 	if subs, ok := m.subscriptionsMapByTopic[topic]; ok {
 		for _, sub := range subs.Map() {
-			if sub.Subscriber().ID.Compare(publisherID) != 0 {
-				log.Logger.Debugf(
-					`Publish(%s,%s) to %s`,
-					event.DocKey,
-					publisherID.String(),
-					sub.SubscriberID(),
-				)
-				sub.Events() <- event
+			if sub.Subscriber().ID.Compare(publisherID) == 0 || sub.IsClosed() {
+				continue
 			}
+
+			log.Logger.Debugf(
+				`Publish(%s,%s) to %s`,
+				event.DocKey,
+				publisherID.String(),
+				sub.SubscriberID(),
+			)
+			sub.Events() <- event
 		}
 	}
 
 	log.Logger.Debugf(`Publish(%s,%s) End`, event.DocKey, publisherID.String())
 }
 
-// Members returns the members of this cluster.
-func (m *PubSub) Members() map[string]*sync.AgentInfo {
-	members := make(map[string]*sync.AgentInfo)
-	members[m.AgentInfo.ID] = m.AgentInfo
-	return members
+// subscriptions is a collection of subscriptions that subscribe to a specific
+// topic.
+type subscriptions struct {
+	internalMap map[string]*sync.Subscription
+}
+
+func newSubscriptions() *subscriptions {
+	return &subscriptions{
+		internalMap: make(map[string]*sync.Subscription),
+	}
+}
+
+// Add adds the given subscription.
+func (s *subscriptions) Add(sub *sync.Subscription) {
+	s.internalMap[sub.ID()] = sub
+}
+
+// Map returns the internal map of this subscriptions.
+func (s *subscriptions) Map() map[string]*sync.Subscription {
+	return s.internalMap
+}
+
+// Delete deletes the subscription of the given id.
+func (s *subscriptions) Delete(id string) {
+	if subscription, ok := s.internalMap[id]; ok {
+		subscription.Close()
+	}
+	delete(s.internalMap, id)
+}
+
+// Len returns the length of this subscriptions.
+func (s *subscriptions) Len() int {
+	return len(s.internalMap)
 }

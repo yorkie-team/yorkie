@@ -50,7 +50,9 @@ type Config struct {
 
 // Client is a client that connects to ETCD.
 type Client struct {
-	config *Config
+	config    *Config
+	agentInfo *sync.AgentInfo
+
 	client *clientv3.Client
 
 	pubSub *memory.PubSub
@@ -71,9 +73,10 @@ func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 	}
 
 	return &Client{
-		config: conf,
+		config:    conf,
+		agentInfo: agentInfo,
 
-		pubSub: memory.NewPubSub(agentInfo),
+		pubSub: memory.NewPubSub(),
 
 		memberMapMu: &gosync.RWMutex{},
 		memberMap:   make(map[string]*sync.AgentInfo),
