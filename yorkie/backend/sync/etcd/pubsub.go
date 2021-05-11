@@ -17,6 +17,8 @@
 package etcd
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -40,12 +42,12 @@ func (c *Client) Unsubscribe(topics []string, sub *sync.Subscription) {
 func (c *Client) Publish(
 	publisherID *time.ActorID,
 	topic string,
-	event sync.DocEvent,
+	event types.DocEvent,
 ) {
 	c.pubSub.Publish(publisherID, topic, event)
 
 	// TODO(hackerwins): broadcast the event to other agents.
-	// for _, member := range c.Members() {
-	// member.RPCAddr
-	// }
+	for _, member := range c.Members() {
+		fmt.Println(event.Type, member.RPCAddr)
+	}
 }

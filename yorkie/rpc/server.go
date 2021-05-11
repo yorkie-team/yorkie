@@ -38,7 +38,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
-	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -408,9 +408,9 @@ func (s *Server) WatchDocuments(
 			}
 
 			if err := stream.Send(&api.WatchDocumentsResponse{
-				Body: &api.WatchDocumentsResponse_Event_{
-					Event: &api.WatchDocumentsResponse_Event{
-						Client:       converter.ToClient(event.Publisher),
+				Body: &api.WatchDocumentsResponse_Event{
+					Event: &api.DocEvent{
+						Publisher:    converter.ToClient(event.Publisher),
 						EventType:    eventType,
 						DocumentKeys: converter.ToDocumentKeys(k),
 					},
@@ -422,6 +422,14 @@ func (s *Server) WatchDocuments(
 			}
 		}
 	}
+}
+
+// PropagateDocEvent propagates the given doc event to clients.
+func (s *Server) PropagateDocEvent(
+	ctx context.Context,
+	req *api.PropagateDocEventRequest,
+) (*api.PropagateDocEventResponse, error) {
+	panic("unimplemented")
 }
 
 func (s *Server) listenAndServeGRPC() error {
@@ -445,9 +453,9 @@ func (s *Server) listenAndServeGRPC() error {
 }
 
 func (s *Server) watchDocs(
-	client pkgtypes.Client,
+	client types.Client,
 	docKeys []string,
-) (*sync.Subscription, map[string][]pkgtypes.Client, error) {
+) (*sync.Subscription, map[string][]types.Client, error) {
 	subscription, peersMap, err := s.backend.Coordinator.Subscribe(
 		client,
 		docKeys,
@@ -461,8 +469,8 @@ func (s *Server) watchDocs(
 		s.backend.Coordinator.Publish(
 			subscription.Subscriber().ID,
 			docKey,
-			sync.DocEvent{
-				Type:      pkgtypes.DocumentsWatchedEvent,
+			types.DocEvent{
+				Type:      types.DocumentsWatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
 			},
@@ -479,8 +487,8 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *sync.Subscription) 
 		s.backend.Coordinator.Publish(
 			subscription.Subscriber().ID,
 			docKey,
-			sync.DocEvent{
-				Type:      pkgtypes.DocumentsUnwatchedEvent,
+			types.DocEvent{
+				Type:      types.DocumentsUnwatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
 			},

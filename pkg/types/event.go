@@ -16,3 +16,11 @@ const (
 	// unwatched by other clients.
 	DocumentsUnwatchedEvent EventType = "documents-unwatched"
 )
+
+// DocEvent represents events that occur related to the document.
+type DocEvent struct {
+	Type EventType
+	// TODO(hackerwins): sync with api.DocEvent
+	DocKey    string
+	Publisher Client
+}

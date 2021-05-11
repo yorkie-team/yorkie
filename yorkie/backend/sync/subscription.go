@@ -28,7 +28,7 @@ type Subscription struct {
 	id         string
 	subscriber types.Client
 	closed     bool
-	events     chan DocEvent
+	events     chan types.DocEvent
 }
 
 // NewSubscription creates a new instance of Subscription.
@@ -36,7 +36,7 @@ func NewSubscription(subscriber types.Client) *Subscription {
 	return &Subscription{
 		id:         xid.New().String(),
 		subscriber: subscriber,
-		events:     make(chan DocEvent, 1),
+		events:     make(chan types.DocEvent, 1),
 	}
 }
 
@@ -46,7 +46,7 @@ func (s *Subscription) ID() string {
 }
 
 // Events returns the DocEvent channel of this subscription.
-func (s *Subscription) Events() chan DocEvent {
+func (s *Subscription) Events() chan types.DocEvent {
 	return s.events
 }
 

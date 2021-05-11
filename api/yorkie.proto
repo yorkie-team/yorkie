@@ -25,6 +25,9 @@ service Yorkie {
     rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
     rpc WatchDocuments (WatchDocumentsRequest) returns (stream WatchDocumentsResponse) {}
     rpc PushPull (PushPullRequest) returns (PushPullResponse) {}
+
+    // TODO(hackerwins): extract to other service
+    rpc PropagateDocEvent (PropagateDocEventRequest) returns (PropagateDocEventResponse) {}
 }
 
 /////////////////////////////////////////
@@ -87,15 +90,9 @@ message WatchDocumentsResponse {
         map<string, Clients> peers_map_by_doc = 1;
     }
 
-    message Event {
-        Client client = 1;
-        EventType event_type = 2;
-        repeated DocumentKey document_keys = 3;
-    }
-
     oneof body {
         Initialization initialization = 1;
-        Event event = 2;
+        DocEvent event = 2;
     }
 }
 
@@ -108,6 +105,14 @@ message PushPullRequest {
 message PushPullResponse {
     bytes client_id = 1;
     ChangePack change_pack = 2;
+}
+
+message PropagateDocEventRequest {
+    DocEvent event = 1;
+}
+
+message PropagateDocEventResponse {
+
 }
 
 /////////////////////////////////////////
@@ -358,7 +363,13 @@ enum ValueType {
     DOUBLE_CNT = 14;
 }
 
-enum EventType {
+message DocEvent {
+    DocEventType event_type = 1;
+    repeated DocumentKey document_keys = 3;
+    Client publisher = 2;
+}
+
+enum DocEventType {
     DOCUMENTS_CHANGED = 0;
     DOCUMENTS_WATCHED = 1;
     DOCUMENTS_UNWATCHED = 2;

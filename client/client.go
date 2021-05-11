@@ -349,8 +349,8 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 
 	handleResponse := func(pbResp *api.WatchDocumentsResponse) error {
 		switch resp := pbResp.Body.(type) {
-		case *api.WatchDocumentsResponse_Event_:
-			publisher, err := converter.FromClient(resp.Event.Client)
+		case *api.WatchDocumentsResponse_Event:
+			publisher, err := converter.FromClient(resp.Event.Publisher)
 			if err != nil {
 				return err
 			}

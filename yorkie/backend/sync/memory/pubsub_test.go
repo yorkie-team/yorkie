@@ -24,7 +24,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
-	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 )
 
@@ -34,7 +33,7 @@ func TestPubSub(t *testing.T) {
 
 	t.Run("publish subscribe test", func(t *testing.T) {
 		pubSub := memory.NewCoordinator(nil)
-		event := sync.DocEvent{
+		event := types.DocEvent{
 			Type:      types.DocumentsWatchedEvent,
 			DocKey:    t.Name(),
 			Publisher: actorB,

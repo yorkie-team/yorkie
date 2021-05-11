@@ -123,14 +123,14 @@ func ToClientsMap(clientsMap map[string][]types.Client) map[string]*api.Clients 
 }
 
 // ToEventType converts the given model format to Protobuf format.
-func ToEventType(eventType types.EventType) (api.EventType, error) {
+func ToEventType(eventType types.EventType) (api.DocEventType, error) {
 	switch eventType {
 	case types.DocumentsChangeEvent:
-		return api.EventType_DOCUMENTS_CHANGED, nil
+		return api.DocEventType_DOCUMENTS_CHANGED, nil
 	case types.DocumentsWatchedEvent:
-		return api.EventType_DOCUMENTS_WATCHED, nil
+		return api.DocEventType_DOCUMENTS_WATCHED, nil
 	case types.DocumentsUnwatchedEvent:
-		return api.EventType_DOCUMENTS_UNWATCHED, nil
+		return api.DocEventType_DOCUMENTS_UNWATCHED, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}

@@ -30,13 +30,6 @@ var (
 	ErrEmptyTopics = errors.New("empty topics")
 )
 
-// DocEvent represents events that occur related to the document.
-type DocEvent struct {
-	Type      types.EventType
-	DocKey    string
-	Publisher types.Client
-}
-
 // AgentInfo represents the information of the Agent.
 type AgentInfo struct {
 	ID        string      `json:"id"`
@@ -63,7 +56,7 @@ type Coordinator interface {
 	Unsubscribe(topics []string, sub *Subscription)
 
 	// Publish publishes the given event to the given Topic.
-	Publish(publisherID *time.ActorID, topic string, event DocEvent)
+	Publish(publisherID *time.ActorID, topic string, event types.DocEvent)
 
 	// Members returns the members of this cluster.
 	Members() map[string]*AgentInfo

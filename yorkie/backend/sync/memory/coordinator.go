@@ -60,7 +60,7 @@ func (m *Coordinator) Unsubscribe(topics []string, sub *sync.Subscription) {
 func (m *Coordinator) Publish(
 	publisherID *time.ActorID,
 	topic string,
-	event sync.DocEvent,
+	event types.DocEvent,
 ) {
 	m.pubSub.Publish(publisherID, topic, event)
 }

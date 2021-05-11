@@ -127,13 +127,13 @@ func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
 }
 
 // FromEventType converts the given Protobuf format to model format.
-func FromEventType(pbEventType api.EventType) (types.EventType, error) {
+func FromEventType(pbEventType api.DocEventType) (types.EventType, error) {
 	switch pbEventType {
-	case api.EventType_DOCUMENTS_CHANGED:
+	case api.DocEventType_DOCUMENTS_CHANGED:
 		return types.DocumentsChangeEvent, nil
-	case api.EventType_DOCUMENTS_WATCHED:
+	case api.DocEventType_DOCUMENTS_WATCHED:
 		return types.DocumentsWatchedEvent, nil
-	case api.EventType_DOCUMENTS_UNWATCHED:
+	case api.DocEventType_DOCUMENTS_UNWATCHED:
 		return types.DocumentsUnwatchedEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbEventType, ErrUnsupportedEventType)

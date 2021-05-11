@@ -106,7 +106,7 @@ func (m *PubSub) Unsubscribe(topics []string, sub *sync.Subscription) {
 func (m *PubSub) Publish(
 	publisherID *time.ActorID,
 	topic string,
-	event sync.DocEvent,
+	event types.DocEvent,
 ) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
