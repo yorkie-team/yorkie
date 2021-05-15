@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.4] - 2021-05-15
+
+### Added
+- Add gRPC health checking: #176
+- Add ca-certificates to access remote DBs such as MongoDB Atlas: #6d3e176
+
+### Changed
+- Expose only basic command in Dockerfile: #317320b
+
+### Fixed
+- Fix incorrect sequences when detaching documents: #173
+
 ## [0.1.3] - 2021-04-04
 
 ### Added
