@@ -3,11 +3,13 @@ package rpc_test
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -30,6 +32,7 @@ var (
 	invalidClientID, _ = hex.DecodeString("invalid")
 
 	testRPCServer *rpc.Server
+	testClient    api.YorkieClient
 
 	invalidChangePack = &api.ChangePack{
 		DocumentKey: &api.DocumentKey{
@@ -65,6 +68,12 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed rpc listen: %s\n", err)
 	}
 
+	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", testRPCPort), grpc.WithInsecure())
+	if err != nil {
+		log.Fatal(err)
+	}
+	testClient = api.NewYorkieClient(conn)
+
 	code := m.Run()
 
 	if err := be.Close(); err != nil {
@@ -76,33 +85,33 @@ func TestMain(m *testing.M) {
 
 func TestRPCServerBackend(t *testing.T) {
 	t.Run("activate/deactivate client test", func(t *testing.T) {
-		activateResp, err := testRPCServer.ActivateClient(
+		activateResp, err := testClient.ActivateClient(
 			context.Background(),
 			&api.ActivateClientRequest{ClientKey: t.Name()},
 		)
 		assert.NoError(t, err)
 
-		_, err = testRPCServer.DeactivateClient(
+		_, err = testClient.DeactivateClient(
 			context.Background(),
 			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
 		)
 		assert.NoError(t, err)
 
 		// invalid argument
-		_, err = testRPCServer.ActivateClient(
+		_, err = testClient.ActivateClient(
 			context.Background(),
 			&api.ActivateClientRequest{ClientKey: ""},
 		)
 		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
-		_, err = testRPCServer.DeactivateClient(
+		_, err = testClient.DeactivateClient(
 			context.Background(),
 			&api.DeactivateClientRequest{ClientId: emptyClientID},
 		)
 		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
 		// client not found
-		_, err = testRPCServer.DeactivateClient(
+		_, err = testClient.DeactivateClient(
 			context.Background(),
 			&api.DeactivateClientRequest{ClientId: nilClientID},
 		)
@@ -110,7 +119,7 @@ func TestRPCServerBackend(t *testing.T) {
 	})
 
 	t.Run("attach/detach document test", func(t *testing.T) {
-		activateResp, err := testRPCServer.ActivateClient(
+		activateResp, err := testClient.ActivateClient(
 			context.Background(),
 			&api.ActivateClientRequest{ClientKey: t.Name()},
 		)
@@ -123,7 +132,7 @@ func TestRPCServerBackend(t *testing.T) {
 			Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
-		_, err = testRPCServer.AttachDocument(
+		_, err = testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -133,7 +142,7 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		// try to attach with invalid client ID
-		_, err = testRPCServer.AttachDocument(
+		_, err = testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   invalidClientID,
@@ -143,7 +152,7 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
 		// try to attach with invalid client
-		_, err = testRPCServer.AttachDocument(
+		_, err = testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   nilClientID,
@@ -153,7 +162,7 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 
 		// try to attach already attached document
-		_, err = testRPCServer.AttachDocument(
+		_, err = testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -163,7 +172,7 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 
 		// try to attach invalid change pack
-		_, err = testRPCServer.AttachDocument(
+		_, err = testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -172,7 +181,7 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
-		_, err = testRPCServer.DetachDocument(
+		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -182,7 +191,7 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		// try to detach already detached document
-		_, err = testRPCServer.DetachDocument(
+		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -191,7 +200,7 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 
-		_, err = testRPCServer.DetachDocument(
+		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -201,7 +210,7 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
 		// document not found
-		_, err = testRPCServer.DetachDocument(
+		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
 				ClientId: activateResp.ClientId,
@@ -215,14 +224,14 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 
-		_, err = testRPCServer.DeactivateClient(
+		_, err = testClient.DeactivateClient(
 			context.Background(),
 			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
 		)
 		assert.NoError(t, err)
 
 		// try to attach the document with a deactivated client
-		_, err = testRPCServer.AttachDocument(
+		_, err = testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -240,7 +249,7 @@ func TestRPCServerBackend(t *testing.T) {
 			Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
-		activateResp, err := testRPCServer.ActivateClient(
+		activateResp, err := testClient.ActivateClient(
 			context.Background(),
 			&api.ActivateClientRequest{ClientKey: t.Name()},
 		)
@@ -267,7 +276,7 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		_, err = testRPCServer.PushPull(
+		_, err = testClient.PushPull(
 			context.Background(),
 			&api.PushPullRequest{
 				ClientId: activateResp.ClientId,
@@ -288,7 +297,7 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		_, err = testRPCServer.DetachDocument(
+		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
 				ClientId: activateResp.ClientId,
@@ -310,7 +319,7 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		// try to push/pull with detached document
-		_, err = testRPCServer.PushPull(
+		_, err = testClient.PushPull(
 			context.Background(),
 			&api.PushPullRequest{
 				ClientId:   activateResp.ClientId,
@@ -320,7 +329,7 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 
 		// try to push/pull with invalid pack
-		_, err = testRPCServer.PushPull(
+		_, err = testClient.PushPull(
 			context.Background(),
 			&api.PushPullRequest{
 				ClientId:   activateResp.ClientId,
@@ -329,14 +338,14 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
-		_, err = testRPCServer.DeactivateClient(
+		_, err = testClient.DeactivateClient(
 			context.Background(),
 			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
 		)
 		assert.NoError(t, err)
 
 		// try to push/pull with deactivated client
-		_, err = testRPCServer.PushPull(
+		_, err = testClient.PushPull(
 			context.Background(),
 			&api.PushPullRequest{
 				ClientId:   activateResp.ClientId,
