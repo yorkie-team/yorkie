@@ -108,6 +108,12 @@ func New(
 		pubSub = memory.NewPubSub(agentInfo)
 	}
 
+	log.Logger.Infof(
+		"backend created: id: %s, addr: %s",
+		agentInfo.ID,
+		agentInfo.RPCAddr,
+	)
+
 	return &Backend{
 		Config:    conf,
 		agentInfo: agentInfo,

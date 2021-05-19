@@ -90,13 +90,13 @@ func (c *Client) initializeMemberMap(ctx context.Context) error {
 // putAgentPeriodically puts the local agent in etcd periodically.
 func (c *Client) putAgentPeriodically() {
 	for {
-		if err := c.putAgent(context.Background()); err != nil {
+		if err := c.putAgent(c.ctx); err != nil {
 			log.Logger.Error(err)
 		}
 
 		select {
 		case <-time.After(putAgentPeriod):
-		case <-c.closing:
+		case <-c.ctx.Done():
 			return
 		}
 	}
@@ -136,7 +136,7 @@ func (c *Client) removeAgent(ctx context.Context) error {
 
 // syncAgents syncs the local member map with etcd.
 func (c *Client) syncAgents() {
-	watchCh := c.client.Watch(context.Background(), agentsPath, clientv3.WithPrefix())
+	watchCh := c.client.Watch(c.ctx, agentsPath, clientv3.WithPrefix())
 	for {
 		select {
 		case watchResponse := <-watchCh:
@@ -153,7 +153,7 @@ func (c *Client) syncAgents() {
 					c.removeAgentInfo(string(event.Kv.Key))
 				}
 			}
-		case <-c.closing:
+		case <-c.ctx.Done():
 			return
 		}
 	}

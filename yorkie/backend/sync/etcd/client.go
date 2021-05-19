@@ -58,7 +58,8 @@ type Client struct {
 	memberMapMu *gosync.RWMutex
 	memberMap   map[string]*sync.AgentInfo
 
-	closing chan struct{}
+	ctx        context.Context
+	cancelFunc context.CancelFunc
 }
 
 // newClient creates a new instance of Client.
@@ -70,6 +71,8 @@ func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 		conf.LockLeaseTimeSec = DefaultLockLeaseTimeSec
 	}
 
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
 	return &Client{
 		config: conf,
 
@@ -78,7 +81,8 @@ func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 		memberMapMu: &gosync.RWMutex{},
 		memberMap:   make(map[string]*sync.AgentInfo),
 
-		closing: make(chan struct{}),
+		ctx:        ctx,
+		cancelFunc: cancelFunc,
 	}
 }
 
@@ -115,7 +119,7 @@ func (c *Client) Dial() error {
 
 // Close all resources of this client.
 func (c *Client) Close() error {
-	close(c.closing)
+	c.cancelFunc()
 
 	if err := c.removeAgent(context.Background()); err != nil {
 		log.Logger.Error(err)

@@ -21,7 +21,8 @@ package integration
 import (
 	"context"
 	"io"
-	"sync"
+	"sort"
+	gosync "sync"
 	"testing"
 	"time"
 
@@ -31,7 +32,19 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/test/helper"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
+
+func keysFromAgents(m map[string]*sync.AgentInfo) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	return keys
+}
 
 func TestClusterMode(t *testing.T) {
 	t.Run("member list test", func(t *testing.T) {
@@ -42,7 +55,7 @@ func TestClusterMode(t *testing.T) {
 
 		time.Sleep(time.Second)
 
-		assert.Equal(t, agentA.Members(), agentB.Members())
+		assert.Equal(t, keysFromAgents(agentA.Members()), keysFromAgents(agentB.Members()))
 		assert.Len(t, defaultYorkie.Members(), 3)
 
 		assert.NoError(t, agentA.Shutdown(true))
@@ -77,7 +90,7 @@ func TestClusterMode(t *testing.T) {
 		assert.NoError(t, clientA.Attach(ctx, docA))
 		assert.NoError(t, clientB.Attach(ctx, docB))
 
-		wg := sync.WaitGroup{}
+		wg := gosync.WaitGroup{}
 
 		wg.Add(1)
 		rch := clientA.Watch(ctx, docA)
