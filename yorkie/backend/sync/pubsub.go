@@ -18,8 +18,7 @@ package sync
 
 import (
 	"errors"
-
-	"github.com/rs/xid"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
@@ -37,55 +36,12 @@ type DocEvent struct {
 	Publisher types.Client
 }
 
-// Subscription represents the subscription of a subscriber. It is used across
-// several topics.
-type Subscription struct {
-	id         string
-	subscriber types.Client
-	closed     bool
-	events     chan DocEvent
-}
-
-// NewSubscription creates a new instance of Subscription.
-func NewSubscription(subscriber types.Client) *Subscription {
-	return &Subscription{
-		id:         xid.New().String(),
-		subscriber: subscriber,
-		// [Workaround] The channel buffer size below avoids stopping during
-		//   event issuing to the events channel. This bug occurs in the order
-		//   of Publish and Unsubscribe.
-		events: make(chan DocEvent, 10),
-	}
-}
-
-// ID returns the id of this subscription.
-func (s *Subscription) ID() string {
-	return s.id
-}
-
-// Events returns the DocEvent channel of this subscription.
-func (s *Subscription) Events() chan DocEvent {
-	return s.events
-}
-
-// Subscriber returns the subscriber of this subscription.
-func (s *Subscription) Subscriber() types.Client {
-	return s.subscriber
-}
-
-// SubscriberID returns string representation of the subscriber.
-func (s *Subscription) SubscriberID() string {
-	return s.subscriber.ID.String()
-}
-
-// Close closes all resources of this Subscription.
-func (s *Subscription) Close() {
-	if s.closed {
-		return
-	}
-
-	s.closed = true
-	close(s.events)
+// AgentInfo represents the information of the Agent.
+type AgentInfo struct {
+	ID        string      `json:"id"`
+	Hostname  string      `json:"hostname"`
+	RPCAddr   string      `json:"rpc_addr"`
+	UpdatedAt gotime.Time `json:"updated_at"`
 }
 
 // PubSub is a structure to support event publishing/subscription.
@@ -101,4 +57,7 @@ type PubSub interface {
 
 	// Publish publishes the given event to the given Topic.
 	Publish(publisherID *time.ActorID, topic string, event DocEvent)
+
+	// Members returns the members of this cluster.
+	Members() map[string]*AgentInfo
 }

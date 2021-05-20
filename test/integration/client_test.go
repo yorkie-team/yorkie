@@ -29,7 +29,7 @@ import (
 
 func TestClient(t *testing.T) {
 	t.Run("dial and close test", func(t *testing.T) {
-		cli, err := client.Dial(testYorkie.RPCAddr())
+		cli, err := client.Dial(defaultYorkie.RPCAddr())
 		assert.NoError(t, err)
 
 		defer func() {
@@ -39,7 +39,7 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("activate/deactivate test", func(t *testing.T) {
-		cli, err := client.Dial(testYorkie.RPCAddr())
+		cli, err := client.Dial(defaultYorkie.RPCAddr())
 		assert.NoError(t, err)
 		defer func() {
 			err := cli.Close()

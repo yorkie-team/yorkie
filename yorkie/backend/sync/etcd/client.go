@@ -18,6 +18,7 @@ package etcd
 
 import (
 	"context"
+	gosync "sync"
 	"time"
 
 	"go.etcd.io/etcd/clientv3"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 )
 
 const (
@@ -50,10 +52,18 @@ type Config struct {
 type Client struct {
 	config *Config
 	client *clientv3.Client
+
+	pubSub *memory.PubSub
+
+	memberMapMu *gosync.RWMutex
+	memberMap   map[string]*sync.AgentInfo
+
+	ctx        context.Context
+	cancelFunc context.CancelFunc
 }
 
 // newClient creates a new instance of Client.
-func newClient(conf *Config) *Client {
+func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 	if conf.DialTimeoutSec == 0 {
 		conf.DialTimeoutSec = DefaultDialTimeoutSec
 	}
@@ -61,14 +71,24 @@ func newClient(conf *Config) *Client {
 		conf.LockLeaseTimeSec = DefaultLockLeaseTimeSec
 	}
 
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
 	return &Client{
 		config: conf,
+
+		pubSub: memory.NewPubSub(agentInfo),
+
+		memberMapMu: &gosync.RWMutex{},
+		memberMap:   make(map[string]*sync.AgentInfo),
+
+		ctx:        ctx,
+		cancelFunc: cancelFunc,
 	}
 }
 
 // Dial creates a new instance of Client and dials the given ETCD.
-func Dial(conf *Config) (*Client, error) {
-	c := newClient(conf)
+func Dial(conf *Config, agentInfo *sync.AgentInfo) (*Client, error) {
+	c := newClient(conf, agentInfo)
 
 	if err := c.Dial(); err != nil {
 		return nil, err
@@ -99,6 +119,12 @@ func (c *Client) Dial() error {
 
 // Close all resources of this client.
 func (c *Client) Close() error {
+	c.cancelFunc()
+
+	if err := c.removeAgent(context.Background()); err != nil {
+		log.Logger.Error(err)
+	}
+
 	return c.client.Close()
 }
 

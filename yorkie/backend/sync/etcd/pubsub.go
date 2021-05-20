@@ -15,3 +15,37 @@
  */
 
 package etcd
+
+import (
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
+)
+
+// Subscribe subscribes to the given topics.
+func (c *Client) Subscribe(
+	subscriber types.Client,
+	topics []string,
+) (*sync.Subscription, map[string][]types.Client, error) {
+	// TODO(hackerwins): build peersMap.
+	return c.pubSub.Subscribe(subscriber, topics)
+}
+
+// Unsubscribe unsubscribes the given topics.
+func (c *Client) Unsubscribe(topics []string, sub *sync.Subscription) {
+	c.pubSub.Unsubscribe(topics, sub)
+}
+
+// Publish publishes the given event to the given Topic.
+func (c *Client) Publish(
+	publisherID *time.ActorID,
+	topic string,
+	event sync.DocEvent,
+) {
+	c.pubSub.Publish(publisherID, topic, event)
+
+	// TODO(hackerwins): broadcast the event to other agents.
+	// for _, member := range c.Members() {
+	// member.RPCAddr
+	// }
+}

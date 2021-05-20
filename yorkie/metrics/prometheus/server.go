@@ -34,16 +34,18 @@ type Config struct {
 // Server provides application-specific and Go metrics.
 type Server struct {
 	conf          *Config
+	metrics       *Metrics
 	metricsServer *http.Server
 }
 
 // NewServer creates an instance of Server.
-func NewServer(conf *Config) (*Server, error) {
+func NewServer(conf *Config, met *Metrics) (*Server, error) {
 	if conf == nil {
 		return nil, nil
 	}
 	return &Server{
-		conf: conf,
+		conf:    conf,
+		metrics: met,
 		metricsServer: &http.Server{
 			Addr: fmt.Sprintf(":%d", conf.Port),
 		},
@@ -53,7 +55,9 @@ func NewServer(conf *Config) (*Server, error) {
 func (s *Server) listenAndServe() error {
 	go func() {
 		log.Logger.Infof(fmt.Sprintf("serving Metrics on %d", s.conf.Port))
-		http.Handle("/metrics", promhttp.Handler())
+		serveMux := http.NewServeMux()
+		serveMux.Handle("/metrics", promhttp.HandlerFor(s.metrics.Registry(), promhttp.HandlerOpts{}))
+		s.metricsServer.Handler = serveMux
 		if err := s.metricsServer.ListenAndServe(); err != http.ErrServerClosed {
 			log.Logger.Error("HTTP server ListenAndServe: %v", err)
 		}

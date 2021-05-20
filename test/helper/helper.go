@@ -108,13 +108,13 @@ func ByteCountIEC(b uint64) string {
 }
 
 // TestYorkie returns Yorkie instance for testing.
-func TestYorkie() *yorkie.Yorkie {
+func TestYorkie(portOffset int) *yorkie.Yorkie {
 	y, err := yorkie.New(&yorkie.Config{
 		RPC: &rpc.Config{
-			Port: RPCPort,
+			Port: RPCPort + portOffset,
 		},
 		Metrics: &prometheus.Config{
-			Port: MetricsPort,
+			Port: MetricsPort + portOffset,
 		},
 		Backend: &backend.Config{
 			SnapshotThreshold: SnapshotThreshold,

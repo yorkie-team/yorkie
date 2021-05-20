@@ -17,7 +17,11 @@
 package backend
 
 import (
+	"os"
 	gosync "sync"
+	"time"
+
+	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
@@ -26,7 +30,6 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
-	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 )
 
 // Config is the configuration for creating a Backend instance.
@@ -42,7 +45,8 @@ type Config struct {
 // Backend manages Yorkie's remote states such as data store, distributed lock
 // and etc. And it has the server status like the configuration.
 type Backend struct {
-	Config *Config
+	Config    *Config
+	agentInfo *sync.AgentInfo
 
 	DB        db.DB
 	LockerMap sync.LockerMap
@@ -65,31 +69,54 @@ func New(
 	conf *Config,
 	mongoConf *mongo.Config,
 	etcdConf *etcd.Config,
+	rpcAddr string,
+	met metrics.Metrics,
 ) (*Backend, error) {
-	met := prometheus.NewMetrics()
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, err
+	}
+
+	agentInfo := &sync.AgentInfo{
+		ID:        xid.New().String(),
+		Hostname:  hostname,
+		RPCAddr:   rpcAddr,
+		UpdatedAt: time.Now(),
+	}
 
 	mongoClient, err := mongo.Dial(mongoConf)
 	if err != nil {
 		return nil, err
 	}
 
+	// TODO(hackerwins): Merge these instances into Coordinator.
 	var pubSub sync.PubSub
 	var lockerMap sync.LockerMap
 	if etcdConf != nil {
-		etcdClient, err := etcd.Dial(etcdConf)
+		etcdClient, err := etcd.Dial(etcdConf, agentInfo)
 		if err != nil {
 			return nil, err
 		}
+		if err := etcdClient.Initialize(); err != nil {
+			return nil, err
+		}
+
 		lockerMap = etcdClient
-		// TODO(hackerwins): We need to replace pubsub with etcdClient.
-		pubSub = memory.NewPubSub()
+		pubSub = etcdClient
 	} else {
 		lockerMap = memory.NewLockerMap()
-		pubSub = memory.NewPubSub()
+		pubSub = memory.NewPubSub(agentInfo)
 	}
+
+	log.Logger.Infof(
+		"backend created: id: %s, addr: %s",
+		agentInfo.ID,
+		agentInfo.RPCAddr,
+	)
 
 	return &Backend{
 		Config:    conf,
+		agentInfo: agentInfo,
 		DB:        mongoClient,
 		LockerMap: lockerMap,
 		PubSub:    pubSub,
@@ -132,4 +159,9 @@ func (b *Backend) AttachGoroutine(f func()) {
 		defer b.wg.Done()
 		f()
 	}()
+}
+
+// Members returns the members of this cluster.
+func (b *Backend) Members() map[string]*sync.AgentInfo {
+	return b.PubSub.Members()
 }

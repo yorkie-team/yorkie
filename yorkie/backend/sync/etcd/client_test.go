@@ -37,7 +37,7 @@ func TestClient(t *testing.T) {
 			_, err = etcd.Dial(&etcd.Config{
 				Endpoints:      []string{"invalid-endpoint:2379"},
 				DialTimeoutSec: 1,
-			})
+			}, nil)
 		}()
 		wg.Wait()
 
