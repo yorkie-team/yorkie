@@ -18,38 +18,28 @@ package rpc
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	gotime "time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
-	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
+	"github.com/yorkie-team/yorkie/yorkie/rpc/interceptors"
 )
-
-type fieldViolation struct {
-	field       string
-	description string
-}
 
 // Config is the configuration for creating a Server instance.
 type Config struct {
@@ -67,13 +57,15 @@ type Server struct {
 
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
+	defaultInterceptor := interceptors.NewDefaultInterceptor()
+
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
-			unaryInterceptor,
+			defaultInterceptor.Unary(),
 			grpcprometheus.UnaryServerInterceptor,
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
-			streamInterceptor,
+			defaultInterceptor.Stream(),
 			grpcprometheus.StreamServerInterceptor,
 		)),
 	}
@@ -122,18 +114,11 @@ func (s *Server) ActivateClient(
 	req *api.ActivateClientRequest,
 ) (*api.ActivateClientResponse, error) {
 	if req.ClientKey == "" {
-		return nil, statusErrorWithDetails(
-			codes.InvalidArgument,
-			"invalid client key",
-			[]fieldViolation{{
-				field:       "client_key",
-				description: "the client key must not be empty",
-			}},
-		)
+		return nil, clients.ErrInvalidClientKey
 	}
 	client, err := clients.Activate(ctx, s.backend, req.ClientKey)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	return &api.ActivateClientResponse{
@@ -148,19 +133,12 @@ func (s *Server) DeactivateClient(
 	req *api.DeactivateClientRequest,
 ) (*api.DeactivateClientResponse, error) {
 	if len(req.ClientId) == 0 {
-		return nil, statusErrorWithDetails(
-			codes.InvalidArgument,
-			"invalid client ID",
-			[]fieldViolation{{
-				field:       "client_id",
-				description: "the client ID must not be empty",
-			}},
-		)
+		return nil, clients.ErrInvalidClientID
 	}
 
 	client, err := clients.Deactivate(ctx, s.backend, req.ClientId)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	return &api.DeactivateClientResponse{
@@ -175,7 +153,7 @@ func (s *Server) AttachDocument(
 ) (*api.AttachDocumentResponse, error) {
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	if pack.HasChanges() {
@@ -184,11 +162,11 @@ func (s *Server) AttachDocument(
 			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
 		)
 		if err != nil {
-			return nil, toStatusError(err)
+			return nil, err
 		}
 
 		if err := locker.Lock(ctx); err != nil {
-			return nil, toStatusError(err)
+			return nil, err
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
@@ -205,20 +183,20 @@ func (s *Server) AttachDocument(
 		true,
 	)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	pbChangePack, err := converter.ToChangePack(pulled)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	return &api.AttachDocumentResponse{
@@ -233,7 +211,7 @@ func (s *Server) DetachDocument(
 ) (*api.DetachDocumentResponse, error) {
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	if pack.HasChanges() {
@@ -242,11 +220,11 @@ func (s *Server) DetachDocument(
 			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
 		)
 		if err != nil {
-			return nil, toStatusError(err)
+			return nil, err
 		}
 
 		if err := locker.Lock(ctx); err != nil {
-			return nil, toStatusError(err)
+			return nil, err
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
@@ -263,23 +241,23 @@ func (s *Server) DetachDocument(
 		false,
 	)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	pbChangePack, err := converter.ToChangePack(pulled)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	return &api.DetachDocumentResponse{
@@ -296,7 +274,7 @@ func (s *Server) PushPull(
 	start := gotime.Now()
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	if pack.HasChanges() {
@@ -307,12 +285,12 @@ func (s *Server) PushPull(
 			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
 		)
 		if err != nil {
-			return nil, toStatusError(err)
+			return nil, err
 		}
 
 		if err := locker.Lock(ctx); err != nil {
 			log.Logger.Error(err)
-			return nil, toStatusError(err)
+			return nil, err
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
@@ -329,20 +307,20 @@ func (s *Server) PushPull(
 		false,
 	)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	pbChangePack, err := converter.ToChangePack(pulled)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, err
 	}
 
 	s.backend.Metrics.SetPushPullSentChanges(len(pbChangePack.Changes))
@@ -443,9 +421,9 @@ func (s *Server) listenAndServeGRPC() error {
 }
 
 func (s *Server) watchDocs(
-	client pkgtypes.Client,
+	client types.Client,
 	docKeys []string,
-) (*sync.Subscription, map[string][]pkgtypes.Client, error) {
+) (*sync.Subscription, map[string][]types.Client, error) {
 	subscription, peersMap, err := s.backend.PubSub.Subscribe(
 		client,
 		docKeys,
@@ -460,7 +438,7 @@ func (s *Server) watchDocs(
 			subscription.Subscriber().ID,
 			docKey,
 			sync.DocEvent{
-				Type:      pkgtypes.DocumentsWatchedEvent,
+				Type:      types.DocumentsWatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
 			},
@@ -478,64 +456,10 @@ func (s *Server) unwatchDocs(docKeys []string, subscription *sync.Subscription) 
 			subscription.Subscriber().ID,
 			docKey,
 			sync.DocEvent{
-				Type:      pkgtypes.DocumentsUnwatchedEvent,
+				Type:      types.DocumentsUnwatchedEvent,
 				DocKey:    docKey,
 				Publisher: subscription.Subscriber(),
 			},
 		)
 	}
-}
-
-// toStatusError returns a status.Error from the given logic error. If an error
-// occurs while executing logic in API handler, gRPC status.error should be
-// returned so that the client can know more about the status of the request.
-func toStatusError(err error) error {
-	if errors.Is(err, converter.ErrPackRequired) ||
-		errors.Is(err, converter.ErrCheckpointRequired) ||
-		errors.Is(err, time.ErrInvalidHexString) ||
-		errors.Is(err, db.ErrInvalidID) {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	if errors.Is(err, converter.ErrUnsupportedOperation) ||
-		errors.Is(err, converter.ErrUnsupportedElement) ||
-		errors.Is(err, converter.ErrUnsupportedEventType) ||
-		errors.Is(err, converter.ErrUnsupportedValueType) ||
-		errors.Is(err, converter.ErrUnsupportedCounterType) {
-		return status.Error(codes.Unimplemented, err.Error())
-	}
-
-	if errors.Is(err, db.ErrClientNotFound) ||
-		errors.Is(err, db.ErrDocumentNotFound) {
-		return status.Error(codes.NotFound, err.Error())
-	}
-
-	if err == db.ErrClientNotActivated ||
-		err == db.ErrDocumentNotAttached ||
-		err == db.ErrDocumentAlreadyAttached ||
-		errors.Is(err, packs.ErrInvalidServerSeq) ||
-		errors.Is(err, db.ErrConflictOnUpdate) {
-		return status.Error(codes.FailedPrecondition, err.Error())
-	}
-
-	return status.Error(codes.Internal, err.Error())
-}
-
-func statusErrorWithDetails(code codes.Code, msg string, violations []fieldViolation) error {
-	br := &errdetails.BadRequest{}
-
-	for _, violation := range violations {
-		br.FieldViolations = append(br.FieldViolations, &errdetails.BadRequest_FieldViolation{
-			Field:       violation.field,
-			Description: violation.description,
-		})
-	}
-
-	st, err := status.New(code, msg).WithDetails(br)
-	if err != nil {
-		// If this errored, it will always error/ here, so better panic so we can figure
-		// out why than have this silently passing.
-		panic(fmt.Sprintf("unexpected error attaching metadata: %violation", err))
-	}
-	return st.Err()
 }
