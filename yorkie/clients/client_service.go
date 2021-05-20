@@ -18,10 +18,19 @@ package clients
 
 import (
 	"context"
+	"errors"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
+)
+
+var (
+	// ErrInvalidClientKey is returned when the given Key is not valid ClientKey.
+	ErrInvalidClientKey = errors.New("invalid client key")
+
+	// ErrInvalidClientID is returned when the given Key is not valid ClientID.
+	ErrInvalidClientID = errors.New("invalid client id")
 )
 
 // Activate activates the given client.

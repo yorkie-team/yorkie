@@ -136,6 +136,8 @@ func (c *Client) removeAgent(ctx context.Context) error {
 
 // syncAgents syncs the local member map with etcd.
 func (c *Client) syncAgents() {
+	// TODO(hackerwins): When the network is recovered, check if we need to
+	// recover the channels watched in the situation.
 	watchCh := c.client.Watch(c.ctx, agentsPath, clientv3.WithPrefix())
 	for {
 		select {
