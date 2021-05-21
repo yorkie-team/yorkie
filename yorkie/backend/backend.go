@@ -109,7 +109,7 @@ func New(
 	}
 
 	log.Logger.Infof(
-		"backend created: id: %s, addr: %s",
+		"backend created: id: %s, rpc: %s",
 		agentInfo.ID,
 		agentInfo.RPCAddr,
 	)
@@ -138,7 +138,17 @@ func (b *Backend) Close() error {
 		log.Logger.Error(err)
 	}
 
-	return b.DB.Close()
+	if err := b.DB.Close(); err != nil {
+		log.Logger.Error(err)
+	}
+
+	log.Logger.Infof(
+		"backend stoped: id: %s, rpc: %s",
+		b.agentInfo.ID,
+		b.agentInfo.RPCAddr,
+	)
+
+	return nil
 }
 
 // AttachGoroutine creates a goroutine on a given function and tracks it using

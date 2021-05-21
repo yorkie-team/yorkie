@@ -54,9 +54,9 @@ var (
 // It has documents and sends changes of the document in local
 // to the agent to synchronize with other replicas in remote.
 type Client struct {
-	conn       *grpc.ClientConn
-	client     api.YorkieClient
-	dialOption grpc.DialOption
+	conn        *grpc.ClientConn
+	client      api.YorkieClient
+	dialOptions []grpc.DialOption
 
 	id           *time.ActorID
 	key          string
@@ -67,8 +67,10 @@ type Client struct {
 
 // Option configures how we set up the client.
 type Option struct {
-	Key                string
-	Metadata           map[string]string
+	Key      string
+	Metadata map[string]string
+	Token    string
+
 	CertFile           string
 	ServerNameOverride string
 }
@@ -91,13 +93,12 @@ func NewClient(opts ...Option) (*Client, error) {
 	if len(opts) > 0 && opts[0].CertFile != "" {
 		certFile = opts[0].CertFile
 	}
-
 	var serverNameOverride string
 	if len(opts) > 0 && opts[0].ServerNameOverride != "" {
 		serverNameOverride = opts[0].ServerNameOverride
 	}
 
-	dialOption := grpc.WithInsecure()
+	var dialOptions []grpc.DialOption
 	if certFile != "" {
 		creds, err := credentials.NewClientTLSFromFile(
 			certFile,
@@ -107,13 +108,25 @@ func NewClient(opts ...Option) (*Client, error) {
 			log.Logger.Error(err)
 			return nil, err
 		}
-		dialOption = grpc.WithTransportCredentials(creds)
+		dialOptions = append(dialOptions, grpc.WithTransportCredentials(creds))
+	} else {
+		dialOptions = append(dialOptions, grpc.WithInsecure())
+	}
+
+	var token string
+	if len(opts) > 0 && opts[0].Token != "" {
+		token = opts[0].Token
+	}
+	if token != "" {
+		authInterceptor := NewAuthInterceptor(token)
+		dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
+		dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
 	}
 
 	return &Client{
 		key:          k,
 		metadata:     metadata,
-		dialOption:   dialOption,
+		dialOptions:  dialOptions,
 		status:       deactivated,
 		attachedDocs: make(map[string]*document.Document),
 	}, nil
@@ -135,7 +148,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 
 // Dial dials the given rpcAddr.
 func (c *Client) Dial(rpcAddr string) error {
-	conn, err := grpc.Dial(rpcAddr, c.dialOption)
+	conn, err := grpc.Dial(rpcAddr, c.dialOptions...)
 	if err != nil {
 		log.Logger.Error(err)
 		return err

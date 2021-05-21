@@ -34,17 +34,17 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie"
 )
 
-var defaultYorkie *yorkie.Yorkie
+var defaultAgent *yorkie.Yorkie
 
 func TestMain(m *testing.M) {
-	y := helper.TestYorkie(0)
-	if err := y.Start(); err != nil {
+	agent := helper.TestYorkie()
+	if err := agent.Start(); err != nil {
 		log.Logger.Fatal(err)
 	}
-	defaultYorkie = y
+	defaultAgent = agent
 	code := m.Run()
-	if defaultYorkie != nil {
-		if err := defaultYorkie.Shutdown(true); err != nil {
+	if defaultAgent != nil {
+		if err := defaultAgent.Shutdown(true); err != nil {
 			log.Logger.Error(err)
 		}
 	}
@@ -84,7 +84,7 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 }
 
 func createConn() (*grpc.ClientConn, error) {
-	conn, err := grpc.Dial(defaultYorkie.RPCAddr(), grpc.WithInsecure())
+	conn, err := grpc.Dial(defaultAgent.RPCAddr(), grpc.WithInsecure())
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func createConn() (*grpc.ClientConn, error) {
 func createActivatedClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
-			defaultYorkie.RPCAddr(),
+			defaultAgent.RPCAddr(),
 			client.Option{Metadata: map[string]string{
 				"name": fmt.Sprintf("name-%d", i),
 			}},

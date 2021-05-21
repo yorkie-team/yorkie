@@ -46,6 +46,8 @@ type Config struct {
 	Port     int
 	CertFile string
 	KeyFile  string
+
+	AuthorizationWebHook string
 }
 
 // Server is a normal server that processes the logic requested by the client.
@@ -57,14 +59,17 @@ type Server struct {
 
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
+	authInterceptor := interceptors.NewAuthInterceptor(conf.AuthorizationWebHook)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
+			authInterceptor.Unary(),
 			defaultInterceptor.Unary(),
 			grpcprometheus.UnaryServerInterceptor,
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
+			authInterceptor.Stream(),
 			defaultInterceptor.Stream(),
 			grpcprometheus.StreamServerInterceptor,
 		)),

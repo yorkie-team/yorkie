@@ -22,18 +22,13 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
-const (
-	// to avoid conflict with rpc port used for client test
-	testRPCPort = helper.RPCPort + 100
-)
-
 var (
 	nilClientID, _     = hex.DecodeString("000000000000000000000000")
 	emptyClientID, _   = hex.DecodeString("")
 	invalidClientID, _ = hex.DecodeString("invalid")
 
 	testRPCServer *rpc.Server
-	testRPCAddr   = fmt.Sprintf("localhost:%d", testRPCPort)
+	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.RPCPort)
 	testClient    api.YorkieClient
 
 	invalidChangePack = &api.ChangePack{
@@ -60,7 +55,7 @@ func TestMain(m *testing.M) {
 	}
 
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
-		Port: testRPCPort,
+		Port: helper.RPCPort,
 	}, be)
 	if err != nil {
 		log.Fatal(err)
@@ -70,7 +65,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed rpc listen: %s\n", err)
 	}
 
-	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", testRPCPort), grpc.WithInsecure())
+	conn, err := grpc.Dial(testRPCAddr, grpc.WithInsecure())
 	if err != nil {
 		log.Fatal(err)
 	}
