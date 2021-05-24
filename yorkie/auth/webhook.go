@@ -18,6 +18,9 @@ import (
 var (
 	// ErrNotAllowed is returned when the given user is not allowed for the access.
 	ErrNotAllowed = errors.New("method is not allowed for this user")
+
+	// ErrInvalidWebhookResponse is returned when the given webhook response is not valid.
+	ErrInvalidWebhookResponse = errors.New("invalid authorization webhook response")
 )
 
 // AccessAttributes returns an array of AccessAttribute from the given pack.
@@ -72,7 +75,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 
 	var authResp types.AuthWebhookResponse
 	if err = json.Unmarshal(respBody, &authResp); err != nil {
-		return err
+		return fmt.Errorf("%s: %w", err.Error(), ErrInvalidWebhookResponse)
 	}
 
 	if !authResp.Allowed {
