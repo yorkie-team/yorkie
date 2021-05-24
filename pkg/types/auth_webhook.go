@@ -16,9 +16,34 @@
 
 package types
 
+// VerbType represents an action taken on the document.
+type VerbType string
+
+const (
+	// Read represents the case of only reading the given document.
+	Read VerbType = "r"
+
+	// ReadWrite represents the case of reading and writing the given document.
+	ReadWrite VerbType = "rw"
+)
+
+// AccessAttribute represents an access attribute.
+type AccessAttribute struct {
+	Key  string   `json:"key"`
+	Verb VerbType `json:"verb"`
+}
+
+// AccessInfo represents an access information.
+type AccessInfo struct {
+	Method     string
+	Attributes []AccessAttribute
+}
+
 // AuthWebhookRequest represents the request of authentication webhook.
 type AuthWebhookRequest struct {
-	Token string `json:"token"`
+	Token      string            `json:"token"`
+	Method     string            `json:"method"`
+	Attributes []AccessAttribute `json:"attributes"`
 }
 
 // AuthWebhookResponse represents the response of authentication webhook.

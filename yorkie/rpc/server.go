@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/yorkie/auth"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
@@ -46,8 +47,6 @@ type Config struct {
 	Port     int
 	CertFile string
 	KeyFile  string
-
-	AuthorizationWebHook string
 }
 
 // Server is a normal server that processes the logic requested by the client.
@@ -59,7 +58,7 @@ type Server struct {
 
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
-	authInterceptor := interceptors.NewAuthInterceptor(conf.AuthorizationWebHook)
+	authInterceptor := interceptors.NewAuthInterceptor(be.Config.AuthorizationWebhook)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []grpc.ServerOption{
@@ -121,6 +120,13 @@ func (s *Server) ActivateClient(
 	if req.ClientKey == "" {
 		return nil, clients.ErrInvalidClientKey
 	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: "ActivateClient",
+	}); err != nil {
+		return nil, err
+	}
+
 	client, err := clients.Activate(ctx, s.backend, req.ClientKey)
 	if err != nil {
 		return nil, err
@@ -141,6 +147,12 @@ func (s *Server) DeactivateClient(
 		return nil, clients.ErrInvalidClientID
 	}
 
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: "DeactivateClient",
+	}); err != nil {
+		return nil, err
+	}
+
 	client, err := clients.Deactivate(ctx, s.backend, req.ClientId)
 	if err != nil {
 		return nil, err
@@ -158,6 +170,13 @@ func (s *Server) AttachDocument(
 ) (*api.AttachDocumentResponse, error) {
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     "AttachDocument",
+		Attributes: auth.AccessAttributes(pack),
+	}); err != nil {
 		return nil, err
 	}
 
@@ -216,6 +235,13 @@ func (s *Server) DetachDocument(
 ) (*api.DetachDocumentResponse, error) {
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     "DetachDocument",
+		Attributes: auth.AccessAttributes(pack),
+	}); err != nil {
 		return nil, err
 	}
 
@@ -279,6 +305,13 @@ func (s *Server) PushPull(
 	start := gotime.Now()
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     "PushPull",
+		Attributes: auth.AccessAttributes(pack),
+	}); err != nil {
 		return nil, err
 	}
 

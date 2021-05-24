@@ -114,14 +114,14 @@ func TestConfig(authWebhook string) *yorkie.Config {
 	portOffset += 100
 	return &yorkie.Config{
 		RPC: &rpc.Config{
-			Port:                 RPCPort + portOffset,
-			AuthorizationWebHook: authWebhook,
+			Port: RPCPort + portOffset,
 		},
 		Metrics: &prometheus.Config{
 			Port: MetricsPort + portOffset,
 		},
 		Backend: &backend.Config{
-			SnapshotThreshold: SnapshotThreshold,
+			SnapshotThreshold:    SnapshotThreshold,
+			AuthorizationWebhook: authWebhook,
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:        MongoConnectionURI,

@@ -17,19 +17,14 @@
 package interceptors
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"io/ioutil"
-	"net/http"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/yorkie-team/yorkie/pkg/log"
-	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/yorkie/auth"
 )
 
 // AuthInterceptor is a interceptor for authentication.
@@ -53,9 +48,11 @@ func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
 		if i.needAuth() {
-			if err := i.authorize(ctx); err != nil {
+			token, err := i.extractToken(ctx)
+			if err != nil {
 				return nil, err
 			}
+			return handler(auth.CtxWithToken(ctx, token), req)
 		}
 
 		return handler(ctx, req)
@@ -70,12 +67,7 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
-		if i.needAuth() {
-			if err := i.authorize(ss.Context()); err != nil {
-				return err
-			}
-		}
-
+		// TODO(hackerwins): extract token and store it on the context.
 		return handler(srv, ss)
 	}
 }
@@ -96,46 +88,4 @@ func (i *AuthInterceptor) extractToken(ctx context.Context) (string, error) {
 	}
 
 	return values[0], nil
-}
-
-func (i *AuthInterceptor) authorize(ctx context.Context) error {
-	token, err := i.extractToken(ctx)
-	if err != nil {
-		return err
-	}
-
-	// TODO(hackerwins): We need to extract docKeys and verbs from RPC.
-	reqBody, err := json.Marshal(types.AuthWebhookRequest{
-		Token: token,
-	})
-	if err != nil {
-		return err
-	}
-
-	// TODO(hackerwins): We need to apply retryBackoff in case of failure
-	resp, err := http.Post(i.webhook, "application/json", bytes.NewBuffer(reqBody))
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Logger.Error(err)
-		}
-	}()
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	var authResp types.AuthWebhookResponse
-	if err = json.Unmarshal(respBody, &authResp); err != nil {
-		return err
-	}
-
-	if !authResp.Allowed {
-		return status.Errorf(codes.Unauthenticated, authResp.Reason)
-	}
-
-	return nil
 }
