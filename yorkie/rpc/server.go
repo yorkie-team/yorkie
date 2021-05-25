@@ -122,7 +122,7 @@ func (s *Server) ActivateClient(
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: "ActivateClient",
+		Method: types.ActivateClient,
 	}); err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (s *Server) DeactivateClient(
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: "DeactivateClient",
+		Method: types.DeactivateClient,
 	}); err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (s *Server) AttachDocument(
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     "AttachDocument",
+		Method:     types.AttachDocument,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
 		return nil, err
@@ -239,7 +239,7 @@ func (s *Server) DetachDocument(
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     "DetachDocument",
+		Method:     types.DetachDocument,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
 		return nil, err
@@ -309,7 +309,7 @@ func (s *Server) PushPull(
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     "PushPull",
+		Method:     types.PushPull,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
 		return nil, err

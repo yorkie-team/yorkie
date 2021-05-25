@@ -16,15 +16,44 @@
 
 package types
 
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
+)
+
 // VerbType represents an action taken on the document.
 type VerbType string
 
 const (
+
 	// Read represents the case of only reading the given document.
 	Read VerbType = "r"
 
 	// ReadWrite represents the case of reading and writing the given document.
 	ReadWrite VerbType = "rw"
+)
+
+var (
+	// ErrInvalidWebhookRequest is returned when the given webhook request is not valid.
+	ErrInvalidWebhookRequest = errors.New("invalid authorization webhook request")
+
+	// ErrInvalidWebhookResponse is returned when the given webhook response is not valid.
+	ErrInvalidWebhookResponse = errors.New("invalid authorization webhook response")
+)
+
+// Method represents a method name of RPC.
+type Method string
+
+// Belows are the names of RPCs.
+const (
+	ActivateClient   Method = "ActivateClient"
+	DeactivateClient Method = "DeactivateClient"
+	AttachDocument   Method = "AttachDocument"
+	DetachDocument   Method = "DetachDocument"
+	PushPull         Method = "PushPull"
 )
 
 // AccessAttribute represents an access attribute.
@@ -35,19 +64,61 @@ type AccessAttribute struct {
 
 // AccessInfo represents an access information.
 type AccessInfo struct {
-	Method     string
+	Method     Method
 	Attributes []AccessAttribute
 }
 
 // AuthWebhookRequest represents the request of authentication webhook.
 type AuthWebhookRequest struct {
 	Token      string            `json:"token"`
-	Method     string            `json:"method"`
+	Method     Method            `json:"method"`
 	Attributes []AccessAttribute `json:"attributes"`
+}
+
+// NewAuthWebhookRequest creates a new instance of AuthWebhookRequest.
+func NewAuthWebhookRequest(reader io.Reader) (*AuthWebhookRequest, error) {
+	req := &AuthWebhookRequest{}
+
+	bytes, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(bytes, req); err != nil {
+		return nil, fmt.Errorf("%s: %w", err.Error(), ErrInvalidWebhookRequest)
+	}
+
+	return req, nil
 }
 
 // AuthWebhookResponse represents the response of authentication webhook.
 type AuthWebhookResponse struct {
 	Allowed bool   `json:"allowed"`
 	Reason  string `json:"reason"`
+}
+
+// NewAuthWebhookResponse creates a new instance of AuthWebhookResponse.
+func NewAuthWebhookResponse(reader io.Reader) (*AuthWebhookResponse, error) {
+	resp := &AuthWebhookResponse{}
+
+	bytes, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(bytes, resp); err != nil {
+		return nil, fmt.Errorf("%s: %w", err.Error(), ErrInvalidWebhookResponse)
+	}
+
+	return resp, nil
+}
+
+// Write writes this response to the given writer.
+func (r *AuthWebhookResponse) Write(writer io.Writer) (int, error) {
+	resBody, err := json.Marshal(r)
+	if err != nil {
+		return 0, err
+	}
+
+	return writer.Write(resBody)
 }

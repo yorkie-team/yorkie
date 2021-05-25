@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -18,9 +17,6 @@ import (
 var (
 	// ErrNotAllowed is returned when the given user is not allowed for the access.
 	ErrNotAllowed = errors.New("method is not allowed for this user")
-
-	// ErrInvalidWebhookResponse is returned when the given webhook response is not valid.
-	ErrInvalidWebhookResponse = errors.New("invalid authorization webhook response")
 )
 
 // AccessAttributes returns an array of AccessAttribute from the given pack.
@@ -68,14 +64,9 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		}
 	}()
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	authResp, err := types.NewAuthWebhookResponse(resp.Body)
 	if err != nil {
 		return err
-	}
-
-	var authResp types.AuthWebhookResponse
-	if err = json.Unmarshal(respBody, &authResp); err != nil {
-		return fmt.Errorf("%s: %w", err.Error(), ErrInvalidWebhookResponse)
 	}
 
 	if !authResp.Allowed {
