@@ -12,7 +12,7 @@ import (
 func TestClient(t *testing.T) {
 	t.Run("create instance test", func(t *testing.T) {
 		opts := client.Option{
-			Token: xid.New().String(),
+			Token:    xid.New().String(),
 			Metadata: map[string]string{"Name": "ClientName"},
 		}
 		cli, err := client.NewClient(opts)
