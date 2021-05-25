@@ -152,7 +152,10 @@ func (c *Client) syncAgents() {
 					}
 					c.setAgentInfo(string(event.Kv.Key), info)
 				case mvccpb.DELETE:
-					c.removeAgentInfo(string(event.Kv.Key))
+					err := c.removeAgentInfo(string(event.Kv.Key))
+					if err != nil {
+						log.Logger.Error(err)
+					}
 				}
 			}
 		case <-c.ctx.Done():
@@ -170,9 +173,20 @@ func (c *Client) setAgentInfo(key string, value sync.AgentInfo) {
 }
 
 // removeAgentInfo removes the given agentInfo from the local member map.
-func (c *Client) removeAgentInfo(key string) {
+func (c *Client) removeAgentInfo(key string) error {
 	c.memberMapMu.Lock()
 	defer c.memberMapMu.Unlock()
 
+	addr := c.memberMap[key].RPCAddr
+	if info, ok := c.broadcastClientMap[addr]; ok {
+		err := info.conn.Close()
+		if err != nil {
+			log.Logger.Error(err)
+			return err
+		}
+		delete(c.broadcastClientMap, addr)
+	}
 	delete(c.memberMap, key)
+
+	return nil
 }

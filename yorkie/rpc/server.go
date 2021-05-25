@@ -23,6 +23,7 @@ import (
 	gotime "time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -63,6 +64,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			defaultInterceptor.Unary(),
 			grpcprometheus.UnaryServerInterceptor,
+			grpc_recovery.UnaryServerInterceptor(),
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			defaultInterceptor.Stream(),
@@ -89,6 +91,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		backend:    be,
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
+	api.RegisterBroadcastServer(rpcServer.grpcServer, rpcServer)
 	grpcprometheus.Register(rpcServer.grpcServer)
 
 	return rpcServer, nil
@@ -355,6 +358,7 @@ func (s *Server) WatchDocuments(
 		return err
 	}
 
+	// TODO(dc7303): broadcast
 	if err := stream.Send(&api.WatchDocumentsResponse{
 		Body: &api.WatchDocumentsResponse_Initialization_{
 			Initialization: &api.WatchDocumentsResponse_Initialization{

@@ -95,10 +95,10 @@ func TestClusterMode(t *testing.T) {
 		wg.Add(1)
 		rch := clientA.Watch(ctx, docA)
 		go func() {
-			defer wg.Done()
 
 			select {
 			case resp := <-rch:
+				defer wg.Done()
 				if resp.Err == io.EOF {
 					return
 				}
@@ -117,10 +117,12 @@ func TestClusterMode(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
+		err = clientB.Sync(ctx)
+		assert.NoError(t, err)
+
 		wg.Wait()
 
-		// TODO(hackerwins): uncomment below test
-		// assert.Equal(t, docA.Marshal(), docB.Marshal())
+		assert.Equal(t, docA.Marshal(), docB.Marshal())
 
 		defer func() {
 			assert.NoError(t, clientA.Deactivate(ctx))

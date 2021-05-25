@@ -146,6 +146,22 @@ func (m *PubSub) Publish(
 	topic string,
 	event sync.DocEvent,
 ) {
+	m.PublishToLocal(publisherID, topic, event)
+}
+
+// Members returns the members of this cluster.
+func (m *PubSub) Members() map[string]*sync.AgentInfo {
+	members := make(map[string]*sync.AgentInfo)
+	members[m.AgentInfo.ID] = m.AgentInfo
+	return members
+}
+
+// PublishToLocal publishes the given event to the given Topic.
+func (m *PubSub) PublishToLocal(
+	publisherID *time.ActorID,
+	topic string,
+	event sync.DocEvent,
+) {
 	m.subscriptionsMapMu.RLock()
 	defer m.subscriptionsMapMu.RUnlock()
 
@@ -166,11 +182,4 @@ func (m *PubSub) Publish(
 	}
 
 	log.Logger.Debugf(`Publish(%s,%s) End`, event.DocKey, publisherID.String())
-}
-
-// Members returns the members of this cluster.
-func (m *PubSub) Members() map[string]*sync.AgentInfo {
-	members := make(map[string]*sync.AgentInfo)
-	members[m.AgentInfo.ID] = m.AgentInfo
-	return members
 }

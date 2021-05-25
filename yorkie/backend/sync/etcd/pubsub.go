@@ -17,7 +17,15 @@
 package etcd
 
 import (
+	"context"
+	"fmt"
+
+	"google.golang.org/grpc"
+
+	"github.com/yorkie-team/yorkie/api"
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
@@ -42,10 +50,68 @@ func (c *Client) Publish(
 	topic string,
 	event sync.DocEvent,
 ) {
-	c.pubSub.Publish(publisherID, topic, event)
+	c.PublishToLocal(publisherID, topic, event)
 
-	// TODO(hackerwins): broadcast the event to other agents.
-	// for _, member := range c.Members() {
-	// member.RPCAddr
-	// }
+	c.memberMapMu.RLock()
+	defer c.memberMapMu.RUnlock()
+
+	for _, member := range c.Members() {
+		memberAddr := member.RPCAddr
+		if memberAddr != c.pubSub.AgentInfo.RPCAddr {
+			c.addBroadcastClient(memberAddr)
+		}
+
+		if memberAddr != c.pubSub.AgentInfo.RPCAddr {
+			c.publishToMember(
+				memberAddr,
+				publisherID,
+				topic,
+				event,
+			)
+		}
+	}
+}
+
+func (c *Client) PublishToLocal(
+	publisherID *time.ActorID,
+	topic string,
+	event sync.DocEvent,
+) {
+	c.pubSub.Publish(publisherID, topic, event)
+}
+
+func (c *Client) addBroadcastClient(addr string) {
+	if _, ok := c.broadcastClientMap[addr]; !ok {
+		conn, err := grpc.Dial(addr, grpc.WithInsecure())
+		if err != nil {
+			log.Logger.Error(err)
+		}
+
+		c.broadcastClientMap[addr] = &broadcastClientInfo{
+			client: api.NewBroadcastClient(conn),
+			conn:   conn,
+		}
+	}
+}
+
+func (c *Client) publishToMember(
+	memberAddr string,
+	publisherID *time.ActorID,
+	topic string,
+	event sync.DocEvent,
+) {
+	bcm := c.broadcastClientMap[memberAddr]
+	eventType, _ := converter.ToEventType(event.Type)
+	if _, err := bcm.client.Publish(context.Background(), &api.PublishRequest{
+		PublisherId: publisherID.Bytes(),
+		Topic:       topic,
+		DocEvent: &api.DocEvent{
+			EventType: eventType,
+			DocKey:    event.DocKey,
+			Publisher: converter.ToClient(event.Publisher),
+		},
+	}); err != nil {
+		fmt.Println(memberAddr, "::", c.pubSub.AgentInfo.RPCAddr)
+		log.Logger.Error(err)
+	}
 }

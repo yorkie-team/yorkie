@@ -363,3 +363,23 @@ enum EventType {
     DOCUMENTS_WATCHED = 1;
     DOCUMENTS_UNWATCHED = 2;
 }
+
+service Broadcast {
+    rpc Publish (PublishRequest) returns (PublishResponse) {}
+}
+
+message PublishRequest {
+    bytes publisher_id = 1;
+    string topic = 2;
+    DocEvent doc_event = 3;
+}
+
+message PublishResponse {
+    string topic = 1;
+}
+
+message DocEvent {
+    EventType event_type = 1;
+	string doc_key = 2;
+	Client publisher = 3;
+}
