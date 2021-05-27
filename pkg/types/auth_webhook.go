@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 )
 
 // VerbType represents an action taken on the document.
@@ -79,12 +78,7 @@ type AuthWebhookRequest struct {
 func NewAuthWebhookRequest(reader io.Reader) (*AuthWebhookRequest, error) {
 	req := &AuthWebhookRequest{}
 
-	bytes, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal(bytes, req); err != nil {
+	if err := json.NewDecoder(reader).Decode(req); err != nil {
 		return nil, fmt.Errorf("%s: %w", err.Error(), ErrInvalidWebhookRequest)
 	}
 
@@ -101,12 +95,7 @@ type AuthWebhookResponse struct {
 func NewAuthWebhookResponse(reader io.Reader) (*AuthWebhookResponse, error) {
 	resp := &AuthWebhookResponse{}
 
-	bytes, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal(bytes, resp); err != nil {
+	if err := json.NewDecoder(reader).Decode(resp); err != nil {
 		return nil, fmt.Errorf("%s: %w", err.Error(), ErrInvalidWebhookResponse)
 	}
 

@@ -21,7 +21,6 @@ package integration
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -43,9 +42,7 @@ func newAuthServer(t *testing.T) (*httptest.Server, string) {
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req types.AuthWebhookRequest
-		body, err := io.ReadAll(r.Body)
-		assert.NoError(t, err)
-		assert.NoError(t, json.Unmarshal(body, &req))
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
 
 		var res types.AuthWebhookResponse
 		if req.Token == token {
