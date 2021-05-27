@@ -41,8 +41,8 @@ type Config struct {
 	// SnapshotInterval is the interval of changes to create a snapshot.
 	SnapshotInterval uint64 `json:"SnapshotInterval"`
 
-	// AuthorizationWebhook is the url of the authorization webhook.
-	AuthorizationWebhook string
+	// AuthorizationWebhookURL is the url of the authorization webhook.
+	AuthorizationWebhookURL string
 }
 
 // Backend manages Yorkie's remote states such as data store, distributed lock

@@ -36,7 +36,7 @@ func AccessAttributes(pack *change.Pack) []types.AccessAttribute {
 
 // VerifyAccess verifies the given access.
 func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessInfo) error {
-	if len(be.Config.AuthorizationWebhook) == 0 {
+	if len(be.Config.AuthorizationWebhookURL) == 0 {
 		return nil
 	}
 
@@ -51,7 +51,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 
 	// TODO(hackerwins): We need to apply retryBackoff in case of failure
 	resp, err := http.Post(
-		be.Config.AuthorizationWebhook,
+		be.Config.AuthorizationWebhookURL,
 		"application/json",
 		bytes.NewBuffer(reqBody),
 	)

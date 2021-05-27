@@ -58,7 +58,7 @@ type Server struct {
 
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
-	authInterceptor := interceptors.NewAuthInterceptor(be.Config.AuthorizationWebhook)
+	authInterceptor := interceptors.NewAuthInterceptor(be.Config.AuthorizationWebhookURL)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []grpc.ServerOption{
