@@ -31,13 +31,8 @@ service Yorkie {
 // Messages for RPC                    //
 /////////////////////////////////////////
 
-message RequestHeader {
-    uint32 version = 1;
-}
-
 message ActivateClientRequest {
-    RequestHeader header = 1;
-    string client_key = 2;
+    string client_key = 1;
 }
 
 message ActivateClientResponse {
@@ -46,8 +41,7 @@ message ActivateClientResponse {
 }
 
 message DeactivateClientRequest {
-    RequestHeader header = 1;
-    bytes client_id = 2;
+    bytes client_id = 1;
 }
 
 message DeactivateClientResponse {
@@ -55,9 +49,8 @@ message DeactivateClientResponse {
 }
 
 message AttachDocumentRequest {
-    RequestHeader header = 1;
-    bytes client_id = 2;
-    ChangePack change_pack = 3;
+    bytes client_id = 1;
+    ChangePack change_pack = 2;
 }
 
 message AttachDocumentResponse {
@@ -66,9 +59,8 @@ message AttachDocumentResponse {
 }
 
 message DetachDocumentRequest {
-    RequestHeader header = 1;
-    bytes client_id = 2;
-    ChangePack change_pack = 3;
+    bytes client_id = 1;
+    ChangePack change_pack = 2;
 }
 
 message DetachDocumentResponse {
@@ -77,9 +69,8 @@ message DetachDocumentResponse {
 }
 
 message WatchDocumentsRequest {
-    RequestHeader header = 1;
-    Client client = 2;
-    repeated DocumentKey document_keys = 3;
+    Client client = 1;
+    repeated DocumentKey document_keys = 2;
 }
 
 message WatchDocumentsResponse {
@@ -100,9 +91,8 @@ message WatchDocumentsResponse {
 }
 
 message PushPullRequest {
-    RequestHeader header = 1;
-    bytes client_id = 2;
-    ChangePack change_pack = 3;
+    bytes client_id = 1;
+    ChangePack change_pack = 2;
 }
 
 message PushPullResponse {

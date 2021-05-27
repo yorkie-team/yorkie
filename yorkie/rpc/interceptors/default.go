@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/yorkie/auth"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
@@ -86,6 +87,10 @@ func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
 // occurs while executing logic in API handler, gRPC status.error should be
 // returned so that the client can know more about the status of the request.
 func toStatusError(err error) error {
+	if errors.Is(err, auth.ErrNotAllowed) {
+		return status.Error(codes.Unauthenticated, err.Error())
+	}
+
 	if errors.Is(err, converter.ErrPackRequired) ||
 		errors.Is(err, converter.ErrCheckpointRequired) ||
 		errors.Is(err, time.ErrInvalidHexString) ||

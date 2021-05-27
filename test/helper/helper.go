@@ -37,8 +37,8 @@ var testStartedAt int64
 
 // Below are the values of the Yorkie config used in the test.
 const (
-	RPCPort                   = 1101
-	MetricsPort               = 1102
+	RPCPort                   = 21101
+	MetricsPort               = 21102
 	MongoConnectionURI        = "mongodb://localhost:27017"
 	MongoConnectionTimeoutSec = 5
 	MongoPingTimeoutSec       = 5
@@ -107,9 +107,12 @@ func ByteCountIEC(b uint64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
-// TestYorkie returns Yorkie instance for testing.
-func TestYorkie(portOffset int) *yorkie.Yorkie {
-	y, err := yorkie.New(&yorkie.Config{
+var portOffset = 0
+
+// TestConfig returns config for creating Yorkie instance.
+func TestConfig(authWebhook string) *yorkie.Config {
+	portOffset += 100
+	return &yorkie.Config{
 		RPC: &rpc.Config{
 			Port: RPCPort + portOffset,
 		},
@@ -117,7 +120,8 @@ func TestYorkie(portOffset int) *yorkie.Yorkie {
 			Port: MetricsPort + portOffset,
 		},
 		Backend: &backend.Config{
-			SnapshotThreshold: SnapshotThreshold,
+			SnapshotThreshold:       SnapshotThreshold,
+			AuthorizationWebhookURL: authWebhook,
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:        MongoConnectionURI,
@@ -128,7 +132,12 @@ func TestYorkie(portOffset int) *yorkie.Yorkie {
 		ETCD: &etcd.Config{
 			Endpoints: ETCDEndpoints,
 		},
-	})
+	}
+}
+
+// TestYorkie returns Yorkie instance for testing.
+func TestYorkie() *yorkie.Yorkie {
+	y, err := yorkie.New(TestConfig(""))
 	if err != nil {
 		log.Fatal(err)
 	}

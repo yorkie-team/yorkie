@@ -48,26 +48,27 @@ func keysFromAgents(m map[string]*sync.AgentInfo) []string {
 
 func TestClusterMode(t *testing.T) {
 	t.Run("member list test", func(t *testing.T) {
-		agentA := helper.TestYorkie(1000)
-		agentB := helper.TestYorkie(2000)
+		agentA := helper.TestYorkie()
+		agentB := helper.TestYorkie()
+
 		assert.NoError(t, agentA.Start())
 		assert.NoError(t, agentB.Start())
-
-		time.Sleep(time.Second)
-
+		time.Sleep(100 * time.Millisecond)
 		assert.Equal(t, keysFromAgents(agentA.Members()), keysFromAgents(agentB.Members()))
-		assert.Len(t, defaultYorkie.Members(), 3)
+		assert.Len(t, defaultAgent.Members(), 3)
 
 		assert.NoError(t, agentA.Shutdown(true))
-		assert.Len(t, defaultYorkie.Members(), 2)
+		time.Sleep(100 * time.Millisecond)
+		assert.Len(t, defaultAgent.Members(), 2)
 
 		assert.NoError(t, agentB.Shutdown(true))
-		assert.Len(t, defaultYorkie.Members(), 1)
+		time.Sleep(100 * time.Millisecond)
+		assert.Len(t, defaultAgent.Members(), 1)
 	})
 
 	t.Run("watch document across agents test", func(t *testing.T) {
-		agentA := helper.TestYorkie(1000)
-		agentB := helper.TestYorkie(2000)
+		agentA := helper.TestYorkie()
+		agentB := helper.TestYorkie()
 		assert.NoError(t, agentA.Start())
 		assert.NoError(t, agentB.Start())
 
