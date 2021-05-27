@@ -17,7 +17,6 @@
 package proxy
 
 import (
-	"fmt"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -230,7 +229,6 @@ func (p *ObjectProxy) GetText(k string) *TextProxy {
 	case *TextProxy:
 		return elem
 	default:
-		fmt.Println(":::::::::::::", elem.Marshal())
 		panic("unsupported type")
 	}
 }

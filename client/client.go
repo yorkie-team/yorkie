@@ -19,6 +19,7 @@ package client
 import (
 	"context"
 	"errors"
+
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

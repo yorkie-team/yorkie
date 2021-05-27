@@ -18,7 +18,6 @@ package etcd
 
 import (
 	"context"
-	"fmt"
 
 	"google.golang.org/grpc"
 
@@ -111,7 +110,6 @@ func (c *Client) publishToMember(
 			Publisher: converter.ToClient(event.Publisher),
 		},
 	}); err != nil {
-		fmt.Println(memberAddr, "::", c.pubSub.AgentInfo.RPCAddr)
 		log.Logger.Error(err)
 	}
 }
