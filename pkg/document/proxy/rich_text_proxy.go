@@ -17,10 +17,10 @@
 package proxy
 
 import (
+	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
-	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 // RichTextProxy is a proxy representing RichText.

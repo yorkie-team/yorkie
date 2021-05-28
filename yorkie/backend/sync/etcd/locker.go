@@ -21,7 +21,7 @@ import (
 
 	"go.etcd.io/etcd/clientv3/concurrency"
 
-	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/internal/log"
 )
 
 type internalLocker struct {

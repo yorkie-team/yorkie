@@ -23,12 +23,12 @@ import (
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
-	pkgtypes "github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -130,9 +130,9 @@ func PushPull(
 				publisherID,
 				reqPack.DocumentKey.BSONKey(),
 				sync.DocEvent{
-					Type:      pkgtypes.DocumentsChangeEvent,
+					Type:      types.DocumentsChangeEvent,
 					DocKey:    reqPack.DocumentKey.BSONKey(),
-					Publisher: pkgtypes.Client{ID: publisherID},
+					Publisher: types.Client{ID: publisherID},
 				},
 			)
 

@@ -25,7 +25,7 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"google.golang.org/grpc"
 
-	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 )

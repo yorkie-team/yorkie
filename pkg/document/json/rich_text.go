@@ -21,8 +21,8 @@ import (
 	"strings"
 	"unicode/utf16"
 
+	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 // InitialRichTextNode creates a initial node of RichText. The text is edited

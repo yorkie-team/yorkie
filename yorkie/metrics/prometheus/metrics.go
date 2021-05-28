@@ -20,7 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/yorkie-team/yorkie/pkg/version"
+	"github.com/yorkie-team/yorkie/internal/version"
 )
 
 const (

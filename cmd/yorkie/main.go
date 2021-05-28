@@ -17,7 +17,7 @@
 package main
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/cli"
+	"github.com/yorkie-team/yorkie/internal/cli"
 )
 
 func main() {
