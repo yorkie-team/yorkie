@@ -71,6 +71,7 @@ func (c *Client) Publish(
 	}
 }
 
+// PublishToLocal publishes the given event to the given Topic.
 func (c *Client) PublishToLocal(
 	publisherID *time.ActorID,
 	topic string,
@@ -79,6 +80,7 @@ func (c *Client) PublishToLocal(
 	c.pubSub.Publish(publisherID, topic, event)
 }
 
+// addBroadcastClient activates the broadcast grpc server and creates a client.
 func (c *Client) addBroadcastClient(addr string) {
 	if _, ok := c.broadcastClientMap[addr]; !ok {
 		conn, err := grpc.Dial(addr, grpc.WithInsecure())
@@ -93,6 +95,7 @@ func (c *Client) addBroadcastClient(addr string) {
 	}
 }
 
+// publishToMember publishes events to other agents.
 func (c *Client) publishToMember(
 	memberAddr string,
 	publisherID *time.ActorID,
@@ -100,15 +103,17 @@ func (c *Client) publishToMember(
 	event sync.DocEvent,
 ) {
 	bcm := c.broadcastClientMap[memberAddr]
-	eventType, _ := converter.ToEventType(event.Type)
+
+	docEvent, err := converter.ToDocEvent(event)
+	if err != nil {
+		log.Logger.Error(err)
+		return
+	}
+
 	if _, err := bcm.client.Publish(context.Background(), &api.PublishRequest{
 		PublisherId: publisherID.Bytes(),
 		Topic:       topic,
-		DocEvent: &api.DocEvent{
-			EventType: eventType,
-			DocKey:    event.DocKey,
-			Publisher: converter.ToClient(event.Publisher),
-		},
+		DocEvent:    docEvent,
 	}); err != nil {
 		log.Logger.Error(err)
 	}

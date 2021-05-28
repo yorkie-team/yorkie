@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
 // FromClient converts the given Protobuf format to model format.
@@ -137,6 +138,25 @@ func FromEventType(pbEventType api.EventType) (types.EventType, error) {
 		return types.DocumentsUnwatchedEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbEventType, ErrUnsupportedEventType)
+}
+
+// FromDocEvent converts the given Protobuf format to model format.
+func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
+	eventType, err := FromEventType(docEvent.EventType)
+	if err != nil {
+		return nil, err
+	}
+
+	publisher, err := FromClient(docEvent.Publisher)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sync.DocEvent{
+		Type:      eventType,
+		DocKey:    docEvent.DocKey,
+		Publisher: *publisher,
+	}, nil
 }
 
 // FromOperations converts the given Protobuf format to model format.

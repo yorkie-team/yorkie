@@ -28,7 +28,7 @@ func TestClusterStress(t *testing.T) {
 		agents := make([]*yorkie.Yorkie, testerSize)
 
 		for i := 0; i < testerSize; i++ {
-			agent := helper.TestYorkie((i + 5) * 1000)
+			agent := helper.TestYorkie()
 			assert.NoError(t, agent.Start())
 			agents[i] = agent
 		}

@@ -49,6 +49,7 @@ type Config struct {
 	LockLeaseTimeSec int `json:"LockLeaseTimeSec"`
 }
 
+// broadcastClientInfo manages broadcast grpc server connections and clients.
 type broadcastClientInfo struct {
 	client api.BroadcastClient
 	conn   *grpc.ClientConn

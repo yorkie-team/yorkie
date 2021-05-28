@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
 // ToClient converts the given model to Protobuf format.
@@ -134,6 +135,22 @@ func ToEventType(eventType types.EventType) (api.EventType, error) {
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}
+}
+
+// ToDocEvent converts the given model to Protobuf format.
+func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
+	eventType, err := ToEventType(docEvent.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	publisher := ToClient(docEvent.Publisher)
+
+	return &api.DocEvent{
+		EventType: eventType,
+		DocKey:    docEvent.DocKey,
+		Publisher: publisher,
+	}, nil
 }
 
 // ToOperations converts the given model format to Protobuf format.

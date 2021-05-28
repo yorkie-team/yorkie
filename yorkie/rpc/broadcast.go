@@ -7,9 +7,9 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/log"
-	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
+// Publish publishes the given event to the given Topic.
 func (s *Server) Publish(_ context.Context, request *api.PublishRequest) (*api.PublishResponse, error) {
 	actorID, err := time.ActorIDFromBytes(request.PublisherId)
 	if err != nil {
@@ -17,13 +17,7 @@ func (s *Server) Publish(_ context.Context, request *api.PublishRequest) (*api.P
 		return nil, err
 	}
 
-	eventType, err := converter.FromEventType(request.DocEvent.EventType)
-	if err != nil {
-		log.Logger.Fatal(err)
-		return nil, err
-	}
-
-	publisher, err := converter.FromClient(request.DocEvent.Publisher)
+	docEvent, err := converter.FromDocEvent(request.DocEvent)
 	if err != nil {
 		log.Logger.Fatal(err)
 		return nil, err
@@ -32,12 +26,9 @@ func (s *Server) Publish(_ context.Context, request *api.PublishRequest) (*api.P
 	s.backend.PubSub.PublishToLocal(
 		actorID,
 		request.Topic,
-		sync.DocEvent{
-			Type:      eventType,
-			DocKey:    request.DocEvent.DocKey,
-			Publisher: *publisher,
-		},
+		*docEvent,
 	)
+
 	return &api.PublishResponse{
 		Topic: request.Topic,
 	}, nil

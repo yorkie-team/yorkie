@@ -58,6 +58,7 @@ type PubSub interface {
 	// Publish publishes the given event to the given Topic.
 	Publish(publisherID *time.ActorID, topic string, event DocEvent)
 
+	// PublishToLocal publishes the given event to the given Topic.
 	PublishToLocal(publisherID *time.ActorID, topic string, event DocEvent)
 
 	// Members returns the members of this cluster.
