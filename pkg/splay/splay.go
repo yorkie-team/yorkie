@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/internal/log"
 )
 
 // Value represents the data stored in the nodes of Tree.

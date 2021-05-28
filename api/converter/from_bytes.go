@@ -22,9 +22,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/yorkie-team/yorkie/api"
+	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 // BytesToObject creates an Object from the given byte array.

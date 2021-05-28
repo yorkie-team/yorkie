@@ -19,8 +19,8 @@ package json
 import (
 	"strings"
 
+	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 

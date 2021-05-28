@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"unicode/utf16"
 
+	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 // InitialTextNode creates a initial node of Text. The text is edited

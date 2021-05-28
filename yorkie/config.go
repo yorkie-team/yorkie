@@ -22,7 +22,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/yorkie-team/yorkie/pkg/log"
+	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"

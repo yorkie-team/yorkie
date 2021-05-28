@@ -5,8 +5,8 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/log"
 )
 
 // Publish publishes the given event to the given Topic.
