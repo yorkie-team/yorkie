@@ -57,7 +57,7 @@ func (c *Client) Publish(
 	for _, member := range c.Members() {
 		memberAddr := member.RPCAddr
 		if memberAddr != c.pubSub.AgentInfo.RPCAddr {
-			c.addBroadcastClient(memberAddr)
+			c.addClusterClient(memberAddr)
 		}
 
 		if memberAddr != c.pubSub.AgentInfo.RPCAddr {
@@ -80,16 +80,19 @@ func (c *Client) PublishToLocal(
 	c.pubSub.Publish(publisherID, topic, event)
 }
 
-// addBroadcastClient activates the broadcast grpc server and creates a client.
-func (c *Client) addBroadcastClient(addr string) {
-	if _, ok := c.broadcastClientMap[addr]; !ok {
+// addClusterClient activates the cluster grpc server and creates a client.
+func (c *Client) addClusterClient(addr string) {
+	c.clusterClinetMapMu.Lock()
+	defer c.clusterClinetMapMu.Unlock()
+
+	if _, ok := c.clusterClientMap[addr]; !ok {
 		conn, err := grpc.Dial(addr, grpc.WithInsecure())
 		if err != nil {
 			log.Logger.Error(err)
 		}
 
-		c.broadcastClientMap[addr] = &broadcastClientInfo{
-			client: api.NewBroadcastClient(conn),
+		c.clusterClientMap[addr] = &clusterClientInfo{
+			client: api.NewClusterClient(conn),
 			conn:   conn,
 		}
 	}
@@ -102,15 +105,17 @@ func (c *Client) publishToMember(
 	topic string,
 	event sync.DocEvent,
 ) {
-	bcm := c.broadcastClientMap[memberAddr]
+	c.clusterClinetMapMu.RLock()
+	defer c.clusterClinetMapMu.RUnlock()
 
+	cluster := c.clusterClientMap[memberAddr]
 	docEvent, err := converter.ToDocEvent(event)
 	if err != nil {
 		log.Logger.Error(err)
 		return
 	}
 
-	if _, err := bcm.client.Publish(context.Background(), &api.PublishRequest{
+	if _, err := cluster.client.BroadcastEvent(context.Background(), &api.BroadcastEventRequest{
 		PublisherId: publisherID.Bytes(),
 		Topic:       topic,
 		DocEvent:    docEvent,

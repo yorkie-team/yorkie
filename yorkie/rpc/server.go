@@ -23,7 +23,6 @@ import (
 	gotime "time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -67,7 +66,6 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 			authInterceptor.Unary(),
 			defaultInterceptor.Unary(),
 			grpcprometheus.UnaryServerInterceptor,
-			grpc_recovery.UnaryServerInterceptor(),
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			authInterceptor.Stream(),
@@ -95,7 +93,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		backend:    be,
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
-	api.RegisterBroadcastServer(rpcServer.grpcServer, rpcServer)
+	api.RegisterClusterServer(rpcServer.grpcServer, rpcServer)
 	grpcprometheus.Register(rpcServer.grpcServer)
 
 	return rpcServer, nil

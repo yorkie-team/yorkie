@@ -177,14 +177,16 @@ func (c *Client) removeAgentInfo(key string) error {
 	c.memberMapMu.Lock()
 	defer c.memberMapMu.Unlock()
 
+	c.clusterClinetMapMu.Lock()
+	defer c.clusterClinetMapMu.Unlock()
+
 	addr := c.memberMap[key].RPCAddr
-	if info, ok := c.broadcastClientMap[addr]; ok {
-		err := info.conn.Close()
-		if err != nil {
+	if info, ok := c.clusterClientMap[addr]; ok {
+		if err := info.conn.Close(); err != nil {
 			log.Logger.Error(err)
 			return err
 		}
-		delete(c.broadcastClientMap, addr)
+		delete(c.clusterClientMap, addr)
 	}
 	delete(c.memberMap, key)
 

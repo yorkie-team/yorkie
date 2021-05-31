@@ -9,17 +9,20 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// Publish publishes the given event to the given Topic.
-func (s *Server) Publish(_ context.Context, request *api.PublishRequest) (*api.PublishResponse, error) {
+// BroadcastEvent publishes the given event to the given Topic.
+func (s *Server) BroadcastEvent(
+	_ context.Context,
+	request *api.BroadcastEventRequest,
+) (*api.BroadcastEventResponse, error) {
 	actorID, err := time.ActorIDFromBytes(request.PublisherId)
 	if err != nil {
-		log.Logger.Fatal(err)
+		log.Logger.Error(err)
 		return nil, err
 	}
 
 	docEvent, err := converter.FromDocEvent(request.DocEvent)
 	if err != nil {
-		log.Logger.Fatal(err)
+		log.Logger.Error(err)
 		return nil, err
 	}
 
@@ -29,7 +32,7 @@ func (s *Server) Publish(_ context.Context, request *api.PublishRequest) (*api.P
 		*docEvent,
 	)
 
-	return &api.PublishResponse{
+	return &api.BroadcastEventResponse{
 		Topic: request.Topic,
 	}, nil
 }

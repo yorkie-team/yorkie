@@ -49,9 +49,9 @@ type Config struct {
 	LockLeaseTimeSec int `json:"LockLeaseTimeSec"`
 }
 
-// broadcastClientInfo manages broadcast grpc server connections and clients.
-type broadcastClientInfo struct {
-	client api.BroadcastClient
+// clusterClientInfo manages cluster grpc server connections and clients.
+type clusterClientInfo struct {
+	client api.ClusterClient
 	conn   *grpc.ClientConn
 }
 
@@ -64,7 +64,8 @@ type Client struct {
 
 	memberMapMu        *gosync.RWMutex
 	memberMap          map[string]*sync.AgentInfo
-	broadcastClientMap map[string]*broadcastClientInfo
+	clusterClinetMapMu *gosync.RWMutex
+	clusterClientMap   map[string]*clusterClientInfo
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
@@ -88,7 +89,8 @@ func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 
 		memberMapMu:        &gosync.RWMutex{},
 		memberMap:          make(map[string]*sync.AgentInfo),
-		broadcastClientMap: make(map[string]*broadcastClientInfo),
+		clusterClinetMapMu: &gosync.RWMutex{},
+		clusterClientMap:   make(map[string]*clusterClientInfo),
 
 		ctx:        ctx,
 		cancelFunc: cancelFunc,

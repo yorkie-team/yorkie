@@ -96,10 +96,10 @@ func TestClusterMode(t *testing.T) {
 		wg.Add(1)
 		rch := clientA.Watch(ctx, docA)
 		go func() {
+			defer wg.Done()
 
 			select {
 			case resp := <-rch:
-				defer wg.Done()
 				if resp.Err == io.EOF {
 					return
 				}
