@@ -168,4 +168,37 @@ func TestArray(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
+
+	t.Run("concurrent array move with the same position test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(helper.Collection, t.Name())
+		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewArray("k1").AddInteger(0, 1, 2)
+			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		d2 := document.New(helper.Collection, t.Name())
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
+			next := root.GetArray("k1").Get(0)
+			elem := root.GetArray("k1").Get(2)
+			root.GetArray("k1").MoveBefore(next.CreatedAt(), elem.CreatedAt())
+			assert.Equal(t, `{"k1":[2,0,1]}`, root.Marshal())
+			return nil
+		}))
+
+		assert.NoError(t, d2.Update(func(root *proxy.ObjectProxy) error {
+			next := root.GetArray("k1").Get(0)
+			elem := root.GetArray("k1").Get(1)
+			root.GetArray("k1").MoveBefore(next.CreatedAt(), elem.CreatedAt())
+			assert.Equal(t, `{"k1":[1,0,2]}`, root.Marshal())
+			return nil
+		}))
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
 }
