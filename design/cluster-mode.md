@@ -1,6 +1,6 @@
 ---
 title: cluster-mode
-target-version: 0.1.4
+target-version: 0.1.6
 ---
 
 # Cluster Mode
@@ -18,8 +18,6 @@ location.
 
 Provide cluster mode when the user sets the etcd configuration. If the user
 does not set etcd configuration, agent runs in the standalone mode as before.
-
-![cluster-mode](media/cluster-mode.png)
 
 ### Non-Goals
 
@@ -49,7 +47,20 @@ created to store agent's states at the remote location when the agent starts.
 
 ### How does it work?
 
-The agent's states to be moved to remote are as follows:
+An example when a user runs two Agents in cluster mode with etcd and introduces
+load balancer is as follows:
+
+![cluster-mode-example](media/cluster-mode-example.png)
+
+- Load Balancer: It Receives requests from clients and forwards it to one of 
+  Agents.
+- Broadcast Channel: It is used to deliver `DocEvent` to other Agents 
+  when it occurs by a Client connected to the Agent.
+- etcd: etcd is responsible for three tasks. it is used to
+  maintain `MemberMaps`, a map of agents in the cluster. It is used to create 
+  cluster-wide locks and to store `SubscriptionMaps`. 
+
+The agent's states to be moved to etcd are as follows:
 - `LockerMap`: A map of locker used to maintain consistency of metadata of the
 documents such as checkpoints when modifying documents.
 - `SubscriptionMap`: A map of subscription used to deliver events to other peers
@@ -59,7 +70,18 @@ The interfaces of `LockerMap` and `SubscriptionMap` are defined in the
 `backend/sync` package and there are memory-based implementations in
 `backend/sync/memory` and etcd-based implementations in `backend/sync/etcd`.
 
-![yorkie-architecture](media/yorkie-architecture.png)
+#### MemberMap
+
+Agents have replicas of `MemberMap` within the cluster in an optimistic
+replication manner. `MemberMap` is used by an Agent to broadcast DocEvents to 
+other Agents.
+
+![member-map](media/member-map.png)
+
+When an Agent started, background routines used to maintain
+`MemberMap` are executed. These routines save the current Agent information by
+periodically with the TTL in etcd and update the local MemberMap with any
+changes to the `/agents` in etcd.
 
 #### LockerMap based on etcd
 
