@@ -106,7 +106,7 @@ func PushPull(
 			// TODO(hackerwins): We need to replace Lock with TryLock.
 			// If the snapshot is already being created by another routine, it
 			// is not necessary to recreate it, so we can skip it.
-			locker, err := be.LockerMap.NewLocker(
+			locker, err := be.Coordinator.NewLocker(
 				ctx,
 				sync.NewKey(fmt.Sprintf("snapshot-%s", docInfo.Key)),
 			)
@@ -126,7 +126,7 @@ func PushPull(
 				}
 			}()
 
-			be.PubSub.Publish(
+			be.Coordinator.Publish(
 				publisherID,
 				reqPack.DocumentKey.BSONKey(),
 				sync.DocEvent{

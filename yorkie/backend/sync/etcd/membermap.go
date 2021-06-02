@@ -106,17 +106,17 @@ func (c *Client) putAgentPeriodically() {
 func (c *Client) putAgent(ctx context.Context) error {
 	grantResponse, err := c.client.Grant(ctx, int64(agentValueTTL.Seconds()))
 	if err != nil {
-		return fmt.Errorf("grant %s: %w", c.pubSub.AgentInfo.ID, err)
+		return fmt.Errorf("grant %s: %w", c.agentInfo.ID, err)
 	}
 
-	agentInfo := *c.pubSub.AgentInfo
+	agentInfo := *c.agentInfo
 	agentInfo.UpdatedAt = time.Now()
 	bytes, err := json.Marshal(agentInfo)
 	if err != nil {
-		return fmt.Errorf("marshal %s: %w", c.pubSub.AgentInfo.ID, err)
+		return fmt.Errorf("marshal %s: %w", c.agentInfo.ID, err)
 	}
 
-	key := fmt.Sprintf("%s/%s", agentsPath, c.pubSub.AgentInfo.ID)
+	key := fmt.Sprintf("%s/%s", agentsPath, c.agentInfo.ID)
 	_, err = c.client.Put(ctx, key, string(bytes), clientv3.WithLease(grantResponse.ID))
 	if err != nil {
 		return fmt.Errorf("put %s: %w", key, err)
@@ -126,7 +126,7 @@ func (c *Client) putAgent(ctx context.Context) error {
 
 // removeAgent removes the local agent in etcd.
 func (c *Client) removeAgent(ctx context.Context) error {
-	key := fmt.Sprintf("%s/%s", agentsPath, c.pubSub.AgentInfo.ID)
+	key := fmt.Sprintf("%s/%s", agentsPath, c.agentInfo.ID)
 	_, err := c.client.Delete(ctx, key)
 	if err != nil {
 		return fmt.Errorf("remove %s: %w", key, err)
