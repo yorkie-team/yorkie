@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.5] - 2021-06-05
+
+### Added
+- Add basic behavior of authorization webhook: #188
+
+### Fixed
+- Fix the concurrent editing issue of Move Operation: #196
+
+### Removed
+- Delete RequestHeader in Protobuf: #188
+
 ## [0.1.4] - 2021-05-15
 
 ### Added
