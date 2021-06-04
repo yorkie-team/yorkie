@@ -14,11 +14,11 @@ Yorkie v0.2 should be reliably available for services used in production environ
 ### 2021
 
  - Mar: Monitoring [#155](https://github.com/yorkie-team/yorkie/issues/155)
- - Apr: Introducing HA [#11](https://github.com/yorkie-team/yorkie/issues/11)
  - May: Supporting TLS and Auth webhook to secure Yorkie [#6](https://github.com/yorkie-team/yorkie/issues/6)
- - June: Improved Peer Awareness [#153](https://github.com/yorkie-team/yorkie/issues/153)
- - July: Limits [#158](https://github.com/yorkie-team/yorkie/issues/158)
- - Aug: History [#52](https://github.com/yorkie-team/yorkie/issues/52)
+ - June: Introducing HA [#11](https://github.com/yorkie-team/yorkie/issues/11)
+ - July: History [#52](https://github.com/yorkie-team/yorkie/issues/52)
+ - Aug: Improved Peer Awareness [#153](https://github.com/yorkie-team/yorkie/issues/153)
+ - Sep: Limits [#158](https://github.com/yorkie-team/yorkie/issues/158)
  - Nov: Redo/Undo [#49](https://github.com/yorkie-team/yorkie/issues/49)
 
 ## Yorkie v0.1
