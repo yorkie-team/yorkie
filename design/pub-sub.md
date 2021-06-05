@@ -32,7 +32,7 @@ The order of operation is as follows.
 
 1. The WatchDocuments API creates a `Subscription` instance with the client and document keys.
 2. Subscription instance internally manages the `DocEvent channel`, and the WatchDocuments API uses a select statement to retrieve events passed to the Subscription instance.
-3. The client can deliver the event to the Subscription instances that are subscribed to the same document through the `PubSub.Publish(publisherID *time.ActorID, topic string, event DocEvent)` method.
+3. The client can deliver the event to the Subscription instances that are subscribed to the same document through the `Publish(publisherID *time.ActorID, topic string, event DocEvent)` method.
 4. In the select statement mentioned earlier, when an event is confirmed, it is sent to the stream server.
 
 ### Risks and Mitigation

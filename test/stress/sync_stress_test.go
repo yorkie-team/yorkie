@@ -35,7 +35,7 @@ func TestSyncStress(t *testing.T) {
 	t.Run("lock/unlock stress test", func(t *testing.T) {
 		start := time.Now()
 
-		lockerMap := memory.NewLockerMap()
+		coordinator := memory.NewCoordinator(nil)
 
 		size := 100
 		sum := 0
@@ -46,7 +46,7 @@ func TestSyncStress(t *testing.T) {
 				defer wg.Done()
 
 				ctx := context.Background()
-				locker, err := lockerMap.NewLocker(ctx, sync.Key(t.Name()))
+				locker, err := coordinator.NewLocker(ctx, sync.Key(t.Name()))
 				assert.NoError(t, err)
 				assert.NoError(t, locker.Lock(ctx))
 				sum += 1

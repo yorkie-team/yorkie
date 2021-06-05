@@ -43,7 +43,4 @@ type Locker interface {
 type LockerMap interface {
 	// NewLocker creates a sync.Locker.
 	NewLocker(ctx context.Context, key Key) (Locker, error)
-
-	// Close closes all resources of this LockerMap.
-	Close() error
 }
