@@ -20,7 +20,7 @@ func (s *Server) BroadcastEvent(
 		return nil, err
 	}
 
-	docEvent, err := converter.FromDocEvent(request.DocEvent)
+	docEvent, err := converter.FromDocEvent(request.Event)
 	if err != nil {
 		log.Logger.Error(err)
 		return nil, err
@@ -28,11 +28,8 @@ func (s *Server) BroadcastEvent(
 
 	s.backend.PubSub.PublishToLocal(
 		actorID,
-		request.Topic,
 		*docEvent,
 	)
 
-	return &api.BroadcastEventResponse{
-		Topic: request.Topic,
-	}, nil
+	return &api.BroadcastEventResponse{}, nil
 }

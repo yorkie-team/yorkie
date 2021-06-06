@@ -380,10 +380,7 @@ func (s *Server) WatchDocuments(
 	if err != nil {
 		return err
 	}
-	var docKeys []string
-	for _, docKey := range converter.FromDocumentKeys(req.DocumentKeys) {
-		docKeys = append(docKeys, docKey.BSONKey())
-	}
+	docKeys := converter.FromDocumentKeys(req.DocumentKeys)
 
 	subscription, peersMap, err := s.watchDocs(
 		*client,
@@ -413,24 +410,17 @@ func (s *Server) WatchDocuments(
 			s.unwatchDocs(docKeys, subscription)
 			return nil
 		case event := <-subscription.Events():
-			k, err := key.FromBSONKey(event.DocKey)
-			if err != nil {
-				log.Logger.Error(err)
-				s.unwatchDocs(docKeys, subscription)
-				return err
-			}
-
-			eventType, err := converter.ToEventType(event.Type)
+			eventType, err := converter.ToEventType(event.EventType)
 			if err != nil {
 				return err
 			}
 
 			if err := stream.Send(&api.WatchDocumentsResponse{
-				Body: &api.WatchDocumentsResponse_Event_{
-					Event: &api.WatchDocumentsResponse_Event{
-						Client:       converter.ToClient(event.Publisher),
+				Body: &api.WatchDocumentsResponse_Event{
+					Event: &api.DocEvent{
+						Client:       converter.ToClient(event.Client),
 						EventType:    eventType,
-						DocumentKeys: converter.ToDocumentKeys(k),
+						DocumentKeys: converter.ToDocumentKeys(event.DocumentKeys),
 					},
 				},
 			}); err != nil {
@@ -464,7 +454,7 @@ func (s *Server) listenAndServeGRPC() error {
 
 func (s *Server) watchDocs(
 	client types.Client,
-	docKeys []string,
+	docKeys []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
 	subscription, peersMap, err := s.backend.PubSub.Subscribe(
 		client,
@@ -475,33 +465,30 @@ func (s *Server) watchDocs(
 		return nil, nil, err
 	}
 
-	for _, docKey := range docKeys {
-		s.backend.PubSub.Publish(
-			subscription.Subscriber().ID,
-			docKey,
-			sync.DocEvent{
-				Type:      types.DocumentsWatchedEvent,
-				DocKey:    docKey,
-				Publisher: subscription.Subscriber(),
-			},
-		)
-	}
+	s.backend.PubSub.Publish(
+		subscription.Subscriber().ID,
+		sync.DocEvent{
+			Client:       subscription.Subscriber(),
+			EventType:    types.DocumentsWatchedEvent,
+			DocumentKeys: docKeys,
+		},
+	)
 
 	return subscription, peersMap, nil
 }
 
-func (s *Server) unwatchDocs(docKeys []string, subscription *sync.Subscription) {
+func (s *Server) unwatchDocs(
+	docKeys []*key.Key,
+	subscription *sync.Subscription,
+) {
 	s.backend.PubSub.Unsubscribe(docKeys, subscription)
 
-	for _, docKey := range docKeys {
-		s.backend.PubSub.Publish(
-			subscription.Subscriber().ID,
-			docKey,
-			sync.DocEvent{
-				Type:      types.DocumentsUnwatchedEvent,
-				DocKey:    docKey,
-				Publisher: subscription.Subscriber(),
-			},
-		)
-	}
+	s.backend.PubSub.Publish(
+		subscription.Subscriber().ID,
+		sync.DocEvent{
+			Client:       subscription.Subscriber(),
+			EventType:    types.DocumentsUnwatchedEvent,
+			DocumentKeys: docKeys,
+		},
+	)
 }

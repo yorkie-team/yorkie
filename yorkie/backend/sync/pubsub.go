@@ -20,6 +20,7 @@ import (
 	"errors"
 	gotime "time"
 
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
@@ -31,9 +32,9 @@ var (
 
 // DocEvent represents events that occur related to the document.
 type DocEvent struct {
-	Type      types.EventType
-	DocKey    string
-	Publisher types.Client
+	Client       types.Client
+	EventType    types.EventType
+	DocumentKeys []*key.Key
 }
 
 // AgentInfo represents the information of the Agent.
@@ -49,17 +50,17 @@ type PubSub interface {
 	// Subscribe subscribes to the given topics.
 	Subscribe(
 		subscriber types.Client,
-		topics []string,
+		topics []*key.Key,
 	) (*Subscription, map[string][]types.Client, error)
 
 	// Unsubscribe unsubscribes the given topics.
-	Unsubscribe(topics []string, sub *Subscription)
+	Unsubscribe(topics []*key.Key, sub *Subscription)
 
-	// Publish publishes the given event to the given Topic.
-	Publish(publisherID *time.ActorID, topic string, event DocEvent)
+	// Publish publishes the given event.
+	Publish(publisherID *time.ActorID, event DocEvent)
 
-	// PublishToLocal publishes the given event to the given Topic.
-	PublishToLocal(publisherID *time.ActorID, topic string, event DocEvent)
+	// PublishToLocal publishes the given event.
+	PublishToLocal(publisherID *time.ActorID, event DocEvent)
 
 	// Members returns the members of this cluster.
 	Members() map[string]*AgentInfo

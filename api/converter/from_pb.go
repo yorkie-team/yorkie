@@ -142,20 +142,20 @@ func FromEventType(pbEventType api.EventType) (types.EventType, error) {
 
 // FromDocEvent converts the given Protobuf format to model format.
 func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
+	client, err := FromClient(docEvent.Client)
+	if err != nil {
+		return nil, err
+	}
+
 	eventType, err := FromEventType(docEvent.EventType)
 	if err != nil {
 		return nil, err
 	}
 
-	publisher, err := FromClient(docEvent.Publisher)
-	if err != nil {
-		return nil, err
-	}
-
 	return &sync.DocEvent{
-		Type:      eventType,
-		DocKey:    docEvent.DocKey,
-		Publisher: *publisher,
+		Client:       *client,
+		EventType:    eventType,
+		DocumentKeys: FromDocumentKeys(docEvent.DocumentKeys),
 	}, nil
 }
 

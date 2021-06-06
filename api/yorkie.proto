@@ -18,6 +18,17 @@ syntax = "proto3";
 
 package api;
 
+service Cluster {
+    rpc BroadcastEvent (BroadcastEventRequest) returns (BroadcastEventResponse) {}
+}
+
+message BroadcastEventRequest {
+    bytes publisher_id = 1;
+    DocEvent event = 3;
+}
+
+message BroadcastEventResponse {}
+
 service Yorkie {
     rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
     rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
@@ -78,15 +89,9 @@ message WatchDocumentsResponse {
         map<string, Clients> peers_map_by_doc = 1;
     }
 
-    message Event {
-        Client client = 1;
-        EventType event_type = 2;
-        repeated DocumentKey document_keys = 3;
-    }
-
     oneof body {
         Initialization initialization = 1;
-        Event event = 2;
+        DocEvent event = 2;
     }
 }
 
@@ -354,22 +359,8 @@ enum EventType {
     DOCUMENTS_UNWATCHED = 2;
 }
 
-service Cluster {
-    rpc BroadcastEvent (BroadcastEventRequest) returns (BroadcastEventResponse) {}
-}
-
-message BroadcastEventRequest {
-    bytes publisher_id = 1;
-    string topic = 2;
-    DocEvent doc_event = 3;
-}
-
-message BroadcastEventResponse {
-    string topic = 1;
-}
-
 message DocEvent {
-    EventType event_type = 1;
-	string doc_key = 2;
-	Client publisher = 3;
+    Client client = 1;
+    EventType event_type = 2;
+    repeated DocumentKey document_keys = 3;
 }

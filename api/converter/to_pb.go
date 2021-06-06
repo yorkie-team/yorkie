@@ -97,7 +97,7 @@ func toChangeID(id *change.ID) *api.ChangeID {
 }
 
 // ToDocumentKeys converts the given model format to Protobuf format.
-func ToDocumentKeys(keys ...*key.Key) []*api.DocumentKey {
+func ToDocumentKeys(keys []*key.Key) []*api.DocumentKey {
 	var pbKeys []*api.DocumentKey
 	for _, k := range keys {
 		pbKeys = append(pbKeys, toDocumentKey(k))
@@ -139,17 +139,15 @@ func ToEventType(eventType types.EventType) (api.EventType, error) {
 
 // ToDocEvent converts the given model to Protobuf format.
 func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
-	eventType, err := ToEventType(docEvent.Type)
+	eventType, err := ToEventType(docEvent.EventType)
 	if err != nil {
 		return nil, err
 	}
 
-	publisher := ToClient(docEvent.Publisher)
-
 	return &api.DocEvent{
-		EventType: eventType,
-		DocKey:    docEvent.DocKey,
-		Publisher: publisher,
+		Client:       ToClient(docEvent.Client),
+		EventType:    eventType,
+		DocumentKeys: ToDocumentKeys(docEvent.DocumentKeys),
 	}, nil
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -32,24 +33,23 @@ import (
 // Subscribe subscribes to the given topics.
 func (c *Client) Subscribe(
 	subscriber types.Client,
-	topics []string,
+	topics []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
 	// TODO(hackerwins): build peersMap.
 	return c.pubSub.Subscribe(subscriber, topics)
 }
 
 // Unsubscribe unsubscribes the given topics.
-func (c *Client) Unsubscribe(topics []string, sub *sync.Subscription) {
+func (c *Client) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
 	c.pubSub.Unsubscribe(topics, sub)
 }
 
 // Publish publishes the given event to the given Topic.
 func (c *Client) Publish(
 	publisherID *time.ActorID,
-	topic string,
 	event sync.DocEvent,
 ) {
-	c.PublishToLocal(publisherID, topic, event)
+	c.PublishToLocal(publisherID, event)
 
 	for _, member := range c.Members() {
 		memberAddr := member.RPCAddr
@@ -66,7 +66,6 @@ func (c *Client) Publish(
 			context.Background(),
 			clientInfo,
 			publisherID,
-			topic,
 			event,
 		); err != nil {
 			continue
@@ -77,10 +76,9 @@ func (c *Client) Publish(
 // PublishToLocal publishes the given event to the given Topic.
 func (c *Client) PublishToLocal(
 	publisherID *time.ActorID,
-	topic string,
 	event sync.DocEvent,
 ) {
-	c.pubSub.Publish(publisherID, topic, event)
+	c.pubSub.Publish(publisherID, event)
 }
 
 // ensureClusterClient activates the cluster grpc server and creates a client.
@@ -109,7 +107,6 @@ func (c *Client) publishToMember(
 	ctx context.Context,
 	clientInfo *clusterClientInfo,
 	publisherID *time.ActorID,
-	topic string,
 	event sync.DocEvent,
 ) error {
 	docEvent, err := converter.ToDocEvent(event)
@@ -120,8 +117,7 @@ func (c *Client) publishToMember(
 
 	if _, err := clientInfo.client.BroadcastEvent(ctx, &api.BroadcastEventRequest{
 		PublisherId: publisherID.Bytes(),
-		Topic:       topic,
-		DocEvent:    docEvent,
+		Event:       docEvent,
 	}); err != nil {
 		log.Logger.Error(err)
 		return err
