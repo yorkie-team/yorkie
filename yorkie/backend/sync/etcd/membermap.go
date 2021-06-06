@@ -152,8 +152,7 @@ func (c *Client) syncAgents() {
 					}
 					c.setAgentInfo(string(event.Kv.Key), info)
 				case mvccpb.DELETE:
-					err := c.removeAgentInfo(string(event.Kv.Key))
-					if err != nil {
+					if err := c.removeAgentInfo(string(event.Kv.Key)); err != nil {
 						log.Logger.Error(err)
 					}
 				}
@@ -177,13 +176,12 @@ func (c *Client) removeAgentInfo(key string) error {
 	c.memberMapMu.Lock()
 	defer c.memberMapMu.Unlock()
 
-	c.clusterClinetMapMu.Lock()
-	defer c.clusterClinetMapMu.Unlock()
+	c.clusterClientMapMu.Lock()
+	defer c.clusterClientMapMu.Unlock()
 
 	addr := c.memberMap[key].RPCAddr
 	if info, ok := c.clusterClientMap[addr]; ok {
 		if err := info.conn.Close(); err != nil {
-			log.Logger.Error(err)
 			return err
 		}
 		delete(c.clusterClientMap, addr)

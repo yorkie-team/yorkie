@@ -51,22 +51,25 @@ func (c *Client) Publish(
 ) {
 	c.PublishToLocal(publisherID, topic, event)
 
-	c.memberMapMu.RLock()
-	defer c.memberMapMu.RUnlock()
-
 	for _, member := range c.Members() {
 		memberAddr := member.RPCAddr
-		if memberAddr != c.pubSub.AgentInfo.RPCAddr {
-			c.addClusterClient(memberAddr)
+		if memberAddr == c.pubSub.AgentInfo.RPCAddr {
+			continue
 		}
 
-		if memberAddr != c.pubSub.AgentInfo.RPCAddr {
-			c.publishToMember(
-				memberAddr,
-				publisherID,
-				topic,
-				event,
-			)
+		clientInfo, err := c.ensureClusterClient(memberAddr)
+		if err != nil {
+			continue
+		}
+
+		if err := c.publishToMember(
+			context.Background(),
+			clientInfo,
+			publisherID,
+			topic,
+			event,
+		); err != nil {
+			continue
 		}
 	}
 }
@@ -80,15 +83,16 @@ func (c *Client) PublishToLocal(
 	c.pubSub.Publish(publisherID, topic, event)
 }
 
-// addClusterClient activates the cluster grpc server and creates a client.
-func (c *Client) addClusterClient(addr string) {
-	c.clusterClinetMapMu.Lock()
-	defer c.clusterClinetMapMu.Unlock()
+// ensureClusterClient activates the cluster grpc server and creates a client.
+func (c *Client) ensureClusterClient(addr string) (*clusterClientInfo, error) {
+	c.clusterClientMapMu.Lock()
+	defer c.clusterClientMapMu.Unlock()
 
 	if _, ok := c.clusterClientMap[addr]; !ok {
 		conn, err := grpc.Dial(addr, grpc.WithInsecure())
 		if err != nil {
 			log.Logger.Error(err)
+			return nil, err
 		}
 
 		c.clusterClientMap[addr] = &clusterClientInfo{
@@ -96,30 +100,32 @@ func (c *Client) addClusterClient(addr string) {
 			conn:   conn,
 		}
 	}
+
+	return c.clusterClientMap[addr], nil
 }
 
 // publishToMember publishes events to other agents.
 func (c *Client) publishToMember(
-	memberAddr string,
+	ctx context.Context,
+	clientInfo *clusterClientInfo,
 	publisherID *time.ActorID,
 	topic string,
 	event sync.DocEvent,
-) {
-	c.clusterClinetMapMu.RLock()
-	defer c.clusterClinetMapMu.RUnlock()
-
-	cluster := c.clusterClientMap[memberAddr]
+) error {
 	docEvent, err := converter.ToDocEvent(event)
 	if err != nil {
 		log.Logger.Error(err)
-		return
+		return err
 	}
 
-	if _, err := cluster.client.BroadcastEvent(context.Background(), &api.BroadcastEventRequest{
+	if _, err := clientInfo.client.BroadcastEvent(ctx, &api.BroadcastEventRequest{
 		PublisherId: publisherID.Bytes(),
 		Topic:       topic,
 		DocEvent:    docEvent,
 	}); err != nil {
 		log.Logger.Error(err)
+		return err
 	}
+
+	return nil
 }

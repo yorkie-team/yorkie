@@ -64,7 +64,7 @@ type Client struct {
 
 	memberMapMu        *gosync.RWMutex
 	memberMap          map[string]*sync.AgentInfo
-	clusterClinetMapMu *gosync.RWMutex
+	clusterClientMapMu *gosync.RWMutex
 	clusterClientMap   map[string]*clusterClientInfo
 
 	ctx        context.Context
@@ -89,7 +89,7 @@ func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 
 		memberMapMu:        &gosync.RWMutex{},
 		memberMap:          make(map[string]*sync.AgentInfo),
-		clusterClinetMapMu: &gosync.RWMutex{},
+		clusterClientMapMu: &gosync.RWMutex{},
 		clusterClientMap:   make(map[string]*clusterClientInfo),
 
 		ctx:        ctx,
