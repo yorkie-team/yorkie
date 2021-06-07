@@ -123,15 +123,15 @@ func ToClientsMap(clientsMap map[string][]types.Client) map[string]*api.Clients 
 	return pbClientsMap
 }
 
-// ToEventType converts the given model format to Protobuf format.
-func ToEventType(eventType types.EventType) (api.EventType, error) {
+// ToDocEventType converts the given model format to Protobuf format.
+func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 	switch eventType {
-	case types.DocumentsChangeEvent:
-		return api.EventType_DOCUMENTS_CHANGED, nil
+	case types.DocumentsChangedEvent:
+		return api.DocEventType_DOCUMENTS_CHANGED, nil
 	case types.DocumentsWatchedEvent:
-		return api.EventType_DOCUMENTS_WATCHED, nil
+		return api.DocEventType_DOCUMENTS_WATCHED, nil
 	case types.DocumentsUnwatchedEvent:
-		return api.EventType_DOCUMENTS_UNWATCHED, nil
+		return api.DocEventType_DOCUMENTS_UNWATCHED, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}
@@ -139,14 +139,14 @@ func ToEventType(eventType types.EventType) (api.EventType, error) {
 
 // ToDocEvent converts the given model to Protobuf format.
 func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
-	eventType, err := ToEventType(docEvent.EventType)
+	eventType, err := ToDocEventType(docEvent.Type)
 	if err != nil {
 		return nil, err
 	}
 
 	return &api.DocEvent{
-		Client:       ToClient(docEvent.Client),
-		EventType:    eventType,
+		Type:         eventType,
+		Publisher:    ToClient(docEvent.Publisher),
 		DocumentKeys: ToDocumentKeys(docEvent.DocumentKeys),
 	}, nil
 }

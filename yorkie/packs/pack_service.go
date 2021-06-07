@@ -130,8 +130,8 @@ func PushPull(
 			be.PubSub.Publish(
 				publisherID,
 				sync.DocEvent{
-					Client:       types.Client{ID: publisherID},
-					EventType:    types.DocumentsChangeEvent,
+					Type:         types.DocumentsChangedEvent,
+					Publisher:    types.Client{ID: publisherID},
 					DocumentKeys: []*key.Key{reqPack.DocumentKey},
 				},
 			)

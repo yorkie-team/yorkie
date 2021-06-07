@@ -410,7 +410,7 @@ func (s *Server) WatchDocuments(
 			s.unwatchDocs(docKeys, subscription)
 			return nil
 		case event := <-subscription.Events():
-			eventType, err := converter.ToEventType(event.EventType)
+			eventType, err := converter.ToDocEventType(event.Type)
 			if err != nil {
 				return err
 			}
@@ -418,8 +418,8 @@ func (s *Server) WatchDocuments(
 			if err := stream.Send(&api.WatchDocumentsResponse{
 				Body: &api.WatchDocumentsResponse_Event{
 					Event: &api.DocEvent{
-						Client:       converter.ToClient(event.Client),
-						EventType:    eventType,
+						Type:         eventType,
+						Publisher:    converter.ToClient(event.Publisher),
 						DocumentKeys: converter.ToDocumentKeys(event.DocumentKeys),
 					},
 				},
@@ -468,8 +468,8 @@ func (s *Server) watchDocs(
 	s.backend.PubSub.Publish(
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Client:       subscription.Subscriber(),
-			EventType:    types.DocumentsWatchedEvent,
+			Type:         types.DocumentsWatchedEvent,
+			Publisher:    subscription.Subscriber(),
 			DocumentKeys: docKeys,
 		},
 	)
@@ -486,8 +486,8 @@ func (s *Server) unwatchDocs(
 	s.backend.PubSub.Publish(
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Client:       subscription.Subscriber(),
-			EventType:    types.DocumentsUnwatchedEvent,
+			Type:         types.DocumentsUnwatchedEvent,
+			Publisher:    subscription.Subscriber(),
 			DocumentKeys: docKeys,
 		},
 	)

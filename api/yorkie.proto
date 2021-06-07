@@ -18,17 +18,6 @@ syntax = "proto3";
 
 package api;
 
-service Cluster {
-    rpc BroadcastEvent (BroadcastEventRequest) returns (BroadcastEventResponse) {}
-}
-
-message BroadcastEventRequest {
-    bytes publisher_id = 1;
-    DocEvent event = 3;
-}
-
-message BroadcastEventResponse {}
-
 service Yorkie {
     rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
     rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
@@ -37,6 +26,21 @@ service Yorkie {
     rpc WatchDocuments (WatchDocumentsRequest) returns (stream WatchDocumentsResponse) {}
     rpc PushPull (PushPullRequest) returns (PushPullResponse) {}
 }
+
+service Cluster {
+    rpc BroadcastEvent (BroadcastEventRequest) returns (BroadcastEventResponse) {}
+}
+
+/////////////////////////////////////////
+// Messages for Cluster                //
+/////////////////////////////////////////
+
+message BroadcastEventRequest {
+    bytes publisher_id = 1;
+    DocEvent event = 2;
+}
+
+message BroadcastEventResponse {}
 
 /////////////////////////////////////////
 // Messages for RPC                    //
@@ -353,14 +357,14 @@ enum ValueType {
     DOUBLE_CNT = 14;
 }
 
-enum EventType {
+enum DocEventType {
     DOCUMENTS_CHANGED = 0;
     DOCUMENTS_WATCHED = 1;
     DOCUMENTS_UNWATCHED = 2;
 }
 
 message DocEvent {
-    Client client = 1;
-    EventType event_type = 2;
+    DocEventType type = 1;
+    Client publisher = 2;
     repeated DocumentKey document_keys = 3;
 }

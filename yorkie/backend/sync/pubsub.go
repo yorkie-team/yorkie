@@ -32,8 +32,8 @@ var (
 
 // DocEvent represents events that occur related to the document.
 type DocEvent struct {
-	Client       types.Client
-	EventType    types.EventType
+	Type         types.DocEventType
+	Publisher    types.Client
 	DocumentKeys []*key.Key
 }
 

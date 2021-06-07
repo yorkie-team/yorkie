@@ -43,8 +43,8 @@ func TestPubSub(t *testing.T) {
 			},
 		}
 		event := sync.DocEvent{
-			Client:       actorB,
-			EventType:    types.DocumentsWatchedEvent,
+			Type:         types.DocumentsWatchedEvent,
+			Publisher:    actorB,
 			DocumentKeys: docKeys,
 		}
 
