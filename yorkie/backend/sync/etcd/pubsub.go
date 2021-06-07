@@ -53,7 +53,7 @@ func (c *Client) Publish(
 
 	for _, member := range c.Members() {
 		memberAddr := member.RPCAddr
-		if memberAddr == c.pubSub.AgentInfo.RPCAddr {
+		if memberAddr == c.agentInfo.RPCAddr {
 			continue
 		}
 

@@ -22,25 +22,7 @@ import (
 	"github.com/moby/locker"
 
 	"github.com/yorkie-team/yorkie/internal/log"
-	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
-
-// LockerMap is locker map based on memory.
-type LockerMap struct {
-	locks *locker.Locker
-}
-
-// NewLockerMap creates an instance of LockerMap.
-func NewLockerMap() *LockerMap {
-	return &LockerMap{
-		locks: locker.New(),
-	}
-}
-
-// Close closes all resources of this LockerMap.
-func (m *LockerMap) Close() error {
-	return nil
-}
 
 type internalLocker struct {
 	key   string
@@ -62,15 +44,4 @@ func (il *internalLocker) Unlock(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// NewLocker creates locker of the given key.
-func (m *LockerMap) NewLocker(
-	ctx context.Context,
-	key sync.Key,
-) (sync.Locker, error) {
-	return &internalLocker{
-		key.String(),
-		m.locks,
-	}, nil
 }

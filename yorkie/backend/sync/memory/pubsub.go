@@ -64,15 +64,13 @@ func (s *subscriptions) Len() int {
 // PubSub is the memory implementation of PubSub, used for single agent or
 // tests.
 type PubSub struct {
-	AgentInfo               *sync.AgentInfo
 	subscriptionsMapMu      *gosync.RWMutex
 	subscriptionsMapByTopic map[string]*subscriptions
 }
 
 // NewPubSub creates an instance of PubSub.
-func NewPubSub(info *sync.AgentInfo) *PubSub {
+func NewPubSub() *PubSub {
 	return &PubSub{
-		AgentInfo:               info,
 		subscriptionsMapMu:      &gosync.RWMutex{},
 		subscriptionsMapByTopic: make(map[string]*subscriptions),
 	}
@@ -162,7 +160,6 @@ func (m *PubSub) Publish(
 // Members returns the members of this cluster.
 func (m *PubSub) Members() map[string]*sync.AgentInfo {
 	members := make(map[string]*sync.AgentInfo)
-	members[m.AgentInfo.ID] = m.AgentInfo
 	return members
 }
 
@@ -194,7 +191,6 @@ func (m *PubSub) PublishToLocal(
 				sub.Events() <- event
 			}
 		}
-
 		log.Logger.Debugf(`Publish(%s,%s) End`, topic, publisherID.String())
 	}
 }

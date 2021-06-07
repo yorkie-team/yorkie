@@ -22,7 +22,29 @@ import (
 	"go.etcd.io/etcd/clientv3/concurrency"
 
 	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
+
+// NewLocker creates locker of the given key.
+func (c *Client) NewLocker(
+	ctx context.Context,
+	key sync.Key,
+) (sync.Locker, error) {
+	session, err := concurrency.NewSession(
+		c.client,
+		concurrency.WithContext(ctx),
+		concurrency.WithTTL(c.config.LockLeaseTimeSec),
+	)
+	if err != nil {
+		log.Logger.Error(err)
+		return nil, err
+	}
+
+	return &internalLocker{
+		session,
+		concurrency.NewMutex(session, key.String()),
+	}, nil
+}
 
 type internalLocker struct {
 	session *concurrency.Session

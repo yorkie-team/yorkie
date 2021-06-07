@@ -35,7 +35,7 @@ func TestPubSub(t *testing.T) {
 	actorB := types.Client{ID: &time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 
 	t.Run("publish subscribe test", func(t *testing.T) {
-		pubSub := memory.NewPubSub(nil)
+		pubSub := memory.NewPubSub()
 		docKeys := []*key.Key{
 			{
 				Collection: helper.Collection,
@@ -69,7 +69,7 @@ func TestPubSub(t *testing.T) {
 	})
 
 	t.Run("subscriptions map test", func(t *testing.T) {
-		pubSub := memory.NewPubSub(nil)
+		pubSub := memory.NewPubSub()
 		docKeys := []*key.Key{
 			{
 				Collection: helper.Collection,

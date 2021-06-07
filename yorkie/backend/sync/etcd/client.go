@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/clientv3/concurrency"
 	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/api"
@@ -57,7 +56,9 @@ type clusterClientInfo struct {
 
 // Client is a client that connects to ETCD.
 type Client struct {
-	config *Config
+	config    *Config
+	agentInfo *sync.AgentInfo
+
 	client *clientv3.Client
 
 	pubSub *memory.PubSub
@@ -83,9 +84,10 @@ func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	return &Client{
-		config: conf,
+		config:    conf,
+		agentInfo: agentInfo,
 
-		pubSub: memory.NewPubSub(agentInfo),
+		pubSub: memory.NewPubSub(),
 
 		memberMapMu:        &gosync.RWMutex{},
 		memberMap:          make(map[string]*sync.AgentInfo),
@@ -137,25 +139,4 @@ func (c *Client) Close() error {
 	}
 
 	return c.client.Close()
-}
-
-// NewLocker creates locker of the given key.
-func (c *Client) NewLocker(
-	ctx context.Context,
-	key sync.Key,
-) (sync.Locker, error) {
-	session, err := concurrency.NewSession(
-		c.client,
-		concurrency.WithContext(ctx),
-		concurrency.WithTTL(c.config.LockLeaseTimeSec),
-	)
-	if err != nil {
-		log.Logger.Error(err)
-		return nil, err
-	}
-
-	return &internalLocker{
-		session,
-		concurrency.NewMutex(session, key.String()),
-	}, nil
 }

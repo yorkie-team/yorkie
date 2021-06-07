@@ -26,7 +26,7 @@ func (s *Server) BroadcastEvent(
 		return nil, err
 	}
 
-	s.backend.PubSub.PublishToLocal(
+	s.backend.Coordinator.PublishToLocal(
 		actorID,
 		*docEvent,
 	)
