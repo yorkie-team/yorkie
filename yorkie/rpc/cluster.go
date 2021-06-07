@@ -11,7 +11,7 @@ import (
 
 // BroadcastEvent publishes the given event to the given Topic.
 func (s *Server) BroadcastEvent(
-	_ context.Context,
+	ctx context.Context,
 	request *api.BroadcastEventRequest,
 ) (*api.BroadcastEventResponse, error) {
 	actorID, err := time.ActorIDFromBytes(request.PublisherId)
@@ -27,6 +27,7 @@ func (s *Server) BroadcastEvent(
 	}
 
 	s.backend.Coordinator.PublishToLocal(
+		ctx,
 		actorID,
 		*docEvent,
 	)

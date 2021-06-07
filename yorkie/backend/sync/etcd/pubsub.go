@@ -46,10 +46,11 @@ func (c *Client) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
 
 // Publish publishes the given event to the given Topic.
 func (c *Client) Publish(
+	ctx context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	c.PublishToLocal(publisherID, event)
+	c.PublishToLocal(ctx, publisherID, event)
 
 	for _, member := range c.Members() {
 		memberAddr := member.RPCAddr
@@ -63,7 +64,7 @@ func (c *Client) Publish(
 		}
 
 		if err := c.publishToMember(
-			context.Background(),
+			ctx,
 			clientInfo,
 			publisherID,
 			event,
@@ -75,10 +76,11 @@ func (c *Client) Publish(
 
 // PublishToLocal publishes the given event to the given Topic.
 func (c *Client) PublishToLocal(
+	ctx context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	c.pubSub.Publish(publisherID, event)
+	c.pubSub.Publish(ctx, publisherID, event)
 }
 
 // ensureClusterClient activates the cluster grpc server and creates a client.

@@ -17,6 +17,7 @@
 package memory
 
 import (
+	"context"
 	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/internal/log"
@@ -151,10 +152,11 @@ func (m *PubSub) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
 
 // Publish publishes the given event.
 func (m *PubSub) Publish(
+	ctx context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	m.PublishToLocal(publisherID, event)
+	m.PublishToLocal(ctx, publisherID, event)
 }
 
 // Members returns the members of this cluster.
@@ -165,6 +167,7 @@ func (m *PubSub) Members() map[string]*sync.AgentInfo {
 
 // PublishToLocal publishes the given event.
 func (m *PubSub) PublishToLocal(
+	_ context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {

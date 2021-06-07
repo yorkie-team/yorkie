@@ -17,6 +17,7 @@
 package memory_test
 
 import (
+	"context"
 	gosync "sync"
 	"testing"
 
@@ -64,7 +65,7 @@ func TestPubSub(t *testing.T) {
 		}()
 
 		// publish the event to the topic by actorB
-		pubSub.Publish(actorB.ID, event)
+		pubSub.Publish(context.Background(), actorB.ID, event)
 		wg.Wait()
 	})
 

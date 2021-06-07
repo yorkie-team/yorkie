@@ -128,6 +128,7 @@ func PushPull(
 			}()
 
 			be.Coordinator.Publish(
+				ctx,
 				publisherID,
 				sync.DocEvent{
 					Type:         types.DocumentsChangedEvent,

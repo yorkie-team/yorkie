@@ -383,6 +383,7 @@ func (s *Server) WatchDocuments(
 	docKeys := converter.FromDocumentKeys(req.DocumentKeys)
 
 	subscription, peersMap, err := s.watchDocs(
+		stream.Context(),
 		*client,
 		docKeys,
 	)
@@ -453,6 +454,7 @@ func (s *Server) listenAndServeGRPC() error {
 }
 
 func (s *Server) watchDocs(
+	ctx context.Context,
 	client types.Client,
 	docKeys []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
@@ -466,6 +468,7 @@ func (s *Server) watchDocs(
 	}
 
 	s.backend.Coordinator.Publish(
+		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
 			Type:         types.DocumentsWatchedEvent,
@@ -484,6 +487,7 @@ func (s *Server) unwatchDocs(
 	s.backend.Coordinator.Unsubscribe(docKeys, subscription)
 
 	s.backend.Coordinator.Publish(
+		context.Background(),
 		subscription.Subscriber().ID,
 		sync.DocEvent{
 			Type:         types.DocumentsUnwatchedEvent,

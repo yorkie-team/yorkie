@@ -17,6 +17,8 @@
 package sync
 
 import (
+	"context"
+
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -91,10 +93,10 @@ type PubSub interface {
 	Unsubscribe(topics []*key.Key, sub *Subscription)
 
 	// Publish publishes the given event.
-	Publish(publisherID *time.ActorID, event DocEvent)
+	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)
 
 	// PublishToLocal publishes the given event.
-	PublishToLocal(publisherID *time.ActorID, event DocEvent)
+	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
 
 	// Members returns the members of this cluster.
 	Members() map[string]*AgentInfo
