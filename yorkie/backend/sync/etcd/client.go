@@ -48,7 +48,7 @@ type Config struct {
 	LockLeaseTimeSec int `json:"LockLeaseTimeSec"`
 }
 
-// clusterClientInfo manages cluster grpc server connections and clients.
+// clusterClientInfo represents a cluster client and its connection.
 type clusterClientInfo struct {
 	client api.ClusterClient
 	conn   *grpc.ClientConn

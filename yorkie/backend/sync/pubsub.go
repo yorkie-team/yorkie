@@ -97,7 +97,4 @@ type PubSub interface {
 
 	// PublishToLocal publishes the given event.
 	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
-
-	// Members returns the members of this cluster.
-	Members() map[string]*AgentInfo
 }

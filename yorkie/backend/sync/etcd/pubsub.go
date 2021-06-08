@@ -58,7 +58,7 @@ func (c *Client) Publish(
 			continue
 		}
 
-		clientInfo, err := c.ensureClusterClient(memberAddr)
+		clientInfo, err := c.ensureClusterClient(member)
 		if err != nil {
 			continue
 		}
@@ -83,25 +83,39 @@ func (c *Client) PublishToLocal(
 	c.pubSub.Publish(ctx, publisherID, event)
 }
 
-// ensureClusterClient activates the cluster grpc server and creates a client.
-func (c *Client) ensureClusterClient(addr string) (*clusterClientInfo, error) {
+// ensureClusterClient return the cluster client from the cache or creates it.
+func (c *Client) ensureClusterClient(member *sync.AgentInfo) (*clusterClientInfo, error) {
 	c.clusterClientMapMu.Lock()
 	defer c.clusterClientMapMu.Unlock()
 
-	if _, ok := c.clusterClientMap[addr]; !ok {
-		conn, err := grpc.Dial(addr, grpc.WithInsecure())
+	if _, ok := c.clusterClientMap[member.ID]; !ok {
+		conn, err := grpc.Dial(member.RPCAddr, grpc.WithInsecure())
 		if err != nil {
 			log.Logger.Error(err)
 			return nil, err
 		}
 
-		c.clusterClientMap[addr] = &clusterClientInfo{
+		c.clusterClientMap[member.ID] = &clusterClientInfo{
 			client: api.NewClusterClient(conn),
 			conn:   conn,
 		}
 	}
 
-	return c.clusterClientMap[addr], nil
+	return c.clusterClientMap[member.ID], nil
+}
+
+// removeClusterClient removes the cluster client of the given ID.
+func (c *Client) removeClusterClient(id string) {
+	c.clusterClientMapMu.Lock()
+	defer c.clusterClientMapMu.Unlock()
+
+	if info, ok := c.clusterClientMap[id]; ok {
+		if err := info.conn.Close(); err != nil {
+			log.Logger.Error(err)
+		}
+
+		delete(c.clusterClientMap, id)
+	}
 }
 
 // publishToMember publishes events to other agents.

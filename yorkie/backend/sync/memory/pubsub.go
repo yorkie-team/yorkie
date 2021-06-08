@@ -159,12 +159,6 @@ func (m *PubSub) Publish(
 	m.PublishToLocal(ctx, publisherID, event)
 }
 
-// Members returns the members of this cluster.
-func (m *PubSub) Members() map[string]*sync.AgentInfo {
-	members := make(map[string]*sync.AgentInfo)
-	return members
-}
-
 // PublishToLocal publishes the given event.
 func (m *PubSub) PublishToLocal(
 	_ context.Context,

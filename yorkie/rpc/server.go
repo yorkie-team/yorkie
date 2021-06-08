@@ -392,7 +392,6 @@ func (s *Server) WatchDocuments(
 		return err
 	}
 
-	// TODO(dc7303): broadcast
 	if err := stream.Send(&api.WatchDocumentsResponse{
 		Body: &api.WatchDocumentsResponse_Initialization_{
 			Initialization: &api.WatchDocumentsResponse_Initialization{
