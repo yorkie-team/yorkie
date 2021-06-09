@@ -184,7 +184,7 @@ func (s *Server) AttachDocument(
 	if pack.HasChanges() {
 		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
-			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
+			packs.NewPushPullKey(pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err
@@ -249,7 +249,7 @@ func (s *Server) DetachDocument(
 	if pack.HasChanges() {
 		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
-			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
+			packs.NewPushPullKey(pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err
@@ -321,7 +321,7 @@ func (s *Server) PushPull(
 
 		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
-			sync.NewKey(fmt.Sprintf("pushpull-%s", pack.DocumentKey.BSONKey())),
+			packs.NewPushPullKey(pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err

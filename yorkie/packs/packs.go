@@ -41,6 +41,16 @@ var (
 	ErrInvalidServerSeq = errors.New("invalid server seq")
 )
 
+// NewPushPullKey creates a new sync.Key of PushPull for the given document.
+func NewPushPullKey(documentKey *key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("pushpull-%s", documentKey.BSONKey()))
+}
+
+// NewSnapshotKey creates a new sync.Key of Snapshot for the given document.
+func NewSnapshotKey(documentKey *key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("snapshot-%s", documentKey.BSONKey()))
+}
+
 // PushPull stores the given changes and returns accumulated changes of the
 // given document.
 func PushPull(
@@ -109,7 +119,7 @@ func PushPull(
 			// is not necessary to recreate it, so we can skip it.
 			locker, err := be.Coordinator.NewLocker(
 				ctx,
-				sync.NewKey(fmt.Sprintf("snapshot-%s", docInfo.Key)),
+				NewSnapshotKey(reqPack.DocumentKey),
 			)
 			if err != nil {
 				log.Logger.Error(err)
