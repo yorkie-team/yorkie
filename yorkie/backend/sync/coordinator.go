@@ -17,8 +17,11 @@
 package sync
 
 import (
+	"context"
 	"errors"
 	gotime "time"
+
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 var (
@@ -41,6 +44,9 @@ type Coordinator interface {
 
 	// Members returns the members of this cluster.
 	Members() map[string]*AgentInfo
+
+	// PublishToLocal publishes the given event.
+	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
 
 	// Close closes all resources of this Coordinator.
 	Close() error

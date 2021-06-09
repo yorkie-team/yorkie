@@ -152,15 +152,6 @@ func (m *PubSub) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
 
 // Publish publishes the given event.
 func (m *PubSub) Publish(
-	ctx context.Context,
-	publisherID *time.ActorID,
-	event sync.DocEvent,
-) {
-	m.PublishToLocal(ctx, publisherID, event)
-}
-
-// PublishToLocal publishes the given event.
-func (m *PubSub) PublishToLocal(
 	_ context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,

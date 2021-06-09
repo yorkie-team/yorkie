@@ -94,7 +94,4 @@ type PubSub interface {
 
 	// Publish publishes the given event.
 	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)
-
-	// PublishToLocal publishes the given event.
-	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
 }

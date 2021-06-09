@@ -74,7 +74,7 @@ func (m *Coordinator) Publish(
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	m.pubSub.PublishToLocal(ctx, publisherID, event)
+	m.pubSub.Publish(ctx, publisherID, event)
 }
 
 // PublishToLocal publishes the given event.
@@ -83,7 +83,7 @@ func (m *Coordinator) PublishToLocal(
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	m.pubSub.PublishToLocal(ctx, publisherID, event)
+	m.pubSub.Publish(ctx, publisherID, event)
 }
 
 // Members returns the members of this cluster.
