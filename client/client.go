@@ -332,7 +332,7 @@ func (c *Client) Metadata() map[string]string {
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
 	Publisher *types.Client
-	EventType types.EventType
+	EventType types.DocEventType
 	Keys      []*key.Key
 	Err       error
 }
@@ -352,7 +352,7 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 			ID:       c.id,
 			Metadata: c.metadata,
 		}),
-		DocumentKeys: converter.ToDocumentKeys(keys...),
+		DocumentKeys: converter.ToDocumentKeys(keys),
 	})
 	if err != nil {
 		rch <- WatchResponse{Err: err}
@@ -362,12 +362,12 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 
 	handleResponse := func(pbResp *api.WatchDocumentsResponse) error {
 		switch resp := pbResp.Body.(type) {
-		case *api.WatchDocumentsResponse_Event_:
-			publisher, err := converter.FromClient(resp.Event.Client)
+		case *api.WatchDocumentsResponse_Event:
+			publisher, err := converter.FromClient(resp.Event.Publisher)
 			if err != nil {
 				return err
 			}
-			eventType, err := converter.FromEventType(resp.Event.EventType)
+			eventType, err := converter.FromEventType(resp.Event.Type)
 			if err != nil {
 				return err
 			}

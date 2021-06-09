@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
 // ToClient converts the given model to Protobuf format.
@@ -96,7 +97,7 @@ func toChangeID(id *change.ID) *api.ChangeID {
 }
 
 // ToDocumentKeys converts the given model format to Protobuf format.
-func ToDocumentKeys(keys ...*key.Key) []*api.DocumentKey {
+func ToDocumentKeys(keys []*key.Key) []*api.DocumentKey {
 	var pbKeys []*api.DocumentKey
 	for _, k := range keys {
 		pbKeys = append(pbKeys, toDocumentKey(k))
@@ -122,18 +123,32 @@ func ToClientsMap(clientsMap map[string][]types.Client) map[string]*api.Clients 
 	return pbClientsMap
 }
 
-// ToEventType converts the given model format to Protobuf format.
-func ToEventType(eventType types.EventType) (api.EventType, error) {
+// ToDocEventType converts the given model format to Protobuf format.
+func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 	switch eventType {
-	case types.DocumentsChangeEvent:
-		return api.EventType_DOCUMENTS_CHANGED, nil
+	case types.DocumentsChangedEvent:
+		return api.DocEventType_DOCUMENTS_CHANGED, nil
 	case types.DocumentsWatchedEvent:
-		return api.EventType_DOCUMENTS_WATCHED, nil
+		return api.DocEventType_DOCUMENTS_WATCHED, nil
 	case types.DocumentsUnwatchedEvent:
-		return api.EventType_DOCUMENTS_UNWATCHED, nil
+		return api.DocEventType_DOCUMENTS_UNWATCHED, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}
+}
+
+// ToDocEvent converts the given model to Protobuf format.
+func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
+	eventType, err := ToDocEventType(docEvent.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.DocEvent{
+		Type:         eventType,
+		Publisher:    ToClient(docEvent.Publisher),
+		DocumentKeys: ToDocumentKeys(docEvent.DocumentKeys),
+	}, nil
 }
 
 // ToOperations converts the given model format to Protobuf format.

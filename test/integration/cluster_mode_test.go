@@ -118,10 +118,12 @@ func TestClusterMode(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
+		err = clientB.Sync(ctx)
+		assert.NoError(t, err)
+
 		wg.Wait()
 
-		// TODO(hackerwins): uncomment below test
-		// assert.Equal(t, docA.Marshal(), docB.Marshal())
+		assert.Equal(t, docA.Marshal(), docB.Marshal())
 
 		defer func() {
 			assert.NoError(t, clientA.Deactivate(ctx))

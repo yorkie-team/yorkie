@@ -153,6 +153,7 @@ func (c *Client) syncAgents() {
 					c.setAgentInfo(string(event.Kv.Key), info)
 				case mvccpb.DELETE:
 					c.removeAgentInfo(string(event.Kv.Key))
+					c.removeClusterClient(string(event.Kv.Key))
 				}
 			}
 		case <-c.ctx.Done():
@@ -170,9 +171,9 @@ func (c *Client) setAgentInfo(key string, value sync.AgentInfo) {
 }
 
 // removeAgentInfo removes the given agentInfo from the local member map.
-func (c *Client) removeAgentInfo(key string) {
+func (c *Client) removeAgentInfo(id string) {
 	c.memberMapMu.Lock()
 	defer c.memberMapMu.Unlock()
 
-	delete(c.memberMap, key)
+	delete(c.memberMap, id)
 }

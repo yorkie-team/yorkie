@@ -24,6 +24,7 @@ import (
 	"go.etcd.io/etcd/clientv3"
 	"google.golang.org/grpc"
 
+	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
@@ -47,6 +48,12 @@ type Config struct {
 	LockLeaseTimeSec int `json:"LockLeaseTimeSec"`
 }
 
+// clusterClientInfo represents a cluster client and its connection.
+type clusterClientInfo struct {
+	client api.ClusterClient
+	conn   *grpc.ClientConn
+}
+
 // Client is a client that connects to ETCD.
 type Client struct {
 	config    *Config
@@ -56,8 +63,10 @@ type Client struct {
 
 	pubSub *memory.PubSub
 
-	memberMapMu *gosync.RWMutex
-	memberMap   map[string]*sync.AgentInfo
+	memberMapMu        *gosync.RWMutex
+	memberMap          map[string]*sync.AgentInfo
+	clusterClientMapMu *gosync.RWMutex
+	clusterClientMap   map[string]*clusterClientInfo
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
@@ -80,8 +89,10 @@ func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 
 		pubSub: memory.NewPubSub(),
 
-		memberMapMu: &gosync.RWMutex{},
-		memberMap:   make(map[string]*sync.AgentInfo),
+		memberMapMu:        &gosync.RWMutex{},
+		memberMap:          make(map[string]*sync.AgentInfo),
+		clusterClientMapMu: &gosync.RWMutex{},
+		clusterClientMap:   make(map[string]*clusterClientInfo),
 
 		ctx:        ctx,
 		cancelFunc: cancelFunc,

@@ -21,6 +21,7 @@ import (
 
 	"github.com/moby/locker"
 
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -57,23 +58,32 @@ func (m *Coordinator) NewLocker(
 // Subscribe subscribes to the given topics.
 func (m *Coordinator) Subscribe(
 	subscriber types.Client,
-	topics []string,
+	topics []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
 	return m.pubSub.Subscribe(subscriber, topics)
 }
 
 // Unsubscribe unsubscribes the given topics.
-func (m *Coordinator) Unsubscribe(topics []string, sub *sync.Subscription) {
+func (m *Coordinator) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
 	m.pubSub.Unsubscribe(topics, sub)
 }
 
-// Publish publishes the given event to the given Topic.
+// Publish publishes the given event.
 func (m *Coordinator) Publish(
+	ctx context.Context,
 	publisherID *time.ActorID,
-	topic string,
 	event sync.DocEvent,
 ) {
-	m.pubSub.Publish(publisherID, topic, event)
+	m.pubSub.PublishToLocal(ctx, publisherID, event)
+}
+
+// PublishToLocal publishes the given event.
+func (m *Coordinator) PublishToLocal(
+	ctx context.Context,
+	publisherID *time.ActorID,
+	event sync.DocEvent,
+) {
+	m.pubSub.PublishToLocal(ctx, publisherID, event)
 }
 
 // Members returns the members of this cluster.

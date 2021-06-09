@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
@@ -127,12 +128,12 @@ func PushPull(
 			}()
 
 			be.Coordinator.Publish(
+				ctx,
 				publisherID,
-				reqPack.DocumentKey.BSONKey(),
 				sync.DocEvent{
-					Type:      types.DocumentsChangeEvent,
-					DocKey:    reqPack.DocumentKey.BSONKey(),
-					Publisher: types.Client{ID: publisherID},
+					Type:         types.DocumentsChangedEvent,
+					Publisher:    types.Client{ID: publisherID},
+					DocumentKeys: []*key.Key{reqPack.DocumentKey},
 				},
 			)
 

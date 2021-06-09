@@ -19,21 +19,12 @@ package sync
 import (
 	"errors"
 	gotime "time"
-
-	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 var (
 	// ErrEmptyTopics is returned when the given topic is empty.
 	ErrEmptyTopics = errors.New("empty topics")
 )
-
-// DocEvent represents events that occur related to the document.
-type DocEvent struct {
-	Type      types.EventType
-	DocKey    string
-	Publisher types.Client
-}
 
 // AgentInfo represents the information of the Agent.
 type AgentInfo struct {

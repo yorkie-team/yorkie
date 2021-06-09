@@ -17,8 +17,11 @@
 package sync
 
 import (
+	"context"
+
 	"github.com/rs/xid"
 
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
@@ -44,6 +47,13 @@ func NewSubscription(subscriber types.Client) *Subscription {
 // ID returns the id of this subscription.
 func (s *Subscription) ID() string {
 	return s.id
+}
+
+// DocEvent represents events that occur related to the document.
+type DocEvent struct {
+	Type         types.DocEventType
+	Publisher    types.Client
+	DocumentKeys []*key.Key
 }
 
 // Events returns the DocEvent channel of this subscription.
@@ -76,12 +86,15 @@ type PubSub interface {
 	// Subscribe subscribes to the given topics.
 	Subscribe(
 		subscriber types.Client,
-		topics []string,
+		topics []*key.Key,
 	) (*Subscription, map[string][]types.Client, error)
 
 	// Unsubscribe unsubscribes the given topics.
-	Unsubscribe(topics []string, sub *Subscription)
+	Unsubscribe(topics []*key.Key, sub *Subscription)
 
-	// Publish publishes the given event to the given Topic.
-	Publish(publisherID *time.ActorID, topic string, event DocEvent)
+	// Publish publishes the given event.
+	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)
+
+	// PublishToLocal publishes the given event.
+	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
 }

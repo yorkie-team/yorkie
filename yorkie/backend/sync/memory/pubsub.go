@@ -17,9 +17,11 @@
 package memory
 
 import (
+	"context"
 	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -78,7 +80,7 @@ func NewPubSub() *PubSub {
 // Subscribe subscribes to the given topics.
 func (m *PubSub) Subscribe(
 	subscriber types.Client,
-	topics []string,
+	topics []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
 	if len(topics) == 0 {
 		return nil, nil, sync.ErrEmptyTopics
@@ -89,7 +91,7 @@ func (m *PubSub) Subscribe(
 
 	log.Logger.Debugf(
 		`Subscribe(%s,%s) Start`,
-		topics[0],
+		topics[0].BSONKey(),
 		subscriber.ID.String(),
 	)
 
@@ -97,73 +99,95 @@ func (m *PubSub) Subscribe(
 	peersMap := make(map[string][]types.Client)
 
 	for _, topic := range topics {
-		if _, ok := m.subscriptionsMapByTopic[topic]; !ok {
-			m.subscriptionsMapByTopic[topic] = newSubscriptions()
+		topicKey := topic.BSONKey()
+		if _, ok := m.subscriptionsMapByTopic[topicKey]; !ok {
+			m.subscriptionsMapByTopic[topicKey] = newSubscriptions()
 		}
-		m.subscriptionsMapByTopic[topic].Add(sub)
+		m.subscriptionsMapByTopic[topicKey].Add(sub)
 
 		var peers []types.Client
-		for _, sub := range m.subscriptionsMapByTopic[topic].Map() {
+		for _, sub := range m.subscriptionsMapByTopic[topicKey].Map() {
 			peers = append(peers, sub.Subscriber())
 		}
-		peersMap[topic] = peers
+		peersMap[topicKey] = peers
 	}
 
 	log.Logger.Debugf(
 		`Subscribe(%s,%s) End`,
-		topics[0],
+		topics[0].BSONKey(),
 		subscriber.ID.String(),
 	)
 	return sub, peersMap, nil
 }
 
 // Unsubscribe unsubscribes the given topics.
-func (m *PubSub) Unsubscribe(topics []string, sub *sync.Subscription) {
+func (m *PubSub) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	log.Logger.Debugf(`Unsubscribe(%s,%s) Start`, topics[0], sub.SubscriberID())
+	log.Logger.Debugf(
+		`Unsubscribe(%s,%s) Start`,
+		topics[0].BSONKey(),
+		sub.SubscriberID(),
+	)
 
 	for _, topic := range topics {
-		if subs, ok := m.subscriptionsMapByTopic[topic]; ok {
+		topicKey := topic.BSONKey()
+		if subs, ok := m.subscriptionsMapByTopic[topicKey]; ok {
 			subs.Delete(sub.ID())
 
 			if subs.Len() == 0 {
-				delete(m.subscriptionsMapByTopic, topic)
+				delete(m.subscriptionsMapByTopic, topicKey)
 			}
 		}
 	}
 	sub.Close()
 
-	log.Logger.Debugf(`Unsubscribe(%s,%s) End`, topics[0], sub.SubscriberID())
+	log.Logger.Debugf(
+		`Unsubscribe(%s,%s) End`,
+		topics[0].BSONKey(),
+		sub.SubscriberID(),
+	)
 }
 
-// Publish publishes the given event to the given Topic.
+// Publish publishes the given event.
 func (m *PubSub) Publish(
+	ctx context.Context,
 	publisherID *time.ActorID,
-	topic string,
+	event sync.DocEvent,
+) {
+	m.PublishToLocal(ctx, publisherID, event)
+}
+
+// PublishToLocal publishes the given event.
+func (m *PubSub) PublishToLocal(
+	_ context.Context,
+	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
 	m.subscriptionsMapMu.RLock()
 	defer m.subscriptionsMapMu.RUnlock()
 
-	log.Logger.Debugf(`Publish(%s,%s) Start`, event.DocKey, publisherID.String())
+	for _, docKey := range event.DocumentKeys {
+		topic := docKey.BSONKey()
 
-	if subs, ok := m.subscriptionsMapByTopic[topic]; ok {
-		for _, sub := range subs.Map() {
-			if sub.Subscriber().ID.Compare(publisherID) == 0 {
-				continue
+		log.Logger.Debugf(`Publish(%s,%s) Start`, topic, publisherID.String())
+
+		if subs, ok := m.subscriptionsMapByTopic[topic]; ok {
+			for _, sub := range subs.Map() {
+				if sub.Subscriber().ID.Compare(publisherID) == 0 {
+					continue
+				}
+
+				log.Logger.Debugf(
+					`Publish(%s,%s) to %s`,
+					topic,
+					publisherID.String(),
+					sub.SubscriberID(),
+				)
+				sub.Events() <- event
 			}
-
-			log.Logger.Debugf(
-				`Publish(%s,%s) to %s`,
-				event.DocKey,
-				publisherID.String(),
-				sub.SubscriberID(),
-			)
-			sub.Events() <- event
 		}
+		log.Logger.Debugf(`Publish(%s,%s) End`, topic, publisherID.String())
 	}
-
-	log.Logger.Debugf(`Publish(%s,%s) End`, event.DocKey, publisherID.String())
 }

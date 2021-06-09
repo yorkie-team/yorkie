@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
 // FromClient converts the given Protobuf format to model format.
@@ -127,16 +128,35 @@ func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
 }
 
 // FromEventType converts the given Protobuf format to model format.
-func FromEventType(pbEventType api.EventType) (types.EventType, error) {
-	switch pbEventType {
-	case api.EventType_DOCUMENTS_CHANGED:
-		return types.DocumentsChangeEvent, nil
-	case api.EventType_DOCUMENTS_WATCHED:
+func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) {
+	switch pbDocEventType {
+	case api.DocEventType_DOCUMENTS_CHANGED:
+		return types.DocumentsChangedEvent, nil
+	case api.DocEventType_DOCUMENTS_WATCHED:
 		return types.DocumentsWatchedEvent, nil
-	case api.EventType_DOCUMENTS_UNWATCHED:
+	case api.DocEventType_DOCUMENTS_UNWATCHED:
 		return types.DocumentsUnwatchedEvent, nil
 	}
-	return "", fmt.Errorf("%v: %w", pbEventType, ErrUnsupportedEventType)
+	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
+}
+
+// FromDocEvent converts the given Protobuf format to model format.
+func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
+	client, err := FromClient(docEvent.Publisher)
+	if err != nil {
+		return nil, err
+	}
+
+	eventType, err := FromEventType(docEvent.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sync.DocEvent{
+		Type:         eventType,
+		Publisher:    *client,
+		DocumentKeys: FromDocumentKeys(docEvent.DocumentKeys),
+	}, nil
 }
 
 // FromOperations converts the given Protobuf format to model format.

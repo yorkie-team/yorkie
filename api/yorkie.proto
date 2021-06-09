@@ -27,6 +27,21 @@ service Yorkie {
     rpc PushPull (PushPullRequest) returns (PushPullResponse) {}
 }
 
+service Cluster {
+    rpc BroadcastEvent (BroadcastEventRequest) returns (BroadcastEventResponse) {}
+}
+
+/////////////////////////////////////////
+// Messages for Cluster                //
+/////////////////////////////////////////
+
+message BroadcastEventRequest {
+    bytes publisher_id = 1;
+    DocEvent event = 2;
+}
+
+message BroadcastEventResponse {}
+
 /////////////////////////////////////////
 // Messages for RPC                    //
 /////////////////////////////////////////
@@ -78,15 +93,9 @@ message WatchDocumentsResponse {
         map<string, Clients> peers_map_by_doc = 1;
     }
 
-    message Event {
-        Client client = 1;
-        EventType event_type = 2;
-        repeated DocumentKey document_keys = 3;
-    }
-
     oneof body {
         Initialization initialization = 1;
-        Event event = 2;
+        DocEvent event = 2;
     }
 }
 
@@ -348,8 +357,14 @@ enum ValueType {
     DOUBLE_CNT = 14;
 }
 
-enum EventType {
+enum DocEventType {
     DOCUMENTS_CHANGED = 0;
     DOCUMENTS_WATCHED = 1;
     DOCUMENTS_UNWATCHED = 2;
+}
+
+message DocEvent {
+    DocEventType type = 1;
+    Client publisher = 2;
+    repeated DocumentKey document_keys = 3;
 }
