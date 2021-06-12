@@ -18,9 +18,10 @@ package client
 
 import (
 	"context"
-	"errors"
+	goerrors "errors"
 
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -43,11 +44,11 @@ const (
 var (
 	// ErrClientNotActivated occurs when an inactive client executes a function
 	// that can only be executed when activated.
-	ErrClientNotActivated = errors.New("client is not activated")
+	ErrClientNotActivated = goerrors.New("client is not activated")
 
 	// ErrDocumentNotAttached occurs when the given document is not attached to
 	// this client.
-	ErrDocumentNotAttached = errors.New("document is not attached")
+	ErrDocumentNotAttached = goerrors.New("document is not attached")
 )
 
 // Client is a normal client that can communicate with the agent.
@@ -105,8 +106,7 @@ func NewClient(opts ...Option) (*Client, error) {
 			serverNameOverride,
 		)
 		if err != nil {
-			log.Logger.Error(err)
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		dialOptions = append(dialOptions, grpc.WithTransportCredentials(creds))
 	} else {
@@ -150,8 +150,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 func (c *Client) Dial(rpcAddr string) error {
 	conn, err := grpc.Dial(rpcAddr, c.dialOptions...)
 	if err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	c.conn = conn
@@ -163,6 +162,7 @@ func (c *Client) Dial(rpcAddr string) error {
 // Close closes all resources of this client.
 func (c *Client) Close() error {
 	if err := c.Deactivate(context.Background()); err != nil {
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 
@@ -185,7 +185,6 @@ func (c *Client) Activate(ctx context.Context) error {
 	response, err := c.client.ActivateClient(ctx, &api.ActivateClientRequest{
 		ClientKey: c.key,
 	})
-
 	if err != nil {
 		log.Logger.Error(err)
 		return err
@@ -193,6 +192,7 @@ func (c *Client) Activate(ctx context.Context) error {
 
 	clientID, err := time.ActorIDFromBytes(response.ClientId)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 
@@ -212,8 +212,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		ClientId: c.id.Bytes(),
 	})
 	if err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	c.status = deactivated
@@ -232,6 +231,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 
@@ -246,11 +246,12 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 
 	pack, err := converter.FromChangePack(res.ChangePack)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
-		log.Logger.Error(err)
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 
@@ -268,15 +269,18 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 // document is no longer used by this client, it should be detached.
 func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
+		log.Logger.Error(ErrClientNotActivated)
 		return ErrClientNotActivated
 	}
 
 	if _, ok := c.attachedDocs[doc.Key().BSONKey()]; !ok {
+		log.Logger.Error(ErrClientNotActivated)
 		return ErrDocumentNotAttached
 	}
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 
@@ -291,11 +295,12 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 
 	pack, err := converter.FromChangePack(res.ChangePack)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
-		log.Logger.Error(err)
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 
@@ -317,6 +322,7 @@ func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
 
 	for _, k := range keys {
 		if err := c.sync(ctx, k); err != nil {
+			log.Logger.Errorf("%+v", err)
 			return err
 		}
 	}
@@ -423,12 +429,12 @@ func (c *Client) IsActive() bool {
 
 func (c *Client) sync(ctx context.Context, key *key.Key) error {
 	if c.status != activated {
-		return ErrClientNotActivated
+		return errors.WithStack(ErrClientNotActivated)
 	}
 
 	doc, ok := c.attachedDocs[key.BSONKey()]
 	if !ok {
-		return ErrDocumentNotAttached
+		return errors.WithStack(ErrDocumentNotAttached)
 	}
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
@@ -441,8 +447,7 @@ func (c *Client) sync(ctx context.Context, key *key.Key) error {
 		ChangePack: pbChangePack,
 	})
 	if err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	pack, err := converter.FromChangePack(res.ChangePack)
@@ -451,7 +456,6 @@ func (c *Client) sync(ctx context.Context, key *key.Key) error {
 	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
-		log.Logger.Error(err)
 		return err
 	}
 

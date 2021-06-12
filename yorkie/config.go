@@ -22,7 +22,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/pkg/errors"
+
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
@@ -69,13 +70,11 @@ func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
 	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
-		log.Logger.Error(err)
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	if err := json.NewDecoder(file).Decode(conf); err != nil {
-		log.Logger.Error(err)
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return conf, nil

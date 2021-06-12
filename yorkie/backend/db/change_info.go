@@ -17,11 +17,10 @@
 package db
 
 import (
-	"errors"
+	"github.com/pkg/errors"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -50,7 +49,6 @@ func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
 	for _, pbOp := range changes {
 		encodedOp, err := pbOp.Marshal()
 		if err != nil {
-			log.Logger.Error(err)
 			return nil, errors.New("fail to encode operation")
 		}
 		encodedOps = append(encodedOps, encodedOp)
@@ -72,8 +70,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	for _, bytesOp := range i.Operations {
 		pbOp := api.Operation{}
 		if err := pbOp.Unmarshal(bytesOp); err != nil {
-			log.Logger.Error(err)
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		pbOps = append(pbOps, &pbOp)
 	}

@@ -1,9 +1,9 @@
 package mongo
 
 import (
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
 
@@ -19,12 +19,10 @@ func decodeClientInfo(
 		ID primitive.ObjectID `bson:"_id"`
 	}{}
 	if err := result.Decode(&idHolder); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	if err := result.Decode(clientInfo); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	clientInfo.ID = decodeID(idHolder.ID)
 	return nil
@@ -39,12 +37,10 @@ func decodeDocInfo(
 		Owner primitive.ObjectID `bson:"owner"`
 	}{}
 	if err := result.Decode(&idHolder); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	if err := result.Decode(&docInfo); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	docInfo.ID = decodeID(idHolder.ID)
 	docInfo.Owner = decodeID(idHolder.Owner)
@@ -60,12 +56,10 @@ func decodeChangeInfo(
 		Actor primitive.ObjectID `bson:"actor"`
 	}{}
 	if err := cursor.Decode(&idHolder); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	if err := cursor.Decode(&changeInfo); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	changeInfo.DocID = decodeID(idHolder.DocID)
 	changeInfo.Actor = decodeID(idHolder.Actor)
@@ -81,12 +75,10 @@ func decodeSyncedSeqInfo(
 		ClientID primitive.ObjectID `bson:"client_id"`
 	}{}
 	if err := result.Decode(&idHolder); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	if err := result.Decode(&syncedSeqInfo); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	syncedSeqInfo.DocID = decodeID(idHolder.DocID)
 	syncedSeqInfo.ClientID = decodeID(idHolder.ClientID)
@@ -102,12 +94,10 @@ func decodeSnapshotInfo(
 		DocID primitive.ObjectID `bson:"doc_id"`
 	}{}
 	if err := result.Decode(&idHolder); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	if err := result.Decode(&snapshotInfo); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	snapshotInfo.ID = decodeID(idHolder.ID)
 	snapshotInfo.DocID = decodeID(idHolder.DocID)

@@ -16,13 +16,13 @@ func (s *Server) BroadcastEvent(
 ) (*api.BroadcastEventResponse, error) {
 	actorID, err := time.ActorIDFromBytes(request.PublisherId)
 	if err != nil {
-		log.Logger.Error(err)
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
 	docEvent, err := converter.FromDocEvent(request.Event)
 	if err != nil {
-		log.Logger.Error(err)
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 

@@ -68,10 +68,12 @@ func newAgentCmd() *cobra.Command {
 
 			r, err := yorkie.New(conf)
 			if err != nil {
+				log.Logger.Errorf("%+v", err)
 				return err
 			}
 
 			if err := r.Start(); err != nil {
+				log.Logger.Errorf("%+v", err)
 				return err
 			}
 

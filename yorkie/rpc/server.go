@@ -24,6 +24,7 @@ import (
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
@@ -77,8 +78,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	if conf.CertFile != "" && conf.KeyFile != "" {
 		creds, err := credentials.NewServerTLSFromFile(conf.CertFile, conf.KeyFile)
 		if err != nil {
-			log.Logger.Error(err)
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 		opts = append(opts, grpc.Creds(creds))
 	}
@@ -119,17 +119,20 @@ func (s *Server) ActivateClient(
 	req *api.ActivateClientRequest,
 ) (*api.ActivateClientResponse, error) {
 	if req.ClientKey == "" {
+		log.Logger.Error(clients.ErrInvalidClientKey)
 		return nil, clients.ErrInvalidClientKey
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method: types.ActivateClient,
 	}); err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
 	client, err := clients.Activate(ctx, s.backend, req.ClientKey)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -151,11 +154,13 @@ func (s *Server) DeactivateClient(
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method: types.DeactivateClient,
 	}); err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
 	client, err := clients.Deactivate(ctx, s.backend, req.ClientId)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -171,6 +176,7 @@ func (s *Server) AttachDocument(
 ) (*api.AttachDocumentResponse, error) {
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -178,6 +184,7 @@ func (s *Server) AttachDocument(
 		Method:     types.AttachDocument,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -187,15 +194,17 @@ func (s *Server) AttachDocument(
 			packs.NewPushPullKey(pack.DocumentKey),
 		)
 		if err != nil {
+			log.Logger.Errorf("%+v", err)
 			return nil, err
 		}
 
 		if err := locker.Lock(ctx); err != nil {
+			log.Logger.Errorf("%+v", err)
 			return nil, err
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
-				log.Logger.Error(err)
+				log.Logger.Errorf("%+v", err)
 			}
 		}()
 	}
@@ -208,19 +217,23 @@ func (s *Server) AttachDocument(
 		true,
 	)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
 	pbChangePack, err := converter.ToChangePack(pulled)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -236,6 +249,7 @@ func (s *Server) DetachDocument(
 ) (*api.DetachDocumentResponse, error) {
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -243,6 +257,7 @@ func (s *Server) DetachDocument(
 		Method:     types.DetachDocument,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -252,15 +267,17 @@ func (s *Server) DetachDocument(
 			packs.NewPushPullKey(pack.DocumentKey),
 		)
 		if err != nil {
+			log.Logger.Errorf("%+v", err)
 			return nil, err
 		}
 
 		if err := locker.Lock(ctx); err != nil {
+			log.Logger.Errorf("%+v", err)
 			return nil, err
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
-				log.Logger.Error(err)
+				log.Logger.Errorf("%+v", err)
 			}
 		}()
 	}
@@ -273,22 +290,27 @@ func (s *Server) DetachDocument(
 		false,
 	)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
 	pbChangePack, err := converter.ToChangePack(pulled)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -306,6 +328,7 @@ func (s *Server) PushPull(
 	start := gotime.Now()
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -313,6 +336,7 @@ func (s *Server) PushPull(
 		Method:     types.PushPull,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -324,16 +348,17 @@ func (s *Server) PushPull(
 			packs.NewPushPullKey(pack.DocumentKey),
 		)
 		if err != nil {
+			log.Logger.Errorf("%+v", err)
 			return nil, err
 		}
 
 		if err := locker.Lock(ctx); err != nil {
-			log.Logger.Error(err)
+			log.Logger.Errorf("%+v", err)
 			return nil, err
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
-				log.Logger.Error(err)
+				log.Logger.Errorf("%+v", err)
 			}
 		}()
 	}
@@ -346,19 +371,23 @@ func (s *Server) PushPull(
 		false,
 	)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
 	pbChangePack, err := converter.ToChangePack(pulled)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return nil, err
 	}
 
@@ -378,6 +407,7 @@ func (s *Server) WatchDocuments(
 ) error {
 	client, err := converter.FromClient(req.Client)
 	if err != nil {
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 	docKeys := converter.FromDocumentKeys(req.DocumentKeys)
@@ -388,7 +418,7 @@ func (s *Server) WatchDocuments(
 		docKeys,
 	)
 	if err != nil {
-		log.Logger.Error(err)
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 
@@ -399,7 +429,7 @@ func (s *Server) WatchDocuments(
 			},
 		},
 	}); err != nil {
-		log.Logger.Error(err)
+		log.Logger.Errorf("%+v", err)
 		s.unwatchDocs(docKeys, subscription)
 		return err
 	}
@@ -424,7 +454,7 @@ func (s *Server) WatchDocuments(
 					},
 				},
 			}); err != nil {
-				log.Logger.Error(err)
+				log.Logger.Errorf("%+v", err)
 				s.unwatchDocs(docKeys, subscription)
 				return err
 			}
@@ -435,8 +465,7 @@ func (s *Server) WatchDocuments(
 func (s *Server) listenAndServeGRPC() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
 	if err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	go func() {
@@ -462,7 +491,7 @@ func (s *Server) watchDocs(
 		docKeys,
 	)
 	if err != nil {
-		log.Logger.Error(err)
+		log.Logger.Errorf("%+v", err)
 		return nil, nil, err
 	}
 

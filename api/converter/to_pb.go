@@ -17,8 +17,9 @@
 package converter
 
 import (
-	"fmt"
 	"reflect"
+
+	"github.com/pkg/errors"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -133,7 +134,7 @@ func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 	case types.DocumentsUnwatchedEvent:
 		return api.DocEventType_DOCUMENTS_UNWATCHED, nil
 	default:
-		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
+		return 0, errors.Wrapf(ErrUnsupportedEventType, "document event type: %s", eventType)
 	}
 }
 
@@ -178,7 +179,7 @@ func ToOperations(operations []operation.Operation) ([]*api.Operation, error) {
 		case *operation.Increase:
 			pbOperation.Body, err = toIncrease(op)
 		default:
-			return nil, ErrUnsupportedOperation
+			return nil, errors.WithStack(ErrUnsupportedOperation)
 		}
 		if err != nil {
 			return nil, err
@@ -353,7 +354,7 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("%v, %w", reflect.TypeOf(elem), ErrUnsupportedElement)
+	return nil, errors.Wrapf(ErrUnsupportedElement, "element type: %v", reflect.TypeOf(elem))
 }
 
 func toTextNodePos(pos *json.RGATreeSplitNodePos) *api.TextNodePos {
@@ -406,7 +407,7 @@ func toValueType(valueType json.ValueType) (api.ValueType, error) {
 		return api.ValueType_DATE, nil
 	}
 
-	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
+	return 0, errors.Wrapf(ErrUnsupportedValueType, "value type: %d", valueType)
 }
 
 func toCounterType(valueType json.CounterType) (api.ValueType, error) {
@@ -419,5 +420,5 @@ func toCounterType(valueType json.CounterType) (api.ValueType, error) {
 		return api.ValueType_DOUBLE_CNT, nil
 	}
 
-	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
+	return 0, errors.Wrapf(ErrUnsupportedCounterType, "value type: %d", valueType)
 }

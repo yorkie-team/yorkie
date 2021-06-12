@@ -17,7 +17,7 @@
 package converter
 
 import (
-	"fmt"
+	"github.com/pkg/errors"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -46,10 +46,10 @@ func FromClient(pbClient *api.Client) (*types.Client, error) {
 // FromChangePack converts the given Protobuf format to model format.
 func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	if pbPack == nil {
-		return nil, ErrPackRequired
+		return nil, errors.WithStack(ErrPackRequired)
 	}
 	if pbPack.Checkpoint == nil {
-		return nil, ErrCheckpointRequired
+		return nil, errors.WithStack(ErrCheckpointRequired)
 	}
 
 	changes, err := fromChanges(pbPack.Changes)
@@ -137,7 +137,7 @@ func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) 
 	case api.DocEventType_DOCUMENTS_UNWATCHED:
 		return types.DocumentsUnwatchedEvent, nil
 	}
-	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
+	return "", errors.Wrapf(ErrUnsupportedEventType, "document event type: %v", pbDocEventType)
 }
 
 // FromDocEvent converts the given Protobuf format to model format.
@@ -185,7 +185,7 @@ func FromOperations(pbOps []*api.Operation) ([]operation.Operation, error) {
 		case *api.Operation_Increase_:
 			op, err = fromIncrease(decoded.Increase)
 		default:
-			return nil, ErrUnsupportedOperation
+			return nil, errors.WithStack(ErrUnsupportedOperation)
 		}
 		if err != nil {
 			return nil, err
@@ -553,7 +553,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		), nil
 	}
 
-	return nil, fmt.Errorf("%d, %w", pbElement.Type, ErrUnsupportedElement)
+	return nil, errors.Wrapf(ErrUnsupportedElement, "element type: %d", pbElement.Type)
 }
 
 func fromPrimitiveValueType(valueType api.ValueType) (json.ValueType, error) {
@@ -576,7 +576,7 @@ func fromPrimitiveValueType(valueType api.ValueType) (json.ValueType, error) {
 		return json.Date, nil
 	}
 
-	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
+	return 0, errors.Wrapf(ErrUnsupportedValueType, "value type: %d", valueType)
 }
 
 func fromCounterType(valueType api.ValueType) (json.CounterType, error) {
@@ -589,5 +589,5 @@ func fromCounterType(valueType api.ValueType) (json.CounterType, error) {
 		return json.DoubleCnt, nil
 	}
 
-	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
+	return 0, errors.Wrapf(ErrUnsupportedCounterType, "value type: %d", valueType)
 }

@@ -18,9 +18,9 @@ package mongo
 
 import (
 	"context"
-	"fmt"
 	gotime "time"
 
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -61,20 +61,17 @@ func Dial(conf *Config) (*Client, error) {
 		options.Client().ApplyURI(conf.ConnectionURI),
 	)
 	if err != nil {
-		log.Logger.Error(err)
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	ctxPing, cancel := context.WithTimeout(ctx, conf.PingTimeoutSec*gotime.Second)
 	defer cancel()
 
 	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
-		log.Logger.Errorf("fail to connect to %s in %d sec", conf.ConnectionURI, conf.PingTimeoutSec)
-		return nil, err
+		return nil, errors.Wrapf(err, "fail to connect to %s in %d sec", conf.ConnectionURI, conf.PingTimeoutSec)
 	}
 
 	if err := ensureIndexes(ctx, client.Database(conf.YorkieDatabase)); err != nil {
-		log.Logger.Error(err)
 		return nil, err
 	}
 
@@ -90,8 +87,7 @@ func Dial(conf *Config) (*Client, error) {
 // Close all resources of this client.
 func (c *Client) Close() error {
 	if err := c.client.Disconnect(context.Background()); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	return nil
@@ -111,8 +107,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
-		log.Logger.Error(err)
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	var result *mongo.SingleResult
@@ -155,8 +150,8 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID db.ID) (*db.Clie
 	})
 
 	if err := decodeClientInfo(res, &clientInfo); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, errors.Wrapf(db.ErrClientNotFound, "clientID: %s", clientID)
 		}
 		return nil, err
 	}
@@ -176,8 +171,8 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID db.ID) (*db.Cl
 		"_id": encodedClientID,
 	})
 	if err := decodeClientInfo(result, &clientInfo); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, errors.Wrapf(db.ErrClientNotFound, "clientID: %s", clientID)
 		}
 	}
 
@@ -227,9 +222,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	if result.Err() != nil {
 		if result.Err() == mongo.ErrNoDocuments {
-			return fmt.Errorf("%s: %w", clientInfo.Key, db.ErrClientNotFound)
+			return errors.Wrapf(db.ErrClientNotFound, "clientKey: %s", clientInfo.Key)
 		}
-		log.Logger.Error(result.Err())
 		return result.Err()
 	}
 
@@ -260,8 +254,7 @@ func (c *Client) FindDocInfoByKey(
 		},
 	}, options.Update().SetUpsert(createDocIfNotExist))
 	if err != nil {
-		log.Logger.Error(err)
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	var result *mongo.SingleResult
@@ -280,12 +273,10 @@ func (c *Client) FindDocInfoByKey(
 			"key": bsonDocKey,
 		})
 		if result.Err() == mongo.ErrNoDocuments {
-			log.Logger.Error(result.Err())
-			return nil, fmt.Errorf("%s: %w", bsonDocKey, db.ErrDocumentNotFound)
+			return nil, errors.Wrapf(db.ErrDocumentNotFound, "bson document key: %s", bsonDocKey)
 		}
 		if result.Err() != nil {
-			log.Logger.Error(result.Err())
-			return nil, result.Err()
+			return nil, errors.WithStack(result.Err())
 		}
 	}
 	if err := decodeDocInfo(result, &docInfo); err != nil {
@@ -333,8 +324,7 @@ func (c *Client) StoreChangeInfos(
 		models,
 		options.BulkWrite().SetOrdered(true),
 	); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
@@ -347,11 +337,10 @@ func (c *Client) StoreChangeInfos(
 		},
 	})
 	if err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %w", docInfo.ID, db.ErrConflictOnUpdate)
+		return errors.Wrapf(db.ErrConflictOnUpdate, "docID: %s", docInfo.ID)
 	}
 
 	return nil
@@ -378,8 +367,7 @@ func (c *Client) CreateSnapshotInfo(
 		"snapshot":   snapshot,
 		"created_at": gotime.Now(),
 	}); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	return nil
@@ -406,8 +394,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		},
 	}, options.Find())
 	if err != nil {
-		log.Logger.Error(err)
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	defer func() {
@@ -429,8 +416,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	}
 
 	if cursor.Err() != nil {
-		log.Logger.Error(cursor.Err())
-		return nil, cursor.Err()
+		return nil, errors.WithStack(cursor.Err())
 	}
 
 	return changes, nil
@@ -468,16 +454,14 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 				"server_seq": serverSeq,
 			},
 		}, options.Update().SetUpsert(true)); err != nil {
-			log.Logger.Error(err)
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 	} else {
 		if _, err = c.collection(ColSyncedSeqs).DeleteOne(ctx, bson.M{
 			"doc_id":    encodedDocID,
 			"client_id": encodedClientID,
 		}, options.Delete()); err != nil {
-			log.Logger.Error(err)
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
 	}
 
@@ -492,8 +476,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		return time.InitialTicket, nil
 	}
 	if result.Err() != nil {
-		log.Logger.Error(result.Err())
-		return nil, result.Err()
+		return nil, errors.WithStack(result.Err())
 	}
 	if err := decodeSyncedSeqInfo(result, &syncedSeqInfo); err != nil {
 		return nil, err
@@ -535,8 +518,7 @@ func (c *Client) FindLastSnapshotInfo(
 	}
 
 	if result.Err() != nil {
-		log.Logger.Error(result.Err())
-		return nil, result.Err()
+		return nil, errors.WithStack(result.Err())
 	}
 
 	if err := decodeSnapshotInfo(result, snapshotInfo); err != nil {
@@ -562,12 +544,11 @@ func (c *Client) findTicketByServerSeq(
 		"server_seq": serverSeq,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("%s: %w", docID.String(), db.ErrDocumentNotFound)
+		return nil, errors.Wrapf(db.ErrDocumentNotFound, "docID: %s", docID.String())
 	}
 
 	if result.Err() != nil {
-		log.Logger.Error(result.Err())
-		return nil, result.Err()
+		return nil, errors.WithStack(result.Err())
 	}
 
 	if err := decodeChangeInfo(result, &changeInfo); err != nil {

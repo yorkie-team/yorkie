@@ -17,6 +17,8 @@
 package operation
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -57,7 +59,7 @@ func (o *Add) Execute(root *json.Root) error {
 
 	obj, ok := parent.(*json.Array)
 	if !ok {
-		return ErrNotApplicableDataType
+		return errors.WithStack(ErrNotApplicableDataType)
 	}
 
 	value := o.value.DeepCopy()

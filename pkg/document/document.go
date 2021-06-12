@@ -67,13 +67,14 @@ func (d *Document) Update(
 	if err := updater(proxy.NewObjectProxy(ctx, d.clone.Object())); err != nil {
 		// drop clone because it is contaminated.
 		d.clone = nil
-		log.Logger.Error(err)
+		log.Logger.Errorf("%+v", err)
 		return err
 	}
 
 	if ctx.HasOperations() {
 		c := ctx.ToChange()
 		if err := c.Execute(d.doc.root); err != nil {
+			log.Logger.Errorf("%+v", err)
 			return err
 		}
 

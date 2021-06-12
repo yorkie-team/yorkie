@@ -18,9 +18,11 @@ package packs
 
 import (
 	"context"
-	"errors"
+	goerrors "errors"
 	"fmt"
 	gotime "time"
+
+	"github.com/pkg/errors"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/internal/log"
@@ -38,7 +40,7 @@ import (
 var (
 	// ErrInvalidServerSeq is returned when the given server seq greater than
 	// the initial server seq.
-	ErrInvalidServerSeq = errors.New("invalid server seq")
+	ErrInvalidServerSeq = goerrors.New("invalid server seq")
 )
 
 // NewPushPullKey creates a new sync.Key of PushPull for the given document.
@@ -109,7 +111,7 @@ func PushPull(
 		be.AttachGoroutine(func() {
 			publisherID, err := time.ActorIDFromHex(clientInfo.ID.String())
 			if err != nil {
-				log.Logger.Error(err)
+				log.Logger.Errorf("%+v", err)
 				return
 			}
 
@@ -122,17 +124,17 @@ func PushPull(
 				NewSnapshotKey(reqPack.DocumentKey),
 			)
 			if err != nil {
-				log.Logger.Error(err)
+				log.Logger.Errorf("%+v", err)
 				return
 			}
 			if err := locker.Lock(ctx); err != nil {
-				log.Logger.Error(err)
+				log.Logger.Errorf("%+v", err)
 				return
 			}
 
 			defer func() {
 				if err := locker.Unlock(ctx); err != nil {
-					log.Logger.Error(err)
+					log.Logger.Errorf("%+v", err)
 					return
 				}
 			}()
@@ -152,7 +154,7 @@ func PushPull(
 				be,
 				docInfo,
 			); err != nil {
-				log.Logger.Error(err)
+				log.Logger.Errorf("%+v", err)
 			}
 		})
 	}
@@ -214,11 +216,11 @@ func pullPack(
 	}
 
 	if initialServerSeq < requestPack.Checkpoint.ServerSeq {
-		return nil, fmt.Errorf(
-			"server seq(initial %d, request pack %d): %w",
+		return nil, errors.Wrapf(
+			ErrInvalidServerSeq,
+			"server seq(initial %d, request pack %d)",
 			initialServerSeq,
 			requestPack.Checkpoint.ServerSeq,
-			ErrInvalidServerSeq,
 		)
 	}
 
@@ -227,7 +229,7 @@ func pullPack(
 		if err != nil {
 			return nil, err
 		}
-		return change.NewPack(docKey, pulledCP, pulledChanges, nil), err
+		return change.NewPack(docKey, pulledCP, pulledChanges, nil), nil
 	}
 
 	pulledCP, snapshot, err := pullSnapshot(ctx, be, clientInfo, docInfo, requestPack, pushedCP, initialServerSeq)
@@ -237,7 +239,7 @@ func pullPack(
 
 	be.Metrics.SetPushPullSnapshotBytes(len(snapshot))
 
-	return change.NewPack(docKey, pulledCP, nil, snapshot), err
+	return change.NewPack(docKey, pulledCP, nil, snapshot), nil
 }
 
 func pullChanges(

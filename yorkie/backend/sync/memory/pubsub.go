@@ -20,6 +20,8 @@ import (
 	"context"
 	gosync "sync"
 
+	"github.com/pkg/errors"
+
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -83,7 +85,7 @@ func (m *PubSub) Subscribe(
 	topics []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
 	if len(topics) == 0 {
-		return nil, nil, sync.ErrEmptyTopics
+		return nil, nil, errors.WithStack(sync.ErrEmptyTopics)
 	}
 
 	m.subscriptionsMapMu.Lock()

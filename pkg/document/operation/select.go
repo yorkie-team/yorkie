@@ -17,6 +17,8 @@
 package operation
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -61,7 +63,7 @@ func (s *Select) Execute(root *json.Root) error {
 	case *json.RichText:
 		obj.Select(s.from, s.to, s.executedAt)
 	default:
-		return ErrNotApplicableDataType
+		return errors.WithStack(ErrNotApplicableDataType)
 	}
 
 	return nil

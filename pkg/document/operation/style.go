@@ -17,6 +17,8 @@
 package operation
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -61,7 +63,7 @@ func (e *Style) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*json.RichText)
 	if !ok {
-		return ErrNotApplicableDataType
+		return errors.WithStack(ErrNotApplicableDataType)
 	}
 
 	obj.SetStyle(e.from, e.to, e.attributes, e.executedAt)

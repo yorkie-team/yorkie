@@ -18,9 +18,10 @@ package types
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
+	goerrors "errors"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 // VerbType represents an action taken on the document.
@@ -37,10 +38,10 @@ const (
 
 var (
 	// ErrInvalidWebhookRequest is returned when the given webhook request is not valid.
-	ErrInvalidWebhookRequest = errors.New("invalid authorization webhook request")
+	ErrInvalidWebhookRequest = goerrors.New("invalid authorization webhook request")
 
 	// ErrInvalidWebhookResponse is returned when the given webhook response is not valid.
-	ErrInvalidWebhookResponse = errors.New("invalid authorization webhook response")
+	ErrInvalidWebhookResponse = goerrors.New("invalid authorization webhook response")
 )
 
 // Method represents a method name of RPC.
@@ -79,7 +80,7 @@ func NewAuthWebhookRequest(reader io.Reader) (*AuthWebhookRequest, error) {
 	req := &AuthWebhookRequest{}
 
 	if err := json.NewDecoder(reader).Decode(req); err != nil {
-		return nil, fmt.Errorf("%s: %w", err.Error(), ErrInvalidWebhookRequest)
+		return nil, errors.Wrapf(ErrInvalidWebhookRequest, "error: %s", err.Error())
 	}
 
 	return req, nil
@@ -96,7 +97,7 @@ func NewAuthWebhookResponse(reader io.Reader) (*AuthWebhookResponse, error) {
 	resp := &AuthWebhookResponse{}
 
 	if err := json.NewDecoder(reader).Decode(resp); err != nil {
-		return nil, fmt.Errorf("%s: %w", err.Error(), ErrInvalidWebhookResponse)
+		return nil, errors.Wrapf(ErrInvalidWebhookResponse, "error: %s", err.Error())
 	}
 
 	return resp, nil

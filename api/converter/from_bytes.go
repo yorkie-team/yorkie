@@ -17,9 +17,8 @@
 package converter
 
 import (
-	"fmt"
-
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/internal/log"
@@ -35,7 +34,7 @@ func BytesToObject(snapshot []byte) (*json.Object, error) {
 
 	pbElem := &api.JSONElement{}
 	if err := proto.Unmarshal(snapshot, pbElem); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	obj, err := fromJSONObject(pbElem.GetJsonObject())
@@ -61,7 +60,7 @@ func fromJSONElement(pbElem *api.JSONElement) (json.Element, error) {
 	case *api.JSONElement_Counter_:
 		return fromJSONCounter(decoded.Counter)
 	default:
-		return nil, fmt.Errorf("%s: %w", decoded, ErrUnsupportedElement)
+		return nil, errors.Wrapf(ErrUnsupportedElement, "decoded: %s", decoded)
 	}
 }
 

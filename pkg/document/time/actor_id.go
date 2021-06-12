@@ -19,9 +19,10 @@ package time
 import (
 	"bytes"
 	"encoding/hex"
-	"errors"
-	"fmt"
+	goerrors "errors"
 	"math"
+
+	"github.com/pkg/errors"
 )
 
 const actorIDSize = 12
@@ -47,7 +48,7 @@ var (
 	}
 
 	// ErrInvalidHexString is returned when the given string is not valid hex.
-	ErrInvalidHexString = errors.New("invalid hex string")
+	ErrInvalidHexString = goerrors.New("invalid hex string")
 )
 
 // ActorID is bytes represented by the hexadecimal string.
@@ -63,11 +64,11 @@ func ActorIDFromHex(str string) (*ActorID, error) {
 	actorID := ActorID{}
 	decoded, err := hex.DecodeString(str)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
+		return nil, errors.Wrapf(ErrInvalidHexString, "string: %s", str)
 	}
 
 	if len(decoded) != actorIDSize {
-		return nil, fmt.Errorf("decoded length %d: %w", len(decoded), ErrInvalidHexString)
+		return nil, errors.Wrapf(ErrInvalidHexString, "decoded length %d", len(decoded))
 	}
 
 	copy(actorID[:], decoded[:actorIDSize])
@@ -81,7 +82,7 @@ func ActorIDFromBytes(bytes []byte) (*ActorID, error) {
 	}
 
 	if len(bytes) != actorIDSize {
-		return nil, fmt.Errorf("bytes length %d: %w", len(bytes), ErrInvalidHexString)
+		return nil, errors.Wrapf(ErrInvalidHexString, "bytes length %d", len(bytes))
 	}
 
 	actorID := ActorID{}

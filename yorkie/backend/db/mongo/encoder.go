@@ -1,11 +1,9 @@
 package mongo
 
 import (
-	"fmt"
-
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
@@ -19,8 +17,7 @@ func encodeActorID(id *time.ActorID) primitive.ObjectID {
 func encodeID(id db.ID) (primitive.ObjectID, error) {
 	objectID, err := primitive.ObjectIDFromHex(id.String())
 	if err != nil {
-		log.Logger.Error(err)
-		return objectID, fmt.Errorf("%s: %w", id, db.ErrInvalidID)
+		return objectID, errors.Wrapf(db.ErrInvalidID, "ID: %s", id)
 	}
 	return objectID, nil
 }

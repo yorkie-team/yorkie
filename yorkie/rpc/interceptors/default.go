@@ -18,9 +18,9 @@ package interceptors
 
 import (
 	"context"
-	"errors"
 	gotime "time"
 
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -113,9 +113,9 @@ func toStatusError(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	}
 
-	if err == db.ErrClientNotActivated ||
-		err == db.ErrDocumentNotAttached ||
-		err == db.ErrDocumentAlreadyAttached ||
+	if errors.Is(err, db.ErrClientNotActivated) ||
+		errors.Is(err, db.ErrDocumentNotAttached) ||
+		errors.Is(err, db.ErrDocumentAlreadyAttached) ||
 		errors.Is(err, packs.ErrInvalidServerSeq) ||
 		errors.Is(err, db.ErrConflictOnUpdate) {
 		return status.Error(codes.FailedPrecondition, err.Error())

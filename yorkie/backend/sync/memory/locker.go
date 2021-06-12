@@ -19,9 +19,9 @@ package memory
 import (
 	"context"
 
-	"github.com/moby/locker"
+	"github.com/pkg/errors"
 
-	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/moby/locker"
 )
 
 type internalLocker struct {
@@ -39,8 +39,7 @@ func (il *internalLocker) Lock(ctx context.Context) error {
 // Unlock unlocks the mutex.
 func (il *internalLocker) Unlock(ctx context.Context) error {
 	if err := il.locks.Unlock(il.key); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	return nil

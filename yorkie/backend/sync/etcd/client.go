@@ -21,6 +21,7 @@ import (
 	gosync "sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3"
 	"google.golang.org/grpc"
 
@@ -120,8 +121,7 @@ func (c *Client) Dial() error {
 		Password:    c.config.Password,
 	})
 	if err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	log.Logger.Infof("etcd connected, URI: %s", c.config.Endpoints)

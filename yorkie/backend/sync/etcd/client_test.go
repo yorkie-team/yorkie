@@ -18,6 +18,7 @@ package etcd_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -41,6 +42,6 @@ func TestClient(t *testing.T) {
 		}()
 		wg.Wait()
 
-		assert.ErrorIs(t, context.DeadlineExceeded, err)
+		assert.ErrorIs(t, context.DeadlineExceeded, errors.Unwrap(err))
 	})
 }

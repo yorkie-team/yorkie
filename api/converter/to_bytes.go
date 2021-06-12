@@ -17,13 +17,12 @@
 package converter
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 
 	"github.com/yorkie-team/yorkie/api"
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 )
 
@@ -36,8 +35,7 @@ func ObjectToBytes(obj *json.Object) ([]byte, error) {
 
 	bytes, err := proto.Marshal(pbElem)
 	if err != nil {
-		log.Logger.Error(err)
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return bytes, nil
 }
@@ -57,7 +55,7 @@ func toJSONElement(elem json.Element) (*api.JSONElement, error) {
 	case *json.Counter:
 		return toCounter(elem)
 	default:
-		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
+		return nil, errors.Wrapf(ErrUnsupportedElement, "element type: %v", reflect.TypeOf(elem))
 	}
 }
 

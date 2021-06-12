@@ -19,9 +19,9 @@ package etcd
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"go.etcd.io/etcd/clientv3/concurrency"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
@@ -36,8 +36,7 @@ func (c *Client) NewLocker(
 		concurrency.WithTTL(c.config.LockLeaseTimeSec),
 	)
 	if err != nil {
-		log.Logger.Error(err)
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
 	return &internalLocker{
@@ -54,8 +53,7 @@ type internalLocker struct {
 // Lock locks a mutex.
 func (il *internalLocker) Lock(ctx context.Context) error {
 	if err := il.mu.Lock(ctx); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	return nil
@@ -64,11 +62,10 @@ func (il *internalLocker) Lock(ctx context.Context) error {
 // Unlock unlocks the mutex.
 func (il *internalLocker) Unlock(ctx context.Context) error {
 	if err := il.mu.Unlock(ctx); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 	if err := il.session.Close(); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	return nil

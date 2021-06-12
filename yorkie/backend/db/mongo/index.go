@@ -19,11 +19,10 @@ package mongo
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/x/bsonx"
-
-	"github.com/yorkie-team/yorkie/internal/log"
 )
 
 // Below are names and indexes information of collections that stores Yorkie data.
@@ -78,40 +77,35 @@ func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 		ctx,
 		idxClientInfos,
 	); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	if _, err := db.Collection(ColDocuments).Indexes().CreateMany(
 		ctx,
 		idxDocInfos,
 	); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	if _, err := db.Collection(ColChanges).Indexes().CreateMany(
 		ctx,
 		idxChanges,
 	); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	if _, err := db.Collection(ColSnapshots).Indexes().CreateMany(
 		ctx,
 		idxSnapshots,
 	); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	if _, err := db.Collection(ColSyncedSeqs).Indexes().CreateMany(
 		ctx,
 		idxSyncedSeqs,
 	); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	return nil

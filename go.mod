@@ -11,6 +11,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.1-0.20190118093823-f849b5445de4
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/moby/locker v1.0.1
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.10.0
 	github.com/rs/xid v1.2.1
 	github.com/spf13/cobra v1.1.1

@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
+	goerrors "errors"
 	"net/http"
+
+	"github.com/pkg/errors"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -16,7 +17,7 @@ import (
 
 var (
 	// ErrNotAllowed is returned when the given user is not allowed for the access.
-	ErrNotAllowed = errors.New("method is not allowed for this user")
+	ErrNotAllowed = goerrors.New("method is not allowed for this user")
 )
 
 // AccessAttributes returns an array of AccessAttribute from the given pack.
@@ -46,7 +47,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		Attributes: info.Attributes,
 	})
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	// TODO(hackerwins): We need to apply retryBackoff in case of failure
@@ -56,11 +57,11 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		bytes.NewBuffer(reqBody),
 	)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.Logger.Error(err)
+			log.Logger.Errorf("%+v", errors.WithStack(err))
 		}
 	}()
 
@@ -70,7 +71,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 	}
 
 	if !authResp.Allowed {
-		return fmt.Errorf("%s: %w", authResp.Reason, ErrNotAllowed)
+		return errors.Wrapf(ErrNotAllowed, "reason: %s", authResp.Reason)
 	}
 
 	return nil

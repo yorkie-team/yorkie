@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"encoding/hex"
+
 	"errors"
 
 	"github.com/yorkie-team/yorkie/pkg/document"

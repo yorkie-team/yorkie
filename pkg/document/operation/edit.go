@@ -17,6 +17,8 @@
 package operation
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -73,7 +75,7 @@ func (e *Edit) Execute(root *json.Root) error {
 			root.RegisterRemovedNodeTextElement(obj)
 		}
 	default:
-		return ErrNotApplicableDataType
+		return errors.WithStack(ErrNotApplicableDataType)
 	}
 
 	return nil

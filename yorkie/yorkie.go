@@ -19,7 +19,6 @@ package yorkie
 import (
 	gosync "sync"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
@@ -84,7 +83,6 @@ func (r *Yorkie) Start() error {
 	if r.metricsServer != nil {
 		err := r.metricsServer.Start()
 		if err != nil {
-			log.Logger.Error(err)
 			return err
 		}
 	}

@@ -17,8 +17,9 @@
 package key
 
 import (
-	"errors"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 const (

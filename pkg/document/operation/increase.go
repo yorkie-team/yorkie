@@ -17,6 +17,8 @@
 package operation
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -47,7 +49,7 @@ func (o *Increase) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	cnt, ok := parent.(*json.Counter)
 	if !ok {
-		return ErrNotApplicableDataType
+		return errors.WithStack(ErrNotApplicableDataType)
 	}
 
 	value := o.value.(*json.Primitive)

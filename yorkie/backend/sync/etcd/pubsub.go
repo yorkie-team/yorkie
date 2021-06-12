@@ -19,6 +19,7 @@ package etcd
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/api"
@@ -127,7 +128,6 @@ func (c *Client) publishToMember(
 ) error {
 	docEvent, err := converter.ToDocEvent(event)
 	if err != nil {
-		log.Logger.Error(err)
 		return err
 	}
 
@@ -135,8 +135,7 @@ func (c *Client) publishToMember(
 		PublisherId: publisherID.Bytes(),
 		Event:       docEvent,
 	}); err != nil {
-		log.Logger.Error(err)
-		return err
+		return errors.WithStack(err)
 	}
 
 	return nil

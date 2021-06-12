@@ -17,6 +17,8 @@
 package operation
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -56,7 +58,7 @@ func (o *Remove) Execute(root *json.Root) error {
 		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
 		root.RegisterRemovedElementPair(parent, elem)
 	default:
-		return ErrNotApplicableDataType
+		return errors.WithStack(ErrNotApplicableDataType)
 	}
 
 	return nil
