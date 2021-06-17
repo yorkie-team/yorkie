@@ -17,10 +17,8 @@
 package rpc
 
 import (
-	"context"
 	"fmt"
 	"net"
-	gotime "time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -30,15 +28,8 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/yorkie-team/yorkie/api"
-	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/internal/log"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/types"
-	"github.com/yorkie-team/yorkie/yorkie/auth"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
-	"github.com/yorkie-team/yorkie/yorkie/clients"
-	"github.com/yorkie-team/yorkie/yorkie/packs"
 	"github.com/yorkie-team/yorkie/yorkie/rpc/interceptors"
 )
 
@@ -53,7 +44,6 @@ type Config struct {
 type Server struct {
 	conf       *Config
 	grpcServer *grpc.Server
-	backend    *backend.Backend
 }
 
 // NewServer creates a new instance of Server.
@@ -84,23 +74,15 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	}
 
 	grpcServer := grpc.NewServer(opts...)
-	healthServer := health.NewServer()
-	healthpb.RegisterHealthServer(grpcServer, healthServer)
+	healthpb.RegisterHealthServer(grpcServer, health.NewServer())
+	api.RegisterYorkieServer(grpcServer, newYorkieServer(be))
+	api.RegisterClusterServer(grpcServer, newClusterServer(be))
+	grpcprometheus.Register(grpcServer)
 
-	rpcServer := &Server{
+	return &Server{
 		conf:       conf,
 		grpcServer: grpcServer,
-		backend:    be,
-	}
-	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
-
-	cluster := &Cluster{
-		backend: be,
-	}
-	api.RegisterClusterServer(rpcServer.grpcServer, cluster)
-	grpcprometheus.Register(rpcServer.grpcServer)
-
-	return rpcServer, nil
+	}, nil
 }
 
 // Start starts this server by opening the rpc port.
@@ -114,325 +96,6 @@ func (s *Server) Shutdown(graceful bool) {
 		s.grpcServer.GracefulStop()
 	} else {
 		s.grpcServer.Stop()
-	}
-}
-
-// ActivateClient activates the given client.
-func (s *Server) ActivateClient(
-	ctx context.Context,
-	req *api.ActivateClientRequest,
-) (*api.ActivateClientResponse, error) {
-	if req.ClientKey == "" {
-		return nil, clients.ErrInvalidClientKey
-	}
-
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.ActivateClient,
-	}); err != nil {
-		return nil, err
-	}
-
-	client, err := clients.Activate(ctx, s.backend, req.ClientKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return &api.ActivateClientResponse{
-		ClientKey: client.Key,
-		ClientId:  client.ID.Bytes(),
-	}, nil
-}
-
-// DeactivateClient deactivates the given client.
-func (s *Server) DeactivateClient(
-	ctx context.Context,
-	req *api.DeactivateClientRequest,
-) (*api.DeactivateClientResponse, error) {
-	if len(req.ClientId) == 0 {
-		return nil, clients.ErrInvalidClientID
-	}
-
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.DeactivateClient,
-	}); err != nil {
-		return nil, err
-	}
-
-	client, err := clients.Deactivate(ctx, s.backend, req.ClientId)
-	if err != nil {
-		return nil, err
-	}
-
-	return &api.DeactivateClientResponse{
-		ClientId: client.ID.Bytes(),
-	}, nil
-}
-
-// AttachDocument attaches the given document to the client.
-func (s *Server) AttachDocument(
-	ctx context.Context,
-	req *api.AttachDocumentRequest,
-) (*api.AttachDocumentResponse, error) {
-	pack, err := converter.FromChangePack(req.ChangePack)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.AttachDocument,
-		Attributes: auth.AccessAttributes(pack),
-	}); err != nil {
-		return nil, err
-	}
-
-	if pack.HasChanges() {
-		locker, err := s.backend.Coordinator.NewLocker(
-			ctx,
-			packs.NewPushPullKey(pack.DocumentKey),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := locker.Lock(ctx); err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := locker.Unlock(ctx); err != nil {
-				log.Logger.Error(err)
-			}
-		}()
-	}
-
-	clientInfo, docInfo, err := clients.FindClientAndDocument(
-		ctx,
-		s.backend,
-		req.ClientId,
-		pack,
-		true,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
-		return nil, err
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
-	if err != nil {
-		return nil, err
-	}
-
-	pbChangePack, err := converter.ToChangePack(pulled)
-	if err != nil {
-		return nil, err
-	}
-
-	return &api.AttachDocumentResponse{
-		ChangePack: pbChangePack,
-	}, nil
-}
-
-// DetachDocument detaches the given document to the client.
-func (s *Server) DetachDocument(
-	ctx context.Context,
-	req *api.DetachDocumentRequest,
-) (*api.DetachDocumentResponse, error) {
-	pack, err := converter.FromChangePack(req.ChangePack)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.DetachDocument,
-		Attributes: auth.AccessAttributes(pack),
-	}); err != nil {
-		return nil, err
-	}
-
-	if pack.HasChanges() {
-		locker, err := s.backend.Coordinator.NewLocker(
-			ctx,
-			packs.NewPushPullKey(pack.DocumentKey),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := locker.Lock(ctx); err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := locker.Unlock(ctx); err != nil {
-				log.Logger.Error(err)
-			}
-		}()
-	}
-
-	clientInfo, docInfo, err := clients.FindClientAndDocument(
-		ctx,
-		s.backend,
-		req.ClientId,
-		pack,
-		false,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
-		return nil, err
-	}
-	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
-		return nil, err
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
-	if err != nil {
-		return nil, err
-	}
-
-	pbChangePack, err := converter.ToChangePack(pulled)
-	if err != nil {
-		return nil, err
-	}
-
-	return &api.DetachDocumentResponse{
-		ChangePack: pbChangePack,
-	}, nil
-}
-
-// PushPull stores the changes sent by the client and delivers the changes
-// accumulated in the agent to the client.
-func (s *Server) PushPull(
-	ctx context.Context,
-	req *api.PushPullRequest,
-) (*api.PushPullResponse, error) {
-	start := gotime.Now()
-	pack, err := converter.FromChangePack(req.ChangePack)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.PushPull,
-		Attributes: auth.AccessAttributes(pack),
-	}); err != nil {
-		return nil, err
-	}
-
-	if pack.HasChanges() {
-		s.backend.Metrics.SetPushPullReceivedChanges(len(pack.Changes))
-
-		locker, err := s.backend.Coordinator.NewLocker(
-			ctx,
-			packs.NewPushPullKey(pack.DocumentKey),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := locker.Lock(ctx); err != nil {
-			log.Logger.Error(err)
-			return nil, err
-		}
-		defer func() {
-			if err := locker.Unlock(ctx); err != nil {
-				log.Logger.Error(err)
-			}
-		}()
-	}
-
-	clientInfo, docInfo, err := clients.FindClientAndDocument(
-		ctx,
-		s.backend,
-		req.ClientId,
-		pack,
-		false,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
-		return nil, err
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
-	if err != nil {
-		return nil, err
-	}
-
-	pbChangePack, err := converter.ToChangePack(pulled)
-	if err != nil {
-		return nil, err
-	}
-
-	s.backend.Metrics.SetPushPullSentChanges(len(pbChangePack.Changes))
-	s.backend.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
-
-	return &api.PushPullResponse{
-		ChangePack: pbChangePack,
-	}, nil
-}
-
-// WatchDocuments connects the stream to deliver events from the given documents
-// to the requesting client.
-func (s *Server) WatchDocuments(
-	req *api.WatchDocumentsRequest,
-	stream api.Yorkie_WatchDocumentsServer,
-) error {
-	client, err := converter.FromClient(req.Client)
-	if err != nil {
-		return err
-	}
-	docKeys := converter.FromDocumentKeys(req.DocumentKeys)
-
-	subscription, peersMap, err := s.watchDocs(
-		stream.Context(),
-		*client,
-		docKeys,
-	)
-	if err != nil {
-		log.Logger.Error(err)
-		return err
-	}
-
-	if err := stream.Send(&api.WatchDocumentsResponse{
-		Body: &api.WatchDocumentsResponse_Initialization_{
-			Initialization: &api.WatchDocumentsResponse_Initialization{
-				PeersMapByDoc: converter.ToClientsMap(peersMap),
-			},
-		},
-	}); err != nil {
-		log.Logger.Error(err)
-		s.unwatchDocs(docKeys, subscription)
-		return err
-	}
-
-	for {
-		select {
-		case <-stream.Context().Done():
-			s.unwatchDocs(docKeys, subscription)
-			return nil
-		case event := <-subscription.Events():
-			eventType, err := converter.ToDocEventType(event.Type)
-			if err != nil {
-				return err
-			}
-
-			if err := stream.Send(&api.WatchDocumentsResponse{
-				Body: &api.WatchDocumentsResponse_Event{
-					Event: &api.DocEvent{
-						Type:         eventType,
-						Publisher:    converter.ToClient(event.Publisher),
-						DocumentKeys: converter.ToDocumentKeys(event.DocumentKeys),
-					},
-				},
-			}); err != nil {
-				log.Logger.Error(err)
-				s.unwatchDocs(docKeys, subscription)
-				return err
-			}
-		}
 	}
 }
 
@@ -454,48 +117,4 @@ func (s *Server) listenAndServeGRPC() error {
 	}()
 
 	return nil
-}
-
-func (s *Server) watchDocs(
-	ctx context.Context,
-	client types.Client,
-	docKeys []*key.Key,
-) (*sync.Subscription, map[string][]types.Client, error) {
-	subscription, peersMap, err := s.backend.Coordinator.Subscribe(
-		client,
-		docKeys,
-	)
-	if err != nil {
-		log.Logger.Error(err)
-		return nil, nil, err
-	}
-
-	s.backend.Coordinator.Publish(
-		ctx,
-		subscription.Subscriber().ID,
-		sync.DocEvent{
-			Type:         types.DocumentsWatchedEvent,
-			Publisher:    subscription.Subscriber(),
-			DocumentKeys: docKeys,
-		},
-	)
-
-	return subscription, peersMap, nil
-}
-
-func (s *Server) unwatchDocs(
-	docKeys []*key.Key,
-	subscription *sync.Subscription,
-) {
-	s.backend.Coordinator.Unsubscribe(docKeys, subscription)
-
-	s.backend.Coordinator.Publish(
-		context.Background(),
-		subscription.Subscriber().ID,
-		sync.DocEvent{
-			Type:         types.DocumentsUnwatchedEvent,
-			Publisher:    subscription.Subscriber(),
-			DocumentKeys: docKeys,
-		},
-	)
 }

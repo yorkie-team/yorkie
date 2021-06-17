@@ -252,7 +252,7 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		_, err = testRPCServer.AttachDocument(
+		_, err = testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId: activateResp.ClientId,

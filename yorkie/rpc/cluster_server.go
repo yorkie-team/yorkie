@@ -10,13 +10,18 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 )
 
-// Cluster is a normal server that processes the broadcast by the agent.
-type Cluster struct {
+// clusterServer is a normal server that processes the broadcast by the agent.
+type clusterServer struct {
 	backend *backend.Backend
 }
 
+// newClusterServer creates a new instance of clusterServer.
+func newClusterServer(be *backend.Backend) *clusterServer {
+	return &clusterServer{backend: be}
+}
+
 // BroadcastEvent publishes the given event to the given Topic.
-func (s *Cluster) BroadcastEvent(
+func (s *clusterServer) BroadcastEvent(
 	ctx context.Context,
 	request *api.BroadcastEventRequest,
 ) (*api.BroadcastEventResponse, error) {
