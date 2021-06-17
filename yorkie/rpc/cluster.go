@@ -7,10 +7,16 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/yorkie/backend"
 )
 
+// Cluster is a normal server that processes the broadcast by the agent.
+type Cluster struct {
+	backend *backend.Backend
+}
+
 // BroadcastEvent publishes the given event to the given Topic.
-func (s *Server) BroadcastEvent(
+func (s *Cluster) BroadcastEvent(
 	ctx context.Context,
 	request *api.BroadcastEventRequest,
 ) (*api.BroadcastEventResponse, error) {

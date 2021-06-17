@@ -93,7 +93,11 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		backend:    be,
 	}
 	api.RegisterYorkieServer(rpcServer.grpcServer, rpcServer)
-	api.RegisterClusterServer(rpcServer.grpcServer, rpcServer)
+
+	cluster := &Cluster{
+		backend: be,
+	}
+	api.RegisterClusterServer(rpcServer.grpcServer, cluster)
 	grpcprometheus.Register(rpcServer.grpcServer)
 
 	return rpcServer, nil
