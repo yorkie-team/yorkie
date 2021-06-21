@@ -173,18 +173,24 @@ func (rht *RHTPriorityQueueMap) Nodes() []*RHTPQMapNode {
 
 // purge physically purge child element.
 func (rht *RHTPriorityQueueMap) purge(elem Element) {
-	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
+	current, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
 		log.Logger.Fatalf("fail to find " + elem.CreatedAt().Key())
 	}
 
-	queue, ok := rht.nodeQueueMapByKey[node.key]
+	queue, ok := rht.nodeQueueMapByKey[current.key]
 	if !ok {
 		log.Logger.Fatalf("fail to find queue of " + elem.CreatedAt().Key())
 	}
 
-	queue.Release(node)
-	delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
+	for _, value := range queue.Values() {
+		node := value.(*RHTPQMapNode)
+		if node.Element().CreatedAt().After(elem.CreatedAt()) {
+			continue
+		}
+		queue.Release(node)
+		delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
+	}
 }
 
 // Marshal returns the JSON encoding of this map.
