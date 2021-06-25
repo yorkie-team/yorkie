@@ -62,8 +62,11 @@ func (o *Set) Execute(root *json.Root) error {
 	}
 
 	value := o.value.DeepCopy()
-	obj.Set(o.key, value)
+	removed := obj.Set(o.key, value)
 	root.RegisterElement(value)
+	if removed != nil {
+		root.RegisterRemovedElementPair(obj, removed)
+	}
 	return nil
 }
 

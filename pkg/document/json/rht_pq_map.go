@@ -40,8 +40,8 @@ func newRHTPQMapNode(key string, elem Element) *RHTPQMapNode {
 }
 
 // Remove removes this node. It only marks the deleted time (tombstone).
-func (n *RHTPQMapNode) Remove(removedAt *time.Ticket) {
-	n.elem.Remove(removedAt)
+func (n *RHTPQMapNode) Remove(removedAt *time.Ticket) bool {
+	return n.elem.Remove(removedAt)
 }
 
 // Less is the implementation of the PriorityQueue Value interface. In RHTPQMap,
@@ -107,8 +107,23 @@ func (rht *RHTPriorityQueueMap) Has(key string) bool {
 	return node != nil && !node.isRemoved()
 }
 
-// Set sets the value of the given key.
-func (rht *RHTPriorityQueueMap) Set(k string, v Element) {
+// Set sets the value of the given key. If there is an existing value, it is removed.
+func (rht *RHTPriorityQueueMap) Set(k string, v Element) Element {
+	var removed Element
+
+	if queue, ok := rht.nodeQueueMapByKey[k]; ok && queue.Len() > 0 {
+		node := queue.Peek().(*RHTPQMapNode)
+		if !node.isRemoved() && node.Remove(v.CreatedAt()) {
+			removed = node.elem
+		}
+	}
+
+	rht.SetInternal(k, v)
+	return removed
+}
+
+// SetInternal sets the value of the given key.
+func (rht *RHTPriorityQueueMap) SetInternal(k string, v Element) {
 	if _, ok := rht.nodeQueueMapByKey[k]; !ok {
 		rht.nodeQueueMapByKey[k] = pq.NewPriorityQueue()
 	}
@@ -126,7 +141,10 @@ func (rht *RHTPriorityQueueMap) Delete(k string, deletedAt *time.Ticket) Element
 	}
 
 	node := queue.Peek().(*RHTPQMapNode)
-	node.Remove(deletedAt)
+	if !node.Remove(deletedAt) {
+		return nil
+	}
+
 	return node.elem
 }
 
@@ -138,7 +156,10 @@ func (rht *RHTPriorityQueueMap) DeleteByCreatedAt(createdAt *time.Ticket, delete
 		return nil
 	}
 
-	node.Remove(deletedAt)
+	if !node.Remove(deletedAt) {
+		return nil
+	}
+
 	return node.elem
 }
 
@@ -173,24 +194,18 @@ func (rht *RHTPriorityQueueMap) Nodes() []*RHTPQMapNode {
 
 // purge physically purge child element.
 func (rht *RHTPriorityQueueMap) purge(elem Element) {
-	current, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
+	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
 		log.Logger.Fatalf("fail to find " + elem.CreatedAt().Key())
 	}
 
-	queue, ok := rht.nodeQueueMapByKey[current.key]
+	queue, ok := rht.nodeQueueMapByKey[node.key]
 	if !ok {
 		log.Logger.Fatalf("fail to find queue of " + elem.CreatedAt().Key())
 	}
 
-	for _, value := range queue.Values() {
-		node := value.(*RHTPQMapNode)
-		if node.Element().CreatedAt().After(elem.CreatedAt()) {
-			continue
-		}
-		queue.Release(node)
-		delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
-	}
+	queue.Release(node)
+	delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
 }
 
 // Marshal returns the JSON encoding of this map.

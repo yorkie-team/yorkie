@@ -282,8 +282,11 @@ func (p *ObjectProxy) setInternal(
 		ticket,
 	))
 
-	p.Set(k, value)
+	removed := p.Set(k, value)
 	p.context.RegisterElement(value)
+	if removed != nil {
+		p.context.RegisterRemovedElementPair(p, removed)
+	}
 
 	return proxy
 }

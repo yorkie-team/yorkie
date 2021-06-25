@@ -505,7 +505,7 @@ func TestDocument(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, "{}", doc.Marshal())
-		assert.Equal(t, 1, doc.GarbageLen())
+		assert.Equal(t, 2, doc.GarbageLen())
 
 		doc.GarbageCollect(time.MaxTicket)
 		assert.Equal(t, "{}", doc.Marshal())
