@@ -43,8 +43,8 @@ func (o *Object) Purge(elem Element) {
 }
 
 // Set sets the given element of the given key.
-func (o *Object) Set(k string, v Element) {
-	o.memberNodes.Set(k, v)
+func (o *Object) Set(k string, v Element) Element {
+	return o.memberNodes.Set(k, v)
 }
 
 // Members returns the member of this object as a map.
@@ -98,7 +98,7 @@ func (o *Object) DeepCopy() Element {
 	members := NewRHTPriorityQueueMap()
 
 	for _, node := range o.memberNodes.Nodes() {
-		members.Set(node.key, node.elem.DeepCopy())
+		members.SetInternal(node.key, node.elem.DeepCopy())
 	}
 
 	obj := NewObject(members, o.createdAt)
@@ -126,9 +126,15 @@ func (o *Object) RemovedAt() *time.Ticket {
 	return o.removedAt
 }
 
+// SetRemovedAt sets the removal time of this array.
+func (o *Object) SetRemovedAt(removedAt *time.Ticket) {
+	o.removedAt = removedAt
+}
+
 // Remove removes this object.
 func (o *Object) Remove(removedAt *time.Ticket) bool {
-	if o.removedAt == nil || removedAt.After(o.removedAt) {
+	if (removedAt != nil && removedAt.After(o.createdAt)) &&
+		(o.removedAt == nil || removedAt.After(o.removedAt)) {
 		o.removedAt = removedAt
 		return true
 	}

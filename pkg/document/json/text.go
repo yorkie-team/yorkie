@@ -140,10 +140,16 @@ func (t *Text) SetMovedAt(movedAt *time.Ticket) {
 	t.movedAt = movedAt
 }
 
+// SetRemovedAt sets the removal time of this array.
+func (t *Text) SetRemovedAt(removedAt *time.Ticket) {
+	t.removedAt = removedAt
+}
+
 // Remove removes this Text.
-func (t *Text) Remove(executedAt *time.Ticket) bool {
-	if t.removedAt == nil || executedAt.After(t.removedAt) {
-		t.removedAt = executedAt
+func (t *Text) Remove(removedAt *time.Ticket) bool {
+	if (removedAt != nil && removedAt.After(t.createdAt)) &&
+		(t.removedAt == nil || removedAt.After(t.removedAt)) {
+		t.removedAt = removedAt
 		return true
 	}
 	return false

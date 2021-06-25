@@ -72,7 +72,7 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*json.Object, error) {
 		if err != nil {
 			return nil, err
 		}
-		members.Set(pbNode.Key, elem)
+		members.SetInternal(pbNode.Key, elem)
 	}
 
 	createdAt, err := fromTimeTicket(pbObj.CreatedAt)
@@ -95,7 +95,7 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*json.Object, error) {
 		createdAt,
 	)
 	obj.SetMovedAt(movedAt)
-	obj.Remove(removedAt)
+	obj.SetRemovedAt(removedAt)
 
 	return obj, nil
 }
@@ -128,7 +128,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*json.Array, error) {
 		createdAt,
 	)
 	arr.SetMovedAt(movedAt)
-	arr.Remove(removedAt)
+	arr.SetRemovedAt(removedAt)
 	return arr, nil
 }
 
@@ -157,7 +157,7 @@ func fromJSONPrimitive(
 		createdAt,
 	)
 	primitive.SetMovedAt(movedAt)
-	primitive.Remove(removedAt)
+	primitive.SetRemovedAt(removedAt)
 	return primitive, nil
 }
 
@@ -202,7 +202,7 @@ func fromJSONText(pbText *api.JSONElement_Text) (*json.Text, error) {
 		createdAt,
 	)
 	text.SetMovedAt(movedAt)
-	text.Remove(removedAt)
+	text.SetRemovedAt(removedAt)
 
 	return text, nil
 }
@@ -250,7 +250,7 @@ func fromJSONRichText(
 		createdAt,
 	)
 	text.SetMovedAt(movedAt)
-	text.Remove(removedAt)
+	text.SetRemovedAt(removedAt)
 
 	return text, nil
 }
@@ -278,7 +278,7 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*json.Counter, error) {
 		createdAt,
 	)
 	counter.SetMovedAt(movedAt)
-	counter.Remove(removedAt)
+	counter.SetRemovedAt(removedAt)
 
 	return counter, nil
 }

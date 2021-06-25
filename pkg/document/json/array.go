@@ -127,9 +127,15 @@ func (a *Array) RemovedAt() *time.Ticket {
 	return a.removedAt
 }
 
+// SetRemovedAt sets the removal time of this array.
+func (a *Array) SetRemovedAt(removedAt *time.Ticket) {
+	a.removedAt = removedAt
+}
+
 // Remove removes this array.
 func (a *Array) Remove(removedAt *time.Ticket) bool {
-	if a.removedAt == nil || removedAt.After(a.removedAt) {
+	if (removedAt != nil && removedAt.After(a.createdAt)) &&
+		(a.removedAt == nil || removedAt.After(a.removedAt)) {
 		a.removedAt = removedAt
 		return true
 	}

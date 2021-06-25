@@ -493,4 +493,22 @@ func TestDocument(t *testing.T) {
 			doc.Root().GetText("text").AnnotatedString(),
 		)
 	})
+
+	t.Run("previously inserted elements in heap when running GC test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetInteger("a", 1)
+			root.SetInteger("a", 2)
+			root.Delete("a")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, "{}", doc.Marshal())
+		assert.Equal(t, 2, doc.GarbageLen())
+
+		doc.GarbageCollect(time.MaxTicket)
+		assert.Equal(t, "{}", doc.Marshal())
+		assert.Equal(t, 0, doc.GarbageLen())
+	})
 }

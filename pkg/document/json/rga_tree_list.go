@@ -109,7 +109,7 @@ type RGATreeList struct {
 // NewRGATreeList creates a new instance of RGATreeList.
 func NewRGATreeList() *RGATreeList {
 	dummyValue := NewPrimitive(0, time.InitialTicket)
-	dummyValue.Remove(time.InitialTicket)
+	dummyValue.SetRemovedAt(time.InitialTicket)
 	dummyHead := newRGATreeListNode(dummyValue)
 	nodeMapByIndex := splay.NewTree(dummyHead.indexNode)
 	nodeMapByCreatedAt := make(map[string]*RGATreeListNode)

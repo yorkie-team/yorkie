@@ -54,7 +54,9 @@ func (o *Remove) Execute(root *json.Root) error {
 	switch parent := parentElem.(type) {
 	case json.Container:
 		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
-		root.RegisterRemovedElementPair(parent, elem)
+		if elem != nil {
+			root.RegisterRemovedElementPair(parent, elem)
+		}
 	default:
 		return ErrNotApplicableDataType
 	}
