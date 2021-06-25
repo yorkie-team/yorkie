@@ -232,7 +232,7 @@ func (p *Primitive) RemovedAt() *time.Ticket {
 	return p.removedAt
 }
 
-// SetRemovedAt sets the remove time of this element.
+// SetRemovedAt sets the removal time of this element.
 func (p *Primitive) SetRemovedAt(removedAt *time.Ticket) {
 	p.removedAt = removedAt
 }
