@@ -55,6 +55,24 @@ const (
 	PushPull         Method = "PushPull"
 )
 
+func IsMethod(method string) bool {
+	return method == string(ActivateClient) ||
+		method == string(DeactivateClient) ||
+		method == string(AttachDocument) ||
+		method == string(DetachDocument) ||
+		method == string(PushPull)
+}
+
+func Methods() []Method {
+	return []Method{
+		ActivateClient,
+		DeactivateClient,
+		AttachDocument,
+		DetachDocument,
+		PushPull,
+	}
+}
+
 // AccessAttribute represents an access attribute.
 type AccessAttribute struct {
 	Key  string   `json:"key"`

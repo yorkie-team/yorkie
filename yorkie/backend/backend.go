@@ -17,6 +17,8 @@
 package backend
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	gosync "sync"
 	"time"
@@ -24,6 +26,7 @@ import (
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -43,6 +46,36 @@ type Config struct {
 
 	// AuthorizationWebhookURL is the url of the authorization webhook.
 	AuthorizationWebhookURL string
+
+	authorizationWebhookMethods map[types.Method]bool
+}
+
+// ResisterAuthWebhookMethods registers the methods the Authorization webhook will run.
+func (c *Config) ResisterAuthWebhookMethods(methods []string) error {
+	if c.authorizationWebhookMethods == nil {
+		c.authorizationWebhookMethods = make(map[types.Method]bool)
+	}
+
+	for _, method := range methods {
+		if !types.IsMethod(method) {
+			return errors.New(fmt.Sprintf("not supported method for authorization webhook: %s", method))
+		}
+		c.authorizationWebhookMethods[types.Method(method)] = true
+	}
+
+	if len(c.authorizationWebhookMethods) == 0 {
+		for _, method := range types.Methods() {
+			c.authorizationWebhookMethods[method] = true
+		}
+	}
+
+	return nil
+}
+
+// IsRunAuthWebhook is a method that checks if a webhook should be executed or not.
+func (c *Config) IsRunAuthWebhook(method types.Method) bool {
+	_, ok := c.authorizationWebhookMethods[method]
+	return ok
 }
 
 // Backend manages Yorkie's remote states such as data store, distributed lock

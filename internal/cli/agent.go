@@ -66,6 +66,16 @@ func newAgentCmd() *cobra.Command {
 				conf = parsed
 			}
 
+			methods, err := cmd.Flags().GetStringSlice("authorization-webhook-methods")
+			if err != nil {
+				return err
+			}
+			if len(methods) > 0 {
+				if err := conf.Backend.ResisterAuthWebhookMethods(methods); err != nil {
+					return err
+				}
+			}
+
 			r, err := yorkie.New(conf)
 			if err != nil {
 				return err
@@ -204,6 +214,12 @@ func init() {
 		"authorization-webhook-url",
 		"",
 		"URL of remote service to query authorization",
+	)
+	cmd.Flags().StringSliceVar(
+		&[]string{},
+		"authorization-webhook-methods",
+		[]string{},
+		"",
 	)
 
 	rootCmd.AddCommand(cmd)
