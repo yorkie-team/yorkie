@@ -55,6 +55,7 @@ const (
 	PushPull         Method = "PushPull"
 )
 
+// IsMethod checks whether the method is being provided.
 func IsMethod(method string) bool {
 	return method == string(ActivateClient) ||
 		method == string(DeactivateClient) ||
@@ -63,6 +64,7 @@ func IsMethod(method string) bool {
 		method == string(PushPull)
 }
 
+// Methods returns a list of methods being used.
 func Methods() []Method {
 	return []Method{
 		ActivateClient,
