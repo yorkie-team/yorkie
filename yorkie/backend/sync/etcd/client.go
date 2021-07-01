@@ -61,7 +61,7 @@ type Client struct {
 
 	client *clientv3.Client
 
-	pubSub *memory.PubSub
+	localPubSub *memory.PubSub
 
 	memberMapMu        *gosync.RWMutex
 	memberMap          map[string]*sync.AgentInfo
@@ -87,7 +87,7 @@ func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 		config:    conf,
 		agentInfo: agentInfo,
 
-		pubSub: memory.NewPubSub(),
+		localPubSub: memory.NewPubSub(),
 
 		memberMapMu:        &gosync.RWMutex{},
 		memberMap:          make(map[string]*sync.AgentInfo),
