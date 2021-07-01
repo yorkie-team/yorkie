@@ -219,7 +219,9 @@ func init() {
 		&[]string{},
 		"authorization-webhook-methods",
 		[]string{},
-		"",
+		"Methods are methods that execute webhooks."+
+			" If you do not enter anything, the webhook is executed"+
+			" in the entire method.",
 	)
 
 	rootCmd.AddCommand(cmd)
