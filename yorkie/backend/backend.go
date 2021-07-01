@@ -17,7 +17,6 @@
 package backend
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	gosync "sync"
@@ -58,7 +57,7 @@ func (c *Config) ResisterAuthWebhookMethods(methods []string) error {
 
 	for _, method := range methods {
 		if !types.IsMethod(method) {
-			return errors.New(fmt.Sprintf("not supported method for authorization webhook: %s", method))
+			return fmt.Errorf("not supported method for authorization webhook: %s", method)
 		}
 		c.authorizationWebhookMethods[types.Method(method)] = true
 	}
@@ -74,6 +73,10 @@ func (c *Config) ResisterAuthWebhookMethods(methods []string) error {
 
 // IsRunAuthWebhook is a method that checks if a webhook should be executed or not.
 func (c *Config) IsRunAuthWebhook(method types.Method) bool {
+	if c.authorizationWebhookMethods == nil {
+		return true
+	}
+
 	_, ok := c.authorizationWebhookMethods[method]
 	return ok
 }

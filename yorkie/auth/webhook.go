@@ -40,6 +40,10 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		return nil
 	}
 
+	if !be.Config.IsRunAuthWebhook(info.Method) {
+		return nil
+	}
+
 	reqBody, err := json.Marshal(types.AuthWebhookRequest{
 		Token:      TokenFromCtx(ctx),
 		Method:     info.Method,
