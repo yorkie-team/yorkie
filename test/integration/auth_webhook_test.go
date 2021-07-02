@@ -96,7 +96,7 @@ func TestAuthWebhook(t *testing.T) {
 		server, _ := newAuthServer(t)
 
 		config := helper.TestConfig(server.URL)
-		config.Backend.ResisterAuthWebhookMethods(
+		config.Backend.RegisterAuthWebhookMethods(
 			[]string{string(types.AttachDocument)},
 		)
 		agent, err := yorkie.New(config)
@@ -105,15 +105,15 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
 
 		ctx := context.Background()
-		cli1, err := client.Dial(agent.RPCAddr(), client.Option{Token: "invalid"})
+		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "invalid"})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, cli1.Close()) }()
+		defer func() { assert.NoError(t, cli.Close()) }()
 
-		err = cli1.Activate(ctx)
+		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
 		doc := document.New(helper.Collection, t.Name())
-		err = cli1.Attach(ctx, doc)
+		err = cli.Attach(ctx, doc)
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 	})
 }

@@ -63,6 +63,12 @@ func newAgentCmd() *cobra.Command {
 						flagConfPath,
 					)
 				}
+
+				err = parsed.Backend.ValidateAuthWebhookMethods()
+				if err != nil {
+					return err
+				}
+
 				conf = parsed
 			}
 
@@ -71,7 +77,7 @@ func newAgentCmd() *cobra.Command {
 				return err
 			}
 			if len(methods) > 0 {
-				if err := conf.Backend.ResisterAuthWebhookMethods(methods); err != nil {
+				if err := conf.Backend.RegisterAuthWebhookMethods(methods); err != nil {
 					return err
 				}
 			}

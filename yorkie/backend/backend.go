@@ -44,28 +44,36 @@ type Config struct {
 	SnapshotInterval uint64 `json:"SnapshotInterval"`
 
 	// AuthorizationWebhookURL is the url of the authorization webhook.
-	AuthorizationWebhookURL string
+	AuthorizationWebhookURL string `json:"AuthorizationWebhookURL"`
 
-	authorizationWebhookMethods map[types.Method]bool
+	// AuthorizationWebhookMethods is the methods that run the authorization webhook.
+	AuthorizationWebhookMethods []types.Method `json:"AuthorizationWebhookMethods"`
 }
 
-// ResisterAuthWebhookMethods registers the methods the Authorization webhook will run.
-func (c *Config) ResisterAuthWebhookMethods(methods []string) error {
-	if c.authorizationWebhookMethods == nil {
-		c.authorizationWebhookMethods = make(map[types.Method]bool)
-	}
-
+// RegisterAuthWebhookMethods registers the methods the Authorization webhook will run.
+func (c *Config) RegisterAuthWebhookMethods(methods []string) error {
 	for _, method := range methods {
 		if !types.IsMethod(method) {
 			return fmt.Errorf("not supported method for authorization webhook: %s", method)
 		}
-		c.authorizationWebhookMethods[types.Method(method)] = true
+
+		registered := false
+		for _, registeredMethod := range c.AuthorizationWebhookMethods {
+			if string(registeredMethod) == method {
+				registered = true
+				break
+			}
+		}
+
+		if registered {
+			continue
+		}
+
+		c.AuthorizationWebhookMethods = append(c.AuthorizationWebhookMethods, types.Method(method))
 	}
 
-	if len(c.authorizationWebhookMethods) == 0 {
-		for _, method := range types.Methods() {
-			c.authorizationWebhookMethods[method] = true
-		}
+	if len(c.AuthorizationWebhookMethods) == 0 {
+		c.AuthorizationWebhookMethods = append(c.AuthorizationWebhookMethods, types.AuthMethods()...)
 	}
 
 	return nil
@@ -73,12 +81,28 @@ func (c *Config) ResisterAuthWebhookMethods(methods []string) error {
 
 // IsRunAuthWebhook is a method that checks if a webhook should be executed or not.
 func (c *Config) IsRunAuthWebhook(method types.Method) bool {
-	if c.authorizationWebhookMethods == nil {
+	if len(c.AuthorizationWebhookMethods) == 0 {
 		return true
 	}
 
-	_, ok := c.authorizationWebhookMethods[method]
-	return ok
+	for _, m := range c.AuthorizationWebhookMethods {
+		if m == method {
+			return true
+		}
+	}
+
+	return false
+}
+
+// ValidateAuthWebhookMethods validates registered methods.
+func (c *Config) ValidateAuthWebhookMethods() error {
+	for _, method := range c.AuthorizationWebhookMethods {
+		if !types.IsMethod(string(method)) {
+			return fmt.Errorf("not supported method for authorization webhook: %s", method)
+		}
+	}
+
+	return nil
 }
 
 // Backend manages Yorkie's remote states such as data store, distributed lock

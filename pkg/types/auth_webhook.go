@@ -57,15 +57,16 @@ const (
 
 // IsMethod checks whether the method is being provided.
 func IsMethod(method string) bool {
-	return method == string(ActivateClient) ||
-		method == string(DeactivateClient) ||
-		method == string(AttachDocument) ||
-		method == string(DetachDocument) ||
-		method == string(PushPull)
+	for _, m := range AuthMethods() {
+		if method == string(m) {
+			return true
+		}
+	}
+	return false
 }
 
-// Methods returns a list of methods being used.
-func Methods() []Method {
+// AuthMethods returns a slice of methods that can be used for authorization.
+func AuthMethods() []Method {
 	return []Method{
 		ActivateClient,
 		DeactivateClient,
