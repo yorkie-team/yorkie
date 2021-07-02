@@ -47,46 +47,21 @@ type Config struct {
 	AuthorizationWebhookURL string `json:"AuthorizationWebhookURL"`
 
 	// AuthorizationWebhookMethods is the methods that run the authorization webhook.
-	AuthorizationWebhookMethods []types.Method `json:"AuthorizationWebhookMethods"`
+	AuthorizationWebhookMethods []string `json:"AuthorizationWebhookMethods"`
 }
 
-// RegisterAuthWebhookMethods registers the methods the Authorization webhook will run.
-func (c *Config) RegisterAuthWebhookMethods(methods []string) error {
-	for _, method := range methods {
-		if !types.IsMethod(method) {
-			return fmt.Errorf("not supported method for authorization webhook: %s", method)
-		}
-
-		registered := false
-		for _, registeredMethod := range c.AuthorizationWebhookMethods {
-			if string(registeredMethod) == method {
-				registered = true
-				break
-			}
-		}
-
-		if registered {
-			continue
-		}
-
-		c.AuthorizationWebhookMethods = append(c.AuthorizationWebhookMethods, types.Method(method))
+// RequireAuth returns whether the given method require authorization.
+func (c *Config) RequireAuth(method types.Method) bool {
+	if len(c.AuthorizationWebhookURL) == 0 {
+		return false
 	}
 
-	if len(c.AuthorizationWebhookMethods) == 0 {
-		c.AuthorizationWebhookMethods = append(c.AuthorizationWebhookMethods, types.AuthMethods()...)
-	}
-
-	return nil
-}
-
-// IsRunAuthWebhook is a method that checks if a webhook should be executed or not.
-func (c *Config) IsRunAuthWebhook(method types.Method) bool {
 	if len(c.AuthorizationWebhookMethods) == 0 {
 		return true
 	}
 
 	for _, m := range c.AuthorizationWebhookMethods {
-		if m == method {
+		if types.Method(m) == method {
 			return true
 		}
 	}
@@ -94,10 +69,10 @@ func (c *Config) IsRunAuthWebhook(method types.Method) bool {
 	return false
 }
 
-// ValidateAuthWebhookMethods validates registered methods.
-func (c *Config) ValidateAuthWebhookMethods() error {
+// Validate validates this config.
+func (c *Config) Validate() error {
 	for _, method := range c.AuthorizationWebhookMethods {
-		if !types.IsMethod(string(method)) {
+		if !types.IsAuthMethod(method) {
 			return fmt.Errorf("not supported method for authorization webhook: %s", method)
 		}
 	}

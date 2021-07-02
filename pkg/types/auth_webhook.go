@@ -55,8 +55,8 @@ const (
 	PushPull         Method = "PushPull"
 )
 
-// IsMethod checks whether the method is being provided.
-func IsMethod(method string) bool {
+// IsAuthMethod returns whether the given method can be used for authorization.
+func IsAuthMethod(method string) bool {
 	for _, m := range AuthMethods() {
 		if method == string(m) {
 			return true

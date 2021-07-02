@@ -95,11 +95,10 @@ func TestAuthWebhook(t *testing.T) {
 	t.Run("Selected method authorization webhook test", func(t *testing.T) {
 		server, _ := newAuthServer(t)
 
-		config := helper.TestConfig(server.URL)
-		config.Backend.RegisterAuthWebhookMethods(
-			[]string{string(types.AttachDocument)},
-		)
-		agent, err := yorkie.New(config)
+		conf := helper.TestConfig(server.URL)
+		conf.Backend.AuthorizationWebhookMethods = []string{string(types.AttachDocument)}
+
+		agent, err := yorkie.New(conf)
 		assert.NoError(t, err)
 		assert.NoError(t, agent.Start())
 		defer func() { assert.NoError(t, agent.Shutdown(true)) }()

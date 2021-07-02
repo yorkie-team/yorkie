@@ -36,11 +36,7 @@ func AccessAttributes(pack *change.Pack) []types.AccessAttribute {
 
 // VerifyAccess verifies the given access.
 func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessInfo) error {
-	if len(be.Config.AuthorizationWebhookURL) == 0 {
-		return nil
-	}
-
-	if !be.Config.IsRunAuthWebhook(info.Method) {
+	if !be.Config.RequireAuth(info.Method) {
 		return nil
 	}
 
