@@ -55,6 +55,27 @@ const (
 	PushPull         Method = "PushPull"
 )
 
+// IsAuthMethod returns whether the given method can be used for authorization.
+func IsAuthMethod(method string) bool {
+	for _, m := range AuthMethods() {
+		if method == string(m) {
+			return true
+		}
+	}
+	return false
+}
+
+// AuthMethods returns a slice of methods that can be used for authorization.
+func AuthMethods() []Method {
+	return []Method{
+		ActivateClient,
+		DeactivateClient,
+		AttachDocument,
+		DetachDocument,
+		PushPull,
+	}
+}
+
 // AccessAttribute represents an access attribute.
 type AccessAttribute struct {
 	Key  string   `json:"key"`

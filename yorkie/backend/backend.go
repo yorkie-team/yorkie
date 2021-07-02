@@ -17,6 +17,7 @@
 package backend
 
 import (
+	"fmt"
 	"os"
 	gosync "sync"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -42,7 +44,40 @@ type Config struct {
 	SnapshotInterval uint64 `json:"SnapshotInterval"`
 
 	// AuthorizationWebhookURL is the url of the authorization webhook.
-	AuthorizationWebhookURL string
+	AuthorizationWebhookURL string `json:"AuthorizationWebhookURL"`
+
+	// AuthorizationWebhookMethods is the methods that run the authorization webhook.
+	AuthorizationWebhookMethods []string `json:"AuthorizationWebhookMethods"`
+}
+
+// RequireAuth returns whether the given method require authorization.
+func (c *Config) RequireAuth(method types.Method) bool {
+	if len(c.AuthorizationWebhookURL) == 0 {
+		return false
+	}
+
+	if len(c.AuthorizationWebhookMethods) == 0 {
+		return true
+	}
+
+	for _, m := range c.AuthorizationWebhookMethods {
+		if types.Method(m) == method {
+			return true
+		}
+	}
+
+	return false
+}
+
+// Validate validates this config.
+func (c *Config) Validate() error {
+	for _, method := range c.AuthorizationWebhookMethods {
+		if !types.IsAuthMethod(method) {
+			return fmt.Errorf("not supported method for authorization webhook: %s", method)
+		}
+	}
+
+	return nil
 }
 
 // Backend manages Yorkie's remote states such as data store, distributed lock

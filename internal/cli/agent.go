@@ -66,6 +66,13 @@ func newAgentCmd() *cobra.Command {
 				conf = parsed
 			}
 
+			// TODO(hackerwins): We need to check that the entire config is valid.
+			// err = conf.Validate()
+			err := conf.Backend.Validate()
+			if err != nil {
+				return err
+			}
+
 			r, err := yorkie.New(conf)
 			if err != nil {
 				return err
@@ -204,6 +211,13 @@ func init() {
 		"authorization-webhook-url",
 		"",
 		"URL of remote service to query authorization",
+	)
+	cmd.Flags().StringSliceVar(
+		&conf.Backend.AuthorizationWebhookMethods,
+		"authorization-webhook-methods",
+		[]string{},
+		"List of methods that require authorization checks."+
+			" If no value is specified, all methods will be checked.",
 	)
 
 	rootCmd.AddCommand(cmd)
