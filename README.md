@@ -98,6 +98,14 @@ If you make any changes to the code, run `make fmt` in order to automatically fo
 ## Contributing
 See [CONTRIBUTING](CONTRIBUTING.md) for details on submitting patches and the contribution workflow.
 
+## Contributors ✨
+
+Thanks goes to these incredible people:
+
+<a href="https://github.com/yorkie-team/yorkie/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=yorkie-team/yorkie" />
+</a>
+
 ## Sponsors
 
 Is your company using Yorkie? Ask your boss to support us. It will help us dedicate more time to maintain this project and to make it even better for all our users. Also your company logo will show up on here and on our website :-) [[Become a sponsor](https://opencollective.com/yorkie#sponsor)]

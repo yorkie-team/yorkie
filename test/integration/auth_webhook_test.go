@@ -91,4 +91,28 @@ func TestAuthWebhook(t *testing.T) {
 		err = cliWithInvalidToken.Activate(ctx)
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 	})
+
+	t.Run("Selected method authorization webhook test", func(t *testing.T) {
+		server, _ := newAuthServer(t)
+
+		conf := helper.TestConfig(server.URL)
+		conf.Backend.AuthorizationWebhookMethods = []string{string(types.AttachDocument)}
+
+		agent, err := yorkie.New(conf)
+		assert.NoError(t, err)
+		assert.NoError(t, agent.Start())
+		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+
+		ctx := context.Background()
+		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "invalid"})
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+
+		err = cli.Activate(ctx)
+		assert.NoError(t, err)
+
+		doc := document.New(helper.Collection, t.Name())
+		err = cli.Attach(ctx, doc)
+		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+	})
 }
