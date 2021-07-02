@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/client"
 	"io"
 	"sync"
 	"testing"
@@ -30,7 +31,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
-	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -159,16 +159,13 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.Collection, t.Name())
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-
 		d2 := document.New(helper.Collection, t.Name())
-		err = c2.Attach(ctx, d2)
-		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c2.Attach(ctx, d2))
 
 		wg := sync.WaitGroup{}
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
-		rch := c1.Watch(watch1Ctx, d1)
+		wrch := c1.Watch(watch1Ctx, d1)
 		defer cancel1()
 
 		go func() {
@@ -176,15 +173,17 @@ func TestDocument(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					assert.Fail(t, "unexpected ctx done")
-				case resp := <-rch:
-					if resp.Err == io.EOF || status.Code(resp.Err) == codes.Canceled {
+					return
+				case wr := <-wrch:
+					if wr.Err == io.EOF || status.Code(wr.Err) == codes.Canceled {
 						return
 					}
-					assert.NoError(t, resp.Err)
+					assert.NoError(t, wr.Err)
 
-					if resp.EventType == types.DocumentsWatchedEvent ||
-						resp.EventType == types.DocumentsUnwatchedEvent {
-						assert.Equal(t, c2.Metadata(), resp.Publisher.Metadata)
+					if wr.Type == client.PeersChanged {
+						if len(wr.PeersMapByDoc) == 2 {
+							assert.Equal(t, c2.Metadata(), wr.PeersMapByDoc[c2.Key()])
+						}
 						wg.Done()
 					}
 				}

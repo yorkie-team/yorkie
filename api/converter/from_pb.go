@@ -159,6 +159,20 @@ func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
 	}, nil
 }
 
+// FromClients converts the given Protobuf format to model format.
+func FromClients(pbClients *api.Clients) ([]*types.Client, error) {
+	var clients []*types.Client
+	for _, pbClient := range pbClients.Clients {
+		client, err := FromClient(pbClient)
+		if err != nil {
+			return nil, err
+		}
+		clients = append(clients, client)
+	}
+
+	return clients, nil
+}
+
 // FromOperations converts the given Protobuf format to model format.
 func FromOperations(pbOps []*api.Operation) ([]operation.Operation, error) {
 	var ops []operation.Operation

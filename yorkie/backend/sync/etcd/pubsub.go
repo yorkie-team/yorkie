@@ -42,25 +42,26 @@ func (c *Client) Subscribe(
 	subscriber types.Client,
 	topics []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	sub, _, err := c.localPubSub.Subscribe(subscriber, topics)
+	sub, peersMap, err := c.localPubSub.Subscribe(subscriber, topics)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ctx := context.Background()
-	peersMap := make(map[string][]types.Client)
-	for _, topic := range topics {
-		if err := c.putSubscription(ctx, topic, sub); err != nil {
-			return nil, nil, err
-		}
+	// TODO(hackerwins): sync remote subscriptions
+	// ctx := context.Background()
+	// peersMap := make(map[string][]types.Client)
+	// for _, topic := range topics {
+	// 	if err := c.putSubscription(ctx, topic, sub); err != nil {
+	// 		return nil, nil, err
+	// 	}
 
-		subs, err := c.pullSubscriptions(ctx, topic)
-		if err != nil {
-			return nil, nil, err
-		}
+	// 	subs, err := c.pullSubscriptions(ctx, topic)
+	// 	if err != nil {
+	// 		return nil, nil, err
+	// 	}
 
-		peersMap[topic.BSONKey()] = subs
-	}
+	// 	peersMap[topic.BSONKey()] = subs
+	// }
 
 	return sub, peersMap, nil
 }
@@ -69,12 +70,13 @@ func (c *Client) Subscribe(
 func (c *Client) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
 	c.localPubSub.Unsubscribe(topics, sub)
 
-	ctx := context.Background()
-	for _, topic := range topics {
-		if err := c.removeSubscription(ctx, topic, sub); err != nil {
-			continue
-		}
-	}
+	// TODO(hackerwins): sync remote subscriptions
+	// ctx := context.Background()
+	// for _, topic := range topics {
+	// 	if err := c.removeSubscription(ctx, topic, sub); err != nil {
+	// 		continue
+	// 	}
+	// }
 }
 
 // Publish publishes the given event to the given Topic.
