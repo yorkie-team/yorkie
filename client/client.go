@@ -90,6 +90,7 @@ type WatchResponseType string
 
 // The values below are types of WatchResponseType.
 const (
+	WatchStarted     WatchResponseType = "watch-started"
 	DocumentsChanged WatchResponseType = "documents-changed"
 	PeersChanged     WatchResponseType = "peers-changed"
 )
@@ -411,7 +412,7 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 			}
 
 			return &WatchResponse{
-				Type:          PeersChanged,
+				Type:          WatchStarted,
 				PeersMapByDoc: c.PeersMapByDoc(),
 			}, nil
 		case *api.WatchDocumentsResponse_Event:
@@ -449,20 +450,6 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 		return nil, fmt.Errorf("unsupported response type")
 	}
 
-	// waiting for starting watch
-	pbResp, err := stream.Recv()
-	if err != nil {
-		rch <- WatchResponse{Err: err}
-		close(rch)
-		return rch
-	}
-	if _, err := handleResponse(pbResp); err != nil {
-		rch <- WatchResponse{Err: err}
-		close(rch)
-		return rch
-	}
-
-	// starting to watch documents
 	go func() {
 		for {
 			pbResp, err := stream.Recv()

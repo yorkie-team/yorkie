@@ -129,15 +129,20 @@ func TestDocument(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			// receive changed event.
-			resp := <-rch
-			if resp.Err == io.EOF {
-				return
-			}
-			assert.NoError(t, resp.Err)
+			for {
+				// receive changed event.
+				resp := <-rch
+				if resp.Err == io.EOF {
+					return
+				}
+				assert.NoError(t, resp.Err)
 
-			err := c1.Sync(ctx, resp.Keys...)
-			assert.NoError(t, err)
+				if resp.Type == client.DocumentsChanged {
+					err := c1.Sync(ctx, resp.Keys...)
+					assert.NoError(t, err)
+					return
+				}
+			}
 		}()
 
 		// 02. cli2 updates doc2.
@@ -166,6 +171,8 @@ func TestDocument(t *testing.T) {
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		wg := sync.WaitGroup{}
+
+		wg.Add(1)
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
 		wrch := c1.Watch(watch1Ctx, d1)
 		defer cancel1()
@@ -182,7 +189,9 @@ func TestDocument(t *testing.T) {
 					}
 					assert.NoError(t, wr.Err)
 
-					if wr.Type == client.PeersChanged {
+					if wr.Type == client.WatchStarted {
+						wg.Done()
+					} else if wr.Type == client.PeersChanged {
 						peers := wr.PeersMapByDoc[d1.Key().BSONKey()]
 						if len(peers) == 2 {
 							assert.Equal(t, c2.Metadata(), peers[c2.ID().String()])
@@ -200,7 +209,18 @@ func TestDocument(t *testing.T) {
 		// 01. PeersChanged is triggered as a new client watches the document
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
 		wg.Add(1)
-		_ = c2.Watch(watch2Ctx, d2)
+		wrch2 := c2.Watch(watch2Ctx, d2)
+
+		wg2 := sync.WaitGroup{}
+		wg2.Add(1)
+		go func() {
+			defer wg2.Done()
+			wr := <-wrch2
+			if wr.Type == client.WatchStarted {
+				return
+			}
+		}()
+		wg2.Wait()
 
 		// 02. PeersChanged is triggered because the client closes the watch
 		wg.Add(1)

@@ -19,6 +19,7 @@ package interceptors
 import (
 	"context"
 
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -67,7 +68,16 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
-		// TODO(hackerwins): extract token and store it on the context.
+		if i.needAuth() {
+			token, err := i.extractToken(ss.Context())
+			if err != nil {
+				return err
+			}
+			wrapped := grpcmiddleware.WrapServerStream(ss)
+			wrapped.WrappedContext = auth.CtxWithToken(ss.Context(), token)
+			return handler(srv, wrapped)
+		}
+
 		return handler(srv, ss)
 	}
 }
