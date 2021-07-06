@@ -33,12 +33,16 @@ import (
 )
 
 type yorkieServer struct {
-	backend *backend.Backend
+	backend    *backend.Backend
+	serviceCtx context.Context
 }
 
 // newYorkieServer creates a new instance of yorkieServer
-func newYorkieServer(be *backend.Backend) *yorkieServer {
-	return &yorkieServer{backend: be}
+func newYorkieServer(serviceCtx context.Context, be *backend.Backend) *yorkieServer {
+	return &yorkieServer{
+		backend:    be,
+		serviceCtx: serviceCtx,
+	}
 }
 
 // ActivateClient activates the given client.
@@ -320,7 +324,6 @@ func (s *yorkieServer) WatchDocuments(
 		return err
 	}
 
-	// TODO(hackerwins): unwatchDocs when shutting down the agent.
 	if err := stream.Send(&api.WatchDocumentsResponse{
 		Body: &api.WatchDocumentsResponse_Initialization_{
 			Initialization: &api.WatchDocumentsResponse_Initialization{
@@ -335,6 +338,9 @@ func (s *yorkieServer) WatchDocuments(
 
 	for {
 		select {
+		case <-s.serviceCtx.Done():
+			s.unwatchDocs(docKeys, subscription)
+			return nil
 		case <-stream.Context().Done():
 			s.unwatchDocs(docKeys, subscription)
 			return nil
