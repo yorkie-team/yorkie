@@ -19,6 +19,7 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -50,6 +51,15 @@ var (
 	ErrDocumentNotAttached = errors.New("document is not attached")
 )
 
+// Metadata represents custom metadata that can be defined in the client.
+type Metadata map[string]string
+
+// Attachment represents the document attached and peers.
+type Attachment struct {
+	doc         *document.Document
+	peerClients map[string]Metadata
+}
+
 // Client is a normal client that can communicate with the agent.
 // It has documents and sends changes of the document in local
 // to the agent to synchronize with other replicas in remote.
@@ -58,21 +68,38 @@ type Client struct {
 	client      api.YorkieClient
 	dialOptions []grpc.DialOption
 
-	id           *time.ActorID
-	key          string
-	metadata     map[string]string
-	status       status
-	attachedDocs map[string]*document.Document
+	id          *time.ActorID
+	key         string
+	metadata    Metadata
+	status      status
+	attachments map[string]*Attachment
 }
 
 // Option configures how we set up the client.
 type Option struct {
 	Key      string
-	Metadata map[string]string
+	Metadata Metadata
 	Token    string
 
 	CertFile           string
 	ServerNameOverride string
+}
+
+// WatchResponseType is type of watch response.
+type WatchResponseType string
+
+// The values below are types of WatchResponseType.
+const (
+	DocumentsChanged WatchResponseType = "documents-changed"
+	PeersChanged     WatchResponseType = "peers-changed"
+)
+
+// WatchResponse is a structure representing response of Watch.
+type WatchResponse struct {
+	Type          WatchResponseType
+	Keys          []*key.Key
+	PeersMapByDoc map[string]map[string]Metadata
+	Err           error
 }
 
 // NewClient creates an instance of Client.
@@ -84,7 +111,7 @@ func NewClient(opts ...Option) (*Client, error) {
 		k = uuid.New().String()
 	}
 
-	metadata := map[string]string{}
+	metadata := Metadata{}
 	if len(opts) > 0 && opts[0].Metadata != nil {
 		metadata = opts[0].Metadata
 	}
@@ -124,11 +151,11 @@ func NewClient(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		key:          k,
-		metadata:     metadata,
-		dialOptions:  dialOptions,
-		status:       deactivated,
-		attachedDocs: make(map[string]*document.Document),
+		key:         k,
+		metadata:    metadata,
+		dialOptions: dialOptions,
+		status:      deactivated,
+		attachments: make(map[string]*Attachment),
 	}, nil
 }
 
@@ -255,7 +282,10 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.Attached)
-	c.attachedDocs[doc.Key().BSONKey()] = doc
+	c.attachments[doc.Key().BSONKey()] = &Attachment{
+		doc:         doc,
+		peerClients: make(map[string]Metadata),
+	}
 
 	return nil
 }
@@ -271,7 +301,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return ErrClientNotActivated
 	}
 
-	if _, ok := c.attachedDocs[doc.Key().BSONKey()]; !ok {
+	if _, ok := c.attachments[doc.Key().BSONKey()]; !ok {
 		return ErrDocumentNotAttached
 	}
 
@@ -300,7 +330,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.Detached)
-	delete(c.attachedDocs, doc.Key().BSONKey())
+	delete(c.attachments, doc.Key().BSONKey())
 
 	return nil
 }
@@ -310,8 +340,8 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 // local documents.
 func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
 	if len(keys) == 0 {
-		for _, doc := range c.attachedDocs {
-			keys = append(keys, doc.Key())
+		for _, attachment := range c.attachments {
+			keys = append(keys, attachment.doc.Key())
 		}
 	}
 
@@ -325,16 +355,21 @@ func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
 }
 
 // Metadata returns the metadata of this client.
-func (c *Client) Metadata() map[string]string {
+func (c *Client) Metadata() Metadata {
 	return c.metadata
 }
 
-// WatchResponse is a structure representing response of Watch.
-type WatchResponse struct {
-	Publisher *types.Client
-	EventType types.DocEventType
-	Keys      []*key.Key
-	Err       error
+// PeersMapByDoc returns the peersMap.
+func (c *Client) PeersMapByDoc() map[string]map[string]Metadata {
+	peersMapByDoc := make(map[string]map[string]Metadata)
+	for doc, attachment := range c.attachments {
+		peers := make(map[string]Metadata)
+		for id, metadata := range attachment.peerClients {
+			peers[id] = metadata
+		}
+		peersMapByDoc[doc] = peers
+	}
+	return peersMapByDoc
 }
 
 // Watch subscribes to events on a given document.
@@ -360,27 +395,58 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 		return rch
 	}
 
-	handleResponse := func(pbResp *api.WatchDocumentsResponse) error {
+	handleResponse := func(pbResp *api.WatchDocumentsResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
-		case *api.WatchDocumentsResponse_Event:
-			publisher, err := converter.FromClient(resp.Event.Publisher)
-			if err != nil {
-				return err
-			}
-			eventType, err := converter.FromEventType(resp.Event.Type)
-			if err != nil {
-				return err
+		case *api.WatchDocumentsResponse_Initialization_:
+			for docID, peers := range resp.Initialization.PeersMapByDoc {
+				clients, err := converter.FromClients(peers)
+				if err != nil {
+					return nil, err
+				}
+
+				attachment := c.attachments[docID]
+				for _, client := range clients {
+					attachment.peerClients[client.ID.String()] = client.Metadata
+				}
 			}
 
-			rch <- WatchResponse{
-				Publisher: publisher,
-				EventType: eventType,
-				Keys:      converter.FromDocumentKeys(resp.Event.DocumentKeys),
+			return &WatchResponse{
+				Type:          PeersChanged,
+				PeersMapByDoc: c.PeersMapByDoc(),
+			}, nil
+		case *api.WatchDocumentsResponse_Event:
+			eventType, err := converter.FromEventType(resp.Event.Type)
+			if err != nil {
+				return nil, err
 			}
-		case *api.WatchDocumentsResponse_Initialization_:
-			// continue
+
+			switch eventType {
+			case types.DocumentsChangedEvent:
+				return &WatchResponse{
+					Type: DocumentsChanged,
+					Keys: converter.FromDocumentKeys(resp.Event.DocumentKeys),
+				}, nil
+			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent:
+				for _, k := range converter.FromDocumentKeys(resp.Event.DocumentKeys) {
+					cli, err := converter.FromClient(resp.Event.Publisher)
+					if err != nil {
+						return nil, err
+					}
+
+					attachment := c.attachments[k.BSONKey()]
+					if eventType == types.DocumentsWatchedEvent {
+						attachment.peerClients[cli.ID.String()] = cli.Metadata
+					} else {
+						delete(attachment.peerClients, cli.ID.String())
+					}
+				}
+				return &WatchResponse{
+					Type:          PeersChanged,
+					PeersMapByDoc: c.PeersMapByDoc(),
+				}, nil
+			}
 		}
-		return nil
+		return nil, fmt.Errorf("unsupported response type")
 	}
 
 	// waiting for starting watch
@@ -390,7 +456,7 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 		close(rch)
 		return rch
 	}
-	if err := handleResponse(pbResp); err != nil {
+	if _, err := handleResponse(pbResp); err != nil {
 		rch <- WatchResponse{Err: err}
 		close(rch)
 		return rch
@@ -405,15 +471,27 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 				close(rch)
 				return
 			}
-			if err := handleResponse(pbResp); err != nil {
+			resp, err := handleResponse(pbResp)
+			if err != nil {
 				rch <- WatchResponse{Err: err}
 				close(rch)
 				return
 			}
+			rch <- *resp
 		}
 	}()
 
 	return rch
+}
+
+// ID returns the ID of this client.
+func (c *Client) ID() *time.ActorID {
+	return c.id
+}
+
+// Key returns the key of this client.
+func (c *Client) Key() string {
+	return c.key
 }
 
 // IsActive returns whether this client is active or not.
@@ -426,12 +504,12 @@ func (c *Client) sync(ctx context.Context, key *key.Key) error {
 		return ErrClientNotActivated
 	}
 
-	doc, ok := c.attachedDocs[key.BSONKey()]
+	attachment, ok := c.attachments[key.BSONKey()]
 	if !ok {
 		return ErrDocumentNotAttached
 	}
 
-	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
+	pbChangePack, err := converter.ToChangePack(attachment.doc.CreateChangePack())
 	if err != nil {
 		return err
 	}
@@ -450,7 +528,7 @@ func (c *Client) sync(ctx context.Context, key *key.Key) error {
 		return err
 	}
 
-	if err := doc.ApplyChangePack(pack); err != nil {
+	if err := attachment.doc.ApplyChangePack(pack); err != nil {
 		log.Logger.Error(err)
 		return err
 	}

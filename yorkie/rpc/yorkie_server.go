@@ -320,6 +320,7 @@ func (s *yorkieServer) WatchDocuments(
 		return err
 	}
 
+	// TODO(hackerwins): unwatchDocs when shutting down the agent.
 	if err := stream.Send(&api.WatchDocumentsResponse{
 		Body: &api.WatchDocumentsResponse_Initialization_{
 			Initialization: &api.WatchDocumentsResponse_Initialization{

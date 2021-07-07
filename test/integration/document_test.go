@@ -28,9 +28,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
-	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -155,20 +155,19 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 
-	t.Run("watch document watched/unwatched events test", func(t *testing.T) {
+	t.Run("watch PeersChanged event test", func(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.Collection, t.Name())
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-
 		d2 := document.New(helper.Collection, t.Name())
-		err = c2.Attach(ctx, d2)
-		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		assert.NoError(t, c2.Attach(ctx, d2))
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		wg := sync.WaitGroup{}
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
-		rch := c1.Watch(watch1Ctx, d1)
+		wrch := c1.Watch(watch1Ctx, d1)
 		defer cancel1()
 
 		go func() {
@@ -176,25 +175,34 @@ func TestDocument(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					assert.Fail(t, "unexpected ctx done")
-				case resp := <-rch:
-					if resp.Err == io.EOF || status.Code(resp.Err) == codes.Canceled {
+					return
+				case wr := <-wrch:
+					if wr.Err == io.EOF || status.Code(wr.Err) == codes.Canceled {
 						return
 					}
-					assert.NoError(t, resp.Err)
+					assert.NoError(t, wr.Err)
 
-					if resp.EventType == types.DocumentsWatchedEvent ||
-						resp.EventType == types.DocumentsUnwatchedEvent {
-						assert.Equal(t, c2.Metadata(), resp.Publisher.Metadata)
-						wg.Done()
+					if wr.Type == client.PeersChanged {
+						peers := wr.PeersMapByDoc[d1.Key().BSONKey()]
+						if len(peers) == 2 {
+							assert.Equal(t, c2.Metadata(), peers[c2.ID().String()])
+							wg.Done()
+						} else if len(peers) == 1 {
+							assert.Equal(t, c1.Metadata(), peers[c1.ID().String()])
+							wg.Done()
+							return
+						}
 					}
 				}
 			}
 		}()
 
+		// 01. PeersChanged is triggered as a new client watches the document
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
 		wg.Add(1)
 		_ = c2.Watch(watch2Ctx, d2)
 
+		// 02. PeersChanged is triggered because the client closes the watch
 		wg.Add(1)
 		cancel2()
 
