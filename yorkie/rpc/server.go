@@ -17,6 +17,7 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -42,8 +43,9 @@ type Config struct {
 
 // Server is a normal server that processes the logic requested by the client.
 type Server struct {
-	conf       *Config
-	grpcServer *grpc.Server
+	conf                *Config
+	grpcServer          *grpc.Server
+	yorkieServiceCancel context.CancelFunc
 }
 
 // NewServer creates a new instance of Server.
@@ -73,15 +75,18 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		opts = append(opts, grpc.Creds(creds))
 	}
 
+	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
+
 	grpcServer := grpc.NewServer(opts...)
 	healthpb.RegisterHealthServer(grpcServer, health.NewServer())
-	api.RegisterYorkieServer(grpcServer, newYorkieServer(be))
+	api.RegisterYorkieServer(grpcServer, newYorkieServer(yorkieServiceCtx, be))
 	api.RegisterClusterServer(grpcServer, newClusterServer(be))
 	grpcprometheus.Register(grpcServer)
 
 	return &Server{
-		conf:       conf,
-		grpcServer: grpcServer,
+		conf:                conf,
+		grpcServer:          grpcServer,
+		yorkieServiceCancel: yorkieServiceCancel,
 	}, nil
 }
 
@@ -92,6 +97,8 @@ func (s *Server) Start() error {
 
 // Shutdown shuts down this server.
 func (s *Server) Shutdown(graceful bool) {
+	s.yorkieServiceCancel()
+
 	if graceful {
 		s.grpcServer.GracefulStop()
 	} else {
