@@ -133,6 +133,7 @@ func TestDocument(t *testing.T) {
 				// receive changed event.
 				resp := <-rch
 				if resp.Err == io.EOF {
+				        assert.Fail(t, resp.Err.Error())
 					return
 				}
 				assert.NoError(t, resp.Err)
