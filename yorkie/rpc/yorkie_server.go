@@ -314,6 +314,20 @@ func (s *yorkieServer) WatchDocuments(
 	}
 	docKeys := converter.FromDocumentKeys(req.DocumentKeys)
 
+	var attrs []types.AccessAttribute
+	for _, k := range docKeys {
+		attrs = append(attrs, types.AccessAttribute{
+			Key:  k.BSONKey(),
+			Verb: types.Read,
+		})
+	}
+	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
+		Method:     types.WatchDocuments,
+		Attributes: attrs,
+	}); err != nil {
+		return err
+	}
+
 	subscription, peersMap, err := s.watchDocs(
 		stream.Context(),
 		*client,

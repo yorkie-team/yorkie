@@ -98,17 +98,19 @@ func TestClusterMode(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			select {
-			case resp := <-rch:
-				if resp.Err == io.EOF {
+			for {
+				select {
+				case resp := <-rch:
+					if resp.Err == io.EOF {
+						return
+					}
+					assert.NoError(t, resp.Err)
+
+					err := clientA.Sync(ctx, resp.Keys...)
+					assert.NoError(t, err)
+				case <-time.After(time.Second):
 					return
 				}
-				assert.NoError(t, resp.Err)
-
-				err := clientA.Sync(ctx, resp.Keys...)
-				assert.NoError(t, err)
-			case <-time.After(time.Second):
-				return
 			}
 		}()
 

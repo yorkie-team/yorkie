@@ -23,6 +23,7 @@ import (
 	"io"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
@@ -129,15 +130,21 @@ func TestDocument(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			// receive changed event.
-			resp := <-rch
-			if resp.Err == io.EOF {
-				return
-			}
-			assert.NoError(t, resp.Err)
+			for {
+				// receive changed event.
+				resp := <-rch
+				if resp.Err == io.EOF {
+				        assert.Fail(t, resp.Err.Error())
+					return
+				}
+				assert.NoError(t, resp.Err)
 
-			err := c1.Sync(ctx, resp.Keys...)
-			assert.NoError(t, err)
+				if resp.Type == client.DocumentsChanged {
+					err := c1.Sync(ctx, resp.Keys...)
+					assert.NoError(t, err)
+					return
+				}
+			}
 		}()
 
 		// 02. cli2 updates doc2.
@@ -155,7 +162,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 
-	t.Run("watch PeersChanged event test", func(t *testing.T) {
+	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.Collection, t.Name())
@@ -165,47 +172,69 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
-		wg := sync.WaitGroup{}
-		watch1Ctx, cancel1 := context.WithCancel(ctx)
-		wrch := c1.Watch(watch1Ctx, d1)
-		defer cancel1()
+		wgEvents := sync.WaitGroup{}
+		var types []client.WatchResponseType
+		wgEvents.Add(1)
 
+		// 01. WatchStarted is triggered when starting to watch a document
+		watch1Ctx, cancel1 := context.WithCancel(ctx)
+		defer cancel1()
+		wrch := c1.Watch(watch1Ctx, d1)
+		wgWatchStarted1 := sync.WaitGroup{}
+		wgWatchStarted1.Add(1)
 		go func() {
+			defer wgEvents.Done()
 			for {
 				select {
-				case <-ctx.Done():
-					assert.Fail(t, "unexpected ctx done")
+				case <- time.After(time.Second):
+					assert.Fail(t, "timeout")
 					return
 				case wr := <-wrch:
 					if wr.Err == io.EOF || status.Code(wr.Err) == codes.Canceled {
+						assert.Fail(t, "unexpected stream closing")
 						return
 					}
-					assert.NoError(t, wr.Err)
 
-					if wr.Type == client.PeersChanged {
+					types = append(types, wr.Type)
+
+					if wr.Type == client.WatchStarted {
+						wgWatchStarted1.Done()
+					} else if wr.Type == client.PeersChanged {
 						peers := wr.PeersMapByDoc[d1.Key().BSONKey()]
 						if len(peers) == 2 {
 							assert.Equal(t, c2.Metadata(), peers[c2.ID().String()])
-							wg.Done()
 						} else if len(peers) == 1 {
 							assert.Equal(t, c1.Metadata(), peers[c1.ID().String()])
-							wg.Done()
 							return
 						}
 					}
 				}
 			}
 		}()
+		wgWatchStarted1.Wait()
 
-		// 01. PeersChanged is triggered as a new client watches the document
+		// 02. PeersChanged is triggered when another client watches the document
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		wg.Add(1)
-		_ = c2.Watch(watch2Ctx, d2)
+		wrch2 := c2.Watch(watch2Ctx, d2)
+		wgWatchStarted2 := sync.WaitGroup{}
+		wgWatchStarted2.Add(1)
+		go func() {
+			wr := <-wrch2
+			if wr.Type == client.WatchStarted {
+				wgWatchStarted2.Done()
+				return
+			}
+		}()
+		wgWatchStarted2.Wait()
 
-		// 02. PeersChanged is triggered because the client closes the watch
-		wg.Add(1)
+		// 03. PeersChanged is triggered when another client closes the watch
 		cancel2()
 
-		wg.Wait()
+		wgEvents.Wait()
+		assert.Equal(t, []client.WatchResponseType{
+			client.WatchStarted,
+			client.PeersChanged,
+			client.PeersChanged,
+		}, types)
 	})
 }
