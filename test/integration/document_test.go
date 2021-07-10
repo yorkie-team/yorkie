@@ -160,7 +160,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 
-	t.Run("watch PeersChanged event test", func(t *testing.T) {
+	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.Collection, t.Name())
@@ -172,6 +172,7 @@ func TestDocument(t *testing.T) {
 
 		wg := sync.WaitGroup{}
 
+		// 01. WatchStarted is triggered when starting to watch a document
 		wg.Add(1)
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
 		wrch := c1.Watch(watch1Ctx, d1)
@@ -206,7 +207,7 @@ func TestDocument(t *testing.T) {
 			}
 		}()
 
-		// 01. PeersChanged is triggered as a new client watches the document
+		// 02. PeersChanged is triggered when another client watches the document
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
 		wg.Add(1)
 		wrch2 := c2.Watch(watch2Ctx, d2)
@@ -222,7 +223,7 @@ func TestDocument(t *testing.T) {
 		}()
 		wg2.Wait()
 
-		// 02. PeersChanged is triggered because the client closes the watch
+		// 03. PeersChanged is triggered when another client closes the watch
 		wg.Add(1)
 		cancel2()
 
