@@ -87,7 +87,8 @@ func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
 // occurs while executing logic in API handler, gRPC status.error should be
 // returned so that the client can know more about the status of the request.
 func toStatusError(err error) error {
-	if errors.Is(err, auth.ErrNotAllowed) {
+	if errors.Is(err, auth.ErrNotAllowed) ||
+		errors.Is(err, auth.ErrUnexpectedStatusCode) {
 		return status.Error(codes.Unauthenticated, err.Error())
 	}
 

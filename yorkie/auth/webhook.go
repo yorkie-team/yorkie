@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
+	"time"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -17,6 +19,9 @@ import (
 var (
 	// ErrNotAllowed is returned when the given user is not allowed for the access.
 	ErrNotAllowed = errors.New("method is not allowed for this user")
+
+	// ErrUnexpectedStatusCode is returned when the response code is not 200 from the webhook.
+	ErrUnexpectedStatusCode = errors.New("unexpected status code from webhook")
 )
 
 // AccessAttributes returns an array of AccessAttribute from the given pack.
@@ -49,29 +54,70 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		return err
 	}
 
-	// TODO(hackerwins): We need to apply retryBackoff in case of failure
-	resp, err := http.Post(
-		be.Config.AuthorizationWebhookURL,
-		"application/json",
-		bytes.NewBuffer(reqBody),
-	)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Logger.Error(err)
+	return withExponentialBackoff(be.Config, func() (int, error) {
+		resp, err := http.Post(
+			be.Config.AuthorizationWebhookURL,
+			"application/json",
+			bytes.NewBuffer(reqBody),
+		)
+		if err != nil {
+			return 0, err
 		}
-	}()
 
-	authResp, err := types.NewAuthWebhookResponse(resp.Body)
-	if err != nil {
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				log.Logger.Error(err)
+			}
+		}()
+
+		if http.StatusOK != resp.StatusCode {
+			return resp.StatusCode, fmt.Errorf("%d: %w", resp.StatusCode, ErrUnexpectedStatusCode)
+		}
+
+		authResp, err := types.NewAuthWebhookResponse(resp.Body)
+		if err != nil {
+			return resp.StatusCode, err
+		}
+
+		if !authResp.Allowed {
+			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Reason, ErrNotAllowed)
+		}
+
+		return resp.StatusCode, nil
+	})
+}
+
+func withExponentialBackoff(config *backend.Config, webhookFn func() (int, error)) error {
+	statusCode, err := webhookFn()
+	if !shouldRetry(statusCode) {
 		return err
 	}
 
-	if !authResp.Allowed {
-		return fmt.Errorf("%s: %w", authResp.Reason, ErrNotAllowed)
-	}
+	var retries uint64
+	for {
+		if retries == config.AuthorizationWebhookMaxRetries {
+			return err
+		}
 
-	return nil
+		time.Sleep(waitInterval(retries, config.AuthorizationWebhookMaxWaitInterval))
+
+		statusCode, err := webhookFn()
+		if !shouldRetry(statusCode) {
+			return err
+		}
+		retries++
+	}
+}
+
+func waitInterval(retries uint64, maxWaitInterval uint64) time.Duration {
+	interval := math.Pow(2, float64(retries)) * 100
+	interval = math.Min(interval, float64(maxWaitInterval))
+	return time.Duration(int64(interval)) * time.Millisecond
+}
+
+func shouldRetry(statusCode int) bool {
+	return statusCode == http.StatusRequestTimeout ||
+		statusCode == http.StatusInternalServerError ||
+		statusCode == http.StatusBadGateway ||
+		statusCode == http.StatusServiceUnavailable
 }

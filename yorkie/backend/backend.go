@@ -48,6 +48,14 @@ type Config struct {
 
 	// AuthorizationWebhookMethods is the methods that run the authorization webhook.
 	AuthorizationWebhookMethods []string `json:"AuthorizationWebhookMethods"`
+
+	// AuthorizationWebhookMaxRetries is the max count
+	// that retries the authorization webhook.
+	AuthorizationWebhookMaxRetries uint64
+
+	// AuthorizationWebhookMaxWaitInterval is the max interval
+	// that waits before retrying the authorization webhook.
+	AuthorizationWebhookMaxWaitInterval uint64
 }
 
 // RequireAuth returns whether the given method require authorization.
