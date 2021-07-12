@@ -126,15 +126,15 @@ func TestDocument(t *testing.T) {
 
 		// 01. cli1 watches doc1.
 		wg.Add(1)
-		rch := c1.Watch(ctx, d1)
+		rch, err := c1.Watch(ctx, d1)
+		assert.NoError(t, err)
 		go func() {
 			defer wg.Done()
 
 			for {
-				// receive changed event.
 				resp := <-rch
 				if resp.Err == io.EOF {
-				        assert.Fail(t, resp.Err.Error())
+					assert.Fail(t, resp.Err.Error())
 					return
 				}
 				assert.NoError(t, resp.Err)
@@ -179,9 +179,8 @@ func TestDocument(t *testing.T) {
 		// 01. WatchStarted is triggered when starting to watch a document
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
 		defer cancel1()
-		wrch := c1.Watch(watch1Ctx, d1)
-		wgWatchStarted1 := sync.WaitGroup{}
-		wgWatchStarted1.Add(1)
+		wrch, err := c1.Watch(watch1Ctx, d1)
+		assert.NoError(t, err)
 		go func() {
 			defer wgEvents.Done()
 			for {
@@ -197,9 +196,7 @@ func TestDocument(t *testing.T) {
 
 					types = append(types, wr.Type)
 
-					if wr.Type == client.WatchStarted {
-						wgWatchStarted1.Done()
-					} else if wr.Type == client.PeersChanged {
+					if wr.Type == client.PeersChanged {
 						peers := wr.PeersMapByDoc[d1.Key().BSONKey()]
 						if len(peers) == 2 {
 							assert.Equal(t, c2.Metadata(), peers[c2.ID().String()])
@@ -211,28 +208,17 @@ func TestDocument(t *testing.T) {
 				}
 			}
 		}()
-		wgWatchStarted1.Wait()
 
 		// 02. PeersChanged is triggered when another client watches the document
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		wrch2 := c2.Watch(watch2Ctx, d2)
-		wgWatchStarted2 := sync.WaitGroup{}
-		wgWatchStarted2.Add(1)
-		go func() {
-			wr := <-wrch2
-			if wr.Type == client.WatchStarted {
-				wgWatchStarted2.Done()
-				return
-			}
-		}()
-		wgWatchStarted2.Wait()
+		_, err = c2.Watch(watch2Ctx, d2)
+		assert.NoError(t, err)
 
 		// 03. PeersChanged is triggered when another client closes the watch
 		cancel2()
 
 		wgEvents.Wait()
 		assert.Equal(t, []client.WatchResponseType{
-			client.WatchStarted,
 			client.PeersChanged,
 			client.PeersChanged,
 		}, types)

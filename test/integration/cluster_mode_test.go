@@ -94,20 +94,22 @@ func TestClusterMode(t *testing.T) {
 		wg := gosync.WaitGroup{}
 
 		wg.Add(1)
-		rch := clientA.Watch(ctx, docA)
+		wrch, err := clientA.Watch(ctx, docA)
+		assert.NoError(t, err)
 		go func() {
 			defer wg.Done()
 
 			for {
 				select {
-				case resp := <-rch:
+				case resp := <-wrch:
 					if resp.Err == io.EOF {
 						return
 					}
 					assert.NoError(t, resp.Err)
 
-					err := clientA.Sync(ctx, resp.Keys...)
-					assert.NoError(t, err)
+					if resp.Type == client.DocumentsChanged {
+						assert.NoError(t, clientA.Sync(ctx, resp.Keys...))
+					}
 				case <-time.After(time.Second):
 					return
 				}
