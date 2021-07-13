@@ -57,6 +57,7 @@ func (m *Coordinator) NewLocker(
 
 // Subscribe subscribes to the given topics.
 func (m *Coordinator) Subscribe(
+	_ context.Context,
 	subscriber types.Client,
 	topics []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
@@ -64,26 +65,30 @@ func (m *Coordinator) Subscribe(
 }
 
 // Unsubscribe unsubscribes the given topics.
-func (m *Coordinator) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
+func (m *Coordinator) Unsubscribe(
+	_ context.Context,
+	topics []*key.Key,
+	sub *sync.Subscription,
+) {
 	m.pubSub.Unsubscribe(topics, sub)
 }
 
 // Publish publishes the given event.
 func (m *Coordinator) Publish(
-	ctx context.Context,
+	_ context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	m.pubSub.Publish(ctx, publisherID, event)
+	m.pubSub.Publish(publisherID, event)
 }
 
 // PublishToLocal publishes the given event.
 func (m *Coordinator) PublishToLocal(
-	ctx context.Context,
+	_ context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	m.pubSub.Publish(ctx, publisherID, event)
+	m.pubSub.Publish(publisherID, event)
 }
 
 // Members returns the members of this cluster.

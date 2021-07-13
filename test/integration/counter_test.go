@@ -34,9 +34,7 @@ func TestCounter(t *testing.T) {
 	clients := createActivatedClients(t, 2)
 	c1 := clients[0]
 	c2 := clients[1]
-	defer func() {
-		cleanupClients(t, clients)
-	}()
+	defer cleanupClients(t, clients)
 
 	t.Run("causal counter.increase test", func(t *testing.T) {
 		ctx := context.Background()

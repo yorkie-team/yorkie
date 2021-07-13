@@ -39,9 +39,7 @@ func TestDocument(t *testing.T) {
 	clients := createActivatedClients(t, 2)
 	c1 := clients[0]
 	c2 := clients[1]
-	defer func() {
-		cleanupClients(t, clients)
-	}()
+	defer cleanupClients(t, clients)
 
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
@@ -172,8 +170,8 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
+		var responsePairs []watchResponsePair
 		wgEvents := sync.WaitGroup{}
-		var types []client.WatchResponseType
 		wgEvents.Add(1)
 
 		// 01. WatchStarted is triggered when starting to watch a document
@@ -194,14 +192,11 @@ func TestDocument(t *testing.T) {
 						return
 					}
 
-					types = append(types, wr.Type)
-
 					if wr.Type == client.PeersChanged {
 						peers := wr.PeersMapByDoc[d1.Key().BSONKey()]
-						if len(peers) == 2 {
-							assert.Equal(t, c2.Metadata(), peers[c2.ID().String()])
-						} else if len(peers) == 1 {
-							assert.Equal(t, c1.Metadata(), peers[c1.ID().String()])
+						responsePairs = append(responsePairs, watchResponsePair{Type: wr.Type, peers: peers})
+
+						if len(peers) == 1 {
 							return
 						}
 					}
@@ -218,9 +213,18 @@ func TestDocument(t *testing.T) {
 		cancel2()
 
 		wgEvents.Wait()
-		assert.Equal(t, []client.WatchResponseType{
-			client.PeersChanged,
-			client.PeersChanged,
-		}, types)
+
+		assert.Equal(t, responsePairs, []watchResponsePair{{
+			Type:  client.PeersChanged,
+			peers: map[string]client.Metadata{
+				c1.ID().String(): c1.Metadata(),
+				c2.ID().String(): c2.Metadata(),
+			},
+		}, {
+			Type:  client.PeersChanged,
+			peers: map[string]client.Metadata{
+				c1.ID().String(): c1.Metadata(),
+			},
+		}})
 	})
 }
