@@ -181,7 +181,6 @@ func (c *Client) publishToMember(
 	return nil
 }
 
-
 // putSubscription puts the given subscription in etcd.
 func (c *Client) putSubscription(
 	ctx context.Context,
