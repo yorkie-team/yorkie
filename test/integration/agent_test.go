@@ -47,7 +47,8 @@ func TestAgent(t *testing.T) {
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		wg := sync.WaitGroup{}
-		wrch := cli.Watch(ctx, doc)
+		wrch, err := cli.Watch(ctx, doc)
+		assert.NoError(t, err)
 
 		go func() {
 			for {

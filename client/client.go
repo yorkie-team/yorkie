@@ -90,7 +90,6 @@ type WatchResponseType string
 
 // The values below are types of WatchResponseType.
 const (
-	WatchStarted     WatchResponseType = "watch-started"
 	DocumentsChanged WatchResponseType = "documents-changed"
 	PeersChanged     WatchResponseType = "peers-changed"
 )
@@ -374,9 +373,14 @@ func (c *Client) PeersMapByDoc() map[string]map[string]Metadata {
 }
 
 // Watch subscribes to events on a given document.
-// If the context "ctx" is canceled or timed out, returned channel is closed,
-// and "WatchResponse" from this closed channel has zero events and nil "Err()".
-func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan WatchResponse {
+// If an error occurs before stream initialization, the second response, error,
+// is returned. If the context "ctx" is canceled or timed out, returned channel
+// is closed, and "WatchResponse" from this closed channel has zero events and
+// nil "Err()".
+func (c *Client) Watch(
+	ctx context.Context,
+	docs ...*document.Document,
+) (<-chan WatchResponse, error) {
 	var keys []*key.Key
 	for _, doc := range docs {
 		keys = append(keys, doc.Key())
@@ -391,9 +395,7 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 		DocumentKeys: converter.ToDocumentKeys(keys),
 	})
 	if err != nil {
-		rch <- WatchResponse{Err: err}
-		close(rch)
-		return rch
+		return nil, err
 	}
 
 	handleResponse := func(pbResp *api.WatchDocumentsResponse) (*WatchResponse, error) {
@@ -411,10 +413,7 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 				}
 			}
 
-			return &WatchResponse{
-				Type:          WatchStarted,
-				PeersMapByDoc: c.PeersMapByDoc(),
-			}, nil
+			return nil, nil
 		case *api.WatchDocumentsResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
 			if err != nil {
@@ -450,6 +449,14 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 		return nil, fmt.Errorf("unsupported response type")
 	}
 
+	pbResp, err := stream.Recv()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := handleResponse(pbResp); err != nil {
+		return nil, err
+	}
+
 	go func() {
 		for {
 			pbResp, err := stream.Recv()
@@ -468,7 +475,7 @@ func (c *Client) Watch(ctx context.Context, docs ...*document.Document) <-chan W
 		}
 	}()
 
-	return rch
+	return rch, nil
 }
 
 // ID returns the ID of this client.

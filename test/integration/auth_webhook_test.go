@@ -22,7 +22,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 
 	"github.com/rs/xid"
@@ -138,18 +137,8 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Attach(ctx, doc)
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 
-		wg := sync.WaitGroup{}
-
-		wg.Add(1)
-		rch := cli.Watch(ctx, doc)
-		go func() {
-			defer wg.Done()
-
-			resp := <-rch
-			assert.Equal(t, codes.Unauthenticated, status.Convert(resp.Err).Code())
-		}()
-
-		wg.Wait()
+		_, err = cli.Watch(ctx, doc)
+		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 	})
 
 	t.Run("authorization webhook that success after retries test", func(t *testing.T) {
@@ -176,19 +165,6 @@ func TestAuthWebhook(t *testing.T) {
 		doc := document.New(helper.Collection, t.Name())
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
-
-		wg := sync.WaitGroup{}
-
-		wg.Add(1)
-		rch := cli.Watch(ctx, doc)
-		go func() {
-			defer wg.Done()
-
-			resp := <-rch
-			assert.NoError(t, resp.Err)
-		}()
-
-		wg.Wait()
 	})
 
 	t.Run("authorization webhook that fails after retries test", func(t *testing.T) {
