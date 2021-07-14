@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 
 	"github.com/rs/xid"
@@ -119,17 +118,7 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Attach(ctx, doc)
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 
-		wg := sync.WaitGroup{}
-
-		wg.Add(1)
-		rch := cli.Watch(ctx, doc)
-		go func() {
-			defer wg.Done()
-
-			resp := <- rch
-			assert.Equal(t, codes.Unauthenticated, status.Convert(resp.Err).Code())
-		}()
-
-		wg.Wait()
+		_, err = cli.Watch(ctx, doc)
+		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 	})
 }
