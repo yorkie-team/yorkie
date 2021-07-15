@@ -17,7 +17,6 @@
 package memory
 
 import (
-	"context"
 	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/internal/log"
@@ -121,7 +120,10 @@ func (m *PubSub) Subscribe(
 }
 
 // Unsubscribe unsubscribes the given topics.
-func (m *PubSub) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
+func (m *PubSub) Unsubscribe(
+	topics []*key.Key,
+	sub *sync.Subscription,
+) {
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
@@ -152,7 +154,6 @@ func (m *PubSub) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
 
 // Publish publishes the given event.
 func (m *PubSub) Publish(
-	_ context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {

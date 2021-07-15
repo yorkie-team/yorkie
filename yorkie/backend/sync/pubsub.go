@@ -85,12 +85,17 @@ func (s *Subscription) Close() {
 type PubSub interface {
 	// Subscribe subscribes to the given topics.
 	Subscribe(
+		ctx context.Context,
 		subscriber types.Client,
 		topics []*key.Key,
 	) (*Subscription, map[string][]types.Client, error)
 
 	// Unsubscribe unsubscribes the given topics.
-	Unsubscribe(topics []*key.Key, sub *Subscription)
+	Unsubscribe(
+		ctx context.Context,
+		topics []*key.Key,
+		sub *Subscription,
+	)
 
 	// Publish publishes the given event.
 	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)

@@ -387,6 +387,7 @@ func (s *yorkieServer) watchDocs(
 	docKeys []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
 	subscription, peersMap, err := s.backend.Coordinator.Subscribe(
+		ctx,
 		client,
 		docKeys,
 	)
@@ -412,10 +413,11 @@ func (s *yorkieServer) unwatchDocs(
 	docKeys []*key.Key,
 	subscription *sync.Subscription,
 ) {
-	s.backend.Coordinator.Unsubscribe(docKeys, subscription)
+	ctx := context.Background()
+	s.backend.Coordinator.Unsubscribe(ctx, docKeys, subscription)
 
 	s.backend.Coordinator.Publish(
-		context.Background(),
+		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
 			Type:         types.DocumentsUnwatchedEvent,

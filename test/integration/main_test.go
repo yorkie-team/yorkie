@@ -34,6 +34,16 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie"
 )
 
+type clientAndDocPair struct {
+	cli *client.Client
+	doc *document.Document
+}
+
+type watchResponsePair struct {
+	Type  client.WatchResponseType
+	peers map[string]client.Metadata
+}
+
 var defaultAgent *yorkie.Yorkie
 
 func TestMain(m *testing.M) {
@@ -49,11 +59,6 @@ func TestMain(m *testing.M) {
 		}
 	}
 	os.Exit(code)
-}
-
-type clientAndDocPair struct {
-	cli *client.Client
-	doc *document.Document
 }
 
 func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {

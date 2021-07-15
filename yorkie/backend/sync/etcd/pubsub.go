@@ -18,7 +18,10 @@ package etcd
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
+	"go.etcd.io/etcd/clientv3"
 	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/api"
@@ -30,18 +33,54 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
+const (
+	subscriptionsPath = "/subscriptions"
+)
+
 // Subscribe subscribes to the given topics.
 func (c *Client) Subscribe(
+	ctx context.Context,
 	subscriber types.Client,
 	topics []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	// TODO(hackerwins): build peersMap.
-	return c.pubSub.Subscribe(subscriber, topics)
+	sub, _, err := c.pubSub.Subscribe(subscriber, topics)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	peersMap := make(map[string][]types.Client)
+	for _, topic := range topics {
+		// TODO(hackerwins): If the agent is not stopped gracefully, there may
+		// be garbage subscriptions left. Consider introducing a TTL and
+		// updating it periodically.
+		if err := c.putSubscription(ctx, topic, sub); err != nil {
+			return nil, nil, err
+		}
+
+		subs, err := c.pullSubscriptions(ctx, topic)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		peersMap[topic.BSONKey()] = subs
+	}
+
+	return sub, peersMap, nil
 }
 
 // Unsubscribe unsubscribes the given topics.
-func (c *Client) Unsubscribe(topics []*key.Key, sub *sync.Subscription) {
+func (c *Client) Unsubscribe(
+	ctx context.Context,
+	topics []*key.Key,
+	sub *sync.Subscription,
+) {
 	c.pubSub.Unsubscribe(topics, sub)
+
+	for _, topic := range topics {
+		if err := c.removeSubscription(ctx, topic, sub); err != nil {
+			continue
+		}
+	}
 }
 
 // Publish publishes the given event to the given Topic.
@@ -80,7 +119,7 @@ func (c *Client) PublishToLocal(
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	c.pubSub.Publish(ctx, publisherID, event)
+	c.pubSub.Publish(publisherID, event)
 }
 
 // ensureClusterClient return the cluster client from the cache or creates it.
@@ -137,6 +176,69 @@ func (c *Client) publishToMember(
 	}); err != nil {
 		log.Logger.Error(err)
 		return err
+	}
+
+	return nil
+}
+
+// putSubscription puts the given subscription in etcd.
+func (c *Client) putSubscription(
+	ctx context.Context,
+	topic *key.Key,
+	sub *sync.Subscription,
+) error {
+	bytes, err := json.Marshal(sub.Subscriber())
+	if err != nil {
+		log.Logger.Error(err)
+		return fmt.Errorf("marshal %s: %w", sub.ID(), err)
+	}
+
+	k := fmt.Sprintf("%s/%s/%s", subscriptionsPath, topic.BSONKey(), sub.ID())
+	if _, err = c.client.Put(ctx, k, string(bytes)); err != nil {
+		log.Logger.Error(err)
+		return fmt.Errorf("put %s: %w", k, err)
+	}
+
+	return nil
+}
+
+// pullSubscriptions pulls the subscriptions of the given topic.
+func (c *Client) pullSubscriptions(ctx context.Context, topic *key.Key) ([]types.Client, error) {
+	getResponse, err := c.client.Get(
+		ctx,
+		fmt.Sprintf("%s/%s", subscriptionsPath, topic.BSONKey()),
+		clientv3.WithPrefix(),
+	)
+	if err != nil {
+		log.Logger.Error(err)
+		return nil, err
+	}
+
+	var clients []types.Client
+
+	for _, kv := range getResponse.Kvs {
+		var client types.Client
+		if err := json.Unmarshal(kv.Value, &client); err != nil {
+			log.Logger.Error(err)
+			return nil, err
+		}
+
+		clients = append(clients, client)
+	}
+
+	return clients, nil
+}
+
+// removeSubscription removes the given subscription in etcd.
+func (c *Client) removeSubscription(
+	ctx context.Context,
+	topic *key.Key,
+	sub *sync.Subscription,
+) error {
+	k := fmt.Sprintf("%s/%s/%s", subscriptionsPath, topic.BSONKey(), sub.ID())
+	if _, err := c.client.Delete(ctx, k); err != nil {
+		log.Logger.Error(err)
+		return fmt.Errorf("remove %s: %w", k, err)
 	}
 
 	return nil
