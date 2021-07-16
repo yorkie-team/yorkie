@@ -73,4 +73,3 @@ func TestAgent(t *testing.T) {
 		wg.Wait()
 	})
 }
-

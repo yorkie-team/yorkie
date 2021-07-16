@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -41,8 +40,8 @@ func newAuthServer(t *testing.T) (*httptest.Server, string) {
 	token := xid.New().String()
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req types.AuthWebhookRequest
-		assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		req, err := types.NewAuthWebhookRequest(r.Body)
+		assert.NoError(t, err)
 
 		var res types.AuthWebhookResponse
 		if req.Token == token {
@@ -50,10 +49,30 @@ func newAuthServer(t *testing.T) (*httptest.Server, string) {
 		} else {
 			res.Reason = "invalid token"
 		}
-		bytes, err := json.Marshal(res)
-		_, err = w.Write(bytes)
+
+		_, err = res.Write(w)
 		assert.NoError(t, err)
 	})), token
+}
+
+func newUnavailableAuthServer(t *testing.T, recoveryCnt uint64) *httptest.Server {
+	var retries uint64
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := types.NewAuthWebhookRequest(r.Body)
+		assert.NoError(t, err)
+
+		var res types.AuthWebhookResponse
+		res.Allowed = true
+		if retries < recoveryCnt-1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			retries++
+		} else {
+			retries = 0
+		}
+
+		_, err = res.Write(w)
+		assert.NoError(t, err)
+	}))
 }
 
 func TestAuthWebhook(t *testing.T) {
@@ -119,6 +138,54 @@ func TestAuthWebhook(t *testing.T) {
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 
 		_, err = cli.Watch(ctx, doc)
+		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+	})
+
+	t.Run("authorization webhook that success after retries test", func(t *testing.T) {
+		var recoveryCnt uint64
+		recoveryCnt = 4
+		server := newUnavailableAuthServer(t, recoveryCnt)
+
+		conf := helper.TestConfig(server.URL)
+		conf.Backend.AuthorizationWebhookMaxRetries = recoveryCnt
+		conf.Backend.AuthorizationWebhookMaxWaitIntervalMillis = 1000
+		agent, err := yorkie.New(conf)
+		assert.NoError(t, err)
+		assert.NoError(t, agent.Start())
+		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+
+		ctx := context.Background()
+		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+
+		err = cli.Activate(ctx)
+		assert.NoError(t, err)
+
+		doc := document.New(helper.Collection, t.Name())
+		err = cli.Attach(ctx, doc)
+		assert.NoError(t, err)
+	})
+
+	t.Run("authorization webhook that fails after retries test", func(t *testing.T) {
+		var recoveryCnt uint64
+		recoveryCnt = 4
+		server := newUnavailableAuthServer(t, recoveryCnt)
+
+		conf := helper.TestConfig(server.URL)
+		conf.Backend.AuthorizationWebhookMaxRetries = 2
+		conf.Backend.AuthorizationWebhookMaxWaitIntervalMillis = 1000
+		agent, err := yorkie.New(conf)
+		assert.NoError(t, err)
+		assert.NoError(t, agent.Start())
+		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+
+		ctx := context.Background()
+		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+
+		err = cli.Activate(ctx)
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 	})
 }

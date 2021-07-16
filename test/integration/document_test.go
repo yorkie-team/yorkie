@@ -183,7 +183,7 @@ func TestDocument(t *testing.T) {
 			defer wgEvents.Done()
 			for {
 				select {
-				case <- time.After(time.Second):
+				case <-time.After(time.Second):
 					assert.Fail(t, "timeout")
 					return
 				case wr := <-wrch:

@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
+	"syscall"
+	"time"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -17,6 +20,12 @@ import (
 var (
 	// ErrNotAllowed is returned when the given user is not allowed for the access.
 	ErrNotAllowed = errors.New("method is not allowed for this user")
+
+	// ErrUnexpectedStatusCode is returned when the response code is not 200 from the webhook.
+	ErrUnexpectedStatusCode = errors.New("unexpected status code from webhook")
+
+	// ErrWebhookTimeout is returned when the webhook does not respond in time.
+	ErrWebhookTimeout = errors.New("webhook timeout")
 )
 
 // AccessAttributes returns an array of AccessAttribute from the given pack.
@@ -49,29 +58,89 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		return err
 	}
 
-	// TODO(hackerwins): We need to apply retryBackoff in case of failure
-	resp, err := http.Post(
-		be.Config.AuthorizationWebhookURL,
-		"application/json",
-		bytes.NewBuffer(reqBody),
-	)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Logger.Error(err)
+	return withExponentialBackoff(ctx, be.Config, func() (int, error) {
+		resp, err := http.Post(
+			be.Config.AuthorizationWebhookURL,
+			"application/json",
+			bytes.NewBuffer(reqBody),
+		)
+		if err != nil {
+			return 0, err
 		}
-	}()
 
-	authResp, err := types.NewAuthWebhookResponse(resp.Body)
-	if err != nil {
-		return err
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				log.Logger.Error(err)
+			}
+		}()
+
+		if http.StatusOK != resp.StatusCode {
+			return resp.StatusCode, ErrUnexpectedStatusCode
+		}
+
+		authResp, err := types.NewAuthWebhookResponse(resp.Body)
+		if err != nil {
+			return resp.StatusCode, err
+		}
+
+		if !authResp.Allowed {
+			return resp.StatusCode, fmt.Errorf("%s: %w", authResp.Reason, ErrNotAllowed)
+		}
+
+		return resp.StatusCode, nil
+	})
+}
+
+func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn func() (int, error)) error {
+	var retries uint64
+	var statusCode int
+	for retries <= cfg.AuthorizationWebhookMaxRetries {
+		statusCode, err := webhookFn()
+		if !shouldRetry(statusCode, err) {
+			if err == ErrUnexpectedStatusCode {
+				return fmt.Errorf("unexpected status code from webhook: %d", statusCode)
+			}
+			return err
+		}
+
+		waitBeforeRetry := waitInterval(
+			retries,
+			time.Duration(cfg.AuthorizationWebhookMaxWaitIntervalMillis)*time.Millisecond,
+		)
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(waitBeforeRetry):
+		}
+
+		retries++
 	}
 
-	if !authResp.Allowed {
-		return fmt.Errorf("%s: %w", authResp.Reason, ErrNotAllowed)
+	return fmt.Errorf("unexpected status code from webhook %d: %w", statusCode, ErrWebhookTimeout)
+}
+
+// waitInterval returns the interval of given retries. (2^retries * 100) milliseconds.
+func waitInterval(retries uint64, maxWaitInterval time.Duration) time.Duration {
+	interval := time.Duration(math.Pow(2, float64(retries))) * 100 * time.Millisecond
+	if maxWaitInterval < interval {
+		return maxWaitInterval
 	}
 
-	return nil
+	return interval
+}
+
+// shouldRetry returns true if the given error should be retried.
+// Refer to https://github.com/kubernetes/kubernetes/search?q=DefaultShouldRetry
+func shouldRetry(statusCode int, err error) bool {
+	// If the connection is reset, we should retry.
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return errno == syscall.ECONNRESET
+	}
+
+	return statusCode == http.StatusInternalServerError ||
+		statusCode == http.StatusServiceUnavailable ||
+		statusCode == http.StatusGatewayTimeout ||
+		statusCode == http.StatusTooManyRequests
 }
