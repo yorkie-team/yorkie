@@ -219,6 +219,18 @@ func init() {
 		"List of methods that require authorization checks."+
 			" If no value is specified, all methods will be checked.",
 	)
+	cmd.Flags().Uint64Var(
+		&conf.Backend.AuthorizationWebhookMaxRetries,
+		"authorization-webhook-max-retries",
+		yorkie.DefaultAuthorizationWebhookMaxRetries,
+		"Maximum number of retries for an authorization webhook.",
+	)
+	cmd.Flags().Uint64Var(
+		&conf.Backend.AuthorizationWebhookMaxWaitIntervalMillis,
+		"authorization-webhook-max-wait-interval-millis",
+		yorkie.DefaultAuthorizationWebhookWaitIntervalMillis,
+		"Maximum wait interval for authorization webhook.",
+	)
 
 	rootCmd.AddCommand(cmd)
 }

@@ -42,6 +42,9 @@ const (
 
 	DefaultSnapshotThreshold = 500
 	DefaultSnapshotInterval  = 100
+
+	DefaultAuthorizationWebhookMaxRetries         = 10
+	DefaultAuthorizationWebhookWaitIntervalMillis = 3000
 )
 
 // Config is the configuration for creating a Yorkie instance.

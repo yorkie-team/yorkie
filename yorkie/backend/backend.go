@@ -51,11 +51,11 @@ type Config struct {
 
 	// AuthorizationWebhookMaxRetries is the max count
 	// that retries the authorization webhook.
-	AuthorizationWebhookMaxRetries uint64
+	AuthorizationWebhookMaxRetries uint64 `json:"AuthorizationWebhookMaxRetries"`
 
-	// AuthorizationWebhookMaxWaitInterval is the max interval
+	// AuthorizationWebhookMaxWaitIntervalMillis is the max interval
 	// that waits before retrying the authorization webhook.
-	AuthorizationWebhookMaxWaitInterval uint64
+	AuthorizationWebhookMaxWaitIntervalMillis uint64 `json:"AuthorizationWebhookMaxWaitIntervalMillis"`
 }
 
 // RequireAuth returns whether the given method require authorization.

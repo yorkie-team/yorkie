@@ -88,7 +88,8 @@ func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
 // returned so that the client can know more about the status of the request.
 func toStatusError(err error) error {
 	if errors.Is(err, auth.ErrNotAllowed) ||
-		errors.Is(err, auth.ErrUnexpectedStatusCode) {
+		errors.Is(err, auth.ErrUnexpectedStatusCode) ||
+		errors.Is(err, auth.ErrWebhookTimeout) {
 		return status.Error(codes.Unauthenticated, err.Error())
 	}
 
