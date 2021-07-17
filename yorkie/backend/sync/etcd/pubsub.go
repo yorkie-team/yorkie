@@ -18,8 +18,8 @@ package etcd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"path"
 
 	"go.etcd.io/etcd/clientv3"
 	"google.golang.org/grpc"
@@ -37,60 +37,109 @@ const (
 	subscriptionsPath = "/subscriptions"
 )
 
-// Subscribe subscribes to the given topics.
+// Subscribe subscribes to the given keys.
 func (c *Client) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	topics []*key.Key,
+	keys []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	sub, _, err := c.pubSub.Subscribe(subscriber, topics)
+	sub, _, err := c.localPubSub.Subscribe(subscriber, keys)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	peersMap := make(map[string][]types.Client)
-	for _, topic := range topics {
-		// TODO(hackerwins): If the agent is not stopped gracefully, there may
-		// be garbage subscriptions left. Consider introducing a TTL and
-		// updating it periodically.
-		if err := c.putSubscription(ctx, topic, sub); err != nil {
-			return nil, nil, err
-		}
+	// TODO(hackerwins): If the agent is not stopped gracefully, there may
+	// be garbage subscriptions left. Consider introducing a TTL and
+	// updating it periodically.
+	if err := c.putSubscriptions(ctx, keys, sub); err != nil {
+		return nil, nil, err
+	}
 
-		subs, err := c.pullSubscriptions(ctx, topic)
+	peersMap := make(map[string][]types.Client)
+	for _, k := range keys {
+		subs, err := c.pullSubscriptions(ctx, k)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		peersMap[topic.BSONKey()] = subs
+		peersMap[k.BSONKey()] = subs
 	}
 
 	return sub, peersMap, nil
 }
 
-// Unsubscribe unsubscribes the given topics.
+// Unsubscribe unsubscribes the given keys.
 func (c *Client) Unsubscribe(
 	ctx context.Context,
-	topics []*key.Key,
+	keys []*key.Key,
 	sub *sync.Subscription,
 ) {
-	c.pubSub.Unsubscribe(topics, sub)
-
-	for _, topic := range topics {
-		if err := c.removeSubscription(ctx, topic, sub); err != nil {
-			continue
-		}
-	}
+	c.localPubSub.Unsubscribe(keys, sub)
+	c.removeSubscriptions(ctx, keys, sub)
 }
 
-// Publish publishes the given event to the given Topic.
+// Publish publishes the given event.
 func (c *Client) Publish(
 	ctx context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	c.PublishToLocal(ctx, publisherID, event)
+	c.localPubSub.Publish(publisherID, event)
+	c.broadcastToMembers(ctx, event)
+}
 
+// PublishToLocal publishes the given event to the local PubSub.
+func (c *Client) PublishToLocal(
+	_ context.Context,
+	publisherID *time.ActorID,
+	event sync.DocEvent,
+) {
+	c.localPubSub.Publish(publisherID, event)
+}
+
+// UpdateMetadata updates the metadata of the given client.
+func (c *Client) UpdateMetadata(
+	ctx context.Context,
+	publisher *types.Client,
+	keys []*key.Key,
+) {
+	// TODO(hackerwins): We should update the metadata of subscriptions in etcd.
+
+	c.localPubSub.UpdateMetadata(publisher, keys)
+	c.localPubSub.Publish(publisher.ID, sync.DocEvent{
+		Type:         types.MetadataChangedEvent,
+		Publisher:    *publisher,
+		DocumentKeys: keys,
+	})
+
+	c.broadcastToMembers(ctx, sync.DocEvent{
+		Type:         types.MetadataChangedEvent,
+		Publisher:    *publisher,
+		DocumentKeys: keys,
+	})
+}
+
+// UpdateMetadataToLocal updates the metadata of the given client.
+func (c *Client) UpdateMetadataToLocal(
+	_ context.Context,
+	publisher *types.Client,
+	keys []*key.Key,
+) {
+	// TODO(hackerwins): We should check if the subscription is existing
+	// in the local PubSub. Because we don't know which agent has the
+	// subscription.  After introducing bi-directional communication,
+	// we can know which agent has the subscription. Then we can remove the
+	// check.
+	c.localPubSub.UpdateMetadata(publisher, keys)
+	c.localPubSub.Publish(publisher.ID, sync.DocEvent{
+		Type:         types.MetadataChangedEvent,
+		Publisher:    *publisher,
+		DocumentKeys: keys,
+	})
+}
+
+// broadcastToMembers broadcasts the given event to all members.
+func (c *Client) broadcastToMembers(ctx context.Context, event sync.DocEvent) {
 	for _, member := range c.Members() {
 		memberAddr := member.RPCAddr
 		if memberAddr == c.agentInfo.RPCAddr {
@@ -105,7 +154,7 @@ func (c *Client) Publish(
 		if err := c.publishToMember(
 			ctx,
 			clientInfo,
-			publisherID,
+			event.Publisher.ID,
 			event,
 		); err != nil {
 			continue
@@ -113,19 +162,15 @@ func (c *Client) Publish(
 	}
 }
 
-// PublishToLocal publishes the given event to the given Topic.
-func (c *Client) PublishToLocal(
-	ctx context.Context,
-	publisherID *time.ActorID,
-	event sync.DocEvent,
-) {
-	c.pubSub.Publish(publisherID, event)
-}
-
 // ensureClusterClient return the cluster client from the cache or creates it.
-func (c *Client) ensureClusterClient(member *sync.AgentInfo) (*clusterClientInfo, error) {
+func (c *Client) ensureClusterClient(
+	member *sync.AgentInfo,
+) (*clusterClientInfo, error) {
 	c.clusterClientMapMu.Lock()
 	defer c.clusterClientMapMu.Unlock()
+
+	// TODO(hackerwins): If the connection is disconnected, the client should
+	// be removed from clusterClientMap.
 
 	if _, ok := c.clusterClientMap[member.ID]; !ok {
 		conn, err := grpc.Dial(member.RPCAddr, grpc.WithInsecure())
@@ -181,32 +226,34 @@ func (c *Client) publishToMember(
 	return nil
 }
 
-// putSubscription puts the given subscription in etcd.
-func (c *Client) putSubscription(
+// putSubscriptions puts the given subscriptions in etcd.
+func (c *Client) putSubscriptions(
 	ctx context.Context,
-	topic *key.Key,
+	keys []*key.Key,
 	sub *sync.Subscription,
 ) error {
-	bytes, err := json.Marshal(sub.Subscriber())
+	cli := sub.Subscriber()
+	encoded, err := cli.Marshal()
 	if err != nil {
-		log.Logger.Error(err)
 		return fmt.Errorf("marshal %s: %w", sub.ID(), err)
 	}
 
-	k := fmt.Sprintf("%s/%s/%s", subscriptionsPath, topic.BSONKey(), sub.ID())
-	if _, err = c.client.Put(ctx, k, string(bytes)); err != nil {
-		log.Logger.Error(err)
-		return fmt.Errorf("put %s: %w", k, err)
+	for _, k := range keys {
+		k := path.Join(subscriptionsPath, k.BSONKey(), sub.ID())
+		if _, err = c.client.Put(ctx, k, encoded); err != nil {
+			log.Logger.Error(err)
+			return fmt.Errorf("put %s: %w", k, err)
+		}
 	}
 
 	return nil
 }
 
-// pullSubscriptions pulls the subscriptions of the given topic.
-func (c *Client) pullSubscriptions(ctx context.Context, topic *key.Key) ([]types.Client, error) {
+// pullSubscriptions pulls the subscriptions of the given document key.
+func (c *Client) pullSubscriptions(ctx context.Context, k *key.Key) ([]types.Client, error) {
 	getResponse, err := c.client.Get(
 		ctx,
-		fmt.Sprintf("%s/%s", subscriptionsPath, topic.BSONKey()),
+		path.Join(subscriptionsPath, k.BSONKey()),
 		clientv3.WithPrefix(),
 	)
 	if err != nil {
@@ -215,31 +262,27 @@ func (c *Client) pullSubscriptions(ctx context.Context, topic *key.Key) ([]types
 	}
 
 	var clients []types.Client
-
 	for _, kv := range getResponse.Kvs {
-		var client types.Client
-		if err := json.Unmarshal(kv.Value, &client); err != nil {
-			log.Logger.Error(err)
+		cli, err := types.NewClient(kv.Value)
+		if err != nil {
 			return nil, err
 		}
-
-		clients = append(clients, client)
+		clients = append(clients, *cli)
 	}
 
 	return clients, nil
 }
 
-// removeSubscription removes the given subscription in etcd.
-func (c *Client) removeSubscription(
+// removeSubscriptions removes the given subscription in etcd.
+func (c *Client) removeSubscriptions(
 	ctx context.Context,
-	topic *key.Key,
+	keys []*key.Key,
 	sub *sync.Subscription,
-) error {
-	k := fmt.Sprintf("%s/%s/%s", subscriptionsPath, topic.BSONKey(), sub.ID())
-	if _, err := c.client.Delete(ctx, k); err != nil {
-		log.Logger.Error(err)
-		return fmt.Errorf("remove %s: %w", k, err)
+) {
+	for _, docKey := range keys {
+		k := path.Join(subscriptionsPath, docKey.BSONKey(), sub.ID())
+		if _, err := c.client.Delete(ctx, k); err != nil {
+			log.Logger.Error(err)
+		}
 	}
-
-	return nil
 }

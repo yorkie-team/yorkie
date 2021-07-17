@@ -19,7 +19,6 @@ package client
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -49,15 +48,16 @@ var (
 	// ErrDocumentNotAttached occurs when the given document is not attached to
 	// this client.
 	ErrDocumentNotAttached = errors.New("document is not attached")
-)
 
-// Metadata represents custom metadata that can be defined in the client.
-type Metadata map[string]string
+	// ErrUnsupportedWatchResponseType occurs when the given WatchResponseType
+	// is not supported.
+	ErrUnsupportedWatchResponseType = errors.New("unsupported watch response type")
+)
 
 // Attachment represents the document attached and peers.
 type Attachment struct {
-	doc         *document.Document
-	peerClients map[string]Metadata
+	doc   *document.Document
+	peers map[string]types.MetadataInfo
 }
 
 // Client is a normal client that can communicate with the agent.
@@ -68,17 +68,17 @@ type Client struct {
 	client      api.YorkieClient
 	dialOptions []grpc.DialOption
 
-	id          *time.ActorID
-	key         string
-	metadata    Metadata
-	status      status
-	attachments map[string]*Attachment
+	id           *time.ActorID
+	key          string
+	metadataInfo types.MetadataInfo
+	status       status
+	attachments  map[string]*Attachment
 }
 
 // Option configures how we set up the client.
 type Option struct {
 	Key      string
-	Metadata Metadata
+	Metadata types.Metadata
 	Token    string
 
 	CertFile           string
@@ -98,7 +98,7 @@ const (
 type WatchResponse struct {
 	Type          WatchResponseType
 	Keys          []*key.Key
-	PeersMapByDoc map[string]map[string]Metadata
+	PeersMapByDoc map[string]map[string]types.Metadata
 	Err           error
 }
 
@@ -111,7 +111,7 @@ func NewClient(opts ...Option) (*Client, error) {
 		k = uuid.New().String()
 	}
 
-	metadata := Metadata{}
+	metadata := types.Metadata{}
 	if len(opts) > 0 && opts[0].Metadata != nil {
 		metadata = opts[0].Metadata
 	}
@@ -151,8 +151,10 @@ func NewClient(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		key:         k,
-		metadata:    metadata,
+		key: k,
+		metadataInfo: types.MetadataInfo{
+			Data: metadata,
+		},
 		dialOptions: dialOptions,
 		status:      deactivated,
 		attachments: make(map[string]*Attachment),
@@ -283,8 +285,8 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 
 	doc.SetStatus(document.Attached)
 	c.attachments[doc.Key().BSONKey()] = &Attachment{
-		doc:         doc,
-		peerClients: make(map[string]Metadata),
+		doc:   doc,
+		peers: make(map[string]types.MetadataInfo),
 	}
 
 	return nil
@@ -354,24 +356,6 @@ func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
 	return nil
 }
 
-// Metadata returns the metadata of this client.
-func (c *Client) Metadata() Metadata {
-	return c.metadata
-}
-
-// PeersMapByDoc returns the peersMap.
-func (c *Client) PeersMapByDoc() map[string]map[string]Metadata {
-	peersMapByDoc := make(map[string]map[string]Metadata)
-	for doc, attachment := range c.attachments {
-		peers := make(map[string]Metadata)
-		for id, metadata := range attachment.peerClients {
-			peers[id] = metadata
-		}
-		peersMapByDoc[doc] = peers
-	}
-	return peersMapByDoc
-}
-
 // Watch subscribes to events on a given document.
 // If an error occurs before stream initialization, the second response, error,
 // is returned. If the context "ctx" is canceled or timed out, returned channel
@@ -389,8 +373,8 @@ func (c *Client) Watch(
 	rch := make(chan WatchResponse)
 	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
 		Client: converter.ToClient(types.Client{
-			ID:       c.id,
-			Metadata: c.metadata,
+			ID:           c.id,
+			MetadataInfo: c.metadataInfo,
 		}),
 		DocumentKeys: converter.ToDocumentKeys(keys),
 	})
@@ -408,8 +392,8 @@ func (c *Client) Watch(
 				}
 
 				attachment := c.attachments[docID]
-				for _, client := range clients {
-					attachment.peerClients[client.ID.String()] = client.Metadata
+				for _, cli := range clients {
+					attachment.peers[cli.ID.String()] = cli.MetadataInfo
 				}
 			}
 
@@ -426,7 +410,7 @@ func (c *Client) Watch(
 					Type: DocumentsChanged,
 					Keys: converter.FromDocumentKeys(resp.Event.DocumentKeys),
 				}, nil
-			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent:
+			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent, types.MetadataChangedEvent:
 				for _, k := range converter.FromDocumentKeys(resp.Event.DocumentKeys) {
 					cli, err := converter.FromClient(resp.Event.Publisher)
 					if err != nil {
@@ -434,10 +418,14 @@ func (c *Client) Watch(
 					}
 
 					attachment := c.attachments[k.BSONKey()]
-					if eventType == types.DocumentsWatchedEvent {
-						attachment.peerClients[cli.ID.String()] = cli.Metadata
+					if eventType == types.DocumentsWatchedEvent || eventType == types.MetadataChangedEvent {
+						if info, ok := attachment.peers[cli.ID.String()]; ok {
+							info.Update(cli.MetadataInfo)
+						} else {
+							attachment.peers[cli.ID.String()] = cli.MetadataInfo
+						}
 					} else {
-						delete(attachment.peerClients, cli.ID.String())
+						delete(attachment.peers, cli.ID.String())
 					}
 				}
 				return &WatchResponse{
@@ -446,7 +434,7 @@ func (c *Client) Watch(
 				}, nil
 			}
 		}
-		return nil, fmt.Errorf("unsupported response type")
+		return nil, ErrUnsupportedWatchResponseType
 	}
 
 	pbResp, err := stream.Recv()
@@ -478,6 +466,41 @@ func (c *Client) Watch(
 	return rch, nil
 }
 
+// UpdateMetadata updates the metadata of this client.
+func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
+	if c.status != activated {
+		return ErrClientNotActivated
+	}
+
+	c.metadataInfo.Data[k] = v
+	c.metadataInfo.Clock++
+
+	if len(c.attachments) == 0 {
+		return nil
+	}
+
+	var keys []*key.Key
+	for _, attachment := range c.attachments {
+		keys = append(keys, attachment.doc.Key())
+	}
+
+	// TODO(hackerwins): We temporarily use Unary Call to update metadata,
+	// because grpc-web can't handle Bi-Directional streaming for now.
+	// After grpc-web supports bi-directional streaming, we can remove the
+	// following.
+	if _, err := c.client.UpdateMetadata(ctx, &api.UpdateMetadataRequest{
+		Client: converter.ToClient(types.Client{
+			ID:           c.id,
+			MetadataInfo: c.metadataInfo,
+		}),
+		DocumentKeys: converter.ToDocumentKeys(keys),
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // ID returns the ID of this client.
 func (c *Client) ID() *time.ActorID {
 	return c.id
@@ -486,6 +509,29 @@ func (c *Client) ID() *time.ActorID {
 // Key returns the key of this client.
 func (c *Client) Key() string {
 	return c.key
+}
+
+// Metadata returns the metadata of this client.
+func (c *Client) Metadata() types.Metadata {
+	metadata := make(types.Metadata)
+	for k, v := range c.metadataInfo.Data {
+		metadata[k] = v
+	}
+
+	return metadata
+}
+
+// PeersMapByDoc returns the peersMap.
+func (c *Client) PeersMapByDoc() map[string]map[string]types.Metadata {
+	peersMapByDoc := make(map[string]map[string]types.Metadata)
+	for doc, attachment := range c.attachments {
+		peers := make(map[string]types.Metadata)
+		for id, metadata := range attachment.peers {
+			peers[id] = metadata.Data
+		}
+		peersMapByDoc[doc] = peers
+	}
+	return peersMapByDoc
 }
 
 // IsActive returns whether this client is active or not.

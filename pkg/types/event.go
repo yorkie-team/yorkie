@@ -15,4 +15,7 @@ const (
 	// DocumentsUnwatchedEvent is an event that occurs when documents are
 	// unwatched by other clients.
 	DocumentsUnwatchedEvent DocEventType = "documents-unwatched"
+
+	// MetadataChangedEvent is an event indicating that metadata is changed.
+	MetadataChangedEvent DocEventType = "metadata-changed"
 )

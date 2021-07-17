@@ -88,8 +88,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Backend manages Yorkie's remote states such as data store, distributed lock
-// and etc. And it has the server status like the configuration.
+// Backend manages Yorkie's backend such as Database and Coordinator. And it
+// has the server status such as the information of this Agent.
 type Backend struct {
 	Config    *Config
 	agentInfo *sync.AgentInfo

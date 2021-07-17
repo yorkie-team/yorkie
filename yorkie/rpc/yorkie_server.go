@@ -381,6 +381,22 @@ func (s *yorkieServer) WatchDocuments(
 	}
 }
 
+// UpdateMetadata updates the metadata of the given client.
+func (s *yorkieServer) UpdateMetadata(
+	ctx context.Context,
+	req *api.UpdateMetadataRequest,
+) (*api.UpdateMetadataResponse, error) {
+	client, err := converter.FromClient(req.Client)
+	if err != nil {
+		return nil, err
+	}
+	keys := converter.FromDocumentKeys(req.DocumentKeys)
+
+	s.backend.Coordinator.UpdateMetadata(ctx, client, keys)
+
+	return &api.UpdateMetadataResponse{}, nil
+}
+
 func (s *yorkieServer) watchDocs(
 	ctx context.Context,
 	client types.Client,

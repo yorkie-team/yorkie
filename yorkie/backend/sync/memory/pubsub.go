@@ -26,8 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
-// subscriptions is a collection of subscriptions that subscribe to a specific
-// topic.
+// subscriptions is a map of subscriptions.
 type subscriptions struct {
 	internalMap map[string]*sync.Subscription
 }
@@ -61,67 +60,69 @@ func (s *subscriptions) Len() int {
 	return len(s.internalMap)
 }
 
-// PubSub is the memory implementation of PubSub, used for single agent or
-// tests.
+// PubSub is the memory implementation of PubSub, used for single agent.
 type PubSub struct {
-	subscriptionsMapMu      *gosync.RWMutex
-	subscriptionsMapByTopic map[string]*subscriptions
+	subscriptionsMapMu           *gosync.RWMutex
+	subscriptionsMapBySubscriber map[string]*sync.Subscription
+	subscriptionsMapByDocKey     map[string]*subscriptions
 }
 
 // NewPubSub creates an instance of PubSub.
 func NewPubSub() *PubSub {
 	return &PubSub{
-		subscriptionsMapMu:      &gosync.RWMutex{},
-		subscriptionsMapByTopic: make(map[string]*subscriptions),
+		subscriptionsMapMu:           &gosync.RWMutex{},
+		subscriptionsMapBySubscriber: make(map[string]*sync.Subscription),
+		subscriptionsMapByDocKey:     make(map[string]*subscriptions),
 	}
 }
 
-// Subscribe subscribes to the given topics.
+// Subscribe subscribes to the given document keys.
 func (m *PubSub) Subscribe(
 	subscriber types.Client,
-	topics []*key.Key,
+	keys []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	if len(topics) == 0 {
-		return nil, nil, sync.ErrEmptyTopics
+	if len(keys) == 0 {
+		return nil, nil, sync.ErrEmptyDocKeys
 	}
+
+	log.Logger.Debugf(
+		`Subscribe(%s,%s) Start`,
+		keys[0].BSONKey(),
+		subscriber.ID.String(),
+	)
 
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	log.Logger.Debugf(
-		`Subscribe(%s,%s) Start`,
-		topics[0].BSONKey(),
-		subscriber.ID.String(),
-	)
-
 	sub := sync.NewSubscription(subscriber)
-	peersMap := make(map[string][]types.Client)
+	m.subscriptionsMapBySubscriber[sub.SubscriberID()] = sub
 
-	for _, topic := range topics {
-		topicKey := topic.BSONKey()
-		if _, ok := m.subscriptionsMapByTopic[topicKey]; !ok {
-			m.subscriptionsMapByTopic[topicKey] = newSubscriptions()
+	peersMap := make(map[string][]types.Client)
+	for _, docKey := range keys {
+		bsonKey := docKey.BSONKey()
+		if _, ok := m.subscriptionsMapByDocKey[bsonKey]; !ok {
+			m.subscriptionsMapByDocKey[bsonKey] = newSubscriptions()
 		}
-		m.subscriptionsMapByTopic[topicKey].Add(sub)
+		m.subscriptionsMapByDocKey[bsonKey].Add(sub)
 
 		var peers []types.Client
-		for _, sub := range m.subscriptionsMapByTopic[topicKey].Map() {
+		for _, sub := range m.subscriptionsMapByDocKey[bsonKey].Map() {
 			peers = append(peers, sub.Subscriber())
 		}
-		peersMap[topicKey] = peers
+		peersMap[bsonKey] = peers
 	}
 
 	log.Logger.Debugf(
 		`Subscribe(%s,%s) End`,
-		topics[0].BSONKey(),
+		keys[0].BSONKey(),
 		subscriber.ID.String(),
 	)
 	return sub, peersMap, nil
 }
 
-// Unsubscribe unsubscribes the given topics.
+// Unsubscribe unsubscribes the given docKeys.
 func (m *PubSub) Unsubscribe(
-	topics []*key.Key,
+	docKeys []*key.Key,
 	sub *sync.Subscription,
 ) {
 	m.subscriptionsMapMu.Lock()
@@ -129,25 +130,27 @@ func (m *PubSub) Unsubscribe(
 
 	log.Logger.Debugf(
 		`Unsubscribe(%s,%s) Start`,
-		topics[0].BSONKey(),
+		docKeys[0].BSONKey(),
 		sub.SubscriberID(),
 	)
 
-	for _, topic := range topics {
-		topicKey := topic.BSONKey()
-		if subs, ok := m.subscriptionsMapByTopic[topicKey]; ok {
+	sub.Close()
+
+	delete(m.subscriptionsMapBySubscriber, sub.SubscriberID())
+	for _, docKey := range docKeys {
+		k := docKey.BSONKey()
+		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
 			subs.Delete(sub.ID())
 
 			if subs.Len() == 0 {
-				delete(m.subscriptionsMapByTopic, topicKey)
+				delete(m.subscriptionsMapByDocKey, k)
 			}
 		}
 	}
-	sub.Close()
 
 	log.Logger.Debugf(
 		`Unsubscribe(%s,%s) End`,
-		topics[0].BSONKey(),
+		docKeys[0].BSONKey(),
 		sub.SubscriberID(),
 	)
 }
@@ -161,11 +164,11 @@ func (m *PubSub) Publish(
 	defer m.subscriptionsMapMu.RUnlock()
 
 	for _, docKey := range event.DocumentKeys {
-		topic := docKey.BSONKey()
+		k := docKey.BSONKey()
 
-		log.Logger.Debugf(`Publish(%s,%s) Start`, topic, publisherID.String())
+		log.Logger.Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
 
-		if subs, ok := m.subscriptionsMapByTopic[topic]; ok {
+		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
 			for _, sub := range subs.Map() {
 				if sub.Subscriber().ID.Compare(publisherID) == 0 {
 					continue
@@ -173,13 +176,26 @@ func (m *PubSub) Publish(
 
 				log.Logger.Debugf(
 					`Publish(%s,%s) to %s`,
-					topic,
+					k,
 					publisherID.String(),
 					sub.SubscriberID(),
 				)
 				sub.Events() <- event
 			}
 		}
-		log.Logger.Debugf(`Publish(%s,%s) End`, topic, publisherID.String())
+		log.Logger.Debugf(`Publish(%s,%s) End`, k, publisherID.String())
+	}
+}
+
+// UpdateMetadata updates the metadata of the given client.
+func (m *PubSub) UpdateMetadata(
+	publisher *types.Client,
+	keys []*key.Key,
+) {
+	m.subscriptionsMapMu.Lock()
+	defer m.subscriptionsMapMu.Unlock()
+
+	if sub, ok := m.subscriptionsMapBySubscriber[publisher.ID.String()]; ok {
+		sub.UpdateMetadata(publisher.MetadataInfo)
 	}
 }

@@ -35,7 +35,15 @@ import (
 func ToClient(client types.Client) *api.Client {
 	return &api.Client{
 		Id:       client.ID.Bytes(),
-		Metadata: client.Metadata,
+		Metadata: ToMetadataInfo(client.MetadataInfo),
+	}
+}
+
+// ToMetadataInfo converts the given model to Protobuf format.
+func ToMetadataInfo(metadata types.MetadataInfo) *api.Metadata {
+	return &api.Metadata{
+		Clock: metadata.Clock,
+		Data:  metadata.Data,
 	}
 }
 
@@ -132,6 +140,8 @@ func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 		return api.DocEventType_DOCUMENTS_WATCHED, nil
 	case types.DocumentsUnwatchedEvent:
 		return api.DocEventType_DOCUMENTS_UNWATCHED, nil
+	case types.MetadataChangedEvent:
+		return api.DocEventType_METADATA_CHANGED, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}

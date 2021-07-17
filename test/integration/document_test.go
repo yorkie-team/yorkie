@@ -23,11 +23,8 @@ import (
 	"io"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -158,73 +155,5 @@ func TestDocument(t *testing.T) {
 		wg.Wait()
 
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
-	})
-
-	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {
-		ctx := context.Background()
-
-		d1 := document.New(helper.Collection, t.Name())
-		d2 := document.New(helper.Collection, t.Name())
-		assert.NoError(t, c1.Attach(ctx, d1))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
-
-		var responsePairs []watchResponsePair
-		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
-
-		// 01. WatchStarted is triggered when starting to watch a document
-		watch1Ctx, cancel1 := context.WithCancel(ctx)
-		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
-		assert.NoError(t, err)
-		go func() {
-			defer wgEvents.Done()
-			for {
-				select {
-				case <-time.After(time.Second):
-					assert.Fail(t, "timeout")
-					return
-				case wr := <-wrch:
-					if wr.Err == io.EOF || status.Code(wr.Err) == codes.Canceled {
-						assert.Fail(t, "unexpected stream closing")
-						return
-					}
-
-					if wr.Type == client.PeersChanged {
-						peers := wr.PeersMapByDoc[d1.Key().BSONKey()]
-						responsePairs = append(responsePairs, watchResponsePair{Type: wr.Type, peers: peers})
-
-						if len(peers) == 1 {
-							return
-						}
-					}
-				}
-			}
-		}()
-
-		// 02. PeersChanged is triggered when another client watches the document
-		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		_, err = c2.Watch(watch2Ctx, d2)
-		assert.NoError(t, err)
-
-		// 03. PeersChanged is triggered when another client closes the watch
-		cancel2()
-
-		wgEvents.Wait()
-
-		assert.Equal(t, responsePairs, []watchResponsePair{{
-			Type:  client.PeersChanged,
-			peers: map[string]client.Metadata{
-				c1.ID().String(): c1.Metadata(),
-				c2.ID().String(): c2.Metadata(),
-			},
-		}, {
-			Type:  client.PeersChanged,
-			peers: map[string]client.Metadata{
-				c1.ID().String(): c1.Metadata(),
-			},
-		}})
 	})
 }

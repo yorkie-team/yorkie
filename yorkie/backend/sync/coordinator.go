@@ -21,12 +21,14 @@ import (
 	"errors"
 	gotime "time"
 
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 var (
-	// ErrEmptyTopics is returned when the given topic is empty.
-	ErrEmptyTopics = errors.New("empty topics")
+	// ErrEmptyDocKeys is returned when the given keys is empty.
+	ErrEmptyDocKeys = errors.New("empty doc keys")
 )
 
 // AgentInfo represents the information of the Agent.
@@ -47,6 +49,9 @@ type Coordinator interface {
 
 	// PublishToLocal publishes the given event.
 	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
+
+	// UpdateMetadataToLocal updates the metadata of the given client.
+	UpdateMetadataToLocal(ctx context.Context, publisher *types.Client, keys []*key.Key)
 
 	// Close closes all resources of this Coordinator.
 	Close() error

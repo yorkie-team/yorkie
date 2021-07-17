@@ -55,22 +55,22 @@ func (m *Coordinator) NewLocker(
 	}, nil
 }
 
-// Subscribe subscribes to the given topics.
+// Subscribe subscribes to the given documents.
 func (m *Coordinator) Subscribe(
 	_ context.Context,
 	subscriber types.Client,
-	topics []*key.Key,
+	keys []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	return m.pubSub.Subscribe(subscriber, topics)
+	return m.pubSub.Subscribe(subscriber, keys)
 }
 
-// Unsubscribe unsubscribes the given topics.
+// Unsubscribe unsubscribes the given documents.
 func (m *Coordinator) Unsubscribe(
 	_ context.Context,
-	topics []*key.Key,
+	keys []*key.Key,
 	sub *sync.Subscription,
 ) {
-	m.pubSub.Unsubscribe(topics, sub)
+	m.pubSub.Unsubscribe(keys, sub)
 }
 
 // Publish publishes the given event.
@@ -89,6 +89,24 @@ func (m *Coordinator) PublishToLocal(
 	event sync.DocEvent,
 ) {
 	m.pubSub.Publish(publisherID, event)
+}
+
+// UpdateMetadata updates the metadata of the given client.
+func (m *Coordinator) UpdateMetadata(
+	_ context.Context,
+	publisher *types.Client,
+	keys []*key.Key,
+) {
+	m.pubSub.UpdateMetadata(publisher, keys)
+}
+
+// UpdateMetadataToLocal updates the metadata of the given client.
+func (m *Coordinator) UpdateMetadataToLocal(
+	_ context.Context,
+	publisher *types.Client,
+	keys []*key.Key,
+) {
+	m.pubSub.UpdateMetadata(publisher, keys)
 }
 
 // Members returns the members of this cluster.

@@ -26,8 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
-// Subscription represents the subscription of a subscriber. It is used across
-// several topics.
+// Subscription represents a subscription of a subscriber to documents.
 type Subscription struct {
 	id         string
 	subscriber types.Client
@@ -71,6 +70,11 @@ func (s *Subscription) SubscriberID() string {
 	return s.subscriber.ID.String()
 }
 
+// UpdateMetadata updates the metadata of the subscriber.
+func (s *Subscription) UpdateMetadata(info types.MetadataInfo) {
+	s.subscriber.MetadataInfo.Update(info)
+}
+
 // Close closes all resources of this Subscription.
 func (s *Subscription) Close() {
 	if s.closed {
@@ -83,20 +87,27 @@ func (s *Subscription) Close() {
 
 // PubSub is a structure to support event publishing/subscription.
 type PubSub interface {
-	// Subscribe subscribes to the given topics.
+	// Subscribe subcribes to the given documents.
 	Subscribe(
 		ctx context.Context,
 		subscriber types.Client,
-		topics []*key.Key,
+		docKeys []*key.Key,
 	) (*Subscription, map[string][]types.Client, error)
 
-	// Unsubscribe unsubscribes the given topics.
+	// Unsubscribe unsubscribes from the given documents.
 	Unsubscribe(
 		ctx context.Context,
-		topics []*key.Key,
+		docKeys []*key.Key,
 		sub *Subscription,
 	)
 
 	// Publish publishes the given event.
 	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)
+
+	// UpdateMetadata updates the metadata of the given client.
+	UpdateMetadata(
+		ctx context.Context,
+		publisher *types.Client,
+		keys []*key.Key,
+	)
 }

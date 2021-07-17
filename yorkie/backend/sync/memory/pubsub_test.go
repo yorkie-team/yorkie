@@ -48,7 +48,7 @@ func TestPubSub(t *testing.T) {
 			DocumentKeys: docKeys,
 		}
 
-		// subscribe the topic by actorA
+		// subscribe the documents by actorA
 		subA, _, err := pubSub.Subscribe(actorA, docKeys)
 		assert.NoError(t, err)
 		defer func() {
@@ -63,7 +63,7 @@ func TestPubSub(t *testing.T) {
 			assert.Equal(t, e, event)
 		}()
 
-		// publish the event to the topic by actorB
+		// publish the event to the documents by actorB
 		pubSub.Publish(actorB.ID, event)
 		wg.Wait()
 	})
