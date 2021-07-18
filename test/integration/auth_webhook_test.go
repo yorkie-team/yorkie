@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -33,6 +32,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie"
@@ -208,9 +208,9 @@ func TestAuthWebhook(t *testing.T) {
 			}
 		}))
 
-		authorizedTTL := 2
+		var authorizedTTL uint64 = 2
 		conf := helper.TestConfig(server.URL)
-		conf.Backend.AuthorizationWebhookCacheAuthorizedTTLSec = 2
+		conf.Backend.AuthorizationWebhookCacheAuthorizedTTLSec = authorizedTTL
 
 		agent, err := yorkie.New(conf)
 		assert.NoError(t, err)
@@ -294,9 +294,9 @@ func TestAuthWebhook(t *testing.T) {
 			reqCnt++
 		}))
 
-		unauthorizedTTL := 2
+		var unauthorizedTTL uint64 = 2
 		conf := helper.TestConfig(server.URL)
-		conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec = 2
+		conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec = unauthorizedTTL
 
 		agent, err := yorkie.New(conf)
 		assert.NoError(t, err)
