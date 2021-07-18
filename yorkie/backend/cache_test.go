@@ -1,13 +1,13 @@
 package backend_test
 
 import (
-	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/yorkie/backend"
 )
 
 func TestCache(t *testing.T) {

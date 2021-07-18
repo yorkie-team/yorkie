@@ -20,9 +20,11 @@ package integration
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
@@ -187,5 +189,140 @@ func TestAuthWebhook(t *testing.T) {
 
 		err = cli.Activate(ctx)
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+	})
+
+	t.Run("authorized request cache test", func(t *testing.T) {
+		reqCnt := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			req, err := types.NewAuthWebhookRequest(r.Body)
+			assert.NoError(t, err)
+
+			var res types.AuthWebhookResponse
+			res.Allowed = true
+
+			_, err = res.Write(w)
+			assert.NoError(t, err)
+
+			if req.Method == types.PushPull {
+				reqCnt++
+			}
+		}))
+
+		authorizedTTL := 2
+		conf := helper.TestConfig(server.URL)
+		conf.Backend.AuthorizationWebhookCacheAuthorizedTTLSec = 2
+
+		agent, err := yorkie.New(conf)
+		assert.NoError(t, err)
+		assert.NoError(t, agent.Start())
+		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+
+		ctx := context.Background()
+		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+
+		err = cli.Activate(ctx)
+		assert.NoError(t, err)
+
+		doc := document.New(helper.Collection, t.Name())
+		err = cli.Attach(ctx, doc)
+		assert.NoError(t, err)
+
+		wrch, err := cli.Watch(ctx, doc)
+		assert.NoError(t, err)
+
+		go func() {
+			for {
+				select {
+				case <-wrch:
+					continue
+				case <-time.After(5 * time.Second):
+					assert.Fail(t, "test timeout")
+					return
+				}
+			}
+		}()
+
+		// activate other client
+		ctx2 := context.Background()
+		cli2, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli2.Close()) }()
+
+		err = cli2.Activate(ctx2)
+		assert.NoError(t, err)
+
+		doc2 := document.New(helper.Collection, t.Name())
+		err = cli2.Attach(ctx2, doc2)
+		assert.NoError(t, err)
+
+		// request(PushPull) 3
+		for i := 0; i < 3; i++ {
+			doc2.Update(func(root *proxy.ObjectProxy) error {
+				root.SetNewObject("k1")
+				return nil
+			})
+		}
+		cli2.Sync(ctx2)
+
+		time.Sleep(time.Duration(authorizedTTL) * time.Second)
+
+		for i := 0; i < 3; i++ {
+			doc2.Update(func(root *proxy.ObjectProxy) error {
+				root.SetNewObject("k1")
+				return nil
+			})
+		}
+		cli2.Sync(ctx2)
+
+		assert.Equal(t, reqCnt, 2)
+	})
+
+	t.Run("unauthorized request cache test", func(t *testing.T) {
+		reqCnt := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := types.NewAuthWebhookRequest(r.Body)
+			assert.NoError(t, err)
+
+			var res types.AuthWebhookResponse
+			res.Allowed = false
+
+			_, err = res.Write(w)
+			assert.NoError(t, err)
+
+			reqCnt++
+		}))
+
+		unauthorizedTTL := 2
+		conf := helper.TestConfig(server.URL)
+		conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec = 2
+
+		agent, err := yorkie.New(conf)
+		assert.NoError(t, err)
+		assert.NoError(t, agent.Start())
+		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+
+		ctx := context.Background()
+		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+
+		// request 3
+		for i := 0; i < 3; i++ {
+			err = cli.Activate(ctx)
+			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		}
+
+		assert.Equal(t, reqCnt, 1)
+
+		time.Sleep(time.Duration(unauthorizedTTL) * time.Second)
+
+		for i := 0; i < 3; i++ {
+			err = cli.Activate(ctx)
+			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		}
+		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		assert.Equal(t, reqCnt, 2)
 	})
 }

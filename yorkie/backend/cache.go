@@ -28,6 +28,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
+// LRUExpireCache is a cache that ensures the mostly recently accessed keys are returned with
+// a ttl beyond which keys are forcibly expired.
 type LRUExpireCache struct {
 	lock sync.Mutex
 
