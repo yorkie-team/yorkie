@@ -231,6 +231,18 @@ func init() {
 		yorkie.DefaultAuthorizationWebhookWaitIntervalMillis,
 		"Maximum wait interval for authorization webhook.",
 	)
+	cmd.Flags().Uint64Var(
+		&conf.Backend.AuthorizationWebhookCacheAuthorizedTTLSec,
+		"authorization-webhook-cache-authorized-ttl-sec",
+		yorkie.DefaultAuthorizationWebhookCacheAuthorizedTTLSec,
+		"TTL value to set when caching authorized webhook response.",
+	)
+	cmd.Flags().Uint64Var(
+		&conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec,
+		"authorization-webhook-cache-unauthorized-ttl-sec",
+		yorkie.DefaultAuthorizationWebhookCacheUnauthorizedTTLSec,
+		"TTL value to set when caching unauthorized webhook response.",
+	)
 
 	rootCmd.AddCommand(cmd)
 }

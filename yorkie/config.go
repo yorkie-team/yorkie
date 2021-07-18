@@ -45,6 +45,9 @@ const (
 
 	DefaultAuthorizationWebhookMaxRetries         = 10
 	DefaultAuthorizationWebhookWaitIntervalMillis = 3000
+
+	DefaultAuthorizationWebhookCacheAuthorizedTTLSec   = 10
+	DefaultAuthorizationWebhookCacheUnauthorizedTTLSec = 10
 )
 
 // Config is the configuration for creating a Yorkie instance.
