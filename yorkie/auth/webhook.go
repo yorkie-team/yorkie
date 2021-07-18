@@ -58,7 +58,17 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		return err
 	}
 
-	return withExponentialBackoff(ctx, be.Config, func() (int, error) {
+	cacheKey := string(reqBody)
+	if resp, ok := be.AuthWebhookCache.Get(cacheKey); ok {
+		if !resp.Allowed {
+			return fmt.Errorf("%s: %w", resp.Reason, ErrNotAllowed)
+		}
+
+		return nil
+	}
+
+	var authResp *types.AuthWebhookResponse
+	if err := withExponentialBackoff(ctx, be.Config, func() (int, error) {
 		resp, err := http.Post(
 			be.Config.AuthorizationWebhookURL,
 			"application/json",
@@ -78,7 +88,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 			return resp.StatusCode, ErrUnexpectedStatusCode
 		}
 
-		authResp, err := types.NewAuthWebhookResponse(resp.Body)
+		authResp, err = types.NewAuthWebhookResponse(resp.Body)
 		if err != nil {
 			return resp.StatusCode, err
 		}
@@ -88,7 +98,19 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		}
 
 		return resp.StatusCode, nil
-	})
+	}); err != nil {
+		if errors.Is(err, ErrNotAllowed) {
+			unauthorizedTTL := time.Duration(be.Config.AuthorizationWebhookCacheUnauthorizedTTLSec) * time.Second
+			be.AuthWebhookCache.Add(cacheKey, authResp, unauthorizedTTL)
+		}
+
+		return err
+	}
+
+	authorizedTTL := time.Duration(be.Config.AuthorizationWebhookCacheAuthorizedTTLSec) * time.Second
+	be.AuthWebhookCache.Add(cacheKey, authResp, authorizedTTL)
+
+	return nil
 }
 
 func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn func() (int, error)) error {
@@ -100,6 +122,7 @@ func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn 
 			if err == ErrUnexpectedStatusCode {
 				return fmt.Errorf("unexpected status code from webhook: %d", statusCode)
 			}
+
 			return err
 		}
 

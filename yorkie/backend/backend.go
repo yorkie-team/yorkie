@@ -56,6 +56,12 @@ type Config struct {
 	// AuthorizationWebhookMaxWaitIntervalMillis is the max interval
 	// that waits before retrying the authorization webhook.
 	AuthorizationWebhookMaxWaitIntervalMillis uint64 `json:"AuthorizationWebhookMaxWaitIntervalMillis"`
+
+	// AuthorizationWebhookCacheAuthorizedTTLSec is the TTL value to set when caching the authorized result.
+	AuthorizationWebhookCacheAuthorizedTTLSec uint64 `json:"AuthorizationWebhookCacheAuthorizedTTLSec"`
+
+	// AuthorizationWebhookCacheAuthorizedTTLSec is the TTL value to set when caching the unauthorized result.
+	AuthorizationWebhookCacheUnauthorizedTTLSec uint64 `json:"AuthorizationWebhookCacheUnauthorizedTTLSec"`
 }
 
 // RequireAuth returns whether the given method require authorization.
@@ -94,9 +100,10 @@ type Backend struct {
 	Config    *Config
 	agentInfo *sync.AgentInfo
 
-	DB          db.DB
-	Coordinator sync.Coordinator
-	Metrics     metrics.Metrics
+	DB               db.DB
+	Coordinator      sync.Coordinator
+	Metrics          metrics.Metrics
+	AuthWebhookCache *LRUExpireCache
 
 	// closing is closed by backend close.
 	closing chan struct{}
@@ -155,13 +162,19 @@ func New(
 		agentInfo.RPCAddr,
 	)
 
+	cache, err := NewLRUExpireCache(5000)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Backend{
-		Config:      conf,
-		agentInfo:   agentInfo,
-		DB:          mongoClient,
-		Coordinator: coordinator,
-		Metrics:     met,
-		closing:     make(chan struct{}),
+		Config:           conf,
+		agentInfo:        agentInfo,
+		DB:               mongoClient,
+		Coordinator:      coordinator,
+		Metrics:          met,
+		AuthWebhookCache: cache,
+		closing:          make(chan struct{}),
 	}, nil
 }
 
