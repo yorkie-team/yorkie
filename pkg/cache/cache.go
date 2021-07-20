@@ -17,15 +17,13 @@
  * https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apimachinery/pkg/util/cache/lruexpirecache.go
  */
 
-package backend
+package cache
 
 import (
 	"container/list"
 	"errors"
 	"sync"
 	"time"
-
-	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 // LRUExpireCache is a cache that ensures the mostly recently accessed keys are returned with
@@ -52,14 +50,14 @@ func NewLRUExpireCache(maxSize int) (*LRUExpireCache, error) {
 
 type cacheEntry struct {
 	key        string
-	value      *types.AuthWebhookResponse
+	value      interface{}
 	expireTime time.Time
 }
 
 // Add adds the value to the cache at key with the specified maximum duration.
 func (c *LRUExpireCache) Add(
 	key string,
-	value *types.AuthWebhookResponse,
+	value interface{},
 	ttl time.Duration,
 ) {
 	c.lock.Lock()
@@ -89,7 +87,7 @@ func (c *LRUExpireCache) Add(
 
 // Get returns the value at the specified key from the cache if it exists and is not
 // expired, or returns false.
-func (c *LRUExpireCache) Get(key string) (*types.AuthWebhookResponse, bool) {
+func (c *LRUExpireCache) Get(key string) (interface{}, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

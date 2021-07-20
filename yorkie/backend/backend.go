@@ -25,6 +25,7 @@ import (
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
@@ -33,6 +34,8 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
 )
+
+const lruExpireCacheSize = 5000
 
 // Config is the configuration for creating a Backend instance.
 type Config struct {
@@ -103,7 +106,7 @@ type Backend struct {
 	DB               db.DB
 	Coordinator      sync.Coordinator
 	Metrics          metrics.Metrics
-	AuthWebhookCache *LRUExpireCache
+	AuthWebhookCache *cache.LRUExpireCache
 
 	// closing is closed by backend close.
 	closing chan struct{}
@@ -162,7 +165,7 @@ func New(
 		agentInfo.RPCAddr,
 	)
 
-	cache, err := NewLRUExpireCache(5000)
+	lruCache, err := cache.NewLRUExpireCache(lruExpireCacheSize)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +176,7 @@ func New(
 		DB:               mongoClient,
 		Coordinator:      coordinator,
 		Metrics:          met,
-		AuthWebhookCache: cache,
+		AuthWebhookCache: lruCache,
 		closing:          make(chan struct{}),
 	}, nil
 }

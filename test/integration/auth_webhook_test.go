@@ -229,51 +229,24 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
 
-		wrch, err := cli.Watch(ctx, doc)
-		assert.NoError(t, err)
-
-		go func() {
-			for {
-				select {
-				case <-wrch:
-					continue
-				case <-time.After(5 * time.Second):
-					return
-				}
-			}
-		}()
-
-		// activate other client
-		ctx2 := context.Background()
-		cli2, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
-		assert.NoError(t, err)
-		defer func() { assert.NoError(t, cli2.Close()) }()
-
-		err = cli2.Activate(ctx2)
-		assert.NoError(t, err)
-
-		doc2 := document.New(helper.Collection, t.Name())
-		err = cli2.Attach(ctx2, doc2)
-		assert.NoError(t, err)
-
 		// request(PushPull) 3
 		for i := 0; i < 3; i++ {
-			doc2.Update(func(root *proxy.ObjectProxy) error {
+			doc.Update(func(root *proxy.ObjectProxy) error {
 				root.SetNewObject("k1")
 				return nil
 			})
+			cli.Sync(ctx)
 		}
-		cli2.Sync(ctx2)
 
 		time.Sleep(time.Duration(authorizedTTL) * time.Second)
 
 		for i := 0; i < 3; i++ {
-			doc2.Update(func(root *proxy.ObjectProxy) error {
+			doc.Update(func(root *proxy.ObjectProxy) error {
 				root.SetNewObject("k1")
 				return nil
 			})
+			cli.Sync(ctx)
 		}
-		cli2.Sync(ctx2)
 
 		assert.Equal(t, reqCnt, 2)
 	})
