@@ -24,12 +24,12 @@ func TestCache(t *testing.T) {
 		lruCache, err := cache.NewLRUExpireCache(1)
 		assert.NoError(t, err)
 
-		lruCache.Add("request1", "response1", time.Second*5)
+		lruCache.Add("request1", "response1", 5*time.Second)
 		response1, ok := lruCache.Get("request1")
 		assert.True(t, ok)
 		assert.NotNil(t, response1)
 
-		lruCache.Add("request2", "response2", time.Second*5)
+		lruCache.Add("request2", "response2", 5*time.Second)
 		response2, ok := lruCache.Get("request2")
 		assert.True(t, ok)
 		assert.NotNil(t, response2)
@@ -44,7 +44,7 @@ func TestCache(t *testing.T) {
 		lruCache, err := cache.NewLRUExpireCache(1)
 		assert.NoError(t, err)
 
-		ttl := time.Second * 1
+		ttl := time.Second
 		lruCache.Add("request", "response", ttl)
 
 		time.Sleep(ttl)

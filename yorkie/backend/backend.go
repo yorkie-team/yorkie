@@ -35,7 +35,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
 )
 
-const lruExpireCacheSize = 5000
+const authWebhookCacheSize = 5000
 
 // Config is the configuration for creating a Backend instance.
 type Config struct {
@@ -165,7 +165,7 @@ func New(
 		agentInfo.RPCAddr,
 	)
 
-	lruCache, err := cache.NewLRUExpireCache(lruExpireCacheSize)
+	lruCache, err := cache.NewLRUExpireCache(authWebhookCacheSize)
 	if err != nil {
 		return nil, err
 	}
