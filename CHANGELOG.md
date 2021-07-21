@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.6] - 2021-07-24
+
+### Added
+- Add Cluster Mode: #183
+- Add Authorization check to Watch API: #209
+- Add authorization-webhook-methods flag: #193
+- Add retry logic to Authorization webhook: #194
+
+### Changed
+- Change Watch events to be similar to JS SDK: #137
+- Close Watch streams on agent shutdown: #208
+
+### Fixed
+- Fix a bug where deleted values from objects are revivded after GC: #202
+
 ## [0.1.5] - 2021-06-05
 
 ### Added
