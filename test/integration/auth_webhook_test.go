@@ -170,9 +170,7 @@ func TestAuthWebhook(t *testing.T) {
 	})
 
 	t.Run("authorization webhook that fails after retries test", func(t *testing.T) {
-		var recoveryCnt uint64
-		recoveryCnt = 4
-		server := newUnavailableAuthServer(t, recoveryCnt)
+		server := newUnavailableAuthServer(t, 4)
 
 		conf := helper.TestConfig(server.URL)
 		conf.Backend.AuthorizationWebhookMaxRetries = 2
@@ -280,13 +278,13 @@ func TestAuthWebhook(t *testing.T) {
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
 
-		// 01. multiple requests to activate.
+		// 01. multiple requests.
 		for i := 0; i < 3; i++ {
 			err = cli.Activate(ctx)
 			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 		}
 
-		// 02. multiple requests to activate after eviction by ttl.
+		// 02. multiple requests after eviction by ttl.
 		time.Sleep(time.Duration(unauthorizedTTLSec) * time.Second)
 		for i := 0; i < 3; i++ {
 			err = cli.Activate(ctx)

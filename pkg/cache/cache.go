@@ -26,6 +26,11 @@ import (
 	"time"
 )
 
+var (
+	// ErrInvalidMaxSize is returned when the given max size is not positive.
+	ErrInvalidMaxSize = errors.New("max size must be > 0")
+)
+
 // LRUExpireCache is a cache that ensures the mostly recently accessed keys are returned with
 // a ttl beyond which keys are forcibly expired.
 type LRUExpireCache struct {
@@ -39,7 +44,7 @@ type LRUExpireCache struct {
 // NewLRUExpireCache creates an expiring cache with the given size
 func NewLRUExpireCache(maxSize int) (*LRUExpireCache, error) {
 	if maxSize <= 0 {
-		return nil, errors.New("max size must be > 0")
+		return nil, ErrInvalidMaxSize
 	}
 
 	return &LRUExpireCache{
