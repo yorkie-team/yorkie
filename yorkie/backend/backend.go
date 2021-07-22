@@ -25,6 +25,7 @@ import (
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
@@ -33,6 +34,8 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/yorkie/metrics"
 )
+
+const authWebhookCacheSize = 5000
 
 // Config is the configuration for creating a Backend instance.
 type Config struct {
@@ -56,6 +59,12 @@ type Config struct {
 	// AuthorizationWebhookMaxWaitIntervalMillis is the max interval
 	// that waits before retrying the authorization webhook.
 	AuthorizationWebhookMaxWaitIntervalMillis uint64 `json:"AuthorizationWebhookMaxWaitIntervalMillis"`
+
+	// AuthorizationWebhookCacheAuthorizedTTLSec is the TTL value to set when caching the authorized result.
+	AuthorizationWebhookCacheAuthorizedTTLSec uint64 `json:"AuthorizationWebhookCacheAuthorizedTTLSec"`
+
+	// AuthorizationWebhookCacheAuthorizedTTLSec is the TTL value to set when caching the unauthorized result.
+	AuthorizationWebhookCacheUnauthorizedTTLSec uint64 `json:"AuthorizationWebhookCacheUnauthorizedTTLSec"`
 }
 
 // RequireAuth returns whether the given method require authorization.
@@ -94,9 +103,10 @@ type Backend struct {
 	Config    *Config
 	agentInfo *sync.AgentInfo
 
-	DB          db.DB
-	Coordinator sync.Coordinator
-	Metrics     metrics.Metrics
+	DB               db.DB
+	Coordinator      sync.Coordinator
+	Metrics          metrics.Metrics
+	AuthWebhookCache *cache.LRUExpireCache
 
 	// closing is closed by backend close.
 	closing chan struct{}
@@ -155,13 +165,19 @@ func New(
 		agentInfo.RPCAddr,
 	)
 
+	lruCache, err := cache.NewLRUExpireCache(authWebhookCacheSize)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Backend{
-		Config:      conf,
-		agentInfo:   agentInfo,
-		DB:          mongoClient,
-		Coordinator: coordinator,
-		Metrics:     met,
-		closing:     make(chan struct{}),
+		Config:           conf,
+		agentInfo:        agentInfo,
+		DB:               mongoClient,
+		Coordinator:      coordinator,
+		Metrics:          met,
+		AuthWebhookCache: lruCache,
+		closing:          make(chan struct{}),
 	}, nil
 }
 

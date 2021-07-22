@@ -44,11 +44,15 @@ func (s *clusterServer) BroadcastEvent(
 		types.DocumentsChangedEvent:
 		s.backend.Coordinator.PublishToLocal(ctx, actorID, *docEvent)
 	case types.MetadataChangedEvent:
-		s.backend.Coordinator.UpdateMetadataToLocal(
+		if _, err := s.backend.Coordinator.UpdateMetadata(
 			ctx,
 			&docEvent.Publisher,
 			docEvent.DocumentKeys,
-		)
+		); err != nil {
+			return nil, err
+		}
+
+		s.backend.Coordinator.PublishToLocal(ctx, actorID, *docEvent)
 	}
 
 	return &api.BroadcastEventResponse{}, nil

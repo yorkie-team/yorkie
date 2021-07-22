@@ -49,7 +49,7 @@ func TestPubSub(t *testing.T) {
 		}
 
 		// subscribe the documents by actorA
-		subA, _, err := pubSub.Subscribe(actorA, docKeys)
+		subA, err := pubSub.Subscribe(actorA, docKeys)
 		assert.NoError(t, err)
 		defer func() {
 			pubSub.Unsubscribe(docKeys, subA)
@@ -78,8 +78,10 @@ func TestPubSub(t *testing.T) {
 		}
 
 		for i := 0; i < 5; i++ {
-			_, subs, err := pubSub.Subscribe(actorA, docKeys)
+			_, err := pubSub.Subscribe(actorA, docKeys)
 			assert.NoError(t, err)
+
+			subs := pubSub.BuildPeersMap(docKeys)
 			assert.Len(t, subs[docKeys[0].BSONKey()], i+1)
 		}
 	})

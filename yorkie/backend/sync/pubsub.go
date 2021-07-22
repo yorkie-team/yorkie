@@ -17,12 +17,9 @@
 package sync
 
 import (
-	"context"
-
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
@@ -83,31 +80,4 @@ func (s *Subscription) Close() {
 
 	s.closed = true
 	close(s.events)
-}
-
-// PubSub is a structure to support event publishing/subscription.
-type PubSub interface {
-	// Subscribe subcribes to the given documents.
-	Subscribe(
-		ctx context.Context,
-		subscriber types.Client,
-		docKeys []*key.Key,
-	) (*Subscription, map[string][]types.Client, error)
-
-	// Unsubscribe unsubscribes from the given documents.
-	Unsubscribe(
-		ctx context.Context,
-		docKeys []*key.Key,
-		sub *Subscription,
-	)
-
-	// Publish publishes the given event.
-	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)
-
-	// UpdateMetadata updates the metadata of the given client.
-	UpdateMetadata(
-		ctx context.Context,
-		publisher *types.Client,
-		keys []*key.Key,
-	)
 }

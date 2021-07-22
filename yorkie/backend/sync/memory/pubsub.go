@@ -62,17 +62,17 @@ func (s *subscriptions) Len() int {
 
 // PubSub is the memory implementation of PubSub, used for single agent.
 type PubSub struct {
-	subscriptionsMapMu           *gosync.RWMutex
-	subscriptionsMapBySubscriber map[string]*sync.Subscription
-	subscriptionsMapByDocKey     map[string]*subscriptions
+	subscriptionsMapMu          *gosync.RWMutex
+	subscriptionMapBySubscriber map[string]*sync.Subscription
+	subscriptionsMapByDocKey    map[string]*subscriptions
 }
 
 // NewPubSub creates an instance of PubSub.
 func NewPubSub() *PubSub {
 	return &PubSub{
-		subscriptionsMapMu:           &gosync.RWMutex{},
-		subscriptionsMapBySubscriber: make(map[string]*sync.Subscription),
-		subscriptionsMapByDocKey:     make(map[string]*subscriptions),
+		subscriptionsMapMu:          &gosync.RWMutex{},
+		subscriptionMapBySubscriber: make(map[string]*sync.Subscription),
+		subscriptionsMapByDocKey:    make(map[string]*subscriptions),
 	}
 }
 
@@ -80,9 +80,9 @@ func NewPubSub() *PubSub {
 func (m *PubSub) Subscribe(
 	subscriber types.Client,
 	keys []*key.Key,
-) (*sync.Subscription, map[string][]types.Client, error) {
+) (*sync.Subscription, error) {
 	if len(keys) == 0 {
-		return nil, nil, sync.ErrEmptyDocKeys
+		return nil, sync.ErrEmptyDocKeys
 	}
 
 	log.Logger.Debugf(
@@ -95,21 +95,14 @@ func (m *PubSub) Subscribe(
 	defer m.subscriptionsMapMu.Unlock()
 
 	sub := sync.NewSubscription(subscriber)
-	m.subscriptionsMapBySubscriber[sub.SubscriberID()] = sub
+	m.subscriptionMapBySubscriber[sub.SubscriberID()] = sub
 
-	peersMap := make(map[string][]types.Client)
 	for _, docKey := range keys {
 		bsonKey := docKey.BSONKey()
 		if _, ok := m.subscriptionsMapByDocKey[bsonKey]; !ok {
 			m.subscriptionsMapByDocKey[bsonKey] = newSubscriptions()
 		}
 		m.subscriptionsMapByDocKey[bsonKey].Add(sub)
-
-		var peers []types.Client
-		for _, sub := range m.subscriptionsMapByDocKey[bsonKey].Map() {
-			peers = append(peers, sub.Subscriber())
-		}
-		peersMap[bsonKey] = peers
 	}
 
 	log.Logger.Debugf(
@@ -117,7 +110,21 @@ func (m *PubSub) Subscribe(
 		keys[0].BSONKey(),
 		subscriber.ID.String(),
 	)
-	return sub, peersMap, nil
+	return sub, nil
+}
+
+// BuildPeersMap builds the peers map of the given keys.
+func (m *PubSub) BuildPeersMap(keys []*key.Key) map[string][]types.Client {
+	peersMap := make(map[string][]types.Client)
+	for _, docKey := range keys {
+		bsonKey := docKey.BSONKey()
+		var peers []types.Client
+		for _, sub := range m.subscriptionsMapByDocKey[bsonKey].Map() {
+			peers = append(peers, sub.Subscriber())
+		}
+		peersMap[bsonKey] = peers
+	}
+	return peersMap
 }
 
 // Unsubscribe unsubscribes the given docKeys.
@@ -136,7 +143,7 @@ func (m *PubSub) Unsubscribe(
 
 	sub.Close()
 
-	delete(m.subscriptionsMapBySubscriber, sub.SubscriberID())
+	delete(m.subscriptionMapBySubscriber, sub.SubscriberID())
 	for _, docKey := range docKeys {
 		k := docKey.BSONKey()
 		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
@@ -191,11 +198,15 @@ func (m *PubSub) Publish(
 func (m *PubSub) UpdateMetadata(
 	publisher *types.Client,
 	keys []*key.Key,
-) {
+) *sync.Subscription {
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	if sub, ok := m.subscriptionsMapBySubscriber[publisher.ID.String()]; ok {
-		sub.UpdateMetadata(publisher.MetadataInfo)
+	sub, ok := m.subscriptionMapBySubscriber[publisher.ID.String()]
+	if !ok {
+		return nil
 	}
+
+	sub.UpdateMetadata(publisher.MetadataInfo)
+	return sub
 }

@@ -117,20 +117,20 @@ func (c *Client) putAgent(ctx context.Context) error {
 		return fmt.Errorf("marshal %s: %w", c.agentInfo.ID, err)
 	}
 
-	key := path.Join(agentsPath, c.agentInfo.ID)
-	_, err = c.client.Put(ctx, key, string(bytes), clientv3.WithLease(grantResponse.ID))
+	k := path.Join(agentsPath, c.agentInfo.ID)
+	_, err = c.client.Put(ctx, k, string(bytes), clientv3.WithLease(grantResponse.ID))
 	if err != nil {
-		return fmt.Errorf("put %s: %w", key, err)
+		return fmt.Errorf("put %s: %w", k, err)
 	}
 	return nil
 }
 
 // removeAgent removes the local agent in etcd.
 func (c *Client) removeAgent(ctx context.Context) error {
-	key := path.Join(agentsPath, c.agentInfo.ID)
-	_, err := c.client.Delete(ctx, key)
+	k := path.Join(agentsPath, c.agentInfo.ID)
+	_, err := c.client.Delete(ctx, k)
 	if err != nil {
-		return fmt.Errorf("remove %s: %w", key, err)
+		return fmt.Errorf("remove %s: %w", k, err)
 	}
 	return nil
 }
@@ -144,6 +144,7 @@ func (c *Client) syncAgents() {
 		select {
 		case watchResponse := <-watchCh:
 			for _, event := range watchResponse.Events {
+				k := string(event.Kv.Key)
 				switch event.Type {
 				case mvccpb.PUT:
 					var info sync.AgentInfo
@@ -151,10 +152,10 @@ func (c *Client) syncAgents() {
 						log.Logger.Error(err)
 						continue
 					}
-					c.setAgentInfo(string(event.Kv.Key), info)
+					c.setAgentInfo(k, info)
 				case mvccpb.DELETE:
-					c.removeAgentInfo(string(event.Kv.Key))
-					c.removeClusterClient(string(event.Kv.Key))
+					c.removeAgentInfo(k)
+					c.removeClusterClient(k)
 				}
 			}
 		case <-c.ctx.Done():

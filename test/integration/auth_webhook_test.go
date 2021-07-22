@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie"
@@ -168,9 +170,7 @@ func TestAuthWebhook(t *testing.T) {
 	})
 
 	t.Run("authorization webhook that fails after retries test", func(t *testing.T) {
-		var recoveryCnt uint64
-		recoveryCnt = 4
-		server := newUnavailableAuthServer(t, recoveryCnt)
+		server := newUnavailableAuthServer(t, 4)
 
 		conf := helper.TestConfig(server.URL)
 		conf.Backend.AuthorizationWebhookMaxRetries = 2
@@ -187,5 +187,109 @@ func TestAuthWebhook(t *testing.T) {
 
 		err = cli.Activate(ctx)
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+	})
+
+	t.Run("authorized request cache test", func(t *testing.T) {
+		reqCnt := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			req, err := types.NewAuthWebhookRequest(r.Body)
+			assert.NoError(t, err)
+
+			var res types.AuthWebhookResponse
+			res.Allowed = true
+
+			_, err = res.Write(w)
+			assert.NoError(t, err)
+
+			if req.Method == types.PushPull {
+				reqCnt++
+			}
+		}))
+
+		var authorizedTTLSec uint64 = 1
+		conf := helper.TestConfig(server.URL)
+		conf.Backend.AuthorizationWebhookCacheAuthorizedTTLSec = authorizedTTLSec
+
+		agent, err := yorkie.New(conf)
+		assert.NoError(t, err)
+		assert.NoError(t, agent.Start())
+		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+
+		ctx := context.Background()
+		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+
+		err = cli.Activate(ctx)
+		assert.NoError(t, err)
+
+		doc := document.New(helper.Collection, t.Name())
+		err = cli.Attach(ctx, doc)
+		assert.NoError(t, err)
+
+		// 01. multiple requests to update the document.
+		for i := 0; i < 3; i++ {
+			assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
+				root.SetNewObject("k1")
+				return nil
+			}))
+			assert.NoError(t, cli.Sync(ctx))
+		}
+
+		// 02. multiple requests to update the document after eviction by ttl.
+		time.Sleep(time.Duration(authorizedTTLSec) * time.Second)
+		for i := 0; i < 3; i++ {
+			assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
+				root.SetNewObject("k1")
+				return nil
+			}))
+			assert.NoError(t, cli.Sync(ctx))
+		}
+
+		assert.Equal(t, 2, reqCnt)
+	})
+
+	t.Run("unauthorized request cache test", func(t *testing.T) {
+		reqCnt := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := types.NewAuthWebhookRequest(r.Body)
+			assert.NoError(t, err)
+
+			var res types.AuthWebhookResponse
+			res.Allowed = false
+
+			_, err = res.Write(w)
+			assert.NoError(t, err)
+
+			reqCnt++
+		}))
+
+		var unauthorizedTTLSec uint64 = 1
+		conf := helper.TestConfig(server.URL)
+		conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec = unauthorizedTTLSec
+
+		agent, err := yorkie.New(conf)
+		assert.NoError(t, err)
+		assert.NoError(t, agent.Start())
+		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+
+		ctx := context.Background()
+		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, cli.Close()) }()
+
+		// 01. multiple requests.
+		for i := 0; i < 3; i++ {
+			err = cli.Activate(ctx)
+			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		}
+
+		// 02. multiple requests after eviction by ttl.
+		time.Sleep(time.Duration(unauthorizedTTLSec) * time.Second)
+		for i := 0; i < 3; i++ {
+			err = cli.Activate(ctx)
+			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		}
+		assert.Equal(t, 2, reqCnt)
 	})
 }

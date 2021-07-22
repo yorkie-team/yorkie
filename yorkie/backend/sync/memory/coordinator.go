@@ -61,7 +61,13 @@ func (m *Coordinator) Subscribe(
 	subscriber types.Client,
 	keys []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	return m.pubSub.Subscribe(subscriber, keys)
+	sub, err := m.pubSub.Subscribe(subscriber, keys)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	peersMap := m.pubSub.BuildPeersMap(keys)
+	return sub, peersMap, nil
 }
 
 // Unsubscribe unsubscribes the given documents.
@@ -69,8 +75,9 @@ func (m *Coordinator) Unsubscribe(
 	_ context.Context,
 	keys []*key.Key,
 	sub *sync.Subscription,
-) {
+) error {
 	m.pubSub.Unsubscribe(keys, sub)
+	return nil
 }
 
 // Publish publishes the given event.
@@ -96,17 +103,14 @@ func (m *Coordinator) UpdateMetadata(
 	_ context.Context,
 	publisher *types.Client,
 	keys []*key.Key,
-) {
+) (*sync.DocEvent, error) {
 	m.pubSub.UpdateMetadata(publisher, keys)
-}
 
-// UpdateMetadataToLocal updates the metadata of the given client.
-func (m *Coordinator) UpdateMetadataToLocal(
-	_ context.Context,
-	publisher *types.Client,
-	keys []*key.Key,
-) {
-	m.pubSub.UpdateMetadata(publisher, keys)
+	return &sync.DocEvent{
+		Type:         types.MetadataChangedEvent,
+		Publisher:    *publisher,
+		DocumentKeys: keys,
+	}, nil
 }
 
 // Members returns the members of this cluster.

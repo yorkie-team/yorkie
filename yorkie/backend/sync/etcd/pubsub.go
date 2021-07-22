@@ -43,7 +43,7 @@ func (c *Client) Subscribe(
 	subscriber types.Client,
 	keys []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	sub, _, err := c.localPubSub.Subscribe(subscriber, keys)
+	sub, err := c.localPubSub.Subscribe(subscriber, keys)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -73,9 +73,9 @@ func (c *Client) Unsubscribe(
 	ctx context.Context,
 	keys []*key.Key,
 	sub *sync.Subscription,
-) {
+) error {
 	c.localPubSub.Unsubscribe(keys, sub)
-	c.removeSubscriptions(ctx, keys, sub)
+	return c.removeSubscriptions(ctx, keys, sub)
 }
 
 // Publish publishes the given event.
@@ -88,9 +88,9 @@ func (c *Client) Publish(
 	c.broadcastToMembers(ctx, event)
 }
 
-// PublishToLocal publishes the given event to the local PubSub.
+// PublishToLocal publishes the given event.
 func (c *Client) PublishToLocal(
-	_ context.Context,
+	ctx context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
@@ -102,40 +102,18 @@ func (c *Client) UpdateMetadata(
 	ctx context.Context,
 	publisher *types.Client,
 	keys []*key.Key,
-) {
-	// TODO(hackerwins): We should update the metadata of subscriptions in etcd.
+) (*sync.DocEvent, error) {
+	if sub := c.localPubSub.UpdateMetadata(publisher, keys); sub != nil {
+		if err := c.putSubscriptions(ctx, keys, sub); err != nil {
+			return nil, err
+		}
+	}
 
-	c.localPubSub.UpdateMetadata(publisher, keys)
-	c.localPubSub.Publish(publisher.ID, sync.DocEvent{
+	return &sync.DocEvent{
 		Type:         types.MetadataChangedEvent,
 		Publisher:    *publisher,
 		DocumentKeys: keys,
-	})
-
-	c.broadcastToMembers(ctx, sync.DocEvent{
-		Type:         types.MetadataChangedEvent,
-		Publisher:    *publisher,
-		DocumentKeys: keys,
-	})
-}
-
-// UpdateMetadataToLocal updates the metadata of the given client.
-func (c *Client) UpdateMetadataToLocal(
-	_ context.Context,
-	publisher *types.Client,
-	keys []*key.Key,
-) {
-	// TODO(hackerwins): We should check if the subscription is existing
-	// in the local PubSub. Because we don't know which agent has the
-	// subscription.  After introducing bi-directional communication,
-	// we can know which agent has the subscription. Then we can remove the
-	// check.
-	c.localPubSub.UpdateMetadata(publisher, keys)
-	c.localPubSub.Publish(publisher.ID, sync.DocEvent{
-		Type:         types.MetadataChangedEvent,
-		Publisher:    *publisher,
-		DocumentKeys: keys,
-	})
+	}, nil
 }
 
 // broadcastToMembers broadcasts the given event to all members.
@@ -250,7 +228,10 @@ func (c *Client) putSubscriptions(
 }
 
 // pullSubscriptions pulls the subscriptions of the given document key.
-func (c *Client) pullSubscriptions(ctx context.Context, k *key.Key) ([]types.Client, error) {
+func (c *Client) pullSubscriptions(
+	ctx context.Context,
+	k *key.Key,
+) ([]types.Client, error) {
 	getResponse, err := c.client.Get(
 		ctx,
 		path.Join(subscriptionsPath, k.BSONKey()),
@@ -278,11 +259,14 @@ func (c *Client) removeSubscriptions(
 	ctx context.Context,
 	keys []*key.Key,
 	sub *sync.Subscription,
-) {
+) error {
 	for _, docKey := range keys {
 		k := path.Join(subscriptionsPath, docKey.BSONKey(), sub.ID())
 		if _, err := c.client.Delete(ctx, k); err != nil {
 			log.Logger.Error(err)
+			return err
 		}
 	}
+
+	return nil
 }
