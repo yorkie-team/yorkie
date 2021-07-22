@@ -14,6 +14,7 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Add Authorization check to Watch API: #209
 - Add authorization-webhook-methods flag: #193
 - Add retry logic to Authorization webhook: #194
+- Add authorization webhook cache: #192
 
 ### Changed
 - Change Watch events to be similar to JS SDK: #137
