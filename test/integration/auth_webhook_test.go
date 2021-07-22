@@ -208,9 +208,9 @@ func TestAuthWebhook(t *testing.T) {
 			}
 		}))
 
-		var authorizedTTL uint64 = 2
+		var authorizedTTLSec uint64 = 1
 		conf := helper.TestConfig(server.URL)
-		conf.Backend.AuthorizationWebhookCacheAuthorizedTTLSec = authorizedTTL
+		conf.Backend.AuthorizationWebhookCacheAuthorizedTTLSec = authorizedTTLSec
 
 		agent, err := yorkie.New(conf)
 		assert.NoError(t, err)
@@ -229,26 +229,26 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
 
-		// request(PushPull) 3
+		// 01. multiple requests to update the document.
 		for i := 0; i < 3; i++ {
-			doc.Update(func(root *proxy.ObjectProxy) error {
+			assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
 				root.SetNewObject("k1")
 				return nil
-			})
-			cli.Sync(ctx)
+			}))
+			assert.NoError(t, cli.Sync(ctx))
 		}
 
-		time.Sleep(time.Duration(authorizedTTL) * time.Second)
-
+		// 02. multiple requests to update the document after eviction by ttl.
+		time.Sleep(time.Duration(authorizedTTLSec) * time.Second)
 		for i := 0; i < 3; i++ {
-			doc.Update(func(root *proxy.ObjectProxy) error {
+			assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
 				root.SetNewObject("k1")
 				return nil
-			})
-			cli.Sync(ctx)
+			}))
+			assert.NoError(t, cli.Sync(ctx))
 		}
 
-		assert.Equal(t, reqCnt, 2)
+		assert.Equal(t, 2, reqCnt)
 	})
 
 	t.Run("unauthorized request cache test", func(t *testing.T) {
@@ -266,9 +266,9 @@ func TestAuthWebhook(t *testing.T) {
 			reqCnt++
 		}))
 
-		var unauthorizedTTL uint64 = 2
+		var unauthorizedTTLSec uint64 = 1
 		conf := helper.TestConfig(server.URL)
-		conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec = unauthorizedTTL
+		conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec = unauthorizedTTLSec
 
 		agent, err := yorkie.New(conf)
 		assert.NoError(t, err)
@@ -280,21 +280,18 @@ func TestAuthWebhook(t *testing.T) {
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
 
-		// request 3
+		// 01. multiple requests to activate.
 		for i := 0; i < 3; i++ {
 			err = cli.Activate(ctx)
 			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 		}
 
-		assert.Equal(t, reqCnt, 1)
-
-		time.Sleep(time.Duration(unauthorizedTTL) * time.Second)
-
+		// 02. multiple requests to activate after eviction by ttl.
+		time.Sleep(time.Duration(unauthorizedTTLSec) * time.Second)
 		for i := 0; i < 3; i++ {
 			err = cli.Activate(ctx)
 			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 		}
-		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
-		assert.Equal(t, reqCnt, 2)
+		assert.Equal(t, 2, reqCnt)
 	})
 }
