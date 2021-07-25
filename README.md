@@ -6,6 +6,7 @@
 [![Contributors](https://img.shields.io/github/contributors/yorkie-team/yorkie.svg)](https://github.com/yorkie-team/yorkie/contributors)
 [![Commits](https://img.shields.io/github/commit-activity/m/yorkie-team/yorkie.svg)](https://github.com/yorkie-team/yorkie/pulse)
 
+[![Build Status](https://github.com/yorkie-team/yorkie/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/yorkie-team/yorkie/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/yorkie-team/yorkie)](https://goreportcard.com/report/github.com/yorkie-team/yorkie)
 [![CodeCov](https://img.shields.io/codecov/c/github/yorkie-team/yorkie)](https://codecov.io/gh/yorkie-team/yorkie)
 [![Godoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](https://godoc.org/github.com/yorkie-team/yorkie)
@@ -76,7 +77,7 @@ https://yorkie.dev/docs/main/
 
 ## Developing Yorkie
 
-For building Yorkie, You'll first need [Go](https://golang.org) installed (version 1.16+ is required). Make sure you have Go properly [installed](https://golang.org/doc/install), including setting up your [GOPATH](https://golang.org/doc/code.html#GOPATH). Then download a pre-built binary from [release page](https://github.com/protocolbuffers/protobuf/releases) and install the protobuf compiler (version 3.4.0+ is required).
+For building Yorkie, You'll first need [Go](https://golang.org) installed (version 1.16+ is required). Make sure you have Go properly [installed](https://golang.org/doc/install), including setting up your [GOPATH](https://golang.org/doc/code.html#Command). Then download a pre-built binary from [release page](https://github.com/protocolbuffers/protobuf/releases) and install the protobuf compiler (version 3.4.0+ is required).
 
 We need to install Golang packages to build Yorkie locally. You can run `make tools` to install the required packages.
 
@@ -103,7 +104,7 @@ See [CONTRIBUTING](CONTRIBUTING.md) for details on submitting patches and the co
 Thanks goes to these incredible people:
 
 <a href="https://github.com/yorkie-team/yorkie/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=yorkie-team/yorkie" />
+  <img src="https://contrib.rocks/image?repo=yorkie-team/yorkie" alt="contributors"/>
 </a>
 
 ## Sponsors
