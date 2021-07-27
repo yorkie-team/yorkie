@@ -208,6 +208,8 @@ func FromOperations(pbOps []*api.Operation) ([]operation.Operation, error) {
 			op, err = fromStyle(decoded.Style)
 		case *api.Operation_Increase_:
 			op, err = fromIncrease(decoded.Increase)
+		case *api.Operation_SetIndex_:
+			op, err = fromSetIndex(decoded.SetIndex)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -445,6 +447,31 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operation.Increase, error) {
 	}
 	return operation.NewIncrease(
 		parentCreatedAt,
+		elem,
+		executedAt,
+	), nil
+}
+
+func fromSetIndex(pbInc *api.Operation_SetIndex) (*operation.SetIndex, error) {
+	parentCreatedAt, err := fromTimeTicket(pbInc.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	positionAt, err := fromTimeTicket(pbInc.PositionAt)
+	if err != nil {
+		return nil, err
+	}
+	elem, err := fromElement(pbInc.Value)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbInc.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operation.NewSetIndex(
+		parentCreatedAt,
+		positionAt,
 		elem,
 		executedAt,
 	), nil

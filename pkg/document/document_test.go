@@ -511,4 +511,22 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 	})
+
+	t.Run("set elements in array when running GC test", func(t *testing.T) {
+		doc := document.New("c1", "d1")
+
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewArray("a").AddInteger(0)
+			root.GetArray("a").SetInteger(0, 1)
+			root.GetArray("a").SetInteger(0, 2)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"a":[2]}`, doc.Marshal())
+		assert.Equal(t, 2, doc.GarbageLen())
+
+		doc.GarbageCollect(time.MaxTicket)
+		assert.Equal(t, `{"a":[2]}`, doc.Marshal())
+		assert.Equal(t, 0, doc.GarbageLen())
+	})
 }

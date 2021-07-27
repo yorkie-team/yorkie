@@ -170,14 +170,16 @@ func toRHTNodes(rhtNodes []*json.RHTPQMapNode) ([]*api.RHTNode, error) {
 func toRGANodes(rgaNodes []*json.RGATreeListNode) ([]*api.RGANode, error) {
 	var pbRGANodes []*api.RGANode
 	for _, rgaNode := range rgaNodes {
-		pbElem, err := toJSONElement(rgaNode.Element())
-		if err != nil {
-			return nil, err
-		}
+		for _, elem := range rgaNode.Elements() {
+			pbElem, err := toJSONElement(elem)
+			if err != nil {
+				return nil, err
+			}
 
-		pbRGANodes = append(pbRGANodes, &api.RGANode{
-			Element: pbElem,
-		})
+			pbRGANodes = append(pbRGANodes, &api.RGANode{
+				Element: pbElem,
+			})
+		}
 	}
 	return pbRGANodes, nil
 }

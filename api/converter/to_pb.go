@@ -187,6 +187,8 @@ func ToOperations(operations []operation.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toStyle(op)
 		case *operation.Increase:
 			pbOperation.Body, err = toIncrease(op)
+		case *operation.SetIndex:
+			pbOperation.Body, err = toSetIndex(op)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -313,6 +315,22 @@ func toIncrease(increase *operation.Increase) (*api.Operation_Increase_, error) 
 			ParentCreatedAt: toTimeTicket(increase.ParentCreatedAt()),
 			Value:           pbElem,
 			ExecutedAt:      toTimeTicket(increase.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toSetIndex(setIndex *operation.SetIndex) (*api.Operation_SetIndex_, error) {
+	pbElem, err := toJSONElementSimple(setIndex.Value())
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.Operation_SetIndex_{
+		SetIndex: &api.Operation_SetIndex{
+			ParentCreatedAt: toTimeTicket(setIndex.ParentCreatedAt()),
+			PositionAt:      toTimeTicket(setIndex.PositionAt()),
+			Value:           pbElem,
+			ExecutedAt:      toTimeTicket(setIndex.ExecutedAt()),
 		},
 	}, nil
 }

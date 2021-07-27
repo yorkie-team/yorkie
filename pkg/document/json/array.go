@@ -50,7 +50,7 @@ func (a *Array) Add(elem Element) *Array {
 
 // Get returns the element of the given index.
 func (a *Array) Get(idx int) Element {
-	return a.elements.Get(idx).elem
+	return a.elements.Get(idx).Element()
 }
 
 // FindPrevCreatedAt returns the creation time of the previous element of the
@@ -61,7 +61,7 @@ func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 
 // Delete deletes the element of the given index.
 func (a *Array) Delete(idx int, deletedAt *time.Ticket) Element {
-	return a.elements.Delete(idx, deletedAt).elem
+	return a.elements.Delete(idx, deletedAt).Element()
 }
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
@@ -77,7 +77,7 @@ func (a *Array) Elements() []Element {
 		if node.isRemoved() {
 			continue
 		}
-		elements = append(elements, node.elem)
+		elements = append(elements, node.Element())
 	}
 
 	return elements
@@ -97,9 +97,8 @@ func (a *Array) AnnotatedString() string {
 // DeepCopy copies itself deeply.
 func (a *Array) DeepCopy() Element {
 	elements := NewRGATreeList()
-
 	for _, node := range a.elements.Nodes() {
-		elements.Add(node.elem.DeepCopy())
+		elements.Add(node.Element().DeepCopy())
 	}
 
 	array := NewArray(elements, a.createdAt)
@@ -152,9 +151,14 @@ func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
 	a.elements.InsertAfter(prevCreatedAt, element)
 }
 
+// SetIndex sets the given element at the given position.
+func (a *Array) SetIndex(positionAt *time.Ticket, element Element) Element {
+	return a.elements.SetIndex(positionAt, element)
+}
+
 // DeleteByCreatedAt deletes the given element.
 func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
-	return a.elements.DeleteByCreatedAt(createdAt, deletedAt).elem
+	return a.elements.DeleteByCreatedAt(createdAt, deletedAt).Element()
 }
 
 // Len returns length of this Array.
@@ -165,15 +169,17 @@ func (a *Array) Len() int {
 // Descendants traverse the descendants of this array.
 func (a *Array) Descendants(callback func(elem Element, parent Container) bool) {
 	for _, node := range a.elements.Nodes() {
-		if callback(node.elem, a) {
-			return
-		}
+		for _, elem := range node.Elements() {
+			if callback(elem, a) {
+				return
+			}
 
-		switch elem := node.elem.(type) {
-		case *Object:
-			elem.Descendants(callback)
-		case *Array:
-			elem.Descendants(callback)
+			switch elem := elem.(type) {
+			case *Object:
+				elem.Descendants(callback)
+			case *Array:
+				elem.Descendants(callback)
+			}
 		}
 	}
 }

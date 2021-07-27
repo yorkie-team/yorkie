@@ -200,6 +200,12 @@ message Operation {
         JSONElementSimple value = 2;
         TimeTicket executed_at = 3;
     }
+    message SetIndex {
+        TimeTicket parent_created_at = 1;
+        TimeTicket position_at = 2;
+        JSONElementSimple value = 3;
+        TimeTicket executed_at = 4;
+    }
 
     oneof body {
         Set set = 1;
@@ -211,6 +217,7 @@ message Operation {
         RichEdit rich_edit = 7;
         Style style = 8;
         Increase increase = 9;
+        SetIndex set_index = 10;
     }
 }
 

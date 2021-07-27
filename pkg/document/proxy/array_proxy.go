@@ -150,9 +150,90 @@ func (p *ArrayProxy) InsertIntegerAfter(index int, v int) *ArrayProxy {
 	return p
 }
 
+// SetNull sets the given null at the index.
+func (p *ArrayProxy) SetNull(idx int) *ArrayProxy {
+	p.setInternal(idx, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(nil, ticket)
+	})
+
+	return p
+}
+
+// SetBool sets the given boolean at the index.
+func (p *ArrayProxy) SetBool(idx int, value bool) *ArrayProxy {
+	p.setInternal(idx, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(value, ticket)
+	})
+
+	return p
+}
+
+// SetInteger sets the given integer at the index.
+func (p *ArrayProxy) SetInteger(idx int, value int) *ArrayProxy {
+	p.setInternal(idx, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(value, ticket)
+	})
+
+	return p
+}
+
+// SetLong sets the given long at the index.
+func (p *ArrayProxy) SetLong(idx int, value int64) *ArrayProxy {
+	p.setInternal(idx, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(value, ticket)
+	})
+
+	return p
+}
+
+// SetDouble sets the given double at the index.
+func (p *ArrayProxy) SetDouble(idx int, value float64) *ArrayProxy {
+	p.setInternal(idx, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(value, ticket)
+	})
+
+	return p
+}
+
+// SetString sets the given string at the index.
+func (p *ArrayProxy) SetString(idx int, value string) *ArrayProxy {
+	p.setInternal(idx, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(value, ticket)
+	})
+
+	return p
+}
+
+// SetBytes sets the given bytes at the index.
+func (p *ArrayProxy) SetBytes(idx int, value []byte) *ArrayProxy {
+	p.setInternal(idx, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(value, ticket)
+	})
+
+	return p
+}
+
+// SetDate sets the given date at the index.
+func (p *ArrayProxy) SetDate(idx int, value gotime.Time) *ArrayProxy {
+	p.setInternal(idx, func(ticket *time.Ticket) json.Element {
+		return json.NewPrimitive(value, ticket)
+	})
+
+	return p
+}
+
+// SetNewArray sets a new array at the index.
+func (p *ArrayProxy) SetNewArray(idx int) *ArrayProxy {
+	p.setInternal(idx, func(ticket *time.Ticket) json.Element {
+		return NewArrayProxy(p.context, json.NewArray(json.NewRGATreeList(), ticket))
+	})
+
+	return p
+}
+
 // Delete deletes the element of the given index.
 func (p *ArrayProxy) Delete(idx int) json.Element {
-	if p.Len() <= idx {
+	if p.Len() <= idx || idx < 0 {
 		log.Logger.Warnf("the given index is out of bound: %d", idx)
 		return nil
 	}
@@ -213,4 +294,33 @@ func (p *ArrayProxy) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 	))
 
 	p.MoveAfter(prevCreatedAt, createdAt, ticket)
+}
+
+func (p *ArrayProxy) setInternal(
+	idx int,
+	creator func(ticket *time.Ticket) json.Element,
+) json.Element {
+	if p.Len() <= idx || idx < 0 {
+		log.Logger.Warnf("the given index is out of bound: %d", idx)
+		return nil
+	}
+
+	positionAt := p.Array.Get(idx).CreatedAt()
+	ticket := p.context.IssueTimeTicket()
+	elem := creator(ticket)
+
+	p.context.Push(operation.NewSetIndex(
+		p.CreatedAt(),
+		positionAt,
+		elem.DeepCopy(),
+		ticket,
+	))
+
+	deleted := p.SetIndex(positionAt, elem)
+	p.context.RegisterElement(elem)
+	if deleted != nil {
+		p.context.RegisterRemovedElementPair(p, deleted)
+	}
+
+	return elem
 }
