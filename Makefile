@@ -32,7 +32,7 @@ fmt:
 	gofmt -s -w $(GO_SRC)
 
 lint:
-	 golangci-lint run ./...
+	golangci-lint run ./...
 
 test:
 	go clean -testcache
