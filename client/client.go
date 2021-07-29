@@ -418,12 +418,13 @@ func (c *Client) Watch(
 					}
 
 					attachment := c.attachments[k.BSONKey()]
-					if eventType == types.DocumentsWatchedEvent || eventType == types.MetadataChangedEvent {
-						if info, ok := attachment.peers[cli.ID.String()]; ok {
-							info.Update(cli.MetadataInfo)
-						} else {
-							attachment.peers[cli.ID.String()] = cli.MetadataInfo
+					if eventType == types.DocumentsWatchedEvent ||
+						eventType == types.MetadataChangedEvent {
+						info, ok := attachment.peers[cli.ID.String()]
+						if ok {
+							cli.MetadataInfo.Update(info)
 						}
+						attachment.peers[cli.ID.String()] = cli.MetadataInfo
 					} else {
 						delete(attachment.peers, cli.ID.String())
 					}

@@ -77,7 +77,7 @@ func TestPeerAwareness(t *testing.T) {
 						peers := wr.PeersMapByDoc[d1.Key().BSONKey()]
 						responsePairs = append(responsePairs, watchResponsePair{
 							Type:  wr.Type,
-							peers: peers,
+							Peers: peers,
 						})
 
 						if len(peers) == 1 {
@@ -91,7 +91,7 @@ func TestPeerAwareness(t *testing.T) {
 		// 01. PeersChanged is triggered when another client watches the document
 		expected = append(expected, watchResponsePair{
 			Type: client.PeersChanged,
-			peers: map[string]types.Metadata{
+			Peers: map[string]types.Metadata{
 				c1.ID().String(): c1.Metadata(),
 				c2.ID().String(): c2.Metadata(),
 			},
@@ -101,19 +101,19 @@ func TestPeerAwareness(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 02. PeersChanged is triggered when another client updates it's metadata
+		assert.NoError(t, c2.UpdateMetadata(ctx, "updated", "true"))
 		expected = append(expected, watchResponsePair{
 			Type: client.PeersChanged,
-			peers: map[string]types.Metadata{
+			Peers: map[string]types.Metadata{
 				c1.ID().String(): c1.Metadata(),
 				c2.ID().String(): c2.Metadata(),
 			},
 		})
-		assert.NoError(t, c2.UpdateMetadata(ctx, "updated", "true"))
 
 		// 03. PeersChanged is triggered when another client closes the watch
 		expected = append(expected, watchResponsePair{
 			Type: client.PeersChanged,
-			peers: map[string]types.Metadata{
+			Peers: map[string]types.Metadata{
 				c1.ID().String(): c1.Metadata(),
 			},
 		})

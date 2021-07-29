@@ -42,7 +42,7 @@ type clientAndDocPair struct {
 
 type watchResponsePair struct {
 	Type  client.WatchResponseType
-	peers map[string]types.Metadata
+	Peers map[string]types.Metadata
 }
 
 var defaultAgent *yorkie.Yorkie
