@@ -277,9 +277,7 @@ func TestArray(t *testing.T) {
 			assert.Equal(t, `{"k1":[4,1,2]}`, root.Marshal())
 			return nil
 		}))
-		c1.Sync(ctx)
-		c2.Sync(ctx)
-		c1.Sync(ctx)
+
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, `{"k1":[4,1,2]}`, d1.Marshal())
 	})
@@ -313,9 +311,6 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 
-		c1.Sync(ctx)
-		c2.Sync(ctx)
-		c1.Sync(ctx)
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, `{"k1":[0,4,3,2],"k2":[0,4,3,2]}`, d1.Marshal())
 	})
@@ -355,9 +350,6 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 
-		c1.Sync(ctx)
-		c2.Sync(ctx)
-		c1.Sync(ctx)
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, `{"k1":[3,0,2],"k2":[3,0,2]}`, d1.Marshal())
 	})
@@ -390,10 +382,6 @@ func TestArray(t *testing.T) {
 			assert.Equal(t, `{"k1":[0,3,2],"k2":[0,2]}`, root.Marshal())
 			return nil
 		}))
-
-		c1.Sync(ctx)
-		c2.Sync(ctx)
-		c1.Sync(ctx)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, `{"k1":[0,3,2],"k2":[0,3,2]}`, d1.Marshal())
