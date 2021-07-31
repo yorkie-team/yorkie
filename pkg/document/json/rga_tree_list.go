@@ -90,8 +90,8 @@ func newRGATreeListNodeAfter(prev *RGATreeListNode, elem Element) *RGATreeListNo
 	return prev.next
 }
 
-// InsertAfter inserts the given node after the given previous node.
-func (n *RGATreeListNode) InsertAfter(node *RGATreeListNode) *RGATreeListNode {
+// InsertNodeAfter inserts the given node after the given previous node.
+func (n *RGATreeListNode) InsertNodeAfter(node *RGATreeListNode) *RGATreeListNode {
 	prevNext := n.next
 
 	n.next = node
@@ -499,13 +499,13 @@ func (a *RGATreeList) insertNodeAfter(
 	executedAt *time.Ticket,
 ) {
 	prevNode := a.findNextBeforeExecutedAt(prevCreatedAt, executedAt)
-	newNode := prevNode.InsertAfter(node)
+	newNode := prevNode.InsertNodeAfter(node)
 	if prevNode == a.last {
 		a.last = newNode
 	}
 
 	a.nodeMapByIndex.InsertAfter(prevNode.indexNode, newNode.indexNode)
-	a.nodeMapByCreatedAt[node.Element().CreatedAt().Key()] = newNode
+	a.nodeMapByCreatedAt[node.CreatedAt().Key()] = newNode
 
 	a.size++
 }

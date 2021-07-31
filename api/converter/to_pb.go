@@ -319,18 +319,18 @@ func toIncrease(increase *operation.Increase) (*api.Operation_Increase_, error) 
 	}, nil
 }
 
-func toSetByIndex(SetByIndex *operation.SetByIndex) (*api.Operation_SetByIndex_, error) {
-	pbElem, err := toJSONElementSimple(SetByIndex.Value())
+func toSetByIndex(setByIndex *operation.SetByIndex) (*api.Operation_SetByIndex_, error) {
+	pbElem, err := toJSONElementSimple(setByIndex.Value())
 	if err != nil {
 		return nil, err
 	}
 
 	return &api.Operation_SetByIndex_{
 		SetByIndex: &api.Operation_SetByIndex{
-			ParentCreatedAt: toTimeTicket(SetByIndex.ParentCreatedAt()),
-			TargetCreatedAt: toTimeTicket(SetByIndex.TargetCreatedAt()),
+			ParentCreatedAt: toTimeTicket(setByIndex.ParentCreatedAt()),
+			TargetCreatedAt: toTimeTicket(setByIndex.TargetCreatedAt()),
 			Value:           pbElem,
-			ExecutedAt:      toTimeTicket(SetByIndex.ExecutedAt()),
+			ExecutedAt:      toTimeTicket(setByIndex.ExecutedAt()),
 		},
 	}, nil
 }
