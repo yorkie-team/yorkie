@@ -21,8 +21,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// SetIndex is an operation representing setting an element to an Array.
-type SetIndex struct {
+// SetByIndex is an operation representing setting an element to an Array.
+type SetByIndex struct {
 	// parentCreatedAt is the creation time of the Object that executes Set.
 	parentCreatedAt *time.Ticket
 
@@ -36,14 +36,14 @@ type SetIndex struct {
 	executedAt *time.Ticket
 }
 
-// NewSetIndex creates a new instance of SetIndex.
-func NewSetIndex(
+// NewSetByIndex creates a new instance of SetByIndex.
+func NewSetByIndex(
 	parentCreatedAt *time.Ticket,
 	positionAt *time.Ticket,
 	value json.Element,
 	executedAt *time.Ticket,
-) *SetIndex {
-	return &SetIndex{
+) *SetByIndex {
+	return &SetByIndex{
 		parentCreatedAt: parentCreatedAt,
 		positionAt:      positionAt,
 		value:           value,
@@ -52,7 +52,7 @@ func NewSetIndex(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (s *SetIndex) Execute(root *json.Root) error {
+func (s *SetByIndex) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(s.parentCreatedAt)
 
 	obj, ok := parent.(*json.Array)
@@ -61,7 +61,7 @@ func (s *SetIndex) Execute(root *json.Root) error {
 	}
 
 	value := s.value.DeepCopy()
-	deleted := obj.SetIndex(s.positionAt, value)
+	deleted := obj.SetByIndex(s.positionAt, value)
 	root.RegisterElement(value)
 	if deleted != nil {
 		root.RegisterRemovedElementPair(obj, deleted)
@@ -71,26 +71,26 @@ func (s *SetIndex) Execute(root *json.Root) error {
 }
 
 // Value return the value of this operation.
-func (s *SetIndex) Value() json.Element {
+func (s *SetByIndex) Value() json.Element {
 	return s.value
 }
 
 // ExecutedAt returns execution time of this operation.
-func (s *SetIndex) ExecutedAt() *time.Ticket {
+func (s *SetByIndex) ExecutedAt() *time.Ticket {
 	return s.executedAt
 }
 
 // SetActor sets the given actor to this operation.
-func (s *SetIndex) SetActor(actorID *time.ActorID) {
+func (s *SetByIndex) SetActor(actorID *time.ActorID) {
 	s.executedAt = s.executedAt.SetActorID(actorID)
 }
 
 // ParentCreatedAt returns the creation time of the Object.
-func (s *SetIndex) ParentCreatedAt() *time.Ticket {
+func (s *SetByIndex) ParentCreatedAt() *time.Ticket {
 	return s.parentCreatedAt
 }
 
 // PositionAt returns the creation time of the Object.
-func (s *SetIndex) PositionAt() *time.Ticket {
+func (s *SetByIndex) PositionAt() *time.Ticket {
 	return s.positionAt
 }

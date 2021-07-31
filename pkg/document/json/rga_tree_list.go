@@ -309,8 +309,8 @@ func (a *RGATreeList) Get(idx int) *RGATreeListNode {
 	return node
 }
 
-// SetIndex sets the given element at the given position.
-func (a *RGATreeList) SetIndex(positionAt *time.Ticket, elem Element) Element {
+// SetByIndex sets the given element at the given position.
+func (a *RGATreeList) SetByIndex(positionAt *time.Ticket, elem Element) Element {
 	node, ok := a.nodeMapByCreatedAt[positionAt.Key()]
 	if !ok {
 		log.Logger.Fatalf(

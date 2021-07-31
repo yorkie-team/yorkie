@@ -187,8 +187,8 @@ func ToOperations(operations []operation.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toStyle(op)
 		case *operation.Increase:
 			pbOperation.Body, err = toIncrease(op)
-		case *operation.SetIndex:
-			pbOperation.Body, err = toSetIndex(op)
+		case *operation.SetByIndex:
+			pbOperation.Body, err = toSetByIndex(op)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -319,18 +319,18 @@ func toIncrease(increase *operation.Increase) (*api.Operation_Increase_, error) 
 	}, nil
 }
 
-func toSetIndex(setIndex *operation.SetIndex) (*api.Operation_SetIndex_, error) {
-	pbElem, err := toJSONElementSimple(setIndex.Value())
+func toSetByIndex(SetByIndex *operation.SetByIndex) (*api.Operation_SetByIndex_, error) {
+	pbElem, err := toJSONElementSimple(SetByIndex.Value())
 	if err != nil {
 		return nil, err
 	}
 
-	return &api.Operation_SetIndex_{
-		SetIndex: &api.Operation_SetIndex{
-			ParentCreatedAt: toTimeTicket(setIndex.ParentCreatedAt()),
-			PositionAt:      toTimeTicket(setIndex.PositionAt()),
+	return &api.Operation_SetByIndex_{
+		SetByIndex: &api.Operation_SetByIndex{
+			ParentCreatedAt: toTimeTicket(SetByIndex.ParentCreatedAt()),
+			PositionAt:      toTimeTicket(SetByIndex.PositionAt()),
 			Value:           pbElem,
-			ExecutedAt:      toTimeTicket(setIndex.ExecutedAt()),
+			ExecutedAt:      toTimeTicket(SetByIndex.ExecutedAt()),
 		},
 	}, nil
 }

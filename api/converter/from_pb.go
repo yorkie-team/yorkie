@@ -208,8 +208,8 @@ func FromOperations(pbOps []*api.Operation) ([]operation.Operation, error) {
 			op, err = fromStyle(decoded.Style)
 		case *api.Operation_Increase_:
 			op, err = fromIncrease(decoded.Increase)
-		case *api.Operation_SetIndex_:
-			op, err = fromSetIndex(decoded.SetIndex)
+		case *api.Operation_SetByIndex_:
+			op, err = fromSetByIndex(decoded.SetByIndex)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -452,24 +452,24 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operation.Increase, error) {
 	), nil
 }
 
-func fromSetIndex(pbInc *api.Operation_SetIndex) (*operation.SetIndex, error) {
-	parentCreatedAt, err := fromTimeTicket(pbInc.ParentCreatedAt)
+func fromSetByIndex(pbSet *api.Operation_SetByIndex) (*operation.SetByIndex, error) {
+	parentCreatedAt, err := fromTimeTicket(pbSet.ParentCreatedAt)
 	if err != nil {
 		return nil, err
 	}
-	positionAt, err := fromTimeTicket(pbInc.PositionAt)
+	positionAt, err := fromTimeTicket(pbSet.PositionAt)
 	if err != nil {
 		return nil, err
 	}
-	elem, err := fromElement(pbInc.Value)
+	elem, err := fromElement(pbSet.Value)
 	if err != nil {
 		return nil, err
 	}
-	executedAt, err := fromTimeTicket(pbInc.ExecutedAt)
+	executedAt, err := fromTimeTicket(pbSet.ExecutedAt)
 	if err != nil {
 		return nil, err
 	}
-	return operation.NewSetIndex(
+	return operation.NewSetByIndex(
 		parentCreatedAt,
 		positionAt,
 		elem,
