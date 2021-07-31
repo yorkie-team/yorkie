@@ -420,8 +420,7 @@ func (c *Client) Watch(
 					attachment := c.attachments[k.BSONKey()]
 					if eventType == types.DocumentsWatchedEvent ||
 						eventType == types.MetadataChangedEvent {
-						info, ok := attachment.peers[cli.ID.String()]
-						if ok {
+						if info, ok := attachment.peers[cli.ID.String()]; ok {
 							cli.MetadataInfo.Update(info)
 						}
 						attachment.peers[cli.ID.String()] = cli.MetadataInfo
