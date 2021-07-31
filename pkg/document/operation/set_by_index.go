@@ -26,8 +26,8 @@ type SetByIndex struct {
 	// parentCreatedAt is the creation time of the Object that executes Set.
 	parentCreatedAt *time.Ticket
 
-	// positionAt is the creation time of the Object that executes Set.
-	positionAt *time.Ticket
+	// targetCreatedAt is the creation time of the Object that executes Set.
+	targetCreatedAt *time.Ticket
 
 	// value is the value of this operation.
 	value json.Element
@@ -39,13 +39,13 @@ type SetByIndex struct {
 // NewSetByIndex creates a new instance of SetByIndex.
 func NewSetByIndex(
 	parentCreatedAt *time.Ticket,
-	positionAt *time.Ticket,
+	targetCreatedAt *time.Ticket,
 	value json.Element,
 	executedAt *time.Ticket,
 ) *SetByIndex {
 	return &SetByIndex{
 		parentCreatedAt: parentCreatedAt,
-		positionAt:      positionAt,
+		targetCreatedAt: targetCreatedAt,
 		value:           value,
 		executedAt:      executedAt,
 	}
@@ -61,7 +61,7 @@ func (s *SetByIndex) Execute(root *json.Root) error {
 	}
 
 	value := s.value.DeepCopy()
-	deleted := obj.SetByIndex(s.positionAt, value)
+	deleted := obj.SetByIndex(s.targetCreatedAt, value)
 	root.RegisterElement(value)
 	if deleted != nil {
 		root.RegisterRemovedElementPair(obj, deleted)
@@ -90,7 +90,7 @@ func (s *SetByIndex) ParentCreatedAt() *time.Ticket {
 	return s.parentCreatedAt
 }
 
-// PositionAt returns the creation time of the Object.
-func (s *SetByIndex) PositionAt() *time.Ticket {
-	return s.positionAt
+// TargetCreatedAt returns the creation time of the Object.
+func (s *SetByIndex) TargetCreatedAt() *time.Ticket {
+	return s.targetCreatedAt
 }

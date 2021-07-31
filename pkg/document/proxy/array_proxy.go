@@ -305,18 +305,18 @@ func (p *ArrayProxy) setInternal(
 		return nil
 	}
 
-	positionAt := p.Array.Get(idx).CreatedAt()
+	targetCreatedAt := p.Array.Get(idx).CreatedAt()
 	ticket := p.context.IssueTimeTicket()
 	elem := creator(ticket)
 
 	p.context.Push(operation.NewSetByIndex(
 		p.CreatedAt(),
-		positionAt,
+		targetCreatedAt,
 		elem.DeepCopy(),
 		ticket,
 	))
 
-	deleted := p.SetByIndex(positionAt, elem)
+	deleted := p.SetByIndex(targetCreatedAt, elem)
 	p.context.RegisterElement(elem)
 	if deleted != nil {
 		p.context.RegisterRemovedElementPair(p, deleted)

@@ -152,8 +152,8 @@ func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
 }
 
 // SetByIndex sets the given element at the given position.
-func (a *Array) SetByIndex(positionAt *time.Ticket, element Element) Element {
-	return a.elements.SetByIndex(positionAt, element)
+func (a *Array) SetByIndex(targetCreatedAt *time.Ticket, element Element) Element {
+	return a.elements.SetByIndex(targetCreatedAt, element)
 }
 
 // DeleteByCreatedAt deletes the given element.

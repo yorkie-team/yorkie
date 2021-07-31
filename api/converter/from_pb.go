@@ -457,7 +457,7 @@ func fromSetByIndex(pbSet *api.Operation_SetByIndex) (*operation.SetByIndex, err
 	if err != nil {
 		return nil, err
 	}
-	positionAt, err := fromTimeTicket(pbSet.PositionAt)
+	targetCreatedAt, err := fromTimeTicket(pbSet.TargetCreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +471,7 @@ func fromSetByIndex(pbSet *api.Operation_SetByIndex) (*operation.SetByIndex, err
 	}
 	return operation.NewSetByIndex(
 		parentCreatedAt,
-		positionAt,
+		targetCreatedAt,
 		elem,
 		executedAt,
 	), nil

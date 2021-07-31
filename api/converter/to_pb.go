@@ -328,7 +328,7 @@ func toSetByIndex(SetByIndex *operation.SetByIndex) (*api.Operation_SetByIndex_,
 	return &api.Operation_SetByIndex_{
 		SetByIndex: &api.Operation_SetByIndex{
 			ParentCreatedAt: toTimeTicket(SetByIndex.ParentCreatedAt()),
-			PositionAt:      toTimeTicket(SetByIndex.PositionAt()),
+			TargetCreatedAt: toTimeTicket(SetByIndex.TargetCreatedAt()),
 			Value:           pbElem,
 			ExecutedAt:      toTimeTicket(SetByIndex.ExecutedAt()),
 		},

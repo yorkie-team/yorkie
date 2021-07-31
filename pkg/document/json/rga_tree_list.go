@@ -310,16 +310,16 @@ func (a *RGATreeList) Get(idx int) *RGATreeListNode {
 }
 
 // SetByIndex sets the given element at the given position.
-func (a *RGATreeList) SetByIndex(positionAt *time.Ticket, elem Element) Element {
-	node, ok := a.nodeMapByCreatedAt[positionAt.Key()]
+func (a *RGATreeList) SetByIndex(targetCreatedAt *time.Ticket, elem Element) Element {
+	node, ok := a.nodeMapByCreatedAt[targetCreatedAt.Key()]
 	if !ok {
 		log.Logger.Fatalf(
-			"fail to find the given positionAt: %s",
-			positionAt.Key(),
+			"fail to find the given targetCreatedAt: %s",
+			targetCreatedAt.Key(),
 		)
 	}
 
-	elem.SetMovedAt(positionAt)
+	elem.SetMovedAt(targetCreatedAt)
 	a.nodeMapByCreatedAt[elem.CreatedAt().Key()] = node
 
 	deleted := node.Set(elem)
