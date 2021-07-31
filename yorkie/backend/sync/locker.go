@@ -38,9 +38,3 @@ type Locker interface {
 	Lock(ctx context.Context) error
 	Unlock(ctx context.Context) error
 }
-
-// LockerMap is a module that manages Locker for the given keys.
-type LockerMap interface {
-	// NewLocker creates a sync.Locker.
-	NewLocker(ctx context.Context, key Key) (Locker, error)
-}

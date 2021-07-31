@@ -199,15 +199,17 @@ func TestConverter(t *testing.T) {
 
 	t.Run("client test", func(t *testing.T) {
 		cli := types.Client{
-			ID:       time.InitialActorID,
-			Metadata: map[string]string{"Name": "ClientName"},
+			ID: time.InitialActorID,
+			MetadataInfo: types.MetadataInfo{
+				Data: types.Metadata{"Name": "ClientName"},
+			},
 		}
 
 		pbCli := converter.ToClient(cli)
 		decodedCli, err := converter.FromClient(pbCli)
 		assert.NoError(t, err)
 		assert.Equal(t, cli.ID, decodedCli.ID)
-		assert.Equal(t, cli.Metadata, decodedCli.Metadata)
+		assert.Equal(t, cli.MetadataInfo, decodedCli.MetadataInfo)
 
 		pbClientsMap := converter.ToClientsMap(map[string][]types.Client{
 			"test": {cli},
@@ -217,6 +219,6 @@ func TestConverter(t *testing.T) {
 		decodedCli, err = converter.FromClient(pbCli)
 		assert.NoError(t, err)
 		assert.Equal(t, cli.ID, decodedCli.ID)
-		assert.Equal(t, cli.Metadata, decodedCli.Metadata)
+		assert.Equal(t, cli.MetadataInfo, decodedCli.MetadataInfo)
 	})
 }

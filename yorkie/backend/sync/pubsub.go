@@ -17,17 +17,13 @@
 package sync
 
 import (
-	"context"
-
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
-// Subscription represents the subscription of a subscriber. It is used across
-// several topics.
+// Subscription represents a subscription of a subscriber to documents.
 type Subscription struct {
 	id         string
 	subscriber types.Client
@@ -71,6 +67,11 @@ func (s *Subscription) SubscriberID() string {
 	return s.subscriber.ID.String()
 }
 
+// UpdateMetadata updates the metadata of the subscriber.
+func (s *Subscription) UpdateMetadata(info types.MetadataInfo) {
+	s.subscriber.MetadataInfo.Update(info)
+}
+
 // Close closes all resources of this Subscription.
 func (s *Subscription) Close() {
 	if s.closed {
@@ -79,24 +80,4 @@ func (s *Subscription) Close() {
 
 	s.closed = true
 	close(s.events)
-}
-
-// PubSub is a structure to support event publishing/subscription.
-type PubSub interface {
-	// Subscribe subscribes to the given topics.
-	Subscribe(
-		ctx context.Context,
-		subscriber types.Client,
-		topics []*key.Key,
-	) (*Subscription, map[string][]types.Client, error)
-
-	// Unsubscribe unsubscribes the given topics.
-	Unsubscribe(
-		ctx context.Context,
-		topics []*key.Key,
-		sub *Subscription,
-	)
-
-	// Publish publishes the given event.
-	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)
 }

@@ -38,9 +38,17 @@ func FromClient(pbClient *api.Client) (*types.Client, error) {
 	}
 
 	return &types.Client{
-		ID:       id,
-		Metadata: pbClient.Metadata,
+		ID:           id,
+		MetadataInfo: FromMetadataInfo(pbClient.Metadata),
 	}, nil
+}
+
+// FromMetadataInfo converts the given Protobuf format to model format.
+func FromMetadataInfo(pbMetadata *api.Metadata) types.MetadataInfo {
+	return types.MetadataInfo{
+		Clock: pbMetadata.Clock,
+		Data:  pbMetadata.Data,
+	}
 }
 
 // FromChangePack converts the given Protobuf format to model format.
@@ -136,6 +144,8 @@ func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) 
 		return types.DocumentsWatchedEvent, nil
 	case api.DocEventType_DOCUMENTS_UNWATCHED:
 		return types.DocumentsUnwatchedEvent, nil
+	case api.DocEventType_METADATA_CHANGED:
+		return types.MetadataChangedEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
 }

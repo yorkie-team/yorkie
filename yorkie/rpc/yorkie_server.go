@@ -381,6 +381,27 @@ func (s *yorkieServer) WatchDocuments(
 	}
 }
 
+// UpdateMetadata updates the metadata of the given client.
+func (s *yorkieServer) UpdateMetadata(
+	ctx context.Context,
+	req *api.UpdateMetadataRequest,
+) (*api.UpdateMetadataResponse, error) {
+	client, err := converter.FromClient(req.Client)
+	if err != nil {
+		return nil, err
+	}
+	keys := converter.FromDocumentKeys(req.DocumentKeys)
+
+	docEvent, err := s.backend.Coordinator.UpdateMetadata(ctx, client, keys)
+	if err != nil {
+		return nil, err
+	}
+
+	s.backend.Coordinator.Publish(ctx, docEvent.Publisher.ID, *docEvent)
+
+	return &api.UpdateMetadataResponse{}, nil
+}
+
 func (s *yorkieServer) watchDocs(
 	ctx context.Context,
 	client types.Client,
@@ -414,8 +435,7 @@ func (s *yorkieServer) unwatchDocs(
 	subscription *sync.Subscription,
 ) {
 	ctx := context.Background()
-	s.backend.Coordinator.Unsubscribe(ctx, docKeys, subscription)
-
+	_ = s.backend.Coordinator.Unsubscribe(ctx, docKeys, subscription)
 	s.backend.Coordinator.Publish(
 		ctx,
 		subscription.Subscriber().ID,

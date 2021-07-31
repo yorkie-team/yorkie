@@ -21,12 +21,14 @@ import (
 	"errors"
 	gotime "time"
 
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 var (
-	// ErrEmptyTopics is returned when the given topic is empty.
-	ErrEmptyTopics = errors.New("empty topics")
+	// ErrEmptyDocKeys is returned when the given keys is empty.
+	ErrEmptyDocKeys = errors.New("empty doc keys")
 )
 
 // AgentInfo represents the information of the Agent.
@@ -39,14 +41,38 @@ type AgentInfo struct {
 
 // Coordinator provides synchronization functions such as locks and event Pub/Sub.
 type Coordinator interface {
-	LockerMap
-	PubSub
+	// NewLocker creates a sync.Locker.
+	NewLocker(ctx context.Context, key Key) (Locker, error)
 
-	// Members returns the members of this cluster.
-	Members() map[string]*AgentInfo
+	// Subscribe subscribes to the given documents.
+	Subscribe(
+		ctx context.Context,
+		subscriber types.Client,
+		docKeys []*key.Key,
+	) (*Subscription, map[string][]types.Client, error)
+
+	// Unsubscribe unsubscribes from the given documents.
+	Unsubscribe(
+		ctx context.Context,
+		docKeys []*key.Key,
+		sub *Subscription,
+	) error
+
+	// Publish publishes the given event.
+	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)
 
 	// PublishToLocal publishes the given event.
 	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
+
+	// UpdateMetadata updates the metadata of the given client.
+	UpdateMetadata(
+		ctx context.Context,
+		publisher *types.Client,
+		keys []*key.Key,
+	) (*DocEvent, error)
+
+	// Members returns the members of this cluster.
+	Members() map[string]*AgentInfo
 
 	// Close closes all resources of this Coordinator.
 	Close() error

@@ -7,6 +7,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 )
 
@@ -20,7 +21,7 @@ func newClusterServer(be *backend.Backend) *clusterServer {
 	return &clusterServer{backend: be}
 }
 
-// BroadcastEvent publishes the given event to the given Topic.
+// BroadcastEvent publishes the given event to the given document.
 func (s *clusterServer) BroadcastEvent(
 	ctx context.Context,
 	request *api.BroadcastEventRequest,
@@ -37,11 +38,22 @@ func (s *clusterServer) BroadcastEvent(
 		return nil, err
 	}
 
-	s.backend.Coordinator.PublishToLocal(
-		ctx,
-		actorID,
-		*docEvent,
-	)
+	switch docEvent.Type {
+	case types.DocumentsWatchedEvent,
+		types.DocumentsUnwatchedEvent,
+		types.DocumentsChangedEvent:
+		s.backend.Coordinator.PublishToLocal(ctx, actorID, *docEvent)
+	case types.MetadataChangedEvent:
+		if _, err := s.backend.Coordinator.UpdateMetadata(
+			ctx,
+			&docEvent.Publisher,
+			docEvent.DocumentKeys,
+		); err != nil {
+			return nil, err
+		}
+
+		s.backend.Coordinator.PublishToLocal(ctx, actorID, *docEvent)
+	}
 
 	return &api.BroadcastEventResponse{}, nil
 }

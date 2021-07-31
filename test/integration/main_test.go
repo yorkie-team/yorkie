@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie"
 )
@@ -41,7 +42,7 @@ type clientAndDocPair struct {
 
 type watchResponsePair struct {
 	Type  client.WatchResponseType
-	peers map[string]client.Metadata
+	Peers map[string]types.Metadata
 }
 
 var defaultAgent *yorkie.Yorkie
@@ -101,9 +102,8 @@ func createActivatedClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
 			defaultAgent.RPCAddr(),
-			client.Option{Metadata: map[string]string{
-				"name": fmt.Sprintf("name-%d", i),
-			}},
+			client.Option{
+				Metadata: types.Metadata{"name": fmt.Sprintf("name-%d", i)}},
 		)
 		assert.NoError(t, err)
 
