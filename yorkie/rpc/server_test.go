@@ -352,3 +352,21 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 	})
 }
+
+func TestConfig_Validate(t *testing.T) {
+	scenarios := []*struct{
+		config *rpc.Config
+		expect error
+	}{
+		{config: &rpc.Config{Port: -1}, expect: rpc.ErrWrongPort},
+		{config: &rpc.Config{Port: 11101, CertFile: "noSuchCertFile"}, expect: rpc.ErrNoCertFile},
+		{config: &rpc.Config{Port: 11101, KeyFile: "noSuchKeyFile"}, expect: rpc.ErrNoKeyFile},
+		// not to use tls
+		{config: &rpc.Config{Port: 11101, CertFile: "", KeyFile: ""}, expect: nil},
+		// pass any file existing
+		{config: &rpc.Config{Port: 11101, CertFile: "server_test.go", KeyFile: "server_test.go"}, expect: nil},
+	}
+	for _, scenario := range scenarios{
+		assert.ErrorIs(t, scenario.config.Validate(), scenario.expect, "provided config: %#v", scenario.config)
+	}
+}

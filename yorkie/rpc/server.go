@@ -18,8 +18,10 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"os"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -32,6 +34,12 @@ import (
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/rpc/interceptors"
+)
+
+var (
+	ErrWrongPort = errors.New("wrong port number for grpc")
+	ErrNoCertFile = errors.New("no such the cert file for RPC server")
+	ErrNoKeyFile = errors.New("no such the key file for RPC server")
 )
 
 // Config is the configuration for creating a Server instance.
@@ -122,6 +130,30 @@ func (s *Server) listenAndServeGRPC() error {
 			}
 		}
 	}()
+
+	return nil
+}
+
+
+// Validate validates port number and checks if files exists
+func (c *Config) Validate() error {
+	var err error
+	if c.Port < 0 || 65535 < c.Port {
+		return fmt.Errorf("%w: %d", ErrWrongPort, c.Port)
+	}
+
+	// when specific cert or key file are configured
+	if c.CertFile != "" {
+		if _, err = os.Stat(c.CertFile); err != nil {
+			return fmt.Errorf("%w: %s", ErrNoCertFile, c.CertFile)
+		}
+	}
+
+	if c.KeyFile != "" {
+		if _, err = os.Stat(c.KeyFile); err != nil {
+			return fmt.Errorf("%w: %s", ErrNoKeyFile, c.KeyFile)
+		}
+	}
 
 	return nil
 }
