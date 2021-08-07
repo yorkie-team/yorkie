@@ -37,9 +37,9 @@ import (
 )
 
 var (
-	ErrWrongPort = errors.New("wrong port number for grpc")
-	ErrNoCertFile = errors.New("no such the cert file for RPC server")
-	ErrNoKeyFile = errors.New("no such the key file for RPC server")
+	ErrWrongPort = errors.New("wrong port number for RPC server")
+	ErrNoCertFile = errors.New("no such cert file for RPC server")
+	ErrNoKeyFile = errors.New("no such key file for RPC server")
 )
 
 // Config is the configuration for creating a Server instance.
