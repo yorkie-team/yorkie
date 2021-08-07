@@ -106,3 +106,13 @@ func newConfig(port int, metricsPort int, dbName string) *Config {
 		},
 	}
 }
+
+// Validate returns an error if the provided Config is invalidated.
+func (c *Config) Validate() error {
+	var err error
+
+	// some validations will be here.
+	// ...
+
+	return err
+}
