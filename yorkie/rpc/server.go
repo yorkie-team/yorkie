@@ -137,7 +137,7 @@ func (s *Server) listenAndServeGRPC() error {
 	return nil
 }
 
-// Validate validates port number and checks if files exists
+// Validate validates the port number and the files for certification.
 func (c *Config) Validate() error {
 	if c.Port < 1 || 65535 < c.Port {
 		return fmt.Errorf("must be between 1 and 65535, given %d: %w", c.Port, ErrInvalidRPCPort)
