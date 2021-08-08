@@ -66,10 +66,7 @@ func newAgentCmd() *cobra.Command {
 				conf = parsed
 			}
 
-			// TODO(hackerwins): We need to check that the entire config is valid.
-			// err = conf.Validate()
-			err := conf.Backend.Validate()
-			if err != nil {
+			if err := conf.Validate(); err != nil {
 				return err
 			}
 
