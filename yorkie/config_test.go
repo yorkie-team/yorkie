@@ -53,21 +53,3 @@ func TestNewConfigFromFile(t *testing.T) {
 	assert.Equal(t, conf.Mongo.PingTimeoutSec, time.Duration(yorkie.DefaultMongoPingTimeoutSec))
 	assert.Equal(t, conf.Backend.SnapshotThreshold, uint64(yorkie.DefaultSnapshotThreshold))
 }
-
-// _ is added in the name to ignore this test for now.
-func _TestConfig_Validate(t *testing.T) {
-	// some test cases of invalidated configs
-	var config *yorkie.Config
-
-	// case - some wrong ports
-	config = &yorkie.Config{}
-	assert.Error(t, config.Validate())
-
-	// case - negative internal value
-	config = &yorkie.Config{}
-	assert.Error(t, config.Validate())
-
-	// case - wrong format of mongo URI
-	// wrong format of mongo connection uris throw error
-	assert.Error(t, config.Validate())
-}
