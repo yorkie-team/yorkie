@@ -39,10 +39,10 @@ import (
 var (
 	// ErrInvalidRPCPort occurs when the port in the config is invalid.
 	ErrInvalidRPCPort = errors.New("invalid port number for RPC server")
-	// ErrInvalidCertFile occurs when yorkie cannot find the cert file.
-	ErrInvalidCertFile = errors.New("no such cert file for RPC server")
-	// ErrInvalidKeyFile occurs when yorkie cannot find the key file.
-	ErrInvalidKeyFile = errors.New("no such key file for RPC server")
+	// ErrInvalidCertFile occurs when the certificate file is invalid.
+	ErrInvalidCertFile = errors.New("invalid cert file for RPC server")
+	// ErrInvalidKeyFile occurs when the key file is invalid.
+	ErrInvalidKeyFile = errors.New("invalid key file for RPC server")
 )
 
 // Config is the configuration for creating a Server instance.
