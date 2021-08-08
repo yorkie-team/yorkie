@@ -118,7 +118,7 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	// other validations will be here later.
+	// TODO(umi0410): Other validations will be here later.
 	// ...
 
 	return nil
