@@ -356,7 +356,7 @@ func TestRPCServerBackend(t *testing.T) {
 func TestConfig_Validate(t *testing.T) {
 	scenarios := []*struct {
 		config *rpc.Config
-		expect error
+		expected error
 	}{
 		{config: &rpc.Config{Port: -1}, expect: rpc.ErrWrongPort},
 		{config: &rpc.Config{Port: 11101, CertFile: "noSuchCertFile"}, expect: rpc.ErrNoCertFile},
