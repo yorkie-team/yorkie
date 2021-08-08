@@ -355,18 +355,18 @@ func TestRPCServerBackend(t *testing.T) {
 
 func TestConfig_Validate(t *testing.T) {
 	scenarios := []*struct {
-		config *rpc.Config
+		config   *rpc.Config
 		expected error
 	}{
-		{config: &rpc.Config{Port: -1}, expect: rpc.ErrWrongPort},
-		{config: &rpc.Config{Port: 11101, CertFile: "noSuchCertFile"}, expect: rpc.ErrNoCertFile},
-		{config: &rpc.Config{Port: 11101, KeyFile: "noSuchKeyFile"}, expect: rpc.ErrNoKeyFile},
+		{config: &rpc.Config{Port: -1}, expected: rpc.ErrInvalidRPCPort},
+		{config: &rpc.Config{Port: 11101, CertFile: "noSuchCertFile"}, expected: rpc.ErrInvalidCertFile},
+		{config: &rpc.Config{Port: 11101, KeyFile: "noSuchKeyFile"}, expected: rpc.ErrInvalidKeyFile},
 		// not to use tls
-		{config: &rpc.Config{Port: 11101, CertFile: "", KeyFile: ""}, expect: nil},
+		{config: &rpc.Config{Port: 11101, CertFile: "", KeyFile: ""}, expected: nil},
 		// pass any file existing
-		{config: &rpc.Config{Port: 11101, CertFile: "server_test.go", KeyFile: "server_test.go"}, expect: nil},
+		{config: &rpc.Config{Port: 11101, CertFile: "server_test.go", KeyFile: "server_test.go"}, expected: nil},
 	}
 	for _, scenario := range scenarios {
-		assert.ErrorIs(t, scenario.config.Validate(), scenario.expect, "provided config: %#v", scenario.config)
+		assert.ErrorIs(t, scenario.config.Validate(), scenario.expected, "provided config: %#v", scenario.config)
 	}
 }

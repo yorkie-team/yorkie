@@ -37,12 +37,12 @@ import (
 )
 
 var (
-	// ErrWrongPort occurs when the port in the config is invalid.
-	ErrWrongPort = errors.New("wrong port number for RPC server")
-	// ErrNoCertFile occurs when yorkie cannot find the cert file.
-	ErrNoCertFile = errors.New("no such cert file for RPC server")
-	// ErrNoKeyFile occurs when yorkie cannot find the key file.
-	ErrNoKeyFile = errors.New("no such key file for RPC server")
+	// ErrInvalidRPCPort occurs when the port in the config is invalid.
+	ErrInvalidRPCPort = errors.New("invalid port number for RPC server")
+	// ErrInvalidCertFile occurs when yorkie cannot find the cert file.
+	ErrInvalidCertFile = errors.New("no such cert file for RPC server")
+	// ErrInvalidKeyFile occurs when yorkie cannot find the key file.
+	ErrInvalidKeyFile = errors.New("no such key file for RPC server")
 )
 
 // Config is the configuration for creating a Server instance.
@@ -139,21 +139,22 @@ func (s *Server) listenAndServeGRPC() error {
 
 // Validate validates port number and checks if files exists
 func (c *Config) Validate() error {
-	var err error
-	if c.Port < 0 || 65535 < c.Port {
-		return fmt.Errorf("%w: %d", ErrWrongPort, c.Port)
+	if c.Port < 1 || 65535 < c.Port {
+		return fmt.Errorf("must be between 1 and 65535, given %d: %w", c.Port, ErrInvalidRPCPort)
 	}
 
 	// when specific cert or key file are configured
 	if c.CertFile != "" {
-		if _, err = os.Stat(c.CertFile); err != nil {
-			return fmt.Errorf("%w: %s", ErrNoCertFile, c.CertFile)
+		_, err := os.Stat(c.CertFile)
+		if os.IsNotExist(err); err != nil {
+			return fmt.Errorf("%w: %s", ErrInvalidCertFile, c.CertFile)
 		}
 	}
 
 	if c.KeyFile != "" {
-		if _, err = os.Stat(c.KeyFile); err != nil {
-			return fmt.Errorf("%w: %s", ErrNoKeyFile, c.KeyFile)
+		_, err := os.Stat(c.KeyFile)
+		if os.IsNotExist(err); err != nil {
+			return fmt.Errorf("%w: %s", ErrInvalidKeyFile, c.KeyFile)
 		}
 	}
 
