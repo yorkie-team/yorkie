@@ -109,12 +109,10 @@ func newConfig(port int, metricsPort int, dbName string) *Config {
 
 // Validate returns an error if the provided Config is invalidated.
 func (c *Config) Validate() error {
-	var err error
-
-	if err = c.Backend.Validate(); err != nil {
+	if err := c.Backend.Validate(); err != nil {
 		return err
 	}
-	if err = c.RPC.Validate(); err != nil {
+	if err := c.RPC.Validate(); err != nil {
 		return err
 	}
 
