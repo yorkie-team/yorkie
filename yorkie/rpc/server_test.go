@@ -354,7 +354,7 @@ func TestRPCServerBackend(t *testing.T) {
 }
 
 func TestConfig_Validate(t *testing.T) {
-	scenarios := []*struct{
+	scenarios := []*struct {
 		config *rpc.Config
 		expect error
 	}{
@@ -366,7 +366,7 @@ func TestConfig_Validate(t *testing.T) {
 		// pass any file existing
 		{config: &rpc.Config{Port: 11101, CertFile: "server_test.go", KeyFile: "server_test.go"}, expect: nil},
 	}
-	for _, scenario := range scenarios{
+	for _, scenario := range scenarios {
 		assert.ErrorIs(t, scenario.config.Validate(), scenario.expect, "provided config: %#v", scenario.config)
 	}
 }
