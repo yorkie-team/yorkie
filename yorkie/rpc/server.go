@@ -145,9 +145,8 @@ func (c *Config) Validate() error {
 
 	// when specific cert or key file are configured
 	if c.CertFile != "" {
-		_, err := os.Stat(c.CertFile)
-		if os.IsNotExist(err); err != nil {
-			return fmt.Errorf("%w: %s", ErrInvalidCertFile, c.CertFile)
+		if _, err := os.Stat(c.CertFile); err != nil {
+			return fmt.Errorf("%s: %w", c.CertFile, ErrInvalidCertFile)
 		}
 	}
 
