@@ -152,9 +152,8 @@ func (c *Config) Validate() error {
 	}
 
 	if c.KeyFile != "" {
-		_, err := os.Stat(c.KeyFile)
-		if os.IsNotExist(err); err != nil {
-			return fmt.Errorf("%w: %s", ErrInvalidKeyFile, c.KeyFile)
+		if _, err := os.Stat(c.KeyFile); err != nil {
+			return fmt.Errorf("%s: %w", c.KeyFile, ErrInvalidKeyFile)
 		}
 	}
 
