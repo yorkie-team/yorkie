@@ -37,9 +37,12 @@ import (
 )
 
 var (
-	ErrWrongPort  = errors.New("wrong port number for RPC server")
+	// ErrWrongPort occurs when the port in the config is invalid.
+	ErrWrongPort = errors.New("wrong port number for RPC server")
+	// ErrNoCertFile occurs when yorkie cannot find the cert file.
 	ErrNoCertFile = errors.New("no such cert file for RPC server")
-	ErrNoKeyFile  = errors.New("no such key file for RPC server")
+	// ErrNoKeyFile occurs when yorkie cannot find the key file.
+	ErrNoKeyFile = errors.New("no such key file for RPC server")
 )
 
 // Config is the configuration for creating a Server instance.
