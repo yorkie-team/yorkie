@@ -43,10 +43,10 @@ func TestMain(m *testing.M) {
 	be, err := backend.New(&backend.Config{
 		SnapshotThreshold: helper.SnapshotThreshold,
 	}, &mongo.Config{
-		ConnectionURI:        helper.MongoConnectionURI,
-		YorkieDatabase:       helper.TestDBName(),
-		ConnectionTimeoutSec: helper.MongoConnectionTimeoutSec,
-		PingTimeoutSec:       helper.MongoPingTimeoutSec,
+		ConnectionURI:     helper.MongoConnectionURI,
+		YorkieDatabase:    helper.TestDBName(),
+		ConnectionTimeout: helper.MongoConnectionTimeout,
+		PingTimeoutSec:    helper.MongoPingTimeoutSec,
 	}, &etcd.Config{
 		Endpoints: helper.ETCDEndpoints,
 	}, testRPCAddr, prometheus.NewMetrics())

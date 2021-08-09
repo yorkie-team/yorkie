@@ -36,10 +36,10 @@ import (
 
 // Config is the configuration for creating a Client instance.
 type Config struct {
-	ConnectionTimeoutSec gotime.Duration `json:"ConnectionTimeoutSec"`
-	ConnectionURI        string          `json:"ConnectionURI"`
-	YorkieDatabase       string          `json:"YorkieDatabase"`
-	PingTimeoutSec       gotime.Duration `json:"PingTimeoutSec"`
+	ConnectionTimeout string          `json:"ConnectionTimeout"`
+	ConnectionURI     string          `json:"ConnectionURI"`
+	YorkieDatabase    string          `json:"YorkieDatabase"`
+	PingTimeoutSec    gotime.Duration `json:"PingTimeoutSec"`
 }
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
@@ -50,9 +50,14 @@ type Client struct {
 
 // Dial creates an instance of Client and dials the given MongoDB.
 func Dial(conf *Config) (*Client, error) {
+	connTimeout, err := gotime.ParseDuration(conf.ConnectionTimeout)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
-		conf.ConnectionTimeoutSec*gotime.Second,
+		connTimeout,
 	)
 	defer cancel()
 

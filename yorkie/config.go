@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
@@ -35,10 +36,10 @@ const (
 	DefaultRPCPort     = 11101
 	DefaultMetricsPort = 11102
 
-	DefaultMongoConnectionURI        = "mongodb://localhost:27017"
-	DefaultMongoConnectionTimeoutSec = 5
-	DefaultMongoPingTimeoutSec       = 5
-	DefaultMongoYorkieDatabase       = "yorkie-meta"
+	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
+	DefaultMongoConnectionTimeout = 5 * time.Second
+	DefaultMongoPingTimeoutSec    = 5
+	DefaultMongoYorkieDatabase    = "yorkie-meta"
 
 	DefaultSnapshotThreshold = 500
 	DefaultSnapshotInterval  = 100
@@ -99,10 +100,10 @@ func newConfig(port int, metricsPort int, dbName string) *Config {
 			SnapshotInterval:  DefaultSnapshotInterval,
 		},
 		Mongo: &mongo.Config{
-			ConnectionURI:        DefaultMongoConnectionURI,
-			ConnectionTimeoutSec: DefaultMongoConnectionTimeoutSec,
-			PingTimeoutSec:       DefaultMongoPingTimeoutSec,
-			YorkieDatabase:       dbName,
+			ConnectionURI:     DefaultMongoConnectionURI,
+			ConnectionTimeout: DefaultMongoConnectionTimeout.String(),
+			PingTimeoutSec:    DefaultMongoPingTimeoutSec,
+			YorkieDatabase:    dbName,
 		},
 	}
 }
