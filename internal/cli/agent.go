@@ -66,10 +66,6 @@ func newAgentCmd() *cobra.Command {
 				conf = parsed
 			}
 
-			if err := conf.Validate(); err != nil {
-				return err
-			}
-
 			r, err := yorkie.New(conf)
 			if err != nil {
 				return err

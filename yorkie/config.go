@@ -58,11 +58,6 @@ type Config struct {
 	Backend *backend.Config    `json:"Backend"`
 }
 
-// RPCAddr returns the RPC address.
-func (c *Config) RPCAddr() string {
-	return fmt.Sprintf("localhost:%d", c.RPC.Port)
-}
-
 // NewConfig returns a Config struct that contains reasonable defaults
 // for most of the configurations.
 func NewConfig() *Config {
@@ -86,6 +81,26 @@ func NewConfigFromFile(path string) (*Config, error) {
 	return conf, nil
 }
 
+// RPCAddr returns the RPC address.
+func (c *Config) RPCAddr() string {
+	return fmt.Sprintf("localhost:%d", c.RPC.Port)
+}
+
+// Validate returns an error if the provided Config is invalidated.
+func (c *Config) Validate() error {
+	if err := c.RPC.Validate(); err != nil {
+		return err
+	}
+
+	// TODO(umi0410): Other validations will be here later.
+
+	if err := c.Backend.Validate(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func newConfig(port int, metricsPort int, dbName string) *Config {
 	return &Config{
 		RPC: &rpc.Config{
@@ -105,19 +120,4 @@ func newConfig(port int, metricsPort int, dbName string) *Config {
 			YorkieDatabase:       dbName,
 		},
 	}
-}
-
-// Validate returns an error if the provided Config is invalidated.
-func (c *Config) Validate() error {
-	if err := c.Backend.Validate(); err != nil {
-		return err
-	}
-	if err := c.RPC.Validate(); err != nil {
-		return err
-	}
-
-	// TODO(umi0410): Other validations will be here later.
-	// ...
-
-	return nil
 }
