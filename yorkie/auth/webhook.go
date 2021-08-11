@@ -116,7 +116,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn func() (int, error)) error {
 	var retries uint64
 	var statusCode int
-	for retries <= cfg.AuthorizationWebhookMaxRetries {
+	for retries <= cfg.AuthWebhookMaxRetries {
 		statusCode, err := webhookFn()
 		if !shouldRetry(statusCode, err) {
 			if err == ErrUnexpectedStatusCode {

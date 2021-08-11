@@ -213,9 +213,9 @@ func init() {
 			" If no value is specified, all methods will be checked.",
 	)
 	cmd.Flags().Uint64Var(
-		&conf.Backend.AuthorizationWebhookMaxRetries,
+		&conf.Backend.AuthWebhookMaxRetries,
 		"authorization-webhook-max-retries",
-		yorkie.DefaultAuthorizationWebhookMaxRetries,
+		yorkie.DefaultAuthWebhookMaxRetries,
 		"Maximum number of retries for an authorization webhook.",
 	)
 	cmd.Flags().Uint64Var(

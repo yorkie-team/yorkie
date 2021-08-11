@@ -44,7 +44,7 @@ const (
 	DefaultSnapshotThreshold = 500
 	DefaultSnapshotInterval  = 100
 
-	DefaultAuthorizationWebhookMaxRetries              = 10
+	DefaultAuthWebhookMaxRetries                       = 10
 	DefaultAuthorizationWebhookWaitIntervalMillis      = 3000
 	DefaultAuthorizationWebhookCacheAuthorizedTTLSec   = 10
 	DefaultAuthorizationWebhookCacheUnauthorizedTTLSec = 10
