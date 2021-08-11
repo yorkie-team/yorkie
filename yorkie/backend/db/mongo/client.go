@@ -34,14 +34,6 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
 
-// Config is the configuration for creating a Client instance.
-type Config struct {
-	ConnectionTimeout string          `json:"ConnectionTimeout"`
-	ConnectionURI     string          `json:"ConnectionURI"`
-	YorkieDatabase    string          `json:"YorkieDatabase"`
-	PingTimeoutSec    gotime.Duration `json:"PingTimeoutSec"`
-}
-
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
 	config *Config
