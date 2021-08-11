@@ -37,7 +37,7 @@ var (
 var (
 	flagConfPath           string
 	mongoConnectionTimeout time.Duration
-	mongoPingTimeoutSec    int
+	mongoPingTimeout       time.Duration
 	etcdEndpoints          []string
 	conf                   = yorkie.NewConfig()
 )
@@ -48,7 +48,7 @@ func newAgentCmd() *cobra.Command {
 		Short: "Starts yorkie agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf.Mongo.ConnectionTimeout = mongoConnectionTimeout.String()
-			conf.Mongo.PingTimeoutSec = time.Duration(mongoPingTimeoutSec)
+			conf.Mongo.PingTimeout = mongoPingTimeout.String()
 			if etcdEndpoints != nil {
 				conf.ETCD = &etcd.Config{
 					Endpoints: etcdEndpoints,
@@ -174,11 +174,11 @@ func init() {
 		yorkie.DefaultMongoYorkieDatabase,
 		"Yorkie's database name in MongoDB",
 	)
-	cmd.Flags().IntVar(
-		&mongoPingTimeoutSec,
-		"mongo-ping-timeout-sec",
-		yorkie.DefaultMongoPingTimeoutSec,
-		"Mongo DB's ping timeout in seconds",
+	cmd.Flags().DurationVar(
+		&mongoPingTimeout,
+		"mongo-ping-timeout",
+		yorkie.DefaultMongoPingTimeout,
+		"Mongo DB's ping timeout",
 	)
 	cmd.Flags().StringSliceVar(
 		&etcdEndpoints,

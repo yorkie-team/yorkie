@@ -41,7 +41,7 @@ const (
 	MetricsPort            = 21102
 	MongoConnectionURI     = "mongodb://localhost:27017"
 	MongoConnectionTimeout = "5s"
-	MongoPingTimeoutSec    = 5
+	MongoPingTimeout       = "5s"
 	SnapshotThreshold      = 10
 	Collection             = "test-collection"
 )
@@ -126,7 +126,7 @@ func TestConfig(authWebhook string) *yorkie.Config {
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,
 			ConnectionTimeout: MongoConnectionTimeout,
-			PingTimeoutSec:    MongoPingTimeoutSec,
+			PingTimeout:       MongoPingTimeout,
 			YorkieDatabase:    TestDBName(),
 		},
 		ETCD: &etcd.Config{

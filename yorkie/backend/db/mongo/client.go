@@ -62,11 +62,15 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	ctxPing, cancel := context.WithTimeout(ctx, conf.PingTimeoutSec*gotime.Second)
+	pingTimeout, err := gotime.ParseDuration(conf.PingTimeout)
+	if err != nil {
+		return nil, err
+	}
+	ctxPing, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
 
 	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
-		log.Logger.Errorf("fail to connect to %s in %d sec", conf.ConnectionURI, conf.PingTimeoutSec)
+		log.Logger.Errorf("fail to connect to %s in %d sec", conf.ConnectionURI, pingTimeout.Seconds())
 		return nil, err
 	}
 

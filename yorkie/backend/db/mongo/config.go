@@ -23,10 +23,10 @@ import (
 
 // Config is the configuration for creating a Client instance.
 type Config struct {
-	ConnectionTimeout string        `json:"ConnectionTimeout"`
-	ConnectionURI     string        `json:"ConnectionURI"`
-	YorkieDatabase    string        `json:"YorkieDatabase"`
-	PingTimeoutSec    time.Duration `json:"PingTimeoutSec"`
+	ConnectionTimeout string `json:"ConnectionTimeout"`
+	ConnectionURI     string `json:"ConnectionURI"`
+	YorkieDatabase    string `json:"YorkieDatabase"`
+	PingTimeout       string `json:"PingTimeout"`
 }
 
 // Validate returns an error if the provided Config is invalidated.
@@ -35,6 +35,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			"invalid argument \"%s\" for \"--mongo-connection-timeout\" flag: %w",
 			c.ConnectionTimeout,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.PingTimeout); err != nil {
+		return fmt.Errorf(
+			"invalid argument \"%s\" for \"--mongo-ping-timeout\" flag: %w",
+			c.PingTimeout,
 			err,
 		)
 	}

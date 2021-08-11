@@ -39,7 +39,9 @@ func TestNewConfigFromFile(t *testing.T) {
 	assert.Equal(t, connTimeout, yorkie.DefaultMongoConnectionTimeout)
 	assert.Equal(t, conf.Mongo.ConnectionURI, yorkie.DefaultMongoConnectionURI)
 	assert.Equal(t, conf.Mongo.YorkieDatabase, yorkie.DefaultMongoYorkieDatabase)
-	assert.Equal(t, conf.Mongo.PingTimeoutSec, time.Duration(yorkie.DefaultMongoPingTimeoutSec))
+	pingTimeout, err := time.ParseDuration(conf.Mongo.PingTimeout)
+	assert.NoError(t, err)
+	assert.Equal(t, pingTimeout, yorkie.DefaultMongoPingTimeout)
 	assert.Equal(t, conf.Backend.SnapshotThreshold, uint64(yorkie.DefaultSnapshotThreshold))
 
 	filePath := "config.sample.json"
@@ -54,6 +56,8 @@ func TestNewConfigFromFile(t *testing.T) {
 	assert.Equal(t, connTimeout, yorkie.DefaultMongoConnectionTimeout)
 	assert.Equal(t, conf.Mongo.ConnectionURI, yorkie.DefaultMongoConnectionURI)
 	assert.Equal(t, conf.Mongo.YorkieDatabase, yorkie.DefaultMongoYorkieDatabase)
-	assert.Equal(t, conf.Mongo.PingTimeoutSec, time.Duration(yorkie.DefaultMongoPingTimeoutSec))
+	pingTimeout, err = time.ParseDuration(conf.Mongo.PingTimeout)
+	assert.NoError(t, err)
+	assert.Equal(t, pingTimeout, yorkie.DefaultMongoPingTimeout)
 	assert.Equal(t, conf.Backend.SnapshotThreshold, uint64(yorkie.DefaultSnapshotThreshold))
 }

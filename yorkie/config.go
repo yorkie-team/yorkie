@@ -38,7 +38,7 @@ const (
 
 	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout = 5 * time.Second
-	DefaultMongoPingTimeoutSec    = 5
+	DefaultMongoPingTimeout       = 5 * time.Second
 	DefaultMongoYorkieDatabase    = "yorkie-meta"
 
 	DefaultSnapshotThreshold = 500
@@ -121,7 +121,7 @@ func newConfig(port int, metricsPort int, dbName string) *Config {
 		Mongo: &mongo.Config{
 			ConnectionURI:     DefaultMongoConnectionURI,
 			ConnectionTimeout: DefaultMongoConnectionTimeout.String(),
-			PingTimeoutSec:    DefaultMongoPingTimeoutSec,
+			PingTimeout:       DefaultMongoPingTimeout.String(),
 			YorkieDatabase:    dbName,
 		},
 	}

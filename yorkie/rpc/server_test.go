@@ -46,7 +46,7 @@ func TestMain(m *testing.M) {
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    helper.TestDBName(),
 		ConnectionTimeout: helper.MongoConnectionTimeout,
-		PingTimeoutSec:    helper.MongoPingTimeoutSec,
+		PingTimeout:       helper.MongoPingTimeout,
 	}, &etcd.Config{
 		Endpoints: helper.ETCDEndpoints,
 	}, testRPCAddr, prometheus.NewMetrics())
