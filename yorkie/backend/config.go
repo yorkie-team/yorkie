@@ -44,10 +44,10 @@ type Config struct {
 	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
 	AuthWebhookMaxWaitInterval string `json:"AuthWebhookMaxWaitInterval"`
 
-	// AuthorizationWebhookCacheAuthorizedTTLSec is the TTL value to set when caching the authorized result.
-	AuthorizationWebhookCacheAuthorizedTTLSec uint64 `json:"AuthorizationWebhookCacheAuthorizedTTLSec"`
+	// AuthWebhookCacheAuthTTL is the TTL value to set when caching the authorized result.
+	AuthWebhookCacheAuthTTL string `json:"AuthWebhookCacheAuthTTL"`
 
-	// AuthorizationWebhookCacheAuthorizedTTLSec is the TTL value to set when caching the unauthorized result.
+	// AuthorizationWebhookCacheUnauthorizedTTLSec is the TTL value to set when caching the unauthorized result.
 	AuthorizationWebhookCacheUnauthorizedTTLSec uint64 `json:"AuthorizationWebhookCacheUnauthorizedTTLSec"`
 }
 
@@ -82,6 +82,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			"invalid argument \"%s\" for \"--auth-webhook-max-wait-interval\" flag: %w",
 			c.AuthWebhookMaxWaitInterval,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.AuthWebhookCacheAuthTTL); err != nil {
+		return fmt.Errorf(
+			"invalid argument \"%s\" for \"--auth-webhook-cache-auth-ttl\" flag: %w",
+			c.AuthWebhookCacheAuthTTL,
 			err,
 		)
 	}

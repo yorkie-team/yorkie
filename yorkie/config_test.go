@@ -68,11 +68,9 @@ func TestNewConfigFromFile(t *testing.T) {
 	authWebhookMaxWaitInterval, err := time.ParseDuration(conf.Backend.AuthWebhookMaxWaitInterval)
 	assert.NoError(t, err)
 	assert.Equal(t, authWebhookMaxWaitInterval, yorkie.DefaultAuthWebhookMaxWaitInterval)
-	assert.Equal(
-		t,
-		conf.Backend.AuthorizationWebhookCacheAuthorizedTTLSec,
-		uint64(yorkie.DefaultAuthorizationWebhookCacheAuthorizedTTLSec),
-	)
+	authWebhookCacheAuthTTL, err := time.ParseDuration(conf.Backend.AuthWebhookCacheAuthTTL)
+	assert.NoError(t, err)
+	assert.Equal(t, authWebhookCacheAuthTTL, yorkie.DefaultAuthWebhookCacheAuthTTL)
 	assert.Equal(
 		t,
 		conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec,

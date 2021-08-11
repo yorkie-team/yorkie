@@ -46,7 +46,7 @@ const (
 
 	DefaultAuthWebhookMaxRetries                       = 10
 	DefaultAuthWebhookMaxWaitInterval                  = 3000 * time.Millisecond
-	DefaultAuthorizationWebhookCacheAuthorizedTTLSec   = 10
+	DefaultAuthWebhookCacheAuthTTL                     = 10 * time.Second
 	DefaultAuthorizationWebhookCacheUnauthorizedTTLSec = 10
 )
 
@@ -151,8 +151,8 @@ func (c *Config) ensureDefaultValue() {
 		c.Backend.AuthWebhookMaxWaitInterval = DefaultAuthWebhookMaxWaitInterval.String()
 	}
 
-	if c.Backend.AuthorizationWebhookCacheAuthorizedTTLSec == 0 {
-		c.Backend.AuthorizationWebhookCacheAuthorizedTTLSec = DefaultAuthorizationWebhookCacheAuthorizedTTLSec
+	if c.Backend.AuthWebhookCacheAuthTTL == "" {
+		c.Backend.AuthWebhookCacheAuthTTL = DefaultAuthWebhookCacheAuthTTL.String()
 	}
 
 	if c.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec == 0 {

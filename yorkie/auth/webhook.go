@@ -107,7 +107,10 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		return err
 	}
 
-	authorizedTTL := time.Duration(be.Config.AuthorizationWebhookCacheAuthorizedTTLSec) * time.Second
+	authorizedTTL, err := time.ParseDuration(be.Config.AuthWebhookCacheAuthTTL)
+	if err != nil {
+		return err
+	}
 	be.AuthWebhookCache.Add(cacheKey, authResp, authorizedTTL)
 
 	return nil

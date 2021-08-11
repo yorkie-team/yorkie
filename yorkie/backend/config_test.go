@@ -39,6 +39,7 @@ func TestConfig(t *testing.T) {
 		conf1 := backend.Config{
 			AuthWebhookMethods:         []string{"ActivateClient"},
 			AuthWebhookMaxWaitInterval: "0ms",
+			AuthWebhookCacheAuthTTL:    "10s",
 		}
 		assert.NoError(t, conf1.Validate())
 
@@ -46,14 +47,24 @@ func TestConfig(t *testing.T) {
 		conf2 := backend.Config{
 			AuthWebhookMethods:         []string{"InvalidMethod"},
 			AuthWebhookMaxWaitInterval: "0ms",
+			AuthWebhookCacheAuthTTL:    "10s",
 		}
 		assert.Error(t, conf2.Validate())
 
-		// 3. Invalid max wait interval
+		// 3. Invalid AuthWebhookMaxWaitInterval
 		conf3 := backend.Config{
 			AuthWebhookMethods:         []string{"ActivateClient"},
 			AuthWebhookMaxWaitInterval: "5",
+			AuthWebhookCacheAuthTTL:    "10s",
 		}
 		assert.Error(t, conf3.Validate())
+
+		// 3. Invalid AuthWebhookCacheAuthTTL
+		conf4 := backend.Config{
+			AuthWebhookMethods:         []string{"ActivateClient"},
+			AuthWebhookMaxWaitInterval: "0ms",
+			AuthWebhookCacheAuthTTL:    "s",
+		}
+		assert.Error(t, conf4.Validate())
 	})
 }

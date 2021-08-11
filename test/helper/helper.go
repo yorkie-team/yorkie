@@ -45,6 +45,7 @@ const (
 	SnapshotThreshold          = 10
 	Collection                 = "test-collection"
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
+	AuthWebhookCacheAuthTTL    = 10 * gotime.Second
 )
 
 // Below are the values of the related ETCD config.
@@ -124,6 +125,7 @@ func TestConfig(authWebhook string) *yorkie.Config {
 			SnapshotThreshold:          SnapshotThreshold,
 			AuthWebhookURL:             authWebhook,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
+			AuthWebhookCacheAuthTTL:    AuthWebhookCacheAuthTTL.String(),
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,
