@@ -18,6 +18,7 @@ package backend
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
@@ -40,9 +41,8 @@ type Config struct {
 	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
 	AuthWebhookMaxRetries uint64 `json:"AuthWebhookMaxRetries"`
 
-	// AuthorizationWebhookMaxWaitIntervalMillis is the max interval
-	// that waits before retrying the authorization webhook.
-	AuthorizationWebhookMaxWaitIntervalMillis uint64 `json:"AuthorizationWebhookMaxWaitIntervalMillis"`
+	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
+	AuthWebhookMaxWaitInterval string `json:"AuthWebhookMaxWaitInterval"`
 
 	// AuthorizationWebhookCacheAuthorizedTTLSec is the TTL value to set when caching the authorized result.
 	AuthorizationWebhookCacheAuthorizedTTLSec uint64 `json:"AuthorizationWebhookCacheAuthorizedTTLSec"`
@@ -75,6 +75,16 @@ func (c *Config) Validate() error {
 	for _, method := range c.AuthWebhookMethods {
 		if !types.IsAuthMethod(method) {
 			return fmt.Errorf("not supported method for authorization webhook: %s", method)
+		}
+	}
+
+	if c.AuthWebhookMaxWaitInterval != "" {
+		if _, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval); err != nil {
+			return fmt.Errorf(
+				"invalid argument \"%s\" for \"--auth-webhook-max-wait-interval\" flag: %w",
+				c.AuthWebhookMaxWaitInterval,
+				err,
+			)
 		}
 	}
 

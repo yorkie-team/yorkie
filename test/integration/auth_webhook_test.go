@@ -150,7 +150,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		conf := helper.TestConfig(server.URL)
 		conf.Backend.AuthWebhookMaxRetries = recoveryCnt
-		conf.Backend.AuthorizationWebhookMaxWaitIntervalMillis = 1000
+		conf.Backend.AuthWebhookMaxWaitInterval = "1000ms"
 		agent, err := yorkie.New(conf)
 		assert.NoError(t, err)
 		assert.NoError(t, agent.Start())
@@ -174,7 +174,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		conf := helper.TestConfig(server.URL)
 		conf.Backend.AuthWebhookMaxRetries = 2
-		conf.Backend.AuthorizationWebhookMaxWaitIntervalMillis = 1000
+		conf.Backend.AuthWebhookMaxWaitInterval = "1000ms"
 		agent, err := yorkie.New(conf)
 		assert.NoError(t, err)
 		assert.NoError(t, agent.Start())

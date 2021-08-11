@@ -126,9 +126,13 @@ func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn 
 			return err
 		}
 
+		maxWaitInterval, err := time.ParseDuration(cfg.AuthWebhookMaxWaitInterval)
+		if err != nil {
+			return err
+		}
 		waitBeforeRetry := waitInterval(
 			retries,
-			time.Duration(cfg.AuthorizationWebhookMaxWaitIntervalMillis)*time.Millisecond,
+			maxWaitInterval,
 		)
 
 		select {
