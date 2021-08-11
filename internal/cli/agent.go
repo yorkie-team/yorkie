@@ -40,6 +40,7 @@ var (
 	mongoPingTimeout           time.Duration
 	authWebhookMaxWaitInterval time.Duration
 	authWebhookCacheAuthTTL    time.Duration
+	authWebhookCacheUnauthTTL  time.Duration
 	etcdEndpoints              []string
 	conf                       = yorkie.NewConfig()
 )
@@ -53,6 +54,7 @@ func newAgentCmd() *cobra.Command {
 			conf.Mongo.PingTimeout = mongoPingTimeout.String()
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
+			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
 			if etcdEndpoints != nil {
 				conf.ETCD = &etcd.Config{
 					Endpoints: etcdEndpoints,
@@ -234,10 +236,10 @@ func init() {
 		yorkie.DefaultAuthWebhookCacheAuthTTL,
 		"TTL value to set when caching authorized webhook response.",
 	)
-	cmd.Flags().Uint64Var(
-		&conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec,
-		"authorization-webhook-cache-unauthorized-ttl-sec",
-		yorkie.DefaultAuthorizationWebhookCacheUnauthorizedTTLSec,
+	cmd.Flags().DurationVar(
+		&authWebhookCacheUnauthTTL,
+		"auth-webhook-cache-unauth-ttl",
+		yorkie.DefaultAuthWebhookCacheUnauthTTL,
 		"TTL value to set when caching unauthorized webhook response.",
 	)
 

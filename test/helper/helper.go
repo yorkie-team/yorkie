@@ -46,6 +46,7 @@ const (
 	Collection                 = "test-collection"
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
 	AuthWebhookCacheAuthTTL    = 10 * gotime.Second
+	AuthWebhookCacheUnauthTTL  = 10 * gotime.Second
 )
 
 // Below are the values of the related ETCD config.
@@ -126,6 +127,7 @@ func TestConfig(authWebhook string) *yorkie.Config {
 			AuthWebhookURL:             authWebhook,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
 			AuthWebhookCacheAuthTTL:    AuthWebhookCacheAuthTTL.String(),
+			AuthWebhookCacheUnauthTTL:  AuthWebhookCacheUnauthTTL.String(),
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,

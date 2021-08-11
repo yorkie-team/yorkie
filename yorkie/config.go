@@ -44,10 +44,10 @@ const (
 	DefaultSnapshotThreshold = 500
 	DefaultSnapshotInterval  = 100
 
-	DefaultAuthWebhookMaxRetries                       = 10
-	DefaultAuthWebhookMaxWaitInterval                  = 3000 * time.Millisecond
-	DefaultAuthWebhookCacheAuthTTL                     = 10 * time.Second
-	DefaultAuthorizationWebhookCacheUnauthorizedTTLSec = 10
+	DefaultAuthWebhookMaxRetries      = 10
+	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultAuthWebhookCacheAuthTTL    = 10 * time.Second
+	DefaultAuthWebhookCacheUnauthTTL  = 10 * time.Second
 )
 
 // Config is the configuration for creating a Yorkie instance.
@@ -155,8 +155,8 @@ func (c *Config) ensureDefaultValue() {
 		c.Backend.AuthWebhookCacheAuthTTL = DefaultAuthWebhookCacheAuthTTL.String()
 	}
 
-	if c.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec == 0 {
-		c.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec = DefaultAuthorizationWebhookCacheUnauthorizedTTLSec
+	if c.Backend.AuthWebhookCacheUnauthTTL == "" {
+		c.Backend.AuthWebhookCacheUnauthTTL = DefaultAuthWebhookCacheUnauthTTL.String()
 	}
 }
 

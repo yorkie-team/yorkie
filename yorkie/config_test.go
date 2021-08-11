@@ -71,9 +71,8 @@ func TestNewConfigFromFile(t *testing.T) {
 	authWebhookCacheAuthTTL, err := time.ParseDuration(conf.Backend.AuthWebhookCacheAuthTTL)
 	assert.NoError(t, err)
 	assert.Equal(t, authWebhookCacheAuthTTL, yorkie.DefaultAuthWebhookCacheAuthTTL)
-	assert.Equal(
-		t,
-		conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec,
-		uint64(yorkie.DefaultAuthorizationWebhookCacheUnauthorizedTTLSec),
-	)
+
+	authWebhookCacheUnauthTTL, err := time.ParseDuration(conf.Backend.AuthWebhookCacheUnauthTTL)
+	assert.NoError(t, err)
+	assert.Equal(t, authWebhookCacheUnauthTTL, yorkie.DefaultAuthWebhookCacheUnauthTTL)
 }

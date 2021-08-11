@@ -264,9 +264,9 @@ func TestAuthWebhook(t *testing.T) {
 			reqCnt++
 		}))
 
-		var unauthorizedTTLSec uint64 = 1
+		unauthorizedTTLSec := 1 * time.Second
 		conf := helper.TestConfig(server.URL)
-		conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec = unauthorizedTTLSec
+		conf.Backend.AuthWebhookCacheUnauthTTL = unauthorizedTTLSec.String()
 
 		agent, err := yorkie.New(conf)
 		assert.NoError(t, err)
@@ -285,7 +285,7 @@ func TestAuthWebhook(t *testing.T) {
 		}
 
 		// 02. multiple requests after eviction by ttl.
-		time.Sleep(time.Duration(unauthorizedTTLSec) * time.Second)
+		time.Sleep(unauthorizedTTLSec)
 		for i := 0; i < 3; i++ {
 			err = cli.Activate(ctx)
 			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())

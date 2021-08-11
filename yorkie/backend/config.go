@@ -47,8 +47,8 @@ type Config struct {
 	// AuthWebhookCacheAuthTTL is the TTL value to set when caching the authorized result.
 	AuthWebhookCacheAuthTTL string `json:"AuthWebhookCacheAuthTTL"`
 
-	// AuthorizationWebhookCacheUnauthorizedTTLSec is the TTL value to set when caching the unauthorized result.
-	AuthorizationWebhookCacheUnauthorizedTTLSec uint64 `json:"AuthorizationWebhookCacheUnauthorizedTTLSec"`
+	// AuthWebhookCacheUnauthTTL is the TTL value to set when caching the unauthorized result.
+	AuthWebhookCacheUnauthTTL string `json:"AuthWebhookCacheUnauthTTL"`
 }
 
 // RequireAuth returns whether the given method require authorization.
@@ -90,6 +90,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			"invalid argument \"%s\" for \"--auth-webhook-cache-auth-ttl\" flag: %w",
 			c.AuthWebhookCacheAuthTTL,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.AuthWebhookCacheUnauthTTL); err != nil {
+		return fmt.Errorf(
+			"invalid argument \"%s\" for \"--auth-webhook-cache-unauth-ttl\" flag: %w",
+			c.AuthWebhookCacheUnauthTTL,
 			err,
 		)
 	}
