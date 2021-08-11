@@ -43,6 +43,10 @@ type Yorkie struct {
 
 // New creates a new instance of Yorkie.
 func New(conf *Config) (*Yorkie, error) {
+	if err := conf.Validate(); err != nil {
+		return nil, err
+	}
+
 	met := prometheus.NewMetrics()
 
 	be, err := backend.New(
