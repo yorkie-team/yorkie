@@ -200,8 +200,8 @@ func init() {
 		"Interval of changes to create a snapshot",
 	)
 	cmd.Flags().StringVar(
-		&conf.Backend.AuthorizationWebhookURL,
-		"authorization-webhook-url",
+		&conf.Backend.AuthWebhookURL,
+		"auth-webhook-url",
 		"",
 		"URL of remote service to query authorization",
 	)

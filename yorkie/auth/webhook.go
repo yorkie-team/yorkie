@@ -70,7 +70,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 	var authResp *types.AuthWebhookResponse
 	if err := withExponentialBackoff(ctx, be.Config, func() (int, error) {
 		resp, err := http.Post(
-			be.Config.AuthorizationWebhookURL,
+			be.Config.AuthWebhookURL,
 			"application/json",
 			bytes.NewBuffer(reqBody),
 		)

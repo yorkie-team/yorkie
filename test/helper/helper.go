@@ -120,8 +120,8 @@ func TestConfig(authWebhook string) *yorkie.Config {
 			Port: MetricsPort + portOffset,
 		},
 		Backend: &backend.Config{
-			SnapshotThreshold:       SnapshotThreshold,
-			AuthorizationWebhookURL: authWebhook,
+			SnapshotThreshold: SnapshotThreshold,
+			AuthWebhookURL:    authWebhook,
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,

@@ -31,8 +31,8 @@ type Config struct {
 	// SnapshotInterval is the interval of changes to create a snapshot.
 	SnapshotInterval uint64 `json:"SnapshotInterval"`
 
-	// AuthorizationWebhookURL is the url of the authorization webhook.
-	AuthorizationWebhookURL string `json:"AuthorizationWebhookURL"`
+	// AuthWebhookURL is the url of the authorization webhook.
+	AuthWebhookURL string `json:"AuthWebhookURL"`
 
 	// AuthorizationWebhookMethods is the methods that run the authorization webhook.
 	AuthorizationWebhookMethods []string `json:"AuthorizationWebhookMethods"`
@@ -54,7 +54,7 @@ type Config struct {
 
 // RequireAuth returns whether the given method require authorization.
 func (c *Config) RequireAuth(method types.Method) bool {
-	if len(c.AuthorizationWebhookURL) == 0 {
+	if len(c.AuthWebhookURL) == 0 {
 		return false
 	}
 
