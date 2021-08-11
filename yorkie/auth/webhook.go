@@ -136,10 +136,7 @@ func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn 
 		if err != nil {
 			return err
 		}
-		waitBeforeRetry := waitInterval(
-			retries,
-			maxWaitInterval,
-		)
+		waitBeforeRetry := waitInterval(retries, maxWaitInterval)
 
 		select {
 		case <-ctx.Done():

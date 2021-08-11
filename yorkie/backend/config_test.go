@@ -3,10 +3,10 @@ package backend_test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestConfig(t *testing.T) {
@@ -36,48 +36,32 @@ func TestConfig(t *testing.T) {
 
 	t.Run("validate test", func(t *testing.T) {
 		// 1.Success
-		conf1 := backend.Config{
+		validConf := backend.Config{
 			AuthWebhookMethods:         []string{"ActivateClient"},
 			AuthWebhookMaxWaitInterval: "0ms",
 			AuthWebhookCacheAuthTTL:    "10s",
 			AuthWebhookCacheUnauthTTL:  "10s",
 		}
-		assert.NoError(t, conf1.Validate())
+		assert.NoError(t, validConf.Validate())
 
 		// 2. Included invalid methods
-		conf2 := backend.Config{
-			AuthWebhookMethods:         []string{"InvalidMethod"},
-			AuthWebhookMaxWaitInterval: "0ms",
-			AuthWebhookCacheAuthTTL:    "10s",
-			AuthWebhookCacheUnauthTTL:  "10s",
-		}
-		assert.Error(t, conf2.Validate())
+		conf1 := validConf
+		conf1.AuthWebhookMethods = []string{"InvalidMethod"}
+		assert.Error(t, conf1.Validate())
 
 		// 3. Invalid AuthWebhookMaxWaitInterval
-		conf3 := backend.Config{
-			AuthWebhookMethods:         []string{"ActivateClient"},
-			AuthWebhookMaxWaitInterval: "5",
-			AuthWebhookCacheAuthTTL:    "10s",
-			AuthWebhookCacheUnauthTTL:  "10s",
-		}
-		assert.Error(t, conf3.Validate())
+		conf2 := validConf
+		conf2.AuthWebhookMaxWaitInterval = "5"
+		assert.Error(t, conf2.Validate())
 
 		// 3. Invalid AuthWebhookCacheAuthTTL
-		conf4 := backend.Config{
-			AuthWebhookMethods:         []string{"ActivateClient"},
-			AuthWebhookMaxWaitInterval: "0ms",
-			AuthWebhookCacheAuthTTL:    "s",
-			AuthWebhookCacheUnauthTTL:  "10s",
-		}
-		assert.Error(t, conf4.Validate())
+		conf3 := validConf
+		conf3.AuthWebhookCacheAuthTTL = "s"
+		assert.Error(t, conf3.Validate())
 
 		// 4. Invalid AuthWebhookCacheUnauthTTL
-		conf5 := backend.Config{
-			AuthWebhookMethods:         []string{"ActivateClient"},
-			AuthWebhookMaxWaitInterval: "0ms",
-			AuthWebhookCacheAuthTTL:    "10s",
-			AuthWebhookCacheUnauthTTL:  "s",
-		}
-		assert.Error(t, conf5.Validate())
+		conf4 := validConf
+		conf4.AuthWebhookCacheUnauthTTL = "s"
+		assert.Error(t, conf4.Validate())
 	})
 }

@@ -47,10 +47,7 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		connTimeout,
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), connTimeout)
 	defer cancel()
 
 	client, err := mongo.Connect(
