@@ -206,8 +206,8 @@ func init() {
 		"URL of remote service to query authorization",
 	)
 	cmd.Flags().StringSliceVar(
-		&conf.Backend.AuthorizationWebhookMethods,
-		"authorization-webhook-methods",
+		&conf.Backend.AuthWebhookMethods,
+		"auth-webhook-methods",
 		[]string{},
 		"List of methods that require authorization checks."+
 			" If no value is specified, all methods will be checked.",

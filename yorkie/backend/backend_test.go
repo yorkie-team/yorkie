@@ -28,22 +28,22 @@ import (
 func TestConfig(t *testing.T) {
 	t.Run("authorization webhook config test", func(t *testing.T) {
 		conf := backend.Config{
-			AuthWebhookURL:              "ValidWebhookURL",
-			AuthorizationWebhookMethods: []string{"InvalidMethod"},
+			AuthWebhookURL:     "ValidWebhookURL",
+			AuthWebhookMethods: []string{"InvalidMethod"},
 		}
 		assert.Error(t, conf.Validate())
 
 		conf2 := backend.Config{
-			AuthWebhookURL:              "ValidWebhookURL",
-			AuthorizationWebhookMethods: []string{string(types.ActivateClient)},
+			AuthWebhookURL:     "ValidWebhookURL",
+			AuthWebhookMethods: []string{string(types.ActivateClient)},
 		}
 		assert.NoError(t, conf2.Validate())
 		assert.True(t, conf2.RequireAuth(types.ActivateClient))
 		assert.False(t, conf2.RequireAuth(types.DetachDocument))
 
 		conf3 := backend.Config{
-			AuthWebhookURL:              "ValidWebhookURL",
-			AuthorizationWebhookMethods: []string{},
+			AuthWebhookURL:     "ValidWebhookURL",
+			AuthWebhookMethods: []string{},
 		}
 		assert.NoError(t, conf3.Validate())
 		assert.True(t, conf3.RequireAuth(types.ActivateClient))

@@ -117,7 +117,7 @@ func TestAuthWebhook(t *testing.T) {
 		server, _ := newAuthServer(t)
 
 		conf := helper.TestConfig(server.URL)
-		conf.Backend.AuthorizationWebhookMethods = []string{
+		conf.Backend.AuthWebhookMethods = []string{
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}

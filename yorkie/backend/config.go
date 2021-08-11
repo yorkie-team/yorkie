@@ -34,8 +34,8 @@ type Config struct {
 	// AuthWebhookURL is the url of the authorization webhook.
 	AuthWebhookURL string `json:"AuthWebhookURL"`
 
-	// AuthorizationWebhookMethods is the methods that run the authorization webhook.
-	AuthorizationWebhookMethods []string `json:"AuthorizationWebhookMethods"`
+	// AuthWebhookMethods is the methods that run the authorization webhook.
+	AuthWebhookMethods []string `json:"AuthWebhookMethods"`
 
 	// AuthorizationWebhookMaxRetries is the max count
 	// that retries the authorization webhook.
@@ -58,11 +58,11 @@ func (c *Config) RequireAuth(method types.Method) bool {
 		return false
 	}
 
-	if len(c.AuthorizationWebhookMethods) == 0 {
+	if len(c.AuthWebhookMethods) == 0 {
 		return true
 	}
 
-	for _, m := range c.AuthorizationWebhookMethods {
+	for _, m := range c.AuthWebhookMethods {
 		if types.Method(m) == method {
 			return true
 		}
@@ -73,7 +73,7 @@ func (c *Config) RequireAuth(method types.Method) bool {
 
 // Validate validates this config.
 func (c *Config) Validate() error {
-	for _, method := range c.AuthorizationWebhookMethods {
+	for _, method := range c.AuthWebhookMethods {
 		if !types.IsAuthMethod(method) {
 			return fmt.Errorf("not supported method for authorization webhook: %s", method)
 		}
