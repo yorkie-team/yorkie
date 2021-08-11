@@ -45,7 +45,7 @@ const (
 	DefaultSnapshotInterval  = 100
 
 	DefaultAuthWebhookMaxRetries                       = 10
-	DefaultAuthWebhookWaitInterval                     = 3000 * time.Millisecond
+	DefaultAuthWebhookMaxWaitInterval                  = 3000 * time.Millisecond
 	DefaultAuthorizationWebhookCacheAuthorizedTTLSec   = 10
 	DefaultAuthorizationWebhookCacheUnauthorizedTTLSec = 10
 )
@@ -79,6 +79,8 @@ func NewConfigFromFile(path string) (*Config, error) {
 		return nil, err
 	}
 
+	conf.ensureDefaultValue()
+
 	return conf, nil
 }
 
@@ -104,6 +106,58 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// ensureDefaultValue sets the value of the option to which the default value
+// should be applied when the user does not input it.
+func (c *Config) ensureDefaultValue() {
+	if c.RPC.Port == 0 {
+		c.RPC.Port = DefaultRPCPort
+	}
+
+	if c.Metrics.Port == 0 {
+		c.Metrics.Port = DefaultMetricsPort
+	}
+
+	if c.Mongo.ConnectionTimeout == "" {
+		c.Mongo.ConnectionTimeout = DefaultMongoConnectionTimeout.String()
+	}
+
+	if c.Mongo.ConnectionURI == "" {
+		c.Mongo.ConnectionURI = DefaultMongoConnectionURI
+	}
+
+	if c.Mongo.YorkieDatabase == "" {
+		c.Mongo.YorkieDatabase = DefaultMongoYorkieDatabase
+	}
+
+	if c.Mongo.PingTimeout == "" {
+		c.Mongo.PingTimeout = DefaultMongoPingTimeout.String()
+	}
+
+	if c.Backend.SnapshotThreshold == 0 {
+		c.Backend.SnapshotThreshold = DefaultSnapshotThreshold
+	}
+
+	if c.Backend.SnapshotInterval == 0 {
+		c.Backend.SnapshotInterval = DefaultSnapshotInterval
+	}
+
+	if c.Backend.AuthWebhookMaxRetries == 0 {
+		c.Backend.AuthWebhookMaxRetries = DefaultAuthWebhookMaxRetries
+	}
+
+	if c.Backend.AuthWebhookMaxWaitInterval == "" {
+		c.Backend.AuthWebhookMaxWaitInterval = DefaultAuthWebhookMaxWaitInterval.String()
+	}
+
+	if c.Backend.AuthorizationWebhookCacheAuthorizedTTLSec == 0 {
+		c.Backend.AuthorizationWebhookCacheAuthorizedTTLSec = DefaultAuthorizationWebhookCacheAuthorizedTTLSec
+	}
+
+	if c.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec == 0 {
+		c.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec = DefaultAuthorizationWebhookCacheUnauthorizedTTLSec
+	}
 }
 
 func newConfig(port int, metricsPort int, dbName string) *Config {

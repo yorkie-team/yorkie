@@ -35,12 +35,12 @@ var (
 )
 
 var (
-	flagConfPath            string
-	mongoConnectionTimeout  time.Duration
-	mongoPingTimeout        time.Duration
-	authWebhookWaitInterval time.Duration
-	etcdEndpoints           []string
-	conf                    = yorkie.NewConfig()
+	flagConfPath               string
+	mongoConnectionTimeout     time.Duration
+	mongoPingTimeout           time.Duration
+	authWebhookMaxWaitInterval time.Duration
+	etcdEndpoints              []string
+	conf                       = yorkie.NewConfig()
 )
 
 func newAgentCmd() *cobra.Command {
@@ -50,7 +50,7 @@ func newAgentCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf.Mongo.ConnectionTimeout = mongoConnectionTimeout.String()
 			conf.Mongo.PingTimeout = mongoPingTimeout.String()
-			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookWaitInterval.String()
+			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			if etcdEndpoints != nil {
 				conf.ETCD = &etcd.Config{
 					Endpoints: etcdEndpoints,
@@ -221,9 +221,9 @@ func init() {
 		"Maximum number of retries for an authorization webhook.",
 	)
 	cmd.Flags().DurationVar(
-		&authWebhookWaitInterval,
+		&authWebhookMaxWaitInterval,
 		"auth-webhook-max-wait-interval",
-		yorkie.DefaultAuthWebhookWaitInterval,
+		yorkie.DefaultAuthWebhookMaxWaitInterval,
 		"Maximum wait interval for authorization webhook.",
 	)
 	cmd.Flags().Uint64Var(

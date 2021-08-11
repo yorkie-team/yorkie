@@ -43,6 +43,8 @@ func TestNewConfigFromFile(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, pingTimeout, yorkie.DefaultMongoPingTimeout)
 	assert.Equal(t, conf.Backend.SnapshotThreshold, uint64(yorkie.DefaultSnapshotThreshold))
+	assert.Equal(t, conf.Backend.SnapshotInterval, uint64(yorkie.DefaultSnapshotInterval))
+	assert.Equal(t, conf.Backend.AuthWebhookURL, "")
 
 	filePath := "config.sample.json"
 	conf, err = yorkie.NewConfigFromFile(filePath)
@@ -60,4 +62,20 @@ func TestNewConfigFromFile(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, pingTimeout, yorkie.DefaultMongoPingTimeout)
 	assert.Equal(t, conf.Backend.SnapshotThreshold, uint64(yorkie.DefaultSnapshotThreshold))
+	assert.Equal(t, conf.Backend.SnapshotInterval, uint64(yorkie.DefaultSnapshotInterval))
+	assert.Equal(t, conf.Backend.AuthWebhookURL, "")
+	assert.Equal(t, conf.Backend.AuthWebhookMaxRetries, uint64(yorkie.DefaultAuthWebhookMaxRetries))
+	authWebhookMaxWaitInterval, err := time.ParseDuration(conf.Backend.AuthWebhookMaxWaitInterval)
+	assert.NoError(t, err)
+	assert.Equal(t, authWebhookMaxWaitInterval, yorkie.DefaultAuthWebhookMaxWaitInterval)
+	assert.Equal(
+		t,
+		conf.Backend.AuthorizationWebhookCacheAuthorizedTTLSec,
+		uint64(yorkie.DefaultAuthorizationWebhookCacheAuthorizedTTLSec),
+	)
+	assert.Equal(
+		t,
+		conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec,
+		uint64(yorkie.DefaultAuthorizationWebhookCacheUnauthorizedTTLSec),
+	)
 }

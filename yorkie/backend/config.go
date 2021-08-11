@@ -78,14 +78,12 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	if c.AuthWebhookMaxWaitInterval != "" {
-		if _, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval); err != nil {
-			return fmt.Errorf(
-				"invalid argument \"%s\" for \"--auth-webhook-max-wait-interval\" flag: %w",
-				c.AuthWebhookMaxWaitInterval,
-				err,
-			)
-		}
+	if _, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval); err != nil {
+		return fmt.Errorf(
+			"invalid argument \"%s\" for \"--auth-webhook-max-wait-interval\" flag: %w",
+			c.AuthWebhookMaxWaitInterval,
+			err,
+		)
 	}
 
 	return nil

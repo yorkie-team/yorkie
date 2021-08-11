@@ -37,13 +37,14 @@ var testStartedAt int64
 
 // Below are the values of the Yorkie config used in the test.
 const (
-	RPCPort                = 21101
-	MetricsPort            = 21102
-	MongoConnectionURI     = "mongodb://localhost:27017"
-	MongoConnectionTimeout = "5s"
-	MongoPingTimeout       = "5s"
-	SnapshotThreshold      = 10
-	Collection             = "test-collection"
+	RPCPort                    = 21101
+	MetricsPort                = 21102
+	MongoConnectionURI         = "mongodb://localhost:27017"
+	MongoConnectionTimeout     = "5s"
+	MongoPingTimeout           = "5s"
+	SnapshotThreshold          = 10
+	Collection                 = "test-collection"
+	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
 )
 
 // Below are the values of the related ETCD config.
@@ -120,8 +121,9 @@ func TestConfig(authWebhook string) *yorkie.Config {
 			Port: MetricsPort + portOffset,
 		},
 		Backend: &backend.Config{
-			SnapshotThreshold: SnapshotThreshold,
-			AuthWebhookURL:    authWebhook,
+			SnapshotThreshold:          SnapshotThreshold,
+			AuthWebhookURL:             authWebhook,
+			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
 		},
 		Mongo: &mongo.Config{
 			ConnectionURI:     MongoConnectionURI,
