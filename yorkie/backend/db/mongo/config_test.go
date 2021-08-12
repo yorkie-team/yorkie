@@ -3,9 +3,9 @@ package mongo_test
 import (
 	"testing"
 
-	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
-
 	"github.com/stretchr/testify/assert"
+
+	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 )
 
 func TestConfig(t *testing.T) {

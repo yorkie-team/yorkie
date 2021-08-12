@@ -206,9 +206,9 @@ func TestAuthWebhook(t *testing.T) {
 			}
 		}))
 
-		authorizedTTLSec := 1 * time.Second
+		authorizedTTL := 1 * time.Second
 		conf := helper.TestConfig(server.URL)
-		conf.Backend.AuthWebhookCacheAuthTTL = authorizedTTLSec.String()
+		conf.Backend.AuthWebhookCacheAuthTTL = authorizedTTL.String()
 
 		agent, err := yorkie.New(conf)
 		assert.NoError(t, err)
@@ -237,7 +237,7 @@ func TestAuthWebhook(t *testing.T) {
 		}
 
 		// 02. multiple requests to update the document after eviction by ttl.
-		time.Sleep(authorizedTTLSec)
+		time.Sleep(authorizedTTL)
 		for i := 0; i < 3; i++ {
 			assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
 				root.SetNewObject("k1")
@@ -264,9 +264,9 @@ func TestAuthWebhook(t *testing.T) {
 			reqCnt++
 		}))
 
-		unauthorizedTTLSec := 1 * time.Second
+		unauthorizedTTL := 1 * time.Second
 		conf := helper.TestConfig(server.URL)
-		conf.Backend.AuthWebhookCacheUnauthTTL = unauthorizedTTLSec.String()
+		conf.Backend.AuthWebhookCacheUnauthTTL = unauthorizedTTL.String()
 
 		agent, err := yorkie.New(conf)
 		assert.NoError(t, err)
@@ -285,7 +285,7 @@ func TestAuthWebhook(t *testing.T) {
 		}
 
 		// 02. multiple requests after eviction by ttl.
-		time.Sleep(unauthorizedTTLSec)
+		time.Sleep(unauthorizedTTL)
 		for i := 0; i < 3; i++ {
 			err = cli.Activate(ctx)
 			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
