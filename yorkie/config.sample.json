@@ -8,10 +8,10 @@
     "Port": 11102
   },
   "Mongo": {
-    "ConnectionTimeoutSec": 5,
+    "ConnectionTimeout": "5s",
     "ConnectionURI": "mongodb://localhost:27017",
     "YorkieDatabase": "yorkie-meta",
-    "PingTimeoutSec": 5
+    "PingTimeout": "5s"
   },
   "ETCD": {
     "Endpoints": [

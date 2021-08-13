@@ -34,14 +34,6 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
 
-// Config is the configuration for creating a Client instance.
-type Config struct {
-	ConnectionTimeoutSec gotime.Duration `json:"ConnectionTimeoutSec"`
-	ConnectionURI        string          `json:"ConnectionURI"`
-	YorkieDatabase       string          `json:"YorkieDatabase"`
-	PingTimeoutSec       gotime.Duration `json:"PingTimeoutSec"`
-}
-
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
 	config *Config
@@ -50,10 +42,7 @@ type Client struct {
 
 // Dial creates an instance of Client and dials the given MongoDB.
 func Dial(conf *Config) (*Client, error) {
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		conf.ConnectionTimeoutSec*gotime.Second,
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), conf.ParseConnectionTimeout())
 	defer cancel()
 
 	client, err := mongo.Connect(
@@ -65,11 +54,12 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	ctxPing, cancel := context.WithTimeout(ctx, conf.PingTimeoutSec*gotime.Second)
+	pingTimeout := conf.ParsePingTimeout()
+	ctxPing, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
 
 	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
-		log.Logger.Errorf("fail to connect to %s in %d sec", conf.ConnectionURI, conf.PingTimeoutSec)
+		log.Logger.Errorf("fail to connect to %s in %d sec", conf.ConnectionURI, pingTimeout.Seconds())
 		return nil, err
 	}
 

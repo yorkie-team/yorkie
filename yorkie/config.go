@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
@@ -35,18 +36,18 @@ const (
 	DefaultRPCPort     = 11101
 	DefaultMetricsPort = 11102
 
-	DefaultMongoConnectionURI        = "mongodb://localhost:27017"
-	DefaultMongoConnectionTimeoutSec = 5
-	DefaultMongoPingTimeoutSec       = 5
-	DefaultMongoYorkieDatabase       = "yorkie-meta"
+	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
+	DefaultMongoConnectionTimeout = 5 * time.Second
+	DefaultMongoPingTimeout       = 5 * time.Second
+	DefaultMongoYorkieDatabase    = "yorkie-meta"
 
 	DefaultSnapshotThreshold = 500
 	DefaultSnapshotInterval  = 100
 
-	DefaultAuthorizationWebhookMaxRetries              = 10
-	DefaultAuthorizationWebhookWaitIntervalMillis      = 3000
-	DefaultAuthorizationWebhookCacheAuthorizedTTLSec   = 10
-	DefaultAuthorizationWebhookCacheUnauthorizedTTLSec = 10
+	DefaultAuthWebhookMaxRetries      = 10
+	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultAuthWebhookCacheAuthTTL    = 10 * time.Second
+	DefaultAuthWebhookCacheUnauthTTL  = 10 * time.Second
 )
 
 // Config is the configuration for creating a Yorkie instance.
@@ -78,6 +79,8 @@ func NewConfigFromFile(path string) (*Config, error) {
 		return nil, err
 	}
 
+	conf.ensureDefaultValue()
+
 	return conf, nil
 }
 
@@ -98,7 +101,63 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	if err := c.Mongo.Validate(); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// ensureDefaultValue sets the value of the option to which the default value
+// should be applied when the user does not input it.
+func (c *Config) ensureDefaultValue() {
+	if c.RPC.Port == 0 {
+		c.RPC.Port = DefaultRPCPort
+	}
+
+	if c.Metrics.Port == 0 {
+		c.Metrics.Port = DefaultMetricsPort
+	}
+
+	if c.Mongo.ConnectionTimeout == "" {
+		c.Mongo.ConnectionTimeout = DefaultMongoConnectionTimeout.String()
+	}
+
+	if c.Mongo.ConnectionURI == "" {
+		c.Mongo.ConnectionURI = DefaultMongoConnectionURI
+	}
+
+	if c.Mongo.YorkieDatabase == "" {
+		c.Mongo.YorkieDatabase = DefaultMongoYorkieDatabase
+	}
+
+	if c.Mongo.PingTimeout == "" {
+		c.Mongo.PingTimeout = DefaultMongoPingTimeout.String()
+	}
+
+	if c.Backend.SnapshotThreshold == 0 {
+		c.Backend.SnapshotThreshold = DefaultSnapshotThreshold
+	}
+
+	if c.Backend.SnapshotInterval == 0 {
+		c.Backend.SnapshotInterval = DefaultSnapshotInterval
+	}
+
+	if c.Backend.AuthWebhookMaxRetries == 0 {
+		c.Backend.AuthWebhookMaxRetries = DefaultAuthWebhookMaxRetries
+	}
+
+	if c.Backend.AuthWebhookMaxWaitInterval == "" {
+		c.Backend.AuthWebhookMaxWaitInterval = DefaultAuthWebhookMaxWaitInterval.String()
+	}
+
+	if c.Backend.AuthWebhookCacheAuthTTL == "" {
+		c.Backend.AuthWebhookCacheAuthTTL = DefaultAuthWebhookCacheAuthTTL.String()
+	}
+
+	if c.Backend.AuthWebhookCacheUnauthTTL == "" {
+		c.Backend.AuthWebhookCacheUnauthTTL = DefaultAuthWebhookCacheUnauthTTL.String()
+	}
 }
 
 func newConfig(port int, metricsPort int, dbName string) *Config {
@@ -114,10 +173,10 @@ func newConfig(port int, metricsPort int, dbName string) *Config {
 			SnapshotInterval:  DefaultSnapshotInterval,
 		},
 		Mongo: &mongo.Config{
-			ConnectionURI:        DefaultMongoConnectionURI,
-			ConnectionTimeoutSec: DefaultMongoConnectionTimeoutSec,
-			PingTimeoutSec:       DefaultMongoPingTimeoutSec,
-			YorkieDatabase:       dbName,
+			ConnectionURI:     DefaultMongoConnectionURI,
+			ConnectionTimeout: DefaultMongoConnectionTimeout.String(),
+			PingTimeout:       DefaultMongoPingTimeout.String(),
+			YorkieDatabase:    dbName,
 		},
 	}
 }

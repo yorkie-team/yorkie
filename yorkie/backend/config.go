@@ -18,6 +18,7 @@ package backend
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/yorkie-team/yorkie/pkg/types"
 )
@@ -31,38 +32,36 @@ type Config struct {
 	// SnapshotInterval is the interval of changes to create a snapshot.
 	SnapshotInterval uint64 `json:"SnapshotInterval"`
 
-	// AuthorizationWebhookURL is the url of the authorization webhook.
-	AuthorizationWebhookURL string `json:"AuthorizationWebhookURL"`
+	// AuthWebhookURL is the url of the authorization webhook.
+	AuthWebhookURL string `json:"AuthWebhookURL"`
 
-	// AuthorizationWebhookMethods is the methods that run the authorization webhook.
-	AuthorizationWebhookMethods []string `json:"AuthorizationWebhookMethods"`
+	// AuthWebhookMethods is the methods that run the authorization webhook.
+	AuthWebhookMethods []string `json:"AuthWebhookMethods"`
 
-	// AuthorizationWebhookMaxRetries is the max count
-	// that retries the authorization webhook.
-	AuthorizationWebhookMaxRetries uint64 `json:"AuthorizationWebhookMaxRetries"`
+	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
+	AuthWebhookMaxRetries uint64 `json:"AuthWebhookMaxRetries"`
 
-	// AuthorizationWebhookMaxWaitIntervalMillis is the max interval
-	// that waits before retrying the authorization webhook.
-	AuthorizationWebhookMaxWaitIntervalMillis uint64 `json:"AuthorizationWebhookMaxWaitIntervalMillis"`
+	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
+	AuthWebhookMaxWaitInterval string `json:"AuthWebhookMaxWaitInterval"`
 
-	// AuthorizationWebhookCacheAuthorizedTTLSec is the TTL value to set when caching the authorized result.
-	AuthorizationWebhookCacheAuthorizedTTLSec uint64 `json:"AuthorizationWebhookCacheAuthorizedTTLSec"`
+	// AuthWebhookCacheAuthTTL is the TTL value to set when caching the authorized result.
+	AuthWebhookCacheAuthTTL string `json:"AuthWebhookCacheAuthTTL"`
 
-	// AuthorizationWebhookCacheAuthorizedTTLSec is the TTL value to set when caching the unauthorized result.
-	AuthorizationWebhookCacheUnauthorizedTTLSec uint64 `json:"AuthorizationWebhookCacheUnauthorizedTTLSec"`
+	// AuthWebhookCacheUnauthTTL is the TTL value to set when caching the unauthorized result.
+	AuthWebhookCacheUnauthTTL string `json:"AuthWebhookCacheUnauthTTL"`
 }
 
 // RequireAuth returns whether the given method require authorization.
 func (c *Config) RequireAuth(method types.Method) bool {
-	if len(c.AuthorizationWebhookURL) == 0 {
+	if len(c.AuthWebhookURL) == 0 {
 		return false
 	}
 
-	if len(c.AuthorizationWebhookMethods) == 0 {
+	if len(c.AuthWebhookMethods) == 0 {
 		return true
 	}
 
-	for _, m := range c.AuthorizationWebhookMethods {
+	for _, m := range c.AuthWebhookMethods {
 		if types.Method(m) == method {
 			return true
 		}
@@ -73,11 +72,65 @@ func (c *Config) RequireAuth(method types.Method) bool {
 
 // Validate validates this config.
 func (c *Config) Validate() error {
-	for _, method := range c.AuthorizationWebhookMethods {
+	for _, method := range c.AuthWebhookMethods {
 		if !types.IsAuthMethod(method) {
 			return fmt.Errorf("not supported method for authorization webhook: %s", method)
 		}
 	}
 
+	if _, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval); err != nil {
+		return fmt.Errorf(
+			"invalid argument \"%s\" for \"--auth-webhook-max-wait-interval\" flag: %w",
+			c.AuthWebhookMaxWaitInterval,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.AuthWebhookCacheAuthTTL); err != nil {
+		return fmt.Errorf(
+			"invalid argument \"%s\" for \"--auth-webhook-cache-auth-ttl\" flag: %w",
+			c.AuthWebhookCacheAuthTTL,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.AuthWebhookCacheUnauthTTL); err != nil {
+		return fmt.Errorf(
+			"invalid argument \"%s\" for \"--auth-webhook-cache-unauth-ttl\" flag: %w",
+			c.AuthWebhookCacheUnauthTTL,
+			err,
+		)
+	}
+
 	return nil
+}
+
+// ParseAuthWebhookMaxWaitInterval returns max wait interval.
+func (c *Config) ParseAuthWebhookMaxWaitInterval() time.Duration {
+	result, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}
+
+// ParseAuthWebhookCacheAuthTTL returns TTL for authorized cache.
+func (c *Config) ParseAuthWebhookCacheAuthTTL() time.Duration {
+	result, err := time.ParseDuration(c.AuthWebhookCacheAuthTTL)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}
+
+// ParseAuthWebhookCacheUnauthTTL returns TTL for unauthorized cache.
+func (c *Config) ParseAuthWebhookCacheUnauthTTL() time.Duration {
+	result, err := time.ParseDuration(c.AuthWebhookCacheUnauthTTL)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
 }

@@ -70,7 +70,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 	var authResp *types.AuthWebhookResponse
 	if err := withExponentialBackoff(ctx, be.Config, func() (int, error) {
 		resp, err := http.Post(
-			be.Config.AuthorizationWebhookURL,
+			be.Config.AuthWebhookURL,
 			"application/json",
 			bytes.NewBuffer(reqBody),
 		)
@@ -100,15 +100,13 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		return resp.StatusCode, nil
 	}); err != nil {
 		if errors.Is(err, ErrNotAllowed) {
-			unauthorizedTTL := time.Duration(be.Config.AuthorizationWebhookCacheUnauthorizedTTLSec) * time.Second
-			be.AuthWebhookCache.Add(cacheKey, authResp, unauthorizedTTL)
+			be.AuthWebhookCache.Add(cacheKey, authResp, be.Config.ParseAuthWebhookCacheUnauthTTL())
 		}
 
 		return err
 	}
 
-	authorizedTTL := time.Duration(be.Config.AuthorizationWebhookCacheAuthorizedTTLSec) * time.Second
-	be.AuthWebhookCache.Add(cacheKey, authResp, authorizedTTL)
+	be.AuthWebhookCache.Add(cacheKey, authResp, be.Config.ParseAuthWebhookCacheAuthTTL())
 
 	return nil
 }
@@ -116,7 +114,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn func() (int, error)) error {
 	var retries uint64
 	var statusCode int
-	for retries <= cfg.AuthorizationWebhookMaxRetries {
+	for retries <= cfg.AuthWebhookMaxRetries {
 		statusCode, err := webhookFn()
 		if !shouldRetry(statusCode, err) {
 			if err == ErrUnexpectedStatusCode {
@@ -126,10 +124,7 @@ func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn 
 			return err
 		}
 
-		waitBeforeRetry := waitInterval(
-			retries,
-			time.Duration(cfg.AuthorizationWebhookMaxWaitIntervalMillis)*time.Millisecond,
-		)
+		waitBeforeRetry := waitInterval(retries, cfg.ParseAuthWebhookMaxWaitInterval())
 
 		select {
 		case <-ctx.Done():

@@ -35,11 +35,14 @@ var (
 )
 
 var (
-	flagConfPath              string
-	mongoConnectionTimeoutSec int
-	mongoPingTimeoutSec       int
-	etcdEndpoints             []string
-	conf                      = yorkie.NewConfig()
+	flagConfPath               string
+	mongoConnectionTimeout     time.Duration
+	mongoPingTimeout           time.Duration
+	authWebhookMaxWaitInterval time.Duration
+	authWebhookCacheAuthTTL    time.Duration
+	authWebhookCacheUnauthTTL  time.Duration
+	etcdEndpoints              []string
+	conf                       = yorkie.NewConfig()
 )
 
 func newAgentCmd() *cobra.Command {
@@ -47,8 +50,11 @@ func newAgentCmd() *cobra.Command {
 		Use:   "agent [options]",
 		Short: "Starts yorkie agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conf.Mongo.ConnectionTimeoutSec = time.Duration(mongoConnectionTimeoutSec)
-			conf.Mongo.PingTimeoutSec = time.Duration(mongoPingTimeoutSec)
+			conf.Mongo.ConnectionTimeout = mongoConnectionTimeout.String()
+			conf.Mongo.PingTimeout = mongoPingTimeout.String()
+			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
+			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
+			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
 			if etcdEndpoints != nil {
 				conf.ETCD = &etcd.Config{
 					Endpoints: etcdEndpoints,
@@ -156,11 +162,11 @@ func init() {
 		yorkie.DefaultMetricsPort,
 		"Metrics port",
 	)
-	cmd.Flags().IntVar(
-		&mongoConnectionTimeoutSec,
-		"mongo-connection-timeout-sec",
-		yorkie.DefaultMongoConnectionTimeoutSec,
-		"Mongo DB's connection timeout in seconds",
+	cmd.Flags().DurationVar(
+		&mongoConnectionTimeout,
+		"mongo-connection-timeout",
+		yorkie.DefaultMongoConnectionTimeout,
+		"Mongo DB's connection timeout",
 	)
 	cmd.Flags().StringVar(
 		&conf.Mongo.ConnectionURI,
@@ -174,11 +180,11 @@ func init() {
 		yorkie.DefaultMongoYorkieDatabase,
 		"Yorkie's database name in MongoDB",
 	)
-	cmd.Flags().IntVar(
-		&mongoPingTimeoutSec,
-		"mongo-ping-timeout-sec",
-		yorkie.DefaultMongoPingTimeoutSec,
-		"Mongo DB's ping timeout in seconds",
+	cmd.Flags().DurationVar(
+		&mongoPingTimeout,
+		"mongo-ping-timeout",
+		yorkie.DefaultMongoPingTimeout,
+		"Mongo DB's ping timeout",
 	)
 	cmd.Flags().StringSliceVar(
 		&etcdEndpoints,
@@ -200,40 +206,40 @@ func init() {
 		"Interval of changes to create a snapshot",
 	)
 	cmd.Flags().StringVar(
-		&conf.Backend.AuthorizationWebhookURL,
-		"authorization-webhook-url",
+		&conf.Backend.AuthWebhookURL,
+		"auth-webhook-url",
 		"",
 		"URL of remote service to query authorization",
 	)
 	cmd.Flags().StringSliceVar(
-		&conf.Backend.AuthorizationWebhookMethods,
-		"authorization-webhook-methods",
+		&conf.Backend.AuthWebhookMethods,
+		"auth-webhook-methods",
 		[]string{},
 		"List of methods that require authorization checks."+
 			" If no value is specified, all methods will be checked.",
 	)
 	cmd.Flags().Uint64Var(
-		&conf.Backend.AuthorizationWebhookMaxRetries,
+		&conf.Backend.AuthWebhookMaxRetries,
 		"authorization-webhook-max-retries",
-		yorkie.DefaultAuthorizationWebhookMaxRetries,
+		yorkie.DefaultAuthWebhookMaxRetries,
 		"Maximum number of retries for an authorization webhook.",
 	)
-	cmd.Flags().Uint64Var(
-		&conf.Backend.AuthorizationWebhookMaxWaitIntervalMillis,
-		"authorization-webhook-max-wait-interval-millis",
-		yorkie.DefaultAuthorizationWebhookWaitIntervalMillis,
+	cmd.Flags().DurationVar(
+		&authWebhookMaxWaitInterval,
+		"auth-webhook-max-wait-interval",
+		yorkie.DefaultAuthWebhookMaxWaitInterval,
 		"Maximum wait interval for authorization webhook.",
 	)
-	cmd.Flags().Uint64Var(
-		&conf.Backend.AuthorizationWebhookCacheAuthorizedTTLSec,
-		"authorization-webhook-cache-authorized-ttl-sec",
-		yorkie.DefaultAuthorizationWebhookCacheAuthorizedTTLSec,
+	cmd.Flags().DurationVar(
+		&authWebhookCacheAuthTTL,
+		"auth-webhook-cache-auth-ttl",
+		yorkie.DefaultAuthWebhookCacheAuthTTL,
 		"TTL value to set when caching authorized webhook response.",
 	)
-	cmd.Flags().Uint64Var(
-		&conf.Backend.AuthorizationWebhookCacheUnauthorizedTTLSec,
-		"authorization-webhook-cache-unauthorized-ttl-sec",
-		yorkie.DefaultAuthorizationWebhookCacheUnauthorizedTTLSec,
+	cmd.Flags().DurationVar(
+		&authWebhookCacheUnauthTTL,
+		"auth-webhook-cache-unauth-ttl",
+		yorkie.DefaultAuthWebhookCacheUnauthTTL,
 		"TTL value to set when caching unauthorized webhook response.",
 	)
 
