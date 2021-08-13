@@ -42,12 +42,7 @@ type Client struct {
 
 // Dial creates an instance of Client and dials the given MongoDB.
 func Dial(conf *Config) (*Client, error) {
-	connTimeout, err := gotime.ParseDuration(conf.ConnectionTimeout)
-	if err != nil {
-		return nil, err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), connTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), conf.ParseConnectionTimeout())
 	defer cancel()
 
 	client, err := mongo.Connect(
@@ -59,10 +54,7 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	pingTimeout, err := gotime.ParseDuration(conf.PingTimeout)
-	if err != nil {
-		return nil, err
-	}
+	pingTimeout := conf.ParsePingTimeout()
 	ctxPing, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
 

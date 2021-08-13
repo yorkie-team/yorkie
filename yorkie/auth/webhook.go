@@ -100,21 +100,13 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 		return resp.StatusCode, nil
 	}); err != nil {
 		if errors.Is(err, ErrNotAllowed) {
-			unauthorizedTTL, ttlParseErr := time.ParseDuration(be.Config.AuthWebhookCacheUnauthTTL)
-			if ttlParseErr != nil {
-				return ttlParseErr
-			}
-			be.AuthWebhookCache.Add(cacheKey, authResp, unauthorizedTTL)
+			be.AuthWebhookCache.Add(cacheKey, authResp, be.Config.ParseAuthWebhookCacheUnauthTTL())
 		}
 
 		return err
 	}
 
-	authorizedTTL, err := time.ParseDuration(be.Config.AuthWebhookCacheAuthTTL)
-	if err != nil {
-		return err
-	}
-	be.AuthWebhookCache.Add(cacheKey, authResp, authorizedTTL)
+	be.AuthWebhookCache.Add(cacheKey, authResp, be.Config.ParseAuthWebhookCacheAuthTTL())
 
 	return nil
 }
@@ -132,11 +124,7 @@ func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn 
 			return err
 		}
 
-		maxWaitInterval, err := time.ParseDuration(cfg.AuthWebhookMaxWaitInterval)
-		if err != nil {
-			return err
-		}
-		waitBeforeRetry := waitInterval(retries, maxWaitInterval)
+		waitBeforeRetry := waitInterval(retries, cfg.ParseAuthWebhookMaxWaitInterval())
 
 		select {
 		case <-ctx.Done():

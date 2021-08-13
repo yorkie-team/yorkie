@@ -104,3 +104,33 @@ func (c *Config) Validate() error {
 
 	return nil
 }
+
+// ParseAuthWebhookMaxWaitInterval returns max wait interval.
+func (c *Config) ParseAuthWebhookMaxWaitInterval() time.Duration {
+	result, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}
+
+// ParseAuthWebhookCacheAuthTTL returns TTL for authorized cache.
+func (c *Config) ParseAuthWebhookCacheAuthTTL() time.Duration {
+	result, err := time.ParseDuration(c.AuthWebhookCacheAuthTTL)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}
+
+// ParseAuthWebhookCacheUnauthTTL returns TTL for unauthorized cache.
+func (c *Config) ParseAuthWebhookCacheUnauthTTL() time.Duration {
+	result, err := time.ParseDuration(c.AuthWebhookCacheUnauthTTL)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}

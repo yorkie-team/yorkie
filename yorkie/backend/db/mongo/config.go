@@ -49,3 +49,23 @@ func (c *Config) Validate() error {
 
 	return nil
 }
+
+// ParseConnectionTimeout returns connection timeout duration.
+func (c *Config) ParseConnectionTimeout() time.Duration {
+	result, err := time.ParseDuration(c.ConnectionTimeout)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}
+
+// ParsePingTimeout returns ping timeout duration.
+func (c *Config) ParsePingTimeout() time.Duration {
+	result, err := time.ParseDuration(c.PingTimeout)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}
