@@ -316,6 +316,9 @@ func pullSnapshot(
 		return nil, nil, err
 	}
 
+	// TODO(hackerwins): If the Snapshot is missing, we may have a very large
+	// number of changes to read at once here. We need to split changes by a
+	// certain size (e.g. 100) and read and gradually reflect it into the document.
 	changes, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
