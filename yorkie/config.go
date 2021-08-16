@@ -101,11 +101,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	if err := c.Mongo.Validate(); err != nil {
-		return err
-	}
+	var err = c.Mongo.Validate()
 
-	return nil
+	return err
 }
 
 // ensureDefaultValue sets the value of the option to which the default value

@@ -322,11 +322,11 @@ func TestDocument(t *testing.T) {
 
 	t.Run("counter test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
-		var integer int = 10
+		var integer = 10
 		var long int64 = 5
 		var uinteger uint = 100
 		var float float32 = 3.14
-		var double float64 = 5.66
+		var double = 5.66
 
 		// integer type test
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
