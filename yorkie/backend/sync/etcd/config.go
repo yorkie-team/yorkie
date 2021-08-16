@@ -1,9 +1,9 @@
 package etcd
 
 import (
-"errors"
-"fmt"
-"time"
+	"errors"
+	"fmt"
+	"time"
 )
 
 var (
