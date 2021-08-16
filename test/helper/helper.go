@@ -139,8 +139,8 @@ func TestConfig(authWebhook string) *yorkie.Config {
 		},
 		ETCD: &etcd.Config{
 			Endpoints: ETCDEndpoints,
-			Username:  EtcdUserName,
-			Password:  EtcdPassword,
+			Username:  ETCDUserName,
+			Password:  ETCDPassword,
 		},
 	}
 }
