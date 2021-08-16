@@ -2,17 +2,12 @@ package etcd
 
 import (
 	"errors"
-	"fmt"
 	"time"
 )
 
 var (
-	//ErrEmptyEndPoints occurs when the endpoints in the config is empty.
-	ErrEmptyEndPoints = errors.New("length of etcd endpoints must be greater than 0")
-	// ErrEmptyUserName occurs when the username is empty.
-	ErrEmptyUserName = errors.New("etcd username cannot be nil or empty")
-	// ErrEmptyPassword occurs when the password is empty.
-	ErrEmptyPassword = errors.New("etcd password cannot be nil or empty")
+	//ErrEmptyEndpoints occurs when the endpoints in the config is empty.
+	ErrEmptyEndpoints = errors.New("length of etcd endpoints must be greater than 0")
 )
 
 // Config is the configuration for creating a Client instance.
@@ -28,15 +23,7 @@ type Config struct {
 // Validate validates this config.
 func (c *Config) Validate() error {
 	if len(c.Endpoints) == 0 {
-		return fmt.Errorf("%w", ErrEmptyEndPoints)
-	}
-
-	if len(c.Username) == 0 {
-		return fmt.Errorf("%w", ErrEmptyUserName)
-	}
-
-	if len(c.Password) == 0 {
-		return fmt.Errorf("%w", ErrEmptyPassword)
+		return ErrEmptyEndpoints
 	}
 
 	return nil
