@@ -52,6 +52,8 @@ const (
 // Below are the values of the related ETCD config.
 var (
 	ETCDEndpoints = []string{"localhost:2379"}
+	EtcdUserName  = "username"
+	EtcdPassword  = "password"
 )
 
 func init() {
@@ -137,6 +139,8 @@ func TestConfig(authWebhook string) *yorkie.Config {
 		},
 		ETCD: &etcd.Config{
 			Endpoints: ETCDEndpoints,
+			Username:  EtcdUserName,
+			Password:  EtcdPassword,
 		},
 	}
 }
