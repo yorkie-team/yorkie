@@ -12,7 +12,6 @@ linters:
     - revive
     - goprintffuncname
     - gosec
-    - interfacer
     - lll
     - misspell
     - nakedret
