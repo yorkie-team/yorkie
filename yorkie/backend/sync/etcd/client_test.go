@@ -44,3 +44,18 @@ func TestClient(t *testing.T) {
 		assert.ErrorIs(t, context.DeadlineExceeded, err)
 	})
 }
+
+func TestConfig_Validate(t *testing.T) {
+	scenarios := []*struct {
+		config   *etcd.Config
+		expected error
+	}{
+		{config: &etcd.Config{Endpoints: []string{}}, expected: etcd.ErrEmptyEndPoints},
+		{config: &etcd.Config{Endpoints: []string{"localhost:2379"}, Username: ""}, expected: etcd.ErrEmptyUserName},
+		{config: &etcd.Config{Endpoints: []string{"localhost:2379"}, Username: "username", Password: ""}, expected: etcd.ErrEmptyPassword},
+		{config: &etcd.Config{Endpoints: []string{"localhost:2379"}, Username: "username", Password: "password"}, expected: nil},
+	}
+	for _, scenario := range scenarios {
+		assert.ErrorIs(t, scenario.config.Validate(), scenario.expected, "provided config: %#v", scenario.config)
+	}
+}
