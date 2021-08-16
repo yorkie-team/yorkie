@@ -52,8 +52,8 @@ const (
 // Below are the values of the related ETCD config.
 var (
 	ETCDEndpoints = []string{"localhost:2379"}
-	EtcdUserName  = "username"
-	EtcdPassword  = "password"
+	ETCDUserName  = "username"
+	ETCDPassword  = "password"
 )
 
 func init() {
