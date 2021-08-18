@@ -106,11 +106,8 @@ func (c *Config) Validate() error {
 	}
 
 	if c.ETCD != nil {
-		if err := c.ETCD.Validate(); err != nil {
-			return err
-		}
+		return c.ETCD.Validate()
 	}
-
 	return nil
 }
 

@@ -9,10 +9,9 @@ linters:
     - gocyclo
     - gofmt
     - goimports
-    - golint
+    - revive
     - goprintffuncname
     - gosec
-    - interfacer
     - lll
     - misspell
     - nakedret

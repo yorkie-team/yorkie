@@ -40,9 +40,9 @@ func TestCounter(t *testing.T) {
 	})
 
 	t.Run("increase test", func(t *testing.T) {
-		var x int = 5
+		var x = 5
 		var y int64 = 10
-		var z float64 = 3.14
+		var z = 3.14
 		integer := json.NewCounter(x, time.InitialTicket)
 		long := json.NewCounter(y, time.InitialTicket)
 		double := json.NewCounter(z, time.InitialTicket)
