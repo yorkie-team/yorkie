@@ -68,7 +68,5 @@ func (il *internalLocker) Unlock(ctx context.Context) error {
 		return err
 	}
 
-	var err = il.session.Close()
-
-	return err
+	return il.session.Close()
 }
