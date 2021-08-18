@@ -105,7 +105,11 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	return c.ETCD.Validate()
+	if c.ETCD != nil {
+		return c.ETCD.Validate()	
+	}
+	
+	return nil
 }
 
 // ensureDefaultValue sets the value of the option to which the default value
