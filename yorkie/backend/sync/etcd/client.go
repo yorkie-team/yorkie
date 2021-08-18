@@ -38,16 +38,6 @@ const (
 	DefaultLockLeaseTimeSec = 30
 )
 
-// Config is the configuration for creating a Client instance.
-type Config struct {
-	Endpoints      []string      `json:"Endpoints"`
-	DialTimeoutSec time.Duration `json:"DialTimeoutSec"`
-	Username       string        `json:"Username"`
-	Password       string        `json:"Password"`
-
-	LockLeaseTimeSec int `json:"LockLeaseTimeSec"`
-}
-
 // clusterClientInfo represents a cluster client and its connection.
 type clusterClientInfo struct {
 	client api.ClusterClient
