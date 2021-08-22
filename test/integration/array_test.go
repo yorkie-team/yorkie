@@ -126,6 +126,46 @@ func TestArray(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
+	t.Run("concurrent array delete test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(helper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewArray("k1").AddString("v1", "v2", "v3")
+			return nil
+		}, "new array and add v1 v2 v3")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.GetArray("k1").Delete(1)
+			return nil
+		}, "delete v2")
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
+			root.GetArray("k1").Delete(1)
+			return nil
+		}, "delete v2")
+		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			assert.Equal(t, 2, root.GetArray("k1").Len())
+			return nil
+		}, "check array length")
+		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
 	t.Run("concurrent array move test", func(t *testing.T) {
 		ctx := context.Background()
 
