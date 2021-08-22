@@ -216,10 +216,10 @@ func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.
 			"fail to find the given createdAt: %s",
 			createdAt.Key(),
 		)
-
 	}
 
-	if node.elem.Remove(deletedAt) {
+	alreadyRemoved := node.isRemoved()
+	if node.elem.Remove(deletedAt) && !alreadyRemoved {
 		a.nodeMapByIndex.Splay(node.indexNode)
 		a.size--
 	}
