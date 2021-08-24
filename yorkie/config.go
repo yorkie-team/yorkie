@@ -54,9 +54,9 @@ const (
 type Config struct {
 	RPC     *rpc.Config        `json:"RPC"`
 	Metrics *prometheus.Config `json:"Metrics"`
+	Backend *backend.Config    `json:"Backend"`
 	Mongo   *mongo.Config      `json:"Mongo"`
 	ETCD    *etcd.Config       `json:"ETCD"`
-	Backend *backend.Config    `json:"Backend"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
@@ -95,7 +95,7 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	// TODO(umi0410): Other validations will be here later.
+	// TODO(hackerwins): We need to validate Metrics here.
 
 	if err := c.Backend.Validate(); err != nil {
 		return err
