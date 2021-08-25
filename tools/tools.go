@@ -1,5 +1,4 @@
 //go:build tools
-// +build tools
 
 /*
  * Copyright 2020 The Yorkie Authors. All rights reserved.

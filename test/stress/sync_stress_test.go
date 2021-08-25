@@ -1,5 +1,4 @@
 //go:build stress
-// +build stress
 
 /*
  * Copyright 2021 The Yorkie Authors. All rights reserved.
