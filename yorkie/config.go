@@ -31,21 +31,21 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
- 
+
 // Below are the values of the default values of Yorkie config.
 const (
 	DefaultRPCPort     = 11101
 	DefaultMetricsPort = 11102
- 
+
 	DefaultMongoConnectionURI        = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeoutSec = 5
 	DefaultMongoPingTimeoutSec       = 5
 	DefaultMongoYorkieDatabase       = "yorkie-meta"
- 
+
 	DefaultSnapshotThreshold = 500
 	DefaultSnapshotInterval  = 100
 )
- 
+
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
 	RPC     *rpc.Config        `yaml:"RPC"`
@@ -54,18 +54,18 @@ type Config struct {
 	ETCD    *etcd.Config       `yaml:"ETCD"`
 	Backend *backend.Config    `yaml:"Backend"`
 }
- 
+
 // RPCAddr returns the RPC address.
 func (c *Config) RPCAddr() string {
 	return fmt.Sprintf("localhost:%d", c.RPC.Port)
 }
- 
+
 // NewConfig returns a Config struct that contains reasonable defaults
 // for most of the configurations.
 func NewConfig() *Config {
 	return newConfig(DefaultRPCPort, DefaultMetricsPort, DefaultMongoYorkieDatabase)
 }
- 
+
 // NewConfigFromFile returns a Config struct for the given conf file.
 func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
@@ -75,21 +75,21 @@ func NewConfigFromFile(path string) (*Config, error) {
 		log.Logger.Error(err)
 		return nil, err
 	}
- 
+
 	// if err := yaml.Unmarshal(file, conf); err != nil {
 	// 	log.Logger.Error(err)
 	// 	return nil, err
 	// }
 	err = yaml.Unmarshal(file, conf)
-	if err != nil {
+    if err != nil {
 		log.Logger.Error(err)
 		return nil, err
 	}
-	 
+	
 	// fmt.Println(conf)
 	return conf, nil
 }
- 
+
 func newConfig(port int, metricsPort int, dbName string) *Config {
 	return &Config{
 		RPC: &rpc.Config{
@@ -110,4 +110,3 @@ func newConfig(port int, metricsPort int, dbName string) *Config {
 		},
 	}
 }
- 
