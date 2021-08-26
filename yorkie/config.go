@@ -19,9 +19,8 @@ package yorkie
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"path/filepath"
-	"time"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
@@ -68,18 +67,16 @@ func NewConfig() *Config {
 // NewConfigFromFile returns a Config struct for the given conf file.
 func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
-	file, err := os.Open(filepath.Clean(path))
+	file, err := ioutil.ReadFile(filepath.Clean(path))
 	if err != nil {
 		log.Logger.Error(err)
 		return nil, err
 	}
 
-	if err := json.NewDecoder(file).Decode(conf); err != nil {
+	err = yaml.Unmarshal(file, conf)
+	if err != nil {
 		log.Logger.Error(err)
-		return nil, err
 	}
-
-	conf.ensureDefaultValue()
 
 	return conf, nil
 }
