@@ -17,11 +17,12 @@
 package yorkie
 
 import (
-	"gopkg.in/yaml.v2"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"time"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
