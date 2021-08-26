@@ -17,10 +17,8 @@
 package yorkie
 
 import (
-	// "encoding/json"
 	"gopkg.in/yaml.v2"
 	"fmt"
-	// "os"
 	"io/ioutil"
 	"path/filepath"
 
@@ -76,17 +74,12 @@ func NewConfigFromFile(path string) (*Config, error) {
 		return nil, err
 	}
  
-	// if err := yaml.Unmarshal(file, conf); err != nil {
-	// 	log.Logger.Error(err)
-	// 	return nil, err
-	// }
 	err = yaml.Unmarshal(file, conf)
 	if err != nil {
 		log.Logger.Error(err)
 		return nil, err
 	}
 	 
-	// fmt.Println(conf)
 	return conf, nil
 }
  
