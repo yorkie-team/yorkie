@@ -17,7 +17,7 @@
 package yorkie
 
 import (
-	"encoding/json"
+	"gopkg.in/yaml.v2"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
