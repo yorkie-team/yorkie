@@ -10,10 +10,10 @@ Metrics:
 
 Mongo:
   # comment
-  ConnectionTimeout: "5s"
+  ConnectionTimeout: "5"
   ConnectionURI: "mongodb://localhost:27017"
   YorkieDatabase: "yorkie-meta"
-  PingTimeout: "5s"
+  PingTimeout: "5"
 
 ETCD:
   Endpoints: [
