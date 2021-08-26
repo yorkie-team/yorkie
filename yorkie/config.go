@@ -79,6 +79,8 @@ func NewConfigFromFile(path string) (*Config, error) {
 		log.Logger.Error(err)
 	}
 
+	conf.ensureDefaultValue()
+
 	return conf, nil
 }
 
