@@ -44,14 +44,14 @@ func TestClientConcurrency(t *testing.T) {
 		// Activate <-> Deactivate in goroutine
 		for i := 0; i <= MAX_ROUTINES; i++ {
 			wg.Add(1)
-			go func() {
+			go func(idx int) {
 				defer wg.Done()
-				if i%2 == 0 {
+				if idx%2 == 0 {
 					assert.NoError(t, cli.Activate(ctx))
 				} else {
 					assert.NoError(t, cli.Deactivate(ctx))
 				}
-			}()
+			}(i)
 		}
 
 		wg.Wait()
