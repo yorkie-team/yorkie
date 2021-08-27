@@ -70,9 +70,9 @@ func TestClientConcurrency(t *testing.T) {
 			}()
 		}
 
-		assert.True(t, cli.IsActive())
-
 		wg.Wait()
+
+		assert.True(t, cli.IsActive())
 
 		// All Deactivate in goroutine
 		for i := 0; i <= MAX_ROUTINES; i++ {
@@ -83,8 +83,9 @@ func TestClientConcurrency(t *testing.T) {
 			}()
 		}
 
+		wg.Wait()
+
 		assert.False(t, cli.IsActive())
 
-		wg.Wait()
 	})
 }

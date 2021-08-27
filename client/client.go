@@ -78,7 +78,7 @@ type Client struct {
 	// A mutex for client id, key, metadataInfo, status changed
 	// gRPC itself statisfy concurrency, so conn and client are NOT included
 	// attachments is NOT included - it use it's own 'attachmentMutex' below
-	clientMutex sync.Mutex
+	clientMutex sync.RWMutex
 
 	// A mutex for Attachment struct
 	attachmentMutex sync.Mutex
@@ -216,9 +216,12 @@ func (c *Client) Close() error {
 // and receives a unique ID from the agent. The given ID is used to distinguish
 // different clients.
 func (c *Client) Activate(ctx context.Context) error {
+	c.clientMutex.RLock()
 	if c.status == activated {
+		c.clientMutex.RUnlock()
 		return nil
 	}
+	c.clientMutex.RUnlock()
 
 	response, err := c.client.ActivateClient(ctx, &api.ActivateClientRequest{
 		ClientKey: c.key,
@@ -244,9 +247,12 @@ func (c *Client) Activate(ctx context.Context) error {
 
 // Deactivate deactivates this client.
 func (c *Client) Deactivate(ctx context.Context) error {
+	c.clientMutex.RLock()
 	if c.status == deactivated {
+		c.clientMutex.RUnlock()
 		return nil
 	}
+	c.clientMutex.RUnlock()
 
 	_, err := c.client.DeactivateClient(ctx, &api.DeactivateClientRequest{
 		ClientId: c.id.Bytes(),
@@ -561,6 +567,8 @@ func (c *Client) PeersMapByDoc() map[string]map[string]types.Metadata {
 
 // IsActive returns whether this client is active or not.
 func (c *Client) IsActive() bool {
+	defer c.clientMutex.RUnlock()
+	c.clientMutex.RLock()
 	return c.status == activated
 }
 
