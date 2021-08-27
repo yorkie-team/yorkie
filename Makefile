@@ -7,9 +7,9 @@ GO_SRC := $(shell find . -path ./vendor -prune -o -type f -name '*.go' -print)
 
 # inject the version number into the golang version package using the -X linker flag
 GO_LDFLAGS ?=
-GO_LDFLAGS += -X ${GO_PROJECT}/pkg/version.GitCommit=${GIT_COMMIT}
-GO_LDFLAGS += -X ${GO_PROJECT}/pkg/version.Version=${YORKIE_VERSION}
-GO_LDFLAGS += -X ${GO_PROJECT}/pkg/version.BuildDate=${BUILD_DATE}
+GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.GitCommit=${GIT_COMMIT}
+GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.Version=${YORKIE_VERSION}
+GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.BuildDate=${BUILD_DATE}
 
 EXECUTABLE = ./bin/yorkie
 
