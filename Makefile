@@ -44,4 +44,7 @@ docker:
 docker-latest:
 	docker build -t yorkieteam/yorkie:latest .
 
-.PHONY: tools proto build fmt lint test docker docker-latest
+release:
+	./scripts/build-binary.sh $(YORKIE_VERSION)
+
+.PHONY: tools proto build fmt lint test docker docker-latest release
