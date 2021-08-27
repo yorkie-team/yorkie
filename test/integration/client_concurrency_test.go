@@ -80,8 +80,7 @@ func TestClientConcurrency(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				err = cli.Deactivate(ctx)
-				assert.NoError(t, err)
+				assert.NoError(t, cli.Deactivate(ctx))
 			}()
 		}
 
