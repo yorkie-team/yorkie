@@ -19,6 +19,7 @@ package client
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -73,6 +74,14 @@ type Client struct {
 	metadataInfo types.MetadataInfo
 	status       status
 	attachments  map[string]*Attachment
+
+	// A mutex for client id, key, metadataInfo, status changed
+	// gRPC itself statisfy concurrency, so conn and client are NOT included
+	// attachments is NOT included - it use it's own 'attachmentMutex' below
+	clientMutex sync.Mutex
+
+	// A mutex for Attachment struct
+	attachmentMutex sync.Mutex
 }
 
 // Option configures how we set up the client.
@@ -225,8 +234,10 @@ func (c *Client) Activate(ctx context.Context) error {
 		return err
 	}
 
+	c.clientMutex.Lock()
 	c.status = activated
 	c.id = clientID
+	c.clientMutex.Unlock()
 
 	return nil
 }
@@ -245,7 +256,9 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		return err
 	}
 
+	c.clientMutex.Lock()
 	c.status = deactivated
+	c.clientMutex.Unlock()
 
 	return nil
 }
@@ -284,10 +297,13 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.Attached)
+
+	c.attachmentMutex.Lock()
 	c.attachments[doc.Key().BSONKey()] = &Attachment{
 		doc:   doc,
 		peers: make(map[string]types.MetadataInfo),
 	}
+	c.attachmentMutex.Unlock()
 
 	return nil
 }
@@ -332,7 +348,10 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.Detached)
+
+	c.attachmentMutex.Lock()
 	delete(c.attachments, doc.Key().BSONKey())
+	c.attachmentMutex.Unlock()
 
 	return nil
 }
@@ -391,10 +410,12 @@ func (c *Client) Watch(
 					return nil, err
 				}
 
+				c.attachmentMutex.Lock()
 				attachment := c.attachments[docID]
 				for _, cli := range clients {
 					attachment.peers[cli.ID.String()] = cli.MetadataInfo
 				}
+				c.attachmentMutex.Unlock()
 			}
 
 			return nil, nil
@@ -417,6 +438,7 @@ func (c *Client) Watch(
 						return nil, err
 					}
 
+					c.attachmentMutex.Lock()
 					attachment := c.attachments[k.BSONKey()]
 					if eventType == types.DocumentsWatchedEvent ||
 						eventType == types.MetadataChangedEvent {
@@ -427,6 +449,7 @@ func (c *Client) Watch(
 					} else {
 						delete(attachment.peers, cli.ID.String())
 					}
+					c.attachmentMutex.Unlock()
 				}
 				return &WatchResponse{
 					Type:          PeersChanged,
@@ -472,8 +495,10 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 		return ErrClientNotActivated
 	}
 
+	c.clientMutex.Lock()
 	c.metadataInfo.Data[k] = v
 	c.metadataInfo.Clock++
+	c.clientMutex.Unlock()
 
 	if len(c.attachments) == 0 {
 		return nil
@@ -568,10 +593,13 @@ func (c *Client) sync(ctx context.Context, key *key.Key) error {
 		return err
 	}
 
+	c.attachmentMutex.Lock()
 	if err := attachment.doc.ApplyChangePack(pack); err != nil {
+		//c.attachmentMutex.Unlock()
 		log.Logger.Error(err)
 		return err
 	}
+	c.attachmentMutex.Unlock()
 
 	return nil
 }
