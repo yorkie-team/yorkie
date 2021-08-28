@@ -119,7 +119,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	d.GarbageCollect(pack.MinSyncedTicket)
+	d.garbageCollect(pack.MinSyncedTicket)
 
 	log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.RootObject().Marshal())
 	return nil
@@ -184,12 +184,17 @@ func (d *Document) Root() *proxy.ObjectProxy {
 	return proxy.NewObjectProxy(ctx, d.clone.Object())
 }
 
-// GarbageCollect purge elements that were removed before the given time.
-func (d *Document) GarbageCollect(ticket *time.Ticket) int {
+// garbageCollect purge elements that were removed before the given time.
+func (d *Document) garbageCollect(ticket *time.Ticket) int {
 	if d.clone != nil {
 		d.clone.GarbageCollect(ticket)
 	}
 	return d.doc.GarbageCollect(ticket)
+}
+
+// GetGarbageCollectFunc wrapper function for internal garbageCollect function, only to be used for testing
+func (d *Document) GetGarbageCollectFunc(ticket *time.Ticket) int {
+	return d.garbageCollect(ticket)
 }
 
 // GarbageLen returns the count of removed elements.
