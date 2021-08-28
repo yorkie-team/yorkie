@@ -81,7 +81,8 @@ type Client struct {
 	clientMutex sync.RWMutex
 
 	// A mutex for Attachment struct
-	attachmentMutex sync.Mutex
+	// use this whenever attachments field is changed (doc, peers, ...)
+	attachmentMutex sync.RWMutex
 }
 
 // Option configures how we set up the client.
@@ -272,9 +273,23 @@ func (c *Client) Deactivate(ctx context.Context) error {
 // Attach attaches the given document to this client. It tells the agent that
 // this client will synchronize the given document.
 func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
+	c.clientMutex.RLock()
 	if c.status != activated {
+		c.clientMutex.RUnlock()
 		return ErrClientNotActivated
 	}
+	c.clientMutex.RUnlock()
+
+	c.attachmentMutex.RLock()
+	// Check if document already exists
+	if _, ok := c.attachments[doc.Key().BSONKey()]; ok {
+		c.attachmentMutex.RUnlock()
+		return nil
+	}
+	c.attachmentMutex.RUnlock()
+
+	defer c.attachmentMutex.Unlock()
+	c.attachmentMutex.Lock()
 
 	doc.SetActor(c.id)
 
@@ -304,12 +319,10 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 
 	doc.SetStatus(document.Attached)
 
-	c.attachmentMutex.Lock()
 	c.attachments[doc.Key().BSONKey()] = &Attachment{
 		doc:   doc,
 		peers: make(map[string]types.MetadataInfo),
 	}
-	c.attachmentMutex.Unlock()
 
 	return nil
 }
@@ -321,13 +334,22 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 // changes should be applied to other replicas before GC time. For this, if the
 // document is no longer used by this client, it should be detached.
 func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
+	c.clientMutex.RLock()
 	if c.status != activated {
+		c.clientMutex.RUnlock()
 		return ErrClientNotActivated
 	}
+	c.clientMutex.RUnlock()
 
+	c.attachmentMutex.RLock()
 	if _, ok := c.attachments[doc.Key().BSONKey()]; !ok {
-		return ErrDocumentNotAttached
+		c.attachmentMutex.RUnlock()
+		return nil
 	}
+	c.attachmentMutex.RUnlock()
+
+	defer c.attachmentMutex.Unlock()
+	c.attachmentMutex.Lock()
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
@@ -355,9 +377,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 
 	doc.SetStatus(document.Detached)
 
-	c.attachmentMutex.Lock()
 	delete(c.attachments, doc.Key().BSONKey())
-	c.attachmentMutex.Unlock()
 
 	return nil
 }
