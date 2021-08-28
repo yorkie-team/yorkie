@@ -3,9 +3,10 @@
 set -e
 
 YORKIE_VERSION=$1
+GO_LDFLAGS=$2
 
-if [ -z "$1" ]; then
-  echo "Usage: ${0} VERSION" >> /dev/stderr
+if [ "$#" -ne 2 ]; then
+  echo "Usage: ${0} VERSION GO_LDFLAGS" >> /dev/stderr
   exit 255
 fi
 
@@ -14,8 +15,6 @@ set -u
 function main {
   mkdir -p release
   cd release
-
-  tarcmd=tar
 
   for os in darwin windows linux; do
     local ext=""
@@ -38,14 +37,14 @@ function main {
       TARGET="yorkie-v${YORKIE_VERSION}-${GOOS}-${GOARCH}"
       mkdir -p "${TARGET}"
 
-      go build -o "${TARGET}/yorkie${ext}" -ldflags "" ../cmd/yorkie
+      go build -o "${TARGET}/yorkie${ext}" -ldflags "${GO_LDFLAGS}" ../cmd/yorkie
 
       for FILE_NAME in README ROADMAP CHANGELOG ; do
         cp "../${FILE_NAME}.md" "${TARGET}/${FILE_NAME}.md"
       done
 
       if [ ${GOOS} == "linux" ]; then
-        ${tarcmd} cfz "${TARGET}.tar.gz" "${TARGET}"
+        tar cfz "${TARGET}.tar.gz" "${TARGET}"
         echo "Wrote release/${TARGET}.tar.gz"
       else
         zip -qr "${TARGET}.zip" "${TARGET}"
