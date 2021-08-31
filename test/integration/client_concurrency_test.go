@@ -20,11 +20,12 @@ package integration
 
 import (
 	"context"
+	"strconv"
 	gosync "sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	
+
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
@@ -32,9 +33,9 @@ import (
 )
 
 func TestClientConcurrency(t *testing.T) {
-	t.Run("concurrent activate/deactivate test", func(t *testing.T) {
-		MAX_ROUTINES := 5
+	MAX_ROUTINES := 5
 
+	t.Run("concurrent activate/deactivate test", func(t *testing.T) {
 		cli, err := client.Dial(defaultAgent.RPCAddr())
 		assert.NoError(t, err)
 		defer func() {
@@ -92,9 +93,6 @@ func TestClientConcurrency(t *testing.T) {
 	})
 
 	t.Run("concurrent attach/detach intersect test", func(t *testing.T) {
-		MAX_EVEN_ROUTINES := 4
-		MAX_ODD_ROUTINES := 5
-
 		cli, err := client.Dial(defaultAgent.RPCAddr())
 		assert.NoError(t, err)
 		defer func() {
@@ -102,56 +100,56 @@ func TestClientConcurrency(t *testing.T) {
 			assert.NoError(t, err)
 		}()
 
-		// Base document doc of {"k1", "v1"} settings
-		doc := document.New(helper.Collection, t.Name())
-		err = doc.Update(func(root *proxy.ObjectProxy) error {
-			root.SetString("k1", "v1")
-			return nil
-		}, "update k1 with v1")
-		assert.NoError(t, err)
+		// Base document doc splice of {"k{i}", "v{i}"} settings
+		//doc := document.New(helper.Collection, t.Name())
+		doc := make([]*document.Document, MAX_ROUTINES)
+
+		// documents num of MAX_ROUTINES
+		for i := 0; i < MAX_ROUTINES; i++ {
+			docId := "k" + strconv.Itoa(i)
+			docVal := "v" + strconv.Itoa(i)
+			doc[i] = document.New(helper.Collection, t.Name()+docId)
+			err = doc[i].Update(func(root *proxy.ObjectProxy) error {
+				root.SetString(docId, docVal)
+				return nil
+			}, "update "+docId+" with "+docVal)
+			assert.NoError(t, err)
+		}
 
 		ctx := context.Background()
 		wg := gosync.WaitGroup{}
 
 		assert.NoError(t, cli.Activate(ctx))
 
-		// Attach <-> Detach attachments with go routines
-		// If num of go routine is ODD => attach tweice + detach twice of same doc
-		// ...Means no doc in client
-		for i := 0; i <= MAX_EVEN_ROUTINES; i++ {
+		// Attach 5 documents with go routines
+		for i := 0; i < MAX_ROUTINES; i++ {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				if idx%2 == 0 {
-					assert.NoError(t, cli.Attach(ctx, doc))
-				} else {
-					assert.NoError(t, cli.Detach(ctx, doc))
-				}
+				assert.NoError(t, cli.Attach(ctx, doc[idx]))
 			}(i)
 		}
 
 		wg.Wait()
 
-		assert.False(t, doc.IsAttached())
+		for i := 0; i < MAX_ROUTINES; i++ {
+			assert.True(t, doc[i].IsAttached())
+		}
 
-		// Attach <-> Detach attachments with go routines
-		// If num of go routine is EVEN => attach three times + detach twice of same doc
-		// ...Means finally doc in client
-		for i := 0; i <= MAX_ODD_ROUTINES; i++ {
+		// Dettach 5 documents with go routines
+		for i := 0; i < MAX_ROUTINES; i++ {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				if idx%2 == 0 {
-					assert.NoError(t, cli.Attach(ctx, doc))
-				} else {
-					assert.NoError(t, cli.Detach(ctx, doc))
-				}
+				assert.NoError(t, cli.Detach(ctx, doc[idx]))
 			}(i)
 		}
 
 		wg.Wait()
 
-		assert.True(t, doc.IsAttached())
+		for i := 0; i < MAX_ROUTINES; i++ {
+			assert.False(t, doc[i].IsAttached())
+		}
 	})
 
 	t.Run("concurrent attach/detach single continuous test", func(t *testing.T) {
