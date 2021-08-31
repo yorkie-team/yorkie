@@ -217,12 +217,9 @@ func (c *Client) Close() error {
 // and receives a unique ID from the agent. The given ID is used to distinguish
 // different clients.
 func (c *Client) Activate(ctx context.Context) error {
-	c.clientMutex.RLock()
-	if c.status == activated {
-		c.clientMutex.RUnlock()
+	if c.IsActive() {
 		return nil
 	}
-	c.clientMutex.RUnlock()
 
 	response, err := c.client.ActivateClient(ctx, &api.ActivateClientRequest{
 		ClientKey: c.key,
