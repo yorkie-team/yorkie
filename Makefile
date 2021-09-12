@@ -38,6 +38,9 @@ test:
 	go clean -testcache
 	go test -tags integration -race ./...
 
+bench:
+	go test -tags bench -bench=./test/bench
+
 docker:
 	docker build -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .
 
