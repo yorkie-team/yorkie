@@ -41,6 +41,8 @@ var (
 	ErrInvalidServerSeq = errors.New("invalid server seq")
 )
 
+const changeSegmentSize = uint64(100)
+
 // NewPushPullKey creates a new sync.Key of PushPull for the given document.
 func NewPushPullKey(documentKey *key.Key) sync.Key {
 	return sync.NewKey(fmt.Sprintf("pushpull-%s", documentKey.BSONKey()))
@@ -316,26 +318,35 @@ func pullSnapshot(
 		return nil, nil, err
 	}
 
-	// TODO(hackerwins): If the Snapshot is missing, we may have a very large
-	// number of changes to read at once here. We need to split changes by a
-	// certain size (e.g. 100) and read and gradually reflect it into the document.
-	changes, err := be.DB.FindChangeInfosBetweenServerSeqs(
-		ctx,
-		docInfo.ID,
-		snapshotInfo.ServerSeq+1,
-		initialServerSeq,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if err := doc.ApplyChangePack(change.NewPack(
-		docKey,
-		checkpoint.Initial.NextServerSeq(docInfo.ServerSeq),
-		changes,
-		nil,
-	)); err != nil {
-		return nil, nil, err
+	var startIdx = snapshotInfo.ServerSeq + 1
+	var endIdx uint64
+	for {
+		if startIdx+changeSegmentSize < initialServerSeq {
+			endIdx = startIdx + changeSegmentSize
+		} else {
+			endIdx = initialServerSeq
+		}
+		changes, err := be.DB.FindChangeInfosBetweenServerSeqs(
+			ctx,
+			docInfo.ID,
+			startIdx,
+			endIdx,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := doc.ApplyChangePack(change.NewPack(
+			docKey,
+			checkpoint.Initial.NextServerSeq(docInfo.ServerSeq),
+			changes,
+			nil,
+		)); err != nil {
+			return nil, nil, err
+		}
+		startIdx += changeSegmentSize
+		if endIdx == initialServerSeq {
+			break
+		}
 	}
 
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
