@@ -53,9 +53,9 @@ func TestClientConcurrency(t *testing.T) {
 				defer wg.Done()
 				if idx%2 == 0 {
 					assert.NoError(t, cli.Activate(ctx))
-				} else {
-					assert.NoError(t, cli.Deactivate(ctx))
+					return
 				}
+				assert.NoError(t, cli.Deactivate(ctx))
 			}(i)
 		}
 
