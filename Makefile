@@ -25,7 +25,7 @@ proto:
 Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
 Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:.
 
-build:
+build: ## build executables
 	go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie
 
 fmt:
@@ -47,4 +47,12 @@ docker-latest:
 release:
 	./scripts/build-binary.sh $(YORKIE_VERSION) "$(GO_LDFLAGS)"
 
-.PHONY: tools proto build fmt lint test docker docker-latest release
+default: help
+help:
+	@echo 'Yorkie commands for' $(EXENAME) $(VERSION)
+	@echo
+	@echo 'Commands:'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    %-20s %s\n", $$1, $$2}'
+	@echo
+
+.PHONY: tools proto build fmt lint test docker docker-latest release, help
