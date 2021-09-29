@@ -62,7 +62,7 @@ func readEditingTraceFromFile(b *testing.B) (*editTrace, error) {
 	return &trace, err
 }
 
-func BenchmarkEditing(b *testing.B) {
+func BenchmarkTextEditing(b *testing.B) {
 	b.StopTimer()
 
 	editingTrace, _ := readEditingTraceFromFile(b)
