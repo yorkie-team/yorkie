@@ -415,6 +415,7 @@ func (c *Client) Watch(
 	}
 
 	rch := make(chan WatchResponse)
+	c.clientMutex.RLock()
 	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
 		Client: converter.ToClient(types.Client{
 			ID:           c.id,
@@ -423,8 +424,10 @@ func (c *Client) Watch(
 		DocumentKeys: converter.ToDocumentKeys(keys),
 	})
 	if err != nil {
+		c.clientMutex.RUnlock()
 		return nil, err
 	}
+	c.clientMutex.RUnlock()
 
 	handleResponse := func(pbResp *api.WatchDocumentsResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {

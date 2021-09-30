@@ -92,7 +92,7 @@ func TestClientConcurrency(t *testing.T) {
 		assert.False(t, cli.IsActive())
 	})
 
-	t.Run("concurrent attach/detach intersect test", func(t *testing.T) {
+	t.Run("concurrent attach/detach test", func(t *testing.T) {
 		cli, err := client.Dial(defaultAgent.RPCAddr())
 		assert.NoError(t, err)
 		defer func() {
@@ -152,7 +152,7 @@ func TestClientConcurrency(t *testing.T) {
 		}
 	})
 
-	t.Run("concurrent attach/detach single continuous test", func(t *testing.T) {
+	t.Run("concurrent watch document across agent with one client in go routines", func(t *testing.T) {
 
 	})
 }
