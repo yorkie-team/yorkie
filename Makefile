@@ -28,13 +28,13 @@ Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:.
 build: ## build executables
 	go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie
 
-fmt:
+fmt: ## overwrite formating and simplify code
 	gofmt -s -w $(GO_SRC)
 
-lint:
+lint: ## runs the golang-ci lint, checks for lint violations
 	 golangci-lint run ./...
 
-test:
+test: ## runs tests, requires local aplications such as mongo db is running first
 	go clean -testcache
 	go test -tags integration -race ./...
 
