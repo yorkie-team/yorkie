@@ -95,7 +95,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	// TODO(hackerwins): We need to validate Metrics here.
+	if err := c.Metrics.Validate(); err != nil {
+		return err
+	}
 
 	if err := c.Backend.Validate(); err != nil {
 		return err

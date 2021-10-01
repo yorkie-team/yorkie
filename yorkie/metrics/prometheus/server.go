@@ -26,11 +26,6 @@ import (
 	"github.com/yorkie-team/yorkie/internal/log"
 )
 
-// Config is the configuration for creating a Server instance.
-type Config struct {
-	Port int
-}
-
 // Server provides application-specific and Go metrics.
 type Server struct {
 	conf          *Config
