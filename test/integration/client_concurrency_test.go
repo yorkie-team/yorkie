@@ -20,20 +20,17 @@ package integration
 
 import (
 	"context"
-	"strconv"
 	gosync "sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/client"
-	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
-	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestClientConcurrency(t *testing.T) {
-	MAX_ROUTINES := 5
+	MAX_ODD_ROUTINES := 5
+	MAX_EVEN_ROUTINES := 6
 
 	t.Run("concurrent activate/deactivate test", func(t *testing.T) {
 		cli, err := client.Dial(defaultAgent.RPCAddr())
@@ -47,7 +44,8 @@ func TestClientConcurrency(t *testing.T) {
 		wg := gosync.WaitGroup{}
 
 		// Activate <-> Deactivate in goroutine
-		for i := 0; i <= MAX_ROUTINES; i++ {
+		// Starts with activate client, Odd times of MAX_ODD_ROUTINES
+		for i := 0; i <= MAX_ODD_ROUTINES; i++ {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
@@ -61,98 +59,29 @@ func TestClientConcurrency(t *testing.T) {
 
 		wg.Wait()
 
-		if !cli.IsActive() {
-			cli.Activate(ctx)
-		}
+		// The final state should be ** Deactive **
+		assert.False(t, cli.IsActive())
 
-		// All Activate in goroutine
-		for i := 0; i <= MAX_ROUTINES; i++ {
+		// Activate <-> Deactivate in goroutine
+		// Starts with activate client, Even times of MAX_EVEN_ROUTINES
+		for i := 0; i <= MAX_EVEN_ROUTINES; i++ {
 			wg.Add(1)
-			go func() {
+			go func(idx int) {
 				defer wg.Done()
-				assert.NoError(t, cli.Activate(ctx))
-			}()
+				if idx%2 == 0 {
+					assert.NoError(t, cli.Activate(ctx))
+					return
+				}
+				assert.NoError(t, cli.Deactivate(ctx))
+			}(i)
 		}
 
 		wg.Wait()
 
+		// The final state should be ** Active **
 		assert.True(t, cli.IsActive())
 
-		// All Deactivate in goroutine
-		for i := 0; i <= MAX_ROUTINES; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				assert.NoError(t, cli.Deactivate(ctx))
-			}()
-		}
-
-		wg.Wait()
-
-		assert.False(t, cli.IsActive())
-	})
-
-	t.Run("concurrent attach/detach test", func(t *testing.T) {
-		cli, err := client.Dial(defaultAgent.RPCAddr())
+		err = cli.Deactivate(ctx)
 		assert.NoError(t, err)
-		defer func() {
-			err := cli.Close()
-			assert.NoError(t, err)
-		}()
-
-		// Base document doc splice of {"k{i}", "v{i}"} settings
-		//doc := document.New(helper.Collection, t.Name())
-		doc := make([]*document.Document, MAX_ROUTINES)
-
-		// documents num of MAX_ROUTINES
-		for i := 0; i < MAX_ROUTINES; i++ {
-			docId := "k" + strconv.Itoa(i)
-			docVal := "v" + strconv.Itoa(i)
-			doc[i] = document.New(helper.Collection, t.Name()+docId)
-			err = doc[i].Update(func(root *proxy.ObjectProxy) error {
-				root.SetString(docId, docVal)
-				return nil
-			}, "update "+docId+" with "+docVal)
-			assert.NoError(t, err)
-		}
-
-		ctx := context.Background()
-		wg := gosync.WaitGroup{}
-
-		assert.NoError(t, cli.Activate(ctx))
-
-		// Attach 5 documents with go routines
-		for i := 0; i < MAX_ROUTINES; i++ {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				assert.NoError(t, cli.Attach(ctx, doc[idx]))
-			}(i)
-		}
-
-		wg.Wait()
-
-		for i := 0; i < MAX_ROUTINES; i++ {
-			assert.True(t, doc[i].IsAttached())
-		}
-
-		// Dettach 5 documents with go routines
-		for i := 0; i < MAX_ROUTINES; i++ {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				assert.NoError(t, cli.Detach(ctx, doc[idx]))
-			}(i)
-		}
-
-		wg.Wait()
-
-		for i := 0; i < MAX_ROUTINES; i++ {
-			assert.False(t, doc[i].IsAttached())
-		}
-	})
-
-	t.Run("concurrent watch document across agent with one client in go routines", func(t *testing.T) {
-
 	})
 }

@@ -75,14 +75,9 @@ type Client struct {
 	status       status
 	attachments  map[string]*Attachment
 
-	// A mutex for client id, key, metadataInfo, status changed
-	// gRPC itself statisfy concurrency, so conn and client are NOT included
-	// attachments is NOT included - it use it's own 'attachmentMutex' below
-	clientMutex sync.RWMutex
-
-	// A mutex for Attachment struct
-	// use this whenever attachments field is changed (doc, peers, ...)
-	attachmentMutex sync.RWMutex
+	// A mutex that set critical sectionssfor client
+	// + Notice that gRPC itself statisfy concurrency
+	clientMutex sync.Mutex
 }
 
 // Option configures how we set up the client.
@@ -217,6 +212,10 @@ func (c *Client) Close() error {
 // and receives a unique ID from the agent. The given ID is used to distinguish
 // different clients.
 func (c *Client) Activate(ctx context.Context) error {
+	// Apply critical section for whole Activate
+	defer c.clientMutex.Unlock()
+	c.clientMutex.Lock()
+
 	if c.IsActive() {
 		return nil
 	}
@@ -235,22 +234,21 @@ func (c *Client) Activate(ctx context.Context) error {
 		return err
 	}
 
-	c.clientMutex.Lock()
 	c.status = activated
 	c.id = clientID
-	c.clientMutex.Unlock()
 
 	return nil
 }
 
 // Deactivate deactivates this client.
 func (c *Client) Deactivate(ctx context.Context) error {
-	c.clientMutex.RLock()
+	// Apply critical section for whole Deactivate
+	defer c.clientMutex.Unlock()
+	c.clientMutex.Lock()
+
 	if c.status == deactivated {
-		c.clientMutex.RUnlock()
 		return nil
 	}
-	c.clientMutex.RUnlock()
 
 	_, err := c.client.DeactivateClient(ctx, &api.DeactivateClientRequest{
 		ClientId: c.id.Bytes(),
@@ -260,9 +258,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		return err
 	}
 
-	c.clientMutex.Lock()
 	c.status = deactivated
-	c.clientMutex.Unlock()
 
 	return nil
 }
@@ -270,23 +266,9 @@ func (c *Client) Deactivate(ctx context.Context) error {
 // Attach attaches the given document to this client. It tells the agent that
 // this client will synchronize the given document.
 func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
-	c.clientMutex.RLock()
 	if c.status != activated {
-		c.clientMutex.RUnlock()
 		return ErrClientNotActivated
 	}
-	c.clientMutex.RUnlock()
-
-	c.attachmentMutex.RLock()
-	// Check if document already exists
-	if _, ok := c.attachments[doc.Key().BSONKey()]; ok {
-		c.attachmentMutex.RUnlock()
-		return nil
-	}
-	c.attachmentMutex.RUnlock()
-
-	defer c.attachmentMutex.Unlock()
-	c.attachmentMutex.Lock()
 
 	doc.SetActor(c.id)
 
@@ -315,7 +297,6 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.Attached)
-
 	c.attachments[doc.Key().BSONKey()] = &Attachment{
 		doc:   doc,
 		peers: make(map[string]types.MetadataInfo),
@@ -331,22 +312,13 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 // changes should be applied to other replicas before GC time. For this, if the
 // document is no longer used by this client, it should be detached.
 func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
-	c.clientMutex.RLock()
 	if c.status != activated {
-		c.clientMutex.RUnlock()
 		return ErrClientNotActivated
 	}
-	c.clientMutex.RUnlock()
 
-	c.attachmentMutex.RLock()
 	if _, ok := c.attachments[doc.Key().BSONKey()]; !ok {
-		c.attachmentMutex.RUnlock()
-		return nil
+		return ErrDocumentNotAttached
 	}
-	c.attachmentMutex.RUnlock()
-
-	defer c.attachmentMutex.Unlock()
-	c.attachmentMutex.Lock()
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
@@ -373,7 +345,6 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.Detached)
-
 	delete(c.attachments, doc.Key().BSONKey())
 
 	return nil
@@ -384,11 +355,9 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 // local documents.
 func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
 	if len(keys) == 0 {
-		c.attachmentMutex.RLock()
 		for _, attachment := range c.attachments {
 			keys = append(keys, attachment.doc.Key())
 		}
-		c.attachmentMutex.RUnlock()
 	}
 
 	for _, k := range keys {
@@ -415,7 +384,6 @@ func (c *Client) Watch(
 	}
 
 	rch := make(chan WatchResponse)
-	c.clientMutex.RLock()
 	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
 		Client: converter.ToClient(types.Client{
 			ID:           c.id,
@@ -424,10 +392,8 @@ func (c *Client) Watch(
 		DocumentKeys: converter.ToDocumentKeys(keys),
 	})
 	if err != nil {
-		c.clientMutex.RUnlock()
 		return nil, err
 	}
-	c.clientMutex.RUnlock()
 
 	handleResponse := func(pbResp *api.WatchDocumentsResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
@@ -438,12 +404,10 @@ func (c *Client) Watch(
 					return nil, err
 				}
 
-				c.attachmentMutex.Lock()
 				attachment := c.attachments[docID]
 				for _, cli := range clients {
 					attachment.peers[cli.ID.String()] = cli.MetadataInfo
 				}
-				c.attachmentMutex.Unlock()
 			}
 
 			return nil, nil
@@ -466,7 +430,6 @@ func (c *Client) Watch(
 						return nil, err
 					}
 
-					c.attachmentMutex.Lock()
 					attachment := c.attachments[k.BSONKey()]
 					if eventType == types.DocumentsWatchedEvent ||
 						eventType == types.MetadataChangedEvent {
@@ -477,7 +440,6 @@ func (c *Client) Watch(
 					} else {
 						delete(attachment.peers, cli.ID.String())
 					}
-					c.attachmentMutex.Unlock()
 				}
 				return &WatchResponse{
 					Type:          PeersChanged,
@@ -523,13 +485,8 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 		return ErrClientNotActivated
 	}
 
-	c.clientMutex.Lock()
 	c.metadataInfo.Data[k] = v
 	c.metadataInfo.Clock++
-	c.clientMutex.Unlock()
-
-	defer c.attachmentMutex.RUnlock()
-	c.attachmentMutex.RLock()
 
 	if len(c.attachments) == 0 {
 		return nil
@@ -544,7 +501,6 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 	// because grpc-web can't handle Bi-Directional streaming for now.
 	// After grpc-web supports bi-directional streaming, we can remove the
 	// following.
-	c.clientMutex.RLock()
 	if _, err := c.client.UpdateMetadata(ctx, &api.UpdateMetadataRequest{
 		Client: converter.ToClient(types.Client{
 			ID:           c.id,
@@ -552,32 +508,24 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 		}),
 		DocumentKeys: converter.ToDocumentKeys(keys),
 	}); err != nil {
-		c.clientMutex.RUnlock()
 		return err
 	}
-	c.clientMutex.RUnlock()
 
 	return nil
 }
 
 // ID returns the ID of this client.
 func (c *Client) ID() *time.ActorID {
-	defer c.clientMutex.RUnlock()
-	c.clientMutex.RLock()
 	return c.id
 }
 
 // Key returns the key of this client.
 func (c *Client) Key() string {
-	defer c.clientMutex.RUnlock()
-	c.clientMutex.RLock()
 	return c.key
 }
 
 // Metadata returns the metadata of this client.
 func (c *Client) Metadata() types.Metadata {
-	defer c.clientMutex.RUnlock()
-	c.clientMutex.RLock()
 	metadata := make(types.Metadata)
 	for k, v := range c.metadataInfo.Data {
 		metadata[k] = v
@@ -588,8 +536,6 @@ func (c *Client) Metadata() types.Metadata {
 
 // PeersMapByDoc returns the peersMap.
 func (c *Client) PeersMapByDoc() map[string]map[string]types.Metadata {
-	defer c.attachmentMutex.RUnlock()
-	c.attachmentMutex.RLock()
 	peersMapByDoc := make(map[string]map[string]types.Metadata)
 	for doc, attachment := range c.attachments {
 		peers := make(map[string]types.Metadata)
@@ -603,8 +549,6 @@ func (c *Client) PeersMapByDoc() map[string]map[string]types.Metadata {
 
 // IsActive returns whether this client is active or not.
 func (c *Client) IsActive() bool {
-	defer c.clientMutex.RUnlock()
-	c.clientMutex.RLock()
 	return c.status == activated
 }
 
@@ -612,9 +556,6 @@ func (c *Client) sync(ctx context.Context, key *key.Key) error {
 	if !c.IsActive() {
 		return ErrClientNotActivated
 	}
-
-	defer c.attachmentMutex.Unlock()
-	c.attachmentMutex.Lock()
 
 	attachment, ok := c.attachments[key.BSONKey()]
 	if !ok {
