@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"unicode/utf16"
 
+	"go.uber.org/zap"
+
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -175,11 +177,15 @@ func (t *Text) Edit(
 		NewTextValue(content),
 		executedAt,
 	)
-	log.Logger.Debugf(
-		"EDIT: '%s' edits %s",
-		executedAt.ActorID().String(),
-		t.rgaTreeSplit.AnnotatedString(),
-	)
+
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf(
+			"EDIT: '%s' edits %s",
+			executedAt.ActorID().String(),
+			t.rgaTreeSplit.AnnotatedString(),
+		)
+	}
+
 	return cursorPos, latestCreatedAtMapByActor
 }
 
@@ -196,11 +202,13 @@ func (t *Text) Select(
 
 	prevSelection := t.selectionMap[executedAt.ActorIDHex()]
 	if executedAt.After(prevSelection.updatedAt) {
-		log.Logger.Debugf(
-			"SELT: '%s' selects %s",
-			executedAt.ActorID().String(),
-			t.rgaTreeSplit.AnnotatedString(),
-		)
+		if log.Core.Enabled(zap.DebugLevel) {
+			log.Logger.Debugf(
+				"SELT: '%s' selects %s",
+				executedAt.ActorID().String(),
+				t.rgaTreeSplit.AnnotatedString(),
+			)
+		}
 
 		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
 	}

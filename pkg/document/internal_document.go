@@ -17,6 +17,8 @@
 package document
 
 import (
+	"go.uber.org/zap"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -122,7 +124,9 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
-	log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.RootObject().Marshal())
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.RootObject().Marshal())
+	}
 	return nil
 }
 

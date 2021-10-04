@@ -17,6 +17,8 @@
 package proxy
 
 import (
+	"go.uber.org/zap"
+
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -43,10 +45,13 @@ func (p *RichTextProxy) Edit(from, to int, content string, attributes map[string
 		panic("from should be less than or equal to to")
 	}
 	fromPos, toPos := p.RichText.CreateRange(from, to)
-	log.Logger.Debugf(
-		"EDIT: f:%d->%s, t:%d->%s, c:%s, attrs:%v",
-		from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), content,
-	)
+
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf(
+			"EDIT: f:%d->%s, t:%d->%s, c:%s, attrs:%v",
+			from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), content,
+		)
+	}
 
 	ticket := p.context.IssueTimeTicket()
 	_, maxCreationMapByActor := p.RichText.Edit(
@@ -80,10 +85,13 @@ func (p *RichTextProxy) SetStyle(from, to int, attributes map[string]string) *Ri
 		panic("from should be less than or equal to to")
 	}
 	fromPos, toPos := p.RichText.CreateRange(from, to)
-	log.Logger.Debugf(
-		"STYL: f:%d->%s, t:%d->%s, attrs:%v",
-		from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), attributes,
-	)
+
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf(
+			"STYL: f:%d->%s, t:%d->%s, attrs:%v",
+			from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), attributes,
+		)
+	}
 
 	ticket := p.context.IssueTimeTicket()
 	p.RichText.SetStyle(
