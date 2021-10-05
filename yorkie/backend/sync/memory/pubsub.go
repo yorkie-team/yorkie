@@ -91,7 +91,7 @@ func (m *PubSub) Subscribe(
 		log.Logger.Debugf(
 			`Subscribe(%s,%s) Start`,
 			keys[0].BSONKey(),
-			subscriber.ID.String(),
+			subscriber.ID.Hex(),
 		)
 	}
 
@@ -113,7 +113,7 @@ func (m *PubSub) Subscribe(
 		log.Logger.Debugf(
 			`Subscribe(%s,%s) End`,
 			keys[0].BSONKey(),
-			subscriber.ID.String(),
+			subscriber.ID.Hex(),
 		)
 	}
 	return sub, nil
@@ -184,7 +184,7 @@ func (m *PubSub) Publish(
 		k := docKey.BSONKey()
 
 		if log.Core.Enabled(zap.DebugLevel) {
-			log.Logger.Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
+			log.Logger.Debugf(`Publish(%s,%s) Start`, k, publisherID.Hex())
 		}
 
 		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
@@ -197,7 +197,7 @@ func (m *PubSub) Publish(
 					log.Logger.Debugf(
 						`Publish(%s,%s) to %s`,
 						k,
-						publisherID.String(),
+						publisherID.Hex(),
 						sub.SubscriberID(),
 					)
 				}
@@ -205,7 +205,7 @@ func (m *PubSub) Publish(
 			}
 		}
 		if log.Core.Enabled(zap.DebugLevel) {
-			log.Logger.Debugf(`Publish(%s,%s) End`, k, publisherID.String())
+			log.Logger.Debugf(`Publish(%s,%s) End`, k, publisherID.Hex())
 		}
 	}
 }
@@ -218,7 +218,7 @@ func (m *PubSub) UpdateMetadata(
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	sub, ok := m.subscriptionMapBySubscriber[publisher.ID.String()]
+	sub, ok := m.subscriptionMapBySubscriber[publisher.ID.Hex()]
 	if !ok {
 		return nil
 	}
