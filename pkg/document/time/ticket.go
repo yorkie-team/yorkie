@@ -19,6 +19,7 @@ package time
 import (
 	"fmt"
 	"math"
+	"strconv"
 )
 
 const (
@@ -81,12 +82,17 @@ func (t *Ticket) AnnotatedString() string {
 // Key returns the key string for this Ticket.
 func (t *Ticket) Key() string {
 	if t.actorID == nil {
-		return fmt.Sprintf("%d:%d:", t.lamport, t.delimiter)
+		return strconv.FormatUint(t.lamport, 10) +
+			":" +
+			strconv.FormatUint(uint64(t.delimiter), 10) +
+			":"
 	}
 
-	return fmt.Sprintf(
-		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.String(),
-	)
+	return strconv.FormatUint(t.lamport, 10) +
+		":" +
+		strconv.FormatUint(uint64(t.delimiter), 10) +
+		":" +
+		t.actorID.String()
 }
 
 // Lamport returns the lamport value.

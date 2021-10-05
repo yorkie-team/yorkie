@@ -2,6 +2,7 @@ package json
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/yorkie-team/yorkie/internal/log"
@@ -91,7 +92,7 @@ func (t *RGATreeSplitNodeID) hasSameCreatedAt(id *RGATreeSplitNodeID) bool {
 }
 
 func (t *RGATreeSplitNodeID) key() string {
-	return fmt.Sprintf("%s:%d", t.createdAt.Key(), t.offset)
+	return t.CreatedAt().Key() + ":" + strconv.FormatUint(uint64(t.offset), 10)
 }
 
 // RGATreeSplitNodePos is the position of the text inside the node.
