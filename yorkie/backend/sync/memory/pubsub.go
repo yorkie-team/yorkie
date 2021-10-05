@@ -19,6 +19,8 @@ package memory
 import (
 	gosync "sync"
 
+	"go.uber.org/zap"
+
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -85,11 +87,13 @@ func (m *PubSub) Subscribe(
 		return nil, sync.ErrEmptyDocKeys
 	}
 
-	log.Logger.Debugf(
-		`Subscribe(%s,%s) Start`,
-		keys[0].BSONKey(),
-		subscriber.ID.String(),
-	)
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf(
+			`Subscribe(%s,%s) Start`,
+			keys[0].BSONKey(),
+			subscriber.ID.String(),
+		)
+	}
 
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
@@ -105,11 +109,13 @@ func (m *PubSub) Subscribe(
 		m.subscriptionsMapByDocKey[bsonKey].Add(sub)
 	}
 
-	log.Logger.Debugf(
-		`Subscribe(%s,%s) End`,
-		keys[0].BSONKey(),
-		subscriber.ID.String(),
-	)
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf(
+			`Subscribe(%s,%s) End`,
+			keys[0].BSONKey(),
+			subscriber.ID.String(),
+		)
+	}
 	return sub, nil
 }
 
@@ -135,11 +141,13 @@ func (m *PubSub) Unsubscribe(
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	log.Logger.Debugf(
-		`Unsubscribe(%s,%s) Start`,
-		docKeys[0].BSONKey(),
-		sub.SubscriberID(),
-	)
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf(
+			`Unsubscribe(%s,%s) Start`,
+			docKeys[0].BSONKey(),
+			sub.SubscriberID(),
+		)
+	}
 
 	sub.Close()
 
@@ -155,11 +163,13 @@ func (m *PubSub) Unsubscribe(
 		}
 	}
 
-	log.Logger.Debugf(
-		`Unsubscribe(%s,%s) End`,
-		docKeys[0].BSONKey(),
-		sub.SubscriberID(),
-	)
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf(
+			`Unsubscribe(%s,%s) End`,
+			docKeys[0].BSONKey(),
+			sub.SubscriberID(),
+		)
+	}
 }
 
 // Publish publishes the given event.
@@ -173,7 +183,9 @@ func (m *PubSub) Publish(
 	for _, docKey := range event.DocumentKeys {
 		k := docKey.BSONKey()
 
-		log.Logger.Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
+		if log.Core.Enabled(zap.DebugLevel) {
+			log.Logger.Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
+		}
 
 		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
 			for _, sub := range subs.Map() {
@@ -181,16 +193,20 @@ func (m *PubSub) Publish(
 					continue
 				}
 
-				log.Logger.Debugf(
-					`Publish(%s,%s) to %s`,
-					k,
-					publisherID.String(),
-					sub.SubscriberID(),
-				)
+				if log.Core.Enabled(zap.DebugLevel) {
+					log.Logger.Debugf(
+						`Publish(%s,%s) to %s`,
+						k,
+						publisherID.String(),
+						sub.SubscriberID(),
+					)
+				}
 				sub.Events() <- event
 			}
 		}
-		log.Logger.Debugf(`Publish(%s,%s) End`, k, publisherID.String())
+		if log.Core.Enabled(zap.DebugLevel) {
+			log.Logger.Debugf(`Publish(%s,%s) End`, k, publisherID.String())
+		}
 	}
 }
 

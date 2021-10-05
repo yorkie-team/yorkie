@@ -25,6 +25,10 @@ import (
 
 // Logger is the default logger used by Yorkie.
 var Logger *zap.SugaredLogger
+
+// Core is a minimal, fast logger interface.
+var Core zapcore.Core
+
 var rawLogger *zap.Logger
 
 func encoderConfig() zapcore.EncoderConfig {
@@ -56,9 +60,10 @@ func init() {
 		zapcore.NewCore(
 			zapcore.NewConsoleEncoder(humanEncoderConfig()),
 			zapcore.AddSync(os.Stdout),
-			zap.InfoLevel,
+			zapcore.InfoLevel,
 		),
 	), zap.AddStacktrace(zap.ErrorLevel))
 
 	Logger = rawLogger.Sugar()
+	Core = rawLogger.Core()
 }

@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"runtime/pprof"
 	"testing"
 	"time"
 
@@ -47,9 +48,14 @@ func BenchmarkTextEditing(b *testing.B) {
 		return nil
 	})
 
+	f, err := os.Create("text-editing.prof")
+	assert.NoError(b, err)
+	assert.NoError(b, pprof.StartCPUProfile(f))
+	defer pprof.StopCPUProfile()
+
 	start := time.Now()
 	for i, edit := range editingTrace.Edits {
-		if i != 0 && i%1000 == 0 {
+		if i != 0 && i%10000 == 0 {
 			b.Log("processing...", i, time.Since(start))
 			start = time.Now()
 		}

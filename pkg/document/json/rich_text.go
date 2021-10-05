@@ -21,6 +21,8 @@ import (
 	"strings"
 	"unicode/utf16"
 
+	"go.uber.org/zap"
+
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -218,11 +220,13 @@ func (t *RichText) Edit(
 		executedAt,
 	)
 
-	log.Logger.Debugf(
-		"EDIT: '%s' edits %s",
-		executedAt.ActorID().String(),
-		t.rgaTreeSplit.AnnotatedString(),
-	)
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf(
+			"EDIT: '%s' edits %s",
+			executedAt.ActorID().String(),
+			t.rgaTreeSplit.AnnotatedString(),
+		)
+	}
 
 	return cursorPos, latestCreatedAtMapByActor
 }
@@ -247,11 +251,13 @@ func (t *RichText) SetStyle(
 		}
 	}
 
-	log.Logger.Debugf(
-		"STYL: '%s' styles %s",
-		executedAt.ActorID().String(),
-		t.rgaTreeSplit.AnnotatedString(),
-	)
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf(
+			"STYL: '%s' styles %s",
+			executedAt.ActorID().String(),
+			t.rgaTreeSplit.AnnotatedString(),
+		)
+	}
 }
 
 // Select stores that the given range has been selected.
@@ -263,11 +269,13 @@ func (t *RichText) Select(
 	if prev, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok || executedAt.After(prev.updatedAt) {
 		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
 
-		log.Logger.Debugf(
-			"SELT: '%s' selects %s",
-			executedAt.ActorID().String(),
-			t.rgaTreeSplit.AnnotatedString(),
-		)
+		if log.Core.Enabled(zap.DebugLevel) {
+			log.Logger.Debugf(
+				"SELT: '%s' selects %s",
+				executedAt.ActorID().String(),
+				t.rgaTreeSplit.AnnotatedString(),
+			)
+		}
 	}
 }
 
