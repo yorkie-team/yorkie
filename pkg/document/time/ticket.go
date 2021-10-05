@@ -75,7 +75,7 @@ func (t *Ticket) AnnotatedString() string {
 	}
 
 	return fmt.Sprintf(
-		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.String()[22:24],
+		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.Hex()[22:24],
 	)
 }
 
@@ -92,7 +92,7 @@ func (t *Ticket) Key() string {
 		":" +
 		strconv.FormatUint(uint64(t.delimiter), 10) +
 		":" +
-		t.actorID.String()
+		t.actorID.Key()
 }
 
 // Lamport returns the lamport value.
@@ -110,9 +110,14 @@ func (t *Ticket) ActorID() *ActorID {
 	return t.actorID
 }
 
+// ActorIDKey returns the actorID's string value.
+func (t *Ticket) ActorIDKey() string {
+	return t.actorID.Key()
+}
+
 // ActorIDHex returns the actorID's hex value.
 func (t *Ticket) ActorIDHex() string {
-	return t.actorID.String()
+	return t.actorID.Hex()
 }
 
 // ActorIDBytes returns the actorID's bytes value.

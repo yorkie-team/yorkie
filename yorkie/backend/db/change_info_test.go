@@ -16,13 +16,13 @@ func TestChangeInfo(t *testing.T) {
 		_, err := rand.Read(actorID[:])
 		assert.NoError(t, err)
 
-		expectedID := actorID.String()
+		expectedID := actorID.Hex()
 		changeInfo := db.ChangeInfo{
 			Actor: db.ID(expectedID),
 		}
 
 		change, err := changeInfo.ToChange()
 		assert.NoError(t, err)
-		assert.Equal(t, change.ID().Actor().String(), expectedID)
+		assert.Equal(t, change.ID().Actor().Hex(), expectedID)
 	})
 }

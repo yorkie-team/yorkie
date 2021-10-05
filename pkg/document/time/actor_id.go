@@ -89,9 +89,18 @@ func ActorIDFromBytes(bytes []byte) (*ActorID, error) {
 	return &actorID, nil
 }
 
-// String returns the hexadecimal encoding of ActorID.
+// Key returns the string of ActorID.
+func (id *ActorID) Key() string {
+	if id == nil {
+		return ""
+	}
+
+	return string(id[:])
+}
+
+// Hex returns the hexadecimal encoding of ActorID.
 // If the receiver is nil, it would return empty string.
-func (id *ActorID) String() string {
+func (id *ActorID) Hex() string {
 	if id == nil {
 		return ""
 	}

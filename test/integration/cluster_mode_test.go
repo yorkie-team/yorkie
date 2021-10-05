@@ -159,8 +159,8 @@ func TestClusterMode(t *testing.T) {
 			expected = append(expected, watchResponsePair{
 				Type: client.PeersChanged,
 				Peers: map[string]types.Metadata{
-					c1.ID().String(): c1.Metadata(),
-					c2.ID().String(): c2.Metadata(),
+					c1.ID().Hex(): c1.Metadata(),
+					c2.ID().Hex(): c2.Metadata(),
 				},
 			})
 
@@ -173,8 +173,8 @@ func TestClusterMode(t *testing.T) {
 			expected = append(expected, watchResponsePair{
 				Type: client.PeersChanged,
 				Peers: map[string]types.Metadata{
-					c1.ID().String(): c1.Metadata(),
-					c2.ID().String(): c2.Metadata(),
+					c1.ID().Hex(): c1.Metadata(),
+					c2.ID().Hex(): c2.Metadata(),
 				},
 			})
 
@@ -182,7 +182,7 @@ func TestClusterMode(t *testing.T) {
 			expected = append(expected, watchResponsePair{
 				Type: client.PeersChanged,
 				Peers: map[string]types.Metadata{
-					c1.ID().String(): c1.Metadata(),
+					c1.ID().Hex(): c1.Metadata(),
 				},
 			})
 			cancel2()

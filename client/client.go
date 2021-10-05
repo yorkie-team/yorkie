@@ -393,7 +393,7 @@ func (c *Client) Watch(
 
 				attachment := c.attachments[docID]
 				for _, cli := range clients {
-					attachment.peers[cli.ID.String()] = cli.MetadataInfo
+					attachment.peers[cli.ID.Hex()] = cli.MetadataInfo
 				}
 			}
 
@@ -420,12 +420,12 @@ func (c *Client) Watch(
 					attachment := c.attachments[k.BSONKey()]
 					if eventType == types.DocumentsWatchedEvent ||
 						eventType == types.MetadataChangedEvent {
-						if info, ok := attachment.peers[cli.ID.String()]; ok {
+						if info, ok := attachment.peers[cli.ID.Hex()]; ok {
 							cli.MetadataInfo.Update(info)
 						}
-						attachment.peers[cli.ID.String()] = cli.MetadataInfo
+						attachment.peers[cli.ID.Hex()] = cli.MetadataInfo
 					} else {
-						delete(attachment.peers, cli.ID.String())
+						delete(attachment.peers, cli.ID.Hex())
 					}
 				}
 				return &WatchResponse{
