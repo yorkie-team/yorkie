@@ -318,14 +318,14 @@ func pullSnapshot(
 		return nil, nil, err
 	}
 
-	var startIdx = snapshotInfo.ServerSeq + 1
-	var endIdx uint64
-	for {
+	for startIdx := snapshotInfo.ServerSeq + 1; startIdx < initialServerSeq; startIdx += changeSegmentSize {
+		var endIdx uint64
 		if startIdx+changeSegmentSize < initialServerSeq {
 			endIdx = startIdx + changeSegmentSize
 		} else {
 			endIdx = initialServerSeq
 		}
+
 		changes, err := be.DB.FindChangeInfosBetweenServerSeqs(
 			ctx,
 			docInfo.ID,
@@ -335,6 +335,7 @@ func pullSnapshot(
 		if err != nil {
 			return nil, nil, err
 		}
+
 		if err := doc.ApplyChangePack(change.NewPack(
 			docKey,
 			checkpoint.Initial.NextServerSeq(docInfo.ServerSeq),
@@ -342,10 +343,6 @@ func pullSnapshot(
 			nil,
 		)); err != nil {
 			return nil, nil, err
-		}
-		startIdx += changeSegmentSize
-		if endIdx == initialServerSeq {
-			break
 		}
 	}
 
