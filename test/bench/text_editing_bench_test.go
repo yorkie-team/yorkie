@@ -24,7 +24,6 @@ import (
 	"os"
 	"runtime/pprof"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -40,6 +39,11 @@ func BenchmarkTextEditing(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	f, err := os.Create("text-editing.prof")
+	assert.NoError(b, err)
+	assert.NoError(b, pprof.StartCPUProfile(f))
+	defer pprof.StopCPUProfile()
+
 	b.StartTimer()
 
 	doc := document.New("c1", "d1")
@@ -48,17 +52,12 @@ func BenchmarkTextEditing(b *testing.B) {
 		return nil
 	})
 
-	f, err := os.Create("text-editing.prof")
-	assert.NoError(b, err)
-	assert.NoError(b, pprof.StartCPUProfile(f))
-	defer pprof.StopCPUProfile()
-
-	start := time.Now()
-	for i, edit := range editingTrace.Edits {
-		if i != 0 && i%10000 == 0 {
-			b.Log("processing...", i, time.Since(start))
-			start = time.Now()
-		}
+	// start := time.Now()
+	for _, edit := range editingTrace.Edits {
+		// if i != 0 && i%10000 == 0 {
+		// 	b.Log("processing...", i, time.Since(start))
+		// 	start = time.Now()
+		// }
 
 		cursor := int(edit[0].(float64))
 		mode := int(edit[1].(float64))
@@ -75,10 +74,10 @@ func BenchmarkTextEditing(b *testing.B) {
 			}
 			return nil
 		})
+		assert.NoError(b, err)
 	}
 	b.StopTimer()
 
-	assert.NoError(b, err)
 	assert.Equal(b, `{"text":"`+editingTrace.FinalText+`"}`, doc.Marshal())
 }
 

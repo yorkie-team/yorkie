@@ -36,6 +36,9 @@ jobs:
     - name: Test
       run: go test -tags integration,stress -race -coverprofile=coverage.txt -covermode=atomic -v ./...
 
+    - name: Bench
+      run: make bench
+
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
       with:
