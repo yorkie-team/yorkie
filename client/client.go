@@ -241,13 +241,12 @@ func (c *Client) Activate(ctx context.Context) error {
 
 // Deactivate deactivates this client.
 func (c *Client) Deactivate(ctx context.Context) error {
-	// Apply critical section for whole Deactivate
-	defer c.clientMutex.Unlock()
-	c.clientMutex.Lock()
-
-	if c.status == deactivated {
+	if !c.IsActive() {
 		return nil
 	}
+	
+	c.clientMutex.Lock()
+	defer c.clientMutex.Unlock()
 
 	_, err := c.client.DeactivateClient(ctx, &api.DeactivateClientRequest{
 		ClientId: c.id.Bytes(),
