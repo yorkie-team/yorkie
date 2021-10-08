@@ -77,7 +77,7 @@ type Client struct {
 
 	// A mutex that set critical sectionssfor client
 	// + Notice that gRPC itself statisfy concurrency
-	clientMutex sync.Mutex
+	clientMutex sync.RWMutex
 }
 
 // Option configures how we set up the client.
@@ -215,7 +215,7 @@ func (c *Client) Activate(ctx context.Context) error {
 	if c.IsActive() {
 		return nil
 	}
-	
+
 	c.clientMutex.Lock()
 	defer c.clientMutex.Unlock()
 
@@ -244,7 +244,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 	if !c.IsActive() {
 		return nil
 	}
-	
+
 	c.clientMutex.Lock()
 	defer c.clientMutex.Unlock()
 
@@ -547,6 +547,9 @@ func (c *Client) PeersMapByDoc() map[string]map[string]types.Metadata {
 
 // IsActive returns whether this client is active or not.
 func (c *Client) IsActive() bool {
+	c.clientMutex.RLock()
+	defer c.clientMutex.RUnlock()
+
 	return c.status == activated
 }
 
