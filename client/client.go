@@ -212,13 +212,12 @@ func (c *Client) Close() error {
 // and receives a unique ID from the agent. The given ID is used to distinguish
 // different clients.
 func (c *Client) Activate(ctx context.Context) error {
-	// Apply critical section for whole Activate
-	defer c.clientMutex.Unlock()
-	c.clientMutex.Lock()
-
 	if c.IsActive() {
 		return nil
 	}
+	
+	c.clientMutex.Lock()
+	defer c.clientMutex.Unlock()
 
 	response, err := c.client.ActivateClient(ctx, &api.ActivateClientRequest{
 		ClientKey: c.key,
