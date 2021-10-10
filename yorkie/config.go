@@ -53,11 +53,11 @@ const (
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPC     *rpc.Config        `json:"RPC"`
-	Metrics *prometheus.Config `json:"Metrics"`
-	Backend *backend.Config    `json:"Backend"`
-	Mongo   *mongo.Config      `json:"Mongo"`
-	ETCD    *etcd.Config       `json:"ETCD"`
+	RPC     *rpc.Config        `yaml:"RPC"`
+	Metrics *prometheus.Config `yaml:"Metrics"`
+	Backend *backend.Config    `yaml:"Backend"`
+	Mongo   *mongo.Config      `yaml:"Mongo"`
+	ETCD    *etcd.Config       `yaml:"ETCD"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
@@ -74,14 +74,14 @@ func NewConfigFromFile(path string) (*Config, error) {
 		log.Logger.Error(err)
 		return nil, err
 	}
-
 	err = yaml.Unmarshal(file, conf)
 	if err != nil {
 		log.Logger.Error(err)
+		return nil, err
 	}
 
 	conf.ensureDefaultValue()
-
+	fmt.Println(conf)
 	return conf, nil
 }
 
