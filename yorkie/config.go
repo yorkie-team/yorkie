@@ -81,7 +81,6 @@ func NewConfigFromFile(path string) (*Config, error) {
 	}
 
 	conf.ensureDefaultValue()
-	fmt.Println(conf)
 	return conf, nil
 }
 
