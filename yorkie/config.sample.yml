@@ -1,0 +1,25 @@
+RPC:
+  # comment 
+  Port: 11101
+  CertFile: ""
+  KeyFile: ""
+
+Metrics:
+  # comment
+  Port: 11102
+
+Mongo:
+  # comment
+  ConnectionTimeout: "5"
+  ConnectionURI: "mongodb://localhost:27017"
+  YorkieDatabase: "yorkie-meta"
+  PingTimeout: "5"
+
+ETCD:
+  Endpoints: [
+    "localhost:2379"
+    ]
+
+Backend:
+  SnapshotThreshold: 500
+  SnapshotInterval: 100

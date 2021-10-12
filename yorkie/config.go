@@ -17,11 +17,12 @@
 package yorkie
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"path/filepath"
 	"time"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
@@ -52,11 +53,11 @@ const (
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPC     *rpc.Config        `json:"RPC"`
-	Metrics *prometheus.Config `json:"Metrics"`
-	Backend *backend.Config    `json:"Backend"`
-	Mongo   *mongo.Config      `json:"Mongo"`
-	ETCD    *etcd.Config       `json:"ETCD"`
+	RPC     *rpc.Config        `yaml:"RPC"`
+	Metrics *prometheus.Config `yaml:"Metrics"`
+	Backend *backend.Config    `yaml:"Backend"`
+	Mongo   *mongo.Config      `yaml:"Mongo"`
+	ETCD    *etcd.Config       `yaml:"ETCD"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
@@ -68,19 +69,18 @@ func NewConfig() *Config {
 // NewConfigFromFile returns a Config struct for the given conf file.
 func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
-	file, err := os.Open(filepath.Clean(path))
+	file, err := ioutil.ReadFile(filepath.Clean(path))
+	if err != nil {
+		log.Logger.Error(err)
+		return nil, err
+	}
+	err = yaml.Unmarshal(file, conf)
 	if err != nil {
 		log.Logger.Error(err)
 		return nil, err
 	}
 
-	if err := json.NewDecoder(file).Decode(conf); err != nil {
-		log.Logger.Error(err)
-		return nil, err
-	}
-
 	conf.ensureDefaultValue()
-
 	return conf, nil
 }
 

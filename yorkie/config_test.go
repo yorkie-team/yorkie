@@ -51,7 +51,7 @@ func TestNewConfigFromFile(t *testing.T) {
 	})
 
 	t.Run("read config file test", func(t *testing.T) {
-		filePath := "config.sample.json"
+		filePath := "config.sample.yml"
 		conf, err := yorkie.NewConfigFromFile(filePath)
 		assert.NoError(t, err)
 
