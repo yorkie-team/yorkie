@@ -62,12 +62,12 @@ $ ./bin/yorkie agent
 Use the -c option to change settings such as the MongoDB connectionURI.
 
 ```
-$ ./bin/yorkie agent -c yorkie.json
+$ ./bin/yorkie agent -c yorkie.yml
 ```
 
 The configuration file with default values is shown below.
 
-https://github.com/yorkie-team/yorkie/blob/main/yorkie/config.sample.json
+https://github.com/yorkie-team/yorkie/blob/main/yorkie/config.sample.yml
 
 ## Documentation
 

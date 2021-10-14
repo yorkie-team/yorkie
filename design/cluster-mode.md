@@ -28,21 +28,20 @@ provide a guide for users to configure themselves for their own environment.
 
 ### How to use
 
-When users set etcd configuration in `config.json`, internal etcd client is
+When users set etcd configuration in `config.yml`, internal etcd client is
 created to store agent's states at the remote location when the agent starts.
 
-```json
-{
-  "RPC": {
-    "Port": 11101,
-    "CertFile": "",
-    "KeyFile": ""
-  },
+```yaml
+RPC:
+  Port: 11101,
+  CertFile: "",
+  KeyFile: ""
+
   // ... other configurations...
-  "ETCD": {
-    "Endpoints": ["localhost:2379"]
-  }
-}
+ETCD:
+  Endpoints: [
+    "localhost:2379"
+    ]
 ```
 
 ### How does it work?
