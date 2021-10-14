@@ -30,7 +30,7 @@ func TestNewConfigFromFile(t *testing.T) {
 	t.Run("fail read config file test", func(t *testing.T) {
 		conf := yorkie.NewConfig()
 		assert.Equal(t, conf.RPCAddr(), "localhost:"+strconv.Itoa(yorkie.DefaultRPCPort))
-		_, err := yorkie.NewConfigFromFile("nowhere.json")
+		_, err := yorkie.NewConfigFromFile("nowhere.yml")
 		assert.Error(t, err)
 		assert.Equal(t, conf.RPC.Port, yorkie.DefaultRPCPort)
 		assert.Equal(t, conf.RPC.CertFile, "")
