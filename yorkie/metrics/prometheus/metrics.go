@@ -44,6 +44,7 @@ type Metrics struct {
 func NewMetrics() *Metrics {
 	reg := prometheus.NewRegistry()
 	metrics := &Metrics{
+		registry: reg,
 		agentVersion: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: "yorkie",
 			Subsystem: "agent",
