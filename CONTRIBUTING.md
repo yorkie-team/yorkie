@@ -70,4 +70,4 @@ type, as do the specifics of the environment needed to successfully run the test
 - Integration: These tests cover interactions of package components or
  interactions between Yorkie packages and some other non-Yorkie system resource
   (eg: MongoDB, ETCD).
-- Stress: These confirm that the performance of the implemented function.  
+- Benchmark: These confirm that the performance of the implemented function.  

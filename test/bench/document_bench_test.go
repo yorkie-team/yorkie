@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 func BenchmarkDocument(b *testing.B) {
@@ -430,43 +431,67 @@ func BenchmarkDocument(b *testing.B) {
 		}
 	})
 
-	b.Run("text bench 100", func(b *testing.B) {
+	b.Run("text edit gc 100", func(b *testing.B) {
+		benchmarkTextEditGC(100, b)
+	})
+
+	b.Run("text edit gc 1000", func(b *testing.B) {
+		benchmarkTextEditGC(1000, b)
+	})
+
+	b.Run("text split gc 100", func(b *testing.B) {
+		benchmarkTextSplitGC(100, b)
+	})
+
+	b.Run("text split gc 1000", func(b *testing.B) {
+		benchmarkTextSplitGC(1000, b)
+	})
+
+	b.Run("text 100", func(b *testing.B) {
 		benchmarkText(100, b)
 	})
 
-	b.Run("text bench 1000", func(b *testing.B) {
+	b.Run("text 1000", func(b *testing.B) {
 		benchmarkText(1000, b)
 	})
 
-	b.Run("array bench 1000", func(b *testing.B) {
+	b.Run("array 1000", func(b *testing.B) {
 		benchmarkArray(1000, b)
 	})
 
-	b.Run("array bench 10000", func(b *testing.B) {
+	b.Run("array 10000", func(b *testing.B) {
 		benchmarkArray(10000, b)
 	})
 
-	b.Run("counter bench 1000", func(b *testing.B) {
+	b.Run("array gc 100", func(b *testing.B) {
+		benchmarkArrayGC(100, b)
+	})
+
+	b.Run("array gc 1000", func(b *testing.B) {
+		benchmarkArrayGC(1000, b)
+	})
+
+	b.Run("counter 1000", func(b *testing.B) {
 		benchmarkCounter(1000, b)
 	})
 
-	b.Run("counter bench 10000", func(b *testing.B) {
+	b.Run("counter 10000", func(b *testing.B) {
 		benchmarkCounter(10000, b)
 	})
 
-	b.Run("rich text bench 100", func(b *testing.B) {
+	b.Run("rich text 100", func(b *testing.B) {
 		benchmarkRichText(100, b)
 	})
 
-	b.Run("rich text bench 1000", func(b *testing.B) {
+	b.Run("rich text 1000", func(b *testing.B) {
 		benchmarkRichText(1000, b)
 	})
 
-	b.Run("object bench 1000", func(b *testing.B) {
+	b.Run("object 1000", func(b *testing.B) {
 		benchmarkObject(1000, b)
 	})
 
-	b.Run("object bench 10000", func(b *testing.B) {
+	b.Run("object 10000", func(b *testing.B) {
 		benchmarkObject(10000, b)
 	})
 }
@@ -486,6 +511,66 @@ func benchmarkText(cnt int, b *testing.B) {
 	}
 }
 
+func benchmarkTextEditGC(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("c1", "d1")
+		assert.Equal(b, "{}", doc.Marshal())
+		assert.False(b, doc.HasLocalChanges())
+
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.SetNewText("k1")
+			for i := 0; i < cnt; i++ {
+				text.Edit(i, i, "a")
+			}
+			return nil
+		}, "creates a text then appends a")
+		assert.NoError(b, err)
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetText("k1")
+			for i := 0; i < cnt; i++ {
+				text.Edit(i, i+1, "b")
+			}
+			return nil
+		}, "replace contents with b")
+		assert.NoError(b, err)
+		assert.Equal(b, cnt, doc.GarbageLen())
+		assert.Equal(b, cnt, doc.GarbageCollect(time.MaxTicket))
+	}
+}
+
+func benchmarkTextSplitGC(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("c1", "d1")
+		assert.Equal(b, "{}", doc.Marshal())
+		assert.False(b, doc.HasLocalChanges())
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.SetNewText("k2")
+			str := ""
+			for i := 0; i < cnt; i++ {
+				str += "a"
+			}
+			text.Edit(0, 0, str)
+			return nil
+		}, "initial")
+		assert.NoError(b, err)
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetText("k2")
+			for i := 0; i < cnt; i++ {
+				if i != cnt {
+					text.Edit(i, i+1, "b")
+				}
+			}
+			return nil
+		}, "Modify one node multiple times")
+		assert.NoError(b, err)
+
+		assert.Equal(b, cnt, doc.GarbageLen())
+		assert.Equal(b, cnt, doc.GarbageCollect(time.MaxTicket))
+	}
+}
+
 func benchmarkArray(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		doc := document.New("c1", "d1")
@@ -497,6 +582,30 @@ func benchmarkArray(cnt int, b *testing.B) {
 			}
 			return nil
 		})
+		assert.NoError(b, err)
+	}
+}
+
+func benchmarkArrayGC(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("c1", "d1")
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewArray("1")
+			for i := 0; i < cnt; i++ {
+				root.GetArray("1").AddInteger(i)
+			}
+
+			return nil
+		}, "creates an array then adds integers")
+		assert.NoError(b, err)
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			root.Delete("1")
+			return nil
+		}, "deletes the array")
+		assert.NoError(b, err)
+
+		assert.Equal(b, cnt+1, doc.GarbageCollect(time.MaxTicket))
 		assert.NoError(b, err)
 	}
 }

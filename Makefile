@@ -28,18 +28,18 @@ Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:.
 build: ## build executables
 	go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie
 
-fmt: ## overwrite formating and simplify code
+fmt: ## apply format and simplify code
 	gofmt -s -w $(GO_SRC)
 
 lint: ## runs the golang-ci lint, checks for lint violations
 	 golangci-lint run ./...
 
-test: ## runs tests, requires local aplications such as mongo db is running first
+test: ## runs tests, requires local applications such as mongo db is running first
 	go clean -testcache
 	go test -tags integration -race ./...
 
 bench:
-	go test -tags bench -bench=. ./test/bench
+	go test -tags bench -benchmem -bench=. ./test/bench
 
 docker:
 	docker build -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .
@@ -58,4 +58,4 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    %-20s %s\n", $$1, $$2}'
 	@echo
 
-.PHONY: tools proto build fmt lint test docker docker-latest release, help
+.PHONY: tools proto build fmt lint test docker docker-latest release help
