@@ -25,30 +25,30 @@ proto:
 Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
 Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:.
 
-build: ## build executables
+build: ## builds an executable that runs in the current environment
 	go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie
 
-fmt: ## apply format and simplify code
+build-binaries: ## builds binaries to attach a new release
+	./scripts/build-binaries.sh $(YORKIE_VERSION) "$(GO_LDFLAGS)"
+
+fmt: ## applies format and simplify codes
 	gofmt -s -w $(GO_SRC)
 
 lint: ## runs the golang-ci lint, checks for lint violations
 	 golangci-lint run ./...
 
-test: ## runs tests, requires local applications such as mongo db is running first
+test: ## runs integration tests that require local applications such as MongoDB
 	go clean -testcache
 	go test -tags integration -race ./...
 
-bench:
+bench: ## runs benchmark tests
 	go test -tags bench -benchmem -bench=. ./test/bench
 
-docker:
+docker: ## builds docker images with the current version and latest tag
 	docker build -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .
 
-docker-latest:
+docker-latest: ## builds a docker image with latest tag
 	docker build -t yorkieteam/yorkie:latest .
-
-release:
-	./scripts/build-binary.sh $(YORKIE_VERSION) "$(GO_LDFLAGS)"
 
 default: help
 help:
