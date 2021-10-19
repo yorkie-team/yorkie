@@ -7,6 +7,24 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.7] - 2021-10-19
+
+### Added
+- Improve Client's metadata to be updatable: #153
+- Build binaries for environments when releasing a new version: #175
+
+### Changed
+- Add config validation: #206
+- Clean up flags in AuthXXX and XXXSec patterns: #168
+- Update MaxConcurrentStreams to max: #227
+- Clear performance bottlenecks: #251
+- Change config format to YAML: #223
+
+### Fixed
+- Fix reduce array size when deleting the same position: #235
+- Fix invalid version package path: #241
+- Add registry missing in PR 185 to Metrics: #e65d5bb
+
 ## [0.1.6] - 2021-07-24
 
 ### Added
