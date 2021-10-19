@@ -48,7 +48,9 @@ func TestMain(m *testing.M) {
 		ConnectionTimeout: helper.MongoConnectionTimeout,
 		PingTimeout:       helper.MongoPingTimeout,
 	}, &etcd.Config{
-		Endpoints: helper.ETCDEndpoints,
+		Endpoints:     helper.ETCDEndpoints,
+		DialTimeout:   helper.ETCDDialTimeout.String(),
+		LockLeaseTime: helper.ETCDLockLeaseTime.String(),
 	}, testRPCAddr, prometheus.NewMetrics())
 	if err != nil {
 		log.Fatal(err)

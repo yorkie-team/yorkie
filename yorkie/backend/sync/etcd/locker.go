@@ -30,10 +30,11 @@ func (c *Client) NewLocker(
 	ctx context.Context,
 	key sync.Key,
 ) (sync.Locker, error) {
+	ttl := int(c.config.ParseLockLeaseTime().Seconds())
 	session, err := concurrency.NewSession(
 		c.client,
 		concurrency.WithContext(ctx),
-		concurrency.WithTTL(c.config.LockLeaseTimeSec),
+		concurrency.WithTTL(ttl),
 	)
 	if err != nil {
 		log.Logger.Error(err)

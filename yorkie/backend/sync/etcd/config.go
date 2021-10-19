@@ -18,7 +18,16 @@ package etcd
 
 import (
 	"errors"
+	"fmt"
 	"time"
+)
+
+const (
+	// DefaultDialTimeout is the default dial timeout of etcd connection.
+	DefaultDialTimeout = 5 * time.Second
+
+	// DefaultLockLeaseTime is the default lease time of lock.
+	DefaultLockLeaseTime = 30 * time.Second
 )
 
 var (
@@ -28,12 +37,12 @@ var (
 
 // Config is the configuration for creating a Client instance.
 type Config struct {
-	Endpoints      []string      `json:"Endpoints"`
-	DialTimeoutSec time.Duration `json:"DialTimeoutSec"`
-	Username       string        `json:"Username"`
-	Password       string        `json:"Password"`
+	Endpoints   []string `json:"Endpoints"`
+	DialTimeout string   `json:"DialTimeout"`
+	Username    string   `json:"Username"`
+	Password    string   `json:"Password"`
 
-	LockLeaseTimeSec int `json:"LockLeaseTimeSec"`
+	LockLeaseTime string `json:"LockLeaseTime"`
 }
 
 // Validate validates this config.
@@ -42,5 +51,41 @@ func (c *Config) Validate() error {
 		return ErrEmptyEndpoints
 	}
 
+	if _, err := time.ParseDuration(c.DialTimeout); err != nil {
+		return fmt.Errorf(
+			"invalid argument \"%s\" for \"--etcd-dial-timeout\" flag: %w",
+			c.DialTimeout,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.LockLeaseTime); err != nil {
+		return fmt.Errorf(
+			"invalid argument \"%s\" for \"--etcd-lock-lease-time\" flag: %w",
+			c.LockLeaseTime,
+			err,
+		)
+	}
+
 	return nil
+}
+
+// ParseDialTimeout returns timeout for lock.
+func (c *Config) ParseDialTimeout() time.Duration {
+	result, err := time.ParseDuration(c.DialTimeout)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
+}
+
+// ParseLockLeaseTime returns lease time for lock.
+func (c *Config) ParseLockLeaseTime() time.Duration {
+	result, err := time.ParseDuration(c.LockLeaseTime)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
 }

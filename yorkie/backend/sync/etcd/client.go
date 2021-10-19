@@ -19,7 +19,6 @@ package etcd
 import (
 	"context"
 	gosync "sync"
-	"time"
 
 	"go.etcd.io/etcd/clientv3"
 	"google.golang.org/grpc"
@@ -28,14 +27,6 @@ import (
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
-)
-
-const (
-	// DefaultDialTimeoutSec is the default dial timeout of etcd connection.
-	DefaultDialTimeoutSec = 5
-
-	// DefaultLockLeaseTimeSec is the default lease time of lock.
-	DefaultLockLeaseTimeSec = 30
 )
 
 // clusterClientInfo represents a cluster client and its connection.
@@ -64,13 +55,6 @@ type Client struct {
 
 // newClient creates a new instance of Client.
 func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
-	if conf.DialTimeoutSec == 0 {
-		conf.DialTimeoutSec = DefaultDialTimeoutSec
-	}
-	if conf.LockLeaseTimeSec == 0 {
-		conf.LockLeaseTimeSec = DefaultLockLeaseTimeSec
-	}
-
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	return &Client{
@@ -104,7 +88,7 @@ func Dial(conf *Config, agentInfo *sync.AgentInfo) (*Client, error) {
 func (c *Client) Dial() error {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   c.config.Endpoints,
-		DialTimeout: c.config.DialTimeoutSec * time.Second,
+		DialTimeout: c.config.ParseDialTimeout(),
 		DialOptions: []grpc.DialOption{grpc.WithBlock()},
 		Username:    c.config.Username,
 		Password:    c.config.Password,
