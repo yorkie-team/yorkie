@@ -34,7 +34,9 @@ import (
 
 func BenchmarkSync(b *testing.B) {
 	cli, err := etcd.Dial(&etcd.Config{
-		Endpoints: helper.ETCDEndpoints,
+		Endpoints:     helper.ETCDEndpoints,
+		DialTimeout:   helper.ETCDDialTimeout.String(),
+		LockLeaseTime: helper.ETCDLockLeaseTime.String(),
 	}, &sync.AgentInfo{
 		ID: xid.New().String(),
 	})
