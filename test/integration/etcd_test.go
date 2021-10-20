@@ -32,7 +32,9 @@ import (
 func TestETCD(t *testing.T) {
 	t.Run("new and close test", func(t *testing.T) {
 		cli, err := etcd.Dial(&etcd.Config{
-			Endpoints: helper.ETCDEndpoints,
+			Endpoints:     helper.ETCDEndpoints,
+			DialTimeout:   helper.ETCDDialTimeout.String(),
+			LockLeaseTime: helper.ETCDLockLeaseTime.String(),
 		}, &sync.AgentInfo{
 			ID: xid.New().String(),
 		})

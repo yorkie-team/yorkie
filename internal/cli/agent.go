@@ -42,6 +42,8 @@ var (
 	authWebhookCacheAuthTTL    time.Duration
 	authWebhookCacheUnauthTTL  time.Duration
 	etcdEndpoints              []string
+	etcdDialTimeout            time.Duration
+	etcdLockLeaseTime          time.Duration
 	conf                       = yorkie.NewConfig()
 )
 
@@ -57,7 +59,9 @@ func newAgentCmd() *cobra.Command {
 			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
 			if etcdEndpoints != nil {
 				conf.ETCD = &etcd.Config{
-					Endpoints: etcdEndpoints,
+					Endpoints:     etcdEndpoints,
+					DialTimeout:   etcdDialTimeout.String(),
+					LockLeaseTime: etcdLockLeaseTime.String(),
 				}
 			}
 			// If config file is given, command-line arguments will be overwritten.
@@ -191,6 +195,18 @@ func init() {
 		"etcd-endpoints",
 		nil,
 		"Comma separated list of etcd endpoints",
+	)
+	cmd.Flags().DurationVar(
+		&etcdDialTimeout,
+		"etcd-dial-timeout",
+		etcd.DefaultDialTimeout,
+		"ETCD's dial timeout",
+	)
+	cmd.Flags().DurationVar(
+		&etcdLockLeaseTime,
+		"etcd-lock-lease-time",
+		etcd.DefaultLockLeaseTime,
+		"ETCD's lease time for lock",
 	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.SnapshotThreshold,

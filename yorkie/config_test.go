@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/yorkie"
+	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 )
 
 func TestNewConfigFromFile(t *testing.T) {
@@ -48,6 +49,8 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, conf.Backend.SnapshotThreshold, uint64(yorkie.DefaultSnapshotThreshold))
 		assert.Equal(t, conf.Backend.SnapshotInterval, uint64(yorkie.DefaultSnapshotInterval))
 		assert.Equal(t, conf.Backend.AuthWebhookURL, "")
+
+		assert.Nil(t, conf.ETCD)
 	})
 
 	t.Run("read config file test", func(t *testing.T) {
@@ -84,5 +87,14 @@ func TestNewConfigFromFile(t *testing.T) {
 		authWebhookCacheUnauthTTL, err := time.ParseDuration(conf.Backend.AuthWebhookCacheUnauthTTL)
 		assert.NoError(t, err)
 		assert.Equal(t, authWebhookCacheUnauthTTL, yorkie.DefaultAuthWebhookCacheUnauthTTL)
+
+		assert.NotNil(t, conf.ETCD)
+		etcdDialTimeout, err := time.ParseDuration(conf.ETCD.DialTimeout)
+		assert.NoError(t, err)
+		assert.Equal(t, etcdDialTimeout, etcd.DefaultDialTimeout)
+
+		lockLeaseTime, err := time.ParseDuration(conf.ETCD.LockLeaseTime)
+		assert.NoError(t, err)
+		assert.Equal(t, lockLeaseTime, etcd.DefaultLockLeaseTime)
 	})
 }

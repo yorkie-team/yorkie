@@ -59,8 +59,8 @@ ETCD:
   # Endpoints is the list of endpoints to connect to for etcd.
   Endpoints: ["localhost:2379"]
 
-  # DialTimeoutSec is the timeout for connecting to etcd.
-  DialTimeoutSec: "5"
+  # DialTimeout is the timeout for connecting to etcd.
+  DialTimeout: "5s"
 
   # Username is the username to use for etcd.
   Username: ""
@@ -68,5 +68,5 @@ ETCD:
   # Password is the password to use for etcd.
   Password: ""
 
-  # LockLeaseTimeSec is the lease time for locks.
-  LockLeaseTimeSec: "30"
+  # LockLeaseTime is the lease time for locks.
+  LockLeaseTime: "30s"

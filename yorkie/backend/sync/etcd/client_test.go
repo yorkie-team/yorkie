@@ -35,8 +35,8 @@ func TestClient(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, err = etcd.Dial(&etcd.Config{
-				Endpoints:      []string{"invalid-endpoint:2379"},
-				DialTimeoutSec: 1,
+				Endpoints:   []string{"invalid-endpoint:2379"},
+				DialTimeout: "1s",
 			}, nil)
 		}()
 		wg.Wait()
@@ -51,7 +51,14 @@ func TestConfig_Validate(t *testing.T) {
 		expected error
 	}{
 		{config: &etcd.Config{Endpoints: []string{}}, expected: etcd.ErrEmptyEndpoints},
-		{config: &etcd.Config{Endpoints: []string{"localhost:2379"}}, expected: nil},
+		{
+			config: &etcd.Config{
+				Endpoints:     []string{"localhost:2379"},
+				DialTimeout:   "5s",
+				LockLeaseTime: "30s",
+			},
+			expected: nil,
+		},
 	}
 	for _, scenario := range scenarios {
 		assert.ErrorIs(

@@ -47,6 +47,8 @@ const (
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
 	AuthWebhookCacheAuthTTL    = 10 * gotime.Second
 	AuthWebhookCacheUnauthTTL  = 10 * gotime.Second
+	ETCDDialTimeout            = 5 * gotime.Second
+	ETCDLockLeaseTime          = 30 * gotime.Second
 )
 
 // Below are the values of the related ETCD config.
@@ -136,7 +138,9 @@ func TestConfig(authWebhook string) *yorkie.Config {
 			YorkieDatabase:    TestDBName(),
 		},
 		ETCD: &etcd.Config{
-			Endpoints: ETCDEndpoints,
+			Endpoints:     ETCDEndpoints,
+			DialTimeout:   ETCDDialTimeout.String(),
+			LockLeaseTime: ETCDLockLeaseTime.String(),
 		},
 	}
 }

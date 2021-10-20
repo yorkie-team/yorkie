@@ -163,6 +163,16 @@ func (c *Config) ensureDefaultValue() {
 	if c.Backend.AuthWebhookCacheUnauthTTL == "" {
 		c.Backend.AuthWebhookCacheUnauthTTL = DefaultAuthWebhookCacheUnauthTTL.String()
 	}
+
+	if c.ETCD != nil {
+		if c.ETCD.DialTimeout == "" {
+			c.ETCD.DialTimeout = etcd.DefaultDialTimeout.String()
+		}
+
+		if c.ETCD.LockLeaseTime == "" {
+			c.ETCD.LockLeaseTime = etcd.DefaultLockLeaseTime.String()
+		}
+	}
 }
 
 func newConfig(port int, metricsPort int, dbName string) *Config {
