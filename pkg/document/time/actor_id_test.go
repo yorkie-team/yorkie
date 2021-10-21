@@ -16,11 +16,11 @@ func TestActorID(t *testing.T) {
 		_, err := rand.Read(actorID[:])
 		assert.NoError(t, err)
 
-		expectedID := actorID.Hex()
+		expectedID := actorID.String()
 		actualID, err := time.ActorIDFromHex(expectedID)
 
 		assert.NoError(t, err)
-		assert.Equal(t, expectedID, actualID.Hex())
+		assert.Equal(t, expectedID, actualID.String())
 	})
 
 	t.Run("get ActorID from hex on invalid hexadecimal string test", func(t *testing.T) {

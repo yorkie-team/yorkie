@@ -223,7 +223,7 @@ func (t *RichText) Edit(
 	if log.Core.Enabled(zap.DebugLevel) {
 		log.Logger.Debugf(
 			"EDIT: '%s' edits %s",
-			executedAt.ActorID().Hex(),
+			executedAt.ActorID().String(),
 			t.rgaTreeSplit.AnnotatedString(),
 		)
 	}
@@ -254,7 +254,7 @@ func (t *RichText) SetStyle(
 	if log.Core.Enabled(zap.DebugLevel) {
 		log.Logger.Debugf(
 			"STYL: '%s' styles %s",
-			executedAt.ActorID().Hex(),
+			executedAt.ActorID().String(),
 			t.rgaTreeSplit.AnnotatedString(),
 		)
 	}
@@ -266,13 +266,13 @@ func (t *RichText) Select(
 	to *RGATreeSplitNodePos,
 	executedAt *time.Ticket,
 ) {
-	if prev, ok := t.selectionMap[executedAt.ActorIDKey()]; !ok || executedAt.After(prev.updatedAt) {
-		t.selectionMap[executedAt.ActorIDKey()] = newSelection(from, to, executedAt)
+	if prev, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok || executedAt.After(prev.updatedAt) {
+		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
 
 		if log.Core.Enabled(zap.DebugLevel) {
 			log.Logger.Debugf(
 				"SELT: '%s' selects %s",
-				executedAt.ActorID().Hex(),
+				executedAt.ActorID().String(),
 				t.rgaTreeSplit.AnnotatedString(),
 			)
 		}

@@ -475,13 +475,13 @@ func (s *RGATreeSplit) deleteNodes(
 	removedNodeMap := make(map[string]*RGATreeSplitNode)
 
 	for _, node := range candidates {
-		actorIDKey := node.createdAt().ActorIDKey()
+		actorIDHex := node.createdAt().ActorIDHex()
 
 		var latestCreatedAt *time.Ticket
 		if latestCreatedAtMapByActor == nil {
 			latestCreatedAt = time.MaxTicket
 		} else {
-			createdAt, ok := latestCreatedAtMapByActor[actorIDKey]
+			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
 			if ok {
 				latestCreatedAt = createdAt
 			} else {
@@ -491,10 +491,10 @@ func (s *RGATreeSplit) deleteNodes(
 
 		if node.Remove(editedAt, latestCreatedAt) {
 			s.treeByIndex.Splay(node.indexNode)
-			latestCreatedAt := createdAtMapByActor[actorIDKey]
+			latestCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
-				createdAtMapByActor[actorIDKey] = createdAt
+				createdAtMapByActor[actorIDHex] = createdAt
 			}
 
 			removedNodeMap[node.id.key()] = node

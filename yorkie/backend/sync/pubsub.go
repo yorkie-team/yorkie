@@ -64,7 +64,7 @@ func (s *Subscription) Subscriber() types.Client {
 
 // SubscriberID returns string representation of the subscriber.
 func (s *Subscription) SubscriberID() string {
-	return s.subscriber.ID.Hex()
+	return s.subscriber.ID.String()
 }
 
 // UpdateMetadata updates the metadata of the subscriber.

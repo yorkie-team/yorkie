@@ -181,7 +181,7 @@ func (t *Text) Edit(
 	if log.Core.Enabled(zap.DebugLevel) {
 		log.Logger.Debugf(
 			"EDIT: '%s' edits %s",
-			executedAt.ActorID().Hex(),
+			executedAt.ActorID().String(),
 			t.rgaTreeSplit.AnnotatedString(),
 		)
 	}
@@ -195,22 +195,22 @@ func (t *Text) Select(
 	to *RGATreeSplitNodePos,
 	executedAt *time.Ticket,
 ) {
-	if _, ok := t.selectionMap[executedAt.ActorIDKey()]; !ok {
-		t.selectionMap[executedAt.ActorIDKey()] = newSelection(from, to, executedAt)
+	if _, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok {
+		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
 		return
 	}
 
-	prevSelection := t.selectionMap[executedAt.ActorIDKey()]
+	prevSelection := t.selectionMap[executedAt.ActorIDHex()]
 	if executedAt.After(prevSelection.updatedAt) {
 		if log.Core.Enabled(zap.DebugLevel) {
 			log.Logger.Debugf(
 				"SELT: '%s' selects %s",
-				executedAt.ActorID().Hex(),
+				executedAt.ActorID().String(),
 				t.rgaTreeSplit.AnnotatedString(),
 			)
 		}
 
-		t.selectionMap[executedAt.ActorIDKey()] = newSelection(from, to, executedAt)
+		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
 	}
 }
 
