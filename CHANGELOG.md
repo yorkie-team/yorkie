@@ -7,6 +7,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.8] - 2021-10-21
+
+### Fixed
+
+- Revert "Replace hex.EncodeTostring with ActorID.key in Text and RichText (#255)"
+
 ## [0.1.7] - 2021-10-19
 
 ### Added
