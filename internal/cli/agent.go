@@ -35,16 +35,22 @@ var (
 )
 
 var (
-	flagConfPath               string
-	mongoConnectionTimeout     time.Duration
-	mongoPingTimeout           time.Duration
+	flagConfPath string
+
+	mongoConnectionTimeout time.Duration
+	mongoPingTimeout       time.Duration
+
 	authWebhookMaxWaitInterval time.Duration
 	authWebhookCacheAuthTTL    time.Duration
 	authWebhookCacheUnauthTTL  time.Duration
-	etcdEndpoints              []string
-	etcdDialTimeout            time.Duration
-	etcdLockLeaseTime          time.Duration
-	conf                       = yorkie.NewConfig()
+
+	etcdEndpoints     []string
+	etcdDialTimeout   time.Duration
+	etcdUsername      string
+	etcdPassword      string
+	etcdLockLeaseTime time.Duration
+
+	conf = yorkie.NewConfig()
 )
 
 func newAgentCmd() *cobra.Command {
@@ -57,13 +63,17 @@ func newAgentCmd() *cobra.Command {
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
 			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
+
 			if etcdEndpoints != nil {
 				conf.ETCD = &etcd.Config{
 					Endpoints:     etcdEndpoints,
 					DialTimeout:   etcdDialTimeout.String(),
+					Username:      etcdUsername,
+					Password:      etcdPassword,
 					LockLeaseTime: etcdLockLeaseTime.String(),
 				}
 			}
+
 			// If config file is given, command-line arguments will be overwritten.
 			if flagConfPath != "" {
 				parsed, err := yorkie.NewConfigFromFile(flagConfPath)
@@ -201,6 +211,18 @@ func init() {
 		"etcd-dial-timeout",
 		etcd.DefaultDialTimeout,
 		"ETCD's dial timeout",
+	)
+	cmd.Flags().StringVar(
+		&etcdUsername,
+		"etcd-username",
+		"",
+		"ETCD's user name",
+	)
+	cmd.Flags().StringVar(
+		&etcdPassword,
+		"etcd-password",
+		"",
+		"ETCD's password",
 	)
 	cmd.Flags().DurationVar(
 		&etcdLockLeaseTime,
