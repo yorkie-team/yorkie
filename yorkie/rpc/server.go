@@ -23,7 +23,6 @@ import (
 	"net"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
@@ -51,12 +50,10 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			authInterceptor.Unary(),
 			defaultInterceptor.Unary(),
-			grpcprometheus.UnaryServerInterceptor,
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			authInterceptor.Stream(),
 			defaultInterceptor.Stream(),
-			grpcprometheus.StreamServerInterceptor,
 		)),
 	}
 
@@ -77,7 +74,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	healthpb.RegisterHealthServer(grpcServer, health.NewServer())
 	api.RegisterYorkieServer(grpcServer, newYorkieServer(yorkieServiceCtx, be))
 	api.RegisterClusterServer(grpcServer, newClusterServer(be))
-	grpcprometheus.Register(grpcServer)
+	be.Metrics.RegisterGRPCServer(grpcServer)
 
 	return &Server{
 		conf:                conf,
@@ -100,6 +97,11 @@ func (s *Server) Shutdown(graceful bool) {
 	} else {
 		s.grpcServer.Stop()
 	}
+}
+
+// GRPCServer returns the gRPC server.
+func (s *Server) GRPCServer() *grpc.Server {
+	return s.grpcServer
 }
 
 func (s *Server) listenAndServeGRPC() error {

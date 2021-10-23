@@ -32,17 +32,14 @@ const (
 
 func TestMetricsServer(t *testing.T) {
 	t.Run("new server test", func(t *testing.T) {
-		server, err := prometheus.NewServer(&prometheus.Config{
-			Port: testMetricsPort,
-		}, prometheus.NewMetrics())
+		met, err := prometheus.NewMetrics()
+		assert.NoError(t, err)
+		server := prometheus.NewServer(
+			&prometheus.Config{Port: testMetricsPort},
+			met,
+		)
 		assert.NoError(t, err)
 		assert.NotNil(t, server)
 		server.Shutdown(true)
-	})
-
-	t.Run("new server without config test", func(t *testing.T) {
-		server, err := prometheus.NewServer(nil, nil)
-		assert.NoError(t, err)
-		assert.Nil(t, server)
 	})
 }

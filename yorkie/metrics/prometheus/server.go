@@ -34,17 +34,14 @@ type Server struct {
 }
 
 // NewServer creates an instance of Server.
-func NewServer(conf *Config, met *Metrics) (*Server, error) {
-	if conf == nil {
-		return nil, nil
-	}
+func NewServer(conf *Config, met *Metrics) *Server {
 	return &Server{
 		conf:    conf,
 		metrics: met,
 		metricsServer: &http.Server{
 			Addr: fmt.Sprintf(":%d", conf.Port),
 		},
-	}, nil
+	}
 }
 
 func (s *Server) listenAndServe() error {

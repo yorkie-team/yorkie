@@ -40,6 +40,11 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	met, err := prometheus.NewMetrics()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	be, err := backend.New(&backend.Config{
 		SnapshotThreshold: helper.SnapshotThreshold,
 	}, &mongo.Config{
@@ -51,7 +56,7 @@ func TestMain(m *testing.M) {
 		Endpoints:     helper.ETCDEndpoints,
 		DialTimeout:   helper.ETCDDialTimeout.String(),
 		LockLeaseTime: helper.ETCDLockLeaseTime.String(),
-	}, testRPCAddr, prometheus.NewMetrics())
+	}, testRPCAddr, met)
 	if err != nil {
 		log.Fatal(err)
 	}

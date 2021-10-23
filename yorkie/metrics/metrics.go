@@ -16,6 +16,8 @@
 
 package metrics
 
+import "google.golang.org/grpc"
+
 // Metrics manages the metric information that Yorkie is trying to measure.
 type Metrics interface {
 	// ObservePushPullResponseSeconds adds response time metrics for PushPull API.
@@ -35,4 +37,8 @@ type Metrics interface {
 
 	// SetPushPullSnapshotBytes sets the snapshot byte size.
 	SetPushPullSnapshotBytes(bytes int)
+
+	// RegisterGRPCServer registers the given gRPC server to collect its
+	// metrics.
+	RegisterGRPCServer(server *grpc.Server)
 }

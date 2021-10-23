@@ -17,8 +17,10 @@
 package prometheus
 
 import (
+	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/internal/version"
 )
@@ -29,7 +31,8 @@ const (
 
 // Metrics manages the metric information that Yorkie is trying to measure.
 type Metrics struct {
-	registry *prometheus.Registry
+	registry      *prometheus.Registry
+	serverMetrics *grpcprometheus.ServerMetrics
 
 	agentVersion *prometheus.GaugeVec
 
@@ -41,10 +44,17 @@ type Metrics struct {
 }
 
 // NewMetrics creates a new instance of Metrics.
-func NewMetrics() *Metrics {
+func NewMetrics() (*Metrics, error) {
 	reg := prometheus.NewRegistry()
+
+	serverMetrics := grpcprometheus.NewServerMetrics()
+	if err := reg.Register(serverMetrics); err != nil {
+		return nil, err
+	}
+
 	metrics := &Metrics{
-		registry: reg,
+		registry:      reg,
+		serverMetrics: serverMetrics,
 		agentVersion: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: "yorkie",
 			Subsystem: "agent",
@@ -87,7 +97,7 @@ func NewMetrics() *Metrics {
 		"agent_version": version.Version,
 	}).Set(1)
 
-	return metrics
+	return metrics, nil
 }
 
 // ObservePushPullResponseSeconds adds response time metrics for PushPull API.
@@ -121,4 +131,9 @@ func (m *Metrics) SetPushPullSnapshotBytes(bytes int) {
 // Registry returns the registry of this metrics.
 func (m *Metrics) Registry() *prometheus.Registry {
 	return m.registry
+}
+
+// RegisterGRPCServer registers the given gRPC server.
+func (m *Metrics) RegisterGRPCServer(server *grpc.Server) {
+	m.serverMetrics.InitializeMetrics(server)
 }

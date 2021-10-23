@@ -47,7 +47,10 @@ func New(conf *Config) (*Yorkie, error) {
 		return nil, err
 	}
 
-	met := prometheus.NewMetrics()
+	met, err := prometheus.NewMetrics()
+	if err != nil {
+		return nil, err
+	}
 
 	be, err := backend.New(
 		conf.Backend,
@@ -60,14 +63,14 @@ func New(conf *Config) (*Yorkie, error) {
 		return nil, err
 	}
 
-	metricsServer, err := prometheus.NewServer(conf.Metrics, met)
+	rpcServer, err := rpc.NewServer(conf.RPC, be)
 	if err != nil {
 		return nil, err
 	}
 
-	rpcServer, err := rpc.NewServer(conf.RPC, be)
-	if err != nil {
-		return nil, err
+	var metricsServer *prometheus.Server
+	if conf.Metrics != nil {
+		metricsServer = prometheus.NewServer(conf.Metrics, met)
 	}
 
 	return &Yorkie{
