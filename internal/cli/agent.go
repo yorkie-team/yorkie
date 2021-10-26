@@ -258,7 +258,7 @@ func init() {
 	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.AuthWebhookMaxRetries,
-		"authorization-webhook-max-retries",
+		"auth-webhook-max-retries",
 		yorkie.DefaultAuthWebhookMaxRetries,
 		"Maximum number of retries for an authorization webhook.",
 	)
