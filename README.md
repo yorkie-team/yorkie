@@ -49,20 +49,30 @@ Yorkie consists of three main components: Client, Document and Agent.
 
 ## Quick Start
 
-For now, we didn't deploy binary yet. So you should [compile Yorkie yourself](#developing-yorkie).
+The easiest way to install yorkie is from pre-built binaries:
+
+1. Download the compressed archive file for your platform from [Releases](https://github.com/yorkie-team/yorkie/releases).
+2. Unpack the archive file. This results in a directory containing the binaries.
+3. Add the executable binaries to your path. For example, rename and/or move the binaries to a directory in your path (like `/usr/local/bin`), or add the directory created by the previous step to your path.
+4. From a shell, test that yorkie is in your path:
+```bash
+$ yorkie --version
+Yorkie: 0.1.8
+...
+```
 
 Yorkie uses MongoDB to store it's data. To start MongoDB, type `docker-compose -f docker/docker-compose.yml up -d`.
 
 Next, let's start a Yorkie agent. Agent runs until they're told to quit and handle the communication of maintenance tasks of Agent. and start the agent:
 
 ```
-$ ./bin/yorkie agent
+$ yorkie agent
 ```
 
 Use the -c option to change settings such as the MongoDB connectionURI.
 
 ```
-$ ./bin/yorkie agent -c yorkie.yml
+$ yorkie agent -c yorkie.yml
 ```
 
 The configuration file with default values is shown below.
