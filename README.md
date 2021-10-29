@@ -17,23 +17,21 @@ Yorkie is an open source document store for building collaborative editing appli
 Yorkie consists of three main components: Client, Document and Agent.
 
  ```
-  +--Client "A" (Go)----+
-  | +--Document "D-1"-+ |               +--Agent------------------+
-  | | { a: 1, b: {} } | <-- Changes --> | +--Collection "C-1"---+ |
-  | +-----------------+ |               | | +--Document "D-1"-+ | |      +--Mongo DB--+
-  +---------------------+               | | | { a: 1, b: {} } | | |      | Changes    |
-                                        | | +-----------------+ | | <--> | Snapshot   |
-  +--Client "B" (JS)----+               | | +--Document "D-2"-+ | |      +------------+
-  | +--Document "D-1"-+ |               | | | { a: 1, b: {} } | | |
-  | | { a: 2, b: {} } | <-- Changes --> | | +-----------------+ | |
-  | +-----------------+ |               | +---------------------+ |
-  +---------------------+               +-------------------------+
-                                                     ^
-  +--Client "C" (JS)------+                          |
-  | +--Query "Q-1"------+ |                          |
-  | | db.['C-1'].find() | <-- MongoDB query ---------+
-  | +-------------------+ |
-  +-----------------------+
+  Client "A" (Go)                 Agent                        Mongo DB
+┌───────────────────┐           ┌────────────────────────┐   ┌───────────┐
+│  Document "D-1"   │◄─Changes─►│  Collection "C-1"      │   │ Changes   │
+│  { a: 1, b: {} }  │           │ ┌───────────────────┐  │◄─►│ Snapshots │
+└───────────────────┘           │ │  Document "D-1"   │  │   └───────────┘
+  Client "B" (JS)                │ │  { a: 2, b: {} }  │  │
+┌───────────────────┐           │ │                   │  │
+│  Document "D-1"   │◄─Changes─►│ │  Document "D-2"   │  │
+│  { a: 2, b: {} }  │           │ │  { a: 3, b: {} }  │  │
+└───────────────────┘           │ └───────────────────┘  │
+  Client "C" (Admin)             │                        │
+┌────────────────────┐          └────────────────────────┘
+│  Query "Q-1"       │               ▲
+│ db[c-1].find({a:2})├─MongoDB Query─┘
+└────────────────────┘
  ```
 
  - Clients can have a replica of the document representing an application model locally on several devices.
