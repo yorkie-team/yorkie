@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.9] - 2021-10-31
+
+### Added
+- Add ETCD username and password flags: #259
+
+### Changed
+- Change the flag missed when renaming to AuthWebHookXXX: #feb831d
+
+### Fixed
+- Fix a bug that gRPC metrics were not displayed: #02c1995
+- Fix a bug that Go process metrics were not displayed: #262
+
 ## [0.1.8] - 2021-10-21
 
 ### Fixed
