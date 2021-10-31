@@ -47,14 +47,15 @@ type Metrics struct {
 // NewMetrics creates a new instance of Metrics.
 func NewMetrics() (*Metrics, error) {
 	reg := prometheus.NewRegistry()
-
 	serverMetrics := grpcprometheus.NewServerMetrics()
+
 	if err := reg.Register(serverMetrics); err != nil {
 		return nil, err
 	}
-
-	goCollector := collectors.NewGoCollector()
-	if err := reg.Register(goCollector); err != nil {
+	if err := reg.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
+		return nil, err
+	}
+	if err := reg.Register(collectors.NewGoCollector()); err != nil {
 		return nil, err
 	}
 
@@ -62,7 +63,7 @@ func NewMetrics() (*Metrics, error) {
 		registry:      reg,
 		serverMetrics: serverMetrics,
 		agentVersion: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-			Namespace: "yorkie",
+			Namespace: namespace,
 			Subsystem: "agent",
 			Name:      "version",
 			Help:      "Which version is running. 1 for 'agent_version' label with current version.",
