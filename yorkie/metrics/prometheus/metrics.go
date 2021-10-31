@@ -19,6 +19,7 @@ package prometheus
 import (
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"google.golang.org/grpc"
 
@@ -49,6 +50,11 @@ func NewMetrics() (*Metrics, error) {
 
 	serverMetrics := grpcprometheus.NewServerMetrics()
 	if err := reg.Register(serverMetrics); err != nil {
+		return nil, err
+	}
+
+	goCollector := collectors.NewGoCollector()
+	if err := reg.Register(goCollector); err != nil {
 		return nil, err
 	}
 
