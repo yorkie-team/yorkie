@@ -112,7 +112,7 @@ func (s *Server) listenAndServeGRPC() error {
 	}
 
 	go func() {
-		log.Logger.Infof("serving API on %d", s.conf.Port)
+		log.Logger.Infof("serving RPC on %d", s.conf.Port)
 
 		if err := s.grpcServer.Serve(lis); err != nil {
 			if err != grpc.ErrServerStopped {

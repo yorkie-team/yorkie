@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package metrics
+package profiling
 
 import "google.golang.org/grpc"
 
