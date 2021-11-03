@@ -19,10 +19,13 @@ package yorkie
 import (
 	gosync "sync"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
-	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
+	"github.com/yorkie-team/yorkie/yorkie/profiling"
+	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
@@ -32,10 +35,10 @@ import (
 type Yorkie struct {
 	lock gosync.Mutex
 
-	conf          *Config
-	backend       *backend.Backend
-	rpcServer     *rpc.Server
-	metricsServer *prometheus.Server
+	conf            *Config
+	backend         *backend.Backend
+	rpcServer       *rpc.Server
+	profilingServer *profiling.Server
 
 	shutdown   bool
 	shutdownCh chan struct{}
@@ -47,7 +50,7 @@ func New(conf *Config) (*Yorkie, error) {
 		return nil, err
 	}
 
-	met, err := prometheus.NewMetrics()
+	metrics, err := prometheus.NewMetrics()
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +60,7 @@ func New(conf *Config) (*Yorkie, error) {
 		conf.Mongo,
 		conf.ETCD,
 		conf.RPCAddr(),
-		met,
+		metrics,
 	)
 	if err != nil {
 		return nil, err
@@ -68,16 +71,17 @@ func New(conf *Config) (*Yorkie, error) {
 		return nil, err
 	}
 
-	var metricsServer *prometheus.Server
-	if conf.Metrics != nil {
-		metricsServer = prometheus.NewServer(conf.Metrics, met)
+	var profilingServer *profiling.Server
+	if conf.Profiling != nil {
+		profilingServer = profiling.NewServer(conf.Profiling)
+		profilingServer.Handle("/metrics", promhttp.HandlerFor(metrics.Registry(), promhttp.HandlerOpts{}))
 	}
 
 	return &Yorkie{
-		conf:          conf,
-		backend:       be,
-		rpcServer:     rpcServer,
-		metricsServer: metricsServer,
+		conf:            conf,
+		backend:         be,
+		rpcServer:       rpcServer,
+		profilingServer: profilingServer,
 
 		shutdownCh: make(chan struct{}),
 	}, nil
@@ -88,8 +92,8 @@ func (r *Yorkie) Start() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	if r.metricsServer != nil {
-		err := r.metricsServer.Start()
+	if r.profilingServer != nil {
+		err := r.profilingServer.Start()
 		if err != nil {
 			log.Logger.Error(err)
 			return err
@@ -107,8 +111,8 @@ func (r *Yorkie) Shutdown(graceful bool) error {
 	}
 
 	r.rpcServer.Shutdown(graceful)
-	if r.metricsServer != nil {
-		r.metricsServer.Shutdown(graceful)
+	if r.profilingServer != nil {
+		r.profilingServer.Shutdown(graceful)
 	}
 
 	if err := r.backend.Close(); err != nil {

@@ -18,7 +18,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
+	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 

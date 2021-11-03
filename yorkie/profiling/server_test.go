@@ -14,28 +14,28 @@
  * limitations under the License.
  */
 
-package prometheus
+package profiling_test
 
 import (
-	"errors"
-	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/yorkie-team/yorkie/test/helper"
+	"github.com/yorkie-team/yorkie/yorkie/profiling"
 )
 
-var (
-	// ErrInvalidMetricPort occurs when the port in the config is invalid.
-	ErrInvalidMetricPort = errors.New("invalid port number for metric server")
+const (
+	// to avoid conflict with profiling port used for client test
+	testProfilingPort = helper.ProfilingPort + 100
 )
 
-// Config is the configuration for creating a Server instance.
-type Config struct {
-	Port int
-}
-
-// Validate validates the port number.
-func (c *Config) Validate() error {
-	if c.Port < 1 || 65535 < c.Port {
-		return fmt.Errorf("must be between 1 and 65535, given %d: %w", c.Port, ErrInvalidMetricPort)
-	}
-
-	return nil
+func TestMetricsServer(t *testing.T) {
+	t.Run("new server test", func(t *testing.T) {
+		server := profiling.NewServer(
+			&profiling.Config{Port: testProfilingPort},
+		)
+		assert.NotNil(t, server)
+		server.Shutdown(true)
+	})
 }

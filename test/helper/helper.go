@@ -29,7 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
+	"github.com/yorkie-team/yorkie/yorkie/profiling"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
@@ -38,7 +38,7 @@ var testStartedAt int64
 // Below are the values of the Yorkie config used in the test.
 const (
 	RPCPort                    = 21101
-	MetricsPort                = 21102
+	ProfilingPort              = 21102
 	MongoConnectionURI         = "mongodb://localhost:27017"
 	MongoConnectionTimeout     = "5s"
 	MongoPingTimeout           = "5s"
@@ -121,8 +121,8 @@ func TestConfig(authWebhook string) *yorkie.Config {
 		RPC: &rpc.Config{
 			Port: RPCPort + portOffset,
 		},
-		Metrics: &prometheus.Config{
-			Port: MetricsPort + portOffset,
+		Profiling: &profiling.Config{
+			Port: ProfilingPort + portOffset,
 		},
 		Backend: &backend.Config{
 			SnapshotThreshold:          SnapshotThreshold,

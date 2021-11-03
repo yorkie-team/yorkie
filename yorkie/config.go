@@ -28,14 +28,14 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/yorkie/metrics/prometheus"
+	"github.com/yorkie-team/yorkie/yorkie/profiling"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
 // Below are the values of the default values of Yorkie config.
 const (
-	DefaultRPCPort     = 11101
-	DefaultMetricsPort = 11102
+	DefaultRPCPort       = 11101
+	DefaultProfilingPort = 11102
 
 	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout = 5 * time.Second
@@ -53,17 +53,17 @@ const (
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPC     *rpc.Config        `yaml:"RPC"`
-	Metrics *prometheus.Config `yaml:"Metrics"`
-	Backend *backend.Config    `yaml:"Backend"`
-	Mongo   *mongo.Config      `yaml:"Mongo"`
-	ETCD    *etcd.Config       `yaml:"ETCD"`
+	RPC       *rpc.Config       `yaml:"RPC"`
+	Profiling *profiling.Config `yaml:"Profiling"`
+	Backend   *backend.Config   `yaml:"Backend"`
+	Mongo     *mongo.Config     `yaml:"Mongo"`
+	ETCD      *etcd.Config      `yaml:"ETCD"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
 // for most of the configurations.
 func NewConfig() *Config {
-	return newConfig(DefaultRPCPort, DefaultMetricsPort, DefaultMongoYorkieDatabase)
+	return newConfig(DefaultRPCPort, DefaultProfilingPort, DefaultMongoYorkieDatabase)
 }
 
 // NewConfigFromFile returns a Config struct for the given conf file.
@@ -95,7 +95,7 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	if err := c.Metrics.Validate(); err != nil {
+	if err := c.Profiling.Validate(); err != nil {
 		return err
 	}
 
@@ -120,8 +120,8 @@ func (c *Config) ensureDefaultValue() {
 		c.RPC.Port = DefaultRPCPort
 	}
 
-	if c.Metrics.Port == 0 {
-		c.Metrics.Port = DefaultMetricsPort
+	if c.Profiling.Port == 0 {
+		c.Profiling.Port = DefaultProfilingPort
 	}
 
 	if c.Mongo.ConnectionTimeout == "" {
@@ -175,13 +175,13 @@ func (c *Config) ensureDefaultValue() {
 	}
 }
 
-func newConfig(port int, metricsPort int, dbName string) *Config {
+func newConfig(port int, profilingPort int, dbName string) *Config {
 	return &Config{
 		RPC: &rpc.Config{
 			Port: port,
 		},
-		Metrics: &prometheus.Config{
-			Port: metricsPort,
+		Profiling: &profiling.Config{
+			Port: profilingPort,
 		},
 		Backend: &backend.Config{
 			SnapshotThreshold: DefaultSnapshotThreshold,

@@ -165,16 +165,22 @@ func init() {
 		"RPC certification file's path",
 	)
 	cmd.Flags().StringVar(
-		&conf.RPC.CertFile,
+		&conf.RPC.KeyFile,
 		"rpc-key-file",
 		"",
 		"RPC key file's path",
 	)
 	cmd.Flags().IntVar(
-		&conf.Metrics.Port,
-		"metrics-port",
-		yorkie.DefaultMetricsPort,
-		"Metrics port",
+		&conf.Profiling.Port,
+		"profiling-port",
+		yorkie.DefaultProfilingPort,
+		"Profiling port",
+	)
+	cmd.Flags().BoolVar(
+		&conf.Profiling.EnablePprof,
+		"enable-pprof",
+		false,
+		"Enable runtime profiling data via HTTP server.",
 	)
 	cmd.Flags().DurationVar(
 		&mongoConnectionTimeout,
