@@ -235,7 +235,7 @@ func pullPack(
 		return nil, err
 	}
 
-	be.Metrics.SetPushPullSnapshotBytes(len(snapshot))
+	be.Metrics.AddPushPullSnapshotBytes(len(snapshot))
 
 	return change.NewPack(docKey, pulledCP, nil, snapshot), err
 }

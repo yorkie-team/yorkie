@@ -23,22 +23,21 @@ type Metrics interface {
 	// ObservePushPullResponseSeconds adds response time metrics for PushPull API.
 	ObservePushPullResponseSeconds(seconds float64)
 
-	// SetPushPullReceivedChanges sets the number of changes metric
-	// included in the request pack of the PushPull API.
-	SetPushPullReceivedChanges(count int)
+	// AddPushPullReceivedChanges sets the number of changes
+	// included in the request pack of PushPull.
+	AddPushPullReceivedChanges(count int)
 
-	// SetPushPullSentChanges sets the number of changes metric
-	// included in the response pack of the PushPull API.
-	SetPushPullSentChanges(count int)
+	// AddPushPullSentChanges adds the number of changes
+	// included in the response pack of PushPull.
+	AddPushPullSentChanges(count int)
 
-	// ObservePushPullSnapshotDurationSeconds adds the time
-	// spent metric when taking snapshots.
+	// ObservePushPullSnapshotDurationSeconds adds an observation
+	// for creating snapshot for the response pack.
 	ObservePushPullSnapshotDurationSeconds(seconds float64)
 
-	// SetPushPullSnapshotBytes sets the snapshot byte size.
-	SetPushPullSnapshotBytes(bytes int)
+	// AddPushPullSnapshotBytes adds the snapshot byte size of response pack.
+	AddPushPullSnapshotBytes(bytes int)
 
-	// RegisterGRPCServer registers the given gRPC server to collect its
-	// metrics.
+	// RegisterGRPCServer registers the given gRPC server.
 	RegisterGRPCServer(server *grpc.Server)
 }
