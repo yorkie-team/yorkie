@@ -18,6 +18,7 @@ package memory
 
 import (
 	gosync "sync"
+	gotime "time"
 
 	"go.uber.org/zap"
 
@@ -201,7 +202,18 @@ func (m *PubSub) Publish(
 						sub.SubscriberID(),
 					)
 				}
-				sub.Events() <- event
+
+				// NOTE: When a subscription is being closed by a subscriber,
+				// the subscriber may not receive messages.
+				select {
+				case sub.Events() <- event:
+				case <-gotime.After(100 * gotime.Millisecond):
+					log.Logger.Warn(
+						`Publish(%s,%s) to %s timeout`,
+						k,
+						publisherID.String(),
+						sub.SubscriberID())
+				}
 			}
 		}
 		if log.Core.Enabled(zap.DebugLevel) {
