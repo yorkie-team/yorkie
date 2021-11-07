@@ -24,7 +24,7 @@ import (
 
 // Context is used to record the context of modification when editing a document.
 // Each time we add an operation, a new time ticket is issued.
-// Finally returns a Change after the modification has been completed.
+// Finally, returns a Change after the modification has been completed.
 type Context struct {
 	id         *ID
 	message    string
@@ -63,7 +63,7 @@ func (c *Context) IssueTimeTicket() *time.Ticket {
 	return c.id.NewTimeTicket(c.delimiter)
 }
 
-// Push pushes an new operation into context queue.
+// Push pushes a new operation into context queue.
 func (c *Context) Push(op operation.Operation) {
 	c.operations = append(c.operations, op)
 }

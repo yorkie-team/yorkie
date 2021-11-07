@@ -6,4 +6,4 @@ services:
     container_name: mongo
     restart: always
     ports:
-      - 27017:27017
+      - '27017:27017'

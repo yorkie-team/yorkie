@@ -109,7 +109,7 @@ func (pq internalQueue) Len() int { return len(pq) }
 // Less reports whether the element with
 // index i should sort before the element with index j.
 func (pq internalQueue) Less(i, j int) bool {
-	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
+	// We want Pop to give us the highest priority, not the lowest, so we use greater than here.
 	return pq[i].value.Less(pq[j].value)
 }
 

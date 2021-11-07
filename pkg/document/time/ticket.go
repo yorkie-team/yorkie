@@ -67,7 +67,7 @@ func NewTicket(
 	}
 }
 
-// AnnotatedString returns a string containing the meta data of the ticket
+// AnnotatedString returns a string containing the metadata of the ticket
 // for debugging purpose.
 func (t *Ticket) AnnotatedString() string {
 	if t.actorID == nil {

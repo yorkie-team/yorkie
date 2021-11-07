@@ -85,8 +85,8 @@ type DB interface {
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(ctx context.Context, docID ID, doc *document.InternalDocument) error
 
-	// FindChangeInfosBetweenServerSeqs returns the changes between two server sequences.
-	FindChangeInfosBetweenServerSeqs(
+	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
+	FindChangesBetweenServerSeqs(
 		ctx context.Context,
 		docID ID,
 		from uint64,

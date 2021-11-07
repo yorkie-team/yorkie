@@ -171,7 +171,7 @@ func (p *Counter) ValueType() CounterType {
 	return p.valueType
 }
 
-// Increase increase integer, long or double.
+// Increase increases integer, long or double.
 // If the result of the operation is greater than MaxInt32 or less
 // than MinInt32, Counter's value type can be changed Integer to Long.
 // Because in golang, int can be either int32 or int64.

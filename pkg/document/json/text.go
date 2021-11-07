@@ -26,7 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// InitialTextNode creates a initial node of Text. The text is edited
+// InitialTextNode creates an initial node of Text. The text is edited
 // as this node is split into multiple nodes.
 func InitialTextNode() *RGATreeSplitNode {
 	return NewRGATreeSplitNode(initialNodeID, &TextValue{
@@ -58,7 +58,7 @@ func (t *TextValue) String() string {
 	return t.value
 }
 
-// AnnotatedString returns a String containing the meta data of this value
+// AnnotatedString returns a String containing the metadata of this value
 // for debugging purpose.
 func (t *TextValue) AnnotatedString() string {
 	return t.value
@@ -157,7 +157,7 @@ func (t *Text) Remove(removedAt *time.Ticket) bool {
 	return false
 }
 
-// CreateRange returns pair of RGATreeSplitNodePos of the given integer offsets.
+// CreateRange returns a pair of RGATreeSplitNodePos of the given integer offsets.
 func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
 	return t.rgaTreeSplit.createRange(from, to)
 }
@@ -219,7 +219,7 @@ func (t *Text) Nodes() []*RGATreeSplitNode {
 	return t.rgaTreeSplit.nodes()
 }
 
-// AnnotatedString returns a String containing the meta data of the text
+// AnnotatedString returns a String containing the metadata of the text
 // for debugging purpose.
 func (t *Text) AnnotatedString() string {
 	return t.rgaTreeSplit.AnnotatedString()

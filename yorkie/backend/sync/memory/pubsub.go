@@ -45,7 +45,7 @@ func (s *subscriptions) Add(sub *sync.Subscription) {
 	s.internalMap[sub.ID()] = sub
 }
 
-// Map returns the internal map of this subscriptions.
+// Map returns the internal map of these subscriptions.
 func (s *subscriptions) Map() map[string]*sync.Subscription {
 	return s.internalMap
 }
@@ -58,7 +58,7 @@ func (s *subscriptions) Delete(id string) {
 	delete(s.internalMap, id)
 }
 
-// Len returns the length of this subscriptions.
+// Len returns the length of these subscriptions.
 func (s *subscriptions) Len() int {
 	return len(s.internalMap)
 }
@@ -208,11 +208,12 @@ func (m *PubSub) Publish(
 				select {
 				case sub.Events() <- event:
 				case <-gotime.After(100 * gotime.Millisecond):
-					log.Logger.Warn(
+					log.Logger.Warnf(
 						`Publish(%s,%s) to %s timeout`,
 						k,
 						publisherID.String(),
-						sub.SubscriberID())
+						sub.SubscriberID(),
+					)
 				}
 			}
 		}

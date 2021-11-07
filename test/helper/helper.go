@@ -19,7 +19,6 @@ package helper
 import (
 	"fmt"
 	"log"
-	"runtime"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -51,8 +50,8 @@ const (
 	ETCDLockLeaseTime          = 30 * gotime.Second
 )
 
-// Below are the values of the related ETCD config.
 var (
+	// ETCDEndpoints is the list of endpoints to connect to for etcd.
 	ETCDEndpoints = []string{"localhost:2379"}
 )
 
@@ -79,37 +78,6 @@ func TextChangeContext(root *json.Root) *change.Context {
 		"",
 		root,
 	)
-}
-
-// PrintMemStats prints memory stats.
-func PrintMemStats() {
-	var mem runtime.MemStats
-	runtime.ReadMemStats(&mem)
-
-	fmt.Println("mem.Alloc:", ByteCountIEC(mem.Alloc))
-	fmt.Println("mem.TotalAlloc:", ByteCountIEC(mem.TotalAlloc))
-	fmt.Println("mem.HeapAlloc:", ByteCountIEC(mem.HeapAlloc))
-	fmt.Println("mem.NumGC:", mem.NumGC)
-}
-
-// PrintSnapshotBytesSize prints the humanized size of the given snapshot.
-func PrintSnapshotBytesSize(bytes []byte) {
-	byteSize := len(bytes)
-	fmt.Println("sna.Bytes:", ByteCountIEC(uint64(byteSize)))
-}
-
-// ByteCountIEC returns humanized size in IEC(binary) format.
-func ByteCountIEC(b uint64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := uint64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 var portOffset = 0
@@ -145,7 +113,7 @@ func TestConfig(authWebhook string) *yorkie.Config {
 	}
 }
 
-// TestYorkie returns Yorkie instance for testing.
+// TestYorkie returns a new instance of Yorkie for testing.
 func TestYorkie() *yorkie.Yorkie {
 	y, err := yorkie.New(TestConfig(""))
 	if err != nil {

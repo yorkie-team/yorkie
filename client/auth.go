@@ -23,7 +23,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-// AuthInterceptor is a interceptor for authentication.
+// AuthInterceptor is an interceptor for authentication.
 type AuthInterceptor struct {
 	token string
 }

@@ -49,7 +49,7 @@ func (p *RichTextProxy) Edit(from, to int, content string, attributes map[string
 	if log.Core.Enabled(zap.DebugLevel) {
 		log.Logger.Debugf(
 			"EDIT: f:%d->%s, t:%d->%s, c:%s, attrs:%v",
-			from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), content,
+			from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), content, attributes,
 		)
 	}
 

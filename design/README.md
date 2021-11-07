@@ -2,7 +2,7 @@
 
 For significant scope and complex new features, it is recommended to write a
  Design Document before starting any implementation work. On the other hand, we
-  don't need design documentation for small, simple features and bug fixes.
+  don't need to design documentation for small, simple features and bug fixes.
  
 Writing a design document for big features has many advantages:
 - It helps new visitors or contributors understand the inner workings or the

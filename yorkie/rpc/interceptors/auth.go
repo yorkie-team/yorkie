@@ -28,7 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/auth"
 )
 
-// AuthInterceptor is a interceptor for authentication.
+// AuthInterceptor is an interceptor for authentication.
 type AuthInterceptor struct {
 	webhook string
 }

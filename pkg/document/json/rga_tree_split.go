@@ -81,7 +81,7 @@ func (t *RGATreeSplitNodeID) Split(offset int) *RGATreeSplitNodeID {
 	return NewRGATreeSplitNodeID(t.createdAt, t.offset+offset)
 }
 
-// AnnotatedString returns a String containing the meta data of the node id
+// AnnotatedString returns a String containing the metadata of the node id
 // for debugging purpose.
 func (t *RGATreeSplitNodeID) AnnotatedString() string {
 	return fmt.Sprintf("%s:%d", t.createdAt.AnnotatedString(), t.offset)
@@ -110,7 +110,7 @@ func (pos *RGATreeSplitNodePos) getAbsoluteID() *RGATreeSplitNodeID {
 	return NewRGATreeSplitNodeID(pos.id.createdAt, pos.id.offset+pos.relativeOffset)
 }
 
-// AnnotatedString returns a String containing the meta data of the position
+// AnnotatedString returns a String containing the metadata of the position
 // for debugging purpose.
 func (pos *RGATreeSplitNodePos) AnnotatedString() string {
 	return fmt.Sprintf("%s:%d", pos.id.AnnotatedString(), pos.relativeOffset)
@@ -246,7 +246,7 @@ func (t *RGATreeSplitNode) createdAt() *time.Ticket {
 	return t.id.createdAt
 }
 
-// annotatedString returns a String containing the meta data of the node
+// annotatedString returns a String containing the metadata of the node
 // for debugging purpose.
 func (t *RGATreeSplitNode) annotatedString() string {
 	return fmt.Sprintf("%s %s", t.id.AnnotatedString(), t.value.AnnotatedString())
@@ -530,7 +530,7 @@ func (s *RGATreeSplit) nodes() []*RGATreeSplitNode {
 	return nodes
 }
 
-// AnnotatedString returns a String containing the meta data of the nodes
+// AnnotatedString returns a String containing the metadata of the nodes
 // for debugging purpose.
 func (s *RGATreeSplit) AnnotatedString() string {
 	var result []string

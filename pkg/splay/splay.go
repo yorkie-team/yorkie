@@ -221,7 +221,7 @@ func (t *Tree) String() string {
 	return strings.Join(str, "")
 }
 
-// AnnotatedString returns a string containing the meta data of the Node
+// AnnotatedString returns a string containing the metadata of the Node
 // for debugging purpose.
 func (t *Tree) AnnotatedString() string {
 	var metaString []string

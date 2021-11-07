@@ -28,7 +28,7 @@ import (
 // ValueType represents the type of Primitive value.
 type ValueType int
 
-// The types of values that Primitive can have are as follows.
+// Primitive can have the following types:
 const (
 	Null ValueType = iota
 	Boolean

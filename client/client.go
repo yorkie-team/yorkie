@@ -203,7 +203,7 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// Activate activates this client. That is, it register itself to the agent
+// Activate activates this client. That is, it registers itself to the agent
 // and receives a unique ID from the agent. The given ID is used to distinguish
 // different clients.
 func (c *Client) Activate(ctx context.Context) error {

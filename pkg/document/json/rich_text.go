@@ -27,7 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// InitialRichTextNode creates a initial node of RichText. The text is edited
+// InitialRichTextNode creates an initial node of RichText. The text is edited
 // as this node is split into multiple nodes.
 func InitialRichTextNode() *RGATreeSplitNode {
 	return NewRGATreeSplitNode(initialNodeID, &RichTextValue{
@@ -36,7 +36,7 @@ func InitialRichTextNode() *RGATreeSplitNode {
 	})
 }
 
-// RichTextValue is a value of RichText which has a attributes that expresses
+// RichTextValue is a value of RichText which has an attributes that expresses
 // the text style.
 type RichTextValue struct {
 	attrs *RHT
@@ -73,7 +73,7 @@ func (t *RichTextValue) String() string {
 	return fmt.Sprintf(`{"attrs":%s,"val":"%s"}`, t.attrs.Marshal(), t.value)
 }
 
-// AnnotatedString returns a String containing the meta data of this value
+// AnnotatedString returns a String containing the metadata of this value
 // for debugging purpose.
 func (t *RichTextValue) AnnotatedString() string {
 	return fmt.Sprintf(`%s "%s"`, t.attrs.Marshal(), t.value)
@@ -193,7 +193,7 @@ func (t *RichText) Remove(removedAt *time.Ticket) bool {
 	return false
 }
 
-// CreateRange returns pair of RGATreeSplitNodePos of the given integer offsets.
+// CreateRange returns a pair of RGATreeSplitNodePos of the given integer offsets.
 func (t *RichText) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
 	return t.rgaTreeSplit.createRange(from, to)
 }
@@ -284,7 +284,7 @@ func (t *RichText) Nodes() []*RGATreeSplitNode {
 	return t.rgaTreeSplit.nodes()
 }
 
-// AnnotatedString returns a String containing the meta data of the text
+// AnnotatedString returns a String containing the metadata of the text
 // for debugging purpose.
 func (t *RichText) AnnotatedString() string {
 	return t.rgaTreeSplit.AnnotatedString()

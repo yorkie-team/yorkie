@@ -100,7 +100,7 @@ func TestPeerAwareness(t *testing.T) {
 		_, err = c2.Watch(watch2Ctx, d2)
 		assert.NoError(t, err)
 
-		// 02. PeersChanged is triggered when another client updates it's metadata
+		// 02. PeersChanged is triggered when another client updates its metadata
 		assert.NoError(t, c2.UpdateMetadata(ctx, "updated", "true"))
 		expected = append(expected, watchResponsePair{
 			Type: client.PeersChanged,

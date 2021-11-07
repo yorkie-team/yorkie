@@ -30,7 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
-// FromClient converts the given Protobuf format to model format.
+// FromClient converts the given Protobuf formats to model format.
 func FromClient(pbClient *api.Client) (*types.Client, error) {
 	id, err := time.ActorIDFromBytes(pbClient.Id)
 	if err != nil {
@@ -43,7 +43,7 @@ func FromClient(pbClient *api.Client) (*types.Client, error) {
 	}, nil
 }
 
-// FromMetadataInfo converts the given Protobuf format to model format.
+// FromMetadataInfo converts the given Protobuf formats to model format.
 func FromMetadataInfo(pbMetadata *api.Metadata) types.MetadataInfo {
 	return types.MetadataInfo{
 		Clock: pbMetadata.Clock,
@@ -51,7 +51,7 @@ func FromMetadataInfo(pbMetadata *api.Metadata) types.MetadataInfo {
 	}
 }
 
-// FromChangePack converts the given Protobuf format to model format.
+// FromChangePack converts the given Protobuf formats to model format.
 func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	if pbPack == nil {
 		return nil, ErrPackRequired
@@ -126,7 +126,7 @@ func fromChangeID(id *api.ChangeID) (*change.ID, error) {
 	), nil
 }
 
-// FromDocumentKeys converts the given Protobuf format to model format.
+// FromDocumentKeys converts the given Protobuf formats to model format.
 func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
 	var keys []*key.Key
 	for _, pbKey := range pbKeys {
@@ -135,7 +135,7 @@ func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
 	return keys
 }
 
-// FromEventType converts the given Protobuf format to model format.
+// FromEventType converts the given Protobuf formats to model format.
 func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) {
 	switch pbDocEventType {
 	case api.DocEventType_DOCUMENTS_CHANGED:
@@ -150,7 +150,7 @@ func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) 
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
 }
 
-// FromDocEvent converts the given Protobuf format to model format.
+// FromDocEvent converts the given Protobuf formats to model format.
 func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
 	client, err := FromClient(docEvent.Publisher)
 	if err != nil {
@@ -169,7 +169,7 @@ func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
 	}, nil
 }
 
-// FromClients converts the given Protobuf format to model format.
+// FromClients converts the given Protobuf formats to model format.
 func FromClients(pbClients *api.Clients) ([]*types.Client, error) {
 	var clients []*types.Client
 	for _, pbClient := range pbClients.Clients {
@@ -183,7 +183,7 @@ func FromClients(pbClients *api.Clients) ([]*types.Client, error) {
 	return clients, nil
 }
 
-// FromOperations converts the given Protobuf format to model format.
+// FromOperations converts the given Protobuf formats to model format.
 func FromOperations(pbOps []*api.Operation) ([]operation.Operation, error) {
 	var ops []operation.Operation
 	for _, pbOp := range pbOps {

@@ -48,7 +48,7 @@ func TestSnapshot(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		// 01. Updates changes over snapshot threshold.
+		// 01. Update changes over snapshot threshold.
 		for i := 0; i < helper.SnapshotThreshold+1; i++ {
 			err := d1.Update(func(root *proxy.ObjectProxy) error {
 				root.SetInteger(fmt.Sprintf("%d", i), i)

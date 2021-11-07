@@ -59,7 +59,7 @@ func Dial(conf *Config) (*Client, error) {
 	defer cancel()
 
 	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
-		log.Logger.Errorf("fail to connect to %s in %d sec", conf.ConnectionURI, pingTimeout.Seconds())
+		log.Logger.Errorf("fail to connect to %s in %f sec", conf.ConnectionURI, pingTimeout.Seconds())
 		return nil, err
 	}
 
@@ -375,8 +375,8 @@ func (c *Client) CreateSnapshotInfo(
 	return nil
 }
 
-// FindChangeInfosBetweenServerSeqs returns the changes between two server sequences.
-func (c *Client) FindChangeInfosBetweenServerSeqs(
+// FindChangesBetweenServerSeqs returns the changes between two server sequences.
+func (c *Client) FindChangesBetweenServerSeqs(
 	ctx context.Context,
 	docID db.ID,
 	from uint64,

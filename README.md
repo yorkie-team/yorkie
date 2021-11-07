@@ -59,7 +59,7 @@ Yorkie: 0.1.8
 ...
 ```
 
-Yorkie uses MongoDB to store it's data. To start MongoDB, type `docker-compose -f docker/docker-compose.yml up -d`.
+Yorkie uses MongoDB to store its data. To start MongoDB, type `docker-compose -f docker/docker-compose.yml up -d`.
 
 Next, let's start a Yorkie agent. Agent runs until they're told to quit and handle the communication of maintenance tasks of Agent. and start the agent:
 
