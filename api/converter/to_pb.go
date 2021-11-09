@@ -55,48 +55,32 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 	}
 
 	return &api.ChangePack{
-		DocumentKey:     toDocumentKey(pack.DocumentKey),
-		Checkpoint:      toCheckpoint(pack.Checkpoint),
+		DocumentKey:     ToDocumentKey(pack.DocumentKey),
+		Checkpoint:      ToCheckpoint(pack.Checkpoint),
 		Changes:         pbChanges,
 		Snapshot:        pack.Snapshot,
-		MinSyncedTicket: toTimeTicket(pack.MinSyncedTicket),
+		MinSyncedTicket: ToTimeTicket(pack.MinSyncedTicket),
 	}, nil
 }
 
-func toDocumentKey(key *key.Key) *api.DocumentKey {
+// ToDocumentKey converts the given model format to Protobuf format.
+func ToDocumentKey(key *key.Key) *api.DocumentKey {
 	return &api.DocumentKey{
 		Collection: key.Collection,
 		Document:   key.Document,
 	}
 }
 
-func toCheckpoint(cp *checkpoint.Checkpoint) *api.Checkpoint {
+// ToCheckpoint converts the given model format to Protobuf format.
+func ToCheckpoint(cp *checkpoint.Checkpoint) *api.Checkpoint {
 	return &api.Checkpoint{
 		ServerSeq: cp.ServerSeq,
 		ClientSeq: cp.ClientSeq,
 	}
 }
 
-func toChanges(changes []*change.Change) ([]*api.Change, error) {
-	var pbChanges []*api.Change
-
-	for _, c := range changes {
-		pbOperations, err := ToOperations(c.Operations())
-		if err != nil {
-			return nil, err
-		}
-
-		pbChanges = append(pbChanges, &api.Change{
-			Id:         toChangeID(c.ID()),
-			Message:    c.Message(),
-			Operations: pbOperations,
-		})
-	}
-
-	return pbChanges, nil
-}
-
-func toChangeID(id *change.ID) *api.ChangeID {
+// ToChangeID converts the given model format to Protobuf format.
+func ToChangeID(id *change.ID) *api.ChangeID {
 	return &api.ChangeID{
 		ClientSeq: id.ClientSeq(),
 		Lamport:   id.Lamport(),
@@ -108,7 +92,7 @@ func toChangeID(id *change.ID) *api.ChangeID {
 func ToDocumentKeys(keys []*key.Key) []*api.DocumentKey {
 	var pbKeys []*api.DocumentKey
 	for _, k := range keys {
-		pbKeys = append(pbKeys, toDocumentKey(k))
+		pbKeys = append(pbKeys, ToDocumentKey(k))
 	}
 	return pbKeys
 }
@@ -199,6 +183,38 @@ func ToOperations(operations []operation.Operation) ([]*api.Operation, error) {
 	return pbOperations, nil
 }
 
+// ToTimeTicket converts the given model format to Protobuf format.
+func ToTimeTicket(ticket *time.Ticket) *api.TimeTicket {
+	if ticket == nil {
+		return nil
+	}
+
+	return &api.TimeTicket{
+		Lamport:   ticket.Lamport(),
+		Delimiter: ticket.Delimiter(),
+		ActorId:   ticket.ActorIDBytes(),
+	}
+}
+
+func toChanges(changes []*change.Change) ([]*api.Change, error) {
+	var pbChanges []*api.Change
+
+	for _, c := range changes {
+		pbOperations, err := ToOperations(c.Operations())
+		if err != nil {
+			return nil, err
+		}
+
+		pbChanges = append(pbChanges, &api.Change{
+			Id:         ToChangeID(c.ID()),
+			Message:    c.Message(),
+			Operations: pbOperations,
+		})
+	}
+
+	return pbChanges, nil
+}
+
 func toSet(set *operation.Set) (*api.Operation_Set_, error) {
 	pbElem, err := toJSONElementSimple(set.Value())
 	if err != nil {
@@ -207,10 +223,10 @@ func toSet(set *operation.Set) (*api.Operation_Set_, error) {
 
 	return &api.Operation_Set_{
 		Set: &api.Operation_Set{
-			ParentCreatedAt: toTimeTicket(set.ParentCreatedAt()),
+			ParentCreatedAt: ToTimeTicket(set.ParentCreatedAt()),
 			Key:             set.Key(),
 			Value:           pbElem,
-			ExecutedAt:      toTimeTicket(set.ExecutedAt()),
+			ExecutedAt:      ToTimeTicket(set.ExecutedAt()),
 		},
 	}, nil
 }
@@ -223,10 +239,10 @@ func toAdd(add *operation.Add) (*api.Operation_Add_, error) {
 
 	return &api.Operation_Add_{
 		Add: &api.Operation_Add{
-			ParentCreatedAt: toTimeTicket(add.ParentCreatedAt()),
-			PrevCreatedAt:   toTimeTicket(add.PrevCreatedAt()),
+			ParentCreatedAt: ToTimeTicket(add.ParentCreatedAt()),
+			PrevCreatedAt:   ToTimeTicket(add.PrevCreatedAt()),
 			Value:           pbElem,
-			ExecutedAt:      toTimeTicket(add.ExecutedAt()),
+			ExecutedAt:      ToTimeTicket(add.ExecutedAt()),
 		},
 	}, nil
 }
@@ -234,10 +250,10 @@ func toAdd(add *operation.Add) (*api.Operation_Add_, error) {
 func toMove(move *operation.Move) (*api.Operation_Move_, error) {
 	return &api.Operation_Move_{
 		Move: &api.Operation_Move{
-			ParentCreatedAt: toTimeTicket(move.ParentCreatedAt()),
-			PrevCreatedAt:   toTimeTicket(move.PrevCreatedAt()),
-			CreatedAt:       toTimeTicket(move.CreatedAt()),
-			ExecutedAt:      toTimeTicket(move.ExecutedAt()),
+			ParentCreatedAt: ToTimeTicket(move.ParentCreatedAt()),
+			PrevCreatedAt:   ToTimeTicket(move.PrevCreatedAt()),
+			CreatedAt:       ToTimeTicket(move.CreatedAt()),
+			ExecutedAt:      ToTimeTicket(move.ExecutedAt()),
 		},
 	}, nil
 }
@@ -245,9 +261,9 @@ func toMove(move *operation.Move) (*api.Operation_Move_, error) {
 func toRemove(remove *operation.Remove) (*api.Operation_Remove_, error) {
 	return &api.Operation_Remove_{
 		Remove: &api.Operation_Remove{
-			ParentCreatedAt: toTimeTicket(remove.ParentCreatedAt()),
-			CreatedAt:       toTimeTicket(remove.CreatedAt()),
-			ExecutedAt:      toTimeTicket(remove.ExecutedAt()),
+			ParentCreatedAt: ToTimeTicket(remove.ParentCreatedAt()),
+			CreatedAt:       ToTimeTicket(remove.CreatedAt()),
+			ExecutedAt:      ToTimeTicket(remove.ExecutedAt()),
 		},
 	}, nil
 }
@@ -255,12 +271,12 @@ func toRemove(remove *operation.Remove) (*api.Operation_Remove_, error) {
 func toEdit(edit *operation.Edit) (*api.Operation_Edit_, error) {
 	return &api.Operation_Edit_{
 		Edit: &api.Operation_Edit{
-			ParentCreatedAt:     toTimeTicket(edit.ParentCreatedAt()),
+			ParentCreatedAt:     ToTimeTicket(edit.ParentCreatedAt()),
 			From:                toTextNodePos(edit.From()),
 			To:                  toTextNodePos(edit.To()),
 			CreatedAtMapByActor: toCreatedAtMapByActor(edit.CreatedAtMapByActor()),
 			Content:             edit.Content(),
-			ExecutedAt:          toTimeTicket(edit.ExecutedAt()),
+			ExecutedAt:          ToTimeTicket(edit.ExecutedAt()),
 		},
 	}, nil
 }
@@ -268,10 +284,10 @@ func toEdit(edit *operation.Edit) (*api.Operation_Edit_, error) {
 func toSelect(s *operation.Select) (*api.Operation_Select_, error) {
 	return &api.Operation_Select_{
 		Select: &api.Operation_Select{
-			ParentCreatedAt: toTimeTicket(s.ParentCreatedAt()),
+			ParentCreatedAt: ToTimeTicket(s.ParentCreatedAt()),
 			From:            toTextNodePos(s.From()),
 			To:              toTextNodePos(s.To()),
-			ExecutedAt:      toTimeTicket(s.ExecutedAt()),
+			ExecutedAt:      ToTimeTicket(s.ExecutedAt()),
 		},
 	}, nil
 }
@@ -279,13 +295,13 @@ func toSelect(s *operation.Select) (*api.Operation_Select_, error) {
 func toRichEdit(richEdit *operation.RichEdit) (*api.Operation_RichEdit_, error) {
 	return &api.Operation_RichEdit_{
 		RichEdit: &api.Operation_RichEdit{
-			ParentCreatedAt:     toTimeTicket(richEdit.ParentCreatedAt()),
+			ParentCreatedAt:     ToTimeTicket(richEdit.ParentCreatedAt()),
 			From:                toTextNodePos(richEdit.From()),
 			To:                  toTextNodePos(richEdit.To()),
 			CreatedAtMapByActor: toCreatedAtMapByActor(richEdit.CreatedAtMapByActor()),
 			Content:             richEdit.Content(),
 			Attributes:          richEdit.Attributes(),
-			ExecutedAt:          toTimeTicket(richEdit.ExecutedAt()),
+			ExecutedAt:          ToTimeTicket(richEdit.ExecutedAt()),
 		},
 	}, nil
 }
@@ -293,11 +309,11 @@ func toRichEdit(richEdit *operation.RichEdit) (*api.Operation_RichEdit_, error) 
 func toStyle(style *operation.Style) (*api.Operation_Style_, error) {
 	return &api.Operation_Style_{
 		Style: &api.Operation_Style{
-			ParentCreatedAt: toTimeTicket(style.ParentCreatedAt()),
+			ParentCreatedAt: ToTimeTicket(style.ParentCreatedAt()),
 			From:            toTextNodePos(style.From()),
 			To:              toTextNodePos(style.To()),
 			Attributes:      style.Attributes(),
-			ExecutedAt:      toTimeTicket(style.ExecutedAt()),
+			ExecutedAt:      ToTimeTicket(style.ExecutedAt()),
 		},
 	}, nil
 }
@@ -310,9 +326,9 @@ func toIncrease(increase *operation.Increase) (*api.Operation_Increase_, error) 
 
 	return &api.Operation_Increase_{
 		Increase: &api.Operation_Increase{
-			ParentCreatedAt: toTimeTicket(increase.ParentCreatedAt()),
+			ParentCreatedAt: ToTimeTicket(increase.ParentCreatedAt()),
 			Value:           pbElem,
-			ExecutedAt:      toTimeTicket(increase.ExecutedAt()),
+			ExecutedAt:      ToTimeTicket(increase.ExecutedAt()),
 		},
 	}, nil
 }
@@ -322,12 +338,12 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 	case *json.Object:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_JSON_OBJECT,
-			CreatedAt: toTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Array:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_JSON_ARRAY,
-			CreatedAt: toTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Primitive:
 		pbValueType, err := toValueType(elem.ValueType())
@@ -337,18 +353,18 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 
 		return &api.JSONElementSimple{
 			Type:      pbValueType,
-			CreatedAt: toTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
 		}, nil
 	case *json.Text:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_TEXT,
-			CreatedAt: toTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.RichText:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_RICH_TEXT,
-			CreatedAt: toTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Counter:
 		pbCounterType, err := toCounterType(elem.ValueType())
@@ -358,7 +374,7 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 
 		return &api.JSONElementSimple{
 			Type:      pbCounterType,
-			CreatedAt: toTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
 		}, nil
 	}
@@ -368,7 +384,7 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 
 func toTextNodePos(pos *json.RGATreeSplitNodePos) *api.TextNodePos {
 	return &api.TextNodePos{
-		CreatedAt:      toTimeTicket(pos.ID().CreatedAt()),
+		CreatedAt:      ToTimeTicket(pos.ID().CreatedAt()),
 		Offset:         int32(pos.ID().Offset()),
 		RelativeOffset: int32(pos.RelativeOffset()),
 	}
@@ -379,21 +395,9 @@ func toCreatedAtMapByActor(
 ) map[string]*api.TimeTicket {
 	pbCreatedAtMapByActor := make(map[string]*api.TimeTicket)
 	for actor, createdAt := range createdAtMapByActor {
-		pbCreatedAtMapByActor[actor] = toTimeTicket(createdAt)
+		pbCreatedAtMapByActor[actor] = ToTimeTicket(createdAt)
 	}
 	return pbCreatedAtMapByActor
-}
-
-func toTimeTicket(ticket *time.Ticket) *api.TimeTicket {
-	if ticket == nil {
-		return nil
-	}
-
-	return &api.TimeTicket{
-		Lamport:   ticket.Lamport(),
-		Delimiter: ticket.Delimiter(),
-		ActorId:   ticket.ActorIDBytes(),
-	}
 }
 
 func toValueType(valueType json.ValueType) (api.ValueType, error) {

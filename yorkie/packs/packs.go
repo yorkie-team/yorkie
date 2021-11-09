@@ -48,7 +48,7 @@ func PushPull(
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
 	reqPack *change.Pack,
-) (*change.Pack, error) {
+) (*ServerPack, error) {
 	// TODO: Changes may be reordered or missing during communication on the network.
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
 	initialServerSeq := docInfo.ServerSeq

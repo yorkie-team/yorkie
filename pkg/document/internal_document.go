@@ -125,7 +125,13 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
 	if log.Core.Enabled(zap.DebugLevel) {
-		log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.RootObject().Marshal())
+		log.Logger.Debugf(
+			"after apply %d changes: elements: %d removeds: %d, %s",
+			len(pack.Changes),
+			d.root.ElementMapLen(),
+			d.root.RemovedElementLen(),
+			d.RootObject().Marshal(),
+		)
 	}
 	return nil
 }
