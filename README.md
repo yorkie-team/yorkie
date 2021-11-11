@@ -12,7 +12,7 @@
 [![Godoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](https://godoc.org/github.com/yorkie-team/yorkie)
 
 
-Yorkie is an open source document store for building collaborative editing applications.
+Yorkie is an open source document store for building collaborative editing applications. Yorkie uses JSON-like documents(CRDT) with optional types.
 
 Yorkie consists of three main components: Client, Document and Agent.
 
