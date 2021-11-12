@@ -151,7 +151,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	pbChangePack, err := converter.ToChangePack(pulled)
+	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pbChangePack, err := converter.ToChangePack(pulled)
+	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +289,7 @@ func (s *yorkieServer) PushPull(
 		return nil, err
 	}
 
-	pbChangePack, err := converter.ToChangePack(pulled)
+	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
 	}

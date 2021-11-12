@@ -70,9 +70,9 @@ func toJSONObject(obj *json.Object) (*api.JSONElement, error) {
 	pbElem := &api.JSONElement{
 		Body: &api.JSONElement_JsonObject{JsonObject: &api.JSONElement_JSONObject{
 			Nodes:     pbRHTNodes,
-			CreatedAt: toTimeTicket(obj.CreatedAt()),
-			MovedAt:   toTimeTicket(obj.MovedAt()),
-			RemovedAt: toTimeTicket(obj.RemovedAt()),
+			CreatedAt: ToTimeTicket(obj.CreatedAt()),
+			MovedAt:   ToTimeTicket(obj.MovedAt()),
+			RemovedAt: ToTimeTicket(obj.RemovedAt()),
 		}},
 	}
 	return pbElem, nil
@@ -87,9 +87,9 @@ func toJSONArray(arr *json.Array) (*api.JSONElement, error) {
 	pbElem := &api.JSONElement{
 		Body: &api.JSONElement_JsonArray{JsonArray: &api.JSONElement_JSONArray{
 			Nodes:     pbRGANodes,
-			CreatedAt: toTimeTicket(arr.CreatedAt()),
-			MovedAt:   toTimeTicket(arr.MovedAt()),
-			RemovedAt: toTimeTicket(arr.RemovedAt()),
+			CreatedAt: ToTimeTicket(arr.CreatedAt()),
+			MovedAt:   ToTimeTicket(arr.MovedAt()),
+			RemovedAt: ToTimeTicket(arr.RemovedAt()),
 		}},
 	}
 	return pbElem, nil
@@ -105,9 +105,9 @@ func toPrimitive(primitive *json.Primitive) (*api.JSONElement, error) {
 		Body: &api.JSONElement_Primitive_{Primitive: &api.JSONElement_Primitive{
 			Type:      pbValueType,
 			Value:     primitive.Bytes(),
-			CreatedAt: toTimeTicket(primitive.CreatedAt()),
-			MovedAt:   toTimeTicket(primitive.MovedAt()),
-			RemovedAt: toTimeTicket(primitive.RemovedAt()),
+			CreatedAt: ToTimeTicket(primitive.CreatedAt()),
+			MovedAt:   ToTimeTicket(primitive.MovedAt()),
+			RemovedAt: ToTimeTicket(primitive.RemovedAt()),
 		}},
 	}, nil
 }
@@ -116,9 +116,9 @@ func toText(text *json.Text) *api.JSONElement {
 	return &api.JSONElement{
 		Body: &api.JSONElement_Text_{Text: &api.JSONElement_Text{
 			Nodes:     toTextNodes(text.Nodes()),
-			CreatedAt: toTimeTicket(text.CreatedAt()),
-			MovedAt:   toTimeTicket(text.MovedAt()),
-			RemovedAt: toTimeTicket(text.RemovedAt()),
+			CreatedAt: ToTimeTicket(text.CreatedAt()),
+			MovedAt:   ToTimeTicket(text.MovedAt()),
+			RemovedAt: ToTimeTicket(text.RemovedAt()),
 		}},
 	}
 }
@@ -127,9 +127,9 @@ func toRichText(text *json.RichText) *api.JSONElement {
 	return &api.JSONElement{
 		Body: &api.JSONElement_RichText_{RichText: &api.JSONElement_RichText{
 			Nodes:     toRichTextNodes(text.Nodes()),
-			CreatedAt: toTimeTicket(text.CreatedAt()),
-			MovedAt:   toTimeTicket(text.MovedAt()),
-			RemovedAt: toTimeTicket(text.RemovedAt()),
+			CreatedAt: ToTimeTicket(text.CreatedAt()),
+			MovedAt:   ToTimeTicket(text.MovedAt()),
+			RemovedAt: ToTimeTicket(text.RemovedAt()),
 		}},
 	}
 }
@@ -144,9 +144,9 @@ func toCounter(counter *json.Counter) (*api.JSONElement, error) {
 		Body: &api.JSONElement_Counter_{Counter: &api.JSONElement_Counter{
 			Type:      pbCounterType,
 			Value:     counter.Bytes(),
-			CreatedAt: toTimeTicket(counter.CreatedAt()),
-			MovedAt:   toTimeTicket(counter.MovedAt()),
-			RemovedAt: toTimeTicket(counter.RemovedAt()),
+			CreatedAt: ToTimeTicket(counter.CreatedAt()),
+			MovedAt:   ToTimeTicket(counter.MovedAt()),
+			RemovedAt: ToTimeTicket(counter.RemovedAt()),
 		}},
 	}, nil
 }
@@ -188,7 +188,7 @@ func toTextNodes(textNodes []*json.RGATreeSplitNode) []*api.TextNode {
 		pbTextNode := &api.TextNode{
 			Id:        toTextNodeID(textNode.ID()),
 			Value:     textNode.String(),
-			RemovedAt: toTimeTicket(textNode.RemovedAt()),
+			RemovedAt: ToTimeTicket(textNode.RemovedAt()),
 		}
 
 		if textNode.InsPrevID() != nil {
@@ -210,7 +210,7 @@ func toRichTextNodes(textNodes []*json.RGATreeSplitNode) []*api.RichTextNode {
 			attrs[node.Key()] = &api.RichTextNodeAttr{
 				Key:       node.Key(),
 				Value:     node.Value(),
-				UpdatedAt: toTimeTicket(node.UpdatedAt()),
+				UpdatedAt: ToTimeTicket(node.UpdatedAt()),
 			}
 		}
 
@@ -218,7 +218,7 @@ func toRichTextNodes(textNodes []*json.RGATreeSplitNode) []*api.RichTextNode {
 			Id:         toTextNodeID(textNode.ID()),
 			Attributes: attrs,
 			Value:      value.Value(),
-			RemovedAt:  toTimeTicket(textNode.RemovedAt()),
+			RemovedAt:  ToTimeTicket(textNode.RemovedAt()),
 		}
 
 		if textNode.InsPrevID() != nil {
@@ -232,7 +232,7 @@ func toRichTextNodes(textNodes []*json.RGATreeSplitNode) []*api.RichTextNode {
 
 func toTextNodeID(id *json.RGATreeSplitNodeID) *api.TextNodeID {
 	return &api.TextNodeID{
-		CreatedAt: toTimeTicket(id.CreatedAt()),
+		CreatedAt: ToTimeTicket(id.CreatedAt()),
 		Offset:    int32(id.Offset()),
 	}
 }

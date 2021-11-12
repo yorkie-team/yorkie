@@ -93,6 +93,14 @@ type DB interface {
 		to uint64,
 	) ([]*change.Change, error)
 
+	// FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
+	FindChangeInfosBetweenServerSeqs(
+		ctx context.Context,
+		docID ID,
+		from uint64,
+		to uint64,
+	) ([]*ChangeInfo, error)
+
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 	// and returns the min synced ticket.
 	UpdateAndFindMinSyncedTicket(

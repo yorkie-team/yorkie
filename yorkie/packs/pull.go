@@ -44,7 +44,7 @@ func pullPack(
 	requestPack *change.Pack,
 	pushedCP *checkpoint.Checkpoint,
 	initialServerSeq uint64,
-) (*change.Pack, error) {
+) (*ServerPack, error) {
 	docKey, err := docInfo.GetKey()
 	if err != nil {
 		return nil, err
@@ -60,11 +60,11 @@ func pullPack(
 	}
 
 	if initialServerSeq-requestPack.Checkpoint.ServerSeq < be.Config.SnapshotThreshold {
-		pulledCP, pulledChanges, err := pullChanges(ctx, be, clientInfo, docInfo, requestPack, pushedCP, initialServerSeq)
+		pulledCP, pulledChanges, err := pullChangeInfos(ctx, be, clientInfo, docInfo, requestPack, pushedCP, initialServerSeq)
 		if err != nil {
 			return nil, err
 		}
-		return change.NewPack(docKey, pulledCP, pulledChanges, nil), err
+		return NewServerPack(docKey, pulledCP, pulledChanges, nil), err
 	}
 
 	pulledCP, snapshot, err := pullSnapshot(ctx, be, clientInfo, docInfo, requestPack, pushedCP, initialServerSeq)
@@ -74,10 +74,10 @@ func pullPack(
 
 	be.Metrics.AddPushPullSnapshotBytes(len(snapshot))
 
-	return change.NewPack(docKey, pulledCP, nil, snapshot), err
+	return NewServerPack(docKey, pulledCP, nil, snapshot), err
 }
 
-func pullChanges(
+func pullChangeInfos(
 	ctx context.Context,
 	be *backend.Backend,
 	clientInfo *db.ClientInfo,
@@ -85,8 +85,8 @@ func pullChanges(
 	requestPack *change.Pack,
 	pushedCP *checkpoint.Checkpoint,
 	initialServerSeq uint64,
-) (*checkpoint.Checkpoint, []*change.Change, error) {
-	pulledChanges, err := be.DB.FindChangesBetweenServerSeqs(
+) (*checkpoint.Checkpoint, []*db.ChangeInfo, error) {
+	pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
 		requestPack.Checkpoint.ServerSeq+1,
@@ -99,12 +99,18 @@ func pullChanges(
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
 
 	if len(pulledChanges) > 0 {
+		ops := 0
+		for _, info := range pulledChanges {
+			ops += len(info.Operations)
+		}
+
 		log.Logger.Infof(
-			"PULL: '%s' pulls %d changes(%d~%d) from '%s', cp: %s",
+			"PULL: '%s' pulls %d changes(%d~%d, ops: %d) from '%s', cp: %s",
 			clientInfo.ID,
 			len(pulledChanges),
-			pulledChanges[0].ServerSeq(),
-			pulledChanges[len(pulledChanges)-1].ServerSeq(),
+			pulledChanges[0].ServerSeq,
+			pulledChanges[len(pulledChanges)-1].ServerSeq,
+			ops,
 			docInfo.Key,
 			pulledCP.String(),
 		)

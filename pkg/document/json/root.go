@@ -120,6 +120,16 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) int {
 	return count
 }
 
+// ElementMapLen returns the size of element map.
+func (r *Root) ElementMapLen() int {
+	return len(r.elementMapByCreatedAt)
+}
+
+// RemovedElementLen returns the size of removed element map.
+func (r *Root) RemovedElementLen() int {
+	return len(r.removedElementPairMapByCreatedAt)
+}
+
 // GarbageLen returns the count of removed elements.
 func (r *Root) GarbageLen() int {
 	count := 0

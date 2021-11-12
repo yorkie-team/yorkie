@@ -382,12 +382,36 @@ func (c *Client) FindChangesBetweenServerSeqs(
 	from uint64,
 	to uint64,
 ) ([]*change.Change, error) {
-	encodedDocID, err := encodeID(docID)
+	infos, err := c.FindChangeInfosBetweenServerSeqs(ctx, docID, from, to)
 	if err != nil {
 		return nil, err
 	}
 
 	var changes []*change.Change
+	for _, info := range infos {
+		c, err := info.ToChange()
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, c)
+	}
+
+	return changes, nil
+}
+
+// FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
+func (c *Client) FindChangeInfosBetweenServerSeqs(
+	ctx context.Context,
+	docID db.ID,
+	from uint64,
+	to uint64,
+) ([]*db.ChangeInfo, error) {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return nil, err
+	}
+
+	var changes []*db.ChangeInfo
 	cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
 		"doc_id": encodedDocID,
 		"server_seq": bson.M{
@@ -411,11 +435,7 @@ func (c *Client) FindChangesBetweenServerSeqs(
 		if err := decodeChangeInfo(cursor, &changeInfo); err != nil {
 			return nil, err
 		}
-		c, err := changeInfo.ToChange()
-		if err != nil {
-			return nil, err
-		}
-		changes = append(changes, c)
+		changes = append(changes, &changeInfo)
 	}
 
 	if cursor.Err() != nil {
