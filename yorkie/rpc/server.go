@@ -48,10 +48,12 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
+			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
 			authInterceptor.Unary(),
 			defaultInterceptor.Unary(),
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
+			be.Metrics.ServerMetrics().StreamServerInterceptor(),
 			authInterceptor.Stream(),
 			defaultInterceptor.Stream(),
 		)),

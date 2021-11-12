@@ -30,7 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
-	"github.com/yorkie-team/yorkie/yorkie/profiling"
+	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 )
 
 const authWebhookCacheSize = 5000
@@ -43,7 +43,7 @@ type Backend struct {
 
 	DB               db.DB
 	Coordinator      sync.Coordinator
-	Metrics          profiling.Metrics
+	Metrics          *prometheus.Metrics
 	AuthWebhookCache *cache.LRUExpireCache
 
 	// closing is closed by backend close.
@@ -63,7 +63,7 @@ func New(
 	mongoConf *mongo.Config,
 	etcdConf *etcd.Config,
 	rpcAddr string,
-	met profiling.Metrics,
+	metrics *prometheus.Metrics,
 ) (*Backend, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -113,7 +113,7 @@ func New(
 		agentInfo:        agentInfo,
 		DB:               mongoClient,
 		Coordinator:      coordinator,
-		Metrics:          met,
+		Metrics:          metrics,
 		AuthWebhookCache: lruCache,
 		closing:          make(chan struct{}),
 	}, nil

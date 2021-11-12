@@ -141,6 +141,11 @@ func (m *Metrics) RegisterGRPCServer(server *grpc.Server) {
 	m.serverMetrics.InitializeMetrics(server)
 }
 
+// ServerMetrics returns the serverMetrics.
+func (m *Metrics) ServerMetrics() *grpcprometheus.ServerMetrics {
+	return m.serverMetrics
+}
+
 // Registry returns the registry of this metrics.
 func (m *Metrics) Registry() *prometheus.Registry {
 	return m.registry
