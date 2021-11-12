@@ -45,10 +45,10 @@ bench: ## runs benchmark tests
 	go test -tags bench -benchmem -bench=. ./test/bench
 
 docker: ## builds docker images with the current version and latest tag
-	docker build -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .
+	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .
 
 docker-latest: ## builds a docker image with latest tag
-	docker build -t yorkieteam/yorkie:latest .
+	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:latest .
 
 default: help
 help:

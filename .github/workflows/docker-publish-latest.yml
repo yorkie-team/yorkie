@@ -17,6 +17,9 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
+      - name: Use docker buildx
+        run: docker buildx create --use
+
       - name: Get tools dependencies
         run: make tools
 
@@ -31,6 +34,3 @@ jobs:
 
       - name: Build Image
         run: make docker-latest
-
-      - name: Push Image
-        run: docker push yorkieteam/yorkie
