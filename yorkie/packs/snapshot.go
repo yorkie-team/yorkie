@@ -18,7 +18,6 @@ package packs
 
 import (
 	"context"
-	"time"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -33,8 +32,6 @@ func storeSnapshot(
 	be *backend.Backend,
 	docInfo *db.DocInfo,
 ) error {
-	start := time.Now()
-
 	// 01. get the last snapshot of this docInfo
 	// TODO: For performance issue, we only need to read the snapshot's metadata.
 	snapshotInfo, err := be.DB.FindLastSnapshotInfo(ctx, docInfo.ID)
@@ -91,11 +88,9 @@ func storeSnapshot(
 	}
 
 	log.Logger.Infof(
-		"SNAP: '%s', serverSeq:%d %s",
+		"SNAP: '%s', serverSeq: %d",
 		docInfo.Key,
 		doc.Checkpoint().ServerSeq,
-		time.Since(start),
 	)
-	be.Metrics.ObservePushPullSnapshotDurationSeconds(time.Since(start).Seconds())
 	return nil
 }

@@ -19,6 +19,7 @@ package packs
 import (
 	"context"
 	"fmt"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -49,6 +50,11 @@ func PushPull(
 	docInfo *db.DocInfo,
 	reqPack *change.Pack,
 ) (*ServerPack, error) {
+	start := gotime.Now()
+	defer func() {
+		be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
+	}()
+
 	// TODO: Changes may be reordered or missing during communication on the network.
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
 	initialServerSeq := docInfo.ServerSeq
@@ -58,12 +64,17 @@ func PushPull(
 	if err != nil {
 		return nil, err
 	}
+	be.Metrics.AddPushPullReceivedChanges(reqPack.ChangesLen())
+	be.Metrics.AddPushPullReceivedOperations(reqPack.OperationsLen())
 
 	// 02. pull change pack.
 	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, pushedCP, initialServerSeq)
 	if err != nil {
 		return nil, err
 	}
+	be.Metrics.AddPushPullSentChanges(respPack.ChangesLen())
+	be.Metrics.AddPushPullSentOperations(respPack.OperationsLen())
+	be.Metrics.AddPushPullSnapshotBytes(respPack.SnapshotLen())
 
 	if err := clientInfo.UpdateCheckpoint(docInfo.ID, respPack.Checkpoint); err != nil {
 		return nil, err
@@ -136,6 +147,7 @@ func PushPull(
 				},
 			)
 
+			start := gotime.Now()
 			if err := storeSnapshot(
 				ctx,
 				be,
@@ -143,6 +155,9 @@ func PushPull(
 			); err != nil {
 				log.Logger.Error(err)
 			}
+			be.Metrics.ObservePushPullSnapshotDurationSeconds(
+				gotime.Since(start).Seconds(),
+			)
 		})
 	}
 

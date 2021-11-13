@@ -60,3 +60,17 @@ func NewPack(
 func (p *Pack) HasChanges() bool {
 	return len(p.Changes) > 0
 }
+
+// ChangesLen returns the size of the changes.
+func (p *Pack) ChangesLen() int {
+	return len(p.Changes)
+}
+
+// OperationsLen returns the size of the operations.
+func (p *Pack) OperationsLen() int {
+	operations := 0
+	for _, c := range p.Changes {
+		operations += len(c.operations)
+	}
+	return operations
+}

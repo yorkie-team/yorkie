@@ -62,6 +62,25 @@ func NewServerPack(
 	}
 }
 
+// ChangesLen returns the size of the changes.
+func (p *ServerPack) ChangesLen() int {
+	return len(p.ChangeInfos)
+}
+
+// OperationsLen returns the size of the operations.
+func (p *ServerPack) OperationsLen() int {
+	ops := 0
+	for _, info := range p.ChangeInfos {
+		ops += len(info.Operations)
+	}
+	return ops
+}
+
+// SnapshotLen returns the size of the snapshot.
+func (p *ServerPack) SnapshotLen() int {
+	return len(p.Snapshot)
+}
+
 // ToPBChangePack converts the given model format to Protobuf format.
 func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	var pbChanges []*api.Change

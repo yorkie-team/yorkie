@@ -40,6 +40,8 @@ type Metrics struct {
 	pushPullResponseSeconds         prometheus.Histogram
 	pushPullReceivedChangesTotal    prometheus.Counter
 	pushPullSentChangesTotal        prometheus.Counter
+	pushPullReceivedOperationsTotal prometheus.Counter
+	pushPullSentOperationsTotal     prometheus.Counter
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytesTotal      prometheus.Counter
 }
@@ -86,6 +88,22 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "sent_changes_total",
 			Help:      "The total count of changes included in response packs in PushPull.",
 		}),
+		pushPullReceivedOperationsTotal: promauto.With(reg).NewCounter(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Subsystem: "pushpull",
+				Name:      "received_operations_total",
+				Help: "The total count of operations included in request" +
+					" packs in PushPull.",
+			}),
+		pushPullSentOperationsTotal: promauto.With(reg).NewCounter(prometheus.
+			CounterOpts{
+			Namespace: namespace,
+			Subsystem: "pushpull",
+			Name:      "sent_operations_total",
+			Help: "The total count of operations included in response" +
+				" packs in PushPull.",
+		}),
 		pushPullSnapshotDurationSeconds: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
 			Subsystem: "pushpull",
@@ -123,6 +141,18 @@ func (m *Metrics) AddPushPullReceivedChanges(count int) {
 // included in the response pack of PushPull.
 func (m *Metrics) AddPushPullSentChanges(count int) {
 	m.pushPullSentChangesTotal.Add(float64(count))
+}
+
+// AddPushPullReceivedOperations sets the number of operations
+// included in the request pack of PushPull.
+func (m *Metrics) AddPushPullReceivedOperations(count int) {
+	m.pushPullReceivedOperationsTotal.Add(float64(count))
+}
+
+// AddPushPullSentOperations adds the number of operations
+// included in the response pack of PushPull.
+func (m *Metrics) AddPushPullSentOperations(count int) {
+	m.pushPullSentOperationsTotal.Add(float64(count))
 }
 
 // ObservePushPullSnapshotDurationSeconds adds an observation

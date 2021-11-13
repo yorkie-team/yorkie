@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -235,7 +234,6 @@ func (s *yorkieServer) PushPull(
 	ctx context.Context,
 	req *api.PushPullRequest,
 ) (*api.PushPullResponse, error) {
-	start := gotime.Now()
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
 		return nil, err
@@ -249,8 +247,6 @@ func (s *yorkieServer) PushPull(
 	}
 
 	if pack.HasChanges() {
-		s.backend.Metrics.AddPushPullReceivedChanges(len(pack.Changes))
-
 		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
 			packs.NewPushPullKey(pack.DocumentKey),
@@ -293,9 +289,6 @@ func (s *yorkieServer) PushPull(
 	if err != nil {
 		return nil, err
 	}
-
-	s.backend.Metrics.AddPushPullSentChanges(len(pbChangePack.Changes))
-	s.backend.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 
 	return &api.PushPullResponse{
 		ChangePack: pbChangePack,

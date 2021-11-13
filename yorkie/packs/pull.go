@@ -72,8 +72,6 @@ func pullPack(
 		return nil, err
 	}
 
-	be.Metrics.AddPushPullSnapshotBytes(len(snapshot))
-
 	return NewServerPack(docKey, pulledCP, nil, snapshot), err
 }
 
@@ -99,18 +97,12 @@ func pullChangeInfos(
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
 
 	if len(pulledChanges) > 0 {
-		ops := 0
-		for _, info := range pulledChanges {
-			ops += len(info.Operations)
-		}
-
 		log.Logger.Infof(
-			"PULL: '%s' pulls %d changes(%d~%d, ops: %d) from '%s', cp: %s",
+			"PULL: '%s' pulls %d changes(%d~%d) from '%s', cp: %s",
 			clientInfo.ID,
 			len(pulledChanges),
 			pulledChanges[0].ServerSeq,
 			pulledChanges[len(pulledChanges)-1].ServerSeq,
-			ops,
 			docInfo.Key,
 			pulledCP.String(),
 		)
