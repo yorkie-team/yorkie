@@ -24,10 +24,10 @@ import (
 
 // DocInfo is a structure representing information of the document.
 type DocInfo struct {
-	ID         ID        `bson:"_id_fake"`
+	ID         ID        `bson:"_id"`
 	Key        string    `bson:"key"`
 	ServerSeq  uint64    `bson:"server_seq"`
-	Owner      ID        `bson:"owner_fake"`
+	Owner      ID        `bson:"owner"`
 	CreatedAt  time.Time `bson:"created_at"`
 	AccessedAt time.Time `bson:"accessed_at"`
 	UpdatedAt  time.Time `bson:"updated_at"`
