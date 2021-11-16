@@ -47,7 +47,9 @@ func Dial(conf *Config) (*Client, error) {
 
 	client, err := mongo.Connect(
 		ctx,
-		options.Client().ApplyURI(conf.ConnectionURI),
+		options.Client().
+			ApplyURI(conf.ConnectionURI).
+			SetRegistry(newRegistryBuilder().Build()),
 	)
 	if err != nil {
 		log.Logger.Error(err)
@@ -120,7 +122,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 		})
 	}
 
-	if err = decodeClientInfo(result, &clientInfo); err != nil {
+	if err = result.Decode(&clientInfo); err != nil {
 		return nil, err
 	}
 
@@ -144,7 +146,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID db.ID) (*db.Clie
 		},
 	})
 
-	if err := decodeClientInfo(res, &clientInfo); err != nil {
+	if err := res.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
 		}
@@ -165,7 +167,7 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID db.ID) (*db.Cl
 	result := c.collection(ColClients).FindOne(ctx, bson.M{
 		"_id": encodedClientID,
 	})
-	if err := decodeClientInfo(result, &clientInfo); err != nil {
+	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
 		}
@@ -278,7 +280,7 @@ func (c *Client) FindDocInfoByKey(
 			return nil, result.Err()
 		}
 	}
-	if err := decodeDocInfo(result, &docInfo); err != nil {
+	if err := result.Decode(&docInfo); err != nil {
 		return nil, err
 	}
 
@@ -411,7 +413,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		return nil, err
 	}
 
-	var changes []*db.ChangeInfo
+	var infos []*db.ChangeInfo
 	cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
 		"doc_id": encodedDocID,
 		"server_seq": bson.M{
@@ -424,26 +426,12 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		return nil, err
 	}
 
-	defer func() {
-		if err := cursor.Close(ctx); err != nil {
-			log.Logger.Error(err)
-		}
-	}()
-
-	for cursor.Next(ctx) {
-		var changeInfo db.ChangeInfo
-		if err := decodeChangeInfo(cursor, &changeInfo); err != nil {
-			return nil, err
-		}
-		changes = append(changes, &changeInfo)
-	}
-
-	if cursor.Err() != nil {
+	if err := cursor.All(ctx, &infos); err != nil {
 		log.Logger.Error(cursor.Err())
 		return nil, cursor.Err()
 	}
 
-	return changes, nil
+	return infos, nil
 }
 
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
@@ -505,7 +493,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		log.Logger.Error(result.Err())
 		return nil, result.Err()
 	}
-	if err := decodeSyncedSeqInfo(result, &syncedSeqInfo); err != nil {
+	if err := result.Decode(&syncedSeqInfo); err != nil {
 		return nil, err
 	}
 
@@ -549,7 +537,7 @@ func (c *Client) FindLastSnapshotInfo(
 		return nil, result.Err()
 	}
 
-	if err := decodeSnapshotInfo(result, snapshotInfo); err != nil {
+	if err := result.Decode(snapshotInfo); err != nil {
 		return nil, err
 	}
 
@@ -580,7 +568,7 @@ func (c *Client) findTicketByServerSeq(
 		return nil, result.Err()
 	}
 
-	if err := decodeChangeInfo(result, &changeInfo); err != nil {
+	if err := result.Decode(&changeInfo); err != nil {
 		return nil, err
 	}
 

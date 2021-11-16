@@ -52,7 +52,7 @@ type ClientDocInfo struct {
 
 // ClientInfo is a structure representing information of a client.
 type ClientInfo struct {
-	ID        ID                    `bson:"_id_fake"`
+	ID        ID                    `bson:"_id"`
 	Key       string                `bson:"key"`
 	Status    string                `bson:"status"`
 	Documents map[ID]*ClientDocInfo `bson:"documents"`
