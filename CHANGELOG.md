@@ -7,6 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.10] - 2021-11-16
+
+### Added
+- Add enable-pprof flag to open pprof via profiling server: #265
+- Build multiple architecture docker images: #10d8c8b
+- Add operations metrics in PushPull API: #d23fc14
+
+### Changed
+- Replace XXXGauges with XXXCounters: #266
+- Reduce memory usage in PushPull API: #268
+
+### Fixed
+- Fix goroutine leaks on subscriptions: #265
+- Add missing go process collector on metrics: #35cefdb
+- Fix missing gRPC interceptors for metrics: #901e4fa
+
 ## [0.1.9] - 2021-10-31
 
 ### Added
