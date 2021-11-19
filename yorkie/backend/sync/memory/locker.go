@@ -36,6 +36,14 @@ func (il *internalLocker) Lock(ctx context.Context) error {
 	return nil
 }
 
+// TryLock locks the mutex if not already locked by another session.
+func (il *internalLocker) TryLock(ctx context.Context) error {
+	// TODO(hackerwins): We need to replace Lock with TryLock.
+	il.locks.Lock(il.key)
+
+	return nil
+}
+
 // Unlock unlocks the mutex.
 func (il *internalLocker) Unlock(ctx context.Context) error {
 	if err := il.locks.Unlock(il.key); err != nil {

@@ -20,7 +20,7 @@ import (
 	"context"
 	gosync "sync"
 
-	"go.etcd.io/etcd/clientv3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/api"

@@ -114,9 +114,6 @@ func PushPull(
 			}
 
 			ctx := context.Background()
-			// TODO(hackerwins): We need to replace Lock with TryLock.
-			// If the snapshot is already being created by another routine, it
-			// is not necessary to recreate it, so we can skip it.
 			locker, err := be.Coordinator.NewLocker(
 				ctx,
 				NewSnapshotKey(reqPack.DocumentKey),
@@ -125,8 +122,9 @@ func PushPull(
 				log.Logger.Error(err)
 				return
 			}
-			if err := locker.Lock(ctx); err != nil {
-				log.Logger.Error(err)
+			// NOTE: If the snapshot is already being created by another routine, it
+			//       is not necessary to recreate it, so we can skip it.
+			if err := locker.TryLock(ctx); err != nil {
 				return
 			}
 
