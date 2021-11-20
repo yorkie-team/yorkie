@@ -19,7 +19,7 @@ package etcd
 import (
 	"context"
 
-	"go.etcd.io/etcd/clientv3/concurrency"
+	"go.etcd.io/etcd/client/v3/concurrency"
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -52,9 +52,23 @@ type internalLocker struct {
 	mu      *concurrency.Mutex
 }
 
-// Lock locks a mutex.
+// Lock locks the mutex with a cancelable context
 func (il *internalLocker) Lock(ctx context.Context) error {
 	if err := il.mu.Lock(ctx); err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	return nil
+}
+
+// TryLock locks the mutex if not already locked by another session.
+func (il *internalLocker) TryLock(ctx context.Context) error {
+	if err := il.mu.TryLock(ctx); err != nil {
+		if err == concurrency.ErrLocked {
+			return sync.ErrAlreadyLocked
+		}
+
 		log.Logger.Error(err)
 		return err
 	}

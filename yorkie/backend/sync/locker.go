@@ -18,7 +18,11 @@ package sync
 
 import (
 	"context"
+	"errors"
 )
+
+// ErrAlreadyLocked is returned when the lock is already locked.
+var ErrAlreadyLocked = errors.New("already locked")
 
 // Key represents key of Locker.
 type Key string
@@ -35,6 +39,12 @@ func (k Key) String() string {
 
 // A Locker represents an object that can be locked and unlocked.
 type Locker interface {
+	// Lock locks the mutex with a cancelable context
 	Lock(ctx context.Context) error
+
+	// TryLock locks the mutex if not already locked by another session.
+	TryLock(ctx context.Context) error
+
+	// Unlock unlocks the mutex.
 	Unlock(ctx context.Context) error
 }
