@@ -170,6 +170,12 @@ func init() {
 		"",
 		"RPC key file's path",
 	)
+	cmd.Flags().Uint64Var(
+		&conf.RPC.MaxRequestBytes,
+		"rpc-max-requests-bytes",
+		yorkie.DefaultRPCMaxRequestsBytes,
+		"Maximum client request size in bytes the server will accept.",
+	)
 	cmd.Flags().IntVar(
 		&conf.Profiling.Port,
 		"profiling-port",

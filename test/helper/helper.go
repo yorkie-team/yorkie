@@ -37,6 +37,7 @@ var testStartedAt int64
 // Below are the values of the Yorkie config used in the test.
 const (
 	RPCPort                    = 21101
+	RPCMaxRequestBytes         = 4 * 1024 * 1024
 	ProfilingPort              = 21102
 	MongoConnectionURI         = "mongodb://localhost:27017"
 	MongoConnectionTimeout     = "5s"
@@ -87,7 +88,8 @@ func TestConfig(authWebhook string) *yorkie.Config {
 	portOffset += 100
 	return &yorkie.Config{
 		RPC: &rpc.Config{
-			Port: RPCPort + portOffset,
+			Port:            RPCPort + portOffset,
+			MaxRequestBytes: RPCMaxRequestBytes,
 		},
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,

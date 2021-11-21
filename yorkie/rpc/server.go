@@ -68,6 +68,8 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		opts = append(opts, grpc.Creds(creds))
 	}
 
+	opts = append(opts, grpc.MaxRecvMsgSize(int(conf.MaxRequestBytes)))
+	opts = append(opts, grpc.MaxSendMsgSize(math.MaxInt32))
 	opts = append(opts, grpc.MaxConcurrentStreams(math.MaxUint32))
 
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())

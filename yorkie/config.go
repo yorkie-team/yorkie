@@ -34,8 +34,9 @@ import (
 
 // Below are the values of the default values of Yorkie config.
 const (
-	DefaultRPCPort       = 11101
-	DefaultProfilingPort = 11102
+	DefaultRPCPort             = 11101
+	DefaultProfilingPort       = 11102
+	DefaultRPCMaxRequestsBytes = 4 * 1024 * 1024 // 4MiB
 
 	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout = 5 * time.Second
@@ -118,6 +119,10 @@ func (c *Config) Validate() error {
 func (c *Config) ensureDefaultValue() {
 	if c.RPC.Port == 0 {
 		c.RPC.Port = DefaultRPCPort
+	}
+
+	if c.RPC.MaxRequestBytes == 0 {
+		c.RPC.MaxRequestBytes = DefaultRPCMaxRequestsBytes
 	}
 
 	if c.Profiling.Port == 0 {

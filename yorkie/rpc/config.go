@@ -33,9 +33,17 @@ var (
 
 // Config is the configuration for creating a Server instance.
 type Config struct {
-	Port     int
+	// Port is the port number for the RPC server.
+	Port int
+
+	// CertFile is the path to the certificate file.
 	CertFile string
-	KeyFile  string
+
+	// KeyFile is the path to the key file.
+	KeyFile string
+
+	// MaxRequestBytes is the maximum client request size in bytes the server will accept.
+	MaxRequestBytes uint64
 }
 
 // Validate validates the port number and the files for certification.
