@@ -26,10 +26,11 @@ import (
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
+	memdb "github.com/yorkie-team/yorkie/yorkie/backend/db/memory"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
+	memsync "github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 )
 
@@ -77,9 +78,17 @@ func New(
 		UpdatedAt: time.Now(),
 	}
 
-	mongoClient, err := mongo.Dial(mongoConf)
-	if err != nil {
-		return nil, err
+	var database db.DB
+	if mongoConf != nil {
+		database, err = mongo.Dial(mongoConf)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		database, err = memdb.New()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var coordinator sync.Coordinator
@@ -94,13 +103,19 @@ func New(
 
 		coordinator = etcdClient
 	} else {
-		coordinator = memory.NewCoordinator(agentInfo)
+		coordinator = memsync.NewCoordinator(agentInfo)
+	}
+
+	dbInfo := "memory"
+	if mongoConf != nil {
+		dbInfo = mongoConf.ConnectionURI
 	}
 
 	log.Logger.Infof(
-		"backend created: id: %s, rpc: %s",
+		"backend created: id: %s, rpc: %s: db: %s",
 		agentInfo.ID,
 		agentInfo.RPCAddr,
+		dbInfo,
 	)
 
 	lruCache, err := cache.NewLRUExpireCache(authWebhookCacheSize)
@@ -111,7 +126,7 @@ func New(
 	return &Backend{
 		Config:           conf,
 		agentInfo:        agentInfo,
-		DB:               mongoClient,
+		DB:               database,
 		Coordinator:      coordinator,
 		Metrics:          metrics,
 		AuthWebhookCache: lruCache,

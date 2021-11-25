@@ -104,8 +104,10 @@ func (c *Config) Validate() error {
 		return err
 	}
 
-	if err := c.Mongo.Validate(); err != nil {
-		return err
+	if c.Mongo != nil {
+		if err := c.Mongo.Validate(); err != nil {
+			return err
+		}
 	}
 
 	if c.ETCD != nil {
@@ -127,22 +129,6 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Profiling.Port == 0 {
 		c.Profiling.Port = DefaultProfilingPort
-	}
-
-	if c.Mongo.ConnectionTimeout == "" {
-		c.Mongo.ConnectionTimeout = DefaultMongoConnectionTimeout.String()
-	}
-
-	if c.Mongo.ConnectionURI == "" {
-		c.Mongo.ConnectionURI = DefaultMongoConnectionURI
-	}
-
-	if c.Mongo.YorkieDatabase == "" {
-		c.Mongo.YorkieDatabase = DefaultMongoYorkieDatabase
-	}
-
-	if c.Mongo.PingTimeout == "" {
-		c.Mongo.PingTimeout = DefaultMongoPingTimeout.String()
 	}
 
 	if c.Backend.SnapshotThreshold == 0 {
@@ -169,6 +155,24 @@ func (c *Config) ensureDefaultValue() {
 		c.Backend.AuthWebhookCacheUnauthTTL = DefaultAuthWebhookCacheUnauthTTL.String()
 	}
 
+	if c.Mongo != nil {
+		if c.Mongo.ConnectionURI == "" {
+			c.Mongo.ConnectionURI = DefaultMongoConnectionURI
+		}
+
+		if c.Mongo.ConnectionTimeout == "" {
+			c.Mongo.ConnectionTimeout = DefaultMongoConnectionTimeout.String()
+		}
+
+		if c.Mongo.YorkieDatabase == "" {
+			c.Mongo.YorkieDatabase = DefaultMongoYorkieDatabase
+		}
+
+		if c.Mongo.PingTimeout == "" {
+			c.Mongo.PingTimeout = DefaultMongoPingTimeout.String()
+		}
+	}
+
 	if c.ETCD != nil {
 		if c.ETCD.DialTimeout == "" {
 			c.ETCD.DialTimeout = etcd.DefaultDialTimeout.String()
@@ -191,12 +195,6 @@ func newConfig(port int, profilingPort int, dbName string) *Config {
 		Backend: &backend.Config{
 			SnapshotThreshold: DefaultSnapshotThreshold,
 			SnapshotInterval:  DefaultSnapshotInterval,
-		},
-		Mongo: &mongo.Config{
-			ConnectionURI:     DefaultMongoConnectionURI,
-			ConnectionTimeout: DefaultMongoConnectionTimeout.String(),
-			PingTimeout:       DefaultMongoPingTimeout.String(),
-			YorkieDatabase:    dbName,
 		},
 	}
 }

@@ -64,9 +64,14 @@ func (s *yorkieServer) ActivateClient(
 		return nil, err
 	}
 
+	pbClientID, err := client.ID.Bytes()
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.ActivateClientResponse{
 		ClientKey: client.Key,
-		ClientId:  client.ID.Bytes(),
+		ClientId:  pbClientID,
 	}, nil
 }
 
@@ -90,8 +95,13 @@ func (s *yorkieServer) DeactivateClient(
 		return nil, err
 	}
 
+	pbClientID, err := client.ID.Bytes()
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.DeactivateClientResponse{
-		ClientId: client.ID.Bytes(),
+		ClientId: pbClientID,
 	}, nil
 }
 

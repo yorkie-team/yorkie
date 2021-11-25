@@ -94,7 +94,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 	clientInfo := db.ClientInfo{}
 
 	now := gotime.Now()
-	res, err := c.collection(ColClients).UpdateOne(ctx, bson.M{
+	res, err := c.collection(colClients).UpdateOne(ctx, bson.M{
 		"key": key,
 	}, bson.M{
 		"$set": bson.M{
@@ -109,7 +109,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 
 	var result *mongo.SingleResult
 	if res.UpsertedCount > 0 {
-		result = c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+		result = c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
 			"_id": res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
@@ -117,7 +117,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 			},
 		})
 	} else {
-		result = c.collection(ColClients).FindOne(ctx, bson.M{
+		result = c.collection(colClients).FindOne(ctx, bson.M{
 			"key": key,
 		})
 	}
@@ -137,7 +137,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID db.ID) (*db.Clie
 	}
 
 	clientInfo := db.ClientInfo{}
-	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+	res := c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
 		"_id": encodedClientID,
 	}, bson.M{
 		"$set": bson.M{
@@ -164,7 +164,7 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID db.ID) (*db.Cl
 	}
 
 	clientInfo := db.ClientInfo{}
-	result := c.collection(ColClients).FindOne(ctx, bson.M{
+	result := c.collection(colClients).FindOne(ctx, bson.M{
 		"_id": encodedClientID,
 	})
 	if err := result.Decode(&clientInfo); err != nil {
@@ -213,7 +213,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		}
 	}
 
-	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+	result := c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
 		"key": clientInfo.Key,
 	}, updater)
 
@@ -242,9 +242,8 @@ func (c *Client) FindDocInfoByKey(
 		return nil, err
 	}
 
-	docInfo := db.DocInfo{}
 	now := gotime.Now()
-	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
+	res, err := c.collection(colDocuments).UpdateOne(ctx, bson.M{
 		"key": bsonDocKey,
 	}, bson.M{
 		"$set": bson.M{
@@ -258,7 +257,7 @@ func (c *Client) FindDocInfoByKey(
 
 	var result *mongo.SingleResult
 	if res.UpsertedCount > 0 {
-		result = c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
+		result = c.collection(colDocuments).FindOneAndUpdate(ctx, bson.M{
 			"_id": res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
@@ -268,7 +267,7 @@ func (c *Client) FindDocInfoByKey(
 			},
 		})
 	} else {
-		result = c.collection(ColDocuments).FindOne(ctx, bson.M{
+		result = c.collection(colDocuments).FindOne(ctx, bson.M{
 			"key": bsonDocKey,
 		})
 		if result.Err() == mongo.ErrNoDocuments {
@@ -280,6 +279,8 @@ func (c *Client) FindDocInfoByKey(
 			return nil, result.Err()
 		}
 	}
+
+	docInfo := db.DocInfo{}
 	if err := result.Decode(&docInfo); err != nil {
 		return nil, err
 	}
@@ -287,8 +288,8 @@ func (c *Client) FindDocInfoByKey(
 	return &docInfo, nil
 }
 
-// StoreChangeInfos stores the given changes and doc info.
-func (c *Client) StoreChangeInfos(
+// CreateChangeInfos stores the given changes and doc info.
+func (c *Client) CreateChangeInfos(
 	ctx context.Context,
 	docInfo *db.DocInfo,
 	initialServerSeq uint64,
@@ -320,7 +321,7 @@ func (c *Client) StoreChangeInfos(
 
 	// TODO(hackerwins): We need to handle the updates for the two collections
 	// below atomically.
-	if _, err = c.collection(ColChanges).BulkWrite(
+	if _, err = c.collection(colChanges).BulkWrite(
 		ctx,
 		models,
 		options.BulkWrite().SetOrdered(true),
@@ -329,7 +330,7 @@ func (c *Client) StoreChangeInfos(
 		return err
 	}
 
-	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
+	res, err := c.collection(colDocuments).UpdateOne(ctx, bson.M{
 		"_id":        encodedDocID,
 		"server_seq": initialServerSeq,
 	}, bson.M{
@@ -344,34 +345,6 @@ func (c *Client) StoreChangeInfos(
 	}
 	if res.MatchedCount == 0 {
 		return fmt.Errorf("%s: %w", docInfo.ID, db.ErrConflictOnUpdate)
-	}
-
-	return nil
-}
-
-// CreateSnapshotInfo stores the snapshot of the given document.
-func (c *Client) CreateSnapshotInfo(
-	ctx context.Context,
-	docID db.ID,
-	doc *document.InternalDocument,
-) error {
-	encodedDocID, err := encodeID(docID)
-	if err != nil {
-		return err
-	}
-	snapshot, err := converter.ObjectToBytes(doc.RootObject())
-	if err != nil {
-		return err
-	}
-
-	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"doc_id":     encodedDocID,
-		"server_seq": doc.Checkpoint().ServerSeq,
-		"snapshot":   snapshot,
-		"created_at": gotime.Now(),
-	}); err != nil {
-		log.Logger.Error(err)
-		return err
 	}
 
 	return nil
@@ -414,7 +387,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	}
 
 	var infos []*db.ChangeInfo
-	cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
+	cursor, err := c.collection(colChanges).Find(ctx, bson.M{
 		"doc_id": encodedDocID,
 		"server_seq": bson.M{
 			"$gte": from,
@@ -432,6 +405,67 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	}
 
 	return infos, nil
+}
+
+// CreateSnapshotInfo stores the snapshot of the given document.
+func (c *Client) CreateSnapshotInfo(
+	ctx context.Context,
+	docID db.ID,
+	doc *document.InternalDocument,
+) error {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return err
+	}
+	snapshot, err := converter.ObjectToBytes(doc.RootObject())
+	if err != nil {
+		return err
+	}
+
+	if _, err := c.collection(colSnapshots).InsertOne(ctx, bson.M{
+		"doc_id":     encodedDocID,
+		"server_seq": doc.Checkpoint().ServerSeq,
+		"snapshot":   snapshot,
+		"created_at": gotime.Now(),
+	}); err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	return nil
+}
+
+// FindLastSnapshotInfo finds the last snapshot of the given document.
+func (c *Client) FindLastSnapshotInfo(
+	ctx context.Context,
+	docID db.ID,
+) (*db.SnapshotInfo, error) {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshotInfo := &db.SnapshotInfo{}
+	result := c.collection(colSnapshots).FindOne(ctx, bson.M{
+		"doc_id": encodedDocID,
+	}, options.FindOne().SetSort(bson.M{
+		"server_seq": -1,
+	}))
+
+	if result.Err() == mongo.ErrNoDocuments {
+		return snapshotInfo, nil
+	}
+
+	if result.Err() != nil {
+		log.Logger.Error(result.Err())
+		return nil, result.Err()
+	}
+
+	if err := result.Decode(snapshotInfo); err != nil {
+		return nil, err
+	}
+
+	return snapshotInfo, nil
 }
 
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
@@ -458,7 +492,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	}
 
 	if isAttached {
-		if _, err = c.collection(ColSyncedSeqs).UpdateOne(ctx, bson.M{
+		if _, err = c.collection(colSyncedSeqs).UpdateOne(ctx, bson.M{
 			"doc_id":    encodedDocID,
 			"client_id": encodedClientID,
 		}, bson.M{
@@ -470,7 +504,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 			return nil, err
 		}
 	} else {
-		if _, err = c.collection(ColSyncedSeqs).DeleteOne(ctx, bson.M{
+		if _, err = c.collection(colSyncedSeqs).DeleteOne(ctx, bson.M{
 			"doc_id":    encodedDocID,
 			"client_id": encodedClientID,
 		}, options.Delete()); err != nil {
@@ -481,7 +515,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 
 	// 02. find min synced seq of the given document.
 	syncedSeqInfo := db.SyncedSeqInfo{}
-	result := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
+	result := c.collection(colSyncedSeqs).FindOne(ctx, bson.M{
 		"doc_id": encodedDocID,
 	}, options.FindOne().SetSort(bson.M{
 		"server_seq": 1,
@@ -511,39 +545,6 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	return ticket, nil
 }
 
-// FindLastSnapshotInfo finds the last snapshot of the given document.
-func (c *Client) FindLastSnapshotInfo(
-	ctx context.Context,
-	docID db.ID,
-) (*db.SnapshotInfo, error) {
-	encodedDocID, err := encodeID(docID)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshotInfo := &db.SnapshotInfo{}
-	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
-		"doc_id": encodedDocID,
-	}, options.FindOne().SetSort(bson.M{
-		"server_seq": -1,
-	}))
-
-	if result.Err() == mongo.ErrNoDocuments {
-		return snapshotInfo, nil
-	}
-
-	if result.Err() != nil {
-		log.Logger.Error(result.Err())
-		return nil, result.Err()
-	}
-
-	if err := result.Decode(snapshotInfo); err != nil {
-		return nil, err
-	}
-
-	return snapshotInfo, nil
-}
-
 func (c *Client) findTicketByServerSeq(
 	ctx context.Context,
 	docID db.ID,
@@ -555,7 +556,7 @@ func (c *Client) findTicketByServerSeq(
 	}
 
 	changeInfo := db.ChangeInfo{}
-	result := c.collection(ColChanges).FindOne(ctx, bson.M{
+	result := c.collection(colChanges).FindOne(ctx, bson.M{
 		"doc_id":     encodedDocID,
 		"server_seq": serverSeq,
 	})

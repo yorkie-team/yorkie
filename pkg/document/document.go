@@ -129,6 +129,11 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	return nil
 }
 
+// InternalDocument returns the internal document.
+func (d *Document) InternalDocument() *InternalDocument {
+	return d.doc
+}
+
 // Key returns the key of this document.
 func (d *Document) Key() *key.Key {
 	return d.doc.key

@@ -18,6 +18,8 @@ func TestID(t *testing.T) {
 	t.Run("get ID from bytes test", func(t *testing.T) {
 		bytes := make([]byte, 12)
 		ID := db.IDFromBytes(bytes)
-		assert.Equal(t, bytes, ID.Bytes())
+		bytesID, err := ID.Bytes()
+		assert.NoError(t, err)
+		assert.Equal(t, bytes, bytesID)
 	})
 }
