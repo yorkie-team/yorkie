@@ -27,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 )
 
@@ -37,7 +38,9 @@ var (
 var (
 	flagConfPath string
 
+	mongoConnectionURI     string
 	mongoConnectionTimeout time.Duration
+	mongoYorkieDatabase    string
 	mongoPingTimeout       time.Duration
 
 	authWebhookMaxWaitInterval time.Duration
@@ -58,11 +61,18 @@ func newAgentCmd() *cobra.Command {
 		Use:   "agent [options]",
 		Short: "Starts yorkie agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			conf.Mongo.ConnectionTimeout = mongoConnectionTimeout.String()
-			conf.Mongo.PingTimeout = mongoPingTimeout.String()
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
 			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
+
+			if mongoConnectionURI != "" {
+				conf.Mongo = &mongo.Config{
+					ConnectionURI:     mongoConnectionURI,
+					ConnectionTimeout: mongoConnectionTimeout.String(),
+					YorkieDatabase:    mongoYorkieDatabase,
+					PingTimeout:       mongoPingTimeout.String(),
+				}
+			}
 
 			if etcdEndpoints != nil {
 				conf.ETCD = &etcd.Config{
@@ -188,6 +198,12 @@ func init() {
 		false,
 		"Enable runtime profiling data via HTTP server.",
 	)
+	cmd.Flags().StringVar(
+		&mongoConnectionURI,
+		"mongo-connection-uri",
+		"",
+		"MongoDB's connection URI",
+	)
 	cmd.Flags().DurationVar(
 		&mongoConnectionTimeout,
 		"mongo-connection-timeout",
@@ -195,13 +211,7 @@ func init() {
 		"Mongo DB's connection timeout",
 	)
 	cmd.Flags().StringVar(
-		&conf.Mongo.ConnectionURI,
-		"mongo-connection-uri",
-		yorkie.DefaultMongoConnectionURI,
-		"MongoDB's connection URI",
-	)
-	cmd.Flags().StringVar(
-		&conf.Mongo.YorkieDatabase,
+		&mongoYorkieDatabase,
 		"mongo-yorkie-database",
 		yorkie.DefaultMongoYorkieDatabase,
 		"Yorkie's database name in MongoDB",

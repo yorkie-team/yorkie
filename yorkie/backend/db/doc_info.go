@@ -48,3 +48,20 @@ func (info *DocInfo) GetKey() (*key.Key, error) {
 
 	return docKey, nil
 }
+
+// DeepCopy creates a deep copy of this DocInfo.
+func (info *DocInfo) DeepCopy() *DocInfo {
+	if info == nil {
+		return nil
+	}
+
+	return &DocInfo{
+		ID:         info.ID,
+		Key:        info.Key,
+		ServerSeq:  info.ServerSeq,
+		Owner:      info.Owner,
+		CreatedAt:  info.CreatedAt,
+		AccessedAt: info.AccessedAt,
+		UpdatedAt:  info.UpdatedAt,
+	}
+}

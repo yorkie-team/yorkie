@@ -29,6 +29,7 @@ import (
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
+	ID         ID       `bson:"_id"`
 	DocID      ID       `bson:"doc_id"`
 	ServerSeq  uint64   `bson:"server_seq"`
 	ClientSeq  uint32   `bson:"client_seq"`

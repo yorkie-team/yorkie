@@ -33,12 +33,12 @@ func (id ID) String() string {
 }
 
 // Bytes returns bytes of decoded hexadecimal string representation of this ID.
-func (id ID) Bytes() []byte {
+func (id ID) Bytes() ([]byte, error) {
 	decoded, err := hex.DecodeString(id.String())
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return decoded
+	return decoded, nil
 }
 
 // IDFromBytes returns ID represented by the encoded hexadecimal string from bytes.
@@ -74,16 +74,13 @@ type DB interface {
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
-	// StoreChangeInfos stores the given changes then updates the given docInfo.
-	StoreChangeInfos(
+	// CreateChangeInfos stores the given changes then updates the given docInfo.
+	CreateChangeInfos(
 		ctx context.Context,
 		docInfo *DocInfo,
 		initialServerSeq uint64,
 		changes []*change.Change,
 	) error
-
-	// CreateSnapshotInfo stores the snapshot of the given document.
-	CreateSnapshotInfo(ctx context.Context, docID ID, doc *document.InternalDocument) error
 
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
@@ -101,6 +98,12 @@ type DB interface {
 		to uint64,
 	) ([]*ChangeInfo, error)
 
+	// CreateSnapshotInfo stores the snapshot of the given document.
+	CreateSnapshotInfo(ctx context.Context, docID ID, doc *document.InternalDocument) error
+
+	// FindLastSnapshotInfo finds the last snapshot of the given document.
+	FindLastSnapshotInfo(ctx context.Context, docID ID) (*SnapshotInfo, error)
+
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 	// and returns the min synced ticket.
 	UpdateAndFindMinSyncedTicket(
@@ -109,7 +112,4 @@ type DB interface {
 		docID ID,
 		serverSeq uint64,
 	) (*time.Ticket, error)
-
-	// FindLastSnapshotInfo finds the last snapshot of the given document.
-	FindLastSnapshotInfo(ctx context.Context, docID ID) (*SnapshotInfo, error)
 }

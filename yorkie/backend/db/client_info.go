@@ -146,6 +146,31 @@ func (i *ClientInfo) EnsureDocumentAttached(docID ID) error {
 	return nil
 }
 
+// DeepCopy returns a deep copy of this client info.
+func (i *ClientInfo) DeepCopy() *ClientInfo {
+	if i == nil {
+		return nil
+	}
+
+	documents := make(map[ID]*ClientDocInfo, len(i.Documents))
+	for k, v := range i.Documents {
+		documents[k] = &ClientDocInfo{
+			Status:    v.Status,
+			ServerSeq: v.ServerSeq,
+			ClientSeq: v.ClientSeq,
+		}
+	}
+
+	return &ClientInfo{
+		ID:        i.ID,
+		Key:       i.Key,
+		Status:    i.Status,
+		Documents: documents,
+		CreatedAt: i.CreatedAt,
+		UpdatedAt: i.UpdatedAt,
+	}
+}
+
 func (i *ClientInfo) hasDocument(docID ID) bool {
 	return i.Documents != nil && i.Documents[docID] != nil
 }

@@ -37,15 +37,6 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, conf.RPC.CertFile, "")
 		assert.Equal(t, conf.RPC.KeyFile, "")
 
-		connTimeout, err := time.ParseDuration(conf.Mongo.ConnectionTimeout)
-		assert.NoError(t, err)
-		assert.Equal(t, connTimeout, yorkie.DefaultMongoConnectionTimeout)
-		assert.Equal(t, conf.Mongo.ConnectionURI, yorkie.DefaultMongoConnectionURI)
-		assert.Equal(t, conf.Mongo.YorkieDatabase, yorkie.DefaultMongoYorkieDatabase)
-
-		pingTimeout, err := time.ParseDuration(conf.Mongo.PingTimeout)
-		assert.NoError(t, err)
-		assert.Equal(t, pingTimeout, yorkie.DefaultMongoPingTimeout)
 		assert.Equal(t, conf.Backend.SnapshotThreshold, uint64(yorkie.DefaultSnapshotThreshold))
 		assert.Equal(t, conf.Backend.SnapshotInterval, uint64(yorkie.DefaultSnapshotInterval))
 		assert.Equal(t, conf.Backend.AuthWebhookURL, "")

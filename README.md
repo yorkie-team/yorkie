@@ -17,7 +17,7 @@ Yorkie is an open source document store for building collaborative editing appli
 Yorkie consists of three main components: Client, Document and Agent.
 
  ```
-  Client "A" (Go)                 Agent                        Mongo DB
+  Client "A" (Go)                 Agent                        MemDB or MongoDB
 ┌───────────────────┐           ┌────────────────────────┐   ┌───────────┐
 │  Document "D-1"   │◄─Changes─►│  Collection "C-1"      │   │ Changes   │
 │  { a: 1, b: {} }  │           │ ┌───────────────────┐  │◄─►│ Snapshots │
@@ -29,8 +29,8 @@ Yorkie consists of three main components: Client, Document and Agent.
 └───────────────────┘           │ └───────────────────┘  │
   Client "C" (Admin)             │                        │
 ┌────────────────────┐          └────────────────────────┘
-│  Query "Q-1"       │               ▲
-│ db[c-1].find({a:2})├─MongoDB Query─┘
+│  Query "Q-1"       │              ▲
+│ db[c-1].find({a:2})├───DB Query───┘
 └────────────────────┘
  ```
 
@@ -58,8 +58,6 @@ $ yorkie --version
 Yorkie: 0.1.8
 ...
 ```
-
-Yorkie uses MongoDB to store its data. To start MongoDB, type `docker-compose -f docker/docker-compose.yml up -d`.
 
 Next, let's start a Yorkie agent. Agent runs until they're told to quit and handle the communication of maintenance tasks of Agent. and start the agent:
 
