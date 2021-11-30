@@ -70,8 +70,8 @@ func (p *TextProxy) Edit(from, to int, content string) *TextProxy {
 		content,
 		ticket,
 	))
-	if fromPos.Compare(toPos) != 0 {
-		p.context.RegisterRemovedNodeTextElement(p)
+	if !fromPos.Equal(toPos) {
+		p.context.RegisterTextElementWithGarbage(p)
 	}
 	return p
 }

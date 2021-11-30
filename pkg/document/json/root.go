@@ -36,7 +36,7 @@ type Root struct {
 	object                               *Object
 	elementMapByCreatedAt                map[string]Element
 	removedElementPairMapByCreatedAt     map[string]ElementPair
-	removedNodeTextElementMapByCreatedAt map[string]TextElement
+	textElementWithGarbageMapByCreatedAt map[string]TextElement
 }
 
 // NewRoot creates a new instance of Root.
@@ -44,7 +44,7 @@ func NewRoot(root *Object) *Root {
 	r := &Root{
 		elementMapByCreatedAt:                make(map[string]Element),
 		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
-		removedNodeTextElementMapByCreatedAt: make(map[string]TextElement),
+		textElementWithGarbageMapByCreatedAt: make(map[string]TextElement),
 	}
 
 	r.object = root
@@ -88,9 +88,9 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	}
 }
 
-// RegisterRemovedNodeTextElement register the given text element to hash table.
-func (r *Root) RegisterRemovedNodeTextElement(textType TextElement) {
-	r.removedNodeTextElementMapByCreatedAt[textType.CreatedAt().Key()] = textType
+// RegisterTextElementWithGarbage register the given text element with garbage to hash table.
+func (r *Root) RegisterTextElementWithGarbage(textType TextElement) {
+	r.textElementWithGarbageMapByCreatedAt[textType.CreatedAt().Key()] = textType
 }
 
 // DeepCopy copies itself deeply.
@@ -109,12 +109,12 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) int {
 		}
 	}
 
-	for _, text := range r.removedNodeTextElementMapByCreatedAt {
-		removedNodeCnt := text.cleanupRemovedNodes(ticket)
-		if removedNodeCnt > 0 {
-			delete(r.removedNodeTextElementMapByCreatedAt, text.CreatedAt().Key())
+	for _, text := range r.textElementWithGarbageMapByCreatedAt {
+		purgedTextNodes := text.purgeTextNodesWithGarbage(ticket)
+		if purgedTextNodes > 0 {
+			delete(r.textElementWithGarbageMapByCreatedAt, text.CreatedAt().Key())
 		}
-		count += removedNodeCnt
+		count += purgedTextNodes
 	}
 
 	return count
@@ -146,7 +146,7 @@ func (r *Root) GarbageLen() int {
 		}
 	}
 
-	for _, text := range r.removedNodeTextElementMapByCreatedAt {
+	for _, text := range r.textElementWithGarbageMapByCreatedAt {
 		count += text.removedNodesLen()
 	}
 

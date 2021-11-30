@@ -76,8 +76,8 @@ func (e *RichEdit) Execute(root *json.Root) error {
 	switch obj := parent.(type) {
 	case *json.RichText:
 		obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
-		if e.from.Compare(e.to) != 0 {
-			root.RegisterRemovedNodeTextElement(obj)
+		if !e.from.Equal(e.to) {
+			root.RegisterTextElementWithGarbage(obj)
 		}
 	default:
 		return ErrNotApplicableDataType
