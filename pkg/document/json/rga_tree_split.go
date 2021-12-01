@@ -126,15 +126,12 @@ func (pos *RGATreeSplitNodePos) RelativeOffset() int {
 	return pos.relativeOffset
 }
 
-// Compare compares the offset between RGATreeSplitNodePos.
-func (pos *RGATreeSplitNodePos) Compare(other *RGATreeSplitNodePos) int {
-	if pos.relativeOffset > other.relativeOffset {
-		return 1
-	} else if pos.relativeOffset < other.relativeOffset {
-		return -1
+// Equal returns the whether the given pos equals or not.
+func (pos *RGATreeSplitNodePos) Equal(other *RGATreeSplitNodePos) bool {
+	if !pos.id.Equal(other.id) {
+		return false
 	}
-
-	return 0
+	return pos.relativeOffset == other.relativeOffset
 }
 
 // Selection represents the selection of text range in the editor.
@@ -560,9 +557,8 @@ func (s *RGATreeSplit) removedNodesLen() int {
 	return len(s.removedNodeMap)
 }
 
-// cleanupRemovedNodes cleans up nodes that have been removed.
-// The cleaned nodes are subject to garbage collector collection.
-func (s *RGATreeSplit) cleanupRemovedNodes(ticket *time.Ticket) int {
+// purgeTextNodesWithGarbage physically purges nodes that have been removed.
+func (s *RGATreeSplit) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
 	count := 0
 	for _, node := range s.removedNodeMap {
 		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {

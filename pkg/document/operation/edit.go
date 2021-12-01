@@ -69,8 +69,8 @@ func (e *Edit) Execute(root *json.Root) error {
 	switch obj := parent.(type) {
 	case *json.Text:
 		obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.executedAt)
-		if e.from.Compare(e.to) != 0 {
-			root.RegisterRemovedNodeTextElement(obj)
+		if !e.from.Equal(e.to) {
+			root.RegisterTextElementWithGarbage(obj)
 		}
 	default:
 		return ErrNotApplicableDataType

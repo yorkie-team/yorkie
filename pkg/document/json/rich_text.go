@@ -295,8 +295,7 @@ func (t *RichText) removedNodesLen() int {
 	return t.rgaTreeSplit.removedNodesLen()
 }
 
-// cleanupRemovedNodes cleans up nodes that have been removed.
-// The cleaned nodes are subject to garbage collector collection.
-func (t *RichText) cleanupRemovedNodes(ticket *time.Ticket) int {
-	return t.rgaTreeSplit.cleanupRemovedNodes(ticket)
+// purgeTextNodesWithGarbage physically purges nodes that have been removed.
+func (t *RichText) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
+	return t.rgaTreeSplit.purgeTextNodesWithGarbage(ticket)
 }

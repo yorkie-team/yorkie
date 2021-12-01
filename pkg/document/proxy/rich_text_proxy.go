@@ -72,8 +72,8 @@ func (p *RichTextProxy) Edit(from, to int, content string, attributes map[string
 		attributes,
 		ticket,
 	))
-	if fromPos.Compare(toPos) != 0 {
-		p.context.RegisterRemovedNodeTextElement(p)
+	if !fromPos.Equal(toPos) {
+		p.context.RegisterTextElementWithGarbage(p)
 	}
 
 	return p

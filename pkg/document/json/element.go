@@ -36,7 +36,7 @@ type Container interface {
 type TextElement interface {
 	Element
 	removedNodesLen() int
-	cleanupRemovedNodes(ticket *time.Ticket) int
+	purgeTextNodesWithGarbage(ticket *time.Ticket) int
 }
 
 // Element represents JSON element.
