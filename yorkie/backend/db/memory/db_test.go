@@ -35,9 +35,11 @@ func TestDB(t *testing.T) {
 	memdb, err := memory.New()
 	assert.NoError(t, err)
 
+	notExistsID := db.ID("000000000000000000000000")
+
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		// try to deactivate the client with not exists ID.
-		_, err = memdb.DeactivateClient(ctx, db.ID("not exists"))
+		_, err = memdb.DeactivateClient(ctx, notExistsID)
 		assert.ErrorIs(t, err, db.ErrClientNotFound)
 
 		clientInfo, err := memdb.ActivateClient(ctx, t.Name())
@@ -67,7 +69,7 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("activate and find client test", func(t *testing.T) {
-		_, err := memdb.FindClientInfoByID(ctx, db.ID("not exists"))
+		_, err := memdb.FindClientInfoByID(ctx, notExistsID)
 		assert.ErrorIs(t, err, db.ErrClientNotFound)
 
 		clientInfo, err := memdb.ActivateClient(ctx, t.Name())

@@ -18,15 +18,18 @@ package key
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
 const (
 	// BSONSplitter is used to separate collection and document in a string.
 	BSONSplitter = "$"
-
-	tokenLen = 2
+	tokenLen     = 2
 )
+
+// ErrInvalidBSONKey is returned when the given bsonKey is invalid.
+var ErrInvalidBSONKey = errors.New("invalid bson key")
 
 // Key represents the key of the Document.
 type Key struct {
@@ -38,7 +41,7 @@ type Key struct {
 func FromBSONKey(bsonKey string) (*Key, error) {
 	splits := strings.Split(bsonKey, BSONSplitter)
 	if len(splits) != tokenLen {
-		return nil, errors.New("fail to create key from bson key")
+		return nil, fmt.Errorf("%s: %w", bsonKey, ErrInvalidBSONKey)
 	}
 
 	return &Key{Collection: splits[0], Document: splits[1]}, nil

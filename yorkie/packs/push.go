@@ -33,17 +33,17 @@ func pushChanges(
 	cp := clientInfo.Checkpoint(docInfo.ID)
 
 	var pushedChanges []*change.Change
-	for _, c := range pack.Changes {
-		if c.ID().ClientSeq() > cp.ClientSeq {
+	for _, cn := range pack.Changes {
+		if cn.ID().ClientSeq() > cp.ClientSeq {
 			serverSeq := docInfo.IncreaseServerSeq()
 			cp = cp.NextServerSeq(serverSeq)
-			c.SetServerSeq(serverSeq)
-			pushedChanges = append(pushedChanges, c)
+			cn.SetServerSeq(serverSeq)
+			pushedChanges = append(pushedChanges, cn)
 		} else {
-			log.Logger.Warnf("change is rejected: %d vs %d ", c.ID().ClientSeq(), cp.ClientSeq)
+			log.Logger.Warnf("change is rejected: %d vs %d ", cn.ID().ClientSeq(), cp.ClientSeq)
 		}
 
-		cp = cp.SyncClientSeq(c.ClientSeq())
+		cp = cp.SyncClientSeq(cn.ClientSeq())
 	}
 
 	if len(pack.Changes) > 0 {

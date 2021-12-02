@@ -19,7 +19,6 @@ package memory
 import (
 	"context"
 	"fmt"
-	"math"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -64,17 +63,19 @@ func (d *DB) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, er
 		return nil, err
 	}
 
+	var clientID db.ID
+	if raw == nil {
+		clientID = newID()
+	} else {
+		clientID = raw.(*db.ClientInfo).ID
+	}
+
 	clientInfo := &db.ClientInfo{
+		ID:        clientID,
 		Key:       key,
 		Status:    db.ClientActivated,
 		CreatedAt: gotime.Now(),
 	}
-	if raw == nil {
-		clientInfo.ID = newID()
-	} else {
-		clientInfo.ID = raw.(*db.ClientInfo).ID
-	}
-
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
 		return nil, err
 	}
@@ -85,10 +86,14 @@ func (d *DB) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, er
 
 // DeactivateClient deactivates a client.
 func (d *DB) DeactivateClient(ctx context.Context, clientID db.ID) (*db.ClientInfo, error) {
+	if err := clientID.Validate(); err != nil {
+		return nil, err
+	}
+
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "id", string(clientID))
+	raw, err := txn.First(tblClients, "id", clientID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -114,10 +119,14 @@ func (d *DB) DeactivateClient(ctx context.Context, clientID db.ID) (*db.ClientIn
 
 // FindClientInfoByID finds a client by ID.
 func (d *DB) FindClientInfoByID(ctx context.Context, clientID db.ID) (*db.ClientInfo, error) {
+	if err := clientID.Validate(); err != nil {
+		return nil, err
+	}
+
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "id", string(clientID))
+	raw, err := txn.First(tblClients, "id", clientID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +153,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "id", string(clientInfo.ID))
+	raw, err := txn.First(tblClients, "id", clientInfo.ID.String())
 	if err != nil {
 		return err
 	}
@@ -223,10 +232,10 @@ func (d *DB) FindDocInfoByKey(
 		}
 		txn.Commit()
 	} else {
-		docInfo = raw.(*db.DocInfo).DeepCopy()
+		docInfo = raw.(*db.DocInfo)
 	}
 
-	return docInfo, nil
+	return docInfo.DeepCopy(), nil
 }
 
 // CreateChangeInfos stores the given changes and doc info.
@@ -372,22 +381,32 @@ func (d *DB) FindLastSnapshotInfo(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
+	// TODO(hackerwins): I couldn't find a efficient way to get the snapshotInfo
+	// with the last serverSeq of the given docID.
 	iterator, err := txn.ReverseLowerBound(
 		tblSnapshots,
 		"doc_id_server_seq",
 		docID.String(),
-		uint64(math.MaxUint64),
+		uint64(0),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	raw := iterator.Next()
-	if raw == nil {
+	var snapshotInfo *db.SnapshotInfo
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		info := raw.(*db.SnapshotInfo)
+		if info.DocID == docID {
+			snapshotInfo = info
+			break
+		}
+	}
+
+	if snapshotInfo == nil {
 		return &db.SnapshotInfo{}, nil
 	}
 
-	return raw.(*db.SnapshotInfo), nil
+	return snapshotInfo, nil
 }
 
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
@@ -471,8 +490,8 @@ func (d *DB) updateSyncedSeq(
 		if _, err = txn.DeleteAll(
 			tblSyncedSeqs,
 			"doc_id_client_id",
-			docID,
-			clientInfo.ID,
+			docID.String(),
+			clientInfo.ID.String(),
 		); err != nil {
 			return err
 		}

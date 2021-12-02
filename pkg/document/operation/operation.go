@@ -26,7 +26,7 @@ import (
 var (
 	// ErrNotApplicableDataType occurs when attempting to execute an operation
 	// on a data type that cannot be executed.
-	ErrNotApplicableDataType = errors.New("fail to execute this operation")
+	ErrNotApplicableDataType = errors.New("not applicable datatype")
 )
 
 // Operation represents an operation to be executed on a document.

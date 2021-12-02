@@ -196,12 +196,12 @@ func (rht *RHTPriorityQueueMap) Nodes() []*RHTPQMapNode {
 func (rht *RHTPriorityQueueMap) purge(elem Element) {
 	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
-		log.Logger.Fatalf("fail to find " + elem.CreatedAt().Key())
+		log.Logger.Fatalf("fail to find %s", elem.CreatedAt().Key())
 	}
 
 	queue, ok := rht.nodeQueueMapByKey[node.key]
 	if !ok {
-		log.Logger.Fatalf("fail to find queue of " + elem.CreatedAt().Key())
+		log.Logger.Fatalf("fail to find queue of %s", elem.CreatedAt().Key())
 	}
 
 	queue.Release(node)

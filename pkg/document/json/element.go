@@ -24,8 +24,10 @@ import (
 type Container interface {
 	Element
 
+	// Purge physically purges the given chile element.
 	Purge(child Element)
 
+	// Descendants returns all descendants of this container.
 	Descendants(callback func(elem Element, parent Container) bool)
 
 	// DeleteByCreatedAt removes the given element from this container.

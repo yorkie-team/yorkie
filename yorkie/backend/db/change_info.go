@@ -27,6 +27,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// ErrEncodeOperationFailed is returned when encoding operation failed.
+var ErrEncodeOperationFailed = errors.New("encode operation failed")
+
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
 	ID         ID       `bson:"_id"`
@@ -52,7 +55,7 @@ func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
 		encodedOp, err := pbOp.Marshal()
 		if err != nil {
 			log.Logger.Error(err)
-			return nil, errors.New("fail to encode operation")
+			return nil, ErrEncodeOperationFailed
 		}
 		encodedOps = append(encodedOps, encodedOp)
 	}

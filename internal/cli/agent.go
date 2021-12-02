@@ -88,24 +88,21 @@ func newAgentCmd() *cobra.Command {
 			if flagConfPath != "" {
 				parsed, err := yorkie.NewConfigFromFile(flagConfPath)
 				if err != nil {
-					return fmt.Errorf(
-						"fail to create config: %s",
-						flagConfPath,
-					)
+					return err
 				}
 				conf = parsed
 			}
 
-			r, err := yorkie.New(conf)
+			y, err := yorkie.New(conf)
 			if err != nil {
 				return err
 			}
 
-			if err := r.Start(); err != nil {
+			if err := y.Start(); err != nil {
 				return err
 			}
 
-			if code := handleSignal(r); code != 0 {
+			if code := handleSignal(y); code != 0 {
 				return fmt.Errorf("exit code: %d", code)
 			}
 

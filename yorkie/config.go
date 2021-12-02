@@ -70,13 +70,13 @@ func NewConfig() *Config {
 // NewConfigFromFile returns a Config struct for the given conf file.
 func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
-	file, err := ioutil.ReadFile(filepath.Clean(path))
+	bytes, err := ioutil.ReadFile(filepath.Clean(path))
 	if err != nil {
 		log.Logger.Error(err)
 		return nil, err
 	}
-	err = yaml.Unmarshal(file, conf)
-	if err != nil {
+
+	if err = yaml.Unmarshal(bytes, conf); err != nil {
 		log.Logger.Error(err)
 		return nil, err
 	}

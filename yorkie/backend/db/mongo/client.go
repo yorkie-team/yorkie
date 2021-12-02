@@ -70,8 +70,7 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, err
 	}
 
-	log.Logger.Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI,
-		conf.YorkieDatabase)
+	log.Logger.Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	return &Client{
 		config: conf,
@@ -91,8 +90,6 @@ func (c *Client) Close() error {
 
 // ActivateClient activates the client of the given key.
 func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, error) {
-	clientInfo := db.ClientInfo{}
-
 	now := gotime.Now()
 	res, err := c.collection(colClients).UpdateOne(ctx, bson.M{
 		"key": key,
@@ -122,6 +119,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 		})
 	}
 
+	clientInfo := db.ClientInfo{}
 	if err = result.Decode(&clientInfo); err != nil {
 		return nil, err
 	}
@@ -136,7 +134,6 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID db.ID) (*db.Clie
 		return nil, err
 	}
 
-	clientInfo := db.ClientInfo{}
 	res := c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
 		"_id": encodedClientID,
 	}, bson.M{
@@ -146,6 +143,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID db.ID) (*db.Clie
 		},
 	})
 
+	clientInfo := db.ClientInfo{}
 	if err := res.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
@@ -163,10 +161,11 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID db.ID) (*db.Cl
 		return nil, err
 	}
 
-	clientInfo := db.ClientInfo{}
 	result := c.collection(colClients).FindOne(ctx, bson.M{
 		"_id": encodedClientID,
 	})
+
+	clientInfo := db.ClientInfo{}
 	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
@@ -386,7 +385,6 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		return nil, err
 	}
 
-	var infos []*db.ChangeInfo
 	cursor, err := c.collection(colChanges).Find(ctx, bson.M{
 		"doc_id": encodedDocID,
 		"server_seq": bson.M{
@@ -399,6 +397,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		return nil, err
 	}
 
+	var infos []*db.ChangeInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		log.Logger.Error(cursor.Err())
 		return nil, cursor.Err()
@@ -445,13 +444,13 @@ func (c *Client) FindLastSnapshotInfo(
 		return nil, err
 	}
 
-	snapshotInfo := &db.SnapshotInfo{}
 	result := c.collection(colSnapshots).FindOne(ctx, bson.M{
 		"doc_id": encodedDocID,
 	}, options.FindOne().SetSort(bson.M{
 		"server_seq": -1,
 	}))
 
+	snapshotInfo := &db.SnapshotInfo{}
 	if result.Err() == mongo.ErrNoDocuments {
 		return snapshotInfo, nil
 	}
@@ -514,7 +513,6 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	}
 
 	// 02. find min synced seq of the given document.
-	syncedSeqInfo := db.SyncedSeqInfo{}
 	result := c.collection(colSyncedSeqs).FindOne(ctx, bson.M{
 		"doc_id": encodedDocID,
 	}, options.FindOne().SetSort(bson.M{
@@ -527,6 +525,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		log.Logger.Error(result.Err())
 		return nil, result.Err()
 	}
+	syncedSeqInfo := db.SyncedSeqInfo{}
 	if err := result.Decode(&syncedSeqInfo); err != nil {
 		return nil, err
 	}
@@ -555,7 +554,6 @@ func (c *Client) findTicketByServerSeq(
 		return nil, err
 	}
 
-	changeInfo := db.ChangeInfo{}
 	result := c.collection(colChanges).FindOne(ctx, bson.M{
 		"doc_id":     encodedDocID,
 		"server_seq": serverSeq,
@@ -569,6 +567,7 @@ func (c *Client) findTicketByServerSeq(
 		return nil, result.Err()
 	}
 
+	changeInfo := db.ChangeInfo{}
 	if err := result.Decode(&changeInfo); err != nil {
 		return nil, err
 	}
