@@ -62,7 +62,8 @@ func TestMain(m *testing.M) {
 	}
 
 	be, err := backend.New(&backend.Config{
-		SnapshotThreshold: helper.SnapshotThreshold,
+		SnapshotThreshold:    helper.SnapshotThreshold,
+		AuthWebhookCacheSize: helper.AuthWebhookSize,
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    helper.TestDBName(),

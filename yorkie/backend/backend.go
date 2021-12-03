@@ -34,8 +34,6 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 )
 
-const authWebhookCacheSize = 5000
-
 // Backend manages Yorkie's backend such as Database and Coordinator. And it
 // has the server status such as the information of this Agent.
 type Backend struct {
@@ -118,7 +116,7 @@ func New(
 		dbInfo,
 	)
 
-	lruCache, err := cache.NewLRUExpireCache(authWebhookCacheSize)
+	lruCache, err := cache.NewLRUExpireCache(conf.AuthWebhookCacheSize)
 	if err != nil {
 		return nil, err
 	}

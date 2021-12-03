@@ -45,6 +45,7 @@ const (
 	SnapshotThreshold          = 10
 	Collection                 = "test-collection"
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
+	AuthWebhookSize            = 100
 	AuthWebhookCacheAuthTTL    = 10 * gotime.Second
 	AuthWebhookCacheUnauthTTL  = 10 * gotime.Second
 	ETCDDialTimeout            = 5 * gotime.Second
@@ -98,6 +99,7 @@ func TestConfig(authWebhook string) *yorkie.Config {
 			SnapshotThreshold:          SnapshotThreshold,
 			AuthWebhookURL:             authWebhook,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
+			AuthWebhookCacheSize:       AuthWebhookSize,
 			AuthWebhookCacheAuthTTL:    AuthWebhookCacheAuthTTL.String(),
 			AuthWebhookCacheUnauthTTL:  AuthWebhookCacheUnauthTTL.String(),
 		},

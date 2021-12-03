@@ -287,6 +287,12 @@ func init() {
 		yorkie.DefaultAuthWebhookMaxWaitInterval,
 		"Maximum wait interval for authorization webhook.",
 	)
+	cmd.Flags().IntVar(
+		&conf.Backend.AuthWebhookCacheSize,
+		"auth-webhook-cache-size",
+		yorkie.DefaultAuthWebhookCacheSize,
+		"The cache size of the authorization webhook.",
+	)
 	cmd.Flags().DurationVar(
 		&authWebhookCacheAuthTTL,
 		"auth-webhook-cache-auth-ttl",

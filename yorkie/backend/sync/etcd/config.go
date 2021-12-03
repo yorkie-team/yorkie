@@ -53,7 +53,7 @@ func (c *Config) Validate() error {
 
 	if _, err := time.ParseDuration(c.DialTimeout); err != nil {
 		return fmt.Errorf(
-			"invalid argument \"%s\" for \"--etcd-dial-timeout\" flag: %w",
+			`invalid argument "%s" for "--etcd-dial-timeout" flag: %w`,
 			c.DialTimeout,
 			err,
 		)
@@ -61,7 +61,7 @@ func (c *Config) Validate() error {
 
 	if _, err := time.ParseDuration(c.LockLeaseTime); err != nil {
 		return fmt.Errorf(
-			"invalid argument \"%s\" for \"--etcd-lock-lease-time\" flag: %w",
+			`invalid argument "%s" for "--etcd-lock-lease-time" flag: %w`,
 			c.LockLeaseTime,
 			err,
 		)

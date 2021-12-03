@@ -99,7 +99,7 @@ func NewText(elements *RGATreeSplit, createdAt *time.Ticket) *Text {
 
 // Marshal returns the JSON encoding of this text.
 func (t *Text) Marshal() string {
-	return fmt.Sprintf("\"%s\"", t.rgaTreeSplit.marshal())
+	return fmt.Sprintf(`"%s"`, t.rgaTreeSplit.marshal())
 }
 
 // DeepCopy copies itself deeply.

@@ -44,6 +44,9 @@ type Config struct {
 	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
 	AuthWebhookMaxWaitInterval string `json:"AuthWebhookMaxWaitInterval"`
 
+	// AuthWebhookCacheSize is the cache size of the authorization webhook.
+	AuthWebhookCacheSize int `json:"AuthWebhookCacheSize"`
+
 	// AuthWebhookCacheAuthTTL is the TTL value to set when caching the authorized result.
 	AuthWebhookCacheAuthTTL string `json:"AuthWebhookCacheAuthTTL"`
 
@@ -80,7 +83,7 @@ func (c *Config) Validate() error {
 
 	if _, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval); err != nil {
 		return fmt.Errorf(
-			"invalid argument \"%s\" for \"--auth-webhook-max-wait-interval\" flag: %w",
+			`invalid argument "%s" for "--auth-webhook-max-wait-interval" flag: %w`,
 			c.AuthWebhookMaxWaitInterval,
 			err,
 		)
@@ -88,7 +91,7 @@ func (c *Config) Validate() error {
 
 	if _, err := time.ParseDuration(c.AuthWebhookCacheAuthTTL); err != nil {
 		return fmt.Errorf(
-			"invalid argument \"%s\" for \"--auth-webhook-cache-auth-ttl\" flag: %w",
+			`invalid argument "%s" for "--auth-webhook-cache-auth-ttl" flag: %w`,
 			c.AuthWebhookCacheAuthTTL,
 			err,
 		)
@@ -96,7 +99,7 @@ func (c *Config) Validate() error {
 
 	if _, err := time.ParseDuration(c.AuthWebhookCacheUnauthTTL); err != nil {
 		return fmt.Errorf(
-			"invalid argument \"%s\" for \"--auth-webhook-cache-unauth-ttl\" flag: %w",
+			`invalid argument "%s" for "--auth-webhook-cache-unauth-ttl" flag: %w`,
 			c.AuthWebhookCacheUnauthTTL,
 			err,
 		)

@@ -33,7 +33,7 @@ type Config struct {
 func (c *Config) Validate() error {
 	if _, err := time.ParseDuration(c.ConnectionTimeout); err != nil {
 		return fmt.Errorf(
-			"invalid argument \"%s\" for \"--mongo-connection-timeout\" flag: %w",
+			`invalid argument "%s" for "--mongo-connection-timeout" flag: %w`,
 			c.ConnectionTimeout,
 			err,
 		)
@@ -41,7 +41,7 @@ func (c *Config) Validate() error {
 
 	if _, err := time.ParseDuration(c.PingTimeout); err != nil {
 		return fmt.Errorf(
-			"invalid argument \"%s\" for \"--mongo-ping-timeout\" flag: %w",
+			`invalid argument "%s" for "--mongo-ping-timeout" flag: %w`,
 			c.PingTimeout,
 			err,
 		)

@@ -48,6 +48,7 @@ const (
 
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
+	DefaultAuthWebhookCacheSize       = 5000
 	DefaultAuthWebhookCacheAuthTTL    = 10 * time.Second
 	DefaultAuthWebhookCacheUnauthTTL  = 10 * time.Second
 )
@@ -137,6 +138,10 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Backend.SnapshotInterval == 0 {
 		c.Backend.SnapshotInterval = DefaultSnapshotInterval
+	}
+
+	if c.Backend.AuthWebhookCacheSize == 0 {
+		c.Backend.AuthWebhookCacheSize = DefaultAuthWebhookCacheSize
 	}
 
 	if c.Backend.AuthWebhookMaxRetries == 0 {
