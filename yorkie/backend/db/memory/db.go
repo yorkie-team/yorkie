@@ -338,7 +338,7 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*db.ChangeInfo)
-		if info.ServerSeq > to {
+		if info.DocID != docID || info.ServerSeq > to {
 			break
 		}
 		infos = append(infos, info)
@@ -434,12 +434,15 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		return nil, err
 	}
 
-	raw := iterator.Next()
-	if raw == nil {
-		return time.InitialTicket, nil
+	var syncedSeqInfo *db.SyncedSeqInfo
+	if raw := iterator.Next(); raw != nil {
+		info := raw.(*db.SyncedSeqInfo)
+		if info.DocID == docID {
+			syncedSeqInfo = info
+		}
 	}
-	syncedSeqInfo := raw.(*db.SyncedSeqInfo)
-	if syncedSeqInfo.ServerSeq == 0 {
+
+	if syncedSeqInfo == nil || syncedSeqInfo.ServerSeq == 0 {
 		return time.InitialTicket, nil
 	}
 
