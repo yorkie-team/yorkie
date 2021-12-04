@@ -7,6 +7,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.12] - 2021-12-04
+
+### Fixed
+
+- Fix a bug to pull changes from other documents in MemDB: #9c2af2e
+
 ## [0.1.11] - 2021-12-04
 
 ### Added
