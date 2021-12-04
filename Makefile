@@ -1,4 +1,4 @@
-YORKIE_VERSION := 0.1.10
+YORKIE_VERSION := 0.1.11
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 BUILD_DATE := $(shell date "+%Y-%m-%d")
