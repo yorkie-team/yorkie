@@ -7,6 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.11] - 2021-12-04
+
+### Added
+
+- Add MemDB to run Yorkie without MongoDB: #276
+- Add rpc-max-requests-bytes flag to set client request limit: #e544cdb
+
+### Changed
+
+- Avoid creating snapshots of a document at the same time in ETCD: #274
+- Extract auth-webhook-cache-size as config and flag: #3256b95
+
+### Fixed
+
+- Fix a bug where text nodes with tombstones were not counted: #277
+
 ## [0.1.10] - 2021-11-16
 
 ### Added
