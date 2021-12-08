@@ -79,7 +79,7 @@ https://github.com/yorkie-team/yorkie/blob/main/yorkie/config.sample.yml
 
 Full, comprehensive documentation is viewable on the Yorkie website:
 
-https://yorkie.dev/docs/main/
+https://yorkie.dev/docs/
 
 ## Developing Yorkie
 
