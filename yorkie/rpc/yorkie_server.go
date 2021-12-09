@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/auth"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
@@ -90,7 +91,7 @@ func (s *yorkieServer) DeactivateClient(
 		return nil, err
 	}
 
-	client, err := clients.Deactivate(ctx, s.backend, req.ClientId)
+	client, err := clients.Deactivate(ctx, s.backend, db.IDFromBytes(req.ClientId))
 	if err != nil {
 		return nil, err
 	}
@@ -144,8 +145,8 @@ func (s *yorkieServer) AttachDocument(
 	clientInfo, docInfo, err := clients.FindClientAndDocument(
 		ctx,
 		s.backend,
-		req.ClientId,
-		pack,
+		db.IDFromBytes(req.ClientId),
+		pack.DocumentKey,
 		true,
 	)
 	if err != nil {
@@ -209,8 +210,8 @@ func (s *yorkieServer) DetachDocument(
 	clientInfo, docInfo, err := clients.FindClientAndDocument(
 		ctx,
 		s.backend,
-		req.ClientId,
-		pack,
+		db.IDFromBytes(req.ClientId),
+		pack.DocumentKey,
 		false,
 	)
 	if err != nil {
@@ -279,8 +280,8 @@ func (s *yorkieServer) PushPull(
 	clientInfo, docInfo, err := clients.FindClientAndDocument(
 		ctx,
 		s.backend,
-		req.ClientId,
-		pack,
+		db.IDFromBytes(req.ClientId),
+		pack.DocumentKey,
 		false,
 	)
 	if err != nil {

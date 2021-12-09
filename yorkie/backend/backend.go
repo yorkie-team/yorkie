@@ -132,8 +132,8 @@ func New(
 	}, nil
 }
 
-// Close closes all resources of this instance.
-func (b *Backend) Close() error {
+// Shutdown closes all resources of this instance.
+func (b *Backend) Shutdown() error {
 	b.wgMu.Lock()
 	close(b.closing)
 	b.wgMu.Unlock()

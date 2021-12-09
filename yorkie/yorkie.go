@@ -19,8 +19,6 @@ package yorkie
 import (
 	gosync "sync"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -73,8 +71,7 @@ func New(conf *Config) (*Yorkie, error) {
 
 	var profilingServer *profiling.Server
 	if conf.Profiling != nil {
-		profilingServer = profiling.NewServer(conf.Profiling)
-		profilingServer.Handle("/metrics", promhttp.HandlerFor(metrics.Registry(), promhttp.HandlerOpts{}))
+		profilingServer = profiling.NewServer(conf.Profiling, metrics)
 	}
 
 	return &Yorkie{
@@ -82,8 +79,7 @@ func New(conf *Config) (*Yorkie, error) {
 		backend:         be,
 		rpcServer:       rpcServer,
 		profilingServer: profilingServer,
-
-		shutdownCh: make(chan struct{}),
+		shutdownCh:      make(chan struct{}),
 	}, nil
 }
 
@@ -115,7 +111,7 @@ func (r *Yorkie) Shutdown(graceful bool) error {
 		r.profilingServer.Shutdown(graceful)
 	}
 
-	if err := r.backend.Close(); err != nil {
+	if err := r.backend.Shutdown(); err != nil {
 		return err
 	}
 

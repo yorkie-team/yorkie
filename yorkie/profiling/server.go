@@ -22,9 +22,13 @@ import (
 	"net/http"
 	"net/http/pprof"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 )
 
+const httpPrefixMetrics = "/metrics"
 const httpPrefixPProf = "/debug/pprof"
 
 // Server serves information for profiling, such as metrics and pprof information.
@@ -35,7 +39,7 @@ type Server struct {
 }
 
 // NewServer creates an instance of Server.
-func NewServer(conf *Config) *Server {
+func NewServer(conf *Config, metrics *prometheus.Metrics) *Server {
 	serveMux := http.NewServeMux()
 	if conf.EnablePprof {
 		serveMux.Handle(httpPrefixPProf+"/", http.HandlerFunc(pprof.Index))
@@ -50,12 +54,14 @@ func NewServer(conf *Config) *Server {
 		serveMux.Handle(httpPrefixPProf+"/mutex", pprof.Handler("mutex"))
 	}
 
+	if metrics != nil {
+		serveMux.Handle(httpPrefixMetrics, promhttp.HandlerFor(metrics.Registry(), promhttp.HandlerOpts{}))
+	}
+
 	return &Server{
-		conf:     conf,
-		serveMux: serveMux,
-		httpServer: &http.Server{
-			Addr: fmt.Sprintf(":%d", conf.Port),
-		},
+		conf:       conf,
+		serveMux:   serveMux,
+		httpServer: &http.Server{Addr: fmt.Sprintf(":%d", conf.Port)},
 	}
 }
 
@@ -69,7 +75,7 @@ func (s *Server) Start() error {
 	return s.listenAndServe()
 }
 
-// Shutdown closes the server.
+// Shutdown shut down the server.
 func (s *Server) Shutdown(graceful bool) {
 	if graceful {
 		if err := s.httpServer.Shutdown(context.Background()); err != nil {
@@ -79,7 +85,7 @@ func (s *Server) Shutdown(graceful bool) {
 	}
 
 	if err := s.httpServer.Close(); err != nil {
-		log.Logger.Error("HTTP server Close: %v", err)
+		log.Logger.Error("HTTP server close: %v", err)
 	}
 }
 

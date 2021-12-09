@@ -32,9 +32,7 @@ const (
 
 func TestMetricsServer(t *testing.T) {
 	t.Run("new server test", func(t *testing.T) {
-		server := profiling.NewServer(
-			&profiling.Config{Port: testProfilingPort},
-		)
+		server := profiling.NewServer(&profiling.Config{Port: testProfilingPort}, nil)
 		assert.NotNil(t, server)
 		server.Shutdown(true)
 	})

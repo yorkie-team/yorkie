@@ -98,7 +98,7 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	if err := be.Close(); err != nil {
+	if err := be.Shutdown(); err != nil {
 		log.Fatal(err)
 	}
 	testRPCServer.Shutdown(true)
