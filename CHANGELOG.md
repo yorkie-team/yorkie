@@ -7,6 +7,24 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.0] - 2020-12-19
+
+2nd year release
+
+### Added
+
+ - Monitoring #155
+ - Supporting TLS and Auth webhook #6
+ - Providing Cluster Mode #11
+ - Improved Peer Awareness #153
+ - Providing MemoryDB for Agent without MongoDB #276
+
+### Changed
+
+### Removed
+
+### Deprecated
+
 ## [0.1.12] - 2021-12-04
 
 ### Fixed
