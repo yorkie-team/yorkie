@@ -20,7 +20,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/google/uuid"
+	"github.com/rs/xid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -108,7 +108,7 @@ func NewClient(opts ...Option) (*Client, error) {
 	if len(opts) > 0 && opts[0].Key != "" {
 		k = opts[0].Key
 	} else {
-		k = uuid.New().String()
+		k = xid.New().String()
 	}
 
 	metadata := types.Metadata{}
