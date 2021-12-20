@@ -47,33 +47,7 @@ Yorkie consists of three main components: Client, Document and Agent.
 
 ## Quick Start
 
-The easiest way to install yorkie is from pre-built binaries:
-
-1. Download the compressed archive file for your platform from [Releases](https://github.com/yorkie-team/yorkie/releases).
-2. Unpack the archive file. This results in a directory containing the binaries.
-3. Add the executable binaries to your path. For example, rename and/or move the binaries to a directory in your path (like `/usr/local/bin`), or add the directory created by the previous step to your path.
-4. From a shell, test that yorkie is in your path:
-```bash
-$ yorkie --version
-Yorkie: 0.1.8
-...
-```
-
-Next, let's start a Yorkie agent. Agent runs until they're told to quit and handle the communication of maintenance tasks of Agent. and start the agent:
-
-```
-$ yorkie agent
-```
-
-Use the -c option to change settings such as the MongoDB connectionURI.
-
-```
-$ yorkie agent -c yorkie.yml
-```
-
-The configuration file with default values is shown below.
-
-https://github.com/yorkie-team/yorkie/blob/main/yorkie/config.sample.yml
+https://yorkie.dev/docs/quick-start
 
 ## Documentation
 
@@ -85,14 +59,14 @@ https://yorkie.dev/docs
 
 For building Yorkie, You'll first need [Go](https://golang.org) installed (version 1.17+ is required). Make sure you have Go properly [installed](https://golang.org/doc/install), including setting up your [GOPATH](https://golang.org/doc/code.html#Command). Then download a pre-built binary from [release page](https://github.com/protocolbuffers/protobuf/releases) and install the protobuf compiler (version 3.4.0+ is required).
 
-We need to install Golang packages to build Yorkie locally. You can run `make tools` to install the required packages.
-
 Next, clone this repository into some local directory and then just type `make build`. In a few moments, you'll have a working `yorkie` executable:
 ```
 $ make build
 ...
 $ bin/yorkie
 ```
+
+> We need to install Golang packages to build Yorkie locally. You can run `make tools` to install the required packages.
 
 Tests can be run by typing `make test`.
 
