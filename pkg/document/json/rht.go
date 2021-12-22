@@ -21,7 +21,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -124,17 +123,6 @@ func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 		return node.val
 	}
 
-	return ""
-}
-
-// RemoveByCreatedAt removes the Element of the given creation time.
-func (rht *RHT) RemoveByCreatedAt(createdAt *time.Ticket, removedAt *time.Ticket) string {
-	if node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]; ok {
-		node.Remove(removedAt)
-		return node.val
-	}
-
-	log.Logger.Warn("fail to find " + createdAt.Key())
 	return ""
 }
 

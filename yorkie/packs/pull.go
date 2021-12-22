@@ -21,13 +21,15 @@ import (
 	"errors"
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 var (
@@ -171,6 +173,16 @@ func pullSnapshot(
 		nil,
 	)); err != nil {
 		return nil, nil, err
+	}
+
+	if log.Core.Enabled(zap.DebugLevel) {
+		log.Logger.Debugf(
+			"after apply %d changes: elements: %d removeds: %d, %s",
+			len(pack.Changes),
+			doc.Root().ElementMapLen(),
+			doc.Root().RemovedElementLen(),
+			doc.RootObject().Marshal(),
+		)
 	}
 
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)

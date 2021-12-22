@@ -19,8 +19,6 @@ package splay
 import (
 	"fmt"
 	"strings"
-
-	"github.com/yorkie-team/yorkie/internal/log"
 )
 
 // Value represents the data stored in the nodes of Tree.
@@ -202,11 +200,11 @@ func (t *Tree) Find(index int) (*Node, int) {
 	}
 
 	if offset > node.value.Len() {
-		log.Logger.Fatalf(
+		panic(fmt.Sprintf(
 			"out of bound of text index: node.length %d, pos %d",
 			node.value.Len(),
 			offset,
-		)
+		))
 	}
 
 	return node, offset

@@ -24,7 +24,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 )
 

@@ -21,8 +21,8 @@ import (
 
 	"go.etcd.io/etcd/client/v3/concurrency"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 // NewLocker creates locker of the given key.

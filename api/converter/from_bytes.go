@@ -22,7 +22,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/yorkie-team/yorkie/api"
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -191,7 +190,7 @@ func fromJSONText(pbText *api.JSONElement_Text) (*json.Text, error) {
 		if insPrevID != nil {
 			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
 			if insPrevNode == nil {
-				log.Logger.Warn("insPrevNode should be presence")
+				panic("insPrevNode should be presence")
 			}
 			current.SetInsPrev(insPrevNode)
 		}
@@ -239,7 +238,7 @@ func fromJSONRichText(
 		if insPrevID != nil {
 			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
 			if insPrevNode == nil {
-				log.Logger.Warn("insPrevNode should be presence")
+				panic("insPrevNode should be presence")
 			}
 			current.SetInsPrev(insPrevNode)
 		}

@@ -17,10 +17,7 @@
 package document
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -124,15 +121,6 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
-	if log.Core.Enabled(zap.DebugLevel) {
-		log.Logger.Debugf(
-			"after apply %d changes: elements: %d removeds: %d, %s",
-			len(pack.Changes),
-			d.root.ElementMapLen(),
-			d.root.RemovedElementLen(),
-			d.RootObject().Marshal(),
-		)
-	}
 	return nil
 }
 
@@ -181,6 +169,11 @@ func (d *InternalDocument) SetStatus(status statusType) {
 // IsAttached returns the whether this document is attached or not.
 func (d *InternalDocument) IsAttached() bool {
 	return d.status == Attached
+}
+
+// Root returns the root of this document.
+func (d *InternalDocument) Root() *json.Root {
+	return d.root
 }
 
 // RootObject returns the root object.

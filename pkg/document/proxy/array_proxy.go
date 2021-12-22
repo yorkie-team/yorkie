@@ -19,7 +19,6 @@ package proxy
 import (
 	gotime "time"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
@@ -153,7 +152,6 @@ func (p *ArrayProxy) InsertIntegerAfter(index int, v int) *ArrayProxy {
 // Delete deletes the element of the given index.
 func (p *ArrayProxy) Delete(idx int) json.Element {
 	if p.Len() <= idx {
-		log.Logger.Warnf("the given index is out of bound: %d", idx)
 		return nil
 	}
 

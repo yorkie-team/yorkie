@@ -25,7 +25,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
@@ -129,12 +128,9 @@ func handleSignal(r *yorkie.Yorkie) int {
 		graceful = true
 	}
 
-	log.Logger.Infof("Caught signal: %s", sig.String())
-
 	gracefulCh := make(chan struct{})
 	go func() {
 		if err := r.Shutdown(graceful); err != nil {
-			log.Logger.Error(err)
 			return
 		}
 		close(gracefulCh)

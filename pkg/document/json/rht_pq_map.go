@@ -21,7 +21,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/pq"
 )
@@ -152,7 +151,6 @@ func (rht *RHTPriorityQueueMap) Delete(k string, deletedAt *time.Ticket) Element
 func (rht *RHTPriorityQueueMap) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
 	node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		log.Logger.Warn("fail to find " + createdAt.Key())
 		return nil
 	}
 
@@ -196,12 +194,12 @@ func (rht *RHTPriorityQueueMap) Nodes() []*RHTPQMapNode {
 func (rht *RHTPriorityQueueMap) purge(elem Element) {
 	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
-		log.Logger.Fatalf("fail to find %s", elem.CreatedAt().Key())
+		panic("fail to find: " + elem.CreatedAt().Key())
 	}
 
 	queue, ok := rht.nodeQueueMapByKey[node.key]
 	if !ok {
-		log.Logger.Fatalf("fail to find queue of %s", elem.CreatedAt().Key())
+		panic("fail to find queue: " + node.key)
 	}
 
 	queue.Release(node)

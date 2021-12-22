@@ -19,7 +19,6 @@ package json
 import (
 	"strings"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/splay"
 )
@@ -212,10 +211,7 @@ func (a *RGATreeList) Get(idx int) *RGATreeListNode {
 func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) *RGATreeListNode {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		log.Logger.Fatalf(
-			"fail to find the given createdAt: %s",
-			createdAt.Key(),
-		)
+		panic("fail to find the given createdAt: " + createdAt.Key())
 	}
 
 	alreadyRemoved := node.isRemoved()
@@ -248,18 +244,12 @@ func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) *RGATreeListNode {
 func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) {
 	prevNode, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
 	if !ok {
-		log.Logger.Fatalf(
-			"fail to find the given prevCreatedAt: %s",
-			prevCreatedAt.Key(),
-		)
+		panic("fail to find the given prevCreatedAt: " + prevCreatedAt.Key())
 	}
 
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		log.Logger.Fatalf(
-			"fail to find the given createdAt: %s",
-			createdAt.Key(),
-		)
+		panic("fail to find the given createdAt: " + createdAt.Key())
 	}
 
 	if node.elem.MovedAt() == nil || executedAt.After(node.elem.MovedAt()) {
@@ -274,10 +264,7 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		log.Logger.Fatalf(
-			"fail to find the given prevCreatedAt: %s",
-			createdAt.Key(),
-		)
+		panic("fail to find the given prevCreatedAt: " + createdAt.Key())
 	}
 
 	for {
@@ -294,10 +281,7 @@ func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 func (a *RGATreeList) purge(elem Element) {
 	node, ok := a.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
-		log.Logger.Fatalf(
-			"fail to find the given createdAt: %s",
-			elem.CreatedAt().Key(),
-		)
+		panic("fail to find the given createdAt: " + elem.CreatedAt().Key())
 	}
 
 	a.release(node)
@@ -309,11 +293,7 @@ func (a *RGATreeList) findNextBeforeExecutedAt(
 ) *RGATreeListNode {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		log.Logger.Fatalf(
-			"fail to find the given createdAt: %s",
-			createdAt.Key(),
-		)
-		return nil
+		panic("fail to find the given createdAt: " + createdAt.Key())
 	}
 
 	for node.next != nil && node.next.PositionedAt().After(executedAt) {

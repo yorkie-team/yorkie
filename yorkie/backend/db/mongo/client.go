@@ -27,11 +27,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
 	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.

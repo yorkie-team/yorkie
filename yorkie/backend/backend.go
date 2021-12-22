@@ -23,7 +23,6 @@ import (
 
 	"github.com/rs/xid"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	memdb "github.com/yorkie-team/yorkie/yorkie/backend/db/memory"
@@ -31,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	memsync "github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 )
 

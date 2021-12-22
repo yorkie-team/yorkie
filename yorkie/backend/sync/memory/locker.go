@@ -21,7 +21,7 @@ import (
 
 	"github.com/moby/locker"
 
-	"github.com/yorkie-team/yorkie/internal/log"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 type internalLocker struct {

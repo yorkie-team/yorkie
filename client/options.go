@@ -16,19 +16,34 @@
 
 package client
 
-import "github.com/yorkie-team/yorkie/pkg/types"
+import (
+	"go.uber.org/zap"
+
+	"github.com/yorkie-team/yorkie/pkg/types"
+)
 
 // Option configures Options.
 type Option func(*Options)
 
 // Options configures how we set up the client.
 type Options struct {
-	Key      string
-	Metadata types.Metadata
-	Token    string
+	// Key is the key of the client. It is used to identify the client.
+	Key string
 
-	CertFile           string
+	// Metadata is the metadata of the client.
+	Metadata types.Metadata
+
+	// Token is the token of the client. Each request will be authenticated with this token.
+	Token string
+
+	// CertFile is the path to the certificate file.
+	CertFile string
+
+	// ServerNameOverride is the server name override.
 	ServerNameOverride string
+
+	// Logger is the Logger of the client.
+	Logger *zap.Logger
 }
 
 // WithKey configures the key of the client.
@@ -54,4 +69,9 @@ func WithCertFile(certFile string) Option {
 // WithServerNameOverride configures the server name override of the client.
 func WithServerNameOverride(serverNameOverride string) Option {
 	return func(o *Options) { o.ServerNameOverride = serverNameOverride }
+}
+
+// WithLogger configures the Logger of the client.
+func WithLogger(logger *zap.Logger) Option {
+	return func(o *Options) { o.Logger = logger }
 }

@@ -17,9 +17,6 @@
 package proxy
 
 import (
-	"go.uber.org/zap"
-
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
@@ -45,13 +42,6 @@ func (p *TextProxy) Edit(from, to int, content string) *TextProxy {
 		panic("from should be less than or equal to to")
 	}
 	fromPos, toPos := p.Text.CreateRange(from, to)
-
-	if log.Core.Enabled(zap.DebugLevel) {
-		log.Logger.Debugf(
-			"EDIT: f:%d->%s, t:%d->%s c:%s",
-			from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(), content,
-		)
-	}
 
 	ticket := p.context.IssueTimeTicket()
 	_, maxCreationMapByActor := p.Text.Edit(
@@ -82,13 +72,6 @@ func (p *TextProxy) Select(from, to int) *TextProxy {
 		panic("from should be less than or equal to to")
 	}
 	fromPos, toPos := p.Text.CreateRange(from, to)
-
-	if log.Core.Enabled(zap.DebugLevel) {
-		log.Logger.Debugf(
-			"SELT: f:%d->%s, t:%d->%s",
-			from, fromPos.AnnotatedString(), to, toPos.AnnotatedString(),
-		)
-	}
 
 	ticket := p.context.IssueTimeTicket()
 	p.Text.Select(

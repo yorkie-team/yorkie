@@ -23,7 +23,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/yorkie-team/yorkie/api"
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 )
 
@@ -36,7 +35,6 @@ func ObjectToBytes(obj *json.Object) ([]byte, error) {
 
 	bytes, err := proto.Marshal(pbElem)
 	if err != nil {
-		log.Logger.Error(err)
 		return nil, err
 	}
 	return bytes, nil

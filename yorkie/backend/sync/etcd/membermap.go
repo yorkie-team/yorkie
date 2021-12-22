@@ -26,8 +26,8 @@ import (
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 const (
