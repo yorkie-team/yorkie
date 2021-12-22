@@ -24,9 +24,9 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/api"
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 // clusterClientInfo represents a cluster client and its connection.

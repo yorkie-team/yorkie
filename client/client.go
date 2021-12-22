@@ -19,14 +19,15 @@ package client
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/rs/xid"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -67,6 +68,7 @@ type Client struct {
 	conn        *grpc.ClientConn
 	client      api.YorkieClient
 	dialOptions []grpc.DialOption
+	logger      *zap.Logger
 
 	id           *time.ActorID
 	key          string
@@ -118,7 +120,6 @@ func New(opts ...Option) (*Client, error) {
 			options.ServerNameOverride,
 		)
 		if err != nil {
-			log.Logger.Error(err)
 			return nil, err
 		}
 		dialOptions = append(dialOptions, grpc.WithTransportCredentials(creds))
@@ -132,14 +133,25 @@ func New(opts ...Option) (*Client, error) {
 		dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
 	}
 
+	var logger *zap.Logger
+	var err error
+	if options.Logger != nil {
+		logger = options.Logger
+	} else {
+		logger, err = zap.NewProduction()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &Client{
-		key: k,
-		metadataInfo: types.MetadataInfo{
-			Data: metadata,
-		},
 		dialOptions: dialOptions,
-		status:      deactivated,
-		attachments: make(map[string]*Attachment),
+		logger:      logger,
+
+		key:          k,
+		metadataInfo: types.MetadataInfo{Data: metadata},
+		status:       deactivated,
+		attachments:  make(map[string]*Attachment),
 	}, nil
 }
 
@@ -161,7 +173,6 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 func (c *Client) Dial(rpcAddr string) error {
 	conn, err := grpc.Dial(rpcAddr, c.dialOptions...)
 	if err != nil {
-		log.Logger.Error(err)
 		return err
 	}
 
@@ -177,12 +188,7 @@ func (c *Client) Close() error {
 		return err
 	}
 
-	if err := c.conn.Close(); err != nil {
-		log.Logger.Error(err)
-		return err
-	}
-
-	return nil
+	return c.conn.Close()
 }
 
 // Activate activates this client. That is, it registers itself to the agent
@@ -196,9 +202,7 @@ func (c *Client) Activate(ctx context.Context) error {
 	response, err := c.client.ActivateClient(ctx, &api.ActivateClientRequest{
 		ClientKey: c.key,
 	})
-
 	if err != nil {
-		log.Logger.Error(err)
 		return err
 	}
 
@@ -223,7 +227,6 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		ClientId: c.id.Bytes(),
 	})
 	if err != nil {
-		log.Logger.Error(err)
 		return err
 	}
 
@@ -251,7 +254,6 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		ChangePack: pbChangePack,
 	})
 	if err != nil {
-		log.Logger.Error(err)
 		return err
 	}
 
@@ -261,8 +263,15 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
-		log.Logger.Error(err)
 		return err
+	}
+
+	if c.logger.Core().Enabled(zap.DebugLevel) {
+		c.logger.Debug(fmt.Sprintf(
+			"after apply %d changes: %s",
+			len(pack.Changes),
+			doc.RootObject().Marshal(),
+		))
 	}
 
 	doc.SetStatus(document.Attached)
@@ -299,7 +308,6 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		ChangePack: pbChangePack,
 	})
 	if err != nil {
-		log.Logger.Error(err)
 		return err
 	}
 
@@ -309,7 +317,6 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
-		log.Logger.Error(err)
 		return err
 	}
 
@@ -541,7 +548,7 @@ func (c *Client) sync(ctx context.Context, key *key.Key) error {
 		ChangePack: pbChangePack,
 	})
 	if err != nil {
-		log.Logger.Error(err)
+		c.logger.Error("failed to sync", zap.Error(err))
 		return err
 	}
 
@@ -551,7 +558,7 @@ func (c *Client) sync(ctx context.Context, key *key.Key) error {
 	}
 
 	if err := attachment.doc.ApplyChangePack(pack); err != nil {
-		log.Logger.Error(err)
+		c.logger.Error("failed to apply change pack", zap.Error(err))
 		return err
 	}
 

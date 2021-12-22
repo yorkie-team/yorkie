@@ -19,9 +19,6 @@ package document
 import (
 	"fmt"
 
-	"go.uber.org/zap"
-
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -69,7 +66,6 @@ func (d *Document) Update(
 	if err := updater(proxy.NewObjectProxy(ctx, d.clone.Object())); err != nil {
 		// drop clone because it is contaminated.
 		d.clone = nil
-		log.Logger.Error(err)
 		return err
 	}
 
@@ -123,9 +119,6 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	// 04. Do Garbage collection.
 	d.GarbageCollect(pack.MinSyncedTicket)
 
-	if log.Core.Enabled(zap.DebugLevel) {
-		log.Logger.Debugf("after apply %d changes: %s", len(pack.Changes), d.RootObject().Marshal())
-	}
 	return nil
 }
 

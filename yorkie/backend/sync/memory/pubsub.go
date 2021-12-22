@@ -22,11 +22,11 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 // subscriptions is a map of subscriptions.

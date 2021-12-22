@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/llrb"
 	"github.com/yorkie-team/yorkie/pkg/splay"
@@ -332,8 +331,7 @@ func (s *RGATreeSplit) findNodeWithSplit(
 func (s *RGATreeSplit) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) *RGATreeSplitNode {
 	node := s.findFloorNode(id)
 	if node == nil {
-		log.Logger.Error(s.AnnotatedString())
-		panic("the node of the given id should be found")
+		panic("the node of the given id should be found: " + s.AnnotatedString())
 	}
 
 	if id.offset > 0 && node.id.offset == id.offset {
@@ -349,8 +347,7 @@ func (s *RGATreeSplit) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) *RGATre
 
 func (s *RGATreeSplit) splitNode(node *RGATreeSplitNode, offset int) *RGATreeSplitNode {
 	if offset > node.contentLen() {
-		log.Logger.Error(s.AnnotatedString())
-		panic("offset should be less than or equal to length")
+		panic("offset should be less than or equal to length: " + s.AnnotatedString())
 	}
 
 	if offset == 0 {

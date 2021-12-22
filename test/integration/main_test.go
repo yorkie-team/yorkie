@@ -28,11 +28,11 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/client"
-	"github.com/yorkie-team/yorkie/internal/log"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 type clientAndDocPair struct {
