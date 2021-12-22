@@ -102,8 +102,7 @@ func createActivatedClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
 			defaultAgent.RPCAddr(),
-			client.Option{
-				Metadata: types.Metadata{"name": fmt.Sprintf("name-%d", i)}},
+			client.WithMetadata(types.Metadata{"name": fmt.Sprintf("name-%d", i)}),
 		)
 		assert.NoError(t, err)
 

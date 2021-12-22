@@ -89,7 +89,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		// client with token
 		ctx := context.Background()
-		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: token})
+		cli, err := client.Dial(agent.RPCAddr(), client.WithToken(token))
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
 		assert.NoError(t, cli.Activate(ctx))
@@ -106,7 +106,7 @@ func TestAuthWebhook(t *testing.T) {
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 
 		// client with invalid token
-		cliWithInvalidToken, err := client.Dial(agent.RPCAddr(), client.Option{Token: "invalid"})
+		cliWithInvalidToken, err := client.Dial(agent.RPCAddr(), client.WithToken("invalid"))
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cliWithInvalidToken.Close()) }()
 		err = cliWithInvalidToken.Activate(ctx)
@@ -128,7 +128,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
 
 		ctx := context.Background()
-		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "invalid"})
+		cli, err := client.Dial(agent.RPCAddr(), client.WithToken("invalid"))
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
 
@@ -157,7 +157,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
 
 		ctx := context.Background()
-		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		cli, err := client.Dial(agent.RPCAddr(), client.WithToken("token"))
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
 
@@ -181,7 +181,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
 
 		ctx := context.Background()
-		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		cli, err := client.Dial(agent.RPCAddr(), client.WithToken("token"))
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
 
@@ -216,7 +216,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
 
 		ctx := context.Background()
-		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		cli, err := client.Dial(agent.RPCAddr(), client.WithToken("token"))
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
 
@@ -274,7 +274,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
 
 		ctx := context.Background()
-		cli, err := client.Dial(agent.RPCAddr(), client.Option{Token: "token"})
+		cli, err := client.Dial(agent.RPCAddr(), client.WithToken("token"))
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Close()) }()
 
