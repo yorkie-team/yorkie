@@ -64,13 +64,15 @@ func withTwoClientsAndDocsInClusterMode(
 	}()
 
 	// creates two clients, each connecting to the two agents
-	client1, err := client.Dial(agent1.RPCAddr(), client.Option{
-		Metadata: types.Metadata{"name": "client1"},
-	})
+	client1, err := client.Dial(
+		agent1.RPCAddr(),
+		client.WithMetadata(types.Metadata{"name": "client1"}),
+	)
 	assert.NoError(t, err)
-	client2, err := client.Dial(agent2.RPCAddr(), client.Option{
-		Metadata: types.Metadata{"name": "client2"},
-	})
+	client2, err := client.Dial(
+		agent2.RPCAddr(),
+		client.WithMetadata(types.Metadata{"name": "client2"}),
+	)
 	assert.NoError(t, err)
 	assert.NoError(t, client1.Activate(ctx))
 	assert.NoError(t, client2.Activate(ctx))
