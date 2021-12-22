@@ -28,13 +28,16 @@ import (
 
 func TestClient(t *testing.T) {
 	t.Run("create instance test", func(t *testing.T) {
-		opts := client.Option{
+		opt := client.Option{
 			Token:    xid.New().String(),
 			Metadata: types.Metadata{"Name": "ClientName"},
 		}
-		cli, err := client.NewClient(opts)
+		assert.Empty(t, opt.Key)
+
+		cli, err := client.NewClient(opt)
 		assert.NoError(t, err)
 
-		assert.Equal(t, opts.Metadata, cli.Metadata())
+		assert.Equal(t, opt.Metadata, cli.Metadata())
+		assert.Empty(t, opt.Key)
 	})
 }

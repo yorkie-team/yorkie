@@ -83,6 +83,39 @@ type Option struct {
 
 	CertFile           string
 	ServerNameOverride string
+
+	dialOptions []grpc.DialOption
+}
+
+func (o *Option) makeUp() error {
+	if o.Key == "" {
+		o.Key = xid.New().String()
+	}
+
+	if o.Metadata == nil {
+		o.Metadata = types.Metadata{}
+	}
+
+	if o.CertFile != "" {
+		creds, err := credentials.NewClientTLSFromFile(
+			o.CertFile,
+			o.ServerNameOverride,
+		)
+		if err != nil {
+			log.Logger.Error(err)
+			return err
+		}
+		o.dialOptions = append(o.dialOptions, grpc.WithTransportCredentials(creds))
+	} else {
+		o.dialOptions = append(o.dialOptions, grpc.WithInsecure())
+	}
+
+	if o.Token != "" {
+		authInterceptor := NewAuthInterceptor(o.Token)
+		o.dialOptions = append(o.dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
+		o.dialOptions = append(o.dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
+	}
+	return nil
 }
 
 // WatchResponseType is type of watch response.
@@ -103,59 +136,17 @@ type WatchResponse struct {
 }
 
 // NewClient creates an instance of Client.
-func NewClient(opts ...Option) (*Client, error) {
-	var k string
-	if len(opts) > 0 && opts[0].Key != "" {
-		k = opts[0].Key
-	} else {
-		k = xid.New().String()
-	}
-
-	metadata := types.Metadata{}
-	if len(opts) > 0 && opts[0].Metadata != nil {
-		metadata = opts[0].Metadata
-	}
-
-	var certFile string
-	if len(opts) > 0 && opts[0].CertFile != "" {
-		certFile = opts[0].CertFile
-	}
-	var serverNameOverride string
-	if len(opts) > 0 && opts[0].ServerNameOverride != "" {
-		serverNameOverride = opts[0].ServerNameOverride
-	}
-
-	var dialOptions []grpc.DialOption
-	if certFile != "" {
-		creds, err := credentials.NewClientTLSFromFile(
-			certFile,
-			serverNameOverride,
-		)
-		if err != nil {
-			log.Logger.Error(err)
-			return nil, err
-		}
-		dialOptions = append(dialOptions, grpc.WithTransportCredentials(creds))
-	} else {
-		dialOptions = append(dialOptions, grpc.WithInsecure())
-	}
-
-	var token string
-	if len(opts) > 0 && opts[0].Token != "" {
-		token = opts[0].Token
-	}
-	if token != "" {
-		authInterceptor := NewAuthInterceptor(token)
-		dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
-		dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
+func NewClient(opt Option) (*Client, error) {
+	if err := opt.makeUp(); err != nil {
+		return nil, err
 	}
 
 	return &Client{
-		key: k,
+		key: opt.Key,
 		metadataInfo: types.MetadataInfo{
-			Data: metadata,
+			Data: opt.Metadata,
 		},
-		dialOptions: dialOptions,
+		dialOptions: opt.dialOptions,
 		status:      deactivated,
 		attachments: make(map[string]*Attachment),
 	}, nil
@@ -163,7 +154,11 @@ func NewClient(opts ...Option) (*Client, error) {
 
 // Dial creates an instance of Client and dials the given rpcAddr.
 func Dial(rpcAddr string, opts ...Option) (*Client, error) {
-	cli, err := NewClient(opts...)
+	opt := Option{}
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+	cli, err := NewClient(opt)
 	if err != nil {
 		return nil, err
 	}
