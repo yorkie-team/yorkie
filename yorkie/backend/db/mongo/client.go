@@ -227,6 +227,31 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
+// FindDeactivateCandidates finds the clients that need housekeeping.
+func (c *Client) FindDeactivateCandidates(
+	ctx context.Context,
+	deactivateThreshold gotime.Duration,
+	candidatesLimit int,
+) ([]*db.ClientInfo, error) {
+	cursor, err := c.collection(colClients).Find(ctx, bson.M{
+		"status": db.ClientActivated,
+		"updated_at": bson.M{
+			"$lte": gotime.Now().Add(-deactivateThreshold),
+		},
+	}, options.Find().SetLimit(int64(candidatesLimit)))
+
+	if err != nil {
+		return nil, err
+	}
+
+	var clientInfos []*db.ClientInfo
+	if err := cursor.All(ctx, &clientInfos); err != nil {
+		return nil, err
+	}
+
+	return clientInfos, nil
+}
+
 // FindDocInfoByKey finds the document of the given key. If the
 // createDocIfNotExist condition is true, create the document if it does not
 // exist.
@@ -475,41 +500,18 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	docID db.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
+	if err := c.UpdateSyncedSeq(
+		ctx,
+		clientInfo,
+		docID,
+		serverSeq,
+	); err != nil {
+		return nil, err
+	}
+
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return nil, err
-	}
-	encodedClientID, err := encodeID(clientInfo.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	// 01. update synced seq of the given client.
-	isAttached, err := clientInfo.IsAttached(docID)
-	if err != nil {
-		return nil, err
-	}
-
-	if isAttached {
-		if _, err = c.collection(colSyncedSeqs).UpdateOne(ctx, bson.M{
-			"doc_id":    encodedDocID,
-			"client_id": encodedClientID,
-		}, bson.M{
-			"$set": bson.M{
-				"server_seq": serverSeq,
-			},
-		}, options.Update().SetUpsert(true)); err != nil {
-			log.Logger.Error(err)
-			return nil, err
-		}
-	} else {
-		if _, err = c.collection(colSyncedSeqs).DeleteOne(ctx, bson.M{
-			"doc_id":    encodedDocID,
-			"client_id": encodedClientID,
-		}, options.Delete()); err != nil {
-			log.Logger.Error(err)
-			return nil, err
-		}
 	}
 
 	// 02. find min synced seq of the given document.
@@ -542,6 +544,54 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	}
 
 	return ticket, nil
+}
+
+// UpdateSyncedSeq updates the syncedSeq of the given client.
+func (c *Client) UpdateSyncedSeq(
+	ctx context.Context,
+	clientInfo *db.ClientInfo,
+	docID db.ID,
+	serverSeq uint64,
+) error {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return err
+	}
+	encodedClientID, err := encodeID(clientInfo.ID)
+	if err != nil {
+		return err
+	}
+
+	// 01. update synced seq of the given client.
+	isAttached, err := clientInfo.IsAttached(docID)
+	if err != nil {
+		return err
+	}
+
+	if isAttached {
+		if _, err = c.collection(colSyncedSeqs).UpdateOne(ctx, bson.M{
+			"doc_id":    encodedDocID,
+			"client_id": encodedClientID,
+		}, bson.M{
+			"$set": bson.M{
+				"server_seq": serverSeq,
+			},
+		}, options.Update().SetUpsert(true)); err != nil {
+			log.Logger.Error(err)
+			return err
+		}
+		return nil
+	}
+
+	if _, err = c.collection(colSyncedSeqs).DeleteOne(ctx, bson.M{
+		"doc_id":    encodedDocID,
+		"client_id": encodedClientID,
+	}, options.Delete()); err != nil {
+		log.Logger.Error(err)
+		return err
+	}
+
+	return nil
 }
 
 func (c *Client) findTicketByServerSeq(

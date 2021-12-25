@@ -40,8 +40,6 @@ type Client struct {
 	config    *Config
 	agentInfo *sync.AgentInfo
 
-	client *clientv3.Client
-
 	localPubSub *memory.PubSub
 
 	memberMapMu        *gosync.RWMutex
@@ -49,12 +47,17 @@ type Client struct {
 	clusterClientMapMu *gosync.RWMutex
 	clusterClientMap   map[string]*clusterClientInfo
 
+	client *clientv3.Client
+
 	ctx        context.Context
 	cancelFunc context.CancelFunc
 }
 
 // newClient creates a new instance of Client.
-func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
+func newClient(
+	conf *Config,
+	agentInfo *sync.AgentInfo,
+) *Client {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	return &Client{
@@ -74,7 +77,11 @@ func newClient(conf *Config, agentInfo *sync.AgentInfo) *Client {
 }
 
 // Dial creates a new instance of Client and dials the given ETCD.
-func Dial(conf *Config, agentInfo *sync.AgentInfo) (*Client, error) {
+func Dial(
+	conf *Config,
+	agentInfo *sync.AgentInfo,
+) (
+	*Client, error) {
 	c := newClient(conf, agentInfo)
 
 	if err := c.Dial(); err != nil {

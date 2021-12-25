@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/profiling"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
@@ -36,20 +37,28 @@ var testStartedAt int64
 
 // Below are the values of the Yorkie config used in the test.
 const (
-	RPCPort                    = 21101
-	RPCMaxRequestBytes         = 4 * 1024 * 1024
-	ProfilingPort              = 21102
-	MongoConnectionURI         = "mongodb://localhost:27017"
-	MongoConnectionTimeout     = "5s"
-	MongoPingTimeout           = "5s"
-	SnapshotThreshold          = 10
-	Collection                 = "test-collection"
+	RPCPort            = 21101
+	RPCMaxRequestBytes = 4 * 1024 * 1024
+
+	ProfilingPort = 21102
+
+	HousekeepingInterval            = 1 * gotime.Second
+	HousekeepingDeactivateThreshold = 1 * gotime.Minute
+	HousekeepingCandidatesLimit     = 10
+
+	MongoConnectionURI     = "mongodb://localhost:27017"
+	MongoConnectionTimeout = "5s"
+	MongoPingTimeout       = "5s"
+	SnapshotThreshold      = 10
+	Collection             = "test-collection"
+
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
 	AuthWebhookSize            = 100
 	AuthWebhookCacheAuthTTL    = 10 * gotime.Second
 	AuthWebhookCacheUnauthTTL  = 10 * gotime.Second
-	ETCDDialTimeout            = 5 * gotime.Second
-	ETCDLockLeaseTime          = 30 * gotime.Second
+
+	ETCDDialTimeout   = 5 * gotime.Second
+	ETCDLockLeaseTime = 30 * gotime.Second
 )
 
 var (
@@ -94,6 +103,11 @@ func TestConfig(authWebhook string) *yorkie.Config {
 		},
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,
+		},
+		Housekeeping: &housekeeping.Config{
+			Interval:            HousekeepingInterval.String(),
+			DeactivateThreshold: HousekeepingDeactivateThreshold.String(),
+			CandidatesLimit:     HousekeepingCandidatesLimit,
 		},
 		Backend: &backend.Config{
 			SnapshotThreshold:          SnapshotThreshold,

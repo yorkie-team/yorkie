@@ -33,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
@@ -73,6 +74,10 @@ func TestMain(m *testing.M) {
 		Endpoints:     helper.ETCDEndpoints,
 		DialTimeout:   helper.ETCDDialTimeout.String(),
 		LockLeaseTime: helper.ETCDLockLeaseTime.String(),
+	}, &housekeeping.Config{
+		Interval:            helper.HousekeepingInterval.String(),
+		DeactivateThreshold: helper.HousekeepingDeactivateThreshold.String(),
+		CandidatesLimit:     helper.HousekeepingCandidatesLimit,
 	}, testRPCAddr, met)
 	if err != nil {
 		log.Fatal(err)

@@ -44,6 +44,11 @@ var collectionInfos = []collectionInfo{
 		indexes: []mongo.IndexModel{{
 			Keys:    bsonx.Doc{{Key: "key", Value: bsonx.Int32(1)}},
 			Options: options.Index().SetUnique(true),
+		}, {
+			Keys: bsonx.Doc{
+				{Key: "status", Value: bsonx.Int32(1)},
+				{Key: "updated_at", Value: bsonx.Int32(1)},
+			},
 		}},
 	}, {
 		name: colDocuments,

@@ -37,6 +37,9 @@ var (
 var (
 	flagConfPath string
 
+	housekeepingInterval            time.Duration
+	housekeepingDeactivateThreshold time.Duration
+
 	mongoConnectionURI     string
 	mongoConnectionTimeout time.Duration
 	mongoYorkieDatabase    string
@@ -63,6 +66,9 @@ func newAgentCmd() *cobra.Command {
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
 			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
+
+			conf.Housekeeping.Interval = housekeepingInterval.String()
+			conf.Housekeeping.DeactivateThreshold = housekeepingDeactivateThreshold.String()
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -191,6 +197,24 @@ func init() {
 		false,
 		"Enable runtime profiling data via HTTP server.",
 	)
+	cmd.Flags().DurationVar(
+		&housekeepingInterval,
+		"housekeeping-interval",
+		yorkie.DefaultHousekeepingInterval,
+		"housekeeping interval between housekeeping runs (default: 1m)",
+	)
+	cmd.Flags().DurationVar(
+		&housekeepingDeactivateThreshold,
+		"housekeeping-deactivate-threshold",
+		yorkie.DefaultHousekeepingDeactivateThreshold,
+		"time after which clients are considered deactivate (default: 7d)",
+	)
+	cmd.Flags().IntVar(
+		&conf.Housekeeping.CandidatesLimit,
+		"housekeeping-candidates-limit",
+		yorkie.DefaultHousekeepingCandidateLimit,
+		"candidates limit for a single housekeeping run (default: 500)",
+	)
 	cmd.Flags().StringVar(
 		&mongoConnectionURI,
 		"mongo-connection-uri",
@@ -250,13 +274,13 @@ func init() {
 		"backend-snapshot-threshold",
 		yorkie.DefaultSnapshotThreshold,
 		"Threshold that determines if changes should be sent with snapshot when the number "+
-			"of changes is greater than this value.",
+			"of changes is greater than this value. (default: 500)",
 	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.SnapshotInterval,
 		"backend-snapshot-interval",
 		yorkie.DefaultSnapshotInterval,
-		"Interval of changes to create a snapshot",
+		"Interval of changes to create a snapshot (default: 1000)",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AuthWebhookURL,
