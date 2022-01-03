@@ -57,6 +57,7 @@ func New(conf *Config) (*Yorkie, error) {
 		conf.Backend,
 		conf.Mongo,
 		conf.ETCD,
+		conf.Housekeeping,
 		conf.RPCAddr(),
 		metrics,
 	)

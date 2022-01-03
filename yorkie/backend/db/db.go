@@ -19,6 +19,7 @@ package db
 import (
 	"context"
 	"errors"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -53,6 +54,13 @@ type DB interface {
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
+
+	// FindDeactivateCandidates finds the housekeeping candidates.
+	FindDeactivateCandidates(
+		ctx context.Context,
+		deactivateThreshold gotime.Duration,
+		candidatesLimit int,
+	) ([]*ClientInfo, error)
 
 	// FindDocInfoByKey finds the document of the given key. If the
 	// createDocIfNotExist condition is true, create the document if it does not
@@ -102,4 +110,12 @@ type DB interface {
 		docID ID,
 		serverSeq uint64,
 	) (*time.Ticket, error)
+
+	// UpdateSyncedSeq updates the syncedSeq of the given client.
+	UpdateSyncedSeq(
+		ctx context.Context,
+		clientInfo *ClientInfo,
+		docID ID,
+		serverSeq uint64,
+	) error
 }

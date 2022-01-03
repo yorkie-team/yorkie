@@ -63,19 +63,23 @@ func (d *DB) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, er
 		return nil, err
 	}
 
-	var clientID db.ID
-	if raw == nil {
-		clientID = newID()
-	} else {
-		clientID = raw.(*db.ClientInfo).ID
-	}
+	now := gotime.Now()
 
 	clientInfo := &db.ClientInfo{
-		ID:        clientID,
 		Key:       key,
 		Status:    db.ClientActivated,
-		CreatedAt: gotime.Now(),
+		UpdatedAt: now,
 	}
+
+	if raw == nil {
+		clientInfo.ID = newID()
+		clientInfo.CreatedAt = now
+	} else {
+		loaded := raw.(*db.ClientInfo)
+		clientInfo.ID = loaded.ID
+		clientInfo.CreatedAt = loaded.CreatedAt
+	}
+
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
 		return nil, err
 	}
@@ -196,6 +200,41 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	txn.Commit()
 
 	return nil
+}
+
+// FindDeactivateCandidates finds the clients that need housekeeping.
+func (d *DB) FindDeactivateCandidates(
+	ctx context.Context,
+	inactiveThreshold gotime.Duration,
+	candidatesLimit int,
+) ([]*db.ClientInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	offset := gotime.Now().Add(-inactiveThreshold)
+
+	var infos []*db.ClientInfo
+	iterator, err := txn.ReverseLowerBound(
+		tblClients,
+		"status_updated_at",
+		db.ClientActivated,
+		offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		info := raw.(*db.ClientInfo)
+
+		if info.Status != db.ClientActivated ||
+			candidatesLimit <= len(infos) ||
+			info.UpdatedAt.After(offset) {
+			break
+		}
+		infos = append(infos, info)
+	}
+	return infos, nil
 }
 
 // FindDocInfoByKey finds a docInfo by key.
@@ -417,7 +456,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	docID db.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
-	if err := d.updateSyncedSeq(clientInfo, docID, serverSeq); err != nil {
+	if err := d.UpdateSyncedSeq(ctx, clientInfo, docID, serverSeq); err != nil {
 		return nil, err
 	}
 
@@ -451,7 +490,9 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	return d.findTicketByServerSeq(txn, docID, syncedSeqInfo.ServerSeq)
 }
 
-func (d *DB) updateSyncedSeq(
+// UpdateSyncedSeq updates the syncedSeq of the given client.
+func (d *DB) UpdateSyncedSeq(
+	ctx context.Context,
 	clientInfo *db.ClientInfo,
 	docID db.ID,
 	serverSeq uint64,

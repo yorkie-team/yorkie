@@ -41,6 +41,15 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "Key"},
 				},
+				"status_updated_at": {
+					Name: "status_updated_at",
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "Status"},
+							&memdb.TimeFieldIndex{Field: "UpdatedAt"},
+						},
+					},
+				},
 			},
 		},
 		tblDocuments: {

@@ -26,6 +26,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/yorkie/log"
 	"github.com/yorkie-team/yorkie/yorkie/profiling"
@@ -35,8 +36,13 @@ import (
 // Below are the values of the default values of Yorkie config.
 const (
 	DefaultRPCPort             = 11101
-	DefaultProfilingPort       = 11102
 	DefaultRPCMaxRequestsBytes = 4 * 1024 * 1024 // 4MiB
+
+	DefaultProfilingPort = 11102
+
+	DefaultHousekeepingInterval            = time.Minute
+	DefaultHousekeepingDeactivateThreshold = 7 * 24 * time.Hour
+	DefaultHousekeepingCandidateLimit      = 500
 
 	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout = 5 * time.Second
@@ -44,7 +50,7 @@ const (
 	DefaultMongoYorkieDatabase    = "yorkie-meta"
 
 	DefaultSnapshotThreshold = 500
-	DefaultSnapshotInterval  = 100
+	DefaultSnapshotInterval  = 1000
 
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
@@ -55,17 +61,18 @@ const (
 
 // Config is the configuration for creating a Yorkie instance.
 type Config struct {
-	RPC       *rpc.Config       `yaml:"RPC"`
-	Profiling *profiling.Config `yaml:"Profiling"`
-	Backend   *backend.Config   `yaml:"Backend"`
-	Mongo     *mongo.Config     `yaml:"Mongo"`
-	ETCD      *etcd.Config      `yaml:"ETCD"`
+	RPC          *rpc.Config          `yaml:"RPC"`
+	Profiling    *profiling.Config    `yaml:"Profiling"`
+	Housekeeping *housekeeping.Config `yaml:"Housekeeping"`
+	Backend      *backend.Config      `yaml:"Backend"`
+	Mongo        *mongo.Config        `yaml:"Mongo"`
+	ETCD         *etcd.Config         `yaml:"ETCD"`
 }
 
 // NewConfig returns a Config struct that contains reasonable defaults
 // for most of the configurations.
 func NewConfig() *Config {
-	return newConfig(DefaultRPCPort, DefaultProfilingPort, DefaultMongoYorkieDatabase)
+	return newConfig(DefaultRPCPort, DefaultProfilingPort)
 }
 
 // NewConfigFromFile returns a Config struct for the given conf file.
@@ -98,6 +105,10 @@ func (c *Config) Validate() error {
 	}
 
 	if err := c.Profiling.Validate(); err != nil {
+		return err
+	}
+
+	if err := c.Housekeeping.Validate(); err != nil {
 		return err
 	}
 
@@ -189,13 +200,18 @@ func (c *Config) ensureDefaultValue() {
 	}
 }
 
-func newConfig(port int, profilingPort int, dbName string) *Config {
+func newConfig(port int, profilingPort int) *Config {
 	return &Config{
 		RPC: &rpc.Config{
 			Port: port,
 		},
 		Profiling: &profiling.Config{
 			Port: profilingPort,
+		},
+		Housekeeping: &housekeeping.Config{
+			Interval:            DefaultHousekeepingInterval.String(),
+			DeactivateThreshold: DefaultHousekeepingDeactivateThreshold.String(),
+			CandidatesLimit:     DefaultHousekeepingCandidateLimit,
 		},
 		Backend: &backend.Config{
 			SnapshotThreshold: DefaultSnapshotThreshold,

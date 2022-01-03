@@ -18,15 +18,16 @@ package backend
 
 import (
 	"os"
-	gosync "sync"
 	"time"
 
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/pkg/cache"
+	"github.com/yorkie-team/yorkie/yorkie/backend/background"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	memdb "github.com/yorkie-team/yorkie/yorkie/backend/db/memory"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/yorkie/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	memsync "github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
@@ -40,20 +41,12 @@ type Backend struct {
 	Config    *Config
 	agentInfo *sync.AgentInfo
 
+	Background       *background.Background
 	DB               db.DB
 	Coordinator      sync.Coordinator
 	Metrics          *prometheus.Metrics
+	Housekeeping     *housekeeping.Housekeeping
 	AuthWebhookCache *cache.LRUExpireCache
-
-	// closing is closed by backend close.
-	closing chan struct{}
-
-	// wgMu blocks concurrent WaitGroup mutation while backend closing
-	wgMu gosync.RWMutex
-
-	// wg is used to wait for the goroutines that depends on the backend state
-	// to exit when closing the backend.
-	wg gosync.WaitGroup
 }
 
 // New creates a new instance of Backend.
@@ -61,6 +54,7 @@ func New(
 	conf *Config,
 	mongoConf *mongo.Config,
 	etcdConf *etcd.Config,
+	housekeepingConf *housekeeping.Config,
 	rpcAddr string,
 	metrics *prometheus.Metrics,
 ) (*Backend, error) {
@@ -75,6 +69,8 @@ func New(
 		RPCAddr:   rpcAddr,
 		UpdatedAt: time.Now(),
 	}
+
+	bg := background.New()
 
 	var database db.DB
 	if mongoConf != nil {
@@ -104,6 +100,20 @@ func New(
 		coordinator = memsync.NewCoordinator(agentInfo)
 	}
 
+	authWebhookCache, err := cache.NewLRUExpireCache(conf.AuthWebhookCacheSize)
+	if err != nil {
+		return nil, err
+	}
+
+	keeping, err := housekeeping.Start(
+		housekeepingConf,
+		database,
+		coordinator,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	dbInfo := "memory"
 	if mongoConf != nil {
 		dbInfo = mongoConf.ConnectionURI
@@ -116,30 +126,27 @@ func New(
 		dbInfo,
 	)
 
-	lruCache, err := cache.NewLRUExpireCache(conf.AuthWebhookCacheSize)
-	if err != nil {
-		return nil, err
-	}
-
 	return &Backend{
-		Config:           conf,
-		agentInfo:        agentInfo,
+		Config:    conf,
+		agentInfo: agentInfo,
+
+		Background:       bg,
+		Metrics:          metrics,
 		DB:               database,
 		Coordinator:      coordinator,
-		Metrics:          metrics,
-		AuthWebhookCache: lruCache,
-		closing:          make(chan struct{}),
+		Housekeeping:     keeping,
+		AuthWebhookCache: authWebhookCache,
 	}, nil
 }
 
 // Shutdown closes all resources of this instance.
 func (b *Backend) Shutdown() error {
-	b.wgMu.Lock()
-	close(b.closing)
-	b.wgMu.Unlock()
+	// this will wait for all goroutines to exit
+	b.Background.Close()
 
-	// wait for goroutines before closing backend
-	b.wg.Wait()
+	if err := b.Housekeeping.Stop(); err != nil {
+		return err
+	}
 
 	if err := b.Coordinator.Close(); err != nil {
 		log.Logger.Error(err)
@@ -156,26 +163,6 @@ func (b *Backend) Shutdown() error {
 	)
 
 	return nil
-}
-
-// AttachGoroutine creates a goroutine on a given function and tracks it using
-// the backend's WaitGroup.
-func (b *Backend) AttachGoroutine(f func()) {
-	b.wgMu.RLock() // this blocks with ongoing close(b.closing)
-	defer b.wgMu.RUnlock()
-	select {
-	case <-b.closing:
-		log.Logger.Warn("backend has closed; skipping AttachGoroutine")
-		return
-	default:
-	}
-
-	// now safe to add since WaitGroup wait has not started yet
-	b.wg.Add(1)
-	go func() {
-		defer b.wg.Done()
-		f()
-	}()
 }
 
 // Members returns the members of this cluster.

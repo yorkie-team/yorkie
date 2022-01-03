@@ -3,6 +3,7 @@ module github.com/yorkie-team/yorkie
 go 1.17
 
 require (
+	bou.ke/monkey v1.0.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
 	github.com/golangci/golangci-lint v1.41.1
@@ -21,6 +22,8 @@ require (
 	google.golang.org/grpc v1.38.0
 	gopkg.in/yaml.v2 v2.4.0
 )
+
+replace github.com/hashicorp/go-memdb => github.com/hackerwins/go-memdb v1.3.3-0.20211225080334-513a74641622
 
 require (
 	4d63.com/gochecknoglobals v0.0.0-20201008074935-acfc0b28355a // indirect
