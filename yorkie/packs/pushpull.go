@@ -38,6 +38,45 @@ var (
 	ErrInvalidServerSeq = errors.New("invalid server seq")
 )
 
+// pushChanges returns the changes excluding already saved in DB.
+func pushChanges(
+	clientInfo *db.ClientInfo,
+	docInfo *db.DocInfo,
+	pack *change.Pack,
+	initialServerSeq uint64,
+) (*checkpoint.Checkpoint, []*change.Change, error) {
+	cp := clientInfo.Checkpoint(docInfo.ID)
+
+	var pushedChanges []*change.Change
+	for _, cn := range pack.Changes {
+		if cn.ID().ClientSeq() > cp.ClientSeq {
+			serverSeq := docInfo.IncreaseServerSeq()
+			cp = cp.NextServerSeq(serverSeq)
+			cn.SetServerSeq(serverSeq)
+			pushedChanges = append(pushedChanges, cn)
+		} else {
+			log.Logger.Warnf("change is rejected: %d vs %d ", cn.ID().ClientSeq(), cp.ClientSeq)
+		}
+
+		cp = cp.SyncClientSeq(cn.ClientSeq())
+	}
+
+	if len(pack.Changes) > 0 {
+		log.Logger.Infof(
+			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
+			clientInfo.ID,
+			len(pushedChanges),
+			docInfo.Key,
+			len(pack.Changes)-len(pushedChanges),
+			initialServerSeq,
+			docInfo.ServerSeq,
+			cp.String(),
+		)
+	}
+
+	return cp, pushedChanges, nil
+}
+
 func pullPack(
 	ctx context.Context,
 	be *backend.Backend,

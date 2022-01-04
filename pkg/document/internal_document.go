@@ -121,6 +121,10 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
+	if pack.MinSyncedTicket != nil {
+		d.GarbageCollect(pack.MinSyncedTicket)
+	}
+
 	return nil
 }
 

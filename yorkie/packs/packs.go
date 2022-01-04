@@ -94,7 +94,7 @@ func PushPull(
 	// 04. update and find min synced ticket for garbage collection.
 	// NOTE Since the client could not receive the PushPull response,
 	//      the requested seq(reqPack) is stored instead of the response seq(resPack).
-	respPack.MinSyncedTicket, err = be.DB.UpdateAndFindMinSyncedTicket(
+	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
 		ctx,
 		clientInfo,
 		docInfo.ID,
@@ -103,6 +103,7 @@ func PushPull(
 	if err != nil {
 		return nil, err
 	}
+	respPack.MinSyncedTicket = minSyncedTicket
 
 	// 05. publish document change event then store snapshot asynchronously.
 	if reqPack.HasChanges() {
@@ -150,6 +151,7 @@ func PushPull(
 				ctx,
 				be,
 				docInfo,
+				minSyncedTicket,
 			); err != nil {
 				log.Logger.Error(err)
 			}

@@ -22,6 +22,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/log"
@@ -31,6 +32,7 @@ func storeSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *db.DocInfo,
+	minSyncedTicket *time.Ticket,
 ) error {
 	// 01. get the last snapshot of this docInfo
 	// TODO: For performance issue, we only need to read the snapshot's metadata.
@@ -73,12 +75,15 @@ func storeSnapshot(
 		return err
 	}
 
-	if err := doc.ApplyChangePack(change.NewPack(
+	pack := change.NewPack(
 		docKey,
 		checkpoint.Initial.NextServerSeq(docInfo.ServerSeq),
 		changes,
 		nil,
-	)); err != nil {
+	)
+	pack.MinSyncedTicket = minSyncedTicket
+
+	if err := doc.ApplyChangePack(pack); err != nil {
 		return err
 	}
 
