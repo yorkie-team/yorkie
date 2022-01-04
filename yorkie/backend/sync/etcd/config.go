@@ -37,12 +37,12 @@ var (
 
 // Config is the configuration for creating a Client instance.
 type Config struct {
-	Endpoints   []string `json:"Endpoints"`
-	DialTimeout string   `json:"DialTimeout"`
-	Username    string   `json:"Username"`
-	Password    string   `json:"Password"`
+	Endpoints   []string `yaml:"Endpoints"`
+	DialTimeout string   `yaml:"DialTimeout"`
+	Username    string   `yaml:"Username"`
+	Password    string   `yaml:"Password"`
 
-	LockLeaseTime string `json:"LockLeaseTime"`
+	LockLeaseTime string `yaml:"LockLeaseTime"`
 }
 
 // Validate validates this config.

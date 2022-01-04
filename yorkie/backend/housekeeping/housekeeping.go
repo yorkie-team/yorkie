@@ -33,14 +33,14 @@ const (
 // Config is the configuration for the housekeeping service.
 type Config struct {
 	// Interval is the time between housekeeping runs.
-	Interval string `yaml:"interval"`
+	Interval string `yaml:"Interval"`
 
 	// deactivateThreshold is the time after which clients are considered
 	// deactivate.
-	DeactivateThreshold string `yaml:"deactivate_threshold"`
+	DeactivateThreshold string `yaml:"DeactivateThreshold"`
 
 	// CandidatesLimit is the maximum number of candidates to be returned.
-	CandidatesLimit int `yaml:"candidates_limit"`
+	CandidatesLimit int `yaml:"CandidatesLimit"`
 }
 
 // Validate validates the configuration.

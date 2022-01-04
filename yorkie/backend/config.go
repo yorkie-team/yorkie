@@ -27,31 +27,31 @@ import (
 type Config struct {
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
-	SnapshotThreshold uint64 `json:"SnapshotThreshold"`
+	SnapshotThreshold uint64 `yaml:"SnapshotThreshold"`
 
 	// SnapshotInterval is the interval of changes to create a snapshot.
-	SnapshotInterval uint64 `json:"SnapshotInterval"`
+	SnapshotInterval uint64 `yaml:"SnapshotInterval"`
 
 	// AuthWebhookURL is the url of the authorization webhook.
-	AuthWebhookURL string `json:"AuthWebhookURL"`
+	AuthWebhookURL string `yaml:"AuthWebhookURL"`
 
 	// AuthWebhookMethods is the methods that run the authorization webhook.
-	AuthWebhookMethods []string `json:"AuthWebhookMethods"`
+	AuthWebhookMethods []string `yaml:"AuthWebhookMethods"`
 
 	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
-	AuthWebhookMaxRetries uint64 `json:"AuthWebhookMaxRetries"`
+	AuthWebhookMaxRetries uint64 `yaml:"AuthWebhookMaxRetries"`
 
 	// AuthWebhookMaxWaitInterval is the max interval that waits before retrying the authorization webhook.
-	AuthWebhookMaxWaitInterval string `json:"AuthWebhookMaxWaitInterval"`
+	AuthWebhookMaxWaitInterval string `yaml:"AuthWebhookMaxWaitInterval"`
 
 	// AuthWebhookCacheSize is the cache size of the authorization webhook.
-	AuthWebhookCacheSize int `json:"AuthWebhookCacheSize"`
+	AuthWebhookCacheSize int `yaml:"AuthWebhookCacheSize"`
 
 	// AuthWebhookCacheAuthTTL is the TTL value to set when caching the authorized result.
-	AuthWebhookCacheAuthTTL string `json:"AuthWebhookCacheAuthTTL"`
+	AuthWebhookCacheAuthTTL string `yaml:"AuthWebhookCacheAuthTTL"`
 
 	// AuthWebhookCacheUnauthTTL is the TTL value to set when caching the unauthorized result.
-	AuthWebhookCacheUnauthTTL string `json:"AuthWebhookCacheUnauthTTL"`
+	AuthWebhookCacheUnauthTTL string `yaml:"AuthWebhookCacheUnauthTTL"`
 }
 
 // RequireAuth returns whether the given method require authorization.

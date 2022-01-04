@@ -28,8 +28,8 @@ var (
 
 // Config is the configuration for creating a Server instance.
 type Config struct {
-	Port        int
-	EnablePprof bool
+	Port        int  `yaml:"Port"`
+	EnablePprof bool `yaml:"EnablePprof"`
 }
 
 // Validate validates the port number.

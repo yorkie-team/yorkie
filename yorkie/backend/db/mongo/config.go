@@ -23,10 +23,10 @@ import (
 
 // Config is the configuration for creating a Client instance.
 type Config struct {
-	ConnectionTimeout string `json:"ConnectionTimeout"`
-	ConnectionURI     string `json:"ConnectionURI"`
-	YorkieDatabase    string `json:"YorkieDatabase"`
-	PingTimeout       string `json:"PingTimeout"`
+	ConnectionTimeout string `yaml:"ConnectionTimeout"`
+	ConnectionURI     string `yaml:"ConnectionURI"`
+	YorkieDatabase    string `yaml:"YorkieDatabase"`
+	PingTimeout       string `yaml:"PingTimeout"`
 }
 
 // Validate returns an error if the provided Config is invalidated.

@@ -20,20 +20,31 @@ Profiling:
   # EnablePprof is whether to enable the pprof `/debug/pprof` endpoint.
   EnablePprof: false
 
+# Housekeeping is the configuration for the housekeeping.
+Housekeeping:
+  # Interval is the time between housekeeping runs (default: 1m).
+  Interval: 1m
+
+  # DeactivateThreshold is the time after which clients are considered deactivate (default: 7d).
+  DeactivateThreshold: 7d
+
+  # CandidatesLimit is the maximum number of candidates to be returned (default: 100).
+  CandidatesLimit: 100
+
 # Backend is the configuration for the backend of Yorkie.
 Backend:
   # SnapshotThreshold is the threshold that determines if changes should be
   # sent with snapshot when the number of changes is greater than this value.
-  SnapshotThreshold: 1000
+  SnapshotThreshold: 500
 
   # SnapshotInterval is the number of changes to create a snapshot.
-  SnapshotInterval: 5000
+  SnapshotInterval: 1000
 
   # AuthWebhookURL is the URL to send authorization requests to.
   AuthWebhookURL: ""
 
   # AuthWebhookMethods is the list of methods to use for authorization.
-  AuthWebhookMethods: []
+  AuthWebhookMethods: [ ]
 
   # AuthWebhookMaxRetries is the max count that retries the authorization webhook.
   AuthWebhookMaxRetries: 10
@@ -47,7 +58,7 @@ Backend:
   # AuthWebhookCacheUnauthTTL is the TTL value to set when caching the unauthorized result.
   AuthWebhookCacheUnauthTTL: "10s"
 
-# Mongo is the MongoDB configuration.
+# Mongo is the MongoDB configuration (Optional).
 Mongo:
   # ConnectionTimeout is the timeout for connecting to MongoDB.
   ConnectionTimeout: "5s"
@@ -61,10 +72,10 @@ Mongo:
   # PingTimeout is the timeout for pinging MongoDB.
   PingTimeout: "5s"
 
-# ETCD is the configuration for the etcd client.
+# ETCD is the configuration for the etcd client (Optional).
 ETCD:
   # Endpoints is the list of endpoints to connect to for etcd.
-  Endpoints: ["localhost:2379"]
+  Endpoints: [ "localhost:2379" ]
 
   # DialTimeout is the timeout for connecting to etcd.
   DialTimeout: "5s"
