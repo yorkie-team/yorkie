@@ -7,7 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## [0.2.0] - 2020-12-19
+## [0.2.1] - 2022-01-04
+
+### Added
+
+- Allow users to set up logger of the client: #285
+- Housekeeping to deactivate clients that have not been updated: #286
+- Run GC when saving snapshots: #287
+
+### Changed
+
+- Clean up client options: #284
+
+2nd year release
+
+## [0.2.0] - 2021-12-19
 
 2nd year release
 
