@@ -52,12 +52,25 @@ type ClientDocInfo struct {
 
 // ClientInfo is a structure representing information of a client.
 type ClientInfo struct {
-	ID        ID                    `bson:"_id"`
-	Key       string                `bson:"key"`
-	Status    string                `bson:"status"`
+	// ID is the unique ID of the client.
+	ID ID `bson:"_id"`
+
+	// Key is the key of the client. It is used to identify the client by users.
+	Key string `bson:"key"`
+
+	// Status is the status of the client.
+	Status string `bson:"status"`
+
+	// Documents is a map of document which is attached to the client.
 	Documents map[ID]*ClientDocInfo `bson:"documents"`
-	CreatedAt time.Time             `bson:"created_at"`
-	UpdatedAt time.Time             `bson:"updated_at"`
+
+	// CreatedAt is the time when the client was created.
+	CreatedAt time.Time `bson:"created_at"`
+
+	// UpdatedAt is the last time the client was accessed.
+	// NOTE(hackerwins): The field name is "updated_at" but it is used as
+	// "accessed_at".
+	UpdatedAt time.Time `bson:"updated_at"`
 }
 
 // AttachDocument attaches the given document to this client.

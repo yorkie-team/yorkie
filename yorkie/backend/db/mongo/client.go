@@ -161,8 +161,12 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID db.ID) (*db.Cl
 		return nil, err
 	}
 
-	result := c.collection(colClients).FindOne(ctx, bson.M{
+	result := c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
 		"_id": encodedClientID,
+	}, bson.M{
+		"$set": bson.M{
+			"updated_at": gotime.Now(),
+		},
 	})
 
 	clientInfo := db.ClientInfo{}

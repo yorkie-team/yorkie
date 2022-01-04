@@ -325,6 +325,14 @@ func (s *yorkieServer) WatchDocuments(
 			Verb: types.Read,
 		})
 	}
+
+	if _, err = s.backend.DB.FindClientInfoByID(
+		stream.Context(),
+		db.IDFromActorID(*client.ID),
+	); err != nil {
+		return err
+	}
+
 	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
 		Attributes: attrs,

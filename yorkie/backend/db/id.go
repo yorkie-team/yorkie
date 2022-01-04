@@ -20,6 +20,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 var (
@@ -61,4 +63,9 @@ func (id *ID) Validate() error {
 // IDFromBytes returns ID represented by the encoded hexadecimal string from bytes.
 func IDFromBytes(bytes []byte) ID {
 	return ID(hex.EncodeToString(bytes))
+}
+
+// IDFromActorID returns ID represented by the encoded hexadecimal string from actor ID.
+func IDFromActorID(actorID time.ActorID) ID {
+	return IDFromBytes(actorID[:])
 }
