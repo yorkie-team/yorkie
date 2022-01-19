@@ -72,7 +72,7 @@ Tests can be run by typing `make test`.
 
 *NOTE: `make test` includes integration tests that require local applications
  such as MongoDB, etcd. To start them, type `docker-compose -f
-  docker/docker-compose-ci.yml up --build -d`.*
+  docker/docker-compose.yml up --build -d`.*
 
 If you make any changes to the code, run `make fmt` in order to automatically format the code according to Go [standards](https://golang.org/doc/effective_go.html#formatting).
 
