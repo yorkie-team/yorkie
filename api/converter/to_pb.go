@@ -22,7 +22,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
@@ -72,7 +71,7 @@ func ToDocumentKey(key *key.Key) *api.DocumentKey {
 }
 
 // ToCheckpoint converts the given model format to Protobuf format.
-func ToCheckpoint(cp *checkpoint.Checkpoint) *api.Checkpoint {
+func ToCheckpoint(cp *change.Checkpoint) *api.Checkpoint {
 	return &api.Checkpoint{
 		ServerSeq: cp.ServerSeq,
 		ClientSeq: cp.ClientSeq,
@@ -84,7 +83,7 @@ func ToChangeID(id *change.ID) *api.ChangeID {
 	return &api.ChangeID{
 		ClientSeq: id.ClientSeq(),
 		Lamport:   id.Lamport(),
-		ActorId:   id.Actor().Bytes(),
+		ActorId:   id.ActorID().Bytes(),
 	}
 }
 

@@ -26,7 +26,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/log"
@@ -44,7 +43,7 @@ func pushChanges(
 	docInfo *db.DocInfo,
 	pack *change.Pack,
 	initialServerSeq uint64,
-) (*checkpoint.Checkpoint, []*change.Change, error) {
+) (*change.Checkpoint, []*change.Change, error) {
 	cp := clientInfo.Checkpoint(docInfo.ID)
 
 	var pushedChanges []*change.Change
@@ -83,7 +82,7 @@ func pullPack(
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
 	requestPack *change.Pack,
-	pushedCP *checkpoint.Checkpoint,
+	pushedCP *change.Checkpoint,
 	initialServerSeq uint64,
 ) (*ServerPack, error) {
 	docKey, err := docInfo.GetKey()
@@ -122,9 +121,9 @@ func pullChangeInfos(
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
 	requestPack *change.Pack,
-	pushedCP *checkpoint.Checkpoint,
+	pushedCP *change.Checkpoint,
 	initialServerSeq uint64,
-) (*checkpoint.Checkpoint, []*db.ChangeInfo, error) {
+) (*change.Checkpoint, []*db.ChangeInfo, error) {
 	pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
@@ -158,9 +157,9 @@ func pullSnapshot(
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
 	pack *change.Pack,
-	pushedCP *checkpoint.Checkpoint,
+	pushedCP *change.Checkpoint,
 	initialServerSeq uint64,
-) (*checkpoint.Checkpoint, []byte, error) {
+) (*change.Checkpoint, []byte, error) {
 	snapshotInfo, err := be.DB.FindLastSnapshotInfo(ctx, docInfo.ID)
 	if err != nil {
 		return nil, nil, err
@@ -207,7 +206,7 @@ func pullSnapshot(
 
 	if err := doc.ApplyChangePack(change.NewPack(
 		docKey,
-		checkpoint.Initial.NextServerSeq(docInfo.ServerSeq),
+		change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
 		changes,
 		nil,
 	)); err != nil {

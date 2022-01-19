@@ -21,7 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
 
@@ -38,7 +38,7 @@ func TestClientInfo(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, isAttached)
 
-		err = clientInfo.UpdateCheckpoint(docID, checkpoint.Max)
+		err = clientInfo.UpdateCheckpoint(docID, change.MaxCheckpoint)
 		assert.NoError(t, err)
 
 		err = clientInfo.DetachDocument(docID)

@@ -296,8 +296,8 @@ func (d *DB) CreateChangeInfos(
 		if err := txn.Insert(tblChanges, &db.ChangeInfo{
 			ID:         newID(),
 			DocID:      docInfo.ID,
-			ServerSeq:  cn.ServerSeq(),
-			Actor:      db.ID(cn.ID().Actor().String()),
+			ServerSeq:  *cn.ServerSeq(),
+			ActorID:    db.ID(cn.ID().ActorID().String()),
 			ClientSeq:  cn.ClientSeq(),
 			Lamport:    cn.ID().Lamport(),
 			Message:    cn.Message(),
@@ -564,7 +564,7 @@ func (d *DB) findTicketByServerSeq(
 	}
 
 	changeInfo := raw.(*db.ChangeInfo)
-	actorID, err := time.ActorIDFromHex(changeInfo.Actor.String())
+	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
 	if err != nil {
 		return nil, err
 	}

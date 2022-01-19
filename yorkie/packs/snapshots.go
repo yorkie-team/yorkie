@@ -21,7 +21,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
@@ -77,7 +76,7 @@ func storeSnapshot(
 
 	pack := change.NewPack(
 		docKey,
-		checkpoint.Initial.NextServerSeq(docInfo.ServerSeq),
+		change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
 		changes,
 		nil,
 	)

@@ -21,7 +21,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
@@ -86,8 +85,8 @@ func fromDocumentKey(pbKey *api.DocumentKey) *key.Key {
 	}
 }
 
-func fromCheckpoint(pbCheckpoint *api.Checkpoint) *checkpoint.Checkpoint {
-	return checkpoint.New(
+func fromCheckpoint(pbCheckpoint *api.Checkpoint) *change.Checkpoint {
+	return change.NewCheckpoint(
 		pbCheckpoint.ServerSeq,
 		pbCheckpoint.ClientSeq,
 	)

@@ -337,9 +337,9 @@ func (c *Client) CreateChangeInfos(
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"doc_id":     encodedDocID,
-			"server_seq": cn.ServerSeq(),
+			"server_seq": *cn.ServerSeq(),
 		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor":      encodeActorID(cn.ID().Actor()),
+			"actor_id":   encodeActorID(cn.ID().ActorID()),
 			"client_seq": cn.ID().ClientSeq(),
 			"lamport":    cn.ID().Lamport(),
 			"message":    cn.Message(),
@@ -626,7 +626,7 @@ func (c *Client) findTicketByServerSeq(
 		return nil, err
 	}
 
-	actorID, err := time.ActorIDFromHex(changeInfo.Actor.String())
+	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
 	if err != nil {
 		return nil, err
 	}

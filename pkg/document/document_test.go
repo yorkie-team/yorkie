@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -36,7 +36,7 @@ var (
 func TestDocument(t *testing.T) {
 	t.Run("constructor test", func(t *testing.T) {
 		doc := document.New("c1", "d1")
-		assert.Equal(t, doc.Checkpoint(), checkpoint.Initial)
+		assert.Equal(t, doc.Checkpoint(), change.InitialCheckpoint)
 		assert.False(t, doc.HasLocalChanges())
 		assert.False(t, doc.IsAttached())
 	})
