@@ -92,8 +92,8 @@ func PushPull(
 	}
 
 	// 04. update and find min synced ticket for garbage collection.
-	// NOTE Since the client could not receive the PushPull response,
-	//      the requested seq(reqPack) is stored instead of the response seq(resPack).
+	// NOTE(hackerwins): Since the client could not receive the response, the
+	// requested seq(reqPack) is stored instead of the response seq(resPack).
 	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
 		ctx,
 		clientInfo,

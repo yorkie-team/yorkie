@@ -24,13 +24,14 @@ import (
 
 // Change represents a unit of modification in the document.
 type Change struct {
+	// id is the unique identifier of the change.
 	id *ID
+
 	// message is used to save a description of the change.
 	message string
+
 	// operations represent a series of user edits.
 	operations []operation.Operation
-	// serverSeq is optional and only present for changes stored on the server.
-	serverSeq *uint64
 }
 
 // New creates a new instance of Change.
@@ -67,14 +68,9 @@ func (c *Change) Operations() []operation.Operation {
 	return c.operations
 }
 
-// SetServerSeq sets the given serverSeq.
-func (c *Change) SetServerSeq(serverSeq uint64) {
-	c.serverSeq = &serverSeq
-}
-
 // ServerSeq returns the serverSeq of this change.
-func (c *Change) ServerSeq() uint64 {
-	return *c.serverSeq
+func (c *Change) ServerSeq() *uint64 {
+	return c.id.ServerSeq()
 }
 
 // ClientSeq returns the clientSeq of this change.
@@ -82,7 +78,12 @@ func (c *Change) ClientSeq() uint32 {
 	return c.id.ClientSeq()
 }
 
-// SetActor sets the given actor.
+// SetServerSeq sets the given serverSeq.
+func (c *Change) SetServerSeq(serverSeq uint64) {
+	c.id = c.id.SetServerSeq(&serverSeq)
+}
+
+// SetActor sets the given actorID.
 func (c *Change) SetActor(actor *time.ActorID) {
 	c.id = c.id.SetActor(actor)
 	for _, op := range c.operations {

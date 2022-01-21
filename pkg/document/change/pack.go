@@ -17,7 +17,6 @@
 package change
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -28,7 +27,7 @@ type Pack struct {
 	DocumentKey *key.Key
 
 	// Checkpoint is used to determine the client received changes.
-	Checkpoint *checkpoint.Checkpoint
+	Checkpoint *Checkpoint
 
 	// Change represents a unit of modification in the document.
 	Changes []*Change
@@ -44,7 +43,7 @@ type Pack struct {
 // NewPack creates a new instance of Pack.
 func NewPack(
 	key *key.Key,
-	cp *checkpoint.Checkpoint,
+	cp *Checkpoint,
 	changes []*Change,
 	snapshot []byte,
 ) *Pack {

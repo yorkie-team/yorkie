@@ -37,7 +37,7 @@ type ChangeInfo struct {
 	ServerSeq  uint64   `bson:"server_seq"`
 	ClientSeq  uint32   `bson:"client_seq"`
 	Lamport    uint64   `bson:"lamport"`
-	Actor      ID       `bson:"actor"`
+	ActorID    ID       `bson:"actor_id"`
 	Message    string   `bson:"message"`
 	Operations [][]byte `bson:"operations"`
 }
@@ -65,7 +65,7 @@ func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
 
 // ToChange creates Change model from this ChangeInfo.
 func (i *ChangeInfo) ToChange() (*change.Change, error) {
-	actorID, err := time.ActorIDFromHex(i.Actor.String())
+	actorID, err := time.ActorIDFromHex(i.ActorID.String())
 	if err != nil {
 		return nil, err
 	}

@@ -22,5 +22,7 @@ type SyncedSeqInfo struct {
 	ID        ID     `bson:"_id"`
 	DocID     ID     `bson:"doc_id"`
 	ClientID  ID     `bson:"client_id"`
+	Lamport   uint64 `bson:"lamport"`
+	ActorID   ID     `bson:"actor_id"`
 	ServerSeq uint64 `bson:"server_seq"`
 }

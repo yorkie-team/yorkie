@@ -34,11 +34,11 @@ func TestChangeInfo(t *testing.T) {
 
 		expectedID := actorID.String()
 		changeInfo := db.ChangeInfo{
-			Actor: db.ID(expectedID),
+			ActorID: db.ID(expectedID),
 		}
 
 		change, err := changeInfo.ToChange()
 		assert.NoError(t, err)
-		assert.Equal(t, change.ID().Actor().String(), expectedID)
+		assert.Equal(t, change.ID().ActorID().String(), expectedID)
 	})
 }

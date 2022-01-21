@@ -20,7 +20,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 )
 
 // Below are the errors may occur depending on the document and client status.
@@ -121,19 +121,19 @@ func (i *ClientInfo) IsAttached(docID ID) (bool, error) {
 }
 
 // Checkpoint returns the checkpoint of the given document.
-func (i *ClientInfo) Checkpoint(docID ID) *checkpoint.Checkpoint {
+func (i *ClientInfo) Checkpoint(docID ID) *change.Checkpoint {
 	clientDocInfo := i.Documents[docID]
 	if clientDocInfo == nil {
-		return checkpoint.Initial
+		return change.InitialCheckpoint
 	}
 
-	return checkpoint.New(clientDocInfo.ServerSeq, clientDocInfo.ClientSeq)
+	return change.NewCheckpoint(clientDocInfo.ServerSeq, clientDocInfo.ClientSeq)
 }
 
 // UpdateCheckpoint updates the checkpoint of the given document.
 func (i *ClientInfo) UpdateCheckpoint(
 	docID ID,
-	cp *checkpoint.Checkpoint,
+	cp *change.Checkpoint,
 ) error {
 	if !i.hasDocument(docID) {
 		return ErrDocumentNeverAttached

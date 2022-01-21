@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
@@ -133,7 +132,7 @@ func (d *Document) Key() *key.Key {
 }
 
 // Checkpoint returns the checkpoint of this document.
-func (d *Document) Checkpoint() *checkpoint.Checkpoint {
+func (d *Document) Checkpoint() *change.Checkpoint {
 	return d.doc.checkpoint
 }
 
@@ -158,9 +157,9 @@ func (d *Document) SetActor(actor *time.ActorID) {
 	d.doc.SetActor(actor)
 }
 
-// Actor sets actor.
-func (d *Document) Actor() *time.ActorID {
-	return d.doc.Actor()
+// ActorID returns ID of the actor currently editing the document.
+func (d *Document) ActorID() *time.ActorID {
+	return d.doc.ActorID()
 }
 
 // SetStatus updates the status of this document.

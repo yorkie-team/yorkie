@@ -31,7 +31,6 @@ var (
 
 // Operation represents an operation to be executed on a document.
 type Operation interface {
-
 	// Execute executes this operation on the given document(`root`).
 	Execute(root *json.Root) error
 
