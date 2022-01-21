@@ -125,12 +125,13 @@ var schema = &memdb.DBSchema{
 						},
 					},
 				},
-				"doc_id_server_seq": {
-					Name: "doc_id_server_seq",
+				"doc_id_lamport_actor_id": {
+					Name: "doc_id_lamport_actor_id",
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.UintFieldIndex{Field: "ServerSeq"},
+							&memdb.UintFieldIndex{Field: "Lamport"},
+							&memdb.StringFieldIndex{Field: "ActorID"},
 						},
 					},
 				},

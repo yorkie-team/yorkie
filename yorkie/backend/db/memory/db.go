@@ -465,9 +465,10 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 
 	iterator, err := txn.LowerBound(
 		tblSyncedSeqs,
-		"doc_id_server_seq",
+		"doc_id_lamport_actor_id",
 		docID.String(),
 		uint64(0),
+		time.InitialActorID.String(),
 	)
 	if err != nil {
 		return nil, err
@@ -485,9 +486,16 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		return time.InitialTicket, nil
 	}
 
-	// 03. find ticket by seq.
-	// TODO: We need to find a way to not access `changes` collection.
-	return d.findTicketByServerSeq(txn, docID, syncedSeqInfo.ServerSeq)
+	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
+	if err != nil {
+		return nil, err
+	}
+
+	return time.NewTicket(
+		syncedSeqInfo.Lamport,
+		time.MaxDelimiter,
+		actorID,
+	), nil
 }
 
 // UpdateSyncedSeq updates the syncedSeq of the given client.
@@ -505,32 +513,7 @@ func (d *DB) UpdateSyncedSeq(
 		return err
 	}
 
-	if isAttached {
-		raw, err := txn.First(
-			tblSyncedSeqs,
-			"doc_id_client_id",
-			docID.String(),
-			clientInfo.ID.String(),
-		)
-		if err != nil {
-			return err
-		}
-
-		syncedSeqInfo := &db.SyncedSeqInfo{
-			DocID:     docID,
-			ClientID:  clientInfo.ID,
-			ServerSeq: serverSeq,
-		}
-		if raw == nil {
-			syncedSeqInfo.ID = newID()
-		} else {
-			syncedSeqInfo.ID = raw.(*db.SyncedSeqInfo).ID
-		}
-
-		if err := txn.Insert(tblSyncedSeqs, syncedSeqInfo); err != nil {
-			return err
-		}
-	} else {
+	if !isAttached {
 		if _, err = txn.DeleteAll(
 			tblSyncedSeqs,
 			"doc_id_client_id",
@@ -539,6 +522,40 @@ func (d *DB) UpdateSyncedSeq(
 		); err != nil {
 			return err
 		}
+		txn.Commit()
+		return nil
+	}
+
+	ticket, err := d.findTicketByServerSeq(txn, docID, serverSeq)
+	if err != nil {
+		return err
+	}
+
+	raw, err := txn.First(
+		tblSyncedSeqs,
+		"doc_id_client_id",
+		docID.String(),
+		clientInfo.ID.String(),
+	)
+	if err != nil {
+		return err
+	}
+
+	syncedSeqInfo := &db.SyncedSeqInfo{
+		DocID:     docID,
+		ClientID:  clientInfo.ID,
+		Lamport:   ticket.Lamport(),
+		ActorID:   db.ID(ticket.ActorID().String()),
+		ServerSeq: serverSeq,
+	}
+	if raw == nil {
+		syncedSeqInfo.ID = newID()
+	} else {
+		syncedSeqInfo.ID = raw.(*db.SyncedSeqInfo).ID
+	}
+
+	if err := txn.Insert(tblSyncedSeqs, syncedSeqInfo); err != nil {
+		return err
 	}
 
 	txn.Commit()

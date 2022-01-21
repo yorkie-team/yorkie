@@ -504,12 +504,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	docID db.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
-	if err := c.UpdateSyncedSeq(
-		ctx,
-		clientInfo,
-		docID,
-		serverSeq,
-	); err != nil {
+	if err := c.UpdateSyncedSeq(ctx, clientInfo, docID, serverSeq); err != nil {
 		return nil, err
 	}
 
@@ -521,8 +516,9 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	// 02. find min synced seq of the given document.
 	result := c.collection(colSyncedSeqs).FindOne(ctx, bson.M{
 		"doc_id": encodedDocID,
-	}, options.FindOne().SetSort(bson.M{
-		"server_seq": 1,
+	}, options.FindOne().SetSort(bson.D{
+		{Key: "lamport", Value: 1},
+		{Key: "actor_id", Value: 1},
 	}))
 	if result.Err() == mongo.ErrNoDocuments {
 		return time.InitialTicket, nil
@@ -540,14 +536,16 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		return time.InitialTicket, nil
 	}
 
-	// 03. find ticket by seq.
-	// TODO: We need to find a way to not access `changes` collection.
-	ticket, err := c.findTicketByServerSeq(ctx, docID, syncedSeqInfo.ServerSeq)
+	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
 	if err != nil {
 		return nil, err
 	}
 
-	return ticket, nil
+	return time.NewTicket(
+		syncedSeqInfo.Lamport,
+		time.MaxDelimiter,
+		actorID,
+	), nil
 }
 
 // UpdateSyncedSeq updates the syncedSeq of the given client.
@@ -572,25 +570,32 @@ func (c *Client) UpdateSyncedSeq(
 		return err
 	}
 
-	if isAttached {
-		if _, err = c.collection(colSyncedSeqs).UpdateOne(ctx, bson.M{
+	if !isAttached {
+		if _, err = c.collection(colSyncedSeqs).DeleteOne(ctx, bson.M{
 			"doc_id":    encodedDocID,
 			"client_id": encodedClientID,
-		}, bson.M{
-			"$set": bson.M{
-				"server_seq": serverSeq,
-			},
-		}, options.Update().SetUpsert(true)); err != nil {
+		}, options.Delete()); err != nil {
 			log.Logger.Error(err)
 			return err
 		}
 		return nil
 	}
 
-	if _, err = c.collection(colSyncedSeqs).DeleteOne(ctx, bson.M{
+	ticket, err := c.findTicketByServerSeq(ctx, docID, serverSeq)
+	if err != nil {
+		return err
+	}
+
+	if _, err = c.collection(colSyncedSeqs).UpdateOne(ctx, bson.M{
 		"doc_id":    encodedDocID,
 		"client_id": encodedClientID,
-	}, options.Delete()); err != nil {
+	}, bson.M{
+		"$set": bson.M{
+			"lamport":    ticket.Lamport(),
+			"actor_id":   encodeActorID(ticket.ActorID()),
+			"server_seq": serverSeq,
+		},
+	}, options.Update().SetUpsert(true)); err != nil {
 		log.Logger.Error(err)
 		return err
 	}
@@ -603,6 +608,10 @@ func (c *Client) findTicketByServerSeq(
 	docID db.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
+	if serverSeq == 0 {
+		return time.InitialTicket, nil
+	}
+
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return nil, err
@@ -613,7 +622,12 @@ func (c *Client) findTicketByServerSeq(
 		"server_seq": serverSeq,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("%s: %w", docID.String(), db.ErrDocumentNotFound)
+		return nil, fmt.Errorf(
+			"change docID=%s serverSeq=%d: %w",
+			docID.String(),
+			serverSeq,
+			db.ErrDocumentNotFound,
+		)
 	}
 
 	if result.Err() != nil {
