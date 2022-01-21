@@ -19,7 +19,6 @@ package document
 import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -42,7 +41,7 @@ type InternalDocument struct {
 	key          *key.Key
 	status       statusType
 	root         *json.Root
-	checkpoint   *checkpoint.Checkpoint
+	checkpoint   *change.Checkpoint
 	changeID     *change.ID
 	localChanges []*change.Change
 }
@@ -55,7 +54,7 @@ func NewInternalDocument(collection, document string) *InternalDocument {
 		key:        &key.Key{Collection: collection, Document: document},
 		status:     Detached,
 		root:       json.NewRoot(root),
-		checkpoint: checkpoint.Initial,
+		checkpoint: change.InitialCheckpoint,
 		changeID:   change.InitialID,
 	}
 }
@@ -76,7 +75,7 @@ func NewInternalDocumentFromSnapshot(
 		key:        &key.Key{Collection: collection, Document: document},
 		status:     Detached,
 		root:       json.NewRoot(obj),
-		checkpoint: checkpoint.Initial.NextServerSeq(serverSeq),
+		checkpoint: change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changeID:   change.InitialID,
 	}, nil
 }
@@ -87,7 +86,7 @@ func (d *InternalDocument) Key() *key.Key {
 }
 
 // Checkpoint returns the checkpoint of this document.
-func (d *InternalDocument) Checkpoint() *checkpoint.Checkpoint {
+func (d *InternalDocument) Checkpoint() *change.Checkpoint {
 	return d.checkpoint
 }
 
@@ -160,9 +159,9 @@ func (d *InternalDocument) SetActor(actor *time.ActorID) {
 	d.changeID = d.changeID.SetActor(actor)
 }
 
-// Actor sets actor.
-func (d *InternalDocument) Actor() *time.ActorID {
-	return d.changeID.Actor()
+// ActorID returns ID of the actor currently editing the document.
+func (d *InternalDocument) ActorID() *time.ActorID {
+	return d.changeID.ActorID()
 }
 
 // SetStatus sets the status of this document.

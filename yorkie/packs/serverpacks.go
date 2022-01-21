@@ -20,7 +20,6 @@ import (
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/checkpoint"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
@@ -34,7 +33,7 @@ type ServerPack struct {
 	DocumentKey *key.Key
 
 	// Checkpoint is used to determine the client received changes.
-	Checkpoint *checkpoint.Checkpoint
+	Checkpoint *change.Checkpoint
 
 	// ChangeInfos represents a unit of modification in the document.
 	ChangeInfos []*db.ChangeInfo
@@ -50,7 +49,7 @@ type ServerPack struct {
 // NewServerPack creates a new instance of ServerPack.
 func NewServerPack(
 	key *key.Key,
-	cp *checkpoint.Checkpoint,
+	cp *change.Checkpoint,
 	changeInfos []*db.ChangeInfo,
 	snapshot []byte,
 ) *ServerPack {
@@ -85,7 +84,7 @@ func (p *ServerPack) SnapshotLen() int {
 func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	var pbChanges []*api.Change
 	for _, changeInfo := range p.ChangeInfos {
-		actorID, err := time.ActorIDFromHex(changeInfo.Actor.String())
+		actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
 		if err != nil {
 			return nil, err
 		}
