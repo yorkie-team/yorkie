@@ -50,13 +50,13 @@ var defaultAgent *yorkie.Yorkie
 func TestMain(m *testing.M) {
 	agent := helper.TestYorkie()
 	if err := agent.Start(); err != nil {
-		log.Logger.Fatal(err)
+		log.Logger().Fatal(err)
 	}
 	defaultAgent = agent
 	code := m.Run()
 	if defaultAgent != nil {
 		if err := defaultAgent.Shutdown(true); err != nil {
-			log.Logger.Error(err)
+			log.Logger().Error(err)
 		}
 	}
 	os.Exit(code)

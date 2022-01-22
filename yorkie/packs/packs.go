@@ -110,7 +110,7 @@ func PushPull(
 		be.Background.AttachGoroutine(func() {
 			publisherID, err := time.ActorIDFromHex(clientInfo.ID.String())
 			if err != nil {
-				log.Logger.Error(err)
+				log.Logger().Error(err)
 				return
 			}
 
@@ -120,7 +120,7 @@ func PushPull(
 				NewSnapshotKey(reqPack.DocumentKey),
 			)
 			if err != nil {
-				log.Logger.Error(err)
+				log.Logger().Error(err)
 				return
 			}
 			// NOTE: If the snapshot is already being created by another routine, it
@@ -131,7 +131,7 @@ func PushPull(
 
 			defer func() {
 				if err := locker.Unlock(ctx); err != nil {
-					log.Logger.Error(err)
+					log.Logger().Error(err)
 					return
 				}
 			}()
@@ -153,7 +153,7 @@ func PushPull(
 				docInfo,
 				minSyncedTicket,
 			); err != nil {
-				log.Logger.Error(err)
+				log.Logger().Error(err)
 			}
 			be.Metrics.ObservePushPullSnapshotDurationSeconds(
 				gotime.Since(start).Seconds(),

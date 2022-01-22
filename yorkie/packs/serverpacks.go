@@ -94,7 +94,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		for _, bytesOp := range changeInfo.Operations {
 			pbOp := api.Operation{}
 			if err := pbOp.Unmarshal(bytesOp); err != nil {
-				log.Logger.Error(err)
+				log.Logger().Error(err)
 				return nil, err
 			}
 			pbOps = append(pbOps, &pbOp)

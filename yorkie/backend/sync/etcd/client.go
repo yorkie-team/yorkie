@@ -101,11 +101,11 @@ func (c *Client) Dial() error {
 		Password:    c.config.Password,
 	})
 	if err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 		return err
 	}
 
-	log.Logger.Infof("etcd connected, URI: %s", c.config.Endpoints)
+	log.Logger().Infof("etcd connected, URI: %s", c.config.Endpoints)
 
 	c.client = cli
 	return nil
@@ -116,7 +116,7 @@ func (c *Client) Close() error {
 	c.cancelFunc()
 
 	if err := c.removeAgent(context.Background()); err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 	}
 
 	for id := range c.clusterClientMap {

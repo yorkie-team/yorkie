@@ -96,7 +96,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
-				log.Logger.Error(err)
+				log.Logger().Error(err)
 			}
 		}()
 
