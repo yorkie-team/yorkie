@@ -63,7 +63,7 @@ Next, clone this repository into some local directory and then just type `make b
 ```
 $ make build
 ...
-$ bin/yorkie
+$ bin/yorkie # (If you are a Windows user, run .\bin\yorkie.exe)
 ```
 
 > We need to install Golang packages to build Yorkie locally. You can run `make tools` to install the required packages.
