@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 var (
@@ -36,6 +37,8 @@ var (
 
 var (
 	flagConfPath string
+
+	flagLogLevel string
 
 	housekeepingInterval            time.Duration
 	housekeepingDeactivateThreshold time.Duration
@@ -97,6 +100,8 @@ func newAgentCmd() *cobra.Command {
 				}
 				conf = parsed
 			}
+
+			log.SetLogLevel(flagLogLevel)
 
 			y, err := yorkie.New(conf)
 			if err != nil {
@@ -160,6 +165,13 @@ func init() {
 		"c",
 		"",
 		"Config path",
+	)
+	cmd.Flags().StringVarP(
+		&flagLogLevel,
+		"log-level",
+		"l",
+		"",
+		"Log Level (default: info)",
 	)
 	cmd.Flags().IntVar(
 		&conf.RPC.Port,

@@ -27,7 +27,6 @@ import (
 var defaultLogger *zap.SugaredLogger
 var coreLogger zapcore.Core
 
-// TODO: will add Sets function to change log level.
 var logLevel = zapcore.InfoLevel
 var loggerOnce sync.Once
 
@@ -45,6 +44,25 @@ func Core() zapcore.Core {
 		initialize()
 	})
 	return coreLogger
+}
+
+// SetLogLevel sets the level of global logger with ["debug", "info", "warn", "error", "panic", "fatal"].
+// Loglevel must be sets before calling DefaultLogger() or CoreLogger() function.
+func SetLogLevel(level string) {
+	switch level {
+	case "debug":
+		logLevel = zapcore.DebugLevel
+	case "info":
+		logLevel = zapcore.InfoLevel
+	case "warn":
+		logLevel = zapcore.WarnLevel
+	case "error":
+		logLevel = zapcore.ErrorLevel
+	case "panic":
+		logLevel = zapcore.PanicLevel
+	case "fatal":
+		logLevel = zapcore.FatalLevel
+	}
 }
 
 func encoderConfig() zapcore.EncoderConfig {
