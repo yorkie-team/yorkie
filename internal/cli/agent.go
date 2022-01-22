@@ -101,7 +101,9 @@ func newAgentCmd() *cobra.Command {
 				conf = parsed
 			}
 
-			log.SetLogLevel(flagLogLevel)
+			if err := log.SetLogLevel(flagLogLevel); err != nil {
+				return err
+			}
 
 			y, err := yorkie.New(conf)
 			if err != nil {

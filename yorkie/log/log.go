@@ -17,7 +17,9 @@
 package log
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"go.uber.org/zap"
@@ -48,8 +50,8 @@ func Core() zapcore.Core {
 
 // SetLogLevel sets the level of global logger with ["debug", "info", "warn", "error", "panic", "fatal"].
 // Loglevel must be sets before calling DefaultLogger() or CoreLogger() function.
-func SetLogLevel(level string) {
-	switch level {
+func SetLogLevel(level string) error {
+	switch strings.ToLower(level) {
 	case "debug":
 		logLevel = zapcore.DebugLevel
 	case "info":
@@ -62,7 +64,10 @@ func SetLogLevel(level string) {
 		logLevel = zapcore.PanicLevel
 	case "fatal":
 		logLevel = zapcore.FatalLevel
+	default:
+		return fmt.Errorf("invalid log level: %s", level)
 	}
+	return nil
 }
 
 func encoderConfig() zapcore.EncoderConfig {
