@@ -1,17 +1,23 @@
 YORKIE_VERSION := 0.2.2
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
-BUILD_DATE := $(shell date "+%Y-%m-%d")
 GO_PROJECT = github.com/yorkie-team/yorkie
-GO_SRC := $(shell find . -path ./vendor -prune -o -type f -name '*.go' -print)
+
+ifeq ($(OS),Windows_NT)
+    BUILD_DATE := $(shell echo %date:~6,4%-%date:~0,2%-%date:~3,2%)
+    GO_SRC := $(shell dir /s /b *.go | findstr /v "vendor")
+    EXECUTABLE = ./bin/yorkie.exe
+else
+    BUILD_DATE := $(shell date "+%Y-%m-%d")
+    GO_SRC := $(shell find . -path ./vendor -prune -o -type f -name '*.go' -print)
+    EXECUTABLE = ./bin/yorkie
+endif
 
 # inject the version number into the golang version package using the -X linker flag
 GO_LDFLAGS ?=
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.GitCommit=${GIT_COMMIT}
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.Version=${YORKIE_VERSION}
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.BuildDate=${BUILD_DATE}
-
-EXECUTABLE = ./bin/yorkie
 
 tools:
 	go generate -tags tools tools/tools.go
