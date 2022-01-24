@@ -40,7 +40,7 @@ func Logger() *zap.SugaredLogger {
 	return defaultLogger
 }
 
-// Core returns the Core logger, where Core is a minial, fast logger interface.
+// Core returns the Core logger, where Core is a minimal, fast logger interface.
 func Core() zapcore.Core {
 	loggerOnce.Do(func() {
 		initialize()

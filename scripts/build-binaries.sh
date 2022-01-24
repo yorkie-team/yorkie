@@ -13,8 +13,8 @@ fi
 set -u
 
 function main {
-  mkdir -p release
-  cd release
+  mkdir -p binaries
+  cd binaries
 
   for os in darwin windows linux; do
     local ext=""
@@ -45,10 +45,10 @@ function main {
 
       if [ ${GOOS} == "linux" ]; then
         tar cfz "${TARGET}.tar.gz" "${TARGET}"
-        echo "Wrote release/${TARGET}.tar.gz"
+        echo "Wrote binaries/${TARGET}.tar.gz"
       else
         zip -qr "${TARGET}.zip" "${TARGET}"
-        echo "Wrote release/${TARGET}.zip"
+        echo "Wrote binaries/${TARGET}.zip"
       fi
     done
   done
