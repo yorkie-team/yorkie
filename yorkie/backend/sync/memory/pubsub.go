@@ -88,8 +88,8 @@ func (m *PubSub) Subscribe(
 		return nil, sync.ErrEmptyDocKeys
 	}
 
-	if log.Core.Enabled(zap.DebugLevel) {
-		log.Logger.Debugf(
+	if log.Core().Enabled(zap.DebugLevel) {
+		log.Logger().Debugf(
 			`Subscribe(%s,%s) Start`,
 			keys[0].BSONKey(),
 			subscriber.ID.String(),
@@ -110,8 +110,8 @@ func (m *PubSub) Subscribe(
 		m.subscriptionsMapByDocKey[bsonKey].Add(sub)
 	}
 
-	if log.Core.Enabled(zap.DebugLevel) {
-		log.Logger.Debugf(
+	if log.Core().Enabled(zap.DebugLevel) {
+		log.Logger().Debugf(
 			`Subscribe(%s,%s) End`,
 			keys[0].BSONKey(),
 			subscriber.ID.String(),
@@ -142,8 +142,8 @@ func (m *PubSub) Unsubscribe(
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	if log.Core.Enabled(zap.DebugLevel) {
-		log.Logger.Debugf(
+	if log.Core().Enabled(zap.DebugLevel) {
+		log.Logger().Debugf(
 			`Unsubscribe(%s,%s) Start`,
 			docKeys[0].BSONKey(),
 			sub.SubscriberID(),
@@ -164,8 +164,8 @@ func (m *PubSub) Unsubscribe(
 		}
 	}
 
-	if log.Core.Enabled(zap.DebugLevel) {
-		log.Logger.Debugf(
+	if log.Core().Enabled(zap.DebugLevel) {
+		log.Logger().Debugf(
 			`Unsubscribe(%s,%s) End`,
 			docKeys[0].BSONKey(),
 			sub.SubscriberID(),
@@ -184,8 +184,8 @@ func (m *PubSub) Publish(
 	for _, docKey := range event.DocumentKeys {
 		k := docKey.BSONKey()
 
-		if log.Core.Enabled(zap.DebugLevel) {
-			log.Logger.Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
+		if log.Core().Enabled(zap.DebugLevel) {
+			log.Logger().Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
 		}
 
 		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
@@ -194,8 +194,8 @@ func (m *PubSub) Publish(
 					continue
 				}
 
-				if log.Core.Enabled(zap.DebugLevel) {
-					log.Logger.Debugf(
+				if log.Core().Enabled(zap.DebugLevel) {
+					log.Logger().Debugf(
 						`Publish(%s,%s) to %s`,
 						k,
 						publisherID.String(),
@@ -208,7 +208,7 @@ func (m *PubSub) Publish(
 				select {
 				case sub.Events() <- event:
 				case <-gotime.After(100 * gotime.Millisecond):
-					log.Logger.Warnf(
+					log.Logger().Warnf(
 						`Publish(%s,%s) to %s timeout`,
 						k,
 						publisherID.String(),
@@ -217,8 +217,8 @@ func (m *PubSub) Publish(
 				}
 			}
 		}
-		if log.Core.Enabled(zap.DebugLevel) {
-			log.Logger.Debugf(`Publish(%s,%s) End`, k, publisherID.String())
+		if log.Core().Enabled(zap.DebugLevel) {
+			log.Logger().Debugf(`Publish(%s,%s) End`, k, publisherID.String())
 		}
 	}
 }

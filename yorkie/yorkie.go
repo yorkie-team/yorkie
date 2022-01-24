@@ -92,7 +92,7 @@ func (r *Yorkie) Start() error {
 	if r.profilingServer != nil {
 		err := r.profilingServer.Start()
 		if err != nil {
-			log.Logger.Error(err)
+			log.Logger().Error(err)
 			return err
 		}
 	}

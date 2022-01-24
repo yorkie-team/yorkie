@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
+	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 var (
@@ -36,6 +37,7 @@ var (
 
 var (
 	flagConfPath string
+	flagLogLevel string
 
 	housekeepingInterval            time.Duration
 	housekeepingDeactivateThreshold time.Duration
@@ -96,6 +98,10 @@ func newAgentCmd() *cobra.Command {
 					return err
 				}
 				conf = parsed
+			}
+
+			if err := log.SetLogLevel(flagLogLevel); err != nil {
+				return err
 			}
 
 			y, err := yorkie.New(conf)
@@ -161,6 +167,13 @@ func init() {
 		"",
 		"Config path",
 	)
+	cmd.Flags().StringVarP(
+		&flagLogLevel,
+		"log-level",
+		"l",
+		"info",
+		"Log level: debug, info, warn, error, panic, fatal",
+	)
 	cmd.Flags().IntVar(
 		&conf.RPC.Port,
 		"rpc-port",
@@ -201,19 +214,19 @@ func init() {
 		&housekeepingInterval,
 		"housekeeping-interval",
 		yorkie.DefaultHousekeepingInterval,
-		"housekeeping interval between housekeeping runs (default: 1m)",
+		"housekeeping interval between housekeeping runs",
 	)
 	cmd.Flags().DurationVar(
 		&housekeepingDeactivateThreshold,
 		"housekeeping-deactivate-threshold",
 		yorkie.DefaultHousekeepingDeactivateThreshold,
-		"time after which clients are considered deactivate (default: 7d)",
+		"time after which clients are considered deactivate",
 	)
 	cmd.Flags().IntVar(
 		&conf.Housekeeping.CandidatesLimit,
 		"housekeeping-candidates-limit",
 		yorkie.DefaultHousekeepingCandidateLimit,
-		"candidates limit for a single housekeeping run (default: 500)",
+		"candidates limit for a single housekeeping run",
 	)
 	cmd.Flags().StringVar(
 		&mongoConnectionURI,
@@ -274,13 +287,13 @@ func init() {
 		"backend-snapshot-threshold",
 		yorkie.DefaultSnapshotThreshold,
 		"Threshold that determines if changes should be sent with snapshot when the number "+
-			"of changes is greater than this value. (default: 500)",
+			"of changes is greater than this value.",
 	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.SnapshotInterval,
 		"backend-snapshot-interval",
 		yorkie.DefaultSnapshotInterval,
-		"Interval of changes to create a snapshot (default: 1000)",
+		"Interval of changes to create a snapshot.",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AuthWebhookURL,

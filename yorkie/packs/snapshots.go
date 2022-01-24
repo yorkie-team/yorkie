@@ -91,7 +91,7 @@ func storeSnapshot(
 		return err
 	}
 
-	log.Logger.Infof(
+	log.Logger().Infof(
 		"SNAP: '%s', serverSeq: %d",
 		docInfo.Key,
 		doc.Checkpoint().ServerSeq,

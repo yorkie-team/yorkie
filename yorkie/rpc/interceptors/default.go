@@ -54,11 +54,11 @@ func (i *DefaultInterceptor) Unary() grpc.UnaryServerInterceptor {
 		start := gotime.Now()
 		resp, err := handler(ctx, req)
 		if err != nil {
-			log.Logger.Warnf("RPC : %q %s: %q => %q", info.FullMethod, gotime.Since(start), req, err)
+			log.Logger().Warnf("RPC : %q %s: %q => %q", info.FullMethod, gotime.Since(start), req, err)
 			return nil, toStatusError(err)
 		}
 
-		log.Logger.Infof("RPC : %q %s", info.FullMethod, gotime.Since(start))
+		log.Logger().Infof("RPC : %q %s", info.FullMethod, gotime.Since(start))
 		return resp, err
 	}
 }
@@ -74,11 +74,11 @@ func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
 		start := gotime.Now()
 		err := handler(srv, ss)
 		if err != nil {
-			log.Logger.Warnf("RPC : stream %q %s => %q", info.FullMethod, gotime.Since(start), err.Error())
+			log.Logger().Warnf("RPC : stream %q %s => %q", info.FullMethod, gotime.Since(start), err.Error())
 			return toStatusError(err)
 		}
 
-		log.Logger.Infof("RPC : stream %q %s", info.FullMethod, gotime.Since(start))
+		log.Logger().Infof("RPC : stream %q %s", info.FullMethod, gotime.Since(start))
 		return err
 	}
 }

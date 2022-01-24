@@ -137,7 +137,7 @@ func (s *yorkieServer) AttachDocument(
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
-				log.Logger.Error(err)
+				log.Logger().Error(err)
 			}
 		}()
 	}
@@ -202,7 +202,7 @@ func (s *yorkieServer) DetachDocument(
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
-				log.Logger.Error(err)
+				log.Logger().Error(err)
 			}
 		}()
 	}
@@ -267,12 +267,12 @@ func (s *yorkieServer) PushPull(
 		}
 
 		if err := locker.Lock(ctx); err != nil {
-			log.Logger.Error(err)
+			log.Logger().Error(err)
 			return nil, err
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
-				log.Logger.Error(err)
+				log.Logger().Error(err)
 			}
 		}()
 	}
@@ -346,7 +346,7 @@ func (s *yorkieServer) WatchDocuments(
 		docKeys,
 	)
 	if err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 		return err
 	}
 
@@ -357,7 +357,7 @@ func (s *yorkieServer) WatchDocuments(
 			},
 		},
 	}); err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 		s.unwatchDocs(docKeys, subscription)
 		return err
 	}
@@ -385,7 +385,7 @@ func (s *yorkieServer) WatchDocuments(
 					},
 				},
 			}); err != nil {
-				log.Logger.Error(err)
+				log.Logger().Error(err)
 				s.unwatchDocs(docKeys, subscription)
 				return err
 			}
@@ -425,7 +425,7 @@ func (s *yorkieServer) watchDocs(
 		docKeys,
 	)
 	if err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 		return nil, nil, err
 	}
 

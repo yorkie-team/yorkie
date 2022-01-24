@@ -167,7 +167,7 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 
 	defer func() {
 		if err := locker.Unlock(ctx); err != nil {
-			log.Logger.Error(err)
+			log.Logger().Error(err)
 		}
 	}()
 
@@ -208,7 +208,7 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 	}
 
 	if len(candidates) > 0 {
-		log.Logger.Infof(
+		log.Logger().Infof(
 			"HSKP: candidates %d, deactivated %d, %s",
 			len(candidates),
 			deactivatedCount,

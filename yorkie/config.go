@@ -80,12 +80,12 @@ func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
 	bytes, err := ioutil.ReadFile(filepath.Clean(path))
 	if err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 		return nil, err
 	}
 
 	if err = yaml.Unmarshal(bytes, conf); err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 		return nil, err
 	}
 

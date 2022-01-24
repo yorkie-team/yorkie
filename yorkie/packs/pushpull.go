@@ -54,14 +54,14 @@ func pushChanges(
 			cn.SetServerSeq(serverSeq)
 			pushedChanges = append(pushedChanges, cn)
 		} else {
-			log.Logger.Warnf("change is rejected: %d vs %d ", cn.ID().ClientSeq(), cp.ClientSeq)
+			log.Logger().Warnf("change is rejected: %d vs %d ", cn.ID().ClientSeq(), cp.ClientSeq)
 		}
 
 		cp = cp.SyncClientSeq(cn.ClientSeq())
 	}
 
 	if len(pack.Changes) > 0 {
-		log.Logger.Infof(
+		log.Logger().Infof(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
 			clientInfo.ID,
 			len(pushedChanges),
@@ -137,7 +137,7 @@ func pullChangeInfos(
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
 
 	if len(pulledChanges) > 0 {
-		log.Logger.Infof(
+		log.Logger().Infof(
 			"PULL: '%s' pulls %d changes(%d~%d) from '%s', cp: %s",
 			clientInfo.ID,
 			len(pulledChanges),
@@ -167,7 +167,7 @@ func pullSnapshot(
 
 	if snapshotInfo.ServerSeq >= initialServerSeq {
 		pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
-		log.Logger.Infof(
+		log.Logger().Infof(
 			"PULL: '%s' pulls snapshot without changes from '%s', cp: %s",
 			clientInfo.ID,
 			docInfo.Key,
@@ -213,8 +213,8 @@ func pullSnapshot(
 		return nil, nil, err
 	}
 
-	if log.Core.Enabled(zap.DebugLevel) {
-		log.Logger.Debugf(
+	if log.Core().Enabled(zap.DebugLevel) {
+		log.Logger().Debugf(
 			"after apply %d changes: elements: %d removeds: %d, %s",
 			len(pack.Changes),
 			doc.Root().ElementMapLen(),
@@ -225,7 +225,7 @@ func pullSnapshot(
 
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
 
-	log.Logger.Infof(
+	log.Logger().Infof(
 		"PULL: '%s' pulls snapshot with changes(%d~%d) from '%s', cp: %s",
 		clientInfo.ID,
 		pack.Checkpoint.ServerSeq+1,

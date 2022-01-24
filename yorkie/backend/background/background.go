@@ -33,7 +33,7 @@ func (b *Background) AttachGoroutine(f func()) {
 	defer b.wgMu.RUnlock()
 	select {
 	case <-b.closing:
-		log.Logger.Warn("backend has closed; skipping AttachGoroutine")
+		log.Logger().Warn("backend has closed; skipping AttachGoroutine")
 		return
 	default:
 	}

@@ -119,7 +119,7 @@ func New(
 		dbInfo = mongoConf.ConnectionURI
 	}
 
-	log.Logger.Infof(
+	log.Logger().Infof(
 		"backend created: id: %s, rpc: %s: db: %s",
 		agentInfo.ID,
 		agentInfo.RPCAddr,
@@ -149,14 +149,14 @@ func (b *Backend) Shutdown() error {
 	}
 
 	if err := b.Coordinator.Close(); err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 	}
 
 	if err := b.DB.Close(); err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 	}
 
-	log.Logger.Infof(
+	log.Logger().Infof(
 		"backend stoped: id: %s, rpc: %s",
 		b.agentInfo.ID,
 		b.agentInfo.RPCAddr,

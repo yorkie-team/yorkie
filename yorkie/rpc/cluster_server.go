@@ -44,13 +44,13 @@ func (s *clusterServer) BroadcastEvent(
 ) (*api.BroadcastEventResponse, error) {
 	actorID, err := time.ActorIDFromBytes(request.PublisherId)
 	if err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 		return nil, err
 	}
 
 	docEvent, err := converter.FromDocEvent(request.Event)
 	if err != nil {
-		log.Logger.Error(err)
+		log.Logger().Error(err)
 		return nil, err
 	}
 

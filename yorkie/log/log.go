@@ -17,19 +17,58 @@
 package log
 
 import (
+	"fmt"
 	"os"
+	"strings"
+	"sync"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-// Logger is the default logger used by Yorkie.
-var Logger *zap.SugaredLogger
+var defaultLogger *zap.SugaredLogger
+var coreLogger zapcore.Core
 
-// Core is a minimal, fast logger interface.
-var Core zapcore.Core
+var logLevel = zapcore.InfoLevel
+var loggerOnce sync.Once
 
-var rawLogger *zap.Logger
+// Logger returns the default logger used by Yorkie.
+func Logger() *zap.SugaredLogger {
+	loggerOnce.Do(func() {
+		initialize()
+	})
+	return defaultLogger
+}
+
+// Core returns the Core logger, where Core is a minial, fast logger interface.
+func Core() zapcore.Core {
+	loggerOnce.Do(func() {
+		initialize()
+	})
+	return coreLogger
+}
+
+// SetLogLevel sets the level of global logger with ["debug", "info", "warn", "error", "panic", "fatal"].
+// Loglevel must be sets before calling DefaultLogger() or CoreLogger() function.
+func SetLogLevel(level string) error {
+	switch strings.ToLower(level) {
+	case "debug":
+		logLevel = zapcore.DebugLevel
+	case "info":
+		logLevel = zapcore.InfoLevel
+	case "warn":
+		logLevel = zapcore.WarnLevel
+	case "error":
+		logLevel = zapcore.ErrorLevel
+	case "panic":
+		logLevel = zapcore.PanicLevel
+	case "fatal":
+		logLevel = zapcore.FatalLevel
+	default:
+		return fmt.Errorf("invalid log level: %s", level)
+	}
+	return nil
+}
 
 func encoderConfig() zapcore.EncoderConfig {
 	return zapcore.EncoderConfig{
@@ -55,15 +94,14 @@ func humanEncoderConfig() zapcore.EncoderConfig {
 	return cfg
 }
 
-func init() {
-	rawLogger = zap.New(zapcore.NewTee(
+func initialize() {
+	rawLogger := zap.New(zapcore.NewTee(
 		zapcore.NewCore(
 			zapcore.NewConsoleEncoder(humanEncoderConfig()),
 			zapcore.AddSync(os.Stdout),
-			zapcore.InfoLevel,
+			logLevel,
 		),
 	), zap.AddStacktrace(zap.ErrorLevel))
-
-	Logger = rawLogger.Sugar()
-	Core = rawLogger.Core()
+	defaultLogger = rawLogger.Sugar()
+	coreLogger = rawLogger.Core()
 }
