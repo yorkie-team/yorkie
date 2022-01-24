@@ -1,6 +1,6 @@
 # Yorkie
 
-[![Github](https://img.shields.io/github/stars/yorkie-team/yorkie.svg?style=social)](https://github.com/yorkie-team/yorkie)
+[![GitHub](https://img.shields.io/github/stars/yorkie-team/yorkie.svg?style=social)](https://github.com/yorkie-team/yorkie)
 [![Twitter](https://img.shields.io/twitter/follow/team_yorkie.svg?label=Follow)](https://twitter.com/team_yorkie)
 [![Slack](https://img.shields.io/badge/chat-on%20Slack-brightgreen.svg?style=social&amp;logo=slack)](https://dev-yorkie.slack.com/)
 [![Contributors](https://img.shields.io/github/contributors/yorkie-team/yorkie.svg)](https://github.com/yorkie-team/yorkie/contributors)
@@ -63,7 +63,7 @@ Next, clone this repository into some local directory and then just type `make b
 ```
 $ make build
 ...
-$ bin/yorkie
+$ bin/yorkie # For Windows, .\bin\yorkie.exe
 ```
 
 > We need to install Golang packages to build Yorkie locally. You can run `make tools` to install the required packages.
