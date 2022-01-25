@@ -31,7 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
 	memsync "github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 )
 
@@ -119,7 +119,7 @@ func New(
 		dbInfo = mongoConf.ConnectionURI
 	}
 
-	log.Logger().Infof(
+	logging.DefaultLogger().Infof(
 		"backend created: id: %s, rpc: %s: db: %s",
 		agentInfo.ID,
 		agentInfo.RPCAddr,
@@ -149,14 +149,14 @@ func (b *Backend) Shutdown() error {
 	}
 
 	if err := b.Coordinator.Close(); err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 	}
 
 	if err := b.DB.Close(); err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 	}
 
-	log.Logger().Infof(
+	logging.DefaultLogger().Infof(
 		"backend stoped: id: %s, rpc: %s",
 		b.agentInfo.ID,
 		b.agentInfo.RPCAddr,

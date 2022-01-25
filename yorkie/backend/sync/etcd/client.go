@@ -26,7 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 // clusterClientInfo represents a cluster client and its connection.
@@ -101,11 +101,11 @@ func (c *Client) Dial() error {
 		Password:    c.config.Password,
 	})
 	if err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 		return err
 	}
 
-	log.Logger().Infof("etcd connected, URI: %s", c.config.Endpoints)
+	logging.DefaultLogger().Infof("etcd connected, URI: %s", c.config.Endpoints)
 
 	c.client = cli
 	return nil
@@ -116,7 +116,7 @@ func (c *Client) Close() error {
 	c.cancelFunc()
 
 	if err := c.removeAgent(context.Background()); err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 	}
 
 	for id := range c.clusterClientMap {

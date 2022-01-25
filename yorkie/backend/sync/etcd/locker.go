@@ -22,7 +22,7 @@ import (
 	"go.etcd.io/etcd/client/v3/concurrency"
 
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 // NewLocker creates locker of the given key.
@@ -37,7 +37,7 @@ func (c *Client) NewLocker(
 		concurrency.WithTTL(ttl),
 	)
 	if err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 		return nil, err
 	}
 
@@ -55,7 +55,7 @@ type internalLocker struct {
 // Lock locks the mutex with a cancelable context
 func (il *internalLocker) Lock(ctx context.Context) error {
 	if err := il.mu.Lock(ctx); err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 		return err
 	}
 
@@ -69,7 +69,7 @@ func (il *internalLocker) TryLock(ctx context.Context) error {
 			return sync.ErrAlreadyLocked
 		}
 
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 		return err
 	}
 
@@ -79,7 +79,7 @@ func (il *internalLocker) TryLock(ctx context.Context) error {
 // Unlock unlocks the mutex.
 func (il *internalLocker) Unlock(ctx context.Context) error {
 	if err := il.mu.Unlock(ctx); err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 		return err
 	}
 

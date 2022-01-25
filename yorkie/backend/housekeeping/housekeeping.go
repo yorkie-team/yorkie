@@ -23,7 +23,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 const (
@@ -141,7 +141,8 @@ func (h *Housekeeping) Stop() error {
 // run is the housekeeping loop.
 func (h *Housekeeping) run() {
 	for {
-		if err := h.deactivateCandidates(context.Background()); err != nil {
+		ctx := context.Background()
+		if err := h.deactivateCandidates(ctx); err != nil {
 			continue
 		}
 
@@ -167,7 +168,7 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 
 	defer func() {
 		if err := locker.Unlock(ctx); err != nil {
-			log.Logger().Error(err)
+			logging.From(ctx).Error(err)
 		}
 	}()
 
@@ -208,7 +209,7 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 	}
 
 	if len(candidates) > 0 {
-		log.Logger().Infof(
+		logging.From(ctx).Infof(
 			"HSKP: candidates %d, deactivated %d, %s",
 			len(candidates),
 			deactivatedCount,

@@ -17,6 +17,7 @@
 package memory
 
 import (
+	"context"
 	gosync "sync"
 	gotime "time"
 
@@ -26,7 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 // subscriptions is a map of subscriptions.
@@ -81,6 +82,7 @@ func NewPubSub() *PubSub {
 
 // Subscribe subscribes to the given document keys.
 func (m *PubSub) Subscribe(
+	ctx context.Context,
 	subscriber types.Client,
 	keys []*key.Key,
 ) (*sync.Subscription, error) {
@@ -88,8 +90,8 @@ func (m *PubSub) Subscribe(
 		return nil, sync.ErrEmptyDocKeys
 	}
 
-	if log.Core().Enabled(zap.DebugLevel) {
-		log.Logger().Debugf(
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
 			keys[0].BSONKey(),
 			subscriber.ID.String(),
@@ -110,8 +112,8 @@ func (m *PubSub) Subscribe(
 		m.subscriptionsMapByDocKey[bsonKey].Add(sub)
 	}
 
-	if log.Core().Enabled(zap.DebugLevel) {
-		log.Logger().Debugf(
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
 			keys[0].BSONKey(),
 			subscriber.ID.String(),
@@ -136,14 +138,15 @@ func (m *PubSub) BuildPeersMap(keys []*key.Key) map[string][]types.Client {
 
 // Unsubscribe unsubscribes the given docKeys.
 func (m *PubSub) Unsubscribe(
+	ctx context.Context,
 	docKeys []*key.Key,
 	sub *sync.Subscription,
 ) {
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	if log.Core().Enabled(zap.DebugLevel) {
-		log.Logger().Debugf(
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
 			docKeys[0].BSONKey(),
 			sub.SubscriberID(),
@@ -164,8 +167,8 @@ func (m *PubSub) Unsubscribe(
 		}
 	}
 
-	if log.Core().Enabled(zap.DebugLevel) {
-		log.Logger().Debugf(
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
 			docKeys[0].BSONKey(),
 			sub.SubscriberID(),
@@ -175,6 +178,7 @@ func (m *PubSub) Unsubscribe(
 
 // Publish publishes the given event.
 func (m *PubSub) Publish(
+	ctx context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
@@ -184,8 +188,8 @@ func (m *PubSub) Publish(
 	for _, docKey := range event.DocumentKeys {
 		k := docKey.BSONKey()
 
-		if log.Core().Enabled(zap.DebugLevel) {
-			log.Logger().Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
+		if logging.Enabled(zap.DebugLevel) {
+			logging.From(ctx).Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
 		}
 
 		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
@@ -194,8 +198,8 @@ func (m *PubSub) Publish(
 					continue
 				}
 
-				if log.Core().Enabled(zap.DebugLevel) {
-					log.Logger().Debugf(
+				if logging.Enabled(zap.DebugLevel) {
+					logging.From(ctx).Debugf(
 						`Publish(%s,%s) to %s`,
 						k,
 						publisherID.String(),
@@ -208,7 +212,7 @@ func (m *PubSub) Publish(
 				select {
 				case sub.Events() <- event:
 				case <-gotime.After(100 * gotime.Millisecond):
-					log.Logger().Warnf(
+					logging.From(ctx).Warnf(
 						`Publish(%s,%s) to %s timeout`,
 						k,
 						publisherID.String(),
@@ -217,8 +221,8 @@ func (m *PubSub) Publish(
 				}
 			}
 		}
-		if log.Core().Enabled(zap.DebugLevel) {
-			log.Logger().Debugf(`Publish(%s,%s) End`, k, publisherID.String())
+		if logging.Enabled(zap.DebugLevel) {
+			logging.From(ctx).Debugf(`Publish(%s,%s) End`, k, publisherID.String())
 		}
 	}
 }

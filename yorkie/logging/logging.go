@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package log
+package logging
 
 import (
 	"fmt"
@@ -26,30 +26,15 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var defaultLogger *zap.SugaredLogger
-var coreLogger zapcore.Core
+// Logger is a wrapper of zap.Logger.
+type Logger = *zap.SugaredLogger
 
+var defaultLogger Logger
 var logLevel = zapcore.InfoLevel
 var loggerOnce sync.Once
 
-// Logger returns the default logger used by Yorkie.
-func Logger() *zap.SugaredLogger {
-	loggerOnce.Do(func() {
-		initialize()
-	})
-	return defaultLogger
-}
-
-// Core returns the Core logger, where Core is a minimal, fast logger interface.
-func Core() zapcore.Core {
-	loggerOnce.Do(func() {
-		initialize()
-	})
-	return coreLogger
-}
-
 // SetLogLevel sets the level of global logger with ["debug", "info", "warn", "error", "panic", "fatal"].
-// Loglevel must be sets before calling DefaultLogger() or CoreLogger() function.
+// SetLoglevel must be sets before calling DefaultLogger() or New().
 func SetLogLevel(level string) error {
 	switch strings.ToLower(level) {
 	case "debug":
@@ -68,6 +53,35 @@ func SetLogLevel(level string) error {
 		return fmt.Errorf("invalid log level: %s", level)
 	}
 	return nil
+}
+
+// New creates a new logger with the given configuration.
+func New(name string) Logger {
+	return newLogger(name)
+}
+
+// DefaultLogger returns the default logger used by Yorkie.
+func DefaultLogger() Logger {
+	loggerOnce.Do(func() {
+		defaultLogger = newLogger("default")
+	})
+	return defaultLogger
+}
+
+// Enabled returns true if the given level is enabled.
+func Enabled(level zapcore.Level) bool {
+	return level >= logLevel
+}
+
+// newLogger returns a new raw logger.
+func newLogger(name string) Logger {
+	return zap.New(zapcore.NewTee(
+		zapcore.NewCore(
+			zapcore.NewConsoleEncoder(humanEncoderConfig()),
+			zapcore.AddSync(os.Stdout),
+			logLevel,
+		),
+	), zap.AddStacktrace(zap.ErrorLevel)).Named(name).Sugar()
 }
 
 func encoderConfig() zapcore.EncoderConfig {
@@ -92,16 +106,4 @@ func humanEncoderConfig() zapcore.EncoderConfig {
 	cfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	cfg.EncodeDuration = zapcore.StringDurationEncoder
 	return cfg
-}
-
-func initialize() {
-	rawLogger := zap.New(zapcore.NewTee(
-		zapcore.NewCore(
-			zapcore.NewConsoleEncoder(humanEncoderConfig()),
-			zapcore.AddSync(os.Stdout),
-			logLevel,
-		),
-	), zap.AddStacktrace(zap.ErrorLevel))
-	defaultLogger = rawLogger.Sugar()
-	coreLogger = rawLogger.Core()
 }

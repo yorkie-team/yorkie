@@ -32,7 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 type clientAndDocPair struct {
@@ -50,13 +50,13 @@ var defaultAgent *yorkie.Yorkie
 func TestMain(m *testing.M) {
 	agent := helper.TestYorkie()
 	if err := agent.Start(); err != nil {
-		log.Logger().Fatal(err)
+		logging.DefaultLogger().Fatal(err)
 	}
 	defaultAgent = agent
 	code := m.Run()
 	if defaultAgent != nil {
 		if err := defaultAgent.Shutdown(true); err != nil {
-			log.Logger().Error(err)
+			logging.DefaultLogger().Error(err)
 		}
 	}
 	os.Exit(code)

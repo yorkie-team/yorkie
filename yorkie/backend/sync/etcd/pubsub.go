@@ -30,7 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 const (
@@ -43,7 +43,7 @@ func (c *Client) Subscribe(
 	subscriber types.Client,
 	keys []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	sub, err := c.localPubSub.Subscribe(subscriber, keys)
+	sub, err := c.localPubSub.Subscribe(ctx, subscriber, keys)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -74,7 +74,7 @@ func (c *Client) Unsubscribe(
 	keys []*key.Key,
 	sub *sync.Subscription,
 ) error {
-	c.localPubSub.Unsubscribe(keys, sub)
+	c.localPubSub.Unsubscribe(ctx, keys, sub)
 	return c.removeSubscriptions(ctx, keys, sub)
 }
 
@@ -84,7 +84,7 @@ func (c *Client) Publish(
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	c.localPubSub.Publish(publisherID, event)
+	c.localPubSub.Publish(ctx, publisherID, event)
 	c.broadcastToMembers(ctx, event)
 }
 
@@ -94,7 +94,7 @@ func (c *Client) PublishToLocal(
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	c.localPubSub.Publish(publisherID, event)
+	c.localPubSub.Publish(ctx, publisherID, event)
 }
 
 // UpdateMetadata updates the metadata of the given client.
@@ -153,7 +153,7 @@ func (c *Client) ensureClusterClient(
 	if _, ok := c.clusterClientMap[member.ID]; !ok {
 		conn, err := grpc.Dial(member.RPCAddr, grpc.WithInsecure())
 		if err != nil {
-			log.Logger().Error(err)
+			logging.DefaultLogger().Error(err)
 			return nil, err
 		}
 
@@ -173,7 +173,7 @@ func (c *Client) removeClusterClient(id string) {
 
 	if info, ok := c.clusterClientMap[id]; ok {
 		if err := info.conn.Close(); err != nil {
-			log.Logger().Error(err)
+			logging.DefaultLogger().Error(err)
 		}
 
 		delete(c.clusterClientMap, id)
@@ -189,7 +189,7 @@ func (c *Client) publishToMember(
 ) error {
 	docEvent, err := converter.ToDocEvent(event)
 	if err != nil {
-		log.Logger().Error(err)
+		logging.From(ctx).Error(err)
 		return err
 	}
 
@@ -197,7 +197,7 @@ func (c *Client) publishToMember(
 		PublisherId: publisherID.Bytes(),
 		Event:       docEvent,
 	}); err != nil {
-		log.Logger().Error(err)
+		logging.From(ctx).Error(err)
 		return err
 	}
 
@@ -219,7 +219,7 @@ func (c *Client) putSubscriptions(
 	for _, k := range keys {
 		k := path.Join(subscriptionsPath, k.BSONKey(), sub.ID())
 		if _, err = c.client.Put(ctx, k, encoded); err != nil {
-			log.Logger().Error(err)
+			logging.From(ctx).Error(err)
 			return fmt.Errorf("put %s: %w", k, err)
 		}
 	}
@@ -238,7 +238,7 @@ func (c *Client) pullSubscriptions(
 		clientv3.WithPrefix(),
 	)
 	if err != nil {
-		log.Logger().Error(err)
+		logging.From(ctx).Error(err)
 		return nil, err
 	}
 
@@ -263,7 +263,7 @@ func (c *Client) removeSubscriptions(
 	for _, docKey := range keys {
 		k := path.Join(subscriptionsPath, docKey.BSONKey(), sub.ID())
 		if _, err := c.client.Delete(ctx, k); err != nil {
-			log.Logger().Error(err)
+			logging.From(ctx).Error(err)
 			return err
 		}
 	}

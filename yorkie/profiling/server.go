@@ -24,7 +24,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 	"github.com/yorkie-team/yorkie/yorkie/profiling/prometheus"
 )
 
@@ -79,22 +79,22 @@ func (s *Server) Start() error {
 func (s *Server) Shutdown(graceful bool) {
 	if graceful {
 		if err := s.httpServer.Shutdown(context.Background()); err != nil {
-			log.Logger().Error("HTTP server Shutdown: %v", err)
+			logging.DefaultLogger().Error("HTTP server Shutdown: %v", err)
 		}
 		return
 	}
 
 	if err := s.httpServer.Close(); err != nil {
-		log.Logger().Error("HTTP server close: %v", err)
+		logging.DefaultLogger().Error("HTTP server close: %v", err)
 	}
 }
 
 func (s *Server) listenAndServe() error {
 	go func() {
-		log.Logger().Infof(fmt.Sprintf("serving profiling on %d", s.conf.Port))
+		logging.DefaultLogger().Infof(fmt.Sprintf("serving profiling on %d", s.conf.Port))
 		s.httpServer.Handler = s.serveMux
 		if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
-			log.Logger().Error("HTTP server ListenAndServe: %v", err)
+			logging.DefaultLogger().Error("HTTP server ListenAndServe: %v", err)
 		}
 	}()
 	return nil

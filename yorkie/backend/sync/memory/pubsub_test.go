@@ -17,6 +17,7 @@
 package memory_test
 
 import (
+	"context"
 	gosync "sync"
 	"testing"
 
@@ -48,11 +49,12 @@ func TestPubSub(t *testing.T) {
 			DocumentKeys: docKeys,
 		}
 
+		ctx := context.Background()
 		// subscribe the documents by actorA
-		subA, err := pubSub.Subscribe(actorA, docKeys)
+		subA, err := pubSub.Subscribe(ctx, actorA, docKeys)
 		assert.NoError(t, err)
 		defer func() {
-			pubSub.Unsubscribe(docKeys, subA)
+			pubSub.Unsubscribe(ctx, docKeys, subA)
 		}()
 
 		var wg gosync.WaitGroup
@@ -64,7 +66,7 @@ func TestPubSub(t *testing.T) {
 		}()
 
 		// publish the event to the documents by actorB
-		pubSub.Publish(actorB.ID, event)
+		pubSub.Publish(ctx, actorB.ID, event)
 		wg.Wait()
 	})
 
@@ -77,8 +79,10 @@ func TestPubSub(t *testing.T) {
 			},
 		}
 
+		ctx := context.Background()
+
 		for i := 0; i < 5; i++ {
-			_, err := pubSub.Subscribe(actorA, docKeys)
+			_, err := pubSub.Subscribe(ctx, actorA, docKeys)
 			assert.NoError(t, err)
 
 			subs := pubSub.BuildPeersMap(docKeys)

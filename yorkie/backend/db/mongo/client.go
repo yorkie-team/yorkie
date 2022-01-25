@@ -31,7 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
@@ -52,7 +52,7 @@ func Dial(conf *Config) (*Client, error) {
 			SetRegistry(newRegistryBuilder().Build()),
 	)
 	if err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 		return nil, err
 	}
 
@@ -61,16 +61,16 @@ func Dial(conf *Config) (*Client, error) {
 	defer cancel()
 
 	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
-		log.Logger().Errorf("fail to connect to %s in %f sec", conf.ConnectionURI, pingTimeout.Seconds())
+		logging.DefaultLogger().Errorf("fail to connect to %s in %f sec", conf.ConnectionURI, pingTimeout.Seconds())
 		return nil, err
 	}
 
 	if err := ensureIndexes(ctx, client.Database(conf.YorkieDatabase)); err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 		return nil, err
 	}
 
-	log.Logger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
+	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
 	return &Client{
 		config: conf,
@@ -81,7 +81,7 @@ func Dial(conf *Config) (*Client, error) {
 // Close all resources of this client.
 func (c *Client) Close() error {
 	if err := c.client.Disconnect(context.Background()); err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 		return err
 	}
 
@@ -100,7 +100,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
-		log.Logger().Error(err)
+		logging.From(ctx).Error(err)
 		return nil, err
 	}
 
@@ -224,7 +224,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		if result.Err() == mongo.ErrNoDocuments {
 			return fmt.Errorf("%s: %w", clientInfo.Key, db.ErrClientNotFound)
 		}
-		log.Logger().Error(result.Err())
+		logging.From(ctx).Error(result.Err())
 		return result.Err()
 	}
 
@@ -279,7 +279,7 @@ func (c *Client) FindDocInfoByKey(
 		},
 	}, options.Update().SetUpsert(createDocIfNotExist))
 	if err != nil {
-		log.Logger().Error(err)
+		logging.From(ctx).Error(err)
 		return nil, err
 	}
 
@@ -299,11 +299,11 @@ func (c *Client) FindDocInfoByKey(
 			"key": bsonDocKey,
 		})
 		if result.Err() == mongo.ErrNoDocuments {
-			log.Logger().Error(result.Err())
+			logging.From(ctx).Error(result.Err())
 			return nil, fmt.Errorf("%s: %w", bsonDocKey, db.ErrDocumentNotFound)
 		}
 		if result.Err() != nil {
-			log.Logger().Error(result.Err())
+			logging.From(ctx).Error(result.Err())
 			return nil, result.Err()
 		}
 	}
@@ -354,7 +354,7 @@ func (c *Client) CreateChangeInfos(
 		models,
 		options.BulkWrite().SetOrdered(true),
 	); err != nil {
-		log.Logger().Error(err)
+		logging.From(ctx).Error(err)
 		return err
 	}
 
@@ -368,7 +368,7 @@ func (c *Client) CreateChangeInfos(
 		},
 	})
 	if err != nil {
-		log.Logger().Error(err)
+		logging.From(ctx).Error(err)
 		return err
 	}
 	if res.MatchedCount == 0 {
@@ -422,13 +422,13 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		},
 	}, options.Find())
 	if err != nil {
-		log.Logger().Error(err)
+		logging.From(ctx).Error(err)
 		return nil, err
 	}
 
 	var infos []*db.ChangeInfo
 	if err := cursor.All(ctx, &infos); err != nil {
-		log.Logger().Error(cursor.Err())
+		logging.From(ctx).Error(cursor.Err())
 		return nil, cursor.Err()
 	}
 
@@ -456,7 +456,7 @@ func (c *Client) CreateSnapshotInfo(
 		"snapshot":   snapshot,
 		"created_at": gotime.Now(),
 	}); err != nil {
-		log.Logger().Error(err)
+		logging.From(ctx).Error(err)
 		return err
 	}
 
@@ -485,7 +485,7 @@ func (c *Client) FindLastSnapshotInfo(
 	}
 
 	if result.Err() != nil {
-		log.Logger().Error(result.Err())
+		logging.From(ctx).Error(result.Err())
 		return nil, result.Err()
 	}
 
@@ -524,7 +524,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		return time.InitialTicket, nil
 	}
 	if result.Err() != nil {
-		log.Logger().Error(result.Err())
+		logging.From(ctx).Error(result.Err())
 		return nil, result.Err()
 	}
 	syncedSeqInfo := db.SyncedSeqInfo{}
@@ -575,7 +575,7 @@ func (c *Client) UpdateSyncedSeq(
 			"doc_id":    encodedDocID,
 			"client_id": encodedClientID,
 		}, options.Delete()); err != nil {
-			log.Logger().Error(err)
+			logging.From(ctx).Error(err)
 			return err
 		}
 		return nil
@@ -596,7 +596,7 @@ func (c *Client) UpdateSyncedSeq(
 			"server_seq": serverSeq,
 		},
 	}, options.Update().SetUpsert(true)); err != nil {
-		log.Logger().Error(err)
+		logging.From(ctx).Error(err)
 		return err
 	}
 
@@ -631,7 +631,7 @@ func (c *Client) findTicketByServerSeq(
 	}
 
 	if result.Err() != nil {
-		log.Logger().Error(result.Err())
+		logging.From(ctx).Error(result.Err())
 		return nil, result.Err()
 	}
 

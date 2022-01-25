@@ -28,7 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 // NewPushPullKey creates a new sync.Key of PushPull for the given document.
@@ -60,7 +60,7 @@ func PushPull(
 	initialServerSeq := docInfo.ServerSeq
 
 	// 01. push changes.
-	pushedCP, pushedChanges, err := pushChanges(clientInfo, docInfo, reqPack, initialServerSeq)
+	pushedCP, pushedChanges, err := pushChanges(ctx, clientInfo, docInfo, reqPack, initialServerSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -107,20 +107,19 @@ func PushPull(
 
 	// 05. publish document change event then store snapshot asynchronously.
 	if reqPack.HasChanges() {
-		be.Background.AttachGoroutine(func() {
+		be.Background.AttachGoroutine(func(ctx context.Context) {
 			publisherID, err := time.ActorIDFromHex(clientInfo.ID.String())
 			if err != nil {
-				log.Logger().Error(err)
+				logging.From(ctx).Error(err)
 				return
 			}
 
-			ctx := context.Background()
 			locker, err := be.Coordinator.NewLocker(
 				ctx,
 				NewSnapshotKey(reqPack.DocumentKey),
 			)
 			if err != nil {
-				log.Logger().Error(err)
+				logging.From(ctx).Error(err)
 				return
 			}
 			// NOTE: If the snapshot is already being created by another routine, it
@@ -131,7 +130,7 @@ func PushPull(
 
 			defer func() {
 				if err := locker.Unlock(ctx); err != nil {
-					log.Logger().Error(err)
+					logging.From(ctx).Error(err)
 					return
 				}
 			}()
@@ -153,7 +152,7 @@ func PushPull(
 				docInfo,
 				minSyncedTicket,
 			); err != nil {
-				log.Logger().Error(err)
+				logging.From(ctx).Error(err)
 			}
 			be.Metrics.ObservePushPullSnapshotDurationSeconds(
 				gotime.Since(start).Seconds(),
