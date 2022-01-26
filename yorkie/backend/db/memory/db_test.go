@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
@@ -162,17 +163,23 @@ func TestDB(t *testing.T) {
 
 		doc := document.New("tests", t.Name())
 		doc.SetActor(actorID)
+
 		assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("array")
 			return nil
 		}))
 
-		err = memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument())
-		assert.NoError(t, err)
-
+		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err := memdb.FindLastSnapshotInfo(ctx, docInfo.ID)
 		assert.NoError(t, err)
-		assert.NotNil(t, snapshot)
+		assert.Equal(t, uint64(0), snapshot.ServerSeq)
+
+		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
+		assert.NoError(t, doc.ApplyChangePack(pack))
+		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = memdb.FindLastSnapshotInfo(ctx, docInfo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(1), snapshot.ServerSeq)
 	})
 
 	t.Run("housekeeping test", func(t *testing.T) {
