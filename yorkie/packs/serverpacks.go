@@ -23,7 +23,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 // ServerPack is similar to change.Pack, but has ChangeInfos instead of Changes
@@ -94,7 +94,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		for _, bytesOp := range changeInfo.Operations {
 			pbOp := api.Operation{}
 			if err := pbOp.Unmarshal(bytesOp); err != nil {
-				log.Logger().Error(err)
+				logging.DefaultLogger().Error(err)
 				return nil, err
 			}
 			pbOps = append(pbOps, &pbOp)

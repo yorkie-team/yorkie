@@ -24,7 +24,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/operation"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/yorkie/log"
 )
 
 // ErrEncodeOperationFailed is returned when encoding operation failed.
@@ -54,7 +53,6 @@ func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
 	for _, pbOp := range changes {
 		encodedOp, err := pbOp.Marshal()
 		if err != nil {
-			log.Logger().Error(err)
 			return nil, ErrEncodeOperationFailed
 		}
 		encodedOps = append(encodedOps, encodedOp)
@@ -76,7 +74,6 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	for _, bytesOp := range i.Operations {
 		pbOp := api.Operation{}
 		if err := pbOp.Unmarshal(bytesOp); err != nil {
-			log.Logger().Error(err)
 			return nil, err
 		}
 		pbOps = append(pbOps, &pbOp)

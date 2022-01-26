@@ -30,7 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 var (
@@ -96,7 +96,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
-				log.Logger().Error(err)
+				logging.From(ctx).Error(err)
 			}
 		}()
 

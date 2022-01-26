@@ -30,13 +30,12 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/auth"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
 )
 
 // DefaultInterceptor is a interceptor for default.
-type DefaultInterceptor struct {
-}
+type DefaultInterceptor struct{}
 
 // NewDefaultInterceptor creates a new instance of DefaultInterceptor.
 func NewDefaultInterceptor() *DefaultInterceptor {
@@ -53,12 +52,15 @@ func (i *DefaultInterceptor) Unary() grpc.UnaryServerInterceptor {
 	) (interface{}, error) {
 		start := gotime.Now()
 		resp, err := handler(ctx, req)
+		reqLogger := logging.From(ctx)
 		if err != nil {
-			log.Logger().Warnf("RPC : %q %s: %q => %q", info.FullMethod, gotime.Since(start), req, err)
+			reqLogger.Warnf("RPC : %q %s: %q => %q", info.FullMethod, gotime.Since(start), req, err)
 			return nil, toStatusError(err)
 		}
 
-		log.Logger().Infof("RPC : %q %s", info.FullMethod, gotime.Since(start))
+		if gotime.Since(start) > 100*gotime.Millisecond {
+			reqLogger.Infof("RPC : %q %s", info.FullMethod, gotime.Since(start))
+		}
 		return resp, err
 	}
 }
@@ -71,14 +73,16 @@ func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
+		reqLogger := logging.From(ss.Context())
+
 		start := gotime.Now()
 		err := handler(srv, ss)
 		if err != nil {
-			log.Logger().Warnf("RPC : stream %q %s => %q", info.FullMethod, gotime.Since(start), err.Error())
+			reqLogger.Warnf("RPC : stream %q %s => %q", info.FullMethod, gotime.Since(start), err.Error())
 			return toStatusError(err)
 		}
 
-		log.Logger().Infof("RPC : stream %q %s", info.FullMethod, gotime.Since(start))
+		reqLogger.Infof("RPC : stream %q %s", info.FullMethod, gotime.Since(start))
 		return err
 	}
 }

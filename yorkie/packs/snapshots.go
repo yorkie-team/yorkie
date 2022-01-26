@@ -24,7 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 func storeSnapshot(
@@ -91,7 +91,7 @@ func storeSnapshot(
 		return err
 	}
 
-	log.Logger().Infof(
+	logging.From(ctx).Infof(
 		"SNAP: '%s', serverSeq: %d",
 		docInfo.Key,
 		doc.Checkpoint().ServerSeq,

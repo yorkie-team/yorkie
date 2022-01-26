@@ -45,66 +45,66 @@ func NewCoordinator(agentInfo *sync.AgentInfo) *Coordinator {
 }
 
 // NewLocker creates locker of the given key.
-func (m *Coordinator) NewLocker(
+func (c *Coordinator) NewLocker(
 	ctx context.Context,
 	key sync.Key,
 ) (sync.Locker, error) {
 	return &internalLocker{
 		key.String(),
-		m.locks,
+		c.locks,
 	}, nil
 }
 
 // Subscribe subscribes to the given documents.
-func (m *Coordinator) Subscribe(
-	_ context.Context,
+func (c *Coordinator) Subscribe(
+	ctx context.Context,
 	subscriber types.Client,
 	keys []*key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	sub, err := m.pubSub.Subscribe(subscriber, keys)
+	sub, err := c.pubSub.Subscribe(ctx, subscriber, keys)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	peersMap := m.pubSub.BuildPeersMap(keys)
+	peersMap := c.pubSub.BuildPeersMap(keys)
 	return sub, peersMap, nil
 }
 
 // Unsubscribe unsubscribes the given documents.
-func (m *Coordinator) Unsubscribe(
-	_ context.Context,
+func (c *Coordinator) Unsubscribe(
+	ctx context.Context,
 	keys []*key.Key,
 	sub *sync.Subscription,
 ) error {
-	m.pubSub.Unsubscribe(keys, sub)
+	c.pubSub.Unsubscribe(ctx, keys, sub)
 	return nil
 }
 
 // Publish publishes the given event.
-func (m *Coordinator) Publish(
-	_ context.Context,
+func (c *Coordinator) Publish(
+	ctx context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	m.pubSub.Publish(publisherID, event)
+	c.pubSub.Publish(ctx, publisherID, event)
 }
 
 // PublishToLocal publishes the given event.
-func (m *Coordinator) PublishToLocal(
-	_ context.Context,
+func (c *Coordinator) PublishToLocal(
+	ctx context.Context,
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	m.pubSub.Publish(publisherID, event)
+	c.pubSub.Publish(ctx, publisherID, event)
 }
 
 // UpdateMetadata updates the metadata of the given client.
-func (m *Coordinator) UpdateMetadata(
+func (c *Coordinator) UpdateMetadata(
 	_ context.Context,
 	publisher *types.Client,
 	keys []*key.Key,
 ) (*sync.DocEvent, error) {
-	m.pubSub.UpdateMetadata(publisher, keys)
+	c.pubSub.UpdateMetadata(publisher, keys)
 
 	return &sync.DocEvent{
 		Type:         types.MetadataChangedEvent,
@@ -114,13 +114,13 @@ func (m *Coordinator) UpdateMetadata(
 }
 
 // Members returns the members of this cluster.
-func (m *Coordinator) Members() map[string]*sync.AgentInfo {
+func (c *Coordinator) Members() map[string]*sync.AgentInfo {
 	members := make(map[string]*sync.AgentInfo)
-	members[m.agentInfo.ID] = m.agentInfo
+	members[c.agentInfo.ID] = c.agentInfo
 	return members
 }
 
 // Close closes all resources of this Coordinator.
-func (m *Coordinator) Close() error {
+func (c *Coordinator) Close() error {
 	return nil
 }

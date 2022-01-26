@@ -27,7 +27,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 const (
@@ -92,7 +92,7 @@ func (c *Client) initializeMemberMap(ctx context.Context) error {
 func (c *Client) putAgentPeriodically() {
 	for {
 		if err := c.putAgent(c.ctx); err != nil {
-			log.Logger().Error(err)
+			logging.DefaultLogger().Error(err)
 		}
 
 		select {
@@ -149,7 +149,7 @@ func (c *Client) syncAgents() {
 				case mvccpb.PUT:
 					var info sync.AgentInfo
 					if err := json.Unmarshal(event.Kv.Value, &info); err != nil {
-						log.Logger().Error(err)
+						logging.DefaultLogger().Error(err)
 						continue
 					}
 					c.setAgentInfo(k, info)

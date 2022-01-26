@@ -30,7 +30,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 	"github.com/yorkie-team/yorkie/yorkie/rpc/interceptors"
 )
 
@@ -43,16 +43,19 @@ type Server struct {
 
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
+	loggingInterceptor := interceptors.NewLoggingInterceptor()
 	authInterceptor := interceptors.NewAuthInterceptor(be.Config.AuthWebhookURL)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
+			loggingInterceptor.Unary(),
 			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
 			authInterceptor.Unary(),
 			defaultInterceptor.Unary(),
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
+			loggingInterceptor.Stream(),
 			be.Metrics.ServerMetrics().StreamServerInterceptor(),
 			authInterceptor.Stream(),
 			defaultInterceptor.Stream(),
@@ -62,7 +65,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	if conf.CertFile != "" && conf.KeyFile != "" {
 		creds, err := credentials.NewServerTLSFromFile(conf.CertFile, conf.KeyFile)
 		if err != nil {
-			log.Logger().Error(err)
+			logging.DefaultLogger().Error(err)
 			return nil, err
 		}
 		opts = append(opts, grpc.Creds(creds))
@@ -111,16 +114,16 @@ func (s *Server) GRPCServer() *grpc.Server {
 func (s *Server) listenAndServeGRPC() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
 	if err != nil {
-		log.Logger().Error(err)
+		logging.DefaultLogger().Error(err)
 		return err
 	}
 
 	go func() {
-		log.Logger().Infof("serving RPC on %d", s.conf.Port)
+		logging.DefaultLogger().Infof("serving RPC on %d", s.conf.Port)
 
 		if err := s.grpcServer.Serve(lis); err != nil {
 			if err != grpc.ErrServerStopped {
-				log.Logger().Error(err)
+				logging.DefaultLogger().Error(err)
 			}
 		}
 	}()

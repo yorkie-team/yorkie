@@ -28,7 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 var (
@@ -100,7 +100,7 @@ func newAgentCmd() *cobra.Command {
 				conf = parsed
 			}
 
-			if err := log.SetLogLevel(flagLogLevel); err != nil {
+			if err := logging.SetLogLevel(flagLogLevel); err != nil {
 				return err
 			}
 

@@ -28,7 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
-	"github.com/yorkie-team/yorkie/yorkie/log"
+	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 var (
@@ -39,6 +39,7 @@ var (
 
 // pushChanges returns the changes excluding already saved in DB.
 func pushChanges(
+	ctx context.Context,
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
 	pack *change.Pack,
@@ -54,14 +55,14 @@ func pushChanges(
 			cn.SetServerSeq(serverSeq)
 			pushedChanges = append(pushedChanges, cn)
 		} else {
-			log.Logger().Warnf("change already pushed: %d vs %d ", cn.ID().ClientSeq(), cp.ClientSeq)
+			logging.From(ctx).Warnf("change already pushed: %d vs %d ", cn.ID().ClientSeq(), cp.ClientSeq)
 		}
 
 		cp = cp.SyncClientSeq(cn.ClientSeq())
 	}
 
 	if len(pack.Changes) > 0 {
-		log.Logger().Infof(
+		logging.From(ctx).Infof(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
 			clientInfo.ID,
 			len(pushedChanges),
@@ -137,7 +138,7 @@ func pullChangeInfos(
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
 
 	if len(pulledChanges) > 0 {
-		log.Logger().Infof(
+		logging.From(ctx).Infof(
 			"PULL: '%s' pulls %d changes(%d~%d) from '%s', cp: %s",
 			clientInfo.ID,
 			len(pulledChanges),
@@ -167,7 +168,7 @@ func pullSnapshot(
 
 	if snapshotInfo.ServerSeq >= initialServerSeq {
 		pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
-		log.Logger().Infof(
+		logging.From(ctx).Infof(
 			"PULL: '%s' pulls snapshot without changes from '%s', cp: %s",
 			clientInfo.ID,
 			docInfo.Key,
@@ -213,8 +214,8 @@ func pullSnapshot(
 		return nil, nil, err
 	}
 
-	if log.Core().Enabled(zap.DebugLevel) {
-		log.Logger().Debugf(
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
 			"after apply %d changes: elements: %d removeds: %d, %s",
 			len(pack.Changes),
 			doc.Root().ElementMapLen(),
@@ -225,7 +226,7 @@ func pullSnapshot(
 
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
 
-	log.Logger().Infof(
+	logging.From(ctx).Infof(
 		"PULL: '%s' pulls snapshot with changes(%d~%d) from '%s', cp: %s",
 		clientInfo.ID,
 		pack.Checkpoint.ServerSeq+1,
