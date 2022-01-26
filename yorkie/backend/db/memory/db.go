@@ -19,6 +19,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"math"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -420,13 +421,11 @@ func (d *DB) FindLastSnapshotInfo(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	// TODO(hackerwins): I couldn't find a efficient way to get the snapshotInfo
-	// with the last serverSeq of the given docID.
 	iterator, err := txn.ReverseLowerBound(
 		tblSnapshots,
 		"doc_id_server_seq",
 		docID.String(),
-		uint64(0),
+		uint64(math.MaxUint64),
 	)
 	if err != nil {
 		return nil, err
