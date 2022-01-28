@@ -19,10 +19,10 @@ GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.GitCommit=${GIT_COMMIT}
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.Version=${YORKIE_VERSION}
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.BuildDate=${BUILD_DATE}
 
-tools:
+tools: ## install tools for developing yorkie
 	go generate -tags tools tools/tools.go
 
-proto:
+proto: ## generate proto files
 	protoc api/yorkie.proto \
 -I=. \
 -I=$(GOPATH)/src \
@@ -54,7 +54,7 @@ bench: ## runs benchmark tests
 docker: ## builds docker images with the current version and latest tag
 	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .
 
-docker-latest: ## builds a docker image with latest tag
+docker-latest: ## builds docker images with latest tag
 	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:latest .
 
 default: help

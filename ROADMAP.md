@@ -17,6 +17,7 @@ Yorkie v0.3 should provide APIs in the form of service(SaaS) to make it easier f
  - Limits [#158](https://github.com/yorkie-team/yorkie/issues/158)
  - QoS [#270](https://github.com/yorkie-team/yorkie/issues/270)
  - Admin API [#273](https://github.com/yorkie-team/yorkie/issues/273)
+ - P2P using WebRTC, LocalStorage [yorkie-js-sdk#271](https://github.com/yorkie-team/yorkie-js-sdk/issues/271)
 
 ## Yorkie v0.2
 
