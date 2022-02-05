@@ -295,6 +295,12 @@ func init() {
 		yorkie.DefaultSnapshotInterval,
 		"Interval of changes to create a snapshot.",
 	)
+	cmd.Flags().Uint64Var(
+		&conf.Backend.ChangesChunkSize,
+		"backend-changes-chunk-size",
+		yorkie.DefaultChangesChunkSize,
+		"Chunk size of changes to load gradually when creating a snapshot",
+	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AuthWebhookURL,
 		"auth-webhook-url",

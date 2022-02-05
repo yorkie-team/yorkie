@@ -50,6 +50,7 @@ const (
 	MongoConnectionTimeout = "5s"
 	MongoPingTimeout       = "5s"
 	SnapshotThreshold      = 10
+	ChangesChunkSize       = 2
 	Collection             = "test-collection"
 
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
@@ -111,6 +112,7 @@ func TestConfig(authWebhook string) *yorkie.Config {
 		},
 		Backend: &backend.Config{
 			SnapshotThreshold:          SnapshotThreshold,
+			ChangesChunkSize:           ChangesChunkSize,
 			AuthWebhookURL:             authWebhook,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
 			AuthWebhookCacheSize:       AuthWebhookSize,

@@ -120,4 +120,31 @@ func TestSnapshot(t *testing.T) {
 		assert.Equal(t, `{"k1":"하늘구름"}`, d1.Marshal())
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
+
+	t.Run("snapshot loads chunked changes test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(helper.Collection, t.Name())
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		// 01. Update a large number of changes over snapshot threshold.
+		changesSize := helper.SnapshotThreshold + 10*helper.ChangesChunkSize
+		for i := 0; i < changesSize; i++ {
+			err := d1.Update(func(root *proxy.ObjectProxy) error {
+				root.SetInteger(fmt.Sprintf("%d", i), i)
+				return nil
+			})
+			assert.NoError(t, err)
+		}
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		// 02. Pull a snapshot from the agent.
+		d2 := document.New(helper.Collection, t.Name())
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
 }

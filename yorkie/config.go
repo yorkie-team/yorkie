@@ -51,6 +51,7 @@ const (
 
 	DefaultSnapshotThreshold = 500
 	DefaultSnapshotInterval  = 1000
+	DefaultChangesChunkSize  = 100
 
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
@@ -149,6 +150,10 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Backend.SnapshotInterval == 0 {
 		c.Backend.SnapshotInterval = DefaultSnapshotInterval
+	}
+
+	if c.Backend.ChangesChunkSize == 0 {
+		c.Backend.ChangesChunkSize = DefaultChangesChunkSize
 	}
 
 	if c.Backend.AuthWebhookCacheSize == 0 {

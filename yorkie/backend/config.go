@@ -32,6 +32,9 @@ type Config struct {
 	// SnapshotInterval is the interval of changes to create a snapshot.
 	SnapshotInterval uint64 `yaml:"SnapshotInterval"`
 
+	// ChangesChunkSize is the chunk size of changes to load gradually when creating a snapshot.
+	ChangesChunkSize uint64 `yaml:"ChangesChunkSize"`
+
 	// AuthWebhookURL is the url of the authorization webhook.
 	AuthWebhookURL string `yaml:"AuthWebhookURL"`
 

@@ -192,26 +192,32 @@ func pullSnapshot(
 		return nil, nil, err
 	}
 
-	// TODO(hackerwins): If the Snapshot is missing, we may have a very large
-	// number of changes to read at once here. We need to split changes by a
-	// certain size (e.g. 100) and read and gradually reflect it into the document.
-	changes, err := be.DB.FindChangesBetweenServerSeqs(
-		ctx,
-		docInfo.ID,
-		snapshotInfo.ServerSeq+1,
-		initialServerSeq,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
+	for startIdx := snapshotInfo.ServerSeq + 1; startIdx < initialServerSeq; startIdx += be.Config.ChangesChunkSize {
+		var endIdx uint64
+		if startIdx+be.Config.ChangesChunkSize < initialServerSeq {
+			endIdx = startIdx + be.Config.ChangesChunkSize
+		} else {
+			endIdx = initialServerSeq
+		}
 
-	if err := doc.ApplyChangePack(change.NewPack(
-		docKey,
-		change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
-		changes,
-		nil,
-	)); err != nil {
-		return nil, nil, err
+		changes, err := be.DB.FindChangesBetweenServerSeqs(
+			ctx,
+			docInfo.ID,
+			startIdx,
+			endIdx,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if err := doc.ApplyChangePack(change.NewPack(
+			docKey,
+			change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
+			changes,
+			nil,
+		)); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
