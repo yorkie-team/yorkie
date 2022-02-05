@@ -32,12 +32,12 @@ import (
 )
 
 func TestPubSub(t *testing.T) {
-	actorA := types.Client{ID: &time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
-	actorB := types.Client{ID: &time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
+	actorA := types.Client{ID: time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
+	actorB := types.Client{ID: time.ActorID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}}
 
 	t.Run("publish subscribe test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
-		docKeys := []*key.Key{
+		docKeys := []key.Key{
 			{
 				Collection: helper.Collection,
 				Document:   t.Name(),
@@ -72,7 +72,7 @@ func TestPubSub(t *testing.T) {
 
 	t.Run("subscriptions map test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
-		docKeys := []*key.Key{
+		docKeys := []key.Key{
 			{
 				Collection: helper.Collection,
 				Document:   t.Name(),
@@ -86,7 +86,7 @@ func TestPubSub(t *testing.T) {
 			assert.NoError(t, err)
 
 			subs := pubSub.BuildPeersMap(docKeys)
-			assert.Len(t, subs[docKeys[0].BSONKey()], i+1)
+			assert.Len(t, subs[docKeys[0].CombinedKey()], i+1)
 		}
 	})
 }

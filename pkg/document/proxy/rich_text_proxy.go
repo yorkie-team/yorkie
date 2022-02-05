@@ -19,7 +19,7 @@ package proxy
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 )
 
 // RichTextProxy is a proxy representing RichText.
@@ -53,7 +53,7 @@ func (p *RichTextProxy) Edit(from, to int, content string, attributes map[string
 		ticket,
 	)
 
-	p.context.Push(operation.NewRichEdit(
+	p.context.Push(operations.NewRichEdit(
 		p.CreatedAt(),
 		fromPos,
 		toPos,
@@ -84,7 +84,7 @@ func (p *RichTextProxy) SetStyle(from, to int, attributes map[string]string) *Ri
 		ticket,
 	)
 
-	p.context.Push(operation.NewStyle(
+	p.context.Push(operations.NewStyle(
 		p.CreatedAt(),
 		fromPos,
 		toPos,

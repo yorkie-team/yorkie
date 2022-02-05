@@ -59,7 +59,7 @@ func (c *Coordinator) NewLocker(
 func (c *Coordinator) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	keys []*key.Key,
+	keys []key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
 	sub, err := c.pubSub.Subscribe(ctx, subscriber, keys)
 	if err != nil {
@@ -73,7 +73,7 @@ func (c *Coordinator) Subscribe(
 // Unsubscribe unsubscribes the given documents.
 func (c *Coordinator) Unsubscribe(
 	ctx context.Context,
-	keys []*key.Key,
+	keys []key.Key,
 	sub *sync.Subscription,
 ) error {
 	c.pubSub.Unsubscribe(ctx, keys, sub)
@@ -83,7 +83,7 @@ func (c *Coordinator) Unsubscribe(
 // Publish publishes the given event.
 func (c *Coordinator) Publish(
 	ctx context.Context,
-	publisherID *time.ActorID,
+	publisherID time.ActorID,
 	event sync.DocEvent,
 ) {
 	c.pubSub.Publish(ctx, publisherID, event)
@@ -92,7 +92,7 @@ func (c *Coordinator) Publish(
 // PublishToLocal publishes the given event.
 func (c *Coordinator) PublishToLocal(
 	ctx context.Context,
-	publisherID *time.ActorID,
+	publisherID time.ActorID,
 	event sync.DocEvent,
 ) {
 	c.pubSub.Publish(ctx, publisherID, event)
@@ -102,7 +102,7 @@ func (c *Coordinator) PublishToLocal(
 func (c *Coordinator) UpdateMetadata(
 	_ context.Context,
 	publisher *types.Client,
-	keys []*key.Key,
+	keys []key.Key,
 ) (*sync.DocEvent, error) {
 	c.pubSub.UpdateMetadata(publisher, keys)
 

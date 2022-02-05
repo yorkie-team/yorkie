@@ -48,27 +48,27 @@ type Coordinator interface {
 	Subscribe(
 		ctx context.Context,
 		subscriber types.Client,
-		docKeys []*key.Key,
+		docKeys []key.Key,
 	) (*Subscription, map[string][]types.Client, error)
 
 	// Unsubscribe unsubscribes from the given documents.
 	Unsubscribe(
 		ctx context.Context,
-		docKeys []*key.Key,
+		docKeys []key.Key,
 		sub *Subscription,
 	) error
 
 	// Publish publishes the given event.
-	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)
+	Publish(ctx context.Context, publisherID time.ActorID, event DocEvent)
 
 	// PublishToLocal publishes the given event.
-	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
+	PublishToLocal(ctx context.Context, publisherID time.ActorID, event DocEvent)
 
 	// UpdateMetadata updates the metadata of the given client.
 	UpdateMetadata(
 		ctx context.Context,
 		publisher *types.Client,
-		keys []*key.Key,
+		keys []key.Key,
 	) (*DocEvent, error)
 
 	// Members returns the members of this cluster.

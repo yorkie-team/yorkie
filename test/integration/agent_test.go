@@ -58,7 +58,7 @@ func TestAgent(t *testing.T) {
 					return
 				case wr := <-wrch:
 					if wr.Err == io.EOF || status.Code(wr.Err) == codes.Canceled {
-						peers := wr.PeersMapByDoc[doc.Key().BSONKey()]
+						peers := wr.PeersMapByDoc[doc.Key().CombinedKey()]
 						assert.Len(t, peers, 0)
 						wg.Done()
 						return

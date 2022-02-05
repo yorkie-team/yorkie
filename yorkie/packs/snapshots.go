@@ -59,14 +59,13 @@ func storeSnapshot(
 	}
 
 	// 03. create document instance of the docInfo
-	docKey, err := docInfo.GetKey()
+	docKey, err := docInfo.Key()
 	if err != nil {
 		return err
 	}
 
 	doc, err := document.NewInternalDocumentFromSnapshot(
-		docKey.Collection,
-		docKey.Document,
+		docKey,
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Snapshot,
 	)
@@ -93,7 +92,7 @@ func storeSnapshot(
 
 	logging.From(ctx).Infof(
 		"SNAP: '%s', serverSeq: %d",
-		docInfo.Key,
+		docInfo.CombinedKey,
 		doc.Checkpoint().ServerSeq,
 	)
 	return nil

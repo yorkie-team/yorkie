@@ -260,12 +260,12 @@ func (d *DB) FindDocInfoByKey(
 	var docInfo *db.DocInfo
 	if raw == nil {
 		docInfo = &db.DocInfo{
-			ID:         newID(),
-			Key:        bsonDocKey,
-			Owner:      clientInfo.ID,
-			ServerSeq:  0,
-			CreatedAt:  now,
-			AccessedAt: now,
+			ID:          newID(),
+			CombinedKey: bsonDocKey,
+			Owner:       clientInfo.ID,
+			ServerSeq:   0,
+			CreatedAt:   now,
+			AccessedAt:  now,
 		}
 		if err := txn.Insert(tblDocuments, docInfo); err != nil {
 			return nil, err
@@ -308,12 +308,12 @@ func (d *DB) CreateChangeInfos(
 		}
 	}
 
-	raw, err := txn.First(tblDocuments, "key", docInfo.Key)
+	raw, err := txn.First(tblDocuments, "key", docInfo.CombinedKey)
 	if err != nil {
 		return err
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", docInfo.Key, db.ErrDocumentNotFound)
+		return fmt.Errorf("%s: %w", docInfo.CombinedKey, db.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*db.DocInfo).DeepCopy()
 	if loadedDocInfo.ServerSeq != initialServerSeq {
@@ -493,7 +493,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	return time.NewTicket(
 		syncedSeqInfo.Lamport,
 		time.MaxDelimiter,
-		actorID,
+		&actorID,
 	), nil
 }
 
@@ -597,7 +597,7 @@ func (d *DB) findTicketByServerSeq(
 	return time.NewTicket(
 		changeInfo.Lamport,
 		time.MaxDelimiter,
-		actorID,
+		&actorID,
 	), nil
 }
 

@@ -54,6 +54,7 @@ const (
 	DetachDocument   Method = "DetachDocument"
 	PushPull         Method = "PushPull"
 	WatchDocuments   Method = "WatchDocuments"
+	FetchHistory     Method = "FetchHistory"
 )
 
 // IsAuthMethod returns whether the given method can be used for authorization.
@@ -75,6 +76,7 @@ func AuthMethods() []Method {
 		DetachDocument,
 		PushPull,
 		WatchDocuments,
+		FetchHistory,
 	}
 }
 

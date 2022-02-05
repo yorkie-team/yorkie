@@ -21,11 +21,13 @@ package api;
 service Yorkie {
     rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
     rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
+    rpc UpdateMetadata (UpdateMetadataRequest) returns (UpdateMetadataResponse) {}
+
     rpc AttachDocument (AttachDocumentRequest) returns (AttachDocumentResponse) {}
     rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
     rpc WatchDocuments (WatchDocumentsRequest) returns (stream WatchDocumentsResponse) {}
     rpc PushPull (PushPullRequest) returns (PushPullResponse) {}
-    rpc UpdateMetadata (UpdateMetadataRequest) returns (UpdateMetadataResponse) {}
+    rpc FetchHistory (FetchHistoryRequest) returns (FetchHistoryResponse) {}
 }
 
 service Cluster {
@@ -116,6 +118,15 @@ message UpdateMetadataRequest {
 }
 
 message UpdateMetadataResponse {}
+
+message FetchHistoryRequest {
+    bytes client_id = 1;
+    DocumentKey document_key = 2;
+}
+
+message FetchHistoryResponse {
+    repeated Change changes = 1;
+}
 
 /////////////////////////////////////////
 // Messages for ChangePack             //

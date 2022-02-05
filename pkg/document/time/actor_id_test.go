@@ -54,6 +54,6 @@ func TestActorID(t *testing.T) {
 	t.Run("get ActorID from bytes on invalid length test", func(t *testing.T) {
 		invalidBytes := make([]byte, 5)
 		_, err := time.ActorIDFromBytes(invalidBytes)
-		assert.ErrorIs(t, err, time.ErrInvalidHexString)
+		assert.ErrorIs(t, err, time.ErrInvalidActorID)
 	})
 }

@@ -84,7 +84,7 @@ func NewPubSub() *PubSub {
 func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	keys []*key.Key,
+	keys []key.Key,
 ) (*sync.Subscription, error) {
 	if len(keys) == 0 {
 		return nil, sync.ErrEmptyDocKeys
@@ -93,7 +93,7 @@ func (m *PubSub) Subscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
-			keys[0].BSONKey(),
+			keys[0].CombinedKey(),
 			subscriber.ID.String(),
 		)
 	}
@@ -105,17 +105,17 @@ func (m *PubSub) Subscribe(
 	m.subscriptionMapBySubscriber[sub.SubscriberID()] = sub
 
 	for _, docKey := range keys {
-		bsonKey := docKey.BSONKey()
-		if _, ok := m.subscriptionsMapByDocKey[bsonKey]; !ok {
-			m.subscriptionsMapByDocKey[bsonKey] = newSubscriptions()
+		combinedKey := docKey.CombinedKey()
+		if _, ok := m.subscriptionsMapByDocKey[combinedKey]; !ok {
+			m.subscriptionsMapByDocKey[combinedKey] = newSubscriptions()
 		}
-		m.subscriptionsMapByDocKey[bsonKey].Add(sub)
+		m.subscriptionsMapByDocKey[combinedKey].Add(sub)
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
-			keys[0].BSONKey(),
+			keys[0].CombinedKey(),
 			subscriber.ID.String(),
 		)
 	}
@@ -123,15 +123,15 @@ func (m *PubSub) Subscribe(
 }
 
 // BuildPeersMap builds the peers map of the given keys.
-func (m *PubSub) BuildPeersMap(keys []*key.Key) map[string][]types.Client {
+func (m *PubSub) BuildPeersMap(keys []key.Key) map[string][]types.Client {
 	peersMap := make(map[string][]types.Client)
 	for _, docKey := range keys {
-		bsonKey := docKey.BSONKey()
+		combinedKey := docKey.CombinedKey()
 		var peers []types.Client
-		for _, sub := range m.subscriptionsMapByDocKey[bsonKey].Map() {
+		for _, sub := range m.subscriptionsMapByDocKey[combinedKey].Map() {
 			peers = append(peers, sub.Subscriber())
 		}
-		peersMap[bsonKey] = peers
+		peersMap[combinedKey] = peers
 	}
 	return peersMap
 }
@@ -139,7 +139,7 @@ func (m *PubSub) BuildPeersMap(keys []*key.Key) map[string][]types.Client {
 // Unsubscribe unsubscribes the given docKeys.
 func (m *PubSub) Unsubscribe(
 	ctx context.Context,
-	docKeys []*key.Key,
+	docKeys []key.Key,
 	sub *sync.Subscription,
 ) {
 	m.subscriptionsMapMu.Lock()
@@ -148,7 +148,7 @@ func (m *PubSub) Unsubscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
-			docKeys[0].BSONKey(),
+			docKeys[0].CombinedKey(),
 			sub.SubscriberID(),
 		)
 	}
@@ -157,7 +157,7 @@ func (m *PubSub) Unsubscribe(
 
 	delete(m.subscriptionMapBySubscriber, sub.SubscriberID())
 	for _, docKey := range docKeys {
-		k := docKey.BSONKey()
+		k := docKey.CombinedKey()
 		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
 			subs.Delete(sub.ID())
 
@@ -170,7 +170,7 @@ func (m *PubSub) Unsubscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
-			docKeys[0].BSONKey(),
+			docKeys[0].CombinedKey(),
 			sub.SubscriberID(),
 		)
 	}
@@ -179,14 +179,14 @@ func (m *PubSub) Unsubscribe(
 // Publish publishes the given event.
 func (m *PubSub) Publish(
 	ctx context.Context,
-	publisherID *time.ActorID,
+	publisherID time.ActorID,
 	event sync.DocEvent,
 ) {
 	m.subscriptionsMapMu.RLock()
 	defer m.subscriptionsMapMu.RUnlock()
 
 	for _, docKey := range event.DocumentKeys {
-		k := docKey.BSONKey()
+		k := docKey.CombinedKey()
 
 		if logging.Enabled(zap.DebugLevel) {
 			logging.From(ctx).Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
@@ -230,7 +230,7 @@ func (m *PubSub) Publish(
 // UpdateMetadata updates the metadata of the given client.
 func (m *PubSub) UpdateMetadata(
 	publisher *types.Client,
-	keys []*key.Key,
+	keys []key.Key,
 ) *sync.Subscription {
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()

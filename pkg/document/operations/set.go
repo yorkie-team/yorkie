@@ -14,72 +14,83 @@
  * limitations under the License.
  */
 
-package operation
+package operations
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// Remove is an operation representing removes an element from Container.
-type Remove struct {
-	// parentCreatedAt is the creation time of the Container that executes
-	// Remove.
+// Set represents an operation that stores the value corresponding to the
+// given key in the Object.
+type Set struct {
+	// parentCreatedAt is the creation time of the Object that executes Set.
 	parentCreatedAt *time.Ticket
 
-	// createdAt is the creation time of the target element to remove.
-	createdAt *time.Ticket
+	// key corresponds to the key of the object to set the value.
+	key string
+
+	// value is the value of this operation.
+	value json.Element
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
 }
 
-// NewRemove creates a new instance of Remove.
-func NewRemove(
+// NewSet creates a new instance of Set.
+func NewSet(
 	parentCreatedAt *time.Ticket,
-	createdAt *time.Ticket,
+	key string,
+	value json.Element,
 	executedAt *time.Ticket,
-) *Remove {
-	return &Remove{
+) *Set {
+	return &Set{
+		key:             key,
+		value:           value,
 		parentCreatedAt: parentCreatedAt,
-		createdAt:       createdAt,
 		executedAt:      executedAt,
 	}
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Remove) Execute(root *json.Root) error {
-	parentElem := root.FindByCreatedAt(o.parentCreatedAt)
+func (o *Set) Execute(root *json.Root) error {
+	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
-	switch parent := parentElem.(type) {
-	case json.Container:
-		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
-		if elem != nil {
-			root.RegisterRemovedElementPair(parent, elem)
-		}
-	default:
+	obj, ok := parent.(*json.Object)
+	if !ok {
 		return ErrNotApplicableDataType
 	}
 
+	value := o.value.DeepCopy()
+	removed := obj.Set(o.key, value)
+	root.RegisterElement(value)
+	if removed != nil {
+		root.RegisterRemovedElementPair(obj, removed)
+	}
 	return nil
 }
 
-// ParentCreatedAt returns the creation time of the Container.
-func (o *Remove) ParentCreatedAt() *time.Ticket {
+// ParentCreatedAt returns the creation time of the Object.
+func (o *Set) ParentCreatedAt() *time.Ticket {
 	return o.parentCreatedAt
 }
 
 // ExecutedAt returns execution time of this operation.
-func (o *Remove) ExecutedAt() *time.Ticket {
+func (o *Set) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
 // SetActor sets the given actor to this operation.
-func (o *Remove) SetActor(actorID *time.ActorID) {
+func (o *Set) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 
-// CreatedAt returns the creation time of the target element.
-func (o *Remove) CreatedAt() *time.Ticket {
-	return o.createdAt
+// Key returns the key of this operation.
+func (o *Set) Key() string {
+	return o.key
+}
+
+// Value returns the value of this operation.
+func (o *Set) Value() json.Element {
+	return o.value
 }

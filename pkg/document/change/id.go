@@ -23,7 +23,7 @@ import (
 var (
 	// InitialID represents the initial state ID. Usually this is used to
 	// represent a state where nothing has been edited.
-	InitialID = NewID(0, 0, time.InitialActorID)
+	InitialID = NewID(0, 0, &time.InitialActorID)
 )
 
 // ID is for identifying the Change. It is immutable.
@@ -48,19 +48,24 @@ func NewID(
 	clientSeq uint32,
 	lamport uint64,
 	actorID *time.ActorID,
-) *ID {
-	id := &ID{
+	serverSeq ...uint64,
+) ID {
+	id := ID{
 		clientSeq: clientSeq,
 		lamport:   lamport,
 		actorID:   actorID,
+	}
+
+	if len(serverSeq) > 0 {
+		id.serverSeq = &serverSeq[0]
 	}
 
 	return id
 }
 
 // Next creates a next ID of this ID.
-func (id *ID) Next() *ID {
-	return &ID{
+func (id ID) Next() ID {
+	return ID{
 		clientSeq: id.clientSeq + 1,
 		lamport:   id.lamport + 1,
 		actorID:   id.actorID,
@@ -68,7 +73,7 @@ func (id *ID) Next() *ID {
 }
 
 // NewTimeTicket creates a ticket of the given delimiter.
-func (id *ID) NewTimeTicket(delimiter uint32) *time.Ticket {
+func (id ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 	return time.NewTicket(
 		id.lamport,
 		delimiter,
@@ -78,7 +83,7 @@ func (id *ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 
 // SyncLamport syncs lamport timestamp with the given ID.
 //  - receiving: https://en.wikipedia.org/wiki/Lamport_timestamps#Algorithm
-func (id *ID) SyncLamport(otherLamport uint64) *ID {
+func (id ID) SyncLamport(otherLamport uint64) ID {
 	if id.lamport < otherLamport {
 		return NewID(id.clientSeq, otherLamport, id.actorID)
 	}
@@ -87,33 +92,31 @@ func (id *ID) SyncLamport(otherLamport uint64) *ID {
 }
 
 // SetActor sets actorID.
-func (id *ID) SetActor(actor *time.ActorID) *ID {
-	return NewID(id.clientSeq, id.lamport, actor)
+func (id ID) SetActor(actor time.ActorID) ID {
+	return NewID(id.clientSeq, id.lamport, &actor)
 }
 
 // SetServerSeq sets server sequence of this ID.
-func (id *ID) SetServerSeq(serverSeq *uint64) *ID {
-	newID := NewID(id.clientSeq, id.lamport, id.actorID)
-	newID.serverSeq = serverSeq
-	return newID
+func (id ID) SetServerSeq(serverSeq uint64) ID {
+	return NewID(id.clientSeq, id.lamport, id.actorID, serverSeq)
 }
 
 // ClientSeq returns the client sequence of this ID.
-func (id *ID) ClientSeq() uint32 {
+func (id ID) ClientSeq() uint32 {
 	return id.clientSeq
 }
 
 // ServerSeq returns the server sequence of this ID.
-func (id *ID) ServerSeq() *uint64 {
+func (id ID) ServerSeq() *uint64 {
 	return id.serverSeq
 }
 
 // Lamport returns the lamport clock of this ID.
-func (id *ID) Lamport() uint64 {
+func (id ID) Lamport() uint64 {
 	return id.lamport
 }
 
 // ActorID returns the actorID of this ID.
-func (id *ID) ActorID() *time.ActorID {
+func (id ID) ActorID() *time.ActorID {
 	return id.actorID
 }

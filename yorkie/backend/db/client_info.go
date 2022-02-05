@@ -121,7 +121,7 @@ func (i *ClientInfo) IsAttached(docID ID) (bool, error) {
 }
 
 // Checkpoint returns the checkpoint of the given document.
-func (i *ClientInfo) Checkpoint(docID ID) *change.Checkpoint {
+func (i *ClientInfo) Checkpoint(docID ID) change.Checkpoint {
 	clientDocInfo := i.Documents[docID]
 	if clientDocInfo == nil {
 		return change.InitialCheckpoint
@@ -133,7 +133,7 @@ func (i *ClientInfo) Checkpoint(docID ID) *change.Checkpoint {
 // UpdateCheckpoint updates the checkpoint of the given document.
 func (i *ClientInfo) UpdateCheckpoint(
 	docID ID,
-	cp *change.Checkpoint,
+	cp change.Checkpoint,
 ) error {
 	if !i.hasDocument(docID) {
 		return ErrDocumentNeverAttached

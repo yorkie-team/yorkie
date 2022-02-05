@@ -24,7 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -48,7 +48,7 @@ func ToMetadataInfo(metadata types.MetadataInfo) *api.Metadata {
 
 // ToChangePack converts the given model format to Protobuf format.
 func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
-	pbChanges, err := toChanges(pack.Changes)
+	pbChanges, err := ToChanges(pack.Changes)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 }
 
 // ToDocumentKey converts the given model format to Protobuf format.
-func ToDocumentKey(key *key.Key) *api.DocumentKey {
+func ToDocumentKey(key key.Key) *api.DocumentKey {
 	return &api.DocumentKey{
 		Collection: key.Collection,
 		Document:   key.Document,
@@ -71,7 +71,7 @@ func ToDocumentKey(key *key.Key) *api.DocumentKey {
 }
 
 // ToCheckpoint converts the given model format to Protobuf format.
-func ToCheckpoint(cp *change.Checkpoint) *api.Checkpoint {
+func ToCheckpoint(cp change.Checkpoint) *api.Checkpoint {
 	return &api.Checkpoint{
 		ServerSeq: cp.ServerSeq,
 		ClientSeq: cp.ClientSeq,
@@ -79,7 +79,7 @@ func ToCheckpoint(cp *change.Checkpoint) *api.Checkpoint {
 }
 
 // ToChangeID converts the given model format to Protobuf format.
-func ToChangeID(id *change.ID) *api.ChangeID {
+func ToChangeID(id change.ID) *api.ChangeID {
 	return &api.ChangeID{
 		ClientSeq: id.ClientSeq(),
 		Lamport:   id.Lamport(),
@@ -88,7 +88,7 @@ func ToChangeID(id *change.ID) *api.ChangeID {
 }
 
 // ToDocumentKeys converts the given model format to Protobuf format.
-func ToDocumentKeys(keys []*key.Key) []*api.DocumentKey {
+func ToDocumentKeys(keys []key.Key) []*api.DocumentKey {
 	var pbKeys []*api.DocumentKey
 	for _, k := range keys {
 		pbKeys = append(pbKeys, ToDocumentKey(k))
@@ -145,30 +145,30 @@ func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
 }
 
 // ToOperations converts the given model format to Protobuf format.
-func ToOperations(operations []operation.Operation) ([]*api.Operation, error) {
+func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 	var pbOperations []*api.Operation
 
-	for _, o := range operations {
+	for _, o := range ops {
 		pbOperation := &api.Operation{}
 		var err error
 		switch op := o.(type) {
-		case *operation.Set:
+		case *operations.Set:
 			pbOperation.Body, err = toSet(op)
-		case *operation.Add:
+		case *operations.Add:
 			pbOperation.Body, err = toAdd(op)
-		case *operation.Move:
+		case *operations.Move:
 			pbOperation.Body, err = toMove(op)
-		case *operation.Remove:
+		case *operations.Remove:
 			pbOperation.Body, err = toRemove(op)
-		case *operation.Edit:
+		case *operations.Edit:
 			pbOperation.Body, err = toEdit(op)
-		case *operation.Select:
+		case *operations.Select:
 			pbOperation.Body, err = toSelect(op)
-		case *operation.RichEdit:
+		case *operations.RichEdit:
 			pbOperation.Body, err = toRichEdit(op)
-		case *operation.Style:
+		case *operations.Style:
 			pbOperation.Body, err = toStyle(op)
-		case *operation.Increase:
+		case *operations.Increase:
 			pbOperation.Body, err = toIncrease(op)
 		default:
 			return nil, ErrUnsupportedOperation
@@ -195,7 +195,8 @@ func ToTimeTicket(ticket *time.Ticket) *api.TimeTicket {
 	}
 }
 
-func toChanges(changes []*change.Change) ([]*api.Change, error) {
+// ToChanges converts the given model format to Protobuf format.
+func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 	var pbChanges []*api.Change
 
 	for _, c := range changes {
@@ -214,7 +215,7 @@ func toChanges(changes []*change.Change) ([]*api.Change, error) {
 	return pbChanges, nil
 }
 
-func toSet(set *operation.Set) (*api.Operation_Set_, error) {
+func toSet(set *operations.Set) (*api.Operation_Set_, error) {
 	pbElem, err := toJSONElementSimple(set.Value())
 	if err != nil {
 		return nil, err
@@ -230,7 +231,7 @@ func toSet(set *operation.Set) (*api.Operation_Set_, error) {
 	}, nil
 }
 
-func toAdd(add *operation.Add) (*api.Operation_Add_, error) {
+func toAdd(add *operations.Add) (*api.Operation_Add_, error) {
 	pbElem, err := toJSONElementSimple(add.Value())
 	if err != nil {
 		return nil, err
@@ -246,7 +247,7 @@ func toAdd(add *operation.Add) (*api.Operation_Add_, error) {
 	}, nil
 }
 
-func toMove(move *operation.Move) (*api.Operation_Move_, error) {
+func toMove(move *operations.Move) (*api.Operation_Move_, error) {
 	return &api.Operation_Move_{
 		Move: &api.Operation_Move{
 			ParentCreatedAt: ToTimeTicket(move.ParentCreatedAt()),
@@ -257,7 +258,7 @@ func toMove(move *operation.Move) (*api.Operation_Move_, error) {
 	}, nil
 }
 
-func toRemove(remove *operation.Remove) (*api.Operation_Remove_, error) {
+func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
 	return &api.Operation_Remove_{
 		Remove: &api.Operation_Remove{
 			ParentCreatedAt: ToTimeTicket(remove.ParentCreatedAt()),
@@ -267,7 +268,7 @@ func toRemove(remove *operation.Remove) (*api.Operation_Remove_, error) {
 	}, nil
 }
 
-func toEdit(edit *operation.Edit) (*api.Operation_Edit_, error) {
+func toEdit(edit *operations.Edit) (*api.Operation_Edit_, error) {
 	return &api.Operation_Edit_{
 		Edit: &api.Operation_Edit{
 			ParentCreatedAt:     ToTimeTicket(edit.ParentCreatedAt()),
@@ -280,7 +281,7 @@ func toEdit(edit *operation.Edit) (*api.Operation_Edit_, error) {
 	}, nil
 }
 
-func toSelect(s *operation.Select) (*api.Operation_Select_, error) {
+func toSelect(s *operations.Select) (*api.Operation_Select_, error) {
 	return &api.Operation_Select_{
 		Select: &api.Operation_Select{
 			ParentCreatedAt: ToTimeTicket(s.ParentCreatedAt()),
@@ -291,7 +292,7 @@ func toSelect(s *operation.Select) (*api.Operation_Select_, error) {
 	}, nil
 }
 
-func toRichEdit(richEdit *operation.RichEdit) (*api.Operation_RichEdit_, error) {
+func toRichEdit(richEdit *operations.RichEdit) (*api.Operation_RichEdit_, error) {
 	return &api.Operation_RichEdit_{
 		RichEdit: &api.Operation_RichEdit{
 			ParentCreatedAt:     ToTimeTicket(richEdit.ParentCreatedAt()),
@@ -305,7 +306,7 @@ func toRichEdit(richEdit *operation.RichEdit) (*api.Operation_RichEdit_, error) 
 	}, nil
 }
 
-func toStyle(style *operation.Style) (*api.Operation_Style_, error) {
+func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 	return &api.Operation_Style_{
 		Style: &api.Operation_Style{
 			ParentCreatedAt: ToTimeTicket(style.ParentCreatedAt()),
@@ -317,7 +318,7 @@ func toStyle(style *operation.Style) (*api.Operation_Style_, error) {
 	}, nil
 }
 
-func toIncrease(increase *operation.Increase) (*api.Operation_Increase_, error) {
+func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error) {
 	pbElem, err := toJSONElementSimple(increase.Value())
 	if err != nil {
 		return nil, err

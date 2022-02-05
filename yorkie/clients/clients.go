@@ -21,6 +21,7 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
@@ -46,20 +47,32 @@ func Activate(
 func Deactivate(
 	ctx context.Context,
 	be *backend.Backend,
-	clientID db.ID,
+	actorID time.ActorID,
 ) (*db.ClientInfo, error) {
-	return be.DB.DeactivateClient(ctx, clientID)
+	return be.DB.DeactivateClient(ctx, db.IDFromActorID(actorID))
+}
+
+// FindClient finds the client with the given id.
+func FindClient(
+	ctx context.Context,
+	be *backend.Backend,
+	clientID time.ActorID,
+) (*db.ClientInfo, error) {
+	return be.DB.FindClientInfoByID(
+		ctx,
+		db.IDFromActorID(clientID),
+	)
 }
 
 // FindClientAndDocument finds the client and the document.
 func FindClientAndDocument(
 	ctx context.Context,
 	be *backend.Backend,
-	clientID db.ID,
-	docKey *key.Key,
+	actorID time.ActorID,
+	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*db.ClientInfo, *db.DocInfo, error) {
-	clientInfo, err := be.DB.FindClientInfoByID(ctx, clientID)
+	clientInfo, err := be.DB.FindClientInfoByID(ctx, db.IDFromActorID(actorID))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -67,7 +80,7 @@ func FindClientAndDocument(
 	docInfo, err := be.DB.FindDocInfoByKey(
 		ctx,
 		clientInfo,
-		docKey.BSONKey(),
+		docKey.CombinedKey(),
 		createDocIfNotExist,
 	)
 	if err != nil {

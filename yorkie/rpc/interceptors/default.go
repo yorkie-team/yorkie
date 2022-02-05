@@ -100,6 +100,7 @@ func toStatusError(err error) error {
 	if errors.Is(err, converter.ErrPackRequired) ||
 		errors.Is(err, converter.ErrCheckpointRequired) ||
 		errors.Is(err, time.ErrInvalidHexString) ||
+		errors.Is(err, time.ErrInvalidActorID) ||
 		errors.Is(err, db.ErrInvalidID) ||
 		errors.Is(err, clients.ErrInvalidClientID) ||
 		errors.Is(err, clients.ErrInvalidClientKey) {

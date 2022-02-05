@@ -30,10 +30,10 @@ import (
 // to reduce type conversion in Agent.
 type ServerPack struct {
 	// DocumentKey is key of the document.
-	DocumentKey *key.Key
+	DocumentKey key.Key
 
 	// Checkpoint is used to determine the client received changes.
-	Checkpoint *change.Checkpoint
+	Checkpoint change.Checkpoint
 
 	// ChangeInfos represents a unit of modification in the document.
 	ChangeInfos []*db.ChangeInfo
@@ -48,8 +48,8 @@ type ServerPack struct {
 
 // NewServerPack creates a new instance of ServerPack.
 func NewServerPack(
-	key *key.Key,
-	cp *change.Checkpoint,
+	key key.Key,
+	cp change.Checkpoint,
 	changeInfos []*db.ChangeInfo,
 	snapshot []byte,
 ) *ServerPack {
@@ -88,7 +88,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		if err != nil {
 			return nil, err
 		}
-		changeID := change.NewID(changeInfo.ClientSeq, changeInfo.Lamport, actorID)
+		changeID := change.NewID(changeInfo.ClientSeq, changeInfo.Lamport, &actorID)
 
 		var pbOps []*api.Operation
 		for _, bytesOp := range changeInfo.Operations {

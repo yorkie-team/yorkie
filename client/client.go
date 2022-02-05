@@ -89,7 +89,7 @@ const (
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
 	Type          WatchResponseType
-	Keys          []*key.Key
+	Keys          []key.Key
 	PeersMapByDoc map[string]map[string]types.Metadata
 	Err           error
 }
@@ -212,7 +212,7 @@ func (c *Client) Activate(ctx context.Context) error {
 	}
 
 	c.status = activated
-	c.id = clientID
+	c.id = &clientID
 
 	return nil
 }
@@ -242,7 +242,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		return ErrClientNotActivated
 	}
 
-	doc.SetActor(c.id)
+	doc.SetActor(*c.id)
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
@@ -275,7 +275,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.Attached)
-	c.attachments[doc.Key().BSONKey()] = &Attachment{
+	c.attachments[doc.Key().CombinedKey()] = &Attachment{
 		doc:   doc,
 		peers: make(map[string]types.MetadataInfo),
 	}
@@ -294,7 +294,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return ErrClientNotActivated
 	}
 
-	if _, ok := c.attachments[doc.Key().BSONKey()]; !ok {
+	if _, ok := c.attachments[doc.Key().CombinedKey()]; !ok {
 		return ErrDocumentNotAttached
 	}
 
@@ -321,7 +321,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.Detached)
-	delete(c.attachments, doc.Key().BSONKey())
+	delete(c.attachments, doc.Key().CombinedKey())
 
 	return nil
 }
@@ -329,7 +329,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 // Sync pushes local changes of the attached documents to the Agent and
 // receives changes of the remote replica from the agent then apply them to
 // local documents.
-func (c *Client) Sync(ctx context.Context, keys ...*key.Key) error {
+func (c *Client) Sync(ctx context.Context, keys ...key.Key) error {
 	if len(keys) == 0 {
 		for _, attachment := range c.attachments {
 			keys = append(keys, attachment.doc.Key())
@@ -354,7 +354,7 @@ func (c *Client) Watch(
 	ctx context.Context,
 	docs ...*document.Document,
 ) (<-chan WatchResponse, error) {
-	var keys []*key.Key
+	var keys []key.Key
 	for _, doc := range docs {
 		keys = append(keys, doc.Key())
 	}
@@ -362,7 +362,7 @@ func (c *Client) Watch(
 	rch := make(chan WatchResponse)
 	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
 		Client: converter.ToClient(types.Client{
-			ID:           c.id,
+			ID:           *c.id,
 			MetadataInfo: c.metadataInfo,
 		}),
 		DocumentKeys: converter.ToDocumentKeys(keys),
@@ -406,7 +406,7 @@ func (c *Client) Watch(
 						return nil, err
 					}
 
-					attachment := c.attachments[k.BSONKey()]
+					attachment := c.attachments[k.CombinedKey()]
 					if eventType == types.DocumentsWatchedEvent ||
 						eventType == types.MetadataChangedEvent {
 						if info, ok := attachment.peers[cli.ID.String()]; ok {
@@ -468,7 +468,7 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 		return nil
 	}
 
-	var keys []*key.Key
+	var keys []key.Key
 	for _, attachment := range c.attachments {
 		keys = append(keys, attachment.doc.Key())
 	}
@@ -479,7 +479,7 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 	// following.
 	if _, err := c.client.UpdateMetadata(ctx, &api.UpdateMetadataRequest{
 		Client: converter.ToClient(types.Client{
-			ID:           c.id,
+			ID:           *c.id,
 			MetadataInfo: c.metadataInfo,
 		}),
 		DocumentKeys: converter.ToDocumentKeys(keys),
@@ -488,6 +488,40 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 	}
 
 	return nil
+}
+
+// FetchHistory returns the history of the given document.
+func (c *Client) FetchHistory(ctx context.Context, key key.Key) ([]*types.ChangeSummary, error) {
+	resp, err := c.client.FetchHistory(ctx, &api.FetchHistoryRequest{
+		ClientId:    c.id.Bytes(),
+		DocumentKey: converter.ToDocumentKey(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	changes, err := converter.FromChanges(resp.Changes)
+	if err != nil {
+		return nil, err
+	}
+
+	doc := document.NewInternalDocument(key)
+
+	var summaries []*types.ChangeSummary
+	for _, c := range changes {
+		if err := doc.ApplyChanges(c); err != nil {
+			return nil, err
+		}
+
+		// TODO(hackerwins): doc.Marshal is expensive function. We need to optimize it.
+		summaries = append(summaries, &types.ChangeSummary{
+			ID:       c.ID(),
+			Message:  c.Message(),
+			Snapshot: doc.Marshal(),
+		})
+	}
+
+	return summaries, nil
 }
 
 // ID returns the ID of this client.
@@ -528,12 +562,12 @@ func (c *Client) IsActive() bool {
 	return c.status == activated
 }
 
-func (c *Client) sync(ctx context.Context, key *key.Key) error {
+func (c *Client) sync(ctx context.Context, key key.Key) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}
 
-	attachment, ok := c.attachments[key.BSONKey()]
+	attachment, ok := c.attachments[key.CombinedKey()]
 	if !ok {
 		return ErrDocumentNotAttached
 	}

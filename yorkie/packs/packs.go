@@ -32,13 +32,13 @@ import (
 )
 
 // NewPushPullKey creates a new sync.Key of PushPull for the given document.
-func NewPushPullKey(documentKey *key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("pushpull-%s", documentKey.BSONKey()))
+func NewPushPullKey(docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("pushpull-%s", docKey.CombinedKey()))
 }
 
 // NewSnapshotKey creates a new sync.Key of Snapshot for the given document.
-func NewSnapshotKey(documentKey *key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("snapshot-%s", documentKey.BSONKey()))
+func NewSnapshotKey(docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("snapshot-%s", docKey.CombinedKey()))
 }
 
 // PushPull stores the given changes and returns accumulated changes of the
@@ -141,7 +141,7 @@ func PushPull(
 				sync.DocEvent{
 					Type:         types.DocumentsChangedEvent,
 					Publisher:    types.Client{ID: publisherID},
-					DocumentKeys: []*key.Key{reqPack.DocumentKey},
+					DocumentKeys: []key.Key{reqPack.DocumentKey},
 				},
 			)
 

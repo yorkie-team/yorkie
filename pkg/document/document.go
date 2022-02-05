@@ -44,8 +44,9 @@ type Document struct {
 
 // New creates a new instance of Document.
 func New(collection, document string) *Document {
+	k := key.Key{Collection: collection, Document: document}
 	return &Document{
-		doc: NewInternalDocument(collection, document),
+		doc: NewInternalDocument(k),
 	}
 }
 
@@ -58,7 +59,7 @@ func (d *Document) Update(
 
 	ctx := change.NewContext(
 		d.doc.changeID.Next(),
-		messageFromMsgAndArgs(msgAndArgs),
+		messageFromMsgAndArgs(msgAndArgs...),
 		d.clone,
 	)
 
@@ -98,7 +99,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 			}
 		}
 
-		if err := d.doc.applyChanges(pack.Changes); err != nil {
+		if err := d.doc.ApplyChanges(pack.Changes...); err != nil {
 			return err
 		}
 	}
@@ -127,12 +128,12 @@ func (d *Document) InternalDocument() *InternalDocument {
 }
 
 // Key returns the key of this document.
-func (d *Document) Key() *key.Key {
+func (d *Document) Key() key.Key {
 	return d.doc.key
 }
 
 // Checkpoint returns the checkpoint of this document.
-func (d *Document) Checkpoint() *change.Checkpoint {
+func (d *Document) Checkpoint() change.Checkpoint {
 	return d.doc.checkpoint
 }
 
@@ -153,7 +154,7 @@ func (d *Document) CreateChangePack() *change.Pack {
 
 // SetActor sets actor into this document. This is also applied in the local
 // changes the document has.
-func (d *Document) SetActor(actor *time.ActorID) {
+func (d *Document) SetActor(actor time.ActorID) {
 	d.doc.SetActor(actor)
 }
 
