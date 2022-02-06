@@ -21,7 +21,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -157,7 +157,7 @@ func (p *ArrayProxy) Delete(idx int) json.Element {
 
 	ticket := p.context.IssueTimeTicket()
 	deleted := p.Array.Delete(idx, ticket)
-	p.context.Push(operation.NewRemove(
+	p.context.Push(operations.NewRemove(
 		p.CreatedAt(),
 		deleted.CreatedAt(),
 		ticket,
@@ -185,7 +185,7 @@ func (p *ArrayProxy) insertAfterInternal(
 	proxy := creator(ticket)
 	value := toOriginal(proxy)
 
-	p.context.Push(operation.NewAdd(
+	p.context.Push(operations.NewAdd(
 		p.Array.CreatedAt(),
 		prevCreatedAt,
 		value.DeepCopy(),
@@ -203,7 +203,7 @@ func (p *ArrayProxy) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 
 	prevCreatedAt := p.FindPrevCreatedAt(nextCreatedAt)
 
-	p.context.Push(operation.NewMove(
+	p.context.Push(operations.NewMove(
 		p.Array.CreatedAt(),
 		prevCreatedAt,
 		createdAt,

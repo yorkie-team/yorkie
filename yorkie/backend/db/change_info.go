@@ -22,12 +22,12 @@ import (
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// ErrEncodeOperationFailed is returned when encoding operation failed.
-var ErrEncodeOperationFailed = errors.New("encode operation failed")
+// ErrEncodeOperationFailed is returned when encoding operations failed.
+var ErrEncodeOperationFailed = errors.New("encode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
@@ -42,7 +42,7 @@ type ChangeInfo struct {
 }
 
 // EncodeOperations encodes the given operations into bytes array.
-func EncodeOperations(operations []operation.Operation) ([][]byte, error) {
+func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	var encodedOps [][]byte
 
 	changes, err := converter.ToOperations(operations)
@@ -68,7 +68,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	changeID := change.NewID(i.ClientSeq, i.Lamport, actorID)
+	changeID := change.NewID(i.ClientSeq, i.Lamport, &actorID, i.ServerSeq)
 
 	var pbOps []*api.Operation
 	for _, bytesOp := range i.Operations {

@@ -38,20 +38,20 @@ const (
 
 // InternalDocument represents a document in MongoDB and contains logical clocks.
 type InternalDocument struct {
-	key          *key.Key
+	key          key.Key
 	status       statusType
 	root         *json.Root
-	checkpoint   *change.Checkpoint
-	changeID     *change.ID
+	checkpoint   change.Checkpoint
+	changeID     change.ID
 	localChanges []*change.Change
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
-func NewInternalDocument(collection, document string) *InternalDocument {
+func NewInternalDocument(k key.Key) *InternalDocument {
 	root := json.NewObject(json.NewRHTPriorityQueueMap(), time.InitialTicket)
 
 	return &InternalDocument{
-		key:        &key.Key{Collection: collection, Document: document},
+		key:        k,
 		status:     Detached,
 		root:       json.NewRoot(root),
 		checkpoint: change.InitialCheckpoint,
@@ -61,8 +61,7 @@ func NewInternalDocument(collection, document string) *InternalDocument {
 
 // NewInternalDocumentFromSnapshot creates a new instance of InternalDocument with the snapshot.
 func NewInternalDocumentFromSnapshot(
-	collection string,
-	document string,
+	k key.Key,
 	serverSeq uint64,
 	snapshot []byte,
 ) (*InternalDocument, error) {
@@ -72,7 +71,7 @@ func NewInternalDocumentFromSnapshot(
 	}
 
 	return &InternalDocument{
-		key:        &key.Key{Collection: collection, Document: document},
+		key:        k,
 		status:     Detached,
 		root:       json.NewRoot(obj),
 		checkpoint: change.InitialCheckpoint.NextServerSeq(serverSeq),
@@ -81,12 +80,12 @@ func NewInternalDocumentFromSnapshot(
 }
 
 // Key returns the key of this document.
-func (d *InternalDocument) Key() *key.Key {
+func (d *InternalDocument) Key() key.Key {
 	return d.key
 }
 
 // Checkpoint returns the checkpoint of this document.
-func (d *InternalDocument) Checkpoint() *change.Checkpoint {
+func (d *InternalDocument) Checkpoint() change.Checkpoint {
 	return d.checkpoint
 }
 
@@ -103,7 +102,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 			return err
 		}
 	} else {
-		if err := d.applyChanges(pack.Changes); err != nil {
+		if err := d.ApplyChanges(pack.Changes...); err != nil {
 			return err
 		}
 	}
@@ -152,7 +151,7 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 
 // SetActor sets actor into this document. This is also applied in the local
 // changes the document has.
-func (d *InternalDocument) SetActor(actor *time.ActorID) {
+func (d *InternalDocument) SetActor(actor time.ActorID) {
 	for _, c := range d.localChanges {
 		c.SetActor(actor)
 	}
@@ -204,8 +203,8 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq uint64) erro
 	return nil
 }
 
-// applyChanges applies remote changes to both the clone and the document.
-func (d *InternalDocument) applyChanges(changes []*change.Change) error {
+// ApplyChanges applies remote changes to the document.
+func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 	for _, c := range changes {
 		if err := c.Execute(d.root); err != nil {
 			return err

@@ -18,24 +18,24 @@ package change
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Change represents a unit of modification in the document.
 type Change struct {
 	// id is the unique identifier of the change.
-	id *ID
+	id ID
 
 	// message is used to save a description of the change.
 	message string
 
 	// operations represent a series of user edits.
-	operations []operation.Operation
+	operations []operations.Operation
 }
 
 // New creates a new instance of Change.
-func New(id *ID, message string, operations []operation.Operation) *Change {
+func New(id ID, message string, operations []operations.Operation) *Change {
 	return &Change{
 		id:         id,
 		message:    message,
@@ -54,7 +54,7 @@ func (c *Change) Execute(root *json.Root) error {
 }
 
 // ID returns the ID of this change.
-func (c *Change) ID() *ID {
+func (c *Change) ID() ID {
 	return c.id
 }
 
@@ -64,7 +64,7 @@ func (c *Change) Message() string {
 }
 
 // Operations returns the operations of this change.
-func (c *Change) Operations() []operation.Operation {
+func (c *Change) Operations() []operations.Operation {
 	return c.operations
 }
 
@@ -80,11 +80,11 @@ func (c *Change) ClientSeq() uint32 {
 
 // SetServerSeq sets the given serverSeq.
 func (c *Change) SetServerSeq(serverSeq uint64) {
-	c.id = c.id.SetServerSeq(&serverSeq)
+	c.id = c.id.SetServerSeq(serverSeq)
 }
 
 // SetActor sets the given actorID.
-func (c *Change) SetActor(actor *time.ActorID) {
+func (c *Change) SetActor(actor time.ActorID) {
 	c.id = c.id.SetActor(actor)
 	for _, op := range c.operations {
 		op.SetActor(actor)

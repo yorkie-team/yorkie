@@ -91,7 +91,7 @@ func TestDB(t *testing.T) {
 
 		docInfo, err := memdb.FindDocInfoByKey(ctx, clientInfo, bsonDocKey, true)
 		assert.NoError(t, err)
-		assert.Equal(t, bsonDocKey, docInfo.Key)
+		assert.Equal(t, bsonDocKey, docInfo.CombinedKey)
 	})
 
 	t.Run("update clientInfo after PushPull test", func(t *testing.T) {

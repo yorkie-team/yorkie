@@ -19,7 +19,7 @@ package proxy
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 )
 
 // TextProxy is a proxy representing Text.
@@ -52,7 +52,7 @@ func (p *TextProxy) Edit(from, to int, content string) *TextProxy {
 		ticket,
 	)
 
-	p.context.Push(operation.NewEdit(
+	p.context.Push(operations.NewEdit(
 		p.CreatedAt(),
 		fromPos,
 		toPos,
@@ -80,7 +80,7 @@ func (p *TextProxy) Select(from, to int) *TextProxy {
 		ticket,
 	)
 
-	p.context.Push(operation.NewSelect(
+	p.context.Push(operations.NewSelect(
 		p.CreatedAt(),
 		fromPos,
 		toPos,

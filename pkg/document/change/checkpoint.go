@@ -38,15 +38,15 @@ type Checkpoint struct {
 }
 
 // NewCheckpoint creates a new instance of Checkpoint.
-func NewCheckpoint(serverSeq uint64, clientSeq uint32) *Checkpoint {
-	return &Checkpoint{
+func NewCheckpoint(serverSeq uint64, clientSeq uint32) Checkpoint {
+	return Checkpoint{
 		ServerSeq: serverSeq,
 		ClientSeq: clientSeq,
 	}
 }
 
 // NextServerSeq creates a new instance with next server sequence.
-func (cp *Checkpoint) NextServerSeq(serverSeq uint64) *Checkpoint {
+func (cp Checkpoint) NextServerSeq(serverSeq uint64) Checkpoint {
 	if cp.ServerSeq == serverSeq {
 		return cp
 	}
@@ -55,12 +55,12 @@ func (cp *Checkpoint) NextServerSeq(serverSeq uint64) *Checkpoint {
 }
 
 // NextClientSeq creates a new instance with next client sequence.
-func (cp *Checkpoint) NextClientSeq() *Checkpoint {
+func (cp Checkpoint) NextClientSeq() Checkpoint {
 	return cp.IncreaseClientSeq(1)
 }
 
 // IncreaseClientSeq creates a new instance with increased client sequence.
-func (cp *Checkpoint) IncreaseClientSeq(inc uint32) *Checkpoint {
+func (cp Checkpoint) IncreaseClientSeq(inc uint32) Checkpoint {
 	if inc == 0 {
 		return cp
 	}
@@ -69,7 +69,7 @@ func (cp *Checkpoint) IncreaseClientSeq(inc uint32) *Checkpoint {
 
 // SyncClientSeq updates the given clientSeq if it is greater than the internal
 // value.
-func (cp *Checkpoint) SyncClientSeq(clientSeq uint32) *Checkpoint {
+func (cp Checkpoint) SyncClientSeq(clientSeq uint32) Checkpoint {
 	if cp.ClientSeq < clientSeq {
 		return NewCheckpoint(cp.ServerSeq, clientSeq)
 	}
@@ -79,7 +79,7 @@ func (cp *Checkpoint) SyncClientSeq(clientSeq uint32) *Checkpoint {
 
 // Forward updates the given checkpoint with those values when it is greater
 // than the values of internal properties.
-func (cp *Checkpoint) Forward(other *Checkpoint) *Checkpoint {
+func (cp Checkpoint) Forward(other Checkpoint) Checkpoint {
 	if cp.Equals(other) {
 		return cp
 	}
@@ -98,12 +98,12 @@ func (cp *Checkpoint) Forward(other *Checkpoint) *Checkpoint {
 }
 
 // Equals returns whether the given checkpoint is equal to this checkpoint or not.
-func (cp *Checkpoint) Equals(other *Checkpoint) bool {
+func (cp *Checkpoint) Equals(other Checkpoint) bool {
 	return cp.ServerSeq == other.ServerSeq &&
 		cp.ClientSeq == other.ClientSeq
 }
 
 // String returns the string of information about this checkpoint.
-func (cp *Checkpoint) String() string {
+func (cp Checkpoint) String() string {
 	return fmt.Sprintf("serverSeq=%d, clientSeq=%d", cp.ServerSeq, cp.ClientSeq)
 }

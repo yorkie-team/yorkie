@@ -28,10 +28,10 @@ const actorIDSize = 12
 
 var (
 	// InitialActorID represents the initial value of ActorID.
-	InitialActorID = &ActorID{}
+	InitialActorID = ActorID{}
 
 	// MaxActorID represents the maximum value of ActorID.
-	MaxActorID = &ActorID{
+	MaxActorID = ActorID{
 		math.MaxUint8,
 		math.MaxUint8,
 		math.MaxUint8,
@@ -48,6 +48,9 @@ var (
 
 	// ErrInvalidHexString is returned when the given string is not valid hex.
 	ErrInvalidHexString = errors.New("invalid hex string")
+
+	// ErrInvalidActorID is returned when the given ID is not valid.
+	ErrInvalidActorID = errors.New("invalid actor id")
 )
 
 // ActorID is bytes represented by the hexadecimal string.
@@ -55,67 +58,57 @@ var (
 type ActorID [actorIDSize]byte
 
 // ActorIDFromHex returns the bytes represented by the hexadecimal string str.
-func ActorIDFromHex(str string) (*ActorID, error) {
+func ActorIDFromHex(str string) (ActorID, error) {
+	actorID := ActorID{}
+
 	if str == "" {
-		return nil, nil
+		return actorID, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
 	}
 
-	actorID := ActorID{}
 	decoded, err := hex.DecodeString(str)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
+		return actorID, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
 	}
 
 	if len(decoded) != actorIDSize {
-		return nil, fmt.Errorf("decoded length %d: %w", len(decoded), ErrInvalidHexString)
+		return actorID, fmt.Errorf("decoded length %d: %w", len(decoded), ErrInvalidHexString)
 	}
 
 	copy(actorID[:], decoded[:actorIDSize])
-	return &actorID, nil
+	return actorID, nil
 }
 
 // ActorIDFromBytes returns the bytes represented by the bytes of decoded hexadecimal string itself.
-func ActorIDFromBytes(bytes []byte) (*ActorID, error) {
+func ActorIDFromBytes(bytes []byte) (ActorID, error) {
+	actorID := ActorID{}
+
 	if len(bytes) == 0 {
-		return nil, nil
+		return actorID, fmt.Errorf("bytes length %d: %w", len(bytes), ErrInvalidActorID)
 	}
 
 	if len(bytes) != actorIDSize {
-		return nil, fmt.Errorf("bytes length %d: %w", len(bytes), ErrInvalidHexString)
+		return actorID, fmt.Errorf("bytes length %d: %w", len(bytes), ErrInvalidActorID)
 	}
 
-	actorID := ActorID{}
 	copy(actorID[:], bytes)
-	return &actorID, nil
+	return actorID, nil
 }
 
 // String returns the hexadecimal encoding of ActorID.
 // If the receiver is nil, it would return empty string.
-func (id *ActorID) String() string {
-	if id == nil {
-		return ""
-	}
-
+func (id ActorID) String() string {
 	return hex.EncodeToString(id[:])
 }
 
 // Bytes returns the bytes of ActorID itself.
 // If the receiver is nil, it would return empty array of byte.
-func (id *ActorID) Bytes() []byte {
-	if id == nil {
-		return nil
-	}
-
+func (id ActorID) Bytes() []byte {
 	return id[:]
 }
 
 // Compare returns an integer comparing two ActorID lexicographically.
 // The result will be 0 if id==other, -1 if id < other, and +1 if id > other.
 // If the receiver or argument is nil, it would panic at runtime.
-func (id *ActorID) Compare(other *ActorID) int {
-	if id == nil || other == nil {
-		panic("actorID cannot be null")
-	}
-
+func (id ActorID) Compare(other ActorID) int {
 	return bytes.Compare(id[:], other[:])
 }

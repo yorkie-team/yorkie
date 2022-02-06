@@ -23,13 +23,13 @@ import (
 )
 
 const (
-	// BSONSplitter is used to separate collection and document in a string.
-	BSONSplitter = "$"
-	tokenLen     = 2
+	// Splitter is used to separate collection and document in a string.
+	Splitter = "$"
+	tokenLen = 2
 )
 
-// ErrInvalidBSONKey is returned when the given bsonKey is invalid.
-var ErrInvalidBSONKey = errors.New("invalid bson key")
+// ErrInvalidCombinedKey is returned when the given combined key is invalid.
+var ErrInvalidCombinedKey = errors.New("invalid combined key")
 
 // Key represents the key of the Document.
 type Key struct {
@@ -37,17 +37,17 @@ type Key struct {
 	Document   string
 }
 
-// FromBSONKey creates an instance of Key from the received bsonKey.
-func FromBSONKey(bsonKey string) (*Key, error) {
-	splits := strings.Split(bsonKey, BSONSplitter)
+// FromCombinedKey creates an instance of Key from the given combined key.
+func FromCombinedKey(k string) (Key, error) {
+	splits := strings.Split(k, Splitter)
 	if len(splits) != tokenLen {
-		return nil, fmt.Errorf("%s: %w", bsonKey, ErrInvalidBSONKey)
+		return Key{}, fmt.Errorf("%s: %w", k, ErrInvalidCombinedKey)
 	}
 
-	return &Key{Collection: splits[0], Document: splits[1]}, nil
+	return Key{Collection: splits[0], Document: splits[1]}, nil
 }
 
-// BSONKey returns the string of this key.
-func (k *Key) BSONKey() string {
-	return k.Collection + BSONSplitter + k.Document
+// CombinedKey returns the string of this key.
+func (k Key) CombinedKey() string {
+	return k.Collection + Splitter + k.Document
 }

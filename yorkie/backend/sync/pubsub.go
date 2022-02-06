@@ -49,7 +49,7 @@ func (s *Subscription) ID() string {
 type DocEvent struct {
 	Type         types.DocEventType
 	Publisher    types.Client
-	DocumentKeys []*key.Key
+	DocumentKeys []key.Key
 }
 
 // Events returns the DocEvent channel of this subscription.

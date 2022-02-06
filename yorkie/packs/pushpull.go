@@ -44,7 +44,7 @@ func pushChanges(
 	docInfo *db.DocInfo,
 	pack *change.Pack,
 	initialServerSeq uint64,
-) (*change.Checkpoint, []*change.Change, error) {
+) (change.Checkpoint, []*change.Change, error) {
 	cp := clientInfo.Checkpoint(docInfo.ID)
 
 	var pushedChanges []*change.Change
@@ -66,7 +66,7 @@ func pushChanges(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
 			clientInfo.ID,
 			len(pushedChanges),
-			docInfo.Key,
+			docInfo.CombinedKey,
 			len(pack.Changes)-len(pushedChanges),
 			initialServerSeq,
 			docInfo.ServerSeq,
@@ -83,10 +83,10 @@ func pullPack(
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
 	requestPack *change.Pack,
-	pushedCP *change.Checkpoint,
+	pushedCP change.Checkpoint,
 	initialServerSeq uint64,
 ) (*ServerPack, error) {
-	docKey, err := docInfo.GetKey()
+	docKey, err := docInfo.Key()
 	if err != nil {
 		return nil, err
 	}
@@ -122,9 +122,9 @@ func pullChangeInfos(
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
 	requestPack *change.Pack,
-	pushedCP *change.Checkpoint,
+	pushedCP change.Checkpoint,
 	initialServerSeq uint64,
-) (*change.Checkpoint, []*db.ChangeInfo, error) {
+) (change.Checkpoint, []*db.ChangeInfo, error) {
 	pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
@@ -132,7 +132,7 @@ func pullChangeInfos(
 		initialServerSeq,
 	)
 	if err != nil {
-		return nil, nil, err
+		return change.InitialCheckpoint, nil, err
 	}
 
 	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
@@ -144,7 +144,7 @@ func pullChangeInfos(
 			len(pulledChanges),
 			pulledChanges[0].ServerSeq,
 			pulledChanges[len(pulledChanges)-1].ServerSeq,
-			docInfo.Key,
+			docInfo.CombinedKey,
 			pulledCP.String(),
 		)
 	}
@@ -158,12 +158,12 @@ func pullSnapshot(
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
 	pack *change.Pack,
-	pushedCP *change.Checkpoint,
+	pushedCP change.Checkpoint,
 	initialServerSeq uint64,
-) (*change.Checkpoint, []byte, error) {
+) (change.Checkpoint, []byte, error) {
 	snapshotInfo, err := be.DB.FindLastSnapshotInfo(ctx, docInfo.ID)
 	if err != nil {
-		return nil, nil, err
+		return change.InitialCheckpoint, nil, err
 	}
 
 	if snapshotInfo.ServerSeq >= initialServerSeq {
@@ -171,25 +171,24 @@ func pullSnapshot(
 		logging.From(ctx).Infof(
 			"PULL: '%s' pulls snapshot without changes from '%s', cp: %s",
 			clientInfo.ID,
-			docInfo.Key,
+			docInfo.CombinedKey,
 			pulledCP.String(),
 		)
 		return pushedCP.NextServerSeq(docInfo.ServerSeq), snapshotInfo.Snapshot, nil
 	}
 
-	docKey, err := docInfo.GetKey()
+	docKey, err := docInfo.Key()
 	if err != nil {
-		return nil, nil, err
+		return change.InitialCheckpoint, nil, err
 	}
 
 	doc, err := document.NewInternalDocumentFromSnapshot(
-		docKey.Collection,
-		docKey.Document,
+		docKey,
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {
-		return nil, nil, err
+		return change.InitialCheckpoint, nil, err
 	}
 
 	// TODO(hackerwins): If the Snapshot is missing, we may have a very large
@@ -202,7 +201,7 @@ func pullSnapshot(
 		initialServerSeq,
 	)
 	if err != nil {
-		return nil, nil, err
+		return change.InitialCheckpoint, nil, err
 	}
 
 	if err := doc.ApplyChangePack(change.NewPack(
@@ -211,7 +210,7 @@ func pullSnapshot(
 		changes,
 		nil,
 	)); err != nil {
-		return nil, nil, err
+		return change.InitialCheckpoint, nil, err
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
@@ -231,13 +230,13 @@ func pullSnapshot(
 		clientInfo.ID,
 		pack.Checkpoint.ServerSeq+1,
 		initialServerSeq,
-		docInfo.Key,
+		docInfo.CombinedKey,
 		pulledCP.String(),
 	)
 
 	snapshot, err := converter.ObjectToBytes(doc.RootObject())
 	if err != nil {
-		return nil, nil, err
+		return change.InitialCheckpoint, nil, err
 	}
 
 	return pulledCP, snapshot, nil

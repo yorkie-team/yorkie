@@ -74,7 +74,7 @@ func TestPeerAwareness(t *testing.T) {
 					}
 
 					if wr.Type == client.PeersChanged {
-						peers := wr.PeersMapByDoc[d1.Key().BSONKey()]
+						peers := wr.PeersMapByDoc[d1.Key().CombinedKey()]
 						responsePairs = append(responsePairs, watchResponsePair{
 							Type:  wr.Type,
 							Peers: peers,

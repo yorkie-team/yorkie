@@ -35,14 +35,14 @@ var (
 	InitialTicket = NewTicket(
 		0,
 		0,
-		InitialActorID,
+		&InitialActorID,
 	)
 
 	// MaxTicket is the maximum value of Ticket.
 	MaxTicket = NewTicket(
 		MaxLamport,
 		MaxDelimiter,
-		MaxActorID,
+		&MaxActorID,
 	)
 )
 
@@ -135,7 +135,7 @@ func (t *Ticket) Compare(other *Ticket) int {
 		return -1
 	}
 
-	compare := t.actorID.Compare(other.ActorID())
+	compare := t.actorID.Compare(*other.ActorID())
 	if compare != 0 {
 		return compare
 	}
@@ -150,10 +150,10 @@ func (t *Ticket) Compare(other *Ticket) int {
 }
 
 // SetActorID creates a new instance of Ticket with the given actorID.
-func (t *Ticket) SetActorID(actorID *ActorID) *Ticket {
+func (t *Ticket) SetActorID(actorID ActorID) *Ticket {
 	return &Ticket{
 		lamport:   t.lamport,
 		delimiter: t.delimiter,
-		actorID:   actorID,
+		actorID:   &actorID,
 	}
 }

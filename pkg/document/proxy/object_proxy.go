@@ -21,7 +21,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -173,7 +173,7 @@ func (p *ObjectProxy) Delete(k string) json.Element {
 
 	ticket := p.context.IssueTimeTicket()
 	deleted := p.Object.Delete(k, ticket)
-	p.context.Push(operation.NewRemove(
+	p.context.Push(operations.NewRemove(
 		p.CreatedAt(),
 		deleted.CreatedAt(),
 		ticket,
@@ -275,7 +275,7 @@ func (p *ObjectProxy) setInternal(
 	proxy := creator(ticket)
 	value := toOriginal(proxy)
 
-	p.context.Push(operation.NewSet(
+	p.context.Push(operations.NewSet(
 		p.CreatedAt(),
 		k,
 		value.DeepCopy(),

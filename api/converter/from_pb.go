@@ -23,7 +23,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -59,7 +59,7 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		return nil, ErrCheckpointRequired
 	}
 
-	changes, err := fromChanges(pbPack.Changes)
+	changes, err := FromChanges(pbPack.Changes)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	}
 
 	return &change.Pack{
-		DocumentKey:     fromDocumentKey(pbPack.DocumentKey),
+		DocumentKey:     FromDocumentKey(pbPack.DocumentKey),
 		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
 		Changes:         changes,
 		Snapshot:        pbPack.Snapshot,
@@ -78,58 +78,60 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	}, nil
 }
 
-func fromDocumentKey(pbKey *api.DocumentKey) *key.Key {
-	return &key.Key{
+// FromDocumentKey converts the given Protobuf formats to model format.
+func FromDocumentKey(pbKey *api.DocumentKey) key.Key {
+	return key.Key{
 		Collection: pbKey.Collection,
 		Document:   pbKey.Document,
 	}
 }
 
-func fromCheckpoint(pbCheckpoint *api.Checkpoint) *change.Checkpoint {
+func fromCheckpoint(pbCheckpoint *api.Checkpoint) change.Checkpoint {
 	return change.NewCheckpoint(
 		pbCheckpoint.ServerSeq,
 		pbCheckpoint.ClientSeq,
 	)
 }
 
-func fromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
+// FromChanges converts the given Protobuf formats to model format.
+func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 	var changes []*change.Change
 	for _, pbChange := range pbChanges {
 		changeID, err := fromChangeID(pbChange.Id)
 		if err != nil {
 			return nil, err
 		}
-		operations, err := FromOperations(pbChange.Operations)
+		ops, err := FromOperations(pbChange.Operations)
 		if err != nil {
 			return nil, err
 		}
 		changes = append(changes, change.New(
 			changeID,
 			pbChange.Message,
-			operations,
+			ops,
 		))
 	}
 
 	return changes, nil
 }
 
-func fromChangeID(id *api.ChangeID) (*change.ID, error) {
+func fromChangeID(id *api.ChangeID) (change.ID, error) {
 	actorID, err := time.ActorIDFromBytes(id.ActorId)
 	if err != nil {
-		return nil, err
+		return change.InitialID, err
 	}
 	return change.NewID(
 		id.ClientSeq,
 		id.Lamport,
-		actorID,
+		&actorID,
 	), nil
 }
 
 // FromDocumentKeys converts the given Protobuf formats to model format.
-func FromDocumentKeys(pbKeys []*api.DocumentKey) []*key.Key {
-	var keys []*key.Key
+func FromDocumentKeys(pbKeys []*api.DocumentKey) []key.Key {
+	var keys []key.Key
 	for _, pbKey := range pbKeys {
-		keys = append(keys, fromDocumentKey(pbKey))
+		keys = append(keys, FromDocumentKey(pbKey))
 	}
 	return keys
 }
@@ -183,10 +185,10 @@ func FromClients(pbClients *api.Clients) ([]*types.Client, error) {
 }
 
 // FromOperations converts the given Protobuf formats to model format.
-func FromOperations(pbOps []*api.Operation) ([]operation.Operation, error) {
-	var ops []operation.Operation
+func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
+	var ops []operations.Operation
 	for _, pbOp := range pbOps {
-		var op operation.Operation
+		var op operations.Operation
 		var err error
 		switch decoded := pbOp.Body.(type) {
 		case *api.Operation_Set_:
@@ -219,7 +221,7 @@ func FromOperations(pbOps []*api.Operation) ([]operation.Operation, error) {
 	return ops, nil
 }
 
-func fromSet(pbSet *api.Operation_Set) (*operation.Set, error) {
+func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 	parentCreatedAt, err := fromTimeTicket(pbSet.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -233,7 +235,7 @@ func fromSet(pbSet *api.Operation_Set) (*operation.Set, error) {
 		return nil, err
 	}
 
-	return operation.NewSet(
+	return operations.NewSet(
 		parentCreatedAt,
 		pbSet.Key,
 		elem,
@@ -241,7 +243,7 @@ func fromSet(pbSet *api.Operation_Set) (*operation.Set, error) {
 	), nil
 }
 
-func fromAdd(pbAdd *api.Operation_Add) (*operation.Add, error) {
+func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
 	parentCreatedAt, err := fromTimeTicket(pbAdd.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -258,7 +260,7 @@ func fromAdd(pbAdd *api.Operation_Add) (*operation.Add, error) {
 	if err != nil {
 		return nil, err
 	}
-	return operation.NewAdd(
+	return operations.NewAdd(
 		parentCreatedAt,
 		prevCreatedAt,
 		elem,
@@ -266,7 +268,7 @@ func fromAdd(pbAdd *api.Operation_Add) (*operation.Add, error) {
 	), nil
 }
 
-func fromMove(pbMove *api.Operation_Move) (*operation.Move, error) {
+func fromMove(pbMove *api.Operation_Move) (*operations.Move, error) {
 	parentCreatedAt, err := fromTimeTicket(pbMove.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -283,7 +285,7 @@ func fromMove(pbMove *api.Operation_Move) (*operation.Move, error) {
 	if err != nil {
 		return nil, err
 	}
-	return operation.NewMove(
+	return operations.NewMove(
 		parentCreatedAt,
 		prevCreatedAt,
 		createdAt,
@@ -291,7 +293,7 @@ func fromMove(pbMove *api.Operation_Move) (*operation.Move, error) {
 	), nil
 }
 
-func fromRemove(pbRemove *api.Operation_Remove) (*operation.Remove, error) {
+func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
 	parentCreatedAt, err := fromTimeTicket(pbRemove.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -304,14 +306,14 @@ func fromRemove(pbRemove *api.Operation_Remove) (*operation.Remove, error) {
 	if err != nil {
 		return nil, err
 	}
-	return operation.NewRemove(
+	return operations.NewRemove(
 		parentCreatedAt,
 		createdAt,
 		executedAt,
 	), nil
 }
 
-func fromEdit(pbEdit *api.Operation_Edit) (*operation.Edit, error) {
+func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -334,7 +336,7 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operation.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return operation.NewEdit(
+	return operations.NewEdit(
 		parentCreatedAt,
 		from,
 		to,
@@ -344,7 +346,7 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operation.Edit, error) {
 	), nil
 }
 
-func fromSelect(pbSelect *api.Operation_Select) (*operation.Select, error) {
+func fromSelect(pbSelect *api.Operation_Select) (*operations.Select, error) {
 	parentCreatedAt, err := fromTimeTicket(pbSelect.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -361,7 +363,7 @@ func fromSelect(pbSelect *api.Operation_Select) (*operation.Select, error) {
 	if err != nil {
 		return nil, err
 	}
-	return operation.NewSelect(
+	return operations.NewSelect(
 		parentCreatedAt,
 		from,
 		to,
@@ -369,7 +371,7 @@ func fromSelect(pbSelect *api.Operation_Select) (*operation.Select, error) {
 	), nil
 }
 
-func fromRichEdit(pbEdit *api.Operation_RichEdit) (*operation.RichEdit, error) {
+func fromRichEdit(pbEdit *api.Operation_RichEdit) (*operations.RichEdit, error) {
 	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -392,7 +394,7 @@ func fromRichEdit(pbEdit *api.Operation_RichEdit) (*operation.RichEdit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return operation.NewRichEdit(
+	return operations.NewRichEdit(
 		parentCreatedAt,
 		from,
 		to,
@@ -403,7 +405,7 @@ func fromRichEdit(pbEdit *api.Operation_RichEdit) (*operation.RichEdit, error) {
 	), nil
 }
 
-func fromStyle(pbStyle *api.Operation_Style) (*operation.Style, error) {
+func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 	parentCreatedAt, err := fromTimeTicket(pbStyle.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -420,7 +422,7 @@ func fromStyle(pbStyle *api.Operation_Style) (*operation.Style, error) {
 	if err != nil {
 		return nil, err
 	}
-	return operation.NewStyle(
+	return operations.NewStyle(
 		parentCreatedAt,
 		from,
 		to,
@@ -429,7 +431,7 @@ func fromStyle(pbStyle *api.Operation_Style) (*operation.Style, error) {
 	), nil
 }
 
-func fromIncrease(pbInc *api.Operation_Increase) (*operation.Increase, error) {
+func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 	parentCreatedAt, err := fromTimeTicket(pbInc.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -442,7 +444,7 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operation.Increase, error) {
 	if err != nil {
 		return nil, err
 	}
-	return operation.NewIncrease(
+	return operations.NewIncrease(
 		parentCreatedAt,
 		elem,
 		executedAt,
@@ -488,7 +490,7 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	return time.NewTicket(
 		pbTicket.Lamport,
 		pbTicket.Delimiter,
-		actorID,
+		&actorID,
 	), nil
 }
 

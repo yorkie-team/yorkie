@@ -544,7 +544,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	return time.NewTicket(
 		syncedSeqInfo.Lamport,
 		time.MaxDelimiter,
-		actorID,
+		&actorID,
 	), nil
 }
 
@@ -648,7 +648,7 @@ func (c *Client) findTicketByServerSeq(
 	return time.NewTicket(
 		changeInfo.Lamport,
 		time.MaxDelimiter,
-		actorID,
+		&actorID,
 	), nil
 }
 

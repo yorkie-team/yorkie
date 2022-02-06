@@ -21,7 +21,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 )
 
 // CounterProxy is a proxy representing counter.
@@ -41,7 +41,7 @@ func NewCounterProxy(ctx *change.Context, counter *json.Counter) *CounterProxy {
 	}
 }
 
-// Increase adds an increase operation.
+// Increase adds an increase operations.
 // Only numeric types are allowed as operand values, excluding
 // uint64 and uintptr.
 func (p *CounterProxy) Increase(v interface{}) *CounterProxy {
@@ -76,7 +76,7 @@ func (p *CounterProxy) Increase(v interface{}) *CounterProxy {
 		panic("unsupported type")
 	}
 
-	p.context.Push(operation.NewIncrease(
+	p.context.Push(operations.NewIncrease(
 		p.CreatedAt(),
 		primitive,
 		ticket,

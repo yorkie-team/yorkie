@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package operation
+package operations
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -83,7 +83,7 @@ func (s *Select) ExecutedAt() *time.Ticket {
 }
 
 // SetActor sets the given actor to this operation.
-func (s *Select) SetActor(actorID *time.ActorID) {
+func (s *Select) SetActor(actorID time.ActorID) {
 	s.executedAt = s.executedAt.SetActorID(actorID)
 }
 

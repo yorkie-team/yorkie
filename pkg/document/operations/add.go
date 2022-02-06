@@ -14,45 +14,45 @@
  * limitations under the License.
  */
 
-package operation
+package operations
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// Move is an operation representing moving an element to an Array.
-type Move struct {
-	// parentCreatedAt is the creation time of the Array that executes Move.
+// Add is an operation representing adding an element to an Array.
+type Add struct {
+	// parentCreatedAt is the creation time of the Array that executes Add.
 	parentCreatedAt *time.Ticket
 
 	// prevCreatedAt is the creation time of the previous element.
 	prevCreatedAt *time.Ticket
 
-	// createdAt is the creation time of the target element to move.
-	createdAt *time.Ticket
+	// value is an element added by the insert operations.
+	value json.Element
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
 }
 
-// NewMove creates a new instance of Move.
-func NewMove(
+// NewAdd creates a new instance of Add.
+func NewAdd(
 	parentCreatedAt *time.Ticket,
 	prevCreatedAt *time.Ticket,
-	createdAt *time.Ticket,
+	value json.Element,
 	executedAt *time.Ticket,
-) *Move {
-	return &Move{
+) *Add {
+	return &Add{
 		parentCreatedAt: parentCreatedAt,
 		prevCreatedAt:   prevCreatedAt,
-		createdAt:       createdAt,
+		value:           value,
 		executedAt:      executedAt,
 	}
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Move) Execute(root *json.Root) error {
+func (o *Add) Execute(root *json.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
 	obj, ok := parent.(*json.Array)
@@ -60,32 +60,34 @@ func (o *Move) Execute(root *json.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
+	value := o.value.DeepCopy()
+	obj.InsertAfter(o.prevCreatedAt, value)
 
+	root.RegisterElement(value)
 	return nil
 }
 
-// CreatedAt returns the creation time of the target element.
-func (o *Move) CreatedAt() *time.Ticket {
-	return o.createdAt
+// Value returns the value of this operation.
+func (o *Add) Value() json.Element {
+	return o.value
 }
 
 // ParentCreatedAt returns the creation time of the Array.
-func (o *Move) ParentCreatedAt() *time.Ticket {
+func (o *Add) ParentCreatedAt() *time.Ticket {
 	return o.parentCreatedAt
 }
 
 // ExecutedAt returns execution time of this operation.
-func (o *Move) ExecutedAt() *time.Ticket {
+func (o *Add) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
 // SetActor sets the given actor to this operation.
-func (o *Move) SetActor(actorID *time.ActorID) {
+func (o *Add) SetActor(actorID time.ActorID) {
 	o.executedAt = o.executedAt.SetActorID(actorID)
 }
 
 // PrevCreatedAt returns the creation time of previous element.
-func (o *Move) PrevCreatedAt() *time.Ticket {
+func (o *Add) PrevCreatedAt() *time.Ticket {
 	return o.prevCreatedAt
 }

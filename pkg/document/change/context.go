@@ -18,7 +18,7 @@ package change
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/operation"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -26,15 +26,15 @@ import (
 // Each time we add an operation, a new time ticket is issued.
 // Finally, returns a Change after the modification has been completed.
 type Context struct {
-	id         *ID
+	id         ID
 	message    string
-	operations []operation.Operation
+	operations []operations.Operation
 	delimiter  uint32
 	root       *json.Root
 }
 
 // NewContext creates a new instance of Context.
-func NewContext(id *ID, message string, root *json.Root) *Context {
+func NewContext(id ID, message string, root *json.Root) *Context {
 	return &Context{
 		id:      id,
 		message: message,
@@ -42,8 +42,8 @@ func NewContext(id *ID, message string, root *json.Root) *Context {
 	}
 }
 
-// ID returns ID.
-func (c *Context) ID() *ID {
+// ID returns ID for new change.
+func (c *Context) ID() ID {
 	return c.id
 }
 
@@ -63,8 +63,8 @@ func (c *Context) IssueTimeTicket() *time.Ticket {
 	return c.id.NewTimeTicket(c.delimiter)
 }
 
-// Push pushes a new operation into context queue.
-func (c *Context) Push(op operation.Operation) {
+// Push pushes a new operations into context queue.
+func (c *Context) Push(op operations.Operation) {
 	c.operations = append(c.operations, op)
 }
 

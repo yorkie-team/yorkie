@@ -22,10 +22,10 @@ import (
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/auth"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/logging"
@@ -60,18 +60,18 @@ func (s *yorkieServer) ActivateClient(
 		return nil, err
 	}
 
-	client, err := clients.Activate(ctx, s.backend, req.ClientKey)
+	cli, err := clients.Activate(ctx, s.backend, req.ClientKey)
 	if err != nil {
 		return nil, err
 	}
 
-	pbClientID, err := client.ID.Bytes()
+	pbClientID, err := cli.ID.Bytes()
 	if err != nil {
 		return nil, err
 	}
 
 	return &api.ActivateClientResponse{
-		ClientKey: client.Key,
+		ClientKey: cli.Key,
 		ClientId:  pbClientID,
 	}, nil
 }
@@ -81,8 +81,9 @@ func (s *yorkieServer) DeactivateClient(
 	ctx context.Context,
 	req *api.DeactivateClientRequest,
 ) (*api.DeactivateClientResponse, error) {
-	if len(req.ClientId) == 0 {
-		return nil, clients.ErrInvalidClientID
+	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
@@ -91,12 +92,12 @@ func (s *yorkieServer) DeactivateClient(
 		return nil, err
 	}
 
-	client, err := clients.Deactivate(ctx, s.backend, db.IDFromBytes(req.ClientId))
+	cli, err := clients.Deactivate(ctx, s.backend, actorID)
 	if err != nil {
 		return nil, err
 	}
 
-	pbClientID, err := client.ID.Bytes()
+	pbClientID, err := cli.ID.Bytes()
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +112,11 @@ func (s *yorkieServer) AttachDocument(
 	ctx context.Context,
 	req *api.AttachDocumentRequest,
 ) (*api.AttachDocumentResponse, error) {
+	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
 		return nil, err
@@ -145,7 +151,7 @@ func (s *yorkieServer) AttachDocument(
 	clientInfo, docInfo, err := clients.FindClientAndDocument(
 		ctx,
 		s.backend,
-		db.IDFromBytes(req.ClientId),
+		actorID,
 		pack.DocumentKey,
 		true,
 	)
@@ -176,6 +182,11 @@ func (s *yorkieServer) DetachDocument(
 	ctx context.Context,
 	req *api.DetachDocumentRequest,
 ) (*api.DetachDocumentResponse, error) {
+	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
 		return nil, err
@@ -210,7 +221,7 @@ func (s *yorkieServer) DetachDocument(
 	clientInfo, docInfo, err := clients.FindClientAndDocument(
 		ctx,
 		s.backend,
-		db.IDFromBytes(req.ClientId),
+		actorID,
 		pack.DocumentKey,
 		false,
 	)
@@ -245,6 +256,11 @@ func (s *yorkieServer) PushPull(
 	ctx context.Context,
 	req *api.PushPullRequest,
 ) (*api.PushPullResponse, error) {
+	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
 		return nil, err
@@ -280,7 +296,7 @@ func (s *yorkieServer) PushPull(
 	clientInfo, docInfo, err := clients.FindClientAndDocument(
 		ctx,
 		s.backend,
-		db.IDFromBytes(req.ClientId),
+		actorID,
 		pack.DocumentKey,
 		false,
 	)
@@ -312,7 +328,7 @@ func (s *yorkieServer) WatchDocuments(
 	req *api.WatchDocumentsRequest,
 	stream api.Yorkie_WatchDocumentsServer,
 ) error {
-	client, err := converter.FromClient(req.Client)
+	cli, err := converter.FromClient(req.Client)
 	if err != nil {
 		return err
 	}
@@ -321,14 +337,15 @@ func (s *yorkieServer) WatchDocuments(
 	var attrs []types.AccessAttribute
 	for _, k := range docKeys {
 		attrs = append(attrs, types.AccessAttribute{
-			Key:  k.BSONKey(),
+			Key:  k.CombinedKey(),
 			Verb: types.Read,
 		})
 	}
 
-	if _, err = s.backend.DB.FindClientInfoByID(
+	if _, err = clients.FindClient(
 		stream.Context(),
-		db.IDFromActorID(*client.ID),
+		s.backend,
+		cli.ID,
 	); err != nil {
 		return err
 	}
@@ -342,7 +359,7 @@ func (s *yorkieServer) WatchDocuments(
 
 	subscription, peersMap, err := s.watchDocs(
 		stream.Context(),
-		*client,
+		*cli,
 		docKeys,
 	)
 	if err != nil {
@@ -398,13 +415,13 @@ func (s *yorkieServer) UpdateMetadata(
 	ctx context.Context,
 	req *api.UpdateMetadataRequest,
 ) (*api.UpdateMetadataResponse, error) {
-	client, err := converter.FromClient(req.Client)
+	cli, err := converter.FromClient(req.Client)
 	if err != nil {
 		return nil, err
 	}
 	keys := converter.FromDocumentKeys(req.DocumentKeys)
 
-	docEvent, err := s.backend.Coordinator.UpdateMetadata(ctx, client, keys)
+	docEvent, err := s.backend.Coordinator.UpdateMetadata(ctx, cli, keys)
 	if err != nil {
 		return nil, err
 	}
@@ -414,10 +431,61 @@ func (s *yorkieServer) UpdateMetadata(
 	return &api.UpdateMetadataResponse{}, nil
 }
 
+// FetchHistory fetches the history of the given document.
+func (s *yorkieServer) FetchHistory(
+	ctx context.Context,
+	req *api.FetchHistoryRequest,
+) (*api.FetchHistoryResponse, error) {
+	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	docKey := converter.FromDocumentKey(req.DocumentKey)
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.FetchHistory,
+		Attributes: []types.AccessAttribute{{
+			Key:  docKey.CombinedKey(),
+			Verb: types.Read,
+		}},
+	}); err != nil {
+		return nil, err
+	}
+
+	_, docInfo, err := clients.FindClientAndDocument(
+		ctx,
+		s.backend,
+		actorID,
+		docKey,
+		false,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	changes, err := packs.FindAllChanges(
+		ctx,
+		s.backend,
+		docInfo,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	pbChanges, err := converter.ToChanges(changes)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.FetchHistoryResponse{
+		Changes: pbChanges,
+	}, nil
+}
+
 func (s *yorkieServer) watchDocs(
 	ctx context.Context,
 	client types.Client,
-	docKeys []*key.Key,
+	docKeys []key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
 	subscription, peersMap, err := s.backend.Coordinator.Subscribe(
 		ctx,
@@ -443,7 +511,7 @@ func (s *yorkieServer) watchDocs(
 }
 
 func (s *yorkieServer) unwatchDocs(
-	docKeys []*key.Key,
+	docKeys []key.Key,
 	subscription *sync.Subscription,
 ) {
 	ctx := context.Background()

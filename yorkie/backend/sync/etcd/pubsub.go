@@ -41,7 +41,7 @@ const (
 func (c *Client) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	keys []*key.Key,
+	keys []key.Key,
 ) (*sync.Subscription, map[string][]types.Client, error) {
 	sub, err := c.localPubSub.Subscribe(ctx, subscriber, keys)
 	if err != nil {
@@ -62,7 +62,7 @@ func (c *Client) Subscribe(
 			return nil, nil, err
 		}
 
-		peersMap[k.BSONKey()] = subs
+		peersMap[k.CombinedKey()] = subs
 	}
 
 	return sub, peersMap, nil
@@ -71,7 +71,7 @@ func (c *Client) Subscribe(
 // Unsubscribe unsubscribes the given keys.
 func (c *Client) Unsubscribe(
 	ctx context.Context,
-	keys []*key.Key,
+	keys []key.Key,
 	sub *sync.Subscription,
 ) error {
 	c.localPubSub.Unsubscribe(ctx, keys, sub)
@@ -81,7 +81,7 @@ func (c *Client) Unsubscribe(
 // Publish publishes the given event.
 func (c *Client) Publish(
 	ctx context.Context,
-	publisherID *time.ActorID,
+	publisherID time.ActorID,
 	event sync.DocEvent,
 ) {
 	c.localPubSub.Publish(ctx, publisherID, event)
@@ -91,7 +91,7 @@ func (c *Client) Publish(
 // PublishToLocal publishes the given event.
 func (c *Client) PublishToLocal(
 	ctx context.Context,
-	publisherID *time.ActorID,
+	publisherID time.ActorID,
 	event sync.DocEvent,
 ) {
 	c.localPubSub.Publish(ctx, publisherID, event)
@@ -101,7 +101,7 @@ func (c *Client) PublishToLocal(
 func (c *Client) UpdateMetadata(
 	ctx context.Context,
 	publisher *types.Client,
-	keys []*key.Key,
+	keys []key.Key,
 ) (*sync.DocEvent, error) {
 	if sub := c.localPubSub.UpdateMetadata(publisher, keys); sub != nil {
 		if err := c.putSubscriptions(ctx, keys, sub); err != nil {
@@ -184,7 +184,7 @@ func (c *Client) removeClusterClient(id string) {
 func (c *Client) publishToMember(
 	ctx context.Context,
 	clientInfo *clusterClientInfo,
-	publisherID *time.ActorID,
+	publisherID time.ActorID,
 	event sync.DocEvent,
 ) error {
 	docEvent, err := converter.ToDocEvent(event)
@@ -207,7 +207,7 @@ func (c *Client) publishToMember(
 // putSubscriptions puts the given subscriptions in etcd.
 func (c *Client) putSubscriptions(
 	ctx context.Context,
-	keys []*key.Key,
+	keys []key.Key,
 	sub *sync.Subscription,
 ) error {
 	cli := sub.Subscriber()
@@ -217,7 +217,7 @@ func (c *Client) putSubscriptions(
 	}
 
 	for _, k := range keys {
-		k := path.Join(subscriptionsPath, k.BSONKey(), sub.ID())
+		k := path.Join(subscriptionsPath, k.CombinedKey(), sub.ID())
 		if _, err = c.client.Put(ctx, k, encoded); err != nil {
 			logging.From(ctx).Error(err)
 			return fmt.Errorf("put %s: %w", k, err)
@@ -230,11 +230,11 @@ func (c *Client) putSubscriptions(
 // pullSubscriptions pulls the subscriptions of the given document key.
 func (c *Client) pullSubscriptions(
 	ctx context.Context,
-	k *key.Key,
+	k key.Key,
 ) ([]types.Client, error) {
 	getResponse, err := c.client.Get(
 		ctx,
-		path.Join(subscriptionsPath, k.BSONKey()),
+		path.Join(subscriptionsPath, k.CombinedKey()),
 		clientv3.WithPrefix(),
 	)
 	if err != nil {
@@ -257,11 +257,11 @@ func (c *Client) pullSubscriptions(
 // removeSubscriptions removes the given subscription in etcd.
 func (c *Client) removeSubscriptions(
 	ctx context.Context,
-	keys []*key.Key,
+	keys []key.Key,
 	sub *sync.Subscription,
 ) error {
 	for _, docKey := range keys {
-		k := path.Join(subscriptionsPath, docKey.BSONKey(), sub.ID())
+		k := path.Join(subscriptionsPath, docKey.CombinedKey(), sub.ID())
 		if _, err := c.client.Delete(ctx, k); err != nil {
 			logging.From(ctx).Error(err)
 			return err

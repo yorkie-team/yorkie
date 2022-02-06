@@ -63,7 +63,7 @@ var schema = &memdb.DBSchema{
 				"key": {
 					Name:    "key",
 					Unique:  true,
-					Indexer: &memdb.StringFieldIndex{Field: "Key"},
+					Indexer: &memdb.StringFieldIndex{Field: "CombinedKey"},
 				},
 			},
 		},

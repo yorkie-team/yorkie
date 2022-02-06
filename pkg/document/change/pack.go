@@ -24,10 +24,10 @@ import (
 // Pack is a unit for delivering changes in a document to the remote.
 type Pack struct {
 	// DocumentKey is key of the document.
-	DocumentKey *key.Key
+	DocumentKey key.Key
 
 	// Checkpoint is used to determine the client received changes.
-	Checkpoint *Checkpoint
+	Checkpoint Checkpoint
 
 	// Change represents a unit of modification in the document.
 	Changes []*Change
@@ -42,8 +42,8 @@ type Pack struct {
 
 // NewPack creates a new instance of Pack.
 func NewPack(
-	key *key.Key,
-	cp *Checkpoint,
+	key key.Key,
+	cp Checkpoint,
 	changes []*Change,
 	snapshot []byte,
 ) *Pack {
