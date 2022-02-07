@@ -236,10 +236,10 @@ func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 	}
 
 	return operations.NewSet(
-		parentCreatedAt,
+		*parentCreatedAt,
 		pbSet.Key,
 		elem,
-		executedAt,
+		*executedAt,
 	), nil
 }
 
@@ -261,10 +261,10 @@ func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
 		return nil, err
 	}
 	return operations.NewAdd(
-		parentCreatedAt,
-		prevCreatedAt,
+		*parentCreatedAt,
+		*prevCreatedAt,
 		elem,
-		executedAt,
+		*executedAt,
 	), nil
 }
 
@@ -286,10 +286,10 @@ func fromMove(pbMove *api.Operation_Move) (*operations.Move, error) {
 		return nil, err
 	}
 	return operations.NewMove(
-		parentCreatedAt,
-		prevCreatedAt,
-		createdAt,
-		executedAt,
+		*parentCreatedAt,
+		*prevCreatedAt,
+		*createdAt,
+		*executedAt,
 	), nil
 }
 
@@ -307,9 +307,9 @@ func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
 		return nil, err
 	}
 	return operations.NewRemove(
-		parentCreatedAt,
-		createdAt,
-		executedAt,
+		*parentCreatedAt,
+		*createdAt,
+		*executedAt,
 	), nil
 }
 
@@ -337,12 +337,12 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 		return nil, err
 	}
 	return operations.NewEdit(
-		parentCreatedAt,
+		*parentCreatedAt,
 		from,
 		to,
 		createdAtMapByActor,
 		pbEdit.Content,
-		executedAt,
+		*executedAt,
 	), nil
 }
 
@@ -364,10 +364,10 @@ func fromSelect(pbSelect *api.Operation_Select) (*operations.Select, error) {
 		return nil, err
 	}
 	return operations.NewSelect(
-		parentCreatedAt,
+		*parentCreatedAt,
 		from,
 		to,
-		executedAt,
+		*executedAt,
 	), nil
 }
 
@@ -395,13 +395,13 @@ func fromRichEdit(pbEdit *api.Operation_RichEdit) (*operations.RichEdit, error) 
 		return nil, err
 	}
 	return operations.NewRichEdit(
-		parentCreatedAt,
+		*parentCreatedAt,
 		from,
 		to,
 		createdAtMapByActor,
 		pbEdit.Content,
 		pbEdit.Attributes,
-		executedAt,
+		*executedAt,
 	), nil
 }
 
@@ -423,11 +423,11 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 		return nil, err
 	}
 	return operations.NewStyle(
-		parentCreatedAt,
+		*parentCreatedAt,
 		from,
 		to,
 		pbStyle.Attributes,
-		executedAt,
+		*executedAt,
 	), nil
 }
 
@@ -445,9 +445,9 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 		return nil, err
 	}
 	return operations.NewIncrease(
-		parentCreatedAt,
+		*parentCreatedAt,
 		elem,
-		executedAt,
+		*executedAt,
 	), nil
 }
 
@@ -467,13 +467,13 @@ func fromCreatedAtMapByActor(
 
 func fromTextNodePos(
 	pbPos *api.TextNodePos,
-) (*json.RGATreeSplitNodePos, error) {
+) (json.RGATreeSplitNodePos, error) {
 	createdAt, err := fromTimeTicket(pbPos.CreatedAt)
 	if err != nil {
-		return nil, err
+		return json.InitialNodePos, err
 	}
 	return json.NewRGATreeSplitNodePos(
-		json.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
+		json.NewRGATreeSplitNodeID(*createdAt, int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),
 	), nil
 }
@@ -487,11 +487,13 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	if err != nil {
 		return nil, err
 	}
-	return time.NewTicket(
+
+	ticket := time.NewTicket(
 		pbTicket.Lamport,
 		pbTicket.Delimiter,
 		&actorID,
-	), nil
+	)
+	return &ticket, nil
 }
 
 func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
@@ -503,7 +505,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		}
 		return json.NewObject(
 			json.NewRHTPriorityQueueMap(),
-			createdAt,
+			*createdAt,
 		), nil
 	case api.ValueType_JSON_ARRAY:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
@@ -512,7 +514,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		}
 		return json.NewArray(
 			json.NewRGATreeList(),
-			createdAt,
+			*createdAt,
 		), nil
 	case api.ValueType_NULL:
 		fallthrough
@@ -539,7 +541,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		}
 		return json.NewPrimitive(
 			json.ValueFromBytes(valueType, pbElement.Value),
-			createdAt,
+			*createdAt,
 		), nil
 	case api.ValueType_TEXT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
@@ -548,7 +550,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		}
 		return json.NewText(
 			json.NewRGATreeSplit(json.InitialTextNode()),
-			createdAt,
+			*createdAt,
 		), nil
 	case api.ValueType_RICH_TEXT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
@@ -557,7 +559,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		}
 		return json.NewInitialRichText(
 			json.NewRGATreeSplit(json.InitialRichTextNode()),
-			createdAt,
+			*createdAt,
 		), nil
 	case api.ValueType_INTEGER_CNT:
 		fallthrough
@@ -574,7 +576,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		}
 		return json.NewCounter(
 			json.CounterValueFromBytes(counterType, pbElement.Value),
-			createdAt,
+			*createdAt,
 		), nil
 	}
 

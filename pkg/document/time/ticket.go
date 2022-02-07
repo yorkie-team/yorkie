@@ -59,8 +59,8 @@ func NewTicket(
 	lamport uint64,
 	delimiter uint32,
 	actorID *ActorID,
-) *Ticket {
-	return &Ticket{
+) Ticket {
+	return Ticket{
 		lamport:   lamport,
 		delimiter: delimiter,
 		actorID:   actorID,
@@ -69,7 +69,7 @@ func NewTicket(
 
 // AnnotatedString returns a string containing the metadata of the ticket
 // for debugging purpose.
-func (t *Ticket) AnnotatedString() string {
+func (t Ticket) AnnotatedString() string {
 	if t.actorID == nil {
 		return fmt.Sprintf("%d:%d:nil", t.lamport, t.delimiter)
 	}
@@ -80,7 +80,7 @@ func (t *Ticket) AnnotatedString() string {
 }
 
 // Key returns the key string for this Ticket.
-func (t *Ticket) Key() string {
+func (t Ticket) Key() string {
 	if t.actorID == nil {
 		return strconv.FormatUint(t.lamport, 10) +
 			":" +
@@ -96,39 +96,39 @@ func (t *Ticket) Key() string {
 }
 
 // Lamport returns the lamport value.
-func (t *Ticket) Lamport() uint64 {
+func (t Ticket) Lamport() uint64 {
 	return t.lamport
 }
 
 // Delimiter returns the delimiter value.
-func (t *Ticket) Delimiter() uint32 {
+func (t Ticket) Delimiter() uint32 {
 	return t.delimiter
 }
 
 // ActorID returns the actorID value.
-func (t *Ticket) ActorID() *ActorID {
+func (t Ticket) ActorID() *ActorID {
 	return t.actorID
 }
 
 // ActorIDHex returns the actorID's hex value.
-func (t *Ticket) ActorIDHex() string {
+func (t Ticket) ActorIDHex() string {
 	return t.actorID.String()
 }
 
 // ActorIDBytes returns the actorID's bytes value.
-func (t *Ticket) ActorIDBytes() []byte {
+func (t Ticket) ActorIDBytes() []byte {
 	return t.actorID.Bytes()
 }
 
 // After returns whether the given ticket was created later.
-func (t *Ticket) After(other *Ticket) bool {
+func (t Ticket) After(other Ticket) bool {
 	return t.Compare(other) > 0
 }
 
 // Compare returns an integer comparing two Ticket.
 // The result will be 0 if id==other, -1 if id < other, and +1 if id > other.
 // If the receiver or argument is nil, it would panic at runtime.
-func (t *Ticket) Compare(other *Ticket) int {
+func (t Ticket) Compare(other Ticket) int {
 	if t.lamport > other.lamport {
 		return 1
 	} else if t.lamport < other.lamport {
@@ -150,8 +150,8 @@ func (t *Ticket) Compare(other *Ticket) int {
 }
 
 // SetActorID creates a new instance of Ticket with the given actorID.
-func (t *Ticket) SetActorID(actorID ActorID) *Ticket {
-	return &Ticket{
+func (t Ticket) SetActorID(actorID ActorID) Ticket {
+	return Ticket{
 		lamport:   t.lamport,
 		delimiter: t.delimiter,
 		actorID:   &actorID,

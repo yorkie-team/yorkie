@@ -41,7 +41,7 @@ func NewArrayProxy(ctx *change.Context, array *json.Array) *ArrayProxy {
 
 // AddNull adds the null at the last.
 func (p *ArrayProxy) AddNull() *ArrayProxy {
-	p.addInternal(func(ticket *time.Ticket) json.Element {
+	p.addInternal(func(ticket time.Ticket) json.Element {
 		return json.NewPrimitive(nil, ticket)
 	})
 
@@ -51,7 +51,7 @@ func (p *ArrayProxy) AddNull() *ArrayProxy {
 // AddBool adds the given boolean at the last.
 func (p *ArrayProxy) AddBool(values ...bool) *ArrayProxy {
 	for _, value := range values {
-		p.addInternal(func(ticket *time.Ticket) json.Element {
+		p.addInternal(func(ticket time.Ticket) json.Element {
 			return json.NewPrimitive(value, ticket)
 		})
 	}
@@ -62,7 +62,7 @@ func (p *ArrayProxy) AddBool(values ...bool) *ArrayProxy {
 // AddInteger adds the given integer at the last.
 func (p *ArrayProxy) AddInteger(values ...int) *ArrayProxy {
 	for _, value := range values {
-		p.addInternal(func(ticket *time.Ticket) json.Element {
+		p.addInternal(func(ticket time.Ticket) json.Element {
 			return json.NewPrimitive(value, ticket)
 		})
 	}
@@ -73,7 +73,7 @@ func (p *ArrayProxy) AddInteger(values ...int) *ArrayProxy {
 // AddLong adds the given long at the last.
 func (p *ArrayProxy) AddLong(values ...int64) *ArrayProxy {
 	for _, value := range values {
-		p.addInternal(func(ticket *time.Ticket) json.Element {
+		p.addInternal(func(ticket time.Ticket) json.Element {
 			return json.NewPrimitive(value, ticket)
 		})
 	}
@@ -84,7 +84,7 @@ func (p *ArrayProxy) AddLong(values ...int64) *ArrayProxy {
 // AddDouble adds the given double at the last.
 func (p *ArrayProxy) AddDouble(values ...float64) *ArrayProxy {
 	for _, value := range values {
-		p.addInternal(func(ticket *time.Ticket) json.Element {
+		p.addInternal(func(ticket time.Ticket) json.Element {
 			return json.NewPrimitive(value, ticket)
 		})
 	}
@@ -95,7 +95,7 @@ func (p *ArrayProxy) AddDouble(values ...float64) *ArrayProxy {
 // AddString adds the given string at the last.
 func (p *ArrayProxy) AddString(values ...string) *ArrayProxy {
 	for _, value := range values {
-		p.addInternal(func(ticket *time.Ticket) json.Element {
+		p.addInternal(func(ticket time.Ticket) json.Element {
 			return json.NewPrimitive(value, ticket)
 		})
 	}
@@ -106,7 +106,7 @@ func (p *ArrayProxy) AddString(values ...string) *ArrayProxy {
 // AddBytes adds the given bytes at the last.
 func (p *ArrayProxy) AddBytes(values ...[]byte) *ArrayProxy {
 	for _, value := range values {
-		p.addInternal(func(ticket *time.Ticket) json.Element {
+		p.addInternal(func(ticket time.Ticket) json.Element {
 			return json.NewPrimitive(value, ticket)
 		})
 	}
@@ -117,7 +117,7 @@ func (p *ArrayProxy) AddBytes(values ...[]byte) *ArrayProxy {
 // AddDate adds the given date at the last.
 func (p *ArrayProxy) AddDate(values ...gotime.Time) *ArrayProxy {
 	for _, value := range values {
-		p.addInternal(func(ticket *time.Ticket) json.Element {
+		p.addInternal(func(ticket time.Ticket) json.Element {
 			return json.NewPrimitive(value, ticket)
 		})
 	}
@@ -127,7 +127,7 @@ func (p *ArrayProxy) AddDate(values ...gotime.Time) *ArrayProxy {
 
 // AddNewArray adds a new array at the last.
 func (p *ArrayProxy) AddNewArray() *ArrayProxy {
-	v := p.addInternal(func(ticket *time.Ticket) json.Element {
+	v := p.addInternal(func(ticket time.Ticket) json.Element {
 		return NewArrayProxy(p.context, json.NewArray(json.NewRGATreeList(), ticket))
 	})
 
@@ -135,14 +135,14 @@ func (p *ArrayProxy) AddNewArray() *ArrayProxy {
 }
 
 // MoveBefore moves the given element to its new position before the given next element.
-func (p *ArrayProxy) MoveBefore(nextCreatedAt, createdAt *time.Ticket) {
+func (p *ArrayProxy) MoveBefore(nextCreatedAt, createdAt time.Ticket) {
 	p.moveBeforeInternal(nextCreatedAt, createdAt)
 }
 
 // InsertIntegerAfter inserts the given integer after the given previous
 // element.
 func (p *ArrayProxy) InsertIntegerAfter(index int, v int) *ArrayProxy {
-	p.insertAfterInternal(p.Get(index).CreatedAt(), func(ticket *time.Ticket) json.Element {
+	p.insertAfterInternal(p.Get(index).CreatedAt(), func(ticket time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
 	})
 
@@ -156,7 +156,7 @@ func (p *ArrayProxy) Delete(idx int) json.Element {
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	deleted := p.Array.Delete(idx, ticket)
+	deleted := p.Array.Delete(idx, &ticket)
 	p.context.Push(operations.NewRemove(
 		p.CreatedAt(),
 		deleted.CreatedAt(),
@@ -172,14 +172,14 @@ func (p *ArrayProxy) Len() int {
 }
 
 func (p *ArrayProxy) addInternal(
-	creator func(ticket *time.Ticket) json.Element,
+	creator func(ticket time.Ticket) json.Element,
 ) json.Element {
 	return p.insertAfterInternal(p.Array.LastCreatedAt(), creator)
 }
 
 func (p *ArrayProxy) insertAfterInternal(
-	prevCreatedAt *time.Ticket,
-	creator func(ticket *time.Ticket) json.Element,
+	prevCreatedAt time.Ticket,
+	creator func(ticket time.Ticket) json.Element,
 ) json.Element {
 	ticket := p.context.IssueTimeTicket()
 	proxy := creator(ticket)
@@ -198,7 +198,7 @@ func (p *ArrayProxy) insertAfterInternal(
 	return proxy
 }
 
-func (p *ArrayProxy) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
+func (p *ArrayProxy) moveBeforeInternal(nextCreatedAt, createdAt time.Ticket) {
 	ticket := p.context.IssueTimeTicket()
 
 	prevCreatedAt := p.FindPrevCreatedAt(nextCreatedAt)

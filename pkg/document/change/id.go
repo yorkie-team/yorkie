@@ -73,7 +73,7 @@ func (id ID) Next() ID {
 }
 
 // NewTimeTicket creates a ticket of the given delimiter.
-func (id ID) NewTimeTicket(delimiter uint32) *time.Ticket {
+func (id ID) NewTimeTicket(delimiter uint32) time.Ticket {
 	return time.NewTicket(
 		id.lamport,
 		delimiter,

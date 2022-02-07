@@ -109,7 +109,7 @@ type DB interface {
 		clientInfo *ClientInfo,
 		docID ID,
 		serverSeq uint64,
-	) (*time.Ticket, error)
+	) (time.Ticket, error)
 
 	// UpdateSyncedSeq updates the syncedSeq of the given client.
 	UpdateSyncedSeq(

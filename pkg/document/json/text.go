@@ -26,7 +26,7 @@ import (
 // InitialTextNode creates an initial node of Text. The text is edited
 // as this node is split into multiple nodes.
 func InitialTextNode() *RGATreeSplitNode {
-	return NewRGATreeSplitNode(initialNodeID, &TextValue{
+	return NewRGATreeSplitNode(InitialNodeID, &TextValue{
 		value: "",
 	})
 }
@@ -80,13 +80,13 @@ func (t *TextValue) DeepCopy() RGATreeSplitValue {
 type Text struct {
 	rgaTreeSplit *RGATreeSplit
 	selectionMap map[string]*Selection
-	createdAt    *time.Ticket
+	createdAt    time.Ticket
 	movedAt      *time.Ticket
 	removedAt    *time.Ticket
 }
 
 // NewText creates a new instance of Text.
-func NewText(elements *RGATreeSplit, createdAt *time.Ticket) *Text {
+func NewText(elements *RGATreeSplit, createdAt time.Ticket) *Text {
 	return &Text{
 		rgaTreeSplit: elements,
 		selectionMap: make(map[string]*Selection),
@@ -108,7 +108,7 @@ func (t *Text) DeepCopy() Element {
 		current = rgaTreeSplit.InsertAfter(current, node.DeepCopy())
 		insPrevID := node.InsPrevID()
 		if insPrevID != nil {
-			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
+			insPrevNode := rgaTreeSplit.FindNode(*insPrevID)
 			if insPrevNode == nil {
 				panic("insPrevNode should be presence")
 			}
@@ -120,7 +120,7 @@ func (t *Text) DeepCopy() Element {
 }
 
 // CreatedAt returns the creation time of this Text.
-func (t *Text) CreatedAt() *time.Ticket {
+func (t *Text) CreatedAt() time.Ticket {
 	return t.createdAt
 }
 
@@ -147,7 +147,7 @@ func (t *Text) SetRemovedAt(removedAt *time.Ticket) {
 // Remove removes this Text.
 func (t *Text) Remove(removedAt *time.Ticket) bool {
 	if (removedAt != nil && removedAt.After(t.createdAt)) &&
-		(t.removedAt == nil || removedAt.After(t.removedAt)) {
+		(t.removedAt == nil || removedAt.After(*t.removedAt)) {
 		t.removedAt = removedAt
 		return true
 	}
@@ -155,18 +155,18 @@ func (t *Text) Remove(removedAt *time.Ticket) bool {
 }
 
 // CreateRange returns a pair of RGATreeSplitNodePos of the given integer offsets.
-func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
+func (t *Text) CreateRange(from, to int) (RGATreeSplitNodePos, RGATreeSplitNodePos) {
 	return t.rgaTreeSplit.createRange(from, to)
 }
 
 // Edit edits the given range with the given content.
 func (t *Text) Edit(
 	from,
-	to *RGATreeSplitNodePos,
+	to RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
-	executedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
+	executedAt time.Ticket,
+) (RGATreeSplitNodePos, map[string]*time.Ticket) {
 	cursorPos, latestCreatedAtMapByActor := t.rgaTreeSplit.edit(
 		from,
 		to,
@@ -180,9 +180,9 @@ func (t *Text) Edit(
 
 // Select stores that the given range has been selected.
 func (t *Text) Select(
-	from *RGATreeSplitNodePos,
-	to *RGATreeSplitNodePos,
-	executedAt *time.Ticket,
+	from RGATreeSplitNodePos,
+	to RGATreeSplitNodePos,
+	executedAt time.Ticket,
 ) {
 	if _, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok {
 		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
@@ -212,6 +212,6 @@ func (t *Text) removedNodesLen() int {
 }
 
 // purgeTextNodesWithGarbage physically purges nodes that have been removed.
-func (t *Text) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
+func (t *Text) purgeTextNodesWithGarbage(ticket time.Ticket) int {
 	return t.rgaTreeSplit.purgeTextNodesWithGarbage(ticket)
 }

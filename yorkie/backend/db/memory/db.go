@@ -454,9 +454,9 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	clientInfo *db.ClientInfo,
 	docID db.ID,
 	serverSeq uint64,
-) (*time.Ticket, error) {
+) (time.Ticket, error) {
 	if err := d.UpdateSyncedSeq(ctx, clientInfo, docID, serverSeq); err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	txn := d.db.Txn(false)
@@ -470,7 +470,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		time.InitialActorID.String(),
 	)
 	if err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	var syncedSeqInfo *db.SyncedSeqInfo
@@ -487,7 +487,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 
 	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
 	if err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	return time.NewTicket(
@@ -565,7 +565,7 @@ func (d *DB) findTicketByServerSeq(
 	txn *memdb.Txn,
 	docID db.ID,
 	serverSeq uint64,
-) (*time.Ticket, error) {
+) (time.Ticket, error) {
 	if serverSeq == 0 {
 		return time.InitialTicket, nil
 	}
@@ -577,10 +577,10 @@ func (d *DB) findTicketByServerSeq(
 		serverSeq,
 	)
 	if err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 	if raw == nil {
-		return nil, fmt.Errorf(
+		return time.InitialTicket, fmt.Errorf(
 			"docID %s, serverSeq %d: %w",
 			docID.String(),
 			serverSeq,
@@ -591,7 +591,7 @@ func (d *DB) findTicketByServerSeq(
 	changeInfo := raw.(*db.ChangeInfo)
 	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
 	if err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	return time.NewTicket(

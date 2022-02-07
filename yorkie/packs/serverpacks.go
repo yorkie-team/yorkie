@@ -43,7 +43,7 @@ type ServerPack struct {
 
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
-	MinSyncedTicket *time.Ticket
+	MinSyncedTicket time.Ticket
 }
 
 // NewServerPack creates a new instance of ServerPack.
@@ -112,6 +112,6 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		Checkpoint:      converter.ToCheckpoint(p.Checkpoint),
 		Changes:         pbChanges,
 		Snapshot:        p.Snapshot,
-		MinSyncedTicket: converter.ToTimeTicket(p.MinSyncedTicket),
+		MinSyncedTicket: converter.ToMustTimeTicket(p.MinSyncedTicket),
 	}, nil
 }

@@ -31,7 +31,7 @@ func storeSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *db.DocInfo,
-	minSyncedTicket *time.Ticket,
+	minSyncedTicket time.Ticket,
 ) error {
 	// 01. get the last snapshot of this docInfo
 	// TODO: For performance issue, we only need to read the snapshot's metadata.
@@ -79,7 +79,7 @@ func storeSnapshot(
 		changes,
 		nil,
 	)
-	pack.MinSyncedTicket = minSyncedTicket
+	pack.MinSyncedTicket = &minSyncedTicket
 
 	if err := doc.ApplyChangePack(pack); err != nil {
 		return err

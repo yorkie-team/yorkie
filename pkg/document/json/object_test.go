@@ -36,7 +36,8 @@ func TestObject(t *testing.T) {
 		assert.Equal(t, `{"k1":"v1"}`, obj.Marshal())
 		obj.Set("k2", json.NewPrimitive("v2", ctx.IssueTimeTicket()))
 		assert.Equal(t, `{"k1":"v1","k2":"v2"}`, obj.Marshal())
-		obj.Delete("k1", ctx.IssueTimeTicket())
+		ticket := ctx.IssueTimeTicket()
+		obj.Delete("k1", &ticket)
 		assert.Equal(t, `{"k2":"v2"}`, obj.Marshal())
 	})
 }

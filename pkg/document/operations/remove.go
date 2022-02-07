@@ -25,20 +25,20 @@ import (
 type Remove struct {
 	// parentCreatedAt is the creation time of the Container that executes
 	// Remove.
-	parentCreatedAt *time.Ticket
+	parentCreatedAt time.Ticket
 
 	// createdAt is the creation time of the target element to remove.
-	createdAt *time.Ticket
+	createdAt time.Ticket
 
 	// executedAt is the time the operation was executed.
-	executedAt *time.Ticket
+	executedAt time.Ticket
 }
 
 // NewRemove creates a new instance of Remove.
 func NewRemove(
-	parentCreatedAt *time.Ticket,
-	createdAt *time.Ticket,
-	executedAt *time.Ticket,
+	parentCreatedAt time.Ticket,
+	createdAt time.Ticket,
+	executedAt time.Ticket,
 ) *Remove {
 	return &Remove{
 		parentCreatedAt: parentCreatedAt,
@@ -53,7 +53,8 @@ func (o *Remove) Execute(root *json.Root) error {
 
 	switch parent := parentElem.(type) {
 	case json.Container:
-		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
+		executedAt := o.executedAt
+		elem := parent.DeleteByCreatedAt(o.createdAt, &executedAt)
 		if elem != nil {
 			root.RegisterRemovedElementPair(parent, elem)
 		}
@@ -65,12 +66,12 @@ func (o *Remove) Execute(root *json.Root) error {
 }
 
 // ParentCreatedAt returns the creation time of the Container.
-func (o *Remove) ParentCreatedAt() *time.Ticket {
+func (o *Remove) ParentCreatedAt() time.Ticket {
 	return o.parentCreatedAt
 }
 
 // ExecutedAt returns execution time of this operation.
-func (o *Remove) ExecutedAt() *time.Ticket {
+func (o *Remove) ExecutedAt() time.Ticket {
 	return o.executedAt
 }
 
@@ -80,6 +81,6 @@ func (o *Remove) SetActor(actorID time.ActorID) {
 }
 
 // CreatedAt returns the creation time of the target element.
-func (o *Remove) CreatedAt() *time.Ticket {
+func (o *Remove) CreatedAt() time.Ticket {
 	return o.createdAt
 }

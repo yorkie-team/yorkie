@@ -24,28 +24,28 @@ import (
 // Style is an operation applies the style of the given range to RichText.
 type Style struct {
 	// parentCreatedAt is the creation time of the RichText that executes Style.
-	parentCreatedAt *time.Ticket
+	parentCreatedAt time.Ticket
 
 	// from is the starting point of the range to apply the style to.
-	from *json.RGATreeSplitNodePos
+	from json.RGATreeSplitNodePos
 
 	// to is the end point of the range to apply the style to.
-	to *json.RGATreeSplitNodePos
+	to json.RGATreeSplitNodePos
 
 	// attributes represents the text style.
 	attributes map[string]string
 
 	// executedAt is the time the operation was executed.
-	executedAt *time.Ticket
+	executedAt time.Ticket
 }
 
 // NewStyle creates a new instance of Style.
 func NewStyle(
-	parentCreatedAt *time.Ticket,
-	from *json.RGATreeSplitNodePos,
-	to *json.RGATreeSplitNodePos,
+	parentCreatedAt time.Ticket,
+	from json.RGATreeSplitNodePos,
+	to json.RGATreeSplitNodePos,
 	attributes map[string]string,
-	executedAt *time.Ticket,
+	executedAt time.Ticket,
 ) *Style {
 	return &Style{
 		parentCreatedAt: parentCreatedAt,
@@ -69,17 +69,17 @@ func (e *Style) Execute(root *json.Root) error {
 }
 
 // From returns the start point of the editing range.
-func (e *Style) From() *json.RGATreeSplitNodePos {
+func (e *Style) From() json.RGATreeSplitNodePos {
 	return e.from
 }
 
 // To returns the end point of the editing range.
-func (e *Style) To() *json.RGATreeSplitNodePos {
+func (e *Style) To() json.RGATreeSplitNodePos {
 	return e.to
 }
 
 // ExecutedAt returns execution time of this operation.
-func (e *Style) ExecutedAt() *time.Ticket {
+func (e *Style) ExecutedAt() time.Ticket {
 	return e.executedAt
 }
 
@@ -89,7 +89,7 @@ func (e *Style) SetActor(actorID time.ActorID) {
 }
 
 // ParentCreatedAt returns the creation time of the RichText.
-func (e *Style) ParentCreatedAt() *time.Ticket {
+func (e *Style) ParentCreatedAt() time.Ticket {
 	return e.parentCreatedAt
 }
 

@@ -25,7 +25,7 @@ import (
 // given key in the Object.
 type Set struct {
 	// parentCreatedAt is the creation time of the Object that executes Set.
-	parentCreatedAt *time.Ticket
+	parentCreatedAt time.Ticket
 
 	// key corresponds to the key of the object to set the value.
 	key string
@@ -34,15 +34,15 @@ type Set struct {
 	value json.Element
 
 	// executedAt is the time the operation was executed.
-	executedAt *time.Ticket
+	executedAt time.Ticket
 }
 
 // NewSet creates a new instance of Set.
 func NewSet(
-	parentCreatedAt *time.Ticket,
+	parentCreatedAt time.Ticket,
 	key string,
 	value json.Element,
-	executedAt *time.Ticket,
+	executedAt time.Ticket,
 ) *Set {
 	return &Set{
 		key:             key,
@@ -71,12 +71,12 @@ func (o *Set) Execute(root *json.Root) error {
 }
 
 // ParentCreatedAt returns the creation time of the Object.
-func (o *Set) ParentCreatedAt() *time.Ticket {
+func (o *Set) ParentCreatedAt() time.Ticket {
 	return o.parentCreatedAt
 }
 
 // ExecutedAt returns execution time of this operation.
-func (o *Set) ExecutedAt() *time.Ticket {
+func (o *Set) ExecutedAt() time.Ticket {
 	return o.executedAt
 }
 

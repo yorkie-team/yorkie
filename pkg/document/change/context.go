@@ -58,7 +58,7 @@ func (c *Context) HasOperations() bool {
 }
 
 // IssueTimeTicket creates a time ticket to be used to create a new operation.
-func (c *Context) IssueTimeTicket() *time.Ticket {
+func (c *Context) IssueTimeTicket() time.Ticket {
 	c.delimiter++
 	return c.id.NewTimeTicket(c.delimiter)
 }

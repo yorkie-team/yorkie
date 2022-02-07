@@ -24,24 +24,24 @@ import (
 // Select represents an operation that selects an area in the text.
 type Select struct {
 	// parentCreatedAt is the creation time of the Text that executes Select.
-	parentCreatedAt *time.Ticket
+	parentCreatedAt time.Ticket
 
 	// from represents the start point of the selection.
-	from *json.RGATreeSplitNodePos
+	from json.RGATreeSplitNodePos
 
 	// to represents the end point of the selection.
-	to *json.RGATreeSplitNodePos
+	to json.RGATreeSplitNodePos
 
 	// executedAt is the time the operation was executed.
-	executedAt *time.Ticket
+	executedAt time.Ticket
 }
 
 // NewSelect creates a new instance of Select.
 func NewSelect(
-	parentCreatedAt *time.Ticket,
-	from *json.RGATreeSplitNodePos,
-	to *json.RGATreeSplitNodePos,
-	executedAt *time.Ticket,
+	parentCreatedAt time.Ticket,
+	from json.RGATreeSplitNodePos,
+	to json.RGATreeSplitNodePos,
+	executedAt time.Ticket,
 ) *Select {
 	return &Select{
 		parentCreatedAt: parentCreatedAt,
@@ -68,17 +68,17 @@ func (s *Select) Execute(root *json.Root) error {
 }
 
 // From returns the start point of the selection.
-func (s *Select) From() *json.RGATreeSplitNodePos {
+func (s *Select) From() json.RGATreeSplitNodePos {
 	return s.from
 }
 
 // To returns the end point of the selection.
-func (s *Select) To() *json.RGATreeSplitNodePos {
+func (s *Select) To() json.RGATreeSplitNodePos {
 	return s.to
 }
 
 // ExecutedAt returns execution time of this operation.
-func (s *Select) ExecutedAt() *time.Ticket {
+func (s *Select) ExecutedAt() time.Ticket {
 	return s.executedAt
 }
 
@@ -88,6 +88,6 @@ func (s *Select) SetActor(actorID time.ActorID) {
 }
 
 // ParentCreatedAt returns the creation time of the Text.
-func (s *Select) ParentCreatedAt() *time.Ticket {
+func (s *Select) ParentCreatedAt() time.Ticket {
 	return s.parentCreatedAt
 }

@@ -91,7 +91,7 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*json.Object, error) {
 
 	obj := json.NewObject(
 		members,
-		createdAt,
+		*createdAt,
 	)
 	obj.SetMovedAt(movedAt)
 	obj.SetRemovedAt(removedAt)
@@ -124,7 +124,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*json.Array, error) {
 
 	arr := json.NewArray(
 		elements,
-		createdAt,
+		*createdAt,
 	)
 	arr.SetMovedAt(movedAt)
 	arr.SetRemovedAt(removedAt)
@@ -153,7 +153,7 @@ func fromJSONPrimitive(
 
 	primitive := json.NewPrimitive(
 		json.ValueFromBytes(valueType, pbPrim.Value),
-		createdAt,
+		*createdAt,
 	)
 	primitive.SetMovedAt(movedAt)
 	primitive.SetRemovedAt(removedAt)
@@ -188,7 +188,7 @@ func fromJSONText(pbText *api.JSONElement_Text) (*json.Text, error) {
 			return nil, err
 		}
 		if insPrevID != nil {
-			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
+			insPrevNode := rgaTreeSplit.FindNode(*insPrevID)
 			if insPrevNode == nil {
 				panic("insPrevNode should be presence")
 			}
@@ -198,7 +198,7 @@ func fromJSONText(pbText *api.JSONElement_Text) (*json.Text, error) {
 
 	text := json.NewText(
 		rgaTreeSplit,
-		createdAt,
+		*createdAt,
 	)
 	text.SetMovedAt(movedAt)
 	text.SetRemovedAt(removedAt)
@@ -236,7 +236,7 @@ func fromJSONRichText(
 			return nil, err
 		}
 		if insPrevID != nil {
-			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
+			insPrevNode := rgaTreeSplit.FindNode(*insPrevID)
 			if insPrevNode == nil {
 				panic("insPrevNode should be presence")
 			}
@@ -246,7 +246,7 @@ func fromJSONRichText(
 
 	text := json.NewRichText(
 		rgaTreeSplit,
-		createdAt,
+		*createdAt,
 	)
 	text.SetMovedAt(movedAt)
 	text.SetRemovedAt(removedAt)
@@ -274,7 +274,7 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*json.Counter, error) {
 
 	counter := json.NewCounter(
 		json.CounterValueFromBytes(counterType, pbCnt.Value),
-		createdAt,
+		*createdAt,
 	)
 	counter.SetMovedAt(movedAt)
 	counter.SetRemovedAt(removedAt)
@@ -288,7 +288,7 @@ func fromTextNode(pbTextNode *api.TextNode) (*json.RGATreeSplitNode, error) {
 		return nil, err
 	}
 	textNode := json.NewRGATreeSplitNode(
-		id,
+		*id,
 		json.NewTextValue(pbTextNode.Value),
 	)
 	if pbTextNode.RemovedAt != nil {
@@ -315,11 +315,11 @@ func fromRichTextNode(
 		if err != nil {
 			return nil, err
 		}
-		attrs.Set(pbAttr.Key, pbAttr.Value, updatedAt)
+		attrs.Set(pbAttr.Key, pbAttr.Value, *updatedAt)
 	}
 
 	textNode := json.NewRGATreeSplitNode(
-		id,
+		*id,
 		json.NewRichTextValue(attrs, pbNode.Value),
 	)
 	if pbNode.RemovedAt != nil {
@@ -344,8 +344,10 @@ func fromTextNodeID(
 		return nil, err
 	}
 
-	return json.NewRGATreeSplitNodeID(
-		createdAt,
+	id := json.NewRGATreeSplitNodeID(
+		*createdAt,
 		int(pbTextNodeID.Offset),
-	), nil
+	)
+
+	return &id, nil
 }

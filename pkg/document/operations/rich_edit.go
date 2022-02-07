@@ -26,13 +26,13 @@ import (
 type RichEdit struct {
 	// parentCreatedAt is the creation time of the RichText that executes
 	// RichEdit.
-	parentCreatedAt *time.Ticket
+	parentCreatedAt time.Ticket
 
 	// from represents the start point of the editing range.
-	from *json.RGATreeSplitNodePos
+	from json.RGATreeSplitNodePos
 
 	// to represents the end point of the editing range.
-	to *json.RGATreeSplitNodePos
+	to json.RGATreeSplitNodePos
 
 	// latestCreatedAtMapByActor is a map that stores the latest creation time
 	// by actor for the nodes included in the editing range.
@@ -45,18 +45,18 @@ type RichEdit struct {
 	attributes map[string]string
 
 	// executedAt is the time the operation was executed.
-	executedAt *time.Ticket
+	executedAt time.Ticket
 }
 
 // NewRichEdit creates a new instance of RichEdit.
 func NewRichEdit(
-	parentCreatedAt *time.Ticket,
-	from *json.RGATreeSplitNodePos,
-	to *json.RGATreeSplitNodePos,
+	parentCreatedAt time.Ticket,
+	from json.RGATreeSplitNodePos,
+	to json.RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	attributes map[string]string,
-	executedAt *time.Ticket,
+	executedAt time.Ticket,
 ) *RichEdit {
 	return &RichEdit{
 		parentCreatedAt:           parentCreatedAt,
@@ -87,17 +87,17 @@ func (e *RichEdit) Execute(root *json.Root) error {
 }
 
 // From returns the start point of the editing range.
-func (e *RichEdit) From() *json.RGATreeSplitNodePos {
+func (e *RichEdit) From() json.RGATreeSplitNodePos {
 	return e.from
 }
 
 // To returns the end point of the editing range.
-func (e *RichEdit) To() *json.RGATreeSplitNodePos {
+func (e *RichEdit) To() json.RGATreeSplitNodePos {
 	return e.to
 }
 
 // ExecutedAt returns execution time of this operation.
-func (e *RichEdit) ExecutedAt() *time.Ticket {
+func (e *RichEdit) ExecutedAt() time.Ticket {
 	return e.executedAt
 }
 
@@ -107,7 +107,7 @@ func (e *RichEdit) SetActor(actorID time.ActorID) {
 }
 
 // ParentCreatedAt returns the creation time of the RichText.
-func (e *RichEdit) ParentCreatedAt() *time.Ticket {
+func (e *RichEdit) ParentCreatedAt() time.Ticket {
 	return e.parentCreatedAt
 }
 

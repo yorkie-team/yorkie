@@ -63,14 +63,14 @@ func (n *RGATreeListNode) Element() Element {
 }
 
 // CreatedAt returns the creation time of this element.
-func (n *RGATreeListNode) CreatedAt() *time.Ticket {
+func (n *RGATreeListNode) CreatedAt() time.Ticket {
 	return n.elem.CreatedAt()
 }
 
 // PositionedAt returns the time this element was positioned.
-func (n *RGATreeListNode) PositionedAt() *time.Ticket {
+func (n *RGATreeListNode) PositionedAt() time.Ticket {
 	if n.elem.MovedAt() != nil {
-		return n.elem.MovedAt()
+		return *n.elem.MovedAt()
 	}
 
 	return n.elem.CreatedAt()
@@ -108,7 +108,7 @@ type RGATreeList struct {
 // NewRGATreeList creates a new instance of RGATreeList.
 func NewRGATreeList() *RGATreeList {
 	dummyValue := NewPrimitive(0, time.InitialTicket)
-	dummyValue.SetRemovedAt(time.InitialTicket)
+	dummyValue.SetRemovedAt(&time.InitialTicket)
 	dummyHead := newRGATreeListNode(dummyValue)
 	nodeMapByIndex := splay.NewTree(dummyHead.indexNode)
 	nodeMapByCreatedAt := make(map[string]*RGATreeListNode)
@@ -174,12 +174,12 @@ func (a *RGATreeList) Nodes() []*RGATreeListNode {
 }
 
 // LastCreatedAt returns the creation time of last elements.
-func (a *RGATreeList) LastCreatedAt() *time.Ticket {
+func (a *RGATreeList) LastCreatedAt() time.Ticket {
 	return a.last.CreatedAt()
 }
 
 // InsertAfter inserts the given element after the given previous element.
-func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element) {
+func (a *RGATreeList) InsertAfter(prevCreatedAt time.Ticket, elem Element) {
 	a.insertAfter(prevCreatedAt, elem, elem.CreatedAt())
 }
 
@@ -208,7 +208,7 @@ func (a *RGATreeList) Get(idx int) *RGATreeListNode {
 }
 
 // DeleteByCreatedAt deletes the given element.
-func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) *RGATreeListNode {
+func (a *RGATreeList) DeleteByCreatedAt(createdAt time.Ticket, deletedAt *time.Ticket) *RGATreeListNode {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
 		panic("fail to find the given createdAt: " + createdAt.Key())
@@ -241,7 +241,7 @@ func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) *RGATreeListNode {
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
 // element.
-func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) {
+func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt time.Ticket) {
 	prevNode, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
 	if !ok {
 		panic("fail to find the given prevCreatedAt: " + prevCreatedAt.Key())
@@ -252,16 +252,16 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 		panic("fail to find the given createdAt: " + createdAt.Key())
 	}
 
-	if node.elem.MovedAt() == nil || executedAt.After(node.elem.MovedAt()) {
+	if node.elem.MovedAt() == nil || executedAt.After(*node.elem.MovedAt()) {
 		a.release(node)
 		a.insertAfter(prevNode.CreatedAt(), node.elem, executedAt)
-		node.elem.SetMovedAt(executedAt)
+		node.elem.SetMovedAt(&executedAt)
 	}
 }
 
 // FindPrevCreatedAt returns the creation time of the previous element of the
 // given element.
-func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
+func (a *RGATreeList) FindPrevCreatedAt(createdAt time.Ticket) time.Ticket {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
 		panic("fail to find the given prevCreatedAt: " + createdAt.Key())
@@ -288,8 +288,8 @@ func (a *RGATreeList) purge(elem Element) {
 }
 
 func (a *RGATreeList) findNextBeforeExecutedAt(
-	createdAt *time.Ticket,
-	executedAt *time.Ticket,
+	createdAt time.Ticket,
+	executedAt time.Ticket,
 ) *RGATreeListNode {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
@@ -323,9 +323,9 @@ func (a *RGATreeList) release(node *RGATreeListNode) {
 }
 
 func (a *RGATreeList) insertAfter(
-	prevCreatedAt *time.Ticket,
+	prevCreatedAt time.Ticket,
 	value Element,
-	executedAt *time.Ticket,
+	executedAt time.Ticket,
 ) {
 	prevNode := a.findNextBeforeExecutedAt(prevCreatedAt, executedAt)
 	newNode := newRGATreeListNodeAfter(prevNode, value)

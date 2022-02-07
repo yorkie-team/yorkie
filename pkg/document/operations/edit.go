@@ -24,13 +24,13 @@ import (
 // Edit is an operation representing editing Text.
 type Edit struct {
 	// parentCreatedAt is the creation time of the Text that executes Edit.
-	parentCreatedAt *time.Ticket
+	parentCreatedAt time.Ticket
 
 	// from represents the start point of the editing range.
-	from *json.RGATreeSplitNodePos
+	from json.RGATreeSplitNodePos
 
 	// to represents the end point of the editing range.
-	to *json.RGATreeSplitNodePos
+	to json.RGATreeSplitNodePos
 
 	// latestCreatedAtMapByActor is a map that stores the latest creation time
 	// by actor for the nodes included in the editing range.
@@ -40,17 +40,17 @@ type Edit struct {
 	content string
 
 	// executedAt is the time the operation was executed.
-	executedAt *time.Ticket
+	executedAt time.Ticket
 }
 
 // NewEdit creates a new instance of Edit.
 func NewEdit(
-	parentCreatedAt *time.Ticket,
-	from *json.RGATreeSplitNodePos,
-	to *json.RGATreeSplitNodePos,
+	parentCreatedAt time.Ticket,
+	from json.RGATreeSplitNodePos,
+	to json.RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
-	executedAt *time.Ticket,
+	executedAt time.Ticket,
 ) *Edit {
 	return &Edit{
 		parentCreatedAt:           parentCreatedAt,
@@ -80,17 +80,17 @@ func (e *Edit) Execute(root *json.Root) error {
 }
 
 // From returns the start point of the editing range.
-func (e *Edit) From() *json.RGATreeSplitNodePos {
+func (e *Edit) From() json.RGATreeSplitNodePos {
 	return e.from
 }
 
 // To returns the end point of the editing range.
-func (e *Edit) To() *json.RGATreeSplitNodePos {
+func (e *Edit) To() json.RGATreeSplitNodePos {
 	return e.to
 }
 
 // ExecutedAt returns execution time of this operation.
-func (e *Edit) ExecutedAt() *time.Ticket {
+func (e *Edit) ExecutedAt() time.Ticket {
 	return e.executedAt
 }
 
@@ -100,7 +100,7 @@ func (e *Edit) SetActor(actorID time.ActorID) {
 }
 
 // ParentCreatedAt returns the creation time of the Text.
-func (e *Edit) ParentCreatedAt() *time.Ticket {
+func (e *Edit) ParentCreatedAt() time.Ticket {
 	return e.parentCreatedAt
 }
 

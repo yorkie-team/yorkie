@@ -28,11 +28,11 @@ import (
 type RHTNode struct {
 	key       string
 	val       string
-	updatedAt *time.Ticket
+	updatedAt time.Ticket
 	removedAt *time.Ticket
 }
 
-func newRHTNode(key, val string, updatedAt *time.Ticket) *RHTNode {
+func newRHTNode(key, val string, updatedAt time.Ticket) *RHTNode {
 	return &RHTNode{
 		key:       key,
 		val:       val,
@@ -42,7 +42,7 @@ func newRHTNode(key, val string, updatedAt *time.Ticket) *RHTNode {
 
 // Remove removes this node. It only marks the deleted time (tombstone).
 func (n *RHTNode) Remove(removedAt *time.Ticket) {
-	if n.removedAt == nil || removedAt.After(n.removedAt) {
+	if n.removedAt == nil || removedAt.After(*n.removedAt) {
 		n.removedAt = removedAt
 	}
 }
@@ -62,7 +62,7 @@ func (n *RHTNode) Value() string {
 }
 
 // UpdatedAt returns the last update time.
-func (n *RHTNode) UpdatedAt() *time.Ticket {
+func (n *RHTNode) UpdatedAt() time.Ticket {
 	return n.updatedAt
 }
 
@@ -108,7 +108,7 @@ func (rht *RHT) Has(key string) bool {
 }
 
 // Set sets the value of the given key.
-func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
+func (rht *RHT) Set(k, v string, executedAt time.Ticket) {
 	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
 		newNode := newRHTNode(k, v, executedAt)
 		rht.nodeMapByKey[k] = newNode
@@ -118,7 +118,7 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
-	if node, ok := rht.nodeMapByKey[k]; ok && executedAt.After(node.removedAt) {
+	if node, ok := rht.nodeMapByKey[k]; ok && executedAt.After(*node.removedAt) {
 		node.Remove(executedAt)
 		return node.val
 	}

@@ -24,16 +24,16 @@ import (
 // Increase represents an operation that increments a numeric value to Counter.
 // Among Primitives, numeric types Integer, Long, and Double are used as values.
 type Increase struct {
-	parentCreatedAt *time.Ticket
+	parentCreatedAt time.Ticket
 	value           json.Element
-	executedAt      *time.Ticket
+	executedAt      time.Ticket
 }
 
 // NewIncrease creates the increase instance.
 func NewIncrease(
-	parentCreatedAt *time.Ticket,
+	parentCreatedAt time.Ticket,
 	value json.Element,
-	executedAt *time.Ticket,
+	executedAt time.Ticket,
 ) *Increase {
 	return &Increase{
 		parentCreatedAt: parentCreatedAt,
@@ -62,12 +62,12 @@ func (o *Increase) Value() json.Element {
 }
 
 // ParentCreatedAt returns the creation time of Counter.
-func (o *Increase) ParentCreatedAt() *time.Ticket {
+func (o *Increase) ParentCreatedAt() time.Ticket {
 	return o.parentCreatedAt
 }
 
 // ExecutedAt returns execution time of this operation.
-func (o *Increase) ExecutedAt() *time.Ticket {
+func (o *Increase) ExecutedAt() time.Ticket {
 	return o.executedAt
 }
 

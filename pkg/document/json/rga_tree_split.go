@@ -11,7 +11,11 @@ import (
 )
 
 var (
-	initialNodeID = NewRGATreeSplitNodeID(time.InitialTicket, 0)
+	// InitialNodeID is the initial node ID.
+	InitialNodeID = NewRGATreeSplitNodeID(time.InitialTicket, 0)
+
+	// InitialNodePos is the initial node position.
+	InitialNodePos = NewRGATreeSplitNodePos(InitialNodeID, 0)
 )
 
 // RGATreeSplitValue is a value of RGATreeSplitNode.
@@ -25,13 +29,13 @@ type RGATreeSplitValue interface {
 
 // RGATreeSplitNodeID is an ID of RGATreeSplitNode.
 type RGATreeSplitNodeID struct {
-	createdAt *time.Ticket
+	createdAt time.Ticket
 	offset    int
 }
 
 // NewRGATreeSplitNodeID creates a new instance of RGATreeSplitNodeID.
-func NewRGATreeSplitNodeID(createdAt *time.Ticket, offset int) *RGATreeSplitNodeID {
-	return &RGATreeSplitNodeID{
+func NewRGATreeSplitNodeID(createdAt time.Ticket, offset int) RGATreeSplitNodeID {
+	return RGATreeSplitNodeID{
 		createdAt: createdAt,
 		offset:    offset,
 	}
@@ -40,12 +44,8 @@ func NewRGATreeSplitNodeID(createdAt *time.Ticket, offset int) *RGATreeSplitNode
 // Compare returns an integer comparing two ID. The result will be 0 if
 // id==other, -1 if id < other, and +1 if id > other. If the receiver or
 // argument is nil, it would panic at runtime.
-func (t *RGATreeSplitNodeID) Compare(other llrb.Key) int {
-	if t == nil || other == nil {
-		panic("RGATreeSplitNodeID cannot be null")
-	}
-
-	o := other.(*RGATreeSplitNodeID)
+func (t RGATreeSplitNodeID) Compare(other llrb.Key) int {
+	o := other.(RGATreeSplitNodeID)
 	compare := t.createdAt.Compare(o.createdAt)
 	if compare != 0 {
 		return compare
@@ -61,72 +61,72 @@ func (t *RGATreeSplitNodeID) Compare(other llrb.Key) int {
 }
 
 // Equal returns whether given ID equals to this ID or not.
-func (t *RGATreeSplitNodeID) Equal(other llrb.Key) bool {
+func (t RGATreeSplitNodeID) Equal(other llrb.Key) bool {
 	return t.Compare(other) == 0
 }
 
 // CreatedAt returns the creation time of this ID.
-func (t *RGATreeSplitNodeID) CreatedAt() *time.Ticket {
+func (t RGATreeSplitNodeID) CreatedAt() time.Ticket {
 	return t.createdAt
 }
 
 // Offset returns the offset of this ID.
-func (t *RGATreeSplitNodeID) Offset() int {
+func (t RGATreeSplitNodeID) Offset() int {
 	return t.offset
 }
 
 // Split creates a new ID with an offset from this ID.
-func (t *RGATreeSplitNodeID) Split(offset int) *RGATreeSplitNodeID {
+func (t RGATreeSplitNodeID) Split(offset int) RGATreeSplitNodeID {
 	return NewRGATreeSplitNodeID(t.createdAt, t.offset+offset)
 }
 
 // AnnotatedString returns a String containing the metadata of the node id
 // for debugging purpose.
-func (t *RGATreeSplitNodeID) AnnotatedString() string {
+func (t RGATreeSplitNodeID) AnnotatedString() string {
 	return fmt.Sprintf("%s:%d", t.createdAt.AnnotatedString(), t.offset)
 }
 
-func (t *RGATreeSplitNodeID) hasSameCreatedAt(id *RGATreeSplitNodeID) bool {
+func (t RGATreeSplitNodeID) hasSameCreatedAt(id RGATreeSplitNodeID) bool {
 	return t.createdAt.Compare(id.createdAt) == 0
 }
 
-func (t *RGATreeSplitNodeID) key() string {
+func (t RGATreeSplitNodeID) key() string {
 	return t.CreatedAt().Key() + ":" + strconv.FormatUint(uint64(t.offset), 10)
 }
 
 // RGATreeSplitNodePos is the position of the text inside the node.
 type RGATreeSplitNodePos struct {
-	id             *RGATreeSplitNodeID
+	id             RGATreeSplitNodeID
 	relativeOffset int
 }
 
 // NewRGATreeSplitNodePos creates a new instance of RGATreeSplitNodePos.
-func NewRGATreeSplitNodePos(id *RGATreeSplitNodeID, offset int) *RGATreeSplitNodePos {
-	return &RGATreeSplitNodePos{id, offset}
+func NewRGATreeSplitNodePos(id RGATreeSplitNodeID, offset int) RGATreeSplitNodePos {
+	return RGATreeSplitNodePos{id, offset}
 }
 
-func (pos *RGATreeSplitNodePos) getAbsoluteID() *RGATreeSplitNodeID {
+func (pos RGATreeSplitNodePos) getAbsoluteID() RGATreeSplitNodeID {
 	return NewRGATreeSplitNodeID(pos.id.createdAt, pos.id.offset+pos.relativeOffset)
 }
 
 // AnnotatedString returns a String containing the metadata of the position
 // for debugging purpose.
-func (pos *RGATreeSplitNodePos) AnnotatedString() string {
+func (pos RGATreeSplitNodePos) AnnotatedString() string {
 	return fmt.Sprintf("%s:%d", pos.id.AnnotatedString(), pos.relativeOffset)
 }
 
 // ID returns the ID of this RGATreeSplitNodePos.
-func (pos *RGATreeSplitNodePos) ID() *RGATreeSplitNodeID {
+func (pos RGATreeSplitNodePos) ID() RGATreeSplitNodeID {
 	return pos.id
 }
 
 // RelativeOffset returns the relative offset of this RGATreeSplitNodePos.
-func (pos *RGATreeSplitNodePos) RelativeOffset() int {
+func (pos RGATreeSplitNodePos) RelativeOffset() int {
 	return pos.relativeOffset
 }
 
 // Equal returns the whether the given pos equals or not.
-func (pos *RGATreeSplitNodePos) Equal(other *RGATreeSplitNodePos) bool {
+func (pos RGATreeSplitNodePos) Equal(other RGATreeSplitNodePos) bool {
 	if !pos.id.Equal(other.id) {
 		return false
 	}
@@ -135,12 +135,12 @@ func (pos *RGATreeSplitNodePos) Equal(other *RGATreeSplitNodePos) bool {
 
 // Selection represents the selection of text range in the editor.
 type Selection struct {
-	from      *RGATreeSplitNodePos
-	to        *RGATreeSplitNodePos
-	updatedAt *time.Ticket
+	from      RGATreeSplitNodePos
+	to        RGATreeSplitNodePos
+	updatedAt time.Ticket
 }
 
-func newSelection(from, to *RGATreeSplitNodePos, updatedAt *time.Ticket) *Selection {
+func newSelection(from, to RGATreeSplitNodePos, updatedAt time.Ticket) *Selection {
 	return &Selection{
 		from,
 		to,
@@ -150,7 +150,7 @@ func newSelection(from, to *RGATreeSplitNodePos, updatedAt *time.Ticket) *Select
 
 // RGATreeSplitNode is a node of RGATreeSplit.
 type RGATreeSplitNode struct {
-	id        *RGATreeSplitNodeID
+	id        RGATreeSplitNodeID
 	indexNode *splay.Node
 	value     RGATreeSplitValue
 	removedAt *time.Ticket
@@ -162,7 +162,7 @@ type RGATreeSplitNode struct {
 }
 
 // NewRGATreeSplitNode creates a new instance of RGATreeSplit.
-func NewRGATreeSplitNode(id *RGATreeSplitNodeID, value RGATreeSplitValue) *RGATreeSplitNode {
+func NewRGATreeSplitNode(id RGATreeSplitNodeID, value RGATreeSplitValue) *RGATreeSplitNode {
 	node := &RGATreeSplitNode{
 		id:    id,
 		value: value,
@@ -173,7 +173,7 @@ func NewRGATreeSplitNode(id *RGATreeSplitNodeID, value RGATreeSplitValue) *RGATr
 }
 
 // ID returns the ID of this RGATreeSplitNode.
-func (t *RGATreeSplitNode) ID() *RGATreeSplitNodeID {
+func (t *RGATreeSplitNode) ID() RGATreeSplitNodeID {
 	return t.id
 }
 
@@ -183,7 +183,7 @@ func (t *RGATreeSplitNode) InsPrevID() *RGATreeSplitNodeID {
 		return nil
 	}
 
-	return t.insPrev.id
+	return &t.insPrev.id
 }
 
 func (t *RGATreeSplitNode) contentLen() int {
@@ -238,7 +238,7 @@ func (t *RGATreeSplitNode) split(offset int) *RGATreeSplitNode {
 	)
 }
 
-func (t *RGATreeSplitNode) createdAt() *time.Ticket {
+func (t *RGATreeSplitNode) createdAt() time.Ticket {
 	return t.id.createdAt
 }
 
@@ -250,9 +250,9 @@ func (t *RGATreeSplitNode) annotatedString() string {
 
 // Remove removes this node if it created before the time of deletion are
 // deleted. It only marks the deleted time (tombstone).
-func (t *RGATreeSplitNode) Remove(removedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
+func (t *RGATreeSplitNode) Remove(removedAt *time.Ticket, latestCreatedAt time.Ticket) bool {
 	if !t.createdAt().After(latestCreatedAt) &&
-		(t.removedAt == nil || removedAt.After(t.removedAt)) {
+		(t.removedAt == nil || removedAt.After(*t.removedAt)) {
 		t.removedAt = removedAt
 		return true
 	}
@@ -292,7 +292,7 @@ func NewRGATreeSplit(initialHead *RGATreeSplitNode) *RGATreeSplit {
 	}
 }
 
-func (s *RGATreeSplit) createRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
+func (s *RGATreeSplit) createRange(from, to int) (RGATreeSplitNodePos, RGATreeSplitNodePos) {
 	fromPos := s.findNodePos(from)
 	if from == to {
 		return fromPos, fromPos
@@ -301,18 +301,18 @@ func (s *RGATreeSplit) createRange(from, to int) (*RGATreeSplitNodePos, *RGATree
 	return fromPos, s.findNodePos(to)
 }
 
-func (s *RGATreeSplit) findNodePos(index int) *RGATreeSplitNodePos {
+func (s *RGATreeSplit) findNodePos(index int) RGATreeSplitNodePos {
 	splayNode, offset := s.treeByIndex.Find(index)
 	node := splayNode.Value().(*RGATreeSplitNode)
-	return &RGATreeSplitNodePos{
+	return RGATreeSplitNodePos{
 		id:             node.ID(),
 		relativeOffset: offset,
 	}
 }
 
 func (s *RGATreeSplit) findNodeWithSplit(
-	pos *RGATreeSplitNodePos,
-	updatedAt *time.Ticket,
+	pos RGATreeSplitNodePos,
+	updatedAt time.Ticket,
 ) (*RGATreeSplitNode, *RGATreeSplitNode) {
 	absoluteID := pos.getAbsoluteID()
 	node := s.findFloorNodePreferToLeft(absoluteID)
@@ -328,7 +328,7 @@ func (s *RGATreeSplit) findNodeWithSplit(
 	return node, node.next
 }
 
-func (s *RGATreeSplit) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) *RGATreeSplitNode {
+func (s *RGATreeSplit) findFloorNodePreferToLeft(id RGATreeSplitNodeID) *RGATreeSplitNode {
 	node := s.findFloorNode(id)
 	if node == nil {
 		panic("the node of the given id should be found: " + s.AnnotatedString())
@@ -389,21 +389,17 @@ func (s *RGATreeSplit) InitialHead() *RGATreeSplitNode {
 }
 
 // FindNode returns the node of the given ID.
-func (s *RGATreeSplit) FindNode(id *RGATreeSplitNodeID) *RGATreeSplitNode {
-	if id == nil {
-		return nil
-	}
-
+func (s *RGATreeSplit) FindNode(id RGATreeSplitNodeID) *RGATreeSplitNode {
 	return s.findFloorNode(id)
 }
 
-func (s *RGATreeSplit) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNode {
+func (s *RGATreeSplit) findFloorNode(id RGATreeSplitNodeID) *RGATreeSplitNode {
 	key, value := s.treeByID.Floor(id)
 	if key == nil {
 		return nil
 	}
 
-	foundID := key.(*RGATreeSplitNodeID)
+	foundID := key.(RGATreeSplitNodeID)
 	foundValue := value.(*RGATreeSplitNode)
 
 	if !foundID.Equal(id) && !foundID.hasSameCreatedAt(id) {
@@ -414,12 +410,12 @@ func (s *RGATreeSplit) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNode {
 }
 
 func (s *RGATreeSplit) edit(
-	from *RGATreeSplitNodePos,
-	to *RGATreeSplitNodePos,
+	from RGATreeSplitNodePos,
+	to RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content RGATreeSplitValue,
-	editedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
+	editedAt time.Ticket,
+) (RGATreeSplitNodePos, map[string]*time.Ticket) {
 	// 01. Split nodes with from and to
 	toLeft, toRight := s.findNodeWithSplit(to, editedAt)
 	fromLeft, fromRight := s.findNodeWithSplit(from, editedAt)
@@ -428,7 +424,7 @@ func (s *RGATreeSplit) edit(
 	nodesToDelete := s.findBetween(fromRight, toRight)
 	latestCreatedAtMap, removedNodeMapByNodeKey := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
 
-	var caretID *RGATreeSplitNodeID
+	var caretID RGATreeSplitNodeID
 	if toRight == nil {
 		caretID = toLeft.id
 	} else {
@@ -463,7 +459,7 @@ func (s *RGATreeSplit) findBetween(from *RGATreeSplitNode, to *RGATreeSplitNode)
 func (s *RGATreeSplit) deleteNodes(
 	candidates []*RGATreeSplitNode,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
-	editedAt *time.Ticket,
+	editedAt time.Ticket,
 ) (map[string]*time.Ticket, map[string]*RGATreeSplitNode) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	removedNodeMap := make(map[string]*RGATreeSplitNode)
@@ -471,24 +467,24 @@ func (s *RGATreeSplit) deleteNodes(
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
 
-		var latestCreatedAt *time.Ticket
+		var latestCreatedAt time.Ticket
 		if latestCreatedAtMapByActor == nil {
 			latestCreatedAt = time.MaxTicket
 		} else {
 			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
 			if ok {
-				latestCreatedAt = createdAt
+				latestCreatedAt = *createdAt
 			} else {
 				latestCreatedAt = time.InitialTicket
 			}
 		}
 
-		if node.Remove(editedAt, latestCreatedAt) {
+		if node.Remove(&editedAt, latestCreatedAt) {
 			s.treeByIndex.Splay(node.indexNode)
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
-			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
-				createdAtMapByActor[actorIDHex] = createdAt
+			if latestCreatedAt == nil || createdAt.After(*latestCreatedAt) {
+				createdAtMapByActor[actorIDHex] = &createdAt
 			}
 
 			removedNodeMap[node.id.key()] = node
@@ -555,10 +551,10 @@ func (s *RGATreeSplit) removedNodesLen() int {
 }
 
 // purgeTextNodesWithGarbage physically purges nodes that have been removed.
-func (s *RGATreeSplit) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
+func (s *RGATreeSplit) purgeTextNodesWithGarbage(ticket time.Ticket) int {
 	count := 0
 	for _, node := range s.removedNodeMap {
-		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {
+		if node.removedAt != nil && ticket.Compare(*node.removedAt) >= 0 {
 			s.treeByIndex.Delete(node.indexNode)
 			s.purge(node)
 			s.treeByID.Remove(node.id)

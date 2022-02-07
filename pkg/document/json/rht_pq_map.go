@@ -112,7 +112,8 @@ func (rht *RHTPriorityQueueMap) Set(k string, v Element) Element {
 
 	if queue, ok := rht.nodeQueueMapByKey[k]; ok && queue.Len() > 0 {
 		node := queue.Peek().(*RHTPQMapNode)
-		if !node.isRemoved() && node.Remove(v.CreatedAt()) {
+		createdAt := v.CreatedAt()
+		if !node.isRemoved() && node.Remove(&createdAt) {
 			removed = node.elem
 		}
 	}
@@ -148,7 +149,7 @@ func (rht *RHTPriorityQueueMap) Delete(k string, deletedAt *time.Ticket) Element
 }
 
 // DeleteByCreatedAt deletes the Element of the given creation time.
-func (rht *RHTPriorityQueueMap) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+func (rht *RHTPriorityQueueMap) DeleteByCreatedAt(createdAt time.Ticket, deletedAt *time.Ticket) Element {
 	node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
 		return nil

@@ -53,13 +53,13 @@ func CounterValueFromBytes(counterType CounterType, value []byte) interface{} {
 type Counter struct {
 	valueType CounterType
 	value     interface{}
-	createdAt *time.Ticket
+	createdAt time.Ticket
 	movedAt   *time.Ticket
 	removedAt *time.Ticket
 }
 
 // NewCounter creates a new instance of Counter.
-func NewCounter(value interface{}, createdAt *time.Ticket) *Counter {
+func NewCounter(value interface{}, createdAt time.Ticket) *Counter {
 	switch val := value.(type) {
 	case int:
 		if math.MaxInt32 < val || math.MinInt32 > val {
@@ -132,7 +132,7 @@ func (p *Counter) DeepCopy() Element {
 }
 
 // CreatedAt returns the creation time.
-func (p *Counter) CreatedAt() *time.Ticket {
+func (p *Counter) CreatedAt() time.Ticket {
 	return p.createdAt
 }
 
@@ -159,7 +159,7 @@ func (p *Counter) SetRemovedAt(removedAt *time.Ticket) {
 // Remove removes this element.
 func (p *Counter) Remove(removedAt *time.Ticket) bool {
 	if (removedAt != nil && removedAt.After(p.createdAt)) &&
-		(p.removedAt == nil || removedAt.After(p.removedAt)) {
+		(p.removedAt == nil || removedAt.After(*p.removedAt)) {
 		p.removedAt = removedAt
 		return true
 	}

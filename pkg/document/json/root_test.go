@@ -26,7 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func registerTextElementWithGarbage(fromPos, toPos *json.RGATreeSplitNodePos, root *json.Root, text json.TextElement) {
+func registerTextElementWithGarbage(fromPos, toPos json.RGATreeSplitNodePos, root *json.Root, text json.TextElement) {
 	if !fromPos.Equal(toPos) {
 		root.RegisterTextElementWithGarbage(text)
 	}
@@ -44,7 +44,8 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, "[0,1,2]", array.Marshal())
 
 		targetElement := array.Get(1)
-		array.DeleteByCreatedAt(targetElement.CreatedAt(), ctx.IssueTimeTicket())
+		ticket := ctx.IssueTimeTicket()
+		array.DeleteByCreatedAt(targetElement.CreatedAt(), &ticket)
 		root.RegisterRemovedElementPair(array, targetElement)
 		assert.Equal(t, "[0,2]", array.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
@@ -174,7 +175,8 @@ func TestRoot(t *testing.T) {
 		obj.Set("3", json.NewPrimitive(3, ctx.IssueTimeTicket()))
 		assert.Equal(t, `{"1":1,"2":[1,2,3],"3":3}`, root.Object().Marshal())
 
-		deleted := obj.Delete("2", ctx.IssueTimeTicket())
+		ticket := ctx.IssueTimeTicket()
+		deleted := obj.Delete("2", &ticket)
 		root.RegisterRemovedElementPair(obj, deleted)
 		assert.Equal(t, `{"1":1,"3":3}`, obj.Marshal())
 		assert.Equal(t, 4, root.GarbageLen())
@@ -182,7 +184,8 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, 4, root.GarbageCollect(time.MaxTicket))
 		assert.Equal(t, 0, root.GarbageLen())
 
-		deleted = obj.Delete("3", ctx.IssueTimeTicket())
+		ticket = ctx.IssueTimeTicket()
+		deleted = obj.Delete("3", &ticket)
 		root.RegisterRemovedElementPair(obj, deleted)
 		assert.Equal(t, `{"1":1}`, obj.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())

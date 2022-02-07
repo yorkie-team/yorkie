@@ -41,7 +41,7 @@ func NewObjectProxy(ctx *change.Context, root *json.Object) *ObjectProxy {
 
 // SetNewObject sets a new Object for the given key.
 func (p *ObjectProxy) SetNewObject(k string) *ObjectProxy {
-	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	v := p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return NewObjectProxy(p.context, json.NewObject(json.NewRHTPriorityQueueMap(), ticket))
 	})
 
@@ -50,7 +50,7 @@ func (p *ObjectProxy) SetNewObject(k string) *ObjectProxy {
 
 // SetNewArray sets a new Array for the given key.
 func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
-	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	v := p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return NewArrayProxy(p.context, json.NewArray(json.NewRGATreeList(), ticket))
 	})
 
@@ -59,7 +59,7 @@ func (p *ObjectProxy) SetNewArray(k string) *ArrayProxy {
 
 // SetNewText sets a new Text for the given key.
 func (p *ObjectProxy) SetNewText(k string) *TextProxy {
-	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	v := p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return NewTextProxy(
 			p.context,
 			json.NewText(json.NewRGATreeSplit(json.InitialTextNode()), ticket),
@@ -71,7 +71,7 @@ func (p *ObjectProxy) SetNewText(k string) *TextProxy {
 
 // SetNewRichText sets a new RichText for the given key.
 func (p *ObjectProxy) SetNewRichText(k string) *RichTextProxy {
-	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	v := p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return NewRichTextProxy(
 			p.context,
 			json.NewInitialRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ticket),
@@ -83,7 +83,7 @@ func (p *ObjectProxy) SetNewRichText(k string) *RichTextProxy {
 
 // SetNewCounter sets a new NewCounter for the given key.
 func (p *ObjectProxy) SetNewCounter(k string, n interface{}) *CounterProxy {
-	v := p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	v := p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return NewCounterProxy(
 			p.context,
 			json.NewCounter(n, ticket),
@@ -95,7 +95,7 @@ func (p *ObjectProxy) SetNewCounter(k string, n interface{}) *CounterProxy {
 
 // SetNull sets the null for the given key.
 func (p *ObjectProxy) SetNull(k string) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return json.NewPrimitive(nil, ticket)
 	})
 
@@ -104,7 +104,7 @@ func (p *ObjectProxy) SetNull(k string) *ObjectProxy {
 
 // SetBool sets the given boolean for the given key.
 func (p *ObjectProxy) SetBool(k string, v bool) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
 	})
 
@@ -113,7 +113,7 @@ func (p *ObjectProxy) SetBool(k string, v bool) *ObjectProxy {
 
 // SetInteger sets the given integer for the given key.
 func (p *ObjectProxy) SetInteger(k string, v int) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
 	})
 
@@ -122,7 +122,7 @@ func (p *ObjectProxy) SetInteger(k string, v int) *ObjectProxy {
 
 // SetLong sets the given long for the given key.
 func (p *ObjectProxy) SetLong(k string, v int64) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
 	})
 
@@ -131,7 +131,7 @@ func (p *ObjectProxy) SetLong(k string, v int64) *ObjectProxy {
 
 // SetDouble sets the given double for the given key.
 func (p *ObjectProxy) SetDouble(k string, v float64) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
 	})
 
@@ -140,7 +140,7 @@ func (p *ObjectProxy) SetDouble(k string, v float64) *ObjectProxy {
 
 // SetString sets the given string for the given key.
 func (p *ObjectProxy) SetString(k, v string) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
 	})
 
@@ -149,7 +149,7 @@ func (p *ObjectProxy) SetString(k, v string) *ObjectProxy {
 
 // SetBytes sets the given bytes for the given key.
 func (p *ObjectProxy) SetBytes(k string, v []byte) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
 	})
 
@@ -158,7 +158,7 @@ func (p *ObjectProxy) SetBytes(k string, v []byte) *ObjectProxy {
 
 // SetDate sets the given date for the given key.
 func (p *ObjectProxy) SetDate(k string, v gotime.Time) *ObjectProxy {
-	p.setInternal(k, func(ticket *time.Ticket) json.Element {
+	p.setInternal(k, func(ticket time.Ticket) json.Element {
 		return json.NewPrimitive(v, ticket)
 	})
 
@@ -172,7 +172,7 @@ func (p *ObjectProxy) Delete(k string) json.Element {
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	deleted := p.Object.Delete(k, ticket)
+	deleted := p.Object.Delete(k, &ticket)
 	p.context.Push(operations.NewRemove(
 		p.CreatedAt(),
 		deleted.CreatedAt(),
@@ -269,7 +269,7 @@ func (p *ObjectProxy) GetCounter(k string) *CounterProxy {
 
 func (p *ObjectProxy) setInternal(
 	k string,
-	creator func(ticket *time.Ticket) json.Element,
+	creator func(ticket time.Ticket) json.Element,
 ) json.Element {
 	ticket := p.context.IssueTimeTicket()
 	proxy := creator(ticket)

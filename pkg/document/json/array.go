@@ -24,13 +24,13 @@ import (
 // Array implements Element interface.
 type Array struct {
 	elements  *RGATreeList
-	createdAt *time.Ticket
+	createdAt time.Ticket
 	movedAt   *time.Ticket
 	removedAt *time.Ticket
 }
 
 // NewArray creates a new instance of Array.
-func NewArray(elements *RGATreeList, createdAt *time.Ticket) *Array {
+func NewArray(elements *RGATreeList, createdAt time.Ticket) *Array {
 	return &Array{
 		elements:  elements,
 		createdAt: createdAt,
@@ -55,7 +55,7 @@ func (a *Array) Get(idx int) Element {
 
 // FindPrevCreatedAt returns the creation time of the previous element of the
 // given element.
-func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
+func (a *Array) FindPrevCreatedAt(createdAt time.Ticket) time.Ticket {
 	return a.elements.FindPrevCreatedAt(createdAt)
 }
 
@@ -66,7 +66,7 @@ func (a *Array) Delete(idx int, deletedAt *time.Ticket) Element {
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
 // element.
-func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) {
+func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt time.Ticket) {
 	a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt)
 }
 
@@ -108,7 +108,7 @@ func (a *Array) DeepCopy() Element {
 }
 
 // CreatedAt returns the creation time of this array.
-func (a *Array) CreatedAt() *time.Ticket {
+func (a *Array) CreatedAt() time.Ticket {
 	return a.createdAt
 }
 
@@ -135,7 +135,7 @@ func (a *Array) SetRemovedAt(removedAt *time.Ticket) {
 // Remove removes this array.
 func (a *Array) Remove(removedAt *time.Ticket) bool {
 	if (removedAt != nil && removedAt.After(a.createdAt)) &&
-		(a.removedAt == nil || removedAt.After(a.removedAt)) {
+		(a.removedAt == nil || removedAt.After(*a.removedAt)) {
 		a.removedAt = removedAt
 		return true
 	}
@@ -143,17 +143,17 @@ func (a *Array) Remove(removedAt *time.Ticket) bool {
 }
 
 // LastCreatedAt returns the creation time of the last element.
-func (a *Array) LastCreatedAt() *time.Ticket {
+func (a *Array) LastCreatedAt() time.Ticket {
 	return a.elements.LastCreatedAt()
 }
 
 // InsertAfter inserts the given element after the given previous element.
-func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
+func (a *Array) InsertAfter(prevCreatedAt time.Ticket, element Element) {
 	a.elements.InsertAfter(prevCreatedAt, element)
 }
 
 // DeleteByCreatedAt deletes the given element.
-func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+func (a *Array) DeleteByCreatedAt(createdAt time.Ticket, deletedAt *time.Ticket) Element {
 	return a.elements.DeleteByCreatedAt(createdAt, deletedAt).elem
 }
 

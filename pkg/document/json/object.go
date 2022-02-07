@@ -24,13 +24,13 @@ import (
 // tickets which is created by logical clock.
 type Object struct {
 	memberNodes *RHTPriorityQueueMap
-	createdAt   *time.Ticket
+	createdAt   time.Ticket
 	movedAt     *time.Ticket
 	removedAt   *time.Ticket
 }
 
 // NewObject creates a new instance of Object.
-func NewObject(memberNodes *RHTPriorityQueueMap, createdAt *time.Ticket) *Object {
+func NewObject(memberNodes *RHTPriorityQueueMap, createdAt time.Ticket) *Object {
 	return &Object{
 		memberNodes: memberNodes,
 		createdAt:   createdAt,
@@ -63,7 +63,7 @@ func (o *Object) Has(k string) bool {
 }
 
 // DeleteByCreatedAt deletes the element of the given creation time.
-func (o *Object) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+func (o *Object) DeleteByCreatedAt(createdAt time.Ticket, deletedAt *time.Ticket) Element {
 	return o.memberNodes.DeleteByCreatedAt(createdAt, deletedAt)
 }
 
@@ -107,7 +107,7 @@ func (o *Object) DeepCopy() Element {
 }
 
 // CreatedAt returns the creation time of this object.
-func (o *Object) CreatedAt() *time.Ticket {
+func (o *Object) CreatedAt() time.Ticket {
 	return o.createdAt
 }
 
@@ -134,7 +134,7 @@ func (o *Object) SetRemovedAt(removedAt *time.Ticket) {
 // Remove removes this object.
 func (o *Object) Remove(removedAt *time.Ticket) bool {
 	if (removedAt != nil && removedAt.After(o.createdAt)) &&
-		(o.removedAt == nil || removedAt.After(o.removedAt)) {
+		(o.removedAt == nil || removedAt.After(*o.removedAt)) {
 		o.removedAt = removedAt
 		return true
 	}

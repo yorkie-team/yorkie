@@ -24,24 +24,24 @@ import (
 // Add is an operation representing adding an element to an Array.
 type Add struct {
 	// parentCreatedAt is the creation time of the Array that executes Add.
-	parentCreatedAt *time.Ticket
+	parentCreatedAt time.Ticket
 
 	// prevCreatedAt is the creation time of the previous element.
-	prevCreatedAt *time.Ticket
+	prevCreatedAt time.Ticket
 
 	// value is an element added by the insert operations.
 	value json.Element
 
 	// executedAt is the time the operation was executed.
-	executedAt *time.Ticket
+	executedAt time.Ticket
 }
 
 // NewAdd creates a new instance of Add.
 func NewAdd(
-	parentCreatedAt *time.Ticket,
-	prevCreatedAt *time.Ticket,
+	parentCreatedAt time.Ticket,
+	prevCreatedAt time.Ticket,
 	value json.Element,
-	executedAt *time.Ticket,
+	executedAt time.Ticket,
 ) *Add {
 	return &Add{
 		parentCreatedAt: parentCreatedAt,
@@ -73,12 +73,12 @@ func (o *Add) Value() json.Element {
 }
 
 // ParentCreatedAt returns the creation time of the Array.
-func (o *Add) ParentCreatedAt() *time.Ticket {
+func (o *Add) ParentCreatedAt() time.Ticket {
 	return o.parentCreatedAt
 }
 
 // ExecutedAt returns execution time of this operation.
-func (o *Add) ExecutedAt() *time.Ticket {
+func (o *Add) ExecutedAt() time.Ticket {
 	return o.executedAt
 }
 
@@ -88,6 +88,6 @@ func (o *Add) SetActor(actorID time.ActorID) {
 }
 
 // PrevCreatedAt returns the creation time of previous element.
-func (o *Add) PrevCreatedAt() *time.Ticket {
+func (o *Add) PrevCreatedAt() time.Ticket {
 	return o.prevCreatedAt
 }

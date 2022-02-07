@@ -27,7 +27,7 @@ import (
 // InitialRichTextNode creates an initial node of RichText. The text is edited
 // as this node is split into multiple nodes.
 func InitialRichTextNode() *RGATreeSplitNode {
-	return NewRGATreeSplitNode(initialNodeID, &RichTextValue{
+	return NewRGATreeSplitNode(InitialNodeID, &RichTextValue{
 		attrs: NewRHT(),
 		value: "",
 	})
@@ -96,13 +96,13 @@ func (t *RichTextValue) DeepCopy() RGATreeSplitValue {
 type RichText struct {
 	rgaTreeSplit *RGATreeSplit
 	selectionMap map[string]*Selection
-	createdAt    *time.Ticket
+	createdAt    time.Ticket
 	movedAt      *time.Ticket
 	removedAt    *time.Ticket
 }
 
 // NewRichText creates a new instance of RichText.
-func NewRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
+func NewRichText(elements *RGATreeSplit, createdAt time.Ticket) *RichText {
 	return &RichText{
 		rgaTreeSplit: elements,
 		selectionMap: make(map[string]*Selection),
@@ -111,7 +111,7 @@ func NewRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
 }
 
 // NewInitialRichText creates a new instance of RichText.
-func NewInitialRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
+func NewInitialRichText(elements *RGATreeSplit, createdAt time.Ticket) *RichText {
 	text := NewRichText(elements, createdAt)
 	fromPos, toPos := text.CreateRange(0, 0)
 	text.Edit(fromPos, toPos, nil, "\n", nil, createdAt)
@@ -144,7 +144,7 @@ func (t *RichText) DeepCopy() Element {
 		current = rgaTreeSplit.InsertAfter(current, node.DeepCopy())
 		insPrevID := node.InsPrevID()
 		if insPrevID != nil {
-			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
+			insPrevNode := rgaTreeSplit.FindNode(*insPrevID)
 			if insPrevNode == nil {
 				panic("insPrevNode should be presence")
 			}
@@ -156,7 +156,7 @@ func (t *RichText) DeepCopy() Element {
 }
 
 // CreatedAt returns the creation time of this Text.
-func (t *RichText) CreatedAt() *time.Ticket {
+func (t *RichText) CreatedAt() time.Ticket {
 	return t.createdAt
 }
 
@@ -183,7 +183,7 @@ func (t *RichText) SetRemovedAt(removedAt *time.Ticket) {
 // Remove removes this Text.
 func (t *RichText) Remove(removedAt *time.Ticket) bool {
 	if (removedAt != nil && removedAt.After(t.createdAt)) &&
-		(t.removedAt == nil || removedAt.After(t.removedAt)) {
+		(t.removedAt == nil || removedAt.After(*t.removedAt)) {
 		t.removedAt = removedAt
 		return true
 	}
@@ -191,19 +191,19 @@ func (t *RichText) Remove(removedAt *time.Ticket) bool {
 }
 
 // CreateRange returns a pair of RGATreeSplitNodePos of the given integer offsets.
-func (t *RichText) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
+func (t *RichText) CreateRange(from, to int) (RGATreeSplitNodePos, RGATreeSplitNodePos) {
 	return t.rgaTreeSplit.createRange(from, to)
 }
 
 // Edit edits the given range with the given content and attributes.
 func (t *RichText) Edit(
 	from,
-	to *RGATreeSplitNodePos,
+	to RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	attributes map[string]string,
-	executedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
+	executedAt time.Ticket,
+) (RGATreeSplitNodePos, map[string]*time.Ticket) {
 	val := NewRichTextValue(NewRHT(), content)
 	for key, value := range attributes {
 		val.attrs.Set(key, value, executedAt)
@@ -223,9 +223,9 @@ func (t *RichText) Edit(
 // SetStyle applies the style of the given range.
 func (t *RichText) SetStyle(
 	from,
-	to *RGATreeSplitNodePos,
+	to RGATreeSplitNodePos,
 	attributes map[string]string,
-	executedAt *time.Ticket,
+	executedAt time.Ticket,
 ) {
 	// 01. Split nodes with from and to
 	_, toRight := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
@@ -243,9 +243,9 @@ func (t *RichText) SetStyle(
 
 // Select stores that the given range has been selected.
 func (t *RichText) Select(
-	from *RGATreeSplitNodePos,
-	to *RGATreeSplitNodePos,
-	executedAt *time.Ticket,
+	from RGATreeSplitNodePos,
+	to RGATreeSplitNodePos,
+	executedAt time.Ticket,
 ) {
 	if prev, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok || executedAt.After(prev.updatedAt) {
 		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
@@ -269,6 +269,6 @@ func (t *RichText) removedNodesLen() int {
 }
 
 // purgeTextNodesWithGarbage physically purges nodes that have been removed.
-func (t *RichText) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
+func (t *RichText) purgeTextNodesWithGarbage(ticket time.Ticket) int {
 	return t.rgaTreeSplit.purgeTextNodesWithGarbage(ticket)
 }

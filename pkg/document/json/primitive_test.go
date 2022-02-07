@@ -57,7 +57,8 @@ func TestPrimitive(t *testing.T) {
 			assert.Equal(t, prim.Marshal(), copied.Marshal())
 
 			actorID, _ := time.ActorIDFromHex("0")
-			prim.SetMovedAt(time.NewTicket(0, 0, &actorID))
+			movedAt := time.NewTicket(0, 0, &actorID)
+			prim.SetMovedAt(&movedAt)
 			assert.NotEqual(t, prim.MovedAt(), copied.MovedAt())
 		}
 		longPrim := json.NewPrimitive(math.MaxInt32+1, time.InitialTicket)

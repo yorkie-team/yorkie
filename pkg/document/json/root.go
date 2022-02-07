@@ -64,7 +64,7 @@ func (r *Root) Object() *Object {
 }
 
 // FindByCreatedAt returns the element of given creation time.
-func (r *Root) FindByCreatedAt(createdAt *time.Ticket) Element {
+func (r *Root) FindByCreatedAt(createdAt time.Ticket) Element {
 	return r.elementMapByCreatedAt[createdAt.Key()]
 }
 
@@ -99,11 +99,11 @@ func (r *Root) DeepCopy() *Root {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (r *Root) GarbageCollect(ticket *time.Ticket) int {
+func (r *Root) GarbageCollect(ticket time.Ticket) int {
 	count := 0
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
-		if pair.elem.RemovedAt() != nil && ticket.Compare(pair.elem.RemovedAt()) >= 0 {
+		if pair.elem.RemovedAt() != nil && ticket.Compare(*pair.elem.RemovedAt()) >= 0 {
 			pair.parent.Purge(pair.elem)
 			count += r.garbageCollect(pair.elem)
 		}

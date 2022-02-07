@@ -73,13 +73,13 @@ func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 type Primitive struct {
 	valueType ValueType
 	value     interface{}
-	createdAt *time.Ticket
+	createdAt time.Ticket
 	movedAt   *time.Ticket
 	removedAt *time.Ticket
 }
 
 // NewPrimitive creates a new instance of Primitive.
-func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
+func NewPrimitive(value interface{}, createdAt time.Ticket) *Primitive {
 	if value == nil {
 		return &Primitive{
 			valueType: Null,
@@ -213,7 +213,7 @@ func (p *Primitive) DeepCopy() Element {
 }
 
 // CreatedAt returns the creation time.
-func (p *Primitive) CreatedAt() *time.Ticket {
+func (p *Primitive) CreatedAt() time.Ticket {
 	return p.createdAt
 }
 
@@ -240,7 +240,7 @@ func (p *Primitive) SetRemovedAt(removedAt *time.Ticket) {
 // Remove removes this element.
 func (p *Primitive) Remove(removedAt *time.Ticket) bool {
 	if (removedAt != nil && removedAt.After(p.createdAt)) &&
-		(p.removedAt == nil || removedAt.After(p.removedAt)) {
+		(p.removedAt == nil || removedAt.After(*p.removedAt)) {
 		p.removedAt = removedAt
 		return true
 	}

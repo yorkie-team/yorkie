@@ -31,14 +31,14 @@ type Container interface {
 	Descendants(callback func(elem Element, parent Container) bool)
 
 	// DeleteByCreatedAt removes the given element from this container.
-	DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element
+	DeleteByCreatedAt(createdAt time.Ticket, deletedAt *time.Ticket) Element
 }
 
 // TextElement represents Text or RichText.
 type TextElement interface {
 	Element
 	removedNodesLen() int
-	purgeTextNodesWithGarbage(ticket *time.Ticket) int
+	purgeTextNodesWithGarbage(ticket time.Ticket) int
 }
 
 // Element represents JSON element.
@@ -50,7 +50,7 @@ type Element interface {
 	DeepCopy() Element
 
 	// CreatedAt returns the creation time of this element.
-	CreatedAt() *time.Ticket
+	CreatedAt() time.Ticket
 
 	// MovedAt returns the move time of this element.
 	MovedAt() *time.Ticket

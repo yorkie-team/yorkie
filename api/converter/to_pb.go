@@ -182,6 +182,15 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 	return pbOperations, nil
 }
 
+// ToMustTimeTicket converts the given model format to Protobuf format.
+func ToMustTimeTicket(ticket time.Ticket) *api.TimeTicket {
+	return &api.TimeTicket{
+		Lamport:   ticket.Lamport(),
+		Delimiter: ticket.Delimiter(),
+		ActorId:   ticket.ActorIDBytes(),
+	}
+}
+
 // ToTimeTicket converts the given model format to Protobuf format.
 func ToTimeTicket(ticket *time.Ticket) *api.TimeTicket {
 	if ticket == nil {
@@ -223,10 +232,10 @@ func toSet(set *operations.Set) (*api.Operation_Set_, error) {
 
 	return &api.Operation_Set_{
 		Set: &api.Operation_Set{
-			ParentCreatedAt: ToTimeTicket(set.ParentCreatedAt()),
+			ParentCreatedAt: ToMustTimeTicket(set.ParentCreatedAt()),
 			Key:             set.Key(),
 			Value:           pbElem,
-			ExecutedAt:      ToTimeTicket(set.ExecutedAt()),
+			ExecutedAt:      ToMustTimeTicket(set.ExecutedAt()),
 		},
 	}, nil
 }
@@ -239,10 +248,10 @@ func toAdd(add *operations.Add) (*api.Operation_Add_, error) {
 
 	return &api.Operation_Add_{
 		Add: &api.Operation_Add{
-			ParentCreatedAt: ToTimeTicket(add.ParentCreatedAt()),
-			PrevCreatedAt:   ToTimeTicket(add.PrevCreatedAt()),
+			ParentCreatedAt: ToMustTimeTicket(add.ParentCreatedAt()),
+			PrevCreatedAt:   ToMustTimeTicket(add.PrevCreatedAt()),
 			Value:           pbElem,
-			ExecutedAt:      ToTimeTicket(add.ExecutedAt()),
+			ExecutedAt:      ToMustTimeTicket(add.ExecutedAt()),
 		},
 	}, nil
 }
@@ -250,10 +259,10 @@ func toAdd(add *operations.Add) (*api.Operation_Add_, error) {
 func toMove(move *operations.Move) (*api.Operation_Move_, error) {
 	return &api.Operation_Move_{
 		Move: &api.Operation_Move{
-			ParentCreatedAt: ToTimeTicket(move.ParentCreatedAt()),
-			PrevCreatedAt:   ToTimeTicket(move.PrevCreatedAt()),
-			CreatedAt:       ToTimeTicket(move.CreatedAt()),
-			ExecutedAt:      ToTimeTicket(move.ExecutedAt()),
+			ParentCreatedAt: ToMustTimeTicket(move.ParentCreatedAt()),
+			PrevCreatedAt:   ToMustTimeTicket(move.PrevCreatedAt()),
+			CreatedAt:       ToMustTimeTicket(move.CreatedAt()),
+			ExecutedAt:      ToMustTimeTicket(move.ExecutedAt()),
 		},
 	}, nil
 }
@@ -261,9 +270,9 @@ func toMove(move *operations.Move) (*api.Operation_Move_, error) {
 func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
 	return &api.Operation_Remove_{
 		Remove: &api.Operation_Remove{
-			ParentCreatedAt: ToTimeTicket(remove.ParentCreatedAt()),
-			CreatedAt:       ToTimeTicket(remove.CreatedAt()),
-			ExecutedAt:      ToTimeTicket(remove.ExecutedAt()),
+			ParentCreatedAt: ToMustTimeTicket(remove.ParentCreatedAt()),
+			CreatedAt:       ToMustTimeTicket(remove.CreatedAt()),
+			ExecutedAt:      ToMustTimeTicket(remove.ExecutedAt()),
 		},
 	}, nil
 }
@@ -271,12 +280,12 @@ func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
 func toEdit(edit *operations.Edit) (*api.Operation_Edit_, error) {
 	return &api.Operation_Edit_{
 		Edit: &api.Operation_Edit{
-			ParentCreatedAt:     ToTimeTicket(edit.ParentCreatedAt()),
+			ParentCreatedAt:     ToMustTimeTicket(edit.ParentCreatedAt()),
 			From:                toTextNodePos(edit.From()),
 			To:                  toTextNodePos(edit.To()),
 			CreatedAtMapByActor: toCreatedAtMapByActor(edit.CreatedAtMapByActor()),
 			Content:             edit.Content(),
-			ExecutedAt:          ToTimeTicket(edit.ExecutedAt()),
+			ExecutedAt:          ToMustTimeTicket(edit.ExecutedAt()),
 		},
 	}, nil
 }
@@ -284,10 +293,10 @@ func toEdit(edit *operations.Edit) (*api.Operation_Edit_, error) {
 func toSelect(s *operations.Select) (*api.Operation_Select_, error) {
 	return &api.Operation_Select_{
 		Select: &api.Operation_Select{
-			ParentCreatedAt: ToTimeTicket(s.ParentCreatedAt()),
+			ParentCreatedAt: ToMustTimeTicket(s.ParentCreatedAt()),
 			From:            toTextNodePos(s.From()),
 			To:              toTextNodePos(s.To()),
-			ExecutedAt:      ToTimeTicket(s.ExecutedAt()),
+			ExecutedAt:      ToMustTimeTicket(s.ExecutedAt()),
 		},
 	}, nil
 }
@@ -295,13 +304,13 @@ func toSelect(s *operations.Select) (*api.Operation_Select_, error) {
 func toRichEdit(richEdit *operations.RichEdit) (*api.Operation_RichEdit_, error) {
 	return &api.Operation_RichEdit_{
 		RichEdit: &api.Operation_RichEdit{
-			ParentCreatedAt:     ToTimeTicket(richEdit.ParentCreatedAt()),
+			ParentCreatedAt:     ToMustTimeTicket(richEdit.ParentCreatedAt()),
 			From:                toTextNodePos(richEdit.From()),
 			To:                  toTextNodePos(richEdit.To()),
 			CreatedAtMapByActor: toCreatedAtMapByActor(richEdit.CreatedAtMapByActor()),
 			Content:             richEdit.Content(),
 			Attributes:          richEdit.Attributes(),
-			ExecutedAt:          ToTimeTicket(richEdit.ExecutedAt()),
+			ExecutedAt:          ToMustTimeTicket(richEdit.ExecutedAt()),
 		},
 	}, nil
 }
@@ -309,11 +318,11 @@ func toRichEdit(richEdit *operations.RichEdit) (*api.Operation_RichEdit_, error)
 func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 	return &api.Operation_Style_{
 		Style: &api.Operation_Style{
-			ParentCreatedAt: ToTimeTicket(style.ParentCreatedAt()),
+			ParentCreatedAt: ToMustTimeTicket(style.ParentCreatedAt()),
 			From:            toTextNodePos(style.From()),
 			To:              toTextNodePos(style.To()),
 			Attributes:      style.Attributes(),
-			ExecutedAt:      ToTimeTicket(style.ExecutedAt()),
+			ExecutedAt:      ToMustTimeTicket(style.ExecutedAt()),
 		},
 	}, nil
 }
@@ -326,9 +335,9 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 
 	return &api.Operation_Increase_{
 		Increase: &api.Operation_Increase{
-			ParentCreatedAt: ToTimeTicket(increase.ParentCreatedAt()),
+			ParentCreatedAt: ToMustTimeTicket(increase.ParentCreatedAt()),
 			Value:           pbElem,
-			ExecutedAt:      ToTimeTicket(increase.ExecutedAt()),
+			ExecutedAt:      ToMustTimeTicket(increase.ExecutedAt()),
 		},
 	}, nil
 }
@@ -338,12 +347,12 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 	case *json.Object:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_JSON_OBJECT,
-			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToMustTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Array:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_JSON_ARRAY,
-			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToMustTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Primitive:
 		pbValueType, err := toValueType(elem.ValueType())
@@ -353,18 +362,18 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 
 		return &api.JSONElementSimple{
 			Type:      pbValueType,
-			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToMustTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
 		}, nil
 	case *json.Text:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_TEXT,
-			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToMustTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.RichText:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_RICH_TEXT,
-			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToMustTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Counter:
 		pbCounterType, err := toCounterType(elem.ValueType())
@@ -374,7 +383,7 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 
 		return &api.JSONElementSimple{
 			Type:      pbCounterType,
-			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			CreatedAt: ToMustTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
 		}, nil
 	}
@@ -382,9 +391,9 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 	return nil, fmt.Errorf("%v, %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 }
 
-func toTextNodePos(pos *json.RGATreeSplitNodePos) *api.TextNodePos {
+func toTextNodePos(pos json.RGATreeSplitNodePos) *api.TextNodePos {
 	return &api.TextNodePos{
-		CreatedAt:      ToTimeTicket(pos.ID().CreatedAt()),
+		CreatedAt:      ToMustTimeTicket(pos.ID().CreatedAt()),
 		Offset:         int32(pos.ID().Offset()),
 		RelativeOffset: int32(pos.RelativeOffset()),
 	}

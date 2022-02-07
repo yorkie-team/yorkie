@@ -503,14 +503,14 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	clientInfo *db.ClientInfo,
 	docID db.ID,
 	serverSeq uint64,
-) (*time.Ticket, error) {
+) (time.Ticket, error) {
 	if err := c.UpdateSyncedSeq(ctx, clientInfo, docID, serverSeq); err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	// 02. find min synced seq of the given document.
@@ -525,11 +525,11 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	}
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
-		return nil, result.Err()
+		return time.InitialTicket, result.Err()
 	}
 	syncedSeqInfo := db.SyncedSeqInfo{}
 	if err := result.Decode(&syncedSeqInfo); err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	if syncedSeqInfo.ServerSeq == 0 {
@@ -538,7 +538,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 
 	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
 	if err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	return time.NewTicket(
@@ -607,14 +607,14 @@ func (c *Client) findTicketByServerSeq(
 	ctx context.Context,
 	docID db.ID,
 	serverSeq uint64,
-) (*time.Ticket, error) {
+) (time.Ticket, error) {
 	if serverSeq == 0 {
 		return time.InitialTicket, nil
 	}
 
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	result := c.collection(colChanges).FindOne(ctx, bson.M{
@@ -622,7 +622,7 @@ func (c *Client) findTicketByServerSeq(
 		"server_seq": serverSeq,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf(
+		return time.InitialTicket, fmt.Errorf(
 			"change docID=%s serverSeq=%d: %w",
 			docID.String(),
 			serverSeq,
@@ -632,17 +632,17 @@ func (c *Client) findTicketByServerSeq(
 
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
-		return nil, result.Err()
+		return time.InitialTicket, result.Err()
 	}
 
 	changeInfo := db.ChangeInfo{}
 	if err := result.Decode(&changeInfo); err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
 	if err != nil {
-		return nil, err
+		return time.InitialTicket, err
 	}
 
 	return time.NewTicket(
