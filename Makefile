@@ -26,7 +26,6 @@ proto: ## generate proto files
 	protoc api/yorkie.proto \
 -I=. \
 -I=$(GOPATH)/src \
--I=$(GOPATH)/src/github.com/gogo/protobuf/protobuf \
 --gofast_out=plugins=grpc,\
 Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
 Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:.

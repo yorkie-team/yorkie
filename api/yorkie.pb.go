@@ -9383,10 +9383,7 @@ func (m *BroadcastEventRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -9437,10 +9434,7 @@ func (m *BroadcastEventResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -9523,10 +9517,7 @@ func (m *ActivateClientRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -9643,10 +9634,7 @@ func (m *ActivateClientResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -9731,10 +9719,7 @@ func (m *DeactivateClientRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -9819,10 +9804,7 @@ func (m *DeactivateClientResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -9943,10 +9925,7 @@ func (m *AttachDocumentRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -10067,10 +10046,7 @@ func (m *AttachDocumentResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -10191,10 +10167,7 @@ func (m *DetachDocumentRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -10313,10 +10286,7 @@ func (m *DetachDocumentResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -10437,10 +10407,7 @@ func (m *WatchDocumentsRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -10561,10 +10528,7 @@ func (m *WatchDocumentsResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -10727,7 +10691,7 @@ func (m *WatchDocumentsResponse_Initialization) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthYorkie
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -10744,10 +10708,7 @@ func (m *WatchDocumentsResponse_Initialization) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -10868,10 +10829,7 @@ func (m *PushPullRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -10992,10 +10950,7 @@ func (m *PushPullResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -11116,10 +11071,7 @@ func (m *UpdateMetadataRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -11170,10 +11122,7 @@ func (m *UpdateMetadataResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -11294,10 +11243,7 @@ func (m *FetchHistoryRequest) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -11382,10 +11328,7 @@ func (m *FetchHistoryResponse) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -11612,10 +11555,7 @@ func (m *ChangePack) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -11768,10 +11708,7 @@ func (m *Change) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -11894,10 +11831,7 @@ func (m *ChangeID) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -12263,10 +12197,7 @@ func (m *Operation) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -12349,7 +12280,7 @@ func (m *Operation_Set) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CombinedKey", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -12457,10 +12388,7 @@ func (m *Operation_Set) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -12655,10 +12583,7 @@ func (m *Operation_Add) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -12853,10 +12778,7 @@ func (m *Operation_Move) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -13015,10 +12937,7 @@ func (m *Operation_Remove) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -13289,7 +13208,7 @@ func (m *Operation_Edit) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthYorkie
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -13374,10 +13293,7 @@ func (m *Operation_Edit) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -13572,10 +13488,7 @@ func (m *Operation_Select) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -13846,7 +13759,7 @@ func (m *Operation_RichEdit) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthYorkie
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14005,7 +13918,7 @@ func (m *Operation_RichEdit) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthYorkie
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14058,10 +13971,7 @@ func (m *Operation_RichEdit) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -14330,7 +14240,7 @@ func (m *Operation_Style) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthYorkie
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -14383,10 +14293,7 @@ func (m *Operation_Style) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -14545,10 +14452,7 @@ func (m *Operation_Increase) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -14760,10 +14664,7 @@ func (m *JSONElementSimple) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -15024,10 +14925,7 @@ func (m *JSONElement) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -15220,10 +15118,7 @@ func (m *JSONElement_JSONObject) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -15416,10 +15311,7 @@ func (m *JSONElement_JSONArray) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -15631,10 +15523,7 @@ func (m *JSONElement_Primitive) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -15827,10 +15716,7 @@ func (m *JSONElement_Text) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -16023,10 +15909,7 @@ func (m *JSONElement_RichText) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -16238,10 +16121,7 @@ func (m *JSONElement_Counter) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -16288,7 +16168,7 @@ func (m *RHTNode) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CombinedKey", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -16360,10 +16240,7 @@ func (m *RHTNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -16486,10 +16363,7 @@ func (m *RGANode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -16680,10 +16554,7 @@ func (m *TextNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -16730,7 +16601,7 @@ func (m *RichTextNodeAttr) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CombinedKey", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -16834,10 +16705,7 @@ func (m *RichTextNodeAttr) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -17036,7 +16904,7 @@ func (m *RichTextNode) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthYorkie
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -17157,10 +17025,7 @@ func (m *RichTextNode) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -17266,10 +17131,7 @@ func (m *TextNodeID) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -17449,7 +17311,7 @@ func (m *Metadata) Unmarshal(dAtA []byte) error {
 					if err != nil {
 						return err
 					}
-					if skippy < 0 {
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
 						return ErrInvalidLengthYorkie
 					}
 					if (iNdEx + skippy) > postIndex {
@@ -17466,10 +17328,7 @@ func (m *Metadata) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -17590,10 +17449,7 @@ func (m *Client) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -17678,10 +17534,7 @@ func (m *Clients) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -17796,10 +17649,7 @@ func (m *DocumentKey) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -17888,10 +17738,7 @@ func (m *Checkpoint) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -18016,10 +17863,7 @@ func (m *TextNodePos) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -18142,10 +17986,7 @@ func (m *TimeTicket) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
@@ -18285,10 +18126,7 @@ func (m *DocEvent) Unmarshal(dAtA []byte) error {
 			if err != nil {
 				return err
 			}
-			if skippy < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) < 0 {
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if (iNdEx + skippy) > l {
