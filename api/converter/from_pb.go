@@ -124,6 +124,7 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 		id.ClientSeq,
 		id.Lamport,
 		&actorID,
+		id.ServerSeq,
 	), nil
 }
 

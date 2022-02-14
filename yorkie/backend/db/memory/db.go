@@ -297,7 +297,7 @@ func (d *DB) CreateChangeInfos(
 		if err := txn.Insert(tblChanges, &db.ChangeInfo{
 			ID:         newID(),
 			DocID:      docInfo.ID,
-			ServerSeq:  *cn.ServerSeq(),
+			ServerSeq:  cn.ServerSeq(),
 			ActorID:    db.ID(cn.ID().ActorID().String()),
 			ClientSeq:  cn.ClientSeq(),
 			Lamport:    cn.ID().Lamport(),

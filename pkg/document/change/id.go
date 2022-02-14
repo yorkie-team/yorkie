@@ -33,8 +33,9 @@ type ID struct {
 	clientSeq uint32
 
 	// serverSeq is the sequence of the change on the server. We can find the
-	// change with serverSeq and documentID in the server.
-	serverSeq *uint64
+	// change with serverSeq and documentID in the server. If the change is not
+	// stored on the server, serverSeq is 0.
+	serverSeq uint64
 
 	// lamport is lamport timestamp.
 	lamport uint64
@@ -57,7 +58,7 @@ func NewID(
 	}
 
 	if len(serverSeq) > 0 {
-		id.serverSeq = &serverSeq[0]
+		id.serverSeq = serverSeq[0]
 	}
 
 	return id
@@ -107,7 +108,7 @@ func (id ID) ClientSeq() uint32 {
 }
 
 // ServerSeq returns the server sequence of this ID.
-func (id ID) ServerSeq() *uint64 {
+func (id ID) ServerSeq() uint64 {
 	return id.serverSeq
 }
 

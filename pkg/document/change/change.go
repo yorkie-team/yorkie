@@ -69,7 +69,7 @@ func (c *Change) Operations() []operations.Operation {
 }
 
 // ServerSeq returns the serverSeq of this change.
-func (c *Change) ServerSeq() *uint64 {
+func (c *Change) ServerSeq() uint64 {
 	return c.id.ServerSeq()
 }
 

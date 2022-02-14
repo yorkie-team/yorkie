@@ -337,7 +337,7 @@ func (c *Client) CreateChangeInfos(
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"doc_id":     encodedDocID,
-			"server_seq": *cn.ServerSeq(),
+			"server_seq": cn.ServerSeq(),
 		}).SetUpdate(bson.M{"$set": bson.M{
 			"actor_id":   encodeActorID(cn.ID().ActorID()),
 			"client_seq": cn.ID().ClientSeq(),

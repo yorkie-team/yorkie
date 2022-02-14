@@ -30,10 +30,13 @@ var MaxCheckpoint = NewCheckpoint(math.MaxUint64, math.MaxUint32)
 // Checkpoint is used to determine the client received changes.
 // It is not meant to be used to determine the logical order of changes.
 type Checkpoint struct {
-	// ServerSeq is the sequence number of this change in the server.
+	// serverSeq is the sequence of the change on the server. We can find the
+	// change with serverSeq and documentID in the server. If the change is not
+	// stored on the server, serverSeq is 0.
 	ServerSeq uint64
 
-	// ClientSeq is the sequence number of this change in the client.
+	// clientSeq is the sequence of the change within the client that made the
+	// change.
 	ClientSeq uint32
 }
 

@@ -148,8 +148,9 @@ message Change {
 
 message ChangeID {
     uint32 client_seq = 1;
-    uint64 lamport = 2 [jstype = JS_STRING];
-    bytes actor_id = 3;
+    uint64 server_seq = 2 [jstype = JS_STRING];
+    uint64 lamport = 3 [jstype = JS_STRING];
+    bytes actor_id = 4;
 }
 
 message Operation {

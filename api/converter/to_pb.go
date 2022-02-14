@@ -82,6 +82,7 @@ func ToCheckpoint(cp change.Checkpoint) *api.Checkpoint {
 func ToChangeID(id change.ID) *api.ChangeID {
 	return &api.ChangeID{
 		ClientSeq: id.ClientSeq(),
+		ServerSeq: id.ServerSeq(),
 		Lamport:   id.Lamport(),
 		ActorId:   id.ActorID().Bytes(),
 	}
