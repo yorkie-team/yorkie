@@ -122,9 +122,9 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 	}
 	return change.NewID(
 		id.ClientSeq,
-		id.Lamport,
-		&actorID,
 		id.ServerSeq,
+		id.Lamport,
+		actorID,
 	), nil
 }
 
@@ -491,7 +491,7 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	return time.NewTicket(
 		pbTicket.Lamport,
 		pbTicket.Delimiter,
-		&actorID,
+		actorID,
 	), nil
 }
 

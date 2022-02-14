@@ -35,14 +35,14 @@ var (
 	InitialTicket = NewTicket(
 		0,
 		0,
-		&InitialActorID,
+		InitialActorID,
 	)
 
 	// MaxTicket is the maximum value of Ticket.
 	MaxTicket = NewTicket(
 		MaxLamport,
 		MaxDelimiter,
-		&MaxActorID,
+		MaxActorID,
 	)
 )
 
@@ -51,14 +51,14 @@ var (
 type Ticket struct {
 	lamport   uint64
 	delimiter uint32
-	actorID   *ActorID
+	actorID   ActorID
 }
 
 // NewTicket creates an instance of Ticket.
 func NewTicket(
 	lamport uint64,
 	delimiter uint32,
-	actorID *ActorID,
+	actorID ActorID,
 ) *Ticket {
 	return &Ticket{
 		lamport:   lamport,
@@ -70,10 +70,6 @@ func NewTicket(
 // AnnotatedString returns a string containing the metadata of the ticket
 // for debugging purpose.
 func (t *Ticket) AnnotatedString() string {
-	if t.actorID == nil {
-		return fmt.Sprintf("%d:%d:nil", t.lamport, t.delimiter)
-	}
-
 	return fmt.Sprintf(
 		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.String()[22:24],
 	)
@@ -81,13 +77,6 @@ func (t *Ticket) AnnotatedString() string {
 
 // Key returns the key string for this Ticket.
 func (t *Ticket) Key() string {
-	if t.actorID == nil {
-		return strconv.FormatUint(t.lamport, 10) +
-			":" +
-			strconv.FormatUint(uint64(t.delimiter), 10) +
-			":"
-	}
-
 	return strconv.FormatUint(t.lamport, 10) +
 		":" +
 		strconv.FormatUint(uint64(t.delimiter), 10) +
@@ -106,7 +95,7 @@ func (t *Ticket) Delimiter() uint32 {
 }
 
 // ActorID returns the actorID value.
-func (t *Ticket) ActorID() *ActorID {
+func (t *Ticket) ActorID() ActorID {
 	return t.actorID
 }
 
@@ -135,7 +124,7 @@ func (t *Ticket) Compare(other *Ticket) int {
 		return -1
 	}
 
-	compare := t.actorID.Compare(*other.ActorID())
+	compare := t.actorID.Compare(other.ActorID())
 	if compare != 0 {
 		return compare
 	}
@@ -154,6 +143,6 @@ func (t *Ticket) SetActorID(actorID ActorID) *Ticket {
 	return &Ticket{
 		lamport:   t.lamport,
 		delimiter: t.delimiter,
-		actorID:   &actorID,
+		actorID:   actorID,
 	}
 }

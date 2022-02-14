@@ -21,8 +21,16 @@ import (
 	"math"
 )
 
+const (
+	// InitialClientSeq is the initial sequence number of the client.
+	InitialClientSeq = 0
+
+	// InitialServerSeq is the initial sequence number of the server.
+	InitialServerSeq = 0
+)
+
 // InitialCheckpoint is the initial value of Checkpoint.
-var InitialCheckpoint = NewCheckpoint(0, 0)
+var InitialCheckpoint = NewCheckpoint(InitialServerSeq, InitialClientSeq)
 
 // MaxCheckpoint is the maximum value of Checkpoint.
 var MaxCheckpoint = NewCheckpoint(math.MaxUint64, math.MaxUint32)

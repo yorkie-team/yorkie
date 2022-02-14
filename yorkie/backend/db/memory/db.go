@@ -481,7 +481,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		}
 	}
 
-	if syncedSeqInfo == nil || syncedSeqInfo.ServerSeq == 0 {
+	if syncedSeqInfo == nil || syncedSeqInfo.ServerSeq == change.InitialServerSeq {
 		return time.InitialTicket, nil
 	}
 
@@ -493,7 +493,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	return time.NewTicket(
 		syncedSeqInfo.Lamport,
 		time.MaxDelimiter,
-		&actorID,
+		actorID,
 	), nil
 }
 
@@ -566,7 +566,7 @@ func (d *DB) findTicketByServerSeq(
 	docID db.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
-	if serverSeq == 0 {
+	if serverSeq == change.InitialServerSeq {
 		return time.InitialTicket, nil
 	}
 
@@ -597,7 +597,7 @@ func (d *DB) findTicketByServerSeq(
 	return time.NewTicket(
 		changeInfo.Lamport,
 		time.MaxDelimiter,
-		&actorID,
+		actorID,
 	), nil
 }
 

@@ -159,7 +159,7 @@ func (d *InternalDocument) SetActor(actor time.ActorID) {
 }
 
 // ActorID returns ID of the actor currently editing the document.
-func (d *InternalDocument) ActorID() *time.ActorID {
+func (d *InternalDocument) ActorID() time.ActorID {
 	return d.changeID.ActorID()
 }
 

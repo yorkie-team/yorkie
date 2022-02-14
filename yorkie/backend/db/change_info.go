@@ -68,7 +68,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	changeID := change.NewID(i.ClientSeq, i.Lamport, &actorID, i.ServerSeq)
+	changeID := change.NewID(i.ClientSeq, i.ServerSeq, i.Lamport, actorID)
 
 	var pbOps []*api.Operation
 	for _, bytesOp := range i.Operations {

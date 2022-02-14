@@ -20,10 +20,15 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+const (
+	// InitialLamport is the initial value of Lamport timestamp.
+	InitialLamport = 0
+)
+
 var (
 	// InitialID represents the initial state ID. Usually this is used to
 	// represent a state where nothing has been edited.
-	InitialID = NewID(0, 0, &time.InitialActorID)
+	InitialID = NewID(InitialClientSeq, InitialServerSeq, InitialLamport, time.InitialActorID)
 )
 
 // ID is for identifying the Change. It is immutable.
@@ -40,28 +45,24 @@ type ID struct {
 	// lamport is lamport timestamp.
 	lamport uint64
 
-	// actorID is actorID of this ID.
-	actorID *time.ActorID
+	// actorID is actorID of this ID. If the actor is not set, it has initial
+	// value.
+	actorID time.ActorID
 }
 
 // NewID creates a new instance of ID.
 func NewID(
 	clientSeq uint32,
+	serverSeq uint64,
 	lamport uint64,
-	actorID *time.ActorID,
-	serverSeq ...uint64,
+	actorID time.ActorID,
 ) ID {
-	id := ID{
+	return ID{
 		clientSeq: clientSeq,
+		serverSeq: serverSeq,
 		lamport:   lamport,
 		actorID:   actorID,
 	}
-
-	if len(serverSeq) > 0 {
-		id.serverSeq = serverSeq[0]
-	}
-
-	return id
 }
 
 // Next creates a next ID of this ID.
@@ -86,20 +87,20 @@ func (id ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 //  - receiving: https://en.wikipedia.org/wiki/Lamport_timestamps#Algorithm
 func (id ID) SyncLamport(otherLamport uint64) ID {
 	if id.lamport < otherLamport {
-		return NewID(id.clientSeq, otherLamport, id.actorID)
+		return NewID(id.clientSeq, InitialServerSeq, otherLamport, id.actorID)
 	}
 
-	return NewID(id.clientSeq, id.lamport+1, id.actorID)
+	return NewID(id.clientSeq, InitialServerSeq, id.lamport+1, id.actorID)
 }
 
 // SetActor sets actorID.
 func (id ID) SetActor(actor time.ActorID) ID {
-	return NewID(id.clientSeq, id.lamport, &actor)
+	return NewID(id.clientSeq, InitialServerSeq, id.lamport, actor)
 }
 
 // SetServerSeq sets server sequence of this ID.
 func (id ID) SetServerSeq(serverSeq uint64) ID {
-	return NewID(id.clientSeq, id.lamport, id.actorID, serverSeq)
+	return NewID(id.clientSeq, serverSeq, id.lamport, id.actorID)
 }
 
 // ClientSeq returns the client sequence of this ID.
@@ -118,6 +119,6 @@ func (id ID) Lamport() uint64 {
 }
 
 // ActorID returns the actorID of this ID.
-func (id ID) ActorID() *time.ActorID {
+func (id ID) ActorID() time.ActorID {
 	return id.actorID
 }

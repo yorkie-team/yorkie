@@ -83,15 +83,15 @@ func (p *ServerPack) SnapshotLen() int {
 // ToPBChangePack converts the given model format to Protobuf format.
 func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	var pbChanges []*api.Change
-	for _, changeInfo := range p.ChangeInfos {
-		actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
+	for _, info := range p.ChangeInfos {
+		actorID, err := time.ActorIDFromHex(info.ActorID.String())
 		if err != nil {
 			return nil, err
 		}
-		changeID := change.NewID(changeInfo.ClientSeq, changeInfo.Lamport, &actorID)
+		changeID := change.NewID(info.ClientSeq, info.ServerSeq, info.Lamport, actorID)
 
 		var pbOps []*api.Operation
-		for _, bytesOp := range changeInfo.Operations {
+		for _, bytesOp := range info.Operations {
 			pbOp := api.Operation{}
 			if err := pbOp.Unmarshal(bytesOp); err != nil {
 				logging.DefaultLogger().Error(err)
@@ -102,7 +102,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 
 		pbChanges = append(pbChanges, &api.Change{
 			Id:         converter.ToChangeID(changeID),
-			Message:    changeInfo.Message,
+			Message:    info.Message,
 			Operations: pbOps,
 		})
 	}
