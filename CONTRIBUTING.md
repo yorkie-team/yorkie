@@ -71,3 +71,21 @@ type, as do the specifics of the environment needed to successfully run the test
  interactions between Yorkie packages and some other non-Yorkie system resource
   (eg: MongoDB, ETCD).
 - Benchmark: These confirm that the performance of the implemented function.  
+
+## Contributor License Agreement
+
+We require that all contributors sign our Contributor License Agreement ("CLA") before we can accept the contribution.
+
+### Signing the CLA
+
+Open a pull request ("PR") to any of our open source projects to sign the CLA. A bot will comment on the PR asking you to sign the CLA if you haven't already.
+
+Follow the steps given by the bot to sign the CLA. This will require you to log in with GitHub. We will only use this information for CLA tracking. You only have to sign the CLA once. Once you've signed the CLA, future contributions to the project will not require you to sign again.
+
+### Why Require a CLA?
+
+Agreeing to a CLA explicitly states that you are entitled to provide a contribution, that you cannot withdraw permission to use your contribution at a later date, and that Yorkie Team has permission to use your contribution.
+
+This removes any ambiguities or uncertainties caused by not having a CLA and allows users and customers to confidently adopt our projects. At the same time, the CLA ensures that all contributions to our open source projects are licensed under the project's respective open source license, such as Apache-2.0 License.
+
+Requiring a CLA is a common and well-accepted practice in open source. Major open source projects require CLAs such as Apache Software Foundation projects, Facebook projects, Google projects, Python, Django, and more. Each of these projects remains licensed under permissive OSS licenses such as MIT, Apache, BSD, and more.
