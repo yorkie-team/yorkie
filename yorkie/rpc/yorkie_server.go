@@ -132,7 +132,7 @@ func (s *yorkieServer) AttachDocument(
 	if pack.HasChanges() {
 		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
-			packs.NewPushPullKey(pack.DocumentKey),
+			packs.PushPullKey(pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err
@@ -202,7 +202,7 @@ func (s *yorkieServer) DetachDocument(
 	if pack.HasChanges() {
 		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
-			packs.NewPushPullKey(pack.DocumentKey),
+			packs.PushPullKey(pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err
@@ -276,7 +276,7 @@ func (s *yorkieServer) PushPull(
 	if pack.HasChanges() {
 		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
-			packs.NewPushPullKey(pack.DocumentKey),
+			packs.PushPullKey(pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err

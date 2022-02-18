@@ -23,7 +23,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
@@ -31,13 +30,13 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
-// NewPushPullKey creates a new sync.Key of PushPull for the given document.
-func NewPushPullKey(docKey key.Key) sync.Key {
+// PushPullKey creates a new sync.Key of PushPull for the given document.
+func PushPullKey(docKey key.Key) sync.Key {
 	return sync.NewKey(fmt.Sprintf("pushpull-%s", docKey.CombinedKey()))
 }
 
-// NewSnapshotKey creates a new sync.Key of Snapshot for the given document.
-func NewSnapshotKey(docKey key.Key) sync.Key {
+// SnapshotKey creates a new sync.Key of Snapshot for the given document.
+func SnapshotKey(docKey key.Key) sync.Key {
 	return sync.NewKey(fmt.Sprintf("snapshot-%s", docKey.CombinedKey()))
 }
 
@@ -59,16 +58,13 @@ func PushPull(
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
 	initialServerSeq := docInfo.ServerSeq
 
-	// 01. push changes.
-	pushedCP, pushedChanges, err := pushChanges(ctx, clientInfo, docInfo, reqPack, initialServerSeq)
-	if err != nil {
-		return nil, err
-	}
+	// 01. push changes: filter out the changes that are already saved in the database.
+	cpAfterPush, pushedChanges := pushChanges(ctx, clientInfo, docInfo, reqPack, initialServerSeq)
 	be.Metrics.AddPushPullReceivedChanges(reqPack.ChangesLen())
 	be.Metrics.AddPushPullReceivedOperations(reqPack.OperationsLen())
 
-	// 02. pull change pack.
-	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, pushedCP, initialServerSeq)
+	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
+	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +76,7 @@ func PushPull(
 		return nil, err
 	}
 
-	// 03. store pushed changes, document info and checkpoint of the client to DB.
+	// 03. store pushed changes, docInfo and checkpoint of the client to DB.
 	if len(pushedChanges) > 0 {
 		if err := be.DB.CreateChangeInfos(ctx, docInfo, initialServerSeq, pushedChanges); err != nil {
 			return nil, err
@@ -108,32 +104,11 @@ func PushPull(
 	// 05. publish document change event then store snapshot asynchronously.
 	if reqPack.HasChanges() {
 		be.Background.AttachGoroutine(func(ctx context.Context) {
-			publisherID, err := time.ActorIDFromHex(clientInfo.ID.String())
+			publisherID, err := clientInfo.ID.ToActorID()
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return
 			}
-
-			locker, err := be.Coordinator.NewLocker(
-				ctx,
-				NewSnapshotKey(reqPack.DocumentKey),
-			)
-			if err != nil {
-				logging.From(ctx).Error(err)
-				return
-			}
-			// NOTE: If the snapshot is already being created by another routine, it
-			//       is not necessary to recreate it, so we can skip it.
-			if err := locker.TryLock(ctx); err != nil {
-				return
-			}
-
-			defer func() {
-				if err := locker.Unlock(ctx); err != nil {
-					logging.From(ctx).Error(err)
-					return
-				}
-			}()
 
 			be.Coordinator.Publish(
 				ctx,
@@ -144,6 +119,24 @@ func PushPull(
 					DocumentKeys: []key.Key{reqPack.DocumentKey},
 				},
 			)
+
+			locker, err := be.Coordinator.NewLocker(ctx, SnapshotKey(reqPack.DocumentKey))
+			if err != nil {
+				logging.From(ctx).Error(err)
+				return
+			}
+
+			// NOTE: If the snapshot is already being created by another routine, it
+			//       is not necessary to recreate it, so we can skip it.
+			if err := locker.TryLock(ctx); err != nil {
+				return
+			}
+			defer func() {
+				if err := locker.Unlock(ctx); err != nil {
+					logging.From(ctx).Error(err)
+					return
+				}
+			}()
 
 			start := gotime.Now()
 			if err := storeSnapshot(
