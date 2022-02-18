@@ -131,6 +131,13 @@ func (p *Counter) DeepCopy() Element {
 	return &counter
 }
 
+// Clone copies itself excluding removed elements.
+func (p *Counter) Clone(ticket *time.Ticket) Element {
+	counter := *p
+	counter.createdAt = ticket
+	return &counter
+}
+
 // CreatedAt returns the creation time.
 func (p *Counter) CreatedAt() *time.Ticket {
 	return p.createdAt

@@ -89,6 +89,7 @@ func pullPack(
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialServerSeq uint64,
+	options PullOptions,
 ) (*ServerPack, error) {
 	docKey, err := docInfo.Key()
 	if err != nil {
@@ -105,12 +106,38 @@ func pullPack(
 	}
 
 	// Pull changes from DB if the size of changes for the response is less than the snapshot threshold.
-	if initialServerSeq-reqPack.Checkpoint.ServerSeq < be.Config.SnapshotThreshold {
-		cpAfterPull, pulledChanges, err := pullChangeInfos(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
+	if !options.WithSnapshot && initialServerSeq-reqPack.Checkpoint.ServerSeq < be.Config.SnapshotThreshold {
+		cpAfterPull, pulledChanges, err := pullChangeInfos(
+			ctx,
+			be,
+			clientInfo,
+			docInfo,
+			reqPack,
+			cpAfterPush,
+			initialServerSeq,
+		)
 		if err != nil {
 			return nil, err
 		}
 		return NewServerPack(docKey, cpAfterPull, pulledChanges, nil), err
+	}
+
+	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
+}
+
+// pullSnapshot pulls the snapshot from DB.
+func pullSnapshot(
+	ctx context.Context,
+	be *backend.Backend,
+	clientInfo *db.ClientInfo,
+	docInfo *db.DocInfo,
+	reqPack *change.Pack,
+	cpAfterPush change.Checkpoint,
+	initialServerSeq uint64,
+) (*ServerPack, error) {
+	docKey, err := docInfo.Key()
+	if err != nil {
+		return nil, err
 	}
 
 	// Build document from DB if the size of changes for the response is greater than the snapshot threshold.
@@ -205,6 +232,7 @@ func buildDocForServerSeq(
 	doc, err := document.NewInternalDocumentFromSnapshot(
 		docKey,
 		snapshotInfo.ServerSeq,
+		snapshotInfo.Lamport,
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {

@@ -66,6 +66,7 @@ func storeSnapshot(
 	doc, err := document.NewInternalDocumentFromSnapshot(
 		docKey,
 		snapshotInfo.ServerSeq,
+		snapshotInfo.Lamport,
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {

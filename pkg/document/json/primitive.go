@@ -212,6 +212,13 @@ func (p *Primitive) DeepCopy() Element {
 	return &primitive
 }
 
+// Clone copies itself excluding removed elements.
+func (p *Primitive) Clone(ticket *time.Ticket) Element {
+	primitive := *p
+	primitive.createdAt = ticket
+	return &primitive
+}
+
 // CreatedAt returns the creation time.
 func (p *Primitive) CreatedAt() *time.Ticket {
 	return p.createdAt

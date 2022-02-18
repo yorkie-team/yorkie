@@ -107,6 +107,22 @@ func (a *Array) DeepCopy() Element {
 	return array
 }
 
+// Clone copies itself excluding removed elements.
+func (a *Array) Clone(ticket *time.Ticket) Element {
+	elements := NewRGATreeList()
+
+	for _, node := range a.elements.Nodes() {
+		if node.isRemoved() {
+			continue
+		}
+
+		elements.Add(node.elem.Clone(ticket))
+	}
+
+	array := NewArray(elements, ticket)
+	return array
+}
+
 // CreatedAt returns the creation time of this array.
 func (a *Array) CreatedAt() *time.Ticket {
 	return a.createdAt
@@ -162,18 +178,16 @@ func (a *Array) Len() int {
 	return a.elements.Len()
 }
 
-// Descendants traverse the descendants of this array.
-func (a *Array) Descendants(callback func(elem Element, parent Container) bool) {
+// Traverse traverses the descendants of this array.
+func (a *Array) Traverse(traverseFunc func(elem Element, parent Container) bool) {
 	for _, node := range a.elements.Nodes() {
-		if callback(node.elem, a) {
+		if traverseFunc(node.elem, a) {
 			return
 		}
 
 		switch elem := node.elem.(type) {
-		case *Object:
-			elem.Descendants(callback)
-		case *Array:
-			elem.Descendants(callback)
+		case Container:
+			elem.Traverse(traverseFunc)
 		}
 	}
 }

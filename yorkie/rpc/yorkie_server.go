@@ -107,6 +107,27 @@ func (s *yorkieServer) DeactivateClient(
 	}, nil
 }
 
+// UpdateMetadata updates the metadata of the given client.
+func (s *yorkieServer) UpdateMetadata(
+	ctx context.Context,
+	req *api.UpdateMetadataRequest,
+) (*api.UpdateMetadataResponse, error) {
+	cli, err := converter.FromClient(req.Client)
+	if err != nil {
+		return nil, err
+	}
+	keys := converter.FromDocumentKeys(req.DocumentKeys)
+
+	docEvent, err := s.backend.Coordinator.UpdateMetadata(ctx, cli, keys)
+	if err != nil {
+		return nil, err
+	}
+
+	s.backend.Coordinator.Publish(ctx, docEvent.Publisher.ID, *docEvent)
+
+	return &api.UpdateMetadataResponse{}, nil
+}
+
 // AttachDocument attaches the given document to the client.
 func (s *yorkieServer) AttachDocument(
 	ctx context.Context,
@@ -162,7 +183,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack, packs.PullOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +256,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack, packs.PullOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -283,12 +304,11 @@ func (s *yorkieServer) PushPull(
 		}
 
 		if err := locker.Lock(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
 			return nil, err
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
-				logging.DefaultLogger().Error(err)
+				logging.From(ctx).Error(err)
 			}
 		}()
 	}
@@ -307,7 +327,7 @@ func (s *yorkieServer) PushPull(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack, packs.PullOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -410,25 +430,86 @@ func (s *yorkieServer) WatchDocuments(
 	}
 }
 
-// UpdateMetadata updates the metadata of the given client.
-func (s *yorkieServer) UpdateMetadata(
+// RestoreDocument restores the given document from the given change ID.
+func (s *yorkieServer) RestoreDocument(
 	ctx context.Context,
-	req *api.UpdateMetadataRequest,
-) (*api.UpdateMetadataResponse, error) {
-	cli, err := converter.FromClient(req.Client)
+	req *api.RestoreDocumentRequest,
+) (*api.RestoreDocumentResponse, error) {
+	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
 		return nil, err
 	}
-	keys := converter.FromDocumentKeys(req.DocumentKeys)
-
-	docEvent, err := s.backend.Coordinator.UpdateMetadata(ctx, cli, keys)
+	docKey := converter.FromDocumentKey(req.DocumentKey)
+	changeID, err := converter.FromChangeID(req.ChangeId)
 	if err != nil {
 		return nil, err
 	}
 
-	s.backend.Coordinator.Publish(ctx, docEvent.Publisher.ID, *docEvent)
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method: types.RestoreDocument,
+		Attributes: []types.AccessAttribute{{
+			Key:  docKey.CombinedKey(),
+			Verb: types.ReadWrite,
+		}},
+	}); err != nil {
+		return nil, err
+	}
 
-	return &api.UpdateMetadataResponse{}, nil
+	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(docKey))
+	if err != nil {
+		return nil, err
+	}
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.From(ctx).Error(err)
+		}
+	}()
+
+	clientInfo, docInfo, err := clients.FindClientAndDocument(
+		ctx,
+		s.backend,
+		actorID,
+		docKey,
+		false,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	reqPack, err := packs.CreateChangePackByServerSeq(
+		ctx,
+		s.backend,
+		clientInfo,
+		docInfo,
+		changeID.ServerSeq(),
+		req.Message,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
+		return nil, err
+	}
+
+	respPack, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, reqPack, packs.PullOptions{
+		WithSnapshot: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pbChangePack, err := respPack.ToPBChangePack()
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.RestoreDocumentResponse{
+		ChangePack: pbChangePack,
+	}, nil
 }
 
 // FetchHistory fetches the history of the given document.
@@ -463,6 +544,7 @@ func (s *yorkieServer) FetchHistory(
 		return nil, err
 	}
 
+	// TODO(hackerwins): We should fetch the history with pagination.
 	changes, err := packs.FindAllChanges(
 		ctx,
 		s.backend,

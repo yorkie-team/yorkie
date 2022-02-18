@@ -54,6 +54,7 @@ const (
 	DetachDocument   Method = "DetachDocument"
 	PushPull         Method = "PushPull"
 	WatchDocuments   Method = "WatchDocuments"
+	RestoreDocument  Method = "RestoreDocument"
 	FetchHistory     Method = "FetchHistory"
 )
 
@@ -76,6 +77,7 @@ func AuthMethods() []Method {
 		DetachDocument,
 		PushPull,
 		WatchDocuments,
+		RestoreDocument,
 		FetchHistory,
 	}
 }

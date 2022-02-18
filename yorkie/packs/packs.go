@@ -30,6 +30,12 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
+// PullOptions contains options for the response pack.
+type PullOptions struct {
+	// WithSnapshot is whether to pull the snapshot.
+	WithSnapshot bool
+}
+
 // PushPullKey creates a new sync.Key of PushPull for the given document.
 func PushPullKey(docKey key.Key) sync.Key {
 	return sync.NewKey(fmt.Sprintf("pushpull-%s", docKey.CombinedKey()))
@@ -48,6 +54,7 @@ func PushPull(
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
 	reqPack *change.Pack,
+	options PullOptions,
 ) (*ServerPack, error) {
 	start := gotime.Now()
 	defer func() {
@@ -64,7 +71,7 @@ func PushPull(
 	be.Metrics.AddPushPullReceivedOperations(reqPack.OperationsLen())
 
 	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
-	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
+	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, options)
 	if err != nil {
 		return nil, err
 	}

@@ -97,7 +97,7 @@ func fromCheckpoint(pbCheckpoint *api.Checkpoint) change.Checkpoint {
 func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 	var changes []*change.Change
 	for _, pbChange := range pbChanges {
-		changeID, err := fromChangeID(pbChange.Id)
+		changeID, err := FromChangeID(pbChange.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -115,7 +115,8 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 	return changes, nil
 }
 
-func fromChangeID(id *api.ChangeID) (change.ID, error) {
+// FromChangeID converts the given Protobuf formats to model format.
+func FromChangeID(id *api.ChangeID) (change.ID, error) {
 	actorID, err := time.ActorIDFromBytes(id.ActorId)
 	if err != nil {
 		return change.InitialID, err
@@ -210,6 +211,8 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 			op, err = fromStyle(decoded.Style)
 		case *api.Operation_Increase_:
 			op, err = fromIncrease(decoded.Increase)
+		case *api.Operation_Snapshot_:
+			op, err = fromSnapshot(decoded.Snapshot)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -448,6 +451,23 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 	return operations.NewIncrease(
 		parentCreatedAt,
 		elem,
+		executedAt,
+	), nil
+}
+
+func fromSnapshot(pbSnapshot *api.Operation_Snapshot) (*operations.Snapshot, error) {
+	executedAt, err := fromTimeTicket(pbSnapshot.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	root, err := BytesToObject(pbSnapshot.Snapshot)
+	if err != nil {
+		return nil, err
+	}
+
+	return operations.NewSnapshot(
+		root,
 		executedAt,
 	), nil
 }

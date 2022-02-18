@@ -403,6 +403,7 @@ func (d *DB) CreateSnapshotInfo(
 		ID:        newID(),
 		DocID:     docID,
 		ServerSeq: doc.Checkpoint().ServerSeq,
+		Lamport:   doc.Lamport(),
 		Snapshot:  snapshot,
 		CreatedAt: gotime.Now(),
 	}); err != nil {

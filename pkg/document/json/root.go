@@ -41,21 +41,24 @@ type Root struct {
 
 // NewRoot creates a new instance of Root.
 func NewRoot(root *Object) *Root {
-	r := &Root{
-		elementMapByCreatedAt:                make(map[string]Element),
-		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
-		textElementWithGarbageMapByCreatedAt: make(map[string]TextElement),
-	}
+	r := &Root{}
+	r.SetRootObject(root)
+	return r
+}
+
+// SetRootObject sets the root object of the JSON.
+func (r *Root) SetRootObject(root *Object) {
+	r.elementMapByCreatedAt = make(map[string]Element)
+	r.removedElementPairMapByCreatedAt = make(map[string]ElementPair)
+	r.textElementWithGarbageMapByCreatedAt = make(map[string]TextElement)
 
 	r.object = root
 	r.RegisterElement(root)
 
-	root.Descendants(func(elem Element, parent Container) bool {
+	root.Traverse(func(elem Element, parent Container) bool {
 		r.RegisterElement(elem)
 		return false
 	})
-
-	return r
 }
 
 // Object returns the root object of the JSON.
@@ -139,7 +142,7 @@ func (r *Root) GarbageLen() int {
 
 		switch elem := pair.elem.(type) {
 		case Container:
-			elem.Descendants(func(elem Element, parent Container) bool {
+			elem.Traverse(func(elem Element, parent Container) bool {
 				count++
 				return false
 			})
@@ -164,10 +167,8 @@ func (r *Root) garbageCollect(elem Element) int {
 
 	callback(elem, nil)
 	switch elem := elem.(type) {
-	case *Object:
-		elem.Descendants(callback)
-	case *Array:
-		elem.Descendants(callback)
+	case Container:
+		elem.Traverse(callback)
 	}
 
 	return count

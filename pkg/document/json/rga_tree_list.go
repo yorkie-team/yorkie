@@ -128,27 +128,19 @@ func (a *RGATreeList) Marshal() string {
 	sb := strings.Builder{}
 	sb.WriteString("[")
 
-	current := a.dummyHead.next
-	for {
-		if current == nil {
-			break
+	first := true
+	for _, node := range a.Nodes() {
+		if node.isRemoved() {
+			continue
 		}
-
-		if !current.isRemoved() {
-			sb.WriteString(current.elem.Marshal())
-
-			// FIXME: When the last element of the array is deleted, it does not
-			// work properly.
-			if current != a.last {
-				sb.WriteString(",")
-			}
+		if !first {
+			sb.WriteString(",")
 		}
-
-		current = current.next
+		sb.WriteString(node.String())
+		first = false
 	}
 
 	sb.WriteString("]")
-
 	return sb.String()
 }
 

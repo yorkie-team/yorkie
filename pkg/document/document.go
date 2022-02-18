@@ -22,6 +22,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -50,6 +51,15 @@ func New(collection, document string) *Document {
 	}
 }
 
+// NewFromInternalDocument creates a new instance of Document from InternalDocument.
+func NewFromInternalDocument(doc *InternalDocument, actor time.ActorID) *Document {
+	d := &Document{
+		doc: doc,
+	}
+	d.SetActor(actor)
+	return d
+}
+
 // Update executes the given updater to update this document.
 func (d *Document) Update(
 	updater func(root *proxy.ObjectProxy) error,
@@ -68,6 +78,33 @@ func (d *Document) Update(
 		d.clone = nil
 		return err
 	}
+
+	if ctx.HasOperations() {
+		c := ctx.ToChange()
+		if err := c.Execute(d.doc.root); err != nil {
+			return err
+		}
+
+		d.doc.localChanges = append(d.doc.localChanges, c)
+		d.doc.changeID = ctx.ID()
+	}
+
+	return nil
+}
+
+// Replace replaces the contents of this document with the given document.
+func (d *Document) Replace(contents *json.Object, message string) error {
+	d.clone = nil
+
+	ctx := change.NewContext(
+		d.doc.changeID.Next(),
+		message,
+		d.doc.Root(),
+	)
+
+	ticket := ctx.IssueTimeTicket()
+	clone := contents.Clone(ticket).(*json.Object)
+	ctx.Push(operations.NewSnapshot(clone, ticket))
 
 	if ctx.HasOperations() {
 		c := ctx.ToChange()

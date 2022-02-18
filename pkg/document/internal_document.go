@@ -63,6 +63,7 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 func NewInternalDocumentFromSnapshot(
 	k key.Key,
 	serverSeq uint64,
+	lamport uint64,
 	snapshot []byte,
 ) (*InternalDocument, error) {
 	obj, err := converter.BytesToObject(snapshot)
@@ -75,7 +76,7 @@ func NewInternalDocumentFromSnapshot(
 		status:     Detached,
 		root:       json.NewRoot(obj),
 		checkpoint: change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:   change.InitialID,
+		changeID:   change.InitialID.SyncLamport(lamport),
 	}, nil
 }
 
@@ -141,6 +142,11 @@ func (d *InternalDocument) Marshal() string {
 	return d.root.Object().Marshal()
 }
 
+// Traverse traverses the descendants of this document.
+func (d *InternalDocument) Traverse(traverseFunc func(elem json.Element, parent json.Container) bool) {
+	d.root.Object().Traverse(traverseFunc)
+}
+
 // CreateChangePack creates pack of the local changes to send to the server.
 func (d *InternalDocument) CreateChangePack() *change.Pack {
 	changes := d.localChanges
@@ -156,6 +162,11 @@ func (d *InternalDocument) SetActor(actor time.ActorID) {
 		c.SetActor(actor)
 	}
 	d.changeID = d.changeID.SetActor(actor)
+}
+
+// Lamport returns the Lamport clock of this document.
+func (d *InternalDocument) Lamport() uint64 {
+	return d.changeID.Lamport()
 }
 
 // ActorID returns ID of the actor currently editing the document.

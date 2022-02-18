@@ -453,6 +453,7 @@ func (c *Client) CreateSnapshotInfo(
 	if _, err := c.collection(colSnapshots).InsertOne(ctx, bson.M{
 		"doc_id":     encodedDocID,
 		"server_seq": doc.Checkpoint().ServerSeq,
+		"lamport":    doc.Lamport(),
 		"snapshot":   snapshot,
 		"created_at": gotime.Now(),
 	}); err != nil {

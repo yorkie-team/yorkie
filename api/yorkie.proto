@@ -27,6 +27,7 @@ service Yorkie {
     rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
     rpc WatchDocuments (WatchDocumentsRequest) returns (stream WatchDocumentsResponse) {}
     rpc PushPull (PushPullRequest) returns (PushPullResponse) {}
+    rpc RestoreDocument (RestoreDocumentRequest) returns (RestoreDocumentResponse) {}
     rpc FetchHistory (FetchHistoryRequest) returns (FetchHistoryResponse) {}
 }
 
@@ -118,6 +119,18 @@ message UpdateMetadataRequest {
 }
 
 message UpdateMetadataResponse {}
+
+message RestoreDocumentRequest {
+    bytes client_id = 1;
+    DocumentKey document_key = 2;
+    ChangeID change_id = 3;
+    string message = 4;
+}
+
+message RestoreDocumentResponse {
+    bytes client_id = 1;
+    ChangePack change_pack = 2;
+}
 
 message FetchHistoryRequest {
     bytes client_id = 1;
@@ -212,6 +225,10 @@ message Operation {
         JSONElementSimple value = 2;
         TimeTicket executed_at = 3;
     }
+    message Snapshot {
+        bytes snapshot = 1;
+        TimeTicket executed_at = 2;
+    }
 
     oneof body {
         Set set = 1;
@@ -223,6 +240,7 @@ message Operation {
         RichEdit rich_edit = 7;
         Style style = 8;
         Increase increase = 9;
+        Snapshot snapshot = 10;
     }
 }
 

@@ -27,8 +27,8 @@ type Container interface {
 	// Purge physically purges the given chile element.
 	Purge(child Element)
 
-	// Descendants returns all descendants of this container.
-	Descendants(callback func(elem Element, parent Container) bool)
+	// Traverse traverses the descendants of this object.
+	Traverse(traverseFunc func(elem Element, parent Container) bool)
 
 	// DeleteByCreatedAt removes the given element from this container.
 	DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element
@@ -48,6 +48,9 @@ type Element interface {
 
 	// DeepCopy copies itself deeply.
 	DeepCopy() Element
+
+	// Clone copies itself excluding removed elements.
+	Clone(ticket *time.Ticket) Element
 
 	// CreatedAt returns the creation time of this element.
 	CreatedAt() *time.Ticket

@@ -171,6 +171,8 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toStyle(op)
 		case *operations.Increase:
 			pbOperation.Body, err = toIncrease(op)
+		case *operations.Snapshot:
+			pbOperation.Body, err = toSnapshot(op)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -330,6 +332,20 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 			ParentCreatedAt: ToTimeTicket(increase.ParentCreatedAt()),
 			Value:           pbElem,
 			ExecutedAt:      ToTimeTicket(increase.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toSnapshot(snapshot *operations.Snapshot) (*api.Operation_Snapshot_, error) {
+	bytes, err := ObjectToBytes(snapshot.Root())
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.Operation_Snapshot_{
+		Snapshot: &api.Operation_Snapshot{
+			Snapshot:   bytes,
+			ExecutedAt: ToTimeTicket(snapshot.ExecutedAt()),
 		},
 	}, nil
 }

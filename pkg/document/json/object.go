@@ -72,18 +72,16 @@ func (o *Object) Delete(k string, deletedAt *time.Ticket) Element {
 	return o.memberNodes.Delete(k, deletedAt)
 }
 
-// Descendants traverse the descendants of this object.
-func (o *Object) Descendants(callback func(elem Element, parent Container) bool) {
+// Traverse traverses the descendants of this object.
+func (o *Object) Traverse(traverseFunc func(elem Element, parent Container) bool) {
 	for _, node := range o.memberNodes.Nodes() {
-		if callback(node.elem, o) {
+		if traverseFunc(node.elem, o) {
 			return
 		}
 
 		switch elem := node.elem.(type) {
-		case *Object:
-			elem.Descendants(callback)
-		case *Array:
-			elem.Descendants(callback)
+		case Container:
+			elem.Traverse(traverseFunc)
 		}
 	}
 }
@@ -103,6 +101,22 @@ func (o *Object) DeepCopy() Element {
 
 	obj := NewObject(members, o.createdAt)
 	obj.removedAt = o.removedAt
+	return obj
+}
+
+// Clone copies itself excluding removed elements.
+func (o *Object) Clone(ticket *time.Ticket) Element {
+	members := NewRHTPriorityQueueMap()
+
+	for _, node := range o.memberNodes.Nodes() {
+		if node.isRemoved() {
+			continue
+		}
+
+		members.SetInternal(node.key, node.elem.Clone(ticket))
+	}
+
+	obj := NewObject(members, ticket)
 	return obj
 }
 

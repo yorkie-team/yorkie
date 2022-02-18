@@ -39,8 +39,4 @@ type Operation interface {
 
 	// SetActor sets the given actor to this operation.
 	SetActor(id time.ActorID)
-
-	// ParentCreatedAt returns the creation time of the target element to
-	// execute the operation.
-	ParentCreatedAt() *time.Ticket
 }

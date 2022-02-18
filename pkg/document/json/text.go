@@ -119,6 +119,21 @@ func (t *Text) DeepCopy() Element {
 	return NewText(rgaTreeSplit, t.createdAt)
 }
 
+// Clone copies itself excluding removed elements.
+func (t *Text) Clone(ticket *time.Ticket) Element {
+	rgaTreeSplit := NewRGATreeSplit(InitialTextNode())
+	fromPos, toPos := rgaTreeSplit.createRange(0, 0)
+	_, _ = rgaTreeSplit.edit(
+		fromPos,
+		toPos,
+		nil,
+		NewTextValue(t.Marshal()),
+		ticket,
+	)
+
+	return NewText(rgaTreeSplit, ticket)
+}
+
 // CreatedAt returns the creation time of this Text.
 func (t *Text) CreatedAt() *time.Ticket {
 	return t.createdAt

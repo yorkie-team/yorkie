@@ -190,22 +190,6 @@ func (rht *RHTPriorityQueueMap) Nodes() []*RHTPQMapNode {
 	return nodes
 }
 
-// purge physically purge child element.
-func (rht *RHTPriorityQueueMap) purge(elem Element) {
-	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
-	if !ok {
-		panic("fail to find: " + elem.CreatedAt().Key())
-	}
-
-	queue, ok := rht.nodeQueueMapByKey[node.key]
-	if !ok {
-		panic("fail to find queue: " + node.key)
-	}
-
-	queue.Release(node)
-	delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
-}
-
 // Marshal returns the JSON encoding of this map.
 func (rht *RHTPriorityQueueMap) Marshal() string {
 	members := rht.Elements()
@@ -231,4 +215,20 @@ func (rht *RHTPriorityQueueMap) Marshal() string {
 	sb.WriteString("}")
 
 	return sb.String()
+}
+
+// purge physically purge child element.
+func (rht *RHTPriorityQueueMap) purge(elem Element) {
+	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
+	if !ok {
+		panic("fail to find: " + elem.CreatedAt().Key())
+	}
+
+	queue, ok := rht.nodeQueueMapByKey[node.key]
+	if !ok {
+		panic("fail to find queue: " + node.key)
+	}
+
+	queue.Release(node)
+	delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
 }

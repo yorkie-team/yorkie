@@ -19,6 +19,7 @@ package packs
 import (
 	"context"
 
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
@@ -37,4 +38,39 @@ func FindAllChanges(
 		docInfo.ServerSeq,
 	)
 	return changes, err
+}
+
+// CreateChangePackByServerSeq creates a change pack by the given server seq.
+func CreateChangePackByServerSeq(
+	ctx context.Context,
+	be *backend.Backend,
+	clientInfo *db.ClientInfo,
+	docInfo *db.DocInfo,
+	serverSeq uint64,
+	message string,
+) (*change.Pack, error) {
+	actorID, err := clientInfo.ID.ToActorID()
+	if err != nil {
+		return nil, err
+	}
+
+	// 01. build the document for the given server seq.
+	sourceDoc, err := buildDocForServerSeq(ctx, be, docInfo, serverSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	// 02. rebuild the document for latest server seq.
+	targetInternalDoc, err := buildDocForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+	if err != nil {
+		return nil, err
+	}
+	targetDoc := document.NewFromInternalDocument(targetInternalDoc, actorID)
+
+	// 03. replace contents of the target document with the source document.
+	if err = targetDoc.Replace(sourceDoc.Root().Object(), message); err != nil {
+		return nil, err
+	}
+
+	return targetDoc.CreateChangePack(), nil
 }

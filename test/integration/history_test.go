@@ -35,7 +35,7 @@ func TestHistory(t *testing.T) {
 	c2 := clients[1]
 	defer cleanupClients(t, clients)
 
-	t.Run("history test", func(t *testing.T) {
+	t.Run("history and restore basic test", func(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.Collection, t.Name())
@@ -74,11 +74,10 @@ func TestHistory(t *testing.T) {
 		assert.Equal(t, `{"todos":["buy coffee"]}`, changes[1].Snapshot)
 		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, changes[2].Snapshot)
 
-		// d2, err := c2.Restore(ctx, helper.Collection, t.Name(), changes[1])
-		// assert.NoError(t, err)
-		// assert.Equal(t, `{"todos":["buy coffee"]}`, d2.Marshal())
-
-		// assert.NoError(t, c1.Sync(ctx))
-		// assert.Equal(t, `{"todos":["buy coffee"]}`, d1.Marshal())
+		d2, err := c2.Restore(ctx, helper.Collection, t.Name(), changes[1], "restore document that only has buy coffee")
+		assert.NoError(t, err)
+		assert.Equal(t, `{"todos":["buy coffee"]}`, d2.Marshal())
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, `{"todos":["buy coffee"]}`, d1.Marshal())
 	})
 }

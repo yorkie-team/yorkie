@@ -598,3 +598,47 @@ func (c *Client) sync(ctx context.Context, key key.Key) error {
 
 	return nil
 }
+
+// Restore restores the given document to the given change summary.
+func (c *Client) Restore(
+	ctx context.Context,
+	collection string,
+	documentName string,
+	change *types.ChangeSummary,
+	message string,
+) (*document.Document, error) {
+	if c.status != activated {
+		return nil, ErrClientNotActivated
+	}
+
+	doc := document.New(collection, documentName)
+
+	res, err := c.client.RestoreDocument(ctx, &api.RestoreDocumentRequest{
+		ClientId:    c.id.Bytes(),
+		DocumentKey: converter.ToDocumentKey(doc.Key()),
+		ChangeId:    converter.ToChangeID(change.ID),
+		Message:     message,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pack, err := converter.FromChangePack(res.ChangePack)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := doc.ApplyChangePack(pack); err != nil {
+		return nil, err
+	}
+
+	if c.logger.Core().Enabled(zap.DebugLevel) {
+		c.logger.Debug(fmt.Sprintf(
+			"after apply %d changes: %s",
+			len(pack.Changes),
+			doc.RootObject().Marshal(),
+		))
+	}
+
+	return doc, nil
+}
