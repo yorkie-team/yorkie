@@ -168,14 +168,26 @@ func TestDB(t *testing.T) {
 		}))
 
 		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err := memdb.FindLastSnapshotInfo(ctx, docInfo.ID)
+		snapshot, err := memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(0), snapshot.ServerSeq)
 
 		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err = memdb.FindLastSnapshotInfo(ctx, docInfo.ID)
+		snapshot, err = memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(1), snapshot.ServerSeq)
+
+		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
+		assert.NoError(t, doc.ApplyChangePack(pack))
+		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(2), snapshot.ServerSeq)
+
+		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, 1)
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(1), snapshot.ServerSeq)
 	})

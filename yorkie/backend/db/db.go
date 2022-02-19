@@ -99,8 +99,8 @@ type DB interface {
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(ctx context.Context, docID ID, doc *document.InternalDocument) error
 
-	// FindLastSnapshotInfo finds the last snapshot of the given document.
-	FindLastSnapshotInfo(ctx context.Context, docID ID) (*SnapshotInfo, error)
+	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
+	FindClosestSnapshotInfo(ctx context.Context, docID ID, serverSeq uint64) (*SnapshotInfo, error)
 
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 	// and returns the min synced ticket.

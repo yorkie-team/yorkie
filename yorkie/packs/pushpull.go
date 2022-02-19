@@ -87,7 +87,7 @@ func pullPack(
 	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
 	reqPack *change.Pack,
-	pushedCP change.Checkpoint,
+	cpAfterPush change.Checkpoint,
 	initialServerSeq uint64,
 ) (*ServerPack, error) {
 	docKey, err := docInfo.Key()
@@ -106,18 +106,45 @@ func pullPack(
 
 	// Pull changes from DB if the size of changes for the response is less than the snapshot threshold.
 	if initialServerSeq-reqPack.Checkpoint.ServerSeq < be.Config.SnapshotThreshold {
-		cpAfterPull, pulledChanges, err := pullChangeInfos(ctx, be, clientInfo, docInfo, reqPack, pushedCP, initialServerSeq)
+		cpAfterPull, pulledChanges, err := pullChangeInfos(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
 		if err != nil {
 			return nil, err
 		}
 		return NewServerPack(docKey, cpAfterPull, pulledChanges, nil), err
 	}
 
-	// Pull snapshot from DB if the size of changes for the response is greater than the snapshot threshold.
-	cpAfterPull, snapshot, err := pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, pushedCP, initialServerSeq)
+	// Build document from DB if the size of changes for the response is greater than the snapshot threshold.
+	doc, err := buildDocForServerSeq(ctx, be, docInfo, initialServerSeq)
 	if err != nil {
 		return nil, err
 	}
+
+	// Apply changes that are in the request pack.
+	if reqPack.HasChanges() {
+		if err := doc.ApplyChangePack(change.NewPack(
+			docKey,
+			doc.Checkpoint().NextServerSeq(docInfo.ServerSeq),
+			reqPack.Changes,
+			nil,
+		)); err != nil {
+			return nil, err
+		}
+	}
+	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)
+
+	snapshot, err := converter.ObjectToBytes(doc.RootObject())
+	if err != nil {
+		return nil, err
+	}
+
+	logging.From(ctx).Infof(
+		"PULL: '%s' build snapshot with changes(%d~%d) from '%s', cp: %s",
+		clientInfo.ID,
+		reqPack.Checkpoint.ServerSeq+1,
+		initialServerSeq,
+		docInfo.CombinedKey,
+		cpAfterPull.String(),
+	)
 
 	return NewServerPack(docKey, cpAfterPull, nil, snapshot), err
 }
@@ -158,34 +185,21 @@ func pullChangeInfos(
 	return cpAfterPull, pulledChanges, nil
 }
 
-func pullSnapshot(
+// buildDocForServerSeq returns a new document for the given serverSeq.
+func buildDocForServerSeq(
 	ctx context.Context,
 	be *backend.Backend,
-	clientInfo *db.ClientInfo,
 	docInfo *db.DocInfo,
-	pack *change.Pack,
-	pushedCP change.Checkpoint,
-	initialServerSeq uint64,
-) (change.Checkpoint, []byte, error) {
-	snapshotInfo, err := be.DB.FindLastSnapshotInfo(ctx, docInfo.ID)
+	serverSeq uint64,
+) (*document.InternalDocument, error) {
+	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, serverSeq)
 	if err != nil {
-		return change.InitialCheckpoint, nil, err
-	}
-
-	if snapshotInfo.ServerSeq >= initialServerSeq {
-		pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
-		logging.From(ctx).Infof(
-			"PULL: '%s' pulls snapshot without changes from '%s', cp: %s",
-			clientInfo.ID,
-			docInfo.CombinedKey,
-			pulledCP.String(),
-		)
-		return pushedCP.NextServerSeq(docInfo.ServerSeq), snapshotInfo.Snapshot, nil
+		return nil, err
 	}
 
 	docKey, err := docInfo.Key()
 	if err != nil {
-		return change.InitialCheckpoint, nil, err
+		return nil, err
 	}
 
 	doc, err := document.NewInternalDocumentFromSnapshot(
@@ -194,7 +208,7 @@ func pullSnapshot(
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {
-		return change.InitialCheckpoint, nil, err
+		return nil, err
 	}
 
 	// TODO(hackerwins): If the Snapshot is missing, we may have a very large
@@ -204,46 +218,30 @@ func pullSnapshot(
 		ctx,
 		docInfo.ID,
 		snapshotInfo.ServerSeq+1,
-		initialServerSeq,
+		serverSeq,
 	)
 	if err != nil {
-		return change.InitialCheckpoint, nil, err
+		return nil, err
 	}
 
 	if err := doc.ApplyChangePack(change.NewPack(
 		docKey,
-		change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
+		change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changes,
 		nil,
 	)); err != nil {
-		return change.InitialCheckpoint, nil, err
+		return nil, err
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			"after apply %d changes: elements: %d removeds: %d, %s",
-			len(pack.Changes),
+			len(changes),
 			doc.Root().ElementMapLen(),
 			doc.Root().RemovedElementLen(),
 			doc.RootObject().Marshal(),
 		)
 	}
 
-	pulledCP := pushedCP.NextServerSeq(docInfo.ServerSeq)
-
-	logging.From(ctx).Infof(
-		"PULL: '%s' pulls snapshot with changes(%d~%d) from '%s', cp: %s",
-		clientInfo.ID,
-		pack.Checkpoint.ServerSeq+1,
-		initialServerSeq,
-		docInfo.CombinedKey,
-		pulledCP.String(),
-	)
-
-	snapshot, err := converter.ObjectToBytes(doc.RootObject())
-	if err != nil {
-		return change.InitialCheckpoint, nil, err
-	}
-
-	return pulledCP, snapshot, nil
+	return doc, nil
 }

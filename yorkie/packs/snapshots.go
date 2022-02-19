@@ -33,14 +33,13 @@ func storeSnapshot(
 	docInfo *db.DocInfo,
 	minSyncedTicket *time.Ticket,
 ) error {
-	// 01. get the last snapshot of this docInfo
+	// 01. get the closest snapshot of this docInfo
 	// TODO: For performance issue, we only need to read the snapshot's metadata.
-	snapshotInfo, err := be.DB.FindLastSnapshotInfo(ctx, docInfo.ID)
+	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, docInfo.ServerSeq)
 	if err != nil {
 		return err
 	}
-
-	if snapshotInfo.ServerSeq >= docInfo.ServerSeq {
+	if snapshotInfo.ServerSeq == docInfo.ServerSeq {
 		return nil
 	}
 	if docInfo.ServerSeq-snapshotInfo.ServerSeq < be.Config.SnapshotInterval {

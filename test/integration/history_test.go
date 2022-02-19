@@ -73,5 +73,12 @@ func TestHistory(t *testing.T) {
 		assert.Equal(t, `{"todos":[]}`, changes[0].Snapshot)
 		assert.Equal(t, `{"todos":["buy coffee"]}`, changes[1].Snapshot)
 		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, changes[2].Snapshot)
+
+		// d2, err := c2.Restore(ctx, helper.Collection, t.Name(), changes[1])
+		// assert.NoError(t, err)
+		// assert.Equal(t, `{"todos":["buy coffee"]}`, d2.Marshal())
+
+		// assert.NoError(t, c1.Sync(ctx))
+		// assert.Equal(t, `{"todos":["buy coffee"]}`, d1.Marshal())
 	})
 }

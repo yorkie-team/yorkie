@@ -19,7 +19,6 @@ package memory
 import (
 	"context"
 	"fmt"
-	"math"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -413,10 +412,11 @@ func (d *DB) CreateSnapshotInfo(
 	return nil
 }
 
-// FindLastSnapshotInfo finds the last snapshot of the given document.
-func (d *DB) FindLastSnapshotInfo(
+// FindClosestSnapshotInfo finds the last snapshot of the given document.
+func (d *DB) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID db.ID,
+	serverSeq uint64,
 ) (*db.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -425,7 +425,7 @@ func (d *DB) FindLastSnapshotInfo(
 		tblSnapshots,
 		"doc_id_server_seq",
 		docID.String(),
-		uint64(math.MaxUint64),
+		serverSeq,
 	)
 	if err != nil {
 		return nil, err

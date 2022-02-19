@@ -463,10 +463,11 @@ func (c *Client) CreateSnapshotInfo(
 	return nil
 }
 
-// FindLastSnapshotInfo finds the last snapshot of the given document.
-func (c *Client) FindLastSnapshotInfo(
+// FindClosestSnapshotInfo finds the last snapshot of the given document.
+func (c *Client) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID db.ID,
+	serverSeq uint64,
 ) (*db.SnapshotInfo, error) {
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
@@ -475,6 +476,9 @@ func (c *Client) FindLastSnapshotInfo(
 
 	result := c.collection(colSnapshots).FindOne(ctx, bson.M{
 		"doc_id": encodedDocID,
+		"server_seq": bson.M{
+			"$lte": serverSeq,
+		},
 	}, options.FindOne().SetSort(bson.M{
 		"server_seq": -1,
 	}))
