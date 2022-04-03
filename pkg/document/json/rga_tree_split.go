@@ -27,6 +27,7 @@ type RGATreeSplitValue interface {
 type RGATreeSplitNodeID struct {
 	createdAt *time.Ticket
 	offset    int
+	key       string
 }
 
 // NewRGATreeSplitNodeID creates a new instance of RGATreeSplitNodeID.
@@ -90,8 +91,14 @@ func (t *RGATreeSplitNodeID) hasSameCreatedAt(id *RGATreeSplitNodeID) bool {
 	return t.createdAt.Compare(id.createdAt) == 0
 }
 
-func (t *RGATreeSplitNodeID) key() string {
-	return t.CreatedAt().Key() + ":" + strconv.FormatUint(uint64(t.offset), 10)
+// Key returns a string representation of the ID. The result will be
+// cached in the key field to prevent instantiation of a new string.
+func (t *RGATreeSplitNodeID) Key() string {
+	if t.key == "" {
+		t.key = t.createdAt.Key() + ":" + strconv.FormatUint(uint64(t.offset), 10)
+	}
+
+	return t.key
 }
 
 // RGATreeSplitNodePos is the position of the text inside the node.
@@ -491,7 +498,7 @@ func (s *RGATreeSplit) deleteNodes(
 				createdAtMapByActor[actorIDHex] = createdAt
 			}
 
-			removedNodeMap[node.id.key()] = node
+			removedNodeMap[node.id.Key()] = node
 		}
 	}
 
@@ -562,7 +569,7 @@ func (s *RGATreeSplit) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
 			s.treeByIndex.Delete(node.indexNode)
 			s.purge(node)
 			s.treeByID.Remove(node.id)
-			delete(s.removedNodeMap, node.id.key())
+			delete(s.removedNodeMap, node.id.Key())
 			count++
 		}
 	}
