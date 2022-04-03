@@ -1,6 +1,6 @@
 YORKIE_VERSION := 0.2.2
 
-GIT_COMMIT := $(shell git rev-parse --short HEAD)
+GIT_COMMIT := $(shell /usr/bin/git rev-parse --short HEAD)
 GO_PROJECT = github.com/yorkie-team/yorkie
 
 ifeq ($(OS),Windows_NT)
