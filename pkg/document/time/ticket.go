@@ -52,6 +52,9 @@ type Ticket struct {
 	lamport   uint64
 	delimiter uint32
 	actorID   ActorID
+
+	// cachedKey is the cache of the string representation of the ticket.
+	cachedKey string
 }
 
 // NewTicket creates an instance of Ticket.
@@ -77,11 +80,16 @@ func (t *Ticket) AnnotatedString() string {
 
 // Key returns the key string for this Ticket.
 func (t *Ticket) Key() string {
-	return strconv.FormatUint(t.lamport, 10) +
-		":" +
-		strconv.FormatUint(uint64(t.delimiter), 10) +
-		":" +
-		t.actorID.String()
+	if t.cachedKey == "" {
+		t.cachedKey = strconv.FormatUint(t.lamport, 10) +
+			":" +
+			strconv.FormatUint(uint64(t.delimiter), 10) +
+			":" +
+			t.actorID.String()
+
+	}
+
+	return t.cachedKey
 }
 
 // Lamport returns the lamport value.
