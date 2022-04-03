@@ -27,6 +27,9 @@ type RGATreeSplitValue interface {
 type RGATreeSplitNodeID struct {
 	createdAt *time.Ticket
 	offset    int
+
+	// cachedKey is the cache of the string representation of the ID.
+	cachedKey string
 }
 
 // NewRGATreeSplitNodeID creates a new instance of RGATreeSplitNodeID.
@@ -90,8 +93,14 @@ func (t *RGATreeSplitNodeID) hasSameCreatedAt(id *RGATreeSplitNodeID) bool {
 	return t.createdAt.Compare(id.createdAt) == 0
 }
 
+// key returns a string representation of the ID. The result will be
+// cached in the key field to prevent instantiation of a new string.
 func (t *RGATreeSplitNodeID) key() string {
-	return t.CreatedAt().Key() + ":" + strconv.FormatUint(uint64(t.offset), 10)
+	if t.cachedKey == "" {
+		t.cachedKey = t.createdAt.Key() + ":" + strconv.FormatUint(uint64(t.offset), 10)
+	}
+
+	return t.cachedKey
 }
 
 // RGATreeSplitNodePos is the position of the text inside the node.
