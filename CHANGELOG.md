@@ -7,6 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.3] - 2022-04-07
+
+### Changed
+
+- Introduce named logging to separate logs by request or routine: #296
+- Add missing serverSeq of change.ID in Protobuf: #f5a0c49
+- Cache the key of RGATreeSplitNodeID to prevent instantiation: #306
+- Cache the key of TimeTicket to prevent instantiation: #307
+
+### Fixed
+
+- Fix for use on Windows: #295
+- Fix snapshot interval to make them trigger properly in memdb: #297
+- Run tests using monkey patch only on amd64: #299
+- Fix a warning that directory does not exist when running make proto: #c441b7b
+
 ## [0.2.2] - 2022-01-24
 
 ### Added
