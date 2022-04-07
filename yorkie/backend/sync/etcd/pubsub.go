@@ -23,6 +23,7 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -151,7 +152,7 @@ func (c *Client) ensureClusterClient(
 	// be removed from clusterClientMap.
 
 	if _, ok := c.clusterClientMap[member.ID]; !ok {
-		conn, err := grpc.Dial(member.RPCAddr, grpc.WithInsecure())
+		conn, err := grpc.Dial(member.RPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			logging.DefaultLogger().Error(err)
 			return nil, err
