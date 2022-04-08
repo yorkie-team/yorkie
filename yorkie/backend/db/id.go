@@ -77,5 +77,5 @@ func IDFromBytes(bytes []byte) ID {
 
 // IDFromActorID returns ID represented by the encoded hexadecimal string from actor ID.
 func IDFromActorID(actorID time.ActorID) ID {
-	return IDFromBytes(actorID[:])
+	return IDFromBytes(actorID.Bytes())
 }

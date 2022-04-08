@@ -13,7 +13,7 @@ import (
 func TestActorID(t *testing.T) {
 	t.Run("get ActorID from hex test", func(t *testing.T) {
 		actorID := time.ActorID{}
-		_, err := rand.Read(actorID[:])
+		_, err := rand.Read(actorID.Bytes())
 		assert.NoError(t, err)
 
 		expectedID := actorID.String()
@@ -41,7 +41,7 @@ func TestActorID(t *testing.T) {
 
 	t.Run("get ActorID from bytes test", func(t *testing.T) {
 		actorID := time.ActorID{}
-		_, err := rand.Read(actorID[:])
+		_, err := rand.Read(actorID.Bytes())
 		assert.NoError(t, err)
 
 		expectedBytes := actorID.Bytes()
