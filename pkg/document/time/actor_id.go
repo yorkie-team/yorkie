@@ -133,7 +133,7 @@ func (id *ActorID) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON ensures that when calling json.Unmarshal(),
-// it is unmarshaled including private field.
+// it is unmarshalled including private field.
 func (id *ActorID) UnmarshalJSON(bytes []byte) error {
 	temp := &(struct{ Bytes [actorIDSize]byte }{
 		Bytes: id.bytes,
