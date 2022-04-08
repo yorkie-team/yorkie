@@ -47,7 +47,7 @@ type ID struct {
 
 	// actorID is actorID of this ID. If the actor is not set, it has initial
 	// value.
-	actorID time.ActorID
+	actorID *time.ActorID
 }
 
 // NewID creates a new instance of ID.
@@ -55,7 +55,7 @@ func NewID(
 	clientSeq uint32,
 	serverSeq uint64,
 	lamport uint64,
-	actorID time.ActorID,
+	actorID *time.ActorID,
 ) ID {
 	return ID{
 		clientSeq: clientSeq,
@@ -94,7 +94,7 @@ func (id ID) SyncLamport(otherLamport uint64) ID {
 }
 
 // SetActor sets actorID.
-func (id ID) SetActor(actor time.ActorID) ID {
+func (id ID) SetActor(actor *time.ActorID) ID {
 	return NewID(id.clientSeq, InitialServerSeq, id.lamport, actor)
 }
 
@@ -119,6 +119,6 @@ func (id ID) Lamport() uint64 {
 }
 
 // ActorID returns the actorID of this ID.
-func (id ID) ActorID() time.ActorID {
+func (id ID) ActorID() *time.ActorID {
 	return id.actorID
 }

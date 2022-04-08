@@ -213,7 +213,7 @@ func (c *Client) Activate(ctx context.Context) error {
 	}
 
 	c.status = activated
-	c.id = &clientID
+	c.id = clientID
 
 	return nil
 }
@@ -243,7 +243,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		return ErrClientNotActivated
 	}
 
-	doc.SetActor(*c.id)
+	doc.SetActor(c.id)
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
@@ -363,7 +363,7 @@ func (c *Client) Watch(
 	rch := make(chan WatchResponse)
 	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
 		Client: converter.ToClient(types.Client{
-			ID:           *c.id,
+			ID:           c.id,
 			MetadataInfo: c.metadataInfo,
 		}),
 		DocumentKeys: converter.ToDocumentKeys(keys),
@@ -480,7 +480,7 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 	// following.
 	if _, err := c.client.UpdateMetadata(ctx, &api.UpdateMetadataRequest{
 		Client: converter.ToClient(types.Client{
-			ID:           *c.id,
+			ID:           c.id,
 			MetadataInfo: c.metadataInfo,
 		}),
 		DocumentKeys: converter.ToDocumentKeys(keys),

@@ -151,7 +151,7 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 
 // SetActor sets actor into this document. This is also applied in the local
 // changes the document has.
-func (d *InternalDocument) SetActor(actor time.ActorID) {
+func (d *InternalDocument) SetActor(actor *time.ActorID) {
 	for _, c := range d.localChanges {
 		c.SetActor(actor)
 	}
@@ -159,7 +159,7 @@ func (d *InternalDocument) SetActor(actor time.ActorID) {
 }
 
 // ActorID returns ID of the actor currently editing the document.
-func (d *InternalDocument) ActorID() time.ActorID {
+func (d *InternalDocument) ActorID() *time.ActorID {
 	return d.changeID.ActorID()
 }
 

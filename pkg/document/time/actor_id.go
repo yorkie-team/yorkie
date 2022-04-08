@@ -28,10 +28,10 @@ const actorIDSize = 12
 
 var (
 	// InitialActorID represents the initial value of ActorID.
-	InitialActorID = ActorID{}
+	InitialActorID = &ActorID{}
 
 	// MaxActorID represents the maximum value of ActorID.
-	MaxActorID = ActorID{
+	MaxActorID = &ActorID{
 		Data: [actorIDSize]byte{
 			math.MaxUint8,
 			math.MaxUint8,
@@ -62,8 +62,8 @@ type ActorID struct {
 }
 
 // ActorIDFromHex returns the bytes represented by the hexadecimal string str.
-func ActorIDFromHex(str string) (ActorID, error) {
-	actorID := ActorID{}
+func ActorIDFromHex(str string) (*ActorID, error) {
+	actorID := &ActorID{}
 
 	if str == "" {
 		return actorID, fmt.Errorf("%s: %w", str, ErrInvalidHexString)
@@ -83,8 +83,8 @@ func ActorIDFromHex(str string) (ActorID, error) {
 }
 
 // ActorIDFromBytes returns the bytes represented by the bytes of decoded hexadecimal string itself.
-func ActorIDFromBytes(bytes []byte) (ActorID, error) {
-	actorID := ActorID{}
+func ActorIDFromBytes(bytes []byte) (*ActorID, error) {
+	actorID := &ActorID{}
 
 	if len(bytes) == 0 {
 		return actorID, fmt.Errorf("bytes length %d: %w", len(bytes), ErrInvalidActorID)
@@ -100,19 +100,19 @@ func ActorIDFromBytes(bytes []byte) (ActorID, error) {
 
 // String returns the hexadecimal encoding of ActorID.
 // If the receiver is nil, it would return empty string.
-func (id ActorID) String() string {
+func (id *ActorID) String() string {
 	return hex.EncodeToString(id.Data[:])
 }
 
 // Bytes returns the bytes of ActorID itself.
 // If the receiver is nil, it would return empty array of byte.
-func (id ActorID) Bytes() []byte {
+func (id *ActorID) Bytes() []byte {
 	return id.Data[:]
 }
 
 // Compare returns an integer comparing two ActorID lexicographically.
 // The result will be 0 if id==other, -1 if id < other, and +1 if id > other.
 // If the receiver or argument is nil, it would panic at runtime.
-func (id ActorID) Compare(other ActorID) int {
+func (id *ActorID) Compare(other *ActorID) int {
 	return bytes.Compare(id.Data[:], other.Data[:])
 }
