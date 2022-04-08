@@ -47,7 +47,7 @@ func Activate(
 func Deactivate(
 	ctx context.Context,
 	be *backend.Backend,
-	actorID time.ActorID,
+	actorID *time.ActorID,
 ) (*db.ClientInfo, error) {
 	return be.DB.DeactivateClient(ctx, db.IDFromActorID(actorID))
 }
@@ -56,7 +56,7 @@ func Deactivate(
 func FindClient(
 	ctx context.Context,
 	be *backend.Backend,
-	clientID time.ActorID,
+	clientID *time.ActorID,
 ) (*db.ClientInfo, error) {
 	return be.DB.FindClientInfoByID(
 		ctx,
@@ -68,7 +68,7 @@ func FindClient(
 func FindClientAndDocument(
 	ctx context.Context,
 	be *backend.Backend,
-	actorID time.ActorID,
+	actorID *time.ActorID,
 	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*db.ClientInfo, *db.DocInfo, error) {

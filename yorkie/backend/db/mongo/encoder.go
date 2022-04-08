@@ -25,9 +25,9 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
 
-func encodeActorID(id time.ActorID) primitive.ObjectID {
+func encodeActorID(id *time.ActorID) primitive.ObjectID {
 	objectID := primitive.ObjectID{}
-	copy(objectID[:], id[:])
+	copy(objectID[:], id.Bytes())
 	return objectID
 }
 

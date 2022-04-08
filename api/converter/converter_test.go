@@ -208,7 +208,7 @@ func TestConverter(t *testing.T) {
 		pbCli := converter.ToClient(cli)
 		decodedCli, err := converter.FromClient(pbCli)
 		assert.NoError(t, err)
-		assert.Equal(t, cli.ID, decodedCli.ID)
+		assert.Equal(t, cli.ID.Bytes(), decodedCli.ID.Bytes())
 		assert.Equal(t, cli.MetadataInfo, decodedCli.MetadataInfo)
 
 		pbClientsMap := converter.ToClientsMap(map[string][]types.Client{
@@ -218,7 +218,7 @@ func TestConverter(t *testing.T) {
 		pbCli = pbClientsMap["test"].Clients[0]
 		decodedCli, err = converter.FromClient(pbCli)
 		assert.NoError(t, err)
-		assert.Equal(t, cli.ID, decodedCli.ID)
+		assert.Equal(t, cli.ID.Bytes(), decodedCli.ID.Bytes())
 		assert.Equal(t, cli.MetadataInfo, decodedCli.MetadataInfo)
 	})
 }

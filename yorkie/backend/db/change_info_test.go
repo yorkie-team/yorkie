@@ -29,7 +29,7 @@ import (
 func TestChangeInfo(t *testing.T) {
 	t.Run("comparing actorID equals after calling ToChange test", func(t *testing.T) {
 		actorID := time.ActorID{}
-		_, err := rand.Read(actorID[:])
+		_, err := rand.Read(actorID.Bytes())
 		assert.NoError(t, err)
 
 		expectedID := actorID.String()

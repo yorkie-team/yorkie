@@ -8,7 +8,7 @@ import (
 
 // Client represents the Client that communicates with the Agent.
 type Client struct {
-	ID           time.ActorID
+	ID           *time.ActorID
 	MetadataInfo MetadataInfo
 }
 

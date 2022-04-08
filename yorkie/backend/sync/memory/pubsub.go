@@ -179,7 +179,7 @@ func (m *PubSub) Unsubscribe(
 // Publish publishes the given event.
 func (m *PubSub) Publish(
 	ctx context.Context,
-	publisherID time.ActorID,
+	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
 	m.subscriptionsMapMu.RLock()

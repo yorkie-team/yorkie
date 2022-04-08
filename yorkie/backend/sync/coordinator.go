@@ -59,10 +59,10 @@ type Coordinator interface {
 	) error
 
 	// Publish publishes the given event.
-	Publish(ctx context.Context, publisherID time.ActorID, event DocEvent)
+	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)
 
 	// PublishToLocal publishes the given event.
-	PublishToLocal(ctx context.Context, publisherID time.ActorID, event DocEvent)
+	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
 
 	// UpdateMetadata updates the metadata of the given client.
 	UpdateMetadata(

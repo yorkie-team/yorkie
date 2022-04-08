@@ -83,7 +83,7 @@ func (c *Coordinator) Unsubscribe(
 // Publish publishes the given event.
 func (c *Coordinator) Publish(
 	ctx context.Context,
-	publisherID time.ActorID,
+	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
 	c.pubSub.Publish(ctx, publisherID, event)
@@ -92,7 +92,7 @@ func (c *Coordinator) Publish(
 // PublishToLocal publishes the given event.
 func (c *Coordinator) PublishToLocal(
 	ctx context.Context,
-	publisherID time.ActorID,
+	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
 	c.pubSub.Publish(ctx, publisherID, event)

@@ -61,10 +61,10 @@ func (id *ID) Validate() error {
 }
 
 // ToActorID returns ActorID from this ID.
-func (id *ID) ToActorID() (time.ActorID, error) {
+func (id *ID) ToActorID() (*time.ActorID, error) {
 	b, err := id.Bytes()
 	if err != nil {
-		return time.ActorID{}, err
+		return &time.ActorID{}, err
 	}
 
 	return time.ActorIDFromBytes(b)
@@ -76,6 +76,6 @@ func IDFromBytes(bytes []byte) ID {
 }
 
 // IDFromActorID returns ID represented by the encoded hexadecimal string from actor ID.
-func IDFromActorID(actorID time.ActorID) ID {
-	return IDFromBytes(actorID[:])
+func IDFromActorID(actorID *time.ActorID) ID {
+	return IDFromBytes(actorID.Bytes())
 }

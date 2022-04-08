@@ -82,7 +82,7 @@ func (c *Client) Unsubscribe(
 // Publish publishes the given event.
 func (c *Client) Publish(
 	ctx context.Context,
-	publisherID time.ActorID,
+	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
 	c.localPubSub.Publish(ctx, publisherID, event)
@@ -92,7 +92,7 @@ func (c *Client) Publish(
 // PublishToLocal publishes the given event.
 func (c *Client) PublishToLocal(
 	ctx context.Context,
-	publisherID time.ActorID,
+	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
 	c.localPubSub.Publish(ctx, publisherID, event)
@@ -185,7 +185,7 @@ func (c *Client) removeClusterClient(id string) {
 func (c *Client) publishToMember(
 	ctx context.Context,
 	clientInfo *clusterClientInfo,
-	publisherID time.ActorID,
+	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) error {
 	docEvent, err := converter.ToDocEvent(event)
