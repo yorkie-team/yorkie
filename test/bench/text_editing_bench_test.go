@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
-	"runtime/pprof"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,11 +37,6 @@ func BenchmarkTextEditing(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-
-	f, err := os.Create("text-editing.prof")
-	assert.NoError(b, err)
-	assert.NoError(b, pprof.StartCPUProfile(f))
-	defer pprof.StopCPUProfile()
 
 	b.StartTimer()
 

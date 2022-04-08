@@ -53,3 +53,6 @@ bin
 
 # binaries
 binaries
+
+# pprof output
+*.prof
