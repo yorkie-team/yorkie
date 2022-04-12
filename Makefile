@@ -23,12 +23,13 @@ tools: ## install tools for developing yorkie
 	go generate -tags tools tools/tools.go
 
 proto: ## generate proto files
-	protoc api/yorkie.proto \
--I=. \
+	protoc \
+-I=./api \
 -I=$(GOPATH)/src \
 --gofast_out=plugins=grpc,\
 Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
-Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:.
+Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:./api \
+api/*.proto
 
 build: ## builds an executable that runs in the current environment
 	go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie

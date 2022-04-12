@@ -1,0 +1,291 @@
+/*
+ * Copyright 2022 The Yorkie Authors. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+syntax = "proto3";
+
+package api;
+
+/////////////////////////////////////////
+// Messages for ChangePack             //
+/////////////////////////////////////////
+
+message ChangePack {
+  DocumentKey document_key = 1;
+  Checkpoint checkpoint = 2;
+  bytes snapshot = 3;
+  repeated Change changes = 4;
+  TimeTicket min_synced_ticket = 5;
+}
+
+message Change {
+  ChangeID id = 1;
+  string message = 2;
+  repeated Operation operations = 3;
+}
+
+message ChangeID {
+  uint32 client_seq = 1;
+  uint64 server_seq = 2 [jstype = JS_STRING];
+  uint64 lamport = 3 [jstype = JS_STRING];
+  bytes actor_id = 4;
+}
+
+message Operation {
+  message Set {
+    TimeTicket parent_created_at = 1;
+    string key = 2;
+    JSONElementSimple value = 3;
+    TimeTicket executed_at = 4;
+  }
+  message Add {
+    TimeTicket parent_created_at = 1;
+    TimeTicket prev_created_at = 2;
+    JSONElementSimple value = 3;
+    TimeTicket executed_at = 4;
+  }
+  message Move {
+    TimeTicket parent_created_at = 1;
+    TimeTicket prev_created_at = 2;
+    TimeTicket created_at = 3;
+    TimeTicket executed_at = 4;
+  }
+  message Remove {
+    TimeTicket parent_created_at = 1;
+    TimeTicket created_at = 2;
+    TimeTicket executed_at = 3;
+  }
+  message Edit {
+    TimeTicket parent_created_at = 1;
+    TextNodePos from = 2;
+    TextNodePos to = 3;
+    map<string, TimeTicket> created_at_map_by_actor = 4;
+    string content = 5;
+    TimeTicket executed_at = 6;
+  }
+  message Select {
+    TimeTicket parent_created_at = 1;
+    TextNodePos from = 2;
+    TextNodePos to = 3;
+    TimeTicket executed_at = 4;
+  }
+  message RichEdit {
+    TimeTicket parent_created_at = 1;
+    TextNodePos from = 2;
+    TextNodePos to = 3;
+    map<string, TimeTicket> created_at_map_by_actor = 4;
+    string content = 5;
+    map<string, string> attributes = 6;
+    TimeTicket executed_at = 7;
+  }
+  message Style {
+    TimeTicket parent_created_at = 1;
+    TextNodePos from = 2;
+    TextNodePos to = 3;
+    map<string, string> attributes = 4;
+    TimeTicket executed_at = 5;
+  }
+  message Increase {
+    TimeTicket parent_created_at = 1;
+    JSONElementSimple value = 2;
+    TimeTicket executed_at = 3;
+  }
+
+  oneof body {
+    Set set = 1;
+    Add add = 2;
+    Move move = 3;
+    Remove remove = 4;
+    Edit edit = 5;
+    Select select = 6;
+    RichEdit rich_edit = 7;
+    Style style = 8;
+    Increase increase = 9;
+  }
+}
+
+message JSONElementSimple {
+  TimeTicket created_at = 1;
+  TimeTicket moved_at = 2;
+  TimeTicket removed_at = 3;
+  ValueType type = 4;
+  bytes value = 5;
+}
+
+/////////////////////////////////////////
+// Messages for JSON                   //
+/////////////////////////////////////////
+
+message JSONElement {
+  message JSONObject {
+    repeated RHTNode nodes = 1;
+    TimeTicket created_at = 2;
+    TimeTicket moved_at = 3;
+    TimeTicket removed_at = 4;
+  }
+  message JSONArray {
+    repeated RGANode nodes = 1;
+    TimeTicket created_at = 2;
+    TimeTicket moved_at = 3;
+    TimeTicket removed_at = 4;
+  }
+  message Primitive {
+    ValueType type = 1;
+    bytes value = 2;
+    TimeTicket created_at = 3;
+    TimeTicket moved_at = 4;
+    TimeTicket removed_at = 5;
+  }
+  message Text {
+    repeated TextNode nodes = 1;
+    TimeTicket created_at = 2;
+    TimeTicket moved_at = 3;
+    TimeTicket removed_at = 4;
+  }
+  message RichText {
+    repeated RichTextNode nodes = 1;
+    TimeTicket created_at = 2;
+    TimeTicket moved_at = 3;
+    TimeTicket removed_at = 4;
+  }
+  message Counter {
+    ValueType type = 1;
+    bytes value = 2;
+    TimeTicket created_at = 3;
+    TimeTicket moved_at = 4;
+    TimeTicket removed_at = 5;
+  }
+
+  oneof Body {
+    JSONObject json_object = 1;
+    JSONArray json_array = 2;
+    Primitive primitive = 3;
+    Text text = 4;
+    RichText rich_text = 5;
+    Counter counter = 6;
+  }
+}
+
+message RHTNode {
+  string key = 1;
+  JSONElement element = 2;
+}
+
+message RGANode {
+  RGANode next = 1;
+  JSONElement element = 2;
+}
+
+message TextNode {
+  TextNodeID id = 1;
+  string value = 2;
+  TimeTicket removed_at = 3;
+  TextNodeID ins_prev_id = 4;
+}
+
+message RichTextNodeAttr {
+  string key = 1;
+  string value = 2;
+  TimeTicket updated_at = 3;
+}
+
+message RichTextNode {
+  TextNodeID id = 1;
+  map<string, RichTextNodeAttr> attributes = 2;
+  string value = 3;
+  TimeTicket removed_at = 4;
+  TextNodeID ins_prev_id = 5;
+}
+
+message TextNodeID {
+  TimeTicket created_at = 1;
+  int32 offset = 2;
+}
+
+/////////////////////////////////////////
+// Messages for Common                 //
+/////////////////////////////////////////
+
+message DocumentSummary {
+  string id = 1;
+  DocumentKey key = 2;
+  string snapshot = 3;
+}
+
+message Metadata {
+  int32 clock = 1;
+  map<string, string> data = 2;
+}
+
+message Client {
+  bytes id = 1;
+  Metadata metadata = 2;
+}
+
+message Clients {
+  repeated Client clients = 1;
+}
+
+message DocumentKey {
+  string collection = 1;
+  string document = 2;
+}
+
+message Checkpoint {
+  uint64 server_seq = 1 [jstype = JS_STRING];
+  uint32 client_seq = 2;
+}
+
+message TextNodePos {
+  TimeTicket created_at = 1;
+  int32 offset = 2;
+  int32 relative_offset = 3;
+}
+
+message TimeTicket {
+  uint64 lamport = 1 [jstype = JS_STRING];
+  uint32 delimiter = 2;
+  bytes actor_id = 3;
+}
+
+enum ValueType {
+  NULL = 0;
+  BOOLEAN = 1;
+  INTEGER = 2;
+  LONG = 3;
+  DOUBLE = 4;
+  STRING = 5;
+  BYTES = 6;
+  DATE = 7;
+  JSON_OBJECT = 8;
+  JSON_ARRAY = 9;
+  TEXT = 10;
+  RICH_TEXT = 11;
+  INTEGER_CNT = 12;
+  LONG_CNT = 13;
+  DOUBLE_CNT = 14;
+}
+
+enum DocEventType {
+  DOCUMENTS_CHANGED = 0;
+  DOCUMENTS_WATCHED = 1;
+  DOCUMENTS_UNWATCHED = 2;
+  METADATA_CHANGED = 3;
+}
+
+message DocEvent {
+  DocEventType type = 1;
+  Client publisher = 2;
+  repeated DocumentKey document_keys = 3;
+}

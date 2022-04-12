@@ -30,6 +30,19 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
+// ToDocumentSummaries converts the given model to Protobuf.
+func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSummary {
+	pbSummaries := make([]*api.DocumentSummary, 0, len(summaries))
+	for _, summary := range summaries {
+		pbSummaries = append(pbSummaries, &api.DocumentSummary{
+			Id:       summary.ID,
+			Key:      ToDocumentKey(summary.Key),
+			Snapshot: summary.Snapshot,
+		})
+	}
+	return pbSummaries
+}
+
 // ToClient converts the given model to Protobuf format.
 func ToClient(client types.Client) *api.Client {
 	return &api.Client{

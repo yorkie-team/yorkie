@@ -19,7 +19,6 @@ package memory
 import (
 	"context"
 	"fmt"
-	"math"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -404,6 +403,7 @@ func (d *DB) CreateSnapshotInfo(
 		ID:        newID(),
 		DocID:     docID,
 		ServerSeq: doc.Checkpoint().ServerSeq,
+		Lamport:   doc.Lamport(),
 		Snapshot:  snapshot,
 		CreatedAt: gotime.Now(),
 	}); err != nil {
@@ -413,10 +413,11 @@ func (d *DB) CreateSnapshotInfo(
 	return nil
 }
 
-// FindLastSnapshotInfo finds the last snapshot of the given document.
-func (d *DB) FindLastSnapshotInfo(
+// FindClosestSnapshotInfo finds the last snapshot of the given document.
+func (d *DB) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID db.ID,
+	serverSeq uint64,
 ) (*db.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -425,7 +426,7 @@ func (d *DB) FindLastSnapshotInfo(
 		tblSnapshots,
 		"doc_id_server_seq",
 		docID.String(),
-		uint64(math.MaxUint64),
+		serverSeq,
 	)
 	if err != nil {
 		return nil, err
@@ -559,6 +560,39 @@ func (d *DB) UpdateSyncedSeq(
 
 	txn.Commit()
 	return nil
+}
+
+// FindDocInfosByPreviousIDAndPageSize returns the docInfos of the given previousID and pageSize.
+func (d *DB) FindDocInfosByPreviousIDAndPageSize(
+	ctx context.Context,
+	previousID db.ID,
+	pageSize int,
+) ([]*db.DocInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iterator, err := txn.LowerBound(
+		tblDocuments,
+		"id",
+		previousID.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var docInfos []*db.DocInfo
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		info := raw.(*db.DocInfo)
+		if len(docInfos) >= pageSize {
+			break
+		}
+
+		if info.ID != previousID {
+			docInfos = append(docInfos, info)
+		}
+	}
+
+	return docInfos, nil
 }
 
 func (d *DB) findTicketByServerSeq(
