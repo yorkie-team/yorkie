@@ -168,15 +168,57 @@ func TestDB(t *testing.T) {
 		}))
 
 		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err := memdb.FindLastSnapshotInfo(ctx, docInfo.ID)
+		snapshot, err := memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(0), snapshot.ServerSeq)
 
 		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err = memdb.FindLastSnapshotInfo(ctx, docInfo.ID)
+		snapshot, err = memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(1), snapshot.ServerSeq)
+
+		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
+		assert.NoError(t, doc.ApplyChangePack(pack))
+		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(2), snapshot.ServerSeq)
+
+		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, 1)
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(1), snapshot.ServerSeq)
+	})
+
+	t.Run("paging docInfo test", func(t *testing.T) {
+		localDB, err := memory.New()
+		assert.NoError(t, err)
+
+		clientInfo, _ := localDB.ActivateClient(ctx, t.Name())
+
+		var givenKeys []string
+		for i := 0; i < 11; i++ {
+			docInfo, err := localDB.FindDocInfoByKey(ctx, clientInfo, fmt.Sprintf("tests$%s-%d", t.Name(), i), true)
+			assert.NoError(t, err)
+			givenKeys = append(givenKeys, docInfo.CombinedKey)
+		}
+
+		var keys []string
+		previousID := db.ID("")
+		for {
+			docInfos, err := localDB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, 10)
+			assert.NoError(t, err)
+			if len(docInfos) == 0 {
+				break
+			}
+			for _, docInfo := range docInfos {
+				keys = append(keys, docInfo.CombinedKey)
+			}
+			previousID = docInfos[len(docInfos)-1].ID
+		}
+
+		assert.Equal(t, givenKeys, keys)
 	})
 }

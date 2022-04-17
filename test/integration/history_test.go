@@ -62,7 +62,7 @@ func TestHistory(t *testing.T) {
 
 		assert.NoError(t, c1.Sync(ctx))
 
-		changes, err := c2.FetchHistory(ctx, d1.Key())
+		changes, err := c2.ListChangeSummaries(ctx, d1.Key())
 		assert.NoError(t, err)
 		assert.Len(t, changes, 3)
 

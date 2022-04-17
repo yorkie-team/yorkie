@@ -431,11 +431,11 @@ func (s *yorkieServer) UpdateMetadata(
 	return &api.UpdateMetadataResponse{}, nil
 }
 
-// FetchHistory fetches the history of the given document.
-func (s *yorkieServer) FetchHistory(
+// ListChanges lists of changes for the given document.
+func (s *yorkieServer) ListChanges(
 	ctx context.Context,
-	req *api.FetchHistoryRequest,
-) (*api.FetchHistoryResponse, error) {
+	req *api.ListChangesRequest,
+) (*api.ListChangesResponse, error) {
 	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
 		return nil, err
@@ -443,7 +443,7 @@ func (s *yorkieServer) FetchHistory(
 	docKey := converter.FromDocumentKey(req.DocumentKey)
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.FetchHistory,
+		Method: types.ListChanges,
 		Attributes: []types.AccessAttribute{{
 			Key:  docKey.CombinedKey(),
 			Verb: types.Read,
@@ -477,7 +477,7 @@ func (s *yorkieServer) FetchHistory(
 		return nil, err
 	}
 
-	return &api.FetchHistoryResponse{
+	return &api.ListChangesResponse{
 		Changes: pbChanges,
 	}, nil
 }

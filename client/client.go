@@ -491,9 +491,9 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 	return nil
 }
 
-// FetchHistory returns the history of the given document.
-func (c *Client) FetchHistory(ctx context.Context, key key.Key) ([]*types.ChangeSummary, error) {
-	resp, err := c.client.FetchHistory(ctx, &api.FetchHistoryRequest{
+// ListChangeSummaries returns the change summaries of the given document.
+func (c *Client) ListChangeSummaries(ctx context.Context, key key.Key) ([]*types.ChangeSummary, error) {
+	resp, err := c.client.ListChanges(ctx, &api.ListChangesRequest{
 		ClientId:    c.id.Bytes(),
 		DocumentKey: converter.ToDocumentKey(key),
 	})

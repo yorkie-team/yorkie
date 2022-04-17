@@ -453,6 +453,7 @@ func (c *Client) CreateSnapshotInfo(
 	if _, err := c.collection(colSnapshots).InsertOne(ctx, bson.M{
 		"doc_id":     encodedDocID,
 		"server_seq": doc.Checkpoint().ServerSeq,
+		"lamport":    doc.Lamport(),
 		"snapshot":   snapshot,
 		"created_at": gotime.Now(),
 	}); err != nil {
@@ -463,10 +464,11 @@ func (c *Client) CreateSnapshotInfo(
 	return nil
 }
 
-// FindLastSnapshotInfo finds the last snapshot of the given document.
-func (c *Client) FindLastSnapshotInfo(
+// FindClosestSnapshotInfo finds the last snapshot of the given document.
+func (c *Client) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID db.ID,
+	serverSeq uint64,
 ) (*db.SnapshotInfo, error) {
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
@@ -475,6 +477,9 @@ func (c *Client) FindLastSnapshotInfo(
 
 	result := c.collection(colSnapshots).FindOne(ctx, bson.M{
 		"doc_id": encodedDocID,
+		"server_seq": bson.M{
+			"$lte": serverSeq,
+		},
 	}, options.FindOne().SetSort(bson.M{
 		"server_seq": -1,
 	}))
@@ -546,6 +551,44 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		time.MaxDelimiter,
 		actorID,
 	), nil
+}
+
+// FindDocInfosByPreviousIDAndPageSize returns the docInfos of the given previousID and pageSize.
+func (c *Client) FindDocInfosByPreviousIDAndPageSize(
+	ctx context.Context,
+	previousID db.ID,
+	pageSize int,
+) ([]*db.DocInfo, error) {
+	filter := bson.M{}
+	if previousID != "" {
+		encodedPreviousID, err := encodeID(previousID)
+		if err != nil {
+			return nil, err
+		}
+		filter = bson.M{
+			"_id": bson.M{
+				"$gt": encodedPreviousID,
+			},
+		}
+	}
+
+	cursor, err := c.collection(colDocuments).Find(
+		ctx,
+		filter,
+		options.Find().SetLimit(int64(pageSize)),
+	)
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	var infos []*db.DocInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		logging.From(ctx).Error(cursor.Err())
+		return nil, cursor.Err()
+	}
+
+	return infos, nil
 }
 
 // UpdateSyncedSeq updates the syncedSeq of the given client.

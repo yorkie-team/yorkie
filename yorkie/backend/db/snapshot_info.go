@@ -22,9 +22,21 @@ import (
 
 // SnapshotInfo is a structure representing information of the snapshot.
 type SnapshotInfo struct {
-	ID        ID        `bson:"_id"`
-	DocID     ID        `bson:"doc_id"`
-	ServerSeq uint64    `bson:"server_seq"`
-	Snapshot  []byte    `bson:"snapshot"`
+	// ID is the unique ID of the snapshot.
+	ID ID `bson:"_id"`
+
+	// DocID is the ID of the document which the snapshot belongs to.
+	DocID ID `bson:"doc_id"`
+
+	// ServerSeq is the sequence number of the server which the snapshot belongs to.
+	ServerSeq uint64 `bson:"server_seq"`
+
+	// Lamport is the Lamport timestamp of the snapshot.
+	Lamport uint64 `bson:"lamport"`
+
+	// Snapshot is the snapshot data.
+	Snapshot []byte `bson:"snapshot"`
+
+	// CreatedAt is the time when the snapshot is created.
 	CreatedAt time.Time `bson:"created_at"`
 }

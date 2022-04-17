@@ -21,6 +21,9 @@ import (
 	"fmt"
 	gotime "time"
 
+	"go.uber.org/zap"
+
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/types"
@@ -154,4 +157,66 @@ func PushPull(
 	}
 
 	return respPack, nil
+}
+
+// BuildDocumentForServerSeq returns a new document for the given serverSeq.
+func BuildDocumentForServerSeq(
+	ctx context.Context,
+	be *backend.Backend,
+	docInfo *db.DocInfo,
+	serverSeq uint64,
+) (*document.InternalDocument, error) {
+	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, serverSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	docKey, err := docInfo.Key()
+	if err != nil {
+		return nil, err
+	}
+
+	doc, err := document.NewInternalDocumentFromSnapshot(
+		docKey,
+		snapshotInfo.ServerSeq,
+		snapshotInfo.Lamport,
+		snapshotInfo.Snapshot,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(hackerwins): If the Snapshot is missing, we may have a very large
+	// number of changes to read at once here. We need to split changes by a
+	// certain size (e.g. 100) and read and gradually reflect it into the document.
+	changes, err := be.DB.FindChangesBetweenServerSeqs(
+		ctx,
+		docInfo.ID,
+		snapshotInfo.ServerSeq+1,
+		serverSeq,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := doc.ApplyChangePack(change.NewPack(
+		docKey,
+		change.InitialCheckpoint.NextServerSeq(serverSeq),
+		changes,
+		nil,
+	)); err != nil {
+		return nil, err
+	}
+
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(
+			"after apply %d changes: elements: %d removeds: %d, %s",
+			len(changes),
+			doc.Root().ElementMapLen(),
+			doc.Root().RemovedElementLen(),
+			doc.RootObject().Marshal(),
+		)
+	}
+
+	return doc, nil
 }
