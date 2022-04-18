@@ -53,6 +53,22 @@ func (d *DB) Close() error {
 	return nil
 }
 
+// FindProjectByClientAPIKey returns a project by client API key.
+func (d *DB) FindProjectByClientAPIKey(ctx context.Context, clientAPIKey string) (*db.ProjectInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblProjects, "client_api_key", clientAPIKey)
+	if err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", clientAPIKey, db.ErrProjectNotFound)
+	}
+
+	return raw.(*db.ProjectInfo).DeepCopy(), nil
+}
+
 // ActivateClient activates a client.
 func (d *DB) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, error) {
 	txn := d.db.Txn(true)

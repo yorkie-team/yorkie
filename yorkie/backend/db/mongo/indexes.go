@@ -25,6 +25,7 @@ import (
 )
 
 const (
+	colProjects   = "projects"
 	colClients    = "clients"
 	colDocuments  = "documents"
 	colChanges    = "changes"

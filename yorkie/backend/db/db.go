@@ -27,6 +27,9 @@ import (
 )
 
 var (
+	// ErrProjectNotFound is returned when the project is not found.
+	ErrProjectNotFound = errors.New("project not found")
+
 	// ErrClientNotFound is returned when the client could not be found.
 	ErrClientNotFound = errors.New("client not found")
 
@@ -41,6 +44,9 @@ var (
 type DB interface {
 	// Close all resources of this database.
 	Close() error
+
+	// FindProjectByClientAPIKey returns a project by client API key.
+	FindProjectByClientAPIKey(ctx context.Context, clientAPIKey string) (*ProjectInfo, error)
 
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, key string) (*ClientInfo, error)

@@ -88,6 +88,23 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// FindProjectByClientAPIKey returns a project by client API key.
+func (c *Client) FindProjectByClientAPIKey(ctx context.Context, clientAPIKey string) (*db.ProjectInfo, error) {
+	result := c.collection(colProjects).FindOne(ctx, bson.M{
+		"client_api_key": clientAPIKey,
+	})
+
+	projectInfo := db.ProjectInfo{}
+	if err := result.Decode(&projectInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", clientAPIKey, db.ErrProjectNotFound)
+		}
+		return nil, err
+	}
+
+	return &projectInfo, nil
+}
+
 // ActivateClient activates the client of the given key.
 func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, error) {
 	now := gotime.Now()

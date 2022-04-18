@@ -19,6 +19,7 @@ package memory
 import "github.com/hashicorp/go-memdb"
 
 var (
+	tblProjects   = "projects"
 	tblClients    = "clients"
 	tblDocuments  = "documents"
 	tblChanges    = "changes"
@@ -28,6 +29,21 @@ var (
 
 var schema = &memdb.DBSchema{
 	Tables: map[string]*memdb.TableSchema{
+		tblProjects: {
+			Name: tblProjects,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"client_api_key": {
+					Name:    "client_api_key",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ClientAPIKey"},
+				},
+			},
+		},
 		tblClients: {
 			Name: tblClients,
 			Indexes: map[string]*memdb.IndexSchema{
