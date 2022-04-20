@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/yorkie-team/yorkie/yorkie/auth"
+	"github.com/yorkie-team/yorkie/yorkie/rpc/auth"
 )
 
 // AuthInterceptor is an interceptor for authentication.

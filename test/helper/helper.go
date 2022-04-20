@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie"
+	"github.com/yorkie-team/yorkie/yorkie/admin"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
 	"github.com/yorkie-team/yorkie/yorkie/backend/housekeeping"
@@ -41,6 +42,8 @@ const (
 	RPCMaxRequestBytes = 4 * 1024 * 1024
 
 	ProfilingPort = 21102
+
+	AdminPort = 21103
 
 	HousekeepingInterval            = 1 * gotime.Second
 	HousekeepingDeactivateThreshold = 1 * gotime.Minute
@@ -103,6 +106,9 @@ func TestConfig(authWebhook string) *yorkie.Config {
 		},
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,
+		},
+		Admin: &admin.Config{
+			Port: AdminPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
 			Interval:            HousekeepingInterval.String(),
