@@ -19,6 +19,7 @@ package yorkie
 import (
 	gosync "sync"
 
+	"github.com/yorkie-team/yorkie/yorkie/admin"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/logging"
@@ -36,6 +37,7 @@ type Yorkie struct {
 	conf            *Config
 	backend         *backend.Backend
 	rpcServer       *rpc.Server
+	adminServer     *admin.Server
 	profilingServer *profiling.Server
 
 	shutdown   bool
@@ -75,11 +77,14 @@ func New(conf *Config) (*Yorkie, error) {
 		profilingServer = profiling.NewServer(conf.Profiling, metrics)
 	}
 
+	adminServer := admin.NewServer(conf.Admin, be)
+
 	return &Yorkie{
 		conf:            conf,
 		backend:         be,
 		rpcServer:       rpcServer,
 		profilingServer: profilingServer,
+		adminServer:     adminServer,
 		shutdownCh:      make(chan struct{}),
 	}, nil
 }
@@ -88,6 +93,10 @@ func New(conf *Config) (*Yorkie, error) {
 func (r *Yorkie) Start() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+
+	if err := r.adminServer.Start(); err != nil {
+		return err
+	}
 
 	if r.profilingServer != nil {
 		err := r.profilingServer.Start()
@@ -112,6 +121,8 @@ func (r *Yorkie) Shutdown(graceful bool) error {
 		r.profilingServer.Shutdown(graceful)
 	}
 
+	r.adminServer.Shutdown(graceful)
+
 	if err := r.backend.Shutdown(); err != nil {
 		return err
 	}
@@ -129,6 +140,11 @@ func (r *Yorkie) ShutdownCh() <-chan struct{} {
 // RPCAddr returns the address of the RPC.
 func (r *Yorkie) RPCAddr() string {
 	return r.conf.RPCAddr()
+}
+
+// AdminAddr returns the address of the admin.
+func (r *Yorkie) AdminAddr() string {
+	return r.conf.AdminAddr()
 }
 
 // Members returns the members of this cluster.

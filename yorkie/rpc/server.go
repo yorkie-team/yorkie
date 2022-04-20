@@ -82,10 +82,9 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	api.RegisterYorkieServer(grpcServer, newYorkieServer(yorkieServiceCtx, be))
 	be.Metrics.RegisterGRPCServer(grpcServer)
 
-	// TODO(hackerwins): AdminServer and ClusterServer need to be handled by different authentication mechanism.
+	// TODO(hackerwins): ClusterServer need to be handled by different authentication mechanism.
 	// Consider extracting the servers to another grpcServer.
 	api.RegisterClusterServer(grpcServer, newClusterServer(be))
-	api.RegisterAdminServer(grpcServer, newAdminServer(be))
 
 	return &Server{
 		conf:                conf,
