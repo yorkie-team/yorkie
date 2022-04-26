@@ -124,5 +124,6 @@ type DB interface {
 		ctx context.Context,
 		previousID ID,
 		pageSize int,
+		isForward bool,
 	) ([]*DocInfo, error)
 }

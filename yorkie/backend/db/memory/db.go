@@ -567,15 +567,34 @@ func (d *DB) FindDocInfosByPreviousIDAndPageSize(
 	ctx context.Context,
 	previousID db.ID,
 	pageSize int,
+	isForward bool,
 ) ([]*db.DocInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iterator, err := txn.LowerBound(
-		tblDocuments,
-		"id",
-		previousID.String(),
-	)
+	var iterator memdb.ResultIterator
+	var err error
+	if isForward {
+		iterator, err = txn.LowerBound(
+			tblDocuments,
+			"id",
+			previousID.String(),
+		)
+	} else {
+		if previousID == "" {
+			iterator, err = txn.GetReverse(
+				tblDocuments,
+				"id",
+			)
+		} else {
+			iterator, err = txn.ReverseLowerBound(
+				tblDocuments,
+				"id",
+				previousID.String(),
+			)
+		}
+	}
+
 	if err != nil {
 		return nil, err
 	}

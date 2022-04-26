@@ -558,6 +558,7 @@ func (c *Client) FindDocInfosByPreviousIDAndPageSize(
 	ctx context.Context,
 	previousID db.ID,
 	pageSize int,
+	isForward bool,
 ) ([]*db.DocInfo, error) {
 	filter := bson.M{}
 	if previousID != "" {
@@ -565,18 +566,22 @@ func (c *Client) FindDocInfosByPreviousIDAndPageSize(
 		if err != nil {
 			return nil, err
 		}
+
+		key := "$lt"
+		if isForward {
+			key = "$gt"
+		}
 		filter = bson.M{
-			"_id": bson.M{
-				"$gt": encodedPreviousID,
-			},
+			"_id": bson.M{key: encodedPreviousID},
 		}
 	}
 
-	cursor, err := c.collection(colDocuments).Find(
-		ctx,
-		filter,
-		options.Find().SetLimit(int64(pageSize)),
-	)
+	opts := options.Find().SetLimit(int64(pageSize))
+	if !isForward {
+		opts = opts.SetSort(map[string]int{"_id": -1})
+	}
+
+	cursor, err := c.collection(colDocuments).Find(ctx, filter, opts)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, err

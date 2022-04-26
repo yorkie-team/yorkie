@@ -198,27 +198,61 @@ func TestDB(t *testing.T) {
 
 		clientInfo, _ := localDB.ActivateClient(ctx, t.Name())
 
-		var givenKeys []string
-		for i := 0; i < 11; i++ {
+		const pageSize int = 5
+		const totalSize int = pageSize * 2
+		var entireDocKeys []string
+		for i := 0; i < totalSize; i++ {
 			docInfo, err := localDB.FindDocInfoByKey(ctx, clientInfo, fmt.Sprintf("tests$%s-%d", t.Name(), i), true)
 			assert.NoError(t, err)
-			givenKeys = append(givenKeys, docInfo.CombinedKey)
+			entireDocKeys = append(entireDocKeys, docInfo.CombinedKey)
 		}
 
+		// first page (previousID is empty)
 		var keys []string
+		var givenKeys []string
 		previousID := db.ID("")
-		for {
-			docInfos, err := localDB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, 10)
-			assert.NoError(t, err)
-			if len(docInfos) == 0 {
-				break
-			}
-			for _, docInfo := range docInfos {
-				keys = append(keys, docInfo.CombinedKey)
-			}
-			previousID = docInfos[len(docInfos)-1].ID
+		isForward := false
+		docInfos, err := localDB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, pageSize, isForward)
+		assert.NoError(t, err)
+		for _, docInfo := range docInfos {
+			keys = append(keys, docInfo.CombinedKey)
 		}
+		startIdx := totalSize - 1
+		for i := startIdx; i > startIdx-pageSize; i-- {
+			givenKeys = append(givenKeys, entireDocKeys[i])
+		}
+		assert.Equal(t, givenKeys, keys)
 
+		// backward
+		previousID = docInfos[len(docInfos)-1].ID
+		isForward = false
+		docInfos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, pageSize, isForward)
+		assert.NoError(t, err)
+		keys = []string{}
+		givenKeys = []string{}
+		for _, docInfo := range docInfos {
+			keys = append(keys, docInfo.CombinedKey)
+		}
+		startIdx = totalSize - pageSize - 1
+		for i := startIdx; i > startIdx-pageSize; i-- {
+			givenKeys = append(givenKeys, entireDocKeys[i])
+		}
+		assert.Equal(t, givenKeys, keys)
+
+		// forward
+		previousID = docInfos[0].ID
+		isForward = true
+		docInfos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, pageSize, isForward)
+		assert.NoError(t, err)
+		keys = []string{}
+		givenKeys = []string{}
+		for _, docInfo := range docInfos {
+			keys = append(keys, docInfo.CombinedKey)
+		}
+		startIdx = totalSize - pageSize
+		for i := startIdx; i < startIdx+pageSize; i++ {
+			givenKeys = append(givenKeys, entireDocKeys[i])
+		}
 		assert.Equal(t, givenKeys, keys)
 	})
 }

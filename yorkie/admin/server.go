@@ -120,6 +120,7 @@ func (s *Server) ListDocuments(
 		s.backend,
 		db.ID(req.PreviousId),
 		int(req.PageSize),
+		req.IsForward,
 	)
 	if err != nil {
 		return nil, err

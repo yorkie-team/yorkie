@@ -27,6 +27,7 @@ service Admin {
 message ListDocumentsRequest {
   string previous_id = 1;
   int32 page_size = 2;
+  bool is_forward = 3;
 }
 
 message ListDocumentsResponse {
