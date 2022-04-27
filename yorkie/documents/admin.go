@@ -31,8 +31,9 @@ func ListDocumentSummaries(
 	be *backend.Backend,
 	previousID db.ID,
 	pageSize int,
+	isForward bool,
 ) ([]*types.DocumentSummary, error) {
-	docInfo, err := be.DB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, pageSize)
+	docInfo, err := be.DB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, pageSize, isForward)
 	if err != nil {
 		return nil, err
 	}
