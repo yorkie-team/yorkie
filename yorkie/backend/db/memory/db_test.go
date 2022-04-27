@@ -192,67 +192,49 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, uint64(1), snapshot.ServerSeq)
 	})
 
-	t.Run("paging docInfo test", func(t *testing.T) {
+	t.Run("docInfo pagination test", func(t *testing.T) {
 		localDB, err := memory.New()
 		assert.NoError(t, err)
 
+		assertKeys := func(expectedKeys []string, infos []*db.DocInfo) {
+			var keys []string
+			for _, info := range infos {
+				keys = append(keys, info.CombinedKey)
+			}
+			assert.EqualValues(t, expectedKeys, keys)
+		}
+
+		pageSize := 5
+		totalSize := 9
 		clientInfo, _ := localDB.ActivateClient(ctx, t.Name())
-
-		const pageSize int = 5
-		const totalSize int = pageSize * 2
-		var entireDocKeys []string
 		for i := 0; i < totalSize; i++ {
-			docInfo, err := localDB.FindDocInfoByKey(ctx, clientInfo, fmt.Sprintf("tests$%s-%d", t.Name(), i), true)
+			_, err := localDB.FindDocInfoByKey(ctx, clientInfo, fmt.Sprintf("%d", i), true)
 			assert.NoError(t, err)
-			entireDocKeys = append(entireDocKeys, docInfo.CombinedKey)
 		}
 
-		// first page (previousID is empty)
-		var keys []string
-		var givenKeys []string
-		previousID := db.ID("")
-		isForward := false
-		docInfos, err := localDB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, pageSize, isForward)
+		// initial page, previousID is empty
+		infos, err := localDB.FindDocInfosByPreviousIDAndPageSize(ctx, "", pageSize, false)
 		assert.NoError(t, err)
-		for _, docInfo := range docInfos {
-			keys = append(keys, docInfo.CombinedKey)
-		}
-		startIdx := totalSize - 1
-		for i := startIdx; i > startIdx-pageSize; i-- {
-			givenKeys = append(givenKeys, entireDocKeys[i])
-		}
-		assert.Equal(t, givenKeys, keys)
+		assertKeys([]string{"8", "7", "6", "5", "4"}, infos)
 
 		// backward
-		previousID = docInfos[len(docInfos)-1].ID
-		isForward = false
-		docInfos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, pageSize, isForward)
+		infos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[len(infos)-1].ID, pageSize, false)
 		assert.NoError(t, err)
-		keys = []string{}
-		givenKeys = []string{}
-		for _, docInfo := range docInfos {
-			keys = append(keys, docInfo.CombinedKey)
-		}
-		startIdx = totalSize - pageSize - 1
-		for i := startIdx; i > startIdx-pageSize; i-- {
-			givenKeys = append(givenKeys, entireDocKeys[i])
-		}
-		assert.Equal(t, givenKeys, keys)
+		assertKeys([]string{"3", "2", "1", "0"}, infos)
+
+		// backward again
+		emptyInfos, err := localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[len(infos)-1].ID, pageSize, false)
+		assert.NoError(t, err)
+		assertKeys(nil, emptyInfos)
 
 		// forward
-		previousID = docInfos[0].ID
-		isForward = true
-		docInfos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, pageSize, isForward)
+		infos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[0].ID, pageSize, true)
 		assert.NoError(t, err)
-		keys = []string{}
-		givenKeys = []string{}
-		for _, docInfo := range docInfos {
-			keys = append(keys, docInfo.CombinedKey)
-		}
-		startIdx = totalSize - pageSize
-		for i := startIdx; i < startIdx+pageSize; i++ {
-			givenKeys = append(givenKeys, entireDocKeys[i])
-		}
-		assert.Equal(t, givenKeys, keys)
+		assertKeys([]string{"4", "5", "6", "7", "8"}, infos)
+
+		// forward again
+		emptyInfos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[len(infos)-1].ID, pageSize, true)
+		assert.NoError(t, err)
+		assertKeys(nil, emptyInfos)
 	})
 }
