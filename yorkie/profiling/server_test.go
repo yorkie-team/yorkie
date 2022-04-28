@@ -25,7 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/profiling"
 )
 
-const (
+var (
 	// to avoid conflict with profiling port used for client test
 	testProfilingPort = helper.ProfilingPort + 100
 )

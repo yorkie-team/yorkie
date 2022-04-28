@@ -21,9 +21,9 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/clients"
@@ -342,18 +342,18 @@ func (s *yorkieServer) WatchDocuments(
 		})
 	}
 
+	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
+		Method:     types.WatchDocuments,
+		Attributes: attrs,
+	}); err != nil {
+		return err
+	}
+
 	if _, err = clients.FindClient(
 		stream.Context(),
 		s.backend,
 		cli.ID,
 	); err != nil {
-		return err
-	}
-
-	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
-		Method:     types.WatchDocuments,
-		Attributes: attrs,
-	}); err != nil {
 		return err
 	}
 

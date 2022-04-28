@@ -25,6 +25,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -53,20 +54,73 @@ func (d *DB) Close() error {
 	return nil
 }
 
-// FindProjectByClientAPIKey returns a project by client API key.
-func (d *DB) FindProjectByClientAPIKey(ctx context.Context, clientAPIKey string) (*db.ProjectInfo, error) {
+// FindProjectInfoByPublicKey returns a project by public key.
+func (d *DB) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*db.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblProjects, "client_api_key", clientAPIKey)
+	raw, err := txn.First(tblProjects, "public_key", publicKey)
 	if err != nil {
 		return nil, err
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", clientAPIKey, db.ErrProjectNotFound)
+		return nil, fmt.Errorf("%s: %w", publicKey, db.ErrProjectNotFound)
 	}
 
 	return raw.(*db.ProjectInfo).DeepCopy(), nil
+}
+
+// EnsureDefaultProjectInfo creates the default project if it does not exist.
+func (d *DB) EnsureDefaultProjectInfo(ctx context.Context) (*db.ProjectInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblProjects, "id", db.DefaultProjectID.String())
+	if err != nil {
+		return nil, err
+	}
+
+	var info *db.ProjectInfo
+	if raw == nil {
+		info = db.NewProjectInfo(db.DefaultProjectName)
+		info.ID = db.DefaultProjectID
+		if err := txn.Insert(tblProjects, info); err != nil {
+			return nil, err
+		}
+	} else {
+		info = raw.(*db.ProjectInfo).DeepCopy()
+	}
+
+	txn.Commit()
+	return info, nil
+}
+
+// CreateProjectInfo creates a new project.
+func (d *DB) CreateProjectInfo(ctx context.Context, name string) (*db.ProjectInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	info := db.NewProjectInfo(name)
+	info.ID = newID()
+	if err := txn.Insert(tblProjects, info); err != nil {
+		return nil, err
+	}
+	txn.Commit()
+
+	return info, nil
+}
+
+// UpdateProjectInfo updates the given project.
+func (d *DB) UpdateProjectInfo(ctx context.Context, info *db.ProjectInfo) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	if err := txn.Insert(tblProjects, info); err != nil {
+		return err
+	}
+	txn.Commit()
+
+	return nil
 }
 
 // ActivateClient activates a client.
@@ -105,7 +159,7 @@ func (d *DB) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, er
 }
 
 // DeactivateClient deactivates a client.
-func (d *DB) DeactivateClient(ctx context.Context, clientID db.ID) (*db.ClientInfo, error) {
+func (d *DB) DeactivateClient(ctx context.Context, clientID types.ID) (*db.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -138,7 +192,7 @@ func (d *DB) DeactivateClient(ctx context.Context, clientID db.ID) (*db.ClientIn
 }
 
 // FindClientInfoByID finds a client by ID.
-func (d *DB) FindClientInfoByID(ctx context.Context, clientID db.ID) (*db.ClientInfo, error) {
+func (d *DB) FindClientInfoByID(ctx context.Context, clientID types.ID) (*db.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -313,7 +367,7 @@ func (d *DB) CreateChangeInfos(
 			ID:         newID(),
 			DocID:      docInfo.ID,
 			ServerSeq:  cn.ServerSeq(),
-			ActorID:    db.ID(cn.ID().ActorID().String()),
+			ActorID:    types.ID(cn.ID().ActorID().String()),
 			ClientSeq:  cn.ClientSeq(),
 			Lamport:    cn.ID().Lamport(),
 			Message:    cn.Message(),
@@ -348,7 +402,7 @@ func (d *DB) CreateChangeInfos(
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (d *DB) FindChangesBetweenServerSeqs(
 	ctx context.Context,
-	docID db.ID,
+	docID types.ID,
 	from uint64,
 	to uint64,
 ) ([]*change.Change, error) {
@@ -372,7 +426,7 @@ func (d *DB) FindChangesBetweenServerSeqs(
 // FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
 func (d *DB) FindChangeInfosBetweenServerSeqs(
 	ctx context.Context,
-	docID db.ID,
+	docID types.ID,
 	from uint64,
 	to uint64,
 ) ([]*db.ChangeInfo, error) {
@@ -404,7 +458,7 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 // CreateSnapshotInfo stores the snapshot of the given document.
 func (d *DB) CreateSnapshotInfo(
 	ctx context.Context,
-	docID db.ID,
+	docID types.ID,
 	doc *document.InternalDocument,
 ) error {
 	snapshot, err := converter.ObjectToBytes(doc.RootObject())
@@ -432,7 +486,7 @@ func (d *DB) CreateSnapshotInfo(
 // FindClosestSnapshotInfo finds the last snapshot of the given document.
 func (d *DB) FindClosestSnapshotInfo(
 	ctx context.Context,
-	docID db.ID,
+	docID types.ID,
 	serverSeq uint64,
 ) (*db.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
@@ -469,7 +523,7 @@ func (d *DB) FindClosestSnapshotInfo(
 func (d *DB) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
 	clientInfo *db.ClientInfo,
-	docID db.ID,
+	docID types.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
 	if err := d.UpdateSyncedSeq(ctx, clientInfo, docID, serverSeq); err != nil {
@@ -518,7 +572,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 func (d *DB) UpdateSyncedSeq(
 	ctx context.Context,
 	clientInfo *db.ClientInfo,
-	docID db.ID,
+	docID types.ID,
 	serverSeq uint64,
 ) error {
 	txn := d.db.Txn(true)
@@ -561,7 +615,7 @@ func (d *DB) UpdateSyncedSeq(
 		DocID:     docID,
 		ClientID:  clientInfo.ID,
 		Lamport:   ticket.Lamport(),
-		ActorID:   db.ID(ticket.ActorID().String()),
+		ActorID:   types.ID(ticket.ActorID().String()),
 		ServerSeq: serverSeq,
 	}
 	if raw == nil {
@@ -581,7 +635,7 @@ func (d *DB) UpdateSyncedSeq(
 // FindDocInfosByPreviousIDAndPageSize returns the docInfos of the given previousID and pageSize.
 func (d *DB) FindDocInfosByPreviousIDAndPageSize(
 	ctx context.Context,
-	previousID db.ID,
+	previousID types.ID,
 	pageSize int,
 	isForward bool,
 ) ([]*db.DocInfo, error) {
@@ -632,7 +686,7 @@ func (d *DB) FindDocInfosByPreviousIDAndPageSize(
 
 func (d *DB) findTicketByServerSeq(
 	txn *memdb.Txn,
-	docID db.ID,
+	docID types.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
 	if serverSeq == change.InitialServerSeq {
@@ -670,6 +724,6 @@ func (d *DB) findTicketByServerSeq(
 	), nil
 }
 
-func newID() db.ID {
-	return db.ID(primitive.NewObjectID().Hex())
+func newID() types.ID {
+	return types.ID(primitive.NewObjectID().Hex())
 }

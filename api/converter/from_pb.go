@@ -19,15 +19,35 @@ package converter
 import (
 	"fmt"
 
+	protoTypes "github.com/gogo/protobuf/types"
+
 	"github.com/yorkie-team/yorkie/api"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
+
+// FromProject converts the given Protobuf formats to model format.
+func FromProject(pbProject *api.Project) (*types.Project, error) {
+	createdAt, err := protoTypes.TimestampFromProto(pbProject.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.Project{
+		ID:                 types.ID(pbProject.Id),
+		Name:               pbProject.Name,
+		PublicKey:          pbProject.PublicKey,
+		SecretKey:          pbProject.SecretKey,
+		AuthWebhookURL:     pbProject.AuthWebhookUrl,
+		AuthWebhookMethods: pbProject.AuthWebhookMethods,
+		CreatedAt:          createdAt,
+	}, nil
+}
 
 // FromClient converts the given Protobuf formats to model format.
 func FromClient(pbClient *api.Client) (*types.Client, error) {

@@ -23,6 +23,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
@@ -36,7 +37,7 @@ func TestDB(t *testing.T) {
 	memdb, err := memory.New()
 	assert.NoError(t, err)
 
-	notExistsID := db.ID("000000000000000000000000")
+	notExistsID := types.ID("000000000000000000000000")
 
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		// try to deactivate the client with not exists ID.

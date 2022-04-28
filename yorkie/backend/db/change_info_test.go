@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
@@ -34,7 +35,7 @@ func TestChangeInfo(t *testing.T) {
 
 		expectedID := actorID.String()
 		changeInfo := db.ChangeInfo{
-			ActorID: db.ID(expectedID),
+			ActorID: types.ID(expectedID),
 		}
 
 		change, err := changeInfo.ToChange()

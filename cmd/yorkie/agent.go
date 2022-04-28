@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package cli
+package main
 
 import (
 	"fmt"
@@ -63,7 +63,7 @@ var (
 func newAgentCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "agent [options]",
-		Short: "Starts yorkie agent",
+		Short: "Start yorkie agent",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
@@ -282,6 +282,13 @@ func init() {
 		etcd.DefaultLockLeaseTime,
 		"ETCD's lease time for lock",
 	)
+	cmd.Flags().BoolVar(
+		&conf.Backend.UseDefaultProject,
+		"backend-use-default-project",
+		yorkie.DefaultUseDefaultProject,
+		"Whether to use the default project. Even if public key is not provided from the client, "+
+			"the default project will be used for the request.",
+	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.SnapshotThreshold,
 		"backend-snapshot-threshold",
@@ -294,19 +301,6 @@ func init() {
 		"backend-snapshot-interval",
 		yorkie.DefaultSnapshotInterval,
 		"Interval of changes to create a snapshot.",
-	)
-	cmd.Flags().StringVar(
-		&conf.Backend.AuthWebhookURL,
-		"auth-webhook-url",
-		"",
-		"URL of remote service to query authorization",
-	)
-	cmd.Flags().StringSliceVar(
-		&conf.Backend.AuthWebhookMethods,
-		"auth-webhook-methods",
-		[]string{},
-		"List of methods that require authorization checks."+
-			" If no value is specified, all methods will be checked.",
 	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.AuthWebhookMaxRetries,

@@ -15,6 +15,8 @@
  */
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
+
 package api;
 
 /////////////////////////////////////////
@@ -216,6 +218,16 @@ message TextNodeID {
 /////////////////////////////////////////
 // Messages for Common                 //
 /////////////////////////////////////////
+
+message Project {
+  string id = 1;
+  string name = 2;
+  string public_key = 3;
+  string secret_key = 4;
+  string auth_webhook_url = 5;
+  repeated string auth_webhook_methods = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
 
 message DocumentSummary {
   string id = 1;

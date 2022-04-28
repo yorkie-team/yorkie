@@ -38,6 +38,11 @@ Housekeeping:
 
 # Backend is the configuration for the backend of Yorkie.
 Backend:
+  # UseDefaultProject is whether to use the default project (default: true).
+  # If public key is not provided from the client, the default project will be
+  # used. If we are using agent as single-tenant mode, this should be set to true.
+  UseDefaultProject: true
+
   # SnapshotThreshold is the threshold that determines if changes should be
   # sent with snapshot when the number of changes is greater than this value.
   SnapshotThreshold: 500

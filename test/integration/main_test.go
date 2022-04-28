@@ -26,10 +26,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie"
 	"github.com/yorkie-team/yorkie/yorkie/logging"
@@ -89,8 +90,12 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 	}
 }
 
-func createConn() (*grpc.ClientConn, error) {
-	conn, err := grpc.Dial(defaultAgent.RPCAddr(), grpc.WithInsecure())
+// clientConn is a helper function to create a client connection.
+func clientConn() (*grpc.ClientConn, error) {
+	conn, err := grpc.Dial(
+		defaultAgent.RPCAddr(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +103,8 @@ func createConn() (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-func createActivatedClients(t *testing.T, n int) (clients []*client.Client) {
+// activeClient is a helper function to create active clients.
+func activeClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
 			defaultAgent.RPCAddr(),
@@ -111,16 +117,13 @@ func createActivatedClients(t *testing.T, n int) (clients []*client.Client) {
 
 		clients = append(clients, c)
 	}
-
 	return
 }
 
+// cleanupClients is a helper function to clean up clients.
 func cleanupClients(t *testing.T, clients []*client.Client) {
 	for _, c := range clients {
-		err := c.Deactivate(context.Background())
-		assert.NoError(t, err)
-
-		err = c.Close()
-		assert.NoError(t, err)
+		assert.NoError(t, c.Deactivate(context.Background()))
+		assert.NoError(t, c.Close())
 	}
 }

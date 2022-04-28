@@ -27,9 +27,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
+	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
@@ -44,31 +44,22 @@ var (
 	ErrWebhookTimeout = errors.New("webhook timeout")
 )
 
-// AccessAttributes returns an array of AccessAttribute from the given pack.
-func AccessAttributes(pack *change.Pack) []types.AccessAttribute {
-	verb := types.Read
-	if pack.HasChanges() {
-		verb = types.ReadWrite
-	}
-
-	// NOTE(hackerwins): In the future, methods such as bulk PushPull can be
-	// added, so we declare it as an array.
-	return []types.AccessAttribute{{
-		Key:  pack.DocumentKey.CombinedKey(),
-		Verb: verb,
-	}}
-}
-
-// VerifyAccess verifies the given access.
-func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessInfo) error {
-	if !be.Config.RequireAuth(info.Method) {
+// verifyAccess verifies the given user is allowed to access the given method.
+func verifyAccess(
+	ctx context.Context,
+	be *backend.Backend,
+	projectInfo *db.ProjectInfo,
+	accessInfo *types.AccessInfo,
+	md Metadata,
+) error {
+	if !projectInfo.RequireAuth(accessInfo.Method) {
 		return nil
 	}
 
 	reqBody, err := json.Marshal(types.AuthWebhookRequest{
-		Token:      TokenFromCtx(ctx),
-		Method:     info.Method,
-		Attributes: info.Attributes,
+		Token:      md.Authorization,
+		Method:     accessInfo.Method,
+		Attributes: accessInfo.Attributes,
 	})
 	if err != nil {
 		return err
@@ -86,7 +77,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, info *types.AccessIn
 	var authResp *types.AuthWebhookResponse
 	if err := withExponentialBackoff(ctx, be.Config, func() (int, error) {
 		resp, err := http.Post(
-			be.Config.AuthWebhookURL,
+			projectInfo.AuthWebhookURL,
 			"application/json",
 			bytes.NewBuffer(reqBody),
 		)

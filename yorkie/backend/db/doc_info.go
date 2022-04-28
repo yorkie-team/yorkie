@@ -19,15 +19,16 @@ package db
 import (
 	"time"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 // DocInfo is a structure representing information of the document.
 type DocInfo struct {
-	ID          ID        `bson:"_id"`
+	ID          types.ID  `bson:"_id"`
 	CombinedKey string    `bson:"key"`
 	ServerSeq   uint64    `bson:"server_seq"`
-	Owner       ID        `bson:"owner"`
+	Owner       types.ID  `bson:"owner"`
 	CreatedAt   time.Time `bson:"created_at"`
 	AccessedAt  time.Time `bson:"accessed_at"`
 	UpdatedAt   time.Time `bson:"updated_at"`

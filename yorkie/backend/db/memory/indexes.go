@@ -37,10 +37,15 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
-				"client_api_key": {
-					Name:    "client_api_key",
+				"public_key": {
+					Name:    "public_key",
 					Unique:  true,
-					Indexer: &memdb.StringFieldIndex{Field: "ClientAPIKey"},
+					Indexer: &memdb.StringFieldIndex{Field: "PublicKey"},
+				},
+				"secret_key": {
+					Name:    "secret_key",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "SecretKey"},
 				},
 			},
 		},

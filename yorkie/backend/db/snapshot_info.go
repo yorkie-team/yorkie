@@ -18,15 +18,17 @@ package db
 
 import (
 	"time"
+
+	"github.com/yorkie-team/yorkie/api/types"
 )
 
 // SnapshotInfo is a structure representing information of the snapshot.
 type SnapshotInfo struct {
 	// ID is the unique ID of the snapshot.
-	ID ID `bson:"_id"`
+	ID types.ID `bson:"_id"`
 
 	// DocID is the ID of the document which the snapshot belongs to.
-	DocID ID `bson:"doc_id"`
+	DocID types.ID `bson:"doc_id"`
 
 	// ServerSeq is the sequence number of the server which the snapshot belongs to.
 	ServerSeq uint64 `bson:"server_seq"`

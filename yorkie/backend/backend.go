@@ -17,6 +17,7 @@
 package backend
 
 import (
+	"context"
 	"os"
 	"time"
 
@@ -41,11 +42,12 @@ type Backend struct {
 	Config    *Config
 	agentInfo *sync.AgentInfo
 
-	Background       *background.Background
-	DB               db.DB
-	Coordinator      sync.Coordinator
-	Metrics          *prometheus.Metrics
-	Housekeeping     *housekeeping.Housekeeping
+	DB           db.DB
+	Coordinator  sync.Coordinator
+	Metrics      *prometheus.Metrics
+	Background   *background.Background
+	Housekeeping *housekeeping.Housekeeping
+
 	AuthWebhookCache *cache.LRUExpireCache
 }
 
@@ -55,7 +57,7 @@ func New(
 	mongoConf *mongo.Config,
 	etcdConf *etcd.Config,
 	housekeepingConf *housekeeping.Config,
-	rpcAddr string,
+	clusterAddr string,
 	metrics *prometheus.Metrics,
 ) (*Backend, error) {
 	hostname, err := os.Hostname()
@@ -64,10 +66,10 @@ func New(
 	}
 
 	agentInfo := &sync.AgentInfo{
-		ID:        xid.New().String(),
-		Hostname:  hostname,
-		RPCAddr:   rpcAddr,
-		UpdatedAt: time.Now(),
+		ID:          xid.New().String(),
+		Hostname:    hostname,
+		ClusterAddr: clusterAddr,
+		UpdatedAt:   time.Now(),
 	}
 
 	bg := background.New()
@@ -122,26 +124,31 @@ func New(
 	logging.DefaultLogger().Infof(
 		"backend created: id: %s, rpc: %s: db: %s",
 		agentInfo.ID,
-		agentInfo.RPCAddr,
+		agentInfo.ClusterAddr,
 		dbInfo,
 	)
+
+	_, err = database.EnsureDefaultProjectInfo(context.Background())
+	if err != nil {
+		return nil, err
+	}
 
 	return &Backend{
 		Config:    conf,
 		agentInfo: agentInfo,
 
-		Background:       bg,
-		Metrics:          metrics,
-		DB:               database,
-		Coordinator:      coordinator,
-		Housekeeping:     keeping,
+		Background:   bg,
+		Metrics:      metrics,
+		DB:           database,
+		Coordinator:  coordinator,
+		Housekeeping: keeping,
+
 		AuthWebhookCache: authWebhookCache,
 	}, nil
 }
 
 // Shutdown closes all resources of this instance.
 func (b *Backend) Shutdown() error {
-	// this will wait for all goroutines to exit
 	b.Background.Close()
 
 	if err := b.Housekeeping.Stop(); err != nil {
@@ -159,7 +166,7 @@ func (b *Backend) Shutdown() error {
 	logging.DefaultLogger().Infof(
 		"backend stoped: id: %s, rpc: %s",
 		b.agentInfo.ID,
-		b.agentInfo.RPCAddr,
+		b.agentInfo.ClusterAddr,
 	)
 
 	return nil

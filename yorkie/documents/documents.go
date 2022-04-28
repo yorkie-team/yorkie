@@ -19,9 +19,8 @@ package documents
 import (
 	"context"
 
-	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/packs"
 )
 
@@ -29,7 +28,7 @@ import (
 func ListDocumentSummaries(
 	ctx context.Context,
 	be *backend.Backend,
-	previousID db.ID,
+	previousID types.ID,
 	pageSize int,
 	isForward bool,
 ) ([]*types.DocumentSummary, error) {

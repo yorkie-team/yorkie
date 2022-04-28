@@ -29,10 +29,10 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 type status int
@@ -102,10 +102,8 @@ func New(opts ...Option) (*Client, error) {
 		opt(&options)
 	}
 
-	var k string
-	if options.Key != "" {
-		k = options.Key
-	} else {
+	k := options.Key
+	if k == "" {
 		k = xid.New().String()
 	}
 
@@ -115,34 +113,28 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	var dialOptions []grpc.DialOption
+
+	transportCreds := grpc.WithTransportCredentials(insecure.NewCredentials())
 	if options.CertFile != "" {
-		creds, err := credentials.NewClientTLSFromFile(
-			options.CertFile,
-			options.ServerNameOverride,
-		)
+		creds, err := credentials.NewClientTLSFromFile(options.CertFile, options.ServerNameOverride)
 		if err != nil {
 			return nil, err
 		}
-		dialOptions = append(dialOptions, grpc.WithTransportCredentials(creds))
-	} else {
-		dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		transportCreds = grpc.WithTransportCredentials(creds)
 	}
+	dialOptions = append(dialOptions, transportCreds)
 
-	if options.Token != "" {
-		authInterceptor := NewAuthInterceptor(options.Token)
-		dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
-		dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
-	}
+	authInterceptor := NewAuthInterceptor(options.APIKey, options.Token)
+	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
+	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
 
-	var logger *zap.Logger
-	var err error
-	if options.Logger != nil {
-		logger = options.Logger
-	} else {
-		logger, err = zap.NewProduction()
+	logger := options.Logger
+	if logger == nil {
+		l, err := zap.NewProduction()
 		if err != nil {
 			return nil, err
 		}
+		logger = l
 	}
 
 	return &Client{

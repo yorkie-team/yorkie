@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
@@ -49,7 +50,7 @@ func Deactivate(
 	be *backend.Backend,
 	actorID *time.ActorID,
 ) (*db.ClientInfo, error) {
-	return be.DB.DeactivateClient(ctx, db.IDFromActorID(actorID))
+	return be.DB.DeactivateClient(ctx, types.IDFromActorID(actorID))
 }
 
 // FindClient finds the client with the given id.
@@ -60,7 +61,7 @@ func FindClient(
 ) (*db.ClientInfo, error) {
 	return be.DB.FindClientInfoByID(
 		ctx,
-		db.IDFromActorID(clientID),
+		types.IDFromActorID(clientID),
 	)
 }
 
@@ -72,7 +73,7 @@ func FindClientAndDocument(
 	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*db.ClientInfo, *db.DocInfo, error) {
-	clientInfo, err := be.DB.FindClientInfoByID(ctx, db.IDFromActorID(actorID))
+	clientInfo, err := be.DB.FindClientInfoByID(ctx, types.IDFromActorID(actorID))
 	if err != nil {
 		return nil, nil, err
 	}

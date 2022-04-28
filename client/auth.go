@@ -25,13 +25,15 @@ import (
 
 // AuthInterceptor is an interceptor for authentication.
 type AuthInterceptor struct {
-	token string
+	apiKey string
+	token  string
 }
 
 // NewAuthInterceptor creates a new instance of AuthInterceptor.
-func NewAuthInterceptor(token string) *AuthInterceptor {
+func NewAuthInterceptor(apiKey, token string) *AuthInterceptor {
 	return &AuthInterceptor{
-		token: token,
+		apiKey: apiKey,
+		token:  token,
 	}
 }
 
@@ -46,7 +48,10 @@ func (i *AuthInterceptor) Unary() grpc.UnaryClientInterceptor {
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", i.token))
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+			"x-api-key", i.apiKey,
+			"authorization", i.token,
+		))
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }
@@ -61,7 +66,10 @@ func (i *AuthInterceptor) Stream() grpc.StreamClientInterceptor {
 		streamer grpc.Streamer,
 		opts ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
-		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", i.token))
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+			"x-api-key", i.apiKey,
+			"authorization", i.token,
+		))
 		return streamer(ctx, desc, cc, method, opts...)
 	}
 }

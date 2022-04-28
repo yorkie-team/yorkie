@@ -23,13 +23,14 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
 
 func TestRegistry(t *testing.T) {
 	registry := newRegistryBuilder().Build()
 
-	id := db.ID(primitive.NewObjectID().Hex())
+	id := types.ID(primitive.NewObjectID().Hex())
 	data, err := bson.MarshalWithRegistry(registry, bson.M{
 		"_id": id,
 	})

@@ -26,10 +26,11 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 	"github.com/yorkie-team/yorkie/yorkie/documents"
 	"github.com/yorkie-team/yorkie/yorkie/logging"
+	"github.com/yorkie-team/yorkie/yorkie/projects"
 )
 
 // ErrInvalidAdminPort occurs when the port in the config is invalid.
@@ -49,7 +50,7 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Server is the gRPC server for admin.
+// Server is the gRPC server for admin service.
 type Server struct {
 	conf       *Config
 	grpcServer *grpc.Server
@@ -67,6 +68,10 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 	}
 
 	api.RegisterAdminServer(grpcServer, server)
+
+	// TODO(hackerwins): ClusterServer need to be handled by different authentication mechanism.
+	// Consider extracting the servers to another grpcServer.
+	api.RegisterClusterServer(grpcServer, newClusterServer(be))
 
 	return server
 }
@@ -110,6 +115,46 @@ func (s *Server) listenAndServeGRPC() error {
 	return nil
 }
 
+// CreateProject creates a new project.
+func (s *Server) CreateProject(
+	ctx context.Context,
+	req *api.CreateProjectRequest,
+) (*api.CreateProjectResponse, error) {
+	project, err := projects.CreateProject(ctx, s.backend, req.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	pbProject, err := converter.ToProject(project)
+	if err != nil {
+		return nil, err
+	}
+	return &api.CreateProjectResponse{
+		Project: pbProject,
+	}, nil
+}
+
+// UpdateProject updates the project.
+func (s *Server) UpdateProject(
+	ctx context.Context,
+	req *api.UpdateProjectRequest,
+) (*api.UpdateProjectResponse, error) {
+	project, err := converter.FromProject(req.Project)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := projects.UpdateProject(
+		ctx,
+		s.backend,
+		project,
+	); err != nil {
+		return nil, err
+	}
+
+	return &api.UpdateProjectResponse{}, nil
+}
+
 // ListDocuments lists documents.
 func (s *Server) ListDocuments(
 	ctx context.Context,
@@ -118,7 +163,7 @@ func (s *Server) ListDocuments(
 	docs, err := documents.ListDocumentSummaries(
 		ctx,
 		s.backend,
-		db.ID(req.PreviousId),
+		types.ID(req.PreviousId),
 		int(req.PageSize),
 		req.IsForward,
 	)

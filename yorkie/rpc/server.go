@@ -44,20 +44,20 @@ type Server struct {
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	loggingInterceptor := interceptors.NewLoggingInterceptor()
-	authInterceptor := interceptors.NewAuthInterceptor(be.Config.AuthWebhookURL)
+	metadataInterceptor := interceptors.NewMetadataInterceptor(be)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			loggingInterceptor.Unary(),
 			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
-			authInterceptor.Unary(),
+			metadataInterceptor.Unary(),
 			defaultInterceptor.Unary(),
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			loggingInterceptor.Stream(),
 			be.Metrics.ServerMetrics().StreamServerInterceptor(),
-			authInterceptor.Stream(),
+			metadataInterceptor.Stream(),
 			defaultInterceptor.Stream(),
 		)),
 	}
@@ -81,10 +81,6 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	healthpb.RegisterHealthServer(grpcServer, health.NewServer())
 	api.RegisterYorkieServer(grpcServer, newYorkieServer(yorkieServiceCtx, be))
 	be.Metrics.RegisterGRPCServer(grpcServer)
-
-	// TODO(hackerwins): ClusterServer need to be handled by different authentication mechanism.
-	// Consider extracting the servers to another grpcServer.
-	api.RegisterClusterServer(grpcServer, newClusterServer(be))
 
 	return &Server{
 		conf:                conf,

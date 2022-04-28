@@ -23,7 +23,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/bsoncodec"
 	"go.mongodb.org/mongo-driver/bson/bsonoptions"
 
-	"github.com/yorkie-team/yorkie/yorkie/backend/db"
+	"github.com/yorkie-team/yorkie/api/types"
 )
 
 func newRegistryBuilder() *bsoncodec.RegistryBuilder {
@@ -34,7 +34,7 @@ func newRegistryBuilder() *bsoncodec.RegistryBuilder {
 	bson.PrimitiveCodecs{}.RegisterPrimitiveCodecs(rb)
 
 	rb.RegisterCodec(
-		reflect.TypeOf(db.ID("")),
+		reflect.TypeOf(types.ID("")),
 		bsoncodec.NewStringCodec(bsonoptions.StringCodec().SetDecodeObjectIDAsHex(true)),
 	)
 

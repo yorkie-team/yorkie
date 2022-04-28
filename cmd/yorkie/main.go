@@ -16,10 +16,6 @@
 
 package main
 
-import (
-	"github.com/yorkie-team/yorkie/internal/cli"
-)
-
 func main() {
-	cli.Run()
+	Run()
 }

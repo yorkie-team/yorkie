@@ -64,7 +64,9 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Housekeeping is the housekeeping service.
+// Housekeeping is the housekeeping service. It periodically runs housekeeping
+// tasks. It is responsible for deactivating clients that have not been active
+// for a long time.
 type Housekeeping struct {
 	database    db.DB
 	coordinator sync.Coordinator

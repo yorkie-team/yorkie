@@ -41,6 +41,16 @@ type collectionInfo struct {
 // Below are names and indexes information of collections that stores Yorkie data.
 var collectionInfos = []collectionInfo{
 	{
+		name: colProjects,
+		indexes: []mongo.IndexModel{{
+			Keys:    bsonx.Doc{{Key: "public_key", Value: bsonx.Int32(1)}},
+			Options: options.Index().SetUnique(true),
+		}, {
+			Keys:    bsonx.Doc{{Key: "secret_key", Value: bsonx.Int32(1)}},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
 		name: colClients,
 		indexes: []mongo.IndexModel{{
 			Keys:    bsonx.Doc{{Key: "key", Value: bsonx.Int32(1)}},

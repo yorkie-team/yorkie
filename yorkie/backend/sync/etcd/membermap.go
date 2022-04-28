@@ -60,10 +60,10 @@ func (c *Client) Members() map[string]*sync.AgentInfo {
 	memberMap := make(map[string]*sync.AgentInfo)
 	for _, member := range c.memberMap {
 		memberMap[member.ID] = &sync.AgentInfo{
-			ID:        member.ID,
-			Hostname:  member.Hostname,
-			RPCAddr:   member.RPCAddr,
-			UpdatedAt: member.UpdatedAt,
+			ID:          member.ID,
+			Hostname:    member.Hostname,
+			ClusterAddr: member.ClusterAddr,
+			UpdatedAt:   member.UpdatedAt,
 		}
 	}
 
