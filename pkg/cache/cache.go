@@ -72,7 +72,7 @@ func (c *LRUExpireCache) Add(
 	if ok {
 		c.evictionList.MoveToFront(oldElement)
 		oldElement.Value.(*cacheEntry).value = value
-		oldElement.Value.(*cacheEntry).expireTime = time.Now()
+		oldElement.Value.(*cacheEntry).expireTime = time.Now().Add(ttl)
 		return
 	}
 

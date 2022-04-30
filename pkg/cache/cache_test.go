@@ -52,4 +52,22 @@ func TestCache(t *testing.T) {
 		assert.False(t, ok)
 		assert.Nil(t, response)
 	})
+
+	t.Run("update expired cache test", func(t *testing.T) {
+		lruCache, err := cache.NewLRUExpireCache(1)
+		assert.NoError(t, err)
+
+		var ttl time.Duration
+		ttl = time.Minute
+		lruCache.Add("request", "response1", ttl)
+		response1, ok := lruCache.Get("request")
+		assert.True(t, ok)
+		assert.Equal(t, "response1", response1)
+
+		ttl = time.Minute
+		lruCache.Add("request", "response2", ttl)
+		response2, ok := lruCache.Get("request")
+		assert.True(t, ok)
+		assert.Equal(t, "response2", response2)
+	})
 }
