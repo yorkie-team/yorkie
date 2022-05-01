@@ -32,9 +32,8 @@ import (
 )
 
 func TestSnapshot(t *testing.T) {
-	clients := createActivatedClients(t, 2)
-	c1 := clients[0]
-	c2 := clients[1]
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
 	defer cleanupClients(t, clients)
 
 	t.Run("snapshot test", func(t *testing.T) {
@@ -49,7 +48,7 @@ func TestSnapshot(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 01. Update changes over snapshot threshold.
-		for i := 0; i < helper.SnapshotThreshold+1; i++ {
+		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
 			err := d1.Update(func(root *proxy.ObjectProxy) error {
 				root.SetInteger(fmt.Sprintf("%d", i), i)
 				return nil

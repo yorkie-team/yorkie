@@ -37,9 +37,9 @@ import (
 var testStartedAt int64
 
 // Below are the values of the Yorkie config used in the test.
-const (
+var (
 	RPCPort            = 21101
-	RPCMaxRequestBytes = 4 * 1024 * 1024
+	RPCMaxRequestBytes = uint64(4 * 1024 * 1024)
 
 	ProfilingPort = 21102
 
@@ -49,24 +49,21 @@ const (
 	HousekeepingDeactivateThreshold = 1 * gotime.Minute
 	HousekeepingCandidatesLimit     = 10
 
-	MongoConnectionURI     = "mongodb://localhost:27017"
-	MongoConnectionTimeout = "5s"
-	MongoPingTimeout       = "5s"
-	SnapshotThreshold      = 10
-	Collection             = "test-collection"
-
+	SnapshotThreshold          = uint64(10)
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
 	AuthWebhookSize            = 100
 	AuthWebhookCacheAuthTTL    = 10 * gotime.Second
 	AuthWebhookCacheUnauthTTL  = 10 * gotime.Second
 
+	MongoConnectionURI     = "mongodb://localhost:27017"
+	MongoConnectionTimeout = "5s"
+	MongoPingTimeout       = "5s"
+
+	ETCDEndpoints     = []string{"localhost:2379"}
 	ETCDDialTimeout   = 5 * gotime.Second
 	ETCDLockLeaseTime = 30 * gotime.Second
-)
 
-var (
-	// ETCDEndpoints is the list of endpoints to connect to for etcd.
-	ETCDEndpoints = []string{"localhost:2379"}
+	Collection = "test-collection"
 )
 
 func init() {
@@ -97,7 +94,7 @@ func TextChangeContext(root *json.Root) *change.Context {
 var portOffset = 0
 
 // TestConfig returns config for creating Yorkie instance.
-func TestConfig(authWebhook string) *yorkie.Config {
+func TestConfig() *yorkie.Config {
 	portOffset += 100
 	return &yorkie.Config{
 		RPC: &rpc.Config{
@@ -116,8 +113,8 @@ func TestConfig(authWebhook string) *yorkie.Config {
 			CandidatesLimit:     HousekeepingCandidatesLimit,
 		},
 		Backend: &backend.Config{
+			UseDefaultProject:          true,
 			SnapshotThreshold:          SnapshotThreshold,
-			AuthWebhookURL:             authWebhook,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
 			AuthWebhookCacheSize:       AuthWebhookSize,
 			AuthWebhookCacheAuthTTL:    AuthWebhookCacheAuthTTL.String(),
@@ -139,7 +136,7 @@ func TestConfig(authWebhook string) *yorkie.Config {
 
 // TestYorkie returns a new instance of Yorkie for testing.
 func TestYorkie() *yorkie.Yorkie {
-	y, err := yorkie.New(TestConfig(""))
+	y, err := yorkie.New(TestConfig())
 	if err != nil {
 		log.Fatal(err)
 	}

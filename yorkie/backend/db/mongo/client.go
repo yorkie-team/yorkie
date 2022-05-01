@@ -22,11 +22,13 @@ import (
 	gotime "time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -88,6 +90,103 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// EnsureDefaultProjectInfo creates the default project info if it does not exist.
+func (c *Client) EnsureDefaultProjectInfo(ctx context.Context) (*db.ProjectInfo, error) {
+	candidate := db.NewProjectInfo(db.DefaultProjectName)
+	candidate.ID = db.DefaultProjectID
+	encodedID, err := encodeID(candidate.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = c.collection(colProjects).UpdateOne(ctx, bson.M{
+		"_id": encodedID,
+	}, bson.M{
+		"$setOnInsert": bson.M{
+			"name":       candidate.Name,
+			"public_key": candidate.PublicKey,
+			"secret_key": candidate.SecretKey,
+			"created_at": gotime.Now(),
+		},
+	}, options.Update().SetUpsert(true))
+	if err != nil {
+		return nil, err
+	}
+
+	result := c.collection(colProjects).FindOne(ctx, bson.M{
+		"_id": encodedID,
+	})
+
+	info := db.ProjectInfo{}
+	if err := result.Decode(&info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("default: %w", db.ErrProjectNotFound)
+		}
+		return nil, err
+	}
+
+	return &info, nil
+}
+
+// CreateProjectInfo creates a new project.
+func (c *Client) CreateProjectInfo(ctx context.Context, name string) (*db.ProjectInfo, error) {
+	info := db.NewProjectInfo(name)
+	result, err := c.collection(colProjects).InsertOne(ctx, bson.M{
+		"name":       info.Name,
+		"public_key": info.PublicKey,
+		"secret_key": info.SecretKey,
+		"created_at": gotime.Now(),
+	})
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	info.ID = types.ID(result.InsertedID.(primitive.ObjectID).Hex())
+	return info, nil
+}
+
+// UpdateProjectInfo updates the project info.
+func (c *Client) UpdateProjectInfo(ctx context.Context, info *db.ProjectInfo) error {
+	encodedID, err := encodeID(info.ID)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.collection(colProjects).ReplaceOne(ctx, bson.M{
+		"_id": encodedID,
+	}, bson.M{
+		"name":                 info.Name,
+		"public_key":           info.PublicKey,
+		"secret_key":           info.SecretKey,
+		"auth_webhook_url":     info.AuthWebhookURL,
+		"auth_webhook_methods": info.AuthWebhookMethods,
+		"created_at":           gotime.Now(),
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// FindProjectInfoByPublicKey returns a project by public key.
+func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*db.ProjectInfo, error) {
+	result := c.collection(colProjects).FindOne(ctx, bson.M{
+		"public_key": publicKey,
+	})
+
+	projectInfo := db.ProjectInfo{}
+	if err := result.Decode(&projectInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", publicKey, db.ErrProjectNotFound)
+		}
+		return nil, err
+	}
+
+	return &projectInfo, nil
+}
+
 // ActivateClient activates the client of the given key.
 func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, error) {
 	now := gotime.Now()
@@ -128,7 +227,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 }
 
 // DeactivateClient deactivates the client of the given ID.
-func (c *Client) DeactivateClient(ctx context.Context, clientID db.ID) (*db.ClientInfo, error) {
+func (c *Client) DeactivateClient(ctx context.Context, clientID types.ID) (*db.ClientInfo, error) {
 	encodedClientID, err := encodeID(clientID)
 	if err != nil {
 		return nil, err
@@ -155,7 +254,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID db.ID) (*db.Clie
 }
 
 // FindClientInfoByID finds the client of the given ID.
-func (c *Client) FindClientInfoByID(ctx context.Context, clientID db.ID) (*db.ClientInfo, error) {
+func (c *Client) FindClientInfoByID(ctx context.Context, clientID types.ID) (*db.ClientInfo, error) {
 	encodedClientID, err := encodeID(clientID)
 	if err != nil {
 		return nil, err
@@ -381,7 +480,7 @@ func (c *Client) CreateChangeInfos(
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (c *Client) FindChangesBetweenServerSeqs(
 	ctx context.Context,
-	docID db.ID,
+	docID types.ID,
 	from uint64,
 	to uint64,
 ) ([]*change.Change, error) {
@@ -405,7 +504,7 @@ func (c *Client) FindChangesBetweenServerSeqs(
 // FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
 func (c *Client) FindChangeInfosBetweenServerSeqs(
 	ctx context.Context,
-	docID db.ID,
+	docID types.ID,
 	from uint64,
 	to uint64,
 ) ([]*db.ChangeInfo, error) {
@@ -438,7 +537,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 // CreateSnapshotInfo stores the snapshot of the given document.
 func (c *Client) CreateSnapshotInfo(
 	ctx context.Context,
-	docID db.ID,
+	docID types.ID,
 	doc *document.InternalDocument,
 ) error {
 	encodedDocID, err := encodeID(docID)
@@ -467,7 +566,7 @@ func (c *Client) CreateSnapshotInfo(
 // FindClosestSnapshotInfo finds the last snapshot of the given document.
 func (c *Client) FindClosestSnapshotInfo(
 	ctx context.Context,
-	docID db.ID,
+	docID types.ID,
 	serverSeq uint64,
 ) (*db.SnapshotInfo, error) {
 	encodedDocID, err := encodeID(docID)
@@ -506,7 +605,7 @@ func (c *Client) FindClosestSnapshotInfo(
 func (c *Client) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
 	clientInfo *db.ClientInfo,
-	docID db.ID,
+	docID types.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
 	if err := c.UpdateSyncedSeq(ctx, clientInfo, docID, serverSeq); err != nil {
@@ -556,7 +655,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 // FindDocInfosByPreviousIDAndPageSize returns the docInfos of the given previousID and pageSize.
 func (c *Client) FindDocInfosByPreviousIDAndPageSize(
 	ctx context.Context,
-	previousID db.ID,
+	previousID types.ID,
 	pageSize int,
 	isForward bool,
 ) ([]*db.DocInfo, error) {
@@ -600,7 +699,7 @@ func (c *Client) FindDocInfosByPreviousIDAndPageSize(
 func (c *Client) UpdateSyncedSeq(
 	ctx context.Context,
 	clientInfo *db.ClientInfo,
-	docID db.ID,
+	docID types.ID,
 	serverSeq uint64,
 ) error {
 	encodedDocID, err := encodeID(docID)
@@ -653,7 +752,7 @@ func (c *Client) UpdateSyncedSeq(
 
 func (c *Client) findTicketByServerSeq(
 	ctx context.Context,
-	docID db.ID,
+	docID types.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
 	if serverSeq == change.InitialServerSeq {

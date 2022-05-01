@@ -20,6 +20,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 )
 
@@ -53,7 +54,7 @@ type ClientDocInfo struct {
 // ClientInfo is a structure representing information of a client.
 type ClientInfo struct {
 	// ID is the unique ID of the client.
-	ID ID `bson:"_id"`
+	ID types.ID `bson:"_id"`
 
 	// Key is the key of the client. It is used to identify the client by users.
 	Key string `bson:"key"`
@@ -62,7 +63,7 @@ type ClientInfo struct {
 	Status string `bson:"status"`
 
 	// Documents is a map of document which is attached to the client.
-	Documents map[ID]*ClientDocInfo `bson:"documents"`
+	Documents map[types.ID]*ClientDocInfo `bson:"documents"`
 
 	// CreatedAt is the time when the client was created.
 	CreatedAt time.Time `bson:"created_at"`
@@ -74,13 +75,13 @@ type ClientInfo struct {
 }
 
 // AttachDocument attaches the given document to this client.
-func (i *ClientInfo) AttachDocument(docID ID) error {
+func (i *ClientInfo) AttachDocument(docID types.ID) error {
 	if i.Status != ClientActivated {
 		return ErrClientNotActivated
 	}
 
 	if i.Documents == nil {
-		i.Documents = make(map[ID]*ClientDocInfo)
+		i.Documents = make(map[types.ID]*ClientDocInfo)
 	}
 
 	if i.hasDocument(docID) && i.Documents[docID].Status == documentAttached {
@@ -98,7 +99,7 @@ func (i *ClientInfo) AttachDocument(docID ID) error {
 }
 
 // DetachDocument detaches the given document from this client.
-func (i *ClientInfo) DetachDocument(docID ID) error {
+func (i *ClientInfo) DetachDocument(docID types.ID) error {
 	if err := i.EnsureDocumentAttached(docID); err != nil {
 		return err
 	}
@@ -112,7 +113,7 @@ func (i *ClientInfo) DetachDocument(docID ID) error {
 }
 
 // IsAttached returns whether the given document is attached to this client.
-func (i *ClientInfo) IsAttached(docID ID) (bool, error) {
+func (i *ClientInfo) IsAttached(docID types.ID) (bool, error) {
 	if !i.hasDocument(docID) {
 		return false, ErrDocumentNeverAttached
 	}
@@ -121,7 +122,7 @@ func (i *ClientInfo) IsAttached(docID ID) (bool, error) {
 }
 
 // Checkpoint returns the checkpoint of the given document.
-func (i *ClientInfo) Checkpoint(docID ID) change.Checkpoint {
+func (i *ClientInfo) Checkpoint(docID types.ID) change.Checkpoint {
 	clientDocInfo := i.Documents[docID]
 	if clientDocInfo == nil {
 		return change.InitialCheckpoint
@@ -132,7 +133,7 @@ func (i *ClientInfo) Checkpoint(docID ID) change.Checkpoint {
 
 // UpdateCheckpoint updates the checkpoint of the given document.
 func (i *ClientInfo) UpdateCheckpoint(
-	docID ID,
+	docID types.ID,
 	cp change.Checkpoint,
 ) error {
 	if !i.hasDocument(docID) {
@@ -147,7 +148,7 @@ func (i *ClientInfo) UpdateCheckpoint(
 }
 
 // EnsureDocumentAttached ensures the given document is attached.
-func (i *ClientInfo) EnsureDocumentAttached(docID ID) error {
+func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 	if i.Status != ClientActivated {
 		return ErrClientNotActivated
 	}
@@ -165,7 +166,7 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 		return nil
 	}
 
-	documents := make(map[ID]*ClientDocInfo, len(i.Documents))
+	documents := make(map[types.ID]*ClientDocInfo, len(i.Documents))
 	for k, v := range i.Documents {
 		documents[k] = &ClientDocInfo{
 			Status:    v.Status,
@@ -184,6 +185,6 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 	}
 }
 
-func (i *ClientInfo) hasDocument(docID ID) bool {
+func (i *ClientInfo) hasDocument(docID types.ID) bool {
 	return i.Documents != nil && i.Documents[docID] != nil
 }

@@ -16,7 +16,8 @@ func (c *routineID) next() string {
 	return "b" + strconv.Itoa(int(next))
 }
 
-// Background is the background service.
+// Background is the background service. It is responsible for managing
+// background routines.
 type Background struct {
 	// closing is closed by backend close.
 	closing chan struct{}
@@ -60,7 +61,8 @@ func (b *Background) AttachGoroutine(f func(ctx context.Context)) {
 	}()
 }
 
-// Close closes the background service.
+// Close closes the background service. This will wait for all goroutines to
+// exit.
 func (b *Background) Close() {
 	b.wgMu.Lock()
 	close(b.closing)

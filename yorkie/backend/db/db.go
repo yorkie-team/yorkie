@@ -21,12 +21,16 @@ import (
 	"errors"
 	gotime "time"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 var (
+	// ErrProjectNotFound is returned when the project is not found.
+	ErrProjectNotFound = errors.New("project not found")
+
 	// ErrClientNotFound is returned when the client could not be found.
 	ErrClientNotFound = errors.New("client not found")
 
@@ -42,14 +46,26 @@ type DB interface {
 	// Close all resources of this database.
 	Close() error
 
+	// FindProjectInfoByPublicKey returns a project by public key.
+	FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*ProjectInfo, error)
+
+	// EnsureDefaultProjectInfo ensures that the default project exists.
+	EnsureDefaultProjectInfo(ctx context.Context) (*ProjectInfo, error)
+
+	// CreateProjectInfo creates a new project.
+	CreateProjectInfo(ctx context.Context, name string) (*ProjectInfo, error)
+
+	// UpdateProjectInfo updates the project.
+	UpdateProjectInfo(ctx context.Context, project *ProjectInfo) error
+
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, key string) (*ClientInfo, error)
 
 	// DeactivateClient deactivates the client of the given ID.
-	DeactivateClient(ctx context.Context, clientID ID) (*ClientInfo, error)
+	DeactivateClient(ctx context.Context, clientID types.ID) (*ClientInfo, error)
 
 	// FindClientInfoByID finds the client of the given ID.
-	FindClientInfoByID(ctx context.Context, clientID ID) (*ClientInfo, error)
+	FindClientInfoByID(ctx context.Context, clientID types.ID) (*ClientInfo, error)
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.
@@ -83,7 +99,7 @@ type DB interface {
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
 		ctx context.Context,
-		docID ID,
+		docID types.ID,
 		from uint64,
 		to uint64,
 	) ([]*change.Change, error)
@@ -91,23 +107,23 @@ type DB interface {
 	// FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
 	FindChangeInfosBetweenServerSeqs(
 		ctx context.Context,
-		docID ID,
+		docID types.ID,
 		from uint64,
 		to uint64,
 	) ([]*ChangeInfo, error)
 
 	// CreateSnapshotInfo stores the snapshot of the given document.
-	CreateSnapshotInfo(ctx context.Context, docID ID, doc *document.InternalDocument) error
+	CreateSnapshotInfo(ctx context.Context, docID types.ID, doc *document.InternalDocument) error
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
-	FindClosestSnapshotInfo(ctx context.Context, docID ID, serverSeq uint64) (*SnapshotInfo, error)
+	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq uint64) (*SnapshotInfo, error)
 
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 	// and returns the min synced ticket.
 	UpdateAndFindMinSyncedTicket(
 		ctx context.Context,
 		clientInfo *ClientInfo,
-		docID ID,
+		docID types.ID,
 		serverSeq uint64,
 	) (*time.Ticket, error)
 
@@ -115,14 +131,14 @@ type DB interface {
 	UpdateSyncedSeq(
 		ctx context.Context,
 		clientInfo *ClientInfo,
-		docID ID,
+		docID types.ID,
 		serverSeq uint64,
 	) error
 
 	// FindDocInfosByPreviousIDAndPageSize returns the documentInfos of the given previousID and pageSize.
 	FindDocInfosByPreviousIDAndPageSize(
 		ctx context.Context,
-		previousID ID,
+		previousID types.ID,
 		pageSize int,
 		isForward bool,
 	) ([]*DocInfo, error)

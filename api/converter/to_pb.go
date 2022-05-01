@@ -20,15 +20,35 @@ import (
 	"fmt"
 	"reflect"
 
+	protoTypes "github.com/gogo/protobuf/types"
+
 	"github.com/yorkie-team/yorkie/api"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
+
+// ToProject converts the given model to Protobuf.
+func ToProject(project *types.Project) (*api.Project, error) {
+	pbCreatedAt, err := protoTypes.TimestampProto(project.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.Project{
+		Id:                 project.ID.String(),
+		Name:               project.Name,
+		PublicKey:          project.PublicKey,
+		SecretKey:          project.SecretKey,
+		AuthWebhookUrl:     project.AuthWebhookURL,
+		AuthWebhookMethods: project.AuthWebhookMethods,
+		CreatedAt:          pbCreatedAt,
+	}, nil
+}
 
 // ToDocumentSummaries converts the given model to Protobuf.
 func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSummary {

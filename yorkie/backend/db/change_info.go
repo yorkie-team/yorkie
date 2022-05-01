@@ -21,6 +21,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -31,12 +32,12 @@ var ErrEncodeOperationFailed = errors.New("encode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	ID         ID       `bson:"_id"`
-	DocID      ID       `bson:"doc_id"`
+	ID         types.ID `bson:"_id"`
+	DocID      types.ID `bson:"doc_id"`
 	ServerSeq  uint64   `bson:"server_seq"`
 	ClientSeq  uint32   `bson:"client_seq"`
 	Lamport    uint64   `bson:"lamport"`
-	ActorID    ID       `bson:"actor_id"`
+	ActorID    types.ID `bson:"actor_id"`
 	Message    string   `bson:"message"`
 	Operations [][]byte `bson:"operations"`
 }

@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api"
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/test/helper"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
@@ -47,6 +48,7 @@ var (
 
 	testRPCServer *rpc.Server
 	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.RPCPort)
+	testAdminAddr = fmt.Sprintf("localhost:%d", helper.AdminPort)
 	testClient    api.YorkieClient
 
 	invalidChangePack = &api.ChangePack{
@@ -79,7 +81,12 @@ func TestMain(m *testing.M) {
 		Interval:            helper.HousekeepingInterval.String(),
 		DeactivateThreshold: helper.HousekeepingDeactivateThreshold.String(),
 		CandidatesLimit:     helper.HousekeepingCandidatesLimit,
-	}, testRPCAddr, met)
+	}, testAdminAddr, met)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	project, err := be.DB.EnsureDefaultProjectInfo(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -96,7 +103,13 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed rpc listen: %s\n", err)
 	}
 
-	conn, err := grpc.Dial(testRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	var dialOptions []grpc.DialOption
+	authInterceptor := client.NewAuthInterceptor(project.PublicKey, "")
+	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
+	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
+	dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	conn, err := grpc.Dial(testRPCAddr, dialOptions...)
 	if err != nil {
 		log.Fatal(err)
 	}

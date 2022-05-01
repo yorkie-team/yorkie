@@ -52,6 +52,7 @@ const (
 	DefaultMongoPingTimeout       = 5 * time.Second
 	DefaultMongoYorkieDatabase    = "yorkie-meta"
 
+	DefaultUseDefaultProject = true
 	DefaultSnapshotThreshold = 500
 	DefaultSnapshotInterval  = 1000
 

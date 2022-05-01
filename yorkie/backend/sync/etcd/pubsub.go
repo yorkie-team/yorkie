@@ -27,9 +27,9 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
@@ -120,8 +120,8 @@ func (c *Client) UpdateMetadata(
 // broadcastToMembers broadcasts the given event to all members.
 func (c *Client) broadcastToMembers(ctx context.Context, event sync.DocEvent) {
 	for _, member := range c.Members() {
-		memberAddr := member.RPCAddr
-		if memberAddr == c.agentInfo.RPCAddr {
+		memberAddr := member.ClusterAddr
+		if memberAddr == c.agentInfo.ClusterAddr {
 			continue
 		}
 
@@ -152,7 +152,7 @@ func (c *Client) ensureClusterClient(
 	// be removed from clusterClientMap.
 
 	if _, ok := c.clusterClientMap[member.ID]; !ok {
-		conn, err := grpc.Dial(member.RPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.Dial(member.ClusterAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			logging.DefaultLogger().Error(err)
 			return nil, err

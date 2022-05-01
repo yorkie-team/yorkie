@@ -16,33 +16,31 @@
 
 package auth
 
-import "context"
+import (
+	"context"
+)
 
 // key is the key for the context.Context.
 type key int
 
-// tokenKey is the key for the token.
-const tokenKey key = 0
+// metadataKey Key = 0
+const metadataKey key = 0
 
-// clientAPIKeyKey is the key for the client API key.
-const clientAPIKeyKey key = 1
+// Metadata represents the metadata of the request.
+type Metadata struct {
+	// APIKey is the public key from the client. It is used to find the project.
+	APIKey string
 
-// TokenFromCtx returns the token from the given context.
-func TokenFromCtx(ctx context.Context) string {
-	return ctx.Value(tokenKey).(string)
+	// Authorization is the authorization of the request.
+	Authorization string
 }
 
-// CtxWithToken creates a new context with the given token.
-func CtxWithToken(ctx context.Context, token string) context.Context {
-	return context.WithValue(ctx, tokenKey, token)
+// MetadataFromCtx returns the metadata from the given context.
+func MetadataFromCtx(ctx context.Context) Metadata {
+	return ctx.Value(metadataKey).(Metadata)
 }
 
-// ClientAPIKeyFromCtx returns the clientAPIKey from the given context.
-func ClientAPIKeyFromCtx(ctx context.Context) string {
-	return ctx.Value(clientAPIKeyKey).(string)
-}
-
-// CtxWithClientAPIKey creates a new context with the given clientAPIKey.
-func CtxWithClientAPIKey(ctx context.Context, clientAPIKey string) context.Context {
-	return context.WithValue(ctx, clientAPIKeyKey, clientAPIKey)
+// CtxWithMetadata creates a new context with the given Metadata.
+func CtxWithMetadata(ctx context.Context, md Metadata) context.Context {
+	return context.WithValue(ctx, metadataKey, md)
 }

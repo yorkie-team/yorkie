@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2020 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,28 @@
  * limitations under the License.
  */
 
-package mongo
+package main
 
 import (
-	"fmt"
+	"github.com/spf13/cobra"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
-
-	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/cmd/yorkie/project"
 )
 
-func encodeActorID(id *time.ActorID) primitive.ObjectID {
-	objectID := primitive.ObjectID{}
-	copy(objectID[:], id.Bytes())
-	return objectID
+var rootCmd = &cobra.Command{
+	Use:   "yorkie",
+	Short: "Document store for collaborative applications based on CRDT",
 }
 
-func encodeID(id types.ID) (primitive.ObjectID, error) {
-	objectID, err := primitive.ObjectIDFromHex(id.String())
-	if err != nil {
-		return objectID, fmt.Errorf("%s: %w", id, types.ErrInvalidID)
+// Run executes CLI.
+func Run() int {
+	if err := rootCmd.Execute(); err != nil {
+		return 1
 	}
-	return objectID, nil
+
+	return 0
+}
+
+func init() {
+	rootCmd.AddCommand(project.SubCmd)
 }

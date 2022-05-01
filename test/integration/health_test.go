@@ -27,7 +27,7 @@ import (
 )
 
 func TestHealthCheck(t *testing.T) {
-	conn, err := createConn()
+	conn, err := clientConn()
 	assert.NoError(t, err)
 	defer func() {
 		assert.NoError(t, conn.Close())

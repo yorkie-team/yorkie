@@ -11,8 +11,8 @@
 [![CodeCov](https://img.shields.io/codecov/c/github/yorkie-team/yorkie)](https://codecov.io/gh/yorkie-team/yorkie)
 [![Godoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](https://godoc.org/github.com/yorkie-team/yorkie)
 
-
-Yorkie is an open source document store for building collaborative editing applications. Yorkie uses JSON-like documents(CRDT) with optional types.
+Yorkie is an open source document store for building collaborative editing applications. Yorkie uses JSON-like
+documents(CRDT) with optional types.
 
 Yorkie consists of three main components: Client, Document and Agent.
 
@@ -27,23 +27,25 @@ Yorkie consists of three main components: Client, Document and Agent.
 │  Document "D-1"   │◄─Changes─►│ │  Document "D-2"   │  │
 │  { a: 2, b: {} }  │           │ │  { a: 3, b: {} }  │  │
 └───────────────────┘           │ └───────────────────┘  │
-  Client "C" (Admin)             │                        │
+  Admin (CLI, Web)               │                        │
 ┌────────────────────┐          └────────────────────────┘
 │  Query "Q-1"       │              ▲
 │ db[c-1].find({a:2})├───DB Query───┘
 └────────────────────┘
  ```
 
- - Clients can have a replica of the document representing an application model locally on several devices.
- - Each client can independently update the document on their local device, even while offline.
- - When a network connection is available, the client figures out which changes need to be synced from one device to another, and brings them into the same state.
- - If the document was changed concurrently on different devices, Yorkie automatically syncs the changes, so that every replica ends up in the same state with resolving conflict.
+- Clients can have a replica of the document representing an application model locally on several devices.
+- Each client can independently update the document on their local device, even while offline.
+- When a network connection is available, the client figures out which changes need to be synced from one device to
+  another, and brings them into the same state.
+- If the document was changed concurrently on different devices, Yorkie automatically syncs the changes, so that every
+  replica ends up in the same state with resolving conflict.
 
 ## Agent and SDKs
 
- - Agent: https://github.com/yorkie-team/yorkie
- - JS SDK: https://github.com/yorkie-team/yorkie-js-sdk
- - Go Client: https://github.com/yorkie-team/yorkie/tree/main/client
+- Agent: https://github.com/yorkie-team/yorkie
+- JS SDK: https://github.com/yorkie-team/yorkie-js-sdk
+- Go Client: https://github.com/yorkie-team/yorkie/tree/main/client
 
 ## Quick Start
 
@@ -57,9 +59,15 @@ https://yorkie.dev/docs
 
 ## Developing Yorkie
 
-For building Yorkie, You'll first need [Go](https://golang.org) installed (version 1.17+ is required). Make sure you have Go properly [installed](https://golang.org/doc/install), including setting up your [GOPATH](https://golang.org/doc/code.html#Command). Then download a pre-built binary from [release page](https://github.com/protocolbuffers/protobuf/releases) and install the protobuf compiler (version 3.4.0+ is required).
+For building Yorkie, You'll first need [Go](https://golang.org) installed (version 1.17+ is required). Make sure you
+have Go properly [installed](https://golang.org/doc/install), including setting up
+your [GOPATH](https://golang.org/doc/code.html#Command). Then download a pre-built binary
+from [release page](https://github.com/protocolbuffers/protobuf/releases) and install the protobuf compiler (version
+3.4.0+ is required).
 
-Next, clone this repository into some local directory and then just type `make build`. In a few moments, you'll have a working `yorkie` executable:
+Next, clone this repository into some local directory and then just type `make build`. In a few moments, you'll have a
+working `yorkie` executable:
+
 ```
 $ make build
 ...
@@ -70,18 +78,19 @@ $ bin/yorkie # For Windows, .\bin\yorkie.exe
 
 Tests can be run by typing `make test`.
 
-*NOTE: `make test` includes integration tests that require local applications
- such as MongoDB, etcd. To start them, type `docker-compose -f
-  docker/docker-compose.yml up --build -d`.*
+*NOTE: `make test` includes integration tests that require local applications such as MongoDB, etcd. To start them,
+type `docker-compose -f docker/docker-compose.yml up --build -d`.*
 
-If you make any changes to the code, run `make fmt` in order to automatically format the code according to Go [standards](https://golang.org/doc/effective_go.html#formatting).
+If you make any changes to the code, run `make fmt` in order to automatically format the code according to
+Go [standards](https://golang.org/doc/effective_go.html#formatting).
 
 ## Contributing
+
 See [CONTRIBUTING](CONTRIBUTING.md) for details on submitting patches and the contribution workflow.
 
 ## Contributors ✨
 
-Thanks goes to these incredible people:
+Thanks go to these incredible people:
 
 <a href="https://github.com/yorkie-team/yorkie/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=yorkie-team/yorkie" alt="contributors"/>
@@ -89,9 +98,13 @@ Thanks goes to these incredible people:
 
 ## Sponsors
 
-Is your company using Yorkie? Ask your boss to support us. It will help us dedicate more time to maintain this project and to make it even better for all our users. Also your company logo will show up on here and on our website :-) [[Become a sponsor](https://opencollective.com/yorkie#sponsor)]
-<a href="https://opencollective.com/yorkie#sponsor" target="_blank"><img src="https://opencollective.com/yorkie/sponsor.svg?width=890"></a>
+Is your company using Yorkie? Ask your boss to support us. It will help us dedicate more time to maintain this project
+and to make it even better for all our users. Also, your company logo will show up on here and on our website:
+-) [[Become a sponsor](https://opencollective.com/yorkie#sponsor)]
+<a href="https://opencollective.com/yorkie#sponsor" target="_
+blank"><img src="https://opencollective.com/yorkie/sponsor.svg?width=890"></a>
 
 ### Backers
+
 Please be our [Backers](https://opencollective.com/yorkie#backers).
 <a href="https://opencollective.com/yorkie#backers" target="_blank"><img src="https://opencollective.com/yorkie/backers.svg?width=890"></a>

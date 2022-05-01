@@ -18,20 +18,11 @@ package interceptors
 
 import (
 	"context"
-	"errors"
 	gotime "time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
-	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/yorkie/backend/db"
-	"github.com/yorkie-team/yorkie/yorkie/clients"
 	"github.com/yorkie-team/yorkie/yorkie/logging"
-	"github.com/yorkie-team/yorkie/yorkie/packs"
-	"github.com/yorkie-team/yorkie/yorkie/rpc/auth"
 )
 
 // DefaultInterceptor is a interceptor for default.
@@ -85,48 +76,4 @@ func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
 		reqLogger.Infof("RPC : stream %q %s", info.FullMethod, gotime.Since(start))
 		return err
 	}
-}
-
-// toStatusError returns a status.Error from the given logic error. If an error
-// occurs while executing logic in API handler, gRPC status.error should be
-// returned so that the client can know more about the status of the request.
-func toStatusError(err error) error {
-	if errors.Is(err, auth.ErrNotAllowed) ||
-		errors.Is(err, auth.ErrUnexpectedStatusCode) ||
-		errors.Is(err, auth.ErrWebhookTimeout) {
-		return status.Error(codes.Unauthenticated, err.Error())
-	}
-
-	if errors.Is(err, converter.ErrPackRequired) ||
-		errors.Is(err, converter.ErrCheckpointRequired) ||
-		errors.Is(err, time.ErrInvalidHexString) ||
-		errors.Is(err, time.ErrInvalidActorID) ||
-		errors.Is(err, db.ErrInvalidID) ||
-		errors.Is(err, clients.ErrInvalidClientID) ||
-		errors.Is(err, clients.ErrInvalidClientKey) {
-		return status.Error(codes.InvalidArgument, err.Error())
-	}
-
-	if errors.Is(err, converter.ErrUnsupportedOperation) ||
-		errors.Is(err, converter.ErrUnsupportedElement) ||
-		errors.Is(err, converter.ErrUnsupportedEventType) ||
-		errors.Is(err, converter.ErrUnsupportedValueType) ||
-		errors.Is(err, converter.ErrUnsupportedCounterType) {
-		return status.Error(codes.Unimplemented, err.Error())
-	}
-
-	if errors.Is(err, db.ErrClientNotFound) ||
-		errors.Is(err, db.ErrDocumentNotFound) {
-		return status.Error(codes.NotFound, err.Error())
-	}
-
-	if err == db.ErrClientNotActivated ||
-		err == db.ErrDocumentNotAttached ||
-		err == db.ErrDocumentAlreadyAttached ||
-		errors.Is(err, packs.ErrInvalidServerSeq) ||
-		errors.Is(err, db.ErrConflictOnUpdate) {
-		return status.Error(codes.FailedPrecondition, err.Error())
-	}
-
-	return status.Error(codes.Internal, err.Error())
 }

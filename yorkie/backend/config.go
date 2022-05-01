@@ -19,24 +19,21 @@ package backend
 import (
 	"fmt"
 	"time"
-
-	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 // Config is the configuration for creating a Backend instance.
 type Config struct {
+	// UseDefaultProject is whether to use the default project. Even if public
+	// key is not provided from the client, the default project will be used. If
+	// we are using agent as single-tenant mode, this should be set to true.
+	UseDefaultProject bool `yaml:"UseDefaultProject"`
+
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold uint64 `yaml:"SnapshotThreshold"`
 
 	// SnapshotInterval is the interval of changes to create a snapshot.
 	SnapshotInterval uint64 `yaml:"SnapshotInterval"`
-
-	// AuthWebhookURL is the url of the authorization webhook.
-	AuthWebhookURL string `yaml:"AuthWebhookURL"`
-
-	// AuthWebhookMethods is the methods that run the authorization webhook.
-	AuthWebhookMethods []string `yaml:"AuthWebhookMethods"`
 
 	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
 	AuthWebhookMaxRetries uint64 `yaml:"AuthWebhookMaxRetries"`
@@ -54,33 +51,8 @@ type Config struct {
 	AuthWebhookCacheUnauthTTL string `yaml:"AuthWebhookCacheUnauthTTL"`
 }
 
-// RequireAuth returns whether the given method require authorization.
-func (c *Config) RequireAuth(method types.Method) bool {
-	if len(c.AuthWebhookURL) == 0 {
-		return false
-	}
-
-	if len(c.AuthWebhookMethods) == 0 {
-		return true
-	}
-
-	for _, m := range c.AuthWebhookMethods {
-		if types.Method(m) == method {
-			return true
-		}
-	}
-
-	return false
-}
-
 // Validate validates this config.
 func (c *Config) Validate() error {
-	for _, method := range c.AuthWebhookMethods {
-		if !types.IsAuthMethod(method) {
-			return fmt.Errorf("not supported method for authorization webhook: %s", method)
-		}
-	}
-
 	if _, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval); err != nil {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--auth-webhook-max-wait-interval" flag: %w`,

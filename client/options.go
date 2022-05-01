@@ -19,7 +19,7 @@ package client
 import (
 	"go.uber.org/zap"
 
-	"github.com/yorkie-team/yorkie/pkg/types"
+	"github.com/yorkie-team/yorkie/api/types"
 )
 
 // Option configures Options.
@@ -32,6 +32,9 @@ type Options struct {
 
 	// Metadata is the metadata of the client.
 	Metadata types.Metadata
+
+	// APIKey is the API key of the client.
+	APIKey string
 
 	// Token is the token of the client. Each request will be authenticated with this token.
 	Token string
@@ -54,6 +57,11 @@ func WithKey(key string) Option {
 // WithMetadata configures the metadata of the client.
 func WithMetadata(metadata types.Metadata) Option {
 	return func(o *Options) { o.Metadata = metadata }
+}
+
+// WithAPIKey configures the API key of the client.
+func WithAPIKey(apiKey string) Option {
+	return func(o *Options) { o.APIKey = apiKey }
 }
 
 // WithToken configures the token of the client.

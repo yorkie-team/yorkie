@@ -22,8 +22,8 @@ import (
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
-	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 func TestClient(t *testing.T) {

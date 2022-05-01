@@ -21,9 +21,9 @@ import (
 	"errors"
 	gotime "time"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 var (
@@ -33,10 +33,10 @@ var (
 
 // AgentInfo represents the information of the Agent.
 type AgentInfo struct {
-	ID        string      `json:"id"`
-	Hostname  string      `json:"hostname"`
-	RPCAddr   string      `json:"rpc_addr"`
-	UpdatedAt gotime.Time `json:"updated_at"`
+	ID          string      `json:"id"`
+	Hostname    string      `json:"hostname"`
+	ClusterAddr string      `json:"cluster_addr"`
+	UpdatedAt   gotime.Time `json:"updated_at"`
 }
 
 // Coordinator provides synchronization functions such as locks and event Pub/Sub.

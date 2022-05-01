@@ -26,16 +26,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/types"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestPeerAwareness(t *testing.T) {
-	clients := createActivatedClients(t, 2)
-	c1 := clients[0]
-	c2 := clients[1]
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
 	defer cleanupClients(t, clients)
 
 	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {

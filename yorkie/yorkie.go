@@ -17,8 +17,10 @@
 package yorkie
 
 import (
+	"context"
 	gosync "sync"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/yorkie/admin"
 	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
@@ -28,7 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/rpc"
 )
 
-// Yorkie is an agent of Yorkie framework.
+// Yorkie is an agent of Yorkie.
 // The agent receives changes from the client, stores them in the repository,
 // and propagates the changes to clients who subscribe to the document.
 type Yorkie struct {
@@ -60,7 +62,7 @@ func New(conf *Config) (*Yorkie, error) {
 		conf.Mongo,
 		conf.ETCD,
 		conf.Housekeeping,
-		conf.RPCAddr(),
+		conf.AdminAddr(),
 		metrics,
 	)
 	if err != nil {
@@ -142,9 +144,19 @@ func (r *Yorkie) RPCAddr() string {
 	return r.conf.RPCAddr()
 }
 
-// AdminAddr returns the address of the admin.
+// AdminAddr returns the address of the admin server.
 func (r *Yorkie) AdminAddr() string {
 	return r.conf.AdminAddr()
+}
+
+// DefaultProject returns the default project.
+func (r *Yorkie) DefaultProject() (*types.Project, error) {
+	info, err := r.backend.DB.EnsureDefaultProjectInfo(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	return info.ToProject(), nil
 }
 
 // Members returns the members of this cluster.

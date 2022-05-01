@@ -18,6 +18,7 @@ package interceptors
 
 import (
 	"context"
+	"strings"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -25,35 +26,36 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/yorkie-team/yorkie/yorkie/backend"
 	"github.com/yorkie-team/yorkie/yorkie/rpc/auth"
 )
 
-// AuthInterceptor is an interceptor for authentication.
-type AuthInterceptor struct {
-	webhook string
+// MetadataInterceptor is an interceptor for extracting metadata from gRPC context.
+type MetadataInterceptor struct {
+	backend *backend.Backend
 }
 
-// NewAuthInterceptor creates a new instance of AuthInterceptor.
-func NewAuthInterceptor(webhook string) *AuthInterceptor {
-	return &AuthInterceptor{
-		webhook: webhook,
+// NewMetadataInterceptor creates a new instance of MetadataInterceptor.
+func NewMetadataInterceptor(be *backend.Backend) *MetadataInterceptor {
+	return &MetadataInterceptor{
+		backend: be,
 	}
 }
 
 // Unary creates a unary server interceptor for authorization.
-func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
+func (i *MetadataInterceptor) Unary() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req interface{},
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
-		if i.needAuth() {
-			token, err := i.extractToken(ctx)
+		if isRPCService(info.FullMethod) {
+			md, err := i.extractMetadata(ctx)
 			if err != nil {
 				return nil, err
 			}
-			return handler(auth.CtxWithToken(ctx, token), req)
+			return handler(auth.CtxWithMetadata(ctx, md), req)
 		}
 
 		return handler(ctx, req)
@@ -61,20 +63,20 @@ func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 }
 
 // Stream creates a stream server interceptor for authorization.
-func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
+func (i *MetadataInterceptor) Stream() grpc.StreamServerInterceptor {
 	return func(
 		srv interface{},
 		ss grpc.ServerStream,
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
-		if i.needAuth() {
-			token, err := i.extractToken(ss.Context())
+		if isRPCService(info.FullMethod) {
+			md, err := i.extractMetadata(ss.Context())
 			if err != nil {
 				return err
 			}
 			wrapped := grpcmiddleware.WrapServerStream(ss)
-			wrapped.WrappedContext = auth.CtxWithToken(ss.Context(), token)
+			wrapped.WrappedContext = auth.CtxWithMetadata(ss.Context(), md)
 			return handler(srv, wrapped)
 		}
 
@@ -82,20 +84,30 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 	}
 }
 
-func (i *AuthInterceptor) needAuth() bool {
-	return len(i.webhook) > 0
+func isRPCService(method string) bool {
+	return strings.HasPrefix(method, "/api.Yorkie/")
 }
 
-func (i *AuthInterceptor) extractToken(ctx context.Context) (string, error) {
+func (i *MetadataInterceptor) extractMetadata(ctx context.Context) (auth.Metadata, error) {
+	md := auth.Metadata{}
 	data, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return "", status.Errorf(codes.Unauthenticated, "metadata is not provided")
+		return md, status.Errorf(codes.Unauthenticated, "metadata is not provided")
 	}
 
-	values := data["authorization"]
-	if len(values) == 0 {
-		return "", status.Errorf(codes.Unauthenticated, "authorization token is not provided")
+	apiKey := data["x-api-key"]
+	if len(apiKey) == 0 && !i.backend.Config.UseDefaultProject {
+		return md, status.Errorf(codes.Unauthenticated, "api key is not provided")
 	}
 
-	return values[0], nil
+	if len(apiKey) > 0 {
+		md.APIKey = apiKey[0]
+	}
+
+	authorization := data["authorization"]
+	if len(authorization) > 0 {
+		md.Authorization = authorization[0]
+	}
+
+	return md, nil
 }

@@ -21,13 +21,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/yorkie/backend/db"
 )
 
 func TestClientInfo(t *testing.T) {
 	t.Run("attach/detach document test", func(t *testing.T) {
-		docID := db.ID("000000000000000000000000")
+		docID := types.ID("000000000000000000000000")
 		clientInfo := db.ClientInfo{
 			Status: db.ClientActivated,
 		}

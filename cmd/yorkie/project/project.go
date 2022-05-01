@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The Yorkie Authors. All rights reserved.
+ * Copyright 2022 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,14 @@
  * limitations under the License.
  */
 
-package cli
+package project
 
-import (
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
-var rootCmd = &cobra.Command{
-	Use:   "yorkie [options]",
-	Short: "Document store for collaborative applications based on CRDT",
-}
-
-// Run executes CLI.
-func Run() int {
-	if err := rootCmd.Execute(); err != nil {
-		return 1
+var (
+	// SubCmd represents the project command
+	SubCmd = &cobra.Command{
+		Use:   "project",
+		Short: "Manage projects",
 	}
-
-	return 0
-}
+)

@@ -30,9 +30,8 @@ import (
 )
 
 func TestText(t *testing.T) {
-	clients := createActivatedClients(t, 2)
-	c1 := clients[0]
-	c2 := clients[1]
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
 	defer cleanupClients(t, clients)
 
 	t.Run("text test", func(t *testing.T) {

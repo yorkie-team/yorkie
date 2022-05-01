@@ -19,8 +19,8 @@ package sync
 import (
 	"github.com/rs/xid"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/types"
 )
 
 // Subscription represents a subscription of a subscriber to documents.
