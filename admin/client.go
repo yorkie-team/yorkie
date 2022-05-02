@@ -123,6 +123,19 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project
 	return converter.FromProject(response.Project)
 }
 
+// ListProjects lists all projects.
+func (c *Client) ListProjects(ctx context.Context) ([]*types.Project, error) {
+	response, err := c.client.ListProjects(
+		ctx,
+		&api.ListProjectsRequest{},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromProjects(response.Projects)
+}
+
 // UpdateProject updates an existing project.
 func (c *Client) UpdateProject(
 	ctx context.Context,

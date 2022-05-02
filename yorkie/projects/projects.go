@@ -51,6 +51,24 @@ func CreateProject(
 	return info.ToProject(), nil
 }
 
+// ListProjects lists all projects.
+func ListProjects(
+	ctx context.Context,
+	be *backend.Backend,
+) ([]*types.Project, error) {
+	infos, err := be.DB.ListProjectInfos(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var projects []*types.Project
+	for _, info := range infos {
+		projects = append(projects, info.ToProject())
+	}
+
+	return projects, nil
+}
+
 // UpdateProject updates a project.
 func UpdateProject(
 	ctx context.Context,
