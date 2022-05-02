@@ -33,13 +33,13 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func TestAgent(t *testing.T) {
-	t.Run("closing WatchDocument stream on agent shutdown test", func(t *testing.T) {
+func TestServer(t *testing.T) {
+	t.Run("closing WatchDocument stream on server shutdown test", func(t *testing.T) {
 		ctx := context.Background()
-		agent := helper.TestYorkie()
-		assert.NoError(t, agent.Start())
+		svr := helper.TestServer()
+		assert.NoError(t, svr.Start())
 
-		cli, err := client.Dial(agent.RPCAddr())
+		cli, err := client.Dial(svr.RPCAddr())
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(ctx))
 
@@ -68,7 +68,7 @@ func TestAgent(t *testing.T) {
 		}()
 
 		wg.Add(1)
-		assert.NoError(t, agent.Shutdown(true))
+		assert.NoError(t, svr.Shutdown(true))
 
 		wg.Wait()
 	})

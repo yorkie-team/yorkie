@@ -62,9 +62,9 @@ type Attachment struct {
 	peers map[string]types.MetadataInfo
 }
 
-// Client is a normal client that can communicate with the agent.
+// Client is a normal client that can communicate with the server.
 // It has documents and sends changes of the document in local
-// to the agent to synchronize with other replicas in remote.
+// to the server to synchronize with other replicas in remote.
 type Client struct {
 	conn        *grpc.ClientConn
 	client      api.YorkieClient
@@ -184,8 +184,8 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
-// Activate activates this client. That is, it registers itself to the agent
-// and receives a unique ID from the agent. The given ID is used to distinguish
+// Activate activates this client. That is, it registers itself to the server
+// and receives a unique ID from the server. The given ID is used to distinguish
 // different clients.
 func (c *Client) Activate(ctx context.Context) error {
 	if c.status == activated {
@@ -228,7 +228,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 	return nil
 }
 
-// Attach attaches the given document to this client. It tells the agent that
+// Attach attaches the given document to this client. It tells the server that
 // this client will synchronize the given document.
 func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
@@ -277,7 +277,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 }
 
 // Detach detaches the given document from this client. It tells the
-// agent that this client will no longer synchronize the given document.
+// server that this client will no longer synchronize the given document.
 //
 // To collect garbage things like CRDT tombstones left on the document, all the
 // changes should be applied to other replicas before GC time. For this, if the
@@ -319,8 +319,8 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	return nil
 }
 
-// Sync pushes local changes of the attached documents to the Agent and
-// receives changes of the remote replica from the agent then apply them to
+// Sync pushes local changes of the attached documents to the server and
+// receives changes of the remote replica from the server then apply them to
 // local documents.
 func (c *Client) Sync(ctx context.Context, keys ...key.Key) error {
 	if len(keys) == 0 {

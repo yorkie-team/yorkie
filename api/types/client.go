@@ -6,7 +6,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// Client represents the Client that communicates with the Agent.
+// Client represents the Client that communicates with the Server.
 type Client struct {
 	ID           *time.ActorID
 	MetadataInfo MetadataInfo

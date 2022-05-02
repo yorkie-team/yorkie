@@ -17,7 +17,7 @@ documents(CRDT) with optional types.
 Yorkie consists of three main components: Client, Document and Agent.
 
  ```
-  Client "A" (Go)                 Agent                        MemDB or MongoDB
+  Client "A" (Go)                 Server                       MemDB or MongoDB
 ┌───────────────────┐           ┌────────────────────────┐   ┌───────────┐
 │  Document "D-1"   │◄─Changes─►│  Collection "C-1"      │   │ Changes   │
 │  { a: 1, b: {} }  │           │ ┌───────────────────┐  │◄─►│ Snapshots │

@@ -32,11 +32,11 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/test/helper"
-	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
-func keysFromAgents(m map[string]*sync.AgentInfo) []string {
+func keysFromServers(m map[string]*sync.ServerInfo) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
@@ -53,24 +53,24 @@ func withTwoClientsAndDocsInClusterMode(
 ) {
 	ctx := context.Background()
 
-	// creates two agents
-	agent1 := helper.TestYorkie()
-	agent2 := helper.TestYorkie()
-	assert.NoError(t, agent1.Start())
-	assert.NoError(t, agent2.Start())
+	// creates two servers
+	svr1 := helper.TestServer()
+	svr2 := helper.TestServer()
+	assert.NoError(t, svr1.Start())
+	assert.NoError(t, svr2.Start())
 	defer func() {
-		assert.NoError(t, agent1.Shutdown(true))
-		assert.NoError(t, agent2.Shutdown(true))
+		assert.NoError(t, svr1.Shutdown(true))
+		assert.NoError(t, svr2.Shutdown(true))
 	}()
 
-	// creates two clients, each connecting to the two agents
+	// creates two clients, each connecting to the two servers
 	client1, err := client.Dial(
-		agent1.RPCAddr(),
+		svr1.RPCAddr(),
 		client.WithMetadata(types.Metadata{"name": "client1"}),
 	)
 	assert.NoError(t, err)
 	client2, err := client.Dial(
-		agent2.RPCAddr(),
+		svr2.RPCAddr(),
 		client.WithMetadata(types.Metadata{"name": "client2"}),
 	)
 	assert.NoError(t, err)
@@ -94,25 +94,25 @@ func withTwoClientsAndDocsInClusterMode(
 
 func TestClusterMode(t *testing.T) {
 	t.Run("member list test", func(t *testing.T) {
-		agentA := helper.TestYorkie()
-		agentB := helper.TestYorkie()
+		svrA := helper.TestServer()
+		svrB := helper.TestServer()
 
-		assert.NoError(t, agentA.Start())
-		assert.NoError(t, agentB.Start())
+		assert.NoError(t, svrA.Start())
+		assert.NoError(t, svrB.Start())
 		time.Sleep(100 * time.Millisecond)
-		assert.Equal(t, keysFromAgents(agentA.Members()), keysFromAgents(agentB.Members()))
-		assert.Len(t, defaultAgent.Members(), 3)
+		assert.Equal(t, keysFromServers(svrA.Members()), keysFromServers(svrB.Members()))
+		assert.Len(t, defaultServer.Members(), 3)
 
-		assert.NoError(t, agentA.Shutdown(true))
+		assert.NoError(t, svrA.Shutdown(true))
 		time.Sleep(100 * time.Millisecond)
-		assert.Len(t, defaultAgent.Members(), 2)
+		assert.Len(t, defaultServer.Members(), 2)
 
-		assert.NoError(t, agentB.Shutdown(true))
+		assert.NoError(t, svrB.Shutdown(true))
 		time.Sleep(100 * time.Millisecond)
-		assert.Len(t, defaultAgent.Members(), 1)
+		assert.Len(t, defaultServer.Members(), 1)
 	})
 
-	t.Run("watch document across agents test", func(t *testing.T) {
+	t.Run("watch document across servers test", func(t *testing.T) {
 		withTwoClientsAndDocsInClusterMode(t, func(
 			t *testing.T,
 			c1, c2 *client.Client,

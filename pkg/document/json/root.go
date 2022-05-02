@@ -28,7 +28,7 @@ type ElementPair struct {
 
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
-// received from agent.
+// received from server.
 //
 // Every element has a unique time ticket at creation, which allows us to find
 // a particular element.
