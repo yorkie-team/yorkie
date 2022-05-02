@@ -63,7 +63,7 @@ func (c *Client) Subscribe(
 			return nil, nil, err
 		}
 
-		peersMap[k.CombinedKey()] = subs
+		peersMap[k.String()] = subs
 	}
 
 	return sub, peersMap, nil
@@ -218,7 +218,7 @@ func (c *Client) putSubscriptions(
 	}
 
 	for _, k := range keys {
-		k := path.Join(subscriptionsPath, k.CombinedKey(), sub.ID())
+		k := path.Join(subscriptionsPath, k.String(), sub.ID())
 		if _, err = c.client.Put(ctx, k, encoded); err != nil {
 			logging.From(ctx).Error(err)
 			return fmt.Errorf("put %s: %w", k, err)
@@ -235,7 +235,7 @@ func (c *Client) pullSubscriptions(
 ) ([]types.Client, error) {
 	getResponse, err := c.client.Get(
 		ctx,
-		path.Join(subscriptionsPath, k.CombinedKey()),
+		path.Join(subscriptionsPath, k.String()),
 		clientv3.WithPrefix(),
 	)
 	if err != nil {
@@ -262,7 +262,7 @@ func (c *Client) removeSubscriptions(
 	sub *sync.Subscription,
 ) error {
 	for _, docKey := range keys {
-		k := path.Join(subscriptionsPath, docKey.CombinedKey(), sub.ID())
+		k := path.Join(subscriptionsPath, docKey.String(), sub.ID())
 		if _, err := c.client.Delete(ctx, k); err != nil {
 			logging.From(ctx).Error(err)
 			return err

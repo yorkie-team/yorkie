@@ -28,7 +28,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
-	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestPubSub(t *testing.T) {
@@ -41,12 +40,7 @@ func TestPubSub(t *testing.T) {
 
 	t.Run("publish subscribe test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
-		docKeys := []key.Key{
-			{
-				Collection: helper.Collection,
-				Document:   t.Name(),
-			},
-		}
+		docKeys := []key.Key{key.Key(t.Name())}
 		event := sync.DocEvent{
 			Type:         types.DocumentsWatchedEvent,
 			Publisher:    actorB,
@@ -76,12 +70,7 @@ func TestPubSub(t *testing.T) {
 
 	t.Run("subscriptions map test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
-		docKeys := []key.Key{
-			{
-				Collection: helper.Collection,
-				Document:   t.Name(),
-			},
-		}
+		docKeys := []key.Key{key.Key(t.Name())}
 
 		ctx := context.Background()
 
@@ -90,7 +79,7 @@ func TestPubSub(t *testing.T) {
 			assert.NoError(t, err)
 
 			subs := pubSub.BuildPeersMap(docKeys)
-			assert.Len(t, subs[docKeys[0].CombinedKey()], i+1)
+			assert.Len(t, subs[docKeys[0].String()], i+1)
 		}
 	})
 }

@@ -19,7 +19,7 @@ Yorkie consists of three main components: Client, Document and Agent.
  ```
   Client "A" (Go)                 Server                       MemDB or MongoDB
 ┌───────────────────┐           ┌────────────────────────┐   ┌───────────┐
-│  Document "D-1"   │◄─Changes─►│  Collection "C-1"      │   │ Changes   │
+│  Document "D-1"   │◄─Changes─►│  Project "P-1"         │   │ Changes   │
 │  { a: 1, b: {} }  │           │ ┌───────────────────┐  │◄─►│ Snapshots │
 └───────────────────┘           │ │  Document "D-1"   │  │   └───────────┘
   Client "B" (JS)                │ │  { a: 2, b: {} }  │  │
@@ -30,7 +30,7 @@ Yorkie consists of three main components: Client, Document and Agent.
   Admin (CLI, Web)               │                        │
 ┌────────────────────┐          └────────────────────────┘
 │  Query "Q-1"       │              ▲
-│ db[c-1].find({a:2})├───DB Query───┘
+│  P-1.find({a:2})   ├───DB Query───┘
 └────────────────────┘
  ```
 

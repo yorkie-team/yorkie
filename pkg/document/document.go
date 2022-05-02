@@ -43,10 +43,9 @@ type Document struct {
 }
 
 // New creates a new instance of Document.
-func New(collection, document string) *Document {
-	k := key.Key{Collection: collection, Document: document}
+func New(key key.Key) *Document {
 	return &Document{
-		doc: NewInternalDocument(k),
+		doc: NewInternalDocument(key),
 	}
 }
 

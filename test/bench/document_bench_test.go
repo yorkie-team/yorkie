@@ -33,7 +33,7 @@ import (
 func BenchmarkDocument(b *testing.B) {
 	b.Run("constructor test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("c1", "d1")
+			doc := document.New("d1")
 			assert.Equal(b, doc.Checkpoint(), change.InitialCheckpoint)
 			assert.False(b, doc.HasLocalChanges())
 			assert.False(b, doc.IsAttached())
@@ -42,7 +42,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("status test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("c1", "d1")
+			doc := document.New("d1")
 			assert.False(b, doc.IsAttached())
 			doc.SetStatus(document.Attached)
 			assert.True(b, doc.IsAttached())
@@ -51,9 +51,9 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("equals test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc1 := document.New("c1", "d1")
-			doc2 := document.New("c1", "d2")
-			doc3 := document.New("c1", "d3")
+			doc1 := document.New("d1")
+			doc2 := document.New("d2")
+			doc3 := document.New("d3")
 
 			err := doc1.Update(func(root *proxy.ObjectProxy) error {
 				root.SetString("k1", "v1")
@@ -70,7 +70,7 @@ func BenchmarkDocument(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 
-			doc := document.New("c1", "d1")
+			doc := document.New("d1")
 			assert.Equal(b, "{}", doc.Marshal())
 			assert.False(b, doc.HasLocalChanges())
 
@@ -90,7 +90,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("delete test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("c1", "d1")
+			doc := document.New("d1")
 			assert.Equal(b, "{}", doc.Marshal())
 			assert.False(b, doc.HasLocalChanges())
 
@@ -118,7 +118,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("object test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("c1", "d1")
+			doc := document.New("d1")
 			err := doc.Update(func(root *proxy.ObjectProxy) error {
 				root.SetString("k1", "v1")
 				assert.Equal(b, `{"k1":"v1"}`, root.Marshal())
@@ -133,7 +133,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("array test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("c1", "d1")
+			doc := document.New("d1")
 
 			err := doc.Update(func(root *proxy.ObjectProxy) error {
 				root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
@@ -173,7 +173,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("text test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("c1", "d1")
+			doc := document.New("d1")
 
 			//           ---------- ins links --------
 			//           |                |          |
@@ -217,7 +217,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("text composition test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("c1", "d1")
+			doc := document.New("d1")
 
 			err := doc.Update(func(root *proxy.ObjectProxy) error {
 				root.SetNewText("k1").
@@ -237,7 +237,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("rich text test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("c1", "d1")
+			doc := document.New("d1")
 
 			err := doc.Update(func(root *proxy.ObjectProxy) error {
 				text := root.SetNewRichText("k1")
@@ -339,7 +339,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("counter test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("c1", "d1")
+			doc := document.New("d1")
 			var integer = 10
 			var long int64 = 5
 			var uinteger uint = 100
@@ -498,7 +498,7 @@ func BenchmarkDocument(b *testing.B) {
 
 func benchmarkText(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.SetNewText("k1")
@@ -513,7 +513,7 @@ func benchmarkText(cnt int, b *testing.B) {
 
 func benchmarkTextEditGC(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
 
@@ -541,7 +541,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 
 func benchmarkTextSplitGC(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
@@ -573,7 +573,7 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 
 func benchmarkArray(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			array := root.SetNewArray("k1")
@@ -588,7 +588,7 @@ func benchmarkArray(cnt int, b *testing.B) {
 
 func benchmarkArrayGC(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("1")
 			for i := 0; i < cnt; i++ {
@@ -612,7 +612,7 @@ func benchmarkArrayGC(cnt int, b *testing.B) {
 
 func benchmarkCounter(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			counter := root.SetNewCounter("k1", 0)
@@ -627,7 +627,7 @@ func benchmarkCounter(cnt int, b *testing.B) {
 
 func benchmarkRichText(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.SetNewRichText("k1")
@@ -642,7 +642,7 @@ func benchmarkRichText(cnt int, b *testing.B) {
 
 func benchmarkObject(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			for c := 0; c < cnt; c++ {

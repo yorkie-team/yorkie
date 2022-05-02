@@ -70,7 +70,7 @@ func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSumm
 	for _, summary := range summaries {
 		pbSummaries = append(pbSummaries, &api.DocumentSummary{
 			Id:       summary.ID,
-			Key:      ToDocumentKey(summary.Key),
+			Key:      summary.Key.String(),
 			Snapshot: summary.Snapshot,
 		})
 	}
@@ -101,20 +101,12 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 	}
 
 	return &api.ChangePack{
-		DocumentKey:     ToDocumentKey(pack.DocumentKey),
+		DocumentKey:     pack.DocumentKey.String(),
 		Checkpoint:      ToCheckpoint(pack.Checkpoint),
 		Changes:         pbChanges,
 		Snapshot:        pack.Snapshot,
 		MinSyncedTicket: ToTimeTicket(pack.MinSyncedTicket),
 	}, nil
-}
-
-// ToDocumentKey converts the given model format to Protobuf format.
-func ToDocumentKey(key key.Key) *api.DocumentKey {
-	return &api.DocumentKey{
-		Collection: key.Collection,
-		Document:   key.Document,
-	}
 }
 
 // ToCheckpoint converts the given model format to Protobuf format.
@@ -136,12 +128,12 @@ func ToChangeID(id change.ID) *api.ChangeID {
 }
 
 // ToDocumentKeys converts the given model format to Protobuf format.
-func ToDocumentKeys(keys []key.Key) []*api.DocumentKey {
-	var pbKeys []*api.DocumentKey
+func ToDocumentKeys(keys []key.Key) []string {
+	var keyList []string
 	for _, k := range keys {
-		pbKeys = append(pbKeys, ToDocumentKey(k))
+		keyList = append(keyList, k.String())
 	}
-	return pbKeys
+	return keyList
 }
 
 // ToClientsMap converts the given model to Protobuf format.

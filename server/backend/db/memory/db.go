@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/db"
 )
@@ -333,30 +334,30 @@ func (d *DB) FindDeactivateCandidates(
 func (d *DB) FindDocInfoByKey(
 	ctx context.Context,
 	clientInfo *db.ClientInfo,
-	bsonDocKey string,
+	key key.Key,
 	createDocIfNotExist bool,
 ) (*db.DocInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "key", bsonDocKey)
+	raw, err := txn.First(tblDocuments, "key", key.String())
 	if err != nil {
 		return nil, err
 	}
 	if !createDocIfNotExist && raw == nil {
-		return nil, fmt.Errorf("%s: %w", bsonDocKey, db.ErrDocumentNotFound)
+		return nil, fmt.Errorf("%s: %w", key, db.ErrDocumentNotFound)
 	}
 
 	now := gotime.Now()
 	var docInfo *db.DocInfo
 	if raw == nil {
 		docInfo = &db.DocInfo{
-			ID:          newID(),
-			CombinedKey: bsonDocKey,
-			Owner:       clientInfo.ID,
-			ServerSeq:   0,
-			CreatedAt:   now,
-			AccessedAt:  now,
+			ID:         newID(),
+			Key:        key,
+			Owner:      clientInfo.ID,
+			ServerSeq:  0,
+			CreatedAt:  now,
+			AccessedAt: now,
 		}
 		if err := txn.Insert(tblDocuments, docInfo); err != nil {
 			return nil, err
@@ -399,12 +400,12 @@ func (d *DB) CreateChangeInfos(
 		}
 	}
 
-	raw, err := txn.First(tblDocuments, "key", docInfo.CombinedKey)
+	raw, err := txn.First(tblDocuments, "key", docInfo.Key.String())
 	if err != nil {
 		return err
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", docInfo.CombinedKey, db.ErrDocumentNotFound)
+		return fmt.Errorf("%s: %w", docInfo.Key, db.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*db.DocInfo).DeepCopy()
 	if loadedDocInfo.ServerSeq != initialServerSeq {

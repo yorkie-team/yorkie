@@ -73,7 +73,7 @@ message DetachDocumentResponse {
 
 message WatchDocumentsRequest {
   Client client = 1;
-  repeated DocumentKey document_keys = 2;
+  repeated string document_keys = 2;
 }
 
 message WatchDocumentsResponse {
@@ -99,14 +99,14 @@ message PushPullResponse {
 
 message UpdateMetadataRequest {
   Client client = 1;
-  repeated DocumentKey document_keys = 2;
+  repeated string document_keys = 2;
 }
 
 message UpdateMetadataResponse {}
 
 message ListChangesRequest {
   bytes client_id = 1;
-  DocumentKey document_key = 2;
+  string document_key = 2;
 }
 
 message ListChangesResponse {

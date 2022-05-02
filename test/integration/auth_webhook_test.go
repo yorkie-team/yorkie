@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -110,7 +111,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		assert.NoError(t, cli.Activate(ctx))
 		defer func() { assert.NoError(t, cli.Deactivate(ctx)) }()
 
-		doc := document.New(helper.Collection, t.Name())
+		doc := document.New(key.Key(t.Name()))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		// client without token
@@ -158,7 +159,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc := document.New(helper.Collection, t.Name())
+		doc := document.New(key.Key(t.Name()))
 		err = cli.Attach(ctx, doc)
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 
@@ -202,7 +203,7 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc := document.New(helper.Collection, t.Name())
+		doc := document.New(key.Key(t.Name()))
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
 	})
@@ -285,7 +286,7 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc := document.New(helper.Collection, t.Name())
+		doc := document.New(key.Key(t.Name()))
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
 

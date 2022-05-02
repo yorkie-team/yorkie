@@ -108,7 +108,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	}
 
 	return &api.ChangePack{
-		DocumentKey:     converter.ToDocumentKey(p.DocumentKey),
+		DocumentKey:     p.DocumentKey.String(),
 		Checkpoint:      converter.ToCheckpoint(p.Checkpoint),
 		Changes:         pbChanges,
 		Snapshot:        p.Snapshot,

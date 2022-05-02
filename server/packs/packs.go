@@ -35,12 +35,12 @@ import (
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
 func PushPullKey(docKey key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("pushpull-%s", docKey.CombinedKey()))
+	return sync.NewKey(fmt.Sprintf("pushpull-%s", docKey))
 }
 
 // SnapshotKey creates a new sync.Key of Snapshot for the given document.
 func SnapshotKey(docKey key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("snapshot-%s", docKey.CombinedKey()))
+	return sync.NewKey(fmt.Sprintf("snapshot-%s", docKey))
 }
 
 // PushPull stores the given changes and returns accumulated changes of the
@@ -171,13 +171,8 @@ func BuildDocumentForServerSeq(
 		return nil, err
 	}
 
-	docKey, err := docInfo.Key()
-	if err != nil {
-		return nil, err
-	}
-
 	doc, err := document.NewInternalDocumentFromSnapshot(
-		docKey,
+		docInfo.Key,
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
 		snapshotInfo.Snapshot,
@@ -200,7 +195,7 @@ func BuildDocumentForServerSeq(
 	}
 
 	if err := doc.ApplyChangePack(change.NewPack(
-		docKey,
+		docInfo.Key,
 		change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changes,
 		nil,

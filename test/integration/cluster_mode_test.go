@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -81,8 +82,8 @@ func withTwoClientsAndDocsInClusterMode(
 		assert.NoError(t, client2.Close())
 	}()
 
-	doc1 := document.New(helper.Collection, t.Name())
-	doc2 := document.New(helper.Collection, t.Name())
+	doc1 := document.New(key.Key(t.Name()))
+	doc2 := document.New(key.Key(t.Name()))
 
 	assert.NoError(t, client1.Attach(ctx, doc1))
 	assert.NoError(t, client2.Attach(ctx, doc2))
@@ -143,7 +144,7 @@ func TestClusterMode(t *testing.T) {
 						assert.NoError(t, wr.Err)
 
 						if wr.Type == client.PeersChanged {
-							peers := wr.PeersMapByDoc[d1.Key().CombinedKey()]
+							peers := wr.PeersMapByDoc[d1.Key().String()]
 							responsePairs = append(responsePairs, watchResponsePair{
 								Type:  wr.Type,
 								Peers: peers,

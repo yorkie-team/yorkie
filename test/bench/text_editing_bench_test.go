@@ -40,7 +40,7 @@ func BenchmarkTextEditing(b *testing.B) {
 
 	b.StartTimer()
 
-	doc := document.New("c1", "d1")
+	doc := document.New("d1")
 	err = doc.Update(func(root *proxy.ObjectProxy) error {
 		root.SetNewText("text")
 		return nil

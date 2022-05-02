@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
-	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestText(t *testing.T) {
@@ -37,7 +37,7 @@ func TestText(t *testing.T) {
 	t.Run("text test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -49,7 +49,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.Collection, t.Name())
+		d2 := document.New(key.Key(t.Name()))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -99,7 +99,7 @@ func TestText(t *testing.T) {
 	t.Run("rich text test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -111,7 +111,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.Collection, t.Name())
+		d2 := document.New(key.Key(t.Name()))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
