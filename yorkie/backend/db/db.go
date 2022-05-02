@@ -55,6 +55,9 @@ type DB interface {
 	// CreateProjectInfo creates a new project.
 	CreateProjectInfo(ctx context.Context, name string) (*ProjectInfo, error)
 
+	// ListProjectInfos returns all projects.
+	ListProjectInfos(ctx context.Context) ([]*ProjectInfo, error)
+
 	// UpdateProjectInfo updates the project.
 	UpdateProjectInfo(ctx context.Context, project *ProjectInfo) error
 

@@ -110,6 +110,28 @@ func (d *DB) CreateProjectInfo(ctx context.Context, name string) (*db.ProjectInf
 	return info, nil
 }
 
+// ListProjectInfos returns all projects.
+func (d *DB) ListProjectInfos(ctx context.Context) ([]*db.ProjectInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblProjects, "id")
+	if err != nil {
+		return nil, err
+	}
+
+	var infos []*db.ProjectInfo
+	for {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
+		infos = append(infos, raw.(*db.ProjectInfo).DeepCopy())
+	}
+
+	return infos, nil
+}
+
 // UpdateProjectInfo updates the given project.
 func (d *DB) UpdateProjectInfo(ctx context.Context, info *db.ProjectInfo) error {
 	txn := d.db.Txn(true)

@@ -32,6 +32,20 @@ import (
 	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
 )
 
+// ToProjects converts the given model to Protobuf.
+func ToProjects(projects []*types.Project) ([]*api.Project, error) {
+	var pbProjects []*api.Project
+	for _, project := range projects {
+		pbProject, err := ToProject(project)
+		if err != nil {
+			return nil, err
+		}
+		pbProjects = append(pbProjects, pbProject)
+	}
+
+	return pbProjects, nil
+}
+
 // ToProject converts the given model to Protobuf.
 func ToProject(project *types.Project) (*api.Project, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(project.CreatedAt)

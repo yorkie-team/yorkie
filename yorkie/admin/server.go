@@ -134,6 +134,26 @@ func (s *Server) CreateProject(
 	}, nil
 }
 
+// ListProjects lists all projects.
+func (s *Server) ListProjects(
+	ctx context.Context,
+	req *api.ListProjectsRequest,
+) (*api.ListProjectsResponse, error) {
+	projectList, err := projects.ListProjects(ctx, s.backend)
+	if err != nil {
+		return nil, err
+	}
+
+	pbProjects, err := converter.ToProjects(projectList)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.ListProjectsResponse{
+		Projects: pbProjects,
+	}, nil
+}
+
 // UpdateProject updates the project.
 func (s *Server) UpdateProject(
 	ctx context.Context,

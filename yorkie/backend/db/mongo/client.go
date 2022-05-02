@@ -146,6 +146,22 @@ func (c *Client) CreateProjectInfo(ctx context.Context, name string) (*db.Projec
 	return info, nil
 }
 
+// ListProjectInfos returns all project infos.
+func (c *Client) ListProjectInfos(ctx context.Context) ([]*db.ProjectInfo, error) {
+	cursor, err := c.collection(colProjects).Find(ctx, bson.M{})
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	var infos []*db.ProjectInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, err
+	}
+
+	return infos, nil
+}
+
 // UpdateProjectInfo updates the project info.
 func (c *Client) UpdateProjectInfo(ctx context.Context, info *db.ProjectInfo) error {
 	encodedID, err := encodeID(info.ID)
