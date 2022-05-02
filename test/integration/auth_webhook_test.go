@@ -35,8 +35,8 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
-	"github.com/yorkie-team/yorkie/yorkie"
 )
 
 func newAuthServer(t *testing.T) (*httptest.Server, string) {
@@ -79,12 +79,12 @@ func newUnavailableAuthServer(t *testing.T, recoveryCnt uint64) *httptest.Server
 }
 
 func TestProjectAuthWebhook(t *testing.T) {
-	agent, err := yorkie.New(helper.TestConfig())
+	svr, err := server.New(helper.TestConfig())
 	assert.NoError(t, err)
-	assert.NoError(t, agent.Start())
-	defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+	assert.NoError(t, svr.Start())
+	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-	adminCli, err := admin.Dial(agent.AdminAddr())
+	adminCli, err := admin.Dial(svr.AdminAddr())
 	assert.NoError(t, err)
 	defer func() { assert.NoError(t, adminCli.Close()) }()
 
@@ -93,15 +93,15 @@ func TestProjectAuthWebhook(t *testing.T) {
 
 	t.Run("authorization webhook test", func(t *testing.T) {
 		ctx := context.Background()
-		server, token := newAuthServer(t)
+		authServer, token := newAuthServer(t)
 
 		// project with authorization webhook
-		project.AuthWebhookURL = server.URL
+		project.AuthWebhookURL = authServer.URL
 		assert.NoError(t, adminCli.UpdateProject(ctx, project))
 
 		// client with token
 		cli, err := client.Dial(
-			agent.RPCAddr(),
+			svr.RPCAddr(),
 			client.WithAPIKey(project.PublicKey),
 			client.WithToken(token),
 		)
@@ -115,7 +115,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 
 		// client without token
 		cliWithoutToken, err := client.Dial(
-			agent.RPCAddr(),
+			svr.RPCAddr(),
 			client.WithAPIKey(project.PublicKey),
 		)
 		assert.NoError(t, err)
@@ -125,7 +125,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 
 		// client with invalid token
 		cliWithInvalidToken, err := client.Dial(
-			agent.RPCAddr(),
+			svr.RPCAddr(),
 			client.WithAPIKey(project.PublicKey),
 			client.WithToken("invalid"),
 		)
@@ -137,10 +137,10 @@ func TestProjectAuthWebhook(t *testing.T) {
 
 	t.Run("Selected method authorization webhook test", func(t *testing.T) {
 		ctx := context.Background()
-		server, _ := newAuthServer(t)
+		authServer, _ := newAuthServer(t)
 
 		// project with authorization webhook
-		project.AuthWebhookURL = server.URL
+		project.AuthWebhookURL = authServer.URL
 		project.AuthWebhookMethods = []string{
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
@@ -148,7 +148,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		assert.NoError(t, adminCli.UpdateProject(ctx, project))
 
 		cli, err := client.Dial(
-			agent.RPCAddr(),
+			svr.RPCAddr(),
 			client.WithAPIKey(project.PublicKey),
 			client.WithToken("invalid"),
 		)
@@ -173,26 +173,26 @@ func TestAuthWebhook(t *testing.T) {
 
 		var recoveryCnt uint64
 		recoveryCnt = 4
-		server := newUnavailableAuthServer(t, recoveryCnt)
+		authServer := newUnavailableAuthServer(t, recoveryCnt)
 
 		conf := helper.TestConfig()
 		conf.Backend.AuthWebhookMaxRetries = recoveryCnt
 		conf.Backend.AuthWebhookMaxWaitInterval = "1000ms"
-		agent, err := yorkie.New(conf)
+		svr, err := server.New(conf)
 		assert.NoError(t, err)
-		assert.NoError(t, agent.Start())
-		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+		assert.NoError(t, svr.Start())
+		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli, err := admin.Dial(agent.AdminAddr())
+		adminCli, err := admin.Dial(svr.AdminAddr())
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
-		project.AuthWebhookURL = server.URL
+		project.AuthWebhookURL = authServer.URL
 		assert.NoError(t, adminCli.UpdateProject(ctx, project))
 
 		cli, err := client.Dial(
-			agent.RPCAddr(),
+			svr.RPCAddr(),
 			client.WithToken("token"),
 			client.WithAPIKey(project.PublicKey),
 		)
@@ -209,26 +209,26 @@ func TestAuthWebhook(t *testing.T) {
 
 	t.Run("authorization webhook that fails after retries test", func(t *testing.T) {
 		ctx := context.Background()
-		server := newUnavailableAuthServer(t, 4)
+		authServer := newUnavailableAuthServer(t, 4)
 
 		conf := helper.TestConfig()
 		conf.Backend.AuthWebhookMaxRetries = 2
 		conf.Backend.AuthWebhookMaxWaitInterval = "1000ms"
-		agent, err := yorkie.New(conf)
+		svr, err := server.New(conf)
 		assert.NoError(t, err)
-		assert.NoError(t, agent.Start())
-		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+		assert.NoError(t, svr.Start())
+		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli, err := admin.Dial(agent.AdminAddr())
+		adminCli, err := admin.Dial(svr.AdminAddr())
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
-		project.AuthWebhookURL = server.URL
+		project.AuthWebhookURL = authServer.URL
 		assert.NoError(t, adminCli.UpdateProject(ctx, project))
 
 		cli, err := client.Dial(
-			agent.RPCAddr(),
+			svr.RPCAddr(),
 			client.WithToken("token"),
 			client.WithAPIKey(project.PublicKey),
 		)
@@ -242,7 +242,7 @@ func TestAuthWebhook(t *testing.T) {
 	t.Run("authorized request cache test", func(t *testing.T) {
 		ctx := context.Background()
 		reqCnt := 0
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			req, err := types.NewAuthWebhookRequest(r.Body)
 			assert.NoError(t, err)
 
@@ -261,21 +261,21 @@ func TestAuthWebhook(t *testing.T) {
 		conf := helper.TestConfig()
 		conf.Backend.AuthWebhookCacheAuthTTL = authorizedTTL.String()
 
-		agent, err := yorkie.New(conf)
+		svr, err := server.New(conf)
 		assert.NoError(t, err)
-		assert.NoError(t, agent.Start())
-		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+		assert.NoError(t, svr.Start())
+		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli, err := admin.Dial(agent.AdminAddr())
+		adminCli, err := admin.Dial(svr.AdminAddr())
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
-		project.AuthWebhookURL = server.URL
+		project.AuthWebhookURL = authServer.URL
 		assert.NoError(t, adminCli.UpdateProject(ctx, project))
 
 		cli, err := client.Dial(
-			agent.RPCAddr(),
+			svr.RPCAddr(),
 			client.WithToken("token"),
 			client.WithAPIKey(project.PublicKey),
 		)
@@ -314,7 +314,7 @@ func TestAuthWebhook(t *testing.T) {
 	t.Run("unauthorized request cache test", func(t *testing.T) {
 		ctx := context.Background()
 		reqCnt := 0
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, err := types.NewAuthWebhookRequest(r.Body)
 			assert.NoError(t, err)
 
@@ -331,21 +331,21 @@ func TestAuthWebhook(t *testing.T) {
 		conf := helper.TestConfig()
 		conf.Backend.AuthWebhookCacheUnauthTTL = unauthorizedTTL.String()
 
-		agent, err := yorkie.New(conf)
+		svr, err := server.New(conf)
 		assert.NoError(t, err)
-		assert.NoError(t, agent.Start())
-		defer func() { assert.NoError(t, agent.Shutdown(true)) }()
+		assert.NoError(t, svr.Start())
+		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli, err := admin.Dial(agent.AdminAddr())
+		adminCli, err := admin.Dial(svr.AdminAddr())
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
-		project.AuthWebhookURL = server.URL
+		project.AuthWebhookURL = authServer.URL
 		assert.NoError(t, adminCli.UpdateProject(ctx, project))
 
 		cli, err := client.Dial(
-			agent.RPCAddr(),
+			svr.RPCAddr(),
 			client.WithToken("token"),
 			client.WithAPIKey(project.PublicKey),
 		)

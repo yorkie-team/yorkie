@@ -31,9 +31,9 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/server"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
-	"github.com/yorkie-team/yorkie/yorkie"
-	"github.com/yorkie-team/yorkie/yorkie/logging"
 )
 
 type clientAndDocPair struct {
@@ -46,17 +46,17 @@ type watchResponsePair struct {
 	Peers map[string]types.Metadata
 }
 
-var defaultAgent *yorkie.Yorkie
+var defaultServer *server.Yorkie
 
 func TestMain(m *testing.M) {
-	agent := helper.TestYorkie()
-	if err := agent.Start(); err != nil {
+	svr := helper.TestServer()
+	if err := svr.Start(); err != nil {
 		logging.DefaultLogger().Fatal(err)
 	}
-	defaultAgent = agent
+	defaultServer = svr
 	code := m.Run()
-	if defaultAgent != nil {
-		if err := defaultAgent.Shutdown(true); err != nil {
+	if defaultServer != nil {
+		if err := defaultServer.Shutdown(true); err != nil {
 			logging.DefaultLogger().Error(err)
 		}
 	}
@@ -93,7 +93,7 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 // clientConn is a helper function to create a client connection.
 func clientConn() (*grpc.ClientConn, error) {
 	conn, err := grpc.Dial(
-		defaultAgent.RPCAddr(),
+		defaultServer.RPCAddr(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -107,7 +107,7 @@ func clientConn() (*grpc.ClientConn, error) {
 func activeClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
-			defaultAgent.RPCAddr(),
+			defaultServer.RPCAddr(),
 			client.WithMetadata(types.Metadata{"name": fmt.Sprintf("name-%d", i)}),
 		)
 		assert.NoError(t, err)

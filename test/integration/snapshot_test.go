@@ -61,7 +61,7 @@ func TestSnapshot(t *testing.T) {
 		// NOTE: waiting for snapshot.
 		time.Sleep(500 * time.Millisecond)
 
-		// 02. Makes local changes then pull a snapshot from the agent.
+		// 02. Makes local changes then pull a snapshot from the server.
 		err = d2.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("key", "value")
 			return nil

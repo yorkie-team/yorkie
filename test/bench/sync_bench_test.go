@@ -26,10 +26,10 @@ import (
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/server/backend/sync"
+	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
+	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/test/helper"
-	"github.com/yorkie-team/yorkie/yorkie/backend/sync"
-	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/yorkie/backend/sync/memory"
 )
 
 func BenchmarkSync(b *testing.B) {
@@ -37,7 +37,7 @@ func BenchmarkSync(b *testing.B) {
 		Endpoints:     helper.ETCDEndpoints,
 		DialTimeout:   helper.ETCDDialTimeout.String(),
 		LockLeaseTime: helper.ETCDLockLeaseTime.String(),
-	}, &sync.AgentInfo{
+	}, &sync.ServerInfo{
 		ID: xid.New().String(),
 	})
 	assert.NoError(b, err)

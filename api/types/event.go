@@ -1,6 +1,6 @@
 package types
 
-// DocEventType represents the event that the Agent delivers to the client.
+// DocEventType represents the event that the Server delivers to the client.
 type DocEventType string
 
 const (

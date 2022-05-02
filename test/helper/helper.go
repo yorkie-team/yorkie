@@ -24,14 +24,14 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/yorkie"
-	"github.com/yorkie-team/yorkie/yorkie/admin"
-	"github.com/yorkie-team/yorkie/yorkie/backend"
-	"github.com/yorkie-team/yorkie/yorkie/backend/db/mongo"
-	"github.com/yorkie-team/yorkie/yorkie/backend/housekeeping"
-	"github.com/yorkie-team/yorkie/yorkie/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/yorkie/profiling"
-	"github.com/yorkie-team/yorkie/yorkie/rpc"
+	"github.com/yorkie-team/yorkie/server"
+	"github.com/yorkie-team/yorkie/server/admin"
+	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
+	"github.com/yorkie-team/yorkie/server/profiling"
+	"github.com/yorkie-team/yorkie/server/rpc"
 )
 
 var testStartedAt int64
@@ -74,7 +74,7 @@ func init() {
 // TestDBName returns the name of test database with timestamp.
 // timestamp is set only once on first call.
 func TestDBName() string {
-	return fmt.Sprintf("test-%s-%d", yorkie.DefaultMongoYorkieDatabase, testStartedAt)
+	return fmt.Sprintf("test-%s-%d", server.DefaultMongoYorkieDatabase, testStartedAt)
 }
 
 // TestRoot returns the root
@@ -94,9 +94,9 @@ func TextChangeContext(root *json.Root) *change.Context {
 var portOffset = 0
 
 // TestConfig returns config for creating Yorkie instance.
-func TestConfig() *yorkie.Config {
+func TestConfig() *server.Config {
 	portOffset += 100
-	return &yorkie.Config{
+	return &server.Config{
 		RPC: &rpc.Config{
 			Port:            RPCPort + portOffset,
 			MaxRequestBytes: RPCMaxRequestBytes,
@@ -134,9 +134,9 @@ func TestConfig() *yorkie.Config {
 	}
 }
 
-// TestYorkie returns a new instance of Yorkie for testing.
-func TestYorkie() *yorkie.Yorkie {
-	y, err := yorkie.New(TestConfig())
+// TestServer returns a new instance of Yorkie for testing.
+func TestServer() *server.Yorkie {
+	y, err := server.New(TestConfig())
 	if err != nil {
 		log.Fatal(err)
 	}
