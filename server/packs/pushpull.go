@@ -67,7 +67,7 @@ func pushChanges(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
 			clientInfo.ID,
 			len(pushedChanges),
-			docInfo.CombinedKey,
+			docInfo.Key,
 			len(reqPack.Changes)-len(pushedChanges),
 			initialServerSeq,
 			docInfo.ServerSeq,
@@ -87,11 +87,6 @@ func pullPack(
 	cpAfterPush change.Checkpoint,
 	initialServerSeq uint64,
 ) (*ServerPack, error) {
-	docKey, err := docInfo.Key()
-	if err != nil {
-		return nil, err
-	}
-
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
 		return nil, fmt.Errorf(
 			"serverSeq of CP greater than serverSeq of clientInfo(clientInfo %d, cp %d): %w",
@@ -115,7 +110,7 @@ func pullPack(
 		if err != nil {
 			return nil, err
 		}
-		return NewServerPack(docKey, cpAfterPull, pulledChanges, nil), err
+		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil), err
 	}
 
 	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
@@ -131,11 +126,6 @@ func pullSnapshot(
 	cpAfterPush change.Checkpoint,
 	initialServerSeq uint64,
 ) (*ServerPack, error) {
-	docKey, err := docInfo.Key()
-	if err != nil {
-		return nil, err
-	}
-
 	// Build document from DB if the size of changes for the response is greater than the snapshot threshold.
 	doc, err := BuildDocumentForServerSeq(ctx, be, docInfo, initialServerSeq)
 	if err != nil {
@@ -145,7 +135,7 @@ func pullSnapshot(
 	// Apply changes that are in the request pack.
 	if reqPack.HasChanges() {
 		if err := doc.ApplyChangePack(change.NewPack(
-			docKey,
+			docInfo.Key,
 			doc.Checkpoint().NextServerSeq(docInfo.ServerSeq),
 			reqPack.Changes,
 			nil,
@@ -165,11 +155,11 @@ func pullSnapshot(
 		clientInfo.ID,
 		reqPack.Checkpoint.ServerSeq+1,
 		initialServerSeq,
-		docInfo.CombinedKey,
+		docInfo.Key,
 		cpAfterPull.String(),
 	)
 
-	return NewServerPack(docKey, cpAfterPull, nil, snapshot), err
+	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot), err
 }
 
 func pullChangeInfos(
@@ -200,7 +190,7 @@ func pullChangeInfos(
 			len(pulledChanges),
 			pulledChanges[0].ServerSeq,
 			pulledChanges[len(pulledChanges)-1].ServerSeq,
-			docInfo.CombinedKey,
+			docInfo.Key,
 			cpAfterPull.String(),
 		)
 	}

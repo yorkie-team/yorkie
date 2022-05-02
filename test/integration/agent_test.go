@@ -30,6 +30,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -43,7 +44,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.Collection, t.Name())
+		doc := document.New(key.Key(t.Name()))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		wg := sync.WaitGroup{}
@@ -58,7 +59,7 @@ func TestServer(t *testing.T) {
 					return
 				case wr := <-wrch:
 					if wr.Err == io.EOF || status.Code(wr.Err) == codes.Canceled {
-						peers := wr.PeersMapByDoc[doc.Key().CombinedKey()]
+						peers := wr.PeersMapByDoc[doc.Key().String()]
 						assert.Len(t, peers, 0)
 						wg.Done()
 						return

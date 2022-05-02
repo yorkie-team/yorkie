@@ -28,8 +28,8 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
-	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestDocument(t *testing.T) {
@@ -39,7 +39,7 @@ func TestDocument(t *testing.T) {
 
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
-		doc := document.New(helper.Collection, t.Name())
+		doc := document.New(key.Key(t.Name()))
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k1", "v1")
 			return nil
@@ -54,7 +54,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 
-		doc2 := document.New(helper.Collection, t.Name())
+		doc2 := document.New(key.Key(t.Name()))
 		err = doc2.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k1", "v2")
 			return nil
@@ -69,11 +69,11 @@ func TestDocument(t *testing.T) {
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.Collection, t.Name())
+		d2 := document.New(key.Key(t.Name()))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -108,11 +108,11 @@ func TestDocument(t *testing.T) {
 	t.Run("watch document changed event test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.Collection, t.Name())
+		d2 := document.New(key.Key(t.Name()))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

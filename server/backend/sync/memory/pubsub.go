@@ -93,7 +93,7 @@ func (m *PubSub) Subscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
-			keys[0].CombinedKey(),
+			keys[0],
 			subscriber.ID.String(),
 		)
 	}
@@ -105,17 +105,17 @@ func (m *PubSub) Subscribe(
 	m.subscriptionMapBySubscriber[sub.SubscriberID()] = sub
 
 	for _, docKey := range keys {
-		combinedKey := docKey.CombinedKey()
-		if _, ok := m.subscriptionsMapByDocKey[combinedKey]; !ok {
-			m.subscriptionsMapByDocKey[combinedKey] = newSubscriptions()
+		key := docKey.String()
+		if _, ok := m.subscriptionsMapByDocKey[key]; !ok {
+			m.subscriptionsMapByDocKey[key] = newSubscriptions()
 		}
-		m.subscriptionsMapByDocKey[combinedKey].Add(sub)
+		m.subscriptionsMapByDocKey[key].Add(sub)
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
-			keys[0].CombinedKey(),
+			keys[0],
 			subscriber.ID.String(),
 		)
 	}
@@ -126,7 +126,7 @@ func (m *PubSub) Subscribe(
 func (m *PubSub) BuildPeersMap(keys []key.Key) map[string][]types.Client {
 	peersMap := make(map[string][]types.Client)
 	for _, docKey := range keys {
-		combinedKey := docKey.CombinedKey()
+		combinedKey := docKey.String()
 		var peers []types.Client
 		for _, sub := range m.subscriptionsMapByDocKey[combinedKey].Map() {
 			peers = append(peers, sub.Subscriber())
@@ -148,7 +148,7 @@ func (m *PubSub) Unsubscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
-			docKeys[0].CombinedKey(),
+			docKeys[0].String(),
 			sub.SubscriberID(),
 		)
 	}
@@ -157,7 +157,7 @@ func (m *PubSub) Unsubscribe(
 
 	delete(m.subscriptionMapBySubscriber, sub.SubscriberID())
 	for _, docKey := range docKeys {
-		k := docKey.CombinedKey()
+		k := docKey.String()
 		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
 			subs.Delete(sub.ID())
 
@@ -170,7 +170,7 @@ func (m *PubSub) Unsubscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
-			docKeys[0].CombinedKey(),
+			docKeys[0].String(),
 			sub.SubscriberID(),
 		)
 	}
@@ -186,7 +186,7 @@ func (m *PubSub) Publish(
 	defer m.subscriptionsMapMu.RUnlock()
 
 	for _, docKey := range event.DocumentKeys {
-		k := docKey.CombinedKey()
+		k := docKey.String()
 
 		if logging.Enabled(zap.DebugLevel) {
 			logging.From(ctx).Debugf(`Publish(%s,%s) Start`, k, publisherID.String())

@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/db"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -377,7 +378,7 @@ func (c *Client) FindDeactivateCandidates(
 func (c *Client) FindDocInfoByKey(
 	ctx context.Context,
 	clientInfo *db.ClientInfo,
-	bsonDocKey string,
+	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*db.DocInfo, error) {
 	encodedOwnerID, err := encodeID(clientInfo.ID)
@@ -387,7 +388,7 @@ func (c *Client) FindDocInfoByKey(
 
 	now := gotime.Now()
 	res, err := c.collection(colDocuments).UpdateOne(ctx, bson.M{
-		"key": bsonDocKey,
+		"key": docKey,
 	}, bson.M{
 		"$set": bson.M{
 			"accessed_at": now,
@@ -411,11 +412,11 @@ func (c *Client) FindDocInfoByKey(
 		})
 	} else {
 		result = c.collection(colDocuments).FindOne(ctx, bson.M{
-			"key": bsonDocKey,
+			"key": docKey,
 		})
 		if result.Err() == mongo.ErrNoDocuments {
 			logging.From(ctx).Error(result.Err())
-			return nil, fmt.Errorf("%s: %w", bsonDocKey, db.ErrDocumentNotFound)
+			return nil, fmt.Errorf("%s: %w", docKey, db.ErrDocumentNotFound)
 		}
 		if result.Err() != nil {
 			logging.From(ctx).Error(result.Err())

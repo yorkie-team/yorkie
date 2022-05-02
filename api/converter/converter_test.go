@@ -37,7 +37,7 @@ func TestConverter(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "{}", obj.Marshal())
 
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewText("k1").Edit(0, 0, "A")
@@ -62,7 +62,7 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("snapshot test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			// an object and primitive types
@@ -124,7 +124,7 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("change pack test", func(t *testing.T) {
-		d1 := document.New("c1", "d1")
+		d1 := document.New("d1")
 
 		err := d1.Update(func(root *proxy.ObjectProxy) error {
 			// an object and primitive types
@@ -182,7 +182,7 @@ func TestConverter(t *testing.T) {
 		assert.NoError(t, err)
 		pack.MinSyncedTicket = time.MaxTicket
 
-		d2 := document.New("c1", "d1")
+		d2 := document.New("d1")
 		err = d2.ApplyChangePack(pack)
 		assert.NoError(t, err)
 

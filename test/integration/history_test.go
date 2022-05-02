@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
-	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestHistory(t *testing.T) {
@@ -37,7 +37,7 @@ func TestHistory(t *testing.T) {
 	t.Run("history test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 

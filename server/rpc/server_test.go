@@ -52,10 +52,8 @@ var (
 	testClient    api.YorkieClient
 
 	invalidChangePack = &api.ChangePack{
-		DocumentKey: &api.DocumentKey{
-			Collection: "invalid", Document: "invalid",
-		},
-		Checkpoint: nil,
+		DocumentKey: "invalid",
+		Checkpoint:  nil,
 	}
 )
 
@@ -167,10 +165,8 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: &api.DocumentKey{
-				Collection: t.Name(), Document: t.Name(),
-			},
-			Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			DocumentKey: t.Name(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
 		_, err = testClient.AttachDocument(
@@ -256,10 +252,8 @@ func TestRPCServerBackend(t *testing.T) {
 			&api.DetachDocumentRequest{
 				ClientId: activateResp.ClientId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: &api.DocumentKey{
-						Collection: "invalid", Document: "invalid",
-					},
-					Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+					DocumentKey: "invalid",
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 				},
 			},
 		)
@@ -284,10 +278,8 @@ func TestRPCServerBackend(t *testing.T) {
 
 	t.Run("push/pull changes test", func(t *testing.T) {
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: &api.DocumentKey{
-				Collection: t.Name(), Document: t.Name(),
-			},
-			Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			DocumentKey: t.Name(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
 		activateResp, err := testClient.ActivateClient(
@@ -301,10 +293,8 @@ func TestRPCServerBackend(t *testing.T) {
 			&api.AttachDocumentRequest{
 				ClientId: activateResp.ClientId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: &api.DocumentKey{
-						Collection: t.Name(), Document: t.Name(),
-					},
-					Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					DocumentKey: t.Name(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
 					Changes: []*api.Change{{
 						Id: &api.ChangeID{
 							ClientSeq: 1,
@@ -322,10 +312,8 @@ func TestRPCServerBackend(t *testing.T) {
 			&api.PushPullRequest{
 				ClientId: activateResp.ClientId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: &api.DocumentKey{
-						Collection: t.Name(), Document: t.Name(),
-					},
-					Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
+					DocumentKey: t.Name(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
 					Changes: []*api.Change{{
 						Id: &api.ChangeID{
 							ClientSeq: 2,
@@ -343,10 +331,8 @@ func TestRPCServerBackend(t *testing.T) {
 			&api.DetachDocumentRequest{
 				ClientId: activateResp.ClientId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: &api.DocumentKey{
-						Collection: t.Name(), Document: t.Name(),
-					},
-					Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
+					DocumentKey: t.Name(),
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
 					Changes: []*api.Change{{
 						Id: &api.ChangeID{
 							ClientSeq: 3,

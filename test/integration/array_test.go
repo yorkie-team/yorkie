@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
-	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestArray(t *testing.T) {
@@ -36,7 +36,7 @@ func TestArray(t *testing.T) {
 
 	t.Run("causal nested array test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -48,7 +48,7 @@ func TestArray(t *testing.T) {
 		}, "nested update by c1")
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.Collection, t.Name())
+		d2 := document.New(key.Key(t.Name()))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -58,7 +58,7 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array add/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -71,7 +71,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.Collection, t.Name())
+		d2 := document.New(key.Key(t.Name()))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -93,7 +93,7 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array add/delete test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -105,7 +105,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.Collection, t.Name())
+		d2 := document.New(key.Key(t.Name()))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -128,7 +128,7 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array delete test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -140,7 +140,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.Collection, t.Name())
+		d2 := document.New(key.Key(t.Name()))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -168,7 +168,7 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array move test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -181,7 +181,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.Collection, t.Name())
+		d2 := document.New(key.Key(t.Name()))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -209,7 +209,7 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array move with the same position test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("k1").AddInteger(0, 1, 2)
@@ -217,7 +217,7 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx))
-		d2 := document.New(helper.Collection, t.Name())
+		d2 := document.New(key.Key(t.Name()))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {

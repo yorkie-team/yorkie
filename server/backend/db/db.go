@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -87,7 +88,7 @@ type DB interface {
 	FindDocInfoByKey(
 		ctx context.Context,
 		clientInfo *ClientInfo,
-		bsonDocKey string,
+		docKey key.Key,
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
 

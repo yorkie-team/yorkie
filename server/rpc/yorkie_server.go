@@ -337,7 +337,7 @@ func (s *yorkieServer) WatchDocuments(
 	var attrs []types.AccessAttribute
 	for _, k := range docKeys {
 		attrs = append(attrs, types.AccessAttribute{
-			Key:  k.CombinedKey(),
+			Key:  k.String(),
 			Verb: types.Read,
 		})
 	}
@@ -440,12 +440,12 @@ func (s *yorkieServer) ListChanges(
 	if err != nil {
 		return nil, err
 	}
-	docKey := converter.FromDocumentKey(req.DocumentKey)
+	docKey := key.Key(req.DocumentKey)
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method: types.ListChanges,
 		Attributes: []types.AccessAttribute{{
-			Key:  docKey.CombinedKey(),
+			Key:  docKey.String(),
 			Verb: types.Read,
 		}},
 	}); err != nil {

@@ -103,20 +103,12 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	}
 
 	return &change.Pack{
-		DocumentKey:     FromDocumentKey(pbPack.DocumentKey),
+		DocumentKey:     key.Key(pbPack.DocumentKey),
 		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
 		Changes:         changes,
 		Snapshot:        pbPack.Snapshot,
 		MinSyncedTicket: minSyncedTicket,
 	}, nil
-}
-
-// FromDocumentKey converts the given Protobuf formats to model format.
-func FromDocumentKey(pbKey *api.DocumentKey) key.Key {
-	return key.Key{
-		Collection: pbKey.Collection,
-		Document:   pbKey.Document,
-	}
 }
 
 func fromCheckpoint(pbCheckpoint *api.Checkpoint) change.Checkpoint {
@@ -162,10 +154,10 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 }
 
 // FromDocumentKeys converts the given Protobuf formats to model format.
-func FromDocumentKeys(pbKeys []*api.DocumentKey) []key.Key {
+func FromDocumentKeys(pbKeys []string) []key.Key {
 	var keys []key.Key
 	for _, pbKey := range pbKeys {
-		keys = append(keys, FromDocumentKey(pbKey))
+		keys = append(keys, key.Key(pbKey))
 	}
 	return keys
 }

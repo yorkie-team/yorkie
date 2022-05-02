@@ -62,8 +62,6 @@ var (
 	ETCDEndpoints     = []string{"localhost:2379"}
 	ETCDDialTimeout   = 5 * gotime.Second
 	ETCDLockLeaseTime = 30 * gotime.Second
-
-	Collection = "test-collection"
 )
 
 func init() {

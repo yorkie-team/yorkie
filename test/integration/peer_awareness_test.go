@@ -29,7 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/test/helper"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 func TestPeerAwareness(t *testing.T) {
@@ -40,8 +40,8 @@ func TestPeerAwareness(t *testing.T) {
 	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.Collection, t.Name())
-		d2 := document.New(helper.Collection, t.Name())
+		d1 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(t.Name()))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2))
@@ -73,7 +73,7 @@ func TestPeerAwareness(t *testing.T) {
 					}
 
 					if wr.Type == client.PeersChanged {
-						peers := wr.PeersMapByDoc[d1.Key().CombinedKey()]
+						peers := wr.PeersMapByDoc[d1.Key().String()]
 						responsePairs = append(responsePairs, watchResponsePair{
 							Type:  wr.Type,
 							Peers: peers,

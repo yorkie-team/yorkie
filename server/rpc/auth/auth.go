@@ -35,7 +35,7 @@ func AccessAttributes(pack *change.Pack) []types.AccessAttribute {
 	// NOTE(hackerwins): In the future, methods such as bulk PushPull can be
 	// added, so we declare it as an array.
 	return []types.AccessAttribute{{
-		Key:  pack.DocumentKey.CombinedKey(),
+		Key:  pack.DocumentKey.String(),
 		Verb: verb,
 	}}
 }

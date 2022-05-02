@@ -35,23 +35,23 @@ var (
 
 func TestDocument(t *testing.T) {
 	t.Run("constructor test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 		assert.Equal(t, doc.Checkpoint(), change.InitialCheckpoint)
 		assert.False(t, doc.HasLocalChanges())
 		assert.False(t, doc.IsAttached())
 	})
 
 	t.Run("status test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 		assert.False(t, doc.IsAttached())
 		doc.SetStatus(document.Attached)
 		assert.True(t, doc.IsAttached())
 	})
 
 	t.Run("equals test", func(t *testing.T) {
-		doc1 := document.New("c1", "d1")
-		doc2 := document.New("c1", "d2")
-		doc3 := document.New("c1", "d3")
+		doc1 := document.New("d1")
+		doc2 := document.New("d2")
+		doc3 := document.New("d3")
 
 		err := doc1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k1", "v1")
@@ -66,7 +66,7 @@ func TestDocument(t *testing.T) {
 	t.Run("nested update test", func(t *testing.T) {
 		expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
 
@@ -84,7 +84,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("delete test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
 
@@ -110,7 +110,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("object test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetString("k1", "v1")
 			assert.Equal(t, `{"k1":"v1"}`, root.Marshal())
@@ -123,7 +123,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("array test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
@@ -161,7 +161,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("text test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		//           ---------- ins links --------
 		//           |                |          |
@@ -203,7 +203,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("text composition test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewText("k1").
@@ -221,7 +221,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("rich text test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.SetNewRichText("k1")
@@ -321,7 +321,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("counter test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 		var integer = 10
 		var long int64 = 5
 		var uinteger uint = 100
@@ -413,7 +413,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("rollback test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("k1").AddInteger(1, 2, 3)
@@ -438,7 +438,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("rollback test, primitive deepcopy", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewObject("k1").
@@ -458,7 +458,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("text garbage collection test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewText("text")
@@ -495,7 +495,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("previously inserted elements in heap when running GC test", func(t *testing.T) {
-		doc := document.New("c1", "d1")
+		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetInteger("a", 1)

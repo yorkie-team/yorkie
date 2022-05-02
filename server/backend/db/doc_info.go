@@ -25,29 +25,19 @@ import (
 
 // DocInfo is a structure representing information of the document.
 type DocInfo struct {
-	ID          types.ID  `bson:"_id"`
-	CombinedKey string    `bson:"key"`
-	ServerSeq   uint64    `bson:"server_seq"`
-	Owner       types.ID  `bson:"owner"`
-	CreatedAt   time.Time `bson:"created_at"`
-	AccessedAt  time.Time `bson:"accessed_at"`
-	UpdatedAt   time.Time `bson:"updated_at"`
+	ID         types.ID  `bson:"_id"`
+	Key        key.Key   `bson:"key"`
+	ServerSeq  uint64    `bson:"server_seq"`
+	Owner      types.ID  `bson:"owner"`
+	CreatedAt  time.Time `bson:"created_at"`
+	AccessedAt time.Time `bson:"accessed_at"`
+	UpdatedAt  time.Time `bson:"updated_at"`
 }
 
 // IncreaseServerSeq increases server sequence of the document.
 func (info *DocInfo) IncreaseServerSeq() uint64 {
 	info.ServerSeq++
 	return info.ServerSeq
-}
-
-// Key creates Key instance of this DocInfo.
-func (info *DocInfo) Key() (key.Key, error) {
-	docKey, err := key.FromCombinedKey(info.CombinedKey)
-	if err != nil {
-		return key.Key{}, err
-	}
-
-	return docKey, nil
 }
 
 // DeepCopy creates a deep copy of this DocInfo.
@@ -57,12 +47,12 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 	}
 
 	return &DocInfo{
-		ID:          info.ID,
-		CombinedKey: info.CombinedKey,
-		ServerSeq:   info.ServerSeq,
-		Owner:       info.Owner,
-		CreatedAt:   info.CreatedAt,
-		AccessedAt:  info.AccessedAt,
-		UpdatedAt:   info.UpdatedAt,
+		ID:         info.ID,
+		Key:        info.Key,
+		ServerSeq:  info.ServerSeq,
+		Owner:      info.Owner,
+		CreatedAt:  info.CreatedAt,
+		AccessedAt: info.AccessedAt,
+		UpdatedAt:  info.UpdatedAt,
 	}
 }

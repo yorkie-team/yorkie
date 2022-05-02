@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/db"
@@ -86,21 +87,21 @@ func TestDB(t *testing.T) {
 		clientInfo, err := memdb.ActivateClient(ctx, t.Name())
 		assert.NoError(t, err)
 
-		bsonDocKey := fmt.Sprintf("tests$%s", t.Name())
-		_, err = memdb.FindDocInfoByKey(ctx, clientInfo, bsonDocKey, false)
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		_, err = memdb.FindDocInfoByKey(ctx, clientInfo, docKey, false)
 		assert.ErrorIs(t, err, db.ErrDocumentNotFound)
 
-		docInfo, err := memdb.FindDocInfoByKey(ctx, clientInfo, bsonDocKey, true)
+		docInfo, err := memdb.FindDocInfoByKey(ctx, clientInfo, docKey, true)
 		assert.NoError(t, err)
-		assert.Equal(t, bsonDocKey, docInfo.CombinedKey)
+		assert.Equal(t, docKey, docInfo.Key)
 	})
 
 	t.Run("update clientInfo after PushPull test", func(t *testing.T) {
 		clientInfo, err := memdb.ActivateClient(ctx, t.Name())
 		assert.NoError(t, err)
 
-		bsonDocKey := fmt.Sprintf("tests$%s", t.Name())
-		docInfo, err := memdb.FindDocInfoByKey(ctx, clientInfo, bsonDocKey, true)
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docInfo, err := memdb.FindDocInfoByKey(ctx, clientInfo, docKey, true)
 		assert.NoError(t, err)
 
 		err = memdb.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
@@ -110,16 +111,16 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("insert and find changes test", func(t *testing.T) {
-		bsonDocKey := fmt.Sprintf("tests$%s", t.Name())
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
 		clientInfo, _ := memdb.ActivateClient(ctx, t.Name())
-		docInfo, _ := memdb.FindDocInfoByKey(ctx, clientInfo, bsonDocKey, true)
+		docInfo, _ := memdb.FindDocInfoByKey(ctx, clientInfo, docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, memdb.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
-		doc := document.New("tests", t.Name())
+		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
 		assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("array")
@@ -132,8 +133,8 @@ func TestDB(t *testing.T) {
 			}))
 		}
 		pack := doc.CreateChangePack()
-		for idx, change := range pack.Changes {
-			change.SetServerSeq(uint64(idx))
+		for idx, c := range pack.Changes {
+			c.SetServerSeq(uint64(idx))
 		}
 
 		// Store changes
@@ -153,14 +154,14 @@ func TestDB(t *testing.T) {
 
 	t.Run("store and find snapshots test", func(t *testing.T) {
 		ctx := context.Background()
-		bsonDocKey := fmt.Sprintf("tests$%s", t.Name())
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
 		clientInfo, _ := memdb.ActivateClient(ctx, t.Name())
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
-		docInfo, _ := memdb.FindDocInfoByKey(ctx, clientInfo, bsonDocKey, true)
+		docInfo, _ := memdb.FindDocInfoByKey(ctx, clientInfo, docKey, true)
 
-		doc := document.New("tests", t.Name())
+		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
 
 		assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
@@ -197,10 +198,10 @@ func TestDB(t *testing.T) {
 		localDB, err := memory.New()
 		assert.NoError(t, err)
 
-		assertKeys := func(expectedKeys []string, infos []*db.DocInfo) {
-			var keys []string
+		assertKeys := func(expectedKeys []key.Key, infos []*db.DocInfo) {
+			var keys []key.Key
 			for _, info := range infos {
-				keys = append(keys, info.CombinedKey)
+				keys = append(keys, info.Key)
 			}
 			assert.EqualValues(t, expectedKeys, keys)
 		}
@@ -209,19 +210,19 @@ func TestDB(t *testing.T) {
 		totalSize := 9
 		clientInfo, _ := localDB.ActivateClient(ctx, t.Name())
 		for i := 0; i < totalSize; i++ {
-			_, err := localDB.FindDocInfoByKey(ctx, clientInfo, fmt.Sprintf("%d", i), true)
+			_, err := localDB.FindDocInfoByKey(ctx, clientInfo, key.Key(fmt.Sprintf("%d", i)), true)
 			assert.NoError(t, err)
 		}
 
 		// initial page, previousID is empty
 		infos, err := localDB.FindDocInfosByPreviousIDAndPageSize(ctx, "", pageSize, false)
 		assert.NoError(t, err)
-		assertKeys([]string{"8", "7", "6", "5", "4"}, infos)
+		assertKeys([]key.Key{"8", "7", "6", "5", "4"}, infos)
 
 		// backward
 		infos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[len(infos)-1].ID, pageSize, false)
 		assert.NoError(t, err)
-		assertKeys([]string{"3", "2", "1", "0"}, infos)
+		assertKeys([]key.Key{"3", "2", "1", "0"}, infos)
 
 		// backward again
 		emptyInfos, err := localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[len(infos)-1].ID, pageSize, false)
@@ -231,7 +232,7 @@ func TestDB(t *testing.T) {
 		// forward
 		infos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[0].ID, pageSize, true)
 		assert.NoError(t, err)
-		assertKeys([]string{"4", "5", "6", "7", "8"}, infos)
+		assertKeys([]key.Key{"4", "5", "6", "7", "8"}, infos)
 
 		// forward again
 		emptyInfos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[len(infos)-1].ID, pageSize, true)

@@ -268,7 +268,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.Attached)
-	c.attachments[doc.Key().CombinedKey()] = &Attachment{
+	c.attachments[doc.Key().String()] = &Attachment{
 		doc:   doc,
 		peers: make(map[string]types.MetadataInfo),
 	}
@@ -287,7 +287,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return ErrClientNotActivated
 	}
 
-	if _, ok := c.attachments[doc.Key().CombinedKey()]; !ok {
+	if _, ok := c.attachments[doc.Key().String()]; !ok {
 		return ErrDocumentNotAttached
 	}
 
@@ -314,7 +314,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.Detached)
-	delete(c.attachments, doc.Key().CombinedKey())
+	delete(c.attachments, doc.Key().String())
 
 	return nil
 }
@@ -399,7 +399,7 @@ func (c *Client) Watch(
 						return nil, err
 					}
 
-					attachment := c.attachments[k.CombinedKey()]
+					attachment := c.attachments[k.String()]
 					if eventType == types.DocumentsWatchedEvent ||
 						eventType == types.MetadataChangedEvent {
 						if info, ok := attachment.peers[cli.ID.String()]; ok {
@@ -487,7 +487,7 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 func (c *Client) ListChangeSummaries(ctx context.Context, key key.Key) ([]*types.ChangeSummary, error) {
 	resp, err := c.client.ListChanges(ctx, &api.ListChangesRequest{
 		ClientId:    c.id.Bytes(),
-		DocumentKey: converter.ToDocumentKey(key),
+		DocumentKey: key.String(),
 	})
 	if err != nil {
 		return nil, err
@@ -560,7 +560,7 @@ func (c *Client) sync(ctx context.Context, key key.Key) error {
 		return ErrClientNotActivated
 	}
 
-	attachment, ok := c.attachments[key.CombinedKey()]
+	attachment, ok := c.attachments[key.String()]
 	if !ok {
 		return ErrDocumentNotAttached
 	}

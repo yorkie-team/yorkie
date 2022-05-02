@@ -81,7 +81,7 @@ func FindClientAndDocument(
 	docInfo, err := be.DB.FindDocInfoByKey(
 		ctx,
 		clientInfo,
-		docKey.CombinedKey(),
+		docKey,
 		createDocIfNotExist,
 	)
 	if err != nil {
