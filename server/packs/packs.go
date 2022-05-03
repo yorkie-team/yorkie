@@ -28,7 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -48,8 +48,8 @@ func SnapshotKey(docKey key.Key) sync.Key {
 func PushPull(
 	ctx context.Context,
 	be *backend.Backend,
-	clientInfo *db.ClientInfo,
-	docInfo *db.DocInfo,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 ) (*ServerPack, error) {
 	start := gotime.Now()
@@ -163,7 +163,7 @@ func PushPull(
 func BuildDocumentForServerSeq(
 	ctx context.Context,
 	be *backend.Backend,
-	docInfo *db.DocInfo,
+	docInfo *database.DocInfo,
 	serverSeq uint64,
 ) (*document.InternalDocument, error) {
 	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, serverSeq)

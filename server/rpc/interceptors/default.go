@@ -52,7 +52,7 @@ func (i *DefaultInterceptor) Unary() grpc.UnaryServerInterceptor {
 		if gotime.Since(start) > 100*gotime.Millisecond {
 			reqLogger.Infof("RPC : %q %s", info.FullMethod, gotime.Since(start))
 		}
-		return resp, err
+		return resp, nil
 	}
 }
 
@@ -74,6 +74,6 @@ func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
 		}
 
 		reqLogger.Infof("RPC : stream %q %s", info.FullMethod, gotime.Since(start))
-		return err
+		return nil
 	}
 }

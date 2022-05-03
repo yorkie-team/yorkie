@@ -23,27 +23,28 @@ import (
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
+	grpcmetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
-// MetadataInterceptor is an interceptor for extracting metadata from gRPC context.
-type MetadataInterceptor struct {
+// ContextInterceptor is an interceptor for building additional context.
+type ContextInterceptor struct {
 	backend *backend.Backend
 }
 
-// NewMetadataInterceptor creates a new instance of MetadataInterceptor.
-func NewMetadataInterceptor(be *backend.Backend) *MetadataInterceptor {
-	return &MetadataInterceptor{
+// NewContextInterceptor creates a new instance of ContextInterceptor.
+func NewContextInterceptor(be *backend.Backend) *ContextInterceptor {
+	return &ContextInterceptor{
 		backend: be,
 	}
 }
 
-// Unary creates a unary server interceptor for authorization.
-func (i *MetadataInterceptor) Unary() grpc.UnaryServerInterceptor {
+// Unary creates a unary server interceptor for building additional context.
+func (i *ContextInterceptor) Unary() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req interface{},
@@ -51,19 +52,20 @@ func (i *MetadataInterceptor) Unary() grpc.UnaryServerInterceptor {
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
 		if isRPCService(info.FullMethod) {
-			md, err := i.extractMetadata(ctx)
+			ctx, err := i.buildContext(ctx)
 			if err != nil {
 				return nil, err
 			}
-			return handler(auth.CtxWithMetadata(ctx, md), req)
+
+			return handler(ctx, req)
 		}
 
 		return handler(ctx, req)
 	}
 }
 
-// Stream creates a stream server interceptor for authorization.
-func (i *MetadataInterceptor) Stream() grpc.StreamServerInterceptor {
+// Stream creates a stream server interceptor for building additional context.
+func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 	return func(
 		srv interface{},
 		ss grpc.ServerStream,
@@ -71,12 +73,15 @@ func (i *MetadataInterceptor) Stream() grpc.StreamServerInterceptor {
 		handler grpc.StreamHandler,
 	) error {
 		if isRPCService(info.FullMethod) {
-			md, err := i.extractMetadata(ss.Context())
+			ctx := ss.Context()
+
+			ctx, err := i.buildContext(ctx)
 			if err != nil {
 				return err
 			}
+
 			wrapped := grpcmiddleware.WrapServerStream(ss)
-			wrapped.WrappedContext = auth.CtxWithMetadata(ss.Context(), md)
+			wrapped.WrappedContext = ctx
 			return handler(srv, wrapped)
 		}
 
@@ -88,18 +93,20 @@ func isRPCService(method string) bool {
 	return strings.HasPrefix(method, "/api.Yorkie/")
 }
 
-func (i *MetadataInterceptor) extractMetadata(ctx context.Context) (auth.Metadata, error) {
-	md := auth.Metadata{}
-	data, ok := metadata.FromIncomingContext(ctx)
+// buildContext builds a context data for RPC. It includes the metadata of the
+// request and the project information.
+func (i *ContextInterceptor) buildContext(ctx context.Context) (context.Context, error) {
+	// 01. building metadata
+	md := metadata.Metadata{}
+	data, ok := grpcmetadata.FromIncomingContext(ctx)
 	if !ok {
-		return md, status.Errorf(codes.Unauthenticated, "metadata is not provided")
+		return nil, status.Errorf(codes.Unauthenticated, "metadata is not provided")
 	}
 
 	apiKey := data["x-api-key"]
 	if len(apiKey) == 0 && !i.backend.Config.UseDefaultProject {
-		return md, status.Errorf(codes.Unauthenticated, "api key is not provided")
+		return nil, status.Errorf(codes.Unauthenticated, "api key is not provided")
 	}
-
 	if len(apiKey) > 0 {
 		md.APIKey = apiKey[0]
 	}
@@ -108,6 +115,16 @@ func (i *MetadataInterceptor) extractMetadata(ctx context.Context) (auth.Metadat
 	if len(authorization) > 0 {
 		md.Authorization = authorization[0]
 	}
+	ctx = metadata.With(ctx, md)
 
-	return md, nil
+	// 02. building project
+	// TODO(hackerwins): Improve the performance of this function.
+	// Consider using a cache to store the info.
+	project, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
+	if err != nil {
+		return nil, toStatusError(err)
+	}
+	ctx = projects.With(ctx, project)
+
+	return ctx, nil
 }

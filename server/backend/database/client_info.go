@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package db
+package database
 
 import (
 	"errors"
@@ -55,6 +55,9 @@ type ClientDocInfo struct {
 type ClientInfo struct {
 	// ID is the unique ID of the client.
 	ID types.ID `bson:"_id"`
+
+	// ProjectID is the ID of the project the client belongs to.
+	ProjectID types.ID `bson:"project_id"`
 
 	// Key is the key of the client. It is used to identify the client by users.
 	Key string `bson:"key"`

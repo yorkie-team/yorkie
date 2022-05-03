@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2022 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,19 +12,14 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
-package db
+package types
 
-import "github.com/yorkie-team/yorkie/api/types"
-
-// SyncedSeqInfo is a structure representing information about the synchronized
-// sequence for each client.
-type SyncedSeqInfo struct {
-	ID        types.ID `bson:"_id"`
-	DocID     types.ID `bson:"doc_id"`
-	ClientID  types.ID `bson:"client_id"`
-	Lamport   uint64   `bson:"lamport"`
-	ActorID   types.ID `bson:"actor_id"`
-	ServerSeq uint64   `bson:"server_seq"`
+// Paging is the paging information for the document.
+type Paging struct {
+	PreviousID ID
+	PageSize   int
+	IsForward  bool
 }

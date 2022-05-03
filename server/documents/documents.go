@@ -28,11 +28,9 @@ import (
 func ListDocumentSummaries(
 	ctx context.Context,
 	be *backend.Backend,
-	previousID types.ID,
-	pageSize int,
-	isForward bool,
+	paging types.Paging,
 ) ([]*types.DocumentSummary, error) {
-	docInfo, err := be.DB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, pageSize, isForward)
+	docInfo, err := be.DB.FindDocInfosByPaging(ctx, paging)
 	if err != nil {
 		return nil, err
 	}

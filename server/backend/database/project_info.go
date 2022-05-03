@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package db
+package database
 
 import (
 	"fmt"
@@ -103,25 +103,6 @@ func (i *ProjectInfo) Validate() error {
 		}
 	}
 	return nil
-}
-
-// RequireAuth returns whether the given method requires authorization.
-func (i *ProjectInfo) RequireAuth(method types.Method) bool {
-	if len(i.AuthWebhookURL) == 0 {
-		return false
-	}
-
-	if len(i.AuthWebhookMethods) == 0 {
-		return true
-	}
-
-	for _, m := range i.AuthWebhookMethods {
-		if types.Method(m) == method {
-			return true
-		}
-	}
-
-	return false
 }
 
 // ToProject converts the ProjectInfo to the Project.

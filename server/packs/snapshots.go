@@ -23,14 +23,14 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 func storeSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
-	docInfo *db.DocInfo,
+	docInfo *database.DocInfo,
 	minSyncedTicket *time.Ticket,
 ) error {
 	// 01. get the closest snapshot of this docInfo

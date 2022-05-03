@@ -33,7 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -92,9 +92,9 @@ func (c *Client) Close() error {
 }
 
 // EnsureDefaultProjectInfo creates the default project info if it does not exist.
-func (c *Client) EnsureDefaultProjectInfo(ctx context.Context) (*db.ProjectInfo, error) {
-	candidate := db.NewProjectInfo(db.DefaultProjectName)
-	candidate.ID = db.DefaultProjectID
+func (c *Client) EnsureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
+	candidate := database.NewProjectInfo(database.DefaultProjectName)
+	candidate.ID = database.DefaultProjectID
 	encodedID, err := encodeID(candidate.ID)
 	if err != nil {
 		return nil, err
@@ -118,10 +118,10 @@ func (c *Client) EnsureDefaultProjectInfo(ctx context.Context) (*db.ProjectInfo,
 		"_id": encodedID,
 	})
 
-	info := db.ProjectInfo{}
+	info := database.ProjectInfo{}
 	if err := result.Decode(&info); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("default: %w", db.ErrProjectNotFound)
+			return nil, fmt.Errorf("default: %w", database.ErrProjectNotFound)
 		}
 		return nil, err
 	}
@@ -130,8 +130,8 @@ func (c *Client) EnsureDefaultProjectInfo(ctx context.Context) (*db.ProjectInfo,
 }
 
 // CreateProjectInfo creates a new project.
-func (c *Client) CreateProjectInfo(ctx context.Context, name string) (*db.ProjectInfo, error) {
-	info := db.NewProjectInfo(name)
+func (c *Client) CreateProjectInfo(ctx context.Context, name string) (*database.ProjectInfo, error) {
+	info := database.NewProjectInfo(name)
 	result, err := c.collection(colProjects).InsertOne(ctx, bson.M{
 		"name":       info.Name,
 		"public_key": info.PublicKey,
@@ -148,14 +148,14 @@ func (c *Client) CreateProjectInfo(ctx context.Context, name string) (*db.Projec
 }
 
 // ListProjectInfos returns all project infos.
-func (c *Client) ListProjectInfos(ctx context.Context) ([]*db.ProjectInfo, error) {
+func (c *Client) ListProjectInfos(ctx context.Context) ([]*database.ProjectInfo, error) {
 	cursor, err := c.collection(colProjects).Find(ctx, bson.M{})
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, err
 	}
 
-	var infos []*db.ProjectInfo
+	var infos []*database.ProjectInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (c *Client) ListProjectInfos(ctx context.Context) ([]*db.ProjectInfo, error
 }
 
 // UpdateProjectInfo updates the project info.
-func (c *Client) UpdateProjectInfo(ctx context.Context, info *db.ProjectInfo) error {
+func (c *Client) UpdateProjectInfo(ctx context.Context, info *database.ProjectInfo) error {
 	encodedID, err := encodeID(info.ID)
 	if err != nil {
 		return err
@@ -188,15 +188,15 @@ func (c *Client) UpdateProjectInfo(ctx context.Context, info *db.ProjectInfo) er
 }
 
 // FindProjectInfoByPublicKey returns a project by public key.
-func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*db.ProjectInfo, error) {
+func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*database.ProjectInfo, error) {
 	result := c.collection(colProjects).FindOne(ctx, bson.M{
 		"public_key": publicKey,
 	})
 
-	projectInfo := db.ProjectInfo{}
+	projectInfo := database.ProjectInfo{}
 	if err := result.Decode(&projectInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", publicKey, db.ErrProjectNotFound)
+			return nil, fmt.Errorf("%s: %w", publicKey, database.ErrProjectNotFound)
 		}
 		return nil, err
 	}
@@ -205,13 +205,13 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 }
 
 // ActivateClient activates the client of the given key.
-func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, error) {
+func (c *Client) ActivateClient(ctx context.Context, key string) (*database.ClientInfo, error) {
 	now := gotime.Now()
 	res, err := c.collection(colClients).UpdateOne(ctx, bson.M{
 		"key": key,
 	}, bson.M{
 		"$set": bson.M{
-			"status":     db.ClientActivated,
+			"status":     database.ClientActivated,
 			"updated_at": now,
 		},
 	}, options.Update().SetUpsert(true))
@@ -235,7 +235,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 		})
 	}
 
-	clientInfo := db.ClientInfo{}
+	clientInfo := database.ClientInfo{}
 	if err = result.Decode(&clientInfo); err != nil {
 		return nil, err
 	}
@@ -244,7 +244,7 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*db.ClientInfo
 }
 
 // DeactivateClient deactivates the client of the given ID.
-func (c *Client) DeactivateClient(ctx context.Context, clientID types.ID) (*db.ClientInfo, error) {
+func (c *Client) DeactivateClient(ctx context.Context, clientID types.ID) (*database.ClientInfo, error) {
 	encodedClientID, err := encodeID(clientID)
 	if err != nil {
 		return nil, err
@@ -254,15 +254,15 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID types.ID) (*db.C
 		"_id": encodedClientID,
 	}, bson.M{
 		"$set": bson.M{
-			"status":     db.ClientDeactivated,
+			"status":     database.ClientDeactivated,
 			"updated_at": gotime.Now(),
 		},
 	})
 
-	clientInfo := db.ClientInfo{}
+	clientInfo := database.ClientInfo{}
 	if err := res.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
+			return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
 		}
 		return nil, err
 	}
@@ -271,7 +271,7 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID types.ID) (*db.C
 }
 
 // FindClientInfoByID finds the client of the given ID.
-func (c *Client) FindClientInfoByID(ctx context.Context, clientID types.ID) (*db.ClientInfo, error) {
+func (c *Client) FindClientInfoByID(ctx context.Context, clientID types.ID) (*database.ClientInfo, error) {
 	encodedClientID, err := encodeID(clientID)
 	if err != nil {
 		return nil, err
@@ -285,10 +285,10 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID types.ID) (*db
 		},
 	})
 
-	clientInfo := db.ClientInfo{}
+	clientInfo := database.ClientInfo{}
 	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
+			return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
 		}
 	}
 
@@ -299,8 +299,8 @@ func (c *Client) FindClientInfoByID(ctx context.Context, clientID types.ID) (*db
 // after handling PushPull.
 func (c *Client) UpdateClientInfoAfterPushPull(
 	ctx context.Context,
-	clientInfo *db.ClientInfo,
-	docInfo *db.DocInfo,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
 ) error {
 	clientDocInfoKey := "documents." + docInfo.ID.String() + "."
 	clientDocInfo := clientInfo.Documents[docInfo.ID]
@@ -338,7 +338,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	if result.Err() != nil {
 		if result.Err() == mongo.ErrNoDocuments {
-			return fmt.Errorf("%s: %w", clientInfo.Key, db.ErrClientNotFound)
+			return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
 		}
 		logging.From(ctx).Error(result.Err())
 		return result.Err()
@@ -352,9 +352,9 @@ func (c *Client) FindDeactivateCandidates(
 	ctx context.Context,
 	deactivateThreshold gotime.Duration,
 	candidatesLimit int,
-) ([]*db.ClientInfo, error) {
+) ([]*database.ClientInfo, error) {
 	cursor, err := c.collection(colClients).Find(ctx, bson.M{
-		"status": db.ClientActivated,
+		"status": database.ClientActivated,
 		"updated_at": bson.M{
 			"$lte": gotime.Now().Add(-deactivateThreshold),
 		},
@@ -364,7 +364,7 @@ func (c *Client) FindDeactivateCandidates(
 		return nil, err
 	}
 
-	var clientInfos []*db.ClientInfo
+	var clientInfos []*database.ClientInfo
 	if err := cursor.All(ctx, &clientInfos); err != nil {
 		return nil, err
 	}
@@ -377,10 +377,10 @@ func (c *Client) FindDeactivateCandidates(
 // exist.
 func (c *Client) FindDocInfoByKey(
 	ctx context.Context,
-	clientInfo *db.ClientInfo,
+	clientInfo *database.ClientInfo,
 	docKey key.Key,
 	createDocIfNotExist bool,
-) (*db.DocInfo, error) {
+) (*database.DocInfo, error) {
 	encodedOwnerID, err := encodeID(clientInfo.ID)
 	if err != nil {
 		return nil, err
@@ -416,7 +416,7 @@ func (c *Client) FindDocInfoByKey(
 		})
 		if result.Err() == mongo.ErrNoDocuments {
 			logging.From(ctx).Error(result.Err())
-			return nil, fmt.Errorf("%s: %w", docKey, db.ErrDocumentNotFound)
+			return nil, fmt.Errorf("%s: %w", docKey, database.ErrDocumentNotFound)
 		}
 		if result.Err() != nil {
 			logging.From(ctx).Error(result.Err())
@@ -424,7 +424,7 @@ func (c *Client) FindDocInfoByKey(
 		}
 	}
 
-	docInfo := db.DocInfo{}
+	docInfo := database.DocInfo{}
 	if err := result.Decode(&docInfo); err != nil {
 		return nil, err
 	}
@@ -435,7 +435,7 @@ func (c *Client) FindDocInfoByKey(
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
-	docInfo *db.DocInfo,
+	docInfo *database.DocInfo,
 	initialServerSeq uint64,
 	changes []*change.Change,
 ) error {
@@ -446,7 +446,7 @@ func (c *Client) CreateChangeInfos(
 
 	var models []mongo.WriteModel
 	for _, cn := range changes {
-		encodedOperations, err := db.EncodeOperations(cn.Operations())
+		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
 			return err
 		}
@@ -488,7 +488,7 @@ func (c *Client) CreateChangeInfos(
 		return err
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %w", docInfo.ID, db.ErrConflictOnUpdate)
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	return nil
@@ -524,7 +524,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	docID types.ID,
 	from uint64,
 	to uint64,
-) ([]*db.ChangeInfo, error) {
+) ([]*database.ChangeInfo, error) {
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return nil, err
@@ -542,7 +542,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 		return nil, err
 	}
 
-	var infos []*db.ChangeInfo
+	var infos []*database.ChangeInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		logging.From(ctx).Error(cursor.Err())
 		return nil, cursor.Err()
@@ -585,7 +585,7 @@ func (c *Client) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID types.ID,
 	serverSeq uint64,
-) (*db.SnapshotInfo, error) {
+) (*database.SnapshotInfo, error) {
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return nil, err
@@ -600,7 +600,7 @@ func (c *Client) FindClosestSnapshotInfo(
 		"server_seq": -1,
 	}))
 
-	snapshotInfo := &db.SnapshotInfo{}
+	snapshotInfo := &database.SnapshotInfo{}
 	if result.Err() == mongo.ErrNoDocuments {
 		return snapshotInfo, nil
 	}
@@ -621,7 +621,7 @@ func (c *Client) FindClosestSnapshotInfo(
 // and returns the min synced ticket.
 func (c *Client) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
-	clientInfo *db.ClientInfo,
+	clientInfo *database.ClientInfo,
 	docID types.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
@@ -648,7 +648,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		logging.From(ctx).Error(result.Err())
 		return nil, result.Err()
 	}
-	syncedSeqInfo := db.SyncedSeqInfo{}
+	syncedSeqInfo := database.SyncedSeqInfo{}
 	if err := result.Decode(&syncedSeqInfo); err != nil {
 		return nil, err
 	}
@@ -669,31 +669,29 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	), nil
 }
 
-// FindDocInfosByPreviousIDAndPageSize returns the docInfos of the given previousID and pageSize.
-func (c *Client) FindDocInfosByPreviousIDAndPageSize(
+// FindDocInfosByPaging returns the docInfos of the given paging.
+func (c *Client) FindDocInfosByPaging(
 	ctx context.Context,
-	previousID types.ID,
-	pageSize int,
-	isForward bool,
-) ([]*db.DocInfo, error) {
+	paging types.Paging,
+) ([]*database.DocInfo, error) {
 	filter := bson.M{}
-	if previousID != "" {
-		encodedPreviousID, err := encodeID(previousID)
+	if paging.PreviousID != "" {
+		encodedPreviousID, err := encodeID(paging.PreviousID)
 		if err != nil {
 			return nil, err
 		}
 
-		key := "$lt"
-		if isForward {
-			key = "$gt"
+		k := "$lt"
+		if paging.IsForward {
+			k = "$gt"
 		}
 		filter = bson.M{
-			"_id": bson.M{key: encodedPreviousID},
+			"_id": bson.M{k: encodedPreviousID},
 		}
 	}
 
-	opts := options.Find().SetLimit(int64(pageSize))
-	if !isForward {
+	opts := options.Find().SetLimit(int64(paging.PageSize))
+	if !paging.IsForward {
 		opts = opts.SetSort(map[string]int{"_id": -1})
 	}
 
@@ -703,7 +701,7 @@ func (c *Client) FindDocInfosByPreviousIDAndPageSize(
 		return nil, err
 	}
 
-	var infos []*db.DocInfo
+	var infos []*database.DocInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		logging.From(ctx).Error(cursor.Err())
 		return nil, cursor.Err()
@@ -715,7 +713,7 @@ func (c *Client) FindDocInfosByPreviousIDAndPageSize(
 // UpdateSyncedSeq updates the syncedSeq of the given client.
 func (c *Client) UpdateSyncedSeq(
 	ctx context.Context,
-	clientInfo *db.ClientInfo,
+	clientInfo *database.ClientInfo,
 	docID types.ID,
 	serverSeq uint64,
 ) error {
@@ -790,7 +788,7 @@ func (c *Client) findTicketByServerSeq(
 			"change docID=%s serverSeq=%d: %w",
 			docID.String(),
 			serverSeq,
-			db.ErrDocumentNotFound,
+			database.ErrDocumentNotFound,
 		)
 	}
 
@@ -799,7 +797,7 @@ func (c *Client) findTicketByServerSeq(
 		return nil, result.Err()
 	}
 
-	changeInfo := db.ChangeInfo{}
+	changeInfo := database.ChangeInfo{}
 	if err := result.Decode(&changeInfo); err != nil {
 		return nil, err
 	}

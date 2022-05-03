@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Yorkie Authors. All rights reserved.
+ * Copyright 2021 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,17 @@
  * limitations under the License.
  */
 
-package packs
+package database
 
-import (
-	"context"
+import "github.com/yorkie-team/yorkie/api/types"
 
-	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/database"
-)
-
-// FindAllChanges fetches all changes of the given document.
-func FindAllChanges(
-	ctx context.Context,
-	be *backend.Backend,
-	docInfo *database.DocInfo,
-) ([]*change.Change, error) {
-	changes, err := be.DB.FindChangesBetweenServerSeqs(
-		ctx,
-		docInfo.ID,
-		0,
-		docInfo.ServerSeq,
-	)
-	return changes, err
+// SyncedSeqInfo is a structure representing information about the synchronized
+// sequence for each client.
+type SyncedSeqInfo struct {
+	ID        types.ID `bson:"_id"`
+	DocID     types.ID `bson:"doc_id"`
+	ClientID  types.ID `bson:"client_id"`
+	Lamport   uint64   `bson:"lamport"`
+	ActorID   types.ID `bson:"actor_id"`
+	ServerSeq uint64   `bson:"server_seq"`
 }

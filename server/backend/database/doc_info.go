@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package db
+package database
 
 import (
 	"time"
@@ -25,13 +25,29 @@ import (
 
 // DocInfo is a structure representing information of the document.
 type DocInfo struct {
-	ID         types.ID  `bson:"_id"`
-	Key        key.Key   `bson:"key"`
-	ServerSeq  uint64    `bson:"server_seq"`
-	Owner      types.ID  `bson:"owner"`
-	CreatedAt  time.Time `bson:"created_at"`
+	// ID is the unique ID of the document.
+	ID types.ID `bson:"_id"`
+
+	// ProjectID is the ID of the project that the document belongs to.
+	ProjectID types.ID `bson:"project_id"`
+
+	// Key is the key of the document.
+	Key key.Key `bson:"key"`
+
+	// ServerSeq is the sequence number of the last change of the document on the server.
+	ServerSeq uint64 `bson:"server_seq"`
+
+	// Owner is the owner(ID of the client) of the document.
+	Owner types.ID `bson:"owner"`
+
+	// CreatedAt is the time when the document is created.
+	CreatedAt time.Time `bson:"created_at"`
+
+	// AccessedAt is the time when the document is accessed.
 	AccessedAt time.Time `bson:"accessed_at"`
-	UpdatedAt  time.Time `bson:"updated_at"`
+
+	// UpdatedAt is the time when the document is updated.
+	UpdatedAt time.Time `bson:"updated_at"`
 }
 
 // IncreaseServerSeq increases server sequence of the document.

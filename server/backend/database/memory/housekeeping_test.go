@@ -27,7 +27,7 @@ import (
 	"bou.ke/monkey"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/server/backend/db/memory"
+	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 )
 
 func TestHousekeeping(t *testing.T) {

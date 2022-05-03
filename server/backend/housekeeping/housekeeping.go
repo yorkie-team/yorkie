@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
@@ -68,7 +68,7 @@ func (c *Config) Validate() error {
 // tasks. It is responsible for deactivating clients that have not been active
 // for a long time.
 type Housekeeping struct {
-	database    db.DB
+	database    database.Database
 	coordinator sync.Coordinator
 
 	interval            time.Duration
@@ -82,7 +82,7 @@ type Housekeeping struct {
 // Start starts the housekeeping service.
 func Start(
 	conf *Config,
-	database db.DB,
+	database database.Database,
 	coordinator sync.Coordinator,
 ) (*Housekeeping, error) {
 	h, err := New(conf, database, coordinator)
@@ -99,7 +99,7 @@ func Start(
 // New creates a new housekeeping instance.
 func New(
 	conf *Config,
-	database db.DB,
+	database database.Database,
 	coordinator sync.Coordinator,
 ) (*Housekeeping, error) {
 	interval, err := time.ParseDuration(conf.Interval)

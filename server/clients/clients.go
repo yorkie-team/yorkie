@@ -24,7 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 var (
@@ -40,7 +40,7 @@ func Activate(
 	ctx context.Context,
 	be *backend.Backend,
 	clientKey string,
-) (*db.ClientInfo, error) {
+) (*database.ClientInfo, error) {
 	return be.DB.ActivateClient(ctx, clientKey)
 }
 
@@ -49,7 +49,7 @@ func Deactivate(
 	ctx context.Context,
 	be *backend.Backend,
 	actorID *time.ActorID,
-) (*db.ClientInfo, error) {
+) (*database.ClientInfo, error) {
 	return be.DB.DeactivateClient(ctx, types.IDFromActorID(actorID))
 }
 
@@ -58,7 +58,7 @@ func FindClient(
 	ctx context.Context,
 	be *backend.Backend,
 	clientID *time.ActorID,
-) (*db.ClientInfo, error) {
+) (*database.ClientInfo, error) {
 	return be.DB.FindClientInfoByID(
 		ctx,
 		types.IDFromActorID(clientID),
@@ -72,7 +72,7 @@ func FindClientAndDocument(
 	actorID *time.ActorID,
 	docKey key.Key,
 	createDocIfNotExist bool,
-) (*db.ClientInfo, *db.DocInfo, error) {
+) (*database.ClientInfo, *database.DocInfo, error) {
 	clientInfo, err := be.DB.FindClientInfoByID(ctx, types.IDFromActorID(actorID))
 	if err != nil {
 		return nil, nil, err

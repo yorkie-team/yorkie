@@ -25,7 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
@@ -59,17 +59,17 @@ func toStatusError(err error) error {
 		return status.Error(codes.Unimplemented, err.Error())
 	}
 
-	if errors.Is(err, db.ErrProjectNotFound) ||
-		errors.Is(err, db.ErrClientNotFound) ||
-		errors.Is(err, db.ErrDocumentNotFound) {
+	if errors.Is(err, database.ErrProjectNotFound) ||
+		errors.Is(err, database.ErrClientNotFound) ||
+		errors.Is(err, database.ErrDocumentNotFound) {
 		return status.Error(codes.NotFound, err.Error())
 	}
 
-	if err == db.ErrClientNotActivated ||
-		err == db.ErrDocumentNotAttached ||
-		err == db.ErrDocumentAlreadyAttached ||
+	if err == database.ErrClientNotActivated ||
+		err == database.ErrDocumentNotAttached ||
+		err == database.ErrDocumentAlreadyAttached ||
 		errors.Is(err, packs.ErrInvalidServerSeq) ||
-		errors.Is(err, db.ErrConflictOnUpdate) {
+		errors.Is(err, database.ErrConflictOnUpdate) {
 		return status.Error(codes.FailedPrecondition, err.Error())
 	}
 

@@ -24,7 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -37,8 +37,8 @@ var (
 // pushChanges returns the changes excluding already saved in DB.
 func pushChanges(
 	ctx context.Context,
-	clientInfo *db.ClientInfo,
-	docInfo *db.DocInfo,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	initialServerSeq uint64,
 ) (change.Checkpoint, []*change.Change) {
@@ -81,8 +81,8 @@ func pushChanges(
 func pullPack(
 	ctx context.Context,
 	be *backend.Backend,
-	clientInfo *db.ClientInfo,
-	docInfo *db.DocInfo,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialServerSeq uint64,
@@ -120,8 +120,8 @@ func pullPack(
 func pullSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
-	clientInfo *db.ClientInfo,
-	docInfo *db.DocInfo,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialServerSeq uint64,
@@ -165,12 +165,12 @@ func pullSnapshot(
 func pullChangeInfos(
 	ctx context.Context,
 	be *backend.Backend,
-	clientInfo *db.ClientInfo,
-	docInfo *db.DocInfo,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialServerSeq uint64,
-) (change.Checkpoint, []*db.ChangeInfo, error) {
+) (change.Checkpoint, []*database.ChangeInfo, error) {
 	pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
