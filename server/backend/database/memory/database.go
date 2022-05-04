@@ -147,11 +147,15 @@ func (d *DB) UpdateProjectInfo(ctx context.Context, info *database.ProjectInfo) 
 }
 
 // ActivateClient activates a client.
-func (d *DB) ActivateClient(ctx context.Context, key string) (*database.ClientInfo, error) {
+func (d *DB) ActivateClient(
+	ctx context.Context,
+	projectID types.ID,
+	key string,
+) (*database.ClientInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "key", key)
+	raw, err := txn.First(tblClients, "project_id_key", projectID.String(), key)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +163,7 @@ func (d *DB) ActivateClient(ctx context.Context, key string) (*database.ClientIn
 	now := gotime.Now()
 
 	clientInfo := &database.ClientInfo{
+		ProjectID: projectID,
 		Key:       key,
 		Status:    database.ClientActivated,
 		UpdatedAt: now,
@@ -182,7 +187,7 @@ func (d *DB) ActivateClient(ctx context.Context, key string) (*database.ClientIn
 }
 
 // DeactivateClient deactivates a client.
-func (d *DB) DeactivateClient(ctx context.Context, clientID types.ID) (*database.ClientInfo, error) {
+func (d *DB) DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -199,13 +204,16 @@ func (d *DB) DeactivateClient(ctx context.Context, clientID types.ID) (*database
 		return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
 	}
 
+	clientInfo := raw.(*database.ClientInfo)
+	if err := clientInfo.CheckIfInProject(projectID); err != nil {
+		return nil, err
+	}
+
 	// NOTE(hackerwins): When retrieving objects from go-memdb, references to
 	// the stored objects are returned instead of new objects. This can cause
 	// problems when directly modifying loaded objects. So, we need to DeepCopy.
-	clientInfo := raw.(*database.ClientInfo).DeepCopy()
-	clientInfo.Status = database.ClientDeactivated
-	clientInfo.UpdatedAt = gotime.Now()
-
+	clientInfo = clientInfo.DeepCopy()
+	clientInfo.Deactivate()
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
 		return nil, err
 	}
@@ -215,7 +223,7 @@ func (d *DB) DeactivateClient(ctx context.Context, clientID types.ID) (*database
 }
 
 // FindClientInfoByID finds a client by ID.
-func (d *DB) FindClientInfoByID(ctx context.Context, clientID types.ID) (*database.ClientInfo, error) {
+func (d *DB) FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -231,7 +239,12 @@ func (d *DB) FindClientInfoByID(ctx context.Context, clientID types.ID) (*databa
 		return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
 	}
 
-	return raw.(*database.ClientInfo).DeepCopy(), nil
+	clientInfo := raw.(*database.ClientInfo)
+	if err := clientInfo.CheckIfInProject(projectID); err != nil {
+		return nil, err
+	}
+
+	return clientInfo.DeepCopy(), nil
 }
 
 // UpdateClientInfoAfterPushPull updates the client from the given clientInfo
@@ -333,14 +346,15 @@ func (d *DB) FindDeactivateCandidates(
 // FindDocInfoByKey finds a docInfo by key.
 func (d *DB) FindDocInfoByKey(
 	ctx context.Context,
-	clientInfo *database.ClientInfo,
+	projectID types.ID,
+	clientID types.ID,
 	key key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "key", key.String())
+	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
 	if err != nil {
 		return nil, err
 	}
@@ -353,8 +367,9 @@ func (d *DB) FindDocInfoByKey(
 	if raw == nil {
 		docInfo = &database.DocInfo{
 			ID:         newID(),
+			ProjectID:  projectID,
 			Key:        key,
-			Owner:      clientInfo.ID,
+			Owner:      clientID,
 			ServerSeq:  0,
 			CreatedAt:  now,
 			AccessedAt: now,
@@ -373,6 +388,7 @@ func (d *DB) FindDocInfoByKey(
 // CreateChangeInfos stores the given changes and doc info.
 func (d *DB) CreateChangeInfos(
 	ctx context.Context,
+	projectID types.ID,
 	docInfo *database.DocInfo,
 	initialServerSeq uint64,
 	changes []*change.Change,
@@ -400,7 +416,7 @@ func (d *DB) CreateChangeInfos(
 		}
 	}
 
-	raw, err := txn.First(tblDocuments, "key", docInfo.Key.String())
+	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), docInfo.Key.String())
 	if err != nil {
 		return err
 	}

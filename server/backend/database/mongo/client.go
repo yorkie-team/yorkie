@@ -205,10 +205,16 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 }
 
 // ActivateClient activates the client of the given key.
-func (c *Client) ActivateClient(ctx context.Context, key string) (*database.ClientInfo, error) {
+func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key string) (*database.ClientInfo, error) {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
+
 	now := gotime.Now()
 	res, err := c.collection(colClients).UpdateOne(ctx, bson.M{
-		"key": key,
+		"project_id": encodedProjectID,
+		"key":        key,
 	}, bson.M{
 		"$set": bson.M{
 			"status":     database.ClientActivated,
@@ -244,14 +250,19 @@ func (c *Client) ActivateClient(ctx context.Context, key string) (*database.Clie
 }
 
 // DeactivateClient deactivates the client of the given ID.
-func (c *Client) DeactivateClient(ctx context.Context, clientID types.ID) (*database.ClientInfo, error) {
+func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
 	encodedClientID, err := encodeID(clientID)
 	if err != nil {
 		return nil, err
 	}
 
 	res := c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
-		"_id": encodedClientID,
+		"_id":        encodedClientID,
+		"project_id": encodedProjectID,
 	}, bson.M{
 		"$set": bson.M{
 			"status":     database.ClientDeactivated,
@@ -271,14 +282,19 @@ func (c *Client) DeactivateClient(ctx context.Context, clientID types.ID) (*data
 }
 
 // FindClientInfoByID finds the client of the given ID.
-func (c *Client) FindClientInfoByID(ctx context.Context, clientID types.ID) (*database.ClientInfo, error) {
+func (c *Client) FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
 	encodedClientID, err := encodeID(clientID)
 	if err != nil {
 		return nil, err
 	}
 
 	result := c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
-		"_id": encodedClientID,
+		"_id":        encodedClientID,
+		"project_id": encodedProjectID,
 	}, bson.M{
 		"$set": bson.M{
 			"updated_at": gotime.Now(),
@@ -377,18 +393,24 @@ func (c *Client) FindDeactivateCandidates(
 // exist.
 func (c *Client) FindDocInfoByKey(
 	ctx context.Context,
-	clientInfo *database.ClientInfo,
+	projectID types.ID,
+	clientID types.ID,
 	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
-	encodedOwnerID, err := encodeID(clientInfo.ID)
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
+	encodedOwnerID, err := encodeID(clientID)
 	if err != nil {
 		return nil, err
 	}
 
 	now := gotime.Now()
 	res, err := c.collection(colDocuments).UpdateOne(ctx, bson.M{
-		"key": docKey,
+		"projectID": encodedProjectID,
+		"key":       docKey,
 	}, bson.M{
 		"$set": bson.M{
 			"accessed_at": now,
@@ -435,6 +457,7 @@ func (c *Client) FindDocInfoByKey(
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
+	projectID types.ID,
 	docInfo *database.DocInfo,
 	initialServerSeq uint64,
 	changes []*change.Change,

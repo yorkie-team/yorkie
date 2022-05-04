@@ -34,13 +34,13 @@ import (
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
-func PushPullKey(docKey key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("pushpull-%s", docKey))
+func PushPullKey(projectID types.ID, docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("pushpull-%s-%s", projectID, docKey))
 }
 
 // SnapshotKey creates a new sync.Key of Snapshot for the given document.
-func SnapshotKey(docKey key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("snapshot-%s", docKey))
+func SnapshotKey(projectID types.ID, docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("snapshot-%s-%s", projectID, docKey))
 }
 
 // PushPull stores the given changes and returns accumulated changes of the
@@ -48,6 +48,7 @@ func SnapshotKey(docKey key.Key) sync.Key {
 func PushPull(
 	ctx context.Context,
 	be *backend.Backend,
+	project *types.Project,
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
@@ -81,7 +82,7 @@ func PushPull(
 
 	// 03. store pushed changes, docInfo and checkpoint of the client to DB.
 	if len(pushedChanges) > 0 {
-		if err := be.DB.CreateChangeInfos(ctx, docInfo, initialServerSeq, pushedChanges); err != nil {
+		if err := be.DB.CreateChangeInfos(ctx, project.ID, docInfo, initialServerSeq, pushedChanges); err != nil {
 			return nil, err
 		}
 	}
@@ -123,7 +124,7 @@ func PushPull(
 				},
 			)
 
-			locker, err := be.Coordinator.NewLocker(ctx, SnapshotKey(reqPack.DocumentKey))
+			locker, err := be.Coordinator.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return

@@ -77,6 +77,20 @@ type ClientInfo struct {
 	UpdatedAt time.Time `bson:"updated_at"`
 }
 
+// CheckIfInProject checks if the client is in the project.
+func (i ClientInfo) CheckIfInProject(projectID types.ID) error {
+	if i.ProjectID != projectID {
+		return ErrClientNotFound
+	}
+	return nil
+}
+
+// Deactivate sets the status of this client to be deactivated.
+func (i *ClientInfo) Deactivate() {
+	i.Status = ClientDeactivated
+	i.UpdatedAt = time.Now()
+}
+
 // AttachDocument attaches the given document to this client.
 func (i *ClientInfo) AttachDocument(docID types.ID) error {
 	if i.Status != ClientActivated {
@@ -180,6 +194,7 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 
 	return &ClientInfo{
 		ID:        i.ID,
+		ProjectID: i.ProjectID,
 		Key:       i.Key,
 		Status:    i.Status,
 		Documents: documents,

@@ -202,7 +202,7 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 			}
 		}
 
-		_, err := h.database.DeactivateClient(ctx, clientInfo.ID)
+		_, err := h.database.DeactivateClient(ctx, clientInfo.ProjectID, clientInfo.ID)
 		if err != nil {
 			return err
 		}

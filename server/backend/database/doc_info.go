@@ -64,6 +64,7 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 
 	return &DocInfo{
 		ID:         info.ID,
+		ProjectID:  info.ProjectID,
 		Key:        info.Key,
 		ServerSeq:  info.ServerSeq,
 		Owner:      info.Owner,

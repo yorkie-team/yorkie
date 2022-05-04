@@ -1,5 +1,6 @@
 ---
-title: peer-awareness target-version: 0.1.2
+title: peer-awareness
+target-version: 0.1.2
 ---
 
 # Peer Awareness
