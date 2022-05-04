@@ -402,6 +402,100 @@ func (m *ListDocumentsResponse) GetDocuments() []*DocumentSummary {
 	return nil
 }
 
+type GetDocumentRequest struct {
+	Id                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetDocumentRequest) Reset()         { *m = GetDocumentRequest{} }
+func (m *GetDocumentRequest) String() string { return proto.CompactTextString(m) }
+func (*GetDocumentRequest) ProtoMessage()    {}
+func (*GetDocumentRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_73a7fc70dcc2027c, []int{8}
+}
+func (m *GetDocumentRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetDocumentRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetDocumentRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetDocumentRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetDocumentRequest.Merge(m, src)
+}
+func (m *GetDocumentRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetDocumentRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetDocumentRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetDocumentRequest proto.InternalMessageInfo
+
+func (m *GetDocumentRequest) GetId() string {
+	if m != nil {
+		return m.Id
+	}
+	return ""
+}
+
+type GetDocumentResponse struct {
+	Document             *DocumentSummary `protobuf:"bytes,1,opt,name=document,proto3" json:"document,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}         `json:"-"`
+	XXX_unrecognized     []byte           `json:"-"`
+	XXX_sizecache        int32            `json:"-"`
+}
+
+func (m *GetDocumentResponse) Reset()         { *m = GetDocumentResponse{} }
+func (m *GetDocumentResponse) String() string { return proto.CompactTextString(m) }
+func (*GetDocumentResponse) ProtoMessage()    {}
+func (*GetDocumentResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_73a7fc70dcc2027c, []int{9}
+}
+func (m *GetDocumentResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetDocumentResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetDocumentResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetDocumentResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetDocumentResponse.Merge(m, src)
+}
+func (m *GetDocumentResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetDocumentResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetDocumentResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetDocumentResponse proto.InternalMessageInfo
+
+func (m *GetDocumentResponse) GetDocument() *DocumentSummary {
+	if m != nil {
+		return m.Document
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*CreateProjectRequest)(nil), "api.CreateProjectRequest")
 	proto.RegisterType((*CreateProjectResponse)(nil), "api.CreateProjectResponse")
@@ -411,37 +505,42 @@ func init() {
 	proto.RegisterType((*UpdateProjectResponse)(nil), "api.UpdateProjectResponse")
 	proto.RegisterType((*ListDocumentsRequest)(nil), "api.ListDocumentsRequest")
 	proto.RegisterType((*ListDocumentsResponse)(nil), "api.ListDocumentsResponse")
+	proto.RegisterType((*GetDocumentRequest)(nil), "api.GetDocumentRequest")
+	proto.RegisterType((*GetDocumentResponse)(nil), "api.GetDocumentResponse")
 }
 
 func init() { proto.RegisterFile("admin.proto", fileDescriptor_73a7fc70dcc2027c) }
 
 var fileDescriptor_73a7fc70dcc2027c = []byte{
-	// 398 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x53, 0xcd, 0x6e, 0xda, 0x40,
-	0x18, 0x64, 0xa1, 0xb4, 0xf8, 0x03, 0xd4, 0x6a, 0x6b, 0xab, 0xc6, 0x55, 0x5d, 0x6b, 0x0f, 0x95,
-	0xd5, 0x03, 0x07, 0x7a, 0xef, 0x7f, 0x2b, 0xaa, 0xf6, 0x50, 0x19, 0xf5, 0x8c, 0xb6, 0x78, 0x13,
-	0x6d, 0x24, 0x7b, 0x37, 0xbb, 0x76, 0xa2, 0xf0, 0x24, 0x79, 0x88, 0x3c, 0x48, 0x8e, 0x79, 0x84,
-	0x88, 0xbc, 0x48, 0x84, 0xbd, 0x86, 0xd8, 0xf8, 0x90, 0x1b, 0x9a, 0x6f, 0xbe, 0xf9, 0x66, 0x67,
-	0x30, 0x0c, 0x69, 0x9c, 0xf0, 0x74, 0x2a, 0x95, 0xc8, 0x04, 0xee, 0x51, 0xc9, 0xbd, 0xe7, 0x8a,
-	0x69, 0x91, 0xab, 0x15, 0xd3, 0x25, 0x4a, 0xde, 0x83, 0xfd, 0x4d, 0x31, 0x9a, 0xb1, 0xbf, 0x4a,
-	0x9c, 0xb0, 0x55, 0x16, 0xb1, 0xd3, 0x9c, 0xe9, 0x0c, 0x63, 0x78, 0x92, 0xd2, 0x84, 0xb9, 0x28,
-	0x40, 0xa1, 0x15, 0x15, 0xbf, 0xc9, 0x27, 0x70, 0x1a, 0x5c, 0x2d, 0x45, 0xaa, 0x19, 0x7e, 0x07,
-	0xcf, 0x64, 0x09, 0x15, 0xfc, 0xe1, 0x6c, 0x34, 0xa5, 0x92, 0x4f, 0x2b, 0x5a, 0x35, 0x24, 0x0e,
-	0xbc, 0xfc, 0xc3, 0x75, 0x66, 0x70, 0x6d, 0x6e, 0x91, 0xcf, 0x60, 0xd7, 0x61, 0x23, 0x1b, 0xc2,
-	0xc0, 0x6c, 0x6a, 0x17, 0x05, 0xbd, 0x03, 0xdd, 0xdd, 0x94, 0x7c, 0x04, 0xfb, 0x9f, 0x8c, 0x0f,
-	0x5f, 0xf1, 0x58, 0x63, 0xaf, 0xc0, 0x69, 0xec, 0x97, 0x16, 0x88, 0x2e, 0xad, 0x7d, 0x17, 0xab,
-	0x3c, 0x61, 0xe9, 0xce, 0x32, 0x7e, 0x0b, 0x43, 0xa9, 0xd8, 0x19, 0x17, 0xb9, 0x5e, 0xf2, 0xd8,
-	0xa4, 0x04, 0x15, 0xf4, 0x2b, 0xc6, 0xaf, 0xc1, 0x92, 0xf4, 0x98, 0x2d, 0x35, 0x5f, 0x33, 0xb7,
-	0x1b, 0xa0, 0xb0, 0x1f, 0x0d, 0xb6, 0xc0, 0x82, 0xaf, 0x19, 0x7e, 0x03, 0xc0, 0xf5, 0xf2, 0x48,
-	0xa8, 0x73, 0xaa, 0x62, 0xb7, 0x17, 0xa0, 0x70, 0x10, 0x59, 0x5c, 0xff, 0x2c, 0x01, 0xf2, 0x1b,
-	0x9c, 0xc6, 0x51, 0x13, 0xc8, 0x0c, 0xac, 0xb8, 0x02, 0x4d, 0x22, 0x76, 0xf1, 0xa0, 0x8a, 0xba,
-	0xc8, 0x93, 0x84, 0xaa, 0x8b, 0x68, 0x4f, 0x9b, 0x5d, 0x75, 0xa1, 0xff, 0x65, 0xfb, 0x37, 0xc0,
-	0x73, 0x18, 0xd7, 0xea, 0xc3, 0x93, 0x62, 0xb7, 0xad, 0x7e, 0xcf, 0x6b, 0x1b, 0x99, 0x4c, 0x3a,
-	0xf8, 0x07, 0x8c, 0x1e, 0x16, 0x86, 0xdd, 0x82, 0xdd, 0x52, 0xad, 0x37, 0x69, 0x99, 0xec, 0x64,
-	0xe6, 0x30, 0xae, 0xa5, 0x6e, 0x0c, 0xb5, 0x35, 0x69, 0x0c, 0xb5, 0x97, 0x54, 0x28, 0xd5, 0x12,
-	0xc3, 0xfb, 0xbb, 0xcd, 0xea, 0x8c, 0x52, 0x6b, 0xc0, 0xa4, 0xf3, 0xf5, 0xc5, 0xf5, 0xc6, 0x47,
-	0x37, 0x1b, 0x1f, 0xdd, 0x6e, 0x7c, 0x74, 0x79, 0xe7, 0x77, 0xfe, 0x3f, 0x2d, 0x3e, 0x94, 0x0f,
-	0xf7, 0x01, 0x00, 0x00, 0xff, 0xff, 0xf4, 0xfd, 0xb8, 0xbb, 0x4d, 0x03, 0x00, 0x00,
+	// 447 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x53, 0xcb, 0x6e, 0xd4, 0x30,
+	0x14, 0x1d, 0xcf, 0x50, 0x98, 0xb9, 0xd3, 0x02, 0x72, 0x27, 0x6a, 0x1a, 0x44, 0x88, 0x2c, 0x84,
+	0x22, 0x16, 0x23, 0x34, 0xec, 0x79, 0x94, 0x47, 0x8b, 0x60, 0x81, 0x52, 0xb1, 0x1e, 0x99, 0x89,
+	0x41, 0x46, 0x4a, 0x6c, 0xec, 0x04, 0x44, 0xbf, 0x84, 0x4f, 0x62, 0xc9, 0x27, 0xa0, 0xe1, 0x07,
+	0xf8, 0x04, 0x54, 0xc7, 0x4e, 0x9b, 0xc4, 0x8b, 0xee, 0xa2, 0x73, 0xcf, 0x3d, 0xf7, 0xf8, 0xde,
+	0x13, 0x98, 0xd3, 0xbc, 0xe0, 0xe5, 0x52, 0x2a, 0x51, 0x09, 0x3c, 0xa1, 0x92, 0x47, 0xb7, 0x14,
+	0xd3, 0xa2, 0x56, 0x1b, 0xa6, 0x1b, 0x94, 0x3c, 0x84, 0xc5, 0x0b, 0xc5, 0x68, 0xc5, 0xde, 0x2b,
+	0xf1, 0x85, 0x6d, 0xaa, 0x8c, 0x7d, 0xad, 0x99, 0xae, 0x30, 0x86, 0x6b, 0x25, 0x2d, 0x58, 0x88,
+	0x12, 0x94, 0xce, 0x32, 0xf3, 0x4d, 0x9e, 0x42, 0xd0, 0xe3, 0x6a, 0x29, 0x4a, 0xcd, 0xf0, 0x03,
+	0xb8, 0x21, 0x1b, 0xc8, 0xf0, 0xe7, 0xab, 0xdd, 0x25, 0x95, 0x7c, 0xe9, 0x68, 0xae, 0x48, 0x02,
+	0xd8, 0x7f, 0xc7, 0x75, 0x65, 0x71, 0x6d, 0x67, 0x91, 0x67, 0xb0, 0xe8, 0xc2, 0x56, 0x36, 0x85,
+	0xa9, 0xed, 0xd4, 0x21, 0x4a, 0x26, 0x03, 0xdd, 0xb6, 0x4a, 0x9e, 0xc0, 0xe2, 0x83, 0xcc, 0x87,
+	0xaf, 0xb8, 0xaa, 0xb1, 0x03, 0x08, 0x7a, 0xfd, 0x8d, 0x05, 0xa2, 0x1b, 0x6b, 0x2f, 0xc5, 0xa6,
+	0x2e, 0x58, 0xd9, 0x5a, 0xc6, 0xf7, 0x60, 0x2e, 0x15, 0xfb, 0xc6, 0x45, 0xad, 0xd7, 0x3c, 0xb7,
+	0x5b, 0x02, 0x07, 0xbd, 0xc9, 0xf1, 0x1d, 0x98, 0x49, 0xfa, 0x99, 0xad, 0x35, 0x3f, 0x63, 0xe1,
+	0x38, 0x41, 0xe9, 0x4e, 0x36, 0x3d, 0x07, 0x4e, 0xf9, 0x19, 0xc3, 0x77, 0x01, 0xb8, 0x5e, 0x7f,
+	0x12, 0xea, 0x3b, 0x55, 0x79, 0x38, 0x49, 0x50, 0x3a, 0xcd, 0x66, 0x5c, 0xbf, 0x6e, 0x00, 0xf2,
+	0x16, 0x82, 0xde, 0x50, 0xbb, 0x90, 0x15, 0xcc, 0x72, 0x07, 0xda, 0x8d, 0x2c, 0xcc, 0x83, 0x1c,
+	0xf5, 0xb4, 0x2e, 0x0a, 0xaa, 0x7e, 0x64, 0x17, 0x34, 0x72, 0x1f, 0xf0, 0x31, 0x6b, 0xb5, 0x9c,
+	0xff, 0x9b, 0x30, 0x6e, 0x6d, 0x8f, 0x79, 0x4e, 0x8e, 0x61, 0xbf, 0xc3, 0xb2, 0x03, 0x1f, 0xc1,
+	0xd4, 0x29, 0xd9, 0x05, 0xfa, 0xe7, 0xb5, 0xac, 0xd5, 0xbf, 0x31, 0xec, 0x3c, 0x3f, 0x4f, 0x1d,
+	0x3e, 0x81, 0xbd, 0x4e, 0x5a, 0xf0, 0xa1, 0x69, 0xf5, 0xa5, 0x2d, 0x8a, 0x7c, 0x25, 0x7b, 0x82,
+	0x11, 0x7e, 0x05, 0xbb, 0x97, 0xf3, 0x81, 0x43, 0xc3, 0xf6, 0x24, 0x29, 0x3a, 0xf4, 0x54, 0x5a,
+	0x99, 0x13, 0xd8, 0xeb, 0x1c, 0xd9, 0x1a, 0xf2, 0x05, 0xc7, 0x1a, 0xf2, 0x67, 0xc2, 0x28, 0x75,
+	0x0e, 0x84, 0x2f, 0xe6, 0xf6, 0x93, 0x62, 0x95, 0xbc, 0xf7, 0x24, 0x23, 0x7c, 0x04, 0xf3, 0x4b,
+	0x7b, 0xc7, 0x07, 0x86, 0x3c, 0xbc, 0x57, 0x14, 0x0e, 0x0b, 0x4e, 0xe3, 0xe8, 0xf6, 0xaf, 0x6d,
+	0x8c, 0x7e, 0x6f, 0x63, 0xf4, 0x67, 0x1b, 0xa3, 0x9f, 0x7f, 0xe3, 0xd1, 0xc7, 0xeb, 0xe6, 0xdf,
+	0x7e, 0xfc, 0x3f, 0x00, 0x00, 0xff, 0xff, 0xd3, 0x84, 0x42, 0xdd, 0x00, 0x04, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -460,6 +559,7 @@ type AdminClient interface {
 	ListProjects(ctx context.Context, in *ListProjectsRequest, opts ...grpc.CallOption) (*ListProjectsResponse, error)
 	UpdateProject(ctx context.Context, in *UpdateProjectRequest, opts ...grpc.CallOption) (*UpdateProjectResponse, error)
 	ListDocuments(ctx context.Context, in *ListDocumentsRequest, opts ...grpc.CallOption) (*ListDocumentsResponse, error)
+	GetDocument(ctx context.Context, in *GetDocumentRequest, opts ...grpc.CallOption) (*GetDocumentResponse, error)
 }
 
 type adminClient struct {
@@ -506,12 +606,22 @@ func (c *adminClient) ListDocuments(ctx context.Context, in *ListDocumentsReques
 	return out, nil
 }
 
+func (c *adminClient) GetDocument(ctx context.Context, in *GetDocumentRequest, opts ...grpc.CallOption) (*GetDocumentResponse, error) {
+	out := new(GetDocumentResponse)
+	err := c.cc.Invoke(ctx, "/api.Admin/GetDocument", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServer is the server API for Admin service.
 type AdminServer interface {
 	CreateProject(context.Context, *CreateProjectRequest) (*CreateProjectResponse, error)
 	ListProjects(context.Context, *ListProjectsRequest) (*ListProjectsResponse, error)
 	UpdateProject(context.Context, *UpdateProjectRequest) (*UpdateProjectResponse, error)
 	ListDocuments(context.Context, *ListDocumentsRequest) (*ListDocumentsResponse, error)
+	GetDocument(context.Context, *GetDocumentRequest) (*GetDocumentResponse, error)
 }
 
 // UnimplementedAdminServer can be embedded to have forward compatible implementations.
@@ -529,6 +639,9 @@ func (*UnimplementedAdminServer) UpdateProject(ctx context.Context, req *UpdateP
 }
 func (*UnimplementedAdminServer) ListDocuments(ctx context.Context, req *ListDocumentsRequest) (*ListDocumentsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDocuments not implemented")
+}
+func (*UnimplementedAdminServer) GetDocument(ctx context.Context, req *GetDocumentRequest) (*GetDocumentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDocument not implemented")
 }
 
 func RegisterAdminServer(s *grpc.Server, srv AdminServer) {
@@ -607,6 +720,24 @@ func _Admin_ListDocuments_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Admin_GetDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDocumentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServer).GetDocument(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.Admin/GetDocument",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).GetDocument(ctx, req.(*GetDocumentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Admin_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "api.Admin",
 	HandlerType: (*AdminServer)(nil),
@@ -626,6 +757,10 @@ var _Admin_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListDocuments",
 			Handler:    _Admin_ListDocuments_Handler,
+		},
+		{
+			MethodName: "GetDocument",
+			Handler:    _Admin_GetDocument_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -929,6 +1064,79 @@ func (m *ListDocumentsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *GetDocumentRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetDocumentRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetDocumentRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Id) > 0 {
+		i -= len(m.Id)
+		copy(dAtA[i:], m.Id)
+		i = encodeVarintAdmin(dAtA, i, uint64(len(m.Id)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetDocumentResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetDocumentResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetDocumentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Document != nil {
+		{
+			size, err := m.Document.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintAdmin(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintAdmin(dAtA []byte, offset int, v uint64) int {
 	offset -= sovAdmin(v)
 	base := offset
@@ -1063,6 +1271,38 @@ func (m *ListDocumentsResponse) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovAdmin(uint64(l))
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *GetDocumentRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Id)
+	if l > 0 {
+		n += 1 + l + sovAdmin(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *GetDocumentResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Document != nil {
+		l = m.Document.Size()
+		n += 1 + l + sovAdmin(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -1702,6 +1942,176 @@ func (m *ListDocumentsResponse) Unmarshal(dAtA []byte) error {
 			}
 			m.Documents = append(m.Documents, &DocumentSummary{})
 			if err := m.Documents[len(m.Documents)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAdmin(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetDocumentRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAdmin
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetDocumentRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetDocumentRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Id = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAdmin(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetDocumentResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAdmin
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetDocumentResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetDocumentResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Document", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Document == nil {
+				m.Document = &DocumentSummary{}
+			}
+			if err := m.Document.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

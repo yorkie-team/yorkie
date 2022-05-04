@@ -56,3 +56,6 @@ binaries
 
 # pprof output
 *.prof
+
+# misc
+.DS_Store

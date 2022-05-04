@@ -23,6 +23,7 @@ import (
 	"net"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -68,7 +69,7 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 	}
 
 	api.RegisterAdminServer(grpcServer, server)
-
+	reflection.Register(grpcServer)
 	// TODO(hackerwins): ClusterServer need to be handled by different authentication mechanism.
 	// Consider extracting the servers to another grpcServer.
 	api.RegisterClusterServer(grpcServer, newClusterServer(be))
@@ -173,6 +174,25 @@ func (s *Server) UpdateProject(
 	}
 
 	return &api.UpdateProjectResponse{}, nil
+}
+
+// GetDocument gets the document.
+func (s *Server) GetDocument(
+	ctx context.Context,
+	req *api.GetDocumentRequest,
+) (*api.GetDocumentResponse, error) {
+	document, err := documents.GetDocumentSummary(
+		ctx,
+		s.backend,
+		types.ID(req.Id),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.GetDocumentResponse{
+		Document: converter.ToDocumentSummary(document),
+	}, nil
 }
 
 // ListDocuments lists documents.

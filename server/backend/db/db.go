@@ -92,6 +92,11 @@ type DB interface {
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
+	FindDocInfoByID(
+		ctx context.Context,
+		id types.ID,
+	) (*DocInfo, error)
+
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,
