@@ -57,10 +57,15 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
-				"key": {
-					Name:    "key",
-					Unique:  true,
-					Indexer: &memdb.StringFieldIndex{Field: "Key"},
+				"project_id_key": {
+					Name:   "project_id_key",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "Key"},
+						},
+					},
 				},
 				"status_updated_at": {
 					Name: "status_updated_at",
@@ -81,10 +86,15 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
-				"key": {
-					Name:    "key",
-					Unique:  true,
-					Indexer: &memdb.StringFieldIndex{Field: "Key"},
+				"project_id_key": {
+					Name:   "project_id_key",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "Key"},
+						},
+					},
 				},
 			},
 		},

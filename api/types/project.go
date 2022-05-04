@@ -43,3 +43,22 @@ type Project struct {
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `json:"created_at"`
 }
+
+// RequireAuth returns whether the given method requires authorization.
+func (p *Project) RequireAuth(method Method) bool {
+	if len(p.AuthWebhookURL) == 0 {
+		return false
+	}
+
+	if len(p.AuthWebhookMethods) == 0 {
+		return true
+	}
+
+	for _, m := range p.AuthWebhookMethods {
+		if Method(m) == method {
+			return true
+		}
+	}
+
+	return false
+}

@@ -183,9 +183,11 @@ func (s *Server) ListDocuments(
 	docs, err := documents.ListDocumentSummaries(
 		ctx,
 		s.backend,
-		types.ID(req.PreviousId),
-		int(req.PageSize),
-		req.IsForward,
+		types.Paging{
+			PreviousID: types.ID(req.PreviousId),
+			PageSize:   int(req.PageSize),
+			IsForward:  req.IsForward,
+		},
 	)
 	if err != nil {
 		return nil, err

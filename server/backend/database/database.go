@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package db
+package database
 
 import (
 	"context"
@@ -42,8 +42,8 @@ var (
 	ErrConflictOnUpdate = errors.New("conflict on update")
 )
 
-// DB represents database which reads or saves Yorkie data.
-type DB interface {
+// Database represents database which reads or saves Yorkie data.
+type Database interface {
 	// Close all resources of this database.
 	Close() error
 
@@ -63,13 +63,13 @@ type DB interface {
 	UpdateProjectInfo(ctx context.Context, project *ProjectInfo) error
 
 	// ActivateClient activates the client of the given key.
-	ActivateClient(ctx context.Context, key string) (*ClientInfo, error)
+	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)
 
 	// DeactivateClient deactivates the client of the given ID.
-	DeactivateClient(ctx context.Context, clientID types.ID) (*ClientInfo, error)
+	DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*ClientInfo, error)
 
 	// FindClientInfoByID finds the client of the given ID.
-	FindClientInfoByID(ctx context.Context, clientID types.ID) (*ClientInfo, error)
+	FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*ClientInfo, error)
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.
@@ -87,7 +87,8 @@ type DB interface {
 	// exist.
 	FindDocInfoByKey(
 		ctx context.Context,
-		clientInfo *ClientInfo,
+		projectID types.ID,
+		clientID types.ID,
 		docKey key.Key,
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
@@ -95,6 +96,7 @@ type DB interface {
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,
+		projectID types.ID,
 		docInfo *DocInfo,
 		initialServerSeq uint64,
 		changes []*change.Change,
@@ -139,11 +141,9 @@ type DB interface {
 		serverSeq uint64,
 	) error
 
-	// FindDocInfosByPreviousIDAndPageSize returns the documentInfos of the given previousID and pageSize.
-	FindDocInfosByPreviousIDAndPageSize(
+	// FindDocInfosByPaging returns the documentInfos of the given paging.
+	FindDocInfosByPaging(
 		ctx context.Context,
-		previousID types.ID,
-		pageSize int,
-		isForward bool,
+		paging types.Paging,
 	) ([]*DocInfo, error)
 }

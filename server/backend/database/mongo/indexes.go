@@ -53,7 +53,10 @@ var collectionInfos = []collectionInfo{
 	{
 		name: colClients,
 		indexes: []mongo.IndexModel{{
-			Keys:    bsonx.Doc{{Key: "key", Value: bsonx.Int32(1)}},
+			Keys: bsonx.Doc{
+				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "key", Value: bsonx.Int32(1)},
+			},
 			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bsonx.Doc{
@@ -64,7 +67,10 @@ var collectionInfos = []collectionInfo{
 	}, {
 		name: colDocuments,
 		indexes: []mongo.IndexModel{{
-			Keys:    bsonx.Doc{{Key: "key", Value: bsonx.Int32(1)}},
+			Keys: bsonx.Doc{
+				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "key", Value: bsonx.Int32(1)},
+			},
 			Options: options.Index().SetUnique(true),
 		}},
 	}, {

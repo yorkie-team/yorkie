@@ -25,9 +25,9 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/server/backend/background"
-	"github.com/yorkie-team/yorkie/server/backend/db"
-	memdb "github.com/yorkie-team/yorkie/server/backend/db/memory"
-	"github.com/yorkie-team/yorkie/server/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/database"
+	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
+	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
@@ -42,7 +42,7 @@ type Backend struct {
 	Config     *Config
 	serverInfo *sync.ServerInfo
 
-	DB           db.DB
+	DB           database.Database
 	Coordinator  sync.Coordinator
 	Metrics      *prometheus.Metrics
 	Background   *background.Background
@@ -74,14 +74,14 @@ func New(
 
 	bg := background.New()
 
-	var database db.DB
+	var db database.Database
 	if mongoConf != nil {
-		database, err = mongo.Dial(mongoConf)
+		db, err = mongo.Dial(mongoConf)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		database, err = memdb.New()
+		db, err = memdb.New()
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +109,7 @@ func New(
 
 	keeping, err := housekeeping.Start(
 		housekeepingConf,
-		database,
+		db,
 		coordinator,
 	)
 	if err != nil {
@@ -128,7 +128,7 @@ func New(
 		dbInfo,
 	)
 
-	_, err = database.EnsureDefaultProjectInfo(context.Background())
+	_, err = db.EnsureDefaultProjectInfo(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func New(
 
 		Background:   bg,
 		Metrics:      metrics,
-		DB:           database,
+		DB:           db,
 		Coordinator:  coordinator,
 		Housekeeping: keeping,
 

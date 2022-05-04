@@ -14,27 +14,27 @@
  * limitations under the License.
  */
 
-package packs
+package database_test
 
 import (
-	"context"
+	"testing"
 
-	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-// FindAllChanges fetches all changes of the given document.
-func FindAllChanges(
-	ctx context.Context,
-	be *backend.Backend,
-	docInfo *database.DocInfo,
-) ([]*change.Change, error) {
-	changes, err := be.DB.FindChangesBetweenServerSeqs(
-		ctx,
-		docInfo.ID,
-		0,
-		docInfo.ServerSeq,
-	)
-	return changes, err
+func TestProjectInfo(t *testing.T) {
+	t.Run("validation test", func(t *testing.T) {
+		conf := &database.ProjectInfo{
+			AuthWebhookMethods: []string{"ActivateClient"},
+		}
+		assert.NoError(t, conf.Validate())
+
+		// 2. Included invalid methods
+		conf = &database.ProjectInfo{
+			AuthWebhookMethods: []string{"InvalidMethod"},
+		}
+		assert.Error(t, conf.Validate())
+	})
 }

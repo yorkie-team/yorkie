@@ -14,30 +14,32 @@
  * limitations under the License.
  */
 
-package mongo
+package database_test
 
 import (
+	"crypto/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-func TestRegistry(t *testing.T) {
-	registry := newRegistryBuilder().Build()
+func TestChangeInfo(t *testing.T) {
+	t.Run("comparing actorID equals after calling ToChange test", func(t *testing.T) {
+		actorID := time.ActorID{}
+		_, err := rand.Read(actorID.Bytes())
+		assert.NoError(t, err)
 
-	id := types.ID(primitive.NewObjectID().Hex())
-	data, err := bson.MarshalWithRegistry(registry, bson.M{
-		"_id": id,
+		expectedID := actorID.String()
+		changeInfo := database.ChangeInfo{
+			ActorID: types.ID(expectedID),
+		}
+
+		change, err := changeInfo.ToChange()
+		assert.NoError(t, err)
+		assert.Equal(t, change.ID().ActorID().String(), expectedID)
 	})
-	assert.NoError(t, err)
-
-	info := db.ClientInfo{}
-	assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
-	assert.Equal(t, id, info.ID)
-
 }

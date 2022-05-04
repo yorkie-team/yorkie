@@ -20,7 +20,9 @@ import (
 	"context"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
 )
 
@@ -28,11 +30,9 @@ import (
 func ListDocumentSummaries(
 	ctx context.Context,
 	be *backend.Backend,
-	previousID types.ID,
-	pageSize int,
-	isForward bool,
+	paging types.Paging,
 ) ([]*types.DocumentSummary, error) {
-	docInfo, err := be.DB.FindDocInfosByPreviousIDAndPageSize(ctx, previousID, pageSize, isForward)
+	docInfo, err := be.DB.FindDocInfosByPaging(ctx, paging)
 	if err != nil {
 		return nil, err
 	}
@@ -52,4 +52,27 @@ func ListDocumentSummaries(
 	}
 
 	return summaries, nil
+}
+
+// FindDocInfo returns a document for the given document key and owner.
+func FindDocInfo(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	clientInfo *database.ClientInfo,
+	docKey key.Key,
+	createDocIfNotExist bool,
+) (*database.DocInfo, error) {
+	docInfo, err := be.DB.FindDocInfoByKey(
+		ctx,
+		project.ID,
+		clientInfo.ID,
+		docKey,
+		createDocIfNotExist,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return docInfo, nil
 }

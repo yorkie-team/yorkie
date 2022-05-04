@@ -21,10 +21,9 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 var (
@@ -39,54 +38,32 @@ var (
 func Activate(
 	ctx context.Context,
 	be *backend.Backend,
+	project *types.Project,
 	clientKey string,
-) (*db.ClientInfo, error) {
-	return be.DB.ActivateClient(ctx, clientKey)
+) (*database.ClientInfo, error) {
+	return be.DB.ActivateClient(ctx, project.ID, clientKey)
 }
 
 // Deactivate deactivates the given client.
 func Deactivate(
 	ctx context.Context,
 	be *backend.Backend,
+	project *types.Project,
 	actorID *time.ActorID,
-) (*db.ClientInfo, error) {
-	return be.DB.DeactivateClient(ctx, types.IDFromActorID(actorID))
+) (*database.ClientInfo, error) {
+	return be.DB.DeactivateClient(ctx, project.ID, types.IDFromActorID(actorID))
 }
 
-// FindClient finds the client with the given id.
-func FindClient(
+// FindClientInfo finds the client with the given id.
+func FindClientInfo(
 	ctx context.Context,
 	be *backend.Backend,
+	project *types.Project,
 	clientID *time.ActorID,
-) (*db.ClientInfo, error) {
+) (*database.ClientInfo, error) {
 	return be.DB.FindClientInfoByID(
 		ctx,
+		project.ID,
 		types.IDFromActorID(clientID),
 	)
-}
-
-// FindClientAndDocument finds the client and the document.
-func FindClientAndDocument(
-	ctx context.Context,
-	be *backend.Backend,
-	actorID *time.ActorID,
-	docKey key.Key,
-	createDocIfNotExist bool,
-) (*db.ClientInfo, *db.DocInfo, error) {
-	clientInfo, err := be.DB.FindClientInfoByID(ctx, types.IDFromActorID(actorID))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	docInfo, err := be.DB.FindDocInfoByKey(
-		ctx,
-		clientInfo,
-		docKey,
-		createDocIfNotExist,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return clientInfo, docInfo, nil
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package db_test
+package types_test
 
 import (
 	"testing"
@@ -22,13 +22,12 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/server/backend/db"
 )
 
 func TestProjectInfo(t *testing.T) {
 	t.Run("require auth test", func(t *testing.T) {
 		// 1. Specify which methods to allow
-		info := &db.ProjectInfo{
+		info := &types.Project{
 			AuthWebhookURL:     "ValidWebhookURL",
 			AuthWebhookMethods: []string{string(types.ActivateClient)},
 		}
@@ -36,7 +35,7 @@ func TestProjectInfo(t *testing.T) {
 		assert.False(t, info.RequireAuth(types.DetachDocument))
 
 		// 2. Allow all
-		info2 := &db.ProjectInfo{
+		info2 := &types.Project{
 			AuthWebhookURL:     "ValidWebhookURL",
 			AuthWebhookMethods: []string{},
 		}
@@ -44,22 +43,9 @@ func TestProjectInfo(t *testing.T) {
 		assert.True(t, info2.RequireAuth(types.DetachDocument))
 
 		// 3. Empty webhook URL
-		info3 := &db.ProjectInfo{
+		info3 := &types.Project{
 			AuthWebhookURL: "",
 		}
 		assert.False(t, info3.RequireAuth(types.ActivateClient))
-	})
-
-	t.Run("validation test", func(t *testing.T) {
-		conf := &db.ProjectInfo{
-			AuthWebhookMethods: []string{"ActivateClient"},
-		}
-		assert.NoError(t, conf.Validate())
-
-		// 2. Included invalid methods
-		conf = &db.ProjectInfo{
-			AuthWebhookMethods: []string{"InvalidMethod"},
-		}
-		assert.Error(t, conf.Validate())
 	})
 }

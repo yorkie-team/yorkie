@@ -22,7 +22,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -36,7 +36,7 @@ type ServerPack struct {
 	Checkpoint change.Checkpoint
 
 	// ChangeInfos represents a unit of modification in the document.
-	ChangeInfos []*db.ChangeInfo
+	ChangeInfos []*database.ChangeInfo
 
 	// Snapshot is a byte array that encode the document.
 	Snapshot []byte
@@ -50,7 +50,7 @@ type ServerPack struct {
 func NewServerPack(
 	key key.Key,
 	cp change.Checkpoint,
-	changeInfos []*db.ChangeInfo,
+	changeInfos []*database.ChangeInfo,
 	snapshot []byte,
 ) *ServerPack {
 	return &ServerPack{

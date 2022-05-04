@@ -21,21 +21,8 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
-
-// FindProjectByPublicKey finds the project by public key.
-func FindProjectByPublicKey(
-	ctx context.Context,
-	be *backend.Backend,
-	publicKey string,
-) (*types.Project, error) {
-	info, err := be.DB.FindProjectInfoByPublicKey(ctx, publicKey)
-	if err != nil {
-		return nil, err
-	}
-	return info.ToProject(), nil
-}
 
 // CreateProject creates a project.
 func CreateProject(
@@ -69,6 +56,24 @@ func ListProjects(
 	return projects, nil
 }
 
+// GetProjectFromAPIKey returns a project from an API key.
+func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey string) (*types.Project, error) {
+	if apiKey == "" {
+		info, err := be.DB.EnsureDefaultProjectInfo(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return info.ToProject(), nil
+	}
+
+	info, err := be.DB.FindProjectInfoByPublicKey(ctx, apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return info.ToProject(), nil
+}
+
 // UpdateProject updates a project.
 func UpdateProject(
 	ctx context.Context,
@@ -78,5 +83,5 @@ func UpdateProject(
 	// TODO(hackerwins): If updates are executed concurrently, only one remains
 	// and the rest may be deleted. Consider to update the project with CAS or update
 	// the fields in the project separately.
-	return be.DB.UpdateProjectInfo(ctx, db.ToProjectInfo(project))
+	return be.DB.UpdateProjectInfo(ctx, database.ToProjectInfo(project))
 }

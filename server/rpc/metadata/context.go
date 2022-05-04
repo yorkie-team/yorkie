@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2022 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,14 @@
  * limitations under the License.
  */
 
-package auth
+package metadata
 
 import (
 	"context"
 )
 
-// key is the key for the context.Context.
-type key int
-
-// metadataKey Key = 0
-const metadataKey key = 0
+// metadataKey is the key for the context.Context.
+type metadataKey struct{}
 
 // Metadata represents the metadata of the request.
 type Metadata struct {
@@ -35,12 +32,12 @@ type Metadata struct {
 	Authorization string
 }
 
-// MetadataFromCtx returns the metadata from the given context.
-func MetadataFromCtx(ctx context.Context) Metadata {
-	return ctx.Value(metadataKey).(Metadata)
+// From returns the metadata from the given context.
+func From(ctx context.Context) Metadata {
+	return ctx.Value(metadataKey{}).(Metadata)
 }
 
-// CtxWithMetadata creates a new context with the given Metadata.
-func CtxWithMetadata(ctx context.Context, md Metadata) context.Context {
-	return context.WithValue(ctx, metadataKey, md)
+// With creates a new context with the given Metadata.
+func With(ctx context.Context, md Metadata) context.Context {
+	return context.WithValue(ctx, metadataKey{}, md)
 }
