@@ -30,7 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 // DB is an in-memory database for testing or temporarily.
@@ -56,7 +56,7 @@ func (d *DB) Close() error {
 }
 
 // FindProjectInfoByPublicKey returns a project by public key.
-func (d *DB) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*db.ProjectInfo, error) {
+func (d *DB) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -65,31 +65,31 @@ func (d *DB) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (
 		return nil, err
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", publicKey, db.ErrProjectNotFound)
+		return nil, fmt.Errorf("%s: %w", publicKey, database.ErrProjectNotFound)
 	}
 
-	return raw.(*db.ProjectInfo).DeepCopy(), nil
+	return raw.(*database.ProjectInfo).DeepCopy(), nil
 }
 
 // EnsureDefaultProjectInfo creates the default project if it does not exist.
-func (d *DB) EnsureDefaultProjectInfo(ctx context.Context) (*db.ProjectInfo, error) {
+func (d *DB) EnsureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblProjects, "id", db.DefaultProjectID.String())
+	raw, err := txn.First(tblProjects, "id", database.DefaultProjectID.String())
 	if err != nil {
 		return nil, err
 	}
 
-	var info *db.ProjectInfo
+	var info *database.ProjectInfo
 	if raw == nil {
-		info = db.NewProjectInfo(db.DefaultProjectName)
-		info.ID = db.DefaultProjectID
+		info = database.NewProjectInfo(database.DefaultProjectName)
+		info.ID = database.DefaultProjectID
 		if err := txn.Insert(tblProjects, info); err != nil {
 			return nil, err
 		}
 	} else {
-		info = raw.(*db.ProjectInfo).DeepCopy()
+		info = raw.(*database.ProjectInfo).DeepCopy()
 	}
 
 	txn.Commit()
@@ -97,11 +97,11 @@ func (d *DB) EnsureDefaultProjectInfo(ctx context.Context) (*db.ProjectInfo, err
 }
 
 // CreateProjectInfo creates a new project.
-func (d *DB) CreateProjectInfo(ctx context.Context, name string) (*db.ProjectInfo, error) {
+func (d *DB) CreateProjectInfo(ctx context.Context, name string) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	info := db.NewProjectInfo(name)
+	info := database.NewProjectInfo(name)
 	info.ID = newID()
 	if err := txn.Insert(tblProjects, info); err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (d *DB) CreateProjectInfo(ctx context.Context, name string) (*db.ProjectInf
 }
 
 // ListProjectInfos returns all projects.
-func (d *DB) ListProjectInfos(ctx context.Context) ([]*db.ProjectInfo, error) {
+func (d *DB) ListProjectInfos(ctx context.Context) ([]*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -121,20 +121,20 @@ func (d *DB) ListProjectInfos(ctx context.Context) ([]*db.ProjectInfo, error) {
 		return nil, err
 	}
 
-	var infos []*db.ProjectInfo
+	var infos []*database.ProjectInfo
 	for {
 		raw := iter.Next()
 		if raw == nil {
 			break
 		}
-		infos = append(infos, raw.(*db.ProjectInfo).DeepCopy())
+		infos = append(infos, raw.(*database.ProjectInfo).DeepCopy())
 	}
 
 	return infos, nil
 }
 
 // UpdateProjectInfo updates the given project.
-func (d *DB) UpdateProjectInfo(ctx context.Context, info *db.ProjectInfo) error {
+func (d *DB) UpdateProjectInfo(ctx context.Context, info *database.ProjectInfo) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -147,20 +147,25 @@ func (d *DB) UpdateProjectInfo(ctx context.Context, info *db.ProjectInfo) error 
 }
 
 // ActivateClient activates a client.
-func (d *DB) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, error) {
+func (d *DB) ActivateClient(
+	ctx context.Context,
+	projectID types.ID,
+	key string,
+) (*database.ClientInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "key", key)
+	raw, err := txn.First(tblClients, "project_id_key", projectID.String(), key)
 	if err != nil {
 		return nil, err
 	}
 
 	now := gotime.Now()
 
-	clientInfo := &db.ClientInfo{
+	clientInfo := &database.ClientInfo{
+		ProjectID: projectID,
 		Key:       key,
-		Status:    db.ClientActivated,
+		Status:    database.ClientActivated,
 		UpdatedAt: now,
 	}
 
@@ -168,7 +173,7 @@ func (d *DB) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, er
 		clientInfo.ID = newID()
 		clientInfo.CreatedAt = now
 	} else {
-		loaded := raw.(*db.ClientInfo)
+		loaded := raw.(*database.ClientInfo)
 		clientInfo.ID = loaded.ID
 		clientInfo.CreatedAt = loaded.CreatedAt
 	}
@@ -182,7 +187,7 @@ func (d *DB) ActivateClient(ctx context.Context, key string) (*db.ClientInfo, er
 }
 
 // DeactivateClient deactivates a client.
-func (d *DB) DeactivateClient(ctx context.Context, clientID types.ID) (*db.ClientInfo, error) {
+func (d *DB) DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -196,16 +201,19 @@ func (d *DB) DeactivateClient(ctx context.Context, clientID types.ID) (*db.Clien
 	}
 
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
+		return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+	}
+
+	clientInfo := raw.(*database.ClientInfo)
+	if err := clientInfo.CheckIfInProject(projectID); err != nil {
+		return nil, err
 	}
 
 	// NOTE(hackerwins): When retrieving objects from go-memdb, references to
 	// the stored objects are returned instead of new objects. This can cause
 	// problems when directly modifying loaded objects. So, we need to DeepCopy.
-	clientInfo := raw.(*db.ClientInfo).DeepCopy()
-	clientInfo.Status = db.ClientDeactivated
-	clientInfo.UpdatedAt = gotime.Now()
-
+	clientInfo = clientInfo.DeepCopy()
+	clientInfo.Deactivate()
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
 		return nil, err
 	}
@@ -215,7 +223,7 @@ func (d *DB) DeactivateClient(ctx context.Context, clientID types.ID) (*db.Clien
 }
 
 // FindClientInfoByID finds a client by ID.
-func (d *DB) FindClientInfoByID(ctx context.Context, clientID types.ID) (*db.ClientInfo, error) {
+func (d *DB) FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -228,18 +236,23 @@ func (d *DB) FindClientInfoByID(ctx context.Context, clientID types.ID) (*db.Cli
 		return nil, err
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", clientID, db.ErrClientNotFound)
+		return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
 	}
 
-	return raw.(*db.ClientInfo).DeepCopy(), nil
+	clientInfo := raw.(*database.ClientInfo)
+	if err := clientInfo.CheckIfInProject(projectID); err != nil {
+		return nil, err
+	}
+
+	return clientInfo.DeepCopy(), nil
 }
 
 // UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 // after handling PushPull.
 func (d *DB) UpdateClientInfoAfterPushPull(
 	ctx context.Context,
-	clientInfo *db.ClientInfo,
-	docInfo *db.DocInfo,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
 ) error {
 	clientDocInfo := clientInfo.Documents[docInfo.ID]
 	attached, err := clientInfo.IsAttached(docInfo.ID)
@@ -255,19 +268,19 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 		return err
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", clientInfo.ID, db.ErrClientNotFound)
+		return fmt.Errorf("%s: %w", clientInfo.ID, database.ErrClientNotFound)
 	}
 
-	loaded := raw.(*db.ClientInfo).DeepCopy()
+	loaded := raw.(*database.ClientInfo).DeepCopy()
 
 	if !attached {
-		loaded.Documents[docInfo.ID] = &db.ClientDocInfo{
+		loaded.Documents[docInfo.ID] = &database.ClientDocInfo{
 			Status: clientDocInfo.Status,
 		}
 		loaded.UpdatedAt = gotime.Now()
 	} else {
 		if _, ok := loaded.Documents[docInfo.ID]; !ok {
-			loaded.Documents[docInfo.ID] = &db.ClientDocInfo{}
+			loaded.Documents[docInfo.ID] = &database.ClientDocInfo{}
 		}
 
 		loadedClientDocInfo := loaded.Documents[docInfo.ID]
@@ -279,7 +292,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 		if clientDocInfo.ClientSeq > loadedClientDocInfo.ClientSeq {
 			clientSeq = clientDocInfo.ClientSeq
 		}
-		loaded.Documents[docInfo.ID] = &db.ClientDocInfo{
+		loaded.Documents[docInfo.ID] = &database.ClientDocInfo{
 			ServerSeq: serverSeq,
 			ClientSeq: clientSeq,
 			Status:    clientDocInfo.Status,
@@ -300,17 +313,17 @@ func (d *DB) FindDeactivateCandidates(
 	ctx context.Context,
 	inactiveThreshold gotime.Duration,
 	candidatesLimit int,
-) ([]*db.ClientInfo, error) {
+) ([]*database.ClientInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
 	offset := gotime.Now().Add(-inactiveThreshold)
 
-	var infos []*db.ClientInfo
+	var infos []*database.ClientInfo
 	iterator, err := txn.ReverseLowerBound(
 		tblClients,
 		"status_updated_at",
-		db.ClientActivated,
+		database.ClientActivated,
 		offset,
 	)
 	if err != nil {
@@ -318,9 +331,9 @@ func (d *DB) FindDeactivateCandidates(
 	}
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
-		info := raw.(*db.ClientInfo)
+		info := raw.(*database.ClientInfo)
 
-		if info.Status != db.ClientActivated ||
+		if info.Status != database.ClientActivated ||
 			candidatesLimit <= len(infos) ||
 			info.UpdatedAt.After(offset) {
 			break
@@ -333,28 +346,30 @@ func (d *DB) FindDeactivateCandidates(
 // FindDocInfoByKey finds a docInfo by key.
 func (d *DB) FindDocInfoByKey(
 	ctx context.Context,
-	clientInfo *db.ClientInfo,
+	projectID types.ID,
+	clientID types.ID,
 	key key.Key,
 	createDocIfNotExist bool,
-) (*db.DocInfo, error) {
+) (*database.DocInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "key", key.String())
+	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
 	if err != nil {
 		return nil, err
 	}
 	if !createDocIfNotExist && raw == nil {
-		return nil, fmt.Errorf("%s: %w", key, db.ErrDocumentNotFound)
+		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
 	}
 
 	now := gotime.Now()
-	var docInfo *db.DocInfo
+	var docInfo *database.DocInfo
 	if raw == nil {
-		docInfo = &db.DocInfo{
+		docInfo = &database.DocInfo{
 			ID:         newID(),
+			ProjectID:  projectID,
 			Key:        key,
-			Owner:      clientInfo.ID,
+			Owner:      clientID,
 			ServerSeq:  0,
 			CreatedAt:  now,
 			AccessedAt: now,
@@ -364,7 +379,7 @@ func (d *DB) FindDocInfoByKey(
 		}
 		txn.Commit()
 	} else {
-		docInfo = raw.(*db.DocInfo)
+		docInfo = raw.(*database.DocInfo)
 	}
 
 	return docInfo.DeepCopy(), nil
@@ -374,7 +389,7 @@ func (d *DB) FindDocInfoByKey(
 func (d *DB) FindDocInfoByID(
 	ctx context.Context,
 	id types.ID,
-) (*db.DocInfo, error) {
+) (*database.DocInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -383,14 +398,15 @@ func (d *DB) FindDocInfoByID(
 		return nil, err
 	}
 
-	docInfo := raw.(*db.DocInfo)
+	docInfo := raw.(*database.DocInfo)
 	return docInfo.DeepCopy(), nil
 }
 
 // CreateChangeInfos stores the given changes and doc info.
 func (d *DB) CreateChangeInfos(
 	ctx context.Context,
-	docInfo *db.DocInfo,
+	projectID types.ID,
+	docInfo *database.DocInfo,
 	initialServerSeq uint64,
 	changes []*change.Change,
 ) error {
@@ -398,12 +414,12 @@ func (d *DB) CreateChangeInfos(
 	defer txn.Abort()
 
 	for _, cn := range changes {
-		encodedOperations, err := db.EncodeOperations(cn.Operations())
+		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
 			return err
 		}
 
-		if err := txn.Insert(tblChanges, &db.ChangeInfo{
+		if err := txn.Insert(tblChanges, &database.ChangeInfo{
 			ID:         newID(),
 			DocID:      docInfo.ID,
 			ServerSeq:  cn.ServerSeq(),
@@ -417,16 +433,16 @@ func (d *DB) CreateChangeInfos(
 		}
 	}
 
-	raw, err := txn.First(tblDocuments, "key", docInfo.Key.String())
+	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), docInfo.Key.String())
 	if err != nil {
 		return err
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", docInfo.Key, db.ErrDocumentNotFound)
+		return fmt.Errorf("%s: %w", docInfo.Key, database.ErrDocumentNotFound)
 	}
-	loadedDocInfo := raw.(*db.DocInfo).DeepCopy()
+	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
 	if loadedDocInfo.ServerSeq != initialServerSeq {
-		return fmt.Errorf("%s: %w", docInfo.ID, db.ErrConflictOnUpdate)
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	loadedDocInfo.ServerSeq = docInfo.ServerSeq
@@ -469,11 +485,11 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 	docID types.ID,
 	from uint64,
 	to uint64,
-) ([]*db.ChangeInfo, error) {
+) ([]*database.ChangeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	var infos []*db.ChangeInfo
+	var infos []*database.ChangeInfo
 
 	iterator, err := txn.LowerBound(
 		tblChanges,
@@ -486,7 +502,7 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 	}
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
-		info := raw.(*db.ChangeInfo)
+		info := raw.(*database.ChangeInfo)
 		if info.DocID != docID || info.ServerSeq > to {
 			break
 		}
@@ -509,7 +525,7 @@ func (d *DB) CreateSnapshotInfo(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	if err := txn.Insert(tblSnapshots, &db.SnapshotInfo{
+	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
 		ID:        newID(),
 		DocID:     docID,
 		ServerSeq: doc.Checkpoint().ServerSeq,
@@ -528,7 +544,7 @@ func (d *DB) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID types.ID,
 	serverSeq uint64,
-) (*db.SnapshotInfo, error) {
+) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -542,9 +558,9 @@ func (d *DB) FindClosestSnapshotInfo(
 		return nil, err
 	}
 
-	var snapshotInfo *db.SnapshotInfo
+	var snapshotInfo *database.SnapshotInfo
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
-		info := raw.(*db.SnapshotInfo)
+		info := raw.(*database.SnapshotInfo)
 		if info.DocID == docID {
 			snapshotInfo = info
 			break
@@ -552,7 +568,7 @@ func (d *DB) FindClosestSnapshotInfo(
 	}
 
 	if snapshotInfo == nil {
-		return &db.SnapshotInfo{}, nil
+		return &database.SnapshotInfo{}, nil
 	}
 
 	return snapshotInfo, nil
@@ -562,7 +578,7 @@ func (d *DB) FindClosestSnapshotInfo(
 // and returns the min synced ticket.
 func (d *DB) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
-	clientInfo *db.ClientInfo,
+	clientInfo *database.ClientInfo,
 	docID types.ID,
 	serverSeq uint64,
 ) (*time.Ticket, error) {
@@ -584,9 +600,9 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		return nil, err
 	}
 
-	var syncedSeqInfo *db.SyncedSeqInfo
+	var syncedSeqInfo *database.SyncedSeqInfo
 	if raw := iterator.Next(); raw != nil {
-		info := raw.(*db.SyncedSeqInfo)
+		info := raw.(*database.SyncedSeqInfo)
 		if info.DocID == docID {
 			syncedSeqInfo = info
 		}
@@ -611,7 +627,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 // UpdateSyncedSeq updates the syncedSeq of the given client.
 func (d *DB) UpdateSyncedSeq(
 	ctx context.Context,
-	clientInfo *db.ClientInfo,
+	clientInfo *database.ClientInfo,
 	docID types.ID,
 	serverSeq uint64,
 ) error {
@@ -651,7 +667,7 @@ func (d *DB) UpdateSyncedSeq(
 		return err
 	}
 
-	syncedSeqInfo := &db.SyncedSeqInfo{
+	syncedSeqInfo := &database.SyncedSeqInfo{
 		DocID:     docID,
 		ClientID:  clientInfo.ID,
 		Lamport:   ticket.Lamport(),
@@ -661,7 +677,7 @@ func (d *DB) UpdateSyncedSeq(
 	if raw == nil {
 		syncedSeqInfo.ID = newID()
 	} else {
-		syncedSeqInfo.ID = raw.(*db.SyncedSeqInfo).ID
+		syncedSeqInfo.ID = raw.(*database.SyncedSeqInfo).ID
 	}
 
 	if err := txn.Insert(tblSyncedSeqs, syncedSeqInfo); err != nil {
@@ -672,26 +688,24 @@ func (d *DB) UpdateSyncedSeq(
 	return nil
 }
 
-// FindDocInfosByPreviousIDAndPageSize returns the docInfos of the given previousID and pageSize.
-func (d *DB) FindDocInfosByPreviousIDAndPageSize(
+// FindDocInfosByPaging returns the documentInfos of the given paging.
+func (d *DB) FindDocInfosByPaging(
 	ctx context.Context,
-	previousID types.ID,
-	pageSize int,
-	isForward bool,
-) ([]*db.DocInfo, error) {
+	paging types.Paging,
+) ([]*database.DocInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
 	var iterator memdb.ResultIterator
 	var err error
-	if isForward {
+	if paging.IsForward {
 		iterator, err = txn.LowerBound(
 			tblDocuments,
 			"id",
-			previousID.String(),
+			paging.PreviousID.String(),
 		)
 	} else {
-		if previousID == "" {
+		if paging.PreviousID == "" {
 			iterator, err = txn.GetReverse(
 				tblDocuments,
 				"id",
@@ -700,7 +714,7 @@ func (d *DB) FindDocInfosByPreviousIDAndPageSize(
 			iterator, err = txn.ReverseLowerBound(
 				tblDocuments,
 				"id",
-				previousID.String(),
+				paging.PreviousID.String(),
 			)
 		}
 	}
@@ -709,14 +723,14 @@ func (d *DB) FindDocInfosByPreviousIDAndPageSize(
 		return nil, err
 	}
 
-	var docInfos []*db.DocInfo
+	var docInfos []*database.DocInfo
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
-		info := raw.(*db.DocInfo)
-		if len(docInfos) >= pageSize {
+		info := raw.(*database.DocInfo)
+		if len(docInfos) >= paging.PageSize {
 			break
 		}
 
-		if info.ID != previousID {
+		if info.ID != paging.PreviousID {
 			docInfos = append(docInfos, info)
 		}
 	}
@@ -747,11 +761,11 @@ func (d *DB) findTicketByServerSeq(
 			"docID %s, serverSeq %d: %w",
 			docID.String(),
 			serverSeq,
-			db.ErrDocumentNotFound,
+			database.ErrDocumentNotFound,
 		)
 	}
 
-	changeInfo := raw.(*db.ChangeInfo)
+	changeInfo := raw.(*database.ChangeInfo)
 	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
 	if err != nil {
 		return nil, err

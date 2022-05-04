@@ -14,32 +14,38 @@
  * limitations under the License.
  */
 
-package db_test
+package database_test
 
 import (
-	"crypto/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-func TestChangeInfo(t *testing.T) {
-	t.Run("comparing actorID equals after calling ToChange test", func(t *testing.T) {
-		actorID := time.ActorID{}
-		_, err := rand.Read(actorID.Bytes())
-		assert.NoError(t, err)
-
-		expectedID := actorID.String()
-		changeInfo := db.ChangeInfo{
-			ActorID: types.ID(expectedID),
+func TestClientInfo(t *testing.T) {
+	t.Run("attach/detach document test", func(t *testing.T) {
+		docID := types.ID("000000000000000000000000")
+		clientInfo := database.ClientInfo{
+			Status: database.ClientActivated,
 		}
 
-		change, err := changeInfo.ToChange()
+		err := clientInfo.AttachDocument(docID)
 		assert.NoError(t, err)
-		assert.Equal(t, change.ID().ActorID().String(), expectedID)
+		isAttached, err := clientInfo.IsAttached(docID)
+		assert.NoError(t, err)
+		assert.True(t, isAttached)
+
+		err = clientInfo.UpdateCheckpoint(docID, change.MaxCheckpoint)
+		assert.NoError(t, err)
+
+		err = clientInfo.DetachDocument(docID)
+		assert.NoError(t, err)
+		isAttached, err = clientInfo.IsAttached(docID)
+		assert.NoError(t, err)
+		assert.False(t, isAttached)
 	})
 }

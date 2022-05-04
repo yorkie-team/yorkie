@@ -44,20 +44,20 @@ type Server struct {
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	loggingInterceptor := interceptors.NewLoggingInterceptor()
-	metadataInterceptor := interceptors.NewMetadataInterceptor(be)
+	contextInterceptor := interceptors.NewContextInterceptor(be)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			loggingInterceptor.Unary(),
 			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
-			metadataInterceptor.Unary(),
+			contextInterceptor.Unary(),
 			defaultInterceptor.Unary(),
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			loggingInterceptor.Stream(),
 			be.Metrics.ServerMetrics().StreamServerInterceptor(),
-			metadataInterceptor.Stream(),
+			contextInterceptor.Stream(),
 			defaultInterceptor.Stream(),
 		)),
 	}
@@ -103,11 +103,6 @@ func (s *Server) Shutdown(graceful bool) {
 	} else {
 		s.grpcServer.Stop()
 	}
-}
-
-// GRPCServer returns the gRPC server.
-func (s *Server) GRPCServer() *grpc.Server {
-	return s.grpcServer
 }
 
 func (s *Server) listenAndServeGRPC() error {

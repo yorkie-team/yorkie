@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Yorkie Authors. All rights reserved.
+ * Copyright 2021 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,30 @@
  * limitations under the License.
  */
 
-package packs
+package mongo
 
 import (
-	"context"
+	"testing"
 
-	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-// FindAllChanges fetches all changes of the given document.
-func FindAllChanges(
-	ctx context.Context,
-	be *backend.Backend,
-	docInfo *database.DocInfo,
-) ([]*change.Change, error) {
-	changes, err := be.DB.FindChangesBetweenServerSeqs(
-		ctx,
-		docInfo.ID,
-		0,
-		docInfo.ServerSeq,
-	)
-	return changes, err
+func TestRegistry(t *testing.T) {
+	registry := newRegistryBuilder().Build()
+
+	id := types.ID(primitive.NewObjectID().Hex())
+	data, err := bson.MarshalWithRegistry(registry, bson.M{
+		"_id": id,
+	})
+	assert.NoError(t, err)
+
+	info := database.ClientInfo{}
+	assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
+	assert.Equal(t, id, info.ID)
+
 }

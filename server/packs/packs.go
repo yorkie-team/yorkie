@@ -28,19 +28,19 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 // PushPullKey creates a new sync.Key of PushPull for the given document.
-func PushPullKey(docKey key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("pushpull-%s", docKey))
+func PushPullKey(projectID types.ID, docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("pushpull-%s-%s", projectID, docKey))
 }
 
 // SnapshotKey creates a new sync.Key of Snapshot for the given document.
-func SnapshotKey(docKey key.Key) sync.Key {
-	return sync.NewKey(fmt.Sprintf("snapshot-%s", docKey))
+func SnapshotKey(projectID types.ID, docKey key.Key) sync.Key {
+	return sync.NewKey(fmt.Sprintf("snapshot-%s-%s", projectID, docKey))
 }
 
 // PushPull stores the given changes and returns accumulated changes of the
@@ -48,8 +48,9 @@ func SnapshotKey(docKey key.Key) sync.Key {
 func PushPull(
 	ctx context.Context,
 	be *backend.Backend,
-	clientInfo *db.ClientInfo,
-	docInfo *db.DocInfo,
+	project *types.Project,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 ) (*ServerPack, error) {
 	start := gotime.Now()
@@ -81,7 +82,7 @@ func PushPull(
 
 	// 03. store pushed changes, docInfo and checkpoint of the client to DB.
 	if len(pushedChanges) > 0 {
-		if err := be.DB.CreateChangeInfos(ctx, docInfo, initialServerSeq, pushedChanges); err != nil {
+		if err := be.DB.CreateChangeInfos(ctx, project.ID, docInfo, initialServerSeq, pushedChanges); err != nil {
 			return nil, err
 		}
 	}
@@ -123,7 +124,7 @@ func PushPull(
 				},
 			)
 
-			locker, err := be.Coordinator.NewLocker(ctx, SnapshotKey(reqPack.DocumentKey))
+			locker, err := be.Coordinator.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
 			if err != nil {
 				logging.From(ctx).Error(err)
 				return
@@ -163,7 +164,7 @@ func PushPull(
 func BuildDocumentForServerSeq(
 	ctx context.Context,
 	be *backend.Backend,
-	docInfo *db.DocInfo,
+	docInfo *database.DocInfo,
 	serverSeq uint64,
 ) (*document.InternalDocument, error) {
 	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, serverSeq)

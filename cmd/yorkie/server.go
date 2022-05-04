@@ -26,7 +26,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yorkie-team/yorkie/server"
-	"github.com/yorkie-team/yorkie/server/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/server/logging"
 )

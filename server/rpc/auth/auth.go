@@ -22,7 +22,8 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/db"
+	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
 // AccessAttributes returns an array of AccessAttribute from the given pack.
@@ -42,20 +43,18 @@ func AccessAttributes(pack *change.Pack) []types.AccessAttribute {
 
 // VerifyAccess verifies the given access.
 func VerifyAccess(ctx context.Context, be *backend.Backend, accessInfo *types.AccessInfo) error {
-	md := MetadataFromCtx(ctx)
+	md := metadata.From(ctx)
+	project := projects.From(ctx)
 
-	// TODO(hackerwins): Improve the performance of this function.
-	// Consider using a cache to store the projectInfo.
-	var projectInfo *db.ProjectInfo
-	var err error
-	if md.APIKey == "" {
-		projectInfo, err = be.DB.EnsureDefaultProjectInfo(ctx)
-	} else {
-		projectInfo, err = be.DB.FindProjectInfoByPublicKey(ctx, md.APIKey)
-	}
-	if err != nil {
-		return err
+	if !project.RequireAuth(accessInfo.Method) {
+		return nil
 	}
 
-	return verifyAccess(ctx, be, projectInfo, accessInfo, md)
+	return verifyAccess(
+		ctx,
+		be,
+		project.AuthWebhookURL,
+		md.Authorization,
+		accessInfo,
+	)
 }

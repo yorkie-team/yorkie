@@ -27,7 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/admin"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/server/profiling"

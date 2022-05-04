@@ -27,8 +27,10 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
+	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
+	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
@@ -60,7 +62,7 @@ func (s *yorkieServer) ActivateClient(
 		return nil, err
 	}
 
-	cli, err := clients.Activate(ctx, s.backend, req.ClientKey)
+	cli, err := clients.Activate(ctx, s.backend, projects.From(ctx), req.ClientKey)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +94,7 @@ func (s *yorkieServer) DeactivateClient(
 		return nil, err
 	}
 
-	cli, err := clients.Deactivate(ctx, s.backend, actorID)
+	cli, err := clients.Deactivate(ctx, s.backend, projects.From(ctx), actorID)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +134,7 @@ func (s *yorkieServer) AttachDocument(
 	if pack.HasChanges() {
 		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
-			packs.PushPullKey(pack.DocumentKey),
+			packs.PushPullKey(projects.From(ctx).ID, pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err
@@ -148,21 +150,32 @@ func (s *yorkieServer) AttachDocument(
 		}()
 	}
 
-	clientInfo, docInfo, err := clients.FindClientAndDocument(
+	clientInfo, err := clients.FindClientInfo(
 		ctx,
 		s.backend,
+		projects.From(ctx),
 		actorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	docInfo, err := documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		clientInfo,
 		pack.DocumentKey,
 		true,
 	)
 	if err != nil {
 		return nil, err
 	}
+
 	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +215,7 @@ func (s *yorkieServer) DetachDocument(
 	if pack.HasChanges() {
 		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
-			packs.PushPullKey(pack.DocumentKey),
+			packs.PushPullKey(projects.From(ctx).ID, pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err
@@ -218,16 +231,27 @@ func (s *yorkieServer) DetachDocument(
 		}()
 	}
 
-	clientInfo, docInfo, err := clients.FindClientAndDocument(
+	clientInfo, err := clients.FindClientInfo(
 		ctx,
 		s.backend,
+		projects.From(ctx),
 		actorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	docInfo, err := documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		clientInfo,
 		pack.DocumentKey,
 		false,
 	)
 	if err != nil {
 		return nil, err
 	}
+
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
 		return nil, err
 	}
@@ -235,7 +259,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +300,7 @@ func (s *yorkieServer) PushPull(
 	if pack.HasChanges() {
 		locker, err := s.backend.Coordinator.NewLocker(
 			ctx,
-			packs.PushPullKey(pack.DocumentKey),
+			packs.PushPullKey(projects.From(ctx).ID, pack.DocumentKey),
 		)
 		if err != nil {
 			return nil, err
@@ -293,21 +317,32 @@ func (s *yorkieServer) PushPull(
 		}()
 	}
 
-	clientInfo, docInfo, err := clients.FindClientAndDocument(
+	clientInfo, err := clients.FindClientInfo(
 		ctx,
 		s.backend,
+		projects.From(ctx),
 		actorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	docInfo, err := documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		clientInfo,
 		pack.DocumentKey,
 		false,
 	)
 	if err != nil {
 		return nil, err
 	}
+
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
 	if err != nil {
 		return nil, err
 	}
@@ -349,9 +384,10 @@ func (s *yorkieServer) WatchDocuments(
 		return err
 	}
 
-	if _, err = clients.FindClient(
+	if _, err = clients.FindClientInfo(
 		stream.Context(),
 		s.backend,
+		projects.From(stream.Context()),
 		cli.ID,
 	); err != nil {
 		return err
@@ -452,10 +488,15 @@ func (s *yorkieServer) ListChanges(
 		return nil, err
 	}
 
-	_, docInfo, err := clients.FindClientAndDocument(
+	clientInfo, err := clients.FindClientInfo(ctx, s.backend, projects.From(ctx), actorID)
+	if err != nil {
+		return nil, err
+	}
+	docInfo, err := documents.FindDocInfo(
 		ctx,
 		s.backend,
-		actorID,
+		projects.From(ctx),
+		clientInfo,
 		docKey,
 		false,
 	)

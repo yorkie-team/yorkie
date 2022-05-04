@@ -27,25 +27,27 @@ import (
 	"bou.ke/monkey"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/server/backend/db/memory"
+	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 )
 
 func TestHousekeeping(t *testing.T) {
 	memdb, err := memory.New()
 	assert.NoError(t, err)
+	projectID := database.DefaultProjectID
 
 	t.Run("housekeeping test", func(t *testing.T) {
 		ctx := context.Background()
 
 		yesterday := gotime.Now().Add(-24 * gotime.Hour)
 		guard := monkey.Patch(gotime.Now, func() gotime.Time { return yesterday })
-		clientA, err := memdb.ActivateClient(ctx, fmt.Sprintf("%s-A", t.Name()))
+		clientA, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-A", t.Name()))
 		assert.NoError(t, err)
-		clientB, err := memdb.ActivateClient(ctx, fmt.Sprintf("%s-B", t.Name()))
+		clientB, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-B", t.Name()))
 		assert.NoError(t, err)
 		guard.Unpatch()
 
-		clientC, err := memdb.ActivateClient(ctx, fmt.Sprintf("%s-C", t.Name()))
+		clientC, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-C", t.Name()))
 		assert.NoError(t, err)
 
 		candidates, err := memdb.FindDeactivateCandidates(

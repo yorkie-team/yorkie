@@ -29,8 +29,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/db"
-	"github.com/yorkie-team/yorkie/server/backend/db/memory"
+	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 )
 
 func TestDB(t *testing.T) {
@@ -38,74 +38,75 @@ func TestDB(t *testing.T) {
 	memdb, err := memory.New()
 	assert.NoError(t, err)
 
+	projectID := database.DefaultProjectID
 	notExistsID := types.ID("000000000000000000000000")
 
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		// try to deactivate the client with not exists ID.
-		_, err = memdb.DeactivateClient(ctx, notExistsID)
-		assert.ErrorIs(t, err, db.ErrClientNotFound)
+		_, err = memdb.DeactivateClient(ctx, projectID, notExistsID)
+		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
-		clientInfo, err := memdb.ActivateClient(ctx, t.Name())
+		clientInfo, err := memdb.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
 		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, db.ClientActivated, clientInfo.Status)
+		assert.Equal(t, database.ClientActivated, clientInfo.Status)
 
 		// try to activate the client twice.
-		clientInfo, err = memdb.ActivateClient(ctx, t.Name())
+		clientInfo, err = memdb.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, db.ClientActivated, clientInfo.Status)
+		assert.Equal(t, database.ClientActivated, clientInfo.Status)
 
 		clientID := clientInfo.ID
 
-		clientInfo, err = memdb.DeactivateClient(ctx, clientID)
+		clientInfo, err = memdb.DeactivateClient(ctx, projectID, clientID)
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, db.ClientDeactivated, clientInfo.Status)
+		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
 
 		// try to deactivate the client twice.
-		clientInfo, err = memdb.DeactivateClient(ctx, clientID)
+		clientInfo, err = memdb.DeactivateClient(ctx, projectID, clientID)
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
-		assert.Equal(t, db.ClientDeactivated, clientInfo.Status)
+		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
 	})
 
 	t.Run("activate and find client test", func(t *testing.T) {
-		_, err := memdb.FindClientInfoByID(ctx, notExistsID)
-		assert.ErrorIs(t, err, db.ErrClientNotFound)
+		_, err := memdb.FindClientInfoByID(ctx, projectID, notExistsID)
+		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
-		clientInfo, err := memdb.ActivateClient(ctx, t.Name())
+		clientInfo, err := memdb.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
-		found, err := memdb.FindClientInfoByID(ctx, clientInfo.ID)
+		found, err := memdb.FindClientInfoByID(ctx, projectID, clientInfo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, clientInfo.Key, found.Key)
 	})
 
 	t.Run("find docInfo test", func(t *testing.T) {
-		clientInfo, err := memdb.ActivateClient(ctx, t.Name())
+		clientInfo, err := memdb.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
-		_, err = memdb.FindDocInfoByKey(ctx, clientInfo, docKey, false)
-		assert.ErrorIs(t, err, db.ErrDocumentNotFound)
+		_, err = memdb.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, false)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
-		docInfo, err := memdb.FindDocInfoByKey(ctx, clientInfo, docKey, true)
+		docInfo, err := memdb.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, err)
 		assert.Equal(t, docKey, docInfo.Key)
 	})
 
 	t.Run("update clientInfo after PushPull test", func(t *testing.T) {
-		clientInfo, err := memdb.ActivateClient(ctx, t.Name())
+		clientInfo, err := memdb.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
-		docInfo, err := memdb.FindDocInfoByKey(ctx, clientInfo, docKey, true)
+		docInfo, err := memdb.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, err)
 
 		err = memdb.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
-		assert.ErrorIs(t, err, db.ErrDocumentNeverAttached)
+		assert.ErrorIs(t, err, database.ErrDocumentNeverAttached)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, memdb.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 	})
@@ -113,8 +114,8 @@ func TestDB(t *testing.T) {
 	t.Run("insert and find changes test", func(t *testing.T) {
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := memdb.ActivateClient(ctx, t.Name())
-		docInfo, _ := memdb.FindDocInfoByKey(ctx, clientInfo, docKey, true)
+		clientInfo, _ := memdb.ActivateClient(ctx, projectID, t.Name())
+		docInfo, _ := memdb.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, memdb.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
@@ -138,7 +139,7 @@ func TestDB(t *testing.T) {
 		}
 
 		// Store changes
-		err = memdb.CreateChangeInfos(ctx, docInfo, 0, pack.Changes)
+		err = memdb.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes)
 		assert.NoError(t, err)
 
 		// Find changes
@@ -156,10 +157,10 @@ func TestDB(t *testing.T) {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := memdb.ActivateClient(ctx, t.Name())
+		clientInfo, _ := memdb.ActivateClient(ctx, projectID, t.Name())
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
-		docInfo, _ := memdb.FindDocInfoByKey(ctx, clientInfo, docKey, true)
+		docInfo, _ := memdb.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
 
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
@@ -198,7 +199,7 @@ func TestDB(t *testing.T) {
 		localDB, err := memory.New()
 		assert.NoError(t, err)
 
-		assertKeys := func(expectedKeys []key.Key, infos []*db.DocInfo) {
+		assertKeys := func(expectedKeys []key.Key, infos []*database.DocInfo) {
 			var keys []key.Key
 			for _, info := range infos {
 				keys = append(keys, info.Key)
@@ -208,34 +209,48 @@ func TestDB(t *testing.T) {
 
 		pageSize := 5
 		totalSize := 9
-		clientInfo, _ := localDB.ActivateClient(ctx, t.Name())
+		clientInfo, _ := localDB.ActivateClient(ctx, projectID, t.Name())
 		for i := 0; i < totalSize; i++ {
-			_, err := localDB.FindDocInfoByKey(ctx, clientInfo, key.Key(fmt.Sprintf("%d", i)), true)
+			_, err := localDB.FindDocInfoByKey(ctx, projectID, clientInfo.ID, key.Key(fmt.Sprintf("%d", i)), true)
 			assert.NoError(t, err)
 		}
 
 		// initial page, previousID is empty
-		infos, err := localDB.FindDocInfosByPreviousIDAndPageSize(ctx, "", pageSize, false)
+		infos, err := localDB.FindDocInfosByPaging(ctx, types.Paging{PageSize: pageSize})
 		assert.NoError(t, err)
 		assertKeys([]key.Key{"8", "7", "6", "5", "4"}, infos)
 
 		// backward
-		infos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[len(infos)-1].ID, pageSize, false)
+		infos, err = localDB.FindDocInfosByPaging(ctx, types.Paging{
+			PreviousID: infos[len(infos)-1].ID,
+			PageSize:   pageSize,
+		})
 		assert.NoError(t, err)
 		assertKeys([]key.Key{"3", "2", "1", "0"}, infos)
 
 		// backward again
-		emptyInfos, err := localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[len(infos)-1].ID, pageSize, false)
+		emptyInfos, err := localDB.FindDocInfosByPaging(ctx, types.Paging{
+			PreviousID: infos[len(infos)-1].ID,
+			PageSize:   pageSize,
+		})
 		assert.NoError(t, err)
 		assertKeys(nil, emptyInfos)
 
 		// forward
-		infos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[0].ID, pageSize, true)
+		infos, err = localDB.FindDocInfosByPaging(ctx, types.Paging{
+			PreviousID: infos[0].ID,
+			PageSize:   pageSize,
+			IsForward:  true,
+		})
 		assert.NoError(t, err)
 		assertKeys([]key.Key{"4", "5", "6", "7", "8"}, infos)
 
 		// forward again
-		emptyInfos, err = localDB.FindDocInfosByPreviousIDAndPageSize(ctx, infos[len(infos)-1].ID, pageSize, true)
+		emptyInfos, err = localDB.FindDocInfosByPaging(ctx, types.Paging{
+			PreviousID: infos[len(infos)-1].ID,
+			PageSize:   pageSize,
+			IsForward:  true,
+		})
 		assert.NoError(t, err)
 		assertKeys(nil, emptyInfos)
 	})

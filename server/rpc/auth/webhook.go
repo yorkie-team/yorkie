@@ -29,7 +29,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/db"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -48,16 +47,12 @@ var (
 func verifyAccess(
 	ctx context.Context,
 	be *backend.Backend,
-	projectInfo *db.ProjectInfo,
+	authWebhookURL string,
+	token string,
 	accessInfo *types.AccessInfo,
-	md Metadata,
 ) error {
-	if !projectInfo.RequireAuth(accessInfo.Method) {
-		return nil
-	}
-
 	reqBody, err := json.Marshal(types.AuthWebhookRequest{
-		Token:      md.Authorization,
+		Token:      token,
 		Method:     accessInfo.Method,
 		Attributes: accessInfo.Attributes,
 	})
@@ -77,7 +72,7 @@ func verifyAccess(
 	var authResp *types.AuthWebhookResponse
 	if err := withExponentialBackoff(ctx, be.Config, func() (int, error) {
 		resp, err := http.Post(
-			projectInfo.AuthWebhookURL,
+			authWebhookURL,
 			"application/json",
 			bytes.NewBuffer(reqBody),
 		)

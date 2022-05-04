@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2022 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,28 +14,23 @@
  * limitations under the License.
  */
 
-package db_test
+package projects
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+	"context"
 
 	"github.com/yorkie-team/yorkie/api/types"
 )
 
-func TestID(t *testing.T) {
-	t.Run("get ID from hex test", func(t *testing.T) {
-		str := "0123456789abcdef01234567"
-		ID := types.ID(str)
-		assert.Equal(t, str, ID.String())
-	})
+// projectKey is the key for the context.Context.
+type projectKey struct{}
 
-	t.Run("get ID from bytes test", func(t *testing.T) {
-		bytes := make([]byte, 12)
-		ID := types.IDFromBytes(bytes)
-		bytesID, err := ID.Bytes()
-		assert.NoError(t, err)
-		assert.Equal(t, bytes, bytesID)
-	})
+// From returns the project from the context.
+func From(ctx context.Context) *types.Project {
+	return ctx.Value(projectKey{}).(*types.Project)
+}
+
+// With creates a new context with the given Project.
+func With(ctx context.Context, project *types.Project) context.Context {
+	return context.WithValue(ctx, projectKey{}, project)
 }

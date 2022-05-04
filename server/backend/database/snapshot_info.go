@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package db
+package database
 
 import (
 	"time"

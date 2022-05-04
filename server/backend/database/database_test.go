@@ -14,32 +14,28 @@
  * limitations under the License.
  */
 
-package mongo_test
+package database_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/server/backend/db/mongo"
+	"github.com/yorkie-team/yorkie/api/types"
 )
 
-func TestConfig(t *testing.T) {
-	t.Run("validate test", func(t *testing.T) {
-		// 1. success
-		config := &mongo.Config{
-			ConnectionTimeout: "5s",
-			PingTimeout:       "5s",
-		}
-		assert.NoError(t, config.Validate())
+func TestID(t *testing.T) {
+	t.Run("get ID from hex test", func(t *testing.T) {
+		str := "0123456789abcdef01234567"
+		ID := types.ID(str)
+		assert.Equal(t, str, ID.String())
+	})
 
-		// 2. invalid connection timeout
-		config.ConnectionTimeout = "5"
-		assert.Error(t, config.Validate())
-
-		// 3. invalid ping timeout
-		config.ConnectionTimeout = "5s"
-		config.PingTimeout = "5"
-		assert.Error(t, config.Validate())
+	t.Run("get ID from bytes test", func(t *testing.T) {
+		bytes := make([]byte, 12)
+		ID := types.IDFromBytes(bytes)
+		bytesID, err := ID.Bytes()
+		assert.NoError(t, err)
+		assert.Equal(t, bytes, bytesID)
 	})
 }

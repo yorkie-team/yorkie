@@ -17,10 +17,8 @@
 package server
 
 import (
-	"context"
 	gosync "sync"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/admin"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -147,16 +145,6 @@ func (r *Yorkie) RPCAddr() string {
 // AdminAddr returns the address of the admin server.
 func (r *Yorkie) AdminAddr() string {
 	return r.conf.AdminAddr()
-}
-
-// DefaultProject returns the default project.
-func (r *Yorkie) DefaultProject() (*types.Project, error) {
-	info, err := r.backend.DB.EnsureDefaultProjectInfo(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
-	return info.ToProject(), nil
 }
 
 // Members returns the members of this cluster.
