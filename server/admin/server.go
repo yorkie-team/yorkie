@@ -23,7 +23,6 @@ import (
 	"net"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -69,7 +68,6 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 	}
 
 	api.RegisterAdminServer(grpcServer, server)
-	reflection.Register(grpcServer)
 	// TODO(hackerwins): ClusterServer need to be handled by different authentication mechanism.
 	// Consider extracting the servers to another grpcServer.
 	api.RegisterClusterServer(grpcServer, newClusterServer(be))
