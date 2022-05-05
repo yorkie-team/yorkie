@@ -398,6 +398,10 @@ func (d *DB) FindDocInfoByID(
 		return nil, err
 	}
 
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
+	}
+
 	docInfo := raw.(*database.DocInfo)
 	return docInfo.DeepCopy(), nil
 }

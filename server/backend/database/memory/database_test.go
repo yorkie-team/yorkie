@@ -254,4 +254,12 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, err)
 		assertKeys(nil, emptyInfos)
 	})
+
+	t.Run("FindDocInfoByID test", func(t *testing.T) {
+		localDB, err := memory.New()
+		assert.NoError(t, err)
+
+		_, err = localDB.FindDocInfoByID(context.Background(), notExistsID)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+	})
 }
