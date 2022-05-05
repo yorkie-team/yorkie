@@ -54,6 +54,29 @@ func ListDocumentSummaries(
 	return summaries, nil
 }
 
+// GetDocumentSummary returns a document summary.
+func GetDocumentSummary(
+	ctx context.Context,
+	be *backend.Backend,
+	id types.ID,
+) (*types.DocumentSummary, error) {
+	docInfo, err := be.DB.FindDocInfoByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.DocumentSummary{
+		ID:       docInfo.ID.String(),
+		Key:      doc.Key(),
+		Snapshot: doc.Marshal(),
+	}, nil
+}
+
 // FindDocInfo returns a document for the given document key and owner.
 func FindDocInfo(
 	ctx context.Context,
@@ -73,6 +96,5 @@ func FindDocInfo(
 	if err != nil {
 		return nil, err
 	}
-
 	return docInfo, nil
 }
