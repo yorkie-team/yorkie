@@ -385,6 +385,27 @@ func (d *DB) FindDocInfoByKey(
 	return docInfo.DeepCopy(), nil
 }
 
+// FindDocInfoByID finds a docInfo of the given ID.
+func (d *DB) FindDocInfoByID(
+	ctx context.Context,
+	id types.ID,
+) (*database.DocInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblDocuments, "id", id.String())
+	if err != nil {
+		return nil, err
+	}
+
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
+	}
+
+	docInfo := raw.(*database.DocInfo)
+	return docInfo.DeepCopy(), nil
+}
+
 // CreateChangeInfos stores the given changes and doc info.
 func (d *DB) CreateChangeInfos(
 	ctx context.Context,

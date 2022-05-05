@@ -64,15 +64,20 @@ func ToProject(project *types.Project) (*api.Project, error) {
 	}, nil
 }
 
+// ToDocumentSummary converts the given model to Protobuf format.
+func ToDocumentSummary(summary *types.DocumentSummary) *api.DocumentSummary {
+	return &api.DocumentSummary{
+		Id:       summary.ID,
+		Key:      summary.Key.String(),
+		Snapshot: summary.Snapshot,
+	}
+}
+
 // ToDocumentSummaries converts the given model to Protobuf.
 func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSummary {
-	pbSummaries := make([]*api.DocumentSummary, 0, len(summaries))
+	var pbSummaries []*api.DocumentSummary
 	for _, summary := range summaries {
-		pbSummaries = append(pbSummaries, &api.DocumentSummary{
-			Id:       summary.ID,
-			Key:      summary.Key.String(),
-			Snapshot: summary.Snapshot,
-		})
+		pbSummaries = append(pbSummaries, ToDocumentSummary(summary))
 	}
 	return pbSummaries
 }

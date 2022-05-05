@@ -454,6 +454,33 @@ func (c *Client) FindDocInfoByKey(
 	return &docInfo, nil
 }
 
+// FindDocInfoByID finds a docInfo of the given ID.
+func (c *Client) FindDocInfoByID(ctx context.Context, id types.ID) (*database.DocInfo, error) {
+	encodedDocID, err := encodeID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	result := c.collection(colDocuments).FindOne(ctx, bson.M{
+		"_id": encodedDocID,
+	})
+	if result.Err() == mongo.ErrNoDocuments {
+		logging.From(ctx).Error(result.Err())
+		return nil, fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
+	}
+	if result.Err() != nil {
+		logging.From(ctx).Error(result.Err())
+		return nil, result.Err()
+	}
+
+	docInfo := database.DocInfo{}
+	if err := result.Decode(&docInfo); err != nil {
+		return nil, err
+	}
+
+	return &docInfo, nil
+}
+
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,

@@ -26,6 +26,7 @@ service Admin {
   rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
 
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
+  rpc GetDocument (GetDocumentRequest) returns (GetDocumentResponse) {}
 }
 
 message CreateProjectRequest {
@@ -56,4 +57,12 @@ message ListDocumentsRequest {
 
 message ListDocumentsResponse {
   repeated DocumentSummary documents = 1;
+}
+
+message GetDocumentRequest {
+  string id = 1;
+}
+
+message GetDocumentResponse {
+  DocumentSummary document = 1;
 }
