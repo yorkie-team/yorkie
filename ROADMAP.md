@@ -13,10 +13,12 @@ Yorkie v0.3 should provide APIs in the form of service(SaaS) to make it easier f
 
 ### 2022
 
+ - Release [Yorkie House](https://github.com/yorkie-team/yorkie-house)
+ - Multitenancy [#310](https://github.com/yorkie-team/yorkie/issues/310)
+ - Admin API [#273](https://github.com/yorkie-team/yorkie/issues/273)
  - History API [#52](https://github.com/yorkie-team/yorkie/issues/52)
  - Limits [#158](https://github.com/yorkie-team/yorkie/issues/158)
  - QoS [#270](https://github.com/yorkie-team/yorkie/issues/270)
- - Admin API [#273](https://github.com/yorkie-team/yorkie/issues/273)
  - P2P using WebRTC, LocalStorage [yorkie-js-sdk#271](https://github.com/yorkie-team/yorkie-js-sdk/issues/271)
 
 ## Yorkie v0.2
@@ -40,7 +42,7 @@ Yorkie's first release version, v0.1, aims to implement the basic features of th
 
  - Jan: Text datatype for supporting text based collaboration editor [#2](https://github.com/yorkie-team/yorkie/issues/2)
  - Feb: Realtime event stream [#5](https://github.com/yorkie-team/yorkie/issues/5)
- - Mar: https://yorkie.dev [yorkie-team.github.io](https://github.com/yorkie-team/yorkie-team.github.io)
+ - Mar: https://yorkie.dev
  - Apr: Change hook
  - May: Snapshot to reduce payload [#9](https://github.com/yorkie-team/yorkie/issues/9)
  - Jun: Garbage collection to clean CRDT meta [#3](https://github.com/yorkie-team/yorkie/issues/3)
