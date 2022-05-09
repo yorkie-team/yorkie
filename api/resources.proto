@@ -235,14 +235,14 @@ message DocumentSummary {
   string snapshot = 3;
 }
 
-message Metadata {
+message Presence {
   int32 clock = 1;
   map<string, string> data = 2;
 }
 
 message Client {
   bytes id = 1;
-  Metadata metadata = 2;
+  Presence presence = 2;
 }
 
 message Clients {
@@ -288,7 +288,7 @@ enum DocEventType {
   DOCUMENTS_CHANGED = 0;
   DOCUMENTS_WATCHED = 1;
   DOCUMENTS_UNWATCHED = 2;
-  METADATA_CHANGED = 3;
+  PRESENCE_CHANGED = 3;
 }
 
 message DocEvent {

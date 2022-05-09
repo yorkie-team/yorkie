@@ -64,8 +64,8 @@ type Coordinator interface {
 	// PublishToLocal publishes the given event.
 	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
 
-	// UpdateMetadata updates the metadata of the given client.
-	UpdateMetadata(
+	// UpdatePresence updates the presence of the given client.
+	UpdatePresence(
 		ctx context.Context,
 		publisher *types.Client,
 		keys []key.Key,

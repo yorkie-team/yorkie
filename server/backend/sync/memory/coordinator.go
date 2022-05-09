@@ -98,16 +98,16 @@ func (c *Coordinator) PublishToLocal(
 	c.pubSub.Publish(ctx, publisherID, event)
 }
 
-// UpdateMetadata updates the metadata of the given client.
-func (c *Coordinator) UpdateMetadata(
+// UpdatePresence updates the presence of the given client.
+func (c *Coordinator) UpdatePresence(
 	_ context.Context,
 	publisher *types.Client,
 	keys []key.Key,
 ) (*sync.DocEvent, error) {
-	c.pubSub.UpdateMetadata(publisher, keys)
+	c.pubSub.UpdatePresence(publisher, keys)
 
 	return &sync.DocEvent{
-		Type:         types.MetadataChangedEvent,
+		Type:         types.PresenceChangedEvent,
 		Publisher:    *publisher,
 		DocumentKeys: keys,
 	}, nil

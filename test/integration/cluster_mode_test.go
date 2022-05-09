@@ -67,12 +67,12 @@ func withTwoClientsAndDocsInClusterMode(
 	// creates two clients, each connecting to the two servers
 	client1, err := client.Dial(
 		svr1.RPCAddr(),
-		client.WithMetadata(types.Metadata{"name": "client1"}),
+		client.WithPresence(types.Presence{"name": "client1"}),
 	)
 	assert.NoError(t, err)
 	client2, err := client.Dial(
 		svr2.RPCAddr(),
-		client.WithMetadata(types.Metadata{"name": "client2"}),
+		client.WithPresence(types.Presence{"name": "client2"}),
 	)
 	assert.NoError(t, err)
 	assert.NoError(t, client1.Activate(ctx))
@@ -161,9 +161,9 @@ func TestClusterMode(t *testing.T) {
 			// 01. PeersChanged is triggered when another client watches the document
 			expected = append(expected, watchResponsePair{
 				Type: client.PeersChanged,
-				Peers: map[string]types.Metadata{
-					c1.ID().String(): c1.Metadata(),
-					c2.ID().String(): c2.Metadata(),
+				Peers: map[string]types.Presence{
+					c1.ID().String(): c1.Presence(),
+					c2.ID().String(): c2.Presence(),
 				},
 			})
 
@@ -171,21 +171,21 @@ func TestClusterMode(t *testing.T) {
 			_, err = c2.Watch(watch2Ctx, d2)
 			assert.NoError(t, err)
 
-			// 02. PeersChanged is triggered when another client updates its metadata
-			assert.NoError(t, c2.UpdateMetadata(ctx, "updated", "true"))
+			// 02. PeersChanged is triggered when another client updates its presence
+			assert.NoError(t, c2.UpdatePresence(ctx, "updated", "true"))
 			expected = append(expected, watchResponsePair{
 				Type: client.PeersChanged,
-				Peers: map[string]types.Metadata{
-					c1.ID().String(): c1.Metadata(),
-					c2.ID().String(): c2.Metadata(),
+				Peers: map[string]types.Presence{
+					c1.ID().String(): c1.Presence(),
+					c2.ID().String(): c2.Presence(),
 				},
 			})
 
 			// 03. PeersChanged is triggered when another client closes the watch
 			expected = append(expected, watchResponsePair{
 				Type: client.PeersChanged,
-				Peers: map[string]types.Metadata{
-					c1.ID().String(): c1.Metadata(),
+				Peers: map[string]types.Presence{
+					c1.ID().String(): c1.Presence(),
 				},
 			})
 			cancel2()

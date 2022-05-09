@@ -90,30 +90,30 @@ func TestPeerAwareness(t *testing.T) {
 		// 01. PeersChanged is triggered when another client watches the document
 		expected = append(expected, watchResponsePair{
 			Type: client.PeersChanged,
-			Peers: map[string]types.Metadata{
-				c1.ID().String(): c1.Metadata(),
-				c2.ID().String(): c2.Metadata(),
+			Peers: map[string]types.Presence{
+				c1.ID().String(): c1.Presence(),
+				c2.ID().String(): c2.Presence(),
 			},
 		})
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
 		_, err = c2.Watch(watch2Ctx, d2)
 		assert.NoError(t, err)
 
-		// 02. PeersChanged is triggered when another client updates its metadata
-		assert.NoError(t, c2.UpdateMetadata(ctx, "updated", "true"))
+		// 02. PeersChanged is triggered when another client updates its presence
+		assert.NoError(t, c2.UpdatePresence(ctx, "updated", "true"))
 		expected = append(expected, watchResponsePair{
 			Type: client.PeersChanged,
-			Peers: map[string]types.Metadata{
-				c1.ID().String(): c1.Metadata(),
-				c2.ID().String(): c2.Metadata(),
+			Peers: map[string]types.Presence{
+				c1.ID().String(): c1.Presence(),
+				c2.ID().String(): c2.Presence(),
 			},
 		})
 
 		// 03. PeersChanged is triggered when another client closes the watch
 		expected = append(expected, watchResponsePair{
 			Type: client.PeersChanged,
-			Peers: map[string]types.Metadata{
-				c1.ID().String(): c1.Metadata(),
+			Peers: map[string]types.Presence{
+				c1.ID().String(): c1.Presence(),
 			},
 		})
 		cancel2()

@@ -227,8 +227,8 @@ func (m *PubSub) Publish(
 	}
 }
 
-// UpdateMetadata updates the metadata of the given client.
-func (m *PubSub) UpdateMetadata(
+// UpdatePresence updates the presence of the given client.
+func (m *PubSub) UpdatePresence(
 	publisher *types.Client,
 	keys []key.Key,
 ) *sync.Subscription {
@@ -240,6 +240,6 @@ func (m *PubSub) UpdateMetadata(
 		return nil
 	}
 
-	sub.UpdateMetadata(publisher.MetadataInfo)
+	sub.UpdatePresence(publisher.PresenceInfo)
 	return sub
 }
