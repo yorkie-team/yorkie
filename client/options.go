@@ -30,8 +30,8 @@ type Options struct {
 	// Key is the key of the client. It is used to identify the client.
 	Key string
 
-	// Metadata is the metadata of the client.
-	Metadata types.Metadata
+	// Presence is the presence of the client.
+	Presence types.Presence
 
 	// APIKey is the API key of the client.
 	APIKey string
@@ -54,9 +54,9 @@ func WithKey(key string) Option {
 	return func(o *Options) { o.Key = key }
 }
 
-// WithMetadata configures the metadata of the client.
-func WithMetadata(metadata types.Metadata) Option {
-	return func(o *Options) { o.Metadata = metadata }
+// WithPresence configures the presence of the client.
+func WithPresence(presence types.Presence) Option {
+	return func(o *Options) { o.Presence = presence }
 }
 
 // WithAPIKey configures the API key of the client.

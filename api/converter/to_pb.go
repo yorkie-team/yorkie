@@ -86,15 +86,15 @@ func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSumm
 func ToClient(client types.Client) *api.Client {
 	return &api.Client{
 		Id:       client.ID.Bytes(),
-		Metadata: ToMetadataInfo(client.MetadataInfo),
+		Presence: ToPresenceInfo(client.PresenceInfo),
 	}
 }
 
-// ToMetadataInfo converts the given model to Protobuf format.
-func ToMetadataInfo(metadata types.MetadataInfo) *api.Metadata {
-	return &api.Metadata{
-		Clock: metadata.Clock,
-		Data:  metadata.Data,
+// ToPresenceInfo converts the given model to Protobuf format.
+func ToPresenceInfo(info types.PresenceInfo) *api.Presence {
+	return &api.Presence{
+		Clock: info.Clock,
+		Data:  info.Presence,
 	}
 }
 
@@ -168,8 +168,8 @@ func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 		return api.DocEventType_DOCUMENTS_WATCHED, nil
 	case types.DocumentsUnwatchedEvent:
 		return api.DocEventType_DOCUMENTS_UNWATCHED, nil
-	case types.MetadataChangedEvent:
-		return api.DocEventType_METADATA_CHANGED, nil
+	case types.PresenceChangedEvent:
+		return api.DocEventType_PRESENCE_CHANGED, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}

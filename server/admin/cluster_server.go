@@ -59,8 +59,8 @@ func (s *clusterServer) BroadcastEvent(
 		types.DocumentsUnwatchedEvent,
 		types.DocumentsChangedEvent:
 		s.backend.Coordinator.PublishToLocal(ctx, actorID, *docEvent)
-	case types.MetadataChangedEvent:
-		if _, err := s.backend.Coordinator.UpdateMetadata(
+	case types.PresenceChangedEvent:
+		if _, err := s.backend.Coordinator.UpdatePresence(
 			ctx,
 			&docEvent.Publisher,
 			docEvent.DocumentKeys,

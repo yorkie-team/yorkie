@@ -71,15 +71,15 @@ func FromClient(pbClient *api.Client) (*types.Client, error) {
 
 	return &types.Client{
 		ID:           id,
-		MetadataInfo: FromMetadataInfo(pbClient.Metadata),
+		PresenceInfo: FromPresenceInfo(pbClient.Presence),
 	}, nil
 }
 
-// FromMetadataInfo converts the given Protobuf formats to model format.
-func FromMetadataInfo(pbMetadata *api.Metadata) types.MetadataInfo {
-	return types.MetadataInfo{
-		Clock: pbMetadata.Clock,
-		Data:  pbMetadata.Data,
+// FromPresenceInfo converts the given Protobuf formats to model format.
+func FromPresenceInfo(pbPresence *api.Presence) types.PresenceInfo {
+	return types.PresenceInfo{
+		Clock:    pbPresence.Clock,
+		Presence: pbPresence.Data,
 	}
 }
 
@@ -171,8 +171,8 @@ func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) 
 		return types.DocumentsWatchedEvent, nil
 	case api.DocEventType_DOCUMENTS_UNWATCHED:
 		return types.DocumentsUnwatchedEvent, nil
-	case api.DocEventType_METADATA_CHANGED:
-		return types.MetadataChangedEvent, nil
+	case api.DocEventType_PRESENCE_CHANGED:
+		return types.PresenceChangedEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
 }

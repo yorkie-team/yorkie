@@ -59,7 +59,7 @@ var (
 // Attachment represents the document attached and peers.
 type Attachment struct {
 	doc   *document.Document
-	peers map[string]types.MetadataInfo
+	peers map[string]types.PresenceInfo
 }
 
 // Client is a normal client that can communicate with the server.
@@ -73,7 +73,7 @@ type Client struct {
 
 	id           *time.ActorID
 	key          string
-	metadataInfo types.MetadataInfo
+	presenceInfo types.PresenceInfo
 	status       status
 	attachments  map[string]*Attachment
 }
@@ -91,7 +91,7 @@ const (
 type WatchResponse struct {
 	Type          WatchResponseType
 	Keys          []key.Key
-	PeersMapByDoc map[string]map[string]types.Metadata
+	PeersMapByDoc map[string]map[string]types.Presence
 	Err           error
 }
 
@@ -107,9 +107,9 @@ func New(opts ...Option) (*Client, error) {
 		k = xid.New().String()
 	}
 
-	metadata := types.Metadata{}
-	if options.Metadata != nil {
-		metadata = options.Metadata
+	presence := types.Presence{}
+	if options.Presence != nil {
+		presence = options.Presence
 	}
 
 	var dialOptions []grpc.DialOption
@@ -142,7 +142,7 @@ func New(opts ...Option) (*Client, error) {
 		logger:      logger,
 
 		key:          k,
-		metadataInfo: types.MetadataInfo{Data: metadata},
+		presenceInfo: types.PresenceInfo{Presence: presence},
 		status:       deactivated,
 		attachments:  make(map[string]*Attachment),
 	}, nil
@@ -270,7 +270,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	doc.SetStatus(document.Attached)
 	c.attachments[doc.Key().String()] = &Attachment{
 		doc:   doc,
-		peers: make(map[string]types.MetadataInfo),
+		peers: make(map[string]types.PresenceInfo),
 	}
 
 	return nil
@@ -356,7 +356,7 @@ func (c *Client) Watch(
 	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
 		Client: converter.ToClient(types.Client{
 			ID:           c.id,
-			MetadataInfo: c.metadataInfo,
+			PresenceInfo: c.presenceInfo,
 		}),
 		DocumentKeys: converter.ToDocumentKeys(keys),
 	})
@@ -375,7 +375,7 @@ func (c *Client) Watch(
 
 				attachment := c.attachments[docID]
 				for _, cli := range clients {
-					attachment.peers[cli.ID.String()] = cli.MetadataInfo
+					attachment.peers[cli.ID.String()] = cli.PresenceInfo
 				}
 			}
 
@@ -392,7 +392,7 @@ func (c *Client) Watch(
 					Type: DocumentsChanged,
 					Keys: converter.FromDocumentKeys(resp.Event.DocumentKeys),
 				}, nil
-			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent, types.MetadataChangedEvent:
+			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent, types.PresenceChangedEvent:
 				for _, k := range converter.FromDocumentKeys(resp.Event.DocumentKeys) {
 					cli, err := converter.FromClient(resp.Event.Publisher)
 					if err != nil {
@@ -401,11 +401,11 @@ func (c *Client) Watch(
 
 					attachment := c.attachments[k.String()]
 					if eventType == types.DocumentsWatchedEvent ||
-						eventType == types.MetadataChangedEvent {
+						eventType == types.PresenceChangedEvent {
 						if info, ok := attachment.peers[cli.ID.String()]; ok {
-							cli.MetadataInfo.Update(info)
+							cli.PresenceInfo.Update(info)
 						}
-						attachment.peers[cli.ID.String()] = cli.MetadataInfo
+						attachment.peers[cli.ID.String()] = cli.PresenceInfo
 					} else {
 						delete(attachment.peers, cli.ID.String())
 					}
@@ -448,14 +448,14 @@ func (c *Client) Watch(
 	return rch, nil
 }
 
-// UpdateMetadata updates the metadata of this client.
-func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
+// UpdatePresence updates the presence of this client.
+func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}
 
-	c.metadataInfo.Data[k] = v
-	c.metadataInfo.Clock++
+	c.presenceInfo.Presence[k] = v
+	c.presenceInfo.Clock++
 
 	if len(c.attachments) == 0 {
 		return nil
@@ -466,14 +466,14 @@ func (c *Client) UpdateMetadata(ctx context.Context, k, v string) error {
 		keys = append(keys, attachment.doc.Key())
 	}
 
-	// TODO(hackerwins): We temporarily use Unary Call to update metadata,
+	// TODO(hackerwins): We temporarily use Unary Call to update presence,
 	// because grpc-web can't handle Bi-Directional streaming for now.
 	// After grpc-web supports bi-directional streaming, we can remove the
 	// following.
-	if _, err := c.client.UpdateMetadata(ctx, &api.UpdateMetadataRequest{
+	if _, err := c.client.UpdatePresence(ctx, &api.UpdatePresenceRequest{
 		Client: converter.ToClient(types.Client{
 			ID:           c.id,
-			MetadataInfo: c.metadataInfo,
+			PresenceInfo: c.presenceInfo,
 		}),
 		DocumentKeys: converter.ToDocumentKeys(keys),
 	}); err != nil {
@@ -527,23 +527,23 @@ func (c *Client) Key() string {
 	return c.key
 }
 
-// Metadata returns the metadata of this client.
-func (c *Client) Metadata() types.Metadata {
-	metadata := make(types.Metadata)
-	for k, v := range c.metadataInfo.Data {
-		metadata[k] = v
+// Presence returns the presence data of this client.
+func (c *Client) Presence() types.Presence {
+	presence := make(types.Presence)
+	for k, v := range c.presenceInfo.Presence {
+		presence[k] = v
 	}
 
-	return metadata
+	return presence
 }
 
 // PeersMapByDoc returns the peersMap.
-func (c *Client) PeersMapByDoc() map[string]map[string]types.Metadata {
-	peersMapByDoc := make(map[string]map[string]types.Metadata)
+func (c *Client) PeersMapByDoc() map[string]map[string]types.Presence {
+	peersMapByDoc := make(map[string]map[string]types.Presence)
 	for doc, attachment := range c.attachments {
-		peers := make(map[string]types.Metadata)
-		for id, metadata := range attachment.peers {
-			peers[id] = metadata.Data
+		peers := make(map[string]types.Presence)
+		for id, info := range attachment.peers {
+			peers[id] = info.Presence
 		}
 		peersMapByDoc[doc] = peers
 	}

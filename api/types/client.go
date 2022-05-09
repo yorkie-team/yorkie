@@ -9,7 +9,7 @@ import (
 // Client represents the Client that communicates with the Server.
 type Client struct {
 	ID           *time.ActorID
-	MetadataInfo MetadataInfo
+	PresenceInfo PresenceInfo
 }
 
 // NewClient creates a new Client from the given JSON.
@@ -32,20 +32,20 @@ func (c *Client) Marshal() (string, error) {
 	return string(encoded), nil
 }
 
-// Metadata represents custom metadata that can be defined in the client.
-type Metadata map[string]string
+// Presence represents custom presence that can be defined in the client.
+type Presence map[string]string
 
-// MetadataInfo is a metadata information with logical clock.
-type MetadataInfo struct {
-	Clock int32
-	Data  Metadata
+// PresenceInfo is a presence information with logical clock.
+type PresenceInfo struct {
+	Clock    int32
+	Presence Presence
 }
 
-// Update updates the given metadata information with the given clock.
-func (i *MetadataInfo) Update(info MetadataInfo) bool {
+// Update updates the given presence information with the given clock.
+func (i *PresenceInfo) Update(info PresenceInfo) bool {
 	if info.Clock > i.Clock {
 		i.Clock = info.Clock
-		i.Data = info.Data
+		i.Presence = info.Presence
 		return true
 	}
 	return false

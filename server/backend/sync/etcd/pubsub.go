@@ -98,20 +98,20 @@ func (c *Client) PublishToLocal(
 	c.localPubSub.Publish(ctx, publisherID, event)
 }
 
-// UpdateMetadata updates the metadata of the given client.
-func (c *Client) UpdateMetadata(
+// UpdatePresence updates the presence of the given client.
+func (c *Client) UpdatePresence(
 	ctx context.Context,
 	publisher *types.Client,
 	keys []key.Key,
 ) (*sync.DocEvent, error) {
-	if sub := c.localPubSub.UpdateMetadata(publisher, keys); sub != nil {
+	if sub := c.localPubSub.UpdatePresence(publisher, keys); sub != nil {
 		if err := c.putSubscriptions(ctx, keys, sub); err != nil {
 			return nil, err
 		}
 	}
 
 	return &sync.DocEvent{
-		Type:         types.MetadataChangedEvent,
+		Type:         types.PresenceChangedEvent,
 		Publisher:    *publisher,
 		DocumentKeys: keys,
 	}, nil

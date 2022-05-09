@@ -43,7 +43,7 @@ type clientAndDocPair struct {
 
 type watchResponsePair struct {
 	Type  client.WatchResponseType
-	Peers map[string]types.Metadata
+	Peers map[string]types.Presence
 }
 
 var defaultServer *server.Yorkie
@@ -108,7 +108,7 @@ func activeClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
 			defaultServer.RPCAddr(),
-			client.WithMetadata(types.Metadata{"name": fmt.Sprintf("name-%d", i)}),
+			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", i)}),
 		)
 		assert.NoError(t, err)
 

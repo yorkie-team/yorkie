@@ -67,9 +67,9 @@ func (s *Subscription) SubscriberID() string {
 	return s.subscriber.ID.String()
 }
 
-// UpdateMetadata updates the metadata of the subscriber.
-func (s *Subscription) UpdateMetadata(info types.MetadataInfo) {
-	s.subscriber.MetadataInfo.Update(info)
+// UpdatePresence updates the presence of the subscriber.
+func (s *Subscription) UpdatePresence(info types.PresenceInfo) {
+	s.subscriber.PresenceInfo.Update(info)
 }
 
 // Close closes all resources of this Subscription.

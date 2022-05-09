@@ -16,6 +16,6 @@ const (
 	// unwatched by other clients.
 	DocumentsUnwatchedEvent DocEventType = "documents-unwatched"
 
-	// MetadataChangedEvent is an event indicating that metadata is changed.
-	MetadataChangedEvent DocEventType = "metadata-changed"
+	// PresenceChangedEvent is an event indicating that presence is changed.
+	PresenceChangedEvent DocEventType = "presence-changed"
 )

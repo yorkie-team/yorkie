@@ -24,7 +24,7 @@ import "resources.proto";
 service Yorkie {
   rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
   rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
-  rpc UpdateMetadata (UpdateMetadataRequest) returns (UpdateMetadataResponse) {}
+  rpc UpdatePresence (UpdatePresenceRequest) returns (UpdatePresenceResponse) {}
 
   rpc AttachDocument (AttachDocumentRequest) returns (AttachDocumentResponse) {}
   rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
@@ -97,12 +97,12 @@ message PushPullResponse {
   ChangePack change_pack = 2;
 }
 
-message UpdateMetadataRequest {
+message UpdatePresenceRequest {
   Client client = 1;
   repeated string document_keys = 2;
 }
 
-message UpdateMetadataResponse {}
+message UpdatePresenceResponse {}
 
 message ListChangesRequest {
   bytes client_id = 1;
