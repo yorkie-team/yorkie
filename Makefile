@@ -1,4 +1,4 @@
-YORKIE_VERSION := 0.2.3
+YORKIE_VERSION := 0.2.4
 
 GIT_COMMIT := $(shell /usr/bin/git rev-parse --short HEAD)
 GO_PROJECT = github.com/yorkie-team/yorkie
