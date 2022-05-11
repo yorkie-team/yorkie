@@ -94,7 +94,7 @@ func (s *Server) listenAndServe() error {
 		logging.DefaultLogger().Infof(fmt.Sprintf("serving profiling on %d", s.conf.Port))
 		s.httpServer.Handler = s.serveMux
 		if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
-			logging.DefaultLogger().Error("HTTP server ListenAndServe: %v", err)
+			logging.DefaultLogger().Errorf("HTTP server ListenAndServe: %v", err)
 		}
 	}()
 	return nil
