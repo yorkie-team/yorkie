@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.5] - 2022-05-11
+
+### Added
+
+- Add the missing admin-port flag for CLI
+
+### Fixed
+
+- Rename projectID written in invalid conventions to project_id
+
 ## [0.2.4] - 2022-05-10
 
 ### Added
