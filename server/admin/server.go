@@ -102,7 +102,7 @@ func (s *Server) listenAndServeGRPC() error {
 	}
 
 	go func() {
-		logging.DefaultLogger().Infof("serving Admin on %d", s.conf.Port)
+		logging.DefaultLogger().Infof("serving admin on %d", s.conf.Port)
 
 		if err := s.grpcServer.Serve(lis); err != nil {
 			if err != grpc.ErrServerStopped {

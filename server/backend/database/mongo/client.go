@@ -409,8 +409,8 @@ func (c *Client) FindDocInfoByKey(
 
 	now := gotime.Now()
 	res, err := c.collection(colDocuments).UpdateOne(ctx, bson.M{
-		"projectID": encodedProjectID,
-		"key":       docKey,
+		"project_id": encodedProjectID,
+		"key":        docKey,
 	}, bson.M{
 		"$set": bson.M{
 			"accessed_at": now,
