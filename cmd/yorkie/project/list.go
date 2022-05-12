@@ -18,15 +18,18 @@ package project
 
 import (
 	"context"
+	"time"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/pkg/units"
 )
 
 func newListCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
+		Use:   "ls",
 		Short: "List all projects",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// TODO(hackerwins): use adminAddr from env or addr flag.
@@ -44,10 +47,33 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			// TODO(hackerwins): Print projects in table format.
+			tw := table.NewWriter()
+			tw.Style().Options.DrawBorder = false
+			tw.Style().Options.SeparateColumns = false
+			tw.Style().Options.SeparateFooter = false
+			tw.Style().Options.SeparateHeader = false
+			tw.Style().Options.SeparateRows = false
+			tw.AppendHeader(table.Row{
+				"ID",
+				"NAME",
+				"PUBLIC KEY",
+				"SECRET KEY",
+				"AUTH WEBHOOK URL",
+				"AUTH WEBHOOK METHODS",
+				"CREATED AT",
+			})
 			for _, project := range projects {
-				cmd.Printf("%s\n", project.Name)
+				tw.AppendRow(table.Row{
+					project.ID,
+					project.Name,
+					project.PublicKey,
+					project.SecretKey,
+					project.AuthWebhookURL,
+					project.AuthWebhookMethods,
+					units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
+				})
 			}
+			cmd.Printf("%s\n", tw.Render())
 
 			return nil
 		},
