@@ -188,8 +188,13 @@ func (s *Server) GetDocument(
 		return nil, err
 	}
 
+	pbDocument, err := converter.ToDocumentSummary(document)
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.GetDocumentResponse{
-		Document: converter.ToDocumentSummary(document),
+		Document: pbDocument,
 	}, nil
 }
 
@@ -211,7 +216,12 @@ func (s *Server) ListDocuments(
 		return nil, err
 	}
 
+	pbDocuments, err := converter.ToDocumentSummaries(docs)
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.ListDocumentsResponse{
-		Documents: converter.ToDocumentSummaries(docs),
+		Documents: pbDocuments,
 	}, nil
 }

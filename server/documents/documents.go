@@ -39,15 +39,12 @@ func ListDocumentSummaries(
 
 	var summaries []*types.DocumentSummary
 	for _, docInfo := range docInfo {
-		doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
-		if err != nil {
-			return nil, err
-		}
-
 		summaries = append(summaries, &types.DocumentSummary{
-			ID:       docInfo.ID.String(),
-			Key:      doc.Key(),
-			Snapshot: doc.Marshal(),
+			ID:         docInfo.ID,
+			Key:        docInfo.Key,
+			CreatedAt:  docInfo.CreatedAt,
+			AccessedAt: docInfo.AccessedAt,
+			UpdatedAt:  docInfo.UpdatedAt,
 		})
 	}
 
@@ -71,9 +68,12 @@ func GetDocumentSummary(
 	}
 
 	return &types.DocumentSummary{
-		ID:       docInfo.ID.String(),
-		Key:      doc.Key(),
-		Snapshot: doc.Marshal(),
+		ID:         docInfo.ID,
+		Key:        docInfo.Key,
+		CreatedAt:  docInfo.CreatedAt,
+		AccessedAt: docInfo.AccessedAt,
+		UpdatedAt:  docInfo.UpdatedAt,
+		Snapshot:   doc.Marshal(),
 	}, nil
 }
 
