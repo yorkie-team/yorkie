@@ -65,21 +65,41 @@ func ToProject(project *types.Project) (*api.Project, error) {
 }
 
 // ToDocumentSummary converts the given model to Protobuf format.
-func ToDocumentSummary(summary *types.DocumentSummary) *api.DocumentSummary {
-	return &api.DocumentSummary{
-		Id:       summary.ID,
-		Key:      summary.Key.String(),
-		Snapshot: summary.Snapshot,
+func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, error) {
+	pbCreatedAt, err := protoTypes.TimestampProto(summary.CreatedAt)
+	if err != nil {
+		return nil, err
 	}
+	pbAccessedAt, err := protoTypes.TimestampProto(summary.AccessedAt)
+	if err != nil {
+		return nil, err
+	}
+	pbUpdatedAt, err := protoTypes.TimestampProto(summary.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.DocumentSummary{
+		Id:         summary.ID.String(),
+		Key:        summary.Key.String(),
+		CreatedAt:  pbCreatedAt,
+		AccessedAt: pbAccessedAt,
+		UpdatedAt:  pbUpdatedAt,
+		Snapshot:   summary.Snapshot,
+	}, nil
 }
 
 // ToDocumentSummaries converts the given model to Protobuf.
-func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSummary {
+func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSummary, error) {
 	var pbSummaries []*api.DocumentSummary
 	for _, summary := range summaries {
-		pbSummaries = append(pbSummaries, ToDocumentSummary(summary))
+		pbSummary, err := ToDocumentSummary(summary)
+		if err != nil {
+			return nil, err
+		}
+		pbSummaries = append(pbSummaries, pbSummary)
 	}
-	return pbSummaries
+	return pbSummaries, nil
 }
 
 // ToClient converts the given model to Protobuf format.
