@@ -1,6 +1,6 @@
 module github.com/yorkie-team/yorkie
 
-go 1.17
+go 1.18
 
 require (
 	bou.ke/monkey v1.0.2
@@ -11,7 +11,6 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/go-memdb v1.3.2
 	github.com/jedib0t/go-pretty/v6 v6.3.1
-	github.com/moby/locker v1.0.1
 	github.com/prometheus/client_golang v1.11.0
 	github.com/rs/xid v1.2.1
 	github.com/spf13/cobra v1.4.0
