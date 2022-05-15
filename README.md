@@ -59,7 +59,7 @@ https://yorkie.dev/docs
 
 ## Developing Yorkie
 
-For building Yorkie, You'll first need [Go](https://golang.org) installed (version 1.17+ is required). Make sure you
+For building Yorkie, You'll first need [Go](https://golang.org) installed (version 1.18+ is required). Make sure you
 have Go properly [installed](https://golang.org/doc/install), including setting up
 your [GOPATH](https://golang.org/doc/code.html#Command). Then download a pre-built binary
 from [release page](https://github.com/protocolbuffers/protobuf/releases) and install the protobuf compiler (version

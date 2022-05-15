@@ -19,8 +19,8 @@ package memory
 import (
 	"context"
 
-	"github.com/moby/locker"
-
+	"github.com/yorkie-team/yorkie/pkg/locker"
+	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -38,8 +38,9 @@ func (il *internalLocker) Lock(ctx context.Context) error {
 
 // TryLock locks the mutex if not already locked by another session.
 func (il *internalLocker) TryLock(ctx context.Context) error {
-	// TODO(hackerwins): We need to replace Lock with TryLock.
-	il.locks.Lock(il.key)
+	if !il.locks.TryLock(il.key) {
+		return sync.ErrAlreadyLocked
+	}
 
 	return nil
 }

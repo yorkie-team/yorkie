@@ -19,11 +19,10 @@ package memory
 import (
 	"context"
 
-	"github.com/moby/locker"
-
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/locker"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 )
 
