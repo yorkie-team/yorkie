@@ -1,4 +1,4 @@
-package interceptors
+package grpchelper
 
 import (
 	"context"

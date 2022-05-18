@@ -58,7 +58,8 @@ type ProjectInfo struct {
 // NewProjectInfo creates a new ProjectInfo of the given name.
 func NewProjectInfo(name string) *ProjectInfo {
 	return &ProjectInfo{
-		Name:      name,
+		Name: name,
+		// TODO(hackerwins): Use random generated Key.
 		PublicKey: xid.New().String(),
 		SecretKey: xid.New().String(),
 		CreatedAt: time.Now(),

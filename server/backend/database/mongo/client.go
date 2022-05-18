@@ -139,6 +139,10 @@ func (c *Client) CreateProjectInfo(ctx context.Context, name string) (*database.
 		"created_at": gotime.Now(),
 	})
 	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrProjectAlreadyExists
+		}
+
 		logging.From(ctx).Error(err)
 		return nil, err
 	}

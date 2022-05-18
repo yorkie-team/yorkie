@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2022 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,12 +46,12 @@ func (i *DefaultInterceptor) Unary() grpc.UnaryServerInterceptor {
 		resp, err := handler(ctx, req)
 		reqLogger := logging.From(ctx)
 		if err != nil {
-			reqLogger.Warnf("RPC : %q %s: %q => %q", info.FullMethod, gotime.Since(start), req, err)
+			reqLogger.Warnf("ADMN: %q %s: %q => %q", info.FullMethod, gotime.Since(start), req, err)
 			return nil, grpchelper.ToStatusError(err)
 		}
 
 		if gotime.Since(start) > 100*gotime.Millisecond {
-			reqLogger.Infof("RPC : %q %s", info.FullMethod, gotime.Since(start))
+			reqLogger.Infof("ADMN: %q %s", info.FullMethod, gotime.Since(start))
 		}
 		return resp, nil
 	}
@@ -70,11 +70,11 @@ func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
 		start := gotime.Now()
 		err := handler(srv, ss)
 		if err != nil {
-			reqLogger.Warnf("RPC : stream %q %s => %q", info.FullMethod, gotime.Since(start), err.Error())
+			reqLogger.Warnf("ADMN: stream %q %s => %q", info.FullMethod, gotime.Since(start), err.Error())
 			return grpchelper.ToStatusError(err)
 		}
 
-		reqLogger.Infof("RPC : stream %q %s", info.FullMethod, gotime.Since(start))
+		reqLogger.Infof("ADMN: stream %q %s", info.FullMethod, gotime.Since(start))
 		return nil
 	}
 }

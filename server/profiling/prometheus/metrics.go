@@ -96,8 +96,7 @@ func NewMetrics() (*Metrics, error) {
 				Help: "The total count of operations included in request" +
 					" packs in PushPull.",
 			}),
-		pushPullSentOperationsTotal: promauto.With(reg).NewCounter(prometheus.
-			CounterOpts{
+		pushPullSentOperationsTotal: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: "pushpull",
 			Name:      "sent_operations_total",

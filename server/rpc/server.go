@@ -30,6 +30,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
 )
@@ -43,7 +44,7 @@ type Server struct {
 
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
-	loggingInterceptor := interceptors.NewLoggingInterceptor()
+	loggingInterceptor := grpchelper.NewLoggingInterceptor()
 	contextInterceptor := interceptors.NewContextInterceptor(be)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 

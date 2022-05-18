@@ -24,9 +24,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcmetadata "google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
+	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
@@ -100,12 +101,12 @@ func (i *ContextInterceptor) buildContext(ctx context.Context) (context.Context,
 	md := metadata.Metadata{}
 	data, ok := grpcmetadata.FromIncomingContext(ctx)
 	if !ok {
-		return nil, status.Errorf(codes.Unauthenticated, "metadata is not provided")
+		return nil, grpcstatus.Errorf(codes.Unauthenticated, "metadata is not provided")
 	}
 
 	apiKey := data["x-api-key"]
 	if len(apiKey) == 0 && !i.backend.Config.UseDefaultProject {
-		return nil, status.Errorf(codes.Unauthenticated, "api key is not provided")
+		return nil, grpcstatus.Errorf(codes.Unauthenticated, "api key is not provided")
 	}
 	if len(apiKey) > 0 {
 		md.APIKey = apiKey[0]
@@ -122,7 +123,7 @@ func (i *ContextInterceptor) buildContext(ctx context.Context) (context.Context,
 	// Consider using a cache to store the info.
 	project, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
 	if err != nil {
-		return nil, toStatusError(err)
+		return nil, grpchelper.ToStatusError(err)
 	}
 	ctx = projects.With(ctx, project)
 
