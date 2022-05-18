@@ -212,26 +212,27 @@ func (t *Tree) Find(index int) (*Node, int) {
 
 // String returns a string containing node values.
 func (t *Tree) String() string {
-	var str []string
+	var builder strings.Builder
 	traverseInOrder(t.root, func(node *Node) {
-		str = append(str, node.value.String())
+		builder.WriteString(node.value.String())
 	})
-	return strings.Join(str, "")
+	return builder.String()
 }
 
 // AnnotatedString returns a string containing the metadata of the Node
 // for debugging purpose.
 func (t *Tree) AnnotatedString() string {
-	var metaString []string
+	var builder strings.Builder
+
 	traverseInOrder(t.root, func(node *Node) {
-		metaString = append(metaString, fmt.Sprintf(
+		builder.WriteString(fmt.Sprintf(
 			"[%d,%d]%s",
 			node.weight,
 			node.value.Len(),
 			node.value.String(),
 		))
 	})
-	return strings.Join(metaString, "")
+	return builder.String()
 }
 
 // UpdateSubtree recalculates the weight of this node with the value and children.

@@ -55,10 +55,15 @@ func (t *TextValue) String() string {
 	return t.value
 }
 
+// Marshal returns the JSON encoding of this text.
+func (t *TextValue) Marshal() string {
+	return EscapeString(t.value)
+}
+
 // AnnotatedString returns a String containing the metadata of this value
 // for debugging purpose.
 func (t *TextValue) AnnotatedString() string {
-	return t.value
+	return EscapeString(t.value)
 }
 
 // Split splits this value by the given offset.
@@ -97,6 +102,11 @@ func NewText(elements *RGATreeSplit, createdAt *time.Ticket) *Text {
 // Marshal returns the JSON encoding of this text.
 func (t *Text) Marshal() string {
 	return fmt.Sprintf(`"%s"`, t.rgaTreeSplit.marshal())
+}
+
+// String returns a string representation of this text.
+func (t *Text) String() string {
+	return t.rgaTreeSplit.string()
 }
 
 // DeepCopy copies itself deeply.

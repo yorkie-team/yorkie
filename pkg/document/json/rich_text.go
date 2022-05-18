@@ -67,13 +67,26 @@ func (t *RichTextValue) Len() int {
 
 // String returns the string representation of this value.
 func (t *RichTextValue) String() string {
-	return fmt.Sprintf(`{"attrs":%s,"val":"%s"}`, t.attrs.Marshal(), t.value)
+	return t.value
+}
+
+// Marshal returns the JSON encoding of this text.
+func (t *RichTextValue) Marshal() string {
+	return fmt.Sprintf(
+		`{"attrs":%s,"val":"%s"}`,
+		t.attrs.Marshal(),
+		EscapeString(t.value),
+	)
 }
 
 // AnnotatedString returns a String containing the metadata of this value
 // for debugging purpose.
 func (t *RichTextValue) AnnotatedString() string {
-	return fmt.Sprintf(`%s "%s"`, t.attrs.Marshal(), t.value)
+	return fmt.Sprintf(
+		`%s "%s"`,
+		t.attrs.Marshal(),
+		EscapeString(t.value),
+	)
 }
 
 // Split splits this value by the given offset.
@@ -127,7 +140,7 @@ func (t *RichText) Marshal() string {
 		if node.createdAt().Compare(t.createdAt) == 0 {
 			// last line
 		} else if node.removedAt == nil {
-			values = append(values, node.String())
+			values = append(values, node.Marshal())
 		}
 		node = node.next
 	}
