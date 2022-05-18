@@ -20,6 +20,7 @@ type RGATreeSplitValue interface {
 	Len() int
 	DeepCopy() RGATreeSplitValue
 	String() string
+	Marshal() string
 	AnnotatedString() string
 }
 
@@ -210,6 +211,11 @@ func (t *RGATreeSplitNode) Len() int {
 // RemovedAt return the remove time of this node.
 func (t *RGATreeSplitNode) RemovedAt() *time.Ticket {
 	return t.removedAt
+}
+
+// Marshal returns the JSON encoding of this node.
+func (t *RGATreeSplitNode) Marshal() string {
+	return t.value.Marshal()
 }
 
 // String returns the string representation of this node.
@@ -508,17 +514,31 @@ func (s *RGATreeSplit) deleteNodes(
 }
 
 func (s *RGATreeSplit) marshal() string {
-	var values []string
+	builder := strings.Builder{}
 
 	node := s.initialHead.next
 	for node != nil {
 		if node.removedAt == nil {
-			values = append(values, node.String())
+			builder.WriteString(node.Marshal())
 		}
 		node = node.next
 	}
 
-	return strings.Join(values, "")
+	return builder.String()
+}
+
+func (s *RGATreeSplit) string() string {
+	builder := strings.Builder{}
+
+	node := s.initialHead.next
+	for node != nil {
+		if node.removedAt == nil {
+			builder.WriteString(node.String())
+		}
+		node = node.next
+	}
+
+	return builder.String()
 }
 
 func (s *RGATreeSplit) nodes() []*RGATreeSplitNode {
@@ -536,26 +556,19 @@ func (s *RGATreeSplit) nodes() []*RGATreeSplitNode {
 // AnnotatedString returns a String containing the metadata of the nodes
 // for debugging purpose.
 func (s *RGATreeSplit) AnnotatedString() string {
-	var result []string
+	builder := strings.Builder{}
 
 	node := s.initialHead
 	for node != nil {
 		if node.removedAt != nil {
-			result = append(result, fmt.Sprintf(
-				"{%s}",
-				node.annotatedString(),
-			))
+			builder.WriteString(fmt.Sprintf("{%s}", node.annotatedString()))
 		} else {
-			result = append(result, fmt.Sprintf(
-				"[%s]",
-				node.annotatedString(),
-			))
+			builder.WriteString(fmt.Sprintf("[%s]", node.annotatedString()))
 		}
-
 		node = node.next
 	}
 
-	return strings.Join(result, "")
+	return builder.String()
 }
 
 // removedNodesLen returns length of removed nodes

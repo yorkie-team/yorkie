@@ -194,7 +194,7 @@ func (p *Primitive) Marshal() string {
 	case Double:
 		return fmt.Sprintf("%f", p.value)
 	case String:
-		return fmt.Sprintf(`"%s"`, p.value)
+		return fmt.Sprintf(`"%s"`, EscapeString(p.value.(string)))
 	case Bytes:
 		// TODO: JSON.stringify({a: new Uint8Array([1,2]), b: 2})
 		// {"a":{"0":1,"1":2},"b":2}

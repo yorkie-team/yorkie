@@ -19,7 +19,7 @@
 package bench
 
 import (
-	"encoding/json"
+	gojson "encoding/json"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -46,20 +46,13 @@ func BenchmarkTextEditing(b *testing.B) {
 		return nil
 	})
 
-	// start := time.Now()
 	for _, edit := range editingTrace.Edits {
-		// if i != 0 && i%10000 == 0 {
-		// 	b.Log("processing...", i, time.Since(start))
-		// 	start = time.Now()
-		// }
-
 		cursor := int(edit[0].(float64))
 		mode := int(edit[1].(float64))
 
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetText("text")
 			if mode == 0 {
-				// insertion
 				value := edit[2].(string)
 				text.Edit(cursor, cursor, value)
 			} else if mode == 1 {
@@ -72,7 +65,11 @@ func BenchmarkTextEditing(b *testing.B) {
 	}
 	b.StopTimer()
 
-	assert.Equal(b, `{"text":"`+editingTrace.FinalText+`"}`, doc.Marshal())
+	assert.Equal(
+		b,
+		editingTrace.FinalText,
+		doc.Root().GetText("text").String(),
+	)
 }
 
 type editTrace struct {
@@ -99,7 +96,7 @@ func readEditingTraceFromFile(b *testing.B) (*editTrace, error) {
 		return nil, err
 	}
 
-	if err = json.Unmarshal(byteValue, &trace); err != nil {
+	if err = gojson.Unmarshal(byteValue, &trace); err != nil {
 		return nil, err
 	}
 
