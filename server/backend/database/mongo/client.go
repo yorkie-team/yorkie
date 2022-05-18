@@ -167,6 +167,40 @@ func (c *Client) ListProjectInfos(ctx context.Context) ([]*database.ProjectInfo,
 	return infos, nil
 }
 
+// FindProjectInfoByPublicKey returns a project by public key.
+func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*database.ProjectInfo, error) {
+	result := c.collection(colProjects).FindOne(ctx, bson.M{
+		"public_key": publicKey,
+	})
+
+	projectInfo := database.ProjectInfo{}
+	if err := result.Decode(&projectInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", publicKey, database.ErrProjectNotFound)
+		}
+		return nil, err
+	}
+
+	return &projectInfo, nil
+}
+
+// FindProjectInfoByName returns a project by name.
+func (c *Client) FindProjectInfoByName(ctx context.Context, name string) (*database.ProjectInfo, error) {
+	result := c.collection(colProjects).FindOne(ctx, bson.M{
+		"name": name,
+	})
+
+	projectInfo := database.ProjectInfo{}
+	if err := result.Decode(&projectInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", name, database.ErrProjectNotFound)
+		}
+		return nil, err
+	}
+
+	return &projectInfo, nil
+}
+
 // UpdateProjectInfo updates the project info.
 func (c *Client) UpdateProjectInfo(ctx context.Context, info *database.ProjectInfo) error {
 	encodedID, err := encodeID(info.ID)
@@ -189,23 +223,6 @@ func (c *Client) UpdateProjectInfo(ctx context.Context, info *database.ProjectIn
 	}
 
 	return nil
-}
-
-// FindProjectInfoByPublicKey returns a project by public key.
-func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*database.ProjectInfo, error) {
-	result := c.collection(colProjects).FindOne(ctx, bson.M{
-		"public_key": publicKey,
-	})
-
-	projectInfo := database.ProjectInfo{}
-	if err := result.Decode(&projectInfo); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", publicKey, database.ErrProjectNotFound)
-		}
-		return nil, err
-	}
-
-	return &projectInfo, nil
 }
 
 // ActivateClient activates the client of the given key.
@@ -438,11 +455,11 @@ func (c *Client) FindDocInfoByKey(
 		})
 	} else {
 		result = c.collection(colDocuments).FindOne(ctx, bson.M{
-			"key": docKey,
+			"project_id": encodedProjectID,
+			"key":        docKey,
 		})
 		if result.Err() == mongo.ErrNoDocuments {
-			logging.From(ctx).Error(result.Err())
-			return nil, fmt.Errorf("%s: %w", docKey, database.ErrDocumentNotFound)
+			return nil, fmt.Errorf("%s %s: %w", projectID, docKey, database.ErrDocumentNotFound)
 		}
 		if result.Err() != nil {
 			logging.From(ctx).Error(result.Err())
@@ -726,9 +743,19 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 // FindDocInfosByPaging returns the docInfos of the given paging.
 func (c *Client) FindDocInfosByPaging(
 	ctx context.Context,
+	projectID types.ID,
 	paging types.Paging,
 ) ([]*database.DocInfo, error) {
-	filter := bson.M{}
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	filter := bson.M{
+		"project_id": bson.M{
+			"$eq": encodedProjectID,
+		},
+	}
 	if paging.PreviousID != "" {
 		encodedPreviousID, err := encodeID(paging.PreviousID)
 		if err != nil {
@@ -739,8 +766,8 @@ func (c *Client) FindDocInfosByPaging(
 		if paging.IsForward {
 			k = "$gt"
 		}
-		filter = bson.M{
-			"_id": bson.M{k: encodedPreviousID},
+		filter["_id"] = bson.M{
+			k: encodedPreviousID,
 		}
 	}
 

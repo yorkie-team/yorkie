@@ -21,6 +21,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -30,9 +31,10 @@ import (
 func ListDocumentSummaries(
 	ctx context.Context,
 	be *backend.Backend,
+	project *types.Project,
 	paging types.Paging,
 ) ([]*types.DocumentSummary, error) {
-	docInfo, err := be.DB.FindDocInfosByPaging(ctx, paging)
+	docInfo, err := be.DB.FindDocInfosByPaging(ctx, project.ID, paging)
 	if err != nil {
 		return nil, err
 	}
@@ -55,9 +57,17 @@ func ListDocumentSummaries(
 func GetDocumentSummary(
 	ctx context.Context,
 	be *backend.Backend,
-	id types.ID,
+	project *types.Project,
+	k key.Key,
 ) (*types.DocumentSummary, error) {
-	docInfo, err := be.DB.FindDocInfoByID(ctx, id)
+	// TODO(hackerwins): Split FindDocInfoByKey into upsert and find.
+	docInfo, err := be.DB.FindDocInfoByKey(
+		ctx,
+		project.ID,
+		types.IDFromActorID(time.InitialActorID),
+		k,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}

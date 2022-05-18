@@ -225,12 +225,12 @@ func TestDB(t *testing.T) {
 		}
 
 		// initial page, previousID is empty
-		infos, err := localDB.FindDocInfosByPaging(ctx, types.Paging{PageSize: pageSize})
+		infos, err := localDB.FindDocInfosByPaging(ctx, projectID, types.Paging{PageSize: pageSize})
 		assert.NoError(t, err)
 		assertKeys([]key.Key{"8", "7", "6", "5", "4"}, infos)
 
 		// backward
-		infos, err = localDB.FindDocInfosByPaging(ctx, types.Paging{
+		infos, err = localDB.FindDocInfosByPaging(ctx, projectID, types.Paging{
 			PreviousID: infos[len(infos)-1].ID,
 			PageSize:   pageSize,
 		})
@@ -238,7 +238,7 @@ func TestDB(t *testing.T) {
 		assertKeys([]key.Key{"3", "2", "1", "0"}, infos)
 
 		// backward again
-		emptyInfos, err := localDB.FindDocInfosByPaging(ctx, types.Paging{
+		emptyInfos, err := localDB.FindDocInfosByPaging(ctx, projectID, types.Paging{
 			PreviousID: infos[len(infos)-1].ID,
 			PageSize:   pageSize,
 		})
@@ -246,7 +246,7 @@ func TestDB(t *testing.T) {
 		assertKeys(nil, emptyInfos)
 
 		// forward
-		infos, err = localDB.FindDocInfosByPaging(ctx, types.Paging{
+		infos, err = localDB.FindDocInfosByPaging(ctx, projectID, types.Paging{
 			PreviousID: infos[0].ID,
 			PageSize:   pageSize,
 			IsForward:  true,
@@ -255,7 +255,7 @@ func TestDB(t *testing.T) {
 		assertKeys([]key.Key{"4", "5", "6", "7", "8"}, infos)
 
 		// forward again
-		emptyInfos, err = localDB.FindDocInfosByPaging(ctx, types.Paging{
+		emptyInfos, err = localDB.FindDocInfosByPaging(ctx, projectID, types.Paging{
 			PreviousID: infos[len(infos)-1].ID,
 			PageSize:   pageSize,
 			IsForward:  true,

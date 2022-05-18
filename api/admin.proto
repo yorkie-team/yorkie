@@ -23,6 +23,7 @@ import "resources.proto";
 service Admin {
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {}
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {}
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
   rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
 
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
@@ -34,6 +35,14 @@ message CreateProjectRequest {
 }
 
 message CreateProjectResponse {
+  Project project = 1;
+}
+
+message GetProjectRequest {
+  string name = 1;
+}
+
+message GetProjectResponse {
   Project project = 1;
 }
 
@@ -50,9 +59,10 @@ message UpdateProjectRequest {
 message UpdateProjectResponse {}
 
 message ListDocumentsRequest {
-  string previous_id = 1;
-  int32 page_size = 2;
-  bool is_forward = 3;
+  string project_name = 1;
+  string previous_id = 2;
+  int32 page_size = 3;
+  bool is_forward = 4;
 }
 
 message ListDocumentsResponse {
@@ -60,7 +70,8 @@ message ListDocumentsResponse {
 }
 
 message GetDocumentRequest {
-  string id = 1;
+  string project_name = 1;
+  string document_key = 2;
 }
 
 message GetDocumentResponse {

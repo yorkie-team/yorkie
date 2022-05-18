@@ -120,6 +120,100 @@ func (m *CreateProjectResponse) GetProject() *Project {
 	return nil
 }
 
+type GetProjectRequest struct {
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetProjectRequest) Reset()         { *m = GetProjectRequest{} }
+func (m *GetProjectRequest) String() string { return proto.CompactTextString(m) }
+func (*GetProjectRequest) ProtoMessage()    {}
+func (*GetProjectRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_73a7fc70dcc2027c, []int{2}
+}
+func (m *GetProjectRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetProjectRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetProjectRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetProjectRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetProjectRequest.Merge(m, src)
+}
+func (m *GetProjectRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetProjectRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetProjectRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetProjectRequest proto.InternalMessageInfo
+
+func (m *GetProjectRequest) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+type GetProjectResponse struct {
+	Project              *Project `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetProjectResponse) Reset()         { *m = GetProjectResponse{} }
+func (m *GetProjectResponse) String() string { return proto.CompactTextString(m) }
+func (*GetProjectResponse) ProtoMessage()    {}
+func (*GetProjectResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_73a7fc70dcc2027c, []int{3}
+}
+func (m *GetProjectResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetProjectResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetProjectResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetProjectResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetProjectResponse.Merge(m, src)
+}
+func (m *GetProjectResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetProjectResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetProjectResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetProjectResponse proto.InternalMessageInfo
+
+func (m *GetProjectResponse) GetProject() *Project {
+	if m != nil {
+		return m.Project
+	}
+	return nil
+}
+
 type ListProjectsRequest struct {
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -130,7 +224,7 @@ func (m *ListProjectsRequest) Reset()         { *m = ListProjectsRequest{} }
 func (m *ListProjectsRequest) String() string { return proto.CompactTextString(m) }
 func (*ListProjectsRequest) ProtoMessage()    {}
 func (*ListProjectsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73a7fc70dcc2027c, []int{2}
+	return fileDescriptor_73a7fc70dcc2027c, []int{4}
 }
 func (m *ListProjectsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -170,7 +264,7 @@ func (m *ListProjectsResponse) Reset()         { *m = ListProjectsResponse{} }
 func (m *ListProjectsResponse) String() string { return proto.CompactTextString(m) }
 func (*ListProjectsResponse) ProtoMessage()    {}
 func (*ListProjectsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73a7fc70dcc2027c, []int{3}
+	return fileDescriptor_73a7fc70dcc2027c, []int{5}
 }
 func (m *ListProjectsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -217,7 +311,7 @@ func (m *UpdateProjectRequest) Reset()         { *m = UpdateProjectRequest{} }
 func (m *UpdateProjectRequest) String() string { return proto.CompactTextString(m) }
 func (*UpdateProjectRequest) ProtoMessage()    {}
 func (*UpdateProjectRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73a7fc70dcc2027c, []int{4}
+	return fileDescriptor_73a7fc70dcc2027c, []int{6}
 }
 func (m *UpdateProjectRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -263,7 +357,7 @@ func (m *UpdateProjectResponse) Reset()         { *m = UpdateProjectResponse{} }
 func (m *UpdateProjectResponse) String() string { return proto.CompactTextString(m) }
 func (*UpdateProjectResponse) ProtoMessage()    {}
 func (*UpdateProjectResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73a7fc70dcc2027c, []int{5}
+	return fileDescriptor_73a7fc70dcc2027c, []int{7}
 }
 func (m *UpdateProjectResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -293,9 +387,10 @@ func (m *UpdateProjectResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_UpdateProjectResponse proto.InternalMessageInfo
 
 type ListDocumentsRequest struct {
-	PreviousId           string   `protobuf:"bytes,1,opt,name=previous_id,json=previousId,proto3" json:"previous_id,omitempty"`
-	PageSize             int32    `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	IsForward            bool     `protobuf:"varint,3,opt,name=is_forward,json=isForward,proto3" json:"is_forward,omitempty"`
+	ProjectName          string   `protobuf:"bytes,1,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"`
+	PreviousId           string   `protobuf:"bytes,2,opt,name=previous_id,json=previousId,proto3" json:"previous_id,omitempty"`
+	PageSize             int32    `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	IsForward            bool     `protobuf:"varint,4,opt,name=is_forward,json=isForward,proto3" json:"is_forward,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -305,7 +400,7 @@ func (m *ListDocumentsRequest) Reset()         { *m = ListDocumentsRequest{} }
 func (m *ListDocumentsRequest) String() string { return proto.CompactTextString(m) }
 func (*ListDocumentsRequest) ProtoMessage()    {}
 func (*ListDocumentsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73a7fc70dcc2027c, []int{6}
+	return fileDescriptor_73a7fc70dcc2027c, []int{8}
 }
 func (m *ListDocumentsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -333,6 +428,13 @@ func (m *ListDocumentsRequest) XXX_DiscardUnknown() {
 }
 
 var xxx_messageInfo_ListDocumentsRequest proto.InternalMessageInfo
+
+func (m *ListDocumentsRequest) GetProjectName() string {
+	if m != nil {
+		return m.ProjectName
+	}
+	return ""
+}
 
 func (m *ListDocumentsRequest) GetPreviousId() string {
 	if m != nil {
@@ -366,7 +468,7 @@ func (m *ListDocumentsResponse) Reset()         { *m = ListDocumentsResponse{} }
 func (m *ListDocumentsResponse) String() string { return proto.CompactTextString(m) }
 func (*ListDocumentsResponse) ProtoMessage()    {}
 func (*ListDocumentsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73a7fc70dcc2027c, []int{7}
+	return fileDescriptor_73a7fc70dcc2027c, []int{9}
 }
 func (m *ListDocumentsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -403,7 +505,8 @@ func (m *ListDocumentsResponse) GetDocuments() []*DocumentSummary {
 }
 
 type GetDocumentRequest struct {
-	Id                   string   `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ProjectName          string   `protobuf:"bytes,1,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"`
+	DocumentKey          string   `protobuf:"bytes,2,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -413,7 +516,7 @@ func (m *GetDocumentRequest) Reset()         { *m = GetDocumentRequest{} }
 func (m *GetDocumentRequest) String() string { return proto.CompactTextString(m) }
 func (*GetDocumentRequest) ProtoMessage()    {}
 func (*GetDocumentRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73a7fc70dcc2027c, []int{8}
+	return fileDescriptor_73a7fc70dcc2027c, []int{10}
 }
 func (m *GetDocumentRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -442,9 +545,16 @@ func (m *GetDocumentRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_GetDocumentRequest proto.InternalMessageInfo
 
-func (m *GetDocumentRequest) GetId() string {
+func (m *GetDocumentRequest) GetProjectName() string {
 	if m != nil {
-		return m.Id
+		return m.ProjectName
+	}
+	return ""
+}
+
+func (m *GetDocumentRequest) GetDocumentKey() string {
+	if m != nil {
+		return m.DocumentKey
 	}
 	return ""
 }
@@ -460,7 +570,7 @@ func (m *GetDocumentResponse) Reset()         { *m = GetDocumentResponse{} }
 func (m *GetDocumentResponse) String() string { return proto.CompactTextString(m) }
 func (*GetDocumentResponse) ProtoMessage()    {}
 func (*GetDocumentResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73a7fc70dcc2027c, []int{9}
+	return fileDescriptor_73a7fc70dcc2027c, []int{11}
 }
 func (m *GetDocumentResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -499,6 +609,8 @@ func (m *GetDocumentResponse) GetDocument() *DocumentSummary {
 func init() {
 	proto.RegisterType((*CreateProjectRequest)(nil), "api.CreateProjectRequest")
 	proto.RegisterType((*CreateProjectResponse)(nil), "api.CreateProjectResponse")
+	proto.RegisterType((*GetProjectRequest)(nil), "api.GetProjectRequest")
+	proto.RegisterType((*GetProjectResponse)(nil), "api.GetProjectResponse")
 	proto.RegisterType((*ListProjectsRequest)(nil), "api.ListProjectsRequest")
 	proto.RegisterType((*ListProjectsResponse)(nil), "api.ListProjectsResponse")
 	proto.RegisterType((*UpdateProjectRequest)(nil), "api.UpdateProjectRequest")
@@ -512,35 +624,39 @@ func init() {
 func init() { proto.RegisterFile("admin.proto", fileDescriptor_73a7fc70dcc2027c) }
 
 var fileDescriptor_73a7fc70dcc2027c = []byte{
-	// 447 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x53, 0xcb, 0x6e, 0xd4, 0x30,
-	0x14, 0x1d, 0xcf, 0x50, 0x98, 0xb9, 0xd3, 0x02, 0x72, 0x27, 0x6a, 0x1a, 0x44, 0x88, 0x2c, 0x84,
-	0x22, 0x16, 0x23, 0x34, 0xec, 0x79, 0x94, 0x47, 0x8b, 0x60, 0x81, 0x52, 0xb1, 0x1e, 0x99, 0x89,
-	0x41, 0x46, 0x4a, 0x6c, 0xec, 0x04, 0x44, 0xbf, 0x84, 0x4f, 0x62, 0xc9, 0x27, 0xa0, 0xe1, 0x07,
-	0xf8, 0x04, 0x54, 0xc7, 0x4e, 0x9b, 0xc4, 0x8b, 0xee, 0xa2, 0x73, 0xcf, 0x3d, 0xf7, 0xf8, 0xde,
-	0x13, 0x98, 0xd3, 0xbc, 0xe0, 0xe5, 0x52, 0x2a, 0x51, 0x09, 0x3c, 0xa1, 0x92, 0x47, 0xb7, 0x14,
-	0xd3, 0xa2, 0x56, 0x1b, 0xa6, 0x1b, 0x94, 0x3c, 0x84, 0xc5, 0x0b, 0xc5, 0x68, 0xc5, 0xde, 0x2b,
-	0xf1, 0x85, 0x6d, 0xaa, 0x8c, 0x7d, 0xad, 0x99, 0xae, 0x30, 0x86, 0x6b, 0x25, 0x2d, 0x58, 0x88,
-	0x12, 0x94, 0xce, 0x32, 0xf3, 0x4d, 0x9e, 0x42, 0xd0, 0xe3, 0x6a, 0x29, 0x4a, 0xcd, 0xf0, 0x03,
-	0xb8, 0x21, 0x1b, 0xc8, 0xf0, 0xe7, 0xab, 0xdd, 0x25, 0x95, 0x7c, 0xe9, 0x68, 0xae, 0x48, 0x02,
-	0xd8, 0x7f, 0xc7, 0x75, 0x65, 0x71, 0x6d, 0x67, 0x91, 0x67, 0xb0, 0xe8, 0xc2, 0x56, 0x36, 0x85,
-	0xa9, 0xed, 0xd4, 0x21, 0x4a, 0x26, 0x03, 0xdd, 0xb6, 0x4a, 0x9e, 0xc0, 0xe2, 0x83, 0xcc, 0x87,
-	0xaf, 0xb8, 0xaa, 0xb1, 0x03, 0x08, 0x7a, 0xfd, 0x8d, 0x05, 0xa2, 0x1b, 0x6b, 0x2f, 0xc5, 0xa6,
-	0x2e, 0x58, 0xd9, 0x5a, 0xc6, 0xf7, 0x60, 0x2e, 0x15, 0xfb, 0xc6, 0x45, 0xad, 0xd7, 0x3c, 0xb7,
-	0x5b, 0x02, 0x07, 0xbd, 0xc9, 0xf1, 0x1d, 0x98, 0x49, 0xfa, 0x99, 0xad, 0x35, 0x3f, 0x63, 0xe1,
-	0x38, 0x41, 0xe9, 0x4e, 0x36, 0x3d, 0x07, 0x4e, 0xf9, 0x19, 0xc3, 0x77, 0x01, 0xb8, 0x5e, 0x7f,
-	0x12, 0xea, 0x3b, 0x55, 0x79, 0x38, 0x49, 0x50, 0x3a, 0xcd, 0x66, 0x5c, 0xbf, 0x6e, 0x00, 0xf2,
-	0x16, 0x82, 0xde, 0x50, 0xbb, 0x90, 0x15, 0xcc, 0x72, 0x07, 0xda, 0x8d, 0x2c, 0xcc, 0x83, 0x1c,
-	0xf5, 0xb4, 0x2e, 0x0a, 0xaa, 0x7e, 0x64, 0x17, 0x34, 0x72, 0x1f, 0xf0, 0x31, 0x6b, 0xb5, 0x9c,
-	0xff, 0x9b, 0x30, 0x6e, 0x6d, 0x8f, 0x79, 0x4e, 0x8e, 0x61, 0xbf, 0xc3, 0xb2, 0x03, 0x1f, 0xc1,
-	0xd4, 0x29, 0xd9, 0x05, 0xfa, 0xe7, 0xb5, 0xac, 0xd5, 0xbf, 0x31, 0xec, 0x3c, 0x3f, 0x4f, 0x1d,
-	0x3e, 0x81, 0xbd, 0x4e, 0x5a, 0xf0, 0xa1, 0x69, 0xf5, 0xa5, 0x2d, 0x8a, 0x7c, 0x25, 0x7b, 0x82,
-	0x11, 0x7e, 0x05, 0xbb, 0x97, 0xf3, 0x81, 0x43, 0xc3, 0xf6, 0x24, 0x29, 0x3a, 0xf4, 0x54, 0x5a,
-	0x99, 0x13, 0xd8, 0xeb, 0x1c, 0xd9, 0x1a, 0xf2, 0x05, 0xc7, 0x1a, 0xf2, 0x67, 0xc2, 0x28, 0x75,
-	0x0e, 0x84, 0x2f, 0xe6, 0xf6, 0x93, 0x62, 0x95, 0xbc, 0xf7, 0x24, 0x23, 0x7c, 0x04, 0xf3, 0x4b,
-	0x7b, 0xc7, 0x07, 0x86, 0x3c, 0xbc, 0x57, 0x14, 0x0e, 0x0b, 0x4e, 0xe3, 0xe8, 0xf6, 0xaf, 0x6d,
-	0x8c, 0x7e, 0x6f, 0x63, 0xf4, 0x67, 0x1b, 0xa3, 0x9f, 0x7f, 0xe3, 0xd1, 0xc7, 0xeb, 0xe6, 0xdf,
-	0x7e, 0xfc, 0x3f, 0x00, 0x00, 0xff, 0xff, 0xd3, 0x84, 0x42, 0xdd, 0x00, 0x04, 0x00, 0x00,
+	// 504 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x54, 0xcb, 0x6e, 0xd3, 0x40,
+	0x14, 0xcd, 0x90, 0x16, 0x92, 0xeb, 0x54, 0xc0, 0x34, 0xa1, 0xae, 0x11, 0x21, 0x9d, 0x05, 0x44,
+	0x2c, 0x22, 0x14, 0xb6, 0x88, 0x42, 0x79, 0xb4, 0xa8, 0x08, 0x21, 0x57, 0x6c, 0xd8, 0x58, 0x43,
+	0x7c, 0x41, 0x03, 0x72, 0x6c, 0x66, 0x6c, 0x50, 0xfa, 0x21, 0x88, 0xdf, 0xe0, 0x2f, 0x58, 0xf2,
+	0x09, 0x28, 0xfc, 0x48, 0xd5, 0xf1, 0x8c, 0x13, 0x3f, 0x16, 0xed, 0xce, 0x3a, 0xf7, 0xdc, 0x33,
+	0xe7, 0xce, 0x9c, 0x6b, 0x70, 0x78, 0x18, 0x89, 0xf9, 0x24, 0x91, 0x71, 0x1a, 0xd3, 0x36, 0x4f,
+	0x84, 0x77, 0x5d, 0xa2, 0x8a, 0x33, 0x39, 0x43, 0x95, 0xa3, 0xec, 0x01, 0xf4, 0x9f, 0x4b, 0xe4,
+	0x29, 0xbe, 0x93, 0xf1, 0x17, 0x9c, 0xa5, 0x3e, 0x7e, 0xcb, 0x50, 0xa5, 0x94, 0xc2, 0xc6, 0x9c,
+	0x47, 0xe8, 0x92, 0x11, 0x19, 0x77, 0x7d, 0xfd, 0xcd, 0xf6, 0x61, 0x50, 0xe1, 0xaa, 0x24, 0x9e,
+	0x2b, 0xa4, 0xf7, 0xe0, 0x5a, 0x92, 0x43, 0x9a, 0xef, 0x4c, 0x7b, 0x13, 0x9e, 0x88, 0x89, 0xa5,
+	0xd9, 0x22, 0xbb, 0x0f, 0x37, 0x0f, 0x31, 0xbd, 0xc0, 0x49, 0x8f, 0x81, 0xae, 0x13, 0x2f, 0x79,
+	0xcc, 0x00, 0xb6, 0xdf, 0x08, 0x65, 0xdb, 0x95, 0x39, 0x88, 0x3d, 0x85, 0x7e, 0x19, 0x36, 0xb2,
+	0x63, 0xe8, 0x98, 0x4e, 0xe5, 0x92, 0x51, 0xbb, 0xa6, 0x5b, 0x54, 0xd9, 0x13, 0xe8, 0xbf, 0x4f,
+	0xc2, 0xfa, 0x65, 0x5d, 0xd4, 0xd8, 0x0e, 0x0c, 0x2a, 0xfd, 0xb9, 0x05, 0xf6, 0x93, 0xe4, 0xde,
+	0x5e, 0xc4, 0xb3, 0x2c, 0xc2, 0x79, 0xe1, 0x99, 0xee, 0x41, 0xcf, 0x34, 0x07, 0x6b, 0x97, 0xe4,
+	0x18, 0xec, 0x2d, 0x8f, 0x90, 0xde, 0x05, 0x27, 0x91, 0xf8, 0x5d, 0xc4, 0x99, 0x0a, 0x44, 0xe8,
+	0x5e, 0xd1, 0x0c, 0xb0, 0xd0, 0xeb, 0x90, 0xde, 0x86, 0x6e, 0xc2, 0x3f, 0x63, 0xa0, 0xc4, 0x29,
+	0xba, 0xed, 0x11, 0x19, 0x6f, 0xfa, 0x9d, 0x73, 0xe0, 0x44, 0x9c, 0x22, 0xbd, 0x03, 0x20, 0x54,
+	0xf0, 0x29, 0x96, 0x3f, 0xb8, 0x0c, 0xdd, 0x8d, 0x11, 0x19, 0x77, 0xfc, 0xae, 0x50, 0xaf, 0x72,
+	0x80, 0x1d, 0xc3, 0xa0, 0xe2, 0xcb, 0x5c, 0xda, 0x14, 0xba, 0xa1, 0x05, 0xcd, 0xad, 0xf5, 0xf5,
+	0xd0, 0x96, 0x7a, 0x92, 0x45, 0x11, 0x97, 0x0b, 0x7f, 0x45, 0x63, 0x1f, 0xf4, 0xab, 0x5a, 0xc2,
+	0x25, 0x46, 0xdc, 0x83, 0x9e, 0x55, 0x09, 0xbe, 0xe2, 0xc2, 0xcc, 0xe8, 0x58, 0xec, 0x18, 0x17,
+	0xec, 0x10, 0xb6, 0x4b, 0xda, 0xc6, 0xe6, 0x43, 0xe8, 0x58, 0x96, 0x79, 0x9a, 0x66, 0x97, 0x05,
+	0x6b, 0xfa, 0xbb, 0x0d, 0x9b, 0xcf, 0xce, 0xd7, 0x86, 0x1e, 0xc1, 0x56, 0x29, 0xee, 0x74, 0x57,
+	0xb7, 0x36, 0xad, 0x8b, 0xe7, 0x35, 0x95, 0xcc, 0xe3, 0xb6, 0xe8, 0x4b, 0xe8, 0xad, 0x27, 0x8f,
+	0xba, 0x9a, 0xdd, 0x90, 0x51, 0x6f, 0xb7, 0xa1, 0x52, 0xc8, 0xec, 0x03, 0xac, 0xb6, 0x82, 0xde,
+	0xd2, 0xd4, 0xda, 0x3e, 0x79, 0x3b, 0x35, 0xbc, 0x10, 0x38, 0x82, 0xad, 0x52, 0xfe, 0xcc, 0x44,
+	0x4d, 0x99, 0x36, 0x13, 0x35, 0xc7, 0x55, 0x2b, 0x95, 0x72, 0x41, 0x57, 0xc6, 0xab, 0x19, 0x36,
+	0x4a, 0x8d, 0x31, 0x62, 0x2d, 0x7a, 0x00, 0xce, 0xda, 0xc3, 0xd1, 0xc2, 0x7d, 0x25, 0x26, 0x9e,
+	0x5b, 0x2f, 0x58, 0x8d, 0x83, 0x1b, 0x7f, 0x96, 0x43, 0xf2, 0x77, 0x39, 0x24, 0xff, 0x96, 0x43,
+	0xf2, 0xeb, 0xff, 0xb0, 0xf5, 0xf1, 0xaa, 0xfe, 0xbb, 0x3d, 0x3a, 0x0b, 0x00, 0x00, 0xff, 0xff,
+	0x4b, 0x93, 0x7b, 0x96, 0x02, 0x05, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -557,6 +673,7 @@ const _ = grpc.SupportPackageIsVersion4
 type AdminClient interface {
 	CreateProject(ctx context.Context, in *CreateProjectRequest, opts ...grpc.CallOption) (*CreateProjectResponse, error)
 	ListProjects(ctx context.Context, in *ListProjectsRequest, opts ...grpc.CallOption) (*ListProjectsResponse, error)
+	GetProject(ctx context.Context, in *GetProjectRequest, opts ...grpc.CallOption) (*GetProjectResponse, error)
 	UpdateProject(ctx context.Context, in *UpdateProjectRequest, opts ...grpc.CallOption) (*UpdateProjectResponse, error)
 	ListDocuments(ctx context.Context, in *ListDocumentsRequest, opts ...grpc.CallOption) (*ListDocumentsResponse, error)
 	GetDocument(ctx context.Context, in *GetDocumentRequest, opts ...grpc.CallOption) (*GetDocumentResponse, error)
@@ -582,6 +699,15 @@ func (c *adminClient) CreateProject(ctx context.Context, in *CreateProjectReques
 func (c *adminClient) ListProjects(ctx context.Context, in *ListProjectsRequest, opts ...grpc.CallOption) (*ListProjectsResponse, error) {
 	out := new(ListProjectsResponse)
 	err := c.cc.Invoke(ctx, "/api.Admin/ListProjects", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminClient) GetProject(ctx context.Context, in *GetProjectRequest, opts ...grpc.CallOption) (*GetProjectResponse, error) {
+	out := new(GetProjectResponse)
+	err := c.cc.Invoke(ctx, "/api.Admin/GetProject", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -619,6 +745,7 @@ func (c *adminClient) GetDocument(ctx context.Context, in *GetDocumentRequest, o
 type AdminServer interface {
 	CreateProject(context.Context, *CreateProjectRequest) (*CreateProjectResponse, error)
 	ListProjects(context.Context, *ListProjectsRequest) (*ListProjectsResponse, error)
+	GetProject(context.Context, *GetProjectRequest) (*GetProjectResponse, error)
 	UpdateProject(context.Context, *UpdateProjectRequest) (*UpdateProjectResponse, error)
 	ListDocuments(context.Context, *ListDocumentsRequest) (*ListDocumentsResponse, error)
 	GetDocument(context.Context, *GetDocumentRequest) (*GetDocumentResponse, error)
@@ -633,6 +760,9 @@ func (*UnimplementedAdminServer) CreateProject(ctx context.Context, req *CreateP
 }
 func (*UnimplementedAdminServer) ListProjects(ctx context.Context, req *ListProjectsRequest) (*ListProjectsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListProjects not implemented")
+}
+func (*UnimplementedAdminServer) GetProject(ctx context.Context, req *GetProjectRequest) (*GetProjectResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetProject not implemented")
 }
 func (*UnimplementedAdminServer) UpdateProject(ctx context.Context, req *UpdateProjectRequest) (*UpdateProjectResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateProject not implemented")
@@ -680,6 +810,24 @@ func _Admin_ListProjects_Handler(srv interface{}, ctx context.Context, dec func(
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServer).ListProjects(ctx, req.(*ListProjectsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Admin_GetProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServer).GetProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.Admin/GetProject",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).GetProject(ctx, req.(*GetProjectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -751,6 +899,10 @@ var _Admin_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Admin_ListProjects_Handler,
 		},
 		{
+			MethodName: "GetProject",
+			Handler:    _Admin_GetProject_Handler,
+		},
+		{
 			MethodName: "UpdateProject",
 			Handler:    _Admin_UpdateProject_Handler,
 		},
@@ -817,6 +969,79 @@ func (m *CreateProjectResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *CreateProjectResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Project != nil {
+		{
+			size, err := m.Project.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintAdmin(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetProjectRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetProjectRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetProjectRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintAdmin(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetProjectResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetProjectResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetProjectResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1006,17 +1231,24 @@ func (m *ListDocumentsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0
 		}
 		i--
-		dAtA[i] = 0x18
+		dAtA[i] = 0x20
 	}
 	if m.PageSize != 0 {
 		i = encodeVarintAdmin(dAtA, i, uint64(m.PageSize))
 		i--
-		dAtA[i] = 0x10
+		dAtA[i] = 0x18
 	}
 	if len(m.PreviousId) > 0 {
 		i -= len(m.PreviousId)
 		copy(dAtA[i:], m.PreviousId)
 		i = encodeVarintAdmin(dAtA, i, uint64(len(m.PreviousId)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ProjectName) > 0 {
+		i -= len(m.ProjectName)
+		copy(dAtA[i:], m.ProjectName)
+		i = encodeVarintAdmin(dAtA, i, uint64(len(m.ProjectName)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1088,10 +1320,17 @@ func (m *GetDocumentRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if len(m.Id) > 0 {
-		i -= len(m.Id)
-		copy(dAtA[i:], m.Id)
-		i = encodeVarintAdmin(dAtA, i, uint64(len(m.Id)))
+	if len(m.DocumentKey) > 0 {
+		i -= len(m.DocumentKey)
+		copy(dAtA[i:], m.DocumentKey)
+		i = encodeVarintAdmin(dAtA, i, uint64(len(m.DocumentKey)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ProjectName) > 0 {
+		i -= len(m.ProjectName)
+		copy(dAtA[i:], m.ProjectName)
+		i = encodeVarintAdmin(dAtA, i, uint64(len(m.ProjectName)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1180,6 +1419,38 @@ func (m *CreateProjectResponse) Size() (n int) {
 	return n
 }
 
+func (m *GetProjectRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovAdmin(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *GetProjectResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Project != nil {
+		l = m.Project.Size()
+		n += 1 + l + sovAdmin(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *ListProjectsRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1244,6 +1515,10 @@ func (m *ListDocumentsRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
+	l = len(m.ProjectName)
+	if l > 0 {
+		n += 1 + l + sovAdmin(uint64(l))
+	}
 	l = len(m.PreviousId)
 	if l > 0 {
 		n += 1 + l + sovAdmin(uint64(l))
@@ -1284,7 +1559,11 @@ func (m *GetDocumentRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.Id)
+	l = len(m.ProjectName)
+	if l > 0 {
+		n += 1 + l + sovAdmin(uint64(l))
+	}
+	l = len(m.DocumentKey)
 	if l > 0 {
 		n += 1 + l + sovAdmin(uint64(l))
 	}
@@ -1426,6 +1705,176 @@ func (m *CreateProjectResponse) Unmarshal(dAtA []byte) error {
 		}
 		if fieldNum <= 0 {
 			return fmt.Errorf("proto: CreateProjectResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Project", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Project == nil {
+				m.Project = &Project{}
+			}
+			if err := m.Project.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAdmin(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetProjectRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAdmin
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetProjectRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetProjectRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAdmin(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetProjectResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAdmin
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetProjectResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetProjectResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1791,6 +2240,38 @@ func (m *ListDocumentsRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProjectName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ProjectName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PreviousId", wireType)
 			}
 			var stringLen uint64
@@ -1821,7 +2302,7 @@ func (m *ListDocumentsRequest) Unmarshal(dAtA []byte) error {
 			}
 			m.PreviousId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 2:
+		case 3:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PageSize", wireType)
 			}
@@ -1840,7 +2321,7 @@ func (m *ListDocumentsRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		case 3:
+		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field IsForward", wireType)
 			}
@@ -1998,7 +2479,7 @@ func (m *GetDocumentRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ProjectName", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -2026,7 +2507,39 @@ func (m *GetDocumentRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Id = string(dAtA[iNdEx:postIndex])
+			m.ProjectName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DocumentKey", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DocumentKey = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
