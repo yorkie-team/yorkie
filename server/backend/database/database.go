@@ -29,6 +29,9 @@ import (
 )
 
 var (
+	// ErrProjectAlreadyExists is returned when the project already exists.
+	ErrProjectAlreadyExists = errors.New("project already exists")
+
 	// ErrProjectNotFound is returned when the project is not found.
 	ErrProjectNotFound = errors.New("project not found")
 

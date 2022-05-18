@@ -101,6 +101,16 @@ func (d *DB) CreateProjectInfo(ctx context.Context, name string) (*database.Proj
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
+	// NOTE(hackerwins): Check if the project already exists.
+	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
+	existing, err := txn.First(tblProjects, "name", name)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectAlreadyExists)
+	}
+
 	info := database.NewProjectInfo(name)
 	info.ID = newID()
 	if err := txn.Insert(tblProjects, info); err != nil {

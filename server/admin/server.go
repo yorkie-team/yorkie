@@ -22,13 +22,16 @@ import (
 	"fmt"
 	"net"
 
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/server/admin/interceptors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/documents"
+	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
 )
@@ -59,7 +62,23 @@ type Server struct {
 
 // NewServer creates a new Server.
 func NewServer(conf *Config, be *backend.Backend) *Server {
-	grpcServer := grpc.NewServer()
+	loggingInterceptor := grpchelper.NewLoggingInterceptor()
+	defaultInterceptor := interceptors.NewDefaultInterceptor()
+
+	opts := []grpc.ServerOption{
+		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
+			loggingInterceptor.Unary(),
+			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
+			defaultInterceptor.Unary(),
+		)),
+		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
+			loggingInterceptor.Stream(),
+			be.Metrics.ServerMetrics().StreamServerInterceptor(),
+			defaultInterceptor.Stream(),
+		)),
+	}
+
+	grpcServer := grpc.NewServer(opts...)
 
 	server := &Server{
 		conf:       conf,

@@ -35,7 +35,7 @@ import (
 
 func TestDB(t *testing.T) {
 	ctx := context.Background()
-	memdb, err := memory.New()
+	db, err := memory.New()
 	assert.NoError(t, err)
 
 	projectID := database.DefaultProjectID
@@ -43,81 +43,90 @@ func TestDB(t *testing.T) {
 
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		// try to deactivate the client with not exists ID.
-		_, err = memdb.DeactivateClient(ctx, projectID, notExistsID)
+		_, err = db.DeactivateClient(ctx, projectID, notExistsID)
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
-		clientInfo, err := memdb.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientActivated, clientInfo.Status)
 
 		// try to activate the client twice.
-		clientInfo, err = memdb.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err = db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientActivated, clientInfo.Status)
 
 		clientID := clientInfo.ID
 
-		clientInfo, err = memdb.DeactivateClient(ctx, projectID, clientID)
+		clientInfo, err = db.DeactivateClient(ctx, projectID, clientID)
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
 
 		// try to deactivate the client twice.
-		clientInfo, err = memdb.DeactivateClient(ctx, projectID, clientID)
+		clientInfo, err = db.DeactivateClient(ctx, projectID, clientID)
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
 	})
 
+	t.Run("project test", func(t *testing.T) {
+		info, err := db.CreateProjectInfo(ctx, t.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, t.Name(), info.Name)
+
+		_, err = db.CreateProjectInfo(ctx, t.Name())
+		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
+	})
+
 	t.Run("activate and find client test", func(t *testing.T) {
-		_, err := memdb.FindClientInfoByID(ctx, projectID, notExistsID)
+		_, err := db.FindClientInfoByID(ctx, projectID, notExistsID)
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
-		clientInfo, err := memdb.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
-		found, err := memdb.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		found, err := db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, clientInfo.Key, found.Key)
 	})
 
 	t.Run("find docInfo test", func(t *testing.T) {
-		clientInfo, err := memdb.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
-		_, err = memdb.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, false)
+		_, err = db.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, false)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
-		docInfo, err := memdb.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
+		docInfo, err := db.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, err)
 		assert.Equal(t, docKey, docInfo.Key)
 	})
 
 	t.Run("update clientInfo after PushPull test", func(t *testing.T) {
-		clientInfo, err := memdb.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
-		docInfo, err := memdb.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
+		docInfo, err := db.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, err)
 
-		err = memdb.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
+		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
 		assert.ErrorIs(t, err, database.ErrDocumentNeverAttached)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
-		assert.NoError(t, memdb.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 	})
 
 	t.Run("insert and find changes test", func(t *testing.T) {
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := memdb.ActivateClient(ctx, projectID, t.Name())
-		docInfo, _ := memdb.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo, _ := db.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
-		assert.NoError(t, memdb.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
@@ -139,11 +148,11 @@ func TestDB(t *testing.T) {
 		}
 
 		// Store changes
-		err = memdb.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes)
+		err = db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes)
 		assert.NoError(t, err)
 
 		// Find changes
-		loadedChanges, err := memdb.FindChangesBetweenServerSeqs(
+		loadedChanges, err := db.FindChangesBetweenServerSeqs(
 			ctx,
 			docInfo.ID,
 			6,
@@ -157,10 +166,10 @@ func TestDB(t *testing.T) {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := memdb.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
-		docInfo, _ := memdb.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
+		docInfo, _ := db.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
 
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
@@ -170,27 +179,27 @@ func TestDB(t *testing.T) {
 			return nil
 		}))
 
-		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err := memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err := db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(0), snapshot.ServerSeq)
 
 		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
-		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err = memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(1), snapshot.ServerSeq)
 
 		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
-		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err = memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(2), snapshot.ServerSeq)
 
-		assert.NoError(t, memdb.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err = memdb.FindClosestSnapshotInfo(ctx, docInfo.ID, 1)
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, 1)
 		assert.NoError(t, err)
 		assert.Equal(t, uint64(1), snapshot.ServerSeq)
 	})

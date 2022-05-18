@@ -54,7 +54,6 @@ func newListCommand() *cobra.Command {
 			tw.Style().Options.SeparateHeader = false
 			tw.Style().Options.SeparateRows = false
 			tw.AppendHeader(table.Row{
-				"ID",
 				"NAME",
 				"PUBLIC KEY",
 				"SECRET KEY",
@@ -64,7 +63,6 @@ func newListCommand() *cobra.Command {
 			})
 			for _, project := range projects {
 				tw.AppendRow(table.Row{
-					project.ID,
 					project.Name,
 					project.PublicKey,
 					project.SecretKey,

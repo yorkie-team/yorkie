@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package interceptors
+package grpchelper
 
 import (
 	"errors"
@@ -31,10 +31,10 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
-// toStatusError returns a status.Error from the given logic error. If an error
+// ToStatusError returns a status.Error from the given logic error. If an error
 // occurs while executing logic in API handler, gRPC status.error should be
 // returned so that the client can know more about the status of the request.
-func toStatusError(err error) error {
+func ToStatusError(err error) error {
 	if errors.Is(err, auth.ErrNotAllowed) ||
 		errors.Is(err, auth.ErrUnexpectedStatusCode) ||
 		errors.Is(err, auth.ErrWebhookTimeout) {
@@ -63,6 +63,10 @@ func toStatusError(err error) error {
 		errors.Is(err, database.ErrClientNotFound) ||
 		errors.Is(err, database.ErrDocumentNotFound) {
 		return status.Error(codes.NotFound, err.Error())
+	}
+
+	if errors.Is(err, database.ErrProjectAlreadyExists) {
+		return status.Error(codes.AlreadyExists, err.Error())
 	}
 
 	if err == database.ErrClientNotActivated ||
