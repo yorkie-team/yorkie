@@ -14,7 +14,7 @@
 Yorkie is an open source document store for building collaborative editing applications. Yorkie uses JSON-like
 documents(CRDT) with optional types.
 
-Yorkie consists of three main components: Client, Document and Agent.
+Yorkie consists of three main components: Client, Document and Server.
 
  ```
   Client "A" (Go)                 Server                       MemDB or MongoDB
@@ -41,11 +41,14 @@ Yorkie consists of three main components: Client, Document and Agent.
 - If the document was changed concurrently on different devices, Yorkie automatically syncs the changes, so that every
   replica ends up in the same state with resolving conflict.
 
-## Agent and SDKs
+## Server and SDKs
 
-- Agent: https://github.com/yorkie-team/yorkie
+- Server: https://yorkie.dev/docs/server
+- Go SDK
+  - Client: https://github.com/yorkie-team/yorkie/tree/main/client
+  - Document: https://github.com/yorkie-team/yorkie/tree/main/pkg/document
 - JS SDK: https://github.com/yorkie-team/yorkie-js-sdk
-- Go Client: https://github.com/yorkie-team/yorkie/tree/main/client
+- Admin: https://github.com/yorkie-team/yorkie-house
 
 ## Quick Start
 
