@@ -71,6 +71,22 @@ func (d *DB) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (
 	return raw.(*database.ProjectInfo).DeepCopy(), nil
 }
 
+// FindProjectInfoByName returns a project by the given name.
+func (d *DB) FindProjectInfoByName(ctx context.Context, name string) (*database.ProjectInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblProjects, "name", name)
+	if err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectNotFound)
+	}
+
+	return raw.(*database.ProjectInfo).DeepCopy(), nil
+}
+
 // EnsureDefaultProjectInfo creates the default project if it does not exist.
 func (d *DB) EnsureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
@@ -705,6 +721,7 @@ func (d *DB) UpdateSyncedSeq(
 // FindDocInfosByPaging returns the documentInfos of the given paging.
 func (d *DB) FindDocInfosByPaging(
 	ctx context.Context,
+	projectID types.ID,
 	paging types.Paging,
 ) ([]*database.DocInfo, error) {
 	txn := d.db.Txn(false)
@@ -715,22 +732,22 @@ func (d *DB) FindDocInfosByPaging(
 	if paging.IsForward {
 		iterator, err = txn.LowerBound(
 			tblDocuments,
-			"id",
+			"project_id_id",
+			projectID.String(),
 			paging.PreviousID.String(),
 		)
 	} else {
+		previousID := paging.PreviousID
 		if paging.PreviousID == "" {
-			iterator, err = txn.GetReverse(
-				tblDocuments,
-				"id",
-			)
-		} else {
-			iterator, err = txn.ReverseLowerBound(
-				tblDocuments,
-				"id",
-				paging.PreviousID.String(),
-			)
+			previousID = types.IDFromActorID(time.MaxActorID)
 		}
+
+		iterator, err = txn.ReverseLowerBound(
+			tblDocuments,
+			"project_id_id",
+			projectID.String(),
+			previousID.String(),
+		)
 	}
 
 	if err != nil {
@@ -740,7 +757,7 @@ func (d *DB) FindDocInfosByPaging(
 	var docInfos []*database.DocInfo
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.DocInfo)
-		if len(docInfos) >= paging.PageSize {
+		if len(docInfos) >= paging.PageSize || info.ProjectID != projectID {
 			break
 		}
 

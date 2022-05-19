@@ -56,6 +56,20 @@ func ListProjects(
 	return projects, nil
 }
 
+// GetProject returns a project by the given name.
+func GetProject(
+	ctx context.Context,
+	be *backend.Backend,
+	name string,
+) (*types.Project, error) {
+	info, err := be.DB.FindProjectInfoByName(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	return info.ToProject(), nil
+}
+
 // GetProjectFromAPIKey returns a project from an API key.
 func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey string) (*types.Project, error) {
 	if apiKey == "" {

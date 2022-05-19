@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/admin/interceptors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -172,6 +173,25 @@ func (s *Server) ListProjects(
 	}, nil
 }
 
+// GetProject gets a project.
+func (s *Server) GetProject(
+	ctx context.Context,
+	req *api.GetProjectRequest,
+) (*api.GetProjectResponse, error) {
+	project, err := projects.GetProject(ctx, s.backend, req.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	pbProject, err := converter.ToProject(project)
+	if err != nil {
+		return nil, err
+	}
+	return &api.GetProjectResponse{
+		Project: pbProject,
+	}, nil
+}
+
 // UpdateProject updates the project.
 func (s *Server) UpdateProject(
 	ctx context.Context,
@@ -198,10 +218,16 @@ func (s *Server) GetDocument(
 	ctx context.Context,
 	req *api.GetDocumentRequest,
 ) (*api.GetDocumentResponse, error) {
+	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
 	document, err := documents.GetDocumentSummary(
 		ctx,
 		s.backend,
-		types.ID(req.Id),
+		project,
+		key.Key(req.DocumentKey),
 	)
 	if err != nil {
 		return nil, err
@@ -222,9 +248,15 @@ func (s *Server) ListDocuments(
 	ctx context.Context,
 	req *api.ListDocumentsRequest,
 ) (*api.ListDocumentsResponse, error) {
+	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
 	docs, err := documents.ListDocumentSummaries(
 		ctx,
 		s.backend,
+		project,
 		types.Paging{
 			PreviousID: types.ID(req.PreviousId),
 			PageSize:   int(req.PageSize),

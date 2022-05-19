@@ -53,6 +53,9 @@ type Database interface {
 	// FindProjectInfoByPublicKey returns a project by public key.
 	FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*ProjectInfo, error)
 
+	// FindProjectInfoByName returns a project by the given name.
+	FindProjectInfoByName(ctx context.Context, name string) (*ProjectInfo, error)
+
 	// EnsureDefaultProjectInfo ensures that the default project exists.
 	EnsureDefaultProjectInfo(ctx context.Context) (*ProjectInfo, error)
 
@@ -152,6 +155,7 @@ type Database interface {
 	// FindDocInfosByPaging returns the documentInfos of the given paging.
 	FindDocInfosByPaging(
 		ctx context.Context,
+		projectID types.ID,
 		paging types.Paging,
 	) ([]*DocInfo, error)
 }
