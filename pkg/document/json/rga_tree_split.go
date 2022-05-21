@@ -286,7 +286,7 @@ func (t *RGATreeSplitNode) Value() RGATreeSplitValue {
 type RGATreeSplit struct {
 	initialHead *RGATreeSplitNode
 	treeByIndex *splay.Tree
-	treeByID    *llrb.Tree
+	treeByID    *llrb.Tree[*RGATreeSplitNodeID, *RGATreeSplitNode]
 
 	// removedNodeMap is a map that holds tombstone nodes
 	// when the edit operation is executed.
@@ -296,7 +296,7 @@ type RGATreeSplit struct {
 // NewRGATreeSplit creates a new instance of RGATreeSplit.
 func NewRGATreeSplit(initialHead *RGATreeSplitNode) *RGATreeSplit {
 	treeByIndex := splay.NewTree(initialHead.indexNode)
-	treeByID := llrb.NewTree()
+	treeByID := llrb.NewTree[*RGATreeSplitNodeID, *RGATreeSplitNode]()
 	treeByID.Put(initialHead.ID(), initialHead)
 
 	return &RGATreeSplit{
@@ -418,14 +418,11 @@ func (s *RGATreeSplit) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNode {
 		return nil
 	}
 
-	foundID := key.(*RGATreeSplitNodeID)
-	foundValue := value.(*RGATreeSplitNode)
-
-	if !foundID.Equal(id) && !foundID.hasSameCreatedAt(id) {
+	if !key.Equal(id) && !key.hasSameCreatedAt(id) {
 		return nil
 	}
 
-	return foundValue
+	return value
 }
 
 func (s *RGATreeSplit) edit(
