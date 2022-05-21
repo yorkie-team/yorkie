@@ -35,18 +35,18 @@ type Value interface {
 }
 
 // Node is a node of Tree.
-type Node struct {
-	key    Key
-	value  Value
-	parent *Node
-	left   *Node
-	right  *Node
+type Node[K Key, V Value] struct {
+	key    K
+	value  V
+	parent *Node[K, V]
+	left   *Node[K, V]
+	right  *Node[K, V]
 	isRed  bool
 }
 
 // NewNode creates a new instance of Node.
-func NewNode(key Key, value Value, isRed bool) *Node {
-	return &Node{
+func NewNode[K Key, V Value](key K, value V, isRed bool) *Node[K, V] {
+	return &Node[K, V]{
 		key:   key,
 		value: value,
 		isRed: isRed,
@@ -60,33 +60,33 @@ func NewNode(key Key, value Value, isRed bool) *Node {
 // Invariant 1: No red node has a red child
 // Invariant 2: Every leaf path has the same number of black nodes
 // Invariant 3: Only the left child can be red (left leaning)
-type Tree struct {
-	root *Node
+type Tree[K Key, V Value] struct {
+	root *Node[K, V]
 	size int
 }
 
 // NewTree creates a new instance of Tree.
-func NewTree() *Tree {
-	return &Tree{}
+func NewTree[K Key, V Value]() *Tree[K, V] {
+	return &Tree[K, V]{}
 }
 
 // Put puts the value of the given key.
-func (t *Tree) Put(k Key, v Value) Value {
+func (t *Tree[K, V]) Put(k K, v V) V {
 	t.root = t.put(t.root, k, v)
 	t.root.isRed = false
 	return v
 }
 
-func (t *Tree) String() string {
+func (t *Tree[K, V]) String() string {
 	var str []string
-	traverseInOrder(t.root, func(node *Node) {
+	traverseInOrder(t.root, func(node *Node[K, V]) {
 		str = append(str, node.value.String())
 	})
 	return strings.Join(str, ",")
 }
 
 // Remove removes the value of the given key.
-func (t *Tree) Remove(key Key) {
+func (t *Tree[K, V]) Remove(key K) {
 	if !isRed(t.root.left) && !isRed(t.root.right) {
 		t.root.isRed = true
 	}
@@ -98,7 +98,7 @@ func (t *Tree) Remove(key Key) {
 }
 
 // Floor returns the greatest key less than or equal to the given key.
-func (t *Tree) Floor(key Key) (Key, Value) {
+func (t *Tree[K, V]) Floor(key K) (K, V) {
 	node := t.root
 
 	for node != nil {
@@ -130,10 +130,12 @@ func (t *Tree) Floor(key Key) (Key, Value) {
 		}
 	}
 
-	return nil, nil
+	var zeroK K
+	var zeroV V
+	return zeroK, zeroV
 }
 
-func (t *Tree) put(node *Node, key Key, value Value) *Node {
+func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) *Node[K, V] {
 	if node == nil {
 		t.size++
 		return NewNode(key, value, true)
@@ -163,7 +165,7 @@ func (t *Tree) put(node *Node, key Key, value Value) *Node {
 	return node
 }
 
-func (t *Tree) remove(node *Node, key Key) *Node {
+func (t *Tree[K, V]) remove(node *Node[K, V], key K) *Node[K, V] {
 	if key.Compare(node.key) < 0 {
 		if !isRed(node.left) && !isRed(node.left.left) {
 			node = moveRedLeft(node)
@@ -197,7 +199,7 @@ func (t *Tree) remove(node *Node, key Key) *Node {
 	return fixUp(node)
 }
 
-func rotateLeft(node *Node) *Node {
+func rotateLeft[K Key, V Value](node *Node[K, V]) *Node[K, V] {
 	right := node.right
 	node.right = right.left
 	right.left = node
@@ -206,7 +208,7 @@ func rotateLeft(node *Node) *Node {
 	return right
 }
 
-func rotateRight(node *Node) *Node {
+func rotateRight[K Key, V Value](node *Node[K, V]) *Node[K, V] {
 	left := node.left
 	node.left = left.right
 	left.right = node
@@ -215,13 +217,13 @@ func rotateRight(node *Node) *Node {
 	return left
 }
 
-func flipColors(node *Node) {
+func flipColors[K Key, V Value](node *Node[K, V]) {
 	node.isRed = !node.isRed
 	node.left.isRed = !node.left.isRed
 	node.right.isRed = !node.right.isRed
 }
 
-func moveRedLeft(node *Node) *Node {
+func moveRedLeft[K Key, V Value](node *Node[K, V]) *Node[K, V] {
 	flipColors(node)
 	if isRed(node.right.left) {
 		node.right = rotateRight(node.right)
@@ -231,7 +233,7 @@ func moveRedLeft(node *Node) *Node {
 	return node
 }
 
-func moveRedRight(node *Node) *Node {
+func moveRedRight[K Key, V Value](node *Node[K, V]) *Node[K, V] {
 	flipColors(node)
 	if isRed(node.left.left) {
 		node = rotateRight(node)
@@ -240,7 +242,7 @@ func moveRedRight(node *Node) *Node {
 	return node
 }
 
-func removeMin(node *Node) *Node {
+func removeMin[K Key, V Value](node *Node[K, V]) *Node[K, V] {
 	if node.left == nil {
 		return nil
 	}
@@ -254,7 +256,7 @@ func removeMin(node *Node) *Node {
 
 }
 
-func min(node *Node) *Node {
+func min[K Key, V Value](node *Node[K, V]) *Node[K, V] {
 	if node.left == nil {
 		return node
 	}
@@ -262,7 +264,7 @@ func min(node *Node) *Node {
 	return min(node.left)
 }
 
-func fixUp(node *Node) *Node {
+func fixUp[K Key, V Value](node *Node[K, V]) *Node[K, V] {
 	if isRed(node.right) {
 		node = rotateLeft(node)
 	}
@@ -278,11 +280,11 @@ func fixUp(node *Node) *Node {
 	return node
 }
 
-func isRed(node *Node) bool {
+func isRed[K Key, V Value](node *Node[K, V]) bool {
 	return node != nil && node.isRed
 }
 
-func traverseInOrder(node *Node, callback func(node *Node)) {
+func traverseInOrder[K Key, V Value](node *Node[K, V], callback func(node *Node[K, V])) {
 	if node == nil {
 		return
 	}

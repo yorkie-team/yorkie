@@ -71,7 +71,7 @@ func TestTree(t *testing.T) {
 		}
 
 		for _, array := range arrays {
-			tree := llrb.NewTree()
+			tree := llrb.NewTree[*intKey, *intValue]()
 			for _, value := range array {
 				tree.Put(newIntKey(value), newIntValue(value))
 			}
