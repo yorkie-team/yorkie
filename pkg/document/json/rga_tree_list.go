@@ -129,19 +129,16 @@ func (a *RGATreeList) Marshal() string {
 	sb.WriteString("[")
 
 	current := a.dummyHead.next
-	for {
-		if current == nil {
-			break
-		}
-
+	isFirst := true
+	for current != nil {
 		if !current.isRemoved() {
-			sb.WriteString(current.elem.Marshal())
-
-			// FIXME: When the last element of the array is deleted, it does not
-			// work properly.
-			if current != a.last {
+			if isFirst {
+				isFirst = false
+			} else {
 				sb.WriteString(",")
 			}
+
+			sb.WriteString(current.elem.Marshal())
 		}
 
 		current = current.next
