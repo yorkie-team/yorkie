@@ -23,14 +23,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// InitialTextNode creates an initial node of Text. The text is edited
-// as this node is split into multiple nodes.
-func InitialTextNode() *RGATreeSplitNode {
-	return NewRGATreeSplitNode(initialNodeID, &TextValue{
-		value: "",
-	})
-}
-
 // TextValue is a value of Text.
 type TextValue struct {
 	value string
@@ -81,9 +73,17 @@ func (t *TextValue) DeepCopy() RGATreeSplitValue {
 	}
 }
 
+// InitialTextNode creates an initial node of Text. The text is edited
+// as this node is split into multiple nodes.
+func InitialTextNode() *RGATreeSplitNode[*TextValue] {
+	return NewRGATreeSplitNode(initialNodeID, &TextValue{
+		value: "",
+	})
+}
+
 // Text is an extended data type for the contents of a text editor.
 type Text struct {
-	rgaTreeSplit *RGATreeSplit
+	rgaTreeSplit *RGATreeSplit[*TextValue]
 	selectionMap map[string]*Selection
 	createdAt    *time.Ticket
 	movedAt      *time.Ticket
@@ -91,7 +91,7 @@ type Text struct {
 }
 
 // NewText creates a new instance of Text.
-func NewText(elements *RGATreeSplit, createdAt *time.Ticket) *Text {
+func NewText(elements *RGATreeSplit[*TextValue], createdAt *time.Ticket) *Text {
 	return &Text{
 		rgaTreeSplit: elements,
 		selectionMap: make(map[string]*Selection),
@@ -206,7 +206,7 @@ func (t *Text) Select(
 }
 
 // Nodes returns the internal nodes of this text.
-func (t *Text) Nodes() []*RGATreeSplitNode {
+func (t *Text) Nodes() []*RGATreeSplitNode[*TextValue] {
 	return t.rgaTreeSplit.nodes()
 }
 

@@ -44,20 +44,20 @@ func NewRGATreeSplitNodeID(createdAt *time.Ticket, offset int) *RGATreeSplitNode
 // Compare returns an integer comparing two ID. The result will be 0 if
 // id==other, -1 if id < other, and +1 if id > other. If the receiver or
 // argument is nil, it would panic at runtime.
-func (t *RGATreeSplitNodeID) Compare(other llrb.Key) int {
-	if t == nil || other == nil {
+func (id *RGATreeSplitNodeID) Compare(other llrb.Key) int {
+	if id == nil || other == nil {
 		panic("RGATreeSplitNodeID cannot be null")
 	}
 
 	o := other.(*RGATreeSplitNodeID)
-	compare := t.createdAt.Compare(o.createdAt)
+	compare := id.createdAt.Compare(o.createdAt)
 	if compare != 0 {
 		return compare
 	}
 
-	if t.offset > o.offset {
+	if id.offset > o.offset {
 		return 1
-	} else if t.offset < o.offset {
+	} else if id.offset < o.offset {
 		return -1
 	}
 
@@ -65,43 +65,43 @@ func (t *RGATreeSplitNodeID) Compare(other llrb.Key) int {
 }
 
 // Equal returns whether given ID equals to this ID or not.
-func (t *RGATreeSplitNodeID) Equal(other llrb.Key) bool {
-	return t.Compare(other) == 0
+func (id *RGATreeSplitNodeID) Equal(other llrb.Key) bool {
+	return id.Compare(other) == 0
 }
 
 // CreatedAt returns the creation time of this ID.
-func (t *RGATreeSplitNodeID) CreatedAt() *time.Ticket {
-	return t.createdAt
+func (id *RGATreeSplitNodeID) CreatedAt() *time.Ticket {
+	return id.createdAt
 }
 
 // Offset returns the offset of this ID.
-func (t *RGATreeSplitNodeID) Offset() int {
-	return t.offset
+func (id *RGATreeSplitNodeID) Offset() int {
+	return id.offset
 }
 
 // Split creates a new ID with an offset from this ID.
-func (t *RGATreeSplitNodeID) Split(offset int) *RGATreeSplitNodeID {
-	return NewRGATreeSplitNodeID(t.createdAt, t.offset+offset)
+func (id *RGATreeSplitNodeID) Split(offset int) *RGATreeSplitNodeID {
+	return NewRGATreeSplitNodeID(id.createdAt, id.offset+offset)
 }
 
 // AnnotatedString returns a String containing the metadata of the node id
 // for debugging purpose.
-func (t *RGATreeSplitNodeID) AnnotatedString() string {
-	return fmt.Sprintf("%s:%d", t.createdAt.AnnotatedString(), t.offset)
+func (id *RGATreeSplitNodeID) AnnotatedString() string {
+	return fmt.Sprintf("%s:%d", id.createdAt.AnnotatedString(), id.offset)
 }
 
-func (t *RGATreeSplitNodeID) hasSameCreatedAt(id *RGATreeSplitNodeID) bool {
-	return t.createdAt.Compare(id.createdAt) == 0
+func (id *RGATreeSplitNodeID) hasSameCreatedAt(other *RGATreeSplitNodeID) bool {
+	return id.createdAt.Compare(other.createdAt) == 0
 }
 
 // key returns a string representation of the ID. The result will be
 // cached in the key field to prevent instantiation of a new string.
-func (t *RGATreeSplitNodeID) key() string {
-	if t.cachedKey == "" {
-		t.cachedKey = t.createdAt.Key() + ":" + strconv.FormatUint(uint64(t.offset), 10)
+func (id *RGATreeSplitNodeID) key() string {
+	if id.cachedKey == "" {
+		id.cachedKey = id.createdAt.Key() + ":" + strconv.FormatUint(uint64(id.offset), 10)
 	}
 
-	return t.cachedKey
+	return id.cachedKey
 }
 
 // RGATreeSplitNodePos is the position of the text inside the node.
@@ -159,21 +159,21 @@ func newSelection(from, to *RGATreeSplitNodePos, updatedAt *time.Ticket) *Select
 }
 
 // RGATreeSplitNode is a node of RGATreeSplit.
-type RGATreeSplitNode struct {
+type RGATreeSplitNode[V RGATreeSplitValue] struct {
 	id        *RGATreeSplitNodeID
 	indexNode *splay.Node
-	value     RGATreeSplitValue
+	value     V
 	removedAt *time.Ticket
 
-	prev    *RGATreeSplitNode
-	next    *RGATreeSplitNode
-	insPrev *RGATreeSplitNode
-	insNext *RGATreeSplitNode
+	prev    *RGATreeSplitNode[V]
+	next    *RGATreeSplitNode[V]
+	insPrev *RGATreeSplitNode[V]
+	insNext *RGATreeSplitNode[V]
 }
 
 // NewRGATreeSplitNode creates a new instance of RGATreeSplit.
-func NewRGATreeSplitNode(id *RGATreeSplitNodeID, value RGATreeSplitValue) *RGATreeSplitNode {
-	node := &RGATreeSplitNode{
+func NewRGATreeSplitNode[V RGATreeSplitValue](id *RGATreeSplitNodeID, value V) *RGATreeSplitNode[V] {
+	node := &RGATreeSplitNode[V]{
 		id:    id,
 		value: value,
 	}
@@ -183,52 +183,52 @@ func NewRGATreeSplitNode(id *RGATreeSplitNodeID, value RGATreeSplitValue) *RGATr
 }
 
 // ID returns the ID of this RGATreeSplitNode.
-func (t *RGATreeSplitNode) ID() *RGATreeSplitNodeID {
-	return t.id
+func (s *RGATreeSplitNode[V]) ID() *RGATreeSplitNodeID {
+	return s.id
 }
 
 // InsPrevID returns previous node ID at the time of this node insertion.
-func (t *RGATreeSplitNode) InsPrevID() *RGATreeSplitNodeID {
-	if t.insPrev == nil {
+func (s *RGATreeSplitNode[V]) InsPrevID() *RGATreeSplitNodeID {
+	if s.insPrev == nil {
 		return nil
 	}
 
-	return t.insPrev.id
+	return s.insPrev.id
 }
 
-func (t *RGATreeSplitNode) contentLen() int {
-	return t.value.Len()
+func (s *RGATreeSplitNode[V]) contentLen() int {
+	return s.value.Len()
 }
 
 // Len returns the length of this node.
-func (t *RGATreeSplitNode) Len() int {
-	if t.removedAt != nil {
+func (s *RGATreeSplitNode[V]) Len() int {
+	if s.removedAt != nil {
 		return 0
 	}
-	return t.contentLen()
+	return s.contentLen()
 }
 
 // RemovedAt return the remove time of this node.
-func (t *RGATreeSplitNode) RemovedAt() *time.Ticket {
-	return t.removedAt
+func (s *RGATreeSplitNode[V]) RemovedAt() *time.Ticket {
+	return s.removedAt
 }
 
 // Marshal returns the JSON encoding of this node.
-func (t *RGATreeSplitNode) Marshal() string {
-	return t.value.Marshal()
+func (s *RGATreeSplitNode[V]) Marshal() string {
+	return s.value.Marshal()
 }
 
 // String returns the string representation of this node.
-func (t *RGATreeSplitNode) String() string {
-	return t.value.String()
+func (s *RGATreeSplitNode[V]) String() string {
+	return s.value.String()
 }
 
 // DeepCopy returns a new instance of this RGATreeSplitNode without structural info.
-func (t *RGATreeSplitNode) DeepCopy() *RGATreeSplitNode {
-	node := &RGATreeSplitNode{
-		id:        t.id,
-		value:     t.value.DeepCopy(),
-		removedAt: t.removedAt,
+func (s *RGATreeSplitNode[V]) DeepCopy() *RGATreeSplitNode[V] {
+	node := &RGATreeSplitNode[V]{
+		id:        s.id,
+		value:     s.value.DeepCopy().(V),
+		removedAt: s.removedAt,
 	}
 	node.indexNode = splay.NewNode(node)
 
@@ -236,78 +236,78 @@ func (t *RGATreeSplitNode) DeepCopy() *RGATreeSplitNode {
 }
 
 // SetInsPrev sets previous node of this node insertion.
-func (t *RGATreeSplitNode) SetInsPrev(node *RGATreeSplitNode) {
-	t.insPrev = node
-	node.insNext = t
+func (s *RGATreeSplitNode[V]) SetInsPrev(node *RGATreeSplitNode[V]) {
+	s.insPrev = node
+	node.insNext = s
 }
 
-func (t *RGATreeSplitNode) setPrev(node *RGATreeSplitNode) {
-	t.prev = node
-	node.next = t
+func (s *RGATreeSplitNode[V]) setPrev(node *RGATreeSplitNode[V]) {
+	s.prev = node
+	node.next = s
 }
 
-func (t *RGATreeSplitNode) split(offset int) *RGATreeSplitNode {
-	return NewRGATreeSplitNode(
-		t.id.Split(offset),
-		t.value.Split(offset),
+func (s *RGATreeSplitNode[V]) split(offset int) *RGATreeSplitNode[V] {
+	return NewRGATreeSplitNode[V](
+		s.id.Split(offset),
+		s.value.Split(offset).(V),
 	)
 }
 
-func (t *RGATreeSplitNode) createdAt() *time.Ticket {
-	return t.id.createdAt
+func (s *RGATreeSplitNode[V]) createdAt() *time.Ticket {
+	return s.id.createdAt
 }
 
 // annotatedString returns a String containing the metadata of the node
 // for debugging purpose.
-func (t *RGATreeSplitNode) annotatedString() string {
-	return fmt.Sprintf("%s %s", t.id.AnnotatedString(), t.value.AnnotatedString())
+func (s *RGATreeSplitNode[V]) annotatedString() string {
+	return fmt.Sprintf("%s %s", s.id.AnnotatedString(), s.value.AnnotatedString())
 }
 
 // Remove removes this node if it created before the time of deletion are
 // deleted. It only marks the deleted time (tombstone).
-func (t *RGATreeSplitNode) Remove(removedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
-	if !t.createdAt().After(latestCreatedAt) &&
-		(t.removedAt == nil || removedAt.After(t.removedAt)) {
-		t.removedAt = removedAt
+func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
+	if !s.createdAt().After(latestCreatedAt) &&
+		(s.removedAt == nil || removedAt.After(s.removedAt)) {
+		s.removedAt = removedAt
 		return true
 	}
 	return false
 }
 
 // Value returns the value of this node.
-func (t *RGATreeSplitNode) Value() RGATreeSplitValue {
-	return t.value
+func (s *RGATreeSplitNode[V]) Value() V {
+	return s.value
 }
 
 // RGATreeSplit is a block-based list with improved index-based lookup in RGA.
 // The difference from RGATreeList is that it has data on a block basis to
 // reduce the size of CRDT metadata. When an edit occurs on a block,
 // the block is split.
-type RGATreeSplit struct {
-	initialHead *RGATreeSplitNode
+type RGATreeSplit[V RGATreeSplitValue] struct {
+	initialHead *RGATreeSplitNode[V]
 	treeByIndex *splay.Tree
-	treeByID    *llrb.Tree[*RGATreeSplitNodeID, *RGATreeSplitNode]
+	treeByID    *llrb.Tree[*RGATreeSplitNodeID, *RGATreeSplitNode[V]]
 
 	// removedNodeMap is a map that holds tombstone nodes
 	// when the edit operation is executed.
-	removedNodeMap map[string]*RGATreeSplitNode
+	removedNodeMap map[string]*RGATreeSplitNode[V]
 }
 
 // NewRGATreeSplit creates a new instance of RGATreeSplit.
-func NewRGATreeSplit(initialHead *RGATreeSplitNode) *RGATreeSplit {
+func NewRGATreeSplit[V RGATreeSplitValue](initialHead *RGATreeSplitNode[V]) *RGATreeSplit[V] {
 	treeByIndex := splay.NewTree(initialHead.indexNode)
-	treeByID := llrb.NewTree[*RGATreeSplitNodeID, *RGATreeSplitNode]()
+	treeByID := llrb.NewTree[*RGATreeSplitNodeID, *RGATreeSplitNode[V]]()
 	treeByID.Put(initialHead.ID(), initialHead)
 
-	return &RGATreeSplit{
+	return &RGATreeSplit[V]{
 		initialHead:    initialHead,
 		treeByIndex:    treeByIndex,
 		treeByID:       treeByID,
-		removedNodeMap: make(map[string]*RGATreeSplitNode),
+		removedNodeMap: make(map[string]*RGATreeSplitNode[V]),
 	}
 }
 
-func (s *RGATreeSplit) createRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
+func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
 	fromPos := s.findNodePos(from)
 	if from == to {
 		return fromPos, fromPos
@@ -316,19 +316,19 @@ func (s *RGATreeSplit) createRange(from, to int) (*RGATreeSplitNodePos, *RGATree
 	return fromPos, s.findNodePos(to)
 }
 
-func (s *RGATreeSplit) findNodePos(index int) *RGATreeSplitNodePos {
+func (s *RGATreeSplit[V]) findNodePos(index int) *RGATreeSplitNodePos {
 	splayNode, offset := s.treeByIndex.Find(index)
-	node := splayNode.Value().(*RGATreeSplitNode)
+	node := splayNode.Value().(*RGATreeSplitNode[V])
 	return &RGATreeSplitNodePos{
 		id:             node.ID(),
 		relativeOffset: offset,
 	}
 }
 
-func (s *RGATreeSplit) findNodeWithSplit(
+func (s *RGATreeSplit[V]) findNodeWithSplit(
 	pos *RGATreeSplitNodePos,
 	updatedAt *time.Ticket,
-) (*RGATreeSplitNode, *RGATreeSplitNode) {
+) (*RGATreeSplitNode[V], *RGATreeSplitNode[V]) {
 	absoluteID := pos.getAbsoluteID()
 	node := s.findFloorNodePreferToLeft(absoluteID)
 
@@ -343,7 +343,7 @@ func (s *RGATreeSplit) findNodeWithSplit(
 	return node, node.next
 }
 
-func (s *RGATreeSplit) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) *RGATreeSplitNode {
+func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] {
 	node := s.findFloorNode(id)
 	if node == nil {
 		panic("the node of the given id should be found: " + s.AnnotatedString())
@@ -360,7 +360,7 @@ func (s *RGATreeSplit) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) *RGATre
 	return node
 }
 
-func (s *RGATreeSplit) splitNode(node *RGATreeSplitNode, offset int) *RGATreeSplitNode {
+func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) *RGATreeSplitNode[V] {
 	if offset > node.contentLen() {
 		panic("offset should be less than or equal to length: " + s.AnnotatedString())
 	}
@@ -385,7 +385,7 @@ func (s *RGATreeSplit) splitNode(node *RGATreeSplitNode, offset int) *RGATreeSpl
 }
 
 // InsertAfter inserts the given node after the given previous node.
-func (s *RGATreeSplit) InsertAfter(prev *RGATreeSplitNode, node *RGATreeSplitNode) *RGATreeSplitNode {
+func (s *RGATreeSplit[V]) InsertAfter(prev, node *RGATreeSplitNode[V]) *RGATreeSplitNode[V] {
 	next := prev.next
 	node.setPrev(prev)
 	if next != nil {
@@ -399,12 +399,12 @@ func (s *RGATreeSplit) InsertAfter(prev *RGATreeSplitNode, node *RGATreeSplitNod
 }
 
 // InitialHead returns the head node of this RGATreeSplit.
-func (s *RGATreeSplit) InitialHead() *RGATreeSplitNode {
+func (s *RGATreeSplit[V]) InitialHead() *RGATreeSplitNode[V] {
 	return s.initialHead
 }
 
 // FindNode returns the node of the given ID.
-func (s *RGATreeSplit) FindNode(id *RGATreeSplitNodeID) *RGATreeSplitNode {
+func (s *RGATreeSplit[V]) FindNode(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] {
 	if id == nil {
 		return nil
 	}
@@ -412,7 +412,7 @@ func (s *RGATreeSplit) FindNode(id *RGATreeSplitNodeID) *RGATreeSplitNode {
 	return s.findFloorNode(id)
 }
 
-func (s *RGATreeSplit) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNode {
+func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] {
 	key, value := s.treeByID.Floor(id)
 	if key == nil {
 		return nil
@@ -425,11 +425,11 @@ func (s *RGATreeSplit) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNode {
 	return value
 }
 
-func (s *RGATreeSplit) edit(
+func (s *RGATreeSplit[V]) edit(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
-	content RGATreeSplitValue,
+	content V,
 	editedAt *time.Ticket,
 ) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
 	// 01. Split nodes with from and to
@@ -450,7 +450,7 @@ func (s *RGATreeSplit) edit(
 
 	// 03. insert a new node
 	if content.Len() > 0 {
-		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content))
+		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode[V](NewRGATreeSplitNodeID(editedAt, 0), content))
 		caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
 	}
 
@@ -462,9 +462,9 @@ func (s *RGATreeSplit) edit(
 	return caretPos, latestCreatedAtMap
 }
 
-func (s *RGATreeSplit) findBetween(from *RGATreeSplitNode, to *RGATreeSplitNode) []*RGATreeSplitNode {
+func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeSplitNode[V] {
 	current := from
-	var nodes []*RGATreeSplitNode
+	var nodes []*RGATreeSplitNode[V]
 	for current != nil && current != to {
 		nodes = append(nodes, current)
 		current = current.next
@@ -472,13 +472,13 @@ func (s *RGATreeSplit) findBetween(from *RGATreeSplitNode, to *RGATreeSplitNode)
 	return nodes
 }
 
-func (s *RGATreeSplit) deleteNodes(
-	candidates []*RGATreeSplitNode,
+func (s *RGATreeSplit[V]) deleteNodes(
+	candidates []*RGATreeSplitNode[V],
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	editedAt *time.Ticket,
-) (map[string]*time.Ticket, map[string]*RGATreeSplitNode) {
+) (map[string]*time.Ticket, map[string]*RGATreeSplitNode[V]) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
-	removedNodeMap := make(map[string]*RGATreeSplitNode)
+	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
 
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
@@ -510,7 +510,7 @@ func (s *RGATreeSplit) deleteNodes(
 	return createdAtMapByActor, removedNodeMap
 }
 
-func (s *RGATreeSplit) marshal() string {
+func (s *RGATreeSplit[V]) marshal() string {
 	builder := strings.Builder{}
 
 	node := s.initialHead.next
@@ -524,7 +524,7 @@ func (s *RGATreeSplit) marshal() string {
 	return builder.String()
 }
 
-func (s *RGATreeSplit) string() string {
+func (s *RGATreeSplit[V]) string() string {
 	builder := strings.Builder{}
 
 	node := s.initialHead.next
@@ -538,8 +538,8 @@ func (s *RGATreeSplit) string() string {
 	return builder.String()
 }
 
-func (s *RGATreeSplit) nodes() []*RGATreeSplitNode {
-	var nodes []*RGATreeSplitNode
+func (s *RGATreeSplit[V]) nodes() []*RGATreeSplitNode[V] {
+	var nodes []*RGATreeSplitNode[V]
 
 	node := s.initialHead.next
 	for node != nil {
@@ -552,7 +552,7 @@ func (s *RGATreeSplit) nodes() []*RGATreeSplitNode {
 
 // AnnotatedString returns a String containing the metadata of the nodes
 // for debugging purpose.
-func (s *RGATreeSplit) AnnotatedString() string {
+func (s *RGATreeSplit[V]) AnnotatedString() string {
 	builder := strings.Builder{}
 
 	node := s.initialHead
@@ -569,12 +569,12 @@ func (s *RGATreeSplit) AnnotatedString() string {
 }
 
 // removedNodesLen returns length of removed nodes
-func (s *RGATreeSplit) removedNodesLen() int {
+func (s *RGATreeSplit[V]) removedNodesLen() int {
 	return len(s.removedNodeMap)
 }
 
 // purgeTextNodesWithGarbage physically purges nodes that have been removed.
-func (s *RGATreeSplit) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
+func (s *RGATreeSplit[V]) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
 	count := 0
 	for _, node := range s.removedNodeMap {
 		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {
@@ -590,7 +590,7 @@ func (s *RGATreeSplit) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
 }
 
 // purge physically purge the given node from RGATreeSplit.
-func (s *RGATreeSplit) purge(node *RGATreeSplitNode) {
+func (s *RGATreeSplit[V]) purge(node *RGATreeSplitNode[V]) {
 	node.prev.next = node.next
 	if node.next != nil {
 		node.next.prev = node.prev

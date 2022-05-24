@@ -24,16 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// InitialRichTextNode creates an initial node of RichText. The text is edited
-// as this node is split into multiple nodes.
-func InitialRichTextNode() *RGATreeSplitNode {
-	return NewRGATreeSplitNode(initialNodeID, &RichTextValue{
-		attrs: NewRHT(),
-		value: "",
-	})
-}
-
-// RichTextValue is a value of RichText which has an attributes that expresses
+// RichTextValue is a value of RichText which has an attributes that represent
 // the text style.
 type RichTextValue struct {
 	attrs *RHT
@@ -105,9 +96,18 @@ func (t *RichTextValue) DeepCopy() RGATreeSplitValue {
 	}
 }
 
+// InitialRichTextNode creates an initial node of RichText. The text is edited
+// as this node is split into multiple nodes.
+func InitialRichTextNode() *RGATreeSplitNode[*RichTextValue] {
+	return NewRGATreeSplitNode(initialNodeID, &RichTextValue{
+		attrs: NewRHT(),
+		value: "",
+	})
+}
+
 // RichText is an extended data type for the contents of a text editor.
 type RichText struct {
-	rgaTreeSplit *RGATreeSplit
+	rgaTreeSplit *RGATreeSplit[*RichTextValue]
 	selectionMap map[string]*Selection
 	createdAt    *time.Ticket
 	movedAt      *time.Ticket
@@ -115,7 +115,7 @@ type RichText struct {
 }
 
 // NewRichText creates a new instance of RichText.
-func NewRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
+func NewRichText(elements *RGATreeSplit[*RichTextValue], createdAt *time.Ticket) *RichText {
 	return &RichText{
 		rgaTreeSplit: elements,
 		selectionMap: make(map[string]*Selection),
@@ -124,7 +124,7 @@ func NewRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
 }
 
 // NewInitialRichText creates a new instance of RichText.
-func NewInitialRichText(elements *RGATreeSplit, createdAt *time.Ticket) *RichText {
+func NewInitialRichText(elements *RGATreeSplit[*RichTextValue], createdAt *time.Ticket) *RichText {
 	text := NewRichText(elements, createdAt)
 	fromPos, toPos := text.CreateRange(0, 0)
 	text.Edit(fromPos, toPos, nil, "\n", nil, createdAt)
@@ -247,7 +247,7 @@ func (t *RichText) SetStyle(
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
 	for _, node := range nodes {
-		val := node.value.(*RichTextValue)
+		val := node.value
 		for key, value := range attributes {
 			val.attrs.Set(key, value, executedAt)
 		}
@@ -266,7 +266,7 @@ func (t *RichText) Select(
 }
 
 // Nodes returns the internal nodes of this rich text.
-func (t *RichText) Nodes() []*RGATreeSplitNode {
+func (t *RichText) Nodes() []*RGATreeSplitNode[*RichTextValue] {
 	return t.rgaTreeSplit.nodes()
 }
 

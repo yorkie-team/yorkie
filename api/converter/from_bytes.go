@@ -282,7 +282,7 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*json.Counter, error) {
 	return counter, nil
 }
 
-func fromTextNode(pbTextNode *api.TextNode) (*json.RGATreeSplitNode, error) {
+func fromTextNode(pbTextNode *api.TextNode) (*json.RGATreeSplitNode[*json.TextValue], error) {
 	id, err := fromTextNodeID(pbTextNode.Id)
 	if err != nil {
 		return nil, err
@@ -303,7 +303,7 @@ func fromTextNode(pbTextNode *api.TextNode) (*json.RGATreeSplitNode, error) {
 
 func fromRichTextNode(
 	pbNode *api.RichTextNode,
-) (*json.RGATreeSplitNode, error) {
+) (*json.RGATreeSplitNode[*json.RichTextValue], error) {
 	id, err := fromTextNodeID(pbNode.Id)
 	if err != nil {
 		return nil, err

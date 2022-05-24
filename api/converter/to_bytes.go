@@ -180,7 +180,7 @@ func toRGANodes(rgaNodes []*json.RGATreeListNode) ([]*api.RGANode, error) {
 	return pbRGANodes, nil
 }
 
-func toTextNodes(textNodes []*json.RGATreeSplitNode) []*api.TextNode {
+func toTextNodes(textNodes []*json.RGATreeSplitNode[*json.TextValue]) []*api.TextNode {
 	var pbTextNodes []*api.TextNode
 	for _, textNode := range textNodes {
 		pbTextNode := &api.TextNode{
@@ -198,10 +198,10 @@ func toTextNodes(textNodes []*json.RGATreeSplitNode) []*api.TextNode {
 	return pbTextNodes
 }
 
-func toRichTextNodes(textNodes []*json.RGATreeSplitNode) []*api.RichTextNode {
+func toRichTextNodes(textNodes []*json.RGATreeSplitNode[*json.RichTextValue]) []*api.RichTextNode {
 	var pbTextNodes []*api.RichTextNode
 	for _, textNode := range textNodes {
-		value := textNode.Value().(*json.RichTextValue)
+		value := textNode.Value()
 
 		attrs := make(map[string]*api.RichTextNodeAttr)
 		for _, node := range value.Attrs().Nodes() {

@@ -128,7 +128,7 @@ func TestRoot(t *testing.T) {
 	t.Run("garbage collection for rich text test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		richText := json.NewRichText(json.NewRGATreeSplit(json.InitialTextNode()), ctx.IssueTimeTicket())
+		richText := json.NewRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := richText.CreateRange(0, 0)
 		richText.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
