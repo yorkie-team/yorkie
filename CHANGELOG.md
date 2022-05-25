@@ -7,6 +7,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.6] - 2022-05-25
+
+### Changed
+
+- Update Go version to 1.18: #326
+- Add trylock to memory locker: #234
+- Print projects in table format: #324
+- Fetch documents by project: #330
+- Add time attributes to document API: #325
+
+### Fixed
+
+- Fix invalid JSON returns from document.Marshal: #328, #332
+
 ## [0.2.5] - 2022-05-11
 
 ### Added
