@@ -16,6 +16,10 @@
 
 package main
 
+import (
+	"os"
+)
+
 func main() {
-	Run()
+	os.Exit(Run())
 }
