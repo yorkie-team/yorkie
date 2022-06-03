@@ -92,7 +92,6 @@ type comparableValue interface {
 	comparable
 }
 
-
 // pqItem is something we manage in a priority queue.
 type pqItem[V comparableValue] struct {
 	value V
