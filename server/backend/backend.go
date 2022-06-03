@@ -48,7 +48,8 @@ type Backend struct {
 	Background   *background.Background
 	Housekeeping *housekeeping.Housekeeping
 
-	AuthWebhookCache *cache.LRUExpireCache
+	// [stirng]말고 cache.Key 를 쓰고 싶은데..
+	AuthWebhookCache *cache.LRUExpireCache[string]
 }
 
 // New creates a new instance of Backend.

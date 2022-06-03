@@ -31,38 +31,43 @@ var (
 	ErrInvalidMaxSize = errors.New("max size must be > 0")
 )
 
+type iKey interface {
+	string
+	// string | int | etc -> can be extended
+}
+
 // LRUExpireCache is a cache that ensures the mostly recently accessed keys are returned with
 // a ttl beyond which keys are forcibly expired.
-type LRUExpireCache struct {
+type LRUExpireCache[K iKey] struct {
 	lock sync.Mutex
 
 	maxSize      int
 	evictionList list.List
-	entries      map[string]*list.Element
+	entries      map[K]*list.Element
 }
 
 // NewLRUExpireCache creates an expiring cache with the given size
-func NewLRUExpireCache(maxSize int) (*LRUExpireCache, error) {
+func NewLRUExpireCache[K iKey](maxSize int) (*LRUExpireCache[K], error) {
 	if maxSize <= 0 {
 		return nil, ErrInvalidMaxSize
 	}
 
-	return &LRUExpireCache{
+	return &LRUExpireCache[K]{
 		maxSize: maxSize,
-		entries: map[string]*list.Element{},
+		entries: map[K]*list.Element{},
 	}, nil
 }
 
-type cacheEntry struct {
-	key        string
-	value      interface{}
+type cacheEntry[K iKey, Value any] struct {
+	key        K
+	value      Value
 	expireTime time.Time
 }
 
 // Add adds the value to the cache at key with the specified maximum duration.
-func (c *LRUExpireCache) Add(
-	key string,
-	value interface{},
+func (c *LRUExpireCache[K]) Add(
+	key K,
+	value any,
 	ttl time.Duration,
 ) {
 	c.lock.Lock()
@@ -71,18 +76,18 @@ func (c *LRUExpireCache) Add(
 	oldElement, ok := c.entries[key]
 	if ok {
 		c.evictionList.MoveToFront(oldElement)
-		oldElement.Value.(*cacheEntry).value = value
-		oldElement.Value.(*cacheEntry).expireTime = time.Now().Add(ttl)
+		oldElement.Value.(*cacheEntry[K, any]).value = value
+		oldElement.Value.(*cacheEntry[K, any]).expireTime = time.Now().Add(ttl)
 		return
 	}
 
 	if c.evictionList.Len() >= c.maxSize {
 		toEvict := c.evictionList.Back()
 		c.evictionList.Remove(toEvict)
-		delete(c.entries, toEvict.Value.(*cacheEntry).key)
+		delete(c.entries, toEvict.Value.(*cacheEntry[K, any]).key)
 	}
 
-	element := c.evictionList.PushFront(&cacheEntry{
+	element := c.evictionList.PushFront(&cacheEntry[K, any]{
 		key:        key,
 		value:      value,
 		expireTime: time.Now().Add(ttl),
@@ -92,7 +97,7 @@ func (c *LRUExpireCache) Add(
 
 // Get returns the value at the specified key from the cache if it exists and is not
 // expired, or returns false.
-func (c *LRUExpireCache) Get(key string) (interface{}, bool) {
+func (c *LRUExpireCache[K]) Get(key K) (any, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -101,7 +106,7 @@ func (c *LRUExpireCache) Get(key string) (interface{}, bool) {
 		return nil, false
 	}
 
-	if time.Now().After(element.Value.(*cacheEntry).expireTime) {
+	if time.Now().After(element.Value.(*cacheEntry[K, any]).expireTime) {
 		c.evictionList.Remove(element)
 		delete(c.entries, key)
 		return nil, false
@@ -109,5 +114,5 @@ func (c *LRUExpireCache) Get(key string) (interface{}, bool) {
 
 	c.evictionList.MoveToFront(element)
 
-	return element.Value.(*cacheEntry).value, true
+	return element.Value.(*cacheEntry[K, any]).value, true
 }
