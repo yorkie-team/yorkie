@@ -39,11 +39,10 @@ func newTestValue(value int) testValue {
 	}
 }
 
-func exist(toFind int, values []pq.Value) bool {
+func exist(toFind int, values []testValue) bool {
 	ret := false
 	for _, value := range values {
-		v := value.(testValue)
-		if v.value == toFind {
+		if value.value == toFind {
 			ret = true
 			break
 		}
@@ -51,8 +50,8 @@ func exist(toFind int, values []pq.Value) bool {
 	return ret
 }
 
-func setUpTestNums() *pq.PriorityQueue {
-	queue := pq.NewPriorityQueue()
+func setUpTestNums() *pq.PriorityQueue[testValue] {
+	queue := pq.NewPriorityQueue[testValue]()
 	testNums := []int{10, 7, 1, 9, 4, 11, 5, 3, 6, 12, 8, 2}
 	for _, testNum := range testNums {
 		queue.Push(newTestValue(testNum))
@@ -88,7 +87,7 @@ func TestPQ(t *testing.T) {
 
 		var tmp []int
 		for queue.Len() != 0 {
-			tmp = append(tmp, (queue.Pop()).(testValue).value)
+			tmp = append(tmp, (queue.Pop()).value)
 		}
 
 		assert.EqualValues(t, tmp, []int{3, 4, 5, 6, 7, 8, 9, 10, 11, 12})
@@ -148,7 +147,7 @@ func TestPQRelease(t *testing.T) {
 	})
 
 	t.Run("if a heap has one node", func(t *testing.T) {
-		queue := pq.NewPriorityQueue()
+		queue := pq.NewPriorityQueue[testValue]()
 		node := newTestValue(0)
 
 		queue.Push(node)
