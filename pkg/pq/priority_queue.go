@@ -26,7 +26,7 @@ type PriorityQueue[V comparableValue] struct {
 }
 
 // NewPriorityQueue creates an instance of NewPriorityQueue.
-func NewPriorityQueue[V comparableValue] () *PriorityQueue[V] {
+func NewPriorityQueue[V comparableValue]() *PriorityQueue[V] {
 	pq := &internalQueue[V]{}
 	heap.Init(pq)
 
