@@ -23,6 +23,7 @@ import (
 
 	"github.com/rs/xid"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -48,8 +49,7 @@ type Backend struct {
 	Background   *background.Background
 	Housekeeping *housekeeping.Housekeeping
 
-	// [stirng]말고 cache.Key 를 쓰고 싶은데..
-	AuthWebhookCache *cache.LRUExpireCache[string]
+	AuthWebhookCache *cache.LRUExpireCache[types.AuthWebhookResponse]
 }
 
 // New creates a new instance of Backend.

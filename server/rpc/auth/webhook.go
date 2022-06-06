@@ -62,7 +62,7 @@ func verifyAccess(
 
 	cacheKey := string(reqBody)
 	if entry, ok := be.AuthWebhookCache.Get(cacheKey); ok {
-		resp := entry.(*types.AuthWebhookResponse)
+		resp := entry
 		if !resp.Allowed {
 			return fmt.Errorf("%s: %w", resp.Reason, ErrNotAllowed)
 		}
