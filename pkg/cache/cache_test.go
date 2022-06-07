@@ -27,12 +27,12 @@ func TestCache(t *testing.T) {
 		lruCache.Add("request1", "response1", time.Second)
 		response1, ok := lruCache.Get("request1")
 		assert.True(t, ok)
-		assert.NotNil(t, response1)
+		assert.NotEmpty(t, response1)
 
 		lruCache.Add("request2", "response2", time.Second)
 		response2, ok := lruCache.Get("request2")
 		assert.True(t, ok)
-		assert.NotNil(t, response2)
+		assert.NotEmpty(t, response2)
 
 		// max size of the current cache is 1
 		response1, ok = lruCache.Get("request1")
