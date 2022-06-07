@@ -87,8 +87,6 @@ type Value interface {
 	Less(other Value) bool
 }
 
-
-
 // pqItem is something we manage in a priority queue.
 type pqItem[V Value] struct {
 	value V
