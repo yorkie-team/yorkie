@@ -21,12 +21,12 @@ import (
 )
 
 // PriorityQueue is a priority queue implemented with max heap.
-type PriorityQueue[V comparableValue] struct {
+type PriorityQueue[V Value] struct {
 	queue *internalQueue[V]
 }
 
 // NewPriorityQueue creates an instance of NewPriorityQueue.
-func NewPriorityQueue[V comparableValue]() *PriorityQueue[V] {
+func NewPriorityQueue[V Value]() *PriorityQueue[V] {
 	pq := &internalQueue[V]{}
 	heap.Init(pq)
 
@@ -60,7 +60,7 @@ func (pq *PriorityQueue[V]) Len() int {
 func (pq *PriorityQueue[V]) Release(value V) {
 	idx := -1
 	for i, item := range *pq.queue {
-		if item.value == value {
+		if !item.value.Less(value) && !value.Less(item.value) {
 			idx = i
 			break
 		}
@@ -87,18 +87,15 @@ type Value interface {
 	Less(other Value) bool
 }
 
-type comparableValue interface {
-	Value
-	comparable
-}
+
 
 // pqItem is something we manage in a priority queue.
-type pqItem[V comparableValue] struct {
+type pqItem[V Value] struct {
 	value V
 	index int
 }
 
-func newPQItem[V comparableValue](value V) *pqItem[V] {
+func newPQItem[V Value](value V) *pqItem[V] {
 	return &pqItem[V]{
 		value: value,
 		index: -1,
@@ -106,7 +103,7 @@ func newPQItem[V comparableValue](value V) *pqItem[V] {
 }
 
 // A internalQueue implements heap.Interface and holds Items.
-type internalQueue[V comparableValue] []*pqItem[V]
+type internalQueue[V Value] []*pqItem[V]
 
 // Len is the number of elements in this internalQueue.
 func (pq internalQueue[V]) Len() int { return len(pq) }
