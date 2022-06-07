@@ -439,6 +439,14 @@ func BenchmarkDocument(b *testing.B) {
 		benchmarkTextSplitGC(1000, b)
 	})
 
+	b.Run("text delete all 1000", func(b *testing.B) {
+		benchmarkTextDeleteAll(1000, b)
+	})
+
+	b.Run("text delete all 10000", func(b *testing.B) {
+		benchmarkTextDeleteAll(10000, b)
+	})
+
 	b.Run("text 100", func(b *testing.B) {
 		benchmarkText(100, b)
 	})
@@ -500,6 +508,30 @@ func benchmarkText(cnt int, b *testing.B) {
 			return nil
 		})
 		assert.NoError(b, err)
+	}
+}
+
+func benchmarkTextDeleteAll(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		err := doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.SetNewText("k1")
+			for c := 0; c < cnt; c++ {
+				text.Edit(c, c, "a")
+			}
+			return nil
+		}, "Create a text then appends a")
+		assert.NoError(b, err)
+
+		err = doc.Update(func(root *proxy.ObjectProxy) error {
+			text := root.GetText("k1")
+			text.Edit(0, cnt, "")
+			return nil
+		}, "Delete all at a time")
+		assert.NoError(b, err)
+
+		assert.Equal(b, `{"k1":""}`, doc.Marshal())
 	}
 }
 
