@@ -24,8 +24,6 @@ import (
 	"errors"
 	"sync"
 	"time"
-
-	"github.com/yorkie-team/yorkie/api/types"
 )
 
 var (
@@ -35,7 +33,7 @@ var (
 
 // LRUExpireCache is a cache that ensures the mostly recently accessed keys are returned with
 // a ttl beyond which keys are forcibly expired.
-type LRUExpireCache[V types.AuthWebhookResponse] struct {
+type LRUExpireCache[V any] struct {
 	lock sync.Mutex
 
 	maxSize      int
@@ -44,7 +42,7 @@ type LRUExpireCache[V types.AuthWebhookResponse] struct {
 }
 
 // NewLRUExpireCache creates an expiring cache with the given size
-func NewLRUExpireCache[V types.AuthWebhookResponse](maxSize int) (*LRUExpireCache[V], error) {
+func NewLRUExpireCache[V any](maxSize int) (*LRUExpireCache[V], error) {
 	if maxSize <= 0 {
 		return nil, ErrInvalidMaxSize
 	}
@@ -55,16 +53,16 @@ func NewLRUExpireCache[V types.AuthWebhookResponse](maxSize int) (*LRUExpireCach
 	}, nil
 }
 
-type cacheEntry[V types.AuthWebhookResponse] struct {
+type cacheEntry[V any] struct {
 	key        string
-	value      *V
+	value      V
 	expireTime time.Time
 }
 
 // Add adds the value to the cache at key with the specified maximum duration.
 func (c *LRUExpireCache[V]) Add(
 	key string,
-	value *V,
+	value V,
 	ttl time.Duration,
 ) {
 	c.lock.Lock()
@@ -94,10 +92,10 @@ func (c *LRUExpireCache[V]) Add(
 
 // Get returns the value at the specified key from the cache if it exists and is not
 // expired, or returns false.
-func (c *LRUExpireCache[V]) Get(key string) (*V, bool) {
+func (c *LRUExpireCache[V]) Get(key string) (V, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	var nilV *V
+	var nilV V
 
 	element, ok := c.entries[key]
 	if !ok {

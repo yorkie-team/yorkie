@@ -49,7 +49,7 @@ type Backend struct {
 	Background   *background.Background
 	Housekeeping *housekeeping.Housekeeping
 
-	AuthWebhookCache *cache.LRUExpireCache[types.AuthWebhookResponse]
+	AuthWebhookCache *cache.LRUExpireCache[*types.AuthWebhookResponse]
 }
 
 // New creates a new instance of Backend.
@@ -103,7 +103,7 @@ func New(
 		coordinator = memsync.NewCoordinator(serverInfo)
 	}
 
-	authWebhookCache, err := cache.NewLRUExpireCache(conf.AuthWebhookCacheSize)
+	authWebhookCache, err := cache.NewLRUExpireCache[*types.AuthWebhookResponse](conf.AuthWebhookCacheSize)
 	if err != nil {
 		return nil, err
 	}
