@@ -11,37 +11,37 @@ import (
 
 func TestCache(t *testing.T) {
 	t.Run("create lru expire cache test", func(t *testing.T) {
-		lruCache, err := cache.NewLRUExpireCache(1)
+		lruCache, err := cache.NewLRUExpireCache[string, string](1)
 		assert.NoError(t, err)
 		assert.NotNil(t, lruCache)
 
-		lruCache, err = cache.NewLRUExpireCache(0)
+		lruCache, err = cache.NewLRUExpireCache[string, string](0)
 		assert.ErrorIs(t, err, cache.ErrInvalidMaxSize)
 		assert.Nil(t, lruCache)
 	})
 
 	t.Run("add test", func(t *testing.T) {
-		lruCache, err := cache.NewLRUExpireCache(1)
+		lruCache, err := cache.NewLRUExpireCache[string, string](1)
 		assert.NoError(t, err)
 
 		lruCache.Add("request1", "response1", time.Second)
 		response1, ok := lruCache.Get("request1")
 		assert.True(t, ok)
-		assert.NotNil(t, response1)
+		assert.NotEmpty(t, response1)
 
 		lruCache.Add("request2", "response2", time.Second)
 		response2, ok := lruCache.Get("request2")
 		assert.True(t, ok)
-		assert.NotNil(t, response2)
+		assert.NotEmpty(t, response2)
 
 		// max size of the current cache is 1
 		response1, ok = lruCache.Get("request1")
 		assert.False(t, ok)
-		assert.Nil(t, response1)
+		assert.Empty(t, response1)
 	})
 
 	t.Run("get expired cache test", func(t *testing.T) {
-		lruCache, err := cache.NewLRUExpireCache(1)
+		lruCache, err := cache.NewLRUExpireCache[string, string](1)
 		assert.NoError(t, err)
 
 		ttl := time.Millisecond
@@ -50,15 +50,16 @@ func TestCache(t *testing.T) {
 		time.Sleep(ttl)
 		response, ok := lruCache.Get("request")
 		assert.False(t, ok)
-		assert.Nil(t, response)
+		assert.Empty(t, response)
 	})
 
 	t.Run("update expired cache test", func(t *testing.T) {
-		lruCache, err := cache.NewLRUExpireCache(1)
+		lruCache, err := cache.NewLRUExpireCache[string, string](1)
 		assert.NoError(t, err)
 
 		var ttl time.Duration
 		ttl = time.Minute
+
 		lruCache.Add("request", "response1", ttl)
 		response1, ok := lruCache.Get("request")
 		assert.True(t, ok)

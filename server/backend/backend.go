@@ -23,6 +23,7 @@ import (
 
 	"github.com/rs/xid"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -48,7 +49,7 @@ type Backend struct {
 	Background   *background.Background
 	Housekeeping *housekeeping.Housekeeping
 
-	AuthWebhookCache *cache.LRUExpireCache
+	AuthWebhookCache *cache.LRUExpireCache[string, *types.AuthWebhookResponse]
 }
 
 // New creates a new instance of Backend.
@@ -102,7 +103,7 @@ func New(
 		coordinator = memsync.NewCoordinator(serverInfo)
 	}
 
-	authWebhookCache, err := cache.NewLRUExpireCache(conf.AuthWebhookCacheSize)
+	authWebhookCache, err := cache.NewLRUExpireCache[string, *types.AuthWebhookResponse](conf.AuthWebhookCacheSize)
 	if err != nil {
 		return nil, err
 	}

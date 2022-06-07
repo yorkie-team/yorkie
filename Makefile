@@ -42,7 +42,7 @@ fmt: ## applies format and simplify codes
 	gofmt -s -w $(GO_SRC)
 
 lint: ## runs the golang-ci lint, checks for lint violations
-	 golangci-lint run ./...
+	golangci-lint run ./...
 
 test: ## runs integration tests that require local applications such as MongoDB
 	go clean -testcache
