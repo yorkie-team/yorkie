@@ -69,14 +69,14 @@ func (n *RHTPQMapNode) Element() Element {
 // Max Heap, the recently inserted value from the logical clock is returned
 // to the outside.
 type RHTPriorityQueueMap struct {
-	nodeQueueMapByKey  map[string]*pq.PriorityQueue
+	nodeQueueMapByKey  map[string]*pq.PriorityQueue[*RHTPQMapNode]
 	nodeMapByCreatedAt map[string]*RHTPQMapNode
 }
 
 // NewRHTPriorityQueueMap creates a new instance of RHTPriorityQueueMap.
 func NewRHTPriorityQueueMap() *RHTPriorityQueueMap {
 	return &RHTPriorityQueueMap{
-		nodeQueueMapByKey:  make(map[string]*pq.PriorityQueue),
+		nodeQueueMapByKey:  make(map[string]*pq.PriorityQueue[*RHTPQMapNode]),
 		nodeMapByCreatedAt: make(map[string]*RHTPQMapNode),
 	}
 }
@@ -88,7 +88,7 @@ func (rht *RHTPriorityQueueMap) Get(key string) Element {
 		return nil
 	}
 
-	node := queue.Peek().(*RHTPQMapNode)
+	node := queue.Peek()
 	if node.isRemoved() {
 		return nil
 	}
@@ -102,7 +102,7 @@ func (rht *RHTPriorityQueueMap) Has(key string) bool {
 		return false
 	}
 
-	node := queue.Peek().(*RHTPQMapNode)
+	node := queue.Peek()
 	return node != nil && !node.isRemoved()
 }
 
@@ -111,7 +111,7 @@ func (rht *RHTPriorityQueueMap) Set(k string, v Element) Element {
 	var removed Element
 
 	if queue, ok := rht.nodeQueueMapByKey[k]; ok && queue.Len() > 0 {
-		node := queue.Peek().(*RHTPQMapNode)
+		node := queue.Peek()
 		if !node.isRemoved() && node.Remove(v.CreatedAt()) {
 			removed = node.elem
 		}
@@ -124,7 +124,7 @@ func (rht *RHTPriorityQueueMap) Set(k string, v Element) Element {
 // SetInternal sets the value of the given key.
 func (rht *RHTPriorityQueueMap) SetInternal(k string, v Element) {
 	if _, ok := rht.nodeQueueMapByKey[k]; !ok {
-		rht.nodeQueueMapByKey[k] = pq.NewPriorityQueue()
+		rht.nodeQueueMapByKey[k] = pq.NewPriorityQueue[*RHTPQMapNode]()
 	}
 
 	node := newRHTPQMapNode(k, v)
@@ -139,7 +139,7 @@ func (rht *RHTPriorityQueueMap) Delete(k string, deletedAt *time.Ticket) Element
 		return nil
 	}
 
-	node := queue.Peek().(*RHTPQMapNode)
+	node := queue.Peek()
 	if !node.Remove(deletedAt) {
 		return nil
 	}
@@ -169,7 +169,7 @@ func (rht *RHTPriorityQueueMap) Elements() map[string]Element {
 		if queue.Len() == 0 {
 			continue
 		}
-		if node := queue.Peek().(*RHTPQMapNode); !node.isRemoved() {
+		if node := queue.Peek(); !node.isRemoved() {
 			members[node.key] = node.elem
 		}
 	}
@@ -183,7 +183,7 @@ func (rht *RHTPriorityQueueMap) Nodes() []*RHTPQMapNode {
 	var nodes []*RHTPQMapNode
 	for _, queue := range rht.nodeQueueMapByKey {
 		for _, value := range queue.Values() {
-			nodes = append(nodes, value.(*RHTPQMapNode))
+			nodes = append(nodes, value)
 		}
 	}
 
