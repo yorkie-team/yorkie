@@ -92,10 +92,11 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 func UpdateProject(
 	ctx context.Context,
 	be *backend.Backend,
-	project *types.Project,
+	id types.ID,
+	field *types.ProjectField,
 ) error {
 	// TODO(hackerwins): If updates are executed concurrently, only one remains
 	// and the rest may be deleted. Consider to update the project with CAS or update
 	// the fields in the project separately.
-	return be.DB.UpdateProjectInfo(ctx, database.ToProjectInfo(project))
+	return be.DB.UpdateProjectInfo(ctx, id, database.ToProjectField(field))
 }

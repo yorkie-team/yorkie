@@ -137,17 +137,17 @@ func (c *Client) ListProjects(ctx context.Context) ([]*types.Project, error) {
 }
 
 // UpdateProject updates an existing project.
-func (c *Client) UpdateProject(
-	ctx context.Context,
-	project *types.Project,
-) error {
-	pbProject, err := converter.ToProject(project)
-	if err != nil {
-		return err
-	}
+// func (c *Client) UpdateProject(
+// 	ctx context.Context,
+// 	project *types.Project,
+// ) error {
+// 	pbProject, err := converter.ToProject(project)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	_, err = c.client.UpdateProject(ctx, &api.UpdateProjectRequest{
-		Project: pbProject,
-	})
-	return err
-}
+// 	_, err = c.client.UpdateProject(ctx, &api.UpdateProjectRequest{
+// 		Project: pbProject,
+// 	})
+// 	return err
+// }

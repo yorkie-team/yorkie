@@ -53,7 +53,8 @@ message ListProjectsResponse {
 }
 
 message UpdateProjectRequest {
-  Project project = 1;
+  string id = 1;
+  ProjectField field = 2;
 }
 
 message UpdateProjectResponse {}

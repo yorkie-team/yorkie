@@ -160,14 +160,14 @@ func (d *DB) ListProjectInfos(ctx context.Context) ([]*database.ProjectInfo, err
 }
 
 // UpdateProjectInfo updates the given project.
-func (d *DB) UpdateProjectInfo(ctx context.Context, info *database.ProjectInfo) error {
-	txn := d.db.Txn(true)
-	defer txn.Abort()
+func (d *DB) UpdateProjectInfo(ctx context.Context, id types.ID, field *database.ProjectField) error {
+	// txn := d.db.Txn(true)
+	// defer txn.Abort()
 
-	if err := txn.Insert(tblProjects, info); err != nil {
-		return err
-	}
-	txn.Commit()
+	// if err := txn.Insert(tblProjects, info); err != nil {
+	// 	return err
+	// }
+	// txn.Commit()
 
 	return nil
 }

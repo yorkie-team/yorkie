@@ -299,3 +299,7 @@ message DocEvent {
   Client publisher = 2;
   repeated string document_keys = 3;
 }
+
+message ProjectField {
+  string name = 1;
+}

@@ -202,21 +202,21 @@ func (c *Client) FindProjectInfoByName(ctx context.Context, name string) (*datab
 }
 
 // UpdateProjectInfo updates the project info.
-func (c *Client) UpdateProjectInfo(ctx context.Context, info *database.ProjectInfo) error {
-	encodedID, err := encodeID(info.ID)
+func (c *Client) UpdateProjectInfo(ctx context.Context, id types.ID, field *database.ProjectField) error {
+	encodedID, err := encodeID(id)
 	if err != nil {
 		return err
 	}
 
-	_, err = c.collection(colProjects).ReplaceOne(ctx, bson.M{
+	now := gotime.Now()
+	_, err = c.collection(colProjects).UpdateOne(ctx, bson.M{
 		"_id": encodedID,
 	}, bson.M{
-		"name":                 info.Name,
-		"public_key":           info.PublicKey,
-		"secret_key":           info.SecretKey,
-		"auth_webhook_url":     info.AuthWebhookURL,
-		"auth_webhook_methods": info.AuthWebhookMethods,
-		"created_at":           gotime.Now(),
+		"$set": bson.M{
+			"name": field.Name,
+			// "webhook": field.webhook
+			"updated_at": now,
+		},
 	})
 	if err != nil {
 		return err

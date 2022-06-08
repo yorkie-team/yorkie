@@ -91,7 +91,7 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 	// TODO(hackerwins): ClusterServer need to be handled by different authentication mechanism.
 	// Consider extracting the servers to another grpcServer.
 	api.RegisterClusterServer(grpcServer, newClusterServer(be))
-
+	
 	return server
 }
 
@@ -197,7 +197,7 @@ func (s *Server) UpdateProject(
 	ctx context.Context,
 	req *api.UpdateProjectRequest,
 ) (*api.UpdateProjectResponse, error) {
-	project, err := converter.FromProject(req.Project)
+	field, err := converter.FromProjectField(req.Field)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,8 @@ func (s *Server) UpdateProject(
 	if err := projects.UpdateProject(
 		ctx,
 		s.backend,
-		project,
+		types.ID(req.Id),
+		field,
 	); err != nil {
 		return nil, err
 	}

@@ -642,3 +642,10 @@ func fromCounterType(valueType api.ValueType) (json.CounterType, error) {
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
 }
+
+// FromProject converts the given Protobuf formats to model format.
+func FromProjectField(pbProjectField *api.ProjectField) (*types.ProjectField, error) {
+	return &types.ProjectField{
+		Name: pbProjectField.Name,
+	}, nil
+}
