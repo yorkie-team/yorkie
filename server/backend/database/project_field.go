@@ -12,13 +12,22 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
-package types
+package database
+
+import (
+	"github.com/yorkie-team/yorkie/api/types"
+)
 
 // ProjectField is a set of fields that use to update a project.
 type ProjectField struct {
-	// Name is the name of this project.
-	Name string `json:"name"`
+	Name string `bson:"name"`
+}
+
+// ToProjectField converts the given types.ProjectField to ProjectField.
+func ToProjectField(field *types.ProjectField) *ProjectField {
+	return &ProjectField{
+		Name: field.Name,
+	}
 }

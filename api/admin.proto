@@ -57,7 +57,9 @@ message UpdateProjectRequest {
   ProjectField field = 2;
 }
 
-message UpdateProjectResponse {}
+message UpdateProjectResponse {
+  Project project = 1;
+}
 
 message ListDocumentsRequest {
   string project_name = 1;

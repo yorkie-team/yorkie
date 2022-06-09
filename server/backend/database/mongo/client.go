@@ -202,27 +202,46 @@ func (c *Client) FindProjectInfoByName(ctx context.Context, name string) (*datab
 }
 
 // UpdateProjectInfo updates the project info.
-func (c *Client) UpdateProjectInfo(ctx context.Context, id types.ID, field *database.ProjectField) error {
+func (c *Client) UpdateProjectInfo(
+	ctx context.Context,
+	id types.ID,
+	field *database.ProjectField,
+) (*database.ProjectInfo, error) {
 	encodedID, err := encodeID(id)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	// field.Name unique test
+	cursor, err := c.collection(colProjects).Find(ctx, bson.M{
+		"name": field.Name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if cursor != nil {
+		return nil, fmt.Errorf("%s: %w", field.Name, database.ErrProjectAlreadyExists)
 	}
 
 	now := gotime.Now()
-	_, err = c.collection(colProjects).UpdateOne(ctx, bson.M{
+	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
 		"_id": encodedID,
 	}, bson.M{
 		"$set": bson.M{
-			"name": field.Name,
-			// "webhook": field.webhook
+			"name":       field.Name,
 			"updated_at": now,
 		},
-	})
-	if err != nil {
-		return err
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+	ProjectInfo := database.ProjectInfo{}
+	if err := res.Decode(&ProjectInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+		}
+		return nil, err
 	}
 
-	return nil
+	return &ProjectInfo, nil
 }
 
 // ActivateClient activates the client of the given key.

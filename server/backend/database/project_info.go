@@ -55,10 +55,6 @@ type ProjectInfo struct {
 	CreatedAt time.Time `bson:"created_at"`
 }
 
-type ProjectField struct {
-	Name string `bson:"name"`
-}
-
 // NewProjectInfo creates a new ProjectInfo of the given name.
 func NewProjectInfo(name string) *ProjectInfo {
 	return &ProjectInfo{
@@ -80,12 +76,6 @@ func ToProjectInfo(project *types.Project) *ProjectInfo {
 		AuthWebhookURL:     project.AuthWebhookURL,
 		AuthWebhookMethods: project.AuthWebhookMethods,
 		CreatedAt:          project.CreatedAt,
-	}
-}
-
-func ToProjectField(field *types.ProjectField) *ProjectField {
-	return &ProjectField{
-		Name: field.Name,
 	}
 }
 

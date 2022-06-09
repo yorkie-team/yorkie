@@ -1,7 +1,7 @@
 /*
  * Copyright 2021 The Yorkie Authors. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * censed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
@@ -270,5 +270,26 @@ func TestDB(t *testing.T) {
 
 		_, err = localDB.FindDocInfoByID(context.Background(), notExistsID)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+	})
+
+	t.Run("UpdateProjectInfo test", func(t *testing.T) {
+		info, err := db.CreateProjectInfo(ctx, t.Name())
+		assert.NoError(t, err)
+
+		id := info.ID
+		newName := "changed-name"
+		field := &database.ProjectField{Name: newName}
+		res, err := db.UpdateProjectInfo(ctx, id, field)
+		assert.NoError(t, err)
+
+		updateInfo, err := db.FindProjectInfoByID(ctx, string(id))
+		assert.NoError(t, err)
+
+		assert.Equal(t, res.Name, newName)
+		assert.Equal(t, updateInfo.Name, newName)
+
+		// update exist name
+		_, err = db.UpdateProjectInfo(ctx, id, field)
+		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
 	})
 }

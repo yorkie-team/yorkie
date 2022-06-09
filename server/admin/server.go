@@ -24,6 +24,7 @@ import (
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -91,7 +92,7 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 	// TODO(hackerwins): ClusterServer need to be handled by different authentication mechanism.
 	// Consider extracting the servers to another grpcServer.
 	api.RegisterClusterServer(grpcServer, newClusterServer(be))
-	
+
 	return server
 }
 
@@ -201,17 +202,24 @@ func (s *Server) UpdateProject(
 	if err != nil {
 		return nil, err
 	}
-
-	if err := projects.UpdateProject(
+	project, err := projects.UpdateProject(
 		ctx,
 		s.backend,
 		types.ID(req.Id),
 		field,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 
-	return &api.UpdateProjectResponse{}, nil
+	pbProject, err := converter.ToProject(project)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.UpdateProjectResponse{
+		Project: pbProject,
+	}, nil
 }
 
 // GetDocument gets the document.
