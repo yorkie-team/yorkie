@@ -480,7 +480,9 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
 
-	for _, node := range candidates {
+	lenCandidates := len(candidates)
+	for i := lenCandidates - 1; i > -1; i-- {
+		node := candidates[i]
 		actorIDHex := node.createdAt().ActorIDHex()
 
 		var latestCreatedAt *time.Ticket

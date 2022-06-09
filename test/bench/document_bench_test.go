@@ -439,12 +439,16 @@ func BenchmarkDocument(b *testing.B) {
 		benchmarkTextSplitGC(1000, b)
 	})
 
-	b.Run("text delete all 1000", func(b *testing.B) {
-		benchmarkTextDeleteAll(1000, b)
-	})
-
 	b.Run("text delete all 10000", func(b *testing.B) {
 		benchmarkTextDeleteAll(10000, b)
+	})
+
+	b.Run("text delete all 100000", func(b *testing.B) {
+		benchmarkTextDeleteAll(100000, b)
+	})
+
+	b.Run("text delete all 1000000", func(b *testing.B) {
+		benchmarkTextDeleteAll(1000000, b)
 	})
 
 	b.Run("text 100", func(b *testing.B) {
