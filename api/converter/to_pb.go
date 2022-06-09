@@ -500,3 +500,10 @@ func toCounterType(valueType json.CounterType) (api.ValueType, error) {
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
 }
+
+// ToProjectField converts the given model format to Protobuf format.
+func ToProjectField(projectField *types.ProjectField) (*api.ProjectField, error) {
+	return &api.ProjectField{
+		Name: projectField.Name,
+	}, nil
+}
