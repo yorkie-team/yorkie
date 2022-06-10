@@ -62,7 +62,7 @@ func (s *yorkieServer) ActivateClient(
 		return nil, err
 	}
 
-	cli, err := clients.Activate(ctx, s.backend, projects.From(ctx), req.ClientKey)
+	cli, err := clients.Activate(ctx, s.backend.DB, projects.From(ctx), req.ClientKey)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,12 @@ func (s *yorkieServer) DeactivateClient(
 		return nil, err
 	}
 
-	cli, err := clients.Deactivate(ctx, s.backend, projects.From(ctx), actorID)
+	cli, err := clients.Deactivate(
+		ctx,
+		s.backend.DB,
+		projects.From(ctx).ID,
+		types.IDFromActorID(actorID),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +157,7 @@ func (s *yorkieServer) AttachDocument(
 
 	clientInfo, err := clients.FindClientInfo(
 		ctx,
-		s.backend,
+		s.backend.DB,
 		projects.From(ctx),
 		actorID,
 	)
@@ -233,7 +238,7 @@ func (s *yorkieServer) DetachDocument(
 
 	clientInfo, err := clients.FindClientInfo(
 		ctx,
-		s.backend,
+		s.backend.DB,
 		projects.From(ctx),
 		actorID,
 	)
@@ -319,7 +324,7 @@ func (s *yorkieServer) PushPull(
 
 	clientInfo, err := clients.FindClientInfo(
 		ctx,
-		s.backend,
+		s.backend.DB,
 		projects.From(ctx),
 		actorID,
 	)
@@ -386,7 +391,7 @@ func (s *yorkieServer) WatchDocuments(
 
 	if _, err = clients.FindClientInfo(
 		stream.Context(),
-		s.backend,
+		s.backend.DB,
 		projects.From(stream.Context()),
 		cli.ID,
 	); err != nil {
@@ -488,7 +493,12 @@ func (s *yorkieServer) ListChanges(
 		return nil, err
 	}
 
-	clientInfo, err := clients.FindClientInfo(ctx, s.backend, projects.From(ctx), actorID)
+	clientInfo, err := clients.FindClientInfo(
+		ctx,
+		s.backend.DB,
+		projects.From(ctx),
+		actorID,
+	)
 	if err != nil {
 		return nil, err
 	}
