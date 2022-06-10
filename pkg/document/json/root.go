@@ -52,6 +52,10 @@ func NewRoot(root *Object) *Root {
 
 	root.Descendants(func(elem Element, parent Container) bool {
 		r.RegisterElement(elem)
+		if elem.RemovedAt() != nil {
+			r.RegisterRemovedElementPair(parent, elem)
+		}
+		// TODO(hackerwins): Register text elements with garbage
 		return false
 	})
 
