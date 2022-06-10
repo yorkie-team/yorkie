@@ -447,10 +447,6 @@ func BenchmarkDocument(b *testing.B) {
 		benchmarkTextDeleteAll(100000, b)
 	})
 
-	b.Run("text delete all 1000000", func(b *testing.B) {
-		benchmarkTextDeleteAll(1000000, b)
-	})
-
 	b.Run("text 100", func(b *testing.B) {
 		benchmarkText(100, b)
 	})
