@@ -507,12 +507,12 @@ func (s *RGATreeSplit[V]) deleteNodes(
 					s.treeByIndex.Splay(node.next.indexNode)
 					s.treeByIndex.Splay(candidates[0].prev.indexNode)
 					// all deleted nodes are at a subtree from root.right.left
-					splay.CutOffLeft(node.next.indexNode)					
+					splay.CutOffLeft(node.next.indexNode)
 				} else {
 					s.treeByIndex.Splay(candidates[0].prev.indexNode)
 					// all deleted nodes are at a subtree from root.right
 					splay.CutOffRight(candidates[0].prev.indexNode)
-				}			
+				}
 			}
 
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
@@ -524,7 +524,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 			removedNodeMap[node.id.key()] = node
 		}
 	}
-	
+
 	return createdAtMapByActor, removedNodeMap
 }
 
