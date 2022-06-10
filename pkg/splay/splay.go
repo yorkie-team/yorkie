@@ -356,3 +356,19 @@ func isLeftChild(node *Node) bool {
 func isRightChild(node *Node) bool {
 	return node != nil && node.parent != nil && node.parent.right == node
 }
+
+func CutOffLeft(node *Node) {
+	if node.left == nil {
+		return
+	}
+	node.left.parent = nil
+	node.left = nil
+}
+
+func CutOffRight(node *Node) {
+	if node.right == nil {
+		return
+	}
+	node.right.parent = nil
+	node.right = nil
+}

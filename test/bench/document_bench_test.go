@@ -517,6 +517,7 @@ func benchmarkText(cnt int, b *testing.B) {
 
 func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
+		b.StopTimer()
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
@@ -525,9 +526,10 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 				text.Edit(c, c, "a")
 			}
 			return nil
-		}, "Create a text then appends a")
+		}, "Create cnt-length text to test")
 		assert.NoError(b, err)
-
+		
+		b.StartTimer()
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetText("k1")
 			text.Edit(0, cnt, "")

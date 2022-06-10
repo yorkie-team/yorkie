@@ -481,8 +481,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
 
 	lenCandidates := len(candidates)
-	for i := lenCandidates - 1; i > -1; i-- {
-		node := candidates[i]
+	for i, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
 
 		var latestCreatedAt *time.Ticket
@@ -498,7 +497,24 @@ func (s *RGATreeSplit[V]) deleteNodes(
 		}
 
 		if node.Remove(editedAt, latestCreatedAt) {
-			s.treeByIndex.Splay(node.indexNode)
+			// no need for splay for a node in between
+			if i == 0 {
+				s.treeByIndex.Splay(node.indexNode)
+			} else if i == lenCandidates-1 {
+				s.treeByIndex.Splay(node.indexNode)
+				// isolate in a subtree
+				if node.next != nil {
+					s.treeByIndex.Splay(node.next.indexNode)
+					s.treeByIndex.Splay(candidates[0].prev.indexNode)
+					// all deleted nodes are at a subtree from root.right.left
+					splay.CutOffLeft(node.next.indexNode)					
+				} else {
+					s.treeByIndex.Splay(candidates[0].prev.indexNode)
+					// all deleted nodes are at a subtree from root.right
+					splay.CutOffRight(candidates[0].prev.indexNode)
+				}			
+			}
+
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
@@ -508,7 +524,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 			removedNodeMap[node.id.key()] = node
 		}
 	}
-
+	
 	return createdAtMapByActor, removedNodeMap
 }
 
