@@ -60,7 +60,7 @@ func CutOffLeft(node *Node) {
 	node.left = nil
 }
 
-// CutOffLeft cut off right subtree of node.
+// CutOffRight cut off right subtree of node.
 func CutOffRight(node *Node) {
 	if node.right == nil {
 		return
