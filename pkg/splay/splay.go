@@ -51,7 +51,7 @@ func (n *Node) Value() Value {
 	return n.value
 }
 
-// Cutoff left subtree of node.
+// CutOffLeft cut off left subtree of node.
 func CutOffLeft(node *Node) {
 	if node.left == nil {
 		return
@@ -60,7 +60,7 @@ func CutOffLeft(node *Node) {
 	node.left = nil
 }
 
-// Cutoff right subtree of node.
+// CutOffLeft cut off right subtree of node.
 func CutOffRight(node *Node) {
 	if node.right == nil {
 		return
