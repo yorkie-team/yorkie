@@ -504,6 +504,8 @@ func toCounterType(valueType json.CounterType) (api.ValueType, error) {
 // ToProjectField converts the given model format to Protobuf format.
 func ToProjectField(projectField *types.ProjectField) (*api.ProjectField, error) {
 	return &api.ProjectField{
-		Name: projectField.Name,
+		Name:               projectField.Name,
+		AuthWebhookUrl:     projectField.AuthWebhookURL,
+		AuthWebhookMethods: projectField.AuthWebhookMethods,
 	}, nil
 }

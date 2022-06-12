@@ -22,12 +22,21 @@ import (
 
 // ProjectField is a set of fields that use to update a project.
 type ProjectField struct {
+	// Name is the name of this project.
 	Name string `bson:"name"`
+
+	// AuthWebhookURL is the url of the authorization webhook.
+	AuthWebhookURL string `bson:"auth_webhook_url"`
+
+	// AuthWebhookMethods is the methods that run the authorization webhook.
+	AuthWebhookMethods []string `bson:"auth_webhook_methods"`
 }
 
 // ToProjectField converts the given types.ProjectField to ProjectField.
 func ToProjectField(field *types.ProjectField) *ProjectField {
 	return &ProjectField{
-		Name: field.Name,
+		Name:               field.Name,
+		AuthWebhookURL:     field.AuthWebhookURL,
+		AuthWebhookMethods: field.AuthWebhookMethods,
 	}
 }

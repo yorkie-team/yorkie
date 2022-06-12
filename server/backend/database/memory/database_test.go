@@ -278,7 +278,16 @@ func TestDB(t *testing.T) {
 
 		id := info.ID
 		newName := "changed-name"
-		field := &database.ProjectField{Name: newName}
+		newAuthWebhookURL := "newWebhookURL"
+		newAuthWebhookMethods := []string{
+			string(types.AttachDocument),
+			string(types.WatchDocuments),
+		}
+		field := &database.ProjectField{
+			Name:               newName,
+			AuthWebhookURL:     newAuthWebhookURL,
+			AuthWebhookMethods: newAuthWebhookMethods,
+		}
 		res, err := db.UpdateProjectInfo(ctx, id, field)
 		assert.NoError(t, err)
 
@@ -287,9 +296,13 @@ func TestDB(t *testing.T) {
 
 		assert.Equal(t, res.Name, newName)
 		assert.Equal(t, updateInfo.Name, newName)
+		assert.Equal(t, res.AuthWebhookURL, newAuthWebhookURL)
+		assert.Equal(t, updateInfo.AuthWebhookURL, newAuthWebhookURL)
+		assert.Equal(t, res.AuthWebhookMethods, newAuthWebhookMethods)
+		assert.Equal(t, updateInfo.AuthWebhookMethods, newAuthWebhookMethods)
 
 		// update exist name
 		_, err = db.UpdateProjectInfo(ctx, id, field)
-		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
+		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
 	})
 }

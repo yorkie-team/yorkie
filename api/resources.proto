@@ -302,4 +302,6 @@ message DocEvent {
 
 message ProjectField {
   string name = 1;
+  string auth_webhook_url = 2;
+  repeated string auth_webhook_methods = 3;
 }

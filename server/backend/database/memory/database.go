@@ -190,7 +190,7 @@ func (d *DB) UpdateProjectInfo(
 		return nil, err
 	}
 	if exist != nil {
-		return nil, fmt.Errorf("%s: %w", field.Name, database.ErrProjectAlreadyExists)
+		return nil, fmt.Errorf("%s: %w", field.Name, database.ErrProjectNameAlreadyExists)
 	}
 
 	raw, err := txn.First(tblProjects, "id", id.String())
@@ -198,11 +198,19 @@ func (d *DB) UpdateProjectInfo(
 		return nil, err
 	}
 	if raw == nil {
-		return nil, database.ErrProjectNotFound
+		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 	}
 
 	info := raw.(*database.ProjectInfo).DeepCopy()
-	info.Name = field.Name
+	if field.Name != "" {
+		info.Name = field.Name
+	}
+	if field.AuthWebhookURL != "" {
+		info.AuthWebhookURL = field.AuthWebhookURL
+	}
+	if len(field.AuthWebhookMethods) != 0 {
+		info.AuthWebhookMethods = field.AuthWebhookMethods
+	}
 
 	if err := txn.Insert(tblProjects, info); err != nil {
 		return nil, err

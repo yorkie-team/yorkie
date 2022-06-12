@@ -18,6 +18,7 @@ package mongo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	gotime "time"
 
@@ -201,6 +202,28 @@ func (c *Client) FindProjectInfoByName(ctx context.Context, name string) (*datab
 	return &projectInfo, nil
 }
 
+// FindProjectInfoByID returns a project by the given id.
+func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.ProjectInfo, error) {
+	encodedID, err := encodeID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	result := c.collection(colProjects).FindOne(ctx, bson.M{
+		"_id": encodedID,
+	})
+
+	projectInfo := database.ProjectInfo{}
+	if err := result.Decode(&projectInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+		}
+		return nil, err
+	}
+
+	return &projectInfo, nil
+}
+
 // UpdateProjectInfo updates the project info.
 func (c *Client) UpdateProjectInfo(
 	ctx context.Context,
@@ -212,31 +235,38 @@ func (c *Client) UpdateProjectInfo(
 		return nil, err
 	}
 
-	// field.Name unique test
-	cursor, err := c.collection(colProjects).Find(ctx, bson.M{
-		"name": field.Name,
-	})
-	if err != nil {
-		return nil, err
+	now := gotime.Now()
+	updateField := bson.M{"updated_at": now}
+	flag := true
+	if field.Name != "" {
+		updateField["name"] = field.Name
+		flag = false
 	}
-	if cursor != nil {
-		return nil, fmt.Errorf("%s: %w", field.Name, database.ErrProjectAlreadyExists)
+	if field.AuthWebhookURL != "" {
+		updateField["auth_webhook_url"] = field.AuthWebhookURL
+		flag = false
+	}
+	if len(field.AuthWebhookMethods) > 0 {
+		updateField["auth_webhook_methods"] = field.AuthWebhookMethods
+		flag = false
+	}
+	if flag {
+		return nil, errors.New("do not send empty project field")
 	}
 
-	now := gotime.Now()
 	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
 		"_id": encodedID,
 	}, bson.M{
-		"$set": bson.M{
-			"name":       field.Name,
-			"updated_at": now,
-		},
+		"$set": updateField,
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	ProjectInfo := database.ProjectInfo{}
 	if err := res.Decode(&ProjectInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+		}
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, fmt.Errorf("%s: %w", field.Name, database.ErrProjectNameAlreadyExists)
 		}
 		return nil, err
 	}

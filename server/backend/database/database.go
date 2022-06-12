@@ -43,6 +43,9 @@ var (
 
 	// ErrConflictOnUpdate is returned when a conflict occurs during update.
 	ErrConflictOnUpdate = errors.New("conflict on update")
+
+	// ErrProjectNameAlreadyExists is returned when the project name already exists.
+	ErrProjectNameAlreadyExists = errors.New("project name already exists")
 )
 
 // Database represents database which reads or saves Yorkie data.

@@ -21,4 +21,10 @@ package types
 type ProjectField struct {
 	// Name is the name of this project.
 	Name string `json:"name"`
+
+	// AuthWebhookURL is the url of the authorization webhook.
+	AuthWebhookURL string `json:"auth_webhook_url"`
+
+	// AuthWebhookMethods is the methods that run the authorization webhook.
+	AuthWebhookMethods []string `json:"auth_webhook_methods"`
 }
