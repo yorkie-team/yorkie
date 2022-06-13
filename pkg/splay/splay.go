@@ -51,24 +51,6 @@ func (n *Node) Value() Value {
 	return n.value
 }
 
-// CutOffLeft cut off left subtree of node.
-func CutOffLeft(node *Node) {
-	if node.left == nil {
-		return
-	}
-	node.left.parent = nil
-	node.left = nil
-}
-
-// CutOffRight cut off right subtree of node.
-func CutOffRight(node *Node) {
-	if node.right == nil {
-		return
-	}
-	node.right.parent = nil
-	node.right = nil
-}
-
 func (n *Node) leftWeight() int {
 	if n.left == nil {
 		return 0
@@ -296,6 +278,36 @@ func (t *Tree) Delete(node *Node) {
 	if t.root != nil {
 		t.UpdateSubtree(t.root)
 	}
+}
+
+// DeleteRange deletes the given range.
+// to splay the Outer nodes of range, isolate the range from fromInner to toInner as a subtree and delete it.
+func (t *Tree) DeleteRange(fromInner, toInner, fromOuter, toOuter *Node) {
+	t.Splay(fromInner)
+	t.Splay(toInner)
+	t.Splay(toOuter)
+	t.Splay(fromOuter)
+	t.CutLeftSubtree(toOuter)
+}
+
+// CutLeftSubtree cut off left subtree of node.
+func (t *Tree) CutLeftSubtree(node *Node) {
+	if node.left == nil {
+		return
+	}
+	node.left.parent = nil
+	node.left = nil
+	t.UpdateSubtree(node)
+}
+
+// CutRightSubtree cut off right subtree of node.
+func (t *Tree) CutRightSubtree(node *Node) {
+	if node.right == nil {
+		return
+	}
+	node.right.parent = nil
+	node.right = nil
+	t.UpdateSubtree(node)
 }
 
 func (t *Tree) rotateLeft(pivot *Node) {
