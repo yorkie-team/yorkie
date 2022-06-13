@@ -23,6 +23,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
+	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -184,26 +185,13 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 	}
 
 	deactivatedCount := 0
-	// TODO(hackerwins): consider to delete syncedSeqs of candidates at once to
-	// reduce the number of database accesses.
 	for _, clientInfo := range candidates {
-		for id, clientDocInfo := range clientInfo.Documents {
-			if err := clientInfo.DetachDocument(id); err != nil {
-				return err
-			}
-
-			if err := h.database.UpdateSyncedSeq(
-				ctx,
-				clientInfo,
-				id,
-				clientDocInfo.ServerSeq,
-			); err != nil {
-				return err
-			}
-		}
-
-		_, err := h.database.DeactivateClient(ctx, clientInfo.ProjectID, clientInfo.ID)
-		if err != nil {
+		if _, err := clients.Deactivate(
+			ctx,
+			h.database,
+			clientInfo.ProjectID,
+			clientInfo.ID,
+		); err != nil {
 			return err
 		}
 
