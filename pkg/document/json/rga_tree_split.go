@@ -514,10 +514,6 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(candidates []*RGATreeSplitNode[V]) {
 	if lenCandidates == 0 {
 		return
 	}
-	if lenCandidates == 1 {
-		s.treeByIndex.Delete(candidates[0].indexNode)
-		return
-	}
 
 	from := candidates[0]
 	to := candidates[lenCandidates-1]
