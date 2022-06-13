@@ -518,11 +518,10 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(candidates []*RGATreeSplitNode[V]) {
 	from := candidates[0]
 	to := candidates[lenCandidates-1]
 	if to.next == nil {
-		s.treeByIndex.Splay(from.prev.indexNode)
-		s.treeByIndex.CutRightSubtree(from.prev.indexNode)
+		s.treeByIndex.SeparateRange(from.indexNode, to.indexNode, from.prev.indexNode, nil)
 		return
 	}
-	s.treeByIndex.DeleteRange(from.indexNode, to.indexNode, from.prev.indexNode, to.next.indexNode)
+	s.treeByIndex.SeparateRange(from.indexNode, to.indexNode, from.prev.indexNode, to.next.indexNode)
 }
 
 func (s *RGATreeSplit[V]) marshal() string {

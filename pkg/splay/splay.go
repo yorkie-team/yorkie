@@ -280,11 +280,27 @@ func (t *Tree) Delete(node *Node) {
 	}
 }
 
-// DeleteRange deletes the given range.
-// to splay the Outer nodes of range, isolate the range from fromInner to toInner as a subtree and delete it.
-func (t *Tree) DeleteRange(fromInner, toInner, fromOuter, toOuter *Node) {
-	t.Splay(fromInner)
+// SeparateRange separates the given range.
+// to splay the Outer nodes of range, isolate the range from fromInner to toInner as a subtree and separate it.
+func (t *Tree) SeparateRange(fromInner, toInner, fromOuter, toOuter *Node) {
 	t.Splay(toInner)
+	t.Splay(fromInner)
+
+	if fromOuter == nil && toOuter == nil {
+		t.root = nil
+		return
+	}
+	if fromOuter == nil {
+		t.Splay(toOuter)
+		t.CutLeftSubtree(toOuter)
+		return
+	}
+	if toOuter == nil {
+		t.Splay(fromOuter)
+		t.CutRightSubtree(fromOuter)
+		return
+	}
+
 	t.Splay(toOuter)
 	t.Splay(fromOuter)
 	t.CutLeftSubtree(toOuter)

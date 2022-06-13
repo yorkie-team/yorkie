@@ -100,4 +100,37 @@ func TestSplayTree(t *testing.T) {
 		assert.Equal(t, tree.IndexOf(nodeL), 1)
 		assert.Equal(t, tree.IndexOf(nodeO), 3)
 	})
+
+	t.Run("range separation test", func(t *testing.T) {
+		tree := splay.NewTree(nil)
+
+		nodeA := tree.Insert(newSplayNode("A"))
+		assert.Equal(t, "[1,1]A", tree.AnnotatedString())
+		nodeB := tree.Insert(newSplayNode("B"))
+		assert.Equal(t, "[1,1]A[2,1]B", tree.AnnotatedString())
+		nodeC := tree.Insert(newSplayNode("C"))
+		assert.Equal(t, "[1,1]A[2,1]B[3,1]C", tree.AnnotatedString())
+		nodeD := tree.Insert(newSplayNode("D"))
+		assert.Equal(t, "[1,1]A[2,1]B[3,1]C[4,1]D", tree.AnnotatedString())
+		nodeE := tree.Insert(newSplayNode("E"))
+		assert.Equal(t, "[1,1]A[2,1]B[3,1]C[4,1]D[5,1]E", tree.AnnotatedString())
+		nodeF := tree.Insert(newSplayNode("F"))
+		assert.Equal(t, "[1,1]A[2,1]B[3,1]C[4,1]D[5,1]E[6,1]F", tree.AnnotatedString())
+		nodeG := tree.Insert(newSplayNode("G"))
+		assert.Equal(t, "[1,1]A[2,1]B[3,1]C[4,1]D[5,1]E[6,1]F[7,1]G", tree.AnnotatedString())
+		
+		tree.SeparateRange(nodeE, nodeF, nodeD, nodeG)
+		assert.Equal(t, "[1,1]A[2,1]B[3,1]C[7,1]D[1,1]G", tree.AnnotatedString())
+
+		tree.SeparateRange(nodeD, nodeG, nodeC, nil)
+		assert.Equal(t, "[1,1]A[2,1]B[3,1]C", tree.AnnotatedString())
+
+		tree.SeparateRange(nodeA, nodeB, nil, nodeC)
+		assert.Equal(t, "[1,1]C", tree.AnnotatedString())
+
+		tree.SeparateRange(nodeC, nodeC, nil, nil)
+		root, _ := tree.Find(0)
+		assert.Nil(t, root)
+	})
+
 }
