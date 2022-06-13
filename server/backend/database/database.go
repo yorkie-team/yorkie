@@ -59,6 +59,9 @@ type Database interface {
 	// FindProjectInfoByName returns a project by the given name.
 	FindProjectInfoByName(ctx context.Context, name string) (*ProjectInfo, error)
 
+	// FindProjectInfoByID returns a project by the given id.
+	FindProjectInfoByID(ctx context.Context, id types.ID) (*ProjectInfo, error)
+
 	// EnsureDefaultProjectInfo ensures that the default project exists.
 	EnsureDefaultProjectInfo(ctx context.Context) (*ProjectInfo, error)
 
@@ -69,7 +72,7 @@ type Database interface {
 	ListProjectInfos(ctx context.Context) ([]*ProjectInfo, error)
 
 	// UpdateProjectInfo updates the project.
-	UpdateProjectInfo(ctx context.Context, id types.ID, field *ProjectField) (*ProjectInfo, error)
+	UpdateProjectInfo(ctx context.Context, id types.ID, field *types.ProjectField) (*ProjectInfo, error)
 
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)

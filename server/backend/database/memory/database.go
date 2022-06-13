@@ -88,11 +88,10 @@ func (d *DB) FindProjectInfoByName(ctx context.Context, name string) (*database.
 }
 
 // FindProjectInfoByID returns a project by the given id.
-func (d *DB) FindProjectInfoByID(ctx context.Context, id string) (*database.ProjectInfo, error) {
+func (d *DB) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
-
-	raw, err := txn.First(tblProjects, "id", id)
+	raw, err := txn.First(tblProjects, "id", id.String())
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +178,7 @@ func (d *DB) ListProjectInfos(ctx context.Context) ([]*database.ProjectInfo, err
 func (d *DB) UpdateProjectInfo(
 	ctx context.Context,
 	id types.ID,
-	field *database.ProjectField,
+	field *types.ProjectField,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()

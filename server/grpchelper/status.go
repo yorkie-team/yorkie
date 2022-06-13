@@ -47,7 +47,8 @@ func ToStatusError(err error) error {
 		errors.Is(err, time.ErrInvalidActorID) ||
 		errors.Is(err, types.ErrInvalidID) ||
 		errors.Is(err, clients.ErrInvalidClientID) ||
-		errors.Is(err, clients.ErrInvalidClientKey) {
+		errors.Is(err, clients.ErrInvalidClientKey) ||
+		errors.Is(err, types.ErrProjectFieldEmpty) {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -55,7 +56,8 @@ func ToStatusError(err error) error {
 		errors.Is(err, converter.ErrUnsupportedElement) ||
 		errors.Is(err, converter.ErrUnsupportedEventType) ||
 		errors.Is(err, converter.ErrUnsupportedValueType) ||
-		errors.Is(err, converter.ErrUnsupportedCounterType) {
+		errors.Is(err, converter.ErrUnsupportedCounterType) ||
+		errors.Is(err, types.ErrNotSupportedMethod) {
 		return status.Error(codes.Unimplemented, err.Error())
 	}
 
@@ -65,7 +67,8 @@ func ToStatusError(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	}
 
-	if errors.Is(err, database.ErrProjectAlreadyExists) {
+	if errors.Is(err, database.ErrProjectAlreadyExists) ||
+		errors.Is(err, database.ErrProjectNameAlreadyExists) {
 		return status.Error(codes.AlreadyExists, err.Error())
 	}
 

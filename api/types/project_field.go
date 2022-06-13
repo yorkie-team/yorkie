@@ -17,6 +17,19 @@
 
 package types
 
+import (
+	"errors"
+	"fmt"
+)
+
+var (
+	// ErrProjectFieldEmpty is returned when the ProjectField is empty.
+	ErrProjectFieldEmpty = errors.New("project field is empty")
+
+	// ErrNotSupportedMethod is returned when the method is not supported.
+	ErrNotSupportedMethod = errors.New("not supported method for authorization webhook")
+)
+
 // ProjectField is a set of fields that use to update a project.
 type ProjectField struct {
 	// Name is the name of this project.
@@ -27,4 +40,20 @@ type ProjectField struct {
 
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods []string `json:"auth_webhook_methods"`
+}
+
+// Validate validates the ProjectField.
+func (i *ProjectField) Validate() error {
+	// field 가 비었는지 안비었는지 확인
+	if i.Name == "" && i.AuthWebhookURL == "" && len(i.AuthWebhookMethods) == 0 {
+		return fmt.Errorf("%s: %w", i, ErrProjectFieldEmpty)
+	}
+	// validation AuthWebhookMethods
+	for _, method := range i.AuthWebhookMethods {
+		if !IsAuthMethod(method) {
+			return fmt.Errorf("%s: %w", method, ErrNotSupportedMethod)
+		}
+	}
+
+	return nil
 }

@@ -201,6 +201,12 @@ func (s *Server) UpdateProject(
 	if err != nil {
 		return nil, err
 	}
+	// Validation field.
+	err = field.Validate()
+	if err != nil {
+		return nil, err
+	}
+
 	project, err := projects.UpdateProject(
 		ctx,
 		s.backend,

@@ -283,7 +283,7 @@ func TestDB(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
-		field := &database.ProjectField{
+		field := &types.ProjectField{
 			Name:               newName,
 			AuthWebhookURL:     newAuthWebhookURL,
 			AuthWebhookMethods: newAuthWebhookMethods,
@@ -291,7 +291,7 @@ func TestDB(t *testing.T) {
 		res, err := db.UpdateProjectInfo(ctx, id, field)
 		assert.NoError(t, err)
 
-		updateInfo, err := db.FindProjectInfoByID(ctx, string(id))
+		updateInfo, err := db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
 
 		assert.Equal(t, res.Name, newName)

@@ -18,7 +18,6 @@ package mongo
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	gotime "time"
 
@@ -228,31 +227,35 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 func (c *Client) UpdateProjectInfo(
 	ctx context.Context,
 	id types.ID,
-	field *database.ProjectField,
+	field *types.ProjectField,
 ) (*database.ProjectInfo, error) {
 	encodedID, err := encodeID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	now := gotime.Now()
-	updateField := bson.M{"updated_at": now}
-	flag := true
+	updateField := bson.M{}
+	// data, err := bson.Marshal(field)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// err = bson.Unmarshal(data, &updateField)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
 	if field.Name != "" {
 		updateField["name"] = field.Name
-		flag = false
 	}
 	if field.AuthWebhookURL != "" {
 		updateField["auth_webhook_url"] = field.AuthWebhookURL
-		flag = false
 	}
 	if len(field.AuthWebhookMethods) > 0 {
 		updateField["auth_webhook_methods"] = field.AuthWebhookMethods
-		flag = false
 	}
-	if flag {
-		return nil, errors.New("do not send empty project field")
-	}
+
+	now := gotime.Now()
+	updateField["updated_at"] = now
 
 	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
 		"_id": encodedID,

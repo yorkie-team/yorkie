@@ -55,26 +55,48 @@ func TestClient(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
-		field := &database.ProjectField{
-			Name:               newName,
-			AuthWebhookURL:     newAuthWebhookURL,
-			AuthWebhookMethods: newAuthWebhookMethods,
+
+		//TODO
+		//1. validate 함수가 잘 작동하는지 테스트 - 일부러 에러 내고 의도한 에러 나오는지 확인 ->  api/types/project_field_test.go 에다가 만든다!
+		//2. 하나의 필드만 바꿨을 때 하나만 바는지 - 다른 필드는 변경되지 않았는지
+		//3. 한번에 여러 필드 변경도 잘 되는지 확인
+
+		// name
+		field := &types.ProjectField{
+			Name: newName,
 		}
+		err = field.Validate()
+		assert.NoError(t, err)
 		res, err := cli.UpdateProjectInfo(ctx, id, field)
 		assert.NoError(t, err)
 
 		updateInfo, err := cli.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
 
+		// TODO: 다른 필드는 변경되지 않음 확인
 		assert.Equal(t, res.Name, newName)
 		assert.Equal(t, updateInfo.Name, newName)
-		assert.Equal(t, res.AuthWebhookURL, newAuthWebhookURL)
-		assert.Equal(t, updateInfo.AuthWebhookURL, newAuthWebhookURL)
+
+		// total
+		field = &types.ProjectField{
+			Name:               newName,
+			AuthWebhookURL:     newAuthWebhookURL,
+			AuthWebhookMethods: newAuthWebhookMethods,
+		}
+
+		err = field.Validate()
+		assert.NoError(t, err)
+		res, err = cli.UpdateProjectInfo(ctx, id, field)
+		assert.NoError(t, err)
+
+		updateInfo, err = cli.FindProjectInfoByID(ctx, id)
+		assert.NoError(t, err)
+
 		assert.Equal(t, res.AuthWebhookMethods, newAuthWebhookMethods)
 		assert.Equal(t, updateInfo.AuthWebhookMethods, newAuthWebhookMethods)
 
 		// update exist name
-		dupField := &database.ProjectField{Name: existName}
+		dupField := &types.ProjectField{Name: existName}
 		_, err = cli.UpdateProjectInfo(ctx, id, dupField)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
 	})

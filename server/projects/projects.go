@@ -21,7 +21,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 // CreateProject creates a project.
@@ -98,7 +97,7 @@ func UpdateProject(
 	// TODO(hackerwins): If updates are executed concurrently, only one remains
 	// and the rest may be deleted. Consider to update the project with CAS or update
 	// the fields in the project separately.
-	info, err := be.DB.UpdateProjectInfo(ctx, id, database.ToProjectField(field))
+	info, err := be.DB.UpdateProjectInfo(ctx, id, field)
 	if err != nil {
 		return nil, err
 	}

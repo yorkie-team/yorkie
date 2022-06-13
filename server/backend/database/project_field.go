@@ -40,3 +40,22 @@ func ToProjectField(field *types.ProjectField) *ProjectField {
 		AuthWebhookMethods: field.AuthWebhookMethods,
 	}
 }
+
+// var ErrProjectFieldEmpty = errors.New("project field is empty")
+// var ErrNotSupportedMethod = errors.New("not supported method for authorization webhook")
+
+// // Validate validates the ProjectField.
+// func (i *ProjectField) Validate() error {
+// 	// field 가 비었는지 안비었는지 확인
+// 	if i.Name == "" && i.AuthWebhookURL == "" && len(i.AuthWebhookMethods) == 0 {
+// 		return fmt.Errorf("%s: %w", i, ErrProjectFieldEmpty)
+// 	}
+// 	// validation AuthWebhookMethods
+// 	for _, method := range i.AuthWebhookMethods {
+// 		if !types.IsAuthMethod(method) {
+// 			return fmt.Errorf("%s: %w", method, ErrNotSupportedMethod)
+// 		}
+// 	}
+
+// 	return nil
+// }
