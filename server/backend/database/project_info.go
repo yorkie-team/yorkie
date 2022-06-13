@@ -53,6 +53,9 @@ type ProjectInfo struct {
 
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `bson:"created_at"`
+
+	// UpdatedAt is the time when the project was updated.
+	UpdatedAt time.Time `bson:"updated_at"`
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
@@ -76,6 +79,7 @@ func ToProjectInfo(project *types.Project) *ProjectInfo {
 		AuthWebhookURL:     project.AuthWebhookURL,
 		AuthWebhookMethods: project.AuthWebhookMethods,
 		CreatedAt:          project.CreatedAt,
+		UpdatedAt:          project.UpdatedAt,
 	}
 }
 
@@ -93,6 +97,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		AuthWebhookURL:     i.AuthWebhookURL,
 		AuthWebhookMethods: i.AuthWebhookMethods,
 		CreatedAt:          i.CreatedAt,
+		UpdatedAt:          i.UpdatedAt,
 	}
 }
 
@@ -116,5 +121,6 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		AuthWebhookURL:     i.AuthWebhookURL,
 		AuthWebhookMethods: i.AuthWebhookMethods,
 		CreatedAt:          i.CreatedAt,
+		UpdatedAt:          i.UpdatedAt,
 	}
 }

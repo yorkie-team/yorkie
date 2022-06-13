@@ -50,6 +50,10 @@ func FromProject(pbProject *api.Project) (*types.Project, error) {
 	if err != nil {
 		return nil, err
 	}
+	UpdatedAt, err := protoTypes.TimestampFromProto(pbProject.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
 
 	return &types.Project{
 		ID:                 types.ID(pbProject.Id),
@@ -59,6 +63,7 @@ func FromProject(pbProject *api.Project) (*types.Project, error) {
 		AuthWebhookURL:     pbProject.AuthWebhookUrl,
 		AuthWebhookMethods: pbProject.AuthWebhookMethods,
 		CreatedAt:          createdAt,
+		UpdatedAt:          UpdatedAt,
 	}, nil
 }
 

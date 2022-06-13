@@ -42,6 +42,9 @@ type Project struct {
 
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `json:"created_at"`
+
+	// UpdatedAt is the time when the project was updated.
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // RequireAuth returns whether the given method requires authorization.
