@@ -281,7 +281,7 @@ func (t *Tree) Delete(node *Node) {
 }
 
 // SeparateRange separates the given range.
-// to splay the Outer nodes of range, isolate the range from fromInner to toInner as a subtree and separate it.
+// by splaying the Outer nodes of range, separate the range from fromInner to toInner as a subtree and cut it.
 func (t *Tree) SeparateRange(fromInner, toInner, fromOuter, toOuter *Node) {
 	t.Splay(toInner)
 	t.Splay(fromInner)
