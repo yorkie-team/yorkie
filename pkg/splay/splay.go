@@ -119,8 +119,8 @@ func (t *Tree) InsertAfter(prev *Node, node *Node) *Node {
 	prev.parent = node
 	prev.right = nil
 
-	t.UpdateSubtree(prev)
-	t.UpdateSubtree(node)
+	t.UpdateWeight(prev)
+	t.UpdateWeight(node)
 
 	return node
 }
@@ -235,8 +235,8 @@ func (t *Tree) AnnotatedString() string {
 	return builder.String()
 }
 
-// UpdateSubtree recalculates the weight of this node with the value and children.
-func (t *Tree) UpdateSubtree(node *Node) {
+// UpdateWeight recalculates the weight of this node with the value and children.
+func (t *Tree) UpdateWeight(node *Node) {
 	node.initWeight()
 
 	if node.left != nil {
@@ -245,6 +245,15 @@ func (t *Tree) UpdateSubtree(node *Node) {
 
 	if node.right != nil {
 		node.increaseWeight(node.rightWeight())
+	}
+}
+
+// updateTreeWeight recalculates the weight of this tree from the given node to
+// the root.
+func (t *Tree) updateTreeWeight(node *Node) {
+	for node != nil {
+		t.UpdateWeight(node)
+		node = node.parent
 	}
 }
 
@@ -276,8 +285,59 @@ func (t *Tree) Delete(node *Node) {
 
 	node.unlink()
 	if t.root != nil {
-		t.UpdateSubtree(t.root)
+		t.UpdateWeight(t.root)
 	}
+}
+
+// CutOffRange cuts the given range from this Tree.
+// This function separates the range from `fromInner` to `toInner` as a subtree
+// by splaying outer nodes then cuts the subtree. 'xxxOuter' could be nil and
+// means to delete the entire subtree in that direction.
+//
+// CAUTION: This function does not filter out invalid argument inputs,
+// such as non-consecutive indices in fromOuter and fromInner.
+func (t *Tree) CutOffRange(fromOuter, fromInner, toInner, toOuter *Node) {
+	t.Splay(toInner)
+	t.Splay(fromInner)
+
+	if fromOuter == nil && toOuter == nil {
+		t.root = nil
+		return
+	}
+	if fromOuter == nil {
+		t.Splay(toOuter)
+		t.cutOffLeft(toOuter)
+		return
+	}
+	if toOuter == nil {
+		t.Splay(fromOuter)
+		t.cutOffRight(fromOuter)
+		return
+	}
+
+	t.Splay(toOuter)
+	t.Splay(fromOuter)
+	t.cutOffLeft(toOuter)
+}
+
+// cutOffLeft cut off left subtree of node.
+func (t *Tree) cutOffLeft(node *Node) {
+	if node.left == nil {
+		return
+	}
+	node.left.parent = nil
+	node.left = nil
+	t.updateTreeWeight(node)
+}
+
+// cutOffRight cut off right subtree of node.
+func (t *Tree) cutOffRight(node *Node) {
+	if node.right == nil {
+		return
+	}
+	node.right.parent = nil
+	node.right = nil
+	t.updateTreeWeight(node)
 }
 
 func (t *Tree) rotateLeft(pivot *Node) {
@@ -302,8 +362,8 @@ func (t *Tree) rotateLeft(pivot *Node) {
 	pivot.left = root
 	pivot.left.parent = pivot
 
-	t.UpdateSubtree(root)
-	t.UpdateSubtree(pivot)
+	t.UpdateWeight(root)
+	t.UpdateWeight(pivot)
 }
 
 func (t *Tree) rotateRight(pivot *Node) {
@@ -327,8 +387,8 @@ func (t *Tree) rotateRight(pivot *Node) {
 	pivot.right = root
 	pivot.right.parent = pivot
 
-	t.UpdateSubtree(root)
-	t.UpdateSubtree(pivot)
+	t.UpdateWeight(root)
+	t.UpdateWeight(pivot)
 }
 
 func (t *Tree) maximum() *Node {

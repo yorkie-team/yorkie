@@ -372,7 +372,7 @@ func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) *RGAT
 	}
 
 	splitNode := node.split(offset)
-	s.treeByIndex.UpdateSubtree(splitNode.indexNode)
+	s.treeByIndex.UpdateWeight(splitNode.indexNode)
 	s.InsertAfter(node, splitNode)
 
 	insNext := node.insNext
@@ -479,16 +479,19 @@ func (s *RGATreeSplit[V]) deleteNodes(
 ) (map[string]*time.Ticket, map[string]*RGATreeSplitNode[V]) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
+	if len(candidates) == 0 {
+		return createdAtMapByActor, removedNodeMap
+	}
+
+	var deletionBoundaries []*RGATreeSplitNode[V]
+	deletionBoundaries = append(deletionBoundaries, candidates[0].prev)
 
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
 
-		var latestCreatedAt *time.Ticket
-		if latestCreatedAtMapByActor == nil {
-			latestCreatedAt = time.MaxTicket
-		} else {
-			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
-			if ok {
+		latestCreatedAt := time.MaxTicket
+		if latestCreatedAtMapByActor != nil {
+			if createdAt, ok := latestCreatedAtMapByActor[actorIDHex]; ok {
 				latestCreatedAt = createdAt
 			} else {
 				latestCreatedAt = time.InitialTicket
@@ -496,18 +499,44 @@ func (s *RGATreeSplit[V]) deleteNodes(
 		}
 
 		if node.Remove(editedAt, latestCreatedAt) {
-			s.treeByIndex.Splay(node.indexNode)
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt
 			}
-
 			removedNodeMap[node.id.key()] = node
+		} else {
+			deletionBoundaries = append(deletionBoundaries, node)
 		}
 	}
 
+	deletionBoundaries = append(deletionBoundaries, candidates[len(candidates)-1].next)
+	s.deleteIndexNodes(deletionBoundaries)
+
 	return createdAtMapByActor, removedNodeMap
+}
+
+// deleteIndexNodes clears the index nodes of the given deletion boundaries.
+// The boundaries mean the nodes that will not be deleted in the range.
+func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
+	for i := 0; i < len(boundaries)-1; i++ {
+		leftBoundary := boundaries[i]
+		rightBoundary := boundaries[i+1]
+
+		var toInner *splay.Node
+		var toOuter *splay.Node
+		if rightBoundary != nil {
+			toInner = rightBoundary.prev.indexNode
+			toOuter = rightBoundary.indexNode
+		}
+
+		s.treeByIndex.CutOffRange(
+			leftBoundary.indexNode,
+			leftBoundary.next.indexNode,
+			toInner,
+			toOuter,
+		)
+	}
 }
 
 func (s *RGATreeSplit[V]) marshal() string {
