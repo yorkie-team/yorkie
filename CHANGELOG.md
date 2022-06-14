@@ -7,6 +7,15 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.7] - 2022-06-14
+
+### Fixed
+
+- Expose the missing exit code: #e87d9d3
+- Skip storing the initial ticket to prevent GC interruption: #339
+- Cache removed elements when creating a document from a snapshot: #340
+- Detach the attached documents when deactivating the client: #342
+
 ## [0.2.6] - 2022-05-25
 
 ### Changed
