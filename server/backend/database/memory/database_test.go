@@ -275,6 +275,9 @@ func TestDB(t *testing.T) {
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {
 		info, err := db.CreateProjectInfo(ctx, t.Name())
 		assert.NoError(t, err)
+		existName := "already"
+		_, err = db.CreateProjectInfo(ctx, existName)
+		assert.NoError(t, err)
 
 		id := info.ID
 		newName := "changed-name"
@@ -283,25 +286,48 @@ func TestDB(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
+
+		// update total project_field
 		field := &types.ProjectField{
 			Name:               newName,
 			AuthWebhookURL:     newAuthWebhookURL,
 			AuthWebhookMethods: newAuthWebhookMethods,
 		}
+
+		err = field.Validate()
+		assert.NoError(t, err)
 		res, err := db.UpdateProjectInfo(ctx, id, field)
 		assert.NoError(t, err)
 
 		updateInfo, err := db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
 
-		assert.Equal(t, res.Name, newName)
-		assert.Equal(t, updateInfo.Name, newName)
-		assert.Equal(t, res.AuthWebhookURL, newAuthWebhookURL)
-		assert.Equal(t, updateInfo.AuthWebhookURL, newAuthWebhookURL)
-		assert.Equal(t, res.AuthWebhookMethods, newAuthWebhookMethods)
-		assert.Equal(t, updateInfo.AuthWebhookMethods, newAuthWebhookMethods)
+		assert.Equal(t, res, updateInfo)
+		assert.Equal(t, newName, updateInfo.Name)
+		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 
-		// update exist name
+		// update one field
+		newName2 := newName + "2"
+		field = &types.ProjectField{
+			Name: newName2,
+		}
+		err = field.Validate()
+		assert.NoError(t, err)
+		res, err = db.UpdateProjectInfo(ctx, id, field)
+		assert.NoError(t, err)
+
+		updateInfo, err = db.FindProjectInfoByID(ctx, id)
+		assert.NoError(t, err)
+
+		// check only name is updated
+		assert.Equal(t, res, updateInfo)
+		assert.NotEqual(t, newName, updateInfo.Name)
+		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+
+		// check duplicate name error
+		field = &types.ProjectField{Name: existName}
 		_, err = db.UpdateProjectInfo(ctx, id, field)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
 	})

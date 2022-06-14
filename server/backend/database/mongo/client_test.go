@@ -56,15 +56,13 @@ func TestClient(t *testing.T) {
 			string(types.WatchDocuments),
 		}
 
-		//TODO
-		//1. validate 함수가 잘 작동하는지 테스트 - 일부러 에러 내고 의도한 에러 나오는지 확인 ->  api/types/project_field_test.go 에다가 만든다!
-		//2. 하나의 필드만 바꿨을 때 하나만 바는지 - 다른 필드는 변경되지 않았는지
-		//3. 한번에 여러 필드 변경도 잘 되는지 확인
-
-		// name
+		// update total project_field
 		field := &types.ProjectField{
-			Name: newName,
+			Name:               newName,
+			AuthWebhookURL:     newAuthWebhookURL,
+			AuthWebhookMethods: newAuthWebhookMethods,
 		}
+
 		err = field.Validate()
 		assert.NoError(t, err)
 		res, err := cli.UpdateProjectInfo(ctx, id, field)
@@ -73,17 +71,16 @@ func TestClient(t *testing.T) {
 		updateInfo, err := cli.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
 
-		// TODO: 다른 필드는 변경되지 않음 확인
-		assert.Equal(t, res.Name, newName)
-		assert.Equal(t, updateInfo.Name, newName)
+		assert.Equal(t, res, updateInfo)
+		assert.Equal(t, newName, updateInfo.Name)
+		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 
-		// total
+		// update one field
+		newName2 := newName + "2"
 		field = &types.ProjectField{
-			Name:               newName,
-			AuthWebhookURL:     newAuthWebhookURL,
-			AuthWebhookMethods: newAuthWebhookMethods,
+			Name: newName2,
 		}
-
 		err = field.Validate()
 		assert.NoError(t, err)
 		res, err = cli.UpdateProjectInfo(ctx, id, field)
@@ -92,12 +89,15 @@ func TestClient(t *testing.T) {
 		updateInfo, err = cli.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
 
-		assert.Equal(t, res.AuthWebhookMethods, newAuthWebhookMethods)
-		assert.Equal(t, updateInfo.AuthWebhookMethods, newAuthWebhookMethods)
+		// check only name is updated
+		assert.Equal(t, res, updateInfo)
+		assert.NotEqual(t, newName, updateInfo.Name)
+		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 
-		// update exist name
-		dupField := &types.ProjectField{Name: existName}
-		_, err = cli.UpdateProjectInfo(ctx, id, dupField)
+		// check duplicate name error
+		field = &types.ProjectField{Name: existName}
+		_, err = cli.UpdateProjectInfo(ctx, id, field)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
 	})
 }

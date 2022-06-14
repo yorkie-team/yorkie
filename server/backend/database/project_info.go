@@ -114,13 +114,15 @@ func (i *ProjectInfo) Validate() error {
 // ToProject converts the ProjectInfo to the Project.
 func (i *ProjectInfo) ToProject() *types.Project {
 	return &types.Project{
-		ID:                 i.ID,
-		Name:               i.Name,
-		PublicKey:          i.PublicKey,
-		SecretKey:          i.SecretKey,
-		AuthWebhookURL:     i.AuthWebhookURL,
-		AuthWebhookMethods: i.AuthWebhookMethods,
-		CreatedAt:          i.CreatedAt,
-		UpdatedAt:          i.UpdatedAt,
+		ID: i.ID,
+		ProjectField: types.ProjectField{
+			Name:               i.Name,
+			AuthWebhookURL:     i.AuthWebhookURL,
+			AuthWebhookMethods: i.AuthWebhookMethods,
+		},
+		PublicKey: i.PublicKey,
+		SecretKey: i.SecretKey,
+		CreatedAt: i.CreatedAt,
+		UpdatedAt: i.UpdatedAt,
 	}
 }

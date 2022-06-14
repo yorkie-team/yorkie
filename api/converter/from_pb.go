@@ -54,16 +54,16 @@ func FromProject(pbProject *api.Project) (*types.Project, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	return &types.Project{
-		ID:                 types.ID(pbProject.Id),
-		Name:               pbProject.Name,
-		PublicKey:          pbProject.PublicKey,
-		SecretKey:          pbProject.SecretKey,
+	ProjectField := types.ProjectField{Name: pbProject.Name,
 		AuthWebhookURL:     pbProject.AuthWebhookUrl,
-		AuthWebhookMethods: pbProject.AuthWebhookMethods,
-		CreatedAt:          createdAt,
-		UpdatedAt:          UpdatedAt,
+		AuthWebhookMethods: pbProject.AuthWebhookMethods}
+	return &types.Project{
+		ID:           types.ID(pbProject.Id),
+		ProjectField: ProjectField,
+		PublicKey:    pbProject.PublicKey,
+		SecretKey:    pbProject.SecretKey,
+		CreatedAt:    createdAt,
+		UpdatedAt:    UpdatedAt,
 	}, nil
 }
 

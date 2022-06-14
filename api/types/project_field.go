@@ -44,11 +44,11 @@ type ProjectField struct {
 
 // Validate validates the ProjectField.
 func (i *ProjectField) Validate() error {
-	// field 가 비었는지 안비었는지 확인
+	// Check empty ProjectField
 	if i.Name == "" && i.AuthWebhookURL == "" && len(i.AuthWebhookMethods) == 0 {
 		return fmt.Errorf("%s: %w", i, ErrProjectFieldEmpty)
 	}
-	// validation AuthWebhookMethods
+	// Check wrong AuthWebhookMethods
 	for _, method := range i.AuthWebhookMethods {
 		if !IsAuthMethod(method) {
 			return fmt.Errorf("%s: %w", method, ErrNotSupportedMethod)

@@ -25,20 +25,14 @@ type Project struct {
 	// ID is the unique ID of the project.
 	ID ID `json:"id"`
 
-	// Name is the name of this project.
-	Name string `json:"name"`
+	// ProjectField is a set of fields that use to update a project.
+	ProjectField
 
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`
 
 	// SecretKey is the secret key of this project.
 	SecretKey string `json:"secret_key"`
-
-	// AuthWebhookURL is the url of the authorization webhook.
-	AuthWebhookURL string `json:"auth_webhook_url"`
-
-	// AuthWebhookMethods is the methods that run the authorization webhook.
-	AuthWebhookMethods []string `json:"auth_webhook_methods"`
 
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `json:"created_at"`

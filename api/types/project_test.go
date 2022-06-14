@@ -28,23 +28,29 @@ func TestProjectInfo(t *testing.T) {
 	t.Run("require auth test", func(t *testing.T) {
 		// 1. Specify which methods to allow
 		info := &types.Project{
-			AuthWebhookURL:     "ValidWebhookURL",
-			AuthWebhookMethods: []string{string(types.ActivateClient)},
+			ProjectField: types.ProjectField{
+				AuthWebhookURL:     "ValidWebhookURL",
+				AuthWebhookMethods: []string{string(types.ActivateClient)},
+			},
 		}
 		assert.True(t, info.RequireAuth(types.ActivateClient))
 		assert.False(t, info.RequireAuth(types.DetachDocument))
 
 		// 2. Allow all
 		info2 := &types.Project{
-			AuthWebhookURL:     "ValidWebhookURL",
-			AuthWebhookMethods: []string{},
+			ProjectField: types.ProjectField{
+				AuthWebhookURL:     "ValidWebhookURL",
+				AuthWebhookMethods: []string{},
+			},
 		}
 		assert.True(t, info2.RequireAuth(types.ActivateClient))
 		assert.True(t, info2.RequireAuth(types.DetachDocument))
 
 		// 3. Empty webhook URL
 		info3 := &types.Project{
-			AuthWebhookURL: "",
+			ProjectField: types.ProjectField{
+				AuthWebhookURL: "",
+			},
 		}
 		assert.False(t, info3.RequireAuth(types.ActivateClient))
 	})
