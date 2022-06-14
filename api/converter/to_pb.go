@@ -506,8 +506,8 @@ func toCounterType(valueType json.CounterType) (api.ValueType, error) {
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
 }
 
-// ToProjectField converts the given model format to Protobuf format.
-func ToProjectField(fields *types.UpdatableProjectFields) (*api.UpdatableProjectFields, error) {
+// ToUpdatableProjectFields converts the given model format to Protobuf format.
+func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.UpdatableProjectFields, error) {
 	pbUpdatableProjectFields := &api.UpdatableProjectFields{}
 	if fields.Name != nil {
 		pbUpdatableProjectFields.Name = &protoTypes.StringValue{Value: *fields.Name}

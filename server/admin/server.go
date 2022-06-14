@@ -197,7 +197,7 @@ func (s *Server) UpdateProject(
 	ctx context.Context,
 	req *api.UpdateProjectRequest,
 ) (*api.UpdateProjectResponse, error) {
-	fields, err := converter.FromProjectField(req.Fields)
+	fields, err := converter.FromUpdatableProjectFields(req.Fields)
 	if err != nil {
 		return nil, err
 	}

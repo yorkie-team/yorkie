@@ -42,9 +42,9 @@ type UpdatableProjectFields struct {
 	AuthWebhookMethods *[]string `json:"auth_webhook_methods,omitempty" bson:"auth_webhook_methods,omitempty"`
 }
 
-// Validate validates the ProjectField.
+// Validate validates the UpdatableProjectFields.
 func (i *UpdatableProjectFields) Validate() error {
-	// Check empty ProjectField
+	// Check empty UpdatableProjectFields
 	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil {
 		return fmt.Errorf("%+v: %w", *i, ErrProjectFieldEmpty)
 	}

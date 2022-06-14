@@ -142,7 +142,7 @@ func (c *Client) UpdateProject(
 	id string,
 	fields *types.UpdatableProjectFields,
 ) (*types.Project, error) {
-	pbProjectField, err := converter.ToProjectField(fields)
+	pbProjectField, err := converter.ToUpdatableProjectFields(fields)
 	if err != nil {
 		return nil, err
 	}

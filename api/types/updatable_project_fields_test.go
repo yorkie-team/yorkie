@@ -25,7 +25,7 @@ import (
 )
 
 func TestUpdatableProjectFields(t *testing.T) {
-	// test ProjectField.validate() works correctly
+	// test UpdatableProjectFields.validate() works correctly
 	t.Run("validation test", func(t *testing.T) {
 		// happy case test
 		newName := "changed-name"
