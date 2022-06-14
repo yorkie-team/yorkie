@@ -482,13 +482,13 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	var deleteIndexNodesBoundaries []*RGATreeSplitNode[V]
 
 	if len(candidates) > 0 {
-		deleteIndexNodesBoundaries = append(deleteIndexNodesBoundaries, candidates[0].prev) 
+		deleteIndexNodesBoundaries = append(deleteIndexNodesBoundaries, candidates[0].prev)
 		defer func() {
 			deleteIndexNodesBoundaries = append(deleteIndexNodesBoundaries, candidates[len(candidates)-1].next)
 			s.deleteIndexNodes(deleteIndexNodesBoundaries)
 		}()
 	}
-	
+
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
 
@@ -523,26 +523,17 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 		return
 	}
 
-	end := boundaries[len(boundaries)-1]
-	leftBoundary := boundaries[0]
-	rightBoundary := boundaries[1]
-	for i := 0; rightBoundary != end; i++ {
-		s.treeByIndex.SeparateRange(
-			leftBoundary.indexNode,
-			leftBoundary.next.indexNode,
-			rightBoundary.prev.indexNode,
-			rightBoundary.indexNode)
+	for i := 0; i < len(boundaries)-1; i++ {
+		leftBoundary := boundaries[i]
+		rightBoundary := boundaries[i+1]
+		s.deleteRange(leftBoundary, rightBoundary)
 		i++
-		leftBoundary = boundaries[i]
-		rightBoundary = boundaries[1+1]
 	}
+}
 
-	if end == nil {
-		s.treeByIndex.SeparateRange(
-			leftBoundary.indexNode,
-			leftBoundary.next.indexNode,
-			nil,
-			nil)
+func (s *RGATreeSplit[V]) deleteRange(leftBoundary, rightBoundary *RGATreeSplitNode[V]) {
+	if rightBoundary == nil {
+		s.treeByIndex.SeparateRange(leftBoundary.indexNode, leftBoundary.next.indexNode, nil, nil)
 		return
 	}
 	s.treeByIndex.SeparateRange(
