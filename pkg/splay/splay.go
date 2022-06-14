@@ -282,7 +282,7 @@ func (t *Tree) Delete(node *Node) {
 
 // SeparateRange separates the given range.
 // by splaying the Outer nodes of range, separate the range from fromInner to toInner as a subtree and cut it.
-func (t *Tree) SeparateRange(fromInner, toInner, fromOuter, toOuter *Node) {
+func (t *Tree) SeparateRange(fromOuter, fromInner, toInner, toOuter *Node) {
 	t.Splay(toInner)
 	t.Splay(fromInner)
 
@@ -314,6 +314,10 @@ func (t *Tree) CutLeftSubtree(node *Node) {
 	node.left.parent = nil
 	node.left = nil
 	t.UpdateSubtree(node)
+	for node.parent != nil {
+		node = node.parent
+		t.UpdateSubtree(node)
+	}
 }
 
 // CutRightSubtree cut off right subtree of node.
@@ -324,6 +328,10 @@ func (t *Tree) CutRightSubtree(node *Node) {
 	node.right.parent = nil
 	node.right = nil
 	t.UpdateSubtree(node)
+	for node.parent != nil {
+		node = node.parent
+		t.UpdateSubtree(node)
+	}
 }
 
 func (t *Tree) rotateLeft(pivot *Node) {

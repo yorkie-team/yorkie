@@ -479,7 +479,16 @@ func (s *RGATreeSplit[V]) deleteNodes(
 ) (map[string]*time.Ticket, map[string]*RGATreeSplitNode[V]) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
+	var deleteIndexNodesBoundaries []*RGATreeSplitNode[V]
 
+	if len(candidates) > 0 {
+		deleteIndexNodesBoundaries = append(deleteIndexNodesBoundaries, candidates[0].prev) 
+		defer func() {
+			deleteIndexNodesBoundaries = append(deleteIndexNodesBoundaries, candidates[len(candidates)-1].next)
+			s.deleteIndexNodes(deleteIndexNodesBoundaries)
+		}()
+	}
+	
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
 
@@ -500,28 +509,47 @@ func (s *RGATreeSplit[V]) deleteNodes(
 			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt
 			}
-
 			removedNodeMap[node.id.key()] = node
+		} else {
+			deleteIndexNodesBoundaries = append(deleteIndexNodesBoundaries, node)
 		}
 	}
-	s.deleteIndexNodes(candidates)
 
 	return createdAtMapByActor, removedNodeMap
 }
 
-func (s *RGATreeSplit[V]) deleteIndexNodes(candidates []*RGATreeSplitNode[V]) {
-	lenCandidates := len(candidates)
-	if lenCandidates == 0 {
+func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
+	if len(boundaries) < 2 {
 		return
 	}
 
-	from := candidates[0]
-	to := candidates[lenCandidates-1]
-	if to.next == nil {
-		s.treeByIndex.SeparateRange(from.indexNode, to.indexNode, from.prev.indexNode, nil)
+	end := boundaries[len(boundaries)-1]
+	leftBoundary := boundaries[0]
+	rightBoundary := boundaries[1]
+	for i := 0; rightBoundary != end; i++ {
+		s.treeByIndex.SeparateRange(
+			leftBoundary.indexNode,
+			leftBoundary.next.indexNode,
+			rightBoundary.prev.indexNode,
+			rightBoundary.indexNode)
+		i++
+		leftBoundary = boundaries[i]
+		rightBoundary = boundaries[1+1]
+	}
+
+	if end == nil {
+		s.treeByIndex.SeparateRange(
+			leftBoundary.indexNode,
+			leftBoundary.next.indexNode,
+			nil,
+			nil)
 		return
 	}
-	s.treeByIndex.SeparateRange(from.indexNode, to.indexNode, from.prev.indexNode, to.next.indexNode)
+	s.treeByIndex.SeparateRange(
+		leftBoundary.indexNode,
+		leftBoundary.next.indexNode,
+		rightBoundary.prev.indexNode,
+		rightBoundary.indexNode)
 }
 
 func (s *RGATreeSplit[V]) marshal() string {
