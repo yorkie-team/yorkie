@@ -73,11 +73,11 @@ func NewProjectInfo(name string) *ProjectInfo {
 func ToProjectInfo(project *types.Project) *ProjectInfo {
 	return &ProjectInfo{
 		ID:                 project.ID,
-		Name:               project.Name,
+		Name:               *project.Name,
 		PublicKey:          project.PublicKey,
 		SecretKey:          project.SecretKey,
-		AuthWebhookURL:     project.AuthWebhookURL,
-		AuthWebhookMethods: project.AuthWebhookMethods,
+		AuthWebhookURL:     *project.AuthWebhookURL,
+		AuthWebhookMethods: *project.AuthWebhookMethods,
 		CreatedAt:          project.CreatedAt,
 		UpdatedAt:          project.UpdatedAt,
 	}
@@ -115,10 +115,10 @@ func (i *ProjectInfo) Validate() error {
 func (i *ProjectInfo) ToProject() *types.Project {
 	return &types.Project{
 		ID: i.ID,
-		ProjectField: types.ProjectField{
-			Name:               i.Name,
-			AuthWebhookURL:     i.AuthWebhookURL,
-			AuthWebhookMethods: i.AuthWebhookMethods,
+		UpdatableProjectFields: types.UpdatableProjectFields{
+			Name:               &i.Name,
+			AuthWebhookURL:     &i.AuthWebhookURL,
+			AuthWebhookMethods: &i.AuthWebhookMethods,
 		},
 		PublicKey: i.PublicKey,
 		SecretKey: i.SecretKey,

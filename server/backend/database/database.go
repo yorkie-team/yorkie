@@ -72,7 +72,7 @@ type Database interface {
 	ListProjectInfos(ctx context.Context) ([]*ProjectInfo, error)
 
 	// UpdateProjectInfo updates the project.
-	UpdateProjectInfo(ctx context.Context, id types.ID, field *types.ProjectField) (*ProjectInfo, error)
+	UpdateProjectInfo(ctx context.Context, id types.ID, fields *types.UpdatableProjectFields) (*ProjectInfo, error)
 
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)

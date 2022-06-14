@@ -97,11 +97,11 @@ func TestProjectAuthWebhook(t *testing.T) {
 		authServer, token := newAuthServer(t)
 
 		// project with authorization webhook
-		project.AuthWebhookURL = authServer.URL
+		project.AuthWebhookURL = &authServer.URL
 		_, err := adminCli.UpdateProject(
 			ctx,
 			string(project.ID),
-			&types.ProjectField{
+			&types.UpdatableProjectFields{
 				AuthWebhookURL: project.AuthWebhookURL,
 			},
 		)
@@ -148,15 +148,15 @@ func TestProjectAuthWebhook(t *testing.T) {
 		authServer, _ := newAuthServer(t)
 
 		// project with authorization webhook
-		project.AuthWebhookURL = authServer.URL
-		project.AuthWebhookMethods = []string{
+		project.AuthWebhookURL = &authServer.URL
+		project.AuthWebhookMethods = &[]string{
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
 		_, err := adminCli.UpdateProject(
 			ctx,
 			string(project.ID),
-			&types.ProjectField{
+			&types.UpdatableProjectFields{
 				AuthWebhookURL:     project.AuthWebhookURL,
 				AuthWebhookMethods: project.AuthWebhookMethods,
 			},
@@ -204,11 +204,11 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
-		project.AuthWebhookURL = authServer.URL
+		project.AuthWebhookURL = &authServer.URL
 		_, err = adminCli.UpdateProject(
 			ctx,
 			string(project.ID),
-			&types.ProjectField{
+			&types.UpdatableProjectFields{
 				AuthWebhookURL: project.AuthWebhookURL,
 			},
 		)
@@ -247,11 +247,11 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
-		project.AuthWebhookURL = authServer.URL
+		project.AuthWebhookURL = &authServer.URL
 		_, err = adminCli.UpdateProject(
 			ctx,
 			string(project.ID),
-			&types.ProjectField{
+			&types.UpdatableProjectFields{
 				AuthWebhookURL: project.AuthWebhookURL,
 			},
 		)
@@ -301,11 +301,11 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
-		project.AuthWebhookURL = authServer.URL
+		project.AuthWebhookURL = &authServer.URL
 		_, err = adminCli.UpdateProject(
 			ctx,
 			string(project.ID),
-			&types.ProjectField{
+			&types.UpdatableProjectFields{
 				AuthWebhookURL: project.AuthWebhookURL,
 			},
 		)
@@ -378,11 +378,11 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
-		project.AuthWebhookURL = authServer.URL
+		project.AuthWebhookURL = &authServer.URL
 		_, err = adminCli.UpdateProject(
 			ctx,
 			string(project.ID),
-			&types.ProjectField{
+			&types.UpdatableProjectFields{
 				AuthWebhookURL: project.AuthWebhookURL,
 			},
 		)

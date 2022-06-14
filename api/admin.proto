@@ -54,7 +54,7 @@ message ListProjectsResponse {
 
 message UpdateProjectRequest {
   string id = 1;
-  ProjectField field = 2;
+  UpdatableProjectFields fields = 2;
 }
 
 message UpdateProjectResponse {

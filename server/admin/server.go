@@ -197,12 +197,12 @@ func (s *Server) UpdateProject(
 	ctx context.Context,
 	req *api.UpdateProjectRequest,
 ) (*api.UpdateProjectResponse, error) {
-	field, err := converter.FromProjectField(req.Field)
+	fields, err := converter.FromProjectField(req.Fields)
 	if err != nil {
 		return nil, err
 	}
-	// Validation field.
-	err = field.Validate()
+	// Validation fields.
+	err = fields.Validate()
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (s *Server) UpdateProject(
 		ctx,
 		s.backend,
 		types.ID(req.Id),
-		field,
+		fields,
 	)
 	if err != nil {
 		return nil, err

@@ -25,8 +25,8 @@ type Project struct {
 	// ID is the unique ID of the project.
 	ID ID `json:"id"`
 
-	// ProjectField is a set of fields that use to update a project.
-	ProjectField
+	// UpdatableProjectFields is a set of fields that use to update a project.
+	UpdatableProjectFields
 
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`
@@ -43,15 +43,15 @@ type Project struct {
 
 // RequireAuth returns whether the given method requires authorization.
 func (p *Project) RequireAuth(method Method) bool {
-	if len(p.AuthWebhookURL) == 0 {
+	if len(*p.AuthWebhookURL) == 0 {
 		return false
 	}
 
-	if len(p.AuthWebhookMethods) == 0 {
+	if len(*p.AuthWebhookMethods) == 0 {
 		return true
 	}
 
-	for _, m := range p.AuthWebhookMethods {
+	for _, m := range *p.AuthWebhookMethods {
 		if Method(m) == method {
 			return true
 		}

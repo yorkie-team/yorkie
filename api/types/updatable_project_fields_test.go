@@ -24,7 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 )
 
-func TestProjectField(t *testing.T) {
+func TestUpdatableProjectFields(t *testing.T) {
 	// test ProjectField.validate() works correctly
 	t.Run("validation test", func(t *testing.T) {
 		// happy case test
@@ -34,38 +34,38 @@ func TestProjectField(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
-		field := &types.ProjectField{
-			Name:               newName,
-			AuthWebhookURL:     newAuthWebhookURL,
-			AuthWebhookMethods: newAuthWebhookMethods,
+		fields := &types.UpdatableProjectFields{
+			Name:               &newName,
+			AuthWebhookURL:     &newAuthWebhookURL,
+			AuthWebhookMethods: &newAuthWebhookMethods,
 		}
-		assert.NoError(t, field.Validate())
+		assert.NoError(t, fields.Validate())
 
-		// Empty project field test
-		field = &types.ProjectField{}
-		assert.ErrorIs(t, field.Validate(), types.ErrProjectFieldEmpty)
+		// Empty UpdatableProjectFields test
+		fields = &types.UpdatableProjectFields{}
+		assert.ErrorIs(t, fields.Validate(), types.ErrProjectFieldEmpty)
 
 		// Partial empty test
-		field = &types.ProjectField{
-			Name: newName,
+		fields = &types.UpdatableProjectFields{
+			Name: &newName,
 		}
-		assert.NoError(t, field.Validate())
+		assert.NoError(t, fields.Validate())
 
-		field = &types.ProjectField{
-			Name:           newName,
-			AuthWebhookURL: newAuthWebhookURL,
+		fields = &types.UpdatableProjectFields{
+			Name:           &newName,
+			AuthWebhookURL: &newAuthWebhookURL,
 		}
-		assert.NoError(t, field.Validate())
+		assert.NoError(t, fields.Validate())
 
 		// Wrong AuthWebhookMethods test
 		newAuthWebhookMethods = []string{
 			"wrong methods",
 		}
-		field = &types.ProjectField{
-			Name:               newName,
-			AuthWebhookURL:     newAuthWebhookURL,
-			AuthWebhookMethods: newAuthWebhookMethods,
+		fields = &types.UpdatableProjectFields{
+			Name:               &newName,
+			AuthWebhookURL:     &newAuthWebhookURL,
+			AuthWebhookMethods: &newAuthWebhookMethods,
 		}
-		assert.ErrorIs(t, field.Validate(), types.ErrNotSupportedMethod)
+		assert.ErrorIs(t, fields.Validate(), types.ErrNotSupportedMethod)
 	})
 }

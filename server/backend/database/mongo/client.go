@@ -227,40 +227,30 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 func (c *Client) UpdateProjectInfo(
 	ctx context.Context,
 	id types.ID,
-	field *types.ProjectField,
+	fields *types.UpdatableProjectFields,
 ) (*database.ProjectInfo, error) {
 	encodedID, err := encodeID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	updateField := bson.M{}
-	// data, err := bson.Marshal(field)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// err = bson.Unmarshal(data, &updateField)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	if field.Name != "" {
-		updateField["name"] = field.Name
+	updateTargetField := bson.M{}
+	data, err := bson.Marshal(fields)
+	if err != nil {
+		return nil, err
 	}
-	if field.AuthWebhookURL != "" {
-		updateField["auth_webhook_url"] = field.AuthWebhookURL
-	}
-	if len(field.AuthWebhookMethods) > 0 {
-		updateField["auth_webhook_methods"] = field.AuthWebhookMethods
+	err = bson.Unmarshal(data, &updateTargetField)
+	if err != nil {
+		return nil, err
 	}
 
 	now := gotime.Now()
-	updateField["updated_at"] = now
+	updateTargetField["updated_at"] = now
 
 	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
 		"_id": encodedID,
 	}, bson.M{
-		"$set": updateField,
+		"$set": updateTargetField,
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	ProjectInfo := database.ProjectInfo{}
@@ -269,7 +259,7 @@ func (c *Client) UpdateProjectInfo(
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
 		if mongo.IsDuplicateKeyError(err) {
-			return nil, fmt.Errorf("%s: %w", field.Name, database.ErrProjectNameAlreadyExists)
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
 		}
 		return nil, err
 	}

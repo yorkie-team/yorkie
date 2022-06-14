@@ -140,16 +140,16 @@ func (c *Client) ListProjects(ctx context.Context) ([]*types.Project, error) {
 func (c *Client) UpdateProject(
 	ctx context.Context,
 	id string,
-	field *types.ProjectField,
+	fields *types.UpdatableProjectFields,
 ) (*types.Project, error) {
-	pbProjectField, err := converter.ToProjectField(field)
+	pbProjectField, err := converter.ToProjectField(fields)
 	if err != nil {
 		return nil, err
 	}
 
 	response, err := c.client.UpdateProject(ctx, &api.UpdateProjectRequest{
-		Id:    id,
-		Field: pbProjectField,
+		Id:     id,
+		Fields: pbProjectField,
 	})
 	if err != nil {
 		return nil, err

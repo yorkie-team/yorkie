@@ -28,6 +28,7 @@ proto: ## generate proto files
 -I=$(GOPATH)/src \
 --gofast_out=plugins=grpc,\
 Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
+Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,\
 Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:./api \
 api/*.proto
 

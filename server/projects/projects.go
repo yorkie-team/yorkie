@@ -92,12 +92,12 @@ func UpdateProject(
 	ctx context.Context,
 	be *backend.Backend,
 	id types.ID,
-	field *types.ProjectField,
+	fields *types.UpdatableProjectFields,
 ) (*types.Project, error) {
 	// TODO(hackerwins): If updates are executed concurrently, only one remains
 	// and the rest may be deleted. Consider to update the project with CAS or update
 	// the fields in the project separately.
-	info, err := be.DB.UpdateProjectInfo(ctx, id, field)
+	info, err := be.DB.UpdateProjectInfo(ctx, id, fields)
 	if err != nil {
 		return nil, err
 	}

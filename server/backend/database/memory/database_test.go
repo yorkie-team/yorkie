@@ -287,16 +287,16 @@ func TestDB(t *testing.T) {
 			string(types.WatchDocuments),
 		}
 
-		// update total project_field
-		field := &types.ProjectField{
-			Name:               newName,
-			AuthWebhookURL:     newAuthWebhookURL,
-			AuthWebhookMethods: newAuthWebhookMethods,
+		// update total UpdatableProjectFields
+		fields := &types.UpdatableProjectFields{
+			Name:               &newName,
+			AuthWebhookURL:     &newAuthWebhookURL,
+			AuthWebhookMethods: &newAuthWebhookMethods,
 		}
 
-		err = field.Validate()
+		err = fields.Validate()
 		assert.NoError(t, err)
-		res, err := db.UpdateProjectInfo(ctx, id, field)
+		res, err := db.UpdateProjectInfo(ctx, id, fields)
 		assert.NoError(t, err)
 
 		updateInfo, err := db.FindProjectInfoByID(ctx, id)
@@ -309,12 +309,12 @@ func TestDB(t *testing.T) {
 
 		// update one field
 		newName2 := newName + "2"
-		field = &types.ProjectField{
-			Name: newName2,
+		fields = &types.UpdatableProjectFields{
+			Name: &newName2,
 		}
-		err = field.Validate()
+		err = fields.Validate()
 		assert.NoError(t, err)
-		res, err = db.UpdateProjectInfo(ctx, id, field)
+		res, err = db.UpdateProjectInfo(ctx, id, fields)
 		assert.NoError(t, err)
 
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
@@ -327,8 +327,8 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 
 		// check duplicate name error
-		field = &types.ProjectField{Name: existName}
-		_, err = db.UpdateProjectInfo(ctx, id, field)
+		fields = &types.UpdatableProjectFields{Name: &existName}
+		_, err = db.UpdateProjectInfo(ctx, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
 	})
 }

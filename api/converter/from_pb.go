@@ -50,20 +50,20 @@ func FromProject(pbProject *api.Project) (*types.Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	UpdatedAt, err := protoTypes.TimestampFromProto(pbProject.UpdatedAt)
+	updatedAt, err := protoTypes.TimestampFromProto(pbProject.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
-	ProjectField := types.ProjectField{Name: pbProject.Name,
-		AuthWebhookURL:     pbProject.AuthWebhookUrl,
-		AuthWebhookMethods: pbProject.AuthWebhookMethods}
+	projectField := types.UpdatableProjectFields{Name: &pbProject.Name,
+		AuthWebhookURL:     &pbProject.AuthWebhookUrl,
+		AuthWebhookMethods: &pbProject.AuthWebhookMethods}
 	return &types.Project{
-		ID:           types.ID(pbProject.Id),
-		ProjectField: ProjectField,
-		PublicKey:    pbProject.PublicKey,
-		SecretKey:    pbProject.SecretKey,
-		CreatedAt:    createdAt,
-		UpdatedAt:    UpdatedAt,
+		ID:                     types.ID(pbProject.Id),
+		UpdatableProjectFields: projectField,
+		PublicKey:              pbProject.PublicKey,
+		SecretKey:              pbProject.SecretKey,
+		CreatedAt:              createdAt,
+		UpdatedAt:              updatedAt,
 	}, nil
 }
 
@@ -649,10 +649,22 @@ func fromCounterType(valueType api.ValueType) (json.CounterType, error) {
 }
 
 // FromProjectField converts the given Protobuf formats to model format.
-func FromProjectField(pbProjectField *api.ProjectField) (*types.ProjectField, error) {
-	return &types.ProjectField{
-		Name:               pbProjectField.Name,
-		AuthWebhookURL:     pbProjectField.AuthWebhookUrl,
-		AuthWebhookMethods: pbProjectField.AuthWebhookMethods,
-	}, nil
+func FromProjectField(pbProjectFields *api.UpdatableProjectFields) (*types.UpdatableProjectFields, error) {
+	updatableProjectFields := &types.UpdatableProjectFields{}
+	tmp := pbProjectFields.GetAuthWebhookUrl()
+	if pbProjectFields.Name != nil {
+		updatableProjectFields.Name = &pbProjectFields.GetName().Value
+	}
+	if pbProjectFields.AuthWebhookUrl != nil {
+		updatableProjectFields.AuthWebhookURL = &tmp.Value
+	}
+	if pbProjectFields.AuthWebhookMethods != nil {
+		tmp := &[]string{}
+		for _, method := range pbProjectFields.GetAuthWebhookMethods() {
+			*tmp = append(*tmp, method.Value)
+		}
+		updatableProjectFields.AuthWebhookMethods = tmp
+	}
+
+	return updatableProjectFields, nil
 }

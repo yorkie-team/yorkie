@@ -53,7 +53,7 @@ func VerifyAccess(ctx context.Context, be *backend.Backend, accessInfo *types.Ac
 	return verifyAccess(
 		ctx,
 		be,
-		project.AuthWebhookURL,
+		*project.AuthWebhookURL,
 		md.Authorization,
 		accessInfo,
 	)

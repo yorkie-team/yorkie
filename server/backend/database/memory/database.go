@@ -178,18 +178,18 @@ func (d *DB) ListProjectInfos(ctx context.Context) ([]*database.ProjectInfo, err
 func (d *DB) UpdateProjectInfo(
 	ctx context.Context,
 	id types.ID,
-	field *types.ProjectField,
+	fields *types.UpdatableProjectFields,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
 	// field.Name unique test
-	exist, err := txn.First(tblProjects, "name", field.Name)
+	exist, err := txn.First(tblProjects, "name", *fields.Name)
 	if err != nil {
 		return nil, err
 	}
 	if exist != nil {
-		return nil, fmt.Errorf("%s: %w", field.Name, database.ErrProjectNameAlreadyExists)
+		return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
 	}
 
 	raw, err := txn.First(tblProjects, "id", id.String())
@@ -201,14 +201,14 @@ func (d *DB) UpdateProjectInfo(
 	}
 
 	info := raw.(*database.ProjectInfo).DeepCopy()
-	if field.Name != "" {
-		info.Name = field.Name
+	if fields.Name != nil {
+		info.Name = *fields.Name
 	}
-	if field.AuthWebhookURL != "" {
-		info.AuthWebhookURL = field.AuthWebhookURL
+	if fields.AuthWebhookURL != nil {
+		info.AuthWebhookURL = *fields.AuthWebhookURL
 	}
-	if len(field.AuthWebhookMethods) != 0 {
-		info.AuthWebhookMethods = field.AuthWebhookMethods
+	if fields.AuthWebhookMethods != nil {
+		info.AuthWebhookMethods = *fields.AuthWebhookMethods
 	}
 
 	if err := txn.Insert(tblProjects, info); err != nil {

@@ -23,35 +23,37 @@ import (
 )
 
 var (
-	// ErrProjectFieldEmpty is returned when the ProjectField is empty.
-	ErrProjectFieldEmpty = errors.New("project field is empty")
+	// ErrProjectFieldEmpty is returned when the UpdatableProjectFields is empty.
+	ErrProjectFieldEmpty = errors.New("UpdatableProjectFields is empty")
 
 	// ErrNotSupportedMethod is returned when the method is not supported.
 	ErrNotSupportedMethod = errors.New("not supported method for authorization webhook")
 )
 
-// ProjectField is a set of fields that use to update a project.
-type ProjectField struct {
+// UpdatableProjectFields is a set of fields that use to update a project.
+type UpdatableProjectFields struct {
 	// Name is the name of this project.
-	Name string `json:"name"`
+	Name *string `json:"name,omitempty" bson:"name,omitempty"`
 
 	// AuthWebhookURL is the url of the authorization webhook.
-	AuthWebhookURL string `json:"auth_webhook_url"`
+	AuthWebhookURL *string `json:"auth_webhook_url,omitempty" bson:"auth_webhook_url,omitempty"`
 
 	// AuthWebhookMethods is the methods that run the authorization webhook.
-	AuthWebhookMethods []string `json:"auth_webhook_methods"`
+	AuthWebhookMethods *[]string `json:"auth_webhook_methods,omitempty" bson:"auth_webhook_methods,omitempty"`
 }
 
 // Validate validates the ProjectField.
-func (i *ProjectField) Validate() error {
+func (i *UpdatableProjectFields) Validate() error {
 	// Check empty ProjectField
-	if i.Name == "" && i.AuthWebhookURL == "" && len(i.AuthWebhookMethods) == 0 {
-		return fmt.Errorf("%s: %w", i, ErrProjectFieldEmpty)
+	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil {
+		return fmt.Errorf("%+v: %w", *i, ErrProjectFieldEmpty)
 	}
 	// Check wrong AuthWebhookMethods
-	for _, method := range i.AuthWebhookMethods {
-		if !IsAuthMethod(method) {
-			return fmt.Errorf("%s: %w", method, ErrNotSupportedMethod)
+	if i.AuthWebhookMethods != nil {
+		for _, method := range *i.AuthWebhookMethods {
+			if !IsAuthMethod(method) {
+				return fmt.Errorf("%s: %w", method, ErrNotSupportedMethod)
+			}
 		}
 	}
 
