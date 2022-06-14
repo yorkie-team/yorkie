@@ -372,7 +372,7 @@ func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) *RGAT
 	}
 
 	splitNode := node.split(offset)
-	s.treeByIndex.UpdateSubtree(splitNode.indexNode)
+	s.treeByIndex.UpdateWeight(splitNode.indexNode)
 	s.InsertAfter(node, splitNode)
 
 	insNext := node.insNext
@@ -519,10 +519,6 @@ func (s *RGATreeSplit[V]) deleteNodes(
 }
 
 func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
-	if len(boundaries) < 2 {
-		return
-	}
-
 	for i := 0; i < len(boundaries)-1; i++ {
 		leftBoundary := boundaries[i]
 		rightBoundary := boundaries[i+1]

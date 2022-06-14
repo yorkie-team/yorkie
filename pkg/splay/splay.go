@@ -119,8 +119,8 @@ func (t *Tree) InsertAfter(prev *Node, node *Node) *Node {
 	prev.parent = node
 	prev.right = nil
 
-	t.UpdateSubtree(prev)
-	t.UpdateSubtree(node)
+	t.UpdateWeight(prev)
+	t.UpdateWeight(node)
 
 	return node
 }
@@ -129,7 +129,7 @@ func (t *Tree) InsertAfter(prev *Node, node *Node) *Node {
 func (t *Tree) Splay(node *Node) {
 	if node == nil {
 		return
-	}
+}
 
 	for {
 		if isLeftChild(node.parent) && isRightChild(node) {
@@ -235,8 +235,8 @@ func (t *Tree) AnnotatedString() string {
 	return builder.String()
 }
 
-// UpdateSubtree recalculates the weight of this node with the value and children.
-func (t *Tree) UpdateSubtree(node *Node) {
+// UpdateWeight recalculates the weight of this node with the value and children.
+func (t *Tree) UpdateWeight(node *Node) {
 	node.initWeight()
 
 	if node.left != nil {
@@ -245,6 +245,13 @@ func (t *Tree) UpdateSubtree(node *Node) {
 
 	if node.right != nil {
 		node.increaseWeight(node.rightWeight())
+	}
+}
+
+func (t *Tree) updateTreeWeight(changed *Node) {
+	for changed != nil {
+		t.UpdateWeight(changed)
+		changed = changed.parent
 	}
 }
 
@@ -276,7 +283,7 @@ func (t *Tree) Delete(node *Node) {
 
 	node.unlink()
 	if t.root != nil {
-		t.UpdateSubtree(t.root)
+		t.UpdateWeight(t.root)
 	}
 }
 
@@ -292,46 +299,38 @@ func (t *Tree) SeparateRange(fromOuter, fromInner, toInner, toOuter *Node) {
 	}
 	if fromOuter == nil {
 		t.Splay(toOuter)
-		t.CutLeftSubtree(toOuter)
+		t.cutLeftSubtree(toOuter)
 		return
 	}
 	if toOuter == nil {
 		t.Splay(fromOuter)
-		t.CutRightSubtree(fromOuter)
+		t.cutRightSubtree(fromOuter)
 		return
 	}
 
 	t.Splay(toOuter)
 	t.Splay(fromOuter)
-	t.CutLeftSubtree(toOuter)
+	t.cutLeftSubtree(toOuter)
 }
 
-// CutLeftSubtree cut off left subtree of node.
-func (t *Tree) CutLeftSubtree(node *Node) {
+// cutLeftSubtree cut off left subtree of node.
+func (t *Tree) cutLeftSubtree(node *Node) {
 	if node.left == nil {
 		return
 	}
 	node.left.parent = nil
 	node.left = nil
-	t.UpdateSubtree(node)
-	for node.parent != nil {
-		node = node.parent
-		t.UpdateSubtree(node)
-	}
+	t.updateTreeWeight(node)
 }
 
-// CutRightSubtree cut off right subtree of node.
-func (t *Tree) CutRightSubtree(node *Node) {
+// cutRightSubtree cut off right subtree of node.
+func (t *Tree) cutRightSubtree(node *Node) {
 	if node.right == nil {
 		return
 	}
 	node.right.parent = nil
 	node.right = nil
-	t.UpdateSubtree(node)
-	for node.parent != nil {
-		node = node.parent
-		t.UpdateSubtree(node)
-	}
+	t.updateTreeWeight(node)
 }
 
 func (t *Tree) rotateLeft(pivot *Node) {
@@ -356,8 +355,8 @@ func (t *Tree) rotateLeft(pivot *Node) {
 	pivot.left = root
 	pivot.left.parent = pivot
 
-	t.UpdateSubtree(root)
-	t.UpdateSubtree(pivot)
+	t.UpdateWeight(root)
+	t.UpdateWeight(pivot)
 }
 
 func (t *Tree) rotateRight(pivot *Node) {
@@ -381,8 +380,8 @@ func (t *Tree) rotateRight(pivot *Node) {
 	pivot.right = root
 	pivot.right.parent = pivot
 
-	t.UpdateSubtree(root)
-	t.UpdateSubtree(pivot)
+	t.UpdateWeight(root)
+	t.UpdateWeight(pivot)
 }
 
 func (t *Tree) maximum() *Node {
