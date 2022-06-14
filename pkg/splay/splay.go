@@ -290,7 +290,8 @@ func (t *Tree) Delete(node *Node) {
 // SeparateRange separates the given range.
 // by splaying the Outer nodes of range, separate the range from fromInner to toInner as a subtree and cut it.
 // The 'Outer' arg is nil means delete the entire subtree in that direction.
-// CAUTION : this function does not filter invalid argument inputs, such as the index of fromOuter and fromInner are not continuous.
+// CAUTION : this function does not filter invalid argument inputs,
+// such as the index of fromOuter and fromInner are not continuous.
 func (t *Tree) SeparateRange(fromOuter, fromInner, toInner, toOuter *Node) {
 	t.Splay(toInner)
 	t.Splay(fromInner)

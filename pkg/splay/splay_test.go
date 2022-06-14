@@ -121,7 +121,9 @@ func TestSplayTree(t *testing.T) {
 		nodeH := tree.Insert(newSplayNode("HH"))
 		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG[24,2]HH", tree.AnnotatedString())
 		nodeI := tree.Insert(newSplayNode("I"))
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG[24,2]HH[25,1]I", tree.AnnotatedString())
+		assert.Equal(t,
+			"[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG[24,2]HH[25,1]I",
+			tree.AnnotatedString())
 
 		tree.SeparateRange(nil, nil, nodeA, nodeB)
 		assert.Equal(t, "[24,2]BB[3,3]CCC[19,4]DDDD[5,5]EEEEE[12,4]FFFF[3,3]GGG[22,2]HH[1,1]I", tree.AnnotatedString())
