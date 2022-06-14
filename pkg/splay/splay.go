@@ -129,7 +129,7 @@ func (t *Tree) InsertAfter(prev *Node, node *Node) *Node {
 func (t *Tree) Splay(node *Node) {
 	if node == nil {
 		return
-}
+	}
 
 	for {
 		if isLeftChild(node.parent) && isRightChild(node) {

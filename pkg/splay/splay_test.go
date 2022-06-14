@@ -112,25 +112,34 @@ func TestSplayTree(t *testing.T) {
 		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC", tree.AnnotatedString())
 		nodeD := tree.Insert(newSplayNode("DDDD"))
 		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD", tree.AnnotatedString())
-		nodeE := tree.Insert(newSplayNode("EEE"))
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[13,3]EEE", tree.AnnotatedString())
-		nodeF := tree.Insert(newSplayNode("FF"))
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[13,3]EEE[15,2]FF", tree.AnnotatedString())
-		nodeG := tree.Insert(newSplayNode("G"))
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[13,3]EEE[15,2]FF[16,1]G", tree.AnnotatedString())
+		nodeE := tree.Insert(newSplayNode("EEEEE"))
+		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE", tree.AnnotatedString())
+		nodeF := tree.Insert(newSplayNode("FFFF"))
+		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF", tree.AnnotatedString())
+		nodeG := tree.Insert(newSplayNode("GGG"))
+		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG", tree.AnnotatedString())
+		nodeH := tree.Insert(newSplayNode("HH"))
+		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG[24,2]HH", tree.AnnotatedString())
+		nodeI := tree.Insert(newSplayNode("I"))
+		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG[24,2]HH[25,1]I", tree.AnnotatedString())
 
-		tree.SeparateRange(nodeD, nodeE, nodeF, nodeG)
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[11,4]DDDD[1,1]G", tree.AnnotatedString())
+		tree.SeparateRange(nil, nil, nodeA, nodeB)
+		assert.Equal(t, "[24,2]BB[3,3]CCC[19,4]DDDD[5,5]EEEEE[12,4]FFFF[3,3]GGG[22,2]HH[1,1]I", tree.AnnotatedString())
 
-		tree.SeparateRange(nodeC, nodeD, nodeG, nil)
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC", tree.AnnotatedString())
+		tree.SeparateRange(nil, nodeB, nodeC, nodeD)
+		assert.Equal(t, "[19,4]DDDD[5,5]EEEEE[12,4]FFFF[3,3]GGG[15,2]HH[1,1]I", tree.AnnotatedString())
 
-		tree.SeparateRange(nil, nodeA, nodeB, nodeC)
-		assert.Equal(t, "[3,3]CCC", tree.AnnotatedString())
+		tree.SeparateRange(nodeH, nodeI, nil, nil)
+		assert.Equal(t, "[16,4]DDDD[5,5]EEEEE[12,4]FFFF[3,3]GGG[18,2]HH", tree.AnnotatedString())
 
-		tree.SeparateRange(nil, nodeC, nodeC, nil)
+		tree.SeparateRange(nodeF, nodeG, nodeH, nil)
+		assert.Equal(t, "[9,4]DDDD[5,5]EEEEE[13,4]FFFF", tree.AnnotatedString())
+
+		tree.SeparateRange(nodeD, nodeE, nodeE, nodeF)
+		assert.Equal(t, "[13,4]DDDD[9,5]EEEEE[4,4]FFFF", tree.AnnotatedString())
+
+		tree.SeparateRange(nil, nodeD, nodeF, nil)
 		root, _ := tree.Find(0)
 		assert.Nil(t, root)
 	})
-
 }
