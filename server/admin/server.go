@@ -197,20 +197,32 @@ func (s *Server) UpdateProject(
 	ctx context.Context,
 	req *api.UpdateProjectRequest,
 ) (*api.UpdateProjectResponse, error) {
-	project, err := converter.FromProject(req.Project)
+	fields, err := converter.FromUpdatableProjectFields(req.Fields)
+	if err != nil {
+		return nil, err
+	}
+	if err = fields.Validate(); err != nil {
+		return nil, err
+	}
+
+	project, err := projects.UpdateProject(
+		ctx,
+		s.backend,
+		types.ID(req.Id),
+		fields,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := projects.UpdateProject(
-		ctx,
-		s.backend,
-		project,
-	); err != nil {
+	pbProject, err := converter.ToProject(project)
+	if err != nil {
 		return nil, err
 	}
 
-	return &api.UpdateProjectResponse{}, nil
+	return &api.UpdateProjectResponse{
+		Project: pbProject,
+	}, nil
 }
 
 // GetDocument gets the document.

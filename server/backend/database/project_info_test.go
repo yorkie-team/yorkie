@@ -21,20 +21,25 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 func TestProjectInfo(t *testing.T) {
-	t.Run("validation test", func(t *testing.T) {
-		conf := &database.ProjectInfo{
-			AuthWebhookMethods: []string{"ActivateClient"},
-		}
-		assert.NoError(t, conf.Validate())
+	t.Run("update fields test", func(t *testing.T) {
+		project := database.NewProjectInfo(t.Name())
 
-		// 2. Included invalid methods
-		conf = &database.ProjectInfo{
-			AuthWebhookMethods: []string{"InvalidMethod"},
-		}
-		assert.Error(t, conf.Validate())
+		testName := "testName"
+		testURL := "testUrl"
+		testMethods := []string{"testMethod"}
+
+		project.UpdateFields(&types.UpdatableProjectFields{Name: &testName})
+		assert.Equal(t, testName, project.Name)
+
+		project.UpdateFields(&types.UpdatableProjectFields{AuthWebhookURL: &testURL})
+		assert.Equal(t, testURL, project.AuthWebhookURL)
+
+		project.UpdateFields(&types.UpdatableProjectFields{AuthWebhookMethods: &testMethods})
+		assert.Equal(t, testMethods, project.AuthWebhookMethods)
 	})
 }

@@ -98,7 +98,14 @@ func TestProjectAuthWebhook(t *testing.T) {
 
 		// project with authorization webhook
 		project.AuthWebhookURL = authServer.URL
-		assert.NoError(t, adminCli.UpdateProject(ctx, project))
+		_, err := adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
 
 		// client with token
 		cli, err := client.Dial(
@@ -146,7 +153,15 @@ func TestProjectAuthWebhook(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
-		assert.NoError(t, adminCli.UpdateProject(ctx, project))
+		_, err := adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL:     &project.AuthWebhookURL,
+				AuthWebhookMethods: &project.AuthWebhookMethods,
+			},
+		)
+		assert.NoError(t, err)
 
 		cli, err := client.Dial(
 			svr.RPCAddr(),
@@ -190,7 +205,14 @@ func TestAuthWebhook(t *testing.T) {
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
-		assert.NoError(t, adminCli.UpdateProject(ctx, project))
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
 
 		cli, err := client.Dial(
 			svr.RPCAddr(),
@@ -226,7 +248,14 @@ func TestAuthWebhook(t *testing.T) {
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
-		assert.NoError(t, adminCli.UpdateProject(ctx, project))
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
 
 		cli, err := client.Dial(
 			svr.RPCAddr(),
@@ -273,7 +302,14 @@ func TestAuthWebhook(t *testing.T) {
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
-		assert.NoError(t, adminCli.UpdateProject(ctx, project))
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
 
 		cli, err := client.Dial(
 			svr.RPCAddr(),
@@ -343,7 +379,14 @@ func TestAuthWebhook(t *testing.T) {
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
-		assert.NoError(t, adminCli.UpdateProject(ctx, project))
+		_, err = adminCli.UpdateProject(
+			ctx,
+			project.ID.String(),
+			&types.UpdatableProjectFields{
+				AuthWebhookURL: &project.AuthWebhookURL,
+			},
+		)
+		assert.NoError(t, err)
 
 		cli, err := client.Dial(
 			svr.RPCAddr(),

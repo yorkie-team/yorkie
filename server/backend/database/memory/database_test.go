@@ -271,4 +271,64 @@ func TestDB(t *testing.T) {
 		_, err = localDB.FindDocInfoByID(context.Background(), notExistsID)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
+
+	t.Run("UpdateProjectInfo test", func(t *testing.T) {
+		info, err := db.CreateProjectInfo(ctx, t.Name())
+		assert.NoError(t, err)
+		existName := "already"
+		_, err = db.CreateProjectInfo(ctx, existName)
+		assert.NoError(t, err)
+
+		id := info.ID
+		newName := "changed-name"
+		newAuthWebhookURL := "newWebhookURL"
+		newAuthWebhookMethods := []string{
+			string(types.AttachDocument),
+			string(types.WatchDocuments),
+		}
+
+		// update all updatable fields
+		fields := &types.UpdatableProjectFields{
+			Name:               &newName,
+			AuthWebhookURL:     &newAuthWebhookURL,
+			AuthWebhookMethods: &newAuthWebhookMethods,
+		}
+
+		err = fields.Validate()
+		assert.NoError(t, err)
+		res, err := db.UpdateProjectInfo(ctx, id, fields)
+		assert.NoError(t, err)
+
+		updateInfo, err := db.FindProjectInfoByID(ctx, id)
+		assert.NoError(t, err)
+
+		assert.Equal(t, res, updateInfo)
+		assert.Equal(t, newName, updateInfo.Name)
+		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+
+		// update one field
+		newName2 := newName + "2"
+		fields = &types.UpdatableProjectFields{
+			Name: &newName2,
+		}
+		err = fields.Validate()
+		assert.NoError(t, err)
+		res, err = db.UpdateProjectInfo(ctx, id, fields)
+		assert.NoError(t, err)
+
+		updateInfo, err = db.FindProjectInfoByID(ctx, id)
+		assert.NoError(t, err)
+
+		// check only name is updated
+		assert.Equal(t, res, updateInfo)
+		assert.NotEqual(t, newName, updateInfo.Name)
+		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+
+		// check duplicate name error
+		fields = &types.UpdatableProjectFields{Name: &existName}
+		_, err = db.UpdateProjectInfo(ctx, id, fields)
+		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
+	})
 }

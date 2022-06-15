@@ -87,6 +87,21 @@ func (d *DB) FindProjectInfoByName(ctx context.Context, name string) (*database.
 	return raw.(*database.ProjectInfo).DeepCopy(), nil
 }
 
+// FindProjectInfoByID returns a project by the given id.
+func (d *DB) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.ProjectInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+	raw, err := txn.First(tblProjects, "id", id.String())
+	if err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+	}
+
+	return raw.(*database.ProjectInfo).DeepCopy(), nil
+}
+
 // EnsureDefaultProjectInfo creates the default project if it does not exist.
 func (d *DB) EnsureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
@@ -160,16 +175,41 @@ func (d *DB) ListProjectInfos(ctx context.Context) ([]*database.ProjectInfo, err
 }
 
 // UpdateProjectInfo updates the given project.
-func (d *DB) UpdateProjectInfo(ctx context.Context, info *database.ProjectInfo) error {
+func (d *DB) UpdateProjectInfo(
+	ctx context.Context,
+	id types.ID,
+	fields *types.UpdatableProjectFields,
+) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
+	if fields.Name != nil {
+		exist, err := txn.First(tblProjects, "name", *fields.Name)
+		if err != nil {
+			return nil, err
+		}
+		if exist != nil {
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+		}
+	}
+
+	raw, err := txn.First(tblProjects, "id", id.String())
+	if err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+	}
+
+	info := raw.(*database.ProjectInfo).DeepCopy()
+	info.UpdateFields(fields)
+	info.UpdatedAt = gotime.Now()
 	if err := txn.Insert(tblProjects, info); err != nil {
-		return err
+		return nil, err
 	}
 	txn.Commit()
 
-	return nil
+	return info, nil
 }
 
 // ActivateClient activates a client.

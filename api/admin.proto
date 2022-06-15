@@ -53,10 +53,13 @@ message ListProjectsResponse {
 }
 
 message UpdateProjectRequest {
-  Project project = 1;
+  string id = 1;
+  UpdatableProjectFields fields = 2;
 }
 
-message UpdateProjectResponse {}
+message UpdateProjectResponse {
+  Project project = 1;
+}
 
 message ListDocumentsRequest {
   string project_name = 1;

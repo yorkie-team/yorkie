@@ -21,7 +21,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 // CreateProject creates a project.
@@ -92,10 +91,13 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 func UpdateProject(
 	ctx context.Context,
 	be *backend.Backend,
-	project *types.Project,
-) error {
-	// TODO(hackerwins): If updates are executed concurrently, only one remains
-	// and the rest may be deleted. Consider to update the project with CAS or update
-	// the fields in the project separately.
-	return be.DB.UpdateProjectInfo(ctx, database.ToProjectInfo(project))
+	id types.ID,
+	fields *types.UpdatableProjectFields,
+) (*types.Project, error) {
+	info, err := be.DB.UpdateProjectInfo(ctx, id, fields)
+	if err != nil {
+		return nil, err
+	}
+
+	return info.ToProject(), nil
 }
