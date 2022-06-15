@@ -654,17 +654,17 @@ func fromCounterType(valueType api.ValueType) (json.CounterType, error) {
 func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*types.UpdatableProjectFields, error) {
 	updatableProjectFields := &types.UpdatableProjectFields{}
 	if pbProjectFields.Name != nil {
-		updatableProjectFields.Name = &pbProjectFields.GetName().Value
+		updatableProjectFields.Name = &pbProjectFields.Name.Value
 	}
 	if pbProjectFields.AuthWebhookUrl != nil {
-		updatableProjectFields.AuthWebhookURL = &pbProjectFields.GetAuthWebhookUrl().Value
+		updatableProjectFields.AuthWebhookURL = &pbProjectFields.AuthWebhookUrl.Value
 	}
 	if pbProjectFields.AuthWebhookMethods != nil {
-		authWebhookMethods := &[]string{}
-		for _, method := range pbProjectFields.GetAuthWebhookMethods() {
-			*authWebhookMethods = append(*authWebhookMethods, method.Value)
+		var authWebhookMethods []string
+		for _, method := range pbProjectFields.AuthWebhookMethods {
+			authWebhookMethods = append(authWebhookMethods, method.Value)
 		}
-		updatableProjectFields.AuthWebhookMethods = authWebhookMethods
+		updatableProjectFields.AuthWebhookMethods = &authWebhookMethods
 	}
 
 	return updatableProjectFields, nil

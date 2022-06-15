@@ -234,27 +234,26 @@ func (c *Client) UpdateProjectInfo(
 		return nil, err
 	}
 
-	updateTargetField := bson.M{}
+	updatableFields := bson.M{}
 	data, err := bson.Marshal(fields)
 	if err != nil {
 		return nil, err
 	}
-	err = bson.Unmarshal(data, &updateTargetField)
+	err = bson.Unmarshal(data, &updatableFields)
 	if err != nil {
 		return nil, err
 	}
 
-	now := gotime.Now()
-	updateTargetField["updated_at"] = now
+	updatableFields["updated_at"] = gotime.Now()
 
 	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
 		"_id": encodedID,
 	}, bson.M{
-		"$set": updateTargetField,
+		"$set": updatableFields,
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
-	ProjectInfo := database.ProjectInfo{}
-	if err := res.Decode(&ProjectInfo); err != nil {
+	info := database.ProjectInfo{}
+	if err := res.Decode(&info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
@@ -264,7 +263,7 @@ func (c *Client) UpdateProjectInfo(
 		return nil, err
 	}
 
-	return &ProjectInfo, nil
+	return &info, nil
 }
 
 // ActivateClient activates the client of the given key.

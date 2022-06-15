@@ -43,7 +43,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 
 		// Empty UpdatableProjectFields test
 		fields = &types.UpdatableProjectFields{}
-		assert.ErrorIs(t, fields.Validate(), types.ErrProjectFieldEmpty)
+		assert.ErrorIs(t, fields.Validate(), types.ErrEmptyProjectFields)
 
 		// Partial empty test
 		fields = &types.UpdatableProjectFields{

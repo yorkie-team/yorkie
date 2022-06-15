@@ -37,4 +37,25 @@ func TestProjectInfo(t *testing.T) {
 		}
 		assert.Error(t, conf.Validate())
 	})
+	t.Run("SetField test", func(t *testing.T) {
+		project := database.NewProjectInfo(t.Name())
+
+		testName := "testName"
+		testURL := "testUrl"
+		testMethod := []string{"testMethod"}
+
+		assert.NoError(t, project.SetField("Name", &testName))
+		assert.Equal(t, testName, project.Name)
+
+		assert.NoError(t, project.SetField("AuthWebhookURL", &testURL))
+		assert.Equal(t, testURL, project.AuthWebhookURL)
+
+		assert.NoError(t, project.SetField("AuthWebhookMethods", &testMethod))
+		assert.Equal(t, testMethod, project.AuthWebhookMethods)
+
+		project = &database.ProjectInfo{
+			AuthWebhookMethods: []string{"InvalidMethod"},
+		}
+		assert.ErrorIs(t, project.SetField("wrong field name", &testName), database.ErrNotUpdatableFieldName)
+	})
 }

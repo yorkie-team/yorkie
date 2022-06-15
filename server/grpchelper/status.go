@@ -48,7 +48,8 @@ func ToStatusError(err error) error {
 		errors.Is(err, types.ErrInvalidID) ||
 		errors.Is(err, clients.ErrInvalidClientID) ||
 		errors.Is(err, clients.ErrInvalidClientKey) ||
-		errors.Is(err, types.ErrProjectFieldEmpty) {
+		errors.Is(err, types.ErrEmptyProjectFields) ||
+		errors.Is(err, database.ErrNotUpdatableFieldName) {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -57,7 +58,8 @@ func ToStatusError(err error) error {
 		errors.Is(err, converter.ErrUnsupportedEventType) ||
 		errors.Is(err, converter.ErrUnsupportedValueType) ||
 		errors.Is(err, converter.ErrUnsupportedCounterType) ||
-		errors.Is(err, types.ErrNotSupportedMethod) {
+		errors.Is(err, types.ErrNotSupportedMethod) ||
+		errors.Is(err, database.ErrNotSupportedMethod) {
 		return status.Error(codes.Unimplemented, err.Error())
 	}
 

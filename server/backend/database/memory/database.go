@@ -19,6 +19,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"reflect"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -183,13 +184,15 @@ func (d *DB) UpdateProjectInfo(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	// field.Name unique test
-	exist, err := txn.First(tblProjects, "name", *fields.Name)
-	if err != nil {
-		return nil, err
-	}
-	if exist != nil {
-		return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+	// fields.Name unique test
+	if fields.Name != nil {
+		exist, err := txn.First(tblProjects, "name", *fields.Name)
+		if err != nil {
+			return nil, err
+		}
+		if exist != nil {
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+		}
 	}
 
 	raw, err := txn.First(tblProjects, "id", id.String())
@@ -201,16 +204,21 @@ func (d *DB) UpdateProjectInfo(
 	}
 
 	info := raw.(*database.ProjectInfo).DeepCopy()
-	if fields.Name != nil {
-		info.Name = *fields.Name
-	}
-	if fields.AuthWebhookURL != nil {
-		info.AuthWebhookURL = *fields.AuthWebhookURL
-	}
-	if fields.AuthWebhookMethods != nil {
-		info.AuthWebhookMethods = *fields.AuthWebhookMethods
+
+	fieldsValue := reflect.ValueOf(*fields)
+	fieldsType := reflect.TypeOf(*fields)
+	for i := 0; i < fieldsValue.NumField(); i++ {
+		if fieldsValue.Field(i).IsNil() {
+			continue
+		} else {
+			err = info.SetField(fieldsType.Field(i).Name, fieldsValue.Field(i).Interface())
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
+	info.UpdatedAt = gotime.Now()
 	if err := txn.Insert(tblProjects, info); err != nil {
 		return nil, err
 	}

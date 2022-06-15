@@ -52,7 +52,7 @@ func ToProject(project *types.Project) (*api.Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	pbUpatedAt, err := protoTypes.TimestampProto(project.UpdatedAt)
+	pbUpdatedAt, err := protoTypes.TimestampProto(project.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func ToProject(project *types.Project) (*api.Project, error) {
 		AuthWebhookUrl:     *project.AuthWebhookURL,
 		AuthWebhookMethods: *project.AuthWebhookMethods,
 		CreatedAt:          pbCreatedAt,
-		UpdatedAt:          pbUpatedAt,
+		UpdatedAt:          pbUpdatedAt,
 	}, nil
 }
 

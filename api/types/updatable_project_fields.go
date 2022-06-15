@@ -23,8 +23,8 @@ import (
 )
 
 var (
-	// ErrProjectFieldEmpty is returned when the UpdatableProjectFields is empty.
-	ErrProjectFieldEmpty = errors.New("UpdatableProjectFields is empty")
+	// ErrEmptyProjectFields is returned when all the fields are empty.
+	ErrEmptyProjectFields = errors.New("UpdatableProjectFields is empty")
 
 	// ErrNotSupportedMethod is returned when the method is not supported.
 	ErrNotSupportedMethod = errors.New("not supported method for authorization webhook")
@@ -44,11 +44,9 @@ type UpdatableProjectFields struct {
 
 // Validate validates the UpdatableProjectFields.
 func (i *UpdatableProjectFields) Validate() error {
-	// Check empty UpdatableProjectFields
 	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil {
-		return fmt.Errorf("%+v: %w", *i, ErrProjectFieldEmpty)
+		return ErrEmptyProjectFields
 	}
-	// Check wrong AuthWebhookMethods
 	if i.AuthWebhookMethods != nil {
 		for _, method := range *i.AuthWebhookMethods {
 			if !IsAuthMethod(method) {
@@ -56,6 +54,5 @@ func (i *UpdatableProjectFields) Validate() error {
 			}
 		}
 	}
-
 	return nil
 }

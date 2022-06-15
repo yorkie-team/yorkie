@@ -17,12 +17,21 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/api/types"
+)
+
+var (
+	// ErrNotUpdatableFieldName is returned when the given field name is unknown.
+	ErrNotUpdatableFieldName = errors.New("not updatable field name")
+
+	// ErrNotSupportedMethod is returned when the method is not supported.
+	ErrNotSupportedMethod = errors.New("not supported method for authorization webhook")
 )
 
 // DefaultProjectID is the default project ID.
@@ -105,7 +114,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 func (i *ProjectInfo) Validate() error {
 	for _, method := range i.AuthWebhookMethods {
 		if !types.IsAuthMethod(method) {
-			return fmt.Errorf("not supported method for authorization webhook: %s", method)
+			return fmt.Errorf("%s: %w", method, ErrNotSupportedMethod)
 		}
 	}
 	return nil
@@ -125,4 +134,19 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		CreatedAt: i.CreatedAt,
 		UpdatedAt: i.UpdatedAt,
 	}
+}
+
+// SetField updates the ProjectInfo with the given name of fields
+func (i *ProjectInfo) SetField(fieldName string, value any) error {
+	switch fieldName {
+	case "Name":
+		i.Name = *value.(*string)
+	case "AuthWebhookURL":
+		i.AuthWebhookURL = *value.(*string)
+	case "AuthWebhookMethods":
+		i.AuthWebhookMethods = *value.(*[]string)
+	default:
+		return fmt.Errorf("%s: %w", fieldName, ErrNotUpdatableFieldName)
+	}
+	return nil
 }

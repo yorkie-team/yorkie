@@ -57,15 +57,15 @@ func TestClient(t *testing.T) {
 		}
 
 		// update total project_field
-		field := &types.UpdatableProjectFields{
+		fields := &types.UpdatableProjectFields{
 			Name:               &newName,
 			AuthWebhookURL:     &newAuthWebhookURL,
 			AuthWebhookMethods: &newAuthWebhookMethods,
 		}
 
-		err = field.Validate()
+		err = fields.Validate()
 		assert.NoError(t, err)
-		res, err := cli.UpdateProjectInfo(ctx, id, field)
+		res, err := cli.UpdateProjectInfo(ctx, id, fields)
 		assert.NoError(t, err)
 
 		updateInfo, err := cli.FindProjectInfoByID(ctx, id)
@@ -78,12 +78,12 @@ func TestClient(t *testing.T) {
 
 		// update one field
 		newName2 := newName + "2"
-		field = &types.UpdatableProjectFields{
+		fields = &types.UpdatableProjectFields{
 			Name: &newName2,
 		}
-		err = field.Validate()
+		err = fields.Validate()
 		assert.NoError(t, err)
-		res, err = cli.UpdateProjectInfo(ctx, id, field)
+		res, err = cli.UpdateProjectInfo(ctx, id, fields)
 		assert.NoError(t, err)
 
 		updateInfo, err = cli.FindProjectInfoByID(ctx, id)
@@ -96,8 +96,8 @@ func TestClient(t *testing.T) {
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 
 		// check duplicate name error
-		field = &types.UpdatableProjectFields{Name: &existName}
-		_, err = cli.UpdateProjectInfo(ctx, id, field)
+		fields = &types.UpdatableProjectFields{Name: &existName}
+		_, err = cli.UpdateProjectInfo(ctx, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
 	})
 }
