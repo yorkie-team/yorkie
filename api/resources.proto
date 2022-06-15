@@ -16,6 +16,7 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 
 package api;
 
@@ -227,6 +228,17 @@ message Project {
   string auth_webhook_url = 5;
   repeated string auth_webhook_methods = 6;
   google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message UpdatableProjectFields {
+  message AuthWebhookMethods {
+    repeated string methods = 1;
+  }
+
+  google.protobuf.StringValue name = 1;
+  google.protobuf.StringValue auth_webhook_url = 2;
+  AuthWebhookMethods auth_webhook_methods = 3;
 }
 
 message DocumentSummary {

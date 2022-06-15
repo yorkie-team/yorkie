@@ -43,6 +43,9 @@ var (
 
 	// ErrConflictOnUpdate is returned when a conflict occurs during update.
 	ErrConflictOnUpdate = errors.New("conflict on update")
+
+	// ErrProjectNameAlreadyExists is returned when the project name already exists.
+	ErrProjectNameAlreadyExists = errors.New("project name already exists")
 )
 
 // Database represents database which reads or saves Yorkie data.
@@ -56,6 +59,9 @@ type Database interface {
 	// FindProjectInfoByName returns a project by the given name.
 	FindProjectInfoByName(ctx context.Context, name string) (*ProjectInfo, error)
 
+	// FindProjectInfoByID returns a project by the given id.
+	FindProjectInfoByID(ctx context.Context, id types.ID) (*ProjectInfo, error)
+
 	// EnsureDefaultProjectInfo ensures that the default project exists.
 	EnsureDefaultProjectInfo(ctx context.Context) (*ProjectInfo, error)
 
@@ -66,7 +72,7 @@ type Database interface {
 	ListProjectInfos(ctx context.Context) ([]*ProjectInfo, error)
 
 	// UpdateProjectInfo updates the project.
-	UpdateProjectInfo(ctx context.Context, project *ProjectInfo) error
+	UpdateProjectInfo(ctx context.Context, id types.ID, fields *types.UpdatableProjectFields) (*ProjectInfo, error)
 
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)

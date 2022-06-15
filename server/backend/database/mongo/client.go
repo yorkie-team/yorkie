@@ -201,28 +201,69 @@ func (c *Client) FindProjectInfoByName(ctx context.Context, name string) (*datab
 	return &projectInfo, nil
 }
 
-// UpdateProjectInfo updates the project info.
-func (c *Client) UpdateProjectInfo(ctx context.Context, info *database.ProjectInfo) error {
-	encodedID, err := encodeID(info.ID)
+// FindProjectInfoByID returns a project by the given id.
+func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.ProjectInfo, error) {
+	encodedID, err := encodeID(id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_, err = c.collection(colProjects).ReplaceOne(ctx, bson.M{
+	result := c.collection(colProjects).FindOne(ctx, bson.M{
+		"_id": encodedID,
+	})
+
+	projectInfo := database.ProjectInfo{}
+	if err := result.Decode(&projectInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+		}
+		return nil, err
+	}
+
+	return &projectInfo, nil
+}
+
+// UpdateProjectInfo updates the project info.
+func (c *Client) UpdateProjectInfo(
+	ctx context.Context,
+	id types.ID,
+	fields *types.UpdatableProjectFields,
+) (*database.ProjectInfo, error) {
+	encodedID, err := encodeID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	updatableFields := bson.M{}
+	data, err := bson.Marshal(fields)
+	if err != nil {
+		return nil, err
+	}
+	err = bson.Unmarshal(data, &updatableFields)
+	if err != nil {
+		return nil, err
+	}
+
+	updatableFields["updated_at"] = gotime.Now()
+
+	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
 		"_id": encodedID,
 	}, bson.M{
-		"name":                 info.Name,
-		"public_key":           info.PublicKey,
-		"secret_key":           info.SecretKey,
-		"auth_webhook_url":     info.AuthWebhookURL,
-		"auth_webhook_methods": info.AuthWebhookMethods,
-		"created_at":           gotime.Now(),
-	})
-	if err != nil {
-		return err
+		"$set": updatableFields,
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+	info := database.ProjectInfo{}
+	if err := res.Decode(&info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+		}
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+		}
+		return nil, err
 	}
 
-	return nil
+	return &info, nil
 }
 
 // ActivateClient activates the client of the given key.

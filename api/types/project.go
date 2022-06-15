@@ -28,20 +28,23 @@ type Project struct {
 	// Name is the name of this project.
 	Name string `json:"name"`
 
-	// PublicKey is the API key of this project.
-	PublicKey string `json:"public_key"`
-
-	// SecretKey is the secret key of this project.
-	SecretKey string `json:"secret_key"`
-
 	// AuthWebhookURL is the url of the authorization webhook.
 	AuthWebhookURL string `json:"auth_webhook_url"`
 
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods []string `json:"auth_webhook_methods"`
 
+	// PublicKey is the API key of this project.
+	PublicKey string `json:"public_key"`
+
+	// SecretKey is the secret key of this project.
+	SecretKey string `json:"secret_key"`
+
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `json:"created_at"`
+
+	// UpdatedAt is the time when the project was updated.
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // RequireAuth returns whether the given method requires authorization.

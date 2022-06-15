@@ -17,7 +17,6 @@
 package database
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/rs/xid"
@@ -53,6 +52,9 @@ type ProjectInfo struct {
 
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `bson:"created_at"`
+
+	// UpdatedAt is the time when the project was updated.
+	UpdatedAt time.Time `bson:"updated_at"`
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
@@ -76,6 +78,7 @@ func ToProjectInfo(project *types.Project) *ProjectInfo {
 		AuthWebhookURL:     project.AuthWebhookURL,
 		AuthWebhookMethods: project.AuthWebhookMethods,
 		CreatedAt:          project.CreatedAt,
+		UpdatedAt:          project.UpdatedAt,
 	}
 }
 
@@ -93,17 +96,21 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		AuthWebhookURL:     i.AuthWebhookURL,
 		AuthWebhookMethods: i.AuthWebhookMethods,
 		CreatedAt:          i.CreatedAt,
+		UpdatedAt:          i.UpdatedAt,
 	}
 }
 
-// Validate validates the ProjectInfo.
-func (i *ProjectInfo) Validate() error {
-	for _, method := range i.AuthWebhookMethods {
-		if !types.IsAuthMethod(method) {
-			return fmt.Errorf("not supported method for authorization webhook: %s", method)
-		}
+// UpdateFields updates the fields.
+func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
+	if fields.Name != nil {
+		i.Name = *fields.Name
 	}
-	return nil
+	if fields.AuthWebhookURL != nil {
+		i.AuthWebhookURL = *fields.AuthWebhookURL
+	}
+	if fields.AuthWebhookMethods != nil {
+		i.AuthWebhookMethods = *fields.AuthWebhookMethods
+	}
 }
 
 // ToProject converts the ProjectInfo to the Project.
@@ -111,10 +118,11 @@ func (i *ProjectInfo) ToProject() *types.Project {
 	return &types.Project{
 		ID:                 i.ID,
 		Name:               i.Name,
-		PublicKey:          i.PublicKey,
-		SecretKey:          i.SecretKey,
 		AuthWebhookURL:     i.AuthWebhookURL,
 		AuthWebhookMethods: i.AuthWebhookMethods,
+		PublicKey:          i.PublicKey,
+		SecretKey:          i.SecretKey,
 		CreatedAt:          i.CreatedAt,
+		UpdatedAt:          i.UpdatedAt,
 	}
 }

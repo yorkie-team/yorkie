@@ -52,15 +52,20 @@ func ToProject(project *types.Project) (*api.Project, error) {
 	if err != nil {
 		return nil, err
 	}
+	pbUpdatedAt, err := protoTypes.TimestampProto(project.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
 
 	return &api.Project{
 		Id:                 project.ID.String(),
 		Name:               project.Name,
-		PublicKey:          project.PublicKey,
-		SecretKey:          project.SecretKey,
 		AuthWebhookUrl:     project.AuthWebhookURL,
 		AuthWebhookMethods: project.AuthWebhookMethods,
+		PublicKey:          project.PublicKey,
+		SecretKey:          project.SecretKey,
 		CreatedAt:          pbCreatedAt,
+		UpdatedAt:          pbUpdatedAt,
 	}, nil
 }
 
@@ -499,4 +504,23 @@ func toCounterType(valueType json.CounterType) (api.ValueType, error) {
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
+}
+
+// ToUpdatableProjectFields converts the given model format to Protobuf format.
+func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.UpdatableProjectFields, error) {
+	pbUpdatableProjectFields := &api.UpdatableProjectFields{}
+	if fields.Name != nil {
+		pbUpdatableProjectFields.Name = &protoTypes.StringValue{Value: *fields.Name}
+	}
+	if fields.AuthWebhookURL != nil {
+		pbUpdatableProjectFields.AuthWebhookUrl = &protoTypes.StringValue{Value: *fields.AuthWebhookURL}
+	}
+	if fields.AuthWebhookMethods != nil {
+		pbUpdatableProjectFields.AuthWebhookMethods = &api.UpdatableProjectFields_AuthWebhookMethods{
+			Methods: *fields.AuthWebhookMethods,
+		}
+	} else {
+		pbUpdatableProjectFields.AuthWebhookMethods = nil
+	}
+	return pbUpdatableProjectFields, nil
 }
