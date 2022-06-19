@@ -524,7 +524,7 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 			return nil
 		}, "Create cnt-length text to test")
 		assert.NoError(b, err)
-		
+
 		b.StartTimer()
 		err = doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetText("k1")
