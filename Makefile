@@ -19,6 +19,8 @@ GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.GitCommit=${GIT_COMMIT}
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.Version=${YORKIE_VERSION}
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.BuildDate=${BUILD_DATE}
 
+default: help
+
 tools: ## install tools for developing yorkie
 	go generate -tags tools tools/tools.go
 
@@ -58,12 +60,9 @@ docker: ## builds docker images with the current version and latest tag
 docker-latest: ## builds docker images with latest tag
 	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:latest .
 
-default: help
 help:
-	@echo 'Yorkie commands for' $(EXENAME) $(VERSION)
-	@echo
 	@echo 'Commands:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    %-20s %s\n", $$1, $$2}'
 	@echo
 
-.PHONY: tools proto build fmt lint test docker docker-latest release help
+.PHONY: tools proto build build-binaries fmt lint test bench docker docker-latest help
