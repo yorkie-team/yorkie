@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.8] - 2022-06-22
+
+### Added
+
+- Add UpdateProject admin API: #338
+
+### Changed
+
+- Improve performance of deletion in Text: #341
+
 ## [0.2.7] - 2022-06-14
 
 ### Fixed
