@@ -536,7 +536,6 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 			toInner,
 			toOuter,
 		)
-		i++
 	}
 }
 
