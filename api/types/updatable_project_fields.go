@@ -20,6 +20,9 @@ package types
 import (
 	"errors"
 	"fmt"
+	"regexp"
+
+	"github.com/go-playground/validator/v10"
 )
 
 var (
@@ -28,12 +31,30 @@ var (
 
 	// ErrNotSupportedMethod is returned when the method is not supported.
 	ErrNotSupportedMethod = errors.New("not supported method for authorization webhook")
+
+	// ErrInvalidProjectName is returned when the name is invalid.
+	ErrInvalidProjectName = errors.New("invalid project name")
 )
+
+// reservedNames gives reserved words for project name.
+func reservedNames() []string {
+	return []string{"new", "default"}
+}
+
+// isReservedNames returns whether the given name is one of reserved names
+func isReservedNames(name string) bool {
+	for _, v := range reservedNames() {
+		if v == name {
+			return true
+		}
+	}
+	return false
+}
 
 // UpdatableProjectFields is a set of fields that use to update a project.
 type UpdatableProjectFields struct {
 	// Name is the name of this project.
-	Name *string `bson:"name,omitempty"`
+	Name *string `bson:"name,omitempty" validate:"omitempty,min=2,max=30,name"`
 
 	// AuthWebhookURL is the url of the authorization webhook.
 	AuthWebhookURL *string `bson:"auth_webhook_url,omitempty"`
@@ -54,5 +75,29 @@ func (i *UpdatableProjectFields) Validate() error {
 			}
 		}
 	}
+
+	v := validator.New()
+	if err := v.RegisterValidation("name", func(fl validator.FieldLevel) bool {
+		// NOTE(DongjinS): regular expression is referenced unreserved characters
+		// (https://datatracker.ietf.org/doc/html/rfc3986#section-2.3)
+		// and copied from https://gist.github.com/dpk/4757681
+		nameRegexString := "^[a-z0-9\\-._~]+$"
+		nameRegex := regexp.MustCompile(nameRegexString)
+		name := fl.Field().String()
+		return nameRegex.MatchString(name) && !isReservedNames(name)
+	}); err != nil {
+		return err
+	}
+
+	err := v.Struct(i)
+	if err != nil {
+		for _, err := range err.(validator.ValidationErrors) {
+			if fieldName := err.Field(); fieldName == "Name" {
+				return fmt.Errorf("%s: %w", *i.Name, ErrInvalidProjectName)
+			}
+		}
+		return err
+	}
+
 	return nil
 }
