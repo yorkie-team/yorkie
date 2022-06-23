@@ -161,7 +161,7 @@ func newSelection(from, to *RGATreeSplitNodePos, updatedAt *time.Ticket) *Select
 // RGATreeSplitNode is a node of RGATreeSplit.
 type RGATreeSplitNode[V RGATreeSplitValue] struct {
 	id        *RGATreeSplitNodeID
-	indexNode *splay.Node
+	indexNode *splay.Node[*RGATreeSplitNode[V]]
 	value     V
 	removedAt *time.Ticket
 
@@ -285,7 +285,7 @@ func (s *RGATreeSplitNode[V]) Value() V {
 // the block is split.
 type RGATreeSplit[V RGATreeSplitValue] struct {
 	initialHead *RGATreeSplitNode[V]
-	treeByIndex *splay.Tree
+	treeByIndex *splay.Tree[*RGATreeSplitNode[V]]
 	treeByID    *llrb.Tree[*RGATreeSplitNodeID, *RGATreeSplitNode[V]]
 
 	// removedNodeMap is a map that holds tombstone nodes
@@ -318,7 +318,7 @@ func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGAT
 
 func (s *RGATreeSplit[V]) findNodePos(index int) *RGATreeSplitNodePos {
 	splayNode, offset := s.treeByIndex.Find(index)
-	node := splayNode.Value().(*RGATreeSplitNode[V])
+	node := splayNode.Value()
 	return &RGATreeSplitNodePos{
 		id:             node.ID(),
 		relativeOffset: offset,
@@ -523,8 +523,8 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 		leftBoundary := boundaries[i]
 		rightBoundary := boundaries[i+1]
 
-		var toInner *splay.Node
-		var toOuter *splay.Node
+		var toInner *splay.Node[*RGATreeSplitNode[V]]
+		var toOuter *splay.Node[*RGATreeSplitNode[V]]
 		if rightBoundary != nil {
 			toInner = rightBoundary.prev.indexNode
 			toOuter = rightBoundary.indexNode

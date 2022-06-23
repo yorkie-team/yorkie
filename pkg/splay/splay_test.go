@@ -28,8 +28,8 @@ type stringValue struct {
 	content string
 }
 
-func newSplayNode(content string) *splay.Node {
-	return splay.NewNode(&stringValue{
+func newSplayNode(content string) *splay.Node[*stringValue] {
+	return splay.NewNode[*stringValue](&stringValue{
 		content: content,
 	})
 }
@@ -44,7 +44,7 @@ func (v *stringValue) String() string {
 
 func TestSplayTree(t *testing.T) {
 	t.Run("insert and splay test", func(t *testing.T) {
-		tree := splay.NewTree(nil)
+		tree := splay.NewTree[*stringValue](nil)
 
 		node, idx := tree.Find(0)
 		assert.Nil(t, node)
@@ -81,7 +81,7 @@ func TestSplayTree(t *testing.T) {
 	})
 
 	t.Run("deletion test", func(t *testing.T) {
-		tree := splay.NewTree(nil)
+		tree := splay.NewTree[*stringValue](nil)
 
 		nodeH := tree.Insert(newSplayNode("H"))
 		assert.Equal(t, "[1,1]H", tree.AnnotatedString())
@@ -102,7 +102,7 @@ func TestSplayTree(t *testing.T) {
 	})
 
 	t.Run("range separation test", func(t *testing.T) {
-		tree := splay.NewTree(nil)
+		tree := splay.NewTree[*stringValue](nil)
 
 		nodeA := tree.Insert(newSplayNode("A"))
 		assert.Equal(t, "[1,1]A", tree.AnnotatedString())
