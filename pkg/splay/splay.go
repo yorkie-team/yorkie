@@ -28,18 +28,18 @@ type Value interface {
 }
 
 // Node is a node of Tree.
-type Node struct {
-	value  Value
+type Node[V Value] struct {
+	value  V
 	weight int
 
-	left   *Node
-	right  *Node
-	parent *Node
+	left   *Node[V]
+	right  *Node[V]
+	parent *Node[V]
 }
 
 // NewNode creates a new instance of Node.
-func NewNode(value Value) *Node {
-	n := &Node{
+func NewNode[V Value](value V) *Node[V] {
+	n := &Node[V]{
 		value: value,
 	}
 	n.initWeight()
@@ -47,58 +47,58 @@ func NewNode(value Value) *Node {
 }
 
 // Value returns the value of this Node.
-func (n *Node) Value() Value {
-	return n.value
+func (t *Node[V]) Value() V {
+	return t.value
 }
 
-func (n *Node) leftWeight() int {
-	if n.left == nil {
+func (t *Node[V]) leftWeight() int {
+	if t.left == nil {
 		return 0
 	}
-	return n.left.weight
+	return t.left.weight
 }
 
-func (n *Node) rightWeight() int {
-	if n.right == nil {
+func (t *Node[V]) rightWeight() int {
+	if t.right == nil {
 		return 0
 	}
-	return n.right.weight
+	return t.right.weight
 }
 
-func (n *Node) initWeight() {
-	n.weight = n.value.Len()
+func (t *Node[V]) initWeight() {
+	t.weight = t.value.Len()
 }
 
-func (n *Node) increaseWeight(weight int) {
-	n.weight += weight
+func (t *Node[V]) increaseWeight(weight int) {
+	t.weight += weight
 }
 
-func (n *Node) unlink() {
-	n.parent = nil
-	n.right = nil
-	n.left = nil
+func (t *Node[V]) unlink() {
+	t.parent = nil
+	t.right = nil
+	t.left = nil
 }
 
-func (n *Node) hasLinks() bool {
-	return n.parent != nil || n.left != nil || n.right != nil
+func (t *Node[V]) hasLinks() bool {
+	return t.parent != nil || t.left != nil || t.right != nil
 }
 
 // Tree is weighted binary search tree which is based on Splay tree.
 // original paper on Splay Trees:
 //  - https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
-type Tree struct {
-	root *Node
+type Tree[V Value] struct {
+	root *Node[V]
 }
 
 // NewTree creates a new instance of Tree.
-func NewTree(root *Node) *Tree {
-	return &Tree{
+func NewTree[V Value](root *Node[V]) *Tree[V] {
+	return &Tree[V]{
 		root: root,
 	}
 }
 
 // Insert inserts the node at the last.
-func (t *Tree) Insert(node *Node) *Node {
+func (t *Tree[V]) Insert(node *Node[V]) *Node[V] {
 	if t.root == nil {
 		t.root = node
 		return node
@@ -108,7 +108,7 @@ func (t *Tree) Insert(node *Node) *Node {
 }
 
 // InsertAfter inserts the node after the given previous node.
-func (t *Tree) InsertAfter(prev *Node, node *Node) *Node {
+func (t *Tree[V]) InsertAfter(prev *Node[V], node *Node[V]) *Node[V] {
 	t.Splay(prev)
 	t.root = node
 	node.right = prev.right
@@ -126,7 +126,7 @@ func (t *Tree) InsertAfter(prev *Node, node *Node) *Node {
 }
 
 // Splay moves the given node to the root.
-func (t *Tree) Splay(node *Node) {
+func (t *Tree[V]) Splay(node *Node[V]) {
 	if node == nil {
 		return
 	}
@@ -161,14 +161,14 @@ func (t *Tree) Splay(node *Node) {
 }
 
 // IndexOf Find the index of the given node.
-func (t *Tree) IndexOf(node *Node) int {
+func (t *Tree[V]) IndexOf(node *Node[V]) int {
 	if node == nil || !node.hasLinks() {
 		return -1
 	}
 
 	index := 0
 	current := node
-	var prev *Node
+	var prev *Node[V]
 	for current != nil {
 		if prev == nil || prev == current.right {
 			index += current.value.Len() + current.leftWeight()
@@ -180,7 +180,7 @@ func (t *Tree) IndexOf(node *Node) int {
 }
 
 // Find returns the Node and offset of the given index.
-func (t *Tree) Find(index int) (*Node, int) {
+func (t *Tree[V]) Find(index int) (*Node[V], int) {
 	if t.root == nil {
 		return nil, 0
 	}
@@ -211,9 +211,9 @@ func (t *Tree) Find(index int) (*Node, int) {
 }
 
 // String returns a string containing node values.
-func (t *Tree) String() string {
+func (t *Tree[V]) String() string {
 	var builder strings.Builder
-	traverseInOrder(t.root, func(node *Node) {
+	traverseInOrder(t.root, func(node *Node[V]) {
 		builder.WriteString(node.value.String())
 	})
 	return builder.String()
@@ -221,10 +221,10 @@ func (t *Tree) String() string {
 
 // AnnotatedString returns a string containing the metadata of the Node
 // for debugging purpose.
-func (t *Tree) AnnotatedString() string {
+func (t *Tree[V]) AnnotatedString() string {
 	var builder strings.Builder
 
-	traverseInOrder(t.root, func(node *Node) {
+	traverseInOrder(t.root, func(node *Node[V]) {
 		builder.WriteString(fmt.Sprintf(
 			"[%d,%d]%s",
 			node.weight,
@@ -236,7 +236,7 @@ func (t *Tree) AnnotatedString() string {
 }
 
 // UpdateWeight recalculates the weight of this node with the value and children.
-func (t *Tree) UpdateWeight(node *Node) {
+func (t *Tree[V]) UpdateWeight(node *Node[V]) {
 	node.initWeight()
 
 	if node.left != nil {
@@ -250,7 +250,7 @@ func (t *Tree) UpdateWeight(node *Node) {
 
 // updateTreeWeight recalculates the weight of this tree from the given node to
 // the root.
-func (t *Tree) updateTreeWeight(node *Node) {
+func (t *Tree[V]) updateTreeWeight(node *Node[V]) {
 	for node != nil {
 		t.UpdateWeight(node)
 		node = node.parent
@@ -258,7 +258,7 @@ func (t *Tree) updateTreeWeight(node *Node) {
 }
 
 // Delete deletes the given node from this Tree.
-func (t *Tree) Delete(node *Node) {
+func (t *Tree[V]) Delete(node *Node[V]) {
 	t.Splay(node)
 
 	leftTree := NewTree(node.left)
@@ -296,7 +296,7 @@ func (t *Tree) Delete(node *Node) {
 //
 // CAUTION: This function does not filter out invalid argument inputs,
 // such as non-consecutive indices in fromOuter and fromInner.
-func (t *Tree) CutOffRange(fromOuter, fromInner, toInner, toOuter *Node) {
+func (t *Tree[V]) CutOffRange(fromOuter, fromInner, toInner, toOuter *Node[V]) {
 	t.Splay(toInner)
 	t.Splay(fromInner)
 
@@ -321,7 +321,7 @@ func (t *Tree) CutOffRange(fromOuter, fromInner, toInner, toOuter *Node) {
 }
 
 // cutOffLeft cut off left subtree of node.
-func (t *Tree) cutOffLeft(node *Node) {
+func (t *Tree[V]) cutOffLeft(node *Node[V]) {
 	if node.left == nil {
 		return
 	}
@@ -331,7 +331,7 @@ func (t *Tree) cutOffLeft(node *Node) {
 }
 
 // cutOffRight cut off right subtree of node.
-func (t *Tree) cutOffRight(node *Node) {
+func (t *Tree[V]) cutOffRight(node *Node[V]) {
 	if node.right == nil {
 		return
 	}
@@ -340,7 +340,7 @@ func (t *Tree) cutOffRight(node *Node) {
 	t.updateTreeWeight(node)
 }
 
-func (t *Tree) rotateLeft(pivot *Node) {
+func (t *Tree[V]) rotateLeft(pivot *Node[V]) {
 	root := pivot.parent
 	if root.parent != nil {
 		if root == root.parent.left {
@@ -366,7 +366,7 @@ func (t *Tree) rotateLeft(pivot *Node) {
 	t.UpdateWeight(pivot)
 }
 
-func (t *Tree) rotateRight(pivot *Node) {
+func (t *Tree[V]) rotateRight(pivot *Node[V]) {
 	root := pivot.parent
 	if root.parent != nil {
 		if root == root.parent.left {
@@ -391,7 +391,7 @@ func (t *Tree) rotateRight(pivot *Node) {
 	t.UpdateWeight(pivot)
 }
 
-func (t *Tree) maximum() *Node {
+func (t *Tree[V]) maximum() *Node[V] {
 	node := t.root
 	for node.right != nil {
 		node = node.right
@@ -399,7 +399,7 @@ func (t *Tree) maximum() *Node {
 	return node
 }
 
-func traverseInOrder(node *Node, callback func(node *Node)) {
+func traverseInOrder[V Value](node *Node[V], callback func(node *Node[V])) {
 	if node == nil {
 		return
 	}
@@ -409,10 +409,10 @@ func traverseInOrder(node *Node, callback func(node *Node)) {
 	traverseInOrder(node.right, callback)
 }
 
-func isLeftChild(node *Node) bool {
+func isLeftChild[V Value](node *Node[V]) bool {
 	return node != nil && node.parent != nil && node.parent.left == node
 }
 
-func isRightChild(node *Node) bool {
+func isRightChild[V Value](node *Node[V]) bool {
 	return node != nil && node.parent != nil && node.parent.right == node
 }

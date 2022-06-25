@@ -25,7 +25,7 @@ import (
 
 // RGATreeListNode is a node of RGATreeList.
 type RGATreeListNode struct {
-	indexNode *splay.Node
+	indexNode *splay.Node[*RGATreeListNode]
 	elem      Element
 
 	prev *RGATreeListNode
@@ -101,7 +101,7 @@ type RGATreeList struct {
 	dummyHead          *RGATreeListNode
 	last               *RGATreeListNode
 	size               int
-	nodeMapByIndex     *splay.Tree
+	nodeMapByIndex     *splay.Tree[*RGATreeListNode]
 	nodeMapByCreatedAt map[string]*RGATreeListNode
 }
 
@@ -183,7 +183,7 @@ func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element) {
 // Get returns the element of the given index.
 func (a *RGATreeList) Get(idx int) *RGATreeListNode {
 	splayNode, offset := a.nodeMapByIndex.Find(idx)
-	node := splayNode.Value().(*RGATreeListNode)
+	node := splayNode.Value()
 
 	if idx == 0 && splayNode == a.dummyHead.indexNode {
 		for {
