@@ -48,39 +48,39 @@ func NewNode[V Value](value V) *Node[V] {
 
 // Value returns the value of this Node.
 func (t *Node[V]) Value() V {
-	return n.value
+	return t.value
 }
 
 func (t *Node[V]) leftWeight() int {
-	if n.left == nil {
+	if t.left == nil {
 		return 0
 	}
-	return n.left.weight
+	return t.left.weight
 }
 
 func (t *Node[V]) rightWeight() int {
-	if n.right == nil {
+	if t.right == nil {
 		return 0
 	}
-	return n.right.weight
+	return t.right.weight
 }
 
 func (t *Node[V]) initWeight() {
-	n.weight = n.value.Len()
+	n.weight = t.value.Len()
 }
 
 func (t *Node[V]) increaseWeight(weight int) {
-	n.weight += weight
+	t.weight += weight
 }
 
 func (t *Node[V]) unlink() {
-	n.parent = nil
-	n.right = nil
-	n.left = nil
+	t.parent = nil
+	t.right = nil
+	t.left = nil
 }
 
 func (t *Node[V]) hasLinks() bool {
-	return n.parent != nil || n.left != nil || n.right != nil
+	return t.parent != nil || t.left != nil || t.right != nil
 }
 
 // Tree is weighted binary search tree which is based on Splay tree.
