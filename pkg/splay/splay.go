@@ -47,39 +47,39 @@ func NewNode[V Value](value V) *Node[V] {
 }
 
 // Value returns the value of this Node.
-func (n *Node[V]) Value() V {
+func (t *Node[V]) Value() V {
 	return n.value
 }
 
-func (n *Node[V]) leftWeight() int {
+func (t *Node[V]) leftWeight() int {
 	if n.left == nil {
 		return 0
 	}
 	return n.left.weight
 }
 
-func (n *Node[V]) rightWeight() int {
+func (t *Node[V]) rightWeight() int {
 	if n.right == nil {
 		return 0
 	}
 	return n.right.weight
 }
 
-func (n *Node[V]) initWeight() {
+func (t *Node[V]) initWeight() {
 	n.weight = n.value.Len()
 }
 
-func (n *Node[V]) increaseWeight(weight int) {
+func (t *Node[V]) increaseWeight(weight int) {
 	n.weight += weight
 }
 
-func (n *Node[V]) unlink() {
+func (t *Node[V]) unlink() {
 	n.parent = nil
 	n.right = nil
 	n.left = nil
 }
 
-func (n *Node[V]) hasLinks() bool {
+func (t *Node[V]) hasLinks() bool {
 	return n.parent != nil || n.left != nil || n.right != nil
 }
 
