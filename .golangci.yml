@@ -1,16 +1,25 @@
+run:
+  deadline: 5m
+
 linters:
   enable:
-    - bodyclose
+    - errcheck
+    - goimports
+    - govet
     - goconst
     - gocyclo
     - gofmt
-    - goimports
     - revive
     - goprintffuncname
     - gosec
     - lll
     - misspell
     - nakedret
+  disable:
+    - gosimple
+    - staticcheck
+    - structcheck
+    - unused
 
 linters-settings:
   goimports:
