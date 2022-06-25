@@ -66,7 +66,7 @@ func (t *Node[V]) rightWeight() int {
 }
 
 func (t *Node[V]) initWeight() {
-	n.weight = t.value.Len()
+	t.weight = t.value.Len()
 }
 
 func (t *Node[V]) increaseWeight(weight int) {
