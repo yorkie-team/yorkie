@@ -20,6 +20,9 @@ package types
 import (
 	"errors"
 	"fmt"
+	"regexp"
+
+	"github.com/go-playground/validator/v10"
 )
 
 var (
@@ -28,12 +31,33 @@ var (
 
 	// ErrNotSupportedMethod is returned when the method is not supported.
 	ErrNotSupportedMethod = errors.New("not supported method for authorization webhook")
+
+	// ErrInvalidProjectField is returned when the field is invalid.
+	ErrInvalidProjectField = errors.New("invalid project field")
 )
+
+var (
+	// reservedNames is a map of reserved names. It is used to check if the
+	// given project name is reserved or not.
+	reservedNames = map[string]bool{"new": true, "default": true}
+
+	// NOTE(DongjinS): regular expression is referenced unreserved characters
+	// (https://datatracker.ietf.org/doc/html/rfc3986#section-2.3)
+	// and copied from https://gist.github.com/dpk/4757681
+	nameRegex = regexp.MustCompile("^[a-z0-9\\-._~]+$")
+)
+
+func isReservedName(name string) bool {
+	if _, ok := reservedNames[name]; ok {
+		return true
+	}
+	return false
+}
 
 // UpdatableProjectFields is a set of fields that use to update a project.
 type UpdatableProjectFields struct {
 	// Name is the name of this project.
-	Name *string `bson:"name,omitempty"`
+	Name *string `bson:"name,omitempty" validate:"omitempty,min=2,max=30,name"`
 
 	// AuthWebhookURL is the url of the authorization webhook.
 	AuthWebhookURL *string `bson:"auth_webhook_url,omitempty"`
@@ -54,5 +78,20 @@ func (i *UpdatableProjectFields) Validate() error {
 			}
 		}
 	}
+
+	if err := defaultValidator.Struct(i); err != nil {
+		for _, err := range err.(validator.ValidationErrors) {
+			return fmt.Errorf("%s: %w", err, ErrInvalidProjectField)
+		}
+		return err
+	}
+
 	return nil
+}
+
+func init() {
+	registerValidation("name", func(level validator.FieldLevel) bool {
+		name := level.Field().String()
+		return !isReservedName(name) && nameRegex.MatchString(name)
+	})
 }

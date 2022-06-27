@@ -64,4 +64,48 @@ func TestUpdatableProjectFields(t *testing.T) {
 		}
 		assert.ErrorIs(t, fields.Validate(), types.ErrNotSupportedMethod)
 	})
+
+	t.Run("project name format test", func(t *testing.T) {
+		validName := "valid-name"
+		fields := &types.UpdatableProjectFields{
+			Name: &validName,
+		}
+		assert.NoError(t, fields.Validate())
+
+		invalidName := "has blank"
+		fields = &types.UpdatableProjectFields{
+			Name: &invalidName,
+		}
+		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+
+		reservedName := "new"
+		fields = &types.UpdatableProjectFields{
+			Name: &reservedName,
+		}
+		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+
+		reservedName = "default"
+		fields = &types.UpdatableProjectFields{
+			Name: &reservedName,
+		}
+		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+
+		invalidName = "1"
+		fields = &types.UpdatableProjectFields{
+			Name: &invalidName,
+		}
+		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+
+		invalidName = "over_30_chracaters_is_invalid_name"
+		fields = &types.UpdatableProjectFields{
+			Name: &invalidName,
+		}
+		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+
+		invalidName = "invalid/name"
+		fields = &types.UpdatableProjectFields{
+			Name: &invalidName,
+		}
+		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+	})
 }

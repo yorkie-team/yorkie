@@ -49,7 +49,8 @@ func ToStatusError(err error) error {
 		errors.Is(err, clients.ErrInvalidClientID) ||
 		errors.Is(err, clients.ErrInvalidClientKey) ||
 		errors.Is(err, types.ErrEmptyProjectFields) ||
-		errors.Is(err, types.ErrNotSupportedMethod) {
+		errors.Is(err, types.ErrNotSupportedMethod) ||
+		errors.Is(err, types.ErrInvalidProjectField) {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
