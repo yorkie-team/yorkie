@@ -22,7 +22,9 @@ GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.BuildDate=${BUILD_DATE}
 default: help
 
 tools: ## install tools for developing yorkie
-	go generate -tags tools tools/tools.go
+	go install github.com/gogo/protobuf/protoc-gen-gogo@v1.3.2
+	go install github.com/gogo/protobuf/protoc-gen-gofast@v1.3.2
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.46.2
 
 proto: ## generate proto files
 	protoc \
