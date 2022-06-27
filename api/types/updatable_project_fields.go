@@ -75,21 +75,7 @@ func (i *UpdatableProjectFields) Validate() error {
 			}
 		}
 	}
-
-	v := validator.New()
-	if err := v.RegisterValidation("name", func(fl validator.FieldLevel) bool {
-		// NOTE(DongjinS): regular expression is referenced unreserved characters
-		// (https://datatracker.ietf.org/doc/html/rfc3986#section-2.3)
-		// and copied from https://gist.github.com/dpk/4757681
-		nameRegexString := "^[a-z0-9\\-._~]+$"
-		nameRegex := regexp.MustCompile(nameRegexString)
-		name := fl.Field().String()
-		return nameRegex.MatchString(name) && !isReservedNames(name)
-	}); err != nil {
-		return err
-	}
-
-	err := v.Struct(i)
+	err := validateStruct(i)
 	if err != nil {
 		for _, err := range err.(validator.ValidationErrors) {
 			if fieldName := err.Field(); fieldName == "Name" {
@@ -100,4 +86,19 @@ func (i *UpdatableProjectFields) Validate() error {
 	}
 
 	return nil
+}
+
+// projectNameValidate is custom validation for project's name
+func projectNameValidate(fl validator.FieldLevel) bool {
+	// NOTE(DongjinS): regular expression is referenced unreserved characters
+	// (https://datatracker.ietf.org/doc/html/rfc3986#section-2.3)
+	// and copied from https://gist.github.com/dpk/4757681
+	nameRegexString := "^[a-z0-9\\-._~]+$"
+	nameRegex := regexp.MustCompile(nameRegexString)
+	name := fl.Field().String()
+	return nameRegex.MatchString(name) && !isReservedNames(name)
+}
+
+func init() {
+	registerValidation("name", projectNameValidate)
 }
