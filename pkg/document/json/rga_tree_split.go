@@ -524,14 +524,14 @@ func (s *RGATreeSplit[V]) findEdgesOfCandidates(
 	candidates []*RGATreeSplitNode[V],
 ) (*RGATreeSplitNode[V], *RGATreeSplitNode[V]) {
 	leftEdge := candidates[0].prev
-    for leftEdge != nil && leftEdge.removedAt != nil {
-      leftEdge = leftEdge.prev
-    }
+	for leftEdge != nil && leftEdge.removedAt != nil {
+		leftEdge = leftEdge.prev
+	}
 
-    rightEdge := candidates[len(candidates) - 1].next
-    for rightEdge != nil && rightEdge.removedAt != nil {
-      rightEdge = rightEdge.next
-    }
+	rightEdge := candidates[len(candidates)-1].next
+	for rightEdge != nil && rightEdge.removedAt != nil {
+		rightEdge = rightEdge.next
+	}
 
 	return leftEdge, rightEdge
 }
