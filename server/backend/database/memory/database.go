@@ -409,8 +409,10 @@ func (d *DB) FindDeactivateCandidates(
 	return infos, nil
 }
 
-// FindDocInfoByKey finds a docInfo by key.
-func (d *DB) FindDocInfoByKey(
+// FindDocInfoByKeyAndOwner finds the document of the given key. If the
+// createDocIfNotExist condition is true, create the document if it does not
+// exist.
+func (d *DB) FindDocInfoByKeyAndOwner(
 	ctx context.Context,
 	projectID types.ID,
 	clientID types.ID,
@@ -449,6 +451,26 @@ func (d *DB) FindDocInfoByKey(
 	}
 
 	return docInfo.DeepCopy(), nil
+}
+
+// FindDocInfoByKey finds the document of the given key.
+func (d *DB) FindDocInfoByKey(
+	ctx context.Context,
+	projectID types.ID,
+	key key.Key,
+) (*database.DocInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
+	if err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
+	}
+
+	return raw.(*database.DocInfo).DeepCopy(), nil
 }
 
 // FindDocInfoByID finds a docInfo of the given ID.

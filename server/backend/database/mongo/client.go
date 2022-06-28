@@ -450,10 +450,10 @@ func (c *Client) FindDeactivateCandidates(
 	return clientInfos, nil
 }
 
-// FindDocInfoByKey finds the document of the given key. If the
+// FindDocInfoByKeyAndOwner finds the document of the given key. If the
 // createDocIfNotExist condition is true, create the document if it does not
 // exist.
-func (c *Client) FindDocInfoByKey(
+func (c *Client) FindDocInfoByKeyAndOwner(
 	ctx context.Context,
 	projectID types.ID,
 	clientID types.ID,
@@ -506,6 +506,37 @@ func (c *Client) FindDocInfoByKey(
 			logging.From(ctx).Error(result.Err())
 			return nil, result.Err()
 		}
+	}
+
+	docInfo := database.DocInfo{}
+	if err := result.Decode(&docInfo); err != nil {
+		return nil, err
+	}
+
+	return &docInfo, nil
+}
+
+// FindDocInfoByKey finds the document of the given key.
+func (c *Client) FindDocInfoByKey(
+	ctx context.Context,
+	projectID types.ID,
+	docKey key.Key,
+) (*database.DocInfo, error) {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := c.collection(colDocuments).FindOne(ctx, bson.M{
+		"project_id": encodedProjectID,
+		"key":        docKey,
+	})
+	if result.Err() == mongo.ErrNoDocuments {
+		return nil, fmt.Errorf("%s %s: %w", projectID, docKey, database.ErrDocumentNotFound)
+	}
+	if result.Err() != nil {
+		logging.From(ctx).Error(result.Err())
+		return nil, result.Err()
 	}
 
 	docInfo := database.DocInfo{}
