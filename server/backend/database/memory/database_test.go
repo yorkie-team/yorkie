@@ -98,10 +98,10 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
-		_, err = db.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, false)
+		_, err = db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, false)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
-		docInfo, err := db.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
+		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, err)
 		assert.Equal(t, docKey, docInfo.Key)
 	})
@@ -111,7 +111,7 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, err)
 
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
-		docInfo, err := db.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
+		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, err)
 
 		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
@@ -124,7 +124,7 @@ func TestDB(t *testing.T) {
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
-		docInfo, _ := db.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
@@ -169,7 +169,7 @@ func TestDB(t *testing.T) {
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
-		docInfo, _ := db.FindDocInfoByKey(ctx, projectID, clientInfo.ID, docKey, true)
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
 
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
@@ -220,7 +220,7 @@ func TestDB(t *testing.T) {
 		totalSize := 9
 		clientInfo, _ := localDB.ActivateClient(ctx, projectID, t.Name())
 		for i := 0; i < totalSize; i++ {
-			_, err := localDB.FindDocInfoByKey(ctx, projectID, clientInfo.ID, key.Key(fmt.Sprintf("%d", i)), true)
+			_, err := localDB.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, key.Key(fmt.Sprintf("%d", i)), true)
 			assert.NoError(t, err)
 		}
 

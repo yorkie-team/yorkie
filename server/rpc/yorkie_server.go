@@ -164,7 +164,7 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
-	docInfo, err := documents.FindDocInfo(
+	docInfo, err := documents.FindDocInfoByKeyAndOwner(
 		ctx,
 		s.backend,
 		projects.From(ctx),
@@ -245,7 +245,7 @@ func (s *yorkieServer) DetachDocument(
 	if err != nil {
 		return nil, err
 	}
-	docInfo, err := documents.FindDocInfo(
+	docInfo, err := documents.FindDocInfoByKeyAndOwner(
 		ctx,
 		s.backend,
 		projects.From(ctx),
@@ -331,7 +331,7 @@ func (s *yorkieServer) PushPull(
 	if err != nil {
 		return nil, err
 	}
-	docInfo, err := documents.FindDocInfo(
+	docInfo, err := documents.FindDocInfoByKeyAndOwner(
 		ctx,
 		s.backend,
 		projects.From(ctx),
@@ -470,67 +470,6 @@ func (s *yorkieServer) UpdatePresence(
 	s.backend.Coordinator.Publish(ctx, docEvent.Publisher.ID, *docEvent)
 
 	return &api.UpdatePresenceResponse{}, nil
-}
-
-// ListChanges lists of changes for the given document.
-func (s *yorkieServer) ListChanges(
-	ctx context.Context,
-	req *api.ListChangesRequest,
-) (*api.ListChangesResponse, error) {
-	actorID, err := time.ActorIDFromBytes(req.ClientId)
-	if err != nil {
-		return nil, err
-	}
-	docKey := key.Key(req.DocumentKey)
-
-	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method: types.ListChanges,
-		Attributes: []types.AccessAttribute{{
-			Key:  docKey.String(),
-			Verb: types.Read,
-		}},
-	}); err != nil {
-		return nil, err
-	}
-
-	clientInfo, err := clients.FindClientInfo(
-		ctx,
-		s.backend.DB,
-		projects.From(ctx),
-		actorID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	docInfo, err := documents.FindDocInfo(
-		ctx,
-		s.backend,
-		projects.From(ctx),
-		clientInfo,
-		docKey,
-		false,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	changes, err := packs.FindAllChanges(
-		ctx,
-		s.backend,
-		docInfo,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	pbChanges, err := converter.ToChanges(changes)
-	if err != nil {
-		return nil, err
-	}
-
-	return &api.ListChangesResponse{
-		Changes: pbChanges,
-	}, nil
 }
 
 func (s *yorkieServer) watchDocs(

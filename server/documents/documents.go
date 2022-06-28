@@ -60,8 +60,8 @@ func GetDocumentSummary(
 	project *types.Project,
 	k key.Key,
 ) (*types.DocumentSummary, error) {
-	// TODO(hackerwins): Split FindDocInfoByKey into upsert and find.
-	docInfo, err := be.DB.FindDocInfoByKey(
+	// TODO(hackerwins): Split FindDocInfoByKeyAndOwner into upsert and find.
+	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
 		project.ID,
 		types.IDFromActorID(time.InitialActorID),
@@ -87,8 +87,22 @@ func GetDocumentSummary(
 	}, nil
 }
 
-// FindDocInfo returns a document for the given document key and owner.
-func FindDocInfo(
+// FindDocInfoByKey returns a document for the given document key.
+func FindDocInfoByKey(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docKey key.Key,
+) (*database.DocInfo, error) {
+	return be.DB.FindDocInfoByKey(
+		ctx,
+		project.ID,
+		docKey,
+	)
+}
+
+// FindDocInfoByKeyAndOwner returns a document for the given document key and owner.
+func FindDocInfoByKeyAndOwner(
 	ctx context.Context,
 	be *backend.Backend,
 	project *types.Project,
@@ -96,15 +110,11 @@ func FindDocInfo(
 	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
-	docInfo, err := be.DB.FindDocInfoByKey(
+	return be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
 		project.ID,
 		clientInfo.ID,
 		docKey,
 		createDocIfNotExist,
 	)
-	if err != nil {
-		return nil, err
-	}
-	return docInfo, nil
 }

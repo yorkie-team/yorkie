@@ -30,8 +30,6 @@ service Yorkie {
   rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
   rpc WatchDocuments (WatchDocumentsRequest) returns (stream WatchDocumentsResponse) {}
   rpc PushPull (PushPullRequest) returns (PushPullResponse) {}
-
-  rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
 }
 
 message ActivateClientRequest {
@@ -103,12 +101,3 @@ message UpdatePresenceRequest {
 }
 
 message UpdatePresenceResponse {}
-
-message ListChangesRequest {
-  bytes client_id = 1;
-  string document_key = 2;
-}
-
-message ListChangesResponse {
-  repeated Change changes = 1;
-}

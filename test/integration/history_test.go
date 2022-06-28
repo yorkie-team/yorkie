@@ -24,22 +24,27 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 )
 
 func TestHistory(t *testing.T) {
-	clients := activeClients(t, 2)
-	c1, c2 := clients[0], clients[1]
+	clients := activeClients(t, 1)
+	cli := clients[0]
 	defer cleanupClients(t, clients)
+
+	adminCli, err := admin.Dial(defaultServer.AdminAddr())
+	assert.NoError(t, err)
+	defer func() { assert.NoError(t, adminCli.Close()) }()
 
 	t.Run("history test", func(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(key.Key(t.Name()))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		assert.NoError(t, cli.Attach(ctx, d1))
+		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 
 		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewArray("todos")
@@ -58,10 +63,9 @@ func TestHistory(t *testing.T) {
 			return nil
 		}, "buy bread"))
 		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, d1.Marshal())
+		assert.NoError(t, cli.Sync(ctx))
 
-		assert.NoError(t, c1.Sync(ctx))
-
-		changes, err := c2.ListChangeSummaries(ctx, d1.Key())
+		changes, err := adminCli.ListChangeSummaries(ctx, "default", d1.Key())
 		assert.NoError(t, err)
 		assert.Len(t, changes, 3)
 

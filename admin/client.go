@@ -26,6 +26,8 @@ import (
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 // Option configures Options.
@@ -156,4 +158,42 @@ func (c *Client) UpdateProject(
 	}
 
 	return converter.FromProject(response.Project)
+}
+
+// ListChangeSummaries returns the change summaries of the given document.
+func (c *Client) ListChangeSummaries(
+	ctx context.Context,
+	projectName string,
+	key key.Key,
+) ([]*types.ChangeSummary, error) {
+	resp, err := c.client.ListChanges(ctx, &api.ListChangesRequest{
+		ProjectName: projectName,
+		DocumentKey: key.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	changes, err := converter.FromChanges(resp.Changes)
+	if err != nil {
+		return nil, err
+	}
+
+	doc := document.NewInternalDocument(key)
+
+	var summaries []*types.ChangeSummary
+	for _, c := range changes {
+		if err := doc.ApplyChanges(c); err != nil {
+			return nil, err
+		}
+
+		// TODO(hackerwins): doc.Marshal is expensive function. We need to optimize it.
+		summaries = append(summaries, &types.ChangeSummary{
+			ID:       c.ID(),
+			Message:  c.Message(),
+			Snapshot: doc.Marshal(),
+		})
+	}
+
+	return summaries, nil
 }
