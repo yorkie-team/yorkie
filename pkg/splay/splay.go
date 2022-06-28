@@ -73,7 +73,7 @@ func (t *Node[V]) increaseWeight(weight int) {
 	t.weight += weight
 }
 
-func (t *Node[V]) unlink() {
+func (t *Node[V]) Unlink() {
 	t.parent = nil
 	t.right = nil
 	t.left = nil
@@ -283,41 +283,40 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 		t.root = rightTree.root
 	}
 
-	node.unlink()
+	node.Unlink()
 	if t.root != nil {
 		t.UpdateWeight(t.root)
 	}
 }
 
-// CutOffRange cuts the given range from this Tree.
-// This function separates the range from `fromInner` to `toInner` as a subtree
-// by splaying outer nodes then cuts the subtree. 'xxxOuter' could be nil and
-// means to delete the entire subtree in that direction.
-//
-// CAUTION: This function does not filter out invalid argument inputs,
-// such as non-consecutive indices in fromOuter and fromInner.
-func (t *Tree[V]) CutOffRange(fromOuter, fromInner, toInner, toOuter *Node[V]) {
-	t.Splay(toInner)
-	t.Splay(fromInner)
-
-	if fromOuter == nil && toOuter == nil {
+// CutOffRange cuts the range between given 2 boundaries from this Tree.
+// This function separates the range as a subtree
+// by splaying outer nodes then cuts the subtree.
+// leftBoundary, rightBoundary are not included in the range to cut,
+// and they could be nil, meaning to delete to the end of the tree.
+func (t *Tree[V]) CutOffRange(leftBoundary, rightBoundary *Node[V]) {
+	if leftBoundary == nil && rightBoundary == nil {
 		t.root = nil
 		return
 	}
-	if fromOuter == nil {
-		t.Splay(toOuter)
-		t.cutOffLeft(toOuter)
+	if leftBoundary == nil {
+		t.Splay(rightBoundary)
+		t.cutOffLeft(rightBoundary)
 		return
 	}
-	if toOuter == nil {
-		t.Splay(fromOuter)
-		t.cutOffRight(fromOuter)
+	if rightBoundary == nil {
+		t.Splay(leftBoundary)
+		t.cutOffRight(leftBoundary)
 		return
 	}
 
-	t.Splay(toOuter)
-	t.Splay(fromOuter)
-	t.cutOffLeft(toOuter)
+	t.Splay(rightBoundary)
+	t.Splay(leftBoundary)
+	t.cutOffLeft(rightBoundary)
+	if leftBoundary.right != rightBoundary {
+		t.cutOffLeft(leftBoundary.right)
+		t.Delete(leftBoundary.right)
+	}
 }
 
 // cutOffLeft cut off left subtree of node.
