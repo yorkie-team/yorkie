@@ -47,6 +47,31 @@ func startDefaultServer() {
 	defaultServer = svr
 }
 
+// activeClient is a helper function to create active clients.
+func activeClients(b *testing.B, n int) (clients []*client.Client) {
+	for i := 0; i < n; i++ {
+		c, err := client.Dial(
+			defaultServer.RPCAddr(),
+			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", i)}),
+		)
+		assert.NoError(b, err)
+
+		err = c.Activate(context.Background())
+		assert.NoError(b, err)
+
+		clients = append(clients, c)
+	}
+	return
+}
+
+// cleanupClients is a helper function to clean up clients.
+func cleanupClients(b *testing.B, clients []*client.Client) {
+	for _, c := range clients {
+		assert.NoError(b, c.Deactivate(context.Background()))
+		assert.NoError(b, c.Close())
+	}
+}
+
 func benchmarkUpdateAndSync(cnt int, ctx context.Context, b *testing.B, cli *client.Client, d *document.Document, key string) error {
 	for i := 0; i < cnt; i++ {
 		err := d.Update(func(root *proxy.ObjectProxy) error {
@@ -85,64 +110,24 @@ func benchmarkUpdateProject(cnt int, adminCli *admin.Client, b *testing.B) error
 	return nil
 }
 
-func benchmarkWatchAndUpdate(cnt int, wg *sync.WaitGroup, b *testing.B) {
+func watchDoc(cli *client.Client, rch <-chan client.WatchResponse, done <-chan bool, ctx context.Context, b *testing.B, wg *sync.WaitGroup) {
 	defer wg.Done()
-	cli, err := client.Dial(
-		defaultServer.RPCAddr(),
-		client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%s", b.Name())}),
-	)
-	assert.NoError(b, err)
-	defer func() {
-		err := cli.Close()
-		assert.NoError(b, err)
-	}()
-
-	ctx := context.Background()
-	err = cli.Activate(ctx)
-	assert.NoError(b, err)
-	assert.True(b, cli.IsActive())
-
-	d := document.New(key.Key(b.Name()))
-	err = cli.Attach(ctx, d)
-	assert.NoError(b, err)
-	docKey := "testKey"
-	err = d.Update(func(root *proxy.ObjectProxy) error {
-		root.SetNewText(docKey)
-		return nil
-	})
-	assert.NoError(b, err)
-
-	rch, err := cli.Watch(ctx, d)
-	assert.NoError(b, err)
-
-	innerWg := sync.WaitGroup{}
-	innerWg.Add(2)
-	done := make(chan bool)
-	go func() {
-		defer innerWg.Done()
-		for {
-			select {
-			case resp := <-rch:
-				if resp.Err == io.EOF {
-					assert.Fail(b, resp.Err.Error())
-				}
-				assert.NoError(b, resp.Err)
-
-				if resp.Type == client.DocumentsChanged {
-					err := cli.Sync(ctx, resp.Keys...)
-					assert.NoError(b, err)
-				}
-			case <-done:
-				return
+	for {
+		select {
+		case resp := <-rch:
+			if resp.Err == io.EOF {
+				assert.Fail(b, resp.Err.Error())
 			}
+			assert.NoError(b, resp.Err)
+
+			if resp.Type == client.DocumentsChanged {
+				err := cli.Sync(ctx, resp.Keys...)
+				assert.NoError(b, err)
+			}
+		case <-done:
+			return
 		}
-	}()
-	go func() {
-		defer innerWg.Done()
-		benchmarkUpdateAndSync(cnt, ctx, b, cli, d, docKey)
-		done <- true
-	}()
-	innerWg.Wait()
+	}
 }
 
 func BenchmarkRPC(b *testing.B) {
@@ -194,11 +179,52 @@ func BenchmarkRPC(b *testing.B) {
 	b.Run("client to client via server", func(b *testing.B) {
 		b.StopTimer()
 		for i := 0; i < b.N; i++ {
+			clients := activeClients(b, 2)
+			c1, c2 := clients[0], clients[1]
+			defer cleanupClients(b, clients)
+
+			ctx := context.Background()
+			d1 := document.New(key.Key(b.Name()))
+			err := c1.Attach(ctx, d1)
+			assert.NoError(b, err)
+			testKey1 := "testKey1"
+			err = d1.Update(func(root *proxy.ObjectProxy) error {
+				root.SetNewText(testKey1)
+				return nil
+			})
+			assert.NoError(b, err)
+
+			d2 := document.New(key.Key(b.Name()))
+			err = c2.Attach(ctx, d2)
+			assert.NoError(b, err)
+			testKey2 := "testKey2"
+			err = d2.Update(func(root *proxy.ObjectProxy) error {
+				root.SetNewText(testKey2)
+				return nil
+			})
+			assert.NoError(b, err)
+
+			rch1, err := c1.Watch(ctx, d1)
+			assert.NoError(b, err)
+			rch2, err := c2.Watch(ctx, d2)
+			assert.NoError(b, err)
+			done1 := make(chan bool)
+			done2 := make(chan bool)
+
 			wg := sync.WaitGroup{}
 			wg.Add(2)
 			b.StartTimer()
-			go benchmarkWatchAndUpdate(250, &wg, b)
-			go benchmarkWatchAndUpdate(250, &wg, b)
+			go watchDoc(c1, rch1, done2, ctx, b, &wg)
+			go watchDoc(c2, rch2, done1, ctx, b, &wg)
+			go func() {
+				benchmarkUpdateAndSync(250, ctx, b, c1, d1, testKey1)
+				done1 <- true
+			}()
+			go func() {
+				benchmarkUpdateAndSync(250, ctx, b, c2, d2, testKey2)
+				done2 <- true
+			}()
+
 			wg.Wait()
 		}
 	})
