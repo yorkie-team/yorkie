@@ -24,6 +24,7 @@ import (
 	"io"
 	"sync"
 	"testing"
+	// "unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/yorkie-team/yorkie/admin"
@@ -132,6 +133,7 @@ func watchDoc(cli *client.Client, rch <-chan client.WatchResponse, done <-chan b
 
 func BenchmarkRPC(b *testing.B) {
 	b.StopTimer()
+	logging.SetLogLevel("error")
 	startDefaultServer()
 	defer func() {
 		if defaultServer != nil {
@@ -171,7 +173,7 @@ func BenchmarkRPC(b *testing.B) {
 			assert.NoError(b, err)
 
 			b.StartTimer()
-			err = benchmarkUpdateAndSync(100, ctx, b, cli, d1, testKey)
+			err = benchmarkUpdateAndSync(1000, ctx, b, cli, d1, testKey)
 			assert.NoError(b, err)
 		}
 	})
@@ -217,14 +219,59 @@ func BenchmarkRPC(b *testing.B) {
 			go watchDoc(c1, rch1, done2, ctx, b, &wg)
 			go watchDoc(c2, rch2, done1, ctx, b, &wg)
 			go func() {
-				benchmarkUpdateAndSync(250, ctx, b, c1, d1, testKey1)
+				benchmarkUpdateAndSync(1000, ctx, b, c1, d1, testKey1)
 				done1 <- true
 			}()
 			go func() {
-				benchmarkUpdateAndSync(250, ctx, b, c2, d2, testKey2)
+				benchmarkUpdateAndSync(1000, ctx, b, c2, d2, testKey2)
 				done2 <- true
 			}()
 
+			wg.Wait()
+		}
+	})
+
+	b.Run("attach large document", func(b *testing.B) {
+		b.StopTimer()
+		for i := 0; i < b.N; i++ {
+			clients := activeClients(b, 2)
+			c1, c2 := clients[0], clients[1]
+			defer cleanupClients(b, clients)
+			
+			ctx := context.Background()
+			doc := document.New(key.Key(b.Name()))
+
+			err := doc.Update(func(root *proxy.ObjectProxy) error {
+				text := root.SetNewText("k1")
+				str := ""
+				// 10 MiB = 10485760 chars
+				for c := 0; c < 50000; c++ {
+					str += "a"
+				}
+				text.Edit(0, 0, str)
+				return nil
+			})
+			assert.NoError(b, err)
+			
+			wg := sync.WaitGroup{}
+			wg.Add(2)
+			b.StartTimer()
+			go func(){
+				defer wg.Done()			
+				if !c1.IsActive() {
+					c1.Activate(ctx)
+				}
+				err := c1.Attach(ctx, doc)
+				assert.NoError(b, err)
+			}()
+			go func(){
+				defer wg.Done()			
+				if !c2.IsActive() {
+					c2.Activate(ctx)
+				}
+				err := c2.Attach(ctx, doc)
+				assert.NoError(b, err)
+			}()
 			wg.Wait()
 		}
 	})
