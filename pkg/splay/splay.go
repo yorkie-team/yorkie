@@ -73,7 +73,7 @@ func (t *Node[V]) increaseWeight(weight int) {
 	t.weight += weight
 }
 
-func (t *Node[V]) Unlink() {
+func (t *Node[V]) unlink() {
 	t.parent = nil
 	t.right = nil
 	t.left = nil
@@ -248,15 +248,6 @@ func (t *Tree[V]) UpdateWeight(node *Node[V]) {
 	}
 }
 
-// updateTreeWeight recalculates the weight of this tree from the given node to
-// the root.
-func (t *Tree[V]) updateTreeWeight(node *Node[V]) {
-	for node != nil {
-		t.UpdateWeight(node)
-		node = node.parent
-	}
-}
-
 // Delete deletes the given node from this Tree.
 func (t *Tree[V]) Delete(node *Node[V]) {
 	t.Splay(node)
@@ -283,60 +274,10 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 		t.root = rightTree.root
 	}
 
-	node.Unlink()
+	node.unlink()
 	if t.root != nil {
 		t.UpdateWeight(t.root)
 	}
-}
-
-// CutOffRange cuts the range between given 2 boundaries from this Tree.
-// This function separates the range as a subtree
-// by splaying outer nodes then cuts the subtree.
-// leftBoundary, rightBoundary are not included in the range to cut,
-// and they could be nil, meaning to delete to the end of the tree.
-func (t *Tree[V]) CutOffRange(leftBoundary, rightBoundary *Node[V]) {
-	if leftBoundary == nil && rightBoundary == nil {
-		t.root = nil
-		return
-	}
-	if leftBoundary == nil {
-		t.Splay(rightBoundary)
-		t.cutOffLeft(rightBoundary)
-		return
-	}
-	if rightBoundary == nil {
-		t.Splay(leftBoundary)
-		t.cutOffRight(leftBoundary)
-		return
-	}
-
-	t.Splay(rightBoundary)
-	t.Splay(leftBoundary)
-	t.cutOffLeft(rightBoundary)
-	if leftBoundary.right != rightBoundary {
-		t.cutOffLeft(leftBoundary.right)
-		t.Delete(leftBoundary.right)
-	}
-}
-
-// cutOffLeft cut off left subtree of node.
-func (t *Tree[V]) cutOffLeft(node *Node[V]) {
-	if node.left == nil {
-		return
-	}
-	node.left.parent = nil
-	node.left = nil
-	t.updateTreeWeight(node)
-}
-
-// cutOffRight cut off right subtree of node.
-func (t *Tree[V]) cutOffRight(node *Node[V]) {
-	if node.right == nil {
-		return
-	}
-	node.right.parent = nil
-	node.right = nil
-	t.updateTreeWeight(node)
 }
 
 func (t *Tree[V]) rotateLeft(pivot *Node[V]) {
