@@ -20,6 +20,7 @@ package bench
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -570,13 +571,13 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 		doc := document.New("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
+		var builder strings.Builder
+		for i := 0; i < cnt; i++ {
+			builder.WriteString("a")				
+		}
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.SetNewText("k2")
-			str := ""
-			for i := 0; i < cnt; i++ {
-				str += "a"
-			}
-			text.Edit(0, 0, str)
+			text.Edit(0, 0, builder.String())
 			return nil
 		}, "initial")
 		assert.NoError(b, err)
