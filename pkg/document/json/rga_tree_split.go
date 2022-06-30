@@ -506,7 +506,6 @@ func (s *RGATreeSplit[V]) deleteNodes(
 		}
 
 		if node.Remove(editedAt, latestCreatedAt) {
-			s.treeByIndex.Splay(node.indexNode)
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
