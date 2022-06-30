@@ -1,7 +1,7 @@
 //go:build bench
 
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2022 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,9 +22,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"testing"
-	// "unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/yorkie-team/yorkie/admin"
@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/server"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -73,7 +74,14 @@ func cleanupClients(b *testing.B, clients []*client.Client) {
 	}
 }
 
-func benchmarkUpdateAndSync(cnt int, ctx context.Context, b *testing.B, cli *client.Client, d *document.Document, key string) error {
+func benchmarkUpdateAndSync(
+	ctx context.Context,
+	b *testing.B,
+	cnt int,
+	cli *client.Client,
+	d *document.Document,
+	key string,
+) error {
 	for i := 0; i < cnt; i++ {
 		err := d.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetText(key)
@@ -87,8 +95,7 @@ func benchmarkUpdateAndSync(cnt int, ctx context.Context, b *testing.B, cli *cli
 	return nil
 }
 
-func benchmarkUpdateProject(cnt int, adminCli *admin.Client, b *testing.B) error {
-	ctx := context.Background()
+func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli *admin.Client) error {
 	for i := 0; i < cnt; i++ {
 		name := fmt.Sprintf("name%d", i)
 		authWebhookURL := fmt.Sprintf("authWebhookURL%d", i)
@@ -99,7 +106,7 @@ func benchmarkUpdateProject(cnt int, adminCli *admin.Client, b *testing.B) error
 
 		_, err := adminCli.UpdateProject(
 			ctx,
-			"000000000000000000000000",
+			database.DefaultProjectID.String(),
 			&types.UpdatableProjectFields{
 				Name:               &name,
 				AuthWebhookURL:     &authWebhookURL,
@@ -111,8 +118,13 @@ func benchmarkUpdateProject(cnt int, adminCli *admin.Client, b *testing.B) error
 	return nil
 }
 
-func watchDoc(cli *client.Client, rch <-chan client.WatchResponse, done <-chan bool, ctx context.Context, b *testing.B, wg *sync.WaitGroup) {
-	defer wg.Done()
+func watchDoc(
+	ctx context.Context,
+	b *testing.B,
+	cli *client.Client,
+	rch <-chan client.WatchResponse, 
+	done <-chan bool,
+) {
 	for {
 		select {
 		case resp := <-rch:
@@ -132,39 +144,39 @@ func watchDoc(cli *client.Client, rch <-chan client.WatchResponse, done <-chan b
 }
 
 func BenchmarkRPC(b *testing.B) {
-	b.StopTimer()
 	logging.SetLogLevel("error")
 	startDefaultServer()
 	defer func() {
-		if defaultServer != nil {
-			if err := defaultServer.Shutdown(true); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
+		if defaultServer == nil {
+			return
+		}
+
+		if err := defaultServer.Shutdown(true); err != nil {
+			logging.DefaultLogger().Error(err)
 		}
 	}()
-	b.StartTimer()
+
 	b.Run("client to server", func(b *testing.B) {
-		b.StopTimer()
+		cli, err := client.Dial(
+			defaultServer.RPCAddr(),
+			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%s", b.Name())}),
+		)
+		assert.NoError(b, err)
+		defer func() {
+			err := cli.Close()
+			assert.NoError(b, err)
+		}()
+
+		ctx := context.Background()
+		err = cli.Activate(ctx)
+		assert.NoError(b, err)
+		assert.True(b, cli.IsActive())
+
+		d1 := document.New("doc1")
+		err = cli.Attach(ctx, d1)
+		assert.NoError(b, err)
+
 		for i := 0; i < b.N; i++ {
-			cli, err := client.Dial(
-				defaultServer.RPCAddr(),
-				client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%s", b.Name())}),
-			)
-			assert.NoError(b, err)
-			defer func() {
-				err := cli.Close()
-				assert.NoError(b, err)
-			}()
-
-			ctx := context.Background()
-			err = cli.Activate(ctx)
-			assert.NoError(b, err)
-			assert.True(b, cli.IsActive())
-
-			d1 := document.New("doc1")
-			err = cli.Attach(ctx, d1)
-			assert.NoError(b, err)
-
 			testKey := "testKey"
 			err = d1.Update(func(root *proxy.ObjectProxy) error {
 				root.SetNewText(testKey)
@@ -172,58 +184,64 @@ func BenchmarkRPC(b *testing.B) {
 			})
 			assert.NoError(b, err)
 
-			b.StartTimer()
-			err = benchmarkUpdateAndSync(1000, ctx, b, cli, d1, testKey)
+			err = benchmarkUpdateAndSync(ctx, b, 1000, cli, d1, testKey)
 			assert.NoError(b, err)
 		}
 	})
 
 	b.Run("client to client via server", func(b *testing.B) {
-		b.StopTimer()
+		clients := activeClients(b, 2)
+		c1, c2 := clients[0], clients[1]
+		defer cleanupClients(b, clients)
+
+		ctx := context.Background()
+
+		d1 := document.New(key.Key(b.Name()))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(b, err)
+		testKey1 := "testKey1"
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText(testKey1)
+			return nil
+		})
+		assert.NoError(b, err)
+
+		d2 := document.New(key.Key(b.Name()))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(b, err)
+		testKey2 := "testKey2"
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText(testKey2)
+			return nil
+		})
+		assert.NoError(b, err)
+
 		for i := 0; i < b.N; i++ {
-			clients := activeClients(b, 2)
-			c1, c2 := clients[0], clients[1]
-			defer cleanupClients(b, clients)
-
-			ctx := context.Background()
-			d1 := document.New(key.Key(b.Name()))
-			err := c1.Attach(ctx, d1)
-			assert.NoError(b, err)
-			testKey1 := "testKey1"
-			err = d1.Update(func(root *proxy.ObjectProxy) error {
-				root.SetNewText(testKey1)
-				return nil
-			})
-			assert.NoError(b, err)
-
-			d2 := document.New(key.Key(b.Name()))
-			err = c2.Attach(ctx, d2)
-			assert.NoError(b, err)
-			testKey2 := "testKey2"
-			err = d2.Update(func(root *proxy.ObjectProxy) error {
-				root.SetNewText(testKey2)
-				return nil
-			})
-			assert.NoError(b, err)
-
 			rch1, err := c1.Watch(ctx, d1)
 			assert.NoError(b, err)
 			rch2, err := c2.Watch(ctx, d2)
 			assert.NoError(b, err)
+
 			done1 := make(chan bool)
 			done2 := make(chan bool)
 
 			wg := sync.WaitGroup{}
 			wg.Add(2)
-			b.StartTimer()
-			go watchDoc(c1, rch1, done2, ctx, b, &wg)
-			go watchDoc(c2, rch2, done1, ctx, b, &wg)
 			go func() {
-				benchmarkUpdateAndSync(1000, ctx, b, c1, d1, testKey1)
+				defer wg.Done()
+				watchDoc(ctx, b, c1, rch1, done2)
+			}()
+			go func() {
+				defer wg.Done()
+				watchDoc(ctx, b, c2, rch2, done1)
+			}()
+
+			go func() {
+				benchmarkUpdateAndSync(ctx, b, 100, c1, d1, testKey1)
 				done1 <- true
 			}()
 			go func() {
-				benchmarkUpdateAndSync(1000, ctx, b, c2, d2, testKey2)
+				benchmarkUpdateAndSync(ctx, b, 100, c2, d2, testKey2)
 				done2 <- true
 			}()
 
@@ -232,59 +250,58 @@ func BenchmarkRPC(b *testing.B) {
 	})
 
 	b.Run("attach large document", func(b *testing.B) {
-		b.StopTimer()
+		var builder strings.Builder
+		for c := 0; c < 50000; c++ {
+			builder.WriteString("a")
+		}
 		for i := 0; i < b.N; i++ {
-			clients := activeClients(b, 2)
-			c1, c2 := clients[0], clients[1]
-			defer cleanupClients(b, clients)
-			
-			ctx := context.Background()
-			doc := document.New(key.Key(b.Name()))
-
-			err := doc.Update(func(root *proxy.ObjectProxy) error {
-				text := root.SetNewText("k1")
-				str := ""
-				// 10 MiB = 10485760 chars
-				for c := 0; c < 50000; c++ {
-					str += "a"
-				}
-				text.Edit(0, 0, str)
-				return nil
-			})
-			assert.NoError(b, err)
-			
-			wg := sync.WaitGroup{}
-			wg.Add(2)
-			b.StartTimer()
-			go func(){
-				defer wg.Done()			
-				if !c1.IsActive() {
-					c1.Activate(ctx)
-				}
-				err := c1.Attach(ctx, doc)
+			func () {
+				clients := activeClients(b, 2)
+				c1, c2 := clients[0], clients[1]
+				defer cleanupClients(b, clients)
+				
+				ctx := context.Background()
+				doc1 := document.New(key.Key(b.Name()))
+				doc2 := document.New(key.Key(b.Name()))
+	
+				err := doc1.Update(func(root *proxy.ObjectProxy) error {
+					text := root.SetNewText("k1")
+					text.Edit(0, 0, builder.String())
+					return nil
+				})
 				assert.NoError(b, err)
-			}()
-			go func(){
-				defer wg.Done()			
-				if !c2.IsActive() {
-					c2.Activate(ctx)
-				}
-				err := c2.Attach(ctx, doc)
+				err = doc2.Update(func(root *proxy.ObjectProxy) error {
+					text := root.SetNewText("k1")
+					text.Edit(0, 0, builder.String())
+					return nil
+				})
 				assert.NoError(b, err)
+				
+				wg := sync.WaitGroup{}
+				wg.Add(2)
+				go func(){
+					defer wg.Done()			
+					err := c1.Attach(ctx, doc1)
+					assert.NoError(b, err)
+				}()
+				go func(){
+					defer wg.Done()			
+					err := c2.Attach(ctx, doc2)
+					assert.NoError(b, err)
+				}()
+				wg.Wait()
 			}()
-			wg.Wait()
 		}
 	})
 
 	b.Run("adminCli to server", func(b *testing.B) {
-		b.StopTimer()
-		for i := 0; i < b.N; i++ {
-			adminCli, err := admin.Dial(defaultServer.AdminAddr())
-			assert.NoError(b, err)
-			defer func() { assert.NoError(b, adminCli.Close()) }()
+		adminCli, err := admin.Dial(defaultServer.AdminAddr())
+		assert.NoError(b, err)
+		defer func() { assert.NoError(b, adminCli.Close()) }()
 
-			b.StartTimer()
-			err = benchmarkUpdateProject(1000, adminCli, b)
+		ctx := context.Background()
+		for i := 0; i < b.N; i++ {
+			err = benchmarkUpdateProject(ctx, b, 1000, adminCli)
 			assert.NoError(b, err)
 		}
 	})
