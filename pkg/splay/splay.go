@@ -316,7 +316,9 @@ func (t *Tree[V]) checkRangeSeparation(leftBoundary, rightBoundary *Node[V]) {
 		panic("Invalid argument for Boundary")
 	}
 	// rightBoundary must be root.right or root.right.right
-	if t.root.right != rightBoundary && t.root.right.right != rightBoundary {
+	if t.root.right == nil ||
+		(t.root.right != rightBoundary &&
+			t.root.right.right != rightBoundary) {
 		panic("Invalid argument for Boundary")
 	}
 }
