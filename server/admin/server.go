@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 )
 
@@ -286,5 +287,45 @@ func (s *Server) ListDocuments(
 
 	return &api.ListDocumentsResponse{
 		Documents: pbDocuments,
+	}, nil
+}
+
+// ListChanges lists of changes for the given document.
+func (s *Server) ListChanges(
+	ctx context.Context,
+	req *api.ListChangesRequest,
+) (*api.ListChangesResponse, error) {
+	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+	docKey := key.Key(req.DocumentKey)
+
+	docInfo, err := documents.FindDocInfoByKey(
+		ctx,
+		s.backend,
+		project,
+		docKey,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	changes, err := packs.FindAllChanges(
+		ctx,
+		s.backend,
+		docInfo,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	pbChanges, err := converter.ToChanges(changes)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.ListChangesResponse{
+		Changes: pbChanges,
 	}, nil
 }

@@ -94,10 +94,17 @@ type Database interface {
 		candidatesLimit int,
 	) ([]*ClientInfo, error)
 
-	// FindDocInfoByKey finds the document of the given key. If the
+	// FindDocInfoByKey finds the document of the given key.
+	FindDocInfoByKey(
+		ctx context.Context,
+		projectID types.ID,
+		docKey key.Key,
+	) (*DocInfo, error)
+
+	// FindDocInfoByKeyAndOwner finds the document of the given key. If the
 	// createDocIfNotExist condition is true, create the document if it does not
 	// exist.
-	FindDocInfoByKey(
+	FindDocInfoByKeyAndOwner(
 		ctx context.Context,
 		projectID types.ID,
 		clientID types.ID,

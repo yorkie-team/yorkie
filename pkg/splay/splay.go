@@ -248,15 +248,6 @@
 	 }
  }
  
- // updateTreeWeight recalculates the weight of this tree from the given node to
- // the root.
- func (t *Tree[V]) updateTreeWeight(node *Node[V]) {
-	 for node != nil {
-		 t.UpdateWeight(node)
-		 node = node.parent
-	 }
- }
- 
  // Delete deletes the given node from this Tree.
  func (t *Tree[V]) Delete(node *Node[V]) {
 	 t.Splay(node)

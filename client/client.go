@@ -483,40 +483,6 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 	return nil
 }
 
-// ListChangeSummaries returns the change summaries of the given document.
-func (c *Client) ListChangeSummaries(ctx context.Context, key key.Key) ([]*types.ChangeSummary, error) {
-	resp, err := c.client.ListChanges(ctx, &api.ListChangesRequest{
-		ClientId:    c.id.Bytes(),
-		DocumentKey: key.String(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	changes, err := converter.FromChanges(resp.Changes)
-	if err != nil {
-		return nil, err
-	}
-
-	doc := document.NewInternalDocument(key)
-
-	var summaries []*types.ChangeSummary
-	for _, c := range changes {
-		if err := doc.ApplyChanges(c); err != nil {
-			return nil, err
-		}
-
-		// TODO(hackerwins): doc.Marshal is expensive function. We need to optimize it.
-		summaries = append(summaries, &types.ChangeSummary{
-			ID:       c.ID(),
-			Message:  c.Message(),
-			Snapshot: doc.Marshal(),
-		})
-	}
-
-	return summaries, nil
-}
-
 // ID returns the ID of this client.
 func (c *Client) ID() *time.ActorID {
 	return c.id

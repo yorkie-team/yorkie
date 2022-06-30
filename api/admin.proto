@@ -28,6 +28,8 @@ service Admin {
 
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
   rpc GetDocument (GetDocumentRequest) returns (GetDocumentResponse) {}
+
+  rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
 }
 
 message CreateProjectRequest {
@@ -79,4 +81,13 @@ message GetDocumentRequest {
 
 message GetDocumentResponse {
   DocumentSummary document = 1;
+}
+
+message ListChangesRequest {
+  string project_name = 1;
+  string document_key = 2;
+}
+
+message ListChangesResponse {
+  repeated Change changes = 1;
 }
