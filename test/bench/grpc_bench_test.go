@@ -42,7 +42,12 @@ import (
 var defaultServer *server.Yorkie
 
 func startDefaultServer() {
-	svr := helper.TestServer()
+	config := helper.TestConfig()
+	config.RPC.MaxRequestBytes = uint64(10 * 1024 * 1024)
+	svr, err := server.New(config)
+	if err != nil {
+		logging.DefaultLogger().Fatal(err)
+	}
 	if err := svr.Start(); err != nil {
 		logging.DefaultLogger().Fatal(err)
 	}
@@ -159,7 +164,6 @@ func BenchmarkRPC(b *testing.B) {
 	b.Run("client to server", func(b *testing.B) {
 		cli, err := client.Dial(
 			defaultServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%s", b.Name())}),
 		)
 		assert.NoError(b, err)
 		defer func() {
@@ -170,7 +174,6 @@ func BenchmarkRPC(b *testing.B) {
 		ctx := context.Background()
 		err = cli.Activate(ctx)
 		assert.NoError(b, err)
-		assert.True(b, cli.IsActive())
 
 		d1 := document.New("doc1")
 		err = cli.Attach(ctx, d1)
@@ -216,14 +219,15 @@ func BenchmarkRPC(b *testing.B) {
 		})
 		assert.NoError(b, err)
 
-		for i := 0; i < b.N; i++ {
-			rch1, err := c1.Watch(ctx, d1)
-			assert.NoError(b, err)
-			rch2, err := c2.Watch(ctx, d2)
-			assert.NoError(b, err)
+		rch1, err := c1.Watch(ctx, d1)
+		assert.NoError(b, err)
+		rch2, err := c2.Watch(ctx, d2)
+		assert.NoError(b, err)
 
-			done1 := make(chan bool)
-			done2 := make(chan bool)
+		done1 := make(chan bool)
+		done2 := make(chan bool)
+
+		for i := 0; i < b.N; i++ {
 
 			wg := sync.WaitGroup{}
 			wg.Add(2)
@@ -251,7 +255,7 @@ func BenchmarkRPC(b *testing.B) {
 
 	b.Run("attach large document", func(b *testing.B) {
 		var builder strings.Builder
-		for c := 0; c < 50000; c++ {
+		for c := 0; c < 100000; c++ {
 			builder.WriteString("a")
 		}
 		for i := 0; i < b.N; i++ {
@@ -263,7 +267,7 @@ func BenchmarkRPC(b *testing.B) {
 				ctx := context.Background()
 				doc1 := document.New(key.Key(b.Name()))
 				doc2 := document.New(key.Key(b.Name()))
-	
+				
 				err := doc1.Update(func(root *proxy.ObjectProxy) error {
 					text := root.SetNewText("k1")
 					text.Edit(0, 0, builder.String())
