@@ -484,8 +484,8 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	}
 
 	// There are 2 types of nodes in `candidates` : should delete, should not delete.
-    // `nodesToKeep` contains nodes should not delete,
-    // then is used to find the boundary of the range to be deleted.
+	// `nodesToKeep` contains nodes should not delete,
+	// then is used to find the boundary of the range to be deleted.
 	var nodesToKeep []*RGATreeSplitNode[V]
 	leftEdge, rightEdge := s.findEdgesOfCandidates(candidates)
 	nodesToKeep = append(nodesToKeep, leftEdge)
