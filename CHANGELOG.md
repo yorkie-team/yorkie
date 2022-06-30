@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.9] - 2022-06-30
+
+### Added
+
+- Add history command to CLI: #349
+- Introduce validator for project name: #345
+
+### Fixed
+
+- Revert text delection improvements: #350
+
 ## [0.2.8] - 2022-06-22
 
 ### Added
