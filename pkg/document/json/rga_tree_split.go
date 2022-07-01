@@ -450,7 +450,7 @@ func (s *RGATreeSplit[V]) edit(
 
 	// 03. insert a new node
 	if content.Len() > 0 {
-		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode[V](NewRGATreeSplitNodeID(editedAt, 0), content))
+		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content))
 		caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
 	}
 
@@ -506,6 +506,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 		}
 
 		if node.Remove(editedAt, latestCreatedAt) {
+			s.treeByIndex.FreeWeight(node.indexNode)
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
@@ -536,10 +537,14 @@ func (s *RGATreeSplit[V]) findEdgesOfCandidates(
 // The boundaries mean the nodes that will not be deleted in the range.
 func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 	for i := 0; i < len(boundaries)-1; i++ {
-		if boundaries[i+1] != nil {
-			s.treeByIndex.CutOffRange(boundaries[i].indexNode, boundaries[i+1].indexNode)
+		leftBoundary := boundaries[i]
+		rightBoundary := boundaries[i+1]
+		if leftBoundary.next == rightBoundary {
+			// If there is no node to delete between boundaries, do notting.
+		} else if rightBoundary == nil {
+			s.treeByIndex.CutOffRange(leftBoundary.indexNode, nil)
 		} else {
-			s.treeByIndex.CutOffRange(boundaries[i].indexNode, nil)
+			s.treeByIndex.CutOffRange(leftBoundary.indexNode, rightBoundary.indexNode)
 		}
 	}
 }

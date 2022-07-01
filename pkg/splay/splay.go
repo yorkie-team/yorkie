@@ -248,6 +248,14 @@ func (t *Tree[V]) UpdateWeight(node *Node[V]) {
 	}
 }
 
+// FreeWeight set the weiht is 0. This function only uses in range deletion.
+func (t *Tree[V]) FreeWeight(node *Node[V]) {
+	node.initWeight()
+	if node.weight != 0 {
+		panic("node is not removed")
+	}
+}
+
 // Delete deletes the given node from this Tree.
 func (t *Tree[V]) Delete(node *Node[V]) {
 	t.Splay(node)
