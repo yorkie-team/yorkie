@@ -59,7 +59,7 @@ func activeClients(b *testing.B, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
 			defaultServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", i)}),
+			client.WithMaxRecvMsgSize(int(10*1024*1024)),
 		)
 		assert.NoError(b, err)
 
@@ -127,7 +127,7 @@ func watchDoc(
 	ctx context.Context,
 	b *testing.B,
 	cli *client.Client,
-	rch <-chan client.WatchResponse, 
+	rch <-chan client.WatchResponse,
 	done <-chan bool,
 ) {
 	for {
@@ -187,7 +187,7 @@ func BenchmarkRPC(b *testing.B) {
 			})
 			assert.NoError(b, err)
 
-			err = benchmarkUpdateAndSync(ctx, b, 1000, cli, d1, testKey)
+			err = benchmarkUpdateAndSync(ctx, b, 100, cli, d1, testKey)
 			assert.NoError(b, err)
 		}
 	})
@@ -241,11 +241,11 @@ func BenchmarkRPC(b *testing.B) {
 			}()
 
 			go func() {
-				benchmarkUpdateAndSync(ctx, b, 100, c1, d1, testKey1)
+				benchmarkUpdateAndSync(ctx, b, 50, c1, d1, testKey1)
 				done1 <- true
 			}()
 			go func() {
-				benchmarkUpdateAndSync(ctx, b, 100, c2, d2, testKey2)
+				benchmarkUpdateAndSync(ctx, b, 50, c2, d2, testKey2)
 				done2 <- true
 			}()
 
@@ -255,19 +255,19 @@ func BenchmarkRPC(b *testing.B) {
 
 	b.Run("attach large document", func(b *testing.B) {
 		var builder strings.Builder
-		for c := 0; c < 100000; c++ {
+		for c := 0; c < 10485000; c++ {
 			builder.WriteString("a")
 		}
 		for i := 0; i < b.N; i++ {
-			func () {
+			func() {
 				clients := activeClients(b, 2)
 				c1, c2 := clients[0], clients[1]
 				defer cleanupClients(b, clients)
-				
+
 				ctx := context.Background()
 				doc1 := document.New(key.Key(b.Name()))
 				doc2 := document.New(key.Key(b.Name()))
-				
+
 				err := doc1.Update(func(root *proxy.ObjectProxy) error {
 					text := root.SetNewText("k1")
 					text.Edit(0, 0, builder.String())
@@ -280,16 +280,16 @@ func BenchmarkRPC(b *testing.B) {
 					return nil
 				})
 				assert.NoError(b, err)
-				
+
 				wg := sync.WaitGroup{}
 				wg.Add(2)
-				go func(){
-					defer wg.Done()			
+				go func() {
+					defer wg.Done()
 					err := c1.Attach(ctx, doc1)
 					assert.NoError(b, err)
 				}()
-				go func(){
-					defer wg.Done()			
+				go func() {
+					defer wg.Done()
 					err := c2.Attach(ctx, doc2)
 					assert.NoError(b, err)
 				}()
@@ -305,7 +305,7 @@ func BenchmarkRPC(b *testing.B) {
 
 		ctx := context.Background()
 		for i := 0; i < b.N; i++ {
-			err = benchmarkUpdateProject(ctx, b, 1000, adminCli)
+			err = benchmarkUpdateProject(ctx, b, 500, adminCli)
 			assert.NoError(b, err)
 		}
 	})

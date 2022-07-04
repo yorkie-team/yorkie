@@ -573,7 +573,7 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 		assert.False(b, doc.HasLocalChanges())
 		var builder strings.Builder
 		for i := 0; i < cnt; i++ {
-			builder.WriteString("a")				
+			builder.WriteString("a")
 		}
 		err := doc.Update(func(root *proxy.ObjectProxy) error {
 			text := root.SetNewText("k2")

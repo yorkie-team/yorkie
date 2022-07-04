@@ -128,6 +128,10 @@ func New(opts ...Option) (*Client, error) {
 	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
 	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
 
+	if options.MaxCallRecvMsgSize != 0 {
+		dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(options.MaxCallRecvMsgSize)))
+	}
+
 	logger := options.Logger
 	if logger == nil {
 		l, err := zap.NewProduction()
