@@ -48,8 +48,8 @@ type Options struct {
 	// Logger is the Logger of the client.
 	Logger *zap.Logger
 
-	// MaxRecvMsgSize is the maximum message size in bytes the client can receive.
-	MaxRecvMsgSize int
+	// MaxCallRecvMsgSize is the maximum message size in bytes the client can receive.
+	MaxCallRecvMsgSize int
 }
 
 // WithKey configures the key of the client.
@@ -89,5 +89,5 @@ func WithLogger(logger *zap.Logger) Option {
 
 // WithMaxRecvMsgSize configures the maximum message size in bytes the client can receive.
 func WithMaxRecvMsgSize(maxRecvMsgSize int) Option {
-	return func(o *Options) { o.MaxRecvMsgSize = maxRecvMsgSize }
+	return func(o *Options) { o.MaxCallRecvMsgSize = maxRecvMsgSize }
 }
