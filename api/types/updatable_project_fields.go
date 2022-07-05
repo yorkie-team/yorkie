@@ -23,6 +23,7 @@ import (
 	"regexp"
 
 	"github.com/go-playground/validator/v10"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 )
 
 var (
@@ -81,7 +82,16 @@ func (i *UpdatableProjectFields) Validate() error {
 
 	if err := defaultValidator.Struct(i); err != nil {
 		for _, err := range err.(validator.ValidationErrors) {
-			return fmt.Errorf("%s: %w", err, ErrInvalidProjectField)
+			desc := "The Project name must only contain url available characters"
+			v := &errdetails.BadRequest_FieldViolation{
+				Field:       "project-name",
+				Description: desc,
+			}
+			br := &errdetails.BadRequest{}
+			// TODO(DONGJIN SHIN): return br(error details) and deliver to yorkie/server/grpchelper/status.go
+			br.FieldViolations = append(br.FieldViolations, v)
+
+			return fmt.Errorf("%s: %w", err.Value(), ErrInvalidProjectField)
 		}
 		return err
 	}
