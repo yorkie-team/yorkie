@@ -18,7 +18,6 @@ package grpchelper
 
 import (
 	"errors"
-	"fmt"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -37,7 +36,6 @@ import (
 // occurs while executing logic in API handler, gRPC status.error should be
 // returned so that the client can know more about the status of the request.
 func ToStatusError(err error) error {
-	var st *status.Status
 	if errors.Is(err, auth.ErrNotAllowed) ||
 		errors.Is(err, auth.ErrUnexpectedStatusCode) ||
 		errors.Is(err, auth.ErrWebhookTimeout) {
@@ -54,7 +52,11 @@ func ToStatusError(err error) error {
 		errors.Is(err, types.ErrEmptyProjectFields) ||
 		errors.Is(err, types.ErrNotSupportedMethod) ||
 		errors.Is(err.(*types.ErrorWithDetails).GetError(), types.ErrInvalidProjectField) {
-		st = status.New(codes.InvalidArgument, err.Error())
+		st := status.New(codes.InvalidArgument, err.Error())
+		if details := err.(*types.ErrorWithDetails).GetDetails(); details != nil {
+			st, _ = st.WithDetails(details.(*errdetails.BadRequest))
+		}
+		return st.Err()
 	}
 
 	if errors.Is(err, converter.ErrUnsupportedOperation) ||
@@ -82,16 +84,6 @@ func ToStatusError(err error) error {
 		errors.Is(err, packs.ErrInvalidServerSeq) ||
 		errors.Is(err, database.ErrConflictOnUpdate) {
 		return status.Error(codes.FailedPrecondition, err.Error())
-	}
-
-	if st != nil {
-		if details := err.(*types.ErrorWithDetails).GetDetails(); details != nil {
-			st, err = st.WithDetails(details.(*errdetails.BadRequest))
-			if err != nil {
-				panic(fmt.Sprintf("Unexpected error: %v", err))
-			}
-		}
-		return st.Err()
 	}
 
 	return status.Error(codes.Internal, err.Error())

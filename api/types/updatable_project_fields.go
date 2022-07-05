@@ -48,19 +48,23 @@ var (
 	nameRegex = regexp.MustCompile("^[a-z0-9\\-._~]+$")
 )
 
+// ErrorWithDetails is error for deliver details with error
 type ErrorWithDetails struct {
 	err     error
 	details interface{}
 }
 
+// Error returns Error() of ErrorWithDetails' err
 func (e *ErrorWithDetails) Error() string {
 	return e.err.Error()
 }
 
+// GetDetails returns details of ErrorWithDetails
 func (e *ErrorWithDetails) GetDetails() interface{} {
 	return e.details
 }
 
+// GetError returns err of ErrorWithDetails
 func (e *ErrorWithDetails) GetError() error {
 	return e.err
 }
