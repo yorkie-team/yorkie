@@ -247,10 +247,12 @@ func (s *RGATreeSplitNode[V]) setPrev(node *RGATreeSplitNode[V]) {
 }
 
 func (s *RGATreeSplitNode[V]) split(offset int) *RGATreeSplitNode[V] {
-	return NewRGATreeSplitNode[V](
+	newNode := NewRGATreeSplitNode[V](
 		s.id.Split(offset),
 		s.value.Split(offset).(V),
 	)
+	newNode.removedAt = s.removedAt
+	return newNode
 }
 
 func (s *RGATreeSplitNode[V]) createdAt() *time.Ticket {
