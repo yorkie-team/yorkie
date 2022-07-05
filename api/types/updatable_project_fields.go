@@ -48,6 +48,23 @@ var (
 	nameRegex = regexp.MustCompile("^[a-z0-9\\-._~]+$")
 )
 
+type ErrorWithDetails struct {
+	err     error
+	details interface{}
+}
+
+func (e *ErrorWithDetails) Error() string {
+	return e.err.Error()
+}
+
+func (e *ErrorWithDetails) GetDetails() interface{} {
+	return e.details
+}
+
+func (e *ErrorWithDetails) GetError() error {
+	return e.err
+}
+
 func isReservedName(name string) bool {
 	if _, ok := reservedNames[name]; ok {
 		return true
@@ -88,10 +105,12 @@ func (i *UpdatableProjectFields) Validate() error {
 				Description: desc,
 			}
 			br := &errdetails.BadRequest{}
-			// TODO(DONGJIN SHIN): return br(error details) and deliver to yorkie/server/grpchelper/status.go
 			br.FieldViolations = append(br.FieldViolations, v)
 
-			return fmt.Errorf("%s: %w", err.Value(), ErrInvalidProjectField)
+			return &ErrorWithDetails{
+				err:     fmt.Errorf("%s: %w", err, ErrInvalidProjectField),
+				details: br,
+			}
 		}
 		return err
 	}

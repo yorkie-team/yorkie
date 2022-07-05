@@ -38,8 +38,6 @@ import (
 // returned so that the client can know more about the status of the request.
 func ToStatusError(err error) error {
 	var st *status.Status
-	// TODO(DONGJIN SHIN): Get details from validation
-	var details interface{}
 	if errors.Is(err, auth.ErrNotAllowed) ||
 		errors.Is(err, auth.ErrUnexpectedStatusCode) ||
 		errors.Is(err, auth.ErrWebhookTimeout) {
@@ -55,7 +53,7 @@ func ToStatusError(err error) error {
 		errors.Is(err, clients.ErrInvalidClientKey) ||
 		errors.Is(err, types.ErrEmptyProjectFields) ||
 		errors.Is(err, types.ErrNotSupportedMethod) ||
-		errors.Is(err, types.ErrInvalidProjectField) {
+		errors.Is(err.(*types.ErrorWithDetails).GetError(), types.ErrInvalidProjectField) {
 		st = status.New(codes.InvalidArgument, err.Error())
 	}
 
@@ -87,8 +85,8 @@ func ToStatusError(err error) error {
 	}
 
 	if st != nil {
-		if details != nil {
-			st, _ = st.WithDetails(details.(*errdetails.BadRequest))
+		if details := err.(*types.ErrorWithDetails).GetDetails(); details != nil {
+			st, err = st.WithDetails(details.(*errdetails.BadRequest))
 			if err != nil {
 				panic(fmt.Sprintf("Unexpected error: %v", err))
 			}
