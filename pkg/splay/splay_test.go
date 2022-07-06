@@ -26,15 +26,19 @@ import (
 
 type stringValue struct {
 	content string
+	removed bool
 }
 
 func newSplayNode(content string) *splay.Node[*stringValue] {
-	return splay.NewNode[*stringValue](&stringValue{
+	return splay.NewNode(&stringValue{
 		content: content,
 	})
 }
 
 func (v *stringValue) Len() int {
+	if v.removed {
+		return 0
+	}
 	return len(v.content)
 }
 
@@ -101,28 +105,62 @@ func TestSplayTree(t *testing.T) {
 		assert.Equal(t, tree.IndexOf(nodeO), 3)
 	})
 
-	t.Run("range separation test", func(t *testing.T) {
-		tree := splay.NewTree[*stringValue](nil)
+	t.Run("range delition test", func(t *testing.T) {
+		tree, nodes := makeSampleTree()
+		// check the filtering of DeleteRange
+		removeNodes(nodes, 7, 8)
+		tree.DeleteRange(nodes[6], nil)
+		assert.Equal(
+			t,
+			"[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG[0,0]HH[0,0]I",
+			tree.AnnotatedString(),
+		)
 
-		tree.Insert(newSplayNode("A"))
-		assert.Equal(t, "[1,1]A", tree.AnnotatedString())
-		tree.Insert(newSplayNode("BB"))
-		assert.Equal(t, "[1,1]A[3,2]BB", tree.AnnotatedString())
-		tree.Insert(newSplayNode("CCC"))
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC", tree.AnnotatedString())
-		tree.Insert(newSplayNode("DDDD"))
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD", tree.AnnotatedString())
-		tree.Insert(newSplayNode("EEEEE"))
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE", tree.AnnotatedString())
-		tree.Insert(newSplayNode("FFFF"))
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF", tree.AnnotatedString())
-		tree.Insert(newSplayNode("GGG"))
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG", tree.AnnotatedString())
-		tree.Insert(newSplayNode("HH"))
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG[24,2]HH", tree.AnnotatedString())
-		tree.Insert(newSplayNode("I"))
-		assert.Equal(t,
-			"[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG[24,2]HH[25,1]I",
-			tree.AnnotatedString())
+		tree, nodes = makeSampleTree()
+		// check the case 1 of DeleteRange
+		removeNodes(nodes, 3, 6)
+		tree.DeleteRange(nodes[2], nodes[7])
+		assert.Equal(
+			t,
+			"[1,1]A[3,2]BB[9,3]CCC[0,0]DDDD[0,0]EEEEE[0,0]FFFF[0,0]GGG[3,2]HH[1,1]I",
+			tree.AnnotatedString(),
+		)
+
+		tree, nodes = makeSampleTree()
+		tree.Splay(nodes[6])
+		tree.Splay(nodes[2])
+		// check the case 2 of DeleteRange
+		removeNodes(nodes, 3, 7)
+		tree.DeleteRange(nodes[2], nodes[8])
+		assert.Equal(
+			t,
+			"[1,1]A[3,2]BB[7,3]CCC[0,0]DDDD[0,0]EEEEE[0,0]FFFF[0,0]GGG[0,0]HH[1,1]I",
+			tree.AnnotatedString(),
+		)
 	})
+}
+
+func makeSampleTree() (*splay.Tree[*stringValue], []*splay.Node[*stringValue]) {
+	tree := splay.NewTree[*stringValue](nil)
+	var nodes []*splay.Node[*stringValue]
+
+	nodes = append(nodes, tree.Insert(newSplayNode("A")))
+	nodes = append(nodes, tree.Insert(newSplayNode("BB")))
+	nodes = append(nodes, tree.Insert(newSplayNode("CCC")))
+	nodes = append(nodes, tree.Insert(newSplayNode("DDDD")))
+	nodes = append(nodes, tree.Insert(newSplayNode("EEEEE")))
+	nodes = append(nodes, tree.Insert(newSplayNode("FFFF")))
+	nodes = append(nodes, tree.Insert(newSplayNode("GGG")))
+	nodes = append(nodes, tree.Insert(newSplayNode("HH")))
+	nodes = append(nodes, tree.Insert(newSplayNode("I")))
+
+	return tree, nodes
+}
+
+// Make nodes in given range the same state as tombstone.
+func removeNodes(nodes []*splay.Node[*stringValue], from, to int) {
+	for i := from; i <= to; i++ {
+		nodes[i].Value().removed = true
+		nodes[i].InitWeight()
+	}
 }

@@ -247,7 +247,7 @@ func (s *RGATreeSplitNode[V]) setPrev(node *RGATreeSplitNode[V]) {
 }
 
 func (s *RGATreeSplitNode[V]) split(offset int) *RGATreeSplitNode[V] {
-	newNode := NewRGATreeSplitNode[V](
+	newNode := NewRGATreeSplitNode(
 		s.id.Split(offset),
 		s.value.Split(offset).(V),
 	)
@@ -452,7 +452,7 @@ func (s *RGATreeSplit[V]) edit(
 
 	// 03. insert a new node
 	if content.Len() > 0 {
-		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode[V](NewRGATreeSplitNodeID(editedAt, 0), content))
+		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content))
 		caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
 	}
 
@@ -482,6 +482,17 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
 
+	if len(candidates) == 0 {
+		return createdAtMapByActor, removedNodeMap
+	}
+
+	// There are 2 types of nodes in `candidates`: should delete, should not delete.
+	// `nodesToKeep` contains nodes should not delete,
+	// then is used to find the boundary of the range to be deleted.
+	var nodesToKeep []*RGATreeSplitNode[V]
+	leftEdge, rightEdge := s.findEdgesOfCandidates(candidates)
+	nodesToKeep = append(nodesToKeep, leftEdge)
+
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
 
@@ -498,7 +509,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 		}
 
 		if node.Remove(editedAt, latestCreatedAt) {
-			s.treeByIndex.Splay(node.indexNode)
+			node.indexNode.InitWeight()
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
@@ -506,10 +517,39 @@ func (s *RGATreeSplit[V]) deleteNodes(
 			}
 
 			removedNodeMap[node.id.key()] = node
+		} else if node.removedAt == nil {
+			nodesToKeep = append(nodesToKeep, node)
 		}
 	}
+	nodesToKeep = append(nodesToKeep, rightEdge)
+	s.deleteIndexNodes(nodesToKeep)
 
 	return createdAtMapByActor, removedNodeMap
+}
+
+// findEdgesOfCandidates finds the edges outside `candidates`,
+// (which has not already been deleted, or be undefined but not yet implemented)
+// right edge is undefined means `candidates` contains the end of text.
+func (s *RGATreeSplit[V]) findEdgesOfCandidates(
+	candidates []*RGATreeSplitNode[V],
+) (*RGATreeSplitNode[V], *RGATreeSplitNode[V]) {
+	return candidates[0].prev, candidates[len(candidates)-1].next
+}
+
+// deleteIndexNodes clears the index nodes of the given deletion boundaries.
+// The boundaries mean the nodes that will not be deleted in the range.
+func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
+	for i := 0; i < len(boundaries)-1; i++ {
+		leftBoundary := boundaries[i]
+		rightBoundary := boundaries[i+1]
+		if leftBoundary.next == rightBoundary {
+			// If there is no node to delete between boundaries, do notting.
+		} else if rightBoundary == nil {
+			s.treeByIndex.DeleteRange(leftBoundary.indexNode, nil)
+		} else {
+			s.treeByIndex.DeleteRange(leftBoundary.indexNode, rightBoundary.indexNode)
+		}
+	}
 }
 
 func (s *RGATreeSplit[V]) marshal() string {
