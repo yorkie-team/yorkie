@@ -76,36 +76,36 @@ func TestUpdatableProjectFields(t *testing.T) {
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails).GetError(), types.ErrInvalidProjectField)
+		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails[types.Details]).GetError(), types.ErrInvalidProjectField)
 
 		reservedName := "new"
 		fields = &types.UpdatableProjectFields{
 			Name: &reservedName,
 		}
-		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails).GetError(), types.ErrInvalidProjectField)
+		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails[types.Details]).GetError(), types.ErrInvalidProjectField)
 
 		reservedName = "default"
 		fields = &types.UpdatableProjectFields{
 			Name: &reservedName,
 		}
-		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails).GetError(), types.ErrInvalidProjectField)
+		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails[types.Details]).GetError(), types.ErrInvalidProjectField)
 
 		invalidName = "1"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails).GetError(), types.ErrInvalidProjectField)
+		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails[types.Details]).GetError(), types.ErrInvalidProjectField)
 
 		invalidName = "over_30_chracaters_is_invalid_name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails).GetError(), types.ErrInvalidProjectField)
+		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails[types.Details]).GetError(), types.ErrInvalidProjectField)
 
 		invalidName = "invalid/name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails).GetError(), types.ErrInvalidProjectField)
+		assert.ErrorIs(t, fields.Validate().(*types.ErrorWithDetails[types.Details]).GetError(), types.ErrInvalidProjectField)
 	})
 }

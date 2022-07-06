@@ -48,24 +48,31 @@ var (
 	nameRegex = regexp.MustCompile("^[a-z0-9\\-._~]+$")
 )
 
+// Details represents interface for error Details
+type Details interface {
+	Reset()
+	String() string
+	ProtoMessage()
+}
+
 // ErrorWithDetails is error for deliver details with error
-type ErrorWithDetails struct {
+type ErrorWithDetails[D Details] struct {
 	err     error
-	details interface{}
+	details D
 }
 
 // Error returns Error() of ErrorWithDetails' err
-func (e *ErrorWithDetails) Error() string {
+func (e *ErrorWithDetails[D]) Error() string {
 	return e.err.Error()
 }
 
 // GetDetails returns details of ErrorWithDetails
-func (e *ErrorWithDetails) GetDetails() interface{} {
+func (e *ErrorWithDetails[D]) GetDetails() D {
 	return e.details
 }
 
 // GetError returns err of ErrorWithDetails
-func (e *ErrorWithDetails) GetError() error {
+func (e *ErrorWithDetails[D]) GetError() error {
 	return e.err
 }
 
@@ -111,7 +118,7 @@ func (i *UpdatableProjectFields) Validate() error {
 			br := &errdetails.BadRequest{}
 			br.FieldViolations = append(br.FieldViolations, v)
 
-			return &ErrorWithDetails{
+			return &ErrorWithDetails[Details]{
 				err:     fmt.Errorf("%s: %w", err, ErrInvalidProjectField),
 				details: br,
 			}

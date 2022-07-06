@@ -19,9 +19,9 @@ package grpchelper
 import (
 	"errors"
 
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/runtime/protoiface"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -32,12 +32,12 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
-func chkErrorWithDetails(err error) (interface{}, error) {
-	var details interface{}
-	errWithDetails, ok := err.(*types.ErrorWithDetails)
+func chkErrorWithDetails(err error) (protoiface.MessageV1, error) {
+	var details protoiface.MessageV1
+	errWithDetails, ok := err.(*types.ErrorWithDetails[protoiface.MessageV1])
 	if ok {
 		err = errWithDetails.GetError()
-		details = errWithDetails.GetDetails().(*errdetails.BadRequest)
+		details = errWithDetails.GetDetails()
 	}
 	return details, err
 }
@@ -65,7 +65,7 @@ func ToStatusError(err error) error {
 		errors.Is(err, types.ErrInvalidProjectField) {
 		st := status.New(codes.InvalidArgument, err.Error())
 		if details != nil {
-			st, _ = st.WithDetails(details.(*errdetails.BadRequest))
+			st, _ = st.WithDetails(details)
 		}
 		return st.Err()
 	}
