@@ -23,7 +23,6 @@ import (
 	"regexp"
 
 	"github.com/go-playground/validator/v10"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 )
 
 var (
@@ -48,31 +47,33 @@ var (
 	nameRegex = regexp.MustCompile("^[a-z0-9\\-._~]+$")
 )
 
-// Details represents interface for error Details
-type Details interface {
-	Reset()
-	String() string
-	ProtoMessage()
+// FieldViolation is used to describe a single bad request field
+type FieldViolation struct {
+
+	// A Field of which field of the reques is bad
+	Field string
+	// A description of why the request element is bad.
+	Description string
 }
 
 // ErrorWithDetails is error for deliver details with error
-type ErrorWithDetails[D Details] struct {
+type ErrorWithDetails struct {
 	err     error
-	details D
+	details []*FieldViolation
 }
 
 // Error returns Error() of ErrorWithDetails' err
-func (e *ErrorWithDetails[D]) Error() string {
+func (e *ErrorWithDetails) Error() string {
 	return e.err.Error()
 }
 
 // GetDetails returns details of ErrorWithDetails
-func (e *ErrorWithDetails[D]) GetDetails() D {
+func (e *ErrorWithDetails) GetDetails() []*FieldViolation {
 	return e.details
 }
 
 // GetError returns err of ErrorWithDetails
-func (e *ErrorWithDetails[D]) GetError() error {
+func (e *ErrorWithDetails) GetError() error {
 	return e.err
 }
 
@@ -86,7 +87,7 @@ func isReservedName(name string) bool {
 // UpdatableProjectFields is a set of fields that use to update a project.
 type UpdatableProjectFields struct {
 	// Name is the name of this project.
-	Name *string `bson:"name,omitempty" validate:"omitempty,min=2,max=30,name"`
+	Name *string `bson:"name,omitempty" validate:"omitempty,min=2,max=30,urlAvailable,reservedName"`
 
 	// AuthWebhookURL is the url of the authorization webhook.
 	AuthWebhookURL *string `bson:"auth_webhook_url,omitempty"`
@@ -109,29 +110,45 @@ func (i *UpdatableProjectFields) Validate() error {
 	}
 
 	if err := defaultValidator.Struct(i); err != nil {
+		errWithDetails := &ErrorWithDetails{}
 		for _, err := range err.(validator.ValidationErrors) {
-			desc := "The Project name must only contain url available characters"
-			v := &errdetails.BadRequest_FieldViolation{
-				Field:       "project-name",
+			var field string
+			var desc string
+			if err.StructField() == "Name" {
+				field = "Name"
+				cause := err.ActualTag()
+				switch cause {
+				case "urlAvailable":
+					desc = fmt.Sprintf("The project name: %s must only contain url available characters", err.Value())
+				case "min", "max":
+					desc = fmt.Sprintf("The length of project name: %s must be between two and thirty", err.Value())
+				case "reservedName":
+					desc = fmt.Sprintf("The project name: %s is reserved name", err.Value())
+				}
+			}
+			v := &FieldViolation{
+				Field:       field,
 				Description: desc,
 			}
-			br := &errdetails.BadRequest{}
-			br.FieldViolations = append(br.FieldViolations, v)
+			errWithDetails = &ErrorWithDetails{}
+			errWithDetails.details = append(errWithDetails.details, v)
+			errWithDetails.err = fmt.Errorf("%s: %w", err, ErrInvalidProjectField)
 
-			return &ErrorWithDetails[Details]{
-				err:     fmt.Errorf("%s: %w", err, ErrInvalidProjectField),
-				details: br,
-			}
 		}
-		return err
+		return errWithDetails
 	}
 
 	return nil
 }
 
 func init() {
-	registerValidation("name", func(level validator.FieldLevel) bool {
+	registerValidation("urlAvailable", func(level validator.FieldLevel) bool {
 		name := level.Field().String()
-		return !isReservedName(name) && nameRegex.MatchString(name)
+		return nameRegex.MatchString(name)
+	})
+
+	registerValidation("reservedName", func(level validator.FieldLevel) bool {
+		name := level.Field().String()
+		return !isReservedName(name)
 	})
 }

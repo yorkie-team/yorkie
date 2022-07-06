@@ -19,6 +19,7 @@ package grpchelper
 import (
 	"errors"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/runtime/protoiface"
@@ -33,13 +34,21 @@ import (
 )
 
 func chkErrorWithDetails(err error) (protoiface.MessageV1, error) {
-	var details protoiface.MessageV1
-	errWithDetails, ok := err.(*types.ErrorWithDetails[protoiface.MessageV1])
+	errWithDetails, ok := err.(*types.ErrorWithDetails)
 	if ok {
 		err = errWithDetails.GetError()
-		details = errWithDetails.GetDetails()
+		details := errWithDetails.GetDetails()
+		br := &errdetails.BadRequest{}
+		for _, detail := range details {
+			v := &errdetails.BadRequest_FieldViolation{
+				Field:       detail.Field,
+				Description: detail.Description,
+			}
+			br.FieldViolations = append(br.FieldViolations, v)
+		}
+		return br, err
 	}
-	return details, err
+	return nil, err
 }
 
 // ToStatusError returns a status.Error from the given logic error. If an error
