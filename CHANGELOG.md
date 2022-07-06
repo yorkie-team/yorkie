@@ -7,6 +7,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.10] - 2022-07-06
+
+### Added
+
+- Add MaxCallRecvMsgSize option to client: #353
+
+### Changed
+
+- Improve performance of deletion in Text: #356
+
+### Fixed
+
+- Fix a bug when deleting blocks concurrently: #b645cf1
+
 ## [0.2.9] - 2022-06-30
 
 ### Added
