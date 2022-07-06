@@ -530,7 +530,9 @@ func (s *RGATreeSplit[V]) deleteNodes(
 // findEdgesOfCandidates finds the edges outside `candidates`,
 // (which has not already been deleted, or be undefined but not yet implemented)
 // right edge is undefined means `candidates` contains the end of text.
-func (s *RGATreeSplit[V]) findEdgesOfCandidates(candidates []*RGATreeSplitNode[V]) (*RGATreeSplitNode[V], *RGATreeSplitNode[V]) {
+func (s *RGATreeSplit[V]) findEdgesOfCandidates(
+	candidates []*RGATreeSplitNode[V],
+) (*RGATreeSplitNode[V], *RGATreeSplitNode[V]) {
 	return candidates[0].prev, candidates[len(candidates)-1].next
 }
 
