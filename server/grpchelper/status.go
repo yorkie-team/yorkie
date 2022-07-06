@@ -32,10 +32,21 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
+func chkErrorWithDetails(err error) (interface{}, error) {
+	var details interface{}
+	errWithDetails, ok := err.(*types.ErrorWithDetails)
+	if ok {
+		err = errWithDetails.GetError()
+		details = errWithDetails.GetDetails().(*errdetails.BadRequest)
+	}
+	return details, err
+}
+
 // ToStatusError returns a status.Error from the given logic error. If an error
 // occurs while executing logic in API handler, gRPC status.error should be
 // returned so that the client can know more about the status of the request.
 func ToStatusError(err error) error {
+	details, err := chkErrorWithDetails(err)
 	if errors.Is(err, auth.ErrNotAllowed) ||
 		errors.Is(err, auth.ErrUnexpectedStatusCode) ||
 		errors.Is(err, auth.ErrWebhookTimeout) {
@@ -51,9 +62,9 @@ func ToStatusError(err error) error {
 		errors.Is(err, clients.ErrInvalidClientKey) ||
 		errors.Is(err, types.ErrEmptyProjectFields) ||
 		errors.Is(err, types.ErrNotSupportedMethod) ||
-		errors.Is(err.(*types.ErrorWithDetails).GetError(), types.ErrInvalidProjectField) {
+		errors.Is(err, types.ErrInvalidProjectField) {
 		st := status.New(codes.InvalidArgument, err.Error())
-		if details := err.(*types.ErrorWithDetails).GetDetails(); details != nil {
+		if details != nil {
 			st, _ = st.WithDetails(details.(*errdetails.BadRequest))
 		}
 		return st.Err()
