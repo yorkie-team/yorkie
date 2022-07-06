@@ -1,7 +1,7 @@
 /*
  * Copyright 2020 The Yorkie Authors. All rights reserved.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the Apache License, Version 2.0 (the "License")
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
@@ -42,7 +42,7 @@ func NewNode[V Value](value V) *Node[V] {
 	n := &Node[V]{
 		value: value,
 	}
-	n.initWeight()
+	n.InitWeight()
 	return n
 }
 
@@ -65,7 +65,8 @@ func (t *Node[V]) rightWeight() int {
 	return t.right.weight
 }
 
-func (t *Node[V]) initWeight() {
+//InitWeight sets initial weight of this node.
+func (t *Node[V]) InitWeight() {
 	t.weight = t.value.Len()
 }
 
@@ -237,7 +238,7 @@ func (t *Tree[V]) AnnotatedString() string {
 
 // UpdateWeight recalculates the weight of this node with the value and children.
 func (t *Tree[V]) UpdateWeight(node *Node[V]) {
-	node.initWeight()
+	node.InitWeight()
 
 	if node.left != nil {
 		node.increaseWeight(node.leftWeight())
@@ -245,6 +246,13 @@ func (t *Tree[V]) UpdateWeight(node *Node[V]) {
 
 	if node.right != nil {
 		node.increaseWeight(node.rightWeight())
+	}
+}
+
+func (t *Tree[V]) updateTreeWeight(node *Node[V]) {
+	for node != nil {
+		t.UpdateWeight(node)
+		node = node.parent
 	}
 }
 
@@ -278,6 +286,40 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 	if t.root != nil {
 		t.UpdateWeight(t.root)
 	}
+}
+
+// DeleteRange separates the range between given 2 boundaries from this Tree.
+// This function separates the range to delete as a subtree
+// by splaying outer boundary nodes.
+// leftBoundary must exist because of 0-indexed initial dummy node of tree,
+// but rightBoundary can be nil means range to delete includes the end of tree.
+func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
+	if rightBoundary == nil {
+		t.Splay(leftBoundary)
+		// After splaying, all the range is the right subtree of leftBoundary.
+		t.cutOffRight(leftBoundary)
+		return
+	}
+	t.Splay(rightBoundary)
+	t.Splay(leftBoundary)
+	// After splaying twice, leftBoundary must be the root and
+	// rightBoundary is leftBoundary.right.right(case 1) or leftBoundary.right(case 2)
+	if leftBoundary.right != rightBoundary {
+		// If case 1, changes to case 2 by rotateLeft (makes rightBoundary be leftBoundary.right).
+		t.rotateLeft(rightBoundary)
+	}
+	// In case 2, since rightBoundary is leftBoundary.right,
+	// all the range nodes between 2 boundaries are in the left subtree of rightBoundary.
+	t.cutOffLeft(rightBoundary)
+}
+
+func (t *Tree[V]) cutOffLeft(node *Node[V]) {
+	// TODO(Eithea): The node to delete is not actually disconnected from the tree yet.
+	t.updateTreeWeight(node)
+}
+
+func (t *Tree[V]) cutOffRight(node *Node[V]) {
+	t.updateTreeWeight(node)
 }
 
 func (t *Tree[V]) rotateLeft(pivot *Node[V]) {
