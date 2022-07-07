@@ -25,7 +25,7 @@ import (
 )
 
 // ErrEmptyProjectFields is returned when all the fields are empty.
-var ErrEmptyProjectFields = errors.New("UpdatableProjectFields is empty")
+var ErrEmptyProjectFields = errors.New("updatable project fields are empty")
 
 var (
 	// reservedNames is a map of reserved names. It is used to check if the
@@ -52,7 +52,7 @@ type InvalidFieldsError struct {
 }
 
 // Error returns the error message.
-func (e *InvalidFieldsError) Error() string { return "invalid project fields" }
+func (e *InvalidFieldsError) Error() string { return "invalid fields" }
 
 func isReservedName(name string) bool {
 	if _, ok := reservedNames[name]; ok {

@@ -29,7 +29,7 @@ var (
 	// api package. In this package, some fields are provided by the user, and
 	// we need to validate them.
 	defaultValidator = validator.New()
-	// defaultEn is the default translator instance for the 'en' locale
+	// defaultEn is the default translator instance for the 'en' locale.
 	defaultEn = en.New()
 	// uni is the UniversalTranslator instance set with
 	// the fallback locale and locales it should support.
