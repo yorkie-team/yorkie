@@ -33,35 +33,35 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
-func chkErrorWithDetails(err error) (protoiface.MessageV1, error) {
-	errWithDetails, ok := err.(*types.ErrorWithDetails)
-	if ok {
-		err = errWithDetails.GetError()
-		details := errWithDetails.GetDetails()
-		br := &errdetails.BadRequest{}
-		for _, detail := range details {
-			v := &errdetails.BadRequest_FieldViolation{
-				Field:       detail.Field,
-				Description: detail.Description,
-			}
-			br.FieldViolations = append(br.FieldViolations, v)
-		}
-		return br, err
+func detailsFromError(err error) (protoiface.MessageV1, bool) {
+	invalidFieldsError, ok := errors.Unwrap(err).(*types.InvalidFieldsError)
+	if !ok {
+		return nil, false
 	}
-	return nil, err
+
+	violations := invalidFieldsError.Violations
+	br := &errdetails.BadRequest{}
+	for _, violation := range violations {
+		v := &errdetails.BadRequest_FieldViolation{
+			Field:       violation.Field,
+			Description: violation.Description,
+		}
+		br.FieldViolations = append(br.FieldViolations, v)
+	}
+	return br, true
 }
 
 // ToStatusError returns a status.Error from the given logic error. If an error
 // occurs while executing logic in API handler, gRPC status.error should be
 // returned so that the client can know more about the status of the request.
 func ToStatusError(err error) error {
-	details, err := chkErrorWithDetails(err)
 	if errors.Is(err, auth.ErrNotAllowed) ||
 		errors.Is(err, auth.ErrUnexpectedStatusCode) ||
 		errors.Is(err, auth.ErrWebhookTimeout) {
 		return status.Error(codes.Unauthenticated, err.Error())
 	}
 
+	var invalidFieldsError *types.InvalidFieldsError
 	if errors.Is(err, converter.ErrPackRequired) ||
 		errors.Is(err, converter.ErrCheckpointRequired) ||
 		errors.Is(err, time.ErrInvalidHexString) ||
@@ -71,9 +71,9 @@ func ToStatusError(err error) error {
 		errors.Is(err, clients.ErrInvalidClientKey) ||
 		errors.Is(err, types.ErrEmptyProjectFields) ||
 		errors.Is(err, types.ErrNotSupportedMethod) ||
-		errors.Is(err, types.ErrInvalidProjectField) {
+		errors.As(err, &invalidFieldsError) {
 		st := status.New(codes.InvalidArgument, err.Error())
-		if details != nil {
+		if details, ok := detailsFromError(err); ok {
 			st, _ = st.WithDetails(details)
 		}
 		return st.Err()

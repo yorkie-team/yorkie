@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -31,9 +32,6 @@ var (
 
 	// ErrNotSupportedMethod is returned when the method is not supported.
 	ErrNotSupportedMethod = errors.New("not supported method for authorization webhook")
-
-	// ErrInvalidProjectField is returned when the field is invalid.
-	ErrInvalidProjectField = errors.New("invalid project field")
 )
 
 var (
@@ -49,32 +47,27 @@ var (
 
 // FieldViolation is used to describe a single bad request field
 type FieldViolation struct {
-
-	// A Field of which field of the reques is bad
+	// A Field of which field of the reques is bad.
 	Field string
 	// A description of why the request element is bad.
 	Description string
 }
 
-// ErrorWithDetails is error for deliver details with error
-type ErrorWithDetails struct {
-	err     error
-	details []*FieldViolation
+// InvalidFieldsError is used to describe invalid fields.
+type InvalidFieldsError struct {
+	Violations []*FieldViolation
 }
 
-// Error returns Error() of ErrorWithDetails' err
-func (e *ErrorWithDetails) Error() string {
-	return e.err.Error()
-}
+// Error returns the error message.
+func (e *InvalidFieldsError) Error() string {
+	var builder strings.Builder
+	for _, detail := range e.Violations {
+		builder.WriteString(detail.Field)
+		builder.WriteString("-")
+		builder.WriteString(detail.Description)
+	}
 
-// GetDetails returns details of ErrorWithDetails
-func (e *ErrorWithDetails) GetDetails() []*FieldViolation {
-	return e.details
-}
-
-// GetError returns err of ErrorWithDetails
-func (e *ErrorWithDetails) GetError() error {
-	return e.err
+	return builder.String()
 }
 
 func isReservedName(name string) bool {
@@ -87,13 +80,13 @@ func isReservedName(name string) bool {
 // UpdatableProjectFields is a set of fields that use to update a project.
 type UpdatableProjectFields struct {
 	// Name is the name of this project.
-	Name *string `bson:"name,omitempty" validate:"omitempty,min=2,max=30,urlAvailable,reservedName"`
+	Name *string `bson:"name,omitempty" validate:"omitempty,min=2,max=30,slug,reservedname"`
 
 	// AuthWebhookURL is the url of the authorization webhook.
 	AuthWebhookURL *string `bson:"auth_webhook_url,omitempty"`
 
 	// AuthWebhookMethods is the methods that run the authorization webhook.
-	AuthWebhookMethods *[]string `bson:"auth_webhook_methods,omitempty"`
+	AuthWebhookMethods *[]string `bson:"auth_webhook_methods,omitempty" validate:"omitempty,invalidmethod"`
 }
 
 // Validate validates the UpdatableProjectFields.
@@ -101,54 +94,58 @@ func (i *UpdatableProjectFields) Validate() error {
 	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil {
 		return ErrEmptyProjectFields
 	}
-	if i.AuthWebhookMethods != nil {
-		for _, method := range *i.AuthWebhookMethods {
-			if !IsAuthMethod(method) {
-				return fmt.Errorf("%s: %w", method, ErrNotSupportedMethod)
-			}
-		}
-	}
 
 	if err := defaultValidator.Struct(i); err != nil {
-		errWithDetails := &ErrorWithDetails{}
+		invalidFieldsError := &InvalidFieldsError{}
 		for _, err := range err.(validator.ValidationErrors) {
-			var field string
-			var desc string
-			if err.StructField() == "Name" {
-				field = "Name"
-				cause := err.ActualTag()
-				switch cause {
-				case "urlAvailable":
-					desc = fmt.Sprintf("The project name: %s must only contain url available characters", err.Value())
-				case "min", "max":
-					desc = fmt.Sprintf("The length of project name: %s must be between two and thirty", err.Value())
-				case "reservedName":
-					desc = fmt.Sprintf("The project name: %s is reserved name", err.Value())
-				}
-			}
+			// var desc string
+			// if err.StructField() == "Name" {
+			// 	cause := err.ActualTag()
+			// 	switch cause {
+			// 	case "slug":
+			// 		desc = fmt.Sprintf("The project name: %s must only contain url available characters", err.Value())
+			// 	case "min", "max":
+			// 		desc = fmt.Sprintf("The length of project name: %s must be between two and thirty", err.Value())
+			// 	case "reservedname":
+			// 		desc = fmt.Sprintf("The project name: %s is reserved name", err.Value())
+			// 	}
+			// } else if err.StructField() == "AuthWebhookMethods" {
+			// 	cause := err.ActualTag()
+			// 	switch cause {
+			// 	case "invalidmethod":
+			// 		desc = fmt.Sprintf("The AuthWebhookMethods: %s is invalid", err.Value())
+			// 	}
+			// }
 			v := &FieldViolation{
-				Field:       field,
-				Description: desc,
+				Field:       err.StructField(),
+				Description: err.Error(),
 			}
-			errWithDetails = &ErrorWithDetails{}
-			errWithDetails.details = append(errWithDetails.details, v)
-			errWithDetails.err = fmt.Errorf("%s: %w", err, ErrInvalidProjectField)
-
+			invalidFieldsError.Violations = append(invalidFieldsError.Violations, v)
 		}
-		return errWithDetails
+		return fmt.Errorf("invalid project fields: %w", invalidFieldsError)
 	}
 
 	return nil
 }
 
 func init() {
-	registerValidation("urlAvailable", func(level validator.FieldLevel) bool {
+	registerValidation("slug", func(level validator.FieldLevel) bool {
 		name := level.Field().String()
 		return nameRegex.MatchString(name)
 	})
 
-	registerValidation("reservedName", func(level validator.FieldLevel) bool {
+	registerValidation("reservedname", func(level validator.FieldLevel) bool {
 		name := level.Field().String()
 		return !isReservedName(name)
+	})
+
+	registerValidation("invalidmethod", func(level validator.FieldLevel) bool {
+		methods := level.Field().Interface().([]string)
+		for _, method := range methods {
+			if !IsAuthMethod(method) {
+				return false
+			}
+		}
+		return true
 	})
 }
