@@ -34,7 +34,7 @@ import (
 )
 
 func detailsFromError(err error) (protoiface.MessageV1, bool) {
-	invalidFieldsError, ok := errors.Unwrap(err).(*types.InvalidFieldsError)
+	invalidFieldsError, ok := err.(*types.InvalidFieldsError)
 	if !ok {
 		return nil, false
 	}
@@ -70,7 +70,6 @@ func ToStatusError(err error) error {
 		errors.Is(err, clients.ErrInvalidClientID) ||
 		errors.Is(err, clients.ErrInvalidClientKey) ||
 		errors.Is(err, types.ErrEmptyProjectFields) ||
-		errors.Is(err, types.ErrNotSupportedMethod) ||
 		errors.As(err, &invalidFieldsError) {
 		st := status.New(codes.InvalidArgument, err.Error())
 		if details, ok := detailsFromError(err); ok {
