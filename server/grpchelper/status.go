@@ -19,8 +19,10 @@ package grpchelper
 import (
 	"errors"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/runtime/protoiface"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -30,6 +32,24 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
+
+func detailsFromError(err error) (protoiface.MessageV1, bool) {
+	invalidFieldsError, ok := err.(*types.InvalidFieldsError)
+	if !ok {
+		return nil, false
+	}
+
+	violations := invalidFieldsError.Violations
+	br := &errdetails.BadRequest{}
+	for _, violation := range violations {
+		v := &errdetails.BadRequest_FieldViolation{
+			Field:       violation.Field,
+			Description: violation.Description,
+		}
+		br.FieldViolations = append(br.FieldViolations, v)
+	}
+	return br, true
+}
 
 // ToStatusError returns a status.Error from the given logic error. If an error
 // occurs while executing logic in API handler, gRPC status.error should be
@@ -41,6 +61,7 @@ func ToStatusError(err error) error {
 		return status.Error(codes.Unauthenticated, err.Error())
 	}
 
+	var invalidFieldsError *types.InvalidFieldsError
 	if errors.Is(err, converter.ErrPackRequired) ||
 		errors.Is(err, converter.ErrCheckpointRequired) ||
 		errors.Is(err, time.ErrInvalidHexString) ||
@@ -49,9 +70,12 @@ func ToStatusError(err error) error {
 		errors.Is(err, clients.ErrInvalidClientID) ||
 		errors.Is(err, clients.ErrInvalidClientKey) ||
 		errors.Is(err, types.ErrEmptyProjectFields) ||
-		errors.Is(err, types.ErrNotSupportedMethod) ||
-		errors.Is(err, types.ErrInvalidProjectField) {
-		return status.Error(codes.InvalidArgument, err.Error())
+		errors.As(err, &invalidFieldsError) {
+		st := status.New(codes.InvalidArgument, err.Error())
+		if details, ok := detailsFromError(err); ok {
+			st, _ = st.WithDetails(details)
+		}
+		return st.Err()
 	}
 
 	if errors.Is(err, converter.ErrUnsupportedOperation) ||

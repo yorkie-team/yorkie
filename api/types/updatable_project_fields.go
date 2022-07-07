@@ -19,22 +19,13 @@ package types
 
 import (
 	"errors"
-	"fmt"
 	"regexp"
 
 	"github.com/go-playground/validator/v10"
 )
 
-var (
-	// ErrEmptyProjectFields is returned when all the fields are empty.
-	ErrEmptyProjectFields = errors.New("UpdatableProjectFields is empty")
-
-	// ErrNotSupportedMethod is returned when the method is not supported.
-	ErrNotSupportedMethod = errors.New("not supported method for authorization webhook")
-
-	// ErrInvalidProjectField is returned when the field is invalid.
-	ErrInvalidProjectField = errors.New("invalid project field")
-)
+// ErrEmptyProjectFields is returned when all the fields are empty.
+var ErrEmptyProjectFields = errors.New("updatable project fields are empty")
 
 var (
 	// reservedNames is a map of reserved names. It is used to check if the
@@ -47,6 +38,22 @@ var (
 	nameRegex = regexp.MustCompile("^[a-z0-9\\-._~]+$")
 )
 
+// FieldViolation is used to describe a single bad request field
+type FieldViolation struct {
+	// A Field of which field of the reques is bad.
+	Field string
+	// A description of why the request element is bad.
+	Description string
+}
+
+// InvalidFieldsError is used to describe invalid fields.
+type InvalidFieldsError struct {
+	Violations []*FieldViolation
+}
+
+// Error returns the error message.
+func (e *InvalidFieldsError) Error() string { return "invalid fields" }
+
 func isReservedName(name string) bool {
 	if _, ok := reservedNames[name]; ok {
 		return true
@@ -57,13 +64,13 @@ func isReservedName(name string) bool {
 // UpdatableProjectFields is a set of fields that use to update a project.
 type UpdatableProjectFields struct {
 	// Name is the name of this project.
-	Name *string `bson:"name,omitempty" validate:"omitempty,min=2,max=30,name"`
+	Name *string `bson:"name,omitempty" validate:"omitempty,min=2,max=30,slug,reservedname"`
 
 	// AuthWebhookURL is the url of the authorization webhook.
 	AuthWebhookURL *string `bson:"auth_webhook_url,omitempty"`
 
 	// AuthWebhookMethods is the methods that run the authorization webhook.
-	AuthWebhookMethods *[]string `bson:"auth_webhook_methods,omitempty"`
+	AuthWebhookMethods *[]string `bson:"auth_webhook_methods,omitempty" validate:"omitempty,invalidmethod"`
 }
 
 // Validate validates the UpdatableProjectFields.
@@ -71,27 +78,43 @@ func (i *UpdatableProjectFields) Validate() error {
 	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil {
 		return ErrEmptyProjectFields
 	}
-	if i.AuthWebhookMethods != nil {
-		for _, method := range *i.AuthWebhookMethods {
-			if !IsAuthMethod(method) {
-				return fmt.Errorf("%s: %w", method, ErrNotSupportedMethod)
-			}
-		}
-	}
 
 	if err := defaultValidator.Struct(i); err != nil {
+		invalidFieldsError := &InvalidFieldsError{}
 		for _, err := range err.(validator.ValidationErrors) {
-			return fmt.Errorf("%s: %w", err, ErrInvalidProjectField)
+			v := &FieldViolation{
+				Field:       err.StructField(),
+				Description: err.Translate(trans),
+			}
+			invalidFieldsError.Violations = append(invalidFieldsError.Violations, v)
 		}
-		return err
+		return invalidFieldsError
 	}
 
 	return nil
 }
 
 func init() {
-	registerValidation("name", func(level validator.FieldLevel) bool {
+	registerValidation("slug", func(level validator.FieldLevel) bool {
 		name := level.Field().String()
-		return !isReservedName(name) && nameRegex.MatchString(name)
+		return nameRegex.MatchString(name)
 	})
+	registerTranslation("slug", "{0} must only contain slug available characters")
+
+	registerValidation("reservedname", func(level validator.FieldLevel) bool {
+		name := level.Field().String()
+		return !isReservedName(name)
+	})
+	registerTranslation("reservedname", "given {0} is reserved name")
+
+	registerValidation("invalidmethod", func(level validator.FieldLevel) bool {
+		methods := level.Field().Interface().([]string)
+		for _, method := range methods {
+			if !IsAuthMethod(method) {
+				return false
+			}
+		}
+		return true
+	})
+	registerTranslation("invalidmethod", "given {0} is invalid method")
 }

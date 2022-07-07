@@ -25,6 +25,7 @@ import (
 )
 
 func TestUpdatableProjectFields(t *testing.T) {
+	var invalidFieldsError *types.InvalidFieldsError
 	t.Run("validation test", func(t *testing.T) {
 		newName := "changed-name"
 		newAuthWebhookURL := "newWebhookURL"
@@ -62,7 +63,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			AuthWebhookURL:     &newAuthWebhookURL,
 			AuthWebhookMethods: &newAuthWebhookMethods,
 		}
-		assert.ErrorIs(t, fields.Validate(), types.ErrNotSupportedMethod)
+		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
 	})
 
 	t.Run("project name format test", func(t *testing.T) {
@@ -76,36 +77,36 @@ func TestUpdatableProjectFields(t *testing.T) {
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
 
 		reservedName := "new"
 		fields = &types.UpdatableProjectFields{
 			Name: &reservedName,
 		}
-		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
 
 		reservedName = "default"
 		fields = &types.UpdatableProjectFields{
 			Name: &reservedName,
 		}
-		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
 
 		invalidName = "1"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
 
 		invalidName = "over_30_chracaters_is_invalid_name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
 
 		invalidName = "invalid/name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorIs(t, fields.Validate(), types.ErrInvalidProjectField)
+		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
 	})
 }

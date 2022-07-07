@@ -18,7 +18,10 @@
 package types
 
 import (
+	"github.com/go-playground/locales/en"
+	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
+	en_translations "github.com/go-playground/validator/v10/translations/en"
 )
 
 var (
@@ -26,12 +29,40 @@ var (
 	// api package. In this package, some fields are provided by the user, and
 	// we need to validate them.
 	defaultValidator = validator.New()
+	// defaultEn is the default translator instance for the 'en' locale.
+	defaultEn = en.New()
+	// uni is the UniversalTranslator instance set with
+	// the fallback locale and locales it should support.
+	uni = ut.New(defaultEn, defaultEn)
+
+	// trans is the specified translator for the given locale,
+	// or fallback if not found.
+	trans, _ = uni.GetTranslator(defaultEn.Locale())
 )
 
 // registerValidation is shortcut of defaultValidator.RegisterValidation
 // that register custom validation with given tag, and it can be used in init.
 func registerValidation(tag string, fn validator.Func) {
 	if err := defaultValidator.RegisterValidation(tag, fn); err != nil {
+		panic(err)
+	}
+}
+
+// registerTranslation is shortcut of defaultValidator.RegisterTranslation
+// that registers translations against the provided tag with given msg.
+func registerTranslation(tag, msg string) {
+	if err := defaultValidator.RegisterTranslation(tag, trans, func(ut ut.Translator) error {
+		return ut.Add(tag, msg, true)
+	}, func(ut ut.Translator, fe validator.FieldError) string {
+		t, _ := ut.T(tag, fe.Field())
+		return t
+	}); err != nil {
+		panic(err)
+	}
+}
+
+func init() {
+	if err := en_translations.RegisterDefaultTranslations(defaultValidator, trans); err != nil {
 		panic(err)
 	}
 }
