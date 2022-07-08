@@ -26,6 +26,7 @@ import (
 
 const (
 	colProjects   = "projects"
+	colUsers      = "users"
 	colClients    = "clients"
 	colDocuments  = "documents"
 	colChanges    = "changes"
@@ -50,6 +51,13 @@ var collectionInfos = []collectionInfo{
 			Options: options.Index().SetUnique(true),
 		}, {
 			Keys:    bsonx.Doc{{Key: "secret_key", Value: bsonx.Int32(1)}},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: colUsers,
+		indexes: []mongo.IndexModel{{
+			Keys:    bsonx.Doc{{Key: "email", Value: bsonx.Int32(1)}},
 			Options: options.Index().SetUnique(true),
 		}},
 	},

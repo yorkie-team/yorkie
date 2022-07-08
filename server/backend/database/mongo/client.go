@@ -137,7 +137,7 @@ func (c *Client) CreateProjectInfo(ctx context.Context, name string) (*database.
 		"name":       info.Name,
 		"public_key": info.PublicKey,
 		"secret_key": info.SecretKey,
-		"created_at": gotime.Now(),
+		"created_at": info.CreatedAt,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
@@ -265,6 +265,47 @@ func (c *Client) UpdateProjectInfo(
 	}
 
 	return &info, nil
+}
+
+// CreateUserInfo creates a new user.
+func (c *Client) CreateUserInfo(
+	ctx context.Context,
+	email string,
+) (*database.UserInfo, error) {
+	info := database.NewUserInfo(email)
+	result, err := c.collection(colProjects).InsertOne(ctx, bson.M{
+		"email":      info.Email,
+		"created_at": info.CreatedAt,
+	})
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrUserAlreadyExists
+		}
+
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	info.ID = types.ID(result.InsertedID.(primitive.ObjectID).Hex())
+	return info, nil
+}
+
+// ListUserInfos returns all users.
+func (c *Client) ListUserInfos(
+	ctx context.Context,
+) ([]*database.UserInfo, error) {
+	cursor, err := c.collection(colUsers).Find(ctx, bson.M{})
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	var infos []*database.UserInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, err
+	}
+
+	return infos, nil
 }
 
 // ActivateClient activates the client of the given key.

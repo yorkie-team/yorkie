@@ -212,6 +212,56 @@ func (d *DB) UpdateProjectInfo(
 	return info, nil
 }
 
+// CreateUserInfo creates a new user.
+func (d *DB) CreateUserInfo(
+	ctx context.Context,
+	email string,
+) (*database.UserInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	existing, err := txn.First(tblUsers, "email", email)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("%s: %w", email, database.ErrUserAlreadyExists)
+	}
+
+	info := database.NewUserInfo(email)
+	info.ID = newID()
+	if err := txn.Insert(tblUsers, info); err != nil {
+		return nil, err
+	}
+	txn.Commit()
+
+	return info, nil
+}
+
+// ListUserInfos returns all users.
+func (d *DB) ListUserInfos(
+	ctx context.Context,
+) ([]*database.UserInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblUsers, "id")
+	if err != nil {
+		return nil, err
+	}
+
+	var infos []*database.UserInfo
+	for {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
+		infos = append(infos, raw.(*database.UserInfo).DeepCopy())
+	}
+
+	return infos, nil
+}
+
 // ActivateClient activates a client.
 func (d *DB) ActivateClient(
 	ctx context.Context,

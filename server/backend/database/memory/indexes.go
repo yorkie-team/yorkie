@@ -20,6 +20,7 @@ import "github.com/hashicorp/go-memdb"
 
 var (
 	tblProjects   = "projects"
+	tblUsers      = "users"
 	tblClients    = "clients"
 	tblDocuments  = "documents"
 	tblChanges    = "changes"
@@ -51,6 +52,21 @@ var schema = &memdb.DBSchema{
 					Name:    "secret_key",
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "SecretKey"},
+				},
+			},
+		},
+		tblUsers: {
+			Name: tblUsers,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"email": {
+					Name:    "email",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "Email"},
 				},
 			},
 		},
