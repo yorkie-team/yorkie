@@ -18,8 +18,8 @@
 package types
 
 // Paging is the paging information for the document.
-type Paging struct {
-	PreviousID ID
+type Paging[T any] struct {
+	PreviousID T
 	PageSize   int
 	IsForward  bool
 }

@@ -248,6 +248,7 @@ message DocumentSummary {
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp accessed_at = 5;
   google.protobuf.Timestamp updated_at = 6;
+  uint64 server_seq = 7;
 }
 
 message Presence {

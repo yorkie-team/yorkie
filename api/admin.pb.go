@@ -6,6 +6,7 @@ package api
 import (
 	context "context"
 	fmt "fmt"
+	types "github.com/gogo/protobuf/types"
 	proto "github.com/golang/protobuf/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
@@ -622,19 +623,140 @@ func (m *GetDocumentResponse) GetDocument() *DocumentSummary {
 	return nil
 }
 
-type ListChangesRequest struct {
+type GetSnapshotMetaRequest struct {
 	ProjectName          string   `protobuf:"bytes,1,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"`
 	DocumentKey          string   `protobuf:"bytes,2,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	ServerSeq            uint64   `protobuf:"varint,3,opt,name=server_seq,json=serverSeq,proto3" json:"server_seq,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetSnapshotMetaRequest) Reset()         { *m = GetSnapshotMetaRequest{} }
+func (m *GetSnapshotMetaRequest) String() string { return proto.CompactTextString(m) }
+func (*GetSnapshotMetaRequest) ProtoMessage()    {}
+func (*GetSnapshotMetaRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_73a7fc70dcc2027c, []int{12}
+}
+func (m *GetSnapshotMetaRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetSnapshotMetaRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetSnapshotMetaRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetSnapshotMetaRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetSnapshotMetaRequest.Merge(m, src)
+}
+func (m *GetSnapshotMetaRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetSnapshotMetaRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetSnapshotMetaRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetSnapshotMetaRequest proto.InternalMessageInfo
+
+func (m *GetSnapshotMetaRequest) GetProjectName() string {
+	if m != nil {
+		return m.ProjectName
+	}
+	return ""
+}
+
+func (m *GetSnapshotMetaRequest) GetDocumentKey() string {
+	if m != nil {
+		return m.DocumentKey
+	}
+	return ""
+}
+
+func (m *GetSnapshotMetaRequest) GetServerSeq() uint64 {
+	if m != nil {
+		return m.ServerSeq
+	}
+	return 0
+}
+
+type GetSnapshotMetaResponse struct {
+	Snapshot             []byte   `protobuf:"bytes,1,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	Lamport              uint64   `protobuf:"varint,2,opt,name=lamport,proto3" json:"lamport,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetSnapshotMetaResponse) Reset()         { *m = GetSnapshotMetaResponse{} }
+func (m *GetSnapshotMetaResponse) String() string { return proto.CompactTextString(m) }
+func (*GetSnapshotMetaResponse) ProtoMessage()    {}
+func (*GetSnapshotMetaResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_73a7fc70dcc2027c, []int{13}
+}
+func (m *GetSnapshotMetaResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetSnapshotMetaResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetSnapshotMetaResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetSnapshotMetaResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetSnapshotMetaResponse.Merge(m, src)
+}
+func (m *GetSnapshotMetaResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetSnapshotMetaResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetSnapshotMetaResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetSnapshotMetaResponse proto.InternalMessageInfo
+
+func (m *GetSnapshotMetaResponse) GetSnapshot() []byte {
+	if m != nil {
+		return m.Snapshot
+	}
+	return nil
+}
+
+func (m *GetSnapshotMetaResponse) GetLamport() uint64 {
+	if m != nil {
+		return m.Lamport
+	}
+	return 0
+}
+
+type ListChangesRequest struct {
+	ProjectName          string             `protobuf:"bytes,1,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"`
+	DocumentKey          string             `protobuf:"bytes,2,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	PreviousSeq          *types.UInt64Value `protobuf:"bytes,3,opt,name=previous_seq,json=previousSeq,proto3" json:"previous_seq,omitempty"`
+	PageSize             *types.Int32Value  `protobuf:"bytes,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	IsForward            *types.BoolValue   `protobuf:"bytes,5,opt,name=is_forward,json=isForward,proto3" json:"is_forward,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
+	XXX_unrecognized     []byte             `json:"-"`
+	XXX_sizecache        int32              `json:"-"`
 }
 
 func (m *ListChangesRequest) Reset()         { *m = ListChangesRequest{} }
 func (m *ListChangesRequest) String() string { return proto.CompactTextString(m) }
 func (*ListChangesRequest) ProtoMessage()    {}
 func (*ListChangesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73a7fc70dcc2027c, []int{12}
+	return fileDescriptor_73a7fc70dcc2027c, []int{14}
 }
 func (m *ListChangesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -677,6 +799,27 @@ func (m *ListChangesRequest) GetDocumentKey() string {
 	return ""
 }
 
+func (m *ListChangesRequest) GetPreviousSeq() *types.UInt64Value {
+	if m != nil {
+		return m.PreviousSeq
+	}
+	return nil
+}
+
+func (m *ListChangesRequest) GetPageSize() *types.Int32Value {
+	if m != nil {
+		return m.PageSize
+	}
+	return nil
+}
+
+func (m *ListChangesRequest) GetIsForward() *types.BoolValue {
+	if m != nil {
+		return m.IsForward
+	}
+	return nil
+}
+
 type ListChangesResponse struct {
 	Changes              []*Change `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
@@ -688,7 +831,7 @@ func (m *ListChangesResponse) Reset()         { *m = ListChangesResponse{} }
 func (m *ListChangesResponse) String() string { return proto.CompactTextString(m) }
 func (*ListChangesResponse) ProtoMessage()    {}
 func (*ListChangesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_73a7fc70dcc2027c, []int{13}
+	return fileDescriptor_73a7fc70dcc2027c, []int{15}
 }
 func (m *ListChangesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -737,6 +880,8 @@ func init() {
 	proto.RegisterType((*ListDocumentsResponse)(nil), "api.ListDocumentsResponse")
 	proto.RegisterType((*GetDocumentRequest)(nil), "api.GetDocumentRequest")
 	proto.RegisterType((*GetDocumentResponse)(nil), "api.GetDocumentResponse")
+	proto.RegisterType((*GetSnapshotMetaRequest)(nil), "api.GetSnapshotMetaRequest")
+	proto.RegisterType((*GetSnapshotMetaResponse)(nil), "api.GetSnapshotMetaResponse")
 	proto.RegisterType((*ListChangesRequest)(nil), "api.ListChangesRequest")
 	proto.RegisterType((*ListChangesResponse)(nil), "api.ListChangesResponse")
 }
@@ -744,44 +889,55 @@ func init() {
 func init() { proto.RegisterFile("admin.proto", fileDescriptor_73a7fc70dcc2027c) }
 
 var fileDescriptor_73a7fc70dcc2027c = []byte{
-	// 583 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x55, 0xcb, 0x6e, 0xd3, 0x40,
-	0x14, 0x8d, 0x93, 0x3e, 0x92, 0xeb, 0x94, 0xc7, 0x34, 0x01, 0xd7, 0x15, 0x21, 0x1d, 0x09, 0x88,
-	0x58, 0x44, 0x28, 0xdd, 0x56, 0x2a, 0xb4, 0xd0, 0x16, 0x15, 0x21, 0xe4, 0x8a, 0x0d, 0x2c, 0xa2,
-	0x69, 0x7c, 0x5b, 0x06, 0xea, 0xd8, 0x78, 0x12, 0x50, 0xfa, 0x21, 0x88, 0x4f, 0x62, 0xc9, 0x27,
-	0xa0, 0xf0, 0x0d, 0xec, 0x51, 0xe6, 0xe1, 0x38, 0xb6, 0x17, 0x44, 0x62, 0x17, 0x9d, 0x7b, 0xe6,
-	0xcc, 0x39, 0xd7, 0xf7, 0x4e, 0xc0, 0x66, 0x7e, 0xc0, 0x87, 0xdd, 0x28, 0x0e, 0x47, 0x21, 0xa9,
-	0xb0, 0x88, 0xbb, 0x37, 0x63, 0x14, 0xe1, 0x38, 0x1e, 0xa0, 0x50, 0x28, 0x7d, 0x0c, 0x8d, 0xc3,
-	0x18, 0xd9, 0x08, 0xdf, 0xc4, 0xe1, 0x47, 0x1c, 0x8c, 0x3c, 0xfc, 0x3c, 0x46, 0x31, 0x22, 0x04,
-	0x56, 0x86, 0x2c, 0x40, 0xc7, 0x6a, 0x5b, 0x9d, 0x9a, 0x27, 0x7f, 0xd3, 0x7d, 0x68, 0x66, 0xb8,
-	0x22, 0x0a, 0x87, 0x02, 0xc9, 0x43, 0x58, 0x8f, 0x14, 0x24, 0xf9, 0x76, 0xaf, 0xde, 0x65, 0x11,
-	0xef, 0x1a, 0x9a, 0x29, 0xd2, 0x47, 0x70, 0xfb, 0x18, 0x47, 0xff, 0x70, 0xd3, 0x1e, 0x90, 0x34,
-	0x71, 0xc9, 0x6b, 0x9a, 0xb0, 0xf9, 0x8a, 0x0b, 0x73, 0x5c, 0xe8, 0x8b, 0xe8, 0x53, 0x68, 0x2c,
-	0xc2, 0x5a, 0xb6, 0x03, 0x55, 0x7d, 0x52, 0x38, 0x56, 0xbb, 0x92, 0xd3, 0x4d, 0xaa, 0xf4, 0x3d,
-	0x34, 0xde, 0x46, 0x7e, 0xbe, 0x59, 0x37, 0xa0, 0xcc, 0x7d, 0x1d, 0xa0, 0xcc, 0x7d, 0xb2, 0x0b,
-	0x6b, 0x17, 0x1c, 0xaf, 0x7c, 0xe1, 0x94, 0xa5, 0xcf, 0x6d, 0xa9, 0x27, 0x8f, 0xb2, 0xf3, 0x2b,
-	0x73, 0xfa, 0x48, 0x52, 0x3c, 0x4d, 0x9d, 0x75, 0x37, 0x23, 0xbe, 0x64, 0xec, 0x6f, 0x96, 0x0a,
-	0xf8, 0x3c, 0x1c, 0x8c, 0x03, 0x1c, 0x26, 0xc1, 0xc9, 0x0e, 0xd4, 0x35, 0xa7, 0x9f, 0xea, 0xb4,
-	0xad, 0xb1, 0xd7, 0x2c, 0x40, 0x72, 0x1f, 0xec, 0x28, 0xc6, 0x2f, 0x3c, 0x1c, 0x8b, 0x3e, 0xf7,
-	0xa5, 0xed, 0x9a, 0x07, 0x06, 0x7a, 0xe9, 0x93, 0x6d, 0xa8, 0x45, 0xec, 0x12, 0xfb, 0x82, 0x5f,
-	0xa3, 0x53, 0x69, 0x5b, 0x9d, 0x55, 0xaf, 0x3a, 0x03, 0xce, 0xf8, 0x35, 0x92, 0x7b, 0x00, 0x5c,
-	0xf4, 0x2f, 0xc2, 0xf8, 0x2b, 0x8b, 0x7d, 0x67, 0xa5, 0x6d, 0x75, 0xaa, 0x5e, 0x8d, 0x8b, 0x23,
-	0x05, 0xd0, 0x53, 0x68, 0x66, 0x7c, 0xe9, 0x64, 0x3d, 0xa8, 0xf9, 0x06, 0xd4, 0xad, 0x6f, 0xc8,
-	0x6c, 0x86, 0x7a, 0x36, 0x0e, 0x02, 0x16, 0x4f, 0xbc, 0x39, 0x8d, 0xbe, 0x93, 0xa3, 0x61, 0x08,
-	0x4b, 0x44, 0xdc, 0x81, 0xba, 0x51, 0xe9, 0x7f, 0xc2, 0x89, 0xce, 0x68, 0x1b, 0xec, 0x14, 0x27,
-	0xf4, 0x18, 0x36, 0x17, 0xb4, 0xb5, 0xcd, 0x27, 0x50, 0x35, 0x2c, 0xfd, 0x05, 0x8a, 0x5d, 0x26,
-	0xac, 0x99, 0xc9, 0x59, 0xe2, 0xc3, 0x0f, 0x6c, 0x78, 0x89, 0xe2, 0xff, 0x9a, 0xdc, 0x53, 0xd3,
-	0x9d, 0x68, 0x6b, 0x93, 0x0f, 0x60, 0x7d, 0xa0, 0x20, 0xdd, 0x49, 0x5b, 0x7a, 0x54, 0x34, 0xcf,
-	0xd4, 0x7a, 0x7f, 0x2a, 0xb0, 0xfa, 0x6c, 0xf6, 0x2a, 0x90, 0x13, 0xd8, 0x58, 0xd8, 0x66, 0xb2,
-	0xa5, 0x0e, 0x14, 0xbc, 0x06, 0xae, 0x5b, 0x54, 0x52, 0x17, 0xd3, 0x12, 0x79, 0x01, 0xf5, 0xf4,
-	0x62, 0x11, 0x47, 0xb2, 0x0b, 0x56, 0xd0, 0xdd, 0x2a, 0xa8, 0x24, 0x32, 0xfb, 0x00, 0xf3, 0xa5,
-	0x27, 0x77, 0x24, 0x35, 0xf7, 0x5c, 0xb8, 0x77, 0x73, 0x78, 0x22, 0x70, 0x02, 0x1b, 0x0b, 0x1b,
-	0xa4, 0x13, 0x15, 0xad, 0xac, 0x4e, 0x54, 0xb8, 0x70, 0x4a, 0x69, 0x61, 0x62, 0xc9, 0xdc, 0x78,
-	0x76, 0xbb, 0xb4, 0x52, 0xe1, 0x80, 0xd3, 0x12, 0x39, 0x00, 0x3b, 0x35, 0x52, 0x24, 0x71, 0x9f,
-	0x19, 0x60, 0xd7, 0xc9, 0x17, 0xd2, 0x1a, 0xa9, 0x2f, 0xae, 0x35, 0xf2, 0xf3, 0xe5, 0x3a, 0xf9,
-	0x82, 0xd1, 0x38, 0xb8, 0xf5, 0x63, 0xda, 0xb2, 0x7e, 0x4e, 0x5b, 0xd6, 0xaf, 0x69, 0xcb, 0xfa,
-	0xfe, 0xbb, 0x55, 0x3a, 0x5f, 0x93, 0x7f, 0x00, 0xbb, 0x7f, 0x03, 0x00, 0x00, 0xff, 0xff, 0x3c,
-	0x67, 0x79, 0x6b, 0x25, 0x06, 0x00, 0x00,
+	// 764 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x54, 0xcd, 0x4e, 0xdb, 0x5a,
+	0x10, 0xc6, 0x21, 0x40, 0x32, 0x0e, 0x97, 0x7b, 0x0f, 0x01, 0x8c, 0xe1, 0xa6, 0xc1, 0x52, 0xdb,
+	0xa8, 0x8b, 0x50, 0x85, 0xaa, 0x6a, 0x25, 0x24, 0x5a, 0x68, 0xf9, 0x11, 0x2d, 0xad, 0x1c, 0xd1,
+	0x45, 0xbb, 0x88, 0x0e, 0xf1, 0x10, 0xdc, 0x26, 0xb6, 0xe3, 0xe3, 0x80, 0x40, 0xea, 0x3b, 0x74,
+	0x55, 0xf5, 0x85, 0x2a, 0x75, 0xd9, 0x47, 0xa8, 0xe8, 0x8b, 0x54, 0x39, 0x3e, 0xc7, 0x71, 0x6c,
+	0x2f, 0x8a, 0xc4, 0x2e, 0x99, 0xf9, 0xe6, 0x9b, 0xf9, 0xc6, 0x73, 0x3e, 0x50, 0xa9, 0xd5, 0xb3,
+	0x9d, 0xba, 0xe7, 0xbb, 0x81, 0x4b, 0x26, 0xa9, 0x67, 0xeb, 0x73, 0x3e, 0x32, 0x77, 0xe0, 0xb7,
+	0x91, 0x85, 0x51, 0xbd, 0xd2, 0x71, 0xdd, 0x4e, 0x17, 0xd7, 0xf9, 0xbf, 0x93, 0xc1, 0xe9, 0xfa,
+	0x85, 0x4f, 0x3d, 0x0f, 0x7d, 0x91, 0x37, 0x1e, 0x40, 0x79, 0xc7, 0x47, 0x1a, 0xe0, 0x5b, 0xdf,
+	0xfd, 0x88, 0xed, 0xc0, 0xc4, 0xfe, 0x00, 0x59, 0x40, 0x08, 0xe4, 0x1d, 0xda, 0x43, 0x4d, 0xa9,
+	0x2a, 0xb5, 0xa2, 0xc9, 0x7f, 0x1b, 0x5b, 0xb0, 0x90, 0xc0, 0x32, 0xcf, 0x75, 0x18, 0x92, 0x7b,
+	0x30, 0xe3, 0x85, 0x21, 0x8e, 0x57, 0x1b, 0xa5, 0x3a, 0xf5, 0xec, 0xba, 0x84, 0xc9, 0xa4, 0x71,
+	0x1f, 0xfe, 0xdb, 0xc3, 0xe0, 0x2f, 0x3a, 0x6d, 0x02, 0x89, 0x03, 0x6f, 0xd8, 0x66, 0x01, 0xe6,
+	0x5f, 0xd9, 0x4c, 0x96, 0x33, 0xd1, 0xc8, 0x78, 0x06, 0xe5, 0xf1, 0xb0, 0xa0, 0xad, 0x41, 0x41,
+	0x54, 0x32, 0x4d, 0xa9, 0x4e, 0xa6, 0x78, 0xa3, 0xac, 0xf1, 0x01, 0xca, 0xc7, 0x9e, 0x95, 0x5e,
+	0xd6, 0x3f, 0x90, 0xb3, 0x2d, 0x21, 0x20, 0x67, 0x5b, 0x64, 0x03, 0xa6, 0x4f, 0x6d, 0xec, 0x5a,
+	0x4c, 0xcb, 0xf1, 0x39, 0x57, 0x38, 0x1f, 0x2f, 0xa5, 0x27, 0x5d, 0x59, 0xbd, 0xcb, 0x21, 0xa6,
+	0x80, 0x0e, 0xb7, 0x9b, 0x20, 0xbf, 0xa1, 0xec, 0xaf, 0x4a, 0x28, 0xf0, 0x85, 0xdb, 0x1e, 0xf4,
+	0xd0, 0x89, 0x84, 0x93, 0x35, 0x28, 0x09, 0x4c, 0x2b, 0xb6, 0x69, 0x55, 0xc4, 0x8e, 0x68, 0x0f,
+	0xc9, 0x1d, 0x50, 0x3d, 0x1f, 0xcf, 0x6d, 0x77, 0xc0, 0x5a, 0xb6, 0xc5, 0xc7, 0x2e, 0x9a, 0x20,
+	0x43, 0x07, 0x16, 0x59, 0x81, 0xa2, 0x47, 0x3b, 0xd8, 0x62, 0xf6, 0x15, 0x6a, 0x93, 0x55, 0xa5,
+	0x36, 0x65, 0x16, 0x86, 0x81, 0xa6, 0x7d, 0x85, 0xe4, 0x7f, 0x00, 0x9b, 0xb5, 0x4e, 0x5d, 0xff,
+	0x82, 0xfa, 0x96, 0x96, 0xaf, 0x2a, 0xb5, 0x82, 0x59, 0xb4, 0xd9, 0x6e, 0x18, 0x30, 0x0e, 0x61,
+	0x21, 0x31, 0x97, 0x50, 0xd6, 0x80, 0xa2, 0x25, 0x83, 0x62, 0xf5, 0x65, 0xae, 0x4d, 0x42, 0x9b,
+	0x83, 0x5e, 0x8f, 0xfa, 0x97, 0xe6, 0x08, 0x66, 0xbc, 0xe7, 0xa7, 0x21, 0x01, 0x37, 0x90, 0xb8,
+	0x06, 0x25, 0xc9, 0xd2, 0xfa, 0x84, 0x97, 0x42, 0xa3, 0x2a, 0x63, 0x87, 0x78, 0x69, 0xec, 0xc1,
+	0xfc, 0x18, 0xb7, 0x18, 0xf3, 0x21, 0x14, 0x24, 0x4a, 0x7c, 0x81, 0xec, 0x29, 0x23, 0x94, 0xf1,
+	0x19, 0x16, 0xf7, 0x30, 0x68, 0x3a, 0xd4, 0x63, 0x67, 0x6e, 0xf0, 0x1a, 0x03, 0x7a, 0xab, 0x83,
+	0x0e, 0x17, 0xce, 0xd0, 0x3f, 0x47, 0xbf, 0xc5, 0xb0, 0xcf, 0x3f, 0x47, 0xde, 0x2c, 0x86, 0x91,
+	0x26, 0xf6, 0x8d, 0x37, 0xb0, 0x94, 0x6a, 0x2f, 0xb4, 0xe8, 0x50, 0x60, 0x22, 0xce, 0x7b, 0x97,
+	0xcc, 0xe8, 0x3f, 0xd1, 0x60, 0xa6, 0x4b, 0x7b, 0x9e, 0xeb, 0x07, 0xbc, 0x67, 0xde, 0x94, 0x7f,
+	0x8d, 0x2f, 0x39, 0x20, 0xc3, 0x4f, 0xb8, 0x73, 0x46, 0x9d, 0x0e, 0xb2, 0xdb, 0x15, 0xb3, 0x35,
+	0x64, 0x11, 0xb7, 0x27, 0xe5, 0xa8, 0x8d, 0xd5, 0x7a, 0xe8, 0x5c, 0x75, 0xe9, 0x5c, 0xf5, 0xe3,
+	0x03, 0x27, 0x78, 0xfc, 0xe8, 0x1d, 0xed, 0x0e, 0xd0, 0x8c, 0xae, 0xb5, 0x89, 0x7d, 0xf2, 0x24,
+	0x7e, 0x9b, 0x79, 0xf1, 0xe2, 0x92, 0xd5, 0x07, 0x4e, 0xb0, 0xd1, 0x08, 0x8b, 0x47, 0x87, 0xfb,
+	0x74, 0xec, 0x70, 0xa7, 0x78, 0xa9, 0x9e, 0x2a, 0xdd, 0x76, 0xdd, 0x6e, 0x58, 0x19, 0x3b, 0xea,
+	0xcd, 0xd0, 0x64, 0xa2, 0x8d, 0x88, 0xfd, 0xde, 0x85, 0x99, 0x76, 0x18, 0x12, 0x07, 0xad, 0xf2,
+	0x53, 0x09, 0x61, 0xa6, 0xcc, 0x35, 0xbe, 0xe7, 0x61, 0xea, 0xf9, 0xd0, 0xbc, 0xc9, 0x3e, 0xcc,
+	0x8e, 0x99, 0x2a, 0x59, 0x0e, 0x0b, 0x32, 0x4c, 0x59, 0xd7, 0xb3, 0x52, 0x61, 0x63, 0x63, 0x82,
+	0xbc, 0x84, 0x52, 0xdc, 0xdf, 0x88, 0xc6, 0xd1, 0x19, 0x4e, 0xa8, 0x2f, 0x67, 0x64, 0x22, 0x9a,
+	0x2d, 0x80, 0x91, 0xf7, 0x92, 0x45, 0x0e, 0x4d, 0xb9, 0xb6, 0xbe, 0x94, 0x8a, 0x47, 0x04, 0xfb,
+	0x30, 0x3b, 0x66, 0x64, 0x42, 0x51, 0x96, 0x73, 0x0a, 0x45, 0x99, 0xbe, 0x17, 0x32, 0x8d, 0x19,
+	0x07, 0x19, 0x0d, 0x9e, 0x34, 0x39, 0xc1, 0x94, 0xe9, 0x33, 0xc6, 0x04, 0xd9, 0x06, 0x35, 0xf6,
+	0xb2, 0x49, 0x34, 0x7d, 0xc2, 0x47, 0x74, 0x2d, 0x9d, 0x88, 0x38, 0x8e, 0x60, 0x2e, 0xf1, 0xaa,
+	0xc8, 0x8a, 0x84, 0x67, 0x3c, 0x75, 0x7d, 0x35, 0x3b, 0x19, 0x9f, 0x29, 0x76, 0x41, 0x62, 0xa6,
+	0xf4, 0x2b, 0xd3, 0xb5, 0x74, 0x42, 0x72, 0x6c, 0xff, 0xfb, 0xe3, 0xba, 0xa2, 0xfc, 0xbc, 0xae,
+	0x28, 0xbf, 0xae, 0x2b, 0xca, 0xb7, 0xdf, 0x95, 0x89, 0x93, 0x69, 0x7e, 0xb6, 0x1b, 0x7f, 0x02,
+	0x00, 0x00, 0xff, 0xff, 0x5b, 0xff, 0x80, 0x88, 0x1c, 0x08, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -802,6 +958,7 @@ type AdminClient interface {
 	UpdateProject(ctx context.Context, in *UpdateProjectRequest, opts ...grpc.CallOption) (*UpdateProjectResponse, error)
 	ListDocuments(ctx context.Context, in *ListDocumentsRequest, opts ...grpc.CallOption) (*ListDocumentsResponse, error)
 	GetDocument(ctx context.Context, in *GetDocumentRequest, opts ...grpc.CallOption) (*GetDocumentResponse, error)
+	GetSnapshotMeta(ctx context.Context, in *GetSnapshotMetaRequest, opts ...grpc.CallOption) (*GetSnapshotMetaResponse, error)
 	ListChanges(ctx context.Context, in *ListChangesRequest, opts ...grpc.CallOption) (*ListChangesResponse, error)
 }
 
@@ -867,6 +1024,15 @@ func (c *adminClient) GetDocument(ctx context.Context, in *GetDocumentRequest, o
 	return out, nil
 }
 
+func (c *adminClient) GetSnapshotMeta(ctx context.Context, in *GetSnapshotMetaRequest, opts ...grpc.CallOption) (*GetSnapshotMetaResponse, error) {
+	out := new(GetSnapshotMetaResponse)
+	err := c.cc.Invoke(ctx, "/api.Admin/GetSnapshotMeta", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminClient) ListChanges(ctx context.Context, in *ListChangesRequest, opts ...grpc.CallOption) (*ListChangesResponse, error) {
 	out := new(ListChangesResponse)
 	err := c.cc.Invoke(ctx, "/api.Admin/ListChanges", in, out, opts...)
@@ -884,6 +1050,7 @@ type AdminServer interface {
 	UpdateProject(context.Context, *UpdateProjectRequest) (*UpdateProjectResponse, error)
 	ListDocuments(context.Context, *ListDocumentsRequest) (*ListDocumentsResponse, error)
 	GetDocument(context.Context, *GetDocumentRequest) (*GetDocumentResponse, error)
+	GetSnapshotMeta(context.Context, *GetSnapshotMetaRequest) (*GetSnapshotMetaResponse, error)
 	ListChanges(context.Context, *ListChangesRequest) (*ListChangesResponse, error)
 }
 
@@ -908,6 +1075,9 @@ func (*UnimplementedAdminServer) ListDocuments(ctx context.Context, req *ListDoc
 }
 func (*UnimplementedAdminServer) GetDocument(ctx context.Context, req *GetDocumentRequest) (*GetDocumentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDocument not implemented")
+}
+func (*UnimplementedAdminServer) GetSnapshotMeta(ctx context.Context, req *GetSnapshotMetaRequest) (*GetSnapshotMetaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSnapshotMeta not implemented")
 }
 func (*UnimplementedAdminServer) ListChanges(ctx context.Context, req *ListChangesRequest) (*ListChangesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListChanges not implemented")
@@ -1025,6 +1195,24 @@ func _Admin_GetDocument_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Admin_GetSnapshotMeta_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSnapshotMetaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServer).GetSnapshotMeta(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/api.Admin/GetSnapshotMeta",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServer).GetSnapshotMeta(ctx, req.(*GetSnapshotMetaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Admin_ListChanges_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListChangesRequest)
 	if err := dec(in); err != nil {
@@ -1070,6 +1258,10 @@ var _Admin_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDocument",
 			Handler:    _Admin_GetDocument_Handler,
+		},
+		{
+			MethodName: "GetSnapshotMeta",
+			Handler:    _Admin_GetSnapshotMeta_Handler,
 		},
 		{
 			MethodName: "ListChanges",
@@ -1556,6 +1748,91 @@ func (m *GetDocumentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *GetSnapshotMetaRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetSnapshotMetaRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetSnapshotMetaRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.ServerSeq != 0 {
+		i = encodeVarintAdmin(dAtA, i, uint64(m.ServerSeq))
+		i--
+		dAtA[i] = 0x18
+	}
+	if len(m.DocumentKey) > 0 {
+		i -= len(m.DocumentKey)
+		copy(dAtA[i:], m.DocumentKey)
+		i = encodeVarintAdmin(dAtA, i, uint64(len(m.DocumentKey)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ProjectName) > 0 {
+		i -= len(m.ProjectName)
+		copy(dAtA[i:], m.ProjectName)
+		i = encodeVarintAdmin(dAtA, i, uint64(len(m.ProjectName)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetSnapshotMetaResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetSnapshotMetaResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetSnapshotMetaResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Lamport != 0 {
+		i = encodeVarintAdmin(dAtA, i, uint64(m.Lamport))
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Snapshot) > 0 {
+		i -= len(m.Snapshot)
+		copy(dAtA[i:], m.Snapshot)
+		i = encodeVarintAdmin(dAtA, i, uint64(len(m.Snapshot)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *ListChangesRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1579,6 +1856,42 @@ func (m *ListChangesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.IsForward != nil {
+		{
+			size, err := m.IsForward.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintAdmin(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.PageSize != nil {
+		{
+			size, err := m.PageSize.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintAdmin(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.PreviousSeq != nil {
+		{
+			size, err := m.PreviousSeq.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintAdmin(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
 	}
 	if len(m.DocumentKey) > 0 {
 		i -= len(m.DocumentKey)
@@ -1859,6 +2172,48 @@ func (m *GetDocumentResponse) Size() (n int) {
 	return n
 }
 
+func (m *GetSnapshotMetaRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ProjectName)
+	if l > 0 {
+		n += 1 + l + sovAdmin(uint64(l))
+	}
+	l = len(m.DocumentKey)
+	if l > 0 {
+		n += 1 + l + sovAdmin(uint64(l))
+	}
+	if m.ServerSeq != 0 {
+		n += 1 + sovAdmin(uint64(m.ServerSeq))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *GetSnapshotMetaResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Snapshot)
+	if l > 0 {
+		n += 1 + l + sovAdmin(uint64(l))
+	}
+	if m.Lamport != 0 {
+		n += 1 + sovAdmin(uint64(m.Lamport))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *ListChangesRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1871,6 +2226,18 @@ func (m *ListChangesRequest) Size() (n int) {
 	}
 	l = len(m.DocumentKey)
 	if l > 0 {
+		n += 1 + l + sovAdmin(uint64(l))
+	}
+	if m.PreviousSeq != nil {
+		l = m.PreviousSeq.Size()
+		n += 1 + l + sovAdmin(uint64(l))
+	}
+	if m.PageSize != nil {
+		l = m.PageSize.Size()
+		n += 1 + l + sovAdmin(uint64(l))
+	}
+	if m.IsForward != nil {
+		l = m.IsForward.Size()
 		n += 1 + l + sovAdmin(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -3026,6 +3393,244 @@ func (m *GetDocumentResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *GetSnapshotMetaRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAdmin
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetSnapshotMetaRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetSnapshotMetaRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProjectName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ProjectName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DocumentKey", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DocumentKey = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ServerSeq", wireType)
+			}
+			m.ServerSeq = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ServerSeq |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAdmin(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetSnapshotMetaResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAdmin
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetSnapshotMetaResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetSnapshotMetaResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Snapshot", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Snapshot = append(m.Snapshot[:0], dAtA[iNdEx:postIndex]...)
+			if m.Snapshot == nil {
+				m.Snapshot = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Lamport", wireType)
+			}
+			m.Lamport = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Lamport |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAdmin(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *ListChangesRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -3118,6 +3723,114 @@ func (m *ListChangesRequest) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.DocumentKey = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PreviousSeq", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.PreviousSeq == nil {
+				m.PreviousSeq = &types.UInt64Value{}
+			}
+			if err := m.PreviousSeq.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PageSize", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.PageSize == nil {
+				m.PageSize = &types.Int32Value{}
+			}
+			if err := m.PageSize.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsForward", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAdmin
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAdmin
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.IsForward == nil {
+				m.IsForward = &types.BoolValue{}
+			}
+			if err := m.IsForward.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

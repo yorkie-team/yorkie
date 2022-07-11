@@ -18,6 +18,7 @@ syntax = "proto3";
 package api;
 
 import "resources.proto";
+import "google/protobuf/wrappers.proto";
 
 // Admin is a service that provides a API for Admin.
 service Admin {
@@ -28,6 +29,7 @@ service Admin {
 
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
   rpc GetDocument (GetDocumentRequest) returns (GetDocumentResponse) {}
+  rpc GetSnapshotMeta (GetSnapshotMetaRequest) returns (GetSnapshotMetaResponse) {}
 
   rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
 }
@@ -83,9 +85,23 @@ message GetDocumentResponse {
   DocumentSummary document = 1;
 }
 
+message GetSnapshotMetaRequest {
+  string project_name = 1;
+  string document_key = 2;
+  uint64 server_seq = 3;
+}
+
+message GetSnapshotMetaResponse {
+  bytes snapshot = 1;
+  uint64 lamport = 2;
+}
+
 message ListChangesRequest {
   string project_name = 1;
   string document_key = 2;
+  google.protobuf.UInt64Value previous_seq = 3;
+  google.protobuf.Int32Value page_size = 4; 
+  google.protobuf.BoolValue is_forward = 5;
 }
 
 message ListChangesResponse {

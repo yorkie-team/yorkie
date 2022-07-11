@@ -13,3 +13,50 @@ type ChangeSummary struct {
 	// Snapshot is the snapshot of the document.
 	Snapshot string
 }
+
+// GetChangesRange returns a range of changes.
+func GetChangesRange(
+	paging Paging[uint64],
+	lastSeq uint64,
+) (uint64, uint64) {
+	if paging.PreviousID == 0 && paging.PageSize == 0 {
+		return 1, lastSeq
+	}
+
+	size := uint64(paging.PageSize)
+	prevSeq := paging.PreviousID
+	var from, to uint64
+	if paging.IsForward {
+		if prevSeq == 0 {
+			from = 1
+			to = size
+			if size > lastSeq {
+				to = lastSeq
+			}
+		} else if prevSeq >= lastSeq {
+			from = lastSeq + 1
+			to = lastSeq + 1
+		} else {
+			from = prevSeq + 1
+			to = prevSeq + size
+			if size == 0 || to > lastSeq {
+				to = lastSeq
+			}
+		}
+	} else {
+		if prevSeq == 0 || prevSeq >= lastSeq {
+			from = lastSeq - size + 1
+			if size > lastSeq || size == 0 {
+				from = 1
+			}
+			to = lastSeq
+		} else {
+			from = prevSeq - size
+			if size >= prevSeq || size == 0 {
+				from = 1
+			}
+			to = prevSeq - 1
+		}
+	}
+	return from, to
+}

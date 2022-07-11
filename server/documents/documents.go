@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -32,7 +33,7 @@ func ListDocumentSummaries(
 	ctx context.Context,
 	be *backend.Backend,
 	project *types.Project,
-	paging types.Paging,
+	paging types.Paging[types.ID],
 ) ([]*types.DocumentSummary, error) {
 	docInfo, err := be.DB.FindDocInfosByPaging(ctx, project.ID, paging)
 	if err != nil {
@@ -84,7 +85,35 @@ func GetDocumentSummary(
 		AccessedAt: docInfo.AccessedAt,
 		UpdatedAt:  docInfo.UpdatedAt,
 		Snapshot:   doc.Marshal(),
+		ServerSeq:  docInfo.ServerSeq,
 	}, nil
+}
+
+// GetDocumentByServerSeq returns a document for the given server sequence.
+func GetDocumentByServerSeq(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	k key.Key,
+	serverSeq uint64,
+) (*document.InternalDocument, error) {
+	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
+		ctx,
+		project.ID,
+		types.IDFromActorID(time.InitialActorID),
+		k,
+		false,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, serverSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	return doc, nil
 }
 
 // FindDocInfoByKey returns a document for the given document key.

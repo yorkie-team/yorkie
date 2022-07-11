@@ -256,6 +256,38 @@ func (s *Server) GetDocument(
 	}, nil
 }
 
+// GetSnapshotMeta gets the snapshot metadata that corresponds to the server sequence.
+func (s *Server) GetSnapshotMeta(
+	ctx context.Context,
+	req *api.GetSnapshotMetaRequest,
+) (*api.GetSnapshotMetaResponse, error) {
+	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	doc, err := documents.GetDocumentByServerSeq(
+		ctx,
+		s.backend,
+		project,
+		key.Key(req.DocumentKey),
+		req.ServerSeq,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot, err := converter.ObjectToBytes(doc.RootObject())
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.GetSnapshotMetaResponse{
+		Lamport:  doc.Lamport(),
+		Snapshot: snapshot,
+	}, nil
+}
+
 // ListDocuments lists documents.
 func (s *Server) ListDocuments(
 	ctx context.Context,
@@ -270,7 +302,7 @@ func (s *Server) ListDocuments(
 		ctx,
 		s.backend,
 		project,
-		types.Paging{
+		types.Paging[types.ID]{
 			PreviousID: types.ID(req.PreviousId),
 			PageSize:   int(req.PageSize),
 			IsForward:  req.IsForward,
@@ -299,22 +331,43 @@ func (s *Server) ListChanges(
 	if err != nil {
 		return nil, err
 	}
-	docKey := key.Key(req.DocumentKey)
 
 	docInfo, err := documents.FindDocInfoByKey(
 		ctx,
 		s.backend,
 		project,
-		docKey,
+		key.Key(req.DocumentKey),
 	)
 	if err != nil {
 		return nil, err
 	}
+	lastSeq := docInfo.ServerSeq
 
-	changes, err := packs.FindAllChanges(
+	isForward := false
+	if req.IsForward != nil {
+		isForward = req.IsForward.Value
+	}
+	previousSeq := uint64(0)
+	if req.PreviousSeq != nil {
+		previousSeq = req.PreviousSeq.Value
+	}
+	pageSize := int32(0)
+	if req.PageSize != nil {
+		pageSize = req.PageSize.Value
+	}
+
+	from, to := types.GetChangesRange(types.Paging[uint64]{
+		PreviousID: previousSeq,
+		PageSize:   int(pageSize),
+		IsForward:  isForward,
+	}, lastSeq)
+
+	changes, err := packs.FindChanges(
 		ctx,
 		s.backend,
 		docInfo,
+		from,
+		to,
 	)
 	if err != nil {
 		return nil, err

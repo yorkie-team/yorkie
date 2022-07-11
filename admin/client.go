@@ -23,6 +23,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	protoTypes "github.com/gogo/protobuf/types"
+
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -165,11 +167,18 @@ func (c *Client) ListChangeSummaries(
 	ctx context.Context,
 	projectName string,
 	key key.Key,
+	previousSeq uint64,
+	pageSize int32,
+	isForward bool,
 ) ([]*types.ChangeSummary, error) {
 	resp, err := c.client.ListChanges(ctx, &api.ListChangesRequest{
 		ProjectName: projectName,
 		DocumentKey: key.String(),
+		PreviousSeq: &protoTypes.UInt64Value{Value: previousSeq},
+		PageSize:    &protoTypes.Int32Value{Value: pageSize},
+		IsForward:   &protoTypes.BoolValue{Value: isForward},
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -179,20 +188,48 @@ func (c *Client) ListChangeSummaries(
 		return nil, err
 	}
 
-	doc := document.NewInternalDocument(key)
+	doc, err := c.client.GetDocument(ctx, &api.GetDocumentRequest{
+		ProjectName: projectName,
+		DocumentKey: key.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
 
+	lastSeq := doc.Document.ServerSeq
+	from, _ := types.GetChangesRange(types.Paging[uint64]{
+		PreviousID: previousSeq,
+		PageSize:   int(pageSize),
+		IsForward:  isForward,
+	}, lastSeq)
+	seq := from - 1
+
+	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &api.GetSnapshotMetaRequest{
+		ProjectName: projectName,
+		DocumentKey: key.String(),
+		ServerSeq:   seq,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	newDoc, err := document.NewInternalDocumentFromSnapshot(key, seq, snapshotMeta.Lamport, snapshotMeta.Snapshot)
+
+	if err != nil {
+		return nil, err
+	}
 	var summaries []*types.ChangeSummary
 	for _, c := range changes {
-		if err := doc.ApplyChanges(c); err != nil {
+		if err := newDoc.ApplyChanges(c); err != nil {
 			return nil, err
 		}
 
 		// TODO(hackerwins): doc.Marshal is expensive function. We need to optimize it.
-		summaries = append(summaries, &types.ChangeSummary{
+		summaries = append([]*types.ChangeSummary{{
 			ID:       c.ID(),
 			Message:  c.Message(),
-			Snapshot: doc.Marshal(),
-		})
+			Snapshot: newDoc.Marshal(),
+		}}, summaries...)
 	}
 
 	return summaries, nil

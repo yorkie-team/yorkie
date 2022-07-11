@@ -169,6 +169,6 @@ type Database interface {
 	FindDocInfosByPaging(
 		ctx context.Context,
 		projectID types.ID,
-		paging types.Paging,
+		paging types.Paging[types.ID],
 	) ([]*DocInfo, error)
 }

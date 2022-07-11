@@ -816,7 +816,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 func (c *Client) FindDocInfosByPaging(
 	ctx context.Context,
 	projectID types.ID,
-	paging types.Paging,
+	paging types.Paging[types.ID],
 ) ([]*database.DocInfo, error) {
 	encodedProjectID, err := encodeID(projectID)
 	if err != nil {

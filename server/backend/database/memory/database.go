@@ -794,7 +794,7 @@ func (d *DB) UpdateSyncedSeq(
 func (d *DB) FindDocInfosByPaging(
 	ctx context.Context,
 	projectID types.ID,
-	paging types.Paging,
+	paging types.Paging[types.ID],
 ) ([]*database.DocInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
