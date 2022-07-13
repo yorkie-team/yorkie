@@ -294,7 +294,7 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 // leftBoundary must exist because of 0-indexed initial dummy node of tree,
 // but rightBoundary can be nil means range to delete includes the end of tree.
 // Refer to the design document: ./design/range-deletion-in-slay-tree.md
-func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {	
+func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
 	if rightBoundary == nil {
 		t.Splay(leftBoundary)
 		t.cutOffRight(leftBoundary)
