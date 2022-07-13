@@ -306,17 +306,6 @@ func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
 		t.rotateRight(leftBoundary)
 	}
 	t.cutOffRight(rightBoundary)
-
-	// Which one is better?
-
-	// 	t.Splay(leftBoundary)
-	// 	if rightBoundary != nil {
-	// 		t.Splay(rightBoundary)
-	// 		if rightBoundary.left != leftBoundary {
-	// 			t.rotateRight(leftBoundary)
-	// 		}
-	// 	}
-	// 	t.cutOffRight(rightBoundary)
 }
 
 func (t *Tree[V]) cutOffRight(node *Node[V]) {
