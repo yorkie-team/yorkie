@@ -10,17 +10,71 @@ target-version: X.X.X
 
 In Splay Tree, an access for a node make the node the root of tree. So when deleting many nodes like `deleteNodes` in `pkg/json/rga_tree_split.go`, deletion for each node in Splay Tree calls many unnecessary `rotation`s.
 
-Using the propertiy of Splay Tree that Change the root freely, 
+Using the propertiy of Splay Tree that change the root freely, `splay.DeleteRange` separates the given range to be deleted as a subtree near the root, without rotations of each node.
 
 ### Goals
 
-The function `deleteRange` should separate all nodes exactly in the given range as a subtree. After the function ends, the entire tree from and weight of every node must be correct just as when the nodes were deleted one by one.
+The function `DeleteRange` should separate all nodes exactly in the given range as a subtree. After the function ends, the entire tree from and weight of every node must be correct just as when the nodes were deleted one by one.
 
 ## Proposal Details
 
-This is where we detail how to use the feature with snippet or API and describe
-the internal implementation.
+![delete-range-in-splay-tree-1](./media/range-deletion-in-splay-tree-1-index-of-subtrees.png)
+
+From the property of indexed BST, all nodes with a smaller index than the root are in the left subtree of root and the nodes with a bigger index are in the right subtree.
+
+And also, Splay Tree can change the root freely to use `Splay`.
+
+Then using the properties, when we want to delete the range from index `L` to `R` we can make the shape of tree like the figure avobe to `Splay(L-1)` then `Splay(R+1)`.
+
+
+![delete-range-in-splay-tree-2](./media/range-deletion-in-splay-tree-2-separation.png)
+
+```go
+// see with the figures above
+// leftBoundary is indexed L-1 and rightBoundary is indexed R+1.
+func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
+    // absence of rightBondary(index R+1) means deletion to the most right of tree.
+	if rightBoundary == nil {
+		t.Splay(leftBoundary)
+		t.cutOffRight(leftBoundary)
+		return
+	}
+
+	t.Splay(leftBoundary)
+	t.Splay(rightBoundary)
+
+    // refer case 2 of second figure
+	if rightBoundary.left != leftBoundary {
+		t.rotateRight(leftBoundary)
+	}
+	t.cutOffRight(rightBoundary)
+}
+
+```
+Sometimes the tree shapes like case 2 after `Splay`s because of the zig-zig case of `Splay`. But it simply changes to the same shapes as case 1 in one rotationfor `L-1`.
+
+Then now to cut off the right child(subtree) of `L-1`, we can separate all nodes in given range to be deleted.
+
 
 ### Risks and Mitigation
 
-`deleteRange` does not consider the occurrence of new nodes from Due to concurrent editing in the range to be deleted. They should be filtered before using `deleteRange`, and `deleteRange` should be executed continuously in the smaller ranges that does not include them.
+`DeleteRange` does not consider the occurrence of new nodes from Due to concurrent editing in the range to be deleted. They should be filtered before using `DeleteRange`, and `DeleteRange` should be executed continuously in the smaller ranges that does not include them.
+
+The figure and codes below shows the situation in which some new nodes `N1`, `N2` are inserted into the range to be deleted concurrently.
+
+![delete-range-in-splay-tree-3](./media/range-deletion-in-splay-tree-3-mitigation.png)
+
+```go
+func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
+    // boundaries = [Lb, N1, N2, Rb]
+	for i := 0; i < len(boundaries)-1; i++ {
+		leftBoundary := boundaries[i]
+		rightBoundary := boundaries[i+1]
+		s.treeByIndex.DeleteRange(
+            leftBoundary.indexNode,
+            rightBoundary.indexNode,
+        )
+		}
+	}
+}
+```

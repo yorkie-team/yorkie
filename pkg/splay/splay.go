@@ -293,32 +293,34 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 // by splaying outer boundary nodes.
 // leftBoundary must exist because of 0-indexed initial dummy node of tree,
 // but rightBoundary can be nil means range to delete includes the end of tree.
-func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
+// Refer to the design document: ./design/range-deletion-in-slay-tree.md
+func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {	
 	if rightBoundary == nil {
 		t.Splay(leftBoundary)
-		// After splaying, all the range is the right subtree of leftBoundary.
 		t.cutOffRight(leftBoundary)
 		return
 	}
-	t.Splay(rightBoundary)
 	t.Splay(leftBoundary)
-	// After splaying twice, leftBoundary must be the root and
-	// rightBoundary is leftBoundary.right.right(case 1) or leftBoundary.right(case 2)
-	if leftBoundary.right != rightBoundary {
-		// If case 1, changes to case 2 by rotateLeft (makes rightBoundary be leftBoundary.right).
-		t.rotateLeft(rightBoundary)
+	t.Splay(rightBoundary)
+	if rightBoundary.left != leftBoundary {
+		t.rotateRight(leftBoundary)
 	}
-	// In case 2, since rightBoundary is leftBoundary.right,
-	// all the range nodes between 2 boundaries are in the left subtree of rightBoundary.
-	t.cutOffLeft(rightBoundary)
-}
+	t.cutOffRight(rightBoundary)
 
-func (t *Tree[V]) cutOffLeft(node *Node[V]) {
-	// TODO(Eithea): The node to delete is not actually disconnected from the tree yet.
-	t.updateTreeWeight(node)
+	// Which one is better?
+
+	// 	t.Splay(leftBoundary)
+	// 	if rightBoundary != nil {
+	// 		t.Splay(rightBoundary)
+	// 		if rightBoundary.left != leftBoundary {
+	// 			t.rotateRight(leftBoundary)
+	// 		}
+	// 	}
+	// 	t.cutOffRight(rightBoundary)
 }
 
 func (t *Tree[V]) cutOffRight(node *Node[V]) {
+	// TODO(Eithea): The node to delete is not actually disconnected from the tree yet.
 	t.updateTreeWeight(node)
 }
 
