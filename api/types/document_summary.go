@@ -25,7 +25,4 @@ type DocumentSummary struct {
 
 	// Snapshot is the string representation of the document.
 	Snapshot string
-
-	// ServerSeq is the sequence number of the document.
-	ServerSeq uint64
 }

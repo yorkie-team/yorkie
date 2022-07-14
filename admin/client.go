@@ -188,15 +188,7 @@ func (c *Client) ListChangeSummaries(
 		return nil, err
 	}
 
-	doc, err := c.client.GetDocument(ctx, &api.GetDocumentRequest{
-		ProjectName: projectName,
-		DocumentKey: key.String(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	lastSeq := doc.Document.ServerSeq
+	lastSeq := changes[len(changes)-1].ID().ServerSeq()
 	from, _ := types.GetChangesRange(types.Paging[uint64]{
 		PreviousID: previousSeq,
 		PageSize:   int(pageSize),

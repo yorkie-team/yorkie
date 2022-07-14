@@ -91,7 +91,6 @@ func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, er
 		AccessedAt: pbAccessedAt,
 		UpdatedAt:  pbUpdatedAt,
 		Snapshot:   summary.Snapshot,
-		ServerSeq:  summary.ServerSeq,
 	}, nil
 }
 

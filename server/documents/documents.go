@@ -85,7 +85,6 @@ func GetDocumentSummary(
 		AccessedAt: docInfo.AccessedAt,
 		UpdatedAt:  docInfo.UpdatedAt,
 		Snapshot:   doc.Marshal(),
-		ServerSeq:  docInfo.ServerSeq,
 	}, nil
 }
 
