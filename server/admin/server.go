@@ -303,9 +303,9 @@ func (s *Server) ListDocuments(
 		s.backend,
 		project,
 		types.Paging[types.ID]{
-			PreviousID: types.ID(req.PreviousId),
-			PageSize:   int(req.PageSize),
-			IsForward:  req.IsForward,
+			Offset:    types.ID(req.PreviousId),
+			PageSize:  int(req.PageSize),
+			IsForward: req.IsForward,
 		},
 	)
 	if err != nil {
@@ -344,9 +344,9 @@ func (s *Server) ListChanges(
 	lastSeq := docInfo.ServerSeq
 
 	from, to := types.GetChangesRange(types.Paging[uint64]{
-		PreviousID: req.PreviousSeq,
-		PageSize:   int(req.PageSize),
-		IsForward:  req.IsForward,
+		Offset:    req.PreviousSeq,
+		PageSize:  int(req.PageSize),
+		IsForward: req.IsForward,
 	}, lastSeq)
 
 	changes, err := packs.FindChanges(

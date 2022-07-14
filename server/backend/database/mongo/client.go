@@ -828,8 +828,8 @@ func (c *Client) FindDocInfosByPaging(
 			"$eq": encodedProjectID,
 		},
 	}
-	if paging.PreviousID != "" {
-		encodedPreviousID, err := encodeID(paging.PreviousID)
+	if paging.Offset != "" {
+		encodedOffset, err := encodeID(paging.Offset)
 		if err != nil {
 			return nil, err
 		}
@@ -839,7 +839,7 @@ func (c *Client) FindDocInfosByPaging(
 			k = "$gt"
 		}
 		filter["_id"] = bson.M{
-			k: encodedPreviousID,
+			k: encodedOffset,
 		}
 	}
 

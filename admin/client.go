@@ -188,9 +188,9 @@ func (c *Client) ListChangeSummaries(
 
 	lastSeq := changes[len(changes)-1].ID().ServerSeq()
 	from, _ := types.GetChangesRange(types.Paging[uint64]{
-		PreviousID: previousSeq,
-		PageSize:   int(pageSize),
-		IsForward:  isForward,
+		Offset:    previousSeq,
+		PageSize:  int(pageSize),
+		IsForward: isForward,
 	}, lastSeq)
 	seq := from - 1
 

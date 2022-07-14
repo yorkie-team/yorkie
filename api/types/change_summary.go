@@ -19,12 +19,12 @@ func GetChangesRange(
 	paging Paging[uint64],
 	lastSeq uint64,
 ) (uint64, uint64) {
-	if paging.PreviousID == 0 && paging.PageSize == 0 {
+	if paging.Offset == 0 && paging.PageSize == 0 {
 		return 1, lastSeq
 	}
 
 	size := uint64(paging.PageSize)
-	prevSeq := paging.PreviousID
+	prevSeq := paging.Offset
 	var from, to uint64
 	if paging.IsForward {
 		if prevSeq == 0 {

@@ -806,19 +806,19 @@ func (d *DB) FindDocInfosByPaging(
 			tblDocuments,
 			"project_id_id",
 			projectID.String(),
-			paging.PreviousID.String(),
+			paging.Offset.String(),
 		)
 	} else {
-		previousID := paging.PreviousID
-		if paging.PreviousID == "" {
-			previousID = types.IDFromActorID(time.MaxActorID)
+		offset := paging.Offset
+		if paging.Offset == "" {
+			offset = types.IDFromActorID(time.MaxActorID)
 		}
 
 		iterator, err = txn.ReverseLowerBound(
 			tblDocuments,
 			"project_id_id",
 			projectID.String(),
-			previousID.String(),
+			offset.String(),
 		)
 	}
 
@@ -833,7 +833,7 @@ func (d *DB) FindDocInfosByPaging(
 			break
 		}
 
-		if info.ID != paging.PreviousID {
+		if info.ID != paging.Offset {
 			docInfos = append(docInfos, info)
 		}
 	}

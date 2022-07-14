@@ -30,97 +30,97 @@ func TestChangeSummary(t *testing.T) {
 		var from, to uint64
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 0,
-			PageSize:   0,
-			IsForward:  false,
+			Offset:    0,
+			PageSize:  0,
+			IsForward: false,
 		}, lastSeq)
 		assert.Equal(t, uint64(1), from)
 		assert.Equal(t, uint64(10), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 0,
-			PageSize:   0,
-			IsForward:  true,
+			Offset:    0,
+			PageSize:  0,
+			IsForward: true,
 		}, lastSeq)
 		assert.Equal(t, uint64(1), from)
 		assert.Equal(t, uint64(10), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 4,
-			PageSize:   3,
-			IsForward:  false,
+			Offset:    4,
+			PageSize:  3,
+			IsForward: false,
 		}, lastSeq)
 		assert.Equal(t, uint64(1), from)
 		assert.Equal(t, uint64(3), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 4,
-			PageSize:   3,
-			IsForward:  true,
+			Offset:    4,
+			PageSize:  3,
+			IsForward: true,
 		}, lastSeq)
 		assert.Equal(t, uint64(5), from)
 		assert.Equal(t, uint64(7), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 4,
-			PageSize:   100,
-			IsForward:  false,
+			Offset:    4,
+			PageSize:  100,
+			IsForward: false,
 		}, lastSeq)
 		assert.Equal(t, uint64(1), from)
 		assert.Equal(t, uint64(3), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 4,
-			PageSize:   100,
-			IsForward:  true,
+			Offset:    4,
+			PageSize:  100,
+			IsForward: true,
 		}, lastSeq)
 		assert.Equal(t, uint64(5), from)
 		assert.Equal(t, uint64(10), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 4,
-			PageSize:   0,
-			IsForward:  false,
+			Offset:    4,
+			PageSize:  0,
+			IsForward: false,
 		}, lastSeq)
 		assert.Equal(t, uint64(1), from)
 		assert.Equal(t, uint64(3), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 4,
-			PageSize:   0,
-			IsForward:  true,
+			Offset:    4,
+			PageSize:  0,
+			IsForward: true,
 		}, lastSeq)
 		assert.Equal(t, uint64(5), from)
 		assert.Equal(t, uint64(10), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 0,
-			PageSize:   2,
-			IsForward:  false,
+			Offset:    0,
+			PageSize:  2,
+			IsForward: false,
 		}, lastSeq)
 		assert.Equal(t, uint64(9), from)
 		assert.Equal(t, uint64(10), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 0,
-			PageSize:   2,
-			IsForward:  true,
+			Offset:    0,
+			PageSize:  2,
+			IsForward: true,
 		}, lastSeq)
 		assert.Equal(t, uint64(1), from)
 		assert.Equal(t, uint64(2), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 14,
-			PageSize:   3,
-			IsForward:  false,
+			Offset:    14,
+			PageSize:  3,
+			IsForward: false,
 		}, lastSeq)
 		assert.Equal(t, uint64(8), from)
 		assert.Equal(t, uint64(10), to)
 
 		from, to = types.GetChangesRange(types.Paging[uint64]{
-			PreviousID: 14,
-			PageSize:   3,
-			IsForward:  true,
+			Offset:    14,
+			PageSize:  3,
+			IsForward: true,
 		}, lastSeq)
 		assert.Equal(t, uint64(lastSeq+1), from)
 		assert.Equal(t, uint64(lastSeq+1), to)
