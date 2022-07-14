@@ -23,8 +23,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	protoTypes "github.com/gogo/protobuf/types"
-
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -174,9 +172,9 @@ func (c *Client) ListChangeSummaries(
 	resp, err := c.client.ListChanges(ctx, &api.ListChangesRequest{
 		ProjectName: projectName,
 		DocumentKey: key.String(),
-		PreviousSeq: &protoTypes.UInt64Value{Value: previousSeq},
-		PageSize:    &protoTypes.Int32Value{Value: pageSize},
-		IsForward:   &protoTypes.BoolValue{Value: isForward},
+		PreviousSeq: previousSeq,
+		PageSize:    pageSize,
+		IsForward:   isForward,
 	})
 
 	if err != nil {

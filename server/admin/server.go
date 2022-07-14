@@ -343,23 +343,10 @@ func (s *Server) ListChanges(
 	}
 	lastSeq := docInfo.ServerSeq
 
-	isForward := false
-	if req.IsForward != nil {
-		isForward = req.IsForward.Value
-	}
-	previousSeq := uint64(0)
-	if req.PreviousSeq != nil {
-		previousSeq = req.PreviousSeq.Value
-	}
-	pageSize := int32(0)
-	if req.PageSize != nil {
-		pageSize = req.PageSize.Value
-	}
-
 	from, to := types.GetChangesRange(types.Paging[uint64]{
-		PreviousID: previousSeq,
-		PageSize:   int(pageSize),
-		IsForward:  isForward,
+		PreviousID: req.PreviousSeq,
+		PageSize:   int(req.PageSize),
+		IsForward:  req.IsForward,
 	}, lastSeq)
 
 	changes, err := packs.FindChanges(
