@@ -39,7 +39,7 @@ func Run() int {
 
 func init() {
 	rootCmd.AddCommand(project.SubCmd)
-	// TODO: set adminAddr from env using viper.
+	// TODO(chacha912): set adminAddr from env using viper.
 	// https://github.com/spf13/cobra/blob/main/user_guide.md#bind-flags-with-config
 	rootCmd.PersistentFlags().StringVar(&config.AdminAddr, "admin-addr", "localhost:11103", "Address of the admin server")
 }
