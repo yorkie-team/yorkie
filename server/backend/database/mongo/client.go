@@ -816,7 +816,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 func (c *Client) FindDocInfosByPaging(
 	ctx context.Context,
 	projectID types.ID,
-	paging types.Paging,
+	paging types.Paging[types.ID],
 ) ([]*database.DocInfo, error) {
 	encodedProjectID, err := encodeID(projectID)
 	if err != nil {
@@ -828,8 +828,8 @@ func (c *Client) FindDocInfosByPaging(
 			"$eq": encodedProjectID,
 		},
 	}
-	if paging.PreviousID != "" {
-		encodedPreviousID, err := encodeID(paging.PreviousID)
+	if paging.Offset != "" {
+		encodedOffset, err := encodeID(paging.Offset)
 		if err != nil {
 			return nil, err
 		}
@@ -839,7 +839,7 @@ func (c *Client) FindDocInfosByPaging(
 			k = "$gt"
 		}
 		filter["_id"] = bson.M{
-			k: encodedPreviousID,
+			k: encodedOffset,
 		}
 	}
 

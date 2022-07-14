@@ -65,16 +65,16 @@ func TestHistory(t *testing.T) {
 		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, d1.Marshal())
 		assert.NoError(t, cli.Sync(ctx))
 
-		changes, err := adminCli.ListChangeSummaries(ctx, "default", d1.Key())
+		changes, err := adminCli.ListChangeSummaries(ctx, "default", d1.Key(), 0, 0, true)
 		assert.NoError(t, err)
 		assert.Len(t, changes, 3)
 
-		assert.Equal(t, "create todos", changes[0].Message)
+		assert.Equal(t, "create todos", changes[2].Message)
 		assert.Equal(t, "buy coffee", changes[1].Message)
-		assert.Equal(t, "buy bread", changes[2].Message)
+		assert.Equal(t, "buy bread", changes[0].Message)
 
-		assert.Equal(t, `{"todos":[]}`, changes[0].Snapshot)
+		assert.Equal(t, `{"todos":[]}`, changes[2].Snapshot)
 		assert.Equal(t, `{"todos":["buy coffee"]}`, changes[1].Snapshot)
-		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, changes[2].Snapshot)
+		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, changes[0].Snapshot)
 	})
 }

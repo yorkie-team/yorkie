@@ -165,11 +165,18 @@ func (c *Client) ListChangeSummaries(
 	ctx context.Context,
 	projectName string,
 	key key.Key,
+	previousSeq uint64,
+	pageSize int32,
+	isForward bool,
 ) ([]*types.ChangeSummary, error) {
 	resp, err := c.client.ListChanges(ctx, &api.ListChangesRequest{
 		ProjectName: projectName,
 		DocumentKey: key.String(),
+		PreviousSeq: previousSeq,
+		PageSize:    pageSize,
+		IsForward:   isForward,
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -179,20 +186,40 @@ func (c *Client) ListChangeSummaries(
 		return nil, err
 	}
 
-	doc := document.NewInternalDocument(key)
+	lastSeq := changes[len(changes)-1].ID().ServerSeq()
+	from, _ := types.GetChangesRange(types.Paging[uint64]{
+		Offset:    previousSeq,
+		PageSize:  int(pageSize),
+		IsForward: isForward,
+	}, lastSeq)
+	seq := from - 1
 
+	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &api.GetSnapshotMetaRequest{
+		ProjectName: projectName,
+		DocumentKey: key.String(),
+		ServerSeq:   seq,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	newDoc, err := document.NewInternalDocumentFromSnapshot(key, seq, snapshotMeta.Lamport, snapshotMeta.Snapshot)
+
+	if err != nil {
+		return nil, err
+	}
 	var summaries []*types.ChangeSummary
 	for _, c := range changes {
-		if err := doc.ApplyChanges(c); err != nil {
+		if err := newDoc.ApplyChanges(c); err != nil {
 			return nil, err
 		}
 
 		// TODO(hackerwins): doc.Marshal is expensive function. We need to optimize it.
-		summaries = append(summaries, &types.ChangeSummary{
+		summaries = append([]*types.ChangeSummary{{
 			ID:       c.ID(),
 			Message:  c.Message(),
-			Snapshot: doc.Marshal(),
-		})
+			Snapshot: newDoc.Marshal(),
+		}}, summaries...)
 	}
 
 	return summaries, nil

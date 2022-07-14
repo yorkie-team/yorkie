@@ -24,17 +24,19 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-// FindAllChanges fetches all changes of the given document.
-func FindAllChanges(
+// FindChanges fetches changes of the given document.
+func FindChanges(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
+	from uint64,
+	to uint64,
 ) ([]*change.Change, error) {
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
-		0,
-		docInfo.ServerSeq,
+		from,
+		to,
 	)
 	return changes, err
 }

@@ -224,41 +224,41 @@ func TestDB(t *testing.T) {
 			assert.NoError(t, err)
 		}
 
-		// initial page, previousID is empty
-		infos, err := localDB.FindDocInfosByPaging(ctx, projectID, types.Paging{PageSize: pageSize})
+		// initial page, offset is empty
+		infos, err := localDB.FindDocInfosByPaging(ctx, projectID, types.Paging[types.ID]{PageSize: pageSize})
 		assert.NoError(t, err)
 		assertKeys([]key.Key{"8", "7", "6", "5", "4"}, infos)
 
 		// backward
-		infos, err = localDB.FindDocInfosByPaging(ctx, projectID, types.Paging{
-			PreviousID: infos[len(infos)-1].ID,
-			PageSize:   pageSize,
+		infos, err = localDB.FindDocInfosByPaging(ctx, projectID, types.Paging[types.ID]{
+			Offset:   infos[len(infos)-1].ID,
+			PageSize: pageSize,
 		})
 		assert.NoError(t, err)
 		assertKeys([]key.Key{"3", "2", "1", "0"}, infos)
 
 		// backward again
-		emptyInfos, err := localDB.FindDocInfosByPaging(ctx, projectID, types.Paging{
-			PreviousID: infos[len(infos)-1].ID,
-			PageSize:   pageSize,
+		emptyInfos, err := localDB.FindDocInfosByPaging(ctx, projectID, types.Paging[types.ID]{
+			Offset:   infos[len(infos)-1].ID,
+			PageSize: pageSize,
 		})
 		assert.NoError(t, err)
 		assertKeys(nil, emptyInfos)
 
 		// forward
-		infos, err = localDB.FindDocInfosByPaging(ctx, projectID, types.Paging{
-			PreviousID: infos[0].ID,
-			PageSize:   pageSize,
-			IsForward:  true,
+		infos, err = localDB.FindDocInfosByPaging(ctx, projectID, types.Paging[types.ID]{
+			Offset:    infos[0].ID,
+			PageSize:  pageSize,
+			IsForward: true,
 		})
 		assert.NoError(t, err)
 		assertKeys([]key.Key{"4", "5", "6", "7", "8"}, infos)
 
 		// forward again
-		emptyInfos, err = localDB.FindDocInfosByPaging(ctx, projectID, types.Paging{
-			PreviousID: infos[len(infos)-1].ID,
-			PageSize:   pageSize,
-			IsForward:  true,
+		emptyInfos, err = localDB.FindDocInfosByPaging(ctx, projectID, types.Paging[types.ID]{
+			Offset:    infos[len(infos)-1].ID,
+			PageSize:  pageSize,
+			IsForward: true,
 		})
 		assert.NoError(t, err)
 		assertKeys(nil, emptyInfos)

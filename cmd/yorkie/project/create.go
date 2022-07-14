@@ -25,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
 func newCreateCommand() *cobra.Command {
@@ -40,8 +41,7 @@ func newCreateCommand() *cobra.Command {
 
 			name := args[0]
 
-			// TODO(hackerwins): use adminAddr from env or addr flag.
-			cli, err := admin.Dial("localhost:11103")
+			cli, err := admin.Dial(config.AdminAddr)
 			if err != nil {
 				return err
 			}

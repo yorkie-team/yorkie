@@ -36,6 +36,13 @@ Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,\
 Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:./api \
 api/*.proto
 
+protoset: ## generate protoset file
+	protoc \
+-I=./api \
+--descriptor_set_out=yorkie.protoset \
+--include_imports \
+api/*.proto
+
 build: ## builds an executable that runs in the current environment
 	go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie
 

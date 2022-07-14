@@ -57,8 +57,12 @@ binaries
 # pprof output
 *.prof
 
+# protoset output
+*.protoset
+
 # misc
 .DS_Store
 
 # vscode
 .vscode
+
