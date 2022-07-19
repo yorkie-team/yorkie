@@ -106,6 +106,30 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, docKey, docInfo.Key)
 	})
 
+	t.Run("search docInfos test", func(t *testing.T) {
+		localDB, err := memory.New()
+		assert.NoError(t, err)
+
+		clientInfo, err := localDB.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+
+		docKeys := []string{"test", "test$1", "test-search", "search$test", "abcde"}
+		for _, docKey := range docKeys {
+			_, err := localDB.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, key.Key(docKey), true)
+			assert.NoError(t, err)
+		}
+
+		docInfos, err := localDB.FindDocInfosByQuery(ctx, projectID, "test")
+		assert.NoError(t, err)
+
+		var keys []key.Key
+		for _, info := range docInfos {
+			keys = append(keys, info.Key)
+		}
+
+		assert.EqualValues(t, []key.Key{"test", "test$1", "test-search"}, keys)
+	})
+
 	t.Run("update clientInfo after PushPull test", func(t *testing.T) {
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)

@@ -115,6 +115,32 @@ func GetDocumentByServerSeq(
 	return doc, nil
 }
 
+// SearchDocumentSummaries returns document summaries that match the query parameters.
+func SearchDocumentSummaries(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	query string,
+) ([]*types.DocumentSummary, error) {
+	docInfo, err := be.DB.FindDocInfosByQuery(ctx, project.ID, query)
+	if err != nil {
+		return nil, err
+	}
+
+	var summaries []*types.DocumentSummary
+	for _, docInfo := range docInfo {
+		summaries = append(summaries, &types.DocumentSummary{
+			ID:         docInfo.ID,
+			Key:        docInfo.Key,
+			CreatedAt:  docInfo.CreatedAt,
+			AccessedAt: docInfo.AccessedAt,
+			UpdatedAt:  docInfo.UpdatedAt,
+		})
+	}
+
+	return summaries, nil
+}
+
 // FindDocInfoByKey returns a document for the given document key.
 func FindDocInfoByKey(
 	ctx context.Context,

@@ -29,6 +29,7 @@ service Admin {
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
   rpc GetDocument (GetDocumentRequest) returns (GetDocumentResponse) {}
   rpc GetSnapshotMeta (GetSnapshotMetaRequest) returns (GetSnapshotMetaResponse) {}
+  rpc SearchDocuments (SearchDocumentsRequest) returns (SearchDocumentsResponse) {}
 
   rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
 }
@@ -93,6 +94,15 @@ message GetSnapshotMetaRequest {
 message GetSnapshotMetaResponse {
   bytes snapshot = 1;
   uint64 lamport = 2;
+}
+
+message SearchDocumentsRequest {
+  string project_name = 1;
+  string query = 2;
+}
+
+message SearchDocumentsResponse {
+  repeated DocumentSummary documents = 1;
 }
 
 message ListChangesRequest {

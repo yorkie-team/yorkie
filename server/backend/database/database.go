@@ -112,6 +112,7 @@ type Database interface {
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
+	// FindDocInfoByID finds the document of the given ID.
 	FindDocInfoByID(
 		ctx context.Context,
 		id types.ID,
@@ -170,5 +171,12 @@ type Database interface {
 		ctx context.Context,
 		projectID types.ID,
 		paging types.Paging[types.ID],
+	) ([]*DocInfo, error)
+
+	// FindDocInfosByQuery returns the documentInfos which match the given query.
+	FindDocInfosByQuery(
+		ctx context.Context,
+		projectID types.ID,
+		query string,
 	) ([]*DocInfo, error)
 }

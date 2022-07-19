@@ -863,6 +863,37 @@ func (c *Client) FindDocInfosByPaging(
 	return infos, nil
 }
 
+// FindDocInfosByQuery returns the docInfos which match the given query.
+func (c *Client) FindDocInfosByQuery(
+	ctx context.Context,
+	projectID types.ID,
+	query string,
+) ([]*database.DocInfo, error) {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, err := c.collection(colDocuments).Find(ctx, bson.M{
+		"project_id": encodedProjectID,
+		"key": bson.M{"$regex": primitive.Regex{
+			Pattern: "^" + query,
+		}},
+	})
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	var infos []*database.DocInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		logging.From(ctx).Error(cursor.Err())
+		return nil, cursor.Err()
+	}
+
+	return infos, nil
+}
+
 // UpdateSyncedSeq updates the syncedSeq of the given client.
 func (c *Client) UpdateSyncedSeq(
 	ctx context.Context,
