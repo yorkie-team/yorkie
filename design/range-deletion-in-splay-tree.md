@@ -1,6 +1,6 @@
 ---
 title: delete-range-in-splay-tree
-target-version: X.X.X
+target-version: 0.2.12
 ---
 ---
 
@@ -8,19 +8,19 @@ target-version: X.X.X
 
 ## Summary
 
-In Splay Tree, an access for a node make the node the root of tree. So when deleting many nodes like `deleteNodes` in `pkg/json/rga_tree_split.go`, deletion for each node in Splay Tree calls many unnecessary `rotation`s.
+In the splay tree, access for a node makes the node the root of the tree. So when deleting many nodes like `deleteNodes` in `pkg/json/rga_tree_split.go`, deletion for each node calls many unnecessary `rotation`s.
 
-Using the propertiy of Splay Tree that change the root freely, `splay.DeleteRange` separates the given range to be deleted as a subtree near the root, without rotations of each node.
+Using the feature of a splay tree that changes the root freely, `splay.DeleteRange` separates the given range to be deleted as a subtree near the root, without rotations of each node.
 
 ### Goals
 
-The function `DeleteRange` should separate all nodes exactly in the given range as a subtree. After the function ends, the entire tree from and weight of every node must be correct just as when the nodes were deleted one by one.
+The function `DeleteRange` should separate all nodes exactly in the given range as a subtree. After executing the function, the entire tree from and weight of every node must be correct just as when the nodes were deleted one by one.
 
 ## Proposal Details
 
 ![delete-range-in-splay-tree-1](./media/range-deletion-in-splay-tree-1-index-of-subtrees.png)
 
-From the property of indexed BST, all nodes with a smaller index than the root are in the left subtree of root and the nodes with a bigger index are in the right subtree.
+From the property of indexed BST, all nodes with a smaller index than the root are in the left subtree of the root and the nodes with a bigger index are in the right subtree.
 
 And also, Splay Tree can change the root freely to use `Splay`.
 
@@ -51,16 +51,14 @@ func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
 }
 
 ```
-Sometimes the tree shapes like case 2 after `Splay`s because of the zig-zig case of `Splay`. But it simply changes to the same shapes as case 1 in one rotationfor `L-1`.
+Sometimes the tree shapes like case 2 after `Splay`s because of the zig-zig case of `Splay`. But it simply changes to the same shapes as case 1 in one rotation for `L-1`.
 
-Then now to cut off the right child(subtree) of `L-1`, we can separate all nodes in given range to be deleted.
-
-
+Then now to cut off the right child(subtree) of `L-1`, we can separate all nodes in the given range to be deleted.
 ### Risks and Mitigation
 
-`DeleteRange` does not consider the occurrence of new nodes from Due to concurrent editing in the range to be deleted. They should be filtered before using `DeleteRange`, and `DeleteRange` should be executed continuously in the smaller ranges that does not include them.
+`DeleteRange` does not consider the occurrence of new nodes due to concurrent editing in the range to be deleted. They should be filtered before using `DeleteRange`, and `DeleteRange` should be executed continuously in the smaller ranges that do not include them.
 
-The figure and codes below shows the situation in which some new nodes `N1`, `N2` are inserted into the range to be deleted concurrently.
+The figure and codes below show the situation in which some new nodes `N1` and `N2` are inserted into the range to be deleted concurrently.
 
 ![delete-range-in-splay-tree-3](./media/range-deletion-in-splay-tree-3-mitigation.png)
 
