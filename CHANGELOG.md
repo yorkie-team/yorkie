@@ -7,6 +7,13 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.11] - 2022-07-14
+
+### Added
+
+- Apply gRPC error details to update project api: #354
+- Implement pagination flags to history command: #360
+
 ## [0.2.10] - 2022-07-06
 
 ### Added
@@ -360,6 +367,5 @@ First public release
 
 ### Deprecated
 
-[Unreleased]: https://github.com/yorkie-team/yorkie/compare/v0.1.0...HEAD
-
-[0.1.0]: https://github.com/yorkie-team/yorkie/releases/tag/v0.1.0# 
+[unreleased]: https://github.com/yorkie-team/yorkie/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/yorkie-team/yorkie/releases/tag/v0.1.0#

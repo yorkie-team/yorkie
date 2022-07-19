@@ -1,4 +1,4 @@
-YORKIE_VERSION := 0.2.10
+YORKIE_VERSION := 0.2.11
 
 GIT_COMMIT := $(shell /usr/bin/git rev-parse --short HEAD)
 GO_PROJECT = github.com/yorkie-team/yorkie
@@ -34,6 +34,13 @@ proto: ## generate proto files
 Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
 Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,\
 Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:./api \
+api/*.proto
+
+protoset: ## generate protoset file
+	protoc \
+-I=./api \
+--descriptor_set_out=yorkie.protoset \
+--include_imports \
 api/*.proto
 
 build: ## builds an executable that runs in the current environment

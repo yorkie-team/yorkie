@@ -30,7 +30,7 @@ Yorkie consists of three main components: Client, Document and Server.
   Admin (CLI, Web)               │                        │
 ┌────────────────────┐          └────────────────────────┘
 │  Query "Q-1"       │              ▲
-│  P-1.find({a:2})   ├───DB Query───┘
+│  P-1.find({a:2})   ├───── Query───┘
 └────────────────────┘
  ```
 
@@ -48,7 +48,9 @@ Yorkie consists of three main components: Client, Document and Server.
   - Client: https://github.com/yorkie-team/yorkie/tree/main/client
   - Document: https://github.com/yorkie-team/yorkie/tree/main/pkg/document
 - JS SDK: https://github.com/yorkie-team/yorkie-js-sdk
-- Admin: https://github.com/yorkie-team/yorkie-house
+- Admin
+  - Web: https://github.com/yorkie-team/yorkie-house
+  - CLI: https://yorkie.dev/docs/server#commands-cli
 
 ## Quick Start
 

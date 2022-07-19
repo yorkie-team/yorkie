@@ -24,7 +24,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+)
+
+var (
+	previousSeq uint64
+	pageSize    int32
+	isForward   bool
 )
 
 func newHistoryCmd() *cobra.Command {
@@ -36,8 +43,7 @@ func newHistoryCmd() *cobra.Command {
 				return errors.New("project name and document key are required")
 			}
 
-			// TODO(hackerwins): use adminAddr from env or addr flag.
-			cli, err := admin.Dial("localhost:11103")
+			cli, err := admin.Dial(config.AdminAddr)
 			if err != nil {
 				return err
 			}
@@ -46,7 +52,14 @@ func newHistoryCmd() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			changes, err := cli.ListChangeSummaries(ctx, args[0], key.Key(args[1]))
+			changes, err := cli.ListChangeSummaries(
+				ctx,
+				args[0],
+				key.Key(args[1]),
+				previousSeq,
+				pageSize,
+				isForward,
+			)
 			if err != nil {
 				return err
 			}
@@ -76,5 +89,24 @@ func newHistoryCmd() *cobra.Command {
 }
 
 func init() {
-	rootCmd.AddCommand(newHistoryCmd())
+	cmd := newHistoryCmd()
+	cmd.Flags().Uint64Var(
+		&previousSeq,
+		"previous-seq",
+		0,
+		"The previous sequence to start from",
+	)
+	cmd.Flags().Int32Var(
+		&pageSize,
+		"size",
+		0,
+		"The number of history sequences to output per page",
+	)
+	cmd.Flags().BoolVar(
+		&isForward,
+		"forward",
+		false,
+		"Whether to search forward or backward",
+	)
+	rootCmd.AddCommand(cmd)
 }

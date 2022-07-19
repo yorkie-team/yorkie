@@ -24,6 +24,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	"github.com/yorkie-team/yorkie/pkg/units"
 )
 
@@ -32,8 +33,7 @@ func newListCommand() *cobra.Command {
 		Use:   "ls",
 		Short: "List all projects",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO(hackerwins): use adminAddr from env or addr flag.
-			cli, err := admin.Dial("localhost:11103")
+			cli, err := admin.Dial(config.AdminAddr)
 			if err != nil {
 				return err
 			}
