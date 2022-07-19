@@ -122,7 +122,7 @@ func TestSplayTree(t *testing.T) {
 		tree.DeleteRange(nodes[2], nodes[7])
 		assert.Equal(
 			t,
-			"[1,1]A[3,2]BB[6,3]CCC[0,0]DDDD[0,0]EEEEE[0,0]FFFF[0,0]GGG[9,2]HH[1,1]I",
+			"[1,1]A[3,2]BB[9,3]CCC[0,0]DDDD[0,0]EEEEE[0,0]FFFF[0,0]GGG[3,2]HH[1,1]I",
 			tree.AnnotatedString(),
 		)
 
@@ -134,7 +134,7 @@ func TestSplayTree(t *testing.T) {
 		tree.DeleteRange(nodes[2], nodes[8])
 		assert.Equal(
 			t,
-			"[1,1]A[3,2]BB[6,3]CCC[0,0]DDDD[0,0]EEEEE[0,0]FFFF[0,0]GGG[0,0]HH[7,1]I",
+			"[1,1]A[3,2]BB[7,3]CCC[0,0]DDDD[0,0]EEEEE[0,0]FFFF[0,0]GGG[0,0]HH[1,1]I",
 			tree.AnnotatedString(),
 		)
 	})
