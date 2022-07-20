@@ -131,4 +131,102 @@ func TestText(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
+
+	t.Run("concurrent block deletions test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(key.Key(t.Name()))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("k1")
+			return nil
+		}, "set a new text by c1")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(key.Key(t.Name()))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.GetText("k1").Edit(0, 0, "123")
+			root.GetText("k1").Edit(3, 3, "456")
+			root.GetText("k1").Edit(6, 6, "789")
+			return nil
+		}, "set new text by c1")
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, `{"k1":"123456789"}`, d2.Marshal())
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.GetText("k1").Edit(1, 7, "")
+			return nil
+		}, "delete block by c1")
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":"189"}`, d1.Marshal())
+
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
+			root.GetText("k1").Edit(2, 5, "")
+			return nil
+		}, "delete block by c2")
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":"126789"}`, d2.Marshal())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("new creation then concurrent deletion test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(key.Key(t.Name()))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("k1")
+			return nil
+		}, "set a new text by c1")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(key.Key(t.Name()))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.GetText("k1").Edit(0, 0, "0")
+			root.GetText("k1").Edit(1, 1, "0")
+			root.GetText("k1").Edit(2, 2, "0")
+			return nil
+		}, "set new text by c1")
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, `{"k1":"000"}`, d2.Marshal())
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.GetText("k1").Edit(1, 2, "1")
+			root.GetText("k1").Edit(1, 2, "1")
+			root.GetText("k1").Edit(1, 2, "")
+			return nil
+		}, "newly create then delete by c1")
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":"00"}`, d1.Marshal())
+
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
+			root.GetText("k1").Edit(0, 3, "")
+			return nil
+		}, "delete the range includes above new nodes")
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":""}`, d2.Marshal())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.True(t, d1.Root().GetText("k1").CheckWeight())
+		assert.True(t, d2.Root().GetText("k1").CheckWeight())
+	})
 }

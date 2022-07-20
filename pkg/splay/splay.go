@@ -243,9 +243,8 @@ func (t *Tree[V]) CheckWeight() bool {
 	traversePostOrder(t.root, func(node *Node[V]) {
 		nodes = append(nodes, node)
 	})
-
 	for _, node := range nodes {
-	if node.weight != node.Value().Len() + node.left.weight + node.right.weight {
+	if node.weight != node.Value().Len() + node.leftWeight() + node.rightWeight() {
 		return false
 	}
 	}
