@@ -121,8 +121,9 @@ func SearchDocumentSummaries(
 	be *backend.Backend,
 	project *types.Project,
 	query string,
+	paging types.Paging[types.ID],
 ) ([]*types.DocumentSummary, error) {
-	docInfo, err := be.DB.FindDocInfosByQuery(ctx, project.ID, query)
+	docInfo, err := be.DB.FindDocInfosByQuery(ctx, project.ID, query, paging)
 	if err != nil {
 		return nil, err
 	}

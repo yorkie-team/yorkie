@@ -178,5 +178,6 @@ type Database interface {
 		ctx context.Context,
 		projectID types.ID,
 		query string,
+		paging types.Paging[types.ID],
 	) ([]*DocInfo, error)
 }

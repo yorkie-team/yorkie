@@ -19,6 +19,7 @@ package mongo
 import (
 	"context"
 	"fmt"
+	"strings"
 	gotime "time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -868,18 +869,40 @@ func (c *Client) FindDocInfosByQuery(
 	ctx context.Context,
 	projectID types.ID,
 	query string,
+	paging types.Paging[types.ID],
 ) ([]*database.DocInfo, error) {
 	encodedProjectID, err := encodeID(projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	cursor, err := c.collection(colDocuments).Find(ctx, bson.M{
+	filter := bson.M{
 		"project_id": encodedProjectID,
 		"key": bson.M{"$regex": primitive.Regex{
-			Pattern: "^" + query,
+			Pattern: "^" + escapeRegexp(query),
 		}},
-	})
+	}
+	if paging.Offset != "" {
+		encodedOffset, err := encodeID(paging.Offset)
+		if err != nil {
+			return nil, err
+		}
+
+		k := "$lt"
+		if paging.IsForward {
+			k = "$gt"
+		}
+		filter["_id"] = bson.M{
+			k: encodedOffset,
+		}
+	}
+
+	opts := options.Find().SetLimit(int64(paging.PageSize))
+	if !paging.IsForward {
+		opts = opts.SetSort(map[string]int{"_id": -1})
+	}
+
+	cursor, err := c.collection(colDocuments).Find(ctx, filter, opts)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, err
@@ -1015,4 +1038,24 @@ func (c *Client) collection(
 	return c.client.
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
+}
+
+// NOTE(chacha912): escapeRegexp escapes special characters by putting a backslash in front of it.
+// (https://github.com/cxr29/scrud/blob/1039f8edaf5eef522275a5a848a0fca0f53224eb/query/util.go#L31-L47)
+func escape(s, a string) string {
+	if strings.ContainsAny(s, a) {
+		b := make([]rune, 0)
+		for _, r := range s {
+			if strings.ContainsRune(a, r) {
+				b = append(b, '\\')
+			}
+			b = append(b, r)
+		}
+		return string(b)
+	}
+	return s
+}
+
+func escapeRegexp(s string) string {
+	return escape(s, `\.+*?()|[]{}^$`)
 }

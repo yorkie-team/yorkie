@@ -19,6 +19,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"strings"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -846,11 +847,34 @@ func (d *DB) FindDocInfosByQuery(
 	ctx context.Context,
 	projectID types.ID,
 	query string,
+	paging types.Paging[types.ID],
 ) ([]*database.DocInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iterator, err := txn.Get(tblDocuments, "project_id_key_prefix", projectID.String(), query)
+	var iterator memdb.ResultIterator
+	var err error
+	if paging.IsForward {
+		iterator, err = txn.LowerBound(
+			tblDocuments,
+			"project_id_id",
+			projectID.String(),
+			paging.Offset.String(),
+		)
+	} else {
+		offset := paging.Offset
+		if paging.Offset == "" {
+			offset = types.IDFromActorID(time.MaxActorID)
+		}
+
+		iterator, err = txn.ReverseLowerBound(
+			tblDocuments,
+			"project_id_id",
+			projectID.String(),
+			offset.String(),
+		)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -858,10 +882,19 @@ func (d *DB) FindDocInfosByQuery(
 	var docInfos []*database.DocInfo
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.DocInfo)
-		docInfos = append(docInfos, info)
+		if len(docInfos) >= paging.PageSize {
+			break
+		}
+		if info.ID == paging.Offset {
+			continue
+		}
+		if strings.HasPrefix(info.Key.String(), query) {
+			docInfos = append(docInfos, info)
+		}
 	}
 
 	return docInfos, nil
+
 }
 
 func (d *DB) findTicketByServerSeq(
