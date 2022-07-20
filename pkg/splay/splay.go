@@ -244,7 +244,7 @@ func (t *Tree[V]) CheckWeight() bool {
 		nodes = append(nodes, node)
 	})
 	for _, node := range nodes {
-		if node.weight != node.Value().Len() + node.leftWeight() + node.rightWeight() {
+		if node.weight != node.Value().Len()+node.leftWeight()+node.rightWeight() {
 			return false
 		}
 	}
@@ -324,7 +324,7 @@ func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
 }
 
 func (t *Tree[V]) cutOffRight(root *Node[V]) {
-	traversePostOrder(root.right, func(node *Node[V]) {node.InitWeight()})
+	traversePostOrder(root.right, func(node *Node[V]) { node.InitWeight() })
 	t.updateTreeWeight(root)
 }
 
