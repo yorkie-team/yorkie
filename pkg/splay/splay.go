@@ -244,9 +244,9 @@ func (t *Tree[V]) CheckWeight() bool {
 		nodes = append(nodes, node)
 	})
 	for _, node := range nodes {
-	if node.weight != node.Value().Len() + node.leftWeight() + node.rightWeight() {
-		return false
-	}
+		if node.weight != node.Value().Len() + node.leftWeight() + node.rightWeight() {
+			return false
+		}
 	}
 	return true
 }
