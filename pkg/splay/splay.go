@@ -236,6 +236,22 @@ func (t *Tree[V]) AnnotatedString() string {
 	return builder.String()
 }
 
+// CheckWeight returns false when there is an incorrect weight node.
+// for debugging purpose.
+func (t *Tree[V]) CheckWeight() bool {
+	var nodes []*Node[V]
+	traversePostOrder(t.root, func(node *Node[V]) {
+		nodes = append(nodes, node)
+	})
+
+	for _, node := range nodes {
+	if node.weight != node.Value().Len() + node.left.weight + node.right.weight {
+		return false
+	}
+	}
+	return true
+}
+
 // UpdateWeight recalculates the weight of this node with the value and children.
 func (t *Tree[V]) UpdateWeight(node *Node[V]) {
 	node.InitWeight()
@@ -293,33 +309,24 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 // by splaying outer boundary nodes.
 // leftBoundary must exist because of 0-indexed initial dummy node of tree,
 // but rightBoundary can be nil means range to delete includes the end of tree.
+// Refer to the design document: ./design/range-deletion-in-slay-tree.md
 func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
 	if rightBoundary == nil {
 		t.Splay(leftBoundary)
-		// After splaying, all the range is the right subtree of leftBoundary.
 		t.cutOffRight(leftBoundary)
 		return
 	}
-	t.Splay(rightBoundary)
 	t.Splay(leftBoundary)
-	// After splaying twice, leftBoundary must be the root and
-	// rightBoundary is leftBoundary.right.right(case 1) or leftBoundary.right(case 2)
-	if leftBoundary.right != rightBoundary {
-		// If case 1, changes to case 2 by rotateLeft (makes rightBoundary be leftBoundary.right).
-		t.rotateLeft(rightBoundary)
+	t.Splay(rightBoundary)
+	if rightBoundary.left != leftBoundary {
+		t.rotateRight(leftBoundary)
 	}
-	// In case 2, since rightBoundary is leftBoundary.right,
-	// all the range nodes between 2 boundaries are in the left subtree of rightBoundary.
-	t.cutOffLeft(rightBoundary)
+	t.cutOffRight(leftBoundary)
 }
 
-func (t *Tree[V]) cutOffLeft(node *Node[V]) {
-	// TODO(Eithea): The node to delete is not actually disconnected from the tree yet.
-	t.updateTreeWeight(node)
-}
-
-func (t *Tree[V]) cutOffRight(node *Node[V]) {
-	t.updateTreeWeight(node)
+func (t *Tree[V]) cutOffRight(root *Node[V]) {
+	traversePostOrder(root.right, func(node *Node[V]) {node.InitWeight()})
+	t.updateTreeWeight(root)
 }
 
 func (t *Tree[V]) rotateLeft(pivot *Node[V]) {
@@ -389,6 +396,16 @@ func traverseInOrder[V Value](node *Node[V], callback func(node *Node[V])) {
 	traverseInOrder(node.left, callback)
 	callback(node)
 	traverseInOrder(node.right, callback)
+}
+
+func traversePostOrder[V Value](node *Node[V], callback func(node *Node[V])) {
+	if node == nil {
+		return
+	}
+
+	traversePostOrder(node.left, callback)
+	traversePostOrder(node.right, callback)
+	callback(node)
 }
 
 func isLeftChild[V Value](node *Node[V]) bool {
