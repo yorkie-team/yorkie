@@ -216,6 +216,12 @@ func (t *Text) AnnotatedString() string {
 	return t.rgaTreeSplit.AnnotatedString()
 }
 
+// CheckWeight returns false when there is an incorrect weight node.
+// for debugging purpose.
+func (t *Text) CheckWeight() bool {
+	return t.rgaTreeSplit.CheckWeight()
+}
+
 // removedNodesLen returns length of removed nodes
 func (t *Text) removedNodesLen() int {
 	return t.rgaTreeSplit.removedNodesLen()

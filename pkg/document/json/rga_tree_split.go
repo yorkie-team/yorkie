@@ -414,6 +414,12 @@ func (s *RGATreeSplit[V]) FindNode(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] 
 	return s.findFloorNode(id)
 }
 
+// CheckWeight returns false when there is an incorrect weight node.
+// for debugging purpose.
+func (s *RGATreeSplit[V]) CheckWeight() bool {
+	return s.treeByIndex.CheckWeight()
+}
+
 func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] {
 	key, value := s.treeByID.Floor(id)
 	if key == nil {
@@ -509,7 +515,6 @@ func (s *RGATreeSplit[V]) deleteNodes(
 		}
 
 		if node.Remove(editedAt, latestCreatedAt) {
-			node.indexNode.InitWeight()
 			latestCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
 			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
@@ -517,7 +522,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 			}
 
 			removedNodeMap[node.id.key()] = node
-		} else if node.removedAt == nil {
+		} else {
 			nodesToKeep = append(nodesToKeep, node)
 		}
 	}
@@ -544,6 +549,7 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 		rightBoundary := boundaries[i+1]
 		if leftBoundary.next == rightBoundary {
 			// If there is no node to delete between boundaries, do notting.
+			continue
 		} else if rightBoundary == nil {
 			s.treeByIndex.DeleteRange(leftBoundary.indexNode, nil)
 		} else {
