@@ -848,7 +848,7 @@ func (d *DB) FindDocInfosByQuery(
 	projectID types.ID,
 	query string,
 	paging types.Paging[types.ID],
-) ([]*database.DocInfo, error) {
+) (*types.DocumentsResponse[[]*database.DocInfo], error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -893,7 +893,19 @@ func (d *DB) FindDocInfosByQuery(
 		}
 	}
 
-	return docInfos, nil
+	iterator, err = txn.Get(tblDocuments, "project_id_key_prefix", projectID.String(), query)
+	if err != nil {
+		return nil, err
+	}
+	count := 0
+	for obj := iterator.Next(); obj != nil; obj = iterator.Next() {
+		count++
+	}
+
+	return &types.DocumentsResponse[[]*database.DocInfo]{
+		TotalCount: count,
+		Documents:  docInfos,
+	}, nil
 
 }
 

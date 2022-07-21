@@ -122,14 +122,14 @@ func SearchDocumentSummaries(
 	project *types.Project,
 	query string,
 	paging types.Paging[types.ID],
-) ([]*types.DocumentSummary, error) {
-	docInfo, err := be.DB.FindDocInfosByQuery(ctx, project.ID, query, paging)
+) (*types.DocumentsResponse[[]*types.DocumentSummary], error) {
+	res, err := be.DB.FindDocInfosByQuery(ctx, project.ID, query, paging)
 	if err != nil {
 		return nil, err
 	}
 
 	var summaries []*types.DocumentSummary
-	for _, docInfo := range docInfo {
+	for _, docInfo := range res.Documents {
 		summaries = append(summaries, &types.DocumentSummary{
 			ID:         docInfo.ID,
 			Key:        docInfo.Key,
@@ -139,7 +139,10 @@ func SearchDocumentSummaries(
 		})
 	}
 
-	return summaries, nil
+	return &types.DocumentsResponse[[]*types.DocumentSummary]{
+		TotalCount: res.TotalCount,
+		Documents:  summaries,
+	}, nil
 }
 
 // FindDocInfoByKey returns a document for the given document key.

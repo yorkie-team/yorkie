@@ -332,7 +332,7 @@ func (s *Server) SearchDocuments(
 		return nil, err
 	}
 
-	docs, err := documents.SearchDocumentSummaries(
+	result, err := documents.SearchDocumentSummaries(
 		ctx,
 		s.backend,
 		project,
@@ -347,13 +347,14 @@ func (s *Server) SearchDocuments(
 		return nil, err
 	}
 
-	pbDocuments, err := converter.ToDocumentSummaries(docs)
+	pbDocuments, err := converter.ToDocumentSummaries(result.Documents)
 	if err != nil {
 		return nil, err
 	}
 
 	return &api.SearchDocumentsResponse{
-		Documents: pbDocuments,
+		TotalCount: int32(result.TotalCount),
+		Documents:  pbDocuments,
 	}, nil
 }
 

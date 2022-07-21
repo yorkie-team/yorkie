@@ -6,9 +6,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
-// DocumentSummary represents a summary of change.
+// DocumentSummary represents a summary of document.
 type DocumentSummary struct {
-	// ID is the unique identifier of the change.
+	// ID is the unique identifier of the document.
 	ID ID
 
 	// Key is the key of the document.

@@ -179,5 +179,5 @@ type Database interface {
 		projectID types.ID,
 		query string,
 		paging types.Paging[types.ID],
-	) ([]*DocInfo, error)
+	) (*types.DocumentsResponse[[]*DocInfo], error)
 }

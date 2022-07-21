@@ -105,7 +105,8 @@ message SearchDocumentsRequest {
 }
 
 message SearchDocumentsResponse {
-  repeated DocumentSummary documents = 1;
+  int32 total_count = 1;
+  repeated DocumentSummary documents = 2;
 }
 
 message ListChangesRequest {

@@ -119,7 +119,7 @@ func TestDB(t *testing.T) {
 			assert.NoError(t, err)
 		}
 
-		docInfos, err := localDB.FindDocInfosByQuery(ctx, projectID, "test", types.Paging[types.ID]{
+		res, err := localDB.FindDocInfosByQuery(ctx, projectID, "test", types.Paging[types.ID]{
 			Offset:    "",
 			PageSize:  3,
 			IsForward: true,
@@ -127,13 +127,14 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, err)
 
 		var keys []key.Key
-		for _, info := range docInfos {
+		for _, info := range res.Documents {
 			keys = append(keys, info.Key)
 		}
 
 		assert.EqualValues(t, []key.Key{"test", "test$3", "test-search"}, keys)
+		assert.Equal(t, 5, res.TotalCount)
 
-		docInfos, err = localDB.FindDocInfosByQuery(ctx, projectID, "test", types.Paging[types.ID]{
+		res, err = localDB.FindDocInfosByQuery(ctx, projectID, "test", types.Paging[types.ID]{
 			Offset:    "",
 			PageSize:  10,
 			IsForward: true,
@@ -141,11 +142,12 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, err)
 
 		keys = []key.Key{}
-		for _, info := range docInfos {
+		for _, info := range res.Documents {
 			keys = append(keys, info.Key)
 		}
 
 		assert.EqualValues(t, []key.Key{"test", "test$3", "test-search", "test$0", "test abc"}, keys)
+		assert.Equal(t, 5, res.TotalCount)
 	})
 
 	t.Run("update clientInfo after PushPull test", func(t *testing.T) {
