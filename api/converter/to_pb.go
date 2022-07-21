@@ -69,6 +69,19 @@ func ToProject(project *types.Project) (*api.Project, error) {
 	}, nil
 }
 
+// ToDocumentSummaries converts the given model to Protobuf.
+func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSummary, error) {
+	var pbSummaries []*api.DocumentSummary
+	for _, summary := range summaries {
+		pbSummary, err := ToDocumentSummary(summary)
+		if err != nil {
+			return nil, err
+		}
+		pbSummaries = append(pbSummaries, pbSummary)
+	}
+	return pbSummaries, nil
+}
+
 // ToDocumentSummary converts the given model to Protobuf format.
 func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(summary.CreatedAt)
@@ -92,19 +105,6 @@ func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, er
 		UpdatedAt:  pbUpdatedAt,
 		Snapshot:   summary.Snapshot,
 	}, nil
-}
-
-// ToDocumentSummaries converts the given model to Protobuf.
-func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSummary, error) {
-	var pbSummaries []*api.DocumentSummary
-	for _, summary := range summaries {
-		pbSummary, err := ToDocumentSummary(summary)
-		if err != nil {
-			return nil, err
-		}
-		pbSummaries = append(pbSummaries, pbSummary)
-	}
-	return pbSummaries, nil
 }
 
 // ToClient converts the given model to Protobuf format.
