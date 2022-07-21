@@ -110,6 +110,32 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
+// LogIn logs in a user.
+func (c *Client) LogIn(ctx context.Context, email, password string) (*types.User, error) {
+	response, err := c.client.LogIn(ctx, &api.LogInRequest{
+		Email:    email,
+		Password: password,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromUser(response.User)
+}
+
+// SignUp signs up a new user.
+func (c *Client) SignUp(ctx context.Context, email, password string) (*types.User, error) {
+	response, err := c.client.SignUp(ctx, &api.SignUpRequest{
+		Email:    email,
+		Password: password,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromUser(response.User)
+}
+
 // CreateProject creates a new project.
 func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project, error) {
 	response, err := c.client.CreateProject(

@@ -24,9 +24,19 @@ import (
 
 // UserInfo is a structure representing information of a user.
 type UserInfo struct {
-	ID        types.ID  `bson:"_id"`
-	Email     string    `bson:"email"`
-	CreatedAt time.Time `bson:"created_at"`
+	ID             types.ID  `bson:"_id"`
+	Email          string    `bson:"email"`
+	HashedPassword string    `bson:"hashed_password"`
+	CreatedAt      time.Time `bson:"created_at"`
+}
+
+// NewUserInfo creates a new UserInfo of the given email.
+func NewUserInfo(email, hashedPassword string) *UserInfo {
+	return &UserInfo{
+		Email:          email,
+		HashedPassword: hashedPassword,
+		CreatedAt:      time.Now(),
+	}
 }
 
 // DeepCopy returns a deep copy of the UserInfo
@@ -36,16 +46,18 @@ func (i *UserInfo) DeepCopy() *UserInfo {
 	}
 
 	return &UserInfo{
-		ID:        i.ID,
-		Email:     i.Email,
-		CreatedAt: i.CreatedAt,
+		ID:             i.ID,
+		Email:          i.Email,
+		HashedPassword: i.HashedPassword,
+		CreatedAt:      i.CreatedAt,
 	}
 }
 
-// NewUserInfo creates a new UserInfo of the given email.
-func NewUserInfo(email string) *UserInfo {
-	return &UserInfo{
-		Email:     email,
-		CreatedAt: time.Now(),
+// ToUser converts the UserInfo to a User.
+func (i *UserInfo) ToUser() *types.User {
+	return &types.User{
+		ID:        i.ID,
+		Email:     i.Email,
+		CreatedAt: i.CreatedAt,
 	}
 }

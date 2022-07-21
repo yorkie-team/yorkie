@@ -32,6 +32,9 @@ var (
 	// ErrProjectAlreadyExists is returned when the project already exists.
 	ErrProjectAlreadyExists = errors.New("project already exists")
 
+	// ErrUserNotFound is returned when the user is not found.
+	ErrUserNotFound = errors.New("user not found")
+
 	// ErrProjectNotFound is returned when the project is not found.
 	ErrProjectNotFound = errors.New("project not found")
 
@@ -78,7 +81,10 @@ type Database interface {
 	UpdateProjectInfo(ctx context.Context, id types.ID, fields *types.UpdatableProjectFields) (*ProjectInfo, error)
 
 	// CreateUserInfo creates a new user.
-	CreateUserInfo(ctx context.Context, email string) (*UserInfo, error)
+	CreateUserInfo(ctx context.Context, email string, hashedPassword string) (*UserInfo, error)
+
+	// FindUserInfo returns a user by the given email.
+	FindUserInfo(ctx context.Context, email string) (*UserInfo, error)
 
 	// ListUserInfos returns all users.
 	ListUserInfos(ctx context.Context) ([]*UserInfo, error)

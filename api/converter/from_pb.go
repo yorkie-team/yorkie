@@ -31,6 +31,20 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 )
 
+// FromUser converts the given Protobuf formats to model format.
+func FromUser(pbUser *api.User) (*types.User, error) {
+	createdAt, err := protoTypes.TimestampFromProto(pbUser.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.User{
+		ID:        types.ID(pbUser.Id),
+		Email:     pbUser.Email,
+		CreatedAt: createdAt,
+	}, nil
+}
+
 // FromProjects converts the given Protobuf formats to model format.
 func FromProjects(pbProjects []*api.Project) ([]*types.Project, error) {
 	var projects []*types.Project

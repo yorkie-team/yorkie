@@ -271,11 +271,13 @@ func (c *Client) UpdateProjectInfo(
 func (c *Client) CreateUserInfo(
 	ctx context.Context,
 	email string,
+	hashedPassword string,
 ) (*database.UserInfo, error) {
-	info := database.NewUserInfo(email)
-	result, err := c.collection(colProjects).InsertOne(ctx, bson.M{
-		"email":      info.Email,
-		"created_at": info.CreatedAt,
+	info := database.NewUserInfo(email, hashedPassword)
+	result, err := c.collection(colUsers).InsertOne(ctx, bson.M{
+		"email":           info.Email,
+		"hashed_password": info.HashedPassword,
+		"created_at":      info.CreatedAt,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
@@ -288,6 +290,23 @@ func (c *Client) CreateUserInfo(
 
 	info.ID = types.ID(result.InsertedID.(primitive.ObjectID).Hex())
 	return info, nil
+}
+
+// FindUserInfo returns a user by email.
+func (c *Client) FindUserInfo(ctx context.Context, email string) (*database.UserInfo, error) {
+	result := c.collection(colUsers).FindOne(ctx, bson.M{
+		"email": email,
+	})
+
+	userInfo := database.UserInfo{}
+	if err := result.Decode(&userInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", email, database.ErrUserNotFound)
+		}
+		return nil, err
+	}
+
+	return &userInfo, nil
 }
 
 // ListUserInfos returns all users.

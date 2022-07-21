@@ -216,6 +216,7 @@ func (d *DB) UpdateProjectInfo(
 func (d *DB) CreateUserInfo(
 	ctx context.Context,
 	email string,
+	hashedPassword string,
 ) (*database.UserInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -228,7 +229,7 @@ func (d *DB) CreateUserInfo(
 		return nil, fmt.Errorf("%s: %w", email, database.ErrUserAlreadyExists)
 	}
 
-	info := database.NewUserInfo(email)
+	info := database.NewUserInfo(email, hashedPassword)
 	info.ID = newID()
 	if err := txn.Insert(tblUsers, info); err != nil {
 		return nil, err
@@ -236,6 +237,22 @@ func (d *DB) CreateUserInfo(
 	txn.Commit()
 
 	return info, nil
+}
+
+// FindUserInfo finds a user by the given email.
+func (d *DB) FindUserInfo(ctx context.Context, email string) (*database.UserInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "email", email)
+	if err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", email, database.ErrUserNotFound)
+	}
+
+	return raw.(*database.UserInfo).DeepCopy(), nil
 }
 
 // ListUserInfos returns all users.

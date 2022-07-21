@@ -32,6 +32,20 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 )
 
+// ToUser converts the given model format to Protobuf format.
+func ToUser(user *types.User) (*api.User, error) {
+	pbCreatedAt, err := protoTypes.TimestampProto(user.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.User{
+		Id:        user.ID.String(),
+		Email:     user.Email,
+		CreatedAt: pbCreatedAt,
+	}, nil
+}
+
 // ToProjects converts the given model to Protobuf.
 func ToProjects(projects []*types.Project) ([]*api.Project, error) {
 	var pbProjects []*api.Project

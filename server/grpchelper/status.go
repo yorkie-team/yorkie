@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/users"
 )
 
 func detailsFromError(err error) (protoiface.MessageV1, bool) {
@@ -57,7 +58,8 @@ func detailsFromError(err error) (protoiface.MessageV1, bool) {
 func ToStatusError(err error) error {
 	if errors.Is(err, auth.ErrNotAllowed) ||
 		errors.Is(err, auth.ErrUnexpectedStatusCode) ||
-		errors.Is(err, auth.ErrWebhookTimeout) {
+		errors.Is(err, auth.ErrWebhookTimeout) ||
+		errors.Is(err, users.ErrMismatchedPassword) {
 		return status.Error(codes.Unauthenticated, err.Error())
 	}
 
@@ -88,7 +90,8 @@ func ToStatusError(err error) error {
 
 	if errors.Is(err, database.ErrProjectNotFound) ||
 		errors.Is(err, database.ErrClientNotFound) ||
-		errors.Is(err, database.ErrDocumentNotFound) {
+		errors.Is(err, database.ErrDocumentNotFound) ||
+		errors.Is(err, database.ErrUserNotFound) {
 		return status.Error(codes.NotFound, err.Error())
 	}
 

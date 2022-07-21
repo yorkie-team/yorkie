@@ -36,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/users"
 )
 
 // ErrInvalidAdminPort occurs when the port in the config is invalid.
@@ -133,6 +134,46 @@ func (s *Server) listenAndServeGRPC() error {
 	}()
 
 	return nil
+}
+
+// SignUp signs up a user.
+func (s *Server) SignUp(
+	ctx context.Context,
+	req *api.SignUpRequest,
+) (*api.SignUpResponse, error) {
+	user, err := users.SignUp(ctx, s.backend, req.Email, req.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	pbUser, err := converter.ToUser(user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.SignUpResponse{
+		User: pbUser,
+	}, nil
+}
+
+// LogIn logs in a user.
+func (s *Server) LogIn(
+	ctx context.Context,
+	req *api.LogInRequest,
+) (*api.LogInResponse, error) {
+	user, err := users.LogIn(ctx, s.backend, req.Email, req.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	pbUser, err := converter.ToUser(user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.LogInResponse{
+		User: pbUser,
+	}, nil
 }
 
 // CreateProject creates a new project.

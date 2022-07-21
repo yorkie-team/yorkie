@@ -82,11 +82,14 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("user test", func(t *testing.T) {
-		info, err := db.CreateUserInfo(ctx, t.Name())
-		assert.NoError(t, err)
-		assert.Equal(t, t.Name(), info.Email)
+		email := "admin@yorkie.dev"
+		password := "hashed-password"
 
-		_, err = db.CreateUserInfo(ctx, t.Name())
+		info, err := db.CreateUserInfo(ctx, email, password)
+		assert.NoError(t, err)
+		assert.Equal(t, email, info.Email)
+
+		_, err = db.CreateUserInfo(ctx, email, password)
 		assert.ErrorIs(t, err, database.ErrUserAlreadyExists)
 
 		infos, err := db.ListUserInfos(ctx)
