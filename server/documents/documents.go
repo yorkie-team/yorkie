@@ -46,7 +46,7 @@ func ListDocumentSummaries(
 		if err != nil {
 			return nil, err
 		}
-		
+
 		var snapshot string
 		fullSnapshot := doc.Marshal()
 		snapshotCutline := 50
@@ -54,7 +54,7 @@ func ListDocumentSummaries(
 		if len(fullSnapshot) < snapshotCutline {
 			snapshot = fullSnapshot
 		} else {
-			snapshot = fullSnapshot[:snapshotCutline]
+			snapshot = fullSnapshot[:snapshotCutline] + " ..."
 		}
 
 		summaries = append(summaries, &types.DocumentSummary{

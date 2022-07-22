@@ -19,6 +19,7 @@ package document
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -78,7 +79,6 @@ func newListCommand() *cobra.Command {
 				})
 			}
 			cmd.Printf("%s\n", tw.Render())
-
 			return nil
 		},
 	}
