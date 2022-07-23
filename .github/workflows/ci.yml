@@ -39,6 +39,23 @@ jobs:
     - name: Bench
       run: make bench
 
+    - name: Download previous benchmark data
+      uses: actions/cache@v1
+      with:
+        path: ./cache
+        key: ${{ runner.os }}-benchmark
+
+    - name: Store benchmark result
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        name: Go Benchmark
+        tool: 'go'
+        output-file-path: output.txt
+        external-data-json-path: ./cache/benchmark-data.json
+        fail-on-alert: false
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        comment-on-alert: true
+
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
       with:
