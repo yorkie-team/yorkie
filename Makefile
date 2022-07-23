@@ -61,7 +61,7 @@ test: ## runs integration tests that require local applications such as MongoDB
 	go test -tags integration -race ./...
 
 bench: ## runs benchmark tests
-	go test -tags bench -benchmem -bench=. ./test/bench -memprofile=mem.prof -cpuprofile=cpu.prof | tee ouput.txt
+	go test -tags bench -benchmem -bench=. ./test/bench -memprofile=mem.prof -cpuprofile=cpu.prof | tee output.txt
 
 docker: ## builds docker images with the current version and latest tag
 	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .
