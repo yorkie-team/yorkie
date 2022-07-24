@@ -47,6 +47,7 @@ jobs:
 
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
+      if: ${{ github.event.pull_request.head.repo.full_name == 'org/repo' }}
       with:
         name: Go Benchmark
         tool: 'go'
