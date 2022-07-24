@@ -18,7 +18,7 @@ syntax = "proto3";
 
 package api;
 
-import "resources.proto";
+import "api/resources.proto";
 
 // Yorkie is a service that provides a API for SDKs.
 service Yorkie {

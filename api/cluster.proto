@@ -17,7 +17,7 @@ syntax = "proto3";
 
 package api;
 
-import "resources.proto";
+import "api/resources.proto";
 
 // Cluster is a service that provides a API used by Yorkie Cluster.
 service Cluster {
