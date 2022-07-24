@@ -54,7 +54,7 @@ jobs:
         external-data-json-path: ./cache/benchmark-data.json
         fail-on-alert: false
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        comment-on-alert: true
+        comment-always: true
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
