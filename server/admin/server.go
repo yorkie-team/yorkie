@@ -337,11 +337,7 @@ func (s *Server) SearchDocuments(
 		s.backend,
 		project,
 		req.Query,
-		types.Paging[types.ID]{
-			Offset:    types.ID(req.PreviousId),
-			PageSize:  int(req.PageSize),
-			IsForward: req.IsForward,
-		},
+		int(req.PageSize),
 	)
 	if err != nil {
 		return nil, err

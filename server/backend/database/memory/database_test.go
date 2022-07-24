@@ -113,17 +113,17 @@ func TestDB(t *testing.T) {
 		clientInfo, err := localDB.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
-		docKeys := []string{"test", "test$3", "test-search", "test$0", "search$test", "abcde", "test abc"}
+		docKeys := []string{
+			"test", "test$3", "test-search", "test$0",
+			"search$test", "abcde", "test abc",
+			"test0", "test1", "test2", "test3", "test10",
+			"test11", "test20", "test21", "test22", "test23"}
 		for _, docKey := range docKeys {
 			_, err := localDB.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, key.Key(docKey), true)
 			assert.NoError(t, err)
 		}
 
-		res, err := localDB.FindDocInfosByQuery(ctx, projectID, "test", types.Paging[types.ID]{
-			Offset:    "",
-			PageSize:  3,
-			IsForward: true,
-		})
+		res, err := localDB.FindDocInfosByQuery(ctx, projectID, "test", 10)
 		assert.NoError(t, err)
 
 		var keys []key.Key
@@ -131,23 +131,10 @@ func TestDB(t *testing.T) {
 			keys = append(keys, info.Key)
 		}
 
-		assert.EqualValues(t, []key.Key{"test", "test$3", "test-search"}, keys)
-		assert.Equal(t, 5, res.TotalCount)
-
-		res, err = localDB.FindDocInfosByQuery(ctx, projectID, "test", types.Paging[types.ID]{
-			Offset:    "",
-			PageSize:  10,
-			IsForward: true,
-		})
-		assert.NoError(t, err)
-
-		keys = []key.Key{}
-		for _, info := range res.Documents {
-			keys = append(keys, info.Key)
-		}
-
-		assert.EqualValues(t, []key.Key{"test", "test$3", "test-search", "test$0", "test abc"}, keys)
-		assert.Equal(t, 5, res.TotalCount)
+		assert.EqualValues(t, []key.Key{
+			"test", "test abc", "test$0", "test$3", "test-search",
+			"test0", "test1", "test10", "test11", "test2"}, keys)
+		assert.Equal(t, 15, res.TotalCount)
 	})
 
 	t.Run("update clientInfo after PushPull test", func(t *testing.T) {

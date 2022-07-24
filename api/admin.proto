@@ -99,9 +99,7 @@ message GetSnapshotMetaResponse {
 message SearchDocumentsRequest {
   string project_name = 1;
   string query = 2;
-  string previous_id = 3;
-  int32 page_size = 4;
-  bool is_forward = 5;
+  int32  page_size = 3; 
 }
 
 message SearchDocumentsResponse {

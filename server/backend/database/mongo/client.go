@@ -869,66 +869,37 @@ func (c *Client) FindDocInfosByQuery(
 	ctx context.Context,
 	projectID types.ID,
 	query string,
-	paging types.Paging[types.ID],
+	pageSize int,
 ) (*types.DocumentsResponse[[]*database.DocInfo], error) {
 	encodedProjectID, err := encodeID(projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	filter := bson.M{
+	cursor, err := c.collection(colDocuments).Find(ctx, bson.M{
 		"project_id": encodedProjectID,
 		"key": bson.M{"$regex": primitive.Regex{
 			Pattern: "^" + escapeRegexp(query),
 		}},
-	}
-
-	// 01. get the total count of the given query.
-	cursor, err := c.collection(colDocuments).Find(ctx, filter)
+	})
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, err
 	}
-	var allInfos []*database.DocInfo
-	if err := cursor.All(ctx, &allInfos); err != nil {
-		logging.From(ctx).Error(cursor.Err())
-		return nil, cursor.Err()
-	}
 
-	// 02. find the docInfos of the given query.
-	if paging.Offset != "" {
-		encodedOffset, err := encodeID(paging.Offset)
-		if err != nil {
-			return nil, err
-		}
-
-		k := "$lt"
-		if paging.IsForward {
-			k = "$gt"
-		}
-		filter["_id"] = bson.M{
-			k: encodedOffset,
-		}
-	}
-	sort := 1
-	if !paging.IsForward {
-		sort = -1
-	}
-	opts := options.Find().SetLimit(int64(paging.PageSize)).SetSort(map[string]int{"_id": sort})
-	cursor, err = c.collection(colDocuments).Find(ctx, filter, opts)
-	if err != nil {
-		logging.From(ctx).Error(err)
-		return nil, err
-	}
 	var infos []*database.DocInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		logging.From(ctx).Error(cursor.Err())
 		return nil, cursor.Err()
 	}
 
+	limit := pageSize
+	if limit > len(infos) {
+		limit = len(infos)
+	}
 	return &types.DocumentsResponse[[]*database.DocInfo]{
-		TotalCount: len(allInfos),
-		Documents:  infos,
+		TotalCount: len(infos),
+		Documents:  infos[:limit],
 	}, nil
 }
 
