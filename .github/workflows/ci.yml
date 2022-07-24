@@ -7,6 +7,19 @@ on:
     branches: [ main ]
 
 jobs:
+  lint-protos:
+    name: lint-protos
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: Setup buf action
+      uses: bufbuild/buf-setup-action@v1
+
+    - name: Lint protos
+      uses: bufbuild/buf-lint-action@v1
 
   build:
     name: build
