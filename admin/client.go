@@ -160,6 +160,21 @@ func (c *Client) UpdateProject(
 	return converter.FromProject(response.Project)
 }
 
+// ListDocuments lists documents.
+func (c *Client) ListDocuments(ctx context.Context, projectName string) ([]*types.DocumentSummary, error) {
+	response, err := c.client.ListDocuments(
+		ctx,
+		&api.ListDocumentsRequest{
+			ProjectName: projectName,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromDocumentSummaries(response.Documents)
+}
+
 // ListChangeSummaries returns the change summaries of the given document.
 func (c *Client) ListChangeSummaries(
 	ctx context.Context,

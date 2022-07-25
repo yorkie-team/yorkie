@@ -42,12 +42,28 @@ func ListDocumentSummaries(
 
 	var summaries []*types.DocumentSummary
 	for _, docInfo := range docInfo {
+		doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+		if err != nil {
+			return nil, err
+		}
+
+		var snapshot string
+		fullSnapshot := doc.Marshal()
+		snapshotCutline := 50
+
+		if len(fullSnapshot) < snapshotCutline {
+			snapshot = fullSnapshot
+		} else {
+			snapshot = fullSnapshot[:snapshotCutline] + " ..."
+		}
+
 		summaries = append(summaries, &types.DocumentSummary{
 			ID:         docInfo.ID,
 			Key:        docInfo.Key,
 			CreatedAt:  docInfo.CreatedAt,
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
+			Snapshot:   snapshot,
 		})
 	}
 
