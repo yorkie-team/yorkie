@@ -31,7 +31,7 @@ import (
 
 func newListCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "ls [project]",
+		Use:   "ls [project name]",
 		Short: "List all documents in the project",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
