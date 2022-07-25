@@ -547,6 +547,44 @@ func (d *DB) CreateChangeInfos(
 	return nil
 }
 
+// DeleteOldChangeInfos delete old change infos before checpoint to save storage
+func (d *DB) DeleteOldChangeInfos(
+	ctx context.Context,
+	docInfo *database.DocInfo,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// 01. Find the smallest serverSeq recorded in colSyncedSeqs.
+	// This is to avoid the error that the change could not be found when doing UpdateAndFindMinSyncedTicket.
+	it, err := txn.Get(tblSyncedSeqs, "id")
+	if err != nil {
+		return err
+	}
+
+	var minSyncedServerSeq uint64 = 18446744073709551615
+	for raw := it.Next(); raw != nil; raw = it.Next() {
+		info := raw.(*database.SyncedSeqInfo)
+		if info.DocID == docInfo.ID && info.ServerSeq < minSyncedServerSeq {
+			minSyncedServerSeq = info.ServerSeq
+		}
+	}
+
+	// 02. Deletes changes recorded before minSyncedSeqInfo.ServerSeq.
+	iterator, err := txn.ReverseLowerBound(tblChanges, "doc_id_server_seq", docInfo.ID.String(), minSyncedServerSeq)
+	if err != nil {
+		return err
+	}
+
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		info := raw.(*database.ChangeInfo)
+		if err = txn.Delete(tblChanges, info); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (d *DB) FindChangesBetweenServerSeqs(
 	ctx context.Context,

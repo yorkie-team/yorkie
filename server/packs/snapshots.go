@@ -85,6 +85,16 @@ func storeSnapshot(
 		return err
 	}
 
+	// 05. delete changes before checkpoint (when --backend-snapshot-with-purging-changes flag exists)
+	if be.Config.SnapshotWithPurgingChanges {
+		if err := be.DB.DeleteOldChangeInfos(
+			ctx,
+			docInfo,
+		); err != nil {
+			logging.From(ctx).Error(err)
+		}
+	}
+
 	logging.From(ctx).Infof(
 		"SNAP: '%s', serverSeq: %d",
 		docInfo.Key,

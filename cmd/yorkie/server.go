@@ -308,6 +308,12 @@ func init() {
 		server.DefaultSnapshotInterval,
 		"Interval of changes to create a snapshot.",
 	)
+	cmd.Flags().BoolVar(
+		&conf.Backend.SnapshotWithPurgingChanges,
+		"backend-snapshot-with-purging-changes",
+		server.DefaultSnapshotWithPurgingChanges,
+		"Whether to delete previous changes when the snapshot is created. ",
+	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.AuthWebhookMaxRetries,
 		"auth-webhook-max-retries",

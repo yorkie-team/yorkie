@@ -127,6 +127,12 @@ type Database interface {
 		changes []*change.Change,
 	) error
 
+	// DeleteOldChangeInfos delete old change infos before checkpoint to save storage
+	DeleteOldChangeInfos(
+		ctx context.Context,
+		docInfo *DocInfo,
+	) error
+
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
 		ctx context.Context,

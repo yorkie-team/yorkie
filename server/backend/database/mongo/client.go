@@ -638,6 +638,53 @@ func (c *Client) CreateChangeInfos(
 	return nil
 }
 
+// DeleteOldChangeInfos delete old change infos before checkpoint to save storage
+func (c *Client) DeleteOldChangeInfos(
+	ctx context.Context,
+	docInfo *database.DocInfo,
+) error {
+	encodedDocID, err := encodeID(docInfo.ID)
+	if err != nil {
+		return err
+	}
+
+	// 01. Find the smallest serverSeq recorded in colSyncedSeqs.
+	// This is to avoid the error that the change could not be found when doing UpdateAndFindMinSyncedTicket.
+	result := c.collection(colSyncedSeqs).FindOne(
+		ctx,
+		bson.M{
+			"doc_id": encodedDocID,
+		},
+		options.FindOne().SetSort(bson.M{"server_seq": 1}),
+	)
+
+	if result.Err() != nil {
+		logging.From(ctx).Error(result.Err())
+		return result.Err()
+	}
+
+	minSyncedSeqInfo := database.SyncedSeqInfo{}
+	if err := result.Decode(&minSyncedSeqInfo); err != nil {
+		return err
+	}
+
+	// 02. Deletes changes recorded before minSyncedSeqInfo.ServerSeq.
+	if _, err := c.collection(colChanges).DeleteMany(
+		ctx,
+		bson.M{
+			"doc_id": encodedDocID,
+			"server_seq": bson.M{
+				"$lt": minSyncedSeqInfo.ServerSeq,
+			},
+		},
+		options.Delete(),
+	); err != nil {
+		logging.From(ctx).Error(err)
+		return err
+	}
+	return nil
+}
+
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (c *Client) FindChangesBetweenServerSeqs(
 	ctx context.Context,

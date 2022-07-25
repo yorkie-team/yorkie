@@ -35,6 +35,9 @@ type Config struct {
 	// SnapshotInterval is the interval of changes to create a snapshot.
 	SnapshotInterval uint64 `yaml:"SnapshotInterval"`
 
+	// SnapshotWithPurgingChanges is whether to delete previous changes when the snapshot is created.
+	SnapshotWithPurgingChanges bool `yaml:"SnapshotWithPurgingChages"`
+
 	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
 	AuthWebhookMaxRetries uint64 `yaml:"AuthWebhookMaxRetries"`
 
