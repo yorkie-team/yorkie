@@ -201,13 +201,14 @@ func (c *Client) ListChangeSummaries(
 		return nil, err
 	}
 
-	lastSeq := changes[len(changes)-1].ID().ServerSeq()
-	from, _ := types.GetChangesRange(types.Paging[uint64]{
-		Offset:    previousSeq,
-		PageSize:  int(pageSize),
-		IsForward: isForward,
-	}, lastSeq)
-	seq := from - 1
+	// lastSeq := changes[len(changes)-1].ID().ServerSeq()
+	// from, _ := types.GetChangesRange(types.Paging[uint64]{
+	// 	Offset:    previousSeq,
+	// 	PageSize:  int(pageSize),
+	// 	IsForward: isForward,
+	// }, lastSeq)
+	// seq := from - 1
+	seq := changes[0].ServerSeq()
 
 	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &api.GetSnapshotMetaRequest{
 		ProjectName: projectName,
@@ -218,13 +219,17 @@ func (c *Client) ListChangeSummaries(
 		return nil, err
 	}
 
-	newDoc, err := document.NewInternalDocumentFromSnapshot(key, seq, snapshotMeta.Lamport, snapshotMeta.Snapshot)
+	newDoc, err := document.NewInternalDocumentFromSnapshot(key, snapshotMeta.ServerSeq, snapshotMeta.Lamport, snapshotMeta.Snapshot)
 
 	if err != nil {
 		return nil, err
 	}
 	var summaries []*types.ChangeSummary
 	for _, c := range changes {
+		if c.ServerSeq() < newDoc.Checkpoint().ServerSeq {
+			continue
+		}
+
 		if err := newDoc.ApplyChanges(c); err != nil {
 			return nil, err
 		}

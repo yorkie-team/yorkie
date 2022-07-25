@@ -266,6 +266,22 @@ func (s *Server) GetSnapshotMeta(
 		return nil, err
 	}
 
+	// When the `--backend-snapshot-with-purging-changes` flag exists, there is no changes before the latest snapshot, so set the latest snapshot to req.serverSeq.
+	if s.backend.Config.SnapshotWithPurgingChanges {
+		docInfo, err := s.backend.DB.FindDocInfoByKey(ctx, project.ID, key.Key(req.DocumentKey))
+		if err != nil {
+			return nil, err
+		}
+		latestSnapshot, err := s.backend.DB.FindLatestSnapshotInfo(ctx, docInfo.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		if req.ServerSeq < latestSnapshot.ServerSeq {
+			req.ServerSeq = latestSnapshot.ServerSeq
+		}
+	}
+
 	doc, err := documents.GetDocumentByServerSeq(
 		ctx,
 		s.backend,
@@ -283,8 +299,9 @@ func (s *Server) GetSnapshotMeta(
 	}
 
 	return &api.GetSnapshotMetaResponse{
-		Lamport:  doc.Lamport(),
-		Snapshot: snapshot,
+		Lamport:   doc.Lamport(),
+		Snapshot:  snapshot,
+		ServerSeq: req.ServerSeq,
 	}, nil
 }
 

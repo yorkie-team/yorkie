@@ -808,6 +808,39 @@ func (c *Client) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
+// FindLatestSnapshotInfo finds the lastest snapshot of the given document.
+func (c *Client) FindLatestSnapshotInfo(
+	ctx context.Context,
+	docID types.ID,
+) (*database.SnapshotInfo, error) {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := c.collection(colSnapshots).FindOne(ctx, bson.M{
+		"doc_id": encodedDocID,
+	}, options.FindOne().SetSort(bson.M{
+		"server_seq": -1,
+	}))
+
+	snapshotInfo := &database.SnapshotInfo{}
+	if result.Err() == mongo.ErrNoDocuments {
+		return snapshotInfo, nil
+	}
+
+	if result.Err() != nil {
+		logging.From(ctx).Error(result.Err())
+		return nil, result.Err()
+	}
+
+	if err := result.Decode(snapshotInfo); err != nil {
+		return nil, err
+	}
+
+	return snapshotInfo, nil
+}
+
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 // and returns the min synced ticket.
 func (c *Client) UpdateAndFindMinSyncedTicket(

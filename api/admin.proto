@@ -94,6 +94,7 @@ message GetSnapshotMetaRequest {
 message GetSnapshotMetaResponse {
   bytes snapshot = 1;
   uint64 lamport = 2;
+  uint64 server_seq = 3;
 }
 
 message SearchDocumentsRequest {
