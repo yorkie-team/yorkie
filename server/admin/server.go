@@ -322,6 +322,38 @@ func (s *Server) ListDocuments(
 	}, nil
 }
 
+// SearchDocuments searches documents for a specified string.
+func (s *Server) SearchDocuments(
+	ctx context.Context,
+	req *api.SearchDocumentsRequest,
+) (*api.SearchDocumentsResponse, error) {
+	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := documents.SearchDocumentSummaries(
+		ctx,
+		s.backend,
+		project,
+		req.Query,
+		int(req.PageSize),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	pbDocuments, err := converter.ToDocumentSummaries(result.Elements)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.SearchDocumentsResponse{
+		TotalCount: int32(result.TotalCount),
+		Documents:  pbDocuments,
+	}, nil
+}
+
 // ListChanges lists of changes for the given document.
 func (s *Server) ListChanges(
 	ctx context.Context,

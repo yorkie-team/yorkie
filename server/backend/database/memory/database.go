@@ -841,6 +841,37 @@ func (d *DB) FindDocInfosByPaging(
 	return docInfos, nil
 }
 
+// FindDocInfosByQuery returns the docInfos which match the given query.
+func (d *DB) FindDocInfosByQuery(
+	ctx context.Context,
+	projectID types.ID,
+	query string,
+	pageSize int,
+) (*types.SearchResult[*database.DocInfo], error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iterator, err := txn.Get(tblDocuments, "project_id_key_prefix", projectID.String(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	var docInfos []*database.DocInfo
+	count := 0
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		if count < pageSize {
+			info := raw.(*database.DocInfo)
+			docInfos = append(docInfos, info)
+		}
+		count++
+	}
+
+	return &types.SearchResult[*database.DocInfo]{
+		TotalCount: count,
+		Elements:   docInfos,
+	}, nil
+}
+
 func (d *DB) findTicketByServerSeq(
 	txn *memdb.Txn,
 	docID types.ID,
