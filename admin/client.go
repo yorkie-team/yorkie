@@ -201,13 +201,6 @@ func (c *Client) ListChangeSummaries(
 		return nil, err
 	}
 
-	// lastSeq := changes[len(changes)-1].ID().ServerSeq()
-	// from, _ := types.GetChangesRange(types.Paging[uint64]{
-	// 	Offset:    previousSeq,
-	// 	PageSize:  int(pageSize),
-	// 	IsForward: isForward,
-	// }, lastSeq)
-	// seq := from - 1
 	seq := changes[0].ServerSeq()
 
 	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &api.GetSnapshotMetaRequest{
