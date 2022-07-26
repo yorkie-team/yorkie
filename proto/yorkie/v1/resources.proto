@@ -170,7 +170,7 @@ message JSONElement {
     TimeTicket removed_at = 5;
   }
 
-  oneof Body {
+  oneof body {
     JSONObject json_object = 1;
     JSONArray json_array = 2;
     Primitive primitive = 3;
