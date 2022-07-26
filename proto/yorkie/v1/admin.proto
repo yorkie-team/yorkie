@@ -15,9 +15,9 @@
  */
 syntax = "proto3";
 
-package api;
+package yorkie.v1;
 
-import "api/resources.proto";
+import "yorkie/v1/resources.proto";
 
 // Admin is a service that provides a API for Admin.
 service Admin {

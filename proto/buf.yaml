@@ -1,7 +1,5 @@
 version: v1
-breaking:
-  use:
-    - FILE
+build:
 lint:
   use:
     - DEFAULT
