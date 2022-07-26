@@ -201,6 +201,11 @@ func (c *Client) ListChangeSummaries(
 		return nil, err
 	}
 
+	if len(changes) == 0 {
+		var summaries []*types.ChangeSummary
+		return summaries, nil
+	}
+
 	seq := changes[0].ServerSeq() - 1
 
 	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &api.GetSnapshotMetaRequest{
@@ -224,7 +229,7 @@ func (c *Client) ListChangeSummaries(
 	}
 	var summaries []*types.ChangeSummary
 	for _, c := range changes {
-		if c.ServerSeq() < newDoc.Checkpoint().ServerSeq {
+		if c.ServerSeq() <= newDoc.Checkpoint().ServerSeq {
 			continue
 		}
 
