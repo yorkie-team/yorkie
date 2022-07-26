@@ -21,7 +21,7 @@ package yorkie.v1;
 import "yorkie/v1/resources.proto";
 
 // Yorkie is a service that provides a API for SDKs.
-service Yorkie {
+service YorkieService {
   rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
   rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
   rpc UpdatePresence (UpdatePresenceRequest) returns (UpdatePresenceResponse) {}

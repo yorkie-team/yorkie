@@ -20,7 +20,7 @@ package yorkie.v1;
 import "yorkie/v1/resources.proto";
 
 // Admin is a service that provides a API for Admin.
-service Admin {
+service AdminService {
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {}
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {}
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
