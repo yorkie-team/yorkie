@@ -570,6 +570,9 @@ func (d *DB) DeleteOldChangeInfos(
 			minSyncedServerSeq = info.ServerSeq
 		}
 	}
+	if minSyncedServerSeq == math.MaxUint64 {
+		return nil
+	}
 
 	// 02. Deletes changes recorded before minSyncedSeqInfo.ServerSeq.
 	iterator, err := txn.ReverseLowerBound(tblChanges, "doc_id_server_seq", docInfo.ID.String(), minSyncedServerSeq)
