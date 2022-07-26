@@ -19,6 +19,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"math"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -562,7 +563,7 @@ func (d *DB) DeleteOldChangeInfos(
 		return err
 	}
 
-	var minSyncedServerSeq uint64 = 18446744073709551615
+	var minSyncedServerSeq uint64 = math.MaxUint64
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		info := raw.(*database.SyncedSeqInfo)
 		if info.DocID == docInfo.ID && info.ServerSeq < minSyncedServerSeq {
@@ -716,7 +717,7 @@ func (d *DB) FindLatestSnapshotInfo(
 		tblSnapshots,
 		"doc_id_server_seq",
 		docID.String(),
-		uint64(18446744073709551615),
+		uint64(math.MaxUint64),
 	)
 	if err != nil {
 		return nil, err
