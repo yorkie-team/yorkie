@@ -266,7 +266,8 @@ func (s *Server) GetSnapshotMeta(
 		return nil, err
 	}
 
-	// When the `--backend-snapshot-with-purging-changes` flag exists, there is no changes before the latest snapshot, so set the latest snapshot to req.serverSeq.
+	// When the `--backend-snapshot-with-purging-changes` flag exists, there is no changes before the latest snapshot,
+	// so set the latest snapshot to req.serverSeq.
 	if s.backend.Config.SnapshotWithPurgingChanges {
 		docInfo, err := s.backend.DB.FindDocInfoByKey(ctx, project.ID, key.Key(req.DocumentKey))
 		if err != nil {

@@ -212,7 +212,12 @@ func (c *Client) ListChangeSummaries(
 		return nil, err
 	}
 
-	newDoc, err := document.NewInternalDocumentFromSnapshot(key, snapshotMeta.ServerSeq, snapshotMeta.Lamport, snapshotMeta.Snapshot)
+	newDoc, err := document.NewInternalDocumentFromSnapshot(
+		key,
+		snapshotMeta.ServerSeq,
+		snapshotMeta.Lamport,
+		snapshotMeta.Snapshot,
+	)
 
 	if err != nil {
 		return nil, err
