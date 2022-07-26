@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestHistory(t *testing.T) {
@@ -67,8 +68,14 @@ func TestHistory(t *testing.T) {
 
 		changes, err := adminCli.ListChangeSummaries(ctx, "default", d1.Key(), 0, 0, true)
 		assert.NoError(t, err)
-		assert.Len(t, changes, 3)
 
+		if helper.SnapshotWithPurgingChanges {
+			// There is no change when SnapshotInterval is not set.
+			assert.Len(t, changes, 0)
+			return
+		}
+
+		assert.Len(t, changes, 3)
 		assert.Equal(t, "create todos", changes[2].Message)
 		assert.Equal(t, "buy coffee", changes[1].Message)
 		assert.Equal(t, "buy bread", changes[0].Message)
