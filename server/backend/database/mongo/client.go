@@ -658,6 +658,10 @@ func (c *Client) DeleteOldChangeInfos(
 		options.FindOne().SetSort(bson.M{"server_seq": 1}),
 	)
 
+	if result.Err() == mongo.ErrNoDocuments {
+		return nil
+	}
+
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
 		return result.Err()
