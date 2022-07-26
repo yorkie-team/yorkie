@@ -201,7 +201,7 @@ func (c *Client) ListChangeSummaries(
 		return nil, err
 	}
 
-	seq := changes[0].ServerSeq()
+	seq := changes[0].ServerSeq() - 1
 
 	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &api.GetSnapshotMetaRequest{
 		ProjectName: projectName,
