@@ -34,6 +34,50 @@ import (
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
+// errorToCode maps an error to gRPC status code.
+var errorToCode = map[error]codes.Code{
+	// InvalidArgument means the request is malformed.
+	converter.ErrPackRequired:       codes.InvalidArgument,
+	converter.ErrCheckpointRequired: codes.InvalidArgument,
+	time.ErrInvalidHexString:        codes.InvalidArgument,
+	time.ErrInvalidActorID:          codes.InvalidArgument,
+	types.ErrInvalidID:              codes.InvalidArgument,
+	clients.ErrInvalidClientID:      codes.InvalidArgument,
+	clients.ErrInvalidClientKey:     codes.InvalidArgument,
+	types.ErrEmptyProjectFields:     codes.InvalidArgument,
+
+	// NotFound means the requested resource does not exist.
+	database.ErrProjectNotFound:  codes.NotFound,
+	database.ErrClientNotFound:   codes.NotFound,
+	database.ErrDocumentNotFound: codes.NotFound,
+	database.ErrUserNotFound:     codes.NotFound,
+
+	// AlreadyExists means the requested resource already exists.
+	database.ErrProjectAlreadyExists:     codes.AlreadyExists,
+	database.ErrProjectNameAlreadyExists: codes.AlreadyExists,
+
+	// FailedPrecondition means the request is rejected because the state of the
+	// system is not the desired state.
+	database.ErrClientNotActivated:      codes.FailedPrecondition,
+	database.ErrDocumentNotAttached:     codes.FailedPrecondition,
+	database.ErrDocumentAlreadyAttached: codes.FailedPrecondition,
+	packs.ErrInvalidServerSeq:           codes.FailedPrecondition,
+	database.ErrConflictOnUpdate:        codes.FailedPrecondition,
+
+	// Unimplemented means the server does not implement the functionality.
+	converter.ErrUnsupportedOperation:   codes.Unimplemented,
+	converter.ErrUnsupportedElement:     codes.Unimplemented,
+	converter.ErrUnsupportedEventType:   codes.Unimplemented,
+	converter.ErrUnsupportedValueType:   codes.Unimplemented,
+	converter.ErrUnsupportedCounterType: codes.Unimplemented,
+
+	// Unauthenticated means the request does not have valid authentication
+	auth.ErrNotAllowed:           codes.Unauthenticated,
+	auth.ErrUnexpectedStatusCode: codes.Unauthenticated,
+	auth.ErrWebhookTimeout:       codes.Unauthenticated,
+	users.ErrMismatchedPassword:  codes.Unauthenticated,
+}
+
 func detailsFromError(err error) (protoiface.MessageV1, bool) {
 	invalidFieldsError, ok := err.(*types.InvalidFieldsError)
 	if !ok {
@@ -56,56 +100,23 @@ func detailsFromError(err error) (protoiface.MessageV1, bool) {
 // occurs while executing logic in API handler, gRPC status.error should be
 // returned so that the client can know more about the status of the request.
 func ToStatusError(err error) error {
-	if errors.Is(err, auth.ErrNotAllowed) ||
-		errors.Is(err, auth.ErrUnexpectedStatusCode) ||
-		errors.Is(err, auth.ErrWebhookTimeout) ||
-		errors.Is(err, users.ErrMismatchedPassword) {
-		return status.Error(codes.Unauthenticated, err.Error())
+	cause := errors.Unwrap(err)
+	if cause == nil {
+		cause = err
+	}
+	if code, ok := errorToCode[cause]; ok {
+		return status.Error(code, err.Error())
 	}
 
+	// NOTE(hackerwins): InvalidFieldsError has details of invalid fields in
+	// the error message.
 	var invalidFieldsError *types.InvalidFieldsError
-	if errors.Is(err, converter.ErrPackRequired) ||
-		errors.Is(err, converter.ErrCheckpointRequired) ||
-		errors.Is(err, time.ErrInvalidHexString) ||
-		errors.Is(err, time.ErrInvalidActorID) ||
-		errors.Is(err, types.ErrInvalidID) ||
-		errors.Is(err, clients.ErrInvalidClientID) ||
-		errors.Is(err, clients.ErrInvalidClientKey) ||
-		errors.Is(err, types.ErrEmptyProjectFields) ||
-		errors.As(err, &invalidFieldsError) {
+	if errors.As(err, &invalidFieldsError) {
 		st := status.New(codes.InvalidArgument, err.Error())
 		if details, ok := detailsFromError(err); ok {
 			st, _ = st.WithDetails(details)
 		}
 		return st.Err()
-	}
-
-	if errors.Is(err, converter.ErrUnsupportedOperation) ||
-		errors.Is(err, converter.ErrUnsupportedElement) ||
-		errors.Is(err, converter.ErrUnsupportedEventType) ||
-		errors.Is(err, converter.ErrUnsupportedValueType) ||
-		errors.Is(err, converter.ErrUnsupportedCounterType) {
-		return status.Error(codes.Unimplemented, err.Error())
-	}
-
-	if errors.Is(err, database.ErrProjectNotFound) ||
-		errors.Is(err, database.ErrClientNotFound) ||
-		errors.Is(err, database.ErrDocumentNotFound) ||
-		errors.Is(err, database.ErrUserNotFound) {
-		return status.Error(codes.NotFound, err.Error())
-	}
-
-	if errors.Is(err, database.ErrProjectAlreadyExists) ||
-		errors.Is(err, database.ErrProjectNameAlreadyExists) {
-		return status.Error(codes.AlreadyExists, err.Error())
-	}
-
-	if err == database.ErrClientNotActivated ||
-		err == database.ErrDocumentNotAttached ||
-		err == database.ErrDocumentAlreadyAttached ||
-		errors.Is(err, packs.ErrInvalidServerSeq) ||
-		errors.Is(err, database.ErrConflictOnUpdate) {
-		return status.Error(codes.FailedPrecondition, err.Error())
 	}
 
 	return status.Error(codes.Internal, err.Error())

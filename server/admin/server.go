@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	gotime "time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -61,6 +62,7 @@ type Server struct {
 	conf       *Config
 	grpcServer *grpc.Server
 	backend    *backend.Backend
+	jwtManager *JWTManager
 }
 
 // NewServer creates a new Server.
@@ -85,8 +87,10 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 
 	server := &Server{
 		conf:       conf,
-		backend:    be,
 		grpcServer: grpcServer,
+		backend:    be,
+		// TODO(hackerwins): inject secret key from config.
+		jwtManager: NewJWTManager("hello", 7*24*gotime.Hour),
 	}
 
 	api.RegisterAdminServer(grpcServer, server)
@@ -161,10 +165,16 @@ func (s *Server) LogIn(
 	ctx context.Context,
 	req *api.LogInRequest,
 ) (*api.LogInResponse, error) {
-	user, err := users.LogIn(ctx, s.backend, req.Email, req.Password)
+	user, err := users.IsCorrectPassword(ctx, s.backend, req.Email, req.Password)
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO(hackerwins): Pass the token to the client.
+	// token, err := s.jwtManager.GenerateToken(user.Email)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	pbUser, err := converter.ToUser(user)
 	if err != nil {

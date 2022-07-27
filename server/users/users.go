@@ -51,8 +51,8 @@ func SignUp(
 	return info.ToUser(), nil
 }
 
-// LogIn logs in a user.
-func LogIn(
+// IsCorrectPassword checks if the password is correct.
+func IsCorrectPassword(
 	ctx context.Context,
 	be *backend.Backend,
 	email,
@@ -69,8 +69,6 @@ func LogIn(
 	); err != nil {
 		return nil, ErrMismatchedPassword
 	}
-
-	// TODO(hackerwins): Create a new token for the user.
 
 	return info.ToUser(), nil
 }
