@@ -42,12 +42,28 @@ func ListDocumentSummaries(
 
 	var summaries []*types.DocumentSummary
 	for _, docInfo := range docInfo {
+		doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+		if err != nil {
+			return nil, err
+		}
+
+		var snapshot string
+		fullSnapshot := doc.Marshal()
+		snapshotCutline := 50
+
+		if len(fullSnapshot) < snapshotCutline {
+			snapshot = fullSnapshot
+		} else {
+			snapshot = fullSnapshot[:snapshotCutline] + " ..."
+		}
+
 		summaries = append(summaries, &types.DocumentSummary{
 			ID:         docInfo.ID,
 			Key:        docInfo.Key,
 			CreatedAt:  docInfo.CreatedAt,
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
+			Snapshot:   snapshot,
 		})
 	}
 
@@ -113,6 +129,36 @@ func GetDocumentByServerSeq(
 	}
 
 	return doc, nil
+}
+
+// SearchDocumentSummaries returns document summaries that match the query parameters.
+func SearchDocumentSummaries(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	query string,
+	pageSize int,
+) (*types.SearchResult[*types.DocumentSummary], error) {
+	res, err := be.DB.FindDocInfosByQuery(ctx, project.ID, query, pageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	var summaries []*types.DocumentSummary
+	for _, docInfo := range res.Elements {
+		summaries = append(summaries, &types.DocumentSummary{
+			ID:         docInfo.ID,
+			Key:        docInfo.Key,
+			CreatedAt:  docInfo.CreatedAt,
+			AccessedAt: docInfo.AccessedAt,
+			UpdatedAt:  docInfo.UpdatedAt,
+		})
+	}
+
+	return &types.SearchResult[*types.DocumentSummary]{
+		TotalCount: res.TotalCount,
+		Elements:   summaries,
+	}, nil
 }
 
 // FindDocInfoByKey returns a document for the given document key.

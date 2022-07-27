@@ -19,6 +19,7 @@ package mongo
 import (
 	"context"
 	"fmt"
+	"strings"
 	gotime "time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -863,6 +864,45 @@ func (c *Client) FindDocInfosByPaging(
 	return infos, nil
 }
 
+// FindDocInfosByQuery returns the docInfos which match the given query.
+func (c *Client) FindDocInfosByQuery(
+	ctx context.Context,
+	projectID types.ID,
+	query string,
+	pageSize int,
+) (*types.SearchResult[*database.DocInfo], error) {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, err := c.collection(colDocuments).Find(ctx, bson.M{
+		"project_id": encodedProjectID,
+		"key": bson.M{"$regex": primitive.Regex{
+			Pattern: "^" + escapeRegexp(query),
+		}},
+	})
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	var infos []*database.DocInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		logging.From(ctx).Error(cursor.Err())
+		return nil, cursor.Err()
+	}
+
+	limit := pageSize
+	if limit > len(infos) {
+		limit = len(infos)
+	}
+	return &types.SearchResult[*database.DocInfo]{
+		TotalCount: len(infos),
+		Elements:   infos[:limit],
+	}, nil
+}
+
 // UpdateSyncedSeq updates the syncedSeq of the given client.
 func (c *Client) UpdateSyncedSeq(
 	ctx context.Context,
@@ -984,4 +1024,24 @@ func (c *Client) collection(
 	return c.client.
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
+}
+
+// NOTE(chacha912): escapeRegexp escapes special characters by putting a backslash in front of it.
+// (https://github.com/cxr29/scrud/blob/1039f8edaf5eef522275a5a848a0fca0f53224eb/query/util.go#L31-L47)
+func escape(s, a string) string {
+	if strings.ContainsAny(s, a) {
+		b := make([]rune, 0)
+		for _, r := range s {
+			if strings.ContainsRune(a, r) {
+				b = append(b, '\\')
+			}
+			b = append(b, r)
+		}
+		return string(b)
+	}
+	return s
+}
+
+func escapeRegexp(s string) string {
+	return escape(s, `\.+*?()|[]{}^$`)
 }

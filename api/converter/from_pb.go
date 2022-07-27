@@ -66,6 +66,43 @@ func FromProject(pbProject *api.Project) (*types.Project, error) {
 	}, nil
 }
 
+// FromDocumentSummaries converts the given Protobuf formats to model format.
+func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) ([]*types.DocumentSummary, error) {
+	var summaries []*types.DocumentSummary
+	for _, pbSummary := range pbSummaries {
+		summary, err := FromDocumentSummary(pbSummary)
+		if err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, summary)
+	}
+	return summaries, nil
+}
+
+// FromDocumentSummary converts the given Protobuf formats to model format.
+func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary, error) {
+	createdAt, err := protoTypes.TimestampFromProto(pbSummary.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	accessedAt, err := protoTypes.TimestampFromProto(pbSummary.AccessedAt)
+	if err != nil {
+		return nil, err
+	}
+	updatedAt, err := protoTypes.TimestampFromProto(pbSummary.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &types.DocumentSummary{
+		ID:         types.ID(pbSummary.Id),
+		Key:        key.Key(pbSummary.Key),
+		CreatedAt:  createdAt,
+		AccessedAt: accessedAt,
+		UpdatedAt:  updatedAt,
+		Snapshot:   pbSummary.Snapshot,
+	}, nil
+}
+
 // FromClient converts the given Protobuf formats to model format.
 func FromClient(pbClient *api.Client) (*types.Client, error) {
 	id, err := time.ActorIDFromBytes(pbClient.Id)
