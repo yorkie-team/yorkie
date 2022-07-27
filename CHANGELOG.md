@@ -7,6 +7,13 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.13] - 2022-07-27
+
+### Added
+
+- Add document list command to CLI: #366
+- Add SearchDocuments admin API: #363
+
 ## [0.2.12] - 2022-07-20
 
 ### Fixed
