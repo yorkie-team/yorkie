@@ -708,36 +708,6 @@ func (d *DB) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// FindLatestSnapshotInfo finds the lastest snapshot of the given document.
-func (d *DB) FindLatestSnapshotInfo(
-	ctx context.Context,
-	docID types.ID,
-) (*database.SnapshotInfo, error) {
-	txn := d.db.Txn(false)
-	defer txn.Abort()
-
-	iterator, err := txn.ReverseLowerBound(
-		tblSnapshots,
-		"doc_id_server_seq",
-		docID.String(),
-		uint64(math.MaxUint64),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var snapshotInfo *database.SnapshotInfo
-	raw := iterator.Next()
-	info := raw.(*database.SnapshotInfo)
-	snapshotInfo = info
-
-	if snapshotInfo == nil {
-		return &database.SnapshotInfo{}, nil
-	}
-
-	return snapshotInfo, nil
-}
-
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 // and returns the min synced ticket.
 func (d *DB) UpdateAndFindMinSyncedTicket(

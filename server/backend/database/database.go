@@ -155,12 +155,6 @@ type Database interface {
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
 	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq uint64) (*SnapshotInfo, error)
 
-	// FindLatestSnapshotInfo finds the lastest snapshot of the given document.
-	FindLatestSnapshotInfo(
-		ctx context.Context,
-		docID types.ID,
-	) (*SnapshotInfo, error)
-
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 	// and returns the min synced ticket.
 	UpdateAndFindMinSyncedTicket(

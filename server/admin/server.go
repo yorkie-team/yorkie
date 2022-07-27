@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -273,7 +274,7 @@ func (s *Server) GetSnapshotMeta(
 		if err != nil {
 			return nil, err
 		}
-		latestSnapshot, err := s.backend.DB.FindLatestSnapshotInfo(ctx, docInfo.ID)
+		latestSnapshot, err := s.backend.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, math.MaxInt64)
 		if err != nil {
 			return nil, err
 		}
