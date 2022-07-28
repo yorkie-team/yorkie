@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 
 	"github.com/rs/xid"
 	"go.uber.org/zap"
@@ -27,7 +28,6 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -67,7 +67,7 @@ type Attachment struct {
 // to the server to synchronize with other replicas in remote.
 type Client struct {
 	conn        *grpc.ClientConn
-	client      api.YorkieClient
+	client      v1.YorkieClient
 	dialOptions []grpc.DialOption
 	logger      *zap.Logger
 
@@ -174,7 +174,7 @@ func (c *Client) Dial(rpcAddr string) error {
 	}
 
 	c.conn = conn
-	c.client = api.NewYorkieClient(conn)
+	c.client = v1.NewYorkieClient(conn)
 
 	return nil
 }
@@ -196,7 +196,7 @@ func (c *Client) Activate(ctx context.Context) error {
 		return nil
 	}
 
-	response, err := c.client.ActivateClient(ctx, &api.ActivateClientRequest{
+	response, err := c.client.ActivateClient(ctx, &v1.ActivateClientRequest{
 		ClientKey: c.key,
 	})
 	if err != nil {
@@ -220,7 +220,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		return nil
 	}
 
-	_, err := c.client.DeactivateClient(ctx, &api.DeactivateClientRequest{
+	_, err := c.client.DeactivateClient(ctx, &v1.DeactivateClientRequest{
 		ClientId: c.id.Bytes(),
 	})
 	if err != nil {
@@ -246,7 +246,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
-	res, err := c.client.AttachDocument(ctx, &api.AttachDocumentRequest{
+	res, err := c.client.AttachDocument(ctx, &v1.AttachDocumentRequest{
 		ClientId:   c.id.Bytes(),
 		ChangePack: pbChangePack,
 	})
@@ -300,7 +300,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
-	res, err := c.client.DetachDocument(ctx, &api.DetachDocumentRequest{
+	res, err := c.client.DetachDocument(ctx, &v1.DetachDocumentRequest{
 		ClientId:   c.id.Bytes(),
 		ChangePack: pbChangePack,
 	})
@@ -357,7 +357,7 @@ func (c *Client) Watch(
 	}
 
 	rch := make(chan WatchResponse)
-	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
+	stream, err := c.client.WatchDocuments(ctx, &v1.WatchDocumentsRequest{
 		Client: converter.ToClient(types.Client{
 			ID:           c.id,
 			PresenceInfo: c.presenceInfo,
@@ -368,9 +368,9 @@ func (c *Client) Watch(
 		return nil, err
 	}
 
-	handleResponse := func(pbResp *api.WatchDocumentsResponse) (*WatchResponse, error) {
+	handleResponse := func(pbResp *v1.WatchDocumentsResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
-		case *api.WatchDocumentsResponse_Initialization_:
+		case *v1.WatchDocumentsResponse_Initialization_:
 			for docID, peers := range resp.Initialization.PeersMapByDoc {
 				clients, err := converter.FromClients(peers)
 				if err != nil {
@@ -384,7 +384,7 @@ func (c *Client) Watch(
 			}
 
 			return nil, nil
-		case *api.WatchDocumentsResponse_Event:
+		case *v1.WatchDocumentsResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
 			if err != nil {
 				return nil, err
@@ -474,7 +474,7 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 	// because grpc-web can't handle Bi-Directional streaming for now.
 	// After grpc-web supports bi-directional streaming, we can remove the
 	// following.
-	if _, err := c.client.UpdatePresence(ctx, &api.UpdatePresenceRequest{
+	if _, err := c.client.UpdatePresence(ctx, &v1.UpdatePresenceRequest{
 		Client: converter.ToClient(types.Client{
 			ID:           c.id,
 			PresenceInfo: c.presenceInfo,
@@ -540,7 +540,7 @@ func (c *Client) sync(ctx context.Context, key key.Key) error {
 		return err
 	}
 
-	res, err := c.client.PushPull(ctx, &api.PushPullRequest{
+	res, err := c.client.PushPull(ctx, &v1.PushPullRequest{
 		ClientId:   c.id.Bytes(),
 		ChangePack: pbChangePack,
 	})

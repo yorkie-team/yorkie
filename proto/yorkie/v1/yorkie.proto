@@ -20,6 +20,8 @@ package yorkie.v1;
 
 import "yorkie/v1/resources.proto";
 
+option go_package = "github.com/yorkie-team/yorkie/gen/go/v1;yorkiev1";
+
 // Yorkie is a service that provides a API for SDKs.
 service YorkieService {
   rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}

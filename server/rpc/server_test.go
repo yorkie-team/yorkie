@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 	"log"
 	"os"
 	"testing"
@@ -30,7 +31,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -49,9 +49,9 @@ var (
 	testRPCServer *rpc.Server
 	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.RPCPort)
 	testAdminAddr = fmt.Sprintf("localhost:%d", helper.AdminPort)
-	testClient    api.YorkieClient
+	testClient    v1.YorkieClient
 
-	invalidChangePack = &api.ChangePack{
+	invalidChangePack = &v1.ChangePack{
 		DocumentKey: "invalid",
 		Checkpoint:  nil,
 	}
@@ -111,7 +111,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	testClient = api.NewYorkieClient(conn)
+	testClient = v1.NewYorkieClient(conn)
 
 	code := m.Run()
 
@@ -126,33 +126,33 @@ func TestRPCServerBackend(t *testing.T) {
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
+			&v1.ActivateClientRequest{ClientKey: t.Name()},
 		)
 		assert.NoError(t, err)
 
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
+			&v1.DeactivateClientRequest{ClientId: activateResp.ClientId},
 		)
 		assert.NoError(t, err)
 
 		// invalid argument
 		_, err = testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: ""},
+			&v1.ActivateClientRequest{ClientKey: ""},
 		)
 		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: emptyClientID},
+			&v1.DeactivateClientRequest{ClientId: emptyClientID},
 		)
 		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
 
 		// client not found
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: nilClientID},
+			&v1.DeactivateClientRequest{ClientId: nilClientID},
 		)
 		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 	})
@@ -160,18 +160,18 @@ func TestRPCServerBackend(t *testing.T) {
 	t.Run("attach/detach document test", func(t *testing.T) {
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
+			&v1.ActivateClientRequest{ClientKey: t.Name()},
 		)
 		assert.NoError(t, err)
 
-		packWithNoChanges := &api.ChangePack{
+		packWithNoChanges := &v1.ChangePack{
 			DocumentKey: t.Name(),
-			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			Checkpoint:  &v1.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
+			&v1.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
 				ChangePack: packWithNoChanges,
 			},
@@ -181,7 +181,7 @@ func TestRPCServerBackend(t *testing.T) {
 		// try to attach with invalid client ID
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
+			&v1.AttachDocumentRequest{
 				ClientId:   invalidClientID,
 				ChangePack: packWithNoChanges,
 			},
@@ -191,7 +191,7 @@ func TestRPCServerBackend(t *testing.T) {
 		// try to attach with invalid client
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
+			&v1.AttachDocumentRequest{
 				ClientId:   nilClientID,
 				ChangePack: packWithNoChanges,
 			},
@@ -201,7 +201,7 @@ func TestRPCServerBackend(t *testing.T) {
 		// try to attach already attached document
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
+			&v1.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
 				ChangePack: packWithNoChanges,
 			},
@@ -211,7 +211,7 @@ func TestRPCServerBackend(t *testing.T) {
 		// try to attach invalid change pack
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
+			&v1.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
 				ChangePack: invalidChangePack,
 			},
@@ -220,7 +220,7 @@ func TestRPCServerBackend(t *testing.T) {
 
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
+			&v1.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
 				ChangePack: packWithNoChanges,
 			},
@@ -230,7 +230,7 @@ func TestRPCServerBackend(t *testing.T) {
 		// try to detach already detached document
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
+			&v1.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
 				ChangePack: packWithNoChanges,
 			},
@@ -239,7 +239,7 @@ func TestRPCServerBackend(t *testing.T) {
 
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
+			&v1.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
 				ChangePack: invalidChangePack,
 			},
@@ -249,11 +249,11 @@ func TestRPCServerBackend(t *testing.T) {
 		// document not found
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
+			&v1.DetachDocumentRequest{
 				ClientId: activateResp.ClientId,
-				ChangePack: &api.ChangePack{
+				ChangePack: &v1.ChangePack{
 					DocumentKey: "invalid",
-					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+					Checkpoint:  &v1.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 				},
 			},
 		)
@@ -261,14 +261,14 @@ func TestRPCServerBackend(t *testing.T) {
 
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
+			&v1.DeactivateClientRequest{ClientId: activateResp.ClientId},
 		)
 		assert.NoError(t, err)
 
 		// try to attach the document with a deactivated client
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
+			&v1.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
 				ChangePack: packWithNoChanges,
 			},
@@ -277,26 +277,26 @@ func TestRPCServerBackend(t *testing.T) {
 	})
 
 	t.Run("push/pull changes test", func(t *testing.T) {
-		packWithNoChanges := &api.ChangePack{
+		packWithNoChanges := &v1.ChangePack{
 			DocumentKey: t.Name(),
-			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			Checkpoint:  &v1.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
+			&v1.ActivateClientRequest{ClientKey: t.Name()},
 		)
 		assert.NoError(t, err)
 
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
+			&v1.AttachDocumentRequest{
 				ClientId: activateResp.ClientId,
-				ChangePack: &api.ChangePack{
+				ChangePack: &v1.ChangePack{
 					DocumentKey: t.Name(),
-					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
-					Changes: []*api.Change{{
-						Id: &api.ChangeID{
+					Checkpoint:  &v1.Checkpoint{ServerSeq: 0, ClientSeq: 1},
+					Changes: []*v1.Change{{
+						Id: &v1.ChangeID{
 							ClientSeq: 1,
 							Lamport:   1,
 							ActorId:   activateResp.ClientId,
@@ -309,13 +309,13 @@ func TestRPCServerBackend(t *testing.T) {
 
 		_, err = testClient.PushPull(
 			context.Background(),
-			&api.PushPullRequest{
+			&v1.PushPullRequest{
 				ClientId: activateResp.ClientId,
-				ChangePack: &api.ChangePack{
+				ChangePack: &v1.ChangePack{
 					DocumentKey: t.Name(),
-					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
-					Changes: []*api.Change{{
-						Id: &api.ChangeID{
+					Checkpoint:  &v1.Checkpoint{ServerSeq: 0, ClientSeq: 2},
+					Changes: []*v1.Change{{
+						Id: &v1.ChangeID{
 							ClientSeq: 2,
 							Lamport:   2,
 							ActorId:   activateResp.ClientId,
@@ -328,13 +328,13 @@ func TestRPCServerBackend(t *testing.T) {
 
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
+			&v1.DetachDocumentRequest{
 				ClientId: activateResp.ClientId,
-				ChangePack: &api.ChangePack{
+				ChangePack: &v1.ChangePack{
 					DocumentKey: t.Name(),
-					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
-					Changes: []*api.Change{{
-						Id: &api.ChangeID{
+					Checkpoint:  &v1.Checkpoint{ServerSeq: 0, ClientSeq: 3},
+					Changes: []*v1.Change{{
+						Id: &v1.ChangeID{
 							ClientSeq: 3,
 							Lamport:   3,
 							ActorId:   activateResp.ClientId,
@@ -348,7 +348,7 @@ func TestRPCServerBackend(t *testing.T) {
 		// try to push/pull with detached document
 		_, err = testClient.PushPull(
 			context.Background(),
-			&api.PushPullRequest{
+			&v1.PushPullRequest{
 				ClientId:   activateResp.ClientId,
 				ChangePack: packWithNoChanges,
 			},
@@ -358,7 +358,7 @@ func TestRPCServerBackend(t *testing.T) {
 		// try to push/pull with invalid pack
 		_, err = testClient.PushPull(
 			context.Background(),
-			&api.PushPullRequest{
+			&v1.PushPullRequest{
 				ClientId:   activateResp.ClientId,
 				ChangePack: invalidChangePack,
 			},
@@ -367,14 +367,14 @@ func TestRPCServerBackend(t *testing.T) {
 
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
+			&v1.DeactivateClientRequest{ClientId: activateResp.ClientId},
 		)
 		assert.NoError(t, err)
 
 		// try to push/pull with deactivated client
 		_, err = testClient.PushPull(
 			context.Background(),
-			&api.PushPullRequest{
+			&v1.PushPullRequest{
 				ClientId:   activateResp.ClientId,
 				ChangePack: packWithNoChanges,
 			},

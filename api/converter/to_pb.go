@@ -18,11 +18,11 @@ package converter
 
 import (
 	"fmt"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 	"reflect"
 
 	protoTypes "github.com/gogo/protobuf/types"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -33,8 +33,8 @@ import (
 )
 
 // ToProjects converts the given model to Protobuf.
-func ToProjects(projects []*types.Project) ([]*api.Project, error) {
-	var pbProjects []*api.Project
+func ToProjects(projects []*types.Project) ([]*v1.Project, error) {
+	var pbProjects []*v1.Project
 	for _, project := range projects {
 		pbProject, err := ToProject(project)
 		if err != nil {
@@ -47,7 +47,7 @@ func ToProjects(projects []*types.Project) ([]*api.Project, error) {
 }
 
 // ToProject converts the given model to Protobuf.
-func ToProject(project *types.Project) (*api.Project, error) {
+func ToProject(project *types.Project) (*v1.Project, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(project.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -57,7 +57,7 @@ func ToProject(project *types.Project) (*api.Project, error) {
 		return nil, err
 	}
 
-	return &api.Project{
+	return &v1.Project{
 		Id:                 project.ID.String(),
 		Name:               project.Name,
 		AuthWebhookUrl:     project.AuthWebhookURL,
@@ -70,8 +70,8 @@ func ToProject(project *types.Project) (*api.Project, error) {
 }
 
 // ToDocumentSummaries converts the given model to Protobuf.
-func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSummary, error) {
-	var pbSummaries []*api.DocumentSummary
+func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*v1.DocumentSummary, error) {
+	var pbSummaries []*v1.DocumentSummary
 	for _, summary := range summaries {
 		pbSummary, err := ToDocumentSummary(summary)
 		if err != nil {
@@ -83,7 +83,7 @@ func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSum
 }
 
 // ToDocumentSummary converts the given model to Protobuf format.
-func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, error) {
+func ToDocumentSummary(summary *types.DocumentSummary) (*v1.DocumentSummary, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(summary.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, er
 		return nil, err
 	}
 
-	return &api.DocumentSummary{
+	return &v1.DocumentSummary{
 		Id:         summary.ID.String(),
 		Key:        summary.Key.String(),
 		CreatedAt:  pbCreatedAt,
@@ -107,30 +107,43 @@ func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, er
 	}, nil
 }
 
+// ToDocumentSummaries converts the given model to Protobuf.
+func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*v1.DocumentSummary, error) {
+	var pbSummaries []*v1.DocumentSummary
+	for _, summary := range summaries {
+		pbSummary, err := ToDocumentSummary(summary)
+		if err != nil {
+			return nil, err
+		}
+		pbSummaries = append(pbSummaries, pbSummary)
+	}
+	return pbSummaries, nil
+}
+
 // ToClient converts the given model to Protobuf format.
-func ToClient(client types.Client) *api.Client {
-	return &api.Client{
+func ToClient(client types.Client) *v1.Client {
+	return &v1.Client{
 		Id:       client.ID.Bytes(),
 		Presence: ToPresenceInfo(client.PresenceInfo),
 	}
 }
 
 // ToPresenceInfo converts the given model to Protobuf format.
-func ToPresenceInfo(info types.PresenceInfo) *api.Presence {
-	return &api.Presence{
+func ToPresenceInfo(info types.PresenceInfo) *v1.Presence {
+	return &v1.Presence{
 		Clock: info.Clock,
 		Data:  info.Presence,
 	}
 }
 
 // ToChangePack converts the given model format to Protobuf format.
-func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
+func ToChangePack(pack *change.Pack) (*v1.ChangePack, error) {
 	pbChanges, err := ToChanges(pack.Changes)
 	if err != nil {
 		return nil, err
 	}
 
-	return &api.ChangePack{
+	return &v1.ChangePack{
 		DocumentKey:     pack.DocumentKey.String(),
 		Checkpoint:      ToCheckpoint(pack.Checkpoint),
 		Changes:         pbChanges,
@@ -140,16 +153,16 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 }
 
 // ToCheckpoint converts the given model format to Protobuf format.
-func ToCheckpoint(cp change.Checkpoint) *api.Checkpoint {
-	return &api.Checkpoint{
+func ToCheckpoint(cp change.Checkpoint) *v1.Checkpoint {
+	return &v1.Checkpoint{
 		ServerSeq: cp.ServerSeq,
 		ClientSeq: cp.ClientSeq,
 	}
 }
 
 // ToChangeID converts the given model format to Protobuf format.
-func ToChangeID(id change.ID) *api.ChangeID {
-	return &api.ChangeID{
+func ToChangeID(id change.ID) *v1.ChangeID {
+	return &v1.ChangeID{
 		ClientSeq: id.ClientSeq(),
 		ServerSeq: id.ServerSeq(),
 		Lamport:   id.Lamport(),
@@ -167,16 +180,16 @@ func ToDocumentKeys(keys []key.Key) []string {
 }
 
 // ToClientsMap converts the given model to Protobuf format.
-func ToClientsMap(clientsMap map[string][]types.Client) map[string]*api.Clients {
-	pbClientsMap := make(map[string]*api.Clients)
+func ToClientsMap(clientsMap map[string][]types.Client) map[string]*v1.Clients {
+	pbClientsMap := make(map[string]*v1.Clients)
 
 	for k, clients := range clientsMap {
-		var pbClients []*api.Client
+		var pbClients []*v1.Client
 		for _, client := range clients {
 			pbClients = append(pbClients, ToClient(client))
 		}
 
-		pbClientsMap[k] = &api.Clients{
+		pbClientsMap[k] = &v1.Clients{
 			Clients: pbClients,
 		}
 	}
@@ -185,29 +198,29 @@ func ToClientsMap(clientsMap map[string][]types.Client) map[string]*api.Clients 
 }
 
 // ToDocEventType converts the given model format to Protobuf format.
-func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
+func ToDocEventType(eventType types.DocEventType) (v1.DocEventType, error) {
 	switch eventType {
 	case types.DocumentsChangedEvent:
-		return api.DocEventType_DOCUMENTS_CHANGED, nil
+		return v1.DocEventType_DOCUMENTS_CHANGED, nil
 	case types.DocumentsWatchedEvent:
-		return api.DocEventType_DOCUMENTS_WATCHED, nil
+		return v1.DocEventType_DOCUMENTS_WATCHED, nil
 	case types.DocumentsUnwatchedEvent:
-		return api.DocEventType_DOCUMENTS_UNWATCHED, nil
+		return v1.DocEventType_DOCUMENTS_UNWATCHED, nil
 	case types.PresenceChangedEvent:
-		return api.DocEventType_PRESENCE_CHANGED, nil
+		return v1.DocEventType_PRESENCE_CHANGED, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}
 }
 
 // ToDocEvent converts the given model to Protobuf format.
-func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
+func ToDocEvent(docEvent sync.DocEvent) (*v1.DocEvent, error) {
 	eventType, err := ToDocEventType(docEvent.Type)
 	if err != nil {
 		return nil, err
 	}
 
-	return &api.DocEvent{
+	return &v1.DocEvent{
 		Type:         eventType,
 		Publisher:    ToClient(docEvent.Publisher),
 		DocumentKeys: ToDocumentKeys(docEvent.DocumentKeys),
@@ -215,11 +228,11 @@ func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
 }
 
 // ToOperations converts the given model format to Protobuf format.
-func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
-	var pbOperations []*api.Operation
+func ToOperations(ops []operations.Operation) ([]*v1.Operation, error) {
+	var pbOperations []*v1.Operation
 
 	for _, o := range ops {
-		pbOperation := &api.Operation{}
+		pbOperation := &v1.Operation{}
 		var err error
 		switch op := o.(type) {
 		case *operations.Set:
@@ -253,12 +266,12 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 }
 
 // ToTimeTicket converts the given model format to Protobuf format.
-func ToTimeTicket(ticket *time.Ticket) *api.TimeTicket {
+func ToTimeTicket(ticket *time.Ticket) *v1.TimeTicket {
 	if ticket == nil {
 		return nil
 	}
 
-	return &api.TimeTicket{
+	return &v1.TimeTicket{
 		Lamport:   ticket.Lamport(),
 		Delimiter: ticket.Delimiter(),
 		ActorId:   ticket.ActorIDBytes(),
@@ -266,8 +279,8 @@ func ToTimeTicket(ticket *time.Ticket) *api.TimeTicket {
 }
 
 // ToChanges converts the given model format to Protobuf format.
-func ToChanges(changes []*change.Change) ([]*api.Change, error) {
-	var pbChanges []*api.Change
+func ToChanges(changes []*change.Change) ([]*v1.Change, error) {
+	var pbChanges []*v1.Change
 
 	for _, c := range changes {
 		pbOperations, err := ToOperations(c.Operations())
@@ -275,7 +288,7 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 			return nil, err
 		}
 
-		pbChanges = append(pbChanges, &api.Change{
+		pbChanges = append(pbChanges, &v1.Change{
 			Id:         ToChangeID(c.ID()),
 			Message:    c.Message(),
 			Operations: pbOperations,
@@ -285,14 +298,14 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 	return pbChanges, nil
 }
 
-func toSet(set *operations.Set) (*api.Operation_Set_, error) {
+func toSet(set *operations.Set) (*v1.Operation_Set_, error) {
 	pbElem, err := toJSONElementSimple(set.Value())
 	if err != nil {
 		return nil, err
 	}
 
-	return &api.Operation_Set_{
-		Set: &api.Operation_Set{
+	return &v1.Operation_Set_{
+		Set: &v1.Operation_Set{
 			ParentCreatedAt: ToTimeTicket(set.ParentCreatedAt()),
 			Key:             set.Key(),
 			Value:           pbElem,
@@ -301,14 +314,14 @@ func toSet(set *operations.Set) (*api.Operation_Set_, error) {
 	}, nil
 }
 
-func toAdd(add *operations.Add) (*api.Operation_Add_, error) {
+func toAdd(add *operations.Add) (*v1.Operation_Add_, error) {
 	pbElem, err := toJSONElementSimple(add.Value())
 	if err != nil {
 		return nil, err
 	}
 
-	return &api.Operation_Add_{
-		Add: &api.Operation_Add{
+	return &v1.Operation_Add_{
+		Add: &v1.Operation_Add{
 			ParentCreatedAt: ToTimeTicket(add.ParentCreatedAt()),
 			PrevCreatedAt:   ToTimeTicket(add.PrevCreatedAt()),
 			Value:           pbElem,
@@ -317,9 +330,9 @@ func toAdd(add *operations.Add) (*api.Operation_Add_, error) {
 	}, nil
 }
 
-func toMove(move *operations.Move) (*api.Operation_Move_, error) {
-	return &api.Operation_Move_{
-		Move: &api.Operation_Move{
+func toMove(move *operations.Move) (*v1.Operation_Move_, error) {
+	return &v1.Operation_Move_{
+		Move: &v1.Operation_Move{
 			ParentCreatedAt: ToTimeTicket(move.ParentCreatedAt()),
 			PrevCreatedAt:   ToTimeTicket(move.PrevCreatedAt()),
 			CreatedAt:       ToTimeTicket(move.CreatedAt()),
@@ -328,9 +341,9 @@ func toMove(move *operations.Move) (*api.Operation_Move_, error) {
 	}, nil
 }
 
-func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
-	return &api.Operation_Remove_{
-		Remove: &api.Operation_Remove{
+func toRemove(remove *operations.Remove) (*v1.Operation_Remove_, error) {
+	return &v1.Operation_Remove_{
+		Remove: &v1.Operation_Remove{
 			ParentCreatedAt: ToTimeTicket(remove.ParentCreatedAt()),
 			CreatedAt:       ToTimeTicket(remove.CreatedAt()),
 			ExecutedAt:      ToTimeTicket(remove.ExecutedAt()),
@@ -338,9 +351,9 @@ func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
 	}, nil
 }
 
-func toEdit(edit *operations.Edit) (*api.Operation_Edit_, error) {
-	return &api.Operation_Edit_{
-		Edit: &api.Operation_Edit{
+func toEdit(edit *operations.Edit) (*v1.Operation_Edit_, error) {
+	return &v1.Operation_Edit_{
+		Edit: &v1.Operation_Edit{
 			ParentCreatedAt:     ToTimeTicket(edit.ParentCreatedAt()),
 			From:                toTextNodePos(edit.From()),
 			To:                  toTextNodePos(edit.To()),
@@ -351,9 +364,9 @@ func toEdit(edit *operations.Edit) (*api.Operation_Edit_, error) {
 	}, nil
 }
 
-func toSelect(s *operations.Select) (*api.Operation_Select_, error) {
-	return &api.Operation_Select_{
-		Select: &api.Operation_Select{
+func toSelect(s *operations.Select) (*v1.Operation_Select_, error) {
+	return &v1.Operation_Select_{
+		Select: &v1.Operation_Select{
 			ParentCreatedAt: ToTimeTicket(s.ParentCreatedAt()),
 			From:            toTextNodePos(s.From()),
 			To:              toTextNodePos(s.To()),
@@ -362,9 +375,9 @@ func toSelect(s *operations.Select) (*api.Operation_Select_, error) {
 	}, nil
 }
 
-func toRichEdit(richEdit *operations.RichEdit) (*api.Operation_RichEdit_, error) {
-	return &api.Operation_RichEdit_{
-		RichEdit: &api.Operation_RichEdit{
+func toRichEdit(richEdit *operations.RichEdit) (*v1.Operation_RichEdit_, error) {
+	return &v1.Operation_RichEdit_{
+		RichEdit: &v1.Operation_RichEdit{
 			ParentCreatedAt:     ToTimeTicket(richEdit.ParentCreatedAt()),
 			From:                toTextNodePos(richEdit.From()),
 			To:                  toTextNodePos(richEdit.To()),
@@ -376,9 +389,9 @@ func toRichEdit(richEdit *operations.RichEdit) (*api.Operation_RichEdit_, error)
 	}, nil
 }
 
-func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
-	return &api.Operation_Style_{
-		Style: &api.Operation_Style{
+func toStyle(style *operations.Style) (*v1.Operation_Style_, error) {
+	return &v1.Operation_Style_{
+		Style: &v1.Operation_Style{
 			ParentCreatedAt: ToTimeTicket(style.ParentCreatedAt()),
 			From:            toTextNodePos(style.From()),
 			To:              toTextNodePos(style.To()),
@@ -388,14 +401,14 @@ func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 	}, nil
 }
 
-func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error) {
+func toIncrease(increase *operations.Increase) (*v1.Operation_Increase_, error) {
 	pbElem, err := toJSONElementSimple(increase.Value())
 	if err != nil {
 		return nil, err
 	}
 
-	return &api.Operation_Increase_{
-		Increase: &api.Operation_Increase{
+	return &v1.Operation_Increase_{
+		Increase: &v1.Operation_Increase{
 			ParentCreatedAt: ToTimeTicket(increase.ParentCreatedAt()),
 			Value:           pbElem,
 			ExecutedAt:      ToTimeTicket(increase.ExecutedAt()),
@@ -403,16 +416,16 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 	}, nil
 }
 
-func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
+func toJSONElementSimple(elem json.Element) (*v1.JSONElementSimple, error) {
 	switch elem := elem.(type) {
 	case *json.Object:
-		return &api.JSONElementSimple{
-			Type:      api.ValueType_JSON_OBJECT,
+		return &v1.JSONElementSimple{
+			Type:      v1.ValueType_JSON_OBJECT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Array:
-		return &api.JSONElementSimple{
-			Type:      api.ValueType_JSON_ARRAY,
+		return &v1.JSONElementSimple{
+			Type:      v1.ValueType_JSON_ARRAY,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Primitive:
@@ -421,19 +434,19 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 			return nil, err
 		}
 
-		return &api.JSONElementSimple{
+		return &v1.JSONElementSimple{
 			Type:      pbValueType,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
 		}, nil
 	case *json.Text:
-		return &api.JSONElementSimple{
-			Type:      api.ValueType_TEXT,
+		return &v1.JSONElementSimple{
+			Type:      v1.ValueType_TEXT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.RichText:
-		return &api.JSONElementSimple{
-			Type:      api.ValueType_RICH_TEXT,
+		return &v1.JSONElementSimple{
+			Type:      v1.ValueType_RICH_TEXT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Counter:
@@ -442,7 +455,7 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 			return nil, err
 		}
 
-		return &api.JSONElementSimple{
+		return &v1.JSONElementSimple{
 			Type:      pbCounterType,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
@@ -452,8 +465,8 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 	return nil, fmt.Errorf("%v, %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 }
 
-func toTextNodePos(pos *json.RGATreeSplitNodePos) *api.TextNodePos {
-	return &api.TextNodePos{
+func toTextNodePos(pos *json.RGATreeSplitNodePos) *v1.TextNodePos {
+	return &v1.TextNodePos{
 		CreatedAt:      ToTimeTicket(pos.ID().CreatedAt()),
 		Offset:         int32(pos.ID().Offset()),
 		RelativeOffset: int32(pos.RelativeOffset()),
@@ -462,53 +475,53 @@ func toTextNodePos(pos *json.RGATreeSplitNodePos) *api.TextNodePos {
 
 func toCreatedAtMapByActor(
 	createdAtMapByActor map[string]*time.Ticket,
-) map[string]*api.TimeTicket {
-	pbCreatedAtMapByActor := make(map[string]*api.TimeTicket)
+) map[string]*v1.TimeTicket {
+	pbCreatedAtMapByActor := make(map[string]*v1.TimeTicket)
 	for actor, createdAt := range createdAtMapByActor {
 		pbCreatedAtMapByActor[actor] = ToTimeTicket(createdAt)
 	}
 	return pbCreatedAtMapByActor
 }
 
-func toValueType(valueType json.ValueType) (api.ValueType, error) {
+func toValueType(valueType json.ValueType) (v1.ValueType, error) {
 	switch valueType {
 	case json.Null:
-		return api.ValueType_NULL, nil
+		return v1.ValueType_NULL, nil
 	case json.Boolean:
-		return api.ValueType_BOOLEAN, nil
+		return v1.ValueType_BOOLEAN, nil
 	case json.Integer:
-		return api.ValueType_INTEGER, nil
+		return v1.ValueType_INTEGER, nil
 	case json.Long:
-		return api.ValueType_LONG, nil
+		return v1.ValueType_LONG, nil
 	case json.Double:
-		return api.ValueType_DOUBLE, nil
+		return v1.ValueType_DOUBLE, nil
 	case json.String:
-		return api.ValueType_STRING, nil
+		return v1.ValueType_STRING, nil
 	case json.Bytes:
-		return api.ValueType_BYTES, nil
+		return v1.ValueType_BYTES, nil
 	case json.Date:
-		return api.ValueType_DATE, nil
+		return v1.ValueType_DATE, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
 }
 
-func toCounterType(valueType json.CounterType) (api.ValueType, error) {
+func toCounterType(valueType json.CounterType) (v1.ValueType, error) {
 	switch valueType {
 	case json.IntegerCnt:
-		return api.ValueType_INTEGER_CNT, nil
+		return v1.ValueType_INTEGER_CNT, nil
 	case json.LongCnt:
-		return api.ValueType_LONG_CNT, nil
+		return v1.ValueType_LONG_CNT, nil
 	case json.DoubleCnt:
-		return api.ValueType_DOUBLE_CNT, nil
+		return v1.ValueType_DOUBLE_CNT, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
 }
 
 // ToUpdatableProjectFields converts the given model format to Protobuf format.
-func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.UpdatableProjectFields, error) {
-	pbUpdatableProjectFields := &api.UpdatableProjectFields{}
+func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*v1.UpdatableProjectFields, error) {
+	pbUpdatableProjectFields := &v1.UpdatableProjectFields{}
 	if fields.Name != nil {
 		pbUpdatableProjectFields.Name = &protoTypes.StringValue{Value: *fields.Name}
 	}
@@ -516,7 +529,7 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 		pbUpdatableProjectFields.AuthWebhookUrl = &protoTypes.StringValue{Value: *fields.AuthWebhookURL}
 	}
 	if fields.AuthWebhookMethods != nil {
-		pbUpdatableProjectFields.AuthWebhookMethods = &api.UpdatableProjectFields_AuthWebhookMethods{
+		pbUpdatableProjectFields.AuthWebhookMethods = &v1.UpdatableProjectFields_AuthWebhookMethods{
 			Methods: *fields.AuthWebhookMethods,
 		}
 	} else {

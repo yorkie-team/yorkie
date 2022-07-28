@@ -19,13 +19,13 @@ package etcd
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 	"path"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -159,7 +159,7 @@ func (c *Client) ensureClusterClient(
 		}
 
 		c.clusterClientMap[member.ID] = &clusterClientInfo{
-			client: api.NewClusterClient(conn),
+			client: v1.NewClusterClient(conn),
 			conn:   conn,
 		}
 	}
@@ -194,7 +194,7 @@ func (c *Client) publishToMember(
 		return err
 	}
 
-	if _, err := clientInfo.client.BroadcastEvent(ctx, &api.BroadcastEventRequest{
+	if _, err := clientInfo.client.BroadcastEvent(ctx, &v1.BroadcastEventRequest{
 		PublisherId: publisherID.Bytes(),
 		Event:       docEvent,
 	}); err != nil {

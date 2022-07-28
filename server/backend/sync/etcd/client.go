@@ -18,12 +18,12 @@ package etcd
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 	gosync "sync"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -31,7 +31,7 @@ import (
 
 // clusterClientInfo represents a cluster client and its connection.
 type clusterClientInfo struct {
-	client api.ClusterClient
+	client v1.ClusterClient
 	conn   *grpc.ClientConn
 }
 

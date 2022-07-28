@@ -19,6 +19,8 @@ package yorkie.v1;
 
 import "yorkie/v1/resources.proto";
 
+option go_package = "github.com/yorkie-team/yorkie/gen/go/v1;yorkiev1";
+
 // Cluster is a service that provides a API used by Yorkie Cluster.
 service ClusterService {
   rpc BroadcastEvent (BroadcastEventRequest) returns (BroadcastEventResponse) {}

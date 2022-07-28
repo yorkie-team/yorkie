@@ -20,12 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 	"net"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -88,10 +88,10 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 		grpcServer: grpcServer,
 	}
 
-	api.RegisterAdminServer(grpcServer, server)
+	v1.RegisterAdminServer(grpcServer, server)
 	// TODO(hackerwins): ClusterServer need to be handled by different authentication mechanism.
 	// Consider extracting the servers to another grpcServer.
-	api.RegisterClusterServer(grpcServer, newClusterServer(be))
+	v1.RegisterClusterServer(grpcServer, newClusterServer(be))
 
 	return server
 }
@@ -138,8 +138,8 @@ func (s *Server) listenAndServeGRPC() error {
 // CreateProject creates a new project.
 func (s *Server) CreateProject(
 	ctx context.Context,
-	req *api.CreateProjectRequest,
-) (*api.CreateProjectResponse, error) {
+	req *v1.CreateProjectRequest,
+) (*v1.CreateProjectResponse, error) {
 	project, err := projects.CreateProject(ctx, s.backend, req.Name)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func (s *Server) CreateProject(
 	if err != nil {
 		return nil, err
 	}
-	return &api.CreateProjectResponse{
+	return &v1.CreateProjectResponse{
 		Project: pbProject,
 	}, nil
 }
@@ -157,8 +157,8 @@ func (s *Server) CreateProject(
 // ListProjects lists all projects.
 func (s *Server) ListProjects(
 	ctx context.Context,
-	req *api.ListProjectsRequest,
-) (*api.ListProjectsResponse, error) {
+	req *v1.ListProjectsRequest,
+) (*v1.ListProjectsResponse, error) {
 	projectList, err := projects.ListProjects(ctx, s.backend)
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func (s *Server) ListProjects(
 		return nil, err
 	}
 
-	return &api.ListProjectsResponse{
+	return &v1.ListProjectsResponse{
 		Projects: pbProjects,
 	}, nil
 }
@@ -177,8 +177,8 @@ func (s *Server) ListProjects(
 // GetProject gets a project.
 func (s *Server) GetProject(
 	ctx context.Context,
-	req *api.GetProjectRequest,
-) (*api.GetProjectResponse, error) {
+	req *v1.GetProjectRequest,
+) (*v1.GetProjectResponse, error) {
 	project, err := projects.GetProject(ctx, s.backend, req.Name)
 	if err != nil {
 		return nil, err
@@ -188,7 +188,7 @@ func (s *Server) GetProject(
 	if err != nil {
 		return nil, err
 	}
-	return &api.GetProjectResponse{
+	return &v1.GetProjectResponse{
 		Project: pbProject,
 	}, nil
 }
@@ -196,8 +196,8 @@ func (s *Server) GetProject(
 // UpdateProject updates the project.
 func (s *Server) UpdateProject(
 	ctx context.Context,
-	req *api.UpdateProjectRequest,
-) (*api.UpdateProjectResponse, error) {
+	req *v1.UpdateProjectRequest,
+) (*v1.UpdateProjectResponse, error) {
 	fields, err := converter.FromUpdatableProjectFields(req.Fields)
 	if err != nil {
 		return nil, err
@@ -221,7 +221,7 @@ func (s *Server) UpdateProject(
 		return nil, err
 	}
 
-	return &api.UpdateProjectResponse{
+	return &v1.UpdateProjectResponse{
 		Project: pbProject,
 	}, nil
 }
@@ -229,8 +229,8 @@ func (s *Server) UpdateProject(
 // GetDocument gets the document.
 func (s *Server) GetDocument(
 	ctx context.Context,
-	req *api.GetDocumentRequest,
-) (*api.GetDocumentResponse, error) {
+	req *v1.GetDocumentRequest,
+) (*v1.GetDocumentResponse, error) {
 	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
 	if err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func (s *Server) GetDocument(
 		return nil, err
 	}
 
-	return &api.GetDocumentResponse{
+	return &v1.GetDocumentResponse{
 		Document: pbDocument,
 	}, nil
 }
@@ -259,8 +259,8 @@ func (s *Server) GetDocument(
 // GetSnapshotMeta gets the snapshot metadata that corresponds to the server sequence.
 func (s *Server) GetSnapshotMeta(
 	ctx context.Context,
-	req *api.GetSnapshotMetaRequest,
-) (*api.GetSnapshotMetaResponse, error) {
+	req *v1.GetSnapshotMetaRequest,
+) (*v1.GetSnapshotMetaResponse, error) {
 	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
 	if err != nil {
 		return nil, err
@@ -282,7 +282,7 @@ func (s *Server) GetSnapshotMeta(
 		return nil, err
 	}
 
-	return &api.GetSnapshotMetaResponse{
+	return &v1.GetSnapshotMetaResponse{
 		Lamport:  doc.Lamport(),
 		Snapshot: snapshot,
 	}, nil
@@ -291,8 +291,8 @@ func (s *Server) GetSnapshotMeta(
 // ListDocuments lists documents.
 func (s *Server) ListDocuments(
 	ctx context.Context,
-	req *api.ListDocumentsRequest,
-) (*api.ListDocumentsResponse, error) {
+	req *v1.ListDocumentsRequest,
+) (*v1.ListDocumentsResponse, error) {
 	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
 	if err != nil {
 		return nil, err
@@ -317,7 +317,7 @@ func (s *Server) ListDocuments(
 		return nil, err
 	}
 
-	return &api.ListDocumentsResponse{
+	return &v1.ListDocumentsResponse{
 		Documents: pbDocuments,
 	}, nil
 }
@@ -357,8 +357,8 @@ func (s *Server) SearchDocuments(
 // ListChanges lists of changes for the given document.
 func (s *Server) ListChanges(
 	ctx context.Context,
-	req *api.ListChangesRequest,
-) (*api.ListChangesResponse, error) {
+	req *v1.ListChangesRequest,
+) (*v1.ListChangesResponse, error) {
 	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
 	if err != nil {
 		return nil, err
@@ -397,7 +397,7 @@ func (s *Server) ListChanges(
 		return nil, err
 	}
 
-	return &api.ListChangesResponse{
+	return &v1.ListChangesResponse{
 		Changes: pbChanges,
 	}, nil
 }

@@ -18,8 +18,8 @@ package admin
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -40,8 +40,8 @@ func newClusterServer(be *backend.Backend) *clusterServer {
 // BroadcastEvent publishes the given event to the given document.
 func (s *clusterServer) BroadcastEvent(
 	ctx context.Context,
-	request *api.BroadcastEventRequest,
-) (*api.BroadcastEventResponse, error) {
+	request *v1.BroadcastEventRequest,
+) (*v1.BroadcastEventResponse, error) {
 	actorID, err := time.ActorIDFromBytes(request.PublisherId)
 	if err != nil {
 		logging.DefaultLogger().Error(err)
@@ -71,5 +71,5 @@ func (s *clusterServer) BroadcastEvent(
 		s.backend.Coordinator.PublishToLocal(ctx, actorID, *docEvent)
 	}
 
-	return &api.BroadcastEventResponse{}, nil
+	return &v1.BroadcastEventResponse{}, nil
 }

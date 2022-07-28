@@ -18,8 +18,8 @@ package database
 
 import (
 	"errors"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -71,9 +71,9 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 
 	changeID := change.NewID(i.ClientSeq, i.ServerSeq, i.Lamport, actorID)
 
-	var pbOps []*api.Operation
+	var pbOps []*v1.Operation
 	for _, bytesOp := range i.Operations {
-		pbOp := api.Operation{}
+		pbOp := v1.Operation{}
 		if err := pbOp.Unmarshal(bytesOp); err != nil {
 			return nil, err
 		}

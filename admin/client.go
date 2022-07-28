@@ -18,12 +18,12 @@ package admin
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -47,7 +47,7 @@ type Options struct {
 // Client is a client for admin service.
 type Client struct {
 	conn        *grpc.ClientConn
-	client      api.AdminClient
+	client      v1.AdminClient
 	dialOptions []grpc.DialOption
 
 	logger *zap.Logger
@@ -100,7 +100,7 @@ func (c *Client) Dial(adminAddr string) error {
 	}
 
 	c.conn = conn
-	c.client = api.NewAdminClient(conn)
+	c.client = v1.NewAdminClient(conn)
 
 	return nil
 }
@@ -114,7 +114,7 @@ func (c *Client) Close() error {
 func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project, error) {
 	response, err := c.client.CreateProject(
 		ctx,
-		&api.CreateProjectRequest{
+		&v1.CreateProjectRequest{
 			Name: name,
 		},
 	)
@@ -129,7 +129,7 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project
 func (c *Client) ListProjects(ctx context.Context) ([]*types.Project, error) {
 	response, err := c.client.ListProjects(
 		ctx,
-		&api.ListProjectsRequest{},
+		&v1.ListProjectsRequest{},
 	)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func (c *Client) UpdateProject(
 		return nil, err
 	}
 
-	response, err := c.client.UpdateProject(ctx, &api.UpdateProjectRequest{
+	response, err := c.client.UpdateProject(ctx, &v1.UpdateProjectRequest{
 		Id:     id,
 		Fields: pbProjectField,
 	})
@@ -184,7 +184,7 @@ func (c *Client) ListChangeSummaries(
 	pageSize int32,
 	isForward bool,
 ) ([]*types.ChangeSummary, error) {
-	resp, err := c.client.ListChanges(ctx, &api.ListChangesRequest{
+	resp, err := c.client.ListChanges(ctx, &v1.ListChangesRequest{
 		ProjectName: projectName,
 		DocumentKey: key.String(),
 		PreviousSeq: previousSeq,
@@ -209,7 +209,7 @@ func (c *Client) ListChangeSummaries(
 	}, lastSeq)
 	seq := from - 1
 
-	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &api.GetSnapshotMetaRequest{
+	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &v1.GetSnapshotMetaRequest{
 		ProjectName: projectName,
 		DocumentKey: key.String(),
 		ServerSeq:   seq,

@@ -18,10 +18,10 @@ package converter
 
 import (
 	"fmt"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 
 	protoTypes "github.com/gogo/protobuf/types"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -32,7 +32,7 @@ import (
 )
 
 // FromProjects converts the given Protobuf formats to model format.
-func FromProjects(pbProjects []*api.Project) ([]*types.Project, error) {
+func FromProjects(pbProjects []*v1.Project) ([]*types.Project, error) {
 	var projects []*types.Project
 	for _, pbProject := range pbProjects {
 		project, err := FromProject(pbProject)
@@ -45,7 +45,7 @@ func FromProjects(pbProjects []*api.Project) ([]*types.Project, error) {
 }
 
 // FromProject converts the given Protobuf formats to model format.
-func FromProject(pbProject *api.Project) (*types.Project, error) {
+func FromProject(pbProject *v1.Project) (*types.Project, error) {
 	createdAt, err := protoTypes.TimestampFromProto(pbProject.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary
 }
 
 // FromClient converts the given Protobuf formats to model format.
-func FromClient(pbClient *api.Client) (*types.Client, error) {
+func FromClient(pbClient *v1.Client) (*types.Client, error) {
 	id, err := time.ActorIDFromBytes(pbClient.Id)
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func FromClient(pbClient *api.Client) (*types.Client, error) {
 }
 
 // FromPresenceInfo converts the given Protobuf formats to model format.
-func FromPresenceInfo(pbPresence *api.Presence) types.PresenceInfo {
+func FromPresenceInfo(pbPresence *v1.Presence) types.PresenceInfo {
 	return types.PresenceInfo{
 		Clock:    pbPresence.Clock,
 		Presence: pbPresence.Data,
@@ -125,7 +125,7 @@ func FromPresenceInfo(pbPresence *api.Presence) types.PresenceInfo {
 }
 
 // FromChangePack converts the given Protobuf formats to model format.
-func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
+func FromChangePack(pbPack *v1.ChangePack) (*change.Pack, error) {
 	if pbPack == nil {
 		return nil, ErrPackRequired
 	}
@@ -152,7 +152,7 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	}, nil
 }
 
-func fromCheckpoint(pbCheckpoint *api.Checkpoint) change.Checkpoint {
+func fromCheckpoint(pbCheckpoint *v1.Checkpoint) change.Checkpoint {
 	return change.NewCheckpoint(
 		pbCheckpoint.ServerSeq,
 		pbCheckpoint.ClientSeq,
@@ -160,7 +160,7 @@ func fromCheckpoint(pbCheckpoint *api.Checkpoint) change.Checkpoint {
 }
 
 // FromChanges converts the given Protobuf formats to model format.
-func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
+func FromChanges(pbChanges []*v1.Change) ([]*change.Change, error) {
 	var changes []*change.Change
 	for _, pbChange := range pbChanges {
 		changeID, err := fromChangeID(pbChange.Id)
@@ -181,7 +181,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 	return changes, nil
 }
 
-func fromChangeID(id *api.ChangeID) (change.ID, error) {
+func fromChangeID(id *v1.ChangeID) (change.ID, error) {
 	actorID, err := time.ActorIDFromBytes(id.ActorId)
 	if err != nil {
 		return change.InitialID, err
@@ -204,22 +204,22 @@ func FromDocumentKeys(pbKeys []string) []key.Key {
 }
 
 // FromEventType converts the given Protobuf formats to model format.
-func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) {
+func FromEventType(pbDocEventType v1.DocEventType) (types.DocEventType, error) {
 	switch pbDocEventType {
-	case api.DocEventType_DOCUMENTS_CHANGED:
+	case v1.DocEventType_DOCUMENTS_CHANGED:
 		return types.DocumentsChangedEvent, nil
-	case api.DocEventType_DOCUMENTS_WATCHED:
+	case v1.DocEventType_DOCUMENTS_WATCHED:
 		return types.DocumentsWatchedEvent, nil
-	case api.DocEventType_DOCUMENTS_UNWATCHED:
+	case v1.DocEventType_DOCUMENTS_UNWATCHED:
 		return types.DocumentsUnwatchedEvent, nil
-	case api.DocEventType_PRESENCE_CHANGED:
+	case v1.DocEventType_PRESENCE_CHANGED:
 		return types.PresenceChangedEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
 }
 
 // FromDocEvent converts the given Protobuf formats to model format.
-func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
+func FromDocEvent(docEvent *v1.DocEvent) (*sync.DocEvent, error) {
 	client, err := FromClient(docEvent.Publisher)
 	if err != nil {
 		return nil, err
@@ -238,7 +238,7 @@ func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
 }
 
 // FromClients converts the given Protobuf formats to model format.
-func FromClients(pbClients *api.Clients) ([]*types.Client, error) {
+func FromClients(pbClients *v1.Clients) ([]*types.Client, error) {
 	var clients []*types.Client
 	for _, pbClient := range pbClients.Clients {
 		client, err := FromClient(pbClient)
@@ -252,29 +252,29 @@ func FromClients(pbClients *api.Clients) ([]*types.Client, error) {
 }
 
 // FromOperations converts the given Protobuf formats to model format.
-func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
+func FromOperations(pbOps []*v1.Operation) ([]operations.Operation, error) {
 	var ops []operations.Operation
 	for _, pbOp := range pbOps {
 		var op operations.Operation
 		var err error
 		switch decoded := pbOp.Body.(type) {
-		case *api.Operation_Set_:
+		case *v1.Operation_Set_:
 			op, err = fromSet(decoded.Set)
-		case *api.Operation_Add_:
+		case *v1.Operation_Add_:
 			op, err = fromAdd(decoded.Add)
-		case *api.Operation_Move_:
+		case *v1.Operation_Move_:
 			op, err = fromMove(decoded.Move)
-		case *api.Operation_Remove_:
+		case *v1.Operation_Remove_:
 			op, err = fromRemove(decoded.Remove)
-		case *api.Operation_Edit_:
+		case *v1.Operation_Edit_:
 			op, err = fromEdit(decoded.Edit)
-		case *api.Operation_Select_:
+		case *v1.Operation_Select_:
 			op, err = fromSelect(decoded.Select)
-		case *api.Operation_RichEdit_:
+		case *v1.Operation_RichEdit_:
 			op, err = fromRichEdit(decoded.RichEdit)
-		case *api.Operation_Style_:
+		case *v1.Operation_Style_:
 			op, err = fromStyle(decoded.Style)
-		case *api.Operation_Increase_:
+		case *v1.Operation_Increase_:
 			op, err = fromIncrease(decoded.Increase)
 		default:
 			return nil, ErrUnsupportedOperation
@@ -288,7 +288,7 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	return ops, nil
 }
 
-func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
+func fromSet(pbSet *v1.Operation_Set) (*operations.Set, error) {
 	parentCreatedAt, err := fromTimeTicket(pbSet.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -310,7 +310,7 @@ func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 	), nil
 }
 
-func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
+func fromAdd(pbAdd *v1.Operation_Add) (*operations.Add, error) {
 	parentCreatedAt, err := fromTimeTicket(pbAdd.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -335,7 +335,7 @@ func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
 	), nil
 }
 
-func fromMove(pbMove *api.Operation_Move) (*operations.Move, error) {
+func fromMove(pbMove *v1.Operation_Move) (*operations.Move, error) {
 	parentCreatedAt, err := fromTimeTicket(pbMove.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -360,7 +360,7 @@ func fromMove(pbMove *api.Operation_Move) (*operations.Move, error) {
 	), nil
 }
 
-func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
+func fromRemove(pbRemove *v1.Operation_Remove) (*operations.Remove, error) {
 	parentCreatedAt, err := fromTimeTicket(pbRemove.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -380,7 +380,7 @@ func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
 	), nil
 }
 
-func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
+func fromEdit(pbEdit *v1.Operation_Edit) (*operations.Edit, error) {
 	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -413,7 +413,7 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	), nil
 }
 
-func fromSelect(pbSelect *api.Operation_Select) (*operations.Select, error) {
+func fromSelect(pbSelect *v1.Operation_Select) (*operations.Select, error) {
 	parentCreatedAt, err := fromTimeTicket(pbSelect.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -438,7 +438,7 @@ func fromSelect(pbSelect *api.Operation_Select) (*operations.Select, error) {
 	), nil
 }
 
-func fromRichEdit(pbEdit *api.Operation_RichEdit) (*operations.RichEdit, error) {
+func fromRichEdit(pbEdit *v1.Operation_RichEdit) (*operations.RichEdit, error) {
 	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -472,7 +472,7 @@ func fromRichEdit(pbEdit *api.Operation_RichEdit) (*operations.RichEdit, error) 
 	), nil
 }
 
-func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
+func fromStyle(pbStyle *v1.Operation_Style) (*operations.Style, error) {
 	parentCreatedAt, err := fromTimeTicket(pbStyle.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -498,7 +498,7 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 	), nil
 }
 
-func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
+func fromIncrease(pbInc *v1.Operation_Increase) (*operations.Increase, error) {
 	parentCreatedAt, err := fromTimeTicket(pbInc.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -519,7 +519,7 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 }
 
 func fromCreatedAtMapByActor(
-	pbCreatedAtMapByActor map[string]*api.TimeTicket,
+	pbCreatedAtMapByActor map[string]*v1.TimeTicket,
 ) (map[string]*time.Ticket, error) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	for actor, pbTicket := range pbCreatedAtMapByActor {
@@ -533,7 +533,7 @@ func fromCreatedAtMapByActor(
 }
 
 func fromTextNodePos(
-	pbPos *api.TextNodePos,
+	pbPos *v1.TextNodePos,
 ) (*json.RGATreeSplitNodePos, error) {
 	createdAt, err := fromTimeTicket(pbPos.CreatedAt)
 	if err != nil {
@@ -545,7 +545,7 @@ func fromTextNodePos(
 	), nil
 }
 
-func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
+func fromTimeTicket(pbTicket *v1.TimeTicket) (*time.Ticket, error) {
 	if pbTicket == nil {
 		return nil, nil
 	}
@@ -561,9 +561,9 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	), nil
 }
 
-func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
+func fromElement(pbElement *v1.JSONElementSimple) (json.Element, error) {
 	switch pbType := pbElement.Type; pbType {
-	case api.ValueType_JSON_OBJECT:
+	case v1.ValueType_JSON_OBJECT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
 			return nil, err
@@ -572,7 +572,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.NewRHTPriorityQueueMap(),
 			createdAt,
 		), nil
-	case api.ValueType_JSON_ARRAY:
+	case v1.ValueType_JSON_ARRAY:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
 			return nil, err
@@ -581,21 +581,21 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.NewRGATreeList(),
 			createdAt,
 		), nil
-	case api.ValueType_NULL:
+	case v1.ValueType_NULL:
 		fallthrough
-	case api.ValueType_BOOLEAN:
+	case v1.ValueType_BOOLEAN:
 		fallthrough
-	case api.ValueType_INTEGER:
+	case v1.ValueType_INTEGER:
 		fallthrough
-	case api.ValueType_LONG:
+	case v1.ValueType_LONG:
 		fallthrough
-	case api.ValueType_DOUBLE:
+	case v1.ValueType_DOUBLE:
 		fallthrough
-	case api.ValueType_STRING:
+	case v1.ValueType_STRING:
 		fallthrough
-	case api.ValueType_BYTES:
+	case v1.ValueType_BYTES:
 		fallthrough
-	case api.ValueType_DATE:
+	case v1.ValueType_DATE:
 		valueType, err := fromPrimitiveValueType(pbElement.Type)
 		if err != nil {
 			return nil, err
@@ -608,7 +608,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.ValueFromBytes(valueType, pbElement.Value),
 			createdAt,
 		), nil
-	case api.ValueType_TEXT:
+	case v1.ValueType_TEXT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
 			return nil, err
@@ -617,7 +617,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.NewRGATreeSplit(json.InitialTextNode()),
 			createdAt,
 		), nil
-	case api.ValueType_RICH_TEXT:
+	case v1.ValueType_RICH_TEXT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
 			return nil, err
@@ -626,11 +626,11 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.NewRGATreeSplit(json.InitialRichTextNode()),
 			createdAt,
 		), nil
-	case api.ValueType_INTEGER_CNT:
+	case v1.ValueType_INTEGER_CNT:
 		fallthrough
-	case api.ValueType_LONG_CNT:
+	case v1.ValueType_LONG_CNT:
 		fallthrough
-	case api.ValueType_DOUBLE_CNT:
+	case v1.ValueType_DOUBLE_CNT:
 		counterType, err := fromCounterType(pbType)
 		if err != nil {
 			return nil, err
@@ -648,36 +648,36 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 	return nil, fmt.Errorf("%d, %w", pbElement.Type, ErrUnsupportedElement)
 }
 
-func fromPrimitiveValueType(valueType api.ValueType) (json.ValueType, error) {
+func fromPrimitiveValueType(valueType v1.ValueType) (json.ValueType, error) {
 	switch valueType {
-	case api.ValueType_NULL:
+	case v1.ValueType_NULL:
 		return json.Null, nil
-	case api.ValueType_BOOLEAN:
+	case v1.ValueType_BOOLEAN:
 		return json.Boolean, nil
-	case api.ValueType_INTEGER:
+	case v1.ValueType_INTEGER:
 		return json.Integer, nil
-	case api.ValueType_LONG:
+	case v1.ValueType_LONG:
 		return json.Long, nil
-	case api.ValueType_DOUBLE:
+	case v1.ValueType_DOUBLE:
 		return json.Double, nil
-	case api.ValueType_STRING:
+	case v1.ValueType_STRING:
 		return json.String, nil
-	case api.ValueType_BYTES:
+	case v1.ValueType_BYTES:
 		return json.Bytes, nil
-	case api.ValueType_DATE:
+	case v1.ValueType_DATE:
 		return json.Date, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
 }
 
-func fromCounterType(valueType api.ValueType) (json.CounterType, error) {
+func fromCounterType(valueType v1.ValueType) (json.CounterType, error) {
 	switch valueType {
-	case api.ValueType_INTEGER_CNT:
+	case v1.ValueType_INTEGER_CNT:
 		return json.IntegerCnt, nil
-	case api.ValueType_LONG_CNT:
+	case v1.ValueType_LONG_CNT:
 		return json.LongCnt, nil
-	case api.ValueType_DOUBLE_CNT:
+	case v1.ValueType_DOUBLE_CNT:
 		return json.DoubleCnt, nil
 	}
 
@@ -685,7 +685,7 @@ func fromCounterType(valueType api.ValueType) (json.CounterType, error) {
 }
 
 // FromUpdatableProjectFields converts the given Protobuf formats to model format.
-func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*types.UpdatableProjectFields, error) {
+func FromUpdatableProjectFields(pbProjectFields *v1.UpdatableProjectFields) (*types.UpdatableProjectFields, error) {
 	updatableProjectFields := &types.UpdatableProjectFields{}
 	if pbProjectFields.Name != nil {
 		updatableProjectFields.Name = &pbProjectFields.Name.Value

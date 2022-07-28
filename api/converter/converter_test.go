@@ -17,13 +17,13 @@
 package converter_test
 
 import (
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 	"math"
 	"testing"
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -193,7 +193,7 @@ func TestConverter(t *testing.T) {
 		_, err := converter.FromChangePack(nil)
 		assert.ErrorIs(t, err, converter.ErrPackRequired)
 
-		_, err = converter.FromChangePack(&api.ChangePack{})
+		_, err = converter.FromChangePack(&v1.ChangePack{})
 		assert.ErrorIs(t, err, converter.ErrCheckpointRequired)
 	})
 

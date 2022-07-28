@@ -18,8 +18,8 @@ package rpc
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -50,8 +50,8 @@ func newYorkieServer(serviceCtx context.Context, be *backend.Backend) *yorkieSer
 // ActivateClient activates the given client.
 func (s *yorkieServer) ActivateClient(
 	ctx context.Context,
-	req *api.ActivateClientRequest,
-) (*api.ActivateClientResponse, error) {
+	req *v1.ActivateClientRequest,
+) (*v1.ActivateClientResponse, error) {
 	if req.ClientKey == "" {
 		return nil, clients.ErrInvalidClientKey
 	}
@@ -72,7 +72,7 @@ func (s *yorkieServer) ActivateClient(
 		return nil, err
 	}
 
-	return &api.ActivateClientResponse{
+	return &v1.ActivateClientResponse{
 		ClientKey: cli.Key,
 		ClientId:  pbClientID,
 	}, nil
@@ -81,8 +81,8 @@ func (s *yorkieServer) ActivateClient(
 // DeactivateClient deactivates the given client.
 func (s *yorkieServer) DeactivateClient(
 	ctx context.Context,
-	req *api.DeactivateClientRequest,
-) (*api.DeactivateClientResponse, error) {
+	req *v1.DeactivateClientRequest,
+) (*v1.DeactivateClientResponse, error) {
 	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
 		return nil, err
@@ -109,7 +109,7 @@ func (s *yorkieServer) DeactivateClient(
 		return nil, err
 	}
 
-	return &api.DeactivateClientResponse{
+	return &v1.DeactivateClientResponse{
 		ClientId: pbClientID,
 	}, nil
 }
@@ -117,8 +117,8 @@ func (s *yorkieServer) DeactivateClient(
 // AttachDocument attaches the given document to the client.
 func (s *yorkieServer) AttachDocument(
 	ctx context.Context,
-	req *api.AttachDocumentRequest,
-) (*api.AttachDocumentResponse, error) {
+	req *v1.AttachDocumentRequest,
+) (*v1.AttachDocumentResponse, error) {
 	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
 		return nil, err
@@ -190,7 +190,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	return &api.AttachDocumentResponse{
+	return &v1.AttachDocumentResponse{
 		ChangePack: pbChangePack,
 	}, nil
 }
@@ -198,8 +198,8 @@ func (s *yorkieServer) AttachDocument(
 // DetachDocument detaches the given document to the client.
 func (s *yorkieServer) DetachDocument(
 	ctx context.Context,
-	req *api.DetachDocumentRequest,
-) (*api.DetachDocumentResponse, error) {
+	req *v1.DetachDocumentRequest,
+) (*v1.DetachDocumentResponse, error) {
 	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
 		return nil, err
@@ -274,7 +274,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	return &api.DetachDocumentResponse{
+	return &v1.DetachDocumentResponse{
 		ChangePack: pbChangePack,
 	}, nil
 }
@@ -283,8 +283,8 @@ func (s *yorkieServer) DetachDocument(
 // accumulated in the server to the client.
 func (s *yorkieServer) PushPull(
 	ctx context.Context,
-	req *api.PushPullRequest,
-) (*api.PushPullResponse, error) {
+	req *v1.PushPullRequest,
+) (*v1.PushPullResponse, error) {
 	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
 		return nil, err
@@ -357,7 +357,7 @@ func (s *yorkieServer) PushPull(
 		return nil, err
 	}
 
-	return &api.PushPullResponse{
+	return &v1.PushPullResponse{
 		ChangePack: pbChangePack,
 	}, nil
 }
@@ -365,8 +365,8 @@ func (s *yorkieServer) PushPull(
 // WatchDocuments connects the stream to deliver events from the given documents
 // to the requesting client.
 func (s *yorkieServer) WatchDocuments(
-	req *api.WatchDocumentsRequest,
-	stream api.Yorkie_WatchDocumentsServer,
+	req *v1.WatchDocumentsRequest,
+	stream v1.Yorkie_WatchDocumentsServer,
 ) error {
 	cli, err := converter.FromClient(req.Client)
 	if err != nil {
@@ -408,9 +408,9 @@ func (s *yorkieServer) WatchDocuments(
 		return err
 	}
 
-	if err := stream.Send(&api.WatchDocumentsResponse{
-		Body: &api.WatchDocumentsResponse_Initialization_{
-			Initialization: &api.WatchDocumentsResponse_Initialization{
+	if err := stream.Send(&v1.WatchDocumentsResponse{
+		Body: &v1.WatchDocumentsResponse_Initialization_{
+			Initialization: &v1.WatchDocumentsResponse_Initialization{
 				PeersMapByDoc: converter.ToClientsMap(peersMap),
 			},
 		},
@@ -434,9 +434,9 @@ func (s *yorkieServer) WatchDocuments(
 				return err
 			}
 
-			if err := stream.Send(&api.WatchDocumentsResponse{
-				Body: &api.WatchDocumentsResponse_Event{
-					Event: &api.DocEvent{
+			if err := stream.Send(&v1.WatchDocumentsResponse{
+				Body: &v1.WatchDocumentsResponse_Event{
+					Event: &v1.DocEvent{
 						Type:         eventType,
 						Publisher:    converter.ToClient(event.Publisher),
 						DocumentKeys: converter.ToDocumentKeys(event.DocumentKeys),
@@ -454,8 +454,8 @@ func (s *yorkieServer) WatchDocuments(
 // UpdatePresence updates the presence of the given client.
 func (s *yorkieServer) UpdatePresence(
 	ctx context.Context,
-	req *api.UpdatePresenceRequest,
-) (*api.UpdatePresenceResponse, error) {
+	req *v1.UpdatePresenceRequest,
+) (*v1.UpdatePresenceResponse, error) {
 	cli, err := converter.FromClient(req.Client)
 	if err != nil {
 		return nil, err
@@ -469,7 +469,7 @@ func (s *yorkieServer) UpdatePresence(
 
 	s.backend.Coordinator.Publish(ctx, docEvent.Publisher.ID, *docEvent)
 
-	return &api.UpdatePresenceResponse{}, nil
+	return &v1.UpdatePresenceResponse{}, nil
 }
 
 func (s *yorkieServer) watchDocs(

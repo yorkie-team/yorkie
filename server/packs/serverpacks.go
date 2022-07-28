@@ -17,8 +17,8 @@
 package packs
 
 import (
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/gen/go/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -81,8 +81,8 @@ func (p *ServerPack) SnapshotLen() int {
 }
 
 // ToPBChangePack converts the given model format to Protobuf format.
-func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
-	var pbChanges []*api.Change
+func (p *ServerPack) ToPBChangePack() (*v1.ChangePack, error) {
+	var pbChanges []*v1.Change
 	for _, info := range p.ChangeInfos {
 		actorID, err := time.ActorIDFromHex(info.ActorID.String())
 		if err != nil {
@@ -90,9 +90,9 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		}
 		changeID := change.NewID(info.ClientSeq, info.ServerSeq, info.Lamport, actorID)
 
-		var pbOps []*api.Operation
+		var pbOps []*v1.Operation
 		for _, bytesOp := range info.Operations {
-			pbOp := api.Operation{}
+			pbOp := v1.Operation{}
 			if err := pbOp.Unmarshal(bytesOp); err != nil {
 				logging.DefaultLogger().Error(err)
 				return nil, err
@@ -100,14 +100,14 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			pbOps = append(pbOps, &pbOp)
 		}
 
-		pbChanges = append(pbChanges, &api.Change{
+		pbChanges = append(pbChanges, &v1.Change{
 			Id:         converter.ToChangeID(changeID),
 			Message:    info.Message,
 			Operations: pbOps,
 		})
 	}
 
-	return &api.ChangePack{
+	return &v1.ChangePack{
 		DocumentKey:     p.DocumentKey.String(),
 		Checkpoint:      converter.ToCheckpoint(p.Checkpoint),
 		Changes:         pbChanges,

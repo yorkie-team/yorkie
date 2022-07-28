@@ -18,6 +18,8 @@ syntax = "proto3";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
 
+option go_package = "github.com/yorkie-team/yorkie/gen/go/v1;yorkiev1";
+
 package yorkie.v1;
 
 /////////////////////////////////////////
