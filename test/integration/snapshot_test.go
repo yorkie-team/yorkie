@@ -120,4 +120,40 @@ func TestSnapshot(t *testing.T) {
 		assert.Equal(t, `{"k1":"하늘구름"}`, d1.Marshal())
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
+
+	t.Run("text snapshot with concurrent local change test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(key.Key(t.Name()))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("k1")
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(key.Key(t.Name()))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
+			err = d1.Update(func(root *proxy.ObjectProxy) error {
+				root.GetText("k1").Edit(i, i, "x")
+				return nil
+			})
+			assert.NoError(t, err)
+		}
+
+		err = d2.Update(func(root *proxy.ObjectProxy) error {
+			root.GetText("k1").Edit(0, 0, "o")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
 }
