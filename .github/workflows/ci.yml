@@ -47,8 +47,11 @@ jobs:
 #        brew install docker docker-machine docker-compose
 #        sudo docker –version
 
-    - name: Stack
+    - name: SetUp Docker Compose In MacOS
+      if: ${{ matrix.os == 'macos-latest' }}
       uses: docker-practice/actions-setup-docker@v1
+
+    - name: Stack
       run: docker-compose -f docker/docker-compose.yml up --build -d
 
     - name: Test
