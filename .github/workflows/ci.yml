@@ -9,11 +9,13 @@ on:
 jobs:
   build:
     name: build
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         go_version:
           - '1.18'
-    runs-on: ubuntu-latest
+        os: [ macos-latest, ubuntu-latest, windows-latest ]
+
     steps:
 
     - name: Set up Go {{ matrix.go_version }}
@@ -46,9 +48,11 @@ jobs:
       run: go test -tags integration -race -coverprofile=coverage.txt -covermode=atomic -v ./...
 
     - name: Bench
+      if: ${{ matrix.os == 'ubuntu-latest' }}
       run: make bench
 
     - name: Download previous benchmark data
+      if: ${{ matrix.os == 'ubuntu-latest' }}
       uses: actions/cache@v1
       with:
         path: ./cache
@@ -56,7 +60,7 @@ jobs:
 
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
-      if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      if: ${{ github.event.pull_request.head.repo.full_name == github.repository && matrix.os == 'ubuntu-latest'}}
       with:
         name: Go Benchmark
         tool: 'go'
@@ -67,6 +71,7 @@ jobs:
         comment-always: true
 
     - name: Upload coverage to Codecov
+      if: ${{ matrix.os == 'ubuntu-latest' }}
       uses: codecov/codecov-action@v1
       with:
         file: ./coverage.txt
