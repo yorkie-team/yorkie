@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"log"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -138,6 +139,9 @@ func TestHistory(t *testing.T) {
 		}, "buy bread"))
 		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, d1.Marshal())
 		assert.NoError(t, cli2.Sync(ctx))
+
+		// Sleep explicitly for waiting sync and storing snapshot is finished in server
+		time.Sleep(3 * time.Second)
 
 		changes, err := adminCli2.ListChangeSummaries(ctx, "default", d1.Key(), 0, 0, true)
 		assert.NoError(t, err)
