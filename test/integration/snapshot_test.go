@@ -21,14 +21,22 @@ package integration
 import (
 	"context"
 	"fmt"
+	"log"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/server"
+	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -155,5 +163,102 @@ func TestSnapshot(t *testing.T) {
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("snapshot with purging chagnes test", func(t *testing.T) {
+		serverConfig := helper.TestConfig()
+		serverConfig.Backend.SnapshotWithPurgingChanges = true
+		testServer, err := server.New(serverConfig)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if err := testServer.Start(); err != nil {
+			logging.DefaultLogger().Fatal(err)
+		}
+
+		cli, err := client.Dial(
+			testServer.RPCAddr(),
+			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 0)}),
+		)
+		assert.NoError(t, err)
+
+		err = cli.Activate(context.Background())
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, cli.Deactivate(context.Background()))
+			assert.NoError(t, cli.Close())
+		}()
+
+		adminCli2, err := admin.Dial(testServer.AdminAddr())
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, adminCli2.Close()) }()
+
+		ctx := context.Background()
+
+		d1 := document.New(key.Key(t.Name()))
+		assert.NoError(t, cli.Attach(ctx, d1))
+		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
+
+		err = d1.Update(func(root *proxy.ObjectProxy) error {
+			root.SetNewText("k1")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		var edits = []struct {
+			from    int
+			to      int
+			content string
+		}{
+			{0, 0, "ㅎ"}, {0, 1, "하"},
+			{0, 1, "한"}, {0, 1, "하"},
+			{1, 1, "느"}, {1, 2, "늘"},
+		}
+
+		// Create 6 changes
+		for _, edit := range edits {
+			err = d1.Update(func(root *proxy.ObjectProxy) error {
+				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
+				return nil
+			})
+			assert.NoError(t, err)
+			err = cli.Sync(ctx)
+			assert.NoError(t, err)
+		}
+
+		// Sleep explicitly for waiting sync and storing snapshot is finished in server
+		time.Sleep(3 * time.Second)
+
+		mongoConfig := &mongo.Config{
+			ConnectionTimeout: "5s",
+			ConnectionURI:     "mongodb://localhost:27017",
+			YorkieDatabase:    helper.TestDBName(),
+			PingTimeout:       "5s",
+		}
+		assert.NoError(t, mongoConfig.Validate())
+
+		mongoCli, err := mongo.Dial(mongoConfig)
+		assert.NoError(t, err)
+
+		docInfo, err := mongoCli.FindDocInfoByKey(
+			ctx,
+			"000000000000000000000000",
+			d1.Key(),
+		)
+		assert.NoError(t, err)
+
+		changes, err := mongoCli.FindChangesBetweenServerSeqs(
+			ctx,
+			docInfo.ID,
+			0,
+			math.MaxInt64,
+		)
+		assert.NoError(t, err)
+
+		// When the snapshot is created, changes before minSyncedServerSeq are deleted, so two changes remain.
+		// Since minSyncedServerSeq is one older from the most recent ServerSeq,
+		// one is most recent ServerSeq and one is one older from the most recent ServerSeq
+		assert.Len(t, changes, 2)
 	})
 }
