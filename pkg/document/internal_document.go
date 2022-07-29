@@ -196,14 +196,6 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq uint64) erro
 	}
 
 	d.root = json.NewRoot(rootObj)
-
-	if d.HasLocalChanges() {
-		for _, c := range d.localChanges {
-			if err := c.Execute(d.root); err != nil {
-				return err
-			}
-		}
-	}
 	d.changeID = d.changeID.SyncLamport(serverSeq)
 
 	return nil
