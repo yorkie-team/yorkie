@@ -167,6 +167,8 @@ func TestSnapshot(t *testing.T) {
 
 	t.Run("snapshot with purging chagnes test", func(t *testing.T) {
 		serverConfig := helper.TestConfig()
+		// Default SnapshotInterval is 0, SnashotThreshold must also be 0
+		serverConfig.Backend.SnapshotThreshold = 0
 		serverConfig.Backend.SnapshotWithPurgingChanges = true
 		testServer, err := server.New(serverConfig)
 		if err != nil {
@@ -177,17 +179,17 @@ func TestSnapshot(t *testing.T) {
 			logging.DefaultLogger().Fatal(err)
 		}
 
-		cli, err := client.Dial(
+		cli1, err := client.Dial(
 			testServer.RPCAddr(),
 			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 0)}),
 		)
 		assert.NoError(t, err)
 
-		err = cli.Activate(context.Background())
+		err = cli1.Activate(context.Background())
 		assert.NoError(t, err)
 		defer func() {
-			assert.NoError(t, cli.Deactivate(context.Background()))
-			assert.NoError(t, cli.Close())
+			assert.NoError(t, cli1.Deactivate(context.Background()))
+			assert.NoError(t, cli1.Close())
 		}()
 
 		adminCli2, err := admin.Dial(testServer.AdminAddr())
@@ -197,8 +199,8 @@ func TestSnapshot(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(key.Key(t.Name()))
-		assert.NoError(t, cli.Attach(ctx, d1))
-		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
+		assert.NoError(t, cli1.Attach(ctx, d1))
+		defer func() { assert.NoError(t, cli1.Detach(ctx, d1)) }()
 
 		err = d1.Update(func(root *proxy.ObjectProxy) error {
 			root.SetNewText("k1")
@@ -223,7 +225,7 @@ func TestSnapshot(t *testing.T) {
 				return nil
 			})
 			assert.NoError(t, err)
-			err = cli.Sync(ctx)
+			err = cli1.Sync(ctx)
 			assert.NoError(t, err)
 		}
 
@@ -260,5 +262,46 @@ func TestSnapshot(t *testing.T) {
 		// Since minSyncedServerSeq is one older from the most recent ServerSeq,
 		// one is most recent ServerSeq and one is one older from the most recent ServerSeq
 		assert.Len(t, changes, 2)
+
+		cli2, err := client.Dial(
+			testServer.RPCAddr(),
+			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 1)}),
+		)
+		assert.NoError(t, err)
+
+		err = cli2.Activate(context.Background())
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, cli2.Deactivate(context.Background()))
+			assert.NoError(t, cli2.Close())
+		}()
+
+		d2 := document.New(key.Key(t.Name()))
+		assert.NoError(t, cli2.Attach(ctx, d2))
+		defer func() { assert.NoError(t, cli2.Detach(ctx, d2)) }()
+
+		// Create 6 changes
+		for _, edit := range edits {
+			err = d2.Update(func(root *proxy.ObjectProxy) error {
+				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
+				return nil
+			})
+			assert.NoError(t, err)
+			err = cli2.Sync(ctx)
+			assert.NoError(t, err)
+		}
+
+		// Sleep explicitly for waiting sync and storing snapshot is finished in server
+		time.Sleep(3 * time.Second)
+
+		changes, err = mongoCli.FindChangesBetweenServerSeqs(
+			ctx,
+			docInfo.ID,
+			0,
+			math.MaxInt64,
+		)
+		assert.NoError(t, err)
+
+		assert.Len(t, changes, 8)
 	})
 }
