@@ -26,24 +26,24 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestUser(t *testing.T) {
-	adminCli, err := admin.Dial(defaultServer.AdminAddr())
-	assert.NoError(t, err)
+	adminCli := helper.CreateAdminCli(t, defaultServer.AdminAddr())
 	defer func() { assert.NoError(t, adminCli.Close()) }()
 
 	t.Run("user test", func(t *testing.T) {
 		ctx := context.Background()
+		username := "admin@yorkie.dev"
 
-		_, err := adminCli.LogIn(ctx, "admin@yorkie.dev", "admin")
+		_, err := adminCli.LogIn(ctx, username, "admin")
 		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 
-		_, err = adminCli.SignUp(ctx, "admin@yorkie.dev", "admin")
+		_, err = adminCli.SignUp(ctx, username, "admin")
 		assert.NoError(t, err)
 
-		_, err = adminCli.LogIn(ctx, "admin@yorkie.dev", "asdf")
+		_, err = adminCli.LogIn(ctx, username, "asdf")
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 	})
 }

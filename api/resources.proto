@@ -222,7 +222,7 @@ message TextNodeID {
 
 message User {
   string id = 1;
-  string email = 2;
+  string username = 2;
   google.protobuf.Timestamp created_at = 3;
 }
 

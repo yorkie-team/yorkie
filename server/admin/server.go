@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/server/admin/auth"
 	"github.com/yorkie-team/yorkie/server/admin/interceptors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -59,26 +60,32 @@ func (c *Config) Validate() error {
 
 // Server is the gRPC server for admin service.
 type Server struct {
-	conf       *Config
-	grpcServer *grpc.Server
-	backend    *backend.Backend
-	jwtManager *JWTManager
+	conf         *Config
+	grpcServer   *grpc.Server
+	backend      *backend.Backend
+	tokenManager *auth.TokenManager
 }
 
 // NewServer creates a new Server.
 func NewServer(conf *Config, be *backend.Backend) *Server {
+	// TODO(hackerwins): extract secretKey and tokenDuration to config.
+	tokenManager := auth.NewTokenManager("yorkie", 7*24*gotime.Hour)
+
 	loggingInterceptor := grpchelper.NewLoggingInterceptor()
+	authInterceptor := interceptors.NewAuthInterceptor(tokenManager)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			loggingInterceptor.Unary(),
 			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
+			authInterceptor.Unary(),
 			defaultInterceptor.Unary(),
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			loggingInterceptor.Stream(),
 			be.Metrics.ServerMetrics().StreamServerInterceptor(),
+			authInterceptor.Stream(),
 			defaultInterceptor.Stream(),
 		)),
 	}
@@ -86,11 +93,10 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 	grpcServer := grpc.NewServer(opts...)
 
 	server := &Server{
-		conf:       conf,
-		grpcServer: grpcServer,
-		backend:    be,
-		// TODO(hackerwins): inject secret key from config.
-		jwtManager: NewJWTManager("hello", 7*24*gotime.Hour),
+		conf:         conf,
+		grpcServer:   grpcServer,
+		backend:      be,
+		tokenManager: tokenManager,
 	}
 
 	api.RegisterAdminServer(grpcServer, server)
@@ -145,7 +151,7 @@ func (s *Server) SignUp(
 	ctx context.Context,
 	req *api.SignUpRequest,
 ) (*api.SignUpResponse, error) {
-	user, err := users.SignUp(ctx, s.backend, req.Email, req.Password)
+	user, err := users.SignUp(ctx, s.backend, req.Username, req.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -165,24 +171,23 @@ func (s *Server) LogIn(
 	ctx context.Context,
 	req *api.LogInRequest,
 ) (*api.LogInResponse, error) {
-	user, err := users.IsCorrectPassword(ctx, s.backend, req.Email, req.Password)
+	user, err := users.IsCorrectPassword(
+		ctx,
+		s.backend,
+		req.Username,
+		req.Password,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(hackerwins): Pass the token to the client.
-	// token, err := s.jwtManager.GenerateToken(user.Email)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	pbUser, err := converter.ToUser(user)
+	token, err := s.tokenManager.Generate(user.Username)
 	if err != nil {
 		return nil, err
 	}
 
 	return &api.LogInResponse{
-		User: pbUser,
+		Token: token,
 	}, nil
 }
 

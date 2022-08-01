@@ -41,7 +41,7 @@ func ToUser(user *types.User) (*api.User, error) {
 
 	return &api.User{
 		Id:        user.ID.String(),
-		Email:     user.Email,
+		Username:  user.Username,
 		CreatedAt: pbCreatedAt,
 	}, nil
 }

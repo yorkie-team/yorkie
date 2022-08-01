@@ -92,8 +92,67 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// EnsureDefaultProjectInfo creates the default project info if it does not exist.
-func (c *Client) EnsureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
+// EnsureDefaultUserAndProject creates the default user and project if they do not exist.
+func (c *Client) EnsureDefaultUserAndProject(
+	ctx context.Context,
+) (*database.UserInfo, *database.ProjectInfo, error) {
+	userInfo, err := c.ensureDefaultUserInfo(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	projectInfo, err := c.ensureDefaultProjectInfo(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return userInfo, projectInfo, nil
+}
+
+// ensureDefaultUserInfo creates the default user info if it does not exist.
+func (c *Client) ensureDefaultUserInfo(
+	ctx context.Context,
+) (*database.UserInfo, error) {
+	hashedPassword, err := database.HashedPassword(database.DefaultPassword)
+	if err != nil {
+		return nil, err
+	}
+
+	candidate := database.NewUserInfo(
+		database.DefaultUsername,
+		hashedPassword,
+	)
+
+	_, err = c.collection(colUsers).UpdateOne(ctx, bson.M{
+		"username": candidate.Username,
+	}, bson.M{
+		"$setOnInsert": bson.M{
+			"username":        candidate.Username,
+			"hashed_password": candidate.HashedPassword,
+			"created_at":      candidate.CreatedAt,
+		},
+	}, options.Update().SetUpsert(true))
+	if err != nil {
+		return nil, err
+	}
+
+	result := c.collection(colUsers).FindOne(ctx, bson.M{
+		"username": candidate.Username,
+	})
+
+	info := database.UserInfo{}
+	if err := result.Decode(&info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("default: %w", database.ErrUserNotFound)
+		}
+		return nil, err
+	}
+
+	return &info, nil
+}
+
+// ensureDefaultProjectInfo creates the default project info if it does not exist.
+func (c *Client) ensureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
 	candidate := database.NewProjectInfo(database.DefaultProjectName)
 	candidate.ID = database.DefaultProjectID
 	encodedID, err := encodeID(candidate.ID)
@@ -108,7 +167,7 @@ func (c *Client) EnsureDefaultProjectInfo(ctx context.Context) (*database.Projec
 			"name":       candidate.Name,
 			"public_key": candidate.PublicKey,
 			"secret_key": candidate.SecretKey,
-			"created_at": gotime.Now(),
+			"created_at": candidate.CreatedAt,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
@@ -270,12 +329,12 @@ func (c *Client) UpdateProjectInfo(
 // CreateUserInfo creates a new user.
 func (c *Client) CreateUserInfo(
 	ctx context.Context,
-	email string,
+	username string,
 	hashedPassword string,
 ) (*database.UserInfo, error) {
-	info := database.NewUserInfo(email, hashedPassword)
+	info := database.NewUserInfo(username, hashedPassword)
 	result, err := c.collection(colUsers).InsertOne(ctx, bson.M{
-		"email":           info.Email,
+		"username":        info.Username,
 		"hashed_password": info.HashedPassword,
 		"created_at":      info.CreatedAt,
 	})
@@ -292,16 +351,16 @@ func (c *Client) CreateUserInfo(
 	return info, nil
 }
 
-// FindUserInfo returns a user by email.
-func (c *Client) FindUserInfo(ctx context.Context, email string) (*database.UserInfo, error) {
+// FindUserInfo returns a user by username.
+func (c *Client) FindUserInfo(ctx context.Context, username string) (*database.UserInfo, error) {
 	result := c.collection(colUsers).FindOne(ctx, bson.M{
-		"email": email,
+		"username": username,
 	})
 
 	userInfo := database.UserInfo{}
 	if err := result.Decode(&userInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", email, database.ErrUserNotFound)
+			return nil, fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
 		}
 		return nil, err
 	}

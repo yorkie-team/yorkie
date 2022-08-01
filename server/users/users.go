@@ -20,30 +20,24 @@ import (
 	"context"
 	"fmt"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
-)
-
-var (
-	// ErrMismatchedPassword is returned when the password is mismatched.
-	ErrMismatchedPassword = fmt.Errorf("mismatched password")
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 // SignUp signs up a new user.
 func SignUp(
 	ctx context.Context,
 	be *backend.Backend,
-	email,
+	username,
 	password string,
 ) (*types.User, error) {
-	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashed, err := database.HashedPassword(password)
 	if err != nil {
 		return nil, fmt.Errorf("cannot hash password: %w", err)
 	}
 
-	info, err := be.DB.CreateUserInfo(ctx, email, string(hashed))
+	info, err := be.DB.CreateUserInfo(ctx, username, string(hashed))
 	if err != nil {
 		return nil, err
 	}
@@ -55,19 +49,19 @@ func SignUp(
 func IsCorrectPassword(
 	ctx context.Context,
 	be *backend.Backend,
-	email,
+	username,
 	password string,
 ) (*types.User, error) {
-	info, err := be.DB.FindUserInfo(ctx, email)
+	info, err := be.DB.FindUserInfo(ctx, username)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := bcrypt.CompareHashAndPassword(
-		[]byte(info.HashedPassword),
-		[]byte(password),
+	if err := database.CompareHashAndPassword(
+		info.HashedPassword,
+		password,
 	); err != nil {
-		return nil, ErrMismatchedPassword
+		return nil, err
 	}
 
 	return info.ToUser(), nil

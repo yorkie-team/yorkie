@@ -24,11 +24,8 @@ type User struct {
 	// ID is the unique ID of the user.
 	ID ID `json:"id"`
 
-	// Email is the email of the user.
-	Email string `json:"email"`
-
-	// Token is the token of the user.
-	Token string `json:"token"`
+	// Username is the username of the user.
+	Username string `json:"username"`
 
 	// CreatedAt is the time when the user was created.
 	CreatedAt time.Time `json:"created_at"`

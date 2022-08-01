@@ -40,7 +40,7 @@ func FromUser(pbUser *api.User) (*types.User, error) {
 
 	return &types.User{
 		ID:        types.ID(pbUser.Id),
-		Email:     pbUser.Email,
+		Username:  pbUser.Username,
 		CreatedAt: createdAt,
 	}, nil
 }

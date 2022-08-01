@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package admin
+package auth
 
 import (
 	"fmt"
@@ -32,38 +32,38 @@ var (
 type UserClaims struct {
 	jwt.StandardClaims
 
-	Email string `json:"email"`
+	Username string `json:"username"`
 }
 
-// JWTManager manages JWT tokens.
-type JWTManager struct {
+// TokenManager manages JWT tokens.
+type TokenManager struct {
 	secretKey     string
 	tokenDuration time.Duration
 }
 
-// NewJWTManager creates a new JWTManager.
-func NewJWTManager(secretKey string, tokenDuration time.Duration) *JWTManager {
-	return &JWTManager{
+// NewTokenManager creates a new TokenManager.
+func NewTokenManager(secretKey string, tokenDuration time.Duration) *TokenManager {
+	return &TokenManager{
 		secretKey:     secretKey,
 		tokenDuration: tokenDuration,
 	}
 }
 
-// GenerateToken generates a new JWT token for the user.
-func (m *JWTManager) GenerateToken(email string) (string, error) {
+// Generate generates a new token for the user.
+func (m *TokenManager) Generate(username string) (string, error) {
 	claims := UserClaims{
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(m.tokenDuration).Unix(),
 		},
-		Email: email,
+		Username: username,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(m.secretKey))
 }
 
-// VerifyToken verifies the JWT token.
-func (m *JWTManager) VerifyToken(token string) (*UserClaims, error) {
+// Verify verifies the given token.
+func (m *TokenManager) Verify(token string) (*UserClaims, error) {
 	claims := &UserClaims{}
 	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
 		_, ok := token.Method.(*jwt.SigningMethodHMAC)

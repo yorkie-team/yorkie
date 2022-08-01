@@ -30,7 +30,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -85,8 +84,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 	assert.NoError(t, svr.Start())
 	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-	adminCli, err := admin.Dial(svr.AdminAddr())
-	assert.NoError(t, err)
+	adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
 	defer func() { assert.NoError(t, adminCli.Close()) }()
 
 	project, err := adminCli.CreateProject(context.Background(), "auth-webhook-test")
@@ -199,8 +197,7 @@ func TestAuthWebhook(t *testing.T) {
 		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli, err := admin.Dial(svr.AdminAddr())
-		assert.NoError(t, err)
+		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
@@ -242,8 +239,7 @@ func TestAuthWebhook(t *testing.T) {
 		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli, err := admin.Dial(svr.AdminAddr())
-		assert.NoError(t, err)
+		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
@@ -296,8 +292,7 @@ func TestAuthWebhook(t *testing.T) {
 		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli, err := admin.Dial(svr.AdminAddr())
-		assert.NoError(t, err)
+		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)
@@ -373,8 +368,7 @@ func TestAuthWebhook(t *testing.T) {
 		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli, err := admin.Dial(svr.AdminAddr())
-		assert.NoError(t, err)
+		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), t.Name())
 		assert.NoError(t, err)

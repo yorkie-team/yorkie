@@ -57,7 +57,7 @@ var collectionInfos = []collectionInfo{
 	{
 		name: colUsers,
 		indexes: []mongo.IndexModel{{
-			Keys:    bsonx.Doc{{Key: "email", Value: bsonx.Int32(1)}},
+			Keys:    bsonx.Doc{{Key: "username", Value: bsonx.Int32(1)}},
 			Options: options.Index().SetUnique(true),
 		}},
 	},

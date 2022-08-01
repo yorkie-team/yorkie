@@ -68,8 +68,10 @@ type Database interface {
 	// FindProjectInfoByID returns a project by the given id.
 	FindProjectInfoByID(ctx context.Context, id types.ID) (*ProjectInfo, error)
 
-	// EnsureDefaultProjectInfo ensures that the default project exists.
-	EnsureDefaultProjectInfo(ctx context.Context) (*ProjectInfo, error)
+	// EnsureDefaultUserAndProject ensures that the default user and project exists.
+	EnsureDefaultUserAndProject(
+		ctx context.Context,
+	) (*UserInfo, *ProjectInfo, error)
 
 	// CreateProjectInfo creates a new project.
 	CreateProjectInfo(ctx context.Context, name string) (*ProjectInfo, error)
@@ -81,10 +83,14 @@ type Database interface {
 	UpdateProjectInfo(ctx context.Context, id types.ID, fields *types.UpdatableProjectFields) (*ProjectInfo, error)
 
 	// CreateUserInfo creates a new user.
-	CreateUserInfo(ctx context.Context, email string, hashedPassword string) (*UserInfo, error)
+	CreateUserInfo(
+		ctx context.Context,
+		username string,
+		hashedPassword string,
+	) (*UserInfo, error)
 
-	// FindUserInfo returns a user by the given email.
-	FindUserInfo(ctx context.Context, email string) (*UserInfo, error)
+	// FindUserInfo returns a user by the given username.
+	FindUserInfo(ctx context.Context, username string) (*UserInfo, error)
 
 	// ListUserInfos returns all users.
 	ListUserInfos(ctx context.Context) ([]*UserInfo, error)

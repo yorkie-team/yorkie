@@ -31,7 +31,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
-	"github.com/yorkie-team/yorkie/server/users"
 )
 
 // errorToCode maps an error to gRPC status code.
@@ -72,10 +71,10 @@ var errorToCode = map[error]codes.Code{
 	converter.ErrUnsupportedCounterType: codes.Unimplemented,
 
 	// Unauthenticated means the request does not have valid authentication
-	auth.ErrNotAllowed:           codes.Unauthenticated,
-	auth.ErrUnexpectedStatusCode: codes.Unauthenticated,
-	auth.ErrWebhookTimeout:       codes.Unauthenticated,
-	users.ErrMismatchedPassword:  codes.Unauthenticated,
+	auth.ErrNotAllowed:             codes.Unauthenticated,
+	auth.ErrUnexpectedStatusCode:   codes.Unauthenticated,
+	auth.ErrWebhookTimeout:         codes.Unauthenticated,
+	database.ErrMismatchedPassword: codes.Unauthenticated,
 }
 
 func detailsFromError(err error) (protoiface.MessageV1, bool) {
