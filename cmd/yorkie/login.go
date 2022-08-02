@@ -14,13 +14,10 @@
  * limitations under the License.
  */
 
-package project
+package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -28,22 +25,17 @@ import (
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
-func newCreateCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:     "create [name]",
-		Short:   "Create a new project",
-		Example: "yorkie project create sample-project",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 1 {
-				return errors.New("name is required")
-			}
-			name := args[0]
+var (
+	username string
+	password string
+)
 
-			token, err := config.LoadToken(config.AdminAddr)
-			if err != nil {
-				return err
-			}
-			cli, err := admin.Dial(config.AdminAddr, admin.WithToken(token))
+func newLoginCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "login",
+		Short: "Log in to the Yorkie server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cli, err := admin.Dial(config.AdminAddr)
 			if err != nil {
 				return err
 			}
@@ -52,17 +44,20 @@ func newCreateCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			project, err := cli.CreateProject(ctx, name)
+			token, err := cli.LogIn(ctx, username, password)
 			if err != nil {
 				return err
 			}
 
-			encoded, err := json.Marshal(project)
+			conf, err := config.Load()
 			if err != nil {
-				return err
+				return nil
 			}
 
-			fmt.Println(string(encoded))
+			conf.Auths[config.AdminAddr] = token
+			if err := config.Save(conf); err != nil {
+				return err
+			}
 
 			return nil
 		},
@@ -70,5 +65,21 @@ func newCreateCommand() *cobra.Command {
 }
 
 func init() {
-	SubCmd.AddCommand(newCreateCommand())
+	cmd := newLoginCmd()
+	cmd.Flags().StringVarP(
+		&username,
+		"username",
+		"u",
+		"",
+		"Username (required if password is set)",
+	)
+	cmd.Flags().StringVarP(
+		&password,
+		"password",
+		"p",
+		"",
+		"Password (required if username is set)",
+	)
+	cmd.MarkFlagsRequiredTogether("username", "password")
+	rootCmd.AddCommand(cmd)
 }

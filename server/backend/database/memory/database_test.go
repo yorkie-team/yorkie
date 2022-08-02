@@ -81,6 +81,23 @@ func TestDB(t *testing.T) {
 		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
 	})
 
+	t.Run("user test", func(t *testing.T) {
+		username := "admin@yorkie.dev"
+		password := "hashed-password"
+
+		info, err := db.CreateUserInfo(ctx, username, password)
+		assert.NoError(t, err)
+		assert.Equal(t, username, info.Username)
+
+		_, err = db.CreateUserInfo(ctx, username, password)
+		assert.ErrorIs(t, err, database.ErrUserAlreadyExists)
+
+		infos, err := db.ListUserInfos(ctx)
+		assert.NoError(t, err)
+		assert.Len(t, infos, 1)
+		assert.Equal(t, infos[0], info)
+	})
+
 	t.Run("activate and find client test", func(t *testing.T) {
 		_, err := db.FindClientInfoByID(ctx, projectID, notExistsID)
 		assert.ErrorIs(t, err, database.ErrClientNotFound)

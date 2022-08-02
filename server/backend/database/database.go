@@ -32,8 +32,14 @@ var (
 	// ErrProjectAlreadyExists is returned when the project already exists.
 	ErrProjectAlreadyExists = errors.New("project already exists")
 
+	// ErrUserNotFound is returned when the user is not found.
+	ErrUserNotFound = errors.New("user not found")
+
 	// ErrProjectNotFound is returned when the project is not found.
 	ErrProjectNotFound = errors.New("project not found")
+
+	// ErrUserAlreadyExists is returned when the user already exists.
+	ErrUserAlreadyExists = errors.New("user already exists")
 
 	// ErrClientNotFound is returned when the client could not be found.
 	ErrClientNotFound = errors.New("client not found")
@@ -62,8 +68,10 @@ type Database interface {
 	// FindProjectInfoByID returns a project by the given id.
 	FindProjectInfoByID(ctx context.Context, id types.ID) (*ProjectInfo, error)
 
-	// EnsureDefaultProjectInfo ensures that the default project exists.
-	EnsureDefaultProjectInfo(ctx context.Context) (*ProjectInfo, error)
+	// EnsureDefaultUserAndProject ensures that the default user and project exists.
+	EnsureDefaultUserAndProject(
+		ctx context.Context,
+	) (*UserInfo, *ProjectInfo, error)
 
 	// CreateProjectInfo creates a new project.
 	CreateProjectInfo(ctx context.Context, name string) (*ProjectInfo, error)
@@ -73,6 +81,19 @@ type Database interface {
 
 	// UpdateProjectInfo updates the project.
 	UpdateProjectInfo(ctx context.Context, id types.ID, fields *types.UpdatableProjectFields) (*ProjectInfo, error)
+
+	// CreateUserInfo creates a new user.
+	CreateUserInfo(
+		ctx context.Context,
+		username string,
+		hashedPassword string,
+	) (*UserInfo, error)
+
+	// FindUserInfo returns a user by the given username.
+	FindUserInfo(ctx context.Context, username string) (*UserInfo, error)
+
+	// ListUserInfos returns all users.
+	ListUserInfos(ctx context.Context) ([]*UserInfo, error)
 
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)

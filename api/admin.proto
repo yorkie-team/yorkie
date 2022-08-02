@@ -21,6 +21,9 @@ import "resources.proto";
 
 // Admin is a service that provides a API for Admin.
 service Admin {
+  rpc SignUp(SignUpRequest) returns (SignUpResponse) {}
+  rpc LogIn(LogInRequest) returns (LogInResponse) {}
+
   rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {}
   rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {}
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
@@ -32,6 +35,24 @@ service Admin {
   rpc SearchDocuments (SearchDocumentsRequest) returns (SearchDocumentsResponse) {}
 
   rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
+}
+
+message SignUpRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message SignUpResponse {
+  User user = 1;
+}
+
+message LogInRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LogInResponse {
+  string token = 1;
 }
 
 message CreateProjectRequest {

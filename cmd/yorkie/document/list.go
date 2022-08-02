@@ -37,9 +37,13 @@ func newListCommand() *cobra.Command {
 			if len(args) != 1 {
 				return errors.New("project is required")
 			}
-
 			projectName := args[0]
-			cli, err := admin.Dial(config.AdminAddr)
+
+			token, err := config.LoadToken(config.AdminAddr)
+			if err != nil {
+				return err
+			}
+			cli, err := admin.Dial(config.AdminAddr, admin.WithToken(token))
 			if err != nil {
 				return err
 			}

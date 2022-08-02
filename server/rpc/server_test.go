@@ -33,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
@@ -84,7 +85,7 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	project, err := be.DB.EnsureDefaultProjectInfo(context.Background())
+	project, err := be.DB.FindProjectInfoByName(context.Background(), database.DefaultProjectName)
 	if err != nil {
 		log.Fatal(err)
 	}

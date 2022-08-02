@@ -24,10 +24,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestHistory(t *testing.T) {
@@ -35,8 +35,7 @@ func TestHistory(t *testing.T) {
 	cli := clients[0]
 	defer cleanupClients(t, clients)
 
-	adminCli, err := admin.Dial(defaultServer.AdminAddr())
-	assert.NoError(t, err)
+	adminCli := helper.CreateAdminCli(t, defaultServer.AdminAddr())
 	defer func() { assert.NoError(t, adminCli.Close()) }()
 
 	t.Run("history test", func(t *testing.T) {

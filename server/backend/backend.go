@@ -129,7 +129,9 @@ func New(
 		dbInfo,
 	)
 
-	_, err = db.EnsureDefaultProjectInfo(context.Background())
+	_, _, err = db.EnsureDefaultUserAndProject(
+		context.Background(),
+	)
 	if err != nil {
 		return nil, err
 	}

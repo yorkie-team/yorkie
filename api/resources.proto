@@ -220,6 +220,12 @@ message TextNodeID {
 // Messages for Common                 //
 /////////////////////////////////////////
 
+message User {
+  string id = 1;
+  string username = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
 message Project {
   string id = 1;
   string name = 2;

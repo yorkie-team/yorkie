@@ -102,8 +102,52 @@ func (d *DB) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.Pr
 	return raw.(*database.ProjectInfo).DeepCopy(), nil
 }
 
-// EnsureDefaultProjectInfo creates the default project if it does not exist.
-func (d *DB) EnsureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
+// EnsureDefaultUserAndProject creates the default user and project if they do not exist.
+func (d *DB) EnsureDefaultUserAndProject(ctx context.Context) (*database.UserInfo, *database.ProjectInfo, error) {
+	user, err := d.ensureDefaultUserInfo(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	project, err := d.ensureDefaultProjectInfo(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return user, project, nil
+}
+
+// ensureDefaultUserInfo creates the default user if it does not exist.
+func (d *DB) ensureDefaultUserInfo(ctx context.Context) (*database.UserInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", database.DefaultUsername)
+	if err != nil {
+		return nil, err
+	}
+
+	var info *database.UserInfo
+	if raw == nil {
+		hashedPassword, err := database.HashedPassword(database.DefaultPassword)
+		if err != nil {
+			return nil, err
+		}
+		info = database.NewUserInfo(database.DefaultUsername, hashedPassword)
+		info.ID = newID()
+		if err := txn.Insert(tblUsers, info); err != nil {
+			return nil, err
+		}
+	} else {
+		info = raw.(*database.UserInfo).DeepCopy()
+	}
+
+	txn.Commit()
+	return info, nil
+}
+
+// ensureDefaultProjectInfo creates the default project if it does not exist.
+func (d *DB) ensureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -210,6 +254,73 @@ func (d *DB) UpdateProjectInfo(
 	txn.Commit()
 
 	return info, nil
+}
+
+// CreateUserInfo creates a new user.
+func (d *DB) CreateUserInfo(
+	ctx context.Context,
+	username string,
+	hashedPassword string,
+) (*database.UserInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	existing, err := txn.First(tblUsers, "username", username)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("%s: %w", username, database.ErrUserAlreadyExists)
+	}
+
+	info := database.NewUserInfo(username, hashedPassword)
+	info.ID = newID()
+	if err := txn.Insert(tblUsers, info); err != nil {
+		return nil, err
+	}
+	txn.Commit()
+
+	return info, nil
+}
+
+// FindUserInfo finds a user by the given username.
+func (d *DB) FindUserInfo(ctx context.Context, username string) (*database.UserInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", username)
+	if err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
+	}
+
+	return raw.(*database.UserInfo).DeepCopy(), nil
+}
+
+// ListUserInfos returns all users.
+func (d *DB) ListUserInfos(
+	ctx context.Context,
+) ([]*database.UserInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblUsers, "id")
+	if err != nil {
+		return nil, err
+	}
+
+	var infos []*database.UserInfo
+	for {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
+		infos = append(infos, raw.(*database.UserInfo).DeepCopy())
+	}
+
+	return infos, nil
 }
 
 // ActivateClient activates a client.

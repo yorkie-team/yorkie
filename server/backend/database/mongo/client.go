@@ -92,8 +92,67 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// EnsureDefaultProjectInfo creates the default project info if it does not exist.
-func (c *Client) EnsureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
+// EnsureDefaultUserAndProject creates the default user and project if they do not exist.
+func (c *Client) EnsureDefaultUserAndProject(
+	ctx context.Context,
+) (*database.UserInfo, *database.ProjectInfo, error) {
+	userInfo, err := c.ensureDefaultUserInfo(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	projectInfo, err := c.ensureDefaultProjectInfo(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return userInfo, projectInfo, nil
+}
+
+// ensureDefaultUserInfo creates the default user info if it does not exist.
+func (c *Client) ensureDefaultUserInfo(
+	ctx context.Context,
+) (*database.UserInfo, error) {
+	hashedPassword, err := database.HashedPassword(database.DefaultPassword)
+	if err != nil {
+		return nil, err
+	}
+
+	candidate := database.NewUserInfo(
+		database.DefaultUsername,
+		hashedPassword,
+	)
+
+	_, err = c.collection(colUsers).UpdateOne(ctx, bson.M{
+		"username": candidate.Username,
+	}, bson.M{
+		"$setOnInsert": bson.M{
+			"username":        candidate.Username,
+			"hashed_password": candidate.HashedPassword,
+			"created_at":      candidate.CreatedAt,
+		},
+	}, options.Update().SetUpsert(true))
+	if err != nil {
+		return nil, err
+	}
+
+	result := c.collection(colUsers).FindOne(ctx, bson.M{
+		"username": candidate.Username,
+	})
+
+	info := database.UserInfo{}
+	if err := result.Decode(&info); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("default: %w", database.ErrUserNotFound)
+		}
+		return nil, err
+	}
+
+	return &info, nil
+}
+
+// ensureDefaultProjectInfo creates the default project info if it does not exist.
+func (c *Client) ensureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
 	candidate := database.NewProjectInfo(database.DefaultProjectName)
 	candidate.ID = database.DefaultProjectID
 	encodedID, err := encodeID(candidate.ID)
@@ -108,7 +167,7 @@ func (c *Client) EnsureDefaultProjectInfo(ctx context.Context) (*database.Projec
 			"name":       candidate.Name,
 			"public_key": candidate.PublicKey,
 			"secret_key": candidate.SecretKey,
-			"created_at": gotime.Now(),
+			"created_at": candidate.CreatedAt,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
@@ -137,7 +196,7 @@ func (c *Client) CreateProjectInfo(ctx context.Context, name string) (*database.
 		"name":       info.Name,
 		"public_key": info.PublicKey,
 		"secret_key": info.SecretKey,
-		"created_at": gotime.Now(),
+		"created_at": info.CreatedAt,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
@@ -265,6 +324,66 @@ func (c *Client) UpdateProjectInfo(
 	}
 
 	return &info, nil
+}
+
+// CreateUserInfo creates a new user.
+func (c *Client) CreateUserInfo(
+	ctx context.Context,
+	username string,
+	hashedPassword string,
+) (*database.UserInfo, error) {
+	info := database.NewUserInfo(username, hashedPassword)
+	result, err := c.collection(colUsers).InsertOne(ctx, bson.M{
+		"username":        info.Username,
+		"hashed_password": info.HashedPassword,
+		"created_at":      info.CreatedAt,
+	})
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrUserAlreadyExists
+		}
+
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	info.ID = types.ID(result.InsertedID.(primitive.ObjectID).Hex())
+	return info, nil
+}
+
+// FindUserInfo returns a user by username.
+func (c *Client) FindUserInfo(ctx context.Context, username string) (*database.UserInfo, error) {
+	result := c.collection(colUsers).FindOne(ctx, bson.M{
+		"username": username,
+	})
+
+	userInfo := database.UserInfo{}
+	if err := result.Decode(&userInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
+		}
+		return nil, err
+	}
+
+	return &userInfo, nil
+}
+
+// ListUserInfos returns all users.
+func (c *Client) ListUserInfos(
+	ctx context.Context,
+) ([]*database.UserInfo, error) {
+	cursor, err := c.collection(colUsers).Find(ctx, bson.M{})
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	var infos []*database.UserInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, err
+	}
+
+	return infos, nil
 }
 
 // ActivateClient activates the client of the given key.
