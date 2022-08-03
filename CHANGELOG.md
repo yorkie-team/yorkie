@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.14] - 2022-08-03
+
+### Added
+
+- Add signup and login commands and APIs: #357
+
+### Fixed
+
+- Fix the problem local changes were applied twice: #375
+
 ## [0.2.13] - 2022-07-27
 
 ### Added
