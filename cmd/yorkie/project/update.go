@@ -30,6 +30,9 @@ import (
 
 var (
 	flagAuthWebHookUrl string
+	flagName           string
+
+	ErrProjectNotFound = errors.New("not found project")
 )
 
 func newUpdateCommand() *cobra.Command {
@@ -42,8 +45,8 @@ func newUpdateCommand() *cobra.Command {
 				return errors.New("project name is required")
 			}
 
-			id := "ID"
-			newName := args[0]
+			name := args[0]
+
 			newAuthWebhookURL := flagAuthWebHookUrl
 			newAuthWebhookMethods := []string{
 				string(types.AttachDocument),
@@ -51,7 +54,7 @@ func newUpdateCommand() *cobra.Command {
 			}
 
 			updatableProjectFields := &types.UpdatableProjectFields{
-				Name:               &newName,
+				Name:               &name,
 				AuthWebhookURL:     &newAuthWebhookURL,
 				AuthWebhookMethods: &newAuthWebhookMethods,
 			}
@@ -66,6 +69,23 @@ func newUpdateCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
+			exists, err := cli.GetProject(ctx, name)
+			if err != nil {
+				return err
+			}
+			if exists == nil {
+				return ErrProjectNotFound
+			}
+			id := exists.ID.String()
+
+			if flagName != "" {
+				name = flagName
+			}
+
+			if flagAuthWebHookUrl == "" {
+				newAuthWebhookURL = exists.AuthWebhookURL
+			}
+
 			project, err := cli.UpdateProject(ctx, id, updatableProjectFields)
 			if err != nil {
 				return err
@@ -90,6 +110,12 @@ func init() {
 		"auth-webhook-url",
 		"",
 		"authorization-webhook update url",
+	)
+	cmd.Flags().StringVar(
+		&flagName,
+		"name",
+		"",
+		"new project name",
 	)
 	SubCmd.AddCommand(cmd)
 }
