@@ -109,12 +109,12 @@ message GetDocumentResponse {
 message GetSnapshotMetaRequest {
   string project_name = 1;
   string document_key = 2;
-  uint64 server_seq = 3;
+  int64 server_seq = 3;
 }
 
 message GetSnapshotMetaResponse {
   bytes snapshot = 1;
-  uint64 lamport = 2;
+  int64 lamport = 2;
 }
 
 message SearchDocumentsRequest {
@@ -131,7 +131,7 @@ message SearchDocumentsResponse {
 message ListChangesRequest {
   string project_name = 1;
   string document_key = 2;
-  uint64 previous_seq = 3;
+  int64 previous_seq = 3;
   int32  page_size = 4; 
   bool   is_forward = 5;
 }

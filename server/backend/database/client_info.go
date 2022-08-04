@@ -47,7 +47,7 @@ const (
 // attached to the client.
 type ClientDocInfo struct {
 	Status    string `bson:"status"`
-	ServerSeq uint64 `bson:"server_seq"`
+	ServerSeq int64  `bson:"server_seq"`
 	ClientSeq uint32 `bson:"client_seq"`
 }
 

@@ -295,14 +295,14 @@ func init() {
 		"Whether to use the default project. Even if public key is not provided from the client, "+
 			"the default project will be used for the request.",
 	)
-	cmd.Flags().Uint64Var(
+	cmd.Flags().Int64Var(
 		&conf.Backend.SnapshotThreshold,
 		"backend-snapshot-threshold",
 		server.DefaultSnapshotThreshold,
 		"Threshold that determines if changes should be sent with snapshot when the number "+
 			"of changes is greater than this value.",
 	)
-	cmd.Flags().Uint64Var(
+	cmd.Flags().Int64Var(
 		&conf.Backend.SnapshotInterval,
 		"backend-snapshot-interval",
 		server.DefaultSnapshotInterval,

@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	previousSeq uint64
+	previousSeq int64
 	pageSize    int32
 	isForward   bool
 )
@@ -90,7 +90,7 @@ func newHistoryCmd() *cobra.Command {
 
 func init() {
 	cmd := newHistoryCmd()
-	cmd.Flags().Uint64Var(
+	cmd.Flags().Int64Var(
 		&previousSeq,
 		"previous-seq",
 		0,

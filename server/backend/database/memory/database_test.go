@@ -192,7 +192,7 @@ func TestDB(t *testing.T) {
 		}
 		pack := doc.CreateChangePack()
 		for idx, c := range pack.Changes {
-			c.SetServerSeq(uint64(idx))
+			c.SetServerSeq(int64(idx))
 		}
 
 		// Store changes
@@ -230,26 +230,26 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err := db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
-		assert.Equal(t, uint64(0), snapshot.ServerSeq)
+		assert.Equal(t, int64(0), snapshot.ServerSeq)
 
 		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
-		assert.Equal(t, uint64(1), snapshot.ServerSeq)
+		assert.Equal(t, int64(1), snapshot.ServerSeq)
 
 		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
-		assert.Equal(t, uint64(2), snapshot.ServerSeq)
+		assert.Equal(t, int64(2), snapshot.ServerSeq)
 
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, 1)
 		assert.NoError(t, err)
-		assert.Equal(t, uint64(1), snapshot.ServerSeq)
+		assert.Equal(t, int64(1), snapshot.ServerSeq)
 	})
 
 	t.Run("docInfo pagination test", func(t *testing.T) {
