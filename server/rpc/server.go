@@ -28,7 +28,7 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/yorkie-team/yorkie/api"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -80,7 +80,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	grpcServer := grpc.NewServer(opts...)
 	healthpb.RegisterHealthServer(grpcServer, health.NewServer())
-	api.RegisterYorkieServer(grpcServer, newYorkieServer(yorkieServiceCtx, be))
+	api.RegisterYorkieServiceServer(grpcServer, newYorkieServer(yorkieServiceCtx, be))
 	be.Metrics.RegisterGRPCServer(grpcServer)
 
 	return &Server{

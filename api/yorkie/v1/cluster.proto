@@ -15,12 +15,14 @@
  */
 syntax = "proto3";
 
-package api;
+package yorkie.v1;
 
-import "api/resources.proto";
+import "yorkie/v1/resources.proto";
+
+option go_package = ".;v1";
 
 // Cluster is a service that provides a API used by Yorkie Cluster.
-service Cluster {
+service ClusterService {
   rpc BroadcastEvent (BroadcastEventRequest) returns (BroadcastEventResponse) {}
 }
 

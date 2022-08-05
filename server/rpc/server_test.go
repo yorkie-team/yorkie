@@ -30,7 +30,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
-	"github.com/yorkie-team/yorkie/api"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -50,7 +50,7 @@ var (
 	testRPCServer *rpc.Server
 	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.RPCPort)
 	testAdminAddr = fmt.Sprintf("localhost:%d", helper.AdminPort)
-	testClient    api.YorkieClient
+	testClient    api.YorkieServiceClient
 
 	invalidChangePack = &api.ChangePack{
 		DocumentKey: "invalid",
@@ -112,7 +112,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	testClient = api.NewYorkieClient(conn)
+	testClient = api.NewYorkieServiceClient(conn)
 
 	code := m.Run()
 

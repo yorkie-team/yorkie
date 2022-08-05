@@ -13,15 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 syntax = "proto3";
 
-package api;
+package yorkie.v1;
 
-import "api/resources.proto";
+import "yorkie/v1/resources.proto";
+
+option go_package = ".;v1";
 
 // Yorkie is a service that provides a API for SDKs.
-service Yorkie {
+service YorkieService {
   rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
   rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
   rpc UpdatePresence (UpdatePresenceRequest) returns (UpdatePresenceResponse) {}
