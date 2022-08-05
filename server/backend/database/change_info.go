@@ -34,9 +34,9 @@ var ErrEncodeOperationFailed = errors.New("encode operations failed")
 type ChangeInfo struct {
 	ID         types.ID `bson:"_id"`
 	DocID      types.ID `bson:"doc_id"`
-	ServerSeq  uint64   `bson:"server_seq"`
+	ServerSeq  int64    `bson:"server_seq"`
 	ClientSeq  uint32   `bson:"client_seq"`
-	Lamport    uint64   `bson:"lamport"`
+	Lamport    int64    `bson:"lamport"`
 	ActorID    types.ID `bson:"actor_id"`
 	Message    string   `bson:"message"`
 	Operations [][]byte `bson:"operations"`

@@ -33,7 +33,7 @@ const (
 var InitialCheckpoint = NewCheckpoint(InitialServerSeq, InitialClientSeq)
 
 // MaxCheckpoint is the maximum value of Checkpoint.
-var MaxCheckpoint = NewCheckpoint(math.MaxUint64, math.MaxUint32)
+var MaxCheckpoint = NewCheckpoint(math.MaxInt64, math.MaxUint32)
 
 // Checkpoint is used to determine the client received changes.
 // It is not meant to be used to determine the logical order of changes.
@@ -41,7 +41,7 @@ type Checkpoint struct {
 	// serverSeq is the sequence of the change on the server. We can find the
 	// change with serverSeq and documentID in the server. If the change is not
 	// stored on the server, serverSeq is 0.
-	ServerSeq uint64
+	ServerSeq int64
 
 	// clientSeq is the sequence of the change within the client that made the
 	// change.
@@ -49,7 +49,7 @@ type Checkpoint struct {
 }
 
 // NewCheckpoint creates a new instance of Checkpoint.
-func NewCheckpoint(serverSeq uint64, clientSeq uint32) Checkpoint {
+func NewCheckpoint(serverSeq int64, clientSeq uint32) Checkpoint {
 	return Checkpoint{
 		ServerSeq: serverSeq,
 		ClientSeq: clientSeq,
@@ -57,7 +57,7 @@ func NewCheckpoint(serverSeq uint64, clientSeq uint32) Checkpoint {
 }
 
 // NextServerSeq creates a new instance with next server sequence.
-func (cp Checkpoint) NextServerSeq(serverSeq uint64) Checkpoint {
+func (cp Checkpoint) NextServerSeq(serverSeq int64) Checkpoint {
 	if cp.ServerSeq == serverSeq {
 		return cp
 	}

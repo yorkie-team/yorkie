@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	gotime "time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -30,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/server/admin/auth"
 	"github.com/yorkie-team/yorkie/server/admin/interceptors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -37,6 +39,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/users"
 )
 
 // ErrInvalidAdminPort occurs when the port in the config is invalid.
@@ -58,25 +61,32 @@ func (c *Config) Validate() error {
 
 // Server is the gRPC server for admin service.
 type Server struct {
-	conf       *Config
-	grpcServer *grpc.Server
-	backend    *backend.Backend
+	conf         *Config
+	grpcServer   *grpc.Server
+	backend      *backend.Backend
+	tokenManager *auth.TokenManager
 }
 
 // NewServer creates a new Server.
 func NewServer(conf *Config, be *backend.Backend) *Server {
+	// TODO(hackerwins): extract secretKey and tokenDuration to config.
+	tokenManager := auth.NewTokenManager("yorkie", 7*24*gotime.Hour)
+
 	loggingInterceptor := grpchelper.NewLoggingInterceptor()
+	authInterceptor := interceptors.NewAuthInterceptor(tokenManager)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			loggingInterceptor.Unary(),
 			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
+			authInterceptor.Unary(),
 			defaultInterceptor.Unary(),
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			loggingInterceptor.Stream(),
 			be.Metrics.ServerMetrics().StreamServerInterceptor(),
+			authInterceptor.Stream(),
 			defaultInterceptor.Stream(),
 		)),
 	}
@@ -84,9 +94,10 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 	grpcServer := grpc.NewServer(opts...)
 
 	server := &Server{
-		conf:       conf,
-		backend:    be,
-		grpcServer: grpcServer,
+		conf:         conf,
+		grpcServer:   grpcServer,
+		backend:      be,
+		tokenManager: tokenManager,
 	}
 
 	api.RegisterAdminServer(grpcServer, server)
@@ -134,6 +145,51 @@ func (s *Server) listenAndServeGRPC() error {
 	}()
 
 	return nil
+}
+
+// SignUp signs up a user.
+func (s *Server) SignUp(
+	ctx context.Context,
+	req *api.SignUpRequest,
+) (*api.SignUpResponse, error) {
+	user, err := users.SignUp(ctx, s.backend, req.Username, req.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	pbUser, err := converter.ToUser(user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.SignUpResponse{
+		User: pbUser,
+	}, nil
+}
+
+// LogIn logs in a user.
+func (s *Server) LogIn(
+	ctx context.Context,
+	req *api.LogInRequest,
+) (*api.LogInResponse, error) {
+	user, err := users.IsCorrectPassword(
+		ctx,
+		s.backend,
+		req.Username,
+		req.Password,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := s.tokenManager.Generate(user.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.LogInResponse{
+		Token: token,
+	}, nil
 }
 
 // CreateProject creates a new project.
@@ -394,7 +450,7 @@ func (s *Server) ListChanges(
 	}
 	lastSeq := docInfo.ServerSeq
 
-	from, to := types.GetChangesRange(types.Paging[uint64]{
+	from, to := types.GetChangesRange(types.Paging[int64]{
 		Offset:    req.PreviousSeq,
 		PageSize:  int(req.PageSize),
 		IsForward: req.IsForward,

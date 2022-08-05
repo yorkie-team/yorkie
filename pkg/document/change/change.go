@@ -69,7 +69,7 @@ func (c *Change) Operations() []operations.Operation {
 }
 
 // ServerSeq returns the serverSeq of this change.
-func (c *Change) ServerSeq() uint64 {
+func (c *Change) ServerSeq() int64 {
 	return c.id.ServerSeq()
 }
 
@@ -79,7 +79,7 @@ func (c *Change) ClientSeq() uint32 {
 }
 
 // SetServerSeq sets the given serverSeq.
-func (c *Change) SetServerSeq(serverSeq uint64) {
+func (c *Change) SetServerSeq(serverSeq int64) {
 	c.id = c.id.SetServerSeq(serverSeq)
 }
 

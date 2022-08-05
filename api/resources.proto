@@ -40,8 +40,8 @@ message Change {
 
 message ChangeID {
   uint32 client_seq = 1;
-  uint64 server_seq = 2 [jstype = JS_STRING];
-  uint64 lamport = 3 [jstype = JS_STRING];
+  int64 server_seq = 2 [jstype = JS_STRING];
+  int64 lamport = 3 [jstype = JS_STRING];
   bytes actor_id = 4;
 }
 
@@ -220,6 +220,12 @@ message TextNodeID {
 // Messages for Common                 //
 /////////////////////////////////////////
 
+message User {
+  string id = 1;
+  string username = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
 message Project {
   string id = 1;
   string name = 2;
@@ -265,7 +271,7 @@ message Clients {
 }
 
 message Checkpoint {
-  uint64 server_seq = 1 [jstype = JS_STRING];
+  int64 server_seq = 1 [jstype = JS_STRING];
   uint32 client_seq = 2;
 }
 
@@ -276,7 +282,7 @@ message TextNodePos {
 }
 
 message TimeTicket {
-  uint64 lamport = 1 [jstype = JS_STRING];
+  int64 lamport = 1 [jstype = JS_STRING];
   uint32 delimiter = 2;
   bytes actor_id = 3;
 }

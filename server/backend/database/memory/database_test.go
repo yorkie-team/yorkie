@@ -81,6 +81,23 @@ func TestDB(t *testing.T) {
 		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
 	})
 
+	t.Run("user test", func(t *testing.T) {
+		username := "admin@yorkie.dev"
+		password := "hashed-password"
+
+		info, err := db.CreateUserInfo(ctx, username, password)
+		assert.NoError(t, err)
+		assert.Equal(t, username, info.Username)
+
+		_, err = db.CreateUserInfo(ctx, username, password)
+		assert.ErrorIs(t, err, database.ErrUserAlreadyExists)
+
+		infos, err := db.ListUserInfos(ctx)
+		assert.NoError(t, err)
+		assert.Len(t, infos, 1)
+		assert.Equal(t, infos[0], info)
+	})
+
 	t.Run("activate and find client test", func(t *testing.T) {
 		_, err := db.FindClientInfoByID(ctx, projectID, notExistsID)
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
@@ -175,7 +192,7 @@ func TestDB(t *testing.T) {
 		}
 		pack := doc.CreateChangePack()
 		for idx, c := range pack.Changes {
-			c.SetServerSeq(uint64(idx))
+			c.SetServerSeq(int64(idx))
 		}
 
 		// Store changes
@@ -213,26 +230,26 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err := db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
-		assert.Equal(t, uint64(0), snapshot.ServerSeq)
+		assert.Equal(t, int64(0), snapshot.ServerSeq)
 
 		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
-		assert.Equal(t, uint64(1), snapshot.ServerSeq)
+		assert.Equal(t, int64(1), snapshot.ServerSeq)
 
 		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
-		assert.Equal(t, uint64(2), snapshot.ServerSeq)
+		assert.Equal(t, int64(2), snapshot.ServerSeq)
 
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, 1)
 		assert.NoError(t, err)
-		assert.Equal(t, uint64(1), snapshot.ServerSeq)
+		assert.Equal(t, int64(1), snapshot.ServerSeq)
 	})
 
 	t.Run("docInfo pagination test", func(t *testing.T) {

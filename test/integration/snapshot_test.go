@@ -28,7 +28,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -191,10 +190,6 @@ func TestSnapshot(t *testing.T) {
 			assert.NoError(t, cli1.Deactivate(context.Background()))
 			assert.NoError(t, cli1.Close())
 		}()
-
-		adminCli2, err := admin.Dial(testServer.AdminAddr())
-		assert.NoError(t, err)
-		defer func() { assert.NoError(t, adminCli2.Close()) }()
 
 		ctx := context.Background()
 

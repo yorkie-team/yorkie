@@ -32,8 +32,14 @@ var (
 	// ErrProjectAlreadyExists is returned when the project already exists.
 	ErrProjectAlreadyExists = errors.New("project already exists")
 
+	// ErrUserNotFound is returned when the user is not found.
+	ErrUserNotFound = errors.New("user not found")
+
 	// ErrProjectNotFound is returned when the project is not found.
 	ErrProjectNotFound = errors.New("project not found")
+
+	// ErrUserAlreadyExists is returned when the user already exists.
+	ErrUserAlreadyExists = errors.New("user already exists")
 
 	// ErrClientNotFound is returned when the client could not be found.
 	ErrClientNotFound = errors.New("client not found")
@@ -62,8 +68,10 @@ type Database interface {
 	// FindProjectInfoByID returns a project by the given id.
 	FindProjectInfoByID(ctx context.Context, id types.ID) (*ProjectInfo, error)
 
-	// EnsureDefaultProjectInfo ensures that the default project exists.
-	EnsureDefaultProjectInfo(ctx context.Context) (*ProjectInfo, error)
+	// EnsureDefaultUserAndProject ensures that the default user and project exists.
+	EnsureDefaultUserAndProject(
+		ctx context.Context,
+	) (*UserInfo, *ProjectInfo, error)
 
 	// CreateProjectInfo creates a new project.
 	CreateProjectInfo(ctx context.Context, name string) (*ProjectInfo, error)
@@ -73,6 +81,19 @@ type Database interface {
 
 	// UpdateProjectInfo updates the project.
 	UpdateProjectInfo(ctx context.Context, id types.ID, fields *types.UpdatableProjectFields) (*ProjectInfo, error)
+
+	// CreateUserInfo creates a new user.
+	CreateUserInfo(
+		ctx context.Context,
+		username string,
+		hashedPassword string,
+	) (*UserInfo, error)
+
+	// FindUserInfo returns a user by the given username.
+	FindUserInfo(ctx context.Context, username string) (*UserInfo, error)
+
+	// ListUserInfos returns all users.
+	ListUserInfos(ctx context.Context) ([]*UserInfo, error)
 
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)
@@ -123,7 +144,7 @@ type Database interface {
 		ctx context.Context,
 		projectID types.ID,
 		docInfo *DocInfo,
-		initialServerSeq uint64,
+		initialServerSeq int64,
 		changes []*change.Change,
 	) error
 
@@ -137,23 +158,23 @@ type Database interface {
 	FindChangesBetweenServerSeqs(
 		ctx context.Context,
 		docID types.ID,
-		from uint64,
-		to uint64,
+		from int64,
+		to int64,
 	) ([]*change.Change, error)
 
 	// FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
 	FindChangeInfosBetweenServerSeqs(
 		ctx context.Context,
 		docID types.ID,
-		from uint64,
-		to uint64,
+		from int64,
+		to int64,
 	) ([]*ChangeInfo, error)
 
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(ctx context.Context, docID types.ID, doc *document.InternalDocument) error
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
-	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq uint64) (*SnapshotInfo, error)
+	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq int64) (*SnapshotInfo, error)
 
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 	// and returns the min synced ticket.
@@ -161,7 +182,7 @@ type Database interface {
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docID types.ID,
-		serverSeq uint64,
+		serverSeq int64,
 	) (*time.Ticket, error)
 
 	// UpdateSyncedSeq updates the syncedSeq of the given client.
@@ -169,7 +190,7 @@ type Database interface {
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docID types.ID,
-		serverSeq uint64,
+		serverSeq int64,
 	) error
 
 	// FindDocInfosByPaging returns the documentInfos of the given paging.

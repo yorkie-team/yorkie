@@ -110,7 +110,7 @@ func GetDocumentByServerSeq(
 	be *backend.Backend,
 	project *types.Project,
 	k key.Key,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*document.InternalDocument, error) {
 	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
 		ctx,

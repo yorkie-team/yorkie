@@ -12,31 +12,21 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
 
-package packs
+package types
 
-import (
-	"context"
+import "time"
 
-	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/database"
-)
+// User is a user that can access the project.
+type User struct {
+	// ID is the unique ID of the user.
+	ID ID `json:"id"`
 
-// FindChanges fetches changes of the given document.
-func FindChanges(
-	ctx context.Context,
-	be *backend.Backend,
-	docInfo *database.DocInfo,
-	from int64,
-	to int64,
-) ([]*change.Change, error) {
-	changes, err := be.DB.FindChangesBetweenServerSeqs(
-		ctx,
-		docInfo.ID,
-		from,
-		to,
-	)
-	return changes, err
+	// Username is the username of the user.
+	Username string `json:"username"`
+
+	// CreatedAt is the time when the user was created.
+	CreatedAt time.Time `json:"created_at"`
 }

@@ -165,7 +165,7 @@ func BuildDocumentForServerSeq(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*document.InternalDocument, error) {
 	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, serverSeq)
 	if err != nil {

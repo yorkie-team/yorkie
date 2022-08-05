@@ -17,16 +17,21 @@
 package helper
 
 import (
+	"context"
 	"fmt"
 	"log"
 	gotime "time"
 
+	"github.com/stretchr/testify/assert"
+
+	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/admin"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
@@ -49,7 +54,7 @@ var (
 	HousekeepingDeactivateThreshold = 1 * gotime.Minute
 	HousekeepingCandidatesLimit     = 10
 
-	SnapshotThreshold          = uint64(10)
+	SnapshotThreshold          = int64(10)
 	SnapshotWithPurgingChanges = false
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
 	AuthWebhookSize            = 100
@@ -74,6 +79,17 @@ func init() {
 // timestamp is set only once on first call.
 func TestDBName() string {
 	return fmt.Sprintf("test-%s-%d", server.DefaultMongoYorkieDatabase, testStartedAt)
+}
+
+// CreateAdminCli returns a new instance of admin cli for testing.
+func CreateAdminCli(t assert.TestingT, adminAddr string) *adminClient.Client {
+	adminCli, err := adminClient.Dial(adminAddr)
+	assert.NoError(t, err)
+
+	_, err = adminCli.LogIn(context.Background(), database.DefaultUsername, database.DefaultPassword)
+	assert.NoError(t, err)
+
+	return adminCli
 }
 
 // TestRoot returns the root

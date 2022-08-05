@@ -103,8 +103,52 @@ func (d *DB) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.Pr
 	return raw.(*database.ProjectInfo).DeepCopy(), nil
 }
 
-// EnsureDefaultProjectInfo creates the default project if it does not exist.
-func (d *DB) EnsureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
+// EnsureDefaultUserAndProject creates the default user and project if they do not exist.
+func (d *DB) EnsureDefaultUserAndProject(ctx context.Context) (*database.UserInfo, *database.ProjectInfo, error) {
+	user, err := d.ensureDefaultUserInfo(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	project, err := d.ensureDefaultProjectInfo(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return user, project, nil
+}
+
+// ensureDefaultUserInfo creates the default user if it does not exist.
+func (d *DB) ensureDefaultUserInfo(ctx context.Context) (*database.UserInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", database.DefaultUsername)
+	if err != nil {
+		return nil, err
+	}
+
+	var info *database.UserInfo
+	if raw == nil {
+		hashedPassword, err := database.HashedPassword(database.DefaultPassword)
+		if err != nil {
+			return nil, err
+		}
+		info = database.NewUserInfo(database.DefaultUsername, hashedPassword)
+		info.ID = newID()
+		if err := txn.Insert(tblUsers, info); err != nil {
+			return nil, err
+		}
+	} else {
+		info = raw.(*database.UserInfo).DeepCopy()
+	}
+
+	txn.Commit()
+	return info, nil
+}
+
+// ensureDefaultProjectInfo creates the default project if it does not exist.
+func (d *DB) ensureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -211,6 +255,73 @@ func (d *DB) UpdateProjectInfo(
 	txn.Commit()
 
 	return info, nil
+}
+
+// CreateUserInfo creates a new user.
+func (d *DB) CreateUserInfo(
+	ctx context.Context,
+	username string,
+	hashedPassword string,
+) (*database.UserInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	existing, err := txn.First(tblUsers, "username", username)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("%s: %w", username, database.ErrUserAlreadyExists)
+	}
+
+	info := database.NewUserInfo(username, hashedPassword)
+	info.ID = newID()
+	if err := txn.Insert(tblUsers, info); err != nil {
+		return nil, err
+	}
+	txn.Commit()
+
+	return info, nil
+}
+
+// FindUserInfo finds a user by the given username.
+func (d *DB) FindUserInfo(ctx context.Context, username string) (*database.UserInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", username)
+	if err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
+	}
+
+	return raw.(*database.UserInfo).DeepCopy(), nil
+}
+
+// ListUserInfos returns all users.
+func (d *DB) ListUserInfos(
+	ctx context.Context,
+) ([]*database.UserInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblUsers, "id")
+	if err != nil {
+		return nil, err
+	}
+
+	var infos []*database.UserInfo
+	for {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
+		infos = append(infos, raw.(*database.UserInfo).DeepCopy())
+	}
+
+	return infos, nil
 }
 
 // ActivateClient activates a client.
@@ -500,7 +611,7 @@ func (d *DB) CreateChangeInfos(
 	ctx context.Context,
 	projectID types.ID,
 	docInfo *database.DocInfo,
-	initialServerSeq uint64,
+	initialServerSeq int64,
 	changes []*change.Change,
 ) error {
 	txn := d.db.Txn(true)
@@ -563,14 +674,14 @@ func (d *DB) DeleteOldChangeInfos(
 		return err
 	}
 
-	var minSyncedServerSeq uint64 = math.MaxUint64
+	var minSyncedServerSeq int64 = math.MaxInt64
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		info := raw.(*database.SyncedSeqInfo)
 		if info.DocID == docInfo.ID && info.ServerSeq < minSyncedServerSeq {
 			minSyncedServerSeq = info.ServerSeq
 		}
 	}
-	if minSyncedServerSeq == math.MaxUint64 {
+	if minSyncedServerSeq == math.MaxInt64 {
 		return nil
 	}
 
@@ -593,8 +704,8 @@ func (d *DB) DeleteOldChangeInfos(
 func (d *DB) FindChangesBetweenServerSeqs(
 	ctx context.Context,
 	docID types.ID,
-	from uint64,
-	to uint64,
+	from int64,
+	to int64,
 ) ([]*change.Change, error) {
 	infos, err := d.FindChangeInfosBetweenServerSeqs(ctx, docID, from, to)
 	if err != nil {
@@ -617,8 +728,8 @@ func (d *DB) FindChangesBetweenServerSeqs(
 func (d *DB) FindChangeInfosBetweenServerSeqs(
 	ctx context.Context,
 	docID types.ID,
-	from uint64,
-	to uint64,
+	from int64,
+	to int64,
 ) ([]*database.ChangeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -677,7 +788,7 @@ func (d *DB) CreateSnapshotInfo(
 func (d *DB) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -714,7 +825,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*time.Ticket, error) {
 	if err := d.UpdateSyncedSeq(ctx, clientInfo, docID, serverSeq); err != nil {
 		return nil, err
@@ -727,7 +838,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		tblSyncedSeqs,
 		"doc_id_lamport_actor_id",
 		docID.String(),
-		uint64(0),
+		int64(0),
 		time.InitialActorID.String(),
 	)
 	if err != nil {
@@ -763,7 +874,7 @@ func (d *DB) UpdateSyncedSeq(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -917,7 +1028,7 @@ func (d *DB) FindDocInfosByQuery(
 func (d *DB) findTicketByServerSeq(
 	txn *memdb.Txn,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*time.Ticket, error) {
 	if serverSeq == change.InitialServerSeq {
 		return time.InitialTicket, nil

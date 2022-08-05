@@ -31,10 +31,10 @@ type SnapshotInfo struct {
 	DocID types.ID `bson:"doc_id"`
 
 	// ServerSeq is the sequence number of the server which the snapshot belongs to.
-	ServerSeq uint64 `bson:"server_seq"`
+	ServerSeq int64 `bson:"server_seq"`
 
 	// Lamport is the Lamport timestamp of the snapshot.
-	Lamport uint64 `bson:"lamport"`
+	Lamport int64 `bson:"lamport"`
 
 	// Snapshot is the snapshot data.
 	Snapshot []byte `bson:"snapshot"`

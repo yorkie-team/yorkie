@@ -21,6 +21,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 // CreateProject creates a project.
@@ -72,7 +73,7 @@ func GetProject(
 // GetProjectFromAPIKey returns a project from an API key.
 func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey string) (*types.Project, error) {
 	if apiKey == "" {
-		info, err := be.DB.EnsureDefaultProjectInfo(ctx)
+		info, err := be.DB.FindProjectInfoByName(ctx, database.DefaultProjectName)
 		if err != nil {
 			return nil, err
 		}

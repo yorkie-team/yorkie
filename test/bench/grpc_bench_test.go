@@ -86,7 +86,7 @@ func benchmarkUpdateAndSync(
 	cli *client.Client,
 	d *document.Document,
 	key string,
-) error {
+) {
 	for i := 0; i < cnt; i++ {
 		err := d.Update(func(root *proxy.ObjectProxy) error {
 			text := root.GetText(key)
@@ -97,7 +97,6 @@ func benchmarkUpdateAndSync(
 		err = cli.Sync(ctx)
 		assert.NoError(b, err)
 	}
-	return nil
 }
 
 func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli *admin.Client) error {
@@ -149,7 +148,8 @@ func watchDoc(
 }
 
 func BenchmarkRPC(b *testing.B) {
-	logging.SetLogLevel("error")
+	err := logging.SetLogLevel("error")
+	assert.NoError(b, err)
 	startDefaultServer()
 	defer func() {
 		if defaultServer == nil {
@@ -187,8 +187,7 @@ func BenchmarkRPC(b *testing.B) {
 			})
 			assert.NoError(b, err)
 
-			err = benchmarkUpdateAndSync(ctx, b, 100, cli, d1, testKey)
-			assert.NoError(b, err)
+			benchmarkUpdateAndSync(ctx, b, 100, cli, d1, testKey)
 		}
 	})
 
@@ -299,14 +298,12 @@ func BenchmarkRPC(b *testing.B) {
 	})
 
 	b.Run("adminCli to server", func(b *testing.B) {
-		adminCli, err := admin.Dial(defaultServer.AdminAddr())
-		assert.NoError(b, err)
+		adminCli := helper.CreateAdminCli(b, defaultServer.AdminAddr())
 		defer func() { assert.NoError(b, adminCli.Close()) }()
 
 		ctx := context.Background()
 		for i := 0; i < b.N; i++ {
-			err = benchmarkUpdateProject(ctx, b, 500, adminCli)
-			assert.NoError(b, err)
+			assert.NoError(b, benchmarkUpdateProject(ctx, b, 500, adminCli))
 		}
 	})
 }

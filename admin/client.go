@@ -33,6 +33,11 @@ import (
 // Option configures Options.
 type Option func(*Options)
 
+// WithToken configures the token of the client.
+func WithToken(token string) Option {
+	return func(o *Options) { o.Token = token }
+}
+
 // WithLogger configures the Logger of the client.
 func WithLogger(logger *zap.Logger) Option {
 	return func(o *Options) { o.Logger = logger }
@@ -40,15 +45,19 @@ func WithLogger(logger *zap.Logger) Option {
 
 // Options configures how we set up the client.
 type Options struct {
+	// Token is the token of the user.
+	Token string
+
 	// Logger is the Logger of the client.
 	Logger *zap.Logger
 }
 
 // Client is a client for admin service.
 type Client struct {
-	conn        *grpc.ClientConn
-	client      api.AdminClient
-	dialOptions []grpc.DialOption
+	conn            *grpc.ClientConn
+	client          api.AdminClient
+	dialOptions     []grpc.DialOption
+	authInterceptor *AuthInterceptor
 
 	logger *zap.Logger
 }
@@ -63,6 +72,10 @@ func New(opts ...Option) (*Client, error) {
 	credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 	dialOptions := []grpc.DialOption{credentials}
 
+	authInterceptor := NewAuthInterceptor(options.Token)
+	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
+	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
+
 	logger := options.Logger
 	if logger == nil {
 		l, err := zap.NewProduction()
@@ -73,8 +86,9 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		logger:      logger,
-		dialOptions: dialOptions,
+		logger:          logger,
+		dialOptions:     dialOptions,
+		authInterceptor: authInterceptor,
 	}, nil
 }
 
@@ -108,6 +122,42 @@ func (c *Client) Dial(adminAddr string) error {
 // Close closes the connection to the admin service.
 func (c *Client) Close() error {
 	return c.conn.Close()
+}
+
+// LogIn logs in a user.
+func (c *Client) LogIn(
+	ctx context.Context,
+	username,
+	password string,
+) (string, error) {
+	response, err := c.client.LogIn(ctx, &api.LogInRequest{
+		Username: username,
+		Password: password,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	c.authInterceptor.SetToken(response.Token)
+
+	return response.Token, nil
+}
+
+// SignUp signs up a new user.
+func (c *Client) SignUp(
+	ctx context.Context,
+	username,
+	password string,
+) (*types.User, error) {
+	response, err := c.client.SignUp(ctx, &api.SignUpRequest{
+		Username: username,
+		Password: password,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromUser(response.User)
 }
 
 // CreateProject creates a new project.
@@ -180,7 +230,7 @@ func (c *Client) ListChangeSummaries(
 	ctx context.Context,
 	projectName string,
 	key key.Key,
-	previousSeq uint64,
+	previousSeq int64,
 	pageSize int32,
 	isForward bool,
 ) ([]*types.ChangeSummary, error) {

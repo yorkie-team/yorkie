@@ -20,6 +20,7 @@ import "github.com/hashicorp/go-memdb"
 
 var (
 	tblProjects   = "projects"
+	tblUsers      = "users"
 	tblClients    = "clients"
 	tblDocuments  = "documents"
 	tblChanges    = "changes"
@@ -51,6 +52,21 @@ var schema = &memdb.DBSchema{
 					Name:    "secret_key",
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "SecretKey"},
+				},
+			},
+		},
+		tblUsers: {
+			Name: tblUsers,
+			Indexes: map[string]*memdb.IndexSchema{
+				"id": {
+					Name:    "id",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "ID"},
+				},
+				"username": {
+					Name:    "username",
+					Unique:  true,
+					Indexer: &memdb.StringFieldIndex{Field: "Username"},
 				},
 			},
 		},
@@ -127,7 +143,7 @@ var schema = &memdb.DBSchema{
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.UintFieldIndex{Field: "ServerSeq"},
+							&memdb.IntFieldIndex{Field: "ServerSeq"},
 						},
 					},
 				},
@@ -147,7 +163,7 @@ var schema = &memdb.DBSchema{
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.UintFieldIndex{Field: "ServerSeq"},
+							&memdb.IntFieldIndex{Field: "ServerSeq"},
 						},
 					},
 				},
@@ -176,7 +192,7 @@ var schema = &memdb.DBSchema{
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.UintFieldIndex{Field: "Lamport"},
+							&memdb.IntFieldIndex{Field: "Lamport"},
 							&memdb.StringFieldIndex{Field: "ActorID"},
 						},
 					},

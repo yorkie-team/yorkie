@@ -43,8 +43,7 @@ func TestHistory(t *testing.T) {
 	cli := clients[0]
 	defer cleanupClients(t, clients)
 
-	adminCli, err := admin.Dial(defaultServer.AdminAddr())
-	assert.NoError(t, err)
+	adminCli := helper.CreateAdminCli(t, defaultServer.AdminAddr())
 	defer func() { assert.NoError(t, adminCli.Close()) }()
 
 	t.Run("history test", func(t *testing.T) {

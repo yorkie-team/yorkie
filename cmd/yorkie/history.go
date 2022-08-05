@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2022 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	previousSeq uint64
+	previousSeq int64
 	pageSize    int32
 	isForward   bool
 )
@@ -90,7 +90,7 @@ func newHistoryCmd() *cobra.Command {
 
 func init() {
 	cmd := newHistoryCmd()
-	cmd.Flags().Uint64Var(
+	cmd.Flags().Int64Var(
 		&previousSeq,
 		"previous-seq",
 		0,
