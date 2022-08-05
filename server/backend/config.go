@@ -30,10 +30,10 @@ type Config struct {
 
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
-	SnapshotThreshold uint64 `yaml:"SnapshotThreshold"`
+	SnapshotThreshold int64 `yaml:"SnapshotThreshold"`
 
 	// SnapshotInterval is the interval of changes to create a snapshot.
-	SnapshotInterval uint64 `yaml:"SnapshotInterval"`
+	SnapshotInterval int64 `yaml:"SnapshotInterval"`
 
 	// AuthWebhookMaxRetries is the max count that retries the authorization webhook.
 	AuthWebhookMaxRetries uint64 `yaml:"AuthWebhookMaxRetries"`

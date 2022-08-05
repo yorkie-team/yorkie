@@ -62,8 +62,8 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 // NewInternalDocumentFromSnapshot creates a new instance of InternalDocument with the snapshot.
 func NewInternalDocumentFromSnapshot(
 	k key.Key,
-	serverSeq uint64,
-	lamport uint64,
+	serverSeq int64,
+	lamport int64,
 	snapshot []byte,
 ) (*InternalDocument, error) {
 	obj, err := converter.BytesToObject(snapshot)
@@ -160,7 +160,7 @@ func (d *InternalDocument) SetActor(actor *time.ActorID) {
 }
 
 // Lamport returns the Lamport clock of this document.
-func (d *InternalDocument) Lamport() uint64 {
+func (d *InternalDocument) Lamport() int64 {
 	return d.changeID.Lamport()
 }
 
@@ -189,7 +189,7 @@ func (d *InternalDocument) RootObject() *json.Object {
 	return d.root.Object()
 }
 
-func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq uint64) error {
+func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error {
 	rootObj, err := converter.BytesToObject(snapshot)
 	if err != nil {
 		return err

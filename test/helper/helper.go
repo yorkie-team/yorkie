@@ -54,7 +54,7 @@ var (
 	HousekeepingDeactivateThreshold = 1 * gotime.Minute
 	HousekeepingCandidatesLimit     = 10
 
-	SnapshotThreshold          = uint64(10)
+	SnapshotThreshold          = int64(10)
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
 	AuthWebhookSize            = 100
 	AuthWebhookCacheAuthTTL    = 10 * gotime.Second

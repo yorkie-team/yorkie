@@ -25,7 +25,7 @@ func TestTicket(t *testing.T) {
 	t.Run("constructor and getter method test", func(t *testing.T) {
 		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
 		ticket := time.NewTicket(0, 1, actorID)
-		assert.Equal(t, uint64(0), ticket.Lamport())
+		assert.Equal(t, int64(0), ticket.Lamport())
 		assert.Equal(t, uint32(1), ticket.Delimiter())
 		assert.Equal(t, actorID, ticket.ActorID())
 

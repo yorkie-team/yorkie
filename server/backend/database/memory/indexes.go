@@ -143,7 +143,7 @@ var schema = &memdb.DBSchema{
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.UintFieldIndex{Field: "ServerSeq"},
+							&memdb.IntFieldIndex{Field: "ServerSeq"},
 						},
 					},
 				},
@@ -163,7 +163,7 @@ var schema = &memdb.DBSchema{
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.UintFieldIndex{Field: "ServerSeq"},
+							&memdb.IntFieldIndex{Field: "ServerSeq"},
 						},
 					},
 				},
@@ -192,7 +192,7 @@ var schema = &memdb.DBSchema{
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "DocID"},
-							&memdb.UintFieldIndex{Field: "Lamport"},
+							&memdb.IntFieldIndex{Field: "Lamport"},
 							&memdb.StringFieldIndex{Field: "ActorID"},
 						},
 					},

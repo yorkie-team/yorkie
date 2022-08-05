@@ -40,10 +40,10 @@ type ID struct {
 	// serverSeq is the sequence of the change on the server. We can find the
 	// change with serverSeq and documentID in the server. If the change is not
 	// stored on the server, serverSeq is 0.
-	serverSeq uint64
+	serverSeq int64
 
 	// lamport is lamport timestamp.
-	lamport uint64
+	lamport int64
 
 	// actorID is actorID of this ID. If the actor is not set, it has initial
 	// value.
@@ -53,8 +53,8 @@ type ID struct {
 // NewID creates a new instance of ID.
 func NewID(
 	clientSeq uint32,
-	serverSeq uint64,
-	lamport uint64,
+	serverSeq int64,
+	lamport int64,
 	actorID *time.ActorID,
 ) ID {
 	return ID{
@@ -85,7 +85,7 @@ func (id ID) NewTimeTicket(delimiter uint32) *time.Ticket {
 
 // SyncLamport syncs lamport timestamp with the given ID.
 //  - receiving: https://en.wikipedia.org/wiki/Lamport_timestamps#Algorithm
-func (id ID) SyncLamport(otherLamport uint64) ID {
+func (id ID) SyncLamport(otherLamport int64) ID {
 	if id.lamport < otherLamport {
 		return NewID(id.clientSeq, InitialServerSeq, otherLamport, id.actorID)
 	}
@@ -99,7 +99,7 @@ func (id ID) SetActor(actor *time.ActorID) ID {
 }
 
 // SetServerSeq sets server sequence of this ID.
-func (id ID) SetServerSeq(serverSeq uint64) ID {
+func (id ID) SetServerSeq(serverSeq int64) ID {
 	return NewID(id.clientSeq, serverSeq, id.lamport, id.actorID)
 }
 
@@ -109,12 +109,12 @@ func (id ID) ClientSeq() uint32 {
 }
 
 // ServerSeq returns the server sequence of this ID.
-func (id ID) ServerSeq() uint64 {
+func (id ID) ServerSeq() int64 {
 	return id.serverSeq
 }
 
 // Lamport returns the lamport clock of this ID.
-func (id ID) Lamport() uint64 {
+func (id ID) Lamport() int64 {
 	return id.lamport
 }
 

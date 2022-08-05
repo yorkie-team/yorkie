@@ -24,7 +24,7 @@ import (
 
 const (
 	// MaxLamport is the maximum value stored in lamport.
-	MaxLamport = math.MaxUint64
+	MaxLamport = math.MaxInt64
 
 	// MaxDelimiter is the maximum value stored in delimiter.
 	MaxDelimiter = math.MaxUint32
@@ -49,7 +49,7 @@ var (
 // Ticket is a timestamp of the logical clock. Ticket is immutable.
 // It is created by change.ID.
 type Ticket struct {
-	lamport   uint64
+	lamport   int64
 	delimiter uint32
 	actorID   *ActorID
 
@@ -59,7 +59,7 @@ type Ticket struct {
 
 // NewTicket creates an instance of Ticket.
 func NewTicket(
-	lamport uint64,
+	lamport int64,
 	delimiter uint32,
 	actorID *ActorID,
 ) *Ticket {
@@ -81,9 +81,9 @@ func (t *Ticket) AnnotatedString() string {
 // Key returns the key string for this Ticket.
 func (t *Ticket) Key() string {
 	if t.cachedKey == "" {
-		t.cachedKey = strconv.FormatUint(t.lamport, 10) +
+		t.cachedKey = strconv.FormatInt(t.lamport, 10) +
 			":" +
-			strconv.FormatUint(uint64(t.delimiter), 10) +
+			strconv.FormatInt(int64(t.delimiter), 10) +
 			":" +
 			t.actorID.String()
 
@@ -93,7 +93,7 @@ func (t *Ticket) Key() string {
 }
 
 // Lamport returns the lamport value.
-func (t *Ticket) Lamport() uint64 {
+func (t *Ticket) Lamport() int64 {
 	return t.lamport
 }
 

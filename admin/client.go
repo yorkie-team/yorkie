@@ -230,7 +230,7 @@ func (c *Client) ListChangeSummaries(
 	ctx context.Context,
 	projectName string,
 	key key.Key,
-	previousSeq uint64,
+	previousSeq int64,
 	pageSize int32,
 	isForward bool,
 ) ([]*types.ChangeSummary, error) {
@@ -252,7 +252,7 @@ func (c *Client) ListChangeSummaries(
 	}
 
 	lastSeq := changes[len(changes)-1].ID().ServerSeq()
-	from, _ := types.GetChangesRange(types.Paging[uint64]{
+	from, _ := types.GetChangesRange(types.Paging[int64]{
 		Offset:    previousSeq,
 		PageSize:  int(pageSize),
 		IsForward: isForward,
