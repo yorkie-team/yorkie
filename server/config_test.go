@@ -37,8 +37,8 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, conf.RPC.CertFile, "")
 		assert.Equal(t, conf.RPC.KeyFile, "")
 
-		assert.Equal(t, conf.Backend.SnapshotThreshold, uint64(server.DefaultSnapshotThreshold))
-		assert.Equal(t, conf.Backend.SnapshotInterval, uint64(server.DefaultSnapshotInterval))
+		assert.Equal(t, conf.Backend.SnapshotThreshold, int64(server.DefaultSnapshotThreshold))
+		assert.Equal(t, conf.Backend.SnapshotInterval, int64(server.DefaultSnapshotInterval))
 
 		assert.Nil(t, conf.ETCD)
 	})
@@ -61,8 +61,8 @@ func TestNewConfigFromFile(t *testing.T) {
 		pingTimeout, err := time.ParseDuration(conf.Mongo.PingTimeout)
 		assert.NoError(t, err)
 		assert.Equal(t, pingTimeout, server.DefaultMongoPingTimeout)
-		assert.Equal(t, conf.Backend.SnapshotThreshold, uint64(server.DefaultSnapshotThreshold))
-		assert.Equal(t, conf.Backend.SnapshotInterval, uint64(server.DefaultSnapshotInterval))
+		assert.Equal(t, conf.Backend.SnapshotThreshold, int64(server.DefaultSnapshotThreshold))
+		assert.Equal(t, conf.Backend.SnapshotInterval, int64(server.DefaultSnapshotInterval))
 		assert.Equal(t, conf.Backend.AuthWebhookMaxRetries, uint64(server.DefaultAuthWebhookMaxRetries))
 
 		authWebhookMaxWaitInterval, err := time.ParseDuration(conf.Backend.AuthWebhookMaxWaitInterval)

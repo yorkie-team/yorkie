@@ -29,8 +29,8 @@ func FindChanges(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
-	from uint64,
-	to uint64,
+	from int64,
+	to int64,
 ) ([]*change.Change, error) {
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,

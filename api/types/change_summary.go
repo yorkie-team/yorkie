@@ -16,16 +16,16 @@ type ChangeSummary struct {
 
 // GetChangesRange returns a range of changes.
 func GetChangesRange(
-	paging Paging[uint64],
-	lastSeq uint64,
-) (uint64, uint64) {
+	paging Paging[int64],
+	lastSeq int64,
+) (int64, int64) {
 	if paging.Offset == 0 && paging.PageSize == 0 {
 		return 1, lastSeq
 	}
 
-	size := uint64(paging.PageSize)
+	size := int64(paging.PageSize)
 	prevSeq := paging.Offset
-	var from, to uint64
+	var from, to int64
 	if paging.IsForward {
 		if prevSeq == 0 {
 			from = 1

@@ -699,7 +699,7 @@ func (c *Client) CreateChangeInfos(
 	ctx context.Context,
 	projectID types.ID,
 	docInfo *database.DocInfo,
-	initialServerSeq uint64,
+	initialServerSeq int64,
 	changes []*change.Change,
 ) error {
 	encodedDocID, err := encodeID(docInfo.ID)
@@ -761,8 +761,8 @@ func (c *Client) CreateChangeInfos(
 func (c *Client) FindChangesBetweenServerSeqs(
 	ctx context.Context,
 	docID types.ID,
-	from uint64,
-	to uint64,
+	from int64,
+	to int64,
 ) ([]*change.Change, error) {
 	infos, err := c.FindChangeInfosBetweenServerSeqs(ctx, docID, from, to)
 	if err != nil {
@@ -785,8 +785,8 @@ func (c *Client) FindChangesBetweenServerSeqs(
 func (c *Client) FindChangeInfosBetweenServerSeqs(
 	ctx context.Context,
 	docID types.ID,
-	from uint64,
-	to uint64,
+	from int64,
+	to int64,
 ) ([]*database.ChangeInfo, error) {
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
@@ -847,7 +847,7 @@ func (c *Client) CreateSnapshotInfo(
 func (c *Client) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*database.SnapshotInfo, error) {
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
@@ -886,7 +886,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*time.Ticket, error) {
 	if err := c.UpdateSyncedSeq(ctx, clientInfo, docID, serverSeq); err != nil {
 		return nil, err
@@ -1027,7 +1027,7 @@ func (c *Client) UpdateSyncedSeq(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) error {
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
@@ -1090,7 +1090,7 @@ func (c *Client) UpdateSyncedSeq(
 func (c *Client) findTicketByServerSeq(
 	ctx context.Context,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*time.Ticket, error) {
 	if serverSeq == change.InitialServerSeq {
 		return time.InitialTicket, nil

@@ -610,7 +610,7 @@ func (d *DB) CreateChangeInfos(
 	ctx context.Context,
 	projectID types.ID,
 	docInfo *database.DocInfo,
-	initialServerSeq uint64,
+	initialServerSeq int64,
 	changes []*change.Change,
 ) error {
 	txn := d.db.Txn(true)
@@ -662,8 +662,8 @@ func (d *DB) CreateChangeInfos(
 func (d *DB) FindChangesBetweenServerSeqs(
 	ctx context.Context,
 	docID types.ID,
-	from uint64,
-	to uint64,
+	from int64,
+	to int64,
 ) ([]*change.Change, error) {
 	infos, err := d.FindChangeInfosBetweenServerSeqs(ctx, docID, from, to)
 	if err != nil {
@@ -686,8 +686,8 @@ func (d *DB) FindChangesBetweenServerSeqs(
 func (d *DB) FindChangeInfosBetweenServerSeqs(
 	ctx context.Context,
 	docID types.ID,
-	from uint64,
-	to uint64,
+	from int64,
+	to int64,
 ) ([]*database.ChangeInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -746,7 +746,7 @@ func (d *DB) CreateSnapshotInfo(
 func (d *DB) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -783,7 +783,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*time.Ticket, error) {
 	if err := d.UpdateSyncedSeq(ctx, clientInfo, docID, serverSeq); err != nil {
 		return nil, err
@@ -796,7 +796,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		tblSyncedSeqs,
 		"doc_id_lamport_actor_id",
 		docID.String(),
-		uint64(0),
+		int64(0),
 		time.InitialActorID.String(),
 	)
 	if err != nil {
@@ -832,7 +832,7 @@ func (d *DB) UpdateSyncedSeq(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -986,7 +986,7 @@ func (d *DB) FindDocInfosByQuery(
 func (d *DB) findTicketByServerSeq(
 	txn *memdb.Txn,
 	docID types.ID,
-	serverSeq uint64,
+	serverSeq int64,
 ) (*time.Ticket, error) {
 	if serverSeq == change.InitialServerSeq {
 		return time.InitialTicket, nil

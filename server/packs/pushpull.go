@@ -40,7 +40,7 @@ func pushChanges(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
-	initialServerSeq uint64,
+	initialServerSeq int64,
 ) (change.Checkpoint, []*change.Change) {
 	cp := clientInfo.Checkpoint(docInfo.ID)
 
@@ -85,7 +85,7 @@ func pullPack(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
-	initialServerSeq uint64,
+	initialServerSeq int64,
 ) (*ServerPack, error) {
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
 		return nil, fmt.Errorf(
@@ -124,7 +124,7 @@ func pullSnapshot(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
-	initialServerSeq uint64,
+	initialServerSeq int64,
 ) (*ServerPack, error) {
 	// Build document from DB if the size of changes for the response is greater than the snapshot threshold.
 	doc, err := BuildDocumentForServerSeq(ctx, be, docInfo, initialServerSeq)
@@ -169,7 +169,7 @@ func pullChangeInfos(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
-	initialServerSeq uint64,
+	initialServerSeq int64,
 ) (change.Checkpoint, []*database.ChangeInfo, error) {
 	pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,

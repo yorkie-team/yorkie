@@ -431,7 +431,7 @@ func (s *Server) ListChanges(
 	}
 	lastSeq := docInfo.ServerSeq
 
-	from, to := types.GetChangesRange(types.Paging[uint64]{
+	from, to := types.GetChangesRange(types.Paging[int64]{
 		Offset:    req.PreviousSeq,
 		PageSize:  int(req.PageSize),
 		IsForward: req.IsForward,

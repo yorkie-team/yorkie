@@ -35,7 +35,7 @@ type DocInfo struct {
 	Key key.Key `bson:"key"`
 
 	// ServerSeq is the sequence number of the last change of the document on the server.
-	ServerSeq uint64 `bson:"server_seq"`
+	ServerSeq int64 `bson:"server_seq"`
 
 	// Owner is the owner(ID of the client) of the document.
 	Owner types.ID `bson:"owner"`
@@ -51,7 +51,7 @@ type DocInfo struct {
 }
 
 // IncreaseServerSeq increases server sequence of the document.
-func (info *DocInfo) IncreaseServerSeq() uint64 {
+func (info *DocInfo) IncreaseServerSeq() int64 {
 	info.ServerSeq++
 	return info.ServerSeq
 }
