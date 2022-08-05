@@ -27,9 +27,9 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -67,7 +67,7 @@ type Attachment struct {
 // to the server to synchronize with other replicas in remote.
 type Client struct {
 	conn        *grpc.ClientConn
-	client      api.YorkieClient
+	client      api.YorkieServiceClient
 	dialOptions []grpc.DialOption
 	logger      *zap.Logger
 
@@ -174,7 +174,7 @@ func (c *Client) Dial(rpcAddr string) error {
 	}
 
 	c.conn = conn
-	c.client = api.NewYorkieClient(conn)
+	c.client = api.NewYorkieServiceClient(conn)
 
 	return nil
 }

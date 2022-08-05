@@ -77,9 +77,9 @@ func (i *AuthInterceptor) authenticate(
 ) error {
 	// NOTE(hackerwins): We don't need to authenticate the request if the
 	// request is from the peer clusters.
-	if method == "/api.Admin/LogIn" ||
-		method == "/api.Admin/SignUp" ||
-		!strings.HasPrefix(method, "/api.Admin/") {
+	if method == "/yorkie.v1.AdminService/LogIn" ||
+		method == "/yorkie.v1.AdminService/SignUp" ||
+		!strings.HasPrefix(method, "/yorkie.v1.AdminService/") {
 		return nil
 	}
 

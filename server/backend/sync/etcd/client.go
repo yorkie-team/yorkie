@@ -23,7 +23,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 
-	"github.com/yorkie-team/yorkie/api"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -31,7 +31,7 @@ import (
 
 // clusterClientInfo represents a cluster client and its connection.
 type clusterClientInfo struct {
-	client api.ClusterClient
+	client api.ClusterServiceClient
 	conn   *grpc.ClientConn
 }
 

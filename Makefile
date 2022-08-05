@@ -33,15 +33,15 @@ proto: ## generate proto files
 --gofast_out=plugins=grpc,\
 Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
 Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,\
-Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:./api \
-api/*.proto
+Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:./api/yorkie/v1 \
+api/yorkie/v1/*.proto
 
 protoset: ## generate protoset file
 	protoc \
 -I=./api \
 --descriptor_set_out=yorkie.protoset \
 --include_imports \
-api/*.proto
+api/yorkie/v1/*.proto
 
 build: ## builds an executable that runs in the current environment
 	go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie

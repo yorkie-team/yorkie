@@ -21,8 +21,8 @@ import (
 
 	protoTypes "github.com/gogo/protobuf/types"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -220,13 +220,13 @@ func FromDocumentKeys(pbKeys []string) []key.Key {
 // FromEventType converts the given Protobuf formats to model format.
 func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) {
 	switch pbDocEventType {
-	case api.DocEventType_DOCUMENTS_CHANGED:
+	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_CHANGED:
 		return types.DocumentsChangedEvent, nil
-	case api.DocEventType_DOCUMENTS_WATCHED:
+	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_WATCHED:
 		return types.DocumentsWatchedEvent, nil
-	case api.DocEventType_DOCUMENTS_UNWATCHED:
+	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_UNWATCHED:
 		return types.DocumentsUnwatchedEvent, nil
-	case api.DocEventType_PRESENCE_CHANGED:
+	case api.DocEventType_DOC_EVENT_TYPE_PRESENCE_CHANGED:
 		return types.PresenceChangedEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
@@ -577,7 +577,7 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 
 func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 	switch pbType := pbElement.Type; pbType {
-	case api.ValueType_JSON_OBJECT:
+	case api.ValueType_VALUE_TYPE_JSON_OBJECT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
 			return nil, err
@@ -586,7 +586,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.NewRHTPriorityQueueMap(),
 			createdAt,
 		), nil
-	case api.ValueType_JSON_ARRAY:
+	case api.ValueType_VALUE_TYPE_JSON_ARRAY:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
 			return nil, err
@@ -595,21 +595,21 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.NewRGATreeList(),
 			createdAt,
 		), nil
-	case api.ValueType_NULL:
+	case api.ValueType_VALUE_TYPE_NULL:
 		fallthrough
-	case api.ValueType_BOOLEAN:
+	case api.ValueType_VALUE_TYPE_BOOLEAN:
 		fallthrough
-	case api.ValueType_INTEGER:
+	case api.ValueType_VALUE_TYPE_INTEGER:
 		fallthrough
-	case api.ValueType_LONG:
+	case api.ValueType_VALUE_TYPE_LONG:
 		fallthrough
-	case api.ValueType_DOUBLE:
+	case api.ValueType_VALUE_TYPE_DOUBLE:
 		fallthrough
-	case api.ValueType_STRING:
+	case api.ValueType_VALUE_TYPE_STRING:
 		fallthrough
-	case api.ValueType_BYTES:
+	case api.ValueType_VALUE_TYPE_BYTES:
 		fallthrough
-	case api.ValueType_DATE:
+	case api.ValueType_VALUE_TYPE_DATE:
 		valueType, err := fromPrimitiveValueType(pbElement.Type)
 		if err != nil {
 			return nil, err
@@ -622,7 +622,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.ValueFromBytes(valueType, pbElement.Value),
 			createdAt,
 		), nil
-	case api.ValueType_TEXT:
+	case api.ValueType_VALUE_TYPE_TEXT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
 			return nil, err
@@ -631,7 +631,7 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.NewRGATreeSplit(json.InitialTextNode()),
 			createdAt,
 		), nil
-	case api.ValueType_RICH_TEXT:
+	case api.ValueType_VALUE_TYPE_RICH_TEXT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
 			return nil, err
@@ -640,11 +640,11 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 			json.NewRGATreeSplit(json.InitialRichTextNode()),
 			createdAt,
 		), nil
-	case api.ValueType_INTEGER_CNT:
+	case api.ValueType_VALUE_TYPE_INTEGER_CNT:
 		fallthrough
-	case api.ValueType_LONG_CNT:
+	case api.ValueType_VALUE_TYPE_LONG_CNT:
 		fallthrough
-	case api.ValueType_DOUBLE_CNT:
+	case api.ValueType_VALUE_TYPE_DOUBLE_CNT:
 		counterType, err := fromCounterType(pbType)
 		if err != nil {
 			return nil, err
@@ -664,21 +664,21 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 
 func fromPrimitiveValueType(valueType api.ValueType) (json.ValueType, error) {
 	switch valueType {
-	case api.ValueType_NULL:
+	case api.ValueType_VALUE_TYPE_NULL:
 		return json.Null, nil
-	case api.ValueType_BOOLEAN:
+	case api.ValueType_VALUE_TYPE_BOOLEAN:
 		return json.Boolean, nil
-	case api.ValueType_INTEGER:
+	case api.ValueType_VALUE_TYPE_INTEGER:
 		return json.Integer, nil
-	case api.ValueType_LONG:
+	case api.ValueType_VALUE_TYPE_LONG:
 		return json.Long, nil
-	case api.ValueType_DOUBLE:
+	case api.ValueType_VALUE_TYPE_DOUBLE:
 		return json.Double, nil
-	case api.ValueType_STRING:
+	case api.ValueType_VALUE_TYPE_STRING:
 		return json.String, nil
-	case api.ValueType_BYTES:
+	case api.ValueType_VALUE_TYPE_BYTES:
 		return json.Bytes, nil
-	case api.ValueType_DATE:
+	case api.ValueType_VALUE_TYPE_DATE:
 		return json.Date, nil
 	}
 
@@ -687,11 +687,11 @@ func fromPrimitiveValueType(valueType api.ValueType) (json.ValueType, error) {
 
 func fromCounterType(valueType api.ValueType) (json.CounterType, error) {
 	switch valueType {
-	case api.ValueType_INTEGER_CNT:
+	case api.ValueType_VALUE_TYPE_INTEGER_CNT:
 		return json.IntegerCnt, nil
-	case api.ValueType_LONG_CNT:
+	case api.ValueType_VALUE_TYPE_LONG_CNT:
 		return json.LongCnt, nil
-	case api.ValueType_DOUBLE_CNT:
+	case api.ValueType_VALUE_TYPE_DOUBLE_CNT:
 		return json.DoubleCnt, nil
 	}
 

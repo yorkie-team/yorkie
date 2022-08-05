@@ -25,9 +25,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -159,7 +159,7 @@ func (c *Client) ensureClusterClient(
 		}
 
 		c.clusterClientMap[member.ID] = &clusterClientInfo{
-			client: api.NewClusterClient(conn),
+			client: api.NewClusterServiceClient(conn),
 			conn:   conn,
 		}
 	}
