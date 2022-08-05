@@ -7,7 +7,6 @@ on:
     branches: [ main ]
 
 jobs:
-
   build:
     name: build
     runs-on: ubuntu-latest
@@ -19,13 +18,19 @@ jobs:
         go-version: ^1.18
 
     - name: Check out code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
+
+    - name: Setup buf action
+      uses: bufbuild/buf-setup-action@v1
 
     - name: Get tools dependencies
       run: make tools
 
     - name: Lint
       run: make lint
+
+    - name: Lint protos
+      uses: bufbuild/buf-lint-action@v1
 
     - name: Build
       run: make build
