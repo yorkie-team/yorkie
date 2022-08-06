@@ -131,6 +131,8 @@ func New(
 
 	_, _, err = db.EnsureDefaultUserAndProject(
 		context.Background(),
+		conf.AdminUser,
+		conf.AdminPassword,
 	)
 	if err != nil {
 		return nil, err

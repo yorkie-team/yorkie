@@ -31,7 +31,6 @@ import (
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/admin"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
@@ -85,7 +84,7 @@ func CreateAdminCli(t assert.TestingT, adminAddr string) *adminClient.Client {
 	adminCli, err := adminClient.Dial(adminAddr)
 	assert.NoError(t, err)
 
-	_, err = adminCli.LogIn(context.Background(), database.DefaultUsername, database.DefaultPassword)
+	_, err = adminCli.LogIn(context.Background(), server.DefaultAdminUser, server.DefaultAdminPassword)
 	assert.NoError(t, err)
 
 	return adminCli
@@ -127,6 +126,10 @@ func TestConfig() *server.Config {
 			CandidatesLimit:     HousekeepingCandidatesLimit,
 		},
 		Backend: &backend.Config{
+			AdminUser:                  server.DefaultAdminUser,
+			AdminPassword:              server.DefaultAdminPassword,
+			SecretKey:                  server.DefaultSecretKey,
+			AdminTokenDuration:         server.DefaultAdminTokenDuration.String(),
 			UseDefaultProject:          true,
 			SnapshotThreshold:          SnapshotThreshold,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),

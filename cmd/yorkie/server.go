@@ -39,6 +39,7 @@ var (
 	flagConfPath string
 	flagLogLevel string
 
+	adminTokenDuration              time.Duration
 	housekeepingInterval            time.Duration
 	housekeepingDeactivateThreshold time.Duration
 
@@ -65,6 +66,7 @@ func newServerCmd() *cobra.Command {
 		Use:   "server [options]",
 		Short: "Start Yorkie server",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			conf.Backend.AdminTokenDuration = adminTokenDuration.String()
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
 			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
@@ -287,6 +289,30 @@ func init() {
 		"etcd-lock-lease-time",
 		etcd.DefaultLockLeaseTime,
 		"ETCD's lease time for lock",
+	)
+	cmd.Flags().StringVar(
+		&conf.Backend.AdminUser,
+		"backend-admin-user",
+		server.DefaultAdminUser,
+		"The name of the default admin user, who has full permissions.",
+	)
+	cmd.Flags().StringVar(
+		&conf.Backend.AdminPassword,
+		"backend-admin-password",
+		server.DefaultAdminPassword,
+		"The password of the default admin.",
+	)
+	cmd.Flags().StringVar(
+		&conf.Backend.SecretKey,
+		"backend-secret-key",
+		server.DefaultSecretKey,
+		"The secret key for signing authentication tokens for admin users.",
+	)
+	cmd.Flags().DurationVar(
+		&adminTokenDuration,
+		"backend-admin-token-duration",
+		server.DefaultAdminTokenDuration,
+		"The duration of the admin authentication token.",
 	)
 	cmd.Flags().BoolVar(
 		&conf.Backend.UseDefaultProject,

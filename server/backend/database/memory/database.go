@@ -103,8 +103,12 @@ func (d *DB) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.Pr
 }
 
 // EnsureDefaultUserAndProject creates the default user and project if they do not exist.
-func (d *DB) EnsureDefaultUserAndProject(ctx context.Context) (*database.UserInfo, *database.ProjectInfo, error) {
-	user, err := d.ensureDefaultUserInfo(ctx)
+func (d *DB) EnsureDefaultUserAndProject(
+	ctx context.Context,
+	username,
+	password string,
+) (*database.UserInfo, *database.ProjectInfo, error) {
+	user, err := d.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -118,22 +122,26 @@ func (d *DB) EnsureDefaultUserAndProject(ctx context.Context) (*database.UserInf
 }
 
 // ensureDefaultUserInfo creates the default user if it does not exist.
-func (d *DB) ensureDefaultUserInfo(ctx context.Context) (*database.UserInfo, error) {
+func (d *DB) ensureDefaultUserInfo(
+	ctx context.Context,
+	username,
+	password string,
+) (*database.UserInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblUsers, "username", database.DefaultUsername)
+	raw, err := txn.First(tblUsers, "username", username)
 	if err != nil {
 		return nil, err
 	}
 
 	var info *database.UserInfo
 	if raw == nil {
-		hashedPassword, err := database.HashedPassword(database.DefaultPassword)
+		hashedPassword, err := database.HashedPassword(password)
 		if err != nil {
 			return nil, err
 		}
-		info = database.NewUserInfo(database.DefaultUsername, hashedPassword)
+		info = database.NewUserInfo(username, hashedPassword)
 		info.ID = newID()
 		if err := txn.Insert(tblUsers, info); err != nil {
 			return nil, err

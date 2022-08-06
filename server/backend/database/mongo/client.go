@@ -95,8 +95,10 @@ func (c *Client) Close() error {
 // EnsureDefaultUserAndProject creates the default user and project if they do not exist.
 func (c *Client) EnsureDefaultUserAndProject(
 	ctx context.Context,
+	username,
+	password string,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
-	userInfo, err := c.ensureDefaultUserInfo(ctx)
+	userInfo, err := c.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -112,14 +114,16 @@ func (c *Client) EnsureDefaultUserAndProject(
 // ensureDefaultUserInfo creates the default user info if it does not exist.
 func (c *Client) ensureDefaultUserInfo(
 	ctx context.Context,
+	username,
+	password string,
 ) (*database.UserInfo, error) {
-	hashedPassword, err := database.HashedPassword(database.DefaultPassword)
+	hashedPassword, err := database.HashedPassword(password)
 	if err != nil {
 		return nil, err
 	}
 
 	candidate := database.NewUserInfo(
-		database.DefaultUsername,
+		username,
 		hashedPassword,
 	)
 
