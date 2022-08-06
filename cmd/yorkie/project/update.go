@@ -26,41 +26,30 @@ import (
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
 var (
-	flagAuthWebHookUrl string
+	flagAuthWebHookURL string
 	flagName           string
-
-	ErrProjectNotFound = errors.New("not found project")
+	newName            string
+	newAuthWebhookURL  string
 )
 
 func newUpdateCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "update [name]",
 		Short:   "Update a project",
-		Example: "yorkie project update name [flags]",
+		Example: "yorkie project update name [options]",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return errors.New("project name is required")
+				return errors.New("name is required")
 			}
 
 			name := args[0]
 
-			newAuthWebhookURL := flagAuthWebHookUrl
-			newAuthWebhookMethods := []string{
-				string(types.AttachDocument),
-				string(types.WatchDocuments),
-			}
-
-			updatableProjectFields := &types.UpdatableProjectFields{
-				Name:               &name,
-				AuthWebhookURL:     &newAuthWebhookURL,
-				AuthWebhookMethods: &newAuthWebhookMethods,
-			}
-
 			// TODO(hackerwins): use adminAddr from env or addr flag.
-			cli, err := admin.Dial("localhost:11103")
+			cli, err := admin.Dial(config.AdminAddr)
 			if err != nil {
 				return err
 			}
@@ -73,17 +62,29 @@ func newUpdateCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if exists == nil {
-				return ErrProjectNotFound
-			}
 			id := exists.ID.String()
 
 			if flagName != "" {
-				name = flagName
+				newName = flagName
+			} else {
+				newName = name
 			}
 
-			if flagAuthWebHookUrl == "" {
+			if flagAuthWebHookURL != "" {
+				newAuthWebhookURL = flagAuthWebHookURL
+			} else {
 				newAuthWebhookURL = exists.AuthWebhookURL
+			}
+
+			newAuthWebhookMethods := []string{
+				string(types.AttachDocument),
+				string(types.WatchDocuments),
+			}
+
+			updatableProjectFields := &types.UpdatableProjectFields{
+				Name:               &newName,
+				AuthWebhookURL:     &newAuthWebhookURL,
+				AuthWebhookMethods: &newAuthWebhookMethods,
 			}
 
 			project, err := cli.UpdateProject(ctx, id, updatableProjectFields)
@@ -106,7 +107,7 @@ func newUpdateCommand() *cobra.Command {
 func init() {
 	cmd := newUpdateCommand()
 	cmd.Flags().StringVar(
-		&flagAuthWebHookUrl,
+		&flagAuthWebHookURL,
 		"auth-webhook-url",
 		"",
 		"authorization-webhook update url",
