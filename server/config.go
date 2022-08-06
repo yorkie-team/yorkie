@@ -52,9 +52,13 @@ const (
 	DefaultMongoPingTimeout       = 5 * time.Second
 	DefaultMongoYorkieDatabase    = "yorkie-meta"
 
-	DefaultUseDefaultProject = true
-	DefaultSnapshotThreshold = 500
-	DefaultSnapshotInterval  = 1000
+	DefaultAdminUser          = "admin"
+	DefaultAdminPassword      = "admin"
+	DefaultSecretKey          = "yorkie-secret"
+	DefaultAdminTokenDuration = 7 * 24 * time.Hour
+	DefaultUseDefaultProject  = true
+	DefaultSnapshotThreshold  = 500
+	DefaultSnapshotInterval   = 1000
 
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
@@ -159,6 +163,22 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Admin.Port == 0 {
 		c.Admin.Port = DefaultAdminPort
+	}
+
+	if c.Backend.AdminUser == "" {
+		c.Backend.AdminUser = DefaultAdminUser
+	}
+
+	if c.Backend.AdminPassword == "" {
+		c.Backend.AdminPassword = DefaultAdminPassword
+	}
+
+	if c.Backend.SecretKey == "" {
+		c.Backend.SecretKey = DefaultSecretKey
+	}
+
+	if c.Backend.AdminTokenDuration == "" {
+		c.Backend.AdminTokenDuration = DefaultAdminTokenDuration.String()
 	}
 
 	if c.Backend.SnapshotThreshold == 0 {
