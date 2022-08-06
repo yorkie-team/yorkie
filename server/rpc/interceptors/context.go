@@ -91,7 +91,7 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 }
 
 func isRPCService(method string) bool {
-	return strings.HasPrefix(method, "/api.Yorkie/")
+	return strings.HasPrefix(method, "/yorkie.v1.YorkieService/")
 }
 
 // buildContext builds a context data for RPC. It includes the metadata of the

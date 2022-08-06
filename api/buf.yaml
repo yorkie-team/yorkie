@@ -1,0 +1,13 @@
+version: v1
+breaking:
+  use:
+    - FILE
+lint:
+  use:
+    - DEFAULT
+  ignore_only:
+    # The linter requires that the zero value for all enums should be suffixed
+    # with _UNSPECIFIED. However, it is difficult to migrate the operations
+    # already stored in the DB, so we ignore the rule for now.
+    ENUM_ZERO_VALUE_SUFFIX:
+      - yorkie/v1/resources.proto

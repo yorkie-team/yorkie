@@ -22,8 +22,8 @@ import (
 
 	protoTypes "github.com/gogo/protobuf/types"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -202,13 +202,13 @@ func ToClientsMap(clientsMap map[string][]types.Client) map[string]*api.Clients 
 func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 	switch eventType {
 	case types.DocumentsChangedEvent:
-		return api.DocEventType_DOCUMENTS_CHANGED, nil
+		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_CHANGED, nil
 	case types.DocumentsWatchedEvent:
-		return api.DocEventType_DOCUMENTS_WATCHED, nil
+		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_WATCHED, nil
 	case types.DocumentsUnwatchedEvent:
-		return api.DocEventType_DOCUMENTS_UNWATCHED, nil
+		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_UNWATCHED, nil
 	case types.PresenceChangedEvent:
-		return api.DocEventType_PRESENCE_CHANGED, nil
+		return api.DocEventType_DOC_EVENT_TYPE_PRESENCE_CHANGED, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}
@@ -421,12 +421,12 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 	switch elem := elem.(type) {
 	case *json.Object:
 		return &api.JSONElementSimple{
-			Type:      api.ValueType_JSON_OBJECT,
+			Type:      api.ValueType_VALUE_TYPE_JSON_OBJECT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Array:
 		return &api.JSONElementSimple{
-			Type:      api.ValueType_JSON_ARRAY,
+			Type:      api.ValueType_VALUE_TYPE_JSON_ARRAY,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Primitive:
@@ -442,12 +442,12 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 		}, nil
 	case *json.Text:
 		return &api.JSONElementSimple{
-			Type:      api.ValueType_TEXT,
+			Type:      api.ValueType_VALUE_TYPE_TEXT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.RichText:
 		return &api.JSONElementSimple{
-			Type:      api.ValueType_RICH_TEXT,
+			Type:      api.ValueType_VALUE_TYPE_RICH_TEXT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *json.Counter:
@@ -487,21 +487,21 @@ func toCreatedAtMapByActor(
 func toValueType(valueType json.ValueType) (api.ValueType, error) {
 	switch valueType {
 	case json.Null:
-		return api.ValueType_NULL, nil
+		return api.ValueType_VALUE_TYPE_NULL, nil
 	case json.Boolean:
-		return api.ValueType_BOOLEAN, nil
+		return api.ValueType_VALUE_TYPE_BOOLEAN, nil
 	case json.Integer:
-		return api.ValueType_INTEGER, nil
+		return api.ValueType_VALUE_TYPE_INTEGER, nil
 	case json.Long:
-		return api.ValueType_LONG, nil
+		return api.ValueType_VALUE_TYPE_LONG, nil
 	case json.Double:
-		return api.ValueType_DOUBLE, nil
+		return api.ValueType_VALUE_TYPE_DOUBLE, nil
 	case json.String:
-		return api.ValueType_STRING, nil
+		return api.ValueType_VALUE_TYPE_STRING, nil
 	case json.Bytes:
-		return api.ValueType_BYTES, nil
+		return api.ValueType_VALUE_TYPE_BYTES, nil
 	case json.Date:
-		return api.ValueType_DATE, nil
+		return api.ValueType_VALUE_TYPE_DATE, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
@@ -510,11 +510,11 @@ func toValueType(valueType json.ValueType) (api.ValueType, error) {
 func toCounterType(valueType json.CounterType) (api.ValueType, error) {
 	switch valueType {
 	case json.IntegerCnt:
-		return api.ValueType_INTEGER_CNT, nil
+		return api.ValueType_VALUE_TYPE_INTEGER_CNT, nil
 	case json.LongCnt:
-		return api.ValueType_LONG_CNT, nil
+		return api.ValueType_VALUE_TYPE_LONG_CNT, nil
 	case json.DoubleCnt:
-		return api.ValueType_DOUBLE_CNT, nil
+		return api.ValueType_VALUE_TYPE_DOUBLE_CNT, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)

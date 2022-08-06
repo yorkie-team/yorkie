@@ -19,9 +19,9 @@ package rpc
 import (
 	"context"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -366,7 +366,7 @@ func (s *yorkieServer) PushPull(
 // to the requesting client.
 func (s *yorkieServer) WatchDocuments(
 	req *api.WatchDocumentsRequest,
-	stream api.Yorkie_WatchDocumentsServer,
+	stream api.YorkieService_WatchDocumentsServer,
 ) error {
 	cli, err := converter.FromClient(req.Client)
 	if err != nil {

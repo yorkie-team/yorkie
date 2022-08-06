@@ -27,9 +27,9 @@ import (
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/admin/auth"
 	"github.com/yorkie-team/yorkie/server/admin/interceptors"
@@ -100,10 +100,10 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 		tokenManager: tokenManager,
 	}
 
-	api.RegisterAdminServer(grpcServer, server)
+	api.RegisterAdminServiceServer(grpcServer, server)
 	// TODO(hackerwins): ClusterServer need to be handled by different authentication mechanism.
 	// Consider extracting the servers to another grpcServer.
-	api.RegisterClusterServer(grpcServer, newClusterServer(be))
+	api.RegisterClusterServiceServer(grpcServer, newClusterServer(be))
 
 	return server
 }

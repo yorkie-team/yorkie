@@ -23,9 +23,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/yorkie-team/yorkie/api"
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
@@ -55,7 +55,7 @@ type Options struct {
 // Client is a client for admin service.
 type Client struct {
 	conn            *grpc.ClientConn
-	client          api.AdminClient
+	client          api.AdminServiceClient
 	dialOptions     []grpc.DialOption
 	authInterceptor *AuthInterceptor
 
@@ -114,7 +114,7 @@ func (c *Client) Dial(adminAddr string) error {
 	}
 
 	c.conn = conn
-	c.client = api.NewAdminClient(conn)
+	c.client = api.NewAdminServiceClient(conn)
 
 	return nil
 }
