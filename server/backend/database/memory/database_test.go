@@ -355,7 +355,7 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 
-		// update one field
+		// update name field
 		newName2 := newName + "2"
 		fields = &types.UpdatableProjectFields{
 			Name: &newName2,
@@ -378,5 +378,25 @@ func TestDB(t *testing.T) {
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = db.UpdateProjectInfo(ctx, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
+
+		// update auth-webhook-url field
+		newAuthWebhookURL2 := newAuthWebhookURL + "2"
+		fields = &types.UpdatableProjectFields{
+			AuthWebhookURL: &newAuthWebhookURL2,
+		}
+		err = fields.Validate()
+		assert.NoError(t, err)
+		res, err = db.UpdateProjectInfo(ctx, id, fields)
+		assert.NoError(t, err)
+
+		updateInfo, err = db.FindProjectInfoByID(ctx, id)
+		assert.NoError(t, err)
+
+		// check only auth-webhook-url is update
+		assert.Equal(t, res, updateInfo)
+		assert.Equal(t, newName2, updateInfo.Name)
+		assert.NotEqual(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+
 	})
 }
