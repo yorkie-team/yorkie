@@ -29,6 +29,11 @@ import (
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
+const (
+	AUTH_WEBHOOK_URL string = "auth-webhook-url"
+	NAME             string = "name"
+)
+
 var (
 	flagAuthWebHookURL string
 	flagName           string
@@ -48,8 +53,12 @@ func newUpdateCommand() *cobra.Command {
 
 			name := args[0]
 
-			// TODO(hackerwins): use adminAddr from env or addr flag.
-			cli, err := admin.Dial(config.AdminAddr)
+			token, err := config.LoadToken(config.AdminAddr)
+			if err != nil {
+				return err
+			}
+
+			cli, err := admin.Dial(config.AdminAddr, admin.WithToken(token))
 			if err != nil {
 				return err
 			}
@@ -64,13 +73,13 @@ func newUpdateCommand() *cobra.Command {
 			}
 			id := exists.ID.String()
 
-			if flagName != "" {
+			if cmd.Flags().Lookup(NAME).Changed {
 				newName = flagName
 			} else {
 				newName = name
 			}
 
-			if flagAuthWebHookURL != "" {
+			if cmd.Flags().Lookup(AUTH_WEBHOOK_URL).Changed {
 				newAuthWebhookURL = flagAuthWebHookURL
 			} else {
 				newAuthWebhookURL = exists.AuthWebhookURL
@@ -108,13 +117,13 @@ func init() {
 	cmd := newUpdateCommand()
 	cmd.Flags().StringVar(
 		&flagAuthWebHookURL,
-		"auth-webhook-url",
+		AUTH_WEBHOOK_URL,
 		"",
 		"authorization-webhook update url",
 	)
 	cmd.Flags().StringVar(
 		&flagName,
-		"name",
+		NAME,
 		"",
 		"new project name",
 	)
