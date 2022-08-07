@@ -29,13 +29,8 @@ import (
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
-const (
-	AUTH_WEBHOOK_URL string = "auth-webhook-url"
-	NAME             string = "name"
-)
-
 var (
-	flagAuthWebHookURL string
+	flagAuthWebhookURL string
 	flagName           string
 	newName            string
 	newAuthWebhookURL  string
@@ -73,14 +68,14 @@ func newUpdateCommand() *cobra.Command {
 			}
 			id := exists.ID.String()
 
-			if cmd.Flags().Lookup(NAME).Changed {
+			if cmd.Flags().Lookup("name").Changed {
 				newName = flagName
 			} else {
 				newName = name
 			}
 
-			if cmd.Flags().Lookup(AUTH_WEBHOOK_URL).Changed {
-				newAuthWebhookURL = flagAuthWebHookURL
+			if cmd.Flags().Lookup("auth-webhook-url").Changed {
+				newAuthWebhookURL = flagAuthWebhookURL
 			} else {
 				newAuthWebhookURL = exists.AuthWebhookURL
 			}
@@ -116,16 +111,16 @@ func newUpdateCommand() *cobra.Command {
 func init() {
 	cmd := newUpdateCommand()
 	cmd.Flags().StringVar(
-		&flagAuthWebHookURL,
-		AUTH_WEBHOOK_URL,
-		"",
-		"authorization-webhook update url",
-	)
-	cmd.Flags().StringVar(
 		&flagName,
-		NAME,
+		"name",
 		"",
 		"new project name",
+	)
+	cmd.Flags().StringVar(
+		&flagAuthWebhookURL,
+		"auth-webhook-url",
+		"",
+		"authorization-webhook update url",
 	)
 	SubCmd.AddCommand(cmd)
 }
