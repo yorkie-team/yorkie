@@ -175,7 +175,7 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project
 	return converter.FromProject(response.Project)
 }
 
-// GetProject get project by name.
+// GetProject gets the project by name.
 func (c *Client) GetProject(ctx context.Context, name string) (*types.Project, error) {
 	response, err := c.client.GetProject(
 		ctx,
