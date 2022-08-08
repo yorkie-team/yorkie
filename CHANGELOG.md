@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.15] - 2022-08-08
+
+### Added
+
+- Introduce `buf` to enforce lint rules designed to guarantee consistency: #382
+- Extract admin settings with flags and configurations: #384
+
+### Changed
+
+- Change uint64 to int64 among data inserted into the DB: #381
+- Add `[jstype = JS_STRING]` field option in admin.proto: #380
+
 ## [0.2.14] - 2022-08-03
 
 ### Added
