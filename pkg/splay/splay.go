@@ -65,7 +65,7 @@ func (t *Node[V]) rightWeight() int {
 	return t.right.weight
 }
 
-//InitWeight sets initial weight of this node.
+// InitWeight sets initial weight of this node.
 func (t *Node[V]) InitWeight() {
 	t.weight = t.value.Len()
 }
