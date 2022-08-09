@@ -32,8 +32,6 @@ import (
 var (
 	flagAuthWebhookURL string
 	flagName           string
-	newName            string
-	newAuthWebhookURL  string
 )
 
 func newUpdateCommand() *cobra.Command {
@@ -62,33 +60,25 @@ func newUpdateCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			exists, err := cli.GetProject(ctx, name)
+			existence, err := cli.GetProject(ctx, name)
 			if err != nil {
 				return err
 			}
-			id := exists.ID.String()
+			id := existence.ID.String()
 
+			newName := name
 			if cmd.Flags().Lookup("name").Changed {
 				newName = flagName
-			} else {
-				newName = name
 			}
 
+			newAuthWebhookURL := existence.AuthWebhookURL
 			if cmd.Flags().Lookup("auth-webhook-url").Changed {
 				newAuthWebhookURL = flagAuthWebhookURL
-			} else {
-				newAuthWebhookURL = exists.AuthWebhookURL
-			}
-
-			newAuthWebhookMethods := []string{
-				string(types.AttachDocument),
-				string(types.WatchDocuments),
 			}
 
 			updatableProjectFields := &types.UpdatableProjectFields{
-				Name:               &newName,
-				AuthWebhookURL:     &newAuthWebhookURL,
-				AuthWebhookMethods: &newAuthWebhookMethods,
+				Name:           &newName,
+				AuthWebhookURL: &newAuthWebhookURL,
 			}
 
 			project, err := cli.UpdateProject(ctx, id, updatableProjectFields)
