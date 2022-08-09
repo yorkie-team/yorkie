@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	gotime "time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -69,8 +68,10 @@ type Server struct {
 
 // NewServer creates a new Server.
 func NewServer(conf *Config, be *backend.Backend) *Server {
-	// TODO(hackerwins): extract secretKey and tokenDuration to config.
-	tokenManager := auth.NewTokenManager("yorkie", 7*24*gotime.Hour)
+	tokenManager := auth.NewTokenManager(
+		be.Config.SecretKey,
+		be.Config.ParseAdminTokenDuration(),
+	)
 
 	loggingInterceptor := grpchelper.NewLoggingInterceptor()
 	authInterceptor := interceptors.NewAuthInterceptor(tokenManager)

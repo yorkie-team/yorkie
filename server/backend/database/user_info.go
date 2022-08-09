@@ -30,15 +30,6 @@ var (
 	ErrMismatchedPassword = fmt.Errorf("mismatched password")
 )
 
-// TODO(hackerwins): Extract this to a config file.
-var (
-	// DefaultUsername is the default username of the user who has full permissions.
-	DefaultUsername = "admin"
-
-	// DefaultPassword is the default password of the default user.
-	DefaultPassword = "admin"
-)
-
 // UserInfo is a structure representing information of a user.
 type UserInfo struct {
 	ID             types.ID  `bson:"_id"`

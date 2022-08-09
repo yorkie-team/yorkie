@@ -23,6 +23,19 @@ import (
 
 // Config is the configuration for creating a Backend instance.
 type Config struct {
+	// AdminUser is the name of the default admin user who has full permissions.
+	// Set once on first-run. Default is "admin".
+	AdminUser string `yaml:"AdminUser"`
+
+	// AdminPassword is the password of the default admin. Default is "admin".
+	AdminPassword string `yaml:"AdminPassword"`
+
+	// SecretKey is the secret key for signing authentication tokens.
+	SecretKey string `yaml:"SecretKey"`
+
+	// AdminTokenDuration is the duration of the admin token. Default is "7d".
+	AdminTokenDuration string `yaml:"AdminTokenDuration"`
+
 	// UseDefaultProject is whether to use the default project. Even if public
 	// key is not provided from the client, the default project will be used. If
 	// we are using server as single-tenant mode, this should be set to true.
@@ -81,6 +94,16 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// ParseAdminTokenDuration returns admin token duration.
+func (c *Config) ParseAdminTokenDuration() time.Duration {
+	result, err := time.ParseDuration(c.AdminTokenDuration)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
 }
 
 // ParseAuthWebhookMaxWaitInterval returns max wait interval.

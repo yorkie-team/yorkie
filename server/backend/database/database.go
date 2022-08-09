@@ -71,6 +71,8 @@ type Database interface {
 	// EnsureDefaultUserAndProject ensures that the default user and project exists.
 	EnsureDefaultUserAndProject(
 		ctx context.Context,
+		username,
+		password string,
 	) (*UserInfo, *ProjectInfo, error)
 
 	// CreateProjectInfo creates a new project.
