@@ -338,7 +338,7 @@ func init() {
 		&conf.Backend.SnapshotWithPurgingChanges,
 		"backend-snapshot-with-purging-changes",
 		server.DefaultSnapshotWithPurgingChanges,
-		"Whether to delete previous changes when the snapshot is created. ",
+		"Whether to delete previous changes when the snapshot is created.",
 	)
 	cmd.Flags().Uint64Var(
 		&conf.Backend.AuthWebhookMaxRetries,
