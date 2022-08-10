@@ -60,19 +60,19 @@ func newUpdateCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			existence, err := cli.GetProject(ctx, name)
+			project, err := cli.GetProject(ctx, name)
 			if err != nil {
 				return err
 			}
-			id := existence.ID.String()
+			id := project.ID.String()
 
 			newName := name
-			if cmd.Flags().Lookup("name").Changed {
+			if flagName != "" {
 				newName = flagName
 			}
 
-			newAuthWebhookURL := existence.AuthWebhookURL
-			if cmd.Flags().Lookup("auth-webhook-url").Changed {
+			newAuthWebhookURL := project.AuthWebhookURL
+			if cmd.Flags().Lookup("auth-webhook-url").Changed { // allow empty string
 				newAuthWebhookURL = flagAuthWebhookURL
 			}
 
@@ -81,12 +81,12 @@ func newUpdateCommand() *cobra.Command {
 				AuthWebhookURL: &newAuthWebhookURL,
 			}
 
-			project, err := cli.UpdateProject(ctx, id, updatableProjectFields)
+			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
 			if err != nil {
 				return err
 			}
 
-			encoded, err := json.Marshal(project)
+			encoded, err := json.Marshal(updated)
 			if err != nil {
 				return err
 			}

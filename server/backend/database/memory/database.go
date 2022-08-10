@@ -186,11 +186,11 @@ func (d *DB) CreateProjectInfo(ctx context.Context, name string) (*database.Proj
 
 	// NOTE(hackerwins): Check if the project already exists.
 	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
-	existence, err := txn.First(tblProjects, "name", name)
+	existing, err := txn.First(tblProjects, "name", name)
 	if err != nil {
 		return nil, err
 	}
-	if existence != nil {
+	if existing != nil {
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectAlreadyExists)
 	}
 
@@ -246,11 +246,11 @@ func (d *DB) UpdateProjectInfo(
 	info := raw.(*database.ProjectInfo).DeepCopy()
 
 	if fields.Name != nil {
-		existence, err := txn.First(tblProjects, "name", *fields.Name)
+		existing, err := txn.First(tblProjects, "name", *fields.Name)
 		if err != nil {
 			return nil, err
 		}
-		if existence != nil && info.Name != *fields.Name {
+		if existing != nil && info.Name != *fields.Name {
 			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
 		}
 	}
@@ -274,11 +274,11 @@ func (d *DB) CreateUserInfo(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	existence, err := txn.First(tblUsers, "username", username)
+	existing, err := txn.First(tblUsers, "username", username)
 	if err != nil {
 		return nil, err
 	}
-	if existence != nil {
+	if existing != nil {
 		return nil, fmt.Errorf("%s: %w", username, database.ErrUserAlreadyExists)
 	}
 
