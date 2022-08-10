@@ -175,6 +175,19 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project
 	return converter.FromProject(response.Project)
 }
 
+// GetProject gets the project by name.
+func (c *Client) GetProject(ctx context.Context, name string) (*types.Project, error) {
+	response, err := c.client.GetProject(
+		ctx,
+		&api.GetProjectRequest{Name: name},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.FromProject(response.Project)
+}
+
 // ListProjects lists all projects.
 func (c *Client) ListProjects(ctx context.Context) ([]*types.Project, error) {
 	response, err := c.client.ListProjects(
