@@ -682,7 +682,7 @@ func (d *DB) DeleteOldChangeInfos(
 		return err
 	}
 
-	var minSyncedServerSeq int64 = math.MaxInt64
+	minSyncedServerSeq := int64(math.MaxInt64)
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		info := raw.(*database.SyncedSeqInfo)
 		if info.DocID == docInfo.ID && info.ServerSeq < minSyncedServerSeq {
