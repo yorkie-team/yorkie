@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-package json_test
+package crdt_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func registerTextElementWithGarbage(fromPos, toPos *json.RGATreeSplitNodePos, root *json.Root, text json.TextElement) {
+func registerTextElementWithGarbage(fromPos, toPos *crdt.RGATreeSplitNodePos, root *crdt.Root, text crdt.TextElement) {
 	if !fromPos.Equal(toPos) {
 		root.RegisterTextElementWithGarbage(text)
 	}
@@ -36,11 +36,11 @@ func TestRoot(t *testing.T) {
 	t.Run("garbage collection for array test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		array := json.NewArray(json.NewRGATreeList(), ctx.IssueTimeTicket())
+		array := crdt.NewArray(crdt.NewRGATreeList(), ctx.IssueTimeTicket())
 
-		array.Add(json.NewPrimitive(0, ctx.IssueTimeTicket()))
-		array.Add(json.NewPrimitive(1, ctx.IssueTimeTicket()))
-		array.Add(json.NewPrimitive(2, ctx.IssueTimeTicket()))
+		array.Add(crdt.NewPrimitive(0, ctx.IssueTimeTicket()))
+		array.Add(crdt.NewPrimitive(1, ctx.IssueTimeTicket()))
+		array.Add(crdt.NewPrimitive(2, ctx.IssueTimeTicket()))
 		assert.Equal(t, "[0,1,2]", array.Marshal())
 
 		targetElement := array.Get(1)
@@ -56,7 +56,7 @@ func TestRoot(t *testing.T) {
 	t.Run("garbage collection for text test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		text := json.NewText(json.NewRGATreeSplit(json.InitialTextNode()), ctx.IssueTimeTicket())
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)
 		text.Edit(fromPos, toPos, nil, "Hello World", ctx.IssueTimeTicket())
@@ -104,7 +104,7 @@ func TestRoot(t *testing.T) {
 
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		text := json.NewText(json.NewRGATreeSplit(json.InitialTextNode()), ctx.IssueTimeTicket())
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		tests := []test{
 			{from: 0, to: 0, content: "Yorkie", want: `"Yorkie"`, garbage: 0},
@@ -128,7 +128,7 @@ func TestRoot(t *testing.T) {
 	t.Run("garbage collection for rich text test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		richText := json.NewRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ctx.IssueTimeTicket())
+		richText := crdt.NewRichText(crdt.NewRGATreeSplit(crdt.InitialRichTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := richText.CreateRange(0, 0)
 		richText.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
@@ -165,13 +165,13 @@ func TestRoot(t *testing.T) {
 		ctx := helper.TextChangeContext(root)
 
 		obj := root.Object()
-		obj.Set("1", json.NewPrimitive(1, ctx.IssueTimeTicket()))
-		arr := json.NewArray(json.NewRGATreeList(), ctx.IssueTimeTicket()).
-			Add(json.NewPrimitive(1, ctx.IssueTimeTicket())).
-			Add(json.NewPrimitive(2, ctx.IssueTimeTicket())).
-			Add(json.NewPrimitive(3, ctx.IssueTimeTicket()))
+		obj.Set("1", crdt.NewPrimitive(1, ctx.IssueTimeTicket()))
+		arr := crdt.NewArray(crdt.NewRGATreeList(), ctx.IssueTimeTicket()).
+			Add(crdt.NewPrimitive(1, ctx.IssueTimeTicket())).
+			Add(crdt.NewPrimitive(2, ctx.IssueTimeTicket())).
+			Add(crdt.NewPrimitive(3, ctx.IssueTimeTicket()))
 		obj.Set("2", arr)
-		obj.Set("3", json.NewPrimitive(3, ctx.IssueTimeTicket()))
+		obj.Set("3", crdt.NewPrimitive(3, ctx.IssueTimeTicket()))
 		assert.Equal(t, `{"1":1,"2":[1,2,3],"3":3}`, root.Object().Marshal())
 
 		deleted := obj.Delete("2", ctx.IssueTimeTicket())

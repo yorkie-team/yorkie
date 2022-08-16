@@ -24,7 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -548,13 +548,13 @@ func fromCreatedAtMapByActor(
 
 func fromTextNodePos(
 	pbPos *api.TextNodePos,
-) (*json.RGATreeSplitNodePos, error) {
+) (*crdt.RGATreeSplitNodePos, error) {
 	createdAt, err := fromTimeTicket(pbPos.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
-	return json.NewRGATreeSplitNodePos(
-		json.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
+	return crdt.NewRGATreeSplitNodePos(
+		crdt.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),
 	), nil
 }
@@ -575,15 +575,15 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 	), nil
 }
 
-func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
+func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	switch pbType := pbElement.Type; pbType {
 	case api.ValueType_VALUE_TYPE_JSON_OBJECT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
-		return json.NewObject(
-			json.NewRHTPriorityQueueMap(),
+		return crdt.NewObject(
+			crdt.NewRHTPriorityQueueMap(),
 			createdAt,
 		), nil
 	case api.ValueType_VALUE_TYPE_JSON_ARRAY:
@@ -591,8 +591,8 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		return json.NewArray(
-			json.NewRGATreeList(),
+		return crdt.NewArray(
+			crdt.NewRGATreeList(),
 			createdAt,
 		), nil
 	case api.ValueType_VALUE_TYPE_NULL:
@@ -618,8 +618,8 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		return json.NewPrimitive(
-			json.ValueFromBytes(valueType, pbElement.Value),
+		return crdt.NewPrimitive(
+			crdt.ValueFromBytes(valueType, pbElement.Value),
 			createdAt,
 		), nil
 	case api.ValueType_VALUE_TYPE_TEXT:
@@ -627,8 +627,8 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		return json.NewText(
-			json.NewRGATreeSplit(json.InitialTextNode()),
+		return crdt.NewText(
+			crdt.NewRGATreeSplit(crdt.InitialTextNode()),
 			createdAt,
 		), nil
 	case api.ValueType_VALUE_TYPE_RICH_TEXT:
@@ -636,8 +636,8 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		return json.NewInitialRichText(
-			json.NewRGATreeSplit(json.InitialRichTextNode()),
+		return crdt.NewInitialRichText(
+			crdt.NewRGATreeSplit(crdt.InitialRichTextNode()),
 			createdAt,
 		), nil
 	case api.ValueType_VALUE_TYPE_INTEGER_CNT:
@@ -653,8 +653,8 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		return json.NewCounter(
-			json.CounterValueFromBytes(counterType, pbElement.Value),
+		return crdt.NewCounter(
+			crdt.CounterValueFromBytes(counterType, pbElement.Value),
 			createdAt,
 		), nil
 	}
@@ -662,37 +662,37 @@ func fromElement(pbElement *api.JSONElementSimple) (json.Element, error) {
 	return nil, fmt.Errorf("%d, %w", pbElement.Type, ErrUnsupportedElement)
 }
 
-func fromPrimitiveValueType(valueType api.ValueType) (json.ValueType, error) {
+func fromPrimitiveValueType(valueType api.ValueType) (crdt.ValueType, error) {
 	switch valueType {
 	case api.ValueType_VALUE_TYPE_NULL:
-		return json.Null, nil
+		return crdt.Null, nil
 	case api.ValueType_VALUE_TYPE_BOOLEAN:
-		return json.Boolean, nil
+		return crdt.Boolean, nil
 	case api.ValueType_VALUE_TYPE_INTEGER:
-		return json.Integer, nil
+		return crdt.Integer, nil
 	case api.ValueType_VALUE_TYPE_LONG:
-		return json.Long, nil
+		return crdt.Long, nil
 	case api.ValueType_VALUE_TYPE_DOUBLE:
-		return json.Double, nil
+		return crdt.Double, nil
 	case api.ValueType_VALUE_TYPE_STRING:
-		return json.String, nil
+		return crdt.String, nil
 	case api.ValueType_VALUE_TYPE_BYTES:
-		return json.Bytes, nil
+		return crdt.Bytes, nil
 	case api.ValueType_VALUE_TYPE_DATE:
-		return json.Date, nil
+		return crdt.Date, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
 }
 
-func fromCounterType(valueType api.ValueType) (json.CounterType, error) {
+func fromCounterType(valueType api.ValueType) (crdt.CounterType, error) {
 	switch valueType {
 	case api.ValueType_VALUE_TYPE_INTEGER_CNT:
-		return json.IntegerCnt, nil
+		return crdt.IntegerCnt, nil
 	case api.ValueType_VALUE_TYPE_LONG_CNT:
-		return json.LongCnt, nil
+		return crdt.LongCnt, nil
 	case api.ValueType_VALUE_TYPE_DOUBLE_CNT:
-		return json.DoubleCnt, nil
+		return crdt.DoubleCnt, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)

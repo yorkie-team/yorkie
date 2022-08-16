@@ -17,217 +17,75 @@
 package json
 
 import (
-	"fmt"
-	"unicode/utf16"
-
-	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 )
 
-// TextValue is a value of Text.
-type TextValue struct {
-	value string
-}
-
-// NewTextValue creates a value of Text.
-func NewTextValue(value string) *TextValue {
-	return &TextValue{
-		value: value,
-	}
-}
-
-// Len returns the length of this value.
-// It is calculated in UTF-16 code units.
-func (t *TextValue) Len() int {
-	encoded := utf16.Encode([]rune(t.value))
-	return len(encoded)
-}
-
-// String returns the string representation of this value.
-func (t *TextValue) String() string {
-	return t.value
-}
-
-// Marshal returns the JSON encoding of this text.
-func (t *TextValue) Marshal() string {
-	return EscapeString(t.value)
-}
-
-// AnnotatedString returns a String containing the metadata of this value
-// for debugging purpose.
-func (t *TextValue) AnnotatedString() string {
-	return EscapeString(t.value)
-}
-
-// Split splits this value by the given offset.
-func (t *TextValue) Split(offset int) RGATreeSplitValue {
-	value := t.value
-	encoded := utf16.Encode([]rune(value))
-	t.value = string(utf16.Decode(encoded[0:offset]))
-	return NewTextValue(string(utf16.Decode(encoded[offset:])))
-}
-
-// DeepCopy copies itself deeply.
-func (t *TextValue) DeepCopy() RGATreeSplitValue {
-	return &TextValue{
-		value: t.value,
-	}
-}
-
-// InitialTextNode creates an initial node of Text. The text is edited
-// as this node is split into multiple nodes.
-func InitialTextNode() *RGATreeSplitNode[*TextValue] {
-	return NewRGATreeSplitNode(initialNodeID, &TextValue{
-		value: "",
-	})
-}
-
-// Text is an extended data type for the contents of a text editor.
+// Text represents a text in the document. As a proxy for the CRDT text, it is
+// used when the user manipulates the text from the outside.
 type Text struct {
-	rgaTreeSplit *RGATreeSplit[*TextValue]
-	selectionMap map[string]*Selection
-	createdAt    *time.Ticket
-	movedAt      *time.Ticket
-	removedAt    *time.Ticket
+	*crdt.Text
+	context *change.Context
 }
 
 // NewText creates a new instance of Text.
-func NewText(elements *RGATreeSplit[*TextValue], createdAt *time.Ticket) *Text {
+func NewText(ctx *change.Context, text *crdt.Text) *Text {
 	return &Text{
-		rgaTreeSplit: elements,
-		selectionMap: make(map[string]*Selection),
-		createdAt:    createdAt,
+		Text:    text,
+		context: ctx,
 	}
-}
-
-// Marshal returns the JSON encoding of this text.
-func (t *Text) Marshal() string {
-	return fmt.Sprintf(`"%s"`, t.rgaTreeSplit.marshal())
-}
-
-// String returns a string representation of this text.
-func (t *Text) String() string {
-	return t.rgaTreeSplit.string()
-}
-
-// DeepCopy copies itself deeply.
-func (t *Text) DeepCopy() Element {
-	rgaTreeSplit := NewRGATreeSplit(InitialTextNode())
-
-	current := rgaTreeSplit.InitialHead()
-	for _, node := range t.Nodes() {
-		current = rgaTreeSplit.InsertAfter(current, node.DeepCopy())
-		insPrevID := node.InsPrevID()
-		if insPrevID != nil {
-			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
-			if insPrevNode == nil {
-				panic("insPrevNode should be presence")
-			}
-			current.SetInsPrev(insPrevNode)
-		}
-	}
-
-	return NewText(rgaTreeSplit, t.createdAt)
-}
-
-// CreatedAt returns the creation time of this Text.
-func (t *Text) CreatedAt() *time.Ticket {
-	return t.createdAt
-}
-
-// RemovedAt returns the removal time of this Text.
-func (t *Text) RemovedAt() *time.Ticket {
-	return t.removedAt
-}
-
-// MovedAt returns the move time of this Text.
-func (t *Text) MovedAt() *time.Ticket {
-	return t.movedAt
-}
-
-// SetMovedAt sets the move time of this Text.
-func (t *Text) SetMovedAt(movedAt *time.Ticket) {
-	t.movedAt = movedAt
-}
-
-// SetRemovedAt sets the removal time of this array.
-func (t *Text) SetRemovedAt(removedAt *time.Ticket) {
-	t.removedAt = removedAt
-}
-
-// Remove removes this Text.
-func (t *Text) Remove(removedAt *time.Ticket) bool {
-	if (removedAt != nil && removedAt.After(t.createdAt)) &&
-		(t.removedAt == nil || removedAt.After(t.removedAt)) {
-		t.removedAt = removedAt
-		return true
-	}
-	return false
-}
-
-// CreateRange returns a pair of RGATreeSplitNodePos of the given integer offsets.
-func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
-	return t.rgaTreeSplit.createRange(from, to)
 }
 
 // Edit edits the given range with the given content.
-func (t *Text) Edit(
-	from,
-	to *RGATreeSplitNodePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
-	content string,
-	executedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
-	cursorPos, latestCreatedAtMapByActor := t.rgaTreeSplit.edit(
-		from,
-		to,
-		latestCreatedAtMapByActor,
-		NewTextValue(content),
-		executedAt,
+func (p *Text) Edit(from, to int, content string) *Text {
+	if from > to {
+		panic("from should be less than or equal to to")
+	}
+	fromPos, toPos := p.Text.CreateRange(from, to)
+
+	ticket := p.context.IssueTimeTicket()
+	_, maxCreationMapByActor := p.Text.Edit(
+		fromPos,
+		toPos,
+		nil,
+		content,
+		ticket,
 	)
 
-	return cursorPos, latestCreatedAtMapByActor
+	p.context.Push(operations.NewEdit(
+		p.CreatedAt(),
+		fromPos,
+		toPos,
+		maxCreationMapByActor,
+		content,
+		ticket,
+	))
+	if !fromPos.Equal(toPos) {
+		p.context.RegisterTextElementWithGarbage(p)
+	}
+	return p
 }
 
 // Select stores that the given range has been selected.
-func (t *Text) Select(
-	from *RGATreeSplitNodePos,
-	to *RGATreeSplitNodePos,
-	executedAt *time.Ticket,
-) {
-	if _, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok {
-		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
-		return
+func (p *Text) Select(from, to int) *Text {
+	if from > to {
+		panic("from should be less than or equal to to")
 	}
+	fromPos, toPos := p.Text.CreateRange(from, to)
 
-	prevSelection := t.selectionMap[executedAt.ActorIDHex()]
-	if executedAt.After(prevSelection.updatedAt) {
-		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
-	}
-}
+	ticket := p.context.IssueTimeTicket()
+	p.Text.Select(
+		fromPos,
+		toPos,
+		ticket,
+	)
 
-// Nodes returns the internal nodes of this text.
-func (t *Text) Nodes() []*RGATreeSplitNode[*TextValue] {
-	return t.rgaTreeSplit.nodes()
-}
-
-// AnnotatedString returns a String containing the metadata of the text
-// for debugging purpose.
-func (t *Text) AnnotatedString() string {
-	return t.rgaTreeSplit.AnnotatedString()
-}
-
-// CheckWeight returns false when there is an incorrect weight node.
-// for debugging purpose.
-func (t *Text) CheckWeight() bool {
-	return t.rgaTreeSplit.CheckWeight()
-}
-
-// removedNodesLen returns length of removed nodes
-func (t *Text) removedNodesLen() int {
-	return t.rgaTreeSplit.removedNodesLen()
-}
-
-// purgeTextNodesWithGarbage physically purges nodes that have been removed.
-func (t *Text) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
-	return t.rgaTreeSplit.purgeTextNodesWithGarbage(ticket)
+	p.context.Push(operations.NewSelect(
+		p.CreatedAt(),
+		fromPos,
+		toPos,
+		ticket,
+	))
+	return p
 }

@@ -19,7 +19,7 @@ package document
 import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -40,7 +40,7 @@ const (
 type InternalDocument struct {
 	key          key.Key
 	status       statusType
-	root         *json.Root
+	root         *crdt.Root
 	checkpoint   change.Checkpoint
 	changeID     change.ID
 	localChanges []*change.Change
@@ -48,12 +48,12 @@ type InternalDocument struct {
 
 // NewInternalDocument creates a new instance of InternalDocument.
 func NewInternalDocument(k key.Key) *InternalDocument {
-	root := json.NewObject(json.NewRHTPriorityQueueMap(), time.InitialTicket)
+	root := crdt.NewObject(crdt.NewRHTPriorityQueueMap(), time.InitialTicket)
 
 	return &InternalDocument{
 		key:        k,
 		status:     Detached,
-		root:       json.NewRoot(root),
+		root:       crdt.NewRoot(root),
 		checkpoint: change.InitialCheckpoint,
 		changeID:   change.InitialID,
 	}
@@ -74,7 +74,7 @@ func NewInternalDocumentFromSnapshot(
 	return &InternalDocument{
 		key:        k,
 		status:     Detached,
-		root:       json.NewRoot(obj),
+		root:       crdt.NewRoot(obj),
 		checkpoint: change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changeID:   change.InitialID.SyncLamport(lamport),
 	}, nil
@@ -180,12 +180,12 @@ func (d *InternalDocument) IsAttached() bool {
 }
 
 // Root returns the root of this document.
-func (d *InternalDocument) Root() *json.Root {
+func (d *InternalDocument) Root() *crdt.Root {
 	return d.root
 }
 
 // RootObject returns the root object.
-func (d *InternalDocument) RootObject() *json.Object {
+func (d *InternalDocument) RootObject() *crdt.Object {
 	return d.root.Object()
 }
 
@@ -195,7 +195,7 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error
 		return err
 	}
 
-	d.root = json.NewRoot(rootObj)
+	d.root = crdt.NewRoot(rootObj)
 	d.changeID = d.changeID.SyncLamport(serverSeq)
 
 	return nil

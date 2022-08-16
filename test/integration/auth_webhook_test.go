@@ -33,8 +33,8 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -323,7 +323,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		// 01. multiple requests to update the document.
 		for i := 0; i < 3; i++ {
-			assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
+			assert.NoError(t, doc.Update(func(root *json.Object) error {
 				root.SetNewObject("k1")
 				return nil
 			}))
@@ -333,7 +333,7 @@ func TestAuthWebhook(t *testing.T) {
 		// 02. multiple requests to update the document after eviction by ttl.
 		time.Sleep(authorizedTTL)
 		for i := 0; i < 3; i++ {
-			assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
+			assert.NoError(t, doc.Update(func(root *json.Object) error {
 				root.SetNewObject("k1")
 				return nil
 			}))

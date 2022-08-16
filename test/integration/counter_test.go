@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 )
 
 func TestCounter(t *testing.T) {
@@ -41,7 +41,7 @@ func TestCounter(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewCounter("age", 1).
 				Increase(2).
 				Increase(2.5).
@@ -66,7 +66,7 @@ func TestCounter(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewCounter("age", 0)
 			root.SetNewCounter("width", 0)
 			root.SetNewCounter("height", 0)
@@ -80,7 +80,7 @@ func TestCounter(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetCounter("age").
 				Increase(1).
 				Increase(2).
@@ -90,13 +90,13 @@ func TestCounter(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetCounter("width").Increase(math.MaxInt32 + 100).Increase(10)
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetCounter("age").Increase(20)
 			root.GetCounter("width").Increase(100).Increase(200)
 			root.GetCounter("height").Increase(50)

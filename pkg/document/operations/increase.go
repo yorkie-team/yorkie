@@ -17,7 +17,7 @@
 package operations
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -25,14 +25,14 @@ import (
 // Among Primitives, numeric types Integer, Long, and Double are used as values.
 type Increase struct {
 	parentCreatedAt *time.Ticket
-	value           json.Element
+	value           crdt.Element
 	executedAt      *time.Ticket
 }
 
 // NewIncrease creates the increase instance.
 func NewIncrease(
 	parentCreatedAt *time.Ticket,
-	value json.Element,
+	value crdt.Element,
 	executedAt *time.Ticket,
 ) *Increase {
 	return &Increase{
@@ -43,21 +43,21 @@ func NewIncrease(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Increase) Execute(root *json.Root) error {
+func (o *Increase) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
-	cnt, ok := parent.(*json.Counter)
+	cnt, ok := parent.(*crdt.Counter)
 	if !ok {
 		return ErrNotApplicableDataType
 	}
 
-	value := o.value.(*json.Primitive)
+	value := o.value.(*crdt.Primitive)
 	cnt.Increase(value)
 
 	return nil
 }
 
 // Value return the value of this operation.
-func (o *Increase) Value() json.Element {
+func (o *Increase) Value() crdt.Element {
 	return o.value
 }
 

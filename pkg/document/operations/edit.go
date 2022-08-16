@@ -17,7 +17,7 @@
 package operations
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -27,10 +27,10 @@ type Edit struct {
 	parentCreatedAt *time.Ticket
 
 	// from represents the start point of the editing range.
-	from *json.RGATreeSplitNodePos
+	from *crdt.RGATreeSplitNodePos
 
 	// to represents the end point of the editing range.
-	to *json.RGATreeSplitNodePos
+	to *crdt.RGATreeSplitNodePos
 
 	// latestCreatedAtMapByActor is a map that stores the latest creation time
 	// by actor for the nodes included in the editing range.
@@ -46,8 +46,8 @@ type Edit struct {
 // NewEdit creates a new instance of Edit.
 func NewEdit(
 	parentCreatedAt *time.Ticket,
-	from *json.RGATreeSplitNodePos,
-	to *json.RGATreeSplitNodePos,
+	from *crdt.RGATreeSplitNodePos,
+	to *crdt.RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	executedAt *time.Ticket,
@@ -63,11 +63,11 @@ func NewEdit(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (e *Edit) Execute(root *json.Root) error {
+func (e *Edit) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 
 	switch obj := parent.(type) {
-	case *json.Text:
+	case *crdt.Text:
 		obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.executedAt)
 		if !e.from.Equal(e.to) {
 			root.RegisterTextElementWithGarbage(obj)
@@ -80,12 +80,12 @@ func (e *Edit) Execute(root *json.Root) error {
 }
 
 // From returns the start point of the editing range.
-func (e *Edit) From() *json.RGATreeSplitNodePos {
+func (e *Edit) From() *crdt.RGATreeSplitNodePos {
 	return e.from
 }
 
 // To returns the end point of the editing range.
-func (e *Edit) To() *json.RGATreeSplitNodePos {
+func (e *Edit) To() *crdt.RGATreeSplitNodePos {
 	return e.to
 }
 

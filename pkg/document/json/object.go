@@ -17,131 +17,277 @@
 package json
 
 import (
+	gotime "time"
+
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// Object represents a JSON object, but unlike regular JSON, it has time
-// tickets which is created by logical clock.
+// Object represents an object in the document. As a proxy for the CRDT object,
+// it is used when the user manipulates the object from the outside.
 type Object struct {
-	memberNodes *RHTPriorityQueueMap
-	createdAt   *time.Ticket
-	movedAt     *time.Ticket
-	removedAt   *time.Ticket
+	*crdt.Object
+	context *change.Context
 }
 
 // NewObject creates a new instance of Object.
-func NewObject(memberNodes *RHTPriorityQueueMap, createdAt *time.Ticket) *Object {
+func NewObject(ctx *change.Context, root *crdt.Object) *Object {
 	return &Object{
-		memberNodes: memberNodes,
-		createdAt:   createdAt,
+		Object:  root,
+		context: ctx,
 	}
 }
 
-// Purge physically purge child element.
-func (o *Object) Purge(elem Element) {
-	o.memberNodes.purge(elem)
+// SetNewObject sets a new Object for the given key.
+func (p *Object) SetNewObject(k string) *Object {
+	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return NewObject(p.context, crdt.NewObject(crdt.NewRHTPriorityQueueMap(), ticket))
+	})
+
+	return v.(*Object)
 }
 
-// Set sets the given element of the given key.
-func (o *Object) Set(k string, v Element) Element {
-	return o.memberNodes.Set(k, v)
+// SetNewArray sets a new Array for the given key.
+func (p *Object) SetNewArray(k string) *Array {
+	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return NewArray(p.context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
+	})
+
+	return v.(*Array)
 }
 
-// Members returns the member of this object as a map.
-func (o *Object) Members() map[string]Element {
-	return o.memberNodes.Elements()
+// SetNewText sets a new Text for the given key.
+func (p *Object) SetNewText(k string) *Text {
+	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return NewText(
+			p.context,
+			crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket),
+		)
+	})
+
+	return v.(*Text)
 }
 
-// Get returns the value of the given key.
-func (o *Object) Get(k string) Element {
-	return o.memberNodes.Get(k)
+// SetNewRichText sets a new RichText for the given key.
+func (p *Object) SetNewRichText(k string) *RichText {
+	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return NewRichText(
+			p.context,
+			crdt.NewInitialRichText(crdt.NewRGATreeSplit(crdt.InitialRichTextNode()), ticket),
+		)
+	})
+
+	return v.(*RichText)
 }
 
-// Has returns whether the element exists of the given key or not.
-func (o *Object) Has(k string) bool {
-	return o.memberNodes.Has(k)
+// SetNewCounter sets a new NewCounter for the given key.
+func (p *Object) SetNewCounter(k string, n interface{}) *Counter {
+	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return NewCounter(
+			p.context,
+			crdt.NewCounter(n, ticket),
+		)
+	})
+
+	return v.(*Counter)
 }
 
-// DeleteByCreatedAt deletes the element of the given creation time.
-func (o *Object) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
-	return o.memberNodes.DeleteByCreatedAt(createdAt, deletedAt)
+// SetNull sets the null for the given key.
+func (p *Object) SetNull(k string) *Object {
+	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewPrimitive(nil, ticket)
+	})
+
+	return p
 }
 
-// Delete deletes the element of the given key.
-func (o *Object) Delete(k string, deletedAt *time.Ticket) Element {
-	return o.memberNodes.Delete(k, deletedAt)
+// SetBool sets the given boolean for the given key.
+func (p *Object) SetBool(k string, v bool) *Object {
+	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewPrimitive(v, ticket)
+	})
+
+	return p
 }
 
-// Descendants traverse the descendants of this object.
-func (o *Object) Descendants(callback func(elem Element, parent Container) bool) {
-	for _, node := range o.memberNodes.Nodes() {
-		if callback(node.elem, o) {
-			return
-		}
+// SetInteger sets the given integer for the given key.
+func (p *Object) SetInteger(k string, v int) *Object {
+	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewPrimitive(v, ticket)
+	})
 
-		switch elem := node.elem.(type) {
-		case *Object:
-			elem.Descendants(callback)
-		case *Array:
-			elem.Descendants(callback)
-		}
+	return p
+}
+
+// SetLong sets the given long for the given key.
+func (p *Object) SetLong(k string, v int64) *Object {
+	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+// SetDouble sets the given double for the given key.
+func (p *Object) SetDouble(k string, v float64) *Object {
+	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+// SetString sets the given string for the given key.
+func (p *Object) SetString(k, v string) *Object {
+	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+// SetBytes sets the given bytes for the given key.
+func (p *Object) SetBytes(k string, v []byte) *Object {
+	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+// SetDate sets the given date for the given key.
+func (p *Object) SetDate(k string, v gotime.Time) *Object {
+	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewPrimitive(v, ticket)
+	})
+
+	return p
+}
+
+// Delete deletes the value of the given key.
+func (p *Object) Delete(k string) crdt.Element {
+	if !p.Object.Has(k) {
+		return nil
+	}
+
+	ticket := p.context.IssueTimeTicket()
+	deleted := p.Object.Delete(k, ticket)
+	p.context.Push(operations.NewRemove(
+		p.CreatedAt(),
+		deleted.CreatedAt(),
+		ticket,
+	))
+	p.context.RegisterRemovedElementPair(p, deleted)
+	return deleted
+}
+
+// GetObject returns Object of the given key.
+func (p *Object) GetObject(k string) *Object {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	switch elem := p.Object.Get(k).(type) {
+	case *crdt.Object:
+		return NewObject(p.context, elem)
+	case *Object:
+		return elem
+	default:
+		panic("unsupported type")
 	}
 }
 
-// Marshal returns the JSON encoding of this object.
-func (o *Object) Marshal() string {
-	return o.memberNodes.Marshal()
-}
-
-// DeepCopy copies itself deeply.
-func (o *Object) DeepCopy() Element {
-	members := NewRHTPriorityQueueMap()
-
-	for _, node := range o.memberNodes.Nodes() {
-		members.SetInternal(node.key, node.elem.DeepCopy())
+// GetArray returns Array of the given key.
+func (p *Object) GetArray(k string) *Array {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
 	}
 
-	obj := NewObject(members, o.createdAt)
-	obj.removedAt = o.removedAt
-	return obj
-}
-
-// CreatedAt returns the creation time of this object.
-func (o *Object) CreatedAt() *time.Ticket {
-	return o.createdAt
-}
-
-// MovedAt returns the move time of this object.
-func (o *Object) MovedAt() *time.Ticket {
-	return o.movedAt
-}
-
-// SetMovedAt sets the move time of this object.
-func (o *Object) SetMovedAt(movedAt *time.Ticket) {
-	o.movedAt = movedAt
-}
-
-// RemovedAt returns the removal time of this object.
-func (o *Object) RemovedAt() *time.Ticket {
-	return o.removedAt
-}
-
-// SetRemovedAt sets the removal time of this array.
-func (o *Object) SetRemovedAt(removedAt *time.Ticket) {
-	o.removedAt = removedAt
-}
-
-// Remove removes this object.
-func (o *Object) Remove(removedAt *time.Ticket) bool {
-	if (removedAt != nil && removedAt.After(o.createdAt)) &&
-		(o.removedAt == nil || removedAt.After(o.removedAt)) {
-		o.removedAt = removedAt
-		return true
+	switch elem := p.Object.Get(k).(type) {
+	case *crdt.Array:
+		return NewArray(p.context, elem)
+	case *Array:
+		return elem
+	default:
+		panic("unsupported type")
 	}
-	return false
 }
 
-// RHTNodes returns the RHTPriorityQueueMap nodes.
-func (o *Object) RHTNodes() []*RHTPQMapNode {
-	return o.memberNodes.Nodes()
+// GetText returns Text of the given key.
+func (p *Object) GetText(k string) *Text {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	switch elem := p.Object.Get(k).(type) {
+	case *crdt.Text:
+		return NewText(p.context, elem)
+	case *Text:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+// GetRichText returns RichText of the given key.
+func (p *Object) GetRichText(k string) *RichText {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	switch elem := p.Object.Get(k).(type) {
+	case *crdt.RichText:
+		return NewRichText(p.context, elem)
+	case *RichText:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+// GetCounter returns Counter of the given key.
+func (p *Object) GetCounter(k string) *Counter {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	switch elem := p.Object.Get(k).(type) {
+	case *crdt.Counter:
+		return NewCounter(p.context, elem)
+	case *Counter:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+func (p *Object) setInternal(
+	k string,
+	creator func(ticket *time.Ticket) crdt.Element,
+) crdt.Element {
+	ticket := p.context.IssueTimeTicket()
+	elem := creator(ticket)
+	value := toOriginal(elem)
+
+	p.context.Push(operations.NewSet(
+		p.CreatedAt(),
+		k,
+		value.DeepCopy(),
+		ticket,
+	))
+
+	removed := p.Set(k, value)
+	p.context.RegisterElement(value)
+	if removed != nil {
+		p.context.RegisterRemovedElementPair(p, removed)
+	}
+
+	return elem
 }

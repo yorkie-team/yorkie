@@ -21,6 +21,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"testing"
 	"time"
 
@@ -28,7 +29,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -50,7 +50,7 @@ func TestSnapshot(t *testing.T) {
 
 		// 01. Update changes over snapshot threshold.
 		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
-			err := d1.Update(func(root *proxy.ObjectProxy) error {
+			err := d1.Update(func(root *json.Object) error {
 				root.SetInteger(fmt.Sprintf("%d", i), i)
 				return nil
 			})
@@ -63,7 +63,7 @@ func TestSnapshot(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 
 		// 02. Makes local changes then pull a snapshot from the server.
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.SetString("key", "value")
 			return nil
 		})
@@ -83,7 +83,7 @@ func TestSnapshot(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewText("k1")
 			return nil
 		})
@@ -104,7 +104,7 @@ func TestSnapshot(t *testing.T) {
 		}
 
 		for _, edit := range edits {
-			err = d1.Update(func(root *proxy.ObjectProxy) error {
+			err = d1.Update(func(root *json.Object) error {
 				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
@@ -128,7 +128,7 @@ func TestSnapshot(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewText("k1")
 			return nil
 		})
@@ -141,14 +141,14 @@ func TestSnapshot(t *testing.T) {
 		assert.NoError(t, err)
 
 		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
-			err = d1.Update(func(root *proxy.ObjectProxy) error {
+			err = d1.Update(func(root *json.Object) error {
 				root.GetText("k1").Edit(i, i, "x")
 				return nil
 			})
 			assert.NoError(t, err)
 		}
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(0, 0, "o")
 			return nil
 		})

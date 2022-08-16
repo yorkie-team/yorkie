@@ -19,7 +19,7 @@ package operations
 import (
 	"errors"
 
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -32,7 +32,7 @@ var (
 // Operation represents an operation to be executed on a document.
 type Operation interface {
 	// Execute executes this operation on the given document(`root`).
-	Execute(root *json.Root) error
+	Execute(root *crdt.Root) error
 
 	// ExecutedAt returns execution time of this operation.
 	ExecutedAt() *time.Ticket

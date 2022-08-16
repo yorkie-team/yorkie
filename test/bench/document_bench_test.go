@@ -27,7 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -56,7 +56,7 @@ func BenchmarkDocument(b *testing.B) {
 			doc2 := document.New("d2")
 			doc3 := document.New("d3")
 
-			err := doc1.Update(func(root *proxy.ObjectProxy) error {
+			err := doc1.Update(func(root *json.Object) error {
 				root.SetString("k1", "v1")
 				return nil
 			}, "updates k1")
@@ -75,7 +75,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.Equal(b, "{}", doc.Marshal())
 			assert.False(b, doc.HasLocalChanges())
 
-			err := doc.Update(func(root *proxy.ObjectProxy) error {
+			err := doc.Update(func(root *json.Object) error {
 				root.SetString("k1", "v1")
 				root.SetNewObject("k2").SetString("k4", "v4")
 				root.SetNewArray("k3").AddString("v5", "v6")
@@ -96,7 +96,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.False(b, doc.HasLocalChanges())
 
 			expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
-			err := doc.Update(func(root *proxy.ObjectProxy) error {
+			err := doc.Update(func(root *json.Object) error {
 				root.SetString("k1", "v1")
 				root.SetNewObject("k2").SetString("k4", "v4")
 				root.SetNewArray("k3").AddString("v5", "v6")
@@ -107,7 +107,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.Equal(b, expected, doc.Marshal())
 
 			expected = `{"k1":"v1","k3":["v5","v6"]}`
-			err = doc.Update(func(root *proxy.ObjectProxy) error {
+			err = doc.Update(func(root *json.Object) error {
 				root.Delete("k2")
 				assert.Equal(b, expected, root.Marshal())
 				return nil
@@ -120,7 +120,7 @@ func BenchmarkDocument(b *testing.B) {
 	b.Run("object test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			doc := document.New("d1")
-			err := doc.Update(func(root *proxy.ObjectProxy) error {
+			err := doc.Update(func(root *json.Object) error {
 				root.SetString("k1", "v1")
 				assert.Equal(b, `{"k1":"v1"}`, root.Marshal())
 				root.SetString("k1", "v2")
@@ -136,7 +136,7 @@ func BenchmarkDocument(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			doc := document.New("d1")
 
-			err := doc.Update(func(root *proxy.ObjectProxy) error {
+			err := doc.Update(func(root *json.Object) error {
 				root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
 				assert.Equal(b, 3, root.GetArray("k1").Len())
 				assert.Equal(b, `{"k1":[1,2,3]}`, root.Marshal())
@@ -179,7 +179,7 @@ func BenchmarkDocument(b *testing.B) {
 			//           ---------- ins links --------
 			//           |                |          |
 			// [init] - [A] - [12] - [BC deleted] - [D]
-			err := doc.Update(func(root *proxy.ObjectProxy) error {
+			err := doc.Update(func(root *json.Object) error {
 				root.SetNewText("k1").
 					Edit(0, 0, "ABCD").
 					Edit(1, 3, "12")
@@ -189,7 +189,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.NoError(b, err)
 			assert.Equal(b, `{"k1":"A12D"}`, doc.Marshal())
 
-			err = doc.Update(func(root *proxy.ObjectProxy) error {
+			err = doc.Update(func(root *json.Object) error {
 				text := root.GetText("k1")
 				assert.Equal(b,
 					"[0:0:00:0 ][1:2:00:0 A][1:3:00:0 12]{1:2:00:1 BC}[1:2:00:3 D]",
@@ -220,7 +220,7 @@ func BenchmarkDocument(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			doc := document.New("d1")
 
-			err := doc.Update(func(root *proxy.ObjectProxy) error {
+			err := doc.Update(func(root *json.Object) error {
 				root.SetNewText("k1").
 					Edit(0, 0, "ㅎ").
 					Edit(0, 1, "하").
@@ -240,7 +240,7 @@ func BenchmarkDocument(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			doc := document.New("d1")
 
-			err := doc.Update(func(root *proxy.ObjectProxy) error {
+			err := doc.Update(func(root *json.Object) error {
 				text := root.SetNewRichText("k1")
 				text.Edit(0, 0, "Hello world", nil)
 				assert.Equal(
@@ -253,7 +253,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.NoError(b, err)
 			assert.Equal(b, `{"k1":[{"attrs":{},"val":"Hello world"}]}`, doc.Marshal())
 
-			err = doc.Update(func(root *proxy.ObjectProxy) error {
+			err = doc.Update(func(root *json.Object) error {
 				text := root.GetRichText("k1")
 				text.SetStyle(0, 5, map[string]string{"b": "1"})
 				assert.Equal(b,
@@ -269,7 +269,7 @@ func BenchmarkDocument(b *testing.B) {
 				doc.Marshal(),
 			)
 
-			err = doc.Update(func(root *proxy.ObjectProxy) error {
+			err = doc.Update(func(root *json.Object) error {
 				text := root.GetRichText("k1")
 				text.SetStyle(0, 5, map[string]string{"b": "1"})
 				assert.Equal(
@@ -293,7 +293,7 @@ func BenchmarkDocument(b *testing.B) {
 				doc.Marshal(),
 			)
 
-			err = doc.Update(func(root *proxy.ObjectProxy) error {
+			err = doc.Update(func(root *json.Object) error {
 				text := root.GetRichText("k1")
 				text.Edit(5, 11, " Yorkie", nil)
 				assert.Equal(
@@ -311,7 +311,7 @@ func BenchmarkDocument(b *testing.B) {
 				doc.Marshal(),
 			)
 
-			err = doc.Update(func(root *proxy.ObjectProxy) error {
+			err = doc.Update(func(root *json.Object) error {
 				text := root.GetRichText("k1")
 				text.Edit(5, 5, "\n", map[string]string{"list": "true"})
 				assert.Equal(
@@ -340,7 +340,7 @@ func BenchmarkDocument(b *testing.B) {
 			var double = 5.66
 
 			// integer type test
-			err := doc.Update(func(root *proxy.ObjectProxy) error {
+			err := doc.Update(func(root *json.Object) error {
 				root.SetNewCounter("age", 5)
 
 				age := root.GetCounter("age")
@@ -356,7 +356,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.Equal(b, `{"age":128}`, doc.Marshal())
 
 			// long type test
-			err = doc.Update(func(root *proxy.ObjectProxy) error {
+			err = doc.Update(func(root *json.Object) error {
 				root.SetNewCounter("price", 9000000000000000000)
 				price := root.GetCounter("price")
 				price.Increase(long)
@@ -371,7 +371,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.Equal(b, `{"age":128,"price":9000000000000000123}`, doc.Marshal())
 
 			// double type test
-			err = doc.Update(func(root *proxy.ObjectProxy) error {
+			err = doc.Update(func(root *json.Object) error {
 				root.SetNewCounter("width", 10.5)
 				width := root.GetCounter("width")
 				width.Increase(long)
@@ -386,7 +386,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.Equal(b, `{"age":128,"price":9000000000000000123,"width":134.300000}`, doc.Marshal())
 
 			// negative operator test
-			err = doc.Update(func(root *proxy.ObjectProxy) error {
+			err = doc.Update(func(root *json.Object) error {
 				age := root.GetCounter("age")
 				age.Increase(-5)
 				age.Increase(-3.14)
@@ -406,7 +406,7 @@ func BenchmarkDocument(b *testing.B) {
 
 			// TODO: it should be modified to error check
 			// when 'Remove panic from server code (#50)' is completed.
-			err = doc.Update(func(root *proxy.ObjectProxy) error {
+			err = doc.Update(func(root *json.Object) error {
 				defer func() {
 					r := recover()
 					assert.NotNil(b, r)
@@ -501,7 +501,7 @@ func benchmarkText(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k1")
 			for c := 0; c < cnt; c++ {
 				text.Edit(c, c, "a")
@@ -517,7 +517,7 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 		b.StopTimer()
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k1")
 			for c := 0; c < cnt; c++ {
 				text.Edit(c, c, "a")
@@ -527,7 +527,7 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 		assert.NoError(b, err)
 
 		b.StartTimer()
-		err = doc.Update(func(root *proxy.ObjectProxy) error {
+		err = doc.Update(func(root *json.Object) error {
 			text := root.GetText("k1")
 			text.Edit(0, cnt, "")
 			return nil
@@ -544,7 +544,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
 
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k1")
 			for i := 0; i < cnt; i++ {
 				text.Edit(i, i, "a")
@@ -553,7 +553,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 		}, "creates a text then appends a")
 		assert.NoError(b, err)
 
-		err = doc.Update(func(root *proxy.ObjectProxy) error {
+		err = doc.Update(func(root *json.Object) error {
 			text := root.GetText("k1")
 			for i := 0; i < cnt; i++ {
 				text.Edit(i, i+1, "b")
@@ -575,14 +575,14 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 		for i := 0; i < cnt; i++ {
 			builder.WriteString("a")
 		}
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k2")
 			text.Edit(0, 0, builder.String())
 			return nil
 		}, "initial")
 		assert.NoError(b, err)
 
-		err = doc.Update(func(root *proxy.ObjectProxy) error {
+		err = doc.Update(func(root *json.Object) error {
 			text := root.GetText("k2")
 			for i := 0; i < cnt; i++ {
 				if i != cnt {
@@ -602,7 +602,7 @@ func benchmarkArray(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err := doc.Update(func(root *json.Object) error {
 			array := root.SetNewArray("k1")
 			for c := 0; c < cnt; c++ {
 				array.AddInteger(c)
@@ -616,7 +616,7 @@ func benchmarkArray(cnt int, b *testing.B) {
 func benchmarkArrayGC(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		doc := document.New("d1")
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err := doc.Update(func(root *json.Object) error {
 			root.SetNewArray("1")
 			for i := 0; i < cnt; i++ {
 				root.GetArray("1").AddInteger(i)
@@ -626,7 +626,7 @@ func benchmarkArrayGC(cnt int, b *testing.B) {
 		}, "creates an array then adds integers")
 		assert.NoError(b, err)
 
-		err = doc.Update(func(root *proxy.ObjectProxy) error {
+		err = doc.Update(func(root *json.Object) error {
 			root.Delete("1")
 			return nil
 		}, "deletes the array")
@@ -641,7 +641,7 @@ func benchmarkCounter(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err := doc.Update(func(root *json.Object) error {
 			counter := root.SetNewCounter("k1", 0)
 			for c := 0; c < cnt; c++ {
 				counter.Increase(c)
@@ -656,7 +656,7 @@ func benchmarkRichText(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewRichText("k1")
 			for c := 0; c < cnt; c++ {
 				text.Edit(0, 0, "a", nil)
@@ -671,7 +671,7 @@ func benchmarkObject(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err := doc.Update(func(root *json.Object) error {
 			for c := 0; c < cnt; c++ {
 				root.SetInteger("k1", c)
 			}

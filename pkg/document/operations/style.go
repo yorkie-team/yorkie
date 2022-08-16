@@ -17,7 +17,7 @@
 package operations
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -27,10 +27,10 @@ type Style struct {
 	parentCreatedAt *time.Ticket
 
 	// from is the starting point of the range to apply the style to.
-	from *json.RGATreeSplitNodePos
+	from *crdt.RGATreeSplitNodePos
 
 	// to is the end point of the range to apply the style to.
-	to *json.RGATreeSplitNodePos
+	to *crdt.RGATreeSplitNodePos
 
 	// attributes represents the text style.
 	attributes map[string]string
@@ -42,8 +42,8 @@ type Style struct {
 // NewStyle creates a new instance of Style.
 func NewStyle(
 	parentCreatedAt *time.Ticket,
-	from *json.RGATreeSplitNodePos,
-	to *json.RGATreeSplitNodePos,
+	from *crdt.RGATreeSplitNodePos,
+	to *crdt.RGATreeSplitNodePos,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 ) *Style {
@@ -57,9 +57,9 @@ func NewStyle(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (e *Style) Execute(root *json.Root) error {
+func (e *Style) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
-	obj, ok := parent.(*json.RichText)
+	obj, ok := parent.(*crdt.RichText)
 	if !ok {
 		return ErrNotApplicableDataType
 	}
@@ -69,12 +69,12 @@ func (e *Style) Execute(root *json.Root) error {
 }
 
 // From returns the start point of the editing range.
-func (e *Style) From() *json.RGATreeSplitNodePos {
+func (e *Style) From() *crdt.RGATreeSplitNodePos {
 	return e.from
 }
 
 // To returns the end point of the editing range.
-func (e *Style) To() *json.RGATreeSplitNodePos {
+func (e *Style) To() *crdt.RGATreeSplitNodePos {
 	return e.to
 }
 
