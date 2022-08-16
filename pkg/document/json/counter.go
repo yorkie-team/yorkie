@@ -17,209 +17,112 @@
 package json
 
 import (
-	"encoding/binary"
-	"fmt"
-	"math"
+	"reflect"
 
-	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 )
 
-// CounterType represents any type that can be used as a counter.
-type CounterType int
-
-// The values below are the types that can be used as counters.
-const (
-	IntegerCnt CounterType = iota
-	LongCnt
-	DoubleCnt
-)
-
-// CounterValueFromBytes parses the given bytes into value.
-func CounterValueFromBytes(counterType CounterType, value []byte) interface{} {
-	switch counterType {
-	case IntegerCnt:
-		val := int32(binary.LittleEndian.Uint32(value))
-		return int(val)
-	case LongCnt:
-		return int64(binary.LittleEndian.Uint64(value))
-	case DoubleCnt:
-		return math.Float64frombits(binary.LittleEndian.Uint64(value))
-	}
-
-	panic("unsupported type")
-}
-
-// Counter represents changeable number data type.
+// Counter represents a counter in the document. As a proxy for the CRDT counter,
+// it is used when the user manipulates the counter from the outside.
 type Counter struct {
-	valueType CounterType
-	value     interface{}
-	createdAt *time.Ticket
-	movedAt   *time.Ticket
-	removedAt *time.Ticket
+	*crdt.Counter
+	context *change.Context
 }
 
-// NewCounter creates a new instance of Counter.
-func NewCounter(value interface{}, createdAt *time.Ticket) *Counter {
-	switch val := value.(type) {
-	case int:
-		if math.MaxInt32 < val || math.MinInt32 > val {
-			return &Counter{
-				valueType: LongCnt,
-				value:     int64(val),
-				createdAt: createdAt,
-			}
-		}
-		return &Counter{
-			valueType: IntegerCnt,
-			value:     val,
-			createdAt: createdAt,
-		}
-	case int64:
-		return &Counter{
-			valueType: LongCnt,
-			value:     val,
-			createdAt: createdAt,
-		}
-	case float64:
-		return &Counter{
-			valueType: DoubleCnt,
-			value:     val,
-			createdAt: createdAt,
-		}
-	}
-
-	panic("unsupported type")
-}
-
-// Bytes creates an array representing the value.
-func (p *Counter) Bytes() []byte {
-	switch val := p.value.(type) {
-	case int:
-		bytes := [4]byte{}
-		binary.LittleEndian.PutUint32(bytes[:], uint32(val))
-		return bytes[:]
-	case int64:
-		bytes := [8]byte{}
-		binary.LittleEndian.PutUint64(bytes[:], uint64(val))
-		return bytes[:]
-	case float64:
-		bytes := [8]byte{}
-		binary.LittleEndian.PutUint64(bytes[:], math.Float64bits(val))
-		return bytes[:]
-	}
-
-	panic("unsupported type")
-}
-
-// Marshal returns the JSON encoding of the value.
-func (p *Counter) Marshal() string {
-	switch p.valueType {
-	case IntegerCnt:
-		return fmt.Sprintf("%d", p.value)
-	case LongCnt:
-		return fmt.Sprintf("%d", p.value)
-	case DoubleCnt:
-		return fmt.Sprintf("%f", p.value)
-	}
-
-	panic("unsupported type")
-}
-
-// DeepCopy copies itself deeply.
-func (p *Counter) DeepCopy() Element {
-	counter := *p
-	return &counter
-}
-
-// CreatedAt returns the creation time.
-func (p *Counter) CreatedAt() *time.Ticket {
-	return p.createdAt
-}
-
-// MovedAt returns the move time of this element.
-func (p *Counter) MovedAt() *time.Ticket {
-	return p.movedAt
-}
-
-// SetMovedAt sets the move time of this element.
-func (p *Counter) SetMovedAt(movedAt *time.Ticket) {
-	p.movedAt = movedAt
-}
-
-// RemovedAt returns the removal time of this element.
-func (p *Counter) RemovedAt() *time.Ticket {
-	return p.removedAt
-}
-
-// SetRemovedAt sets the removal time of this array.
-func (p *Counter) SetRemovedAt(removedAt *time.Ticket) {
-	p.removedAt = removedAt
-}
-
-// Remove removes this element.
-func (p *Counter) Remove(removedAt *time.Ticket) bool {
-	if (removedAt != nil && removedAt.After(p.createdAt)) &&
-		(p.removedAt == nil || removedAt.After(p.removedAt)) {
-		p.removedAt = removedAt
-		return true
-	}
-	return false
-}
-
-// ValueType returns the type of the value.
-func (p *Counter) ValueType() CounterType {
-	return p.valueType
-}
-
-// Increase increases integer, long or double.
-// If the result of the operation is greater than MaxInt32 or less
-// than MinInt32, Counter's value type can be changed Integer to Long.
-// Because in golang, int can be either int32 or int64.
-// So we need to assert int to int32.
-func (p *Counter) Increase(v *Primitive) *Counter {
-	if !p.IsNumericType() || !v.IsNumericType() {
+// NewCounter create Counter instance.
+func NewCounter(ctx *change.Context, counter *crdt.Counter) *Counter {
+	if !counter.IsNumericType() {
 		panic("unsupported type")
 	}
-	switch p.valueType {
-	case IntegerCnt:
-		switch v.valueType {
-		case Long:
-			p.value = p.value.(int) + int(v.value.(int64))
-		case Double:
-			p.value = p.value.(int) + int(v.value.(float64))
-		default:
-			p.value = p.value.(int) + v.value.(int)
-		}
-
-		if p.value.(int) > math.MaxInt32 || p.value.(int) < math.MinInt32 {
-			p.value = int64(p.value.(int))
-			p.valueType = LongCnt
-		}
-	case LongCnt:
-		switch v.valueType {
-		case Integer:
-			p.value = p.value.(int64) + int64(v.value.(int))
-		case Double:
-			p.value = p.value.(int64) + int64(v.value.(float64))
-		default:
-			p.value = p.value.(int64) + v.value.(int64)
-		}
-	case DoubleCnt:
-		switch v.valueType {
-		case Integer:
-			p.value = p.value.(float64) + float64(v.value.(int))
-		case Long:
-			p.value = p.value.(float64) + float64(v.value.(int64))
-		default:
-			p.value = p.value.(float64) + v.value.(float64)
-		}
+	return &Counter{
+		Counter: counter,
+		context: ctx,
 	}
+}
+
+// Increase adds an increase operations.
+// Only numeric types are allowed as operand values, excluding
+// uint64 and uintptr.
+func (p *Counter) Increase(v interface{}) *Counter {
+	if !isAllowedOperand(v) {
+		panic("unsupported type")
+	}
+	var primitive *crdt.Primitive
+	ticket := p.context.IssueTimeTicket()
+
+	value, kind := convertAssertableOperand(v)
+	isInt := kind == reflect.Int
+	switch p.ValueType() {
+	case crdt.LongCnt:
+		if isInt {
+			primitive = crdt.NewPrimitive(int64(value.(int)), ticket)
+		} else {
+			primitive = crdt.NewPrimitive(int64(value.(float64)), ticket)
+		}
+	case crdt.IntegerCnt:
+		if isInt {
+			primitive = crdt.NewPrimitive(value, ticket)
+		} else {
+			primitive = crdt.NewPrimitive(int(value.(float64)), ticket)
+		}
+	case crdt.DoubleCnt:
+		if isInt {
+			primitive = crdt.NewPrimitive(float64(value.(int)), ticket)
+		} else {
+			primitive = crdt.NewPrimitive(value, ticket)
+		}
+	default:
+		panic("unsupported type")
+	}
+
+	p.context.Push(operations.NewIncrease(
+		p.CreatedAt(),
+		primitive,
+		ticket,
+	))
 
 	return p
 }
 
-// IsNumericType checks for numeric types.
-func (p *Counter) IsNumericType() bool {
-	t := p.valueType
-	return t == IntegerCnt || t == LongCnt || t == DoubleCnt
+// isAllowedOperand indicates whether
+// the operand of increase is an allowable type.
+func isAllowedOperand(v interface{}) bool {
+	vt := reflect.ValueOf(v).Kind()
+	if vt >= reflect.Int && vt <= reflect.Float64 && vt != reflect.Uint64 && vt != reflect.Uintptr {
+		return true
+	}
+
+	return false
+}
+
+// convertAssertableOperand converts the operand
+// to be used in the increase function to assertable type.
+func convertAssertableOperand(v interface{}) (interface{}, reflect.Kind) {
+	vt := reflect.ValueOf(v).Kind()
+	switch vt {
+	case reflect.Int:
+		return v, reflect.Int
+	case reflect.Int8:
+		return int(v.(int8)), reflect.Int
+	case reflect.Int16:
+		return int(v.(int16)), reflect.Int
+	case reflect.Int32:
+		return int(v.(int32)), reflect.Int
+	case reflect.Int64:
+		return int(v.(int64)), reflect.Int
+	case reflect.Uint:
+		return int(v.(uint)), reflect.Int
+	case reflect.Uint8:
+		return int(v.(uint8)), reflect.Int
+	case reflect.Uint16:
+		return int(v.(uint16)), reflect.Int
+	case reflect.Uint32:
+		return int(v.(uint32)), reflect.Int
+	case reflect.Float32:
+		return float64(v.(float32)), reflect.Float64
+	default:
+		return v, reflect.Float64
+	}
 }

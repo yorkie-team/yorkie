@@ -17,7 +17,7 @@
 package operations
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -31,7 +31,7 @@ type Set struct {
 	key string
 
 	// value is the value of this operation.
-	value json.Element
+	value crdt.Element
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
@@ -41,7 +41,7 @@ type Set struct {
 func NewSet(
 	parentCreatedAt *time.Ticket,
 	key string,
-	value json.Element,
+	value crdt.Element,
 	executedAt *time.Ticket,
 ) *Set {
 	return &Set{
@@ -53,10 +53,10 @@ func NewSet(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Set) Execute(root *json.Root) error {
+func (o *Set) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
-	obj, ok := parent.(*json.Object)
+	obj, ok := parent.(*crdt.Object)
 	if !ok {
 		return ErrNotApplicableDataType
 	}
@@ -91,6 +91,6 @@ func (o *Set) Key() string {
 }
 
 // Value returns the value of this operation.
-func (o *Set) Value() json.Element {
+func (o *Set) Value() crdt.Element {
 	return o.value
 }

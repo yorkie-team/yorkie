@@ -17,7 +17,7 @@
 package operations
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -52,10 +52,10 @@ func NewMove(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Move) Execute(root *json.Root) error {
+func (o *Move) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
-	obj, ok := parent.(*json.Array)
+	obj, ok := parent.(*crdt.Array)
 	if !ok {
 		return ErrNotApplicableDataType
 	}

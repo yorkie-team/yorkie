@@ -20,9 +20,9 @@ import (
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -39,7 +39,7 @@ type Document struct {
 
 	// clone is a copy of `doc` to be exposed to the user and is used to
 	// protect `doc`.
-	clone *json.Root
+	clone *crdt.Root
 }
 
 // New creates a new instance of Document.
@@ -51,7 +51,7 @@ func New(key key.Key) *Document {
 
 // Update executes the given updater to update this document.
 func (d *Document) Update(
-	updater func(root *proxy.ObjectProxy) error,
+	updater func(root *json.Object) error,
 	msgAndArgs ...interface{},
 ) error {
 	d.ensureClone()
@@ -62,7 +62,7 @@ func (d *Document) Update(
 		d.clone,
 	)
 
-	if err := updater(proxy.NewObjectProxy(ctx, d.clone.Object())); err != nil {
+	if err := updater(json.NewObject(ctx, d.clone.Object())); err != nil {
 		// drop clone because it is contaminated.
 		d.clone = nil
 		return err
@@ -172,17 +172,17 @@ func (d *Document) IsAttached() bool {
 	return d.doc.IsAttached()
 }
 
-// RootObject returns the root object.
-func (d *Document) RootObject() *json.Object {
+// RootObject returns the internal root object of this document.
+func (d *Document) RootObject() *crdt.Object {
 	return d.doc.RootObject()
 }
 
-// Root returns the proxy of the root object.
-func (d *Document) Root() *proxy.ObjectProxy {
+// Root returns the root object of this document.
+func (d *Document) Root() *json.Object {
 	d.ensureClone()
 
 	ctx := change.NewContext(d.doc.changeID.Next(), "", d.clone)
-	return proxy.NewObjectProxy(ctx, d.clone.Object())
+	return json.NewObject(ctx, d.clone.Object())
 }
 
 // GarbageCollect purge elements that were removed before the given time.

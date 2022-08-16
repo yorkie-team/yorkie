@@ -17,7 +17,7 @@
 package operations
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -30,7 +30,7 @@ type Add struct {
 	prevCreatedAt *time.Ticket
 
 	// value is an element added by the insert operations.
-	value json.Element
+	value crdt.Element
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
@@ -40,7 +40,7 @@ type Add struct {
 func NewAdd(
 	parentCreatedAt *time.Ticket,
 	prevCreatedAt *time.Ticket,
-	value json.Element,
+	value crdt.Element,
 	executedAt *time.Ticket,
 ) *Add {
 	return &Add{
@@ -52,10 +52,10 @@ func NewAdd(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Add) Execute(root *json.Root) error {
+func (o *Add) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 
-	obj, ok := parent.(*json.Array)
+	obj, ok := parent.(*crdt.Array)
 	if !ok {
 		return ErrNotApplicableDataType
 	}
@@ -68,7 +68,7 @@ func (o *Add) Execute(root *json.Root) error {
 }
 
 // Value returns the value of this operation.
-func (o *Add) Value() json.Element {
+func (o *Add) Value() crdt.Element {
 	return o.value
 }
 

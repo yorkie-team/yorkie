@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package json_test
+package crdt_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -29,7 +29,7 @@ func TestText(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		text := json.NewText(json.NewRGATreeSplit(json.InitialTextNode()), ctx.IssueTimeTicket())
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)
 		text.Edit(fromPos, toPos, nil, "Hello World", ctx.IssueTimeTicket())
@@ -52,11 +52,11 @@ func TestText(t *testing.T) {
 			{10, "Ĺo͂řȩm̅"},
 		}
 		for _, test := range tests {
-			val := json.NewTextValue(test.value)
+			val := crdt.NewTextValue(test.value)
 			assert.Equal(t, test.length, val.Len())
 			assert.Equal(t, test.length-2, val.Split(2).Len())
 
-			richVal := json.NewRichTextValue(json.NewRHT(), test.value)
+			richVal := crdt.NewRichTextValue(crdt.NewRHT(), test.value)
 			assert.Equal(t, test.length, richVal.Len())
 			assert.Equal(t, test.length-2, richVal.Split(2).Len())
 		}

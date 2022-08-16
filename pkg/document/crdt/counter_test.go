@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package json_test
+package crdt_test
 
 import (
 	"math"
@@ -23,33 +23,33 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 func TestCounter(t *testing.T) {
 	t.Run("new counter test", func(t *testing.T) {
-		integer := json.NewCounter(math.MaxInt32, time.InitialTicket)
-		assert.Equal(t, json.IntegerCnt, integer.ValueType())
+		integer := crdt.NewCounter(math.MaxInt32, time.InitialTicket)
+		assert.Equal(t, crdt.IntegerCnt, integer.ValueType())
 
-		long := json.NewCounter(math.MaxInt32+1, time.InitialTicket)
-		assert.Equal(t, json.LongCnt, long.ValueType())
+		long := crdt.NewCounter(math.MaxInt32+1, time.InitialTicket)
+		assert.Equal(t, crdt.LongCnt, long.ValueType())
 
-		double := json.NewCounter(0.5, time.InitialTicket)
-		assert.Equal(t, json.DoubleCnt, double.ValueType())
+		double := crdt.NewCounter(0.5, time.InitialTicket)
+		assert.Equal(t, crdt.DoubleCnt, double.ValueType())
 	})
 
 	t.Run("increase test", func(t *testing.T) {
 		var x = 5
 		var y int64 = 10
 		var z = 3.14
-		integer := json.NewCounter(x, time.InitialTicket)
-		long := json.NewCounter(y, time.InitialTicket)
-		double := json.NewCounter(z, time.InitialTicket)
+		integer := crdt.NewCounter(x, time.InitialTicket)
+		long := crdt.NewCounter(y, time.InitialTicket)
+		double := crdt.NewCounter(z, time.InitialTicket)
 
-		integerOperand := json.NewPrimitive(x, time.InitialTicket)
-		longOperand := json.NewPrimitive(y, time.InitialTicket)
-		doubleOperand := json.NewPrimitive(z, time.InitialTicket)
+		integerOperand := crdt.NewPrimitive(x, time.InitialTicket)
+		longOperand := crdt.NewPrimitive(y, time.InitialTicket)
+		doubleOperand := crdt.NewPrimitive(z, time.InitialTicket)
 
 		// normal process test
 		integer.Increase(integerOperand)
@@ -77,7 +77,7 @@ func TestCounter(t *testing.T) {
 		}
 		unsupportedTest := func(v interface{}) {
 			defer unsupportedTypePanicTest()
-			json.NewCounter(v, time.InitialTicket)
+			crdt.NewCounter(v, time.InitialTicket)
 		}
 		unsupportedTest("str")
 		unsupportedTest(true)
@@ -90,11 +90,11 @@ func TestCounter(t *testing.T) {
 	})
 
 	t.Run("Counter's value type changed Integer to Long test", func(t *testing.T) {
-		integer := json.NewCounter(math.MaxInt32, time.InitialTicket)
-		assert.Equal(t, integer.ValueType(), json.IntegerCnt)
+		integer := crdt.NewCounter(math.MaxInt32, time.InitialTicket)
+		assert.Equal(t, integer.ValueType(), crdt.IntegerCnt)
 
-		operand := json.NewPrimitive(1, time.InitialTicket)
+		operand := crdt.NewPrimitive(1, time.InitialTicket)
 		integer.Increase(operand)
-		assert.Equal(t, integer.ValueType(), json.LongCnt)
+		assert.Equal(t, integer.ValueType(), crdt.LongCnt)
 	})
 }

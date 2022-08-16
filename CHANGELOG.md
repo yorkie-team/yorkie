@@ -13,6 +13,10 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - Add `--auth-webhook-url`, `--name` flag to updateProject command: #376
 
+### Changed
+
+- Rename package names to match JS SDK: #395
+
 ## [0.2.15] - 2022-08-08
 
 ### Added

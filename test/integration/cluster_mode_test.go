@@ -31,8 +31,8 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -190,7 +190,7 @@ func TestClusterMode(t *testing.T) {
 			})
 			cancel2()
 
-			assert.NoError(t, d2.Update(func(root *proxy.ObjectProxy) error {
+			assert.NoError(t, d2.Update(func(root *json.Object) error {
 				root.SetString("hello", "world")
 				return nil
 			}))

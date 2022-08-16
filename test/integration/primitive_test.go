@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 )
 
 func TestPrimitive(t *testing.T) {
@@ -41,7 +41,7 @@ func TestPrimitive(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewObject("k1").
 				SetBool("k1.1", true).
 				SetInteger("k1.2", 2147483647).

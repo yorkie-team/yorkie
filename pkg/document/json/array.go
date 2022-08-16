@@ -17,168 +17,199 @@
 package json
 
 import (
+	gotime "time"
+
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// Array represents JSON array data structure including logical clock.
-// Array implements Element interface.
+// Array represents an array in the document. As a proxy for the CRDT array,
+// it is used when the user manipulate the array from the outside.
 type Array struct {
-	elements  *RGATreeList
-	createdAt *time.Ticket
-	movedAt   *time.Ticket
-	removedAt *time.Ticket
+	*crdt.Array
+	context *change.Context
 }
 
 // NewArray creates a new instance of Array.
-func NewArray(elements *RGATreeList, createdAt *time.Ticket) *Array {
+func NewArray(ctx *change.Context, array *crdt.Array) *Array {
 	return &Array{
-		elements:  elements,
-		createdAt: createdAt,
+		Array:   array,
+		context: ctx,
 	}
 }
 
-// Purge physically purge child element.
-func (a *Array) Purge(elem Element) {
-	a.elements.purge(elem)
+// AddNull adds the null at the last.
+func (p *Array) AddNull() *Array {
+	p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewPrimitive(nil, ticket)
+	})
+
+	return p
 }
 
-// Add adds the given element at the last.
-func (a *Array) Add(elem Element) *Array {
-	a.elements.Add(elem)
-	return a
+// AddBool adds the given boolean at the last.
+func (p *Array) AddBool(values ...bool) *Array {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) crdt.Element {
+			return crdt.NewPrimitive(value, ticket)
+		})
+	}
+
+	return p
 }
 
-// Get returns the element of the given index.
-func (a *Array) Get(idx int) Element {
-	return a.elements.Get(idx).elem
+// AddInteger adds the given integer at the last.
+func (p *Array) AddInteger(values ...int) *Array {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) crdt.Element {
+			return crdt.NewPrimitive(value, ticket)
+		})
+	}
+
+	return p
 }
 
-// FindPrevCreatedAt returns the creation time of the previous element of the
-// given element.
-func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
-	return a.elements.FindPrevCreatedAt(createdAt)
+// AddLong adds the given long at the last.
+func (p *Array) AddLong(values ...int64) *Array {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) crdt.Element {
+			return crdt.NewPrimitive(value, ticket)
+		})
+	}
+
+	return p
+}
+
+// AddDouble adds the given double at the last.
+func (p *Array) AddDouble(values ...float64) *Array {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) crdt.Element {
+			return crdt.NewPrimitive(value, ticket)
+		})
+	}
+
+	return p
+}
+
+// AddString adds the given string at the last.
+func (p *Array) AddString(values ...string) *Array {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) crdt.Element {
+			return crdt.NewPrimitive(value, ticket)
+		})
+	}
+
+	return p
+}
+
+// AddBytes adds the given bytes at the last.
+func (p *Array) AddBytes(values ...[]byte) *Array {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) crdt.Element {
+			return crdt.NewPrimitive(value, ticket)
+		})
+	}
+
+	return p
+}
+
+// AddDate adds the given date at the last.
+func (p *Array) AddDate(values ...gotime.Time) *Array {
+	for _, value := range values {
+		p.addInternal(func(ticket *time.Ticket) crdt.Element {
+			return crdt.NewPrimitive(value, ticket)
+		})
+	}
+
+	return p
+}
+
+// AddNewArray adds a new array at the last.
+func (p *Array) AddNewArray() *Array {
+	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
+		return NewArray(p.context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
+	})
+
+	return v.(*Array)
+}
+
+// MoveBefore moves the given element to its new position before the given next element.
+func (p *Array) MoveBefore(nextCreatedAt, createdAt *time.Ticket) {
+	p.moveBeforeInternal(nextCreatedAt, createdAt)
+}
+
+// InsertIntegerAfter inserts the given integer after the given previous
+// element.
+func (p *Array) InsertIntegerAfter(index int, v int) *Array {
+	p.insertAfterInternal(p.Get(index).CreatedAt(), func(ticket *time.Ticket) crdt.Element {
+		return crdt.NewPrimitive(v, ticket)
+	})
+
+	return p
 }
 
 // Delete deletes the element of the given index.
-func (a *Array) Delete(idx int, deletedAt *time.Ticket) Element {
-	return a.elements.Delete(idx, deletedAt).elem
-}
-
-// MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
-// element.
-func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) {
-	a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt)
-}
-
-// Elements returns an array of elements contained in this RGATreeList.
-func (a *Array) Elements() []Element {
-	var elements []Element
-	for _, node := range a.elements.Nodes() {
-		if node.isRemoved() {
-			continue
-		}
-		elements = append(elements, node.elem)
+func (p *Array) Delete(idx int) crdt.Element {
+	if p.Len() <= idx {
+		return nil
 	}
 
-	return elements
-}
-
-// Marshal returns the JSON encoding of this Array.
-func (a *Array) Marshal() string {
-	return a.elements.Marshal()
-}
-
-// AnnotatedString returns a String containing the metadata of the elements
-// for debugging purpose.
-func (a *Array) AnnotatedString() string {
-	return a.elements.AnnotatedString()
-}
-
-// DeepCopy copies itself deeply.
-func (a *Array) DeepCopy() Element {
-	elements := NewRGATreeList()
-
-	for _, node := range a.elements.Nodes() {
-		elements.Add(node.elem.DeepCopy())
-	}
-
-	array := NewArray(elements, a.createdAt)
-	array.removedAt = a.removedAt
-	return array
-}
-
-// CreatedAt returns the creation time of this array.
-func (a *Array) CreatedAt() *time.Ticket {
-	return a.createdAt
-}
-
-// MovedAt returns the move time of this array.
-func (a *Array) MovedAt() *time.Ticket {
-	return a.movedAt
-}
-
-// SetMovedAt sets the move time of this array.
-func (a *Array) SetMovedAt(movedAt *time.Ticket) {
-	a.movedAt = movedAt
-}
-
-// RemovedAt returns the removal time of this array.
-func (a *Array) RemovedAt() *time.Ticket {
-	return a.removedAt
-}
-
-// SetRemovedAt sets the removal time of this array.
-func (a *Array) SetRemovedAt(removedAt *time.Ticket) {
-	a.removedAt = removedAt
-}
-
-// Remove removes this array.
-func (a *Array) Remove(removedAt *time.Ticket) bool {
-	if (removedAt != nil && removedAt.After(a.createdAt)) &&
-		(a.removedAt == nil || removedAt.After(a.removedAt)) {
-		a.removedAt = removedAt
-		return true
-	}
-	return false
-}
-
-// LastCreatedAt returns the creation time of the last element.
-func (a *Array) LastCreatedAt() *time.Ticket {
-	return a.elements.LastCreatedAt()
-}
-
-// InsertAfter inserts the given element after the given previous element.
-func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
-	a.elements.InsertAfter(prevCreatedAt, element)
-}
-
-// DeleteByCreatedAt deletes the given element.
-func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
-	return a.elements.DeleteByCreatedAt(createdAt, deletedAt).elem
+	ticket := p.context.IssueTimeTicket()
+	deleted := p.Array.Delete(idx, ticket)
+	p.context.Push(operations.NewRemove(
+		p.CreatedAt(),
+		deleted.CreatedAt(),
+		ticket,
+	))
+	p.context.RegisterRemovedElementPair(p, deleted)
+	return deleted
 }
 
 // Len returns length of this Array.
-func (a *Array) Len() int {
-	return a.elements.Len()
+func (p *Array) Len() int {
+	return p.Array.Len()
 }
 
-// Descendants traverse the descendants of this array.
-func (a *Array) Descendants(callback func(elem Element, parent Container) bool) {
-	for _, node := range a.elements.Nodes() {
-		if callback(node.elem, a) {
-			return
-		}
-
-		switch elem := node.elem.(type) {
-		case *Object:
-			elem.Descendants(callback)
-		case *Array:
-			elem.Descendants(callback)
-		}
-	}
+func (p *Array) addInternal(
+	creator func(ticket *time.Ticket) crdt.Element,
+) crdt.Element {
+	return p.insertAfterInternal(p.Array.LastCreatedAt(), creator)
 }
 
-// RGANodes returns the slices of RGATreeListNode.
-func (a *Array) RGANodes() []*RGATreeListNode {
-	return a.elements.Nodes()
+func (p *Array) insertAfterInternal(
+	prevCreatedAt *time.Ticket,
+	creator func(ticket *time.Ticket) crdt.Element,
+) crdt.Element {
+	ticket := p.context.IssueTimeTicket()
+	elem := creator(ticket)
+	value := toOriginal(elem)
+
+	p.context.Push(operations.NewAdd(
+		p.Array.CreatedAt(),
+		prevCreatedAt,
+		value.DeepCopy(),
+		ticket,
+	))
+
+	p.InsertAfter(prevCreatedAt, value)
+	p.context.RegisterElement(value)
+
+	return elem
+}
+
+func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
+	ticket := p.context.IssueTimeTicket()
+
+	prevCreatedAt := p.FindPrevCreatedAt(nextCreatedAt)
+
+	p.context.Push(operations.NewMove(
+		p.Array.CreatedAt(),
+		prevCreatedAt,
+		createdAt,
+		ticket,
+	))
+
+	p.MoveAfter(prevCreatedAt, createdAt, ticket)
 }

@@ -26,8 +26,8 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
@@ -180,12 +180,12 @@ func TestDB(t *testing.T) {
 		actorID, _ := time.ActorIDFromBytes(bytesID)
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
-		assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			root.SetNewArray("array")
 			return nil
 		}))
 		for idx := 0; idx < 10; idx++ {
-			assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
+			assert.NoError(t, doc.Update(func(root *json.Object) error {
 				root.GetArray("array").AddInteger(idx)
 				return nil
 			}))
@@ -222,7 +222,7 @@ func TestDB(t *testing.T) {
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
 
-		assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			root.SetNewArray("array")
 			return nil
 		}))

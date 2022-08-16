@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 )
 
 func TestGarbageCollection(t *testing.T) {
@@ -45,7 +45,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetInteger("1", 1)
 			root.SetNewArray("2").AddInteger(1, 2, 3)
 			root.SetInteger("3", 3)
@@ -63,7 +63,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.Delete("2")
 			return nil
 		}, "removes 2")
@@ -113,7 +113,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewText("text").
 				Edit(0, 0, "Hello world")
 			root.SetNewRichText("richText").
@@ -132,7 +132,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetText("text").
 				Edit(0, 1, "a").
 				Edit(1, 2, "b")
@@ -186,7 +186,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetInteger("1", 1)
 			root.SetNewArray("2").AddInteger(1, 2, 3)
 			root.SetInteger("3", 3)
@@ -206,7 +206,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.Delete("2")
 			root.GetText("4").Edit(0, 1, "h")
 			root.GetRichText("5").Edit(0, 1, "h", map[string]string{"b": "1"})

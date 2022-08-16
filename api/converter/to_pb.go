@@ -25,7 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -417,19 +417,19 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 	}, nil
 }
 
-func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
+func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 	switch elem := elem.(type) {
-	case *json.Object:
+	case *crdt.Object:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_JSON_OBJECT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
-	case *json.Array:
+	case *crdt.Array:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_JSON_ARRAY,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
-	case *json.Primitive:
+	case *crdt.Primitive:
 		pbValueType, err := toValueType(elem.ValueType())
 		if err != nil {
 			return nil, err
@@ -440,17 +440,17 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
 		}, nil
-	case *json.Text:
+	case *crdt.Text:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_TEXT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
-	case *json.RichText:
+	case *crdt.RichText:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_RICH_TEXT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
-	case *json.Counter:
+	case *crdt.Counter:
 		pbCounterType, err := toCounterType(elem.ValueType())
 		if err != nil {
 			return nil, err
@@ -466,7 +466,7 @@ func toJSONElementSimple(elem json.Element) (*api.JSONElementSimple, error) {
 	return nil, fmt.Errorf("%v, %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 }
 
-func toTextNodePos(pos *json.RGATreeSplitNodePos) *api.TextNodePos {
+func toTextNodePos(pos *crdt.RGATreeSplitNodePos) *api.TextNodePos {
 	return &api.TextNodePos{
 		CreatedAt:      ToTimeTicket(pos.ID().CreatedAt()),
 		Offset:         int32(pos.ID().Offset()),
@@ -484,36 +484,36 @@ func toCreatedAtMapByActor(
 	return pbCreatedAtMapByActor
 }
 
-func toValueType(valueType json.ValueType) (api.ValueType, error) {
+func toValueType(valueType crdt.ValueType) (api.ValueType, error) {
 	switch valueType {
-	case json.Null:
+	case crdt.Null:
 		return api.ValueType_VALUE_TYPE_NULL, nil
-	case json.Boolean:
+	case crdt.Boolean:
 		return api.ValueType_VALUE_TYPE_BOOLEAN, nil
-	case json.Integer:
+	case crdt.Integer:
 		return api.ValueType_VALUE_TYPE_INTEGER, nil
-	case json.Long:
+	case crdt.Long:
 		return api.ValueType_VALUE_TYPE_LONG, nil
-	case json.Double:
+	case crdt.Double:
 		return api.ValueType_VALUE_TYPE_DOUBLE, nil
-	case json.String:
+	case crdt.String:
 		return api.ValueType_VALUE_TYPE_STRING, nil
-	case json.Bytes:
+	case crdt.Bytes:
 		return api.ValueType_VALUE_TYPE_BYTES, nil
-	case json.Date:
+	case crdt.Date:
 		return api.ValueType_VALUE_TYPE_DATE, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
 }
 
-func toCounterType(valueType json.CounterType) (api.ValueType, error) {
+func toCounterType(valueType crdt.CounterType) (api.ValueType, error) {
 	switch valueType {
-	case json.IntegerCnt:
+	case crdt.IntegerCnt:
 		return api.ValueType_VALUE_TYPE_INTEGER_CNT, nil
-	case json.LongCnt:
+	case crdt.LongCnt:
 		return api.ValueType_VALUE_TYPE_LONG_CNT, nil
-	case json.DoubleCnt:
+	case crdt.DoubleCnt:
 		return api.ValueType_VALUE_TYPE_DOUBLE_CNT, nil
 	}
 
