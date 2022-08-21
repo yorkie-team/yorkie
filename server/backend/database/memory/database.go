@@ -236,16 +236,6 @@ func (d *DB) UpdateProjectInfo(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	if fields.Name != nil {
-		exist, err := txn.First(tblProjects, "name", *fields.Name)
-		if err != nil {
-			return nil, err
-		}
-		if exist != nil {
-			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
-		}
-	}
-
 	raw, err := txn.First(tblProjects, "id", id.String())
 	if err != nil {
 		return nil, err
@@ -255,6 +245,17 @@ func (d *DB) UpdateProjectInfo(
 	}
 
 	info := raw.(*database.ProjectInfo).DeepCopy()
+
+	if fields.Name != nil {
+		existing, err := txn.First(tblProjects, "name", *fields.Name)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil && info.Name != *fields.Name {
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+		}
+	}
+
 	info.UpdateFields(fields)
 	info.UpdatedAt = gotime.Now()
 	if err := txn.Insert(tblProjects, info); err != nil {

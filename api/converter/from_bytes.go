@@ -22,14 +22,14 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // BytesToObject creates an Object from the given byte array.
-func BytesToObject(snapshot []byte) (*json.Object, error) {
+func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 	if snapshot == nil {
-		return json.NewObject(json.NewRHTPriorityQueueMap(), time.InitialTicket), nil
+		return crdt.NewObject(crdt.NewRHTPriorityQueueMap(), time.InitialTicket), nil
 	}
 
 	pbElem := &api.JSONElement{}
@@ -45,7 +45,7 @@ func BytesToObject(snapshot []byte) (*json.Object, error) {
 	return obj, nil
 }
 
-func fromJSONElement(pbElem *api.JSONElement) (json.Element, error) {
+func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
 	switch decoded := pbElem.Body.(type) {
 	case *api.JSONElement_JsonObject:
 		return fromJSONObject(decoded.JsonObject)
@@ -64,8 +64,8 @@ func fromJSONElement(pbElem *api.JSONElement) (json.Element, error) {
 	}
 }
 
-func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*json.Object, error) {
-	members := json.NewRHTPriorityQueueMap()
+func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
+	members := crdt.NewRHTPriorityQueueMap()
 	for _, pbNode := range pbObj.Nodes {
 		elem, err := fromJSONElement(pbNode.Element)
 		if err != nil {
@@ -89,7 +89,7 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*json.Object, error) {
 		return nil, err
 	}
 
-	obj := json.NewObject(
+	obj := crdt.NewObject(
 		members,
 		createdAt,
 	)
@@ -99,8 +99,8 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*json.Object, error) {
 	return obj, nil
 }
 
-func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*json.Array, error) {
-	elements := json.NewRGATreeList()
+func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
+	elements := crdt.NewRGATreeList()
 	for _, pbNode := range pbArr.Nodes {
 		elem, err := fromJSONElement(pbNode.Element)
 		if err != nil {
@@ -122,7 +122,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*json.Array, error) {
 		return nil, err
 	}
 
-	arr := json.NewArray(
+	arr := crdt.NewArray(
 		elements,
 		createdAt,
 	)
@@ -133,7 +133,7 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*json.Array, error) {
 
 func fromJSONPrimitive(
 	pbPrim *api.JSONElement_Primitive,
-) (*json.Primitive, error) {
+) (*crdt.Primitive, error) {
 	createdAt, err := fromTimeTicket(pbPrim.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -151,8 +151,8 @@ func fromJSONPrimitive(
 		return nil, err
 	}
 
-	primitive := json.NewPrimitive(
-		json.ValueFromBytes(valueType, pbPrim.Value),
+	primitive := crdt.NewPrimitive(
+		crdt.ValueFromBytes(valueType, pbPrim.Value),
 		createdAt,
 	)
 	primitive.SetMovedAt(movedAt)
@@ -160,7 +160,7 @@ func fromJSONPrimitive(
 	return primitive, nil
 }
 
-func fromJSONText(pbText *api.JSONElement_Text) (*json.Text, error) {
+func fromJSONText(pbText *api.JSONElement_Text) (*crdt.Text, error) {
 	createdAt, err := fromTimeTicket(pbText.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -174,7 +174,7 @@ func fromJSONText(pbText *api.JSONElement_Text) (*json.Text, error) {
 		return nil, err
 	}
 
-	rgaTreeSplit := json.NewRGATreeSplit(json.InitialTextNode())
+	rgaTreeSplit := crdt.NewRGATreeSplit(crdt.InitialTextNode())
 
 	current := rgaTreeSplit.InitialHead()
 	for _, pbNode := range pbText.Nodes {
@@ -196,7 +196,7 @@ func fromJSONText(pbText *api.JSONElement_Text) (*json.Text, error) {
 		}
 	}
 
-	text := json.NewText(
+	text := crdt.NewText(
 		rgaTreeSplit,
 		createdAt,
 	)
@@ -208,7 +208,7 @@ func fromJSONText(pbText *api.JSONElement_Text) (*json.Text, error) {
 
 func fromJSONRichText(
 	pbText *api.JSONElement_RichText,
-) (*json.RichText, error) {
+) (*crdt.RichText, error) {
 	createdAt, err := fromTimeTicket(pbText.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -222,7 +222,7 @@ func fromJSONRichText(
 		return nil, err
 	}
 
-	rgaTreeSplit := json.NewRGATreeSplit(json.InitialRichTextNode())
+	rgaTreeSplit := crdt.NewRGATreeSplit(crdt.InitialRichTextNode())
 
 	current := rgaTreeSplit.InitialHead()
 	for _, pbNode := range pbText.Nodes {
@@ -244,7 +244,7 @@ func fromJSONRichText(
 		}
 	}
 
-	text := json.NewRichText(
+	text := crdt.NewRichText(
 		rgaTreeSplit,
 		createdAt,
 	)
@@ -254,7 +254,7 @@ func fromJSONRichText(
 	return text, nil
 }
 
-func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*json.Counter, error) {
+func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*crdt.Counter, error) {
 	createdAt, err := fromTimeTicket(pbCnt.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -272,8 +272,8 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*json.Counter, error) {
 		return nil, err
 	}
 
-	counter := json.NewCounter(
-		json.CounterValueFromBytes(counterType, pbCnt.Value),
+	counter := crdt.NewCounter(
+		crdt.CounterValueFromBytes(counterType, pbCnt.Value),
 		createdAt,
 	)
 	counter.SetMovedAt(movedAt)
@@ -282,14 +282,14 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*json.Counter, error) {
 	return counter, nil
 }
 
-func fromTextNode(pbTextNode *api.TextNode) (*json.RGATreeSplitNode[*json.TextValue], error) {
+func fromTextNode(pbTextNode *api.TextNode) (*crdt.RGATreeSplitNode[*crdt.TextValue], error) {
 	id, err := fromTextNodeID(pbTextNode.Id)
 	if err != nil {
 		return nil, err
 	}
-	textNode := json.NewRGATreeSplitNode(
+	textNode := crdt.NewRGATreeSplitNode(
 		id,
-		json.NewTextValue(pbTextNode.Value),
+		crdt.NewTextValue(pbTextNode.Value),
 	)
 	if pbTextNode.RemovedAt != nil {
 		removedAt, err := fromTimeTicket(pbTextNode.RemovedAt)
@@ -303,13 +303,13 @@ func fromTextNode(pbTextNode *api.TextNode) (*json.RGATreeSplitNode[*json.TextVa
 
 func fromRichTextNode(
 	pbNode *api.RichTextNode,
-) (*json.RGATreeSplitNode[*json.RichTextValue], error) {
+) (*crdt.RGATreeSplitNode[*crdt.RichTextValue], error) {
 	id, err := fromTextNodeID(pbNode.Id)
 	if err != nil {
 		return nil, err
 	}
 
-	attrs := json.NewRHT()
+	attrs := crdt.NewRHT()
 	for _, pbAttr := range pbNode.Attributes {
 		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
 		if err != nil {
@@ -318,9 +318,9 @@ func fromRichTextNode(
 		attrs.Set(pbAttr.Key, pbAttr.Value, updatedAt)
 	}
 
-	textNode := json.NewRGATreeSplitNode(
+	textNode := crdt.NewRGATreeSplitNode(
 		id,
-		json.NewRichTextValue(attrs, pbNode.Value),
+		crdt.NewRichTextValue(attrs, pbNode.Value),
 	)
 	if pbNode.RemovedAt != nil {
 		removedAt, err := fromTimeTicket(pbNode.RemovedAt)
@@ -334,7 +334,7 @@ func fromRichTextNode(
 
 func fromTextNodeID(
 	pbTextNodeID *api.TextNodeID,
-) (*json.RGATreeSplitNodeID, error) {
+) (*crdt.RGATreeSplitNodeID, error) {
 	if pbTextNodeID == nil {
 		return nil, nil
 	}
@@ -344,7 +344,7 @@ func fromTextNodeID(
 		return nil, err
 	}
 
-	return json.NewRGATreeSplitNodeID(
+	return crdt.NewRGATreeSplitNodeID(
 		createdAt,
 		int(pbTextNodeID.Offset),
 	), nil

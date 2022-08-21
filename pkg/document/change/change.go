@@ -17,7 +17,7 @@
 package change
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -44,7 +44,7 @@ func New(id ID, message string, operations []operations.Operation) *Change {
 }
 
 // Execute applies this change to the given JSON root.
-func (c *Change) Execute(root *json.Root) error {
+func (c *Change) Execute(root *crdt.Root) error {
 	for _, op := range c.operations {
 		if err := op.Execute(root); err != nil {
 			return err

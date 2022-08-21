@@ -17,7 +17,7 @@
 package operations
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -27,10 +27,10 @@ type Select struct {
 	parentCreatedAt *time.Ticket
 
 	// from represents the start point of the selection.
-	from *json.RGATreeSplitNodePos
+	from *crdt.RGATreeSplitNodePos
 
 	// to represents the end point of the selection.
-	to *json.RGATreeSplitNodePos
+	to *crdt.RGATreeSplitNodePos
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
@@ -39,8 +39,8 @@ type Select struct {
 // NewSelect creates a new instance of Select.
 func NewSelect(
 	parentCreatedAt *time.Ticket,
-	from *json.RGATreeSplitNodePos,
-	to *json.RGATreeSplitNodePos,
+	from *crdt.RGATreeSplitNodePos,
+	to *crdt.RGATreeSplitNodePos,
 	executedAt *time.Ticket,
 ) *Select {
 	return &Select{
@@ -52,13 +52,13 @@ func NewSelect(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (s *Select) Execute(root *json.Root) error {
+func (s *Select) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(s.parentCreatedAt)
 
 	switch obj := parent.(type) {
-	case *json.Text:
+	case *crdt.Text:
 		obj.Select(s.from, s.to, s.executedAt)
-	case *json.RichText:
+	case *crdt.RichText:
 		obj.Select(s.from, s.to, s.executedAt)
 	default:
 		return ErrNotApplicableDataType
@@ -68,12 +68,12 @@ func (s *Select) Execute(root *json.Root) error {
 }
 
 // From returns the start point of the selection.
-func (s *Select) From() *json.RGATreeSplitNodePos {
+func (s *Select) From() *crdt.RGATreeSplitNodePos {
 	return s.from
 }
 
 // To returns the end point of the selection.
-func (s *Select) To() *json.RGATreeSplitNodePos {
+func (s *Select) To() *crdt.RGATreeSplitNodePos {
 	return s.to
 }
 

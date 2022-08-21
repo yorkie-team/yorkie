@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package json_test
+package crdt_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -30,7 +30,7 @@ func TestRichText(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
 
-		text := json.NewInitialRichText(json.NewRGATreeSplit(json.InitialRichTextNode()), ctx.IssueTimeTicket())
+		text := crdt.NewInitialRichText(crdt.NewRGATreeSplit(crdt.InitialRichTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)
 		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())

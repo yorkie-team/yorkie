@@ -26,8 +26,8 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
@@ -180,12 +180,12 @@ func TestDB(t *testing.T) {
 		actorID, _ := time.ActorIDFromBytes(bytesID)
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
-		assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			root.SetNewArray("array")
 			return nil
 		}))
 		for idx := 0; idx < 10; idx++ {
-			assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
+			assert.NoError(t, doc.Update(func(root *json.Object) error {
 				root.GetArray("array").AddInteger(idx)
 				return nil
 			}))
@@ -222,7 +222,7 @@ func TestDB(t *testing.T) {
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
 
-		assert.NoError(t, doc.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			root.SetNewArray("array")
 			return nil
 		}))
@@ -355,7 +355,7 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 
-		// update one field
+		// update name field
 		newName2 := newName + "2"
 		fields = &types.UpdatableProjectFields{
 			Name: &newName2,
@@ -378,5 +378,25 @@ func TestDB(t *testing.T) {
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = db.UpdateProjectInfo(ctx, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
+
+		// update auth-webhook-url field
+		newAuthWebhookURL2 := newAuthWebhookURL + "2"
+		fields = &types.UpdatableProjectFields{
+			AuthWebhookURL: &newAuthWebhookURL2,
+		}
+		err = fields.Validate()
+		assert.NoError(t, err)
+		res, err = db.UpdateProjectInfo(ctx, id, fields)
+		assert.NoError(t, err)
+
+		updateInfo, err = db.FindProjectInfoByID(ctx, id)
+		assert.NoError(t, err)
+
+		// check only auth-webhook-url is update
+		assert.Equal(t, res, updateInfo)
+		assert.Equal(t, newName2, updateInfo.Name)
+		assert.NotEqual(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+
 	})
 }

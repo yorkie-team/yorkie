@@ -17,7 +17,7 @@
 package change
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -30,11 +30,11 @@ type Context struct {
 	message    string
 	operations []operations.Operation
 	delimiter  uint32
-	root       *json.Root
+	root       *crdt.Root
 }
 
 // NewContext creates a new instance of Context.
-func NewContext(id ID, message string, root *json.Root) *Context {
+func NewContext(id ID, message string, root *crdt.Root) *Context {
 	return &Context{
 		id:      id,
 		message: message,
@@ -69,16 +69,16 @@ func (c *Context) Push(op operations.Operation) {
 }
 
 // RegisterElement registers the given element to the root.
-func (c *Context) RegisterElement(elem json.Element) {
+func (c *Context) RegisterElement(elem crdt.Element) {
 	c.root.RegisterElement(elem)
 }
 
 // RegisterRemovedElementPair registers the given element pair to hash table.
-func (c *Context) RegisterRemovedElementPair(parent json.Container, deleted json.Element) {
+func (c *Context) RegisterRemovedElementPair(parent crdt.Container, deleted crdt.Element) {
 	c.root.RegisterRemovedElementPair(parent, deleted)
 }
 
 // RegisterTextElementWithGarbage register the given text element with garbage to hash table.
-func (c *Context) RegisterTextElementWithGarbage(textType json.TextElement) {
+func (c *Context) RegisterTextElementWithGarbage(textType crdt.TextElement) {
 	c.root.RegisterTextElementWithGarbage(textType)
 }

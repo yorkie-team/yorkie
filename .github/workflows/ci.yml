@@ -9,13 +9,17 @@ on:
 jobs:
   build:
     name: build
+    strategy:
+      matrix:
+        go_version:
+          - '1.18'
     runs-on: ubuntu-latest
     steps:
 
-    - name: Set up Go 1.x
-      uses: actions/setup-go@v2
+    - name: Set up Go {{ matrix.go_version }}
+      uses: actions/setup-go@v3
       with:
-        go-version: ^1.18
+        go-version: ${{ matrix.go_version }}
 
     - name: Setup buf action
       uses: bufbuild/buf-setup-action@v1

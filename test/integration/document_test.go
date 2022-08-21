@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"io"
 	"sync"
 	"testing"
@@ -29,7 +30,6 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 )
 
 func TestDocument(t *testing.T) {
@@ -40,7 +40,7 @@ func TestDocument(t *testing.T) {
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
 		doc := document.New(key.Key(t.Name()))
-		err := doc.Update(func(root *proxy.ObjectProxy) error {
+		err := doc.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
 			return nil
 		}, "update k1 with v1")
@@ -55,7 +55,7 @@ func TestDocument(t *testing.T) {
 		assert.False(t, doc.IsAttached())
 
 		doc2 := document.New(key.Key(t.Name()))
-		err = doc2.Update(func(root *proxy.ObjectProxy) error {
+		err = doc2.Update(func(root *json.Object) error {
 			root.SetString("k1", "v2")
 			return nil
 		}, "update k1 with v2")
@@ -77,26 +77,26 @@ func TestDocument(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewObject("k1").SetNewArray("k1.1").AddString("1", "2")
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k2").AddString("1", "2", "3")
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddString("4", "5")
 			root.SetNewArray("k2").AddString("6", "7")
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.Delete("k2")
 			return nil
 		})
@@ -142,7 +142,7 @@ func TestDocument(t *testing.T) {
 		}()
 
 		// 02. cli2 updates doc2.
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.SetString("key", "value")
 			return nil
 		})

@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 )
 
 func BenchmarkTextEditing(b *testing.B) {
@@ -41,7 +41,7 @@ func BenchmarkTextEditing(b *testing.B) {
 	b.StartTimer()
 
 	doc := document.New("d1")
-	err = doc.Update(func(root *proxy.ObjectProxy) error {
+	err = doc.Update(func(root *json.Object) error {
 		root.SetNewText("text")
 		return nil
 	})
@@ -50,7 +50,7 @@ func BenchmarkTextEditing(b *testing.B) {
 		cursor := int(edit[0].(float64))
 		mode := int(edit[1].(float64))
 
-		err = doc.Update(func(root *proxy.ObjectProxy) error {
+		err = doc.Update(func(root *json.Object) error {
 			text := root.GetText("text")
 			if mode == 0 {
 				value := edit[2].(string)

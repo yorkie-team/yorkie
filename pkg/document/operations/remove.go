@@ -17,7 +17,7 @@
 package operations
 
 import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -48,11 +48,11 @@ func NewRemove(
 }
 
 // Execute executes this operation on the given document(`root`).
-func (o *Remove) Execute(root *json.Root) error {
+func (o *Remove) Execute(root *crdt.Root) error {
 	parentElem := root.FindByCreatedAt(o.parentCreatedAt)
 
 	switch parent := parentElem.(type) {
-	case json.Container:
+	case crdt.Container:
 		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
 		if elem != nil {
 			root.RegisterRemovedElementPair(parent, elem)

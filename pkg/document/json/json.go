@@ -14,25 +14,23 @@
  * limitations under the License.
  */
 
-package proxy
+package json
 
-import (
-	"github.com/yorkie-team/yorkie/pkg/document/json"
-)
+import "github.com/yorkie-team/yorkie/pkg/document/crdt"
 
-func toOriginal(elem json.Element) json.Element {
+func toOriginal(elem crdt.Element) crdt.Element {
 	switch elem := elem.(type) {
-	case *ObjectProxy:
+	case *Object:
 		return elem.Object
-	case *ArrayProxy:
+	case *Array:
 		return elem.Array
-	case *TextProxy:
+	case *Text:
 		return elem.Text
-	case *RichTextProxy:
+	case *RichText:
 		return elem.RichText
-	case *CounterProxy:
+	case *Counter:
 		return elem.Counter
-	case *json.Primitive:
+	case *crdt.Primitive:
 		return elem
 	}
 

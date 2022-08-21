@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package json_test
+package crdt_test
 
 import (
 	"math"
@@ -23,32 +23,32 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 func TestPrimitive(t *testing.T) {
 	tests := []struct {
 		value     interface{}
-		valueType json.ValueType
+		valueType crdt.ValueType
 		marshal   string
 	}{
-		{nil, json.Null, "null"},
-		{false, json.Boolean, "false"},
-		{true, json.Boolean, "true"},
-		{0, json.Integer, "0"},
-		{int64(0), json.Long, "0"},
-		{float64(0), json.Double, "0.000000"},
-		{"0", json.String, `"0"`},
-		{[]byte{}, json.Bytes, `""`},
-		{gotime.Unix(0, 0), json.Date, gotime.Unix(0, 0).Format(gotime.RFC3339)},
+		{nil, crdt.Null, "null"},
+		{false, crdt.Boolean, "false"},
+		{true, crdt.Boolean, "true"},
+		{0, crdt.Integer, "0"},
+		{int64(0), crdt.Long, "0"},
+		{float64(0), crdt.Double, "0.000000"},
+		{"0", crdt.String, `"0"`},
+		{[]byte{}, crdt.Bytes, `""`},
+		{gotime.Unix(0, 0), crdt.Date, gotime.Unix(0, 0).Format(gotime.RFC3339)},
 	}
 
 	t.Run("creation and deep copy test", func(t *testing.T) {
 		for _, test := range tests {
-			prim := json.NewPrimitive(test.value, time.InitialTicket)
+			prim := crdt.NewPrimitive(test.value, time.InitialTicket)
 			assert.Equal(t, prim.ValueType(), test.valueType)
-			assert.Equal(t, prim.Value(), json.ValueFromBytes(prim.ValueType(), prim.Bytes()))
+			assert.Equal(t, prim.Value(), crdt.ValueFromBytes(prim.ValueType(), prim.Bytes()))
 			assert.Equal(t, prim.Marshal(), test.marshal)
 
 			copied := prim.DeepCopy()
@@ -60,7 +60,7 @@ func TestPrimitive(t *testing.T) {
 			prim.SetMovedAt(time.NewTicket(0, 0, actorID))
 			assert.NotEqual(t, prim.MovedAt(), copied.MovedAt())
 		}
-		longPrim := json.NewPrimitive(math.MaxInt32+1, time.InitialTicket)
-		assert.Equal(t, longPrim.ValueType(), json.Long)
+		longPrim := crdt.NewPrimitive(math.MaxInt32+1, time.InitialTicket)
+		assert.Equal(t, longPrim.ValueType(), crdt.Long)
 	})
 }

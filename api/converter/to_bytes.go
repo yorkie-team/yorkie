@@ -23,11 +23,11 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 )
 
 // ObjectToBytes converts the given object to byte array.
-func ObjectToBytes(obj *json.Object) ([]byte, error) {
+func ObjectToBytes(obj *crdt.Object) ([]byte, error) {
 	pbElem, err := toJSONElement(obj)
 	if err != nil {
 		return nil, err
@@ -40,26 +40,26 @@ func ObjectToBytes(obj *json.Object) ([]byte, error) {
 	return bytes, nil
 }
 
-func toJSONElement(elem json.Element) (*api.JSONElement, error) {
+func toJSONElement(elem crdt.Element) (*api.JSONElement, error) {
 	switch elem := elem.(type) {
-	case *json.Object:
+	case *crdt.Object:
 		return toJSONObject(elem)
-	case *json.Array:
+	case *crdt.Array:
 		return toJSONArray(elem)
-	case *json.Primitive:
+	case *crdt.Primitive:
 		return toPrimitive(elem)
-	case *json.Text:
+	case *crdt.Text:
 		return toText(elem), nil
-	case *json.RichText:
+	case *crdt.RichText:
 		return toRichText(elem), nil
-	case *json.Counter:
+	case *crdt.Counter:
 		return toCounter(elem)
 	default:
 		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 	}
 }
 
-func toJSONObject(obj *json.Object) (*api.JSONElement, error) {
+func toJSONObject(obj *crdt.Object) (*api.JSONElement, error) {
 	pbRHTNodes, err := toRHTNodes(obj.RHTNodes())
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func toJSONObject(obj *json.Object) (*api.JSONElement, error) {
 	return pbElem, nil
 }
 
-func toJSONArray(arr *json.Array) (*api.JSONElement, error) {
+func toJSONArray(arr *crdt.Array) (*api.JSONElement, error) {
 	pbRGANodes, err := toRGANodes(arr.RGANodes())
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func toJSONArray(arr *json.Array) (*api.JSONElement, error) {
 	return pbElem, nil
 }
 
-func toPrimitive(primitive *json.Primitive) (*api.JSONElement, error) {
+func toPrimitive(primitive *crdt.Primitive) (*api.JSONElement, error) {
 	pbValueType, err := toValueType(primitive.ValueType())
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func toPrimitive(primitive *json.Primitive) (*api.JSONElement, error) {
 	}, nil
 }
 
-func toText(text *json.Text) *api.JSONElement {
+func toText(text *crdt.Text) *api.JSONElement {
 	return &api.JSONElement{
 		Body: &api.JSONElement_Text_{Text: &api.JSONElement_Text{
 			Nodes:     toTextNodes(text.Nodes()),
@@ -121,7 +121,7 @@ func toText(text *json.Text) *api.JSONElement {
 	}
 }
 
-func toRichText(text *json.RichText) *api.JSONElement {
+func toRichText(text *crdt.RichText) *api.JSONElement {
 	return &api.JSONElement{
 		Body: &api.JSONElement_RichText_{RichText: &api.JSONElement_RichText{
 			Nodes:     toRichTextNodes(text.Nodes()),
@@ -132,7 +132,7 @@ func toRichText(text *json.RichText) *api.JSONElement {
 	}
 }
 
-func toCounter(counter *json.Counter) (*api.JSONElement, error) {
+func toCounter(counter *crdt.Counter) (*api.JSONElement, error) {
 	pbCounterType, err := toCounterType(counter.ValueType())
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func toCounter(counter *json.Counter) (*api.JSONElement, error) {
 	}, nil
 }
 
-func toRHTNodes(rhtNodes []*json.RHTPQMapNode) ([]*api.RHTNode, error) {
+func toRHTNodes(rhtNodes []*crdt.RHTPQMapNode) ([]*api.RHTNode, error) {
 	var pbRHTNodes []*api.RHTNode
 	for _, rhtNode := range rhtNodes {
 		pbElem, err := toJSONElement(rhtNode.Element())
@@ -165,7 +165,7 @@ func toRHTNodes(rhtNodes []*json.RHTPQMapNode) ([]*api.RHTNode, error) {
 	return pbRHTNodes, nil
 }
 
-func toRGANodes(rgaNodes []*json.RGATreeListNode) ([]*api.RGANode, error) {
+func toRGANodes(rgaNodes []*crdt.RGATreeListNode) ([]*api.RGANode, error) {
 	var pbRGANodes []*api.RGANode
 	for _, rgaNode := range rgaNodes {
 		pbElem, err := toJSONElement(rgaNode.Element())
@@ -180,7 +180,7 @@ func toRGANodes(rgaNodes []*json.RGATreeListNode) ([]*api.RGANode, error) {
 	return pbRGANodes, nil
 }
 
-func toTextNodes(textNodes []*json.RGATreeSplitNode[*json.TextValue]) []*api.TextNode {
+func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.TextNode {
 	var pbTextNodes []*api.TextNode
 	for _, textNode := range textNodes {
 		pbTextNode := &api.TextNode{
@@ -198,7 +198,7 @@ func toTextNodes(textNodes []*json.RGATreeSplitNode[*json.TextValue]) []*api.Tex
 	return pbTextNodes
 }
 
-func toRichTextNodes(textNodes []*json.RGATreeSplitNode[*json.RichTextValue]) []*api.RichTextNode {
+func toRichTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.RichTextValue]) []*api.RichTextNode {
 	var pbTextNodes []*api.RichTextNode
 	for _, textNode := range textNodes {
 		value := textNode.Value()
@@ -228,7 +228,7 @@ func toRichTextNodes(textNodes []*json.RGATreeSplitNode[*json.RichTextValue]) []
 	return pbTextNodes
 }
 
-func toTextNodeID(id *json.RGATreeSplitNodeID) *api.TextNodeID {
+func toTextNodeID(id *crdt.RGATreeSplitNodeID) *api.TextNodeID {
 	return &api.TextNodeID{
 		CreatedAt: ToTimeTicket(id.CreatedAt()),
 		Offset:    int32(id.Offset()),

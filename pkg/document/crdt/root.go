@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package json
+package crdt
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"

@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 )
 
 func TestArray(t *testing.T) {
@@ -40,7 +40,7 @@ func TestArray(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").
 				AddString("v1").
 				AddNewArray().AddString("1", "2", "3")
@@ -62,7 +62,7 @@ func TestArray(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddString("v1", "v2")
 			return nil
 		}, "add v1, v2 by c1")
@@ -75,13 +75,13 @@ func TestArray(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetArray("k1").Delete(1)
 			return nil
 		}, "delete v2 by c1")
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetArray("k1").AddString("v3")
 			return nil
 		}, "add v3 by c2")
@@ -97,7 +97,7 @@ func TestArray(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddString("v1")
 			return nil
 		}, "new array and add v1")
@@ -109,14 +109,14 @@ func TestArray(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetArray("k1").AddString("v2", "v3")
 			root.GetArray("k1").Delete(1)
 			return nil
 		}, "add v2, v3 and delete v2 by c1")
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetArray("k1").AddString("v4", "v5")
 			return nil
 		}, "add v4, v5 by c2")
@@ -132,7 +132,7 @@ func TestArray(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddString("v1", "v2", "v3")
 			return nil
 		}, "new array and add v1 v2 v3")
@@ -144,20 +144,20 @@ func TestArray(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetArray("k1").Delete(1)
 			return nil
 		}, "delete v2")
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetArray("k1").Delete(1)
 			return nil
 		}, "delete v2")
 		assert.NoError(t, err)
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			assert.Equal(t, 2, root.GetArray("k1").Len())
 			return nil
 		}, "check array length")
@@ -172,7 +172,7 @@ func TestArray(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddInteger(0, 1, 2)
 			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
 			return nil
@@ -185,7 +185,7 @@ func TestArray(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			prev := root.GetArray("k1").Get(0)
 			elem := root.GetArray("k1").Get(2)
 			root.GetArray("k1").MoveBefore(prev.CreatedAt(), elem.CreatedAt())
@@ -194,7 +194,7 @@ func TestArray(t *testing.T) {
 		}, "move 2 before 0")
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			prev := root.GetArray("k1").Get(1)
 			elem := root.GetArray("k1").Get(2)
 			root.GetArray("k1").MoveBefore(prev.CreatedAt(), elem.CreatedAt())
@@ -211,7 +211,7 @@ func TestArray(t *testing.T) {
 
 		d1 := document.New(key.Key(t.Name()))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddInteger(0, 1, 2)
 			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
 			return nil
@@ -220,7 +220,7 @@ func TestArray(t *testing.T) {
 		d2 := document.New(key.Key(t.Name()))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
-		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			next := root.GetArray("k1").Get(0)
 			elem := root.GetArray("k1").Get(2)
 			root.GetArray("k1").MoveBefore(next.CreatedAt(), elem.CreatedAt())
@@ -228,7 +228,7 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 
-		assert.NoError(t, d2.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, d2.Update(func(root *json.Object) error {
 			next := root.GetArray("k1").Get(0)
 			elem := root.GetArray("k1").Get(1)
 			root.GetArray("k1").MoveBefore(next.CreatedAt(), elem.CreatedAt())

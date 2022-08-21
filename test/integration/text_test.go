@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 )
 
 func TestText(t *testing.T) {
@@ -41,7 +41,7 @@ func TestText(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewText("k1")
 			return nil
 		}, "set a new text by c1")
@@ -53,13 +53,13 @@ func TestText(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(0, 0, "ABCD")
 			return nil
 		}, "edit 0,0 ABCD by c1")
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(0, 0, "1234")
 			return nil
 		}, "edit 0,0 1234 by c2")
@@ -67,13 +67,13 @@ func TestText(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(2, 3, "XX")
 			return nil
 		}, "edit 2,3 XX by c1")
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(2, 3, "YY")
 			return nil
 		}, "edit 2,3 YY by c2")
@@ -81,13 +81,13 @@ func TestText(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(4, 5, "ZZ")
 			return nil
 		}, "edit 4,5 ZZ by c1")
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(2, 3, "TT")
 			return nil
 		}, "edit 2,3 TT by c2")
@@ -103,7 +103,7 @@ func TestText(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewRichText("k1").Edit(0, 0, "Hello world", nil)
 			return nil
 		}, `set a new text with "Hello world" by c1`)
@@ -115,14 +115,14 @@ func TestText(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			text := root.GetRichText("k1")
 			text.SetStyle(0, 1, map[string]string{"b": "1"})
 			return nil
 		}, `set style b to "H" by c1`)
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			text := root.GetRichText("k1")
 			text.SetStyle(0, 5, map[string]string{"i": "1"})
 			return nil
@@ -139,7 +139,7 @@ func TestText(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewText("k1")
 			return nil
 		}, "set a new text by c1")
@@ -151,7 +151,7 @@ func TestText(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(0, 0, "123")
 			root.GetText("k1").Edit(3, 3, "456")
 			root.GetText("k1").Edit(6, 6, "789")
@@ -162,14 +162,14 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, `{"k1":"123456789"}`, d2.Marshal())
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(1, 7, "")
 			return nil
 		}, "delete block by c1")
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"189"}`, d1.Marshal())
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(2, 5, "")
 			return nil
 		}, "delete block by c2")
@@ -186,7 +186,7 @@ func TestText(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.SetNewText("k1")
 			return nil
 		}, "set a new text by c1")
@@ -198,7 +198,7 @@ func TestText(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(0, 0, "0")
 			root.GetText("k1").Edit(1, 1, "0")
 			root.GetText("k1").Edit(2, 2, "0")
@@ -209,7 +209,7 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, `{"k1":"000"}`, d2.Marshal())
 
-		err = d1.Update(func(root *proxy.ObjectProxy) error {
+		err = d1.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(1, 2, "1")
 			root.GetText("k1").Edit(1, 2, "1")
 			root.GetText("k1").Edit(1, 2, "")
@@ -218,7 +218,7 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"00"}`, d1.Marshal())
 
-		err = d2.Update(func(root *proxy.ObjectProxy) error {
+		err = d2.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(0, 3, "")
 			return nil
 		}, "delete the range includes above new nodes")

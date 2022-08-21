@@ -26,7 +26,7 @@ import (
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/admin"
@@ -92,12 +92,12 @@ func CreateAdminCli(t assert.TestingT, adminAddr string) *adminClient.Client {
 }
 
 // TestRoot returns the root
-func TestRoot() *json.Root {
-	return json.NewRoot(json.NewObject(json.NewRHTPriorityQueueMap(), time.InitialTicket))
+func TestRoot() *crdt.Root {
+	return crdt.NewRoot(crdt.NewObject(crdt.NewRHTPriorityQueueMap(), time.InitialTicket))
 }
 
 // TextChangeContext returns the context of test change.
-func TextChangeContext(root *json.Root) *change.Context {
+func TextChangeContext(root *crdt.Root) *change.Context {
 	return change.NewContext(
 		change.InitialID,
 		"",

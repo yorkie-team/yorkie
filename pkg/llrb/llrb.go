@@ -55,7 +55,7 @@ func NewNode[K Key, V Value](key K, value V, isRed bool) *Node[K, V] {
 
 // Tree is an implementation of Left-learning Red-Black Tree.
 // Original paper on Left-leaning Red-Black Trees:
-//  - http://www.cs.princeton.edu/~rs/talks/LLRB/LLRB.pdf
+// http://www.cs.princeton.edu/~rs/talks/LLRB/LLRB.pdf
 //
 // Invariant 1: No red node has a red child
 // Invariant 2: Every leaf path has the same number of black nodes

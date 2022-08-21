@@ -1,4 +1,4 @@
-package json
+package crdt
 
 import (
 	"fmt"

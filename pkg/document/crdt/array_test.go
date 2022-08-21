@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package json_test
+package crdt_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -30,13 +30,13 @@ func TestArray(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
 
-		a := json.NewArray(json.NewRGATreeList(), ctx.IssueTimeTicket())
+		a := crdt.NewArray(crdt.NewRGATreeList(), ctx.IssueTimeTicket())
 
-		a.Add(json.NewPrimitive("1", ctx.IssueTimeTicket()))
+		a.Add(crdt.NewPrimitive("1", ctx.IssueTimeTicket()))
 		assert.Equal(t, `["1"]`, a.Marshal())
-		a.Add(json.NewPrimitive("2", ctx.IssueTimeTicket()))
+		a.Add(crdt.NewPrimitive("2", ctx.IssueTimeTicket()))
 		assert.Equal(t, `["1","2"]`, a.Marshal())
-		a.Add(json.NewPrimitive("3", ctx.IssueTimeTicket()))
+		a.Add(crdt.NewPrimitive("3", ctx.IssueTimeTicket()))
 		assert.Equal(t, `["1","2","3"]`, a.Marshal())
 	})
 }

@@ -30,8 +30,8 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/proxy"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -52,19 +52,19 @@ func TestHistory(t *testing.T) {
 		assert.NoError(t, cli.Attach(ctx, d1))
 		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 
-		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			root.SetNewArray("todos")
 			return nil
 		}, "create todos"))
 		assert.Equal(t, `{"todos":[]}`, d1.Marshal())
 
-		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			root.GetArray("todos").AddString("buy coffee")
 			return nil
 		}, "buy coffee"))
 		assert.Equal(t, `{"todos":["buy coffee"]}`, d1.Marshal())
 
-		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			root.GetArray("todos").AddString("buy bread")
 			return nil
 		}, "buy bread"))
@@ -119,19 +119,19 @@ func TestHistory(t *testing.T) {
 		assert.NoError(t, cli2.Attach(ctx, d1))
 		defer func() { assert.NoError(t, cli2.Detach(ctx, d1)) }()
 
-		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			root.SetNewArray("todos")
 			return nil
 		}, "create todos"))
 		assert.Equal(t, `{"todos":[]}`, d1.Marshal())
 
-		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			root.GetArray("todos").AddString("buy coffee")
 			return nil
 		}, "buy coffee"))
 		assert.Equal(t, `{"todos":["buy coffee"]}`, d1.Marshal())
 
-		assert.NoError(t, d1.Update(func(root *proxy.ObjectProxy) error {
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			root.GetArray("todos").AddString("buy bread")
 			return nil
 		}, "buy bread"))
