@@ -43,7 +43,12 @@ func newHistoryCmd() *cobra.Command {
 				return errors.New("project name and document key are required")
 			}
 
-			cli, err := admin.Dial(config.AdminAddr)
+			token, err := config.LoadToken(config.AdminAddr)
+			if err != nil {
+				return err
+			}
+
+			cli, err := admin.Dial(config.AdminAddr, admin.WithToken(token))
 			if err != nil {
 				return err
 			}
