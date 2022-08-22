@@ -22,9 +22,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"reflect"
 	"testing"
-	"time"
 
+	"bou.ke/monkey"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -33,11 +34,22 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server"
+	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestHistory(t *testing.T) {
+	var b *background.Background
+	// "bou.ke/monkey"
+	monkey.PatchInstanceMethod(
+		reflect.TypeOf(b),
+		"AttachGoroutine",
+		func(_ *background.Background, f func(c context.Context)) {
+			f(context.Background())
+		},
+	)
+
 	clients := activeClients(t, 1)
 	cli := clients[0]
 	defer cleanupClients(t, clients)
@@ -137,9 +149,6 @@ func TestHistory(t *testing.T) {
 		}, "buy bread"))
 		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, d1.Marshal())
 		assert.NoError(t, cli2.Sync(ctx))
-
-		// Sleep explicitly for waiting sync and storing snapshot is finished in server
-		time.Sleep(3 * time.Second)
 
 		changes, err := adminCli2.ListChangeSummaries(ctx, "default", d1.Key(), 0, 0, true)
 		assert.NoError(t, err)

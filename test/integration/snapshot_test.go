@@ -23,9 +23,10 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"reflect"
 	"testing"
-	"time"
 
+	"bou.ke/monkey"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 
 	"github.com/stretchr/testify/assert"
@@ -35,12 +36,23 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server"
+	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestSnapshot(t *testing.T) {
+	var b *background.Background
+	// "bou.ke/monkey"
+	monkey.PatchInstanceMethod(
+		reflect.TypeOf(b),
+		"AttachGoroutine",
+		func(_ *background.Background, f func(c context.Context)) {
+			f(context.Background())
+		},
+	)
+
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
 	defer cleanupClients(t, clients)
@@ -66,9 +78,6 @@ func TestSnapshot(t *testing.T) {
 		}
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
-
-		// NOTE: waiting for snapshot.
-		time.Sleep(500 * time.Millisecond)
 
 		// 02. Makes local changes then pull a snapshot from the server.
 		err = d2.Update(func(root *json.Object) error {
@@ -225,9 +234,6 @@ func TestSnapshot(t *testing.T) {
 			assert.NoError(t, err)
 		}
 
-		// Sleep explicitly for waiting sync and storing snapshot is finished in server
-		time.Sleep(3 * time.Second)
-
 		mongoConfig := &mongo.Config{
 			ConnectionTimeout: "5s",
 			ConnectionURI:     "mongodb://localhost:27017",
@@ -286,9 +292,6 @@ func TestSnapshot(t *testing.T) {
 			err = cli2.Sync(ctx)
 			assert.NoError(t, err)
 		}
-
-		// Sleep explicitly for waiting sync and storing snapshot is finished in server
-		time.Sleep(3 * time.Second)
 
 		changes, err = mongoCli.FindChangesBetweenServerSeqs(
 			ctx,
