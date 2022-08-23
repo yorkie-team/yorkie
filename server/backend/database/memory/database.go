@@ -829,7 +829,7 @@ func (d *DB) FindClosestSnapshotInfo(
 }
 
 // FindMinSyncedSeqInfo finds the minimum synced sequence info.
-func (d DB) FindMinSyncedSeqInfo(
+func (d *DB) FindMinSyncedSeqInfo(
 	ctx context.Context,
 	docID types.ID,
 ) (*database.SyncedSeqInfo, error) {
