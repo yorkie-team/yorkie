@@ -1,4 +1,4 @@
-//go:build integration
+//go:build integration && amd64
 
 /*
  * Copyright 2022 The Yorkie Authors. All rights reserved.
@@ -48,6 +48,10 @@ func TestHistory(t *testing.T) {
 		func(_ *background.Background, f func(c context.Context)) {
 			f(context.Background())
 		},
+	)
+	defer monkey.UnpatchInstanceMethod(
+		reflect.TypeOf(b),
+		"AttachGoroutine",
 	)
 
 	clients := activeClients(t, 1)
@@ -152,6 +156,12 @@ func TestHistory(t *testing.T) {
 
 		changes, err := adminCli2.ListChangeSummaries(ctx, "default", d1.Key(), 0, 0, true)
 		assert.NoError(t, err)
-		assert.Len(t, changes, 0)
+		assert.Len(t, changes, 3)
+
+		assert.NoError(t, cli2.Sync(ctx))
+
+		changes2, err := adminCli2.ListChangeSummaries(ctx, "default", d1.Key(), 0, 0, true)
+		assert.NoError(t, err)
+		assert.Len(t, changes2, 0)
 	})
 }

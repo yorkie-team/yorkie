@@ -1,4 +1,4 @@
-//go:build integration
+//go:build integration && amd64
 
 /*
  * Copyright 2020 The Yorkie Authors. All rights reserved.
@@ -51,6 +51,10 @@ func TestSnapshot(t *testing.T) {
 		func(_ *background.Background, f func(c context.Context)) {
 			f(context.Background())
 		},
+	)
+	defer monkey.UnpatchInstanceMethod(
+		reflect.TypeOf(b),
+		"AttachGoroutine",
 	)
 
 	clients := activeClients(t, 2)
