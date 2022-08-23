@@ -44,7 +44,6 @@ import (
 
 func TestSnapshot(t *testing.T) {
 	var b *background.Background
-	// "bou.ke/monkey"
 	monkey.PatchInstanceMethod(
 		reflect.TypeOf(b),
 		"AttachGoroutine",
