@@ -764,9 +764,9 @@ func (c *Client) CreateChangeInfos(
 // DeleteOldChangeInfos delete old change infos before checkpoint to save storage
 func (c *Client) DeleteOldChangeInfos(
 	ctx context.Context,
-	docInfo *database.DocInfo,
+	docID types.ID,
 ) error {
-	encodedDocID, err := encodeID(docInfo.ID)
+	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return err
 	}
@@ -933,6 +933,38 @@ func (c *Client) FindClosestSnapshotInfo(
 	}
 
 	return snapshotInfo, nil
+}
+
+// FindMinSyncedSeqInfo finds the minimum synced sequence info.
+func (c *Client) FindMinSyncedSeqInfo(
+	ctx context.Context,
+	docID types.ID,
+) (*database.SyncedSeqInfo, error) {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return nil, err
+	}
+
+	syncedSeqResult := c.collection(colSyncedSeqs).FindOne(ctx, bson.M{
+		"doc_id": encodedDocID,
+	}, options.FindOne().SetSort(bson.D{
+		{Key: "server_seq", Value: 1},
+	}))
+	if syncedSeqResult.Err() == mongo.ErrNoDocuments {
+		syncedSeqInfo := database.SyncedSeqInfo{}
+		return &syncedSeqInfo, nil
+	}
+	if syncedSeqResult.Err() != nil {
+		logging.From(ctx).Error(syncedSeqResult.Err())
+		return nil, syncedSeqResult.Err()
+	}
+
+	syncedSeqInfo := database.SyncedSeqInfo{}
+	if err := syncedSeqResult.Decode(&syncedSeqInfo); err != nil {
+		return nil, err
+	}
+
+	return &syncedSeqInfo, nil
 }
 
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client

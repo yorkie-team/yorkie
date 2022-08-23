@@ -89,7 +89,7 @@ func storeSnapshot(
 	if be.Config.SnapshotWithPurgingChanges {
 		if err := be.DB.DeleteOldChangeInfos(
 			ctx,
-			docInfo,
+			docInfo.ID,
 		); err != nil {
 			logging.From(ctx).Error(err)
 		}

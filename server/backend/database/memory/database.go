@@ -671,7 +671,7 @@ func (d *DB) CreateChangeInfos(
 // DeleteOldChangeInfos delete old change infos before checpoint to save storage
 func (d *DB) DeleteOldChangeInfos(
 	ctx context.Context,
-	docInfo *database.DocInfo,
+	docID types.ID,
 ) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -686,7 +686,7 @@ func (d *DB) DeleteOldChangeInfos(
 	minSyncedServerSeq := int64(math.MaxInt64)
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		info := raw.(*database.SyncedSeqInfo)
-		if info.DocID == docInfo.ID && info.ServerSeq < minSyncedServerSeq {
+		if info.DocID == docID && info.ServerSeq < minSyncedServerSeq {
 			minSyncedServerSeq = info.ServerSeq
 		}
 	}
@@ -695,7 +695,7 @@ func (d *DB) DeleteOldChangeInfos(
 	}
 
 	// 02. Deletes changes recorded before minSyncedSeqInfo.ServerSeq.
-	iterator, err := txn.ReverseLowerBound(tblChanges, "doc_id_server_seq", docInfo.ID.String(), minSyncedServerSeq)
+	iterator, err := txn.ReverseLowerBound(tblChanges, "doc_id_server_seq", docID.String(), minSyncedServerSeq)
 	if err != nil {
 		return err
 	}
@@ -826,6 +826,35 @@ func (d *DB) FindClosestSnapshotInfo(
 	}
 
 	return snapshotInfo, nil
+}
+
+// FindMinSyncedSeqInfo finds the minimum synced sequence info.
+func (d DB) FindMinSyncedSeqInfo(
+	ctx context.Context,
+	docID types.ID,
+) (*database.SyncedSeqInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	it, err := txn.Get(tblSyncedSeqs, "id")
+	if err != nil {
+		return nil, err
+	}
+
+	syncedSeqInfo := &database.SyncedSeqInfo{}
+	minSyncedServerSeq := int64(math.MaxInt64)
+	for raw := it.Next(); raw != nil; raw = it.Next() {
+		info := raw.(*database.SyncedSeqInfo)
+		if info.DocID == docID && info.ServerSeq < minSyncedServerSeq {
+			minSyncedServerSeq = info.ServerSeq
+			syncedSeqInfo = info
+		}
+	}
+	if minSyncedServerSeq == math.MaxInt64 {
+		return nil, nil
+	}
+
+	return syncedSeqInfo, nil
 }
 
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client

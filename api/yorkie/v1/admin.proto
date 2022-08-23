@@ -117,7 +117,6 @@ message GetSnapshotMetaRequest {
 message GetSnapshotMetaResponse {
   bytes snapshot = 1;
   int64 lamport = 2  [jstype = JS_STRING];
-  int64 server_seq = 3 [jstype = JS_STRING];
 }
 
 message SearchDocumentsRequest {

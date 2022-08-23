@@ -282,7 +282,7 @@ func (c *Client) ListChangeSummaries(
 
 	newDoc, err := document.NewInternalDocumentFromSnapshot(
 		key,
-		snapshotMeta.ServerSeq,
+		seq,
 		snapshotMeta.Lamport,
 		snapshotMeta.Snapshot,
 	)
@@ -292,10 +292,6 @@ func (c *Client) ListChangeSummaries(
 	}
 	var summaries []*types.ChangeSummary
 	for _, c := range changes {
-		if c.ServerSeq() <= newDoc.Checkpoint().ServerSeq {
-			continue
-		}
-
 		if err := newDoc.ApplyChanges(c); err != nil {
 			return nil, err
 		}

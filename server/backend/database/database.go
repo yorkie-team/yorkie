@@ -153,7 +153,7 @@ type Database interface {
 	// DeleteOldChangeInfos delete old change infos before checkpoint to save storage
 	DeleteOldChangeInfos(
 		ctx context.Context,
-		docInfo *DocInfo,
+		docID types.ID,
 	) error
 
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
@@ -177,6 +177,9 @@ type Database interface {
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
 	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq int64) (*SnapshotInfo, error)
+
+	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
+	FindMinSyncedSeqInfo(ctx context.Context, docID types.ID) (*SyncedSeqInfo, error)
 
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 	// and returns the min synced ticket.
