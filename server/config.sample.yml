@@ -50,6 +50,9 @@ Backend:
   # SnapshotInterval is the number of changes to create a snapshot.
   SnapshotInterval: 1000
 
+  # SnapshotWithPurgingChanges is whether to delete previous changes when the snapshot is created.
+  SnapshotWithPurgingChanges: false
+
   # AuthWebhookURL is the URL to send authorization requests to.
   AuthWebhookURL: ""
 

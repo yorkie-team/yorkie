@@ -54,6 +54,7 @@ var (
 	HousekeepingCandidatesLimit     = 10
 
 	SnapshotThreshold          = int64(10)
+	SnapshotWithPurgingChanges = false
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
 	AuthWebhookSize            = 100
 	AuthWebhookCacheAuthTTL    = 10 * gotime.Second
@@ -132,6 +133,7 @@ func TestConfig() *server.Config {
 			AdminTokenDuration:         server.DefaultAdminTokenDuration.String(),
 			UseDefaultProject:          true,
 			SnapshotThreshold:          SnapshotThreshold,
+			SnapshotWithPurgingChanges: SnapshotWithPurgingChanges,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
 			AuthWebhookCacheSize:       AuthWebhookSize,
 			AuthWebhookCacheAuthTTL:    AuthWebhookCacheAuthTTL.String(),

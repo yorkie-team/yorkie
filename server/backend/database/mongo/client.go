@@ -17,6 +17,7 @@
 package mongo
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -761,6 +762,52 @@ func (c *Client) CreateChangeInfos(
 	return nil
 }
 
+// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
+// save storage.
+func (c *Client) PurgeStaleChanges(
+	ctx context.Context,
+	docID types.ID,
+) error {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return err
+	}
+
+	// Find the smallest server seq in `syncedseqs`.
+	// Because offline client can pull changes when it becomes online.
+	result := c.collection(colSyncedSeqs).FindOne(
+		ctx,
+		bson.M{"doc_id": encodedDocID},
+		options.FindOne().SetSort(bson.M{"server_seq": 1}),
+	)
+	if result.Err() == mongo.ErrNoDocuments {
+		return nil
+	}
+	if result.Err() != nil {
+		logging.From(ctx).Error(result.Err())
+		return result.Err()
+	}
+	minSyncedSeqInfo := database.SyncedSeqInfo{}
+	if err := result.Decode(&minSyncedSeqInfo); err != nil {
+		return err
+	}
+
+	// Delete all changes before the smallest server seq.
+	if _, err := c.collection(colChanges).DeleteMany(
+		ctx,
+		bson.M{
+			"doc_id":     encodedDocID,
+			"server_seq": bson.M{"$lt": minSyncedSeqInfo.ServerSeq},
+		},
+		options.Delete(),
+	); err != nil {
+		logging.From(ctx).Error(err)
+		return err
+	}
+
+	return nil
+}
+
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (c *Client) FindChangesBetweenServerSeqs(
 	ctx context.Context,
@@ -884,6 +931,38 @@ func (c *Client) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
+// FindMinSyncedSeqInfo finds the minimum synced sequence info.
+func (c *Client) FindMinSyncedSeqInfo(
+	ctx context.Context,
+	docID types.ID,
+) (*database.SyncedSeqInfo, error) {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return nil, err
+	}
+
+	syncedSeqResult := c.collection(colSyncedSeqs).FindOne(ctx, bson.M{
+		"doc_id": encodedDocID,
+	}, options.FindOne().SetSort(bson.D{
+		{Key: "server_seq", Value: 1},
+	}))
+	if syncedSeqResult.Err() == mongo.ErrNoDocuments {
+		syncedSeqInfo := database.SyncedSeqInfo{}
+		return &syncedSeqInfo, nil
+	}
+	if syncedSeqResult.Err() != nil {
+		logging.From(ctx).Error(syncedSeqResult.Err())
+		return nil, syncedSeqResult.Err()
+	}
+
+	syncedSeqInfo := database.SyncedSeqInfo{}
+	if err := syncedSeqResult.Decode(&syncedSeqInfo); err != nil {
+		return nil, err
+	}
+
+	return &syncedSeqInfo, nil
+}
+
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 // and returns the min synced ticket.
 func (c *Client) UpdateAndFindMinSyncedTicket(
@@ -1002,7 +1081,7 @@ func (c *Client) FindDocInfosByQuery(
 	cursor, err := c.collection(colDocuments).Find(ctx, bson.M{
 		"project_id": encodedProjectID,
 		"key": bson.M{"$regex": primitive.Regex{
-			Pattern: "^" + escapeRegexp(query),
+			Pattern: "^" + escapeRegex(query),
 		}},
 	})
 	if err != nil {
@@ -1149,22 +1228,20 @@ func (c *Client) collection(
 		Collection(name, opts...)
 }
 
-// NOTE(chacha912): escapeRegexp escapes special characters by putting a backslash in front of it.
-// (https://github.com/cxr29/scrud/blob/1039f8edaf5eef522275a5a848a0fca0f53224eb/query/util.go#L31-L47)
-func escape(s, a string) string {
-	if strings.ContainsAny(s, a) {
-		b := make([]rune, 0)
-		for _, r := range s {
-			if strings.ContainsRune(a, r) {
-				b = append(b, '\\')
-			}
-			b = append(b, r)
-		}
-		return string(b)
+// escapeRegex escapes special characters by putting a backslash in front of it.
+// NOTE(chacha912): (https://github.com/cxr29/scrud/blob/1039f8edaf5eef522275a5a848a0fca0f53224eb/query/util.go#L31-L47)
+func escapeRegex(str string) string {
+	regex := `\.+*?()|[]{}^$`
+	if !strings.ContainsAny(str, regex) {
+		return str
 	}
-	return s
-}
 
-func escapeRegexp(s string) string {
-	return escape(s, `\.+*?()|[]{}^$`)
+	var buf bytes.Buffer
+	for _, r := range str {
+		if strings.ContainsRune(regex, r) {
+			buf.WriteByte('\\')
+		}
+		buf.WriteByte(byte(r))
+	}
+	return buf.String()
 }

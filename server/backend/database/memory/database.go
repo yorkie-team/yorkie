@@ -667,6 +667,53 @@ func (d *DB) CreateChangeInfos(
 	return nil
 }
 
+// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
+// save storage.
+func (d *DB) PurgeStaleChanges(
+	ctx context.Context,
+	docID types.ID,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	// Find the smallest server seq in `syncedseqs`.
+	// Because offline client can pull changes when it becomes online.
+	it, err := txn.Get(tblSyncedSeqs, "id")
+	if err != nil {
+		return err
+	}
+
+	minSyncedServerSeq := change.MaxServerSeq
+	for raw := it.Next(); raw != nil; raw = it.Next() {
+		info := raw.(*database.SyncedSeqInfo)
+		if info.DocID == docID && info.ServerSeq < minSyncedServerSeq {
+			minSyncedServerSeq = info.ServerSeq
+		}
+	}
+	if minSyncedServerSeq == change.MaxServerSeq {
+		return nil
+	}
+
+	// Delete all changes before the smallest server seq.
+	iterator, err := txn.ReverseLowerBound(
+		tblChanges,
+		"doc_id_server_seq",
+		docID.String(),
+		minSyncedServerSeq,
+	)
+	if err != nil {
+		return err
+	}
+
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		info := raw.(*database.ChangeInfo)
+		if err = txn.Delete(tblChanges, info); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (d *DB) FindChangesBetweenServerSeqs(
 	ctx context.Context,
@@ -685,6 +732,7 @@ func (d *DB) FindChangesBetweenServerSeqs(
 		if err != nil {
 			return nil, err
 		}
+
 		changes = append(changes, c)
 	}
 
@@ -784,6 +832,35 @@ func (d *DB) FindClosestSnapshotInfo(
 	}
 
 	return snapshotInfo, nil
+}
+
+// FindMinSyncedSeqInfo finds the minimum synced sequence info.
+func (d *DB) FindMinSyncedSeqInfo(
+	ctx context.Context,
+	docID types.ID,
+) (*database.SyncedSeqInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	it, err := txn.Get(tblSyncedSeqs, "id")
+	if err != nil {
+		return nil, err
+	}
+
+	syncedSeqInfo := &database.SyncedSeqInfo{}
+	minSyncedServerSeq := change.MaxServerSeq
+	for raw := it.Next(); raw != nil; raw = it.Next() {
+		info := raw.(*database.SyncedSeqInfo)
+		if info.DocID == docID && info.ServerSeq < minSyncedServerSeq {
+			minSyncedServerSeq = info.ServerSeq
+			syncedSeqInfo = info
+		}
+	}
+	if minSyncedServerSeq == change.MaxServerSeq {
+		return nil, nil
+	}
+
+	return syncedSeqInfo, nil
 }
 
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client

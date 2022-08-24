@@ -150,6 +150,13 @@ type Database interface {
 		changes []*change.Change,
 	) error
 
+	// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
+	// save storage.
+	PurgeStaleChanges(
+		ctx context.Context,
+		docID types.ID,
+	) error
+
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
 		ctx context.Context,
@@ -171,6 +178,9 @@ type Database interface {
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
 	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq int64) (*SnapshotInfo, error)
+
+	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
+	FindMinSyncedSeqInfo(ctx context.Context, docID types.ID) (*SyncedSeqInfo, error)
 
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 	// and returns the min synced ticket.

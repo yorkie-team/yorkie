@@ -27,13 +27,19 @@ const (
 
 	// InitialServerSeq is the initial sequence number of the server.
 	InitialServerSeq = 0
+
+	// MaxClientSeq is the maximum sequence number of the client.
+	MaxClientSeq = math.MaxUint32
+
+	// MaxServerSeq is the maximum sequence number of the server.
+	MaxServerSeq = int64(math.MaxInt64)
 )
 
 // InitialCheckpoint is the initial value of Checkpoint.
 var InitialCheckpoint = NewCheckpoint(InitialServerSeq, InitialClientSeq)
 
 // MaxCheckpoint is the maximum value of Checkpoint.
-var MaxCheckpoint = NewCheckpoint(math.MaxInt64, math.MaxUint32)
+var MaxCheckpoint = NewCheckpoint(MaxServerSeq, MaxClientSeq)
 
 // Checkpoint is used to determine the client received changes.
 // It is not meant to be used to determine the logical order of changes.

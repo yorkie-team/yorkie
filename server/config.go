@@ -52,13 +52,14 @@ const (
 	DefaultMongoPingTimeout       = 5 * time.Second
 	DefaultMongoYorkieDatabase    = "yorkie-meta"
 
-	DefaultAdminUser          = "admin"
-	DefaultAdminPassword      = "admin"
-	DefaultSecretKey          = "yorkie-secret"
-	DefaultAdminTokenDuration = 7 * 24 * time.Hour
-	DefaultUseDefaultProject  = true
-	DefaultSnapshotThreshold  = 500
-	DefaultSnapshotInterval   = 1000
+	DefaultAdminUser                  = "admin"
+	DefaultAdminPassword              = "admin"
+	DefaultSecretKey                  = "yorkie-secret"
+	DefaultAdminTokenDuration         = 7 * 24 * time.Hour
+	DefaultUseDefaultProject          = true
+	DefaultSnapshotThreshold          = 500
+	DefaultSnapshotInterval           = 1000
+	DefaultSnapshotWithPurgingChanges = false
 
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond
@@ -255,8 +256,9 @@ func newConfig(port int, profilingPort int) *Config {
 			CandidatesLimit:     DefaultHousekeepingCandidateLimit,
 		},
 		Backend: &backend.Config{
-			SnapshotThreshold: DefaultSnapshotThreshold,
-			SnapshotInterval:  DefaultSnapshotInterval,
+			SnapshotThreshold:          DefaultSnapshotThreshold,
+			SnapshotInterval:           DefaultSnapshotInterval,
+			SnapshotWithPurgingChanges: DefaultSnapshotWithPurgingChanges,
 		},
 	}
 }

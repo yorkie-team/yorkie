@@ -85,6 +85,16 @@ func storeSnapshot(
 		return err
 	}
 
+	// 05. delete changes before the smallest in `syncedseqs` to save storage.
+	if be.Config.SnapshotWithPurgingChanges {
+		if err := be.DB.PurgeStaleChanges(
+			ctx,
+			docInfo.ID,
+		); err != nil {
+			logging.From(ctx).Error(err)
+		}
+	}
+
 	logging.From(ctx).Infof(
 		"SNAP: '%s', serverSeq: %d",
 		docInfo.Key,
