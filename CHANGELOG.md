@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.17] - 2022-08-25
+
+### Added
+
+- Add `--backend-snapshot-with-purging-changes` flag: #370
+
+### Fixed
+
+- Fix history command authentication error: #397
+
 ## [0.2.16] - 2022-08-16
 
 ### Added
