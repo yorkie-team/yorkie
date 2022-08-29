@@ -60,15 +60,25 @@ type Database interface {
 	Close() error
 
 	// FindProjectInfoByPublicKey returns a project by public key.
-	FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*ProjectInfo, error)
+	FindProjectInfoByPublicKey(
+		ctx context.Context,
+		publicKey string,
+	) (*ProjectInfo, error)
 
 	// FindProjectInfoByName returns a project by the given name.
-	FindProjectInfoByName(ctx context.Context, name string) (*ProjectInfo, error)
+	FindProjectInfoByName(
+		ctx context.Context,
+		owner types.ID,
+		name string,
+	) (*ProjectInfo, error)
 
-	// FindProjectInfoByID returns a project by the given id.
+	// FindProjectInfoByID returns a project by the given id. It should not be
+	// used directly by clients because it is not checked if the project is
+	// permitted to be accessed by the admin client.
 	FindProjectInfoByID(ctx context.Context, id types.ID) (*ProjectInfo, error)
 
-	// EnsureDefaultUserAndProject ensures that the default user and project exists.
+	// EnsureDefaultUserAndProject ensures that the default user and project
+	// exists.
 	EnsureDefaultUserAndProject(
 		ctx context.Context,
 		username,
@@ -76,13 +86,22 @@ type Database interface {
 	) (*UserInfo, *ProjectInfo, error)
 
 	// CreateProjectInfo creates a new project.
-	CreateProjectInfo(ctx context.Context, name string) (*ProjectInfo, error)
+	CreateProjectInfo(
+		ctx context.Context,
+		name string,
+		owner types.ID,
+	) (*ProjectInfo, error)
 
 	// ListProjectInfos returns all projects.
-	ListProjectInfos(ctx context.Context) ([]*ProjectInfo, error)
+	ListProjectInfos(ctx context.Context, owner types.ID) ([]*ProjectInfo, error)
 
 	// UpdateProjectInfo updates the project.
-	UpdateProjectInfo(ctx context.Context, id types.ID, fields *types.UpdatableProjectFields) (*ProjectInfo, error)
+	UpdateProjectInfo(
+		ctx context.Context,
+		owner types.ID,
+		id types.ID,
+		fields *types.UpdatableProjectFields,
+	) (*ProjectInfo, error)
 
 	// CreateUserInfo creates a new user.
 	CreateUserInfo(

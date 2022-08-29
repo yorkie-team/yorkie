@@ -85,7 +85,10 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	project, err := be.DB.FindProjectInfoByName(context.Background(), database.DefaultProjectName)
+	project, err := be.DB.FindProjectInfoByID(
+		context.Background(),
+		database.DefaultProjectID,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}

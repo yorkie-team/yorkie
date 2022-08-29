@@ -38,6 +38,9 @@ type ProjectInfo struct {
 	// Name is the name of this project.
 	Name string `bson:"name"`
 
+	// Owner is the owner of this project.
+	Owner types.ID `bson:"owner"`
+
 	// PublicKey is the API key of this project.
 	PublicKey string `bson:"public_key"`
 
@@ -58,9 +61,10 @@ type ProjectInfo struct {
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
-func NewProjectInfo(name string) *ProjectInfo {
+func NewProjectInfo(name string, owner types.ID) *ProjectInfo {
 	return &ProjectInfo{
-		Name: name,
+		Name:  name,
+		Owner: owner,
 		// TODO(hackerwins): Use random generated Key.
 		PublicKey: xid.New().String(),
 		SecretKey: xid.New().String(),
@@ -73,6 +77,7 @@ func ToProjectInfo(project *types.Project) *ProjectInfo {
 	return &ProjectInfo{
 		ID:                 project.ID,
 		Name:               project.Name,
+		Owner:              project.Owner,
 		PublicKey:          project.PublicKey,
 		SecretKey:          project.SecretKey,
 		AuthWebhookURL:     project.AuthWebhookURL,
@@ -91,6 +96,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 	return &ProjectInfo{
 		ID:                 i.ID,
 		Name:               i.Name,
+		Owner:              i.Owner,
 		PublicKey:          i.PublicKey,
 		SecretKey:          i.SecretKey,
 		AuthWebhookURL:     i.AuthWebhookURL,
@@ -118,6 +124,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 	return &types.Project{
 		ID:                 i.ID,
 		Name:               i.Name,
+		Owner:              i.Owner,
 		AuthWebhookURL:     i.AuthWebhookURL,
 		AuthWebhookMethods: i.AuthWebhookMethods,
 		PublicKey:          i.PublicKey,

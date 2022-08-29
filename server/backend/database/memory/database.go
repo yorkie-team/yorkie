@@ -56,7 +56,10 @@ func (d *DB) Close() error {
 }
 
 // FindProjectInfoByPublicKey returns a project by public key.
-func (d *DB) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (*database.ProjectInfo, error) {
+func (d *DB) FindProjectInfoByPublicKey(
+	ctx context.Context,
+	publicKey string,
+) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -72,7 +75,11 @@ func (d *DB) FindProjectInfoByPublicKey(ctx context.Context, publicKey string) (
 }
 
 // FindProjectInfoByName returns a project by the given name.
-func (d *DB) FindProjectInfoByName(ctx context.Context, name string) (*database.ProjectInfo, error) {
+func (d *DB) FindProjectInfoByName(
+	ctx context.Context,
+	owner types.ID,
+	name string,
+) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -84,7 +91,12 @@ func (d *DB) FindProjectInfoByName(ctx context.Context, name string) (*database.
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectNotFound)
 	}
 
-	return raw.(*database.ProjectInfo).DeepCopy(), nil
+	info := raw.(*database.ProjectInfo).DeepCopy()
+	if info.Owner != owner {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectNotFound)
+	}
+
+	return info, nil
 }
 
 // FindProjectInfoByID returns a project by the given id.
@@ -113,7 +125,7 @@ func (d *DB) EnsureDefaultUserAndProject(
 		return nil, nil, err
 	}
 
-	project, err := d.ensureDefaultProjectInfo(ctx)
+	project, err := d.ensureDefaultProjectInfo(ctx, user.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -155,7 +167,10 @@ func (d *DB) ensureDefaultUserInfo(
 }
 
 // ensureDefaultProjectInfo creates the default project if it does not exist.
-func (d *DB) ensureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
+func (d *DB) ensureDefaultProjectInfo(
+	ctx context.Context,
+	defaultUserID types.ID,
+) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -166,7 +181,7 @@ func (d *DB) ensureDefaultProjectInfo(ctx context.Context) (*database.ProjectInf
 
 	var info *database.ProjectInfo
 	if raw == nil {
-		info = database.NewProjectInfo(database.DefaultProjectName)
+		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID)
 		info.ID = database.DefaultProjectID
 		if err := txn.Insert(tblProjects, info); err != nil {
 			return nil, err
@@ -180,7 +195,11 @@ func (d *DB) ensureDefaultProjectInfo(ctx context.Context) (*database.ProjectInf
 }
 
 // CreateProjectInfo creates a new project.
-func (d *DB) CreateProjectInfo(ctx context.Context, name string) (*database.ProjectInfo, error) {
+func (d *DB) CreateProjectInfo(
+	ctx context.Context,
+	name string,
+	owner types.ID,
+) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -194,7 +213,7 @@ func (d *DB) CreateProjectInfo(ctx context.Context, name string) (*database.Proj
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectAlreadyExists)
 	}
 
-	info := database.NewProjectInfo(name)
+	info := database.NewProjectInfo(name, owner)
 	info.ID = newID()
 	if err := txn.Insert(tblProjects, info); err != nil {
 		return nil, err
@@ -205,22 +224,32 @@ func (d *DB) CreateProjectInfo(ctx context.Context, name string) (*database.Proj
 }
 
 // ListProjectInfos returns all projects.
-func (d *DB) ListProjectInfos(ctx context.Context) ([]*database.ProjectInfo, error) {
+func (d *DB) ListProjectInfos(
+	ctx context.Context,
+	owner types.ID,
+) ([]*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iter, err := txn.Get(tblProjects, "id")
+	defaultProjectID := database.DefaultProjectID
+	iter, err := txn.LowerBound(
+		tblProjects,
+		"owner_id",
+		owner.String(),
+		defaultProjectID.String(),
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	var infos []*database.ProjectInfo
-	for {
-		raw := iter.Next()
-		if raw == nil {
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ProjectInfo).DeepCopy()
+		if info.Owner != owner {
 			break
 		}
-		infos = append(infos, raw.(*database.ProjectInfo).DeepCopy())
+
+		infos = append(infos, info)
 	}
 
 	return infos, nil
@@ -229,6 +258,7 @@ func (d *DB) ListProjectInfos(ctx context.Context) ([]*database.ProjectInfo, err
 // UpdateProjectInfo updates the given project.
 func (d *DB) UpdateProjectInfo(
 	ctx context.Context,
+	owner types.ID,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*database.ProjectInfo, error) {
@@ -244,6 +274,9 @@ func (d *DB) UpdateProjectInfo(
 	}
 
 	info := raw.(*database.ProjectInfo).DeepCopy()
+	if info.Owner != owner {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+	}
 
 	if fields.Name != nil {
 		existing, err := txn.First(tblProjects, "name", *fields.Name)

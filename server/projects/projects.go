@@ -28,9 +28,10 @@ import (
 func CreateProject(
 	ctx context.Context,
 	be *backend.Backend,
+	owner types.ID,
 	name string,
 ) (*types.Project, error) {
-	info, err := be.DB.CreateProjectInfo(ctx, name)
+	info, err := be.DB.CreateProjectInfo(ctx, name, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -42,8 +43,9 @@ func CreateProject(
 func ListProjects(
 	ctx context.Context,
 	be *backend.Backend,
+	owner types.ID,
 ) ([]*types.Project, error) {
-	infos, err := be.DB.ListProjectInfos(ctx)
+	infos, err := be.DB.ListProjectInfos(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -60,27 +62,10 @@ func ListProjects(
 func GetProject(
 	ctx context.Context,
 	be *backend.Backend,
+	owner types.ID,
 	name string,
 ) (*types.Project, error) {
-	info, err := be.DB.FindProjectInfoByName(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-
-	return info.ToProject(), nil
-}
-
-// GetProjectFromAPIKey returns a project from an API key.
-func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey string) (*types.Project, error) {
-	if apiKey == "" {
-		info, err := be.DB.FindProjectInfoByName(ctx, database.DefaultProjectName)
-		if err != nil {
-			return nil, err
-		}
-		return info.ToProject(), nil
-	}
-
-	info, err := be.DB.FindProjectInfoByPublicKey(ctx, apiKey)
+	info, err := be.DB.FindProjectInfoByName(ctx, owner, name)
 	if err != nil {
 		return nil, err
 	}
@@ -92,10 +77,29 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 func UpdateProject(
 	ctx context.Context,
 	be *backend.Backend,
+	owner types.ID,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*types.Project, error) {
-	info, err := be.DB.UpdateProjectInfo(ctx, id, fields)
+	info, err := be.DB.UpdateProjectInfo(ctx, owner, id, fields)
+	if err != nil {
+		return nil, err
+	}
+
+	return info.ToProject(), nil
+}
+
+// GetProjectFromAPIKey returns a project from an API key.
+func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey string) (*types.Project, error) {
+	if apiKey == "" {
+		info, err := be.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
+		if err != nil {
+			return nil, err
+		}
+		return info.ToProject(), nil
+	}
+
+	info, err := be.DB.FindProjectInfoByPublicKey(ctx, apiKey)
 	if err != nil {
 		return nil, err
 	}

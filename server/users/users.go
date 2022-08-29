@@ -66,3 +66,17 @@ func IsCorrectPassword(
 
 	return info.ToUser(), nil
 }
+
+// GetUser returns a user by the given username.
+func GetUser(
+	ctx context.Context,
+	be *backend.Backend,
+	username string,
+) (*types.User, error) {
+	info, err := be.DB.FindUserInfo(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+
+	return info.ToUser(), nil
+}

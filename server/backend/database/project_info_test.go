@@ -27,7 +27,8 @@ import (
 
 func TestProjectInfo(t *testing.T) {
 	t.Run("update fields test", func(t *testing.T) {
-		project := database.NewProjectInfo(t.Name())
+		dummyOwnerID := types.ID("000000000000000000000000")
+		project := database.NewProjectInfo(t.Name(), dummyOwnerID)
 
 		testName := "testName"
 		testURL := "testUrl"
@@ -41,5 +42,6 @@ func TestProjectInfo(t *testing.T) {
 
 		project.UpdateFields(&types.UpdatableProjectFields{AuthWebhookMethods: &testMethods})
 		assert.Equal(t, testMethods, project.AuthWebhookMethods)
+		assert.Equal(t, dummyOwnerID, project.Owner)
 	})
 }

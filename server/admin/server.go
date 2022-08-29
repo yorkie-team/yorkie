@@ -73,7 +73,7 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 	)
 
 	loggingInterceptor := grpchelper.NewLoggingInterceptor()
-	authInterceptor := interceptors.NewAuthInterceptor(tokenManager)
+	authInterceptor := interceptors.NewAuthInterceptor(be, tokenManager)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	opts := []grpc.ServerOption{
@@ -197,7 +197,8 @@ func (s *Server) CreateProject(
 	ctx context.Context,
 	req *api.CreateProjectRequest,
 ) (*api.CreateProjectResponse, error) {
-	project, err := projects.CreateProject(ctx, s.backend, req.Name)
+	user := users.From(ctx)
+	project, err := projects.CreateProject(ctx, s.backend, user.ID, req.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +217,8 @@ func (s *Server) ListProjects(
 	ctx context.Context,
 	req *api.ListProjectsRequest,
 ) (*api.ListProjectsResponse, error) {
-	projectList, err := projects.ListProjects(ctx, s.backend)
+	user := users.From(ctx)
+	projectList, err := projects.ListProjects(ctx, s.backend, user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +238,8 @@ func (s *Server) GetProject(
 	ctx context.Context,
 	req *api.GetProjectRequest,
 ) (*api.GetProjectResponse, error) {
-	project, err := projects.GetProject(ctx, s.backend, req.Name)
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -263,9 +266,11 @@ func (s *Server) UpdateProject(
 		return nil, err
 	}
 
+	user := users.From(ctx)
 	project, err := projects.UpdateProject(
 		ctx,
 		s.backend,
+		user.ID,
 		types.ID(req.Id),
 		fields,
 	)
@@ -288,7 +293,8 @@ func (s *Server) GetDocument(
 	ctx context.Context,
 	req *api.GetDocumentRequest,
 ) (*api.GetDocumentResponse, error) {
-	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +324,8 @@ func (s *Server) GetSnapshotMeta(
 	ctx context.Context,
 	req *api.GetSnapshotMetaRequest,
 ) (*api.GetSnapshotMetaResponse, error) {
-	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +357,8 @@ func (s *Server) ListDocuments(
 	ctx context.Context,
 	req *api.ListDocumentsRequest,
 ) (*api.ListDocumentsResponse, error) {
-	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +392,8 @@ func (s *Server) SearchDocuments(
 	ctx context.Context,
 	req *api.SearchDocumentsRequest,
 ) (*api.SearchDocumentsResponse, error) {
-	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +425,8 @@ func (s *Server) ListChanges(
 	ctx context.Context,
 	req *api.ListChangesRequest,
 ) (*api.ListChangesResponse, error) {
-	project, err := projects.GetProject(ctx, s.backend, req.ProjectName)
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
