@@ -41,11 +41,13 @@ func TestClient(t *testing.T) {
 	cli, err := mongo.Dial(config)
 	assert.NoError(t, err)
 
+	dummyOwnerID := types.ID("000000000000000000000000")
+
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {
-		info, err := cli.CreateProjectInfo(ctx, t.Name())
+		info, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
 		assert.NoError(t, err)
 		existName := "already"
-		_, err = cli.CreateProjectInfo(ctx, existName)
+		_, err = cli.CreateProjectInfo(ctx, existName, dummyOwnerID)
 		assert.NoError(t, err)
 
 		id := info.ID
@@ -65,7 +67,7 @@ func TestClient(t *testing.T) {
 
 		err = fields.Validate()
 		assert.NoError(t, err)
-		res, err := cli.UpdateProjectInfo(ctx, id, fields)
+		res, err := cli.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.NoError(t, err)
 
 		updateInfo, err := cli.FindProjectInfoByID(ctx, id)
@@ -83,7 +85,7 @@ func TestClient(t *testing.T) {
 		}
 		err = fields.Validate()
 		assert.NoError(t, err)
-		res, err = cli.UpdateProjectInfo(ctx, id, fields)
+		res, err = cli.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.NoError(t, err)
 
 		updateInfo, err = cli.FindProjectInfoByID(ctx, id)
@@ -97,7 +99,7 @@ func TestClient(t *testing.T) {
 
 		// check duplicate name error
 		fields = &types.UpdatableProjectFields{Name: &existName}
-		_, err = cli.UpdateProjectInfo(ctx, id, fields)
+		_, err = cli.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
 	})
 }

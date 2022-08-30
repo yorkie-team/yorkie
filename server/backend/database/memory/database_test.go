@@ -39,6 +39,8 @@ func TestDB(t *testing.T) {
 	assert.NoError(t, err)
 
 	projectID := database.DefaultProjectID
+	dummyOwnerID := types.ID("000000000000000000000000")
+	otherOwnerID := types.ID("000000000000000000000001")
 	notExistsID := types.ID("000000000000000000000000")
 
 	t.Run("activate/deactivate client test", func(t *testing.T) {
@@ -73,12 +75,18 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("project test", func(t *testing.T) {
-		info, err := db.CreateProjectInfo(ctx, t.Name())
+		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID)
 		assert.NoError(t, err)
-		assert.Equal(t, t.Name(), info.Name)
 
-		_, err = db.CreateProjectInfo(ctx, t.Name())
-		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
+		suffixes := []int{0, 1, 2}
+		for _, suffix := range suffixes {
+			_, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%s-%d", t.Name(), suffix), dummyOwnerID)
+			assert.NoError(t, err)
+		}
+
+		projects, err := db.ListProjectInfos(ctx, dummyOwnerID)
+		assert.NoError(t, err)
+		assert.Len(t, projects, len(suffixes))
 	})
 
 	t.Run("user test", func(t *testing.T) {
@@ -320,83 +328,87 @@ func TestDB(t *testing.T) {
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 
-	t.Run("UpdateProjectInfo test", func(t *testing.T) {
-		info, err := db.CreateProjectInfo(ctx, t.Name())
-		assert.NoError(t, err)
-		existName := "already"
-		_, err = db.CreateProjectInfo(ctx, existName)
+	t.Run("FindProjectInfoByID test", func(t *testing.T) {
+		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
 		assert.NoError(t, err)
 
-		id := info.ID
+		_, err = db.FindProjectInfoByName(ctx, dummyOwnerID, info.Name)
+		assert.NoError(t, err)
+
+		_, err = db.FindProjectInfoByName(ctx, otherOwnerID, info.Name)
+		assert.ErrorIs(t, err, database.ErrProjectNotFound)
+	})
+
+	t.Run("UpdateProjectInfo test", func(t *testing.T) {
+		existName := "already"
 		newName := "changed-name"
+		newName2 := newName + "2"
 		newAuthWebhookURL := "newWebhookURL"
 		newAuthWebhookMethods := []string{
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
 
-		// update all updatable fields
+		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID)
+		assert.NoError(t, err)
+
+		id := info.ID
+
+		// 01. Update all fields test
 		fields := &types.UpdatableProjectFields{
 			Name:               &newName,
 			AuthWebhookURL:     &newAuthWebhookURL,
 			AuthWebhookMethods: &newAuthWebhookMethods,
 		}
-
-		err = fields.Validate()
+		assert.NoError(t, fields.Validate())
+		res, err := db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.NoError(t, err)
-		res, err := db.UpdateProjectInfo(ctx, id, fields)
-		assert.NoError(t, err)
-
 		updateInfo, err := db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
-
 		assert.Equal(t, res, updateInfo)
 		assert.Equal(t, newName, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 
-		// update name field
-		newName2 := newName + "2"
+		// 02. Update name field test
 		fields = &types.UpdatableProjectFields{
 			Name: &newName2,
 		}
-		err = fields.Validate()
+		assert.NoError(t, fields.Validate())
+		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.NoError(t, err)
-		res, err = db.UpdateProjectInfo(ctx, id, fields)
-		assert.NoError(t, err)
-
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
-
-		// check only name is updated
 		assert.Equal(t, res, updateInfo)
 		assert.NotEqual(t, newName, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 
-		// check duplicate name error
-		fields = &types.UpdatableProjectFields{Name: &existName}
-		_, err = db.UpdateProjectInfo(ctx, id, fields)
-		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
-
-		// update auth-webhook-url field
+		// 03. Update authWebhookURL test
 		newAuthWebhookURL2 := newAuthWebhookURL + "2"
 		fields = &types.UpdatableProjectFields{
 			AuthWebhookURL: &newAuthWebhookURL2,
 		}
-		err = fields.Validate()
+		assert.NoError(t, fields.Validate())
+		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.NoError(t, err)
-		res, err = db.UpdateProjectInfo(ctx, id, fields)
-		assert.NoError(t, err)
-
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
-
-		// check only auth-webhook-url is update
 		assert.Equal(t, res, updateInfo)
 		assert.Equal(t, newName2, updateInfo.Name)
 		assert.NotEqual(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
 
+		// 04. Duplicated name test
+		fields = &types.UpdatableProjectFields{Name: &existName}
+		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
+
+		// 05. OwnerID not match test
+		fields = &types.UpdatableProjectFields{Name: &existName}
+		_, err = db.UpdateProjectInfo(ctx, otherOwnerID, id, fields)
+		assert.ErrorIs(t, err, database.ErrProjectNotFound)
 	})
 }

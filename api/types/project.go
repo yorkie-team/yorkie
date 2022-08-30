@@ -28,6 +28,9 @@ type Project struct {
 	// Name is the name of this project.
 	Name string `json:"name"`
 
+	// Owner is the owner of this project.
+	Owner ID `json:"owner"`
+
 	// AuthWebhookURL is the url of the authorization webhook.
 	AuthWebhookURL string `json:"auth_webhook_url"`
 

@@ -104,7 +104,7 @@ func (c *Client) EnsureDefaultUserAndProject(
 		return nil, nil, err
 	}
 
-	projectInfo, err := c.ensureDefaultProjectInfo(ctx)
+	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -157,10 +157,17 @@ func (c *Client) ensureDefaultUserInfo(
 }
 
 // ensureDefaultProjectInfo creates the default project info if it does not exist.
-func (c *Client) ensureDefaultProjectInfo(ctx context.Context) (*database.ProjectInfo, error) {
-	candidate := database.NewProjectInfo(database.DefaultProjectName)
+func (c *Client) ensureDefaultProjectInfo(
+	ctx context.Context,
+	defaultUserID types.ID,
+) (*database.ProjectInfo, error) {
+	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID)
 	candidate.ID = database.DefaultProjectID
 	encodedID, err := encodeID(candidate.ID)
+	if err != nil {
+		return nil, err
+	}
+	encodedDefaultUserID, err := encodeID(defaultUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -170,6 +177,7 @@ func (c *Client) ensureDefaultProjectInfo(ctx context.Context) (*database.Projec
 	}, bson.M{
 		"$setOnInsert": bson.M{
 			"name":       candidate.Name,
+			"owner":      encodedDefaultUserID,
 			"public_key": candidate.PublicKey,
 			"secret_key": candidate.SecretKey,
 			"created_at": candidate.CreatedAt,
@@ -195,10 +203,20 @@ func (c *Client) ensureDefaultProjectInfo(ctx context.Context) (*database.Projec
 }
 
 // CreateProjectInfo creates a new project.
-func (c *Client) CreateProjectInfo(ctx context.Context, name string) (*database.ProjectInfo, error) {
-	info := database.NewProjectInfo(name)
+func (c *Client) CreateProjectInfo(
+	ctx context.Context,
+	name string,
+	owner types.ID,
+) (*database.ProjectInfo, error) {
+	encodedOwner, err := encodeID(owner)
+	if err != nil {
+		return nil, err
+	}
+
+	info := database.NewProjectInfo(name, owner)
 	result, err := c.collection(colProjects).InsertOne(ctx, bson.M{
 		"name":       info.Name,
+		"owner":      encodedOwner,
 		"public_key": info.PublicKey,
 		"secret_key": info.SecretKey,
 		"created_at": info.CreatedAt,
@@ -217,8 +235,18 @@ func (c *Client) CreateProjectInfo(ctx context.Context, name string) (*database.
 }
 
 // ListProjectInfos returns all project infos.
-func (c *Client) ListProjectInfos(ctx context.Context) ([]*database.ProjectInfo, error) {
-	cursor, err := c.collection(colProjects).Find(ctx, bson.M{})
+func (c *Client) ListProjectInfos(
+	ctx context.Context,
+	owner types.ID,
+) ([]*database.ProjectInfo, error) {
+	encodedOwnerID, err := encodeID(owner)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, err := c.collection(colProjects).Find(ctx, bson.M{
+		"owner": encodedOwnerID,
+	})
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, err
@@ -250,9 +278,19 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 }
 
 // FindProjectInfoByName returns a project by name.
-func (c *Client) FindProjectInfoByName(ctx context.Context, name string) (*database.ProjectInfo, error) {
+func (c *Client) FindProjectInfoByName(
+	ctx context.Context,
+	owner types.ID,
+	name string,
+) (*database.ProjectInfo, error) {
+	encodedOwner, err := encodeID(owner)
+	if err != nil {
+		return nil, err
+	}
+
 	result := c.collection(colProjects).FindOne(ctx, bson.M{
-		"name": name,
+		"name":  name,
+		"owner": encodedOwner,
 	})
 
 	projectInfo := database.ProjectInfo{}
@@ -291,9 +329,14 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 // UpdateProjectInfo updates the project info.
 func (c *Client) UpdateProjectInfo(
 	ctx context.Context,
+	owner types.ID,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*database.ProjectInfo, error) {
+	encodedOwner, err := encodeID(owner)
+	if err != nil {
+		return nil, err
+	}
 	encodedID, err := encodeID(id)
 	if err != nil {
 		return nil, err
@@ -312,7 +355,8 @@ func (c *Client) UpdateProjectInfo(
 	updatableFields["updated_at"] = gotime.Now()
 
 	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
-		"_id": encodedID,
+		"_id":   encodedID,
+		"owner": encodedOwner,
 	}, bson.M{
 		"$set": updatableFields,
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))

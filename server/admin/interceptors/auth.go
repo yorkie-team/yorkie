@@ -20,22 +20,28 @@ import (
 	"context"
 	"strings"
 
+	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcmetadata "google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/admin/auth"
+	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/users"
 )
 
 // AuthInterceptor is an interceptor for authentication.
 type AuthInterceptor struct {
+	backend      *backend.Backend
 	tokenManager *auth.TokenManager
 }
 
 // NewAuthInterceptor creates a new instance of AuthInterceptor.
-func NewAuthInterceptor(tokenManager *auth.TokenManager) *AuthInterceptor {
+func NewAuthInterceptor(be *backend.Backend, tokenManager *auth.TokenManager) *AuthInterceptor {
 	return &AuthInterceptor{
+		backend:      be,
 		tokenManager: tokenManager,
 	}
 }
@@ -48,9 +54,15 @@ func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
-		if err := i.authenticate(ctx, info.FullMethod); err != nil {
-			return nil, err
+		if isRequiredAuth(info.FullMethod) {
+			user, err := i.authenticate(ctx, info.FullMethod)
+			if err != nil {
+				return nil, err
+			}
+
+			return handler(users.With(ctx, user), req)
 		}
+
 		return handler(ctx, req)
 	}
 }
@@ -63,40 +75,58 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
-		if err := i.authenticate(stream.Context(), info.FullMethod); err != nil {
-			return err
+		if isRequiredAuth(info.FullMethod) {
+			ctx := stream.Context()
+			user, err := i.authenticate(ctx, info.FullMethod)
+			if err != nil {
+				return err
+			}
+
+			wrapped := grpcmiddleware.WrapServerStream(stream)
+			wrapped.WrappedContext = users.With(ctx, user)
+			return handler(srv, wrapped)
 		}
+
 		return handler(srv, stream)
 	}
+}
+
+func isRequiredAuth(method string) bool {
+	// NOTE(hackerwins): We don't need to authenticate the request if the
+	// request is from the peer clusters.
+	return method != "/yorkie.v1.AdminService/LogIn" &&
+		method != "/yorkie.v1.AdminService/SignUp" &&
+		strings.HasPrefix(method, "/yorkie.v1.AdminService/")
 }
 
 // authenticate does authenticate the request.
 func (i *AuthInterceptor) authenticate(
 	ctx context.Context,
 	method string,
-) error {
-	// NOTE(hackerwins): We don't need to authenticate the request if the
-	// request is from the peer clusters.
-	if method == "/yorkie.v1.AdminService/LogIn" ||
-		method == "/yorkie.v1.AdminService/SignUp" ||
-		!strings.HasPrefix(method, "/yorkie.v1.AdminService/") {
-		return nil
+) (*types.User, error) {
+	if !isRequiredAuth(method) {
+		return nil, nil
 	}
 
 	data, ok := grpcmetadata.FromIncomingContext(ctx)
 	if !ok {
-		return grpcstatus.Errorf(codes.Unauthenticated, "metadata is not provided")
+		return nil, grpcstatus.Errorf(codes.Unauthenticated, "metadata is not provided")
 	}
 
 	authorization := data["authorization"]
 	if len(authorization) == 0 {
-		return grpcstatus.Errorf(codes.Unauthenticated, "authorization is not provided")
+		return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is not provided")
 	}
 
-	// TODO: store the userClaims in the `ctx`.
-	if _, err := i.tokenManager.Verify(authorization[0]); err != nil {
-		return grpcstatus.Errorf(codes.Unauthenticated, "authorization is invalid")
+	claims, err := i.tokenManager.Verify(authorization[0])
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is invalid")
 	}
 
-	return nil
+	user, err := users.GetUser(ctx, i.backend, claims.Username)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is invalid")
+	}
+
+	return user, nil
 }
