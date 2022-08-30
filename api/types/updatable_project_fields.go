@@ -32,7 +32,7 @@ type UpdatableProjectFields struct {
 	Name *string `bson:"name,omitempty" validate:"omitempty,min=2,max=30,slug,reservedname"`
 
 	// AuthWebhookURL is the url of the authorization webhook.
-	AuthWebhookURL *string `bson:"auth_webhook_url,omitempty"`
+	AuthWebhookURL *string `bson:"auth_webhook_url,omitempty" validate:"omitempty,url|emptystring"`
 
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods *[]string `bson:"auth_webhook_methods,omitempty" validate:"omitempty,invalidmethod"`

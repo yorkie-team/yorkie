@@ -64,4 +64,10 @@ func init() {
 		return true
 	})
 	registerTranslation("invalidmethod", "given {0} is invalid method")
+
+	registerValidation("emptystring", func(level validator.FieldLevel) bool {
+		url := level.Field().String()
+		return url == ""
+	})
+	registerTranslation("url|emptystring", "{0} must be a valid URL")
 }

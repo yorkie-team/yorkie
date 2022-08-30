@@ -52,7 +52,7 @@ func TestClient(t *testing.T) {
 
 		id := info.ID
 		newName := "changed-name"
-		newAuthWebhookURL := "newWebhookURL"
+		newAuthWebhookURL := "http://localhost:3000"
 		newAuthWebhookMethods := []string{
 			string(types.AttachDocument),
 			string(types.WatchDocuments),

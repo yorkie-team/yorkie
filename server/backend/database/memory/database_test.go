@@ -343,7 +343,7 @@ func TestDB(t *testing.T) {
 		existName := "already"
 		newName := "changed-name"
 		newName2 := newName + "2"
-		newAuthWebhookURL := "newWebhookURL"
+		newAuthWebhookURL := "http://localhost:3000"
 		newAuthWebhookMethods := []string{
 			string(types.AttachDocument),
 			string(types.WatchDocuments),

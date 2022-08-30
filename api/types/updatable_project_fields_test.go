@@ -28,7 +28,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 	var invalidFieldsError *types.InvalidFieldsError
 	t.Run("validation test", func(t *testing.T) {
 		newName := "changed-name"
-		newAuthWebhookURL := "newWebhookURL"
+		newAuthWebhookURL := "http://localhost:3000"
 		newAuthWebhookMethods := []string{
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
