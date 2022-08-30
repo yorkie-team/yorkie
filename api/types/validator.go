@@ -40,6 +40,22 @@ var (
 	trans, _ = uni.GetTranslator(defaultEn.Locale())
 )
 
+// FieldViolation is used to describe a single bad request field
+type FieldViolation struct {
+	// A Field of which field of the reques is bad.
+	Field string
+	// A description of why the request element is bad.
+	Description string
+}
+
+// InvalidFieldsError is used to describe invalid fields.
+type InvalidFieldsError struct {
+	Violations []*FieldViolation
+}
+
+// Error returns the error message.
+func (e *InvalidFieldsError) Error() string { return "invalid fields" }
+
 // registerValidation is shortcut of defaultValidator.RegisterValidation
 // that register custom validation with given tag, and it can be used in init.
 func registerValidation(tag string, fn validator.Func) {

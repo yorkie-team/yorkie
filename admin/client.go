@@ -172,6 +172,16 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project
 		},
 	)
 	if err != nil {
+		st := status.Convert(err)
+		for _, detail := range st.Details() {
+			switch t := detail.(type) {
+			case *errdetails.BadRequest:
+				for _, violation := range t.GetFieldViolations() {
+					fmt.Printf("Invalid Fields: The %q field was wrong: %s\n", violation.GetField(), violation.GetDescription())
+				}
+			}
+		}
+
 		return nil, err
 	}
 
