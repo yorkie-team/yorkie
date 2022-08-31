@@ -18,32 +18,17 @@
 package types
 
 import (
-	"errors"
-
 	"github.com/go-playground/validator/v10"
 )
 
-// ErrEmptyProjectFields is returned when all the fields are empty.
-var ErrEmptyProjectFields = errors.New("updatable project fields are empty")
-
-// UpdatableProjectFields is a set of fields that use to update a project.
-type UpdatableProjectFields struct {
+// CreateProjectFields is a set of fields that use to create a project.
+type CreateProjectFields struct {
 	// Name is the name of this project.
-	Name *string `bson:"name,omitempty" validate:"omitempty,min=2,max=30,slug,reservedname"`
-
-	// AuthWebhookURL is the url of the authorization webhook.
-	AuthWebhookURL *string `bson:"auth_webhook_url,omitempty" validate:"omitempty,url|emptystring"`
-
-	// AuthWebhookMethods is the methods that run the authorization webhook.
-	AuthWebhookMethods *[]string `bson:"auth_webhook_methods,omitempty" validate:"omitempty,invalidmethod"`
+	Name *string `bson:"name,omitempty" validate:"required,min=2,max=30,slug,reservedname"`
 }
 
-// Validate validates the UpdatableProjectFields.
-func (i *UpdatableProjectFields) Validate() error {
-	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil {
-		return ErrEmptyProjectFields
-	}
-
+// Validate validates the CreateProjectFields.
+func (i *CreateProjectFields) Validate() error {
 	if err := defaultValidator.Struct(i); err != nil {
 		invalidFieldsError := &InvalidFieldsError{}
 		for _, err := range err.(validator.ValidationErrors) {

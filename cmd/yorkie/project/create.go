@@ -20,9 +20,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -54,6 +55,16 @@ func newCreateCommand() *cobra.Command {
 			ctx := context.Background()
 			project, err := cli.CreateProject(ctx, name)
 			if err != nil {
+				// TODO(chacha912): consider creating the error details type to remove the dependency on gRPC.
+				st := status.Convert(err)
+				for _, detail := range st.Details() {
+					switch t := detail.(type) {
+					case *errdetails.BadRequest:
+						for _, violation := range t.GetFieldViolations() {
+							cmd.Printf("Invalid Fields: The %q field was wrong: %s\n", violation.GetField(), violation.GetDescription())
+						}
+					}
+				}
 				return err
 			}
 
@@ -62,7 +73,7 @@ func newCreateCommand() *cobra.Command {
 				return err
 			}
 
-			fmt.Println(string(encoded))
+			cmd.Println(string(encoded))
 
 			return nil
 		},

@@ -197,6 +197,11 @@ func (s *Server) CreateProject(
 	ctx context.Context,
 	req *api.CreateProjectRequest,
 ) (*api.CreateProjectResponse, error) {
+	fields := &types.CreateProjectFields{Name: &req.Name}
+	if err := fields.Validate(); err != nil {
+		return nil, err
+	}
+
 	user := users.From(ctx)
 	project, err := projects.CreateProject(ctx, s.backend, user.ID, req.Name)
 	if err != nil {
