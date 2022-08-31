@@ -20,9 +20,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -83,6 +84,16 @@ func newUpdateCommand() *cobra.Command {
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
 			if err != nil {
+				st := status.Convert(err)
+				for _, detail := range st.Details() {
+					switch t := detail.(type) {
+					case *errdetails.BadRequest:
+						for _, violation := range t.GetFieldViolations() {
+							cmd.Printf("Invalid Fields: The %q field was wrong: %s\n", violation.GetField(), violation.GetDescription())
+						}
+					}
+				}
+
 				return err
 			}
 
@@ -91,7 +102,7 @@ func newUpdateCommand() *cobra.Command {
 				return err
 			}
 
-			fmt.Println(string(encoded))
+			cmd.Println(string(encoded))
 
 			return nil
 		},
