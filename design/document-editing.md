@@ -56,7 +56,10 @@ The figure above explains the Document in more detail, and three internal compon
 
 Local Editing consists of tree logic parts.
 
-1. Calling `Document.Update`: When this function is called, the Proxy creates Changes and adds them to LocalChanges.
+1. Calling `Document.Update`
+   - 1-1. When the function is called, `Proxy` creates Changes.
+   - 1-2. And then the changes are added to LocalChanges.
+   - 1-3. The changes also apply to the CRDT. The CRDT is only updated by changes.
 2. Pushing Changes to Server: Client checks LocalChanges of Document at specific intervals and sends them to the `Server`.
 3. Propagating Changes to Peers: Server stores changes received by the Client and propagates them to other peers who subscribe the Document.
 
