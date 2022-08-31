@@ -84,6 +84,7 @@ func newUpdateCommand() *cobra.Command {
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
 			if err != nil {
+				// TODO(chacha912): consider creating the error details type to remove the dependency on gRPC.
 				st := status.Convert(err)
 				for _, detail := range st.Details() {
 					switch t := detail.(type) {
