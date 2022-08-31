@@ -199,7 +199,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
-		project, err := adminCli.CreateProject(context.Background(), t.Name())
+		project, err := adminCli.CreateProject(context.Background(), "success-webhook-after-retries")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
 		_, err = adminCli.UpdateProject(
@@ -241,7 +241,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
-		project, err := adminCli.CreateProject(context.Background(), t.Name())
+		project, err := adminCli.CreateProject(context.Background(), "fail-webhook-after-retries")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
 		_, err = adminCli.UpdateProject(
@@ -294,7 +294,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
-		project, err := adminCli.CreateProject(context.Background(), t.Name())
+		project, err := adminCli.CreateProject(context.Background(), "auth-request-cache")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
 		_, err = adminCli.UpdateProject(
@@ -370,7 +370,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
-		project, err := adminCli.CreateProject(context.Background(), t.Name())
+		project, err := adminCli.CreateProject(context.Background(), "unauth-request-cache")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
 		_, err = adminCli.UpdateProject(
