@@ -19,6 +19,7 @@ package main
 import (
 	"fmt"
 	"runtime"
+	"runtime/debug"
 
 	"github.com/spf13/cobra"
 
@@ -31,12 +32,25 @@ func newVersionCmd() *cobra.Command {
 		Short: "Print the version number of Yorkie",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Yorkie: %s\n", version.Version)
-			fmt.Printf("Commit: %s\n", version.GitCommit)
+			fmt.Printf("Commit: %s\n", getBuildInfoByKey("vcs.revision"))
 			fmt.Printf("Go: %s\n", runtime.Version())
-			fmt.Printf("Build date: %s\n", version.BuildDate)
+			fmt.Printf("Build date: %s\n", getBuildInfoByKey("vcs.time"))
 			return nil
 		},
 	}
+}
+
+func getBuildInfoByKey(key string) string {
+	return func() string {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			for _, setting := range info.Settings {
+				if setting.Key == key {
+					return setting.Value
+				}
+			}
+		}
+		return ""
+	}()
 }
 
 func init() {
