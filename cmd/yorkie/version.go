@@ -26,15 +26,18 @@ import (
 	"github.com/yorkie-team/yorkie/internal/version"
 )
 
+const commitRevisionKey = "vcs.revision"
+const buildTimeKey = "vcs.time"
+
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print the version number of Yorkie",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Yorkie: %s\n", version.Version)
-			fmt.Printf("Commit: %s\n", getBuildInfoByKey("vcs.revision"))
+			fmt.Printf("Commit: %s\n", getBuildInfoByKey(commitRevisionKey))
 			fmt.Printf("Go: %s\n", runtime.Version())
-			fmt.Printf("Build date: %s\n", getBuildInfoByKey("vcs.time"))
+			fmt.Printf("Build date: %s\n", getBuildInfoByKey(buildTimeKey))
 			return nil
 		},
 	}
