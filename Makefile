@@ -2,6 +2,12 @@ YORKIE_VERSION := 0.2.17
 
 GO_PROJECT = github.com/yorkie-team/yorkie
 
+ifeq ($(OS),Windows_NT)
+    EXECUTABLE = ./bin/yorkie.exe
+else
+    EXECUTABLE = ./bin/yorkie
+endif
+
 # inject the version number into the golang version package using the -X linker flag
 GO_LDFLAGS ?=
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.Version=${YORKIE_VERSION}
