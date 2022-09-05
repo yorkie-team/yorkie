@@ -7,6 +7,13 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.18] - 2022-09-05
+
+### Added
+
+- Bind project and user with owner field: #398
+- Validate fields when creating or updating a project: #399
+
 ## [0.2.17] - 2022-08-25
 
 ### Added
