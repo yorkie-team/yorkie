@@ -22,6 +22,9 @@ import "google/protobuf/wrappers.proto";
 
 option go_package = ".;v1";
 
+option java_multiple_files = true;
+option java_package = "dev.yorkie.api.v1.resources";
+
 /////////////////////////////////////////
 // Messages for ChangePack             //
 /////////////////////////////////////////
