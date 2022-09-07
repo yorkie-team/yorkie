@@ -21,6 +21,9 @@ import "yorkie/v1/resources.proto";
 
 option go_package = ".;v1";
 
+option java_multiple_files = true;
+option java_package = "dev.yorkie.api.v1";
+
 // Yorkie is a service that provides a API for SDKs.
 service YorkieService {
   rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
