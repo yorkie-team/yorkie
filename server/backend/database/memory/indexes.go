@@ -38,20 +38,20 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
-				"owner_id": {
-					Name:   "owner_id",
-					Unique: true,
+				"owner_name": {
+					Name:   "owner_name",
+					Unique: false,
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "Owner"},
-							&memdb.StringFieldIndex{Field: "ID"},
+							&memdb.StringFieldIndex{Field: "Name"},
 						},
 					},
 				},
-				"name": {
-					Name:    "name",
-					Unique:  true,
-					Indexer: &memdb.StringFieldIndex{Field: "Name"},
+				"owner": {
+					Name:    "owner",
+					Unique:  false,
+					Indexer: &memdb.StringFieldIndex{Field: "Owner"},
 				},
 				"public_key": {
 					Name:    "public_key",

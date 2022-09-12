@@ -42,6 +42,7 @@ func TestClient(t *testing.T) {
 	assert.NoError(t, err)
 
 	dummyOwnerID := types.ID("000000000000000000000000")
+	otherOwnerID := types.ID("000000000000000000000001")
 
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {
 		info, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
@@ -101,5 +102,17 @@ func TestClient(t *testing.T) {
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = cli.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
+	})
+
+	t.Run("FindProjectInfoByName test", func(t *testing.T) {
+		info1, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+		_, err = cli.CreateProjectInfo(ctx, t.Name(), otherOwnerID)
+		assert.NoError(t, err)
+
+		info2, err := cli.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, info1.ID, info2.ID)
+
 	})
 }

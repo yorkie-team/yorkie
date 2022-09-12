@@ -83,7 +83,7 @@ func (d *DB) FindProjectInfoByName(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblProjects, "name", name)
+	raw, err := txn.First(tblProjects, "owner_name", owner.String(), name)
 	if err != nil {
 		return nil, err
 	}
@@ -92,9 +92,6 @@ func (d *DB) FindProjectInfoByName(
 	}
 
 	info := raw.(*database.ProjectInfo).DeepCopy()
-	if info.Owner != owner {
-		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectNotFound)
-	}
 
 	return info, nil
 }
@@ -205,7 +202,7 @@ func (d *DB) CreateProjectInfo(
 
 	// NOTE(hackerwins): Check if the project already exists.
 	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
-	existing, err := txn.First(tblProjects, "name", name)
+	existing, err := txn.First(tblProjects, "owner_name", owner.String(), name)
 	if err != nil {
 		return nil, err
 	}
@@ -231,12 +228,10 @@ func (d *DB) ListProjectInfos(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	defaultProjectID := database.DefaultProjectID
 	iter, err := txn.LowerBound(
 		tblProjects,
-		"owner_id",
+		"owner",
 		owner.String(),
-		defaultProjectID.String(),
 	)
 	if err != nil {
 		return nil, err
@@ -279,7 +274,7 @@ func (d *DB) UpdateProjectInfo(
 	}
 
 	if fields.Name != nil {
-		existing, err := txn.First(tblProjects, "name", *fields.Name)
+		existing, err := txn.First(tblProjects, "owner_name", owner.String(), *fields.Name)
 		if err != nil {
 			return nil, err
 		}

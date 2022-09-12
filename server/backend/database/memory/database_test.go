@@ -75,6 +75,8 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("project test", func(t *testing.T) {
+		newName := "changed-name"
+
 		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID)
 		assert.NoError(t, err)
 
@@ -87,6 +89,32 @@ func TestDB(t *testing.T) {
 		projects, err := db.ListProjectInfos(ctx, dummyOwnerID)
 		assert.NoError(t, err)
 		assert.Len(t, projects, len(suffixes))
+
+		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		project, err := db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, project.Name, t.Name())
+
+		fields := &types.UpdatableProjectFields{
+			Name: &newName,
+		}
+		err = fields.Validate()
+		assert.NoError(t, err)
+		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, project.ID, fields)
+		assert.NoError(t, err)
+
+		_, err = db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
+		assert.ErrorIs(t, err, database.ErrProjectNotFound)
+
+		name := t.Name()
+		fields.Name = &name
+		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, project.ID, fields)
+		assert.NoError(t, err)
+
+		_, err = db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
+		assert.NoError(t, err)
 	})
 
 	t.Run("user test", func(t *testing.T) {
