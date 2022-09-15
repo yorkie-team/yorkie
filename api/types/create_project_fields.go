@@ -24,7 +24,7 @@ import (
 // CreateProjectFields is a set of fields that use to create a project.
 type CreateProjectFields struct {
 	// Name is the name of this project.
-	Name *string `bson:"name,omitempty" validate:"required,min=2,max=30,slug,reservedname"`
+	Name *string `bson:"name,omitempty" validate:"required,min=2,max=30,slug,reserved_project_name"`
 }
 
 // Validate validates the CreateProjectFields.
