@@ -58,13 +58,13 @@ func hasAlphaNumSpecial(str string) bool {
 	// NOTE(chacha912): Re2 in Go doesn't support lookahead assertion(?!re)
 	// so iterate over the string to check if the regular expression is matching.
 	// https://github.com/golang/go/issues/18868
-	testRegexs := []*regexp.Regexp{
+	testRegexes := []*regexp.Regexp{
 		alphaNumberSpecialCharRegex,
 		containAlphaRegex,
 		containNumberRegex,
 		containSpecialCharRegex}
 
-	for _, regex := range testRegexs {
+	for _, regex := range testRegexes {
 		t := regex.MatchString(str)
 		if !t {
 			isValid = false
