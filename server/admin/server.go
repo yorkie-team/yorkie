@@ -152,6 +152,11 @@ func (s *Server) SignUp(
 	ctx context.Context,
 	req *api.SignUpRequest,
 ) (*api.SignUpResponse, error) {
+	fields := &types.SignupFields{Username: &req.Username, Password: &req.Password}
+	if err := fields.Validate(); err != nil {
+		return nil, err
+	}
+
 	user, err := users.SignUp(ctx, s.backend, req.Username, req.Password)
 	if err != nil {
 		return nil, err
