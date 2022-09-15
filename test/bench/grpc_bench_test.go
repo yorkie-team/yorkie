@@ -103,7 +103,7 @@ func benchmarkUpdateAndSync(
 func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli *admin.Client) error {
 	for i := 0; i < cnt; i++ {
 		name := fmt.Sprintf("name%d", i)
-		authWebhookURL := fmt.Sprintf("authWebhookURL%d", i)
+		authWebhookURL := fmt.Sprintf("http://authWebhookURL%d", i)
 		authWebhookMethods := []string{}
 		for _, m := range types.AuthMethods() {
 			authWebhookMethods = append(authWebhookMethods, string(m))
