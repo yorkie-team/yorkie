@@ -154,7 +154,6 @@ func (s *Server) SignUp(
 ) (*api.SignUpResponse, error) {
 	fields := &types.SignupFields{Username: &req.Username, Password: &req.Password}
 	if err := fields.Validate(); err != nil {
-		fmt.Println(fields, err)
 		return nil, err
 	}
 
