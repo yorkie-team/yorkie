@@ -35,12 +35,19 @@ func TestUser(t *testing.T) {
 
 	t.Run("user test", func(t *testing.T) {
 		ctx := context.Background()
-		username := "admin@yorkie.dev"
+		username := "test_name"
+		password := "password123!"
 
-		_, err := adminCli.LogIn(ctx, username, "admin")
+		_, err := adminCli.LogIn(ctx, username, password)
 		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 
-		_, err = adminCli.SignUp(ctx, username, "admin")
+		_, err = adminCli.SignUp(ctx, "name !@#", password)
+		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+
+		_, err = adminCli.SignUp(ctx, username, "pass")
+		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+
+		_, err = adminCli.SignUp(ctx, username, password)
 		assert.NoError(t, err)
 
 		_, err = adminCli.LogIn(ctx, username, "asdf")
