@@ -74,15 +74,13 @@ func (n *RHTNode) RemovedAt() *time.Ticket {
 // RHT is a hashtable with logical clock(Replicated hashtable).
 // For more details about RHT: http://csl.skku.edu/papers/jpdc11.pdf
 type RHT struct {
-	nodeMapByKey       map[string]*RHTNode
-	nodeMapByCreatedAt map[string]*RHTNode
+	nodeMapByKey map[string]*RHTNode
 }
 
 // NewRHT creates a new instance of RHT.
 func NewRHT() *RHT {
 	return &RHT{
-		nodeMapByKey:       make(map[string]*RHTNode),
-		nodeMapByCreatedAt: make(map[string]*RHTNode),
+		nodeMapByKey: make(map[string]*RHTNode),
 	}
 }
 
@@ -112,7 +110,6 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
 		newNode := newRHTNode(k, v, executedAt)
 		rht.nodeMapByKey[k] = newNode
-		rht.nodeMapByCreatedAt[executedAt.Key()] = newNode
 	}
 }
 
