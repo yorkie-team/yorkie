@@ -23,15 +23,27 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+const (
+	// NOTE(DongjinS): regular expression is referenced unreserved characters
+	// (https://datatracker.ietf.org/doc/html/rfc3986#section-2.3)
+	// and copied from https://gist.github.com/dpk/4757681
+	slugRegexString                   = `^[a-z0-9\-._~]+$`
+	containAlphaRegexString           = `[a-zA-Z]`
+	containNumberRegexString          = `[0-9]`
+	containSpecialCharRegexString     = `[\{\}\[\]\/?.,;:|\)*~!^\-_+<>@\#$%&\\\=\(\'\"\x60]`
+	alphaNumberSpecialCharRegexString = `^[a-zA-Z0-9\{\}\[\]\/?.,;:|\)*~!^\-_+<>@\#$%&\\\=\(\'\"\x60]+$`
+)
+
 var (
 	// reservedProjectNames is a map of reserved names. It is used to check if the
 	// given project name is reserved or not.
 	reservedProjectNames = map[string]bool{"new": true, "default": true}
 
-	// NOTE(DongjinS): regular expression is referenced unreserved characters
-	// (https://datatracker.ietf.org/doc/html/rfc3986#section-2.3)
-	// and copied from https://gist.github.com/dpk/4757681
-	slugRegex = regexp.MustCompile(`^[a-z0-9\-._~]+$`)
+	slugRegex                   = regexp.MustCompile(slugRegexString)
+	containAlphaRegex           = regexp.MustCompile(containAlphaRegexString)
+	containNumberRegex          = regexp.MustCompile(containNumberRegexString)
+	containSpecialCharRegex     = regexp.MustCompile(containSpecialCharRegexString)
+	alphaNumberSpecialCharRegex = regexp.MustCompile(alphaNumberSpecialCharRegexString)
 )
 
 func isReservedProjectName(name string) bool {
@@ -46,13 +58,14 @@ func hasAlphaNumSpecial(str string) bool {
 	// NOTE(chacha912): Re2 in Go doesn't support lookahead assertion(?!re)
 	// so iterate over the string to check if the regular expression is matching.
 	// https://github.com/golang/go/issues/18868
-	testRegexs := []string{
-		`^[a-zA-Z0-9\{\}\[\]\/?.,;:|\)*~!^\-_+<>@\#$%&\\\=\(\'\"\x60]+$`,
-		`[a-zA-Z]`,
-		`[0-9]`,
-		`[\{\}\[\]\/?.,;:|\)*~!^\-_+<>@\#$%&\\\=\(\'\"\x60]`}
-	for _, test := range testRegexs {
-		t, _ := regexp.MatchString(test, str)
+	testRegexs := []*regexp.Regexp{
+		alphaNumberSpecialCharRegex,
+		containAlphaRegex,
+		containNumberRegex,
+		containSpecialCharRegex}
+
+	for _, regex := range testRegexs {
+		t := regex.MatchString(str)
 		if !t {
 			isValid = false
 			break
