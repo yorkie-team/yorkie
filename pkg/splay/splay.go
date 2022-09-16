@@ -220,9 +220,9 @@ func (t *Tree[V]) String() string {
 	return builder.String()
 }
 
-// AnnotatedString returns a string containing the metadata of the Node
+// StructureAsString returns a string containing the metadata of the Node
 // for debugging purpose.
-func (t *Tree[V]) AnnotatedString() string {
+func (t *Tree[V]) StructureAsString() string {
 	var builder strings.Builder
 
 	traverseInOrder(t.root, func(node *Node[V]) {
@@ -286,8 +286,8 @@ func (t *Tree[V]) Delete(node *Node[V]) {
 	}
 
 	if leftTree.root != nil {
-		maxNode := leftTree.maximum()
-		leftTree.Splay(maxNode)
+		rightmost := leftTree.rightmost()
+		leftTree.Splay(rightmost)
 		leftTree.root.right = rightTree.root
 		if rightTree.root != nil {
 			rightTree.root.parent = leftTree.root
@@ -379,7 +379,7 @@ func (t *Tree[V]) rotateRight(pivot *Node[V]) {
 	t.UpdateWeight(pivot)
 }
 
-func (t *Tree[V]) maximum() *Node[V] {
+func (t *Tree[V]) rightmost() *Node[V] {
 	node := t.root
 	for node.right != nil {
 		node = node.right

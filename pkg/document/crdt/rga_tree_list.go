@@ -224,10 +224,10 @@ func (a *RGATreeList) Len() int {
 	return a.size
 }
 
-// AnnotatedString returns a String containing the metadata of the node id
+// StructureAsString returns a String containing the metadata of the node id
 // for debugging purpose.
-func (a *RGATreeList) AnnotatedString() string {
-	return a.nodeMapByIndex.AnnotatedString()
+func (a *RGATreeList) StructureAsString() string {
+	return a.nodeMapByIndex.StructureAsString()
 }
 
 // Delete deletes the node of the given index.
