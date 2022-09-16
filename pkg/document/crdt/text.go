@@ -52,9 +52,9 @@ func (t *TextValue) Marshal() string {
 	return EscapeString(t.value)
 }
 
-// AnnotatedString returns a String containing the metadata of this value
+// structureAsString returns a String containing the metadata of this value
 // for debugging purpose.
-func (t *TextValue) AnnotatedString() string {
+func (t *TextValue) structureAsString() string {
 	return EscapeString(t.value)
 }
 
@@ -210,10 +210,10 @@ func (t *Text) Nodes() []*RGATreeSplitNode[*TextValue] {
 	return t.rgaTreeSplit.nodes()
 }
 
-// AnnotatedString returns a String containing the metadata of the text
+// StructureAsString returns a String containing the metadata of the text
 // for debugging purpose.
-func (t *Text) AnnotatedString() string {
-	return t.rgaTreeSplit.AnnotatedString()
+func (t *Text) StructureAsString() string {
+	return t.rgaTreeSplit.StructureAsString()
 }
 
 // CheckWeight returns false when there is an incorrect weight node.
