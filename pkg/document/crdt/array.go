@@ -88,10 +88,10 @@ func (a *Array) Marshal() string {
 	return a.elements.Marshal()
 }
 
-// AnnotatedString returns a String containing the metadata of the elements
+// StructureAsString returns a String containing the metadata of the elements
 // for debugging purpose.
-func (a *Array) AnnotatedString() string {
-	return a.elements.AnnotatedString()
+func (a *Array) StructureAsString() string {
+	return a.elements.StructureAsString()
 }
 
 // DeepCopy copies itself deeply.

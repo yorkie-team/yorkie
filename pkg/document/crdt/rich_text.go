@@ -70,9 +70,9 @@ func (t *RichTextValue) Marshal() string {
 	)
 }
 
-// AnnotatedString returns a String containing the metadata of this value
+// structureAsString returns a String containing the metadata of this value
 // for debugging purpose.
-func (t *RichTextValue) AnnotatedString() string {
+func (t *RichTextValue) structureAsString() string {
 	return fmt.Sprintf(
 		`%s "%s"`,
 		t.attrs.Marshal(),
@@ -270,10 +270,10 @@ func (t *RichText) Nodes() []*RGATreeSplitNode[*RichTextValue] {
 	return t.rgaTreeSplit.nodes()
 }
 
-// AnnotatedString returns a String containing the metadata of the text
+// StructureAsString returns a String containing the metadata of the text
 // for debugging purpose.
-func (t *RichText) AnnotatedString() string {
-	return t.rgaTreeSplit.AnnotatedString()
+func (t *RichText) StructureAsString() string {
+	return t.rgaTreeSplit.StructureAsString()
 }
 
 // removedNodesLen returns length of removed nodes
