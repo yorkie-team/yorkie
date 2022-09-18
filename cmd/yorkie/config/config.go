@@ -18,6 +18,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
 )
@@ -64,13 +65,14 @@ func LoadToken(addr string) (string, error) {
 
 // Load loads the configuration from the given path.
 func Load() (*Config, error) {
-	file, err := os.Open(configPath())
+	confPath := configPath()
+	file, err := os.Open(confPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return New(), nil
 		}
 
-		return nil, err
+		return nil, fmt.Errorf("failed to open config file %s: %w", confPath, err)
 	}
 	defer func() {
 		_ = file.Close()
@@ -78,7 +80,7 @@ func Load() (*Config, error) {
 
 	var config *Config
 	if err := json.NewDecoder(file).Decode(&config); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode config file: %w", err)
 	}
 
 	return config, nil
@@ -86,16 +88,17 @@ func Load() (*Config, error) {
 
 // Save saves the configuration to the given path.
 func Save(config *Config) error {
-	file, err := os.Create(configPath())
+	confPath := configPath()
+	file, err := os.Create(confPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create config file %s: %w", confPath, err)
 	}
 	defer func() {
 		_ = file.Close()
 	}()
 
 	if err := json.NewEncoder(file).Encode(config); err != nil {
-		return err
+		return fmt.Errorf("failed to encode config file: %w", err)
 	}
 
 	return nil

@@ -59,7 +59,12 @@ func (m *TokenManager) Generate(username string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(m.secretKey))
+	signedStr, err := token.SignedString([]byte(m.secretKey))
+	if err != nil {
+		return "", fmt.Errorf("failed to signed token: %w", err)
+	}
+
+	return signedStr, nil
 }
 
 // Verify verifies the given token.
@@ -73,7 +78,7 @@ func (m *TokenManager) Verify(token string) (*UserClaims, error) {
 		return []byte(m.secretKey), nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse jwt %s: %w", token, err)
 	}
 
 	return claims, nil
