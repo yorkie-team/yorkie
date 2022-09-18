@@ -18,6 +18,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -80,7 +81,7 @@ func New(opts ...Option) (*Client, error) {
 	if logger == nil {
 		l, err := zap.NewProduction()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to initialize the logger: %w", err)
 		}
 		logger = l
 	}
@@ -110,7 +111,7 @@ func Dial(adminAddr string, opts ...Option) (*Client, error) {
 func (c *Client) Dial(adminAddr string) error {
 	conn, err := grpc.Dial(adminAddr, c.dialOptions...)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to dial grpc: %w", err)
 	}
 
 	c.conn = conn
@@ -121,7 +122,12 @@ func (c *Client) Dial(adminAddr string) error {
 
 // Close closes the connection to the admin service.
 func (c *Client) Close() error {
-	return c.conn.Close()
+	err := c.conn.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close grpc client: %w", err)
+	}
+
+	return nil
 }
 
 // LogIn logs in a user.
@@ -135,7 +141,7 @@ func (c *Client) LogIn(
 		Password: password,
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to log in the user %s: %w", username, err)
 	}
 
 	c.authInterceptor.SetToken(response.Token)
@@ -154,10 +160,15 @@ func (c *Client) SignUp(
 		Password: password,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to sign up a new user: %w", err)
 	}
 
-	return converter.FromUser(response.User)
+	user, err := converter.FromUser(response.User)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert a user: %w", err)
+	}
+
+	return user, nil
 }
 
 // CreateProject creates a new project.
@@ -169,10 +180,15 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create a project: %w", err)
 	}
 
-	return converter.FromProject(response.Project)
+	project, err := converter.FromProject(response.Project)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert a project: %w", err)
+	}
+
+	return project, nil
 }
 
 // GetProject gets the project by name.
@@ -182,10 +198,15 @@ func (c *Client) GetProject(ctx context.Context, name string) (*types.Project, e
 		&api.GetProjectRequest{Name: name},
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get a proejct: %w", err)
 	}
 
-	return converter.FromProject(response.Project)
+	project, err := converter.FromProject(response.Project)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert a project: %w", err)
+	}
+
+	return project, nil
 }
 
 // ListProjects lists all projects.
@@ -195,10 +216,15 @@ func (c *Client) ListProjects(ctx context.Context) ([]*types.Project, error) {
 		&api.ListProjectsRequest{},
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get a list of project: %w", err)
 	}
 
-	return converter.FromProjects(response.Projects)
+	projects, err := converter.FromProjects(response.Projects)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert projects: %w", err)
+	}
+
+	return projects, nil
 }
 
 // UpdateProject updates an existing project.
@@ -209,7 +235,7 @@ func (c *Client) UpdateProject(
 ) (*types.Project, error) {
 	pbProjectField, err := converter.ToUpdatableProjectFields(fields)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to convert project fields to protobuf format: %w", err)
 	}
 
 	response, err := c.client.UpdateProject(ctx, &api.UpdateProjectRequest{
@@ -217,10 +243,15 @@ func (c *Client) UpdateProject(
 		Fields: pbProjectField,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to update a project: %w", err)
 	}
 
-	return converter.FromProject(response.Project)
+	project, err := converter.FromProject(response.Project)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert a project: %w", err)
+	}
+
+	return project, err
 }
 
 // ListDocuments lists documents.
@@ -232,10 +263,15 @@ func (c *Client) ListDocuments(ctx context.Context, projectName string) ([]*type
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get a list of document: %w", err)
 	}
 
-	return converter.FromDocumentSummaries(response.Documents)
+	summaries, err := converter.FromDocumentSummaries(response.Documents)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert document summaries: %w", err)
+	}
+
+	return summaries, nil
 }
 
 // ListChangeSummaries returns the change summaries of the given document.
@@ -254,14 +290,13 @@ func (c *Client) ListChangeSummaries(
 		PageSize:    pageSize,
 		IsForward:   isForward,
 	})
-
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get a list of change: %w", err)
 	}
 
 	changes, err := converter.FromChanges(resp.Changes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to convert Changes in response: %w", err)
 	}
 
 	if len(changes) == 0 {
@@ -277,7 +312,7 @@ func (c *Client) ListChangeSummaries(
 		ServerSeq:   seq,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get snapshot meta: %w", err)
 	}
 
 	newDoc, err := document.NewInternalDocumentFromSnapshot(
@@ -286,14 +321,14 @@ func (c *Client) ListChangeSummaries(
 		snapshotMeta.Lamport,
 		snapshotMeta.Snapshot,
 	)
-
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create an internal document by snapshot: %w", err)
 	}
+
 	var summaries []*types.ChangeSummary
 	for _, c := range changes {
 		if err := newDoc.ApplyChanges(c); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to apply remote changes: %w", err)
 		}
 
 		// TODO(hackerwins): doc.Marshal is expensive function. We need to optimize it.

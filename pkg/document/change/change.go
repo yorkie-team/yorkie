@@ -17,6 +17,8 @@
 package change
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -47,7 +49,7 @@ func New(id ID, message string, operations []operations.Operation) *Change {
 func (c *Change) Execute(root *crdt.Root) error {
 	for _, op := range c.operations {
 		if err := op.Execute(root); err != nil {
-			return err
+			return fmt.Errorf("failed to execute operation: %w", err)
 		}
 	}
 	return nil

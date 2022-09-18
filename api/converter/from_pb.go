@@ -35,7 +35,7 @@ import (
 func FromUser(pbUser *api.User) (*types.User, error) {
 	createdAt, err := protoTypes.TimestampFromProto(pbUser.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to convert a CreatedAt: %w", err)
 	}
 
 	return &types.User{
@@ -62,11 +62,11 @@ func FromProjects(pbProjects []*api.Project) ([]*types.Project, error) {
 func FromProject(pbProject *api.Project) (*types.Project, error) {
 	createdAt, err := protoTypes.TimestampFromProto(pbProject.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to convert a CreatedAt: %w", err)
 	}
 	updatedAt, err := protoTypes.TimestampFromProto(pbProject.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to convert a UpdatedAt: %w", err)
 	}
 	return &types.Project{
 		ID:                 types.ID(pbProject.Id),
@@ -121,7 +121,7 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary
 func FromClient(pbClient *api.Client) (*types.Client, error) {
 	id, err := time.ActorIDFromBytes(pbClient.Id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to convert Bytes to ActorID: %w", err)
 	}
 
 	return &types.Client{
@@ -198,7 +198,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 func fromChangeID(id *api.ChangeID) (change.ID, error) {
 	actorID, err := time.ActorIDFromBytes(id.ActorId)
 	if err != nil {
-		return change.InitialID, err
+		return change.InitialID, fmt.Errorf("failed to convert Bytes to ActorID: %w", err)
 	}
 	return change.NewID(
 		id.ClientSeq,

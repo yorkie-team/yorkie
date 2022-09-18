@@ -18,6 +18,8 @@
 package types
 
 import (
+	"fmt"
+
 	"github.com/go-playground/locales/en"
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
@@ -68,7 +70,11 @@ func registerValidation(tag string, fn validator.Func) {
 // that registers translations against the provided tag with given msg.
 func registerTranslation(tag, msg string) {
 	if err := defaultValidator.RegisterTranslation(tag, trans, func(ut ut.Translator) error {
-		return ut.Add(tag, msg, true)
+		if err := ut.Add(tag, msg, true); err != nil {
+			return fmt.Errorf("failed to add a normal translation: %w", err)
+		}
+
+		return nil
 	}, func(ut ut.Translator, fe validator.FieldError) string {
 		t, _ := ut.T(tag, fe.Field())
 		return t

@@ -34,7 +34,7 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 
 	pbElem := &api.JSONElement{}
 	if err := proto.Unmarshal(snapshot, pbElem); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal a element: %w", err)
 	}
 
 	obj, err := fromJSONObject(pbElem.GetJsonObject())

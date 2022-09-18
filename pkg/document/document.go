@@ -71,7 +71,7 @@ func (d *Document) Update(
 	if ctx.HasOperations() {
 		c := ctx.ToChange()
 		if err := c.Execute(d.doc.root); err != nil {
-			return err
+			return fmt.Errorf("failed to execute change: %w", err)
 		}
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
@@ -94,7 +94,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 
 		for _, c := range pack.Changes {
 			if err := c.Execute(d.clone); err != nil {
-				return err
+				return fmt.Errorf("failed to execute change: %w", err)
 			}
 		}
 

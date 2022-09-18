@@ -129,8 +129,13 @@ func NewAuthWebhookResponse(reader io.Reader) (*AuthWebhookResponse, error) {
 func (r *AuthWebhookResponse) Write(writer io.Writer) (int, error) {
 	resBody, err := json.Marshal(r)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to marshal a AuthWebhookResponse: %w", err)
 	}
 
-	return writer.Write(resBody)
+	bytesCnt, err := writer.Write(resBody)
+	if err != nil {
+		return 0, fmt.Errorf("failed to write bytes: %w", err)
+	}
+
+	return bytesCnt, nil
 }

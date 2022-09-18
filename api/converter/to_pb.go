@@ -36,7 +36,7 @@ import (
 func ToUser(user *types.User) (*api.User, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(user.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to convert a CreatedAt: %w", err)
 	}
 
 	return &api.User{
@@ -64,11 +64,11 @@ func ToProjects(projects []*types.Project) ([]*api.Project, error) {
 func ToProject(project *types.Project) (*api.Project, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(project.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("faield to convert a CreatedAt: %w", err)
 	}
 	pbUpdatedAt, err := protoTypes.TimestampProto(project.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("faield to convert a UpdatedAt: %w", err)
 	}
 
 	return &api.Project{
