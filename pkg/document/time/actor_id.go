@@ -132,7 +132,7 @@ func (id *ActorID) MarshalJSON() ([]byte, error) {
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal ActorID %s: %w", id.String(), err)
+		return nil, fmt.Errorf("marshal ActorID %s: %w", id.String(), err)
 	}
 
 	return bytes, nil
@@ -145,7 +145,7 @@ func (id *ActorID) UnmarshalJSON(bytes []byte) error {
 		Bytes: id.bytes,
 	})
 	if err := json.Unmarshal(bytes, temp); err != nil {
-		return fmt.Errorf("failed to unmarshal ActorID %s: %w", id.String(), err)
+		return fmt.Errorf("unmarshal ActorID %s: %w", id.String(), err)
 	}
 
 	id.bytes = temp.Bytes

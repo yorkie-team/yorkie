@@ -71,7 +71,7 @@ func registerValidation(tag string, fn validator.Func) {
 func registerTranslation(tag, msg string) {
 	if err := defaultValidator.RegisterTranslation(tag, trans, func(ut ut.Translator) error {
 		if err := ut.Add(tag, msg, true); err != nil {
-			return fmt.Errorf("failed to add a normal translation: %w", err)
+			return fmt.Errorf("add normal translation: %w", err)
 		}
 
 		return nil

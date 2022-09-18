@@ -36,7 +36,7 @@ import (
 func ToUser(user *types.User) (*api.User, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(user.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert a CreatedAt: %w", err)
+		return nil, fmt.Errorf("convert CreatedAt: %w", err)
 	}
 
 	return &api.User{

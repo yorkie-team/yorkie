@@ -72,7 +72,7 @@ func Load() (*Config, error) {
 			return New(), nil
 		}
 
-		return nil, fmt.Errorf("failed to open config file %s: %w", confPath, err)
+		return nil, fmt.Errorf("open config file %s: %w", confPath, err)
 	}
 	defer func() {
 		_ = file.Close()
@@ -80,7 +80,7 @@ func Load() (*Config, error) {
 
 	var config *Config
 	if err := json.NewDecoder(file).Decode(&config); err != nil {
-		return nil, fmt.Errorf("failed to decode config file: %w", err)
+		return nil, fmt.Errorf("decode config file: %w", err)
 	}
 
 	return config, nil
@@ -91,14 +91,14 @@ func Save(config *Config) error {
 	confPath := configPath()
 	file, err := os.Create(confPath)
 	if err != nil {
-		return fmt.Errorf("failed to create config file %s: %w", confPath, err)
+		return fmt.Errorf("create config file %s: %w", confPath, err)
 	}
 	defer func() {
 		_ = file.Close()
 	}()
 
 	if err := json.NewEncoder(file).Encode(config); err != nil {
-		return fmt.Errorf("failed to encode config file: %w", err)
+		return fmt.Errorf("encode config file: %w", err)
 	}
 
 	return nil

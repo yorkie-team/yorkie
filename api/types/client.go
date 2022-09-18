@@ -18,7 +18,7 @@ func NewClient(encoded []byte) (*Client, error) {
 	cli := &Client{}
 	err := json.Unmarshal(encoded, cli)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal a client: %w", err)
+		return nil, fmt.Errorf("unmarshal client: %w", err)
 	}
 	return cli, nil
 }
@@ -27,7 +27,7 @@ func NewClient(encoded []byte) (*Client, error) {
 func (c *Client) Marshal() (string, error) {
 	encoded, err := json.Marshal(c)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal a client: %w", err)
+		return "", fmt.Errorf("marshal client: %w", err)
 	}
 
 	return string(encoded), nil

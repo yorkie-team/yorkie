@@ -41,7 +41,7 @@ func (id *ID) String() string {
 func (id *ID) Bytes() ([]byte, error) {
 	decoded, err := hex.DecodeString(id.String())
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode id %s: %w", id.String(), err)
+		return nil, fmt.Errorf("decode id %s: %w", id.String(), err)
 	}
 	return decoded, nil
 }
@@ -69,7 +69,7 @@ func (id *ID) ToActorID() (*time.ActorID, error) {
 
 	actorID, err := time.ActorIDFromBytes(b)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert Bytes to ActorID: %w", err)
+		return nil, fmt.Errorf("convert bytes to ActorID: %w", err)
 	}
 
 	return actorID, nil

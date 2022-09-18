@@ -70,7 +70,7 @@ func NewInternalDocumentFromSnapshot(
 ) (*InternalDocument, error) {
 	obj, err := converter.BytesToObject(snapshot)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert a snapshot: %w", err)
+		return nil, fmt.Errorf("convert snapshot: %w", err)
 	}
 
 	return &InternalDocument{
@@ -194,7 +194,7 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error {
 	rootObj, err := converter.BytesToObject(snapshot)
 	if err != nil {
-		return fmt.Errorf("failed to convert a snapshot: %w", err)
+		return fmt.Errorf("convert snapshot: %w", err)
 	}
 
 	d.root = crdt.NewRoot(rootObj)
@@ -207,7 +207,7 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error
 func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 	for _, c := range changes {
 		if err := c.Execute(d.root); err != nil {
-			return fmt.Errorf("failed to execute change: %w", err)
+			return fmt.Errorf("execute change: %w", err)
 		}
 		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
 	}

@@ -35,7 +35,7 @@ func ObjectToBytes(obj *crdt.Object) ([]byte, error) {
 
 	bytes, err := proto.Marshal(pbElem)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal element: %w", err)
+		return nil, fmt.Errorf("marshal element: %w", err)
 	}
 	return bytes, nil
 }

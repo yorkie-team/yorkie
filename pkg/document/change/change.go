@@ -49,7 +49,7 @@ func New(id ID, message string, operations []operations.Operation) *Change {
 func (c *Change) Execute(root *crdt.Root) error {
 	for _, op := range c.operations {
 		if err := op.Execute(root); err != nil {
-			return fmt.Errorf("failed to execute operation: %w", err)
+			return fmt.Errorf("execute operation: %w", err)
 		}
 	}
 	return nil

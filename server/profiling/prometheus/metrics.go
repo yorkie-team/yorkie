@@ -54,13 +54,13 @@ func NewMetrics() (*Metrics, error) {
 	serverMetrics := grpcprometheus.NewServerMetrics()
 
 	if err := reg.Register(serverMetrics); err != nil {
-		return nil, fmt.Errorf("failed to implement registerer for serverMetrics: %w", err)
+		return nil, fmt.Errorf("implement registerer for serverMetrics: %w", err)
 	}
 	if err := reg.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
-		return nil, fmt.Errorf("failed to implement registerer for process collector: %w", err)
+		return nil, fmt.Errorf("implement registerer for process collector: %w", err)
 	}
 	if err := reg.Register(collectors.NewGoCollector()); err != nil {
-		return nil, fmt.Errorf("failed to implement registerer for go collector: %w", err)
+		return nil, fmt.Errorf("implement registerer for go collector: %w", err)
 	}
 
 	metrics := &Metrics{
