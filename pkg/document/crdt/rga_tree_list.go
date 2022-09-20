@@ -100,7 +100,6 @@ func (n *RGATreeListNode) isRemoved() bool {
 type RGATreeList struct {
 	dummyHead          *RGATreeListNode
 	last               *RGATreeListNode
-	size               int
 	nodeMapByIndex     *splay.Tree[*RGATreeListNode]
 	nodeMapByCreatedAt map[string]*RGATreeListNode
 }
@@ -117,7 +116,6 @@ func NewRGATreeList() *RGATreeList {
 	return &RGATreeList{
 		dummyHead:          dummyHead,
 		last:               dummyHead,
-		size:               0,
 		nodeMapByIndex:     nodeMapByIndex,
 		nodeMapByCreatedAt: nodeMapByCreatedAt,
 	}
@@ -214,14 +212,13 @@ func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.
 	alreadyRemoved := node.isRemoved()
 	if node.elem.Remove(deletedAt) && !alreadyRemoved {
 		a.nodeMapByIndex.Splay(node.indexNode)
-		a.size--
 	}
 	return node
 }
 
 // Len returns length of this RGATreeList.
 func (a *RGATreeList) Len() int {
-	return a.size
+	return a.nodeMapByIndex.Len()
 }
 
 // StructureAsString returns a String containing the metadata of the node id
@@ -313,10 +310,6 @@ func (a *RGATreeList) release(node *RGATreeListNode) {
 
 	a.nodeMapByIndex.Delete(node.indexNode)
 	delete(a.nodeMapByCreatedAt, node.CreatedAt().Key())
-
-	if !node.isRemoved() {
-		a.size--
-	}
 }
 
 func (a *RGATreeList) insertAfter(
@@ -332,6 +325,4 @@ func (a *RGATreeList) insertAfter(
 
 	a.nodeMapByIndex.InsertAfter(prevNode.indexNode, newNode.indexNode)
 	a.nodeMapByCreatedAt[value.CreatedAt().Key()] = newNode
-
-	a.size++
 }
