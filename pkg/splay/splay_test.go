@@ -89,15 +89,20 @@ func TestSplayTree(t *testing.T) {
 
 		nodeH := tree.Insert(newSplayNode("H"))
 		assert.Equal(t, "[1,1]H", tree.StructureAsString())
+		assert.Equal(t, 1, tree.Len())
 		nodeE := tree.Insert(newSplayNode("E"))
 		assert.Equal(t, "[1,1]H[2,1]E", tree.StructureAsString())
+		assert.Equal(t, 2, tree.Len())
 		nodeL := tree.Insert(newSplayNode("LL"))
 		assert.Equal(t, "[1,1]H[2,1]E[4,2]LL", tree.StructureAsString())
+		assert.Equal(t, 4, tree.Len())
 		nodeO := tree.Insert(newSplayNode("O"))
 		assert.Equal(t, "[1,1]H[2,1]E[4,2]LL[5,1]O", tree.StructureAsString())
+		assert.Equal(t, 5, tree.Len())
 
 		tree.Delete(nodeE)
 		assert.Equal(t, "[4,1]H[3,2]LL[1,1]O", tree.StructureAsString())
+		assert.Equal(t, 4, tree.Len())
 
 		assert.Equal(t, tree.IndexOf(nodeH), 0)
 		assert.Equal(t, tree.IndexOf(nodeE), -1)

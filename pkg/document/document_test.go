@@ -160,6 +160,41 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("delete elements of array test", func(t *testing.T) {
+		doc := document.New("d1")
+		err := doc.Update(func(root *json.Object) error {
+			root.SetNewArray("data").AddInteger(0).AddInteger(1).AddInteger(2)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"data":[0,1,2]}`, doc.Marshal())
+		assert.Equal(t, 3, doc.Root().GetArray("data").Len())
+
+		err = doc.Update(func(root *json.Object) error {
+			root.GetArray("data").Delete(0)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"data":[1,2]}`, doc.Marshal())
+		assert.Equal(t, 2, doc.Root().GetArray("data").Len())
+
+		err = doc.Update(func(root *json.Object) error {
+			root.GetArray("data").Delete(1)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"data":[1]}`, doc.Marshal())
+		assert.Equal(t, 1, doc.Root().GetArray("data").Len())
+
+		err = doc.Update(func(root *json.Object) error {
+			root.GetArray("data").Delete(0)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"data":[]}`, doc.Marshal())
+		assert.Equal(t, 0, doc.Root().GetArray("data").Len())
+	})
+
 	t.Run("text test", func(t *testing.T) {
 		doc := document.New("d1")
 

@@ -156,6 +156,7 @@ func (t *Tree[V]) Splay(node *Node[V]) {
 			} else if isRightChild(node) {
 				t.rotateLeft(node)
 			}
+			t.updateTreeWeight(node)
 			return
 		}
 	}
@@ -385,6 +386,14 @@ func (t *Tree[V]) rightmost() *Node[V] {
 		node = node.right
 	}
 	return node
+}
+
+func (t *Tree[V]) Len() int {
+	if t.root == nil {
+		return 0
+	}
+
+	return t.root.weight
 }
 
 func traverseInOrder[V Value](node *Node[V], callback func(node *Node[V])) {
