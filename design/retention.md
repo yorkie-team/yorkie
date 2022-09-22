@@ -26,9 +26,27 @@ Since the maximum number of changes that can be deleted are deleted, the number 
 
 ## Proposal Details
 
-This is where we detail how to use the feature with snippet or API and describe
-the internal implementation.
+The --backend-snapshot-with-purging-changes flag was initially suggested in issue #288.
+As you can see from the above issue, this is a retention-related option that delete synchronized changes when creating a snapshot.
+
+### Background
+
+The yorkie server basically saves all document changes under the name of change in the DB and delivers these changes to other clients to implement document synchronization.
+In addition to this, in order to avoid the problem of synchronizing too many changes one by one, when the number of changes exceeds a certain number, a snapshot is created to record and synchronize the state of the document.
+
+However, due to this structure, all changes of the document are stored in the DB, which has a problem of using a lot of storage space.
+To improve this, the --backend-snapshot-with-purging-changes flag enables the feature to delete previous changes when a snapshot is created and the document state is recorded.
+
+### How it works?
+
+As you can see from the flag name, this feature deletes the changes before the snapshot when the snapshot is created, but more precisely, it deletes the changes that were synchronized before the snapshot.
+This is to avoid the problem of not being synchronized because changes that have not yet been synchronized are deleted. 
+
+To understand this, we need to understand how the server handles changes.
+
 
 ### Risks and Mitigation
 
 The current implementation simply deletes the synchronized changes when the snapshot is created. A more detailed retention function needs to be added for future production environments.
+
+### Future Plan
