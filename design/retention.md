@@ -44,6 +44,13 @@ This is to avoid the problem of not being synchronized because changes that have
 
 To understand this, we need to understand how the server handles changes.
 
+As mentioned in the background above, yorkie assigns ServerSeq to all changes in the document and records them under the name change. 
+Here, ServerSeq records the order of changes received by the server in chronological order, and checks how far the synchronization with the client is based on ServerSeq. And the ServerSeq of the confirmed part is recorded in the SyncedSeqs table for each client. 
+The Synced ServerSeq recorded here is recorded a [initialServerSeq](https://github.com/yorkie-team/yorkie/blob/8ff528083450887190f599efc0b955cb4fae2eef/server/packs/packs.go#L61-L63) when the client and server start syncing. This is to deal with a situation where changes were sent but were missing for some reason.
+
+Therefore, if communication is lost, you can know that you need to apply the changes from the ServerSeq recorded in the SyncedSeq table. 
+In conclusion, when a snapshot is created, it should not simply delete the changes before the snapshot, but the changes that have been confirmed to be synchronized(the changes before the minimum ServerSeq that recorded in the SyncedSeq table).
+
 
 ### Risks and Mitigation
 
