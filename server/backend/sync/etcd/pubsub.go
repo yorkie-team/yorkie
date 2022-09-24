@@ -46,7 +46,7 @@ func (c *Client) Subscribe(
 ) (*sync.Subscription, map[string][]types.Client, error) {
 	sub, err := c.localPubSub.Subscribe(ctx, subscriber, keys)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("subscribe PubSub: %w", err)
 	}
 
 	// TODO(hackerwins): If the server is not stopped gracefully, there may
@@ -155,7 +155,7 @@ func (c *Client) ensureClusterClient(
 		conn, err := grpc.Dial(member.ClusterAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			logging.DefaultLogger().Error(err)
-			return nil, err
+			return nil, fmt.Errorf("dial grpc: %w", err)
 		}
 
 		c.clusterClientMap[member.ID] = &clusterClientInfo{
@@ -191,7 +191,7 @@ func (c *Client) publishToMember(
 	docEvent, err := converter.ToDocEvent(event)
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return err
+		return fmt.Errorf("convert to doc event protobuf: %w", err)
 	}
 
 	if _, err := clientInfo.client.BroadcastEvent(ctx, &api.BroadcastEventRequest{
@@ -199,7 +199,7 @@ func (c *Client) publishToMember(
 		Event:       docEvent,
 	}); err != nil {
 		logging.From(ctx).Error(err)
-		return err
+		return fmt.Errorf("broadcast event: %w", err)
 	}
 
 	return nil
@@ -240,14 +240,14 @@ func (c *Client) pullSubscriptions(
 	)
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("get response: %w", err)
 	}
 
 	var clients []types.Client
 	for _, kv := range getResponse.Kvs {
 		cli, err := types.NewClient(kv.Value)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("new client: %w", err)
 		}
 		clients = append(clients, *cli)
 	}
@@ -265,7 +265,7 @@ func (c *Client) removeSubscriptions(
 		k := path.Join(subscriptionsPath, docKey.String(), sub.ID())
 		if _, err := c.client.Delete(ctx, k); err != nil {
 			logging.From(ctx).Error(err)
-			return err
+			return fmt.Errorf("delete client: %w", err)
 		}
 	}
 

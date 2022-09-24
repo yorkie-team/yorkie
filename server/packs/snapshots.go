@@ -18,6 +18,7 @@ package packs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -37,7 +38,7 @@ func storeSnapshot(
 	// TODO: For performance issue, we only need to read the snapshot's metadata.
 	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, docInfo.ServerSeq)
 	if err != nil {
-		return err
+		return fmt.Errorf("find closest snapshot info: %w", err)
 	}
 	if snapshotInfo.ServerSeq == docInfo.ServerSeq {
 		return nil
@@ -54,7 +55,7 @@ func storeSnapshot(
 		docInfo.ServerSeq,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("find changes between server seqs: %w", err)
 	}
 
 	// 03. create document instance of the docInfo
@@ -65,7 +66,7 @@ func storeSnapshot(
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("new internal document from snapshot: %w", err)
 	}
 
 	pack := change.NewPack(
@@ -77,12 +78,12 @@ func storeSnapshot(
 	pack.MinSyncedTicket = minSyncedTicket
 
 	if err := doc.ApplyChangePack(pack); err != nil {
-		return err
+		return fmt.Errorf("apply change pack: %w", err)
 	}
 
 	// 04. save the snapshot of the docInfo
 	if err := be.DB.CreateSnapshotInfo(ctx, docInfo.ID, doc); err != nil {
-		return err
+		return fmt.Errorf("create snapshot info: %w", err)
 	}
 
 	// 05. delete changes before the smallest in `syncedseqs` to save storage.

@@ -112,5 +112,5 @@ func FindClientInfo(
 		return nil, fmt.Errorf("find client info by ID: %w", err)
 	}
 
-	return clientInfo, err
+	return clientInfo, nil
 }

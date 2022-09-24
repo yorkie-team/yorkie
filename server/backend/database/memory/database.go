@@ -267,7 +267,7 @@ func (d *DB) UpdateProjectInfo(
 
 	raw, err := txn.First(tblProjects, "id", id.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find project by id(%s): %w", id.String(), err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
@@ -281,7 +281,7 @@ func (d *DB) UpdateProjectInfo(
 	if fields.Name != nil {
 		existing, err := txn.First(tblProjects, "name", *fields.Name)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("find project by name: %w", err)
 		}
 		if existing != nil && info.Name != *fields.Name {
 			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
@@ -309,7 +309,7 @@ func (d *DB) CreateUserInfo(
 
 	existing, err := txn.First(tblUsers, "username", username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find user by username(%s): %w", username, err)
 	}
 	if existing != nil {
 		return nil, fmt.Errorf("%s: %w", username, database.ErrUserAlreadyExists)
@@ -318,7 +318,7 @@ func (d *DB) CreateUserInfo(
 	info := database.NewUserInfo(username, hashedPassword)
 	info.ID = newID()
 	if err := txn.Insert(tblUsers, info); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("insert user: %w", err)
 	}
 	txn.Commit()
 
@@ -332,7 +332,7 @@ func (d *DB) FindUserInfo(ctx context.Context, username string) (*database.UserI
 
 	raw, err := txn.First(tblUsers, "username", username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find user by username(%s): %w", username, err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
@@ -398,7 +398,7 @@ func (d *DB) ActivateClient(
 	}
 
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("insert client: %w", err)
 	}
 
 	txn.Commit()
@@ -434,7 +434,7 @@ func (d *DB) DeactivateClient(ctx context.Context, projectID, clientID types.ID)
 	clientInfo = clientInfo.DeepCopy()
 	clientInfo.Deactivate()
 	if err := txn.Insert(tblClients, clientInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("insert client: %w", err)
 	}
 
 	txn.Commit()
@@ -1038,6 +1038,7 @@ func (d *DB) FindDocInfosByPaging(
 			projectID.String(),
 			paging.Offset.String(),
 		)
+		err = fmt.Errorf("lower bound documents by project_id_id: %w", err)
 	} else {
 		offset := paging.Offset
 		if paging.Offset == "" {
@@ -1050,6 +1051,7 @@ func (d *DB) FindDocInfosByPaging(
 			projectID.String(),
 			offset.String(),
 		)
+		err = fmt.Errorf("reverse lower bound documents by project_id_id: %w", err)
 	}
 
 	if err != nil {
@@ -1083,7 +1085,7 @@ func (d *DB) FindDocInfosByQuery(
 
 	iterator, err := txn.Get(tblDocuments, "project_id_key_prefix", projectID.String(), query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get documents by proejct_id_key_prefix: %w", err)
 	}
 
 	var docInfos []*database.DocInfo

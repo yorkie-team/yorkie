@@ -140,14 +140,14 @@ func pullSnapshot(
 			reqPack.Changes,
 			nil,
 		)); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("apply change pack: %w", err)
 		}
 	}
 	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)
 
 	snapshot, err := converter.ObjectToBytes(doc.RootObject())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert root object to bytes: %w", err)
 	}
 
 	logging.From(ctx).Infof(

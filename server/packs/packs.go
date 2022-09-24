@@ -77,18 +77,18 @@ func PushPull(
 	be.Metrics.AddPushPullSnapshotBytes(respPack.SnapshotLen())
 
 	if err := clientInfo.UpdateCheckpoint(docInfo.ID, respPack.Checkpoint); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("update checkpoint: %w", err)
 	}
 
 	// 03. store pushed changes, docInfo and checkpoint of the client to DB.
 	if len(pushedChanges) > 0 {
 		if err := be.DB.CreateChangeInfos(ctx, project.ID, docInfo, initialServerSeq, pushedChanges); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("create change infos: %w", err)
 		}
 	}
 
 	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("update client info after push pull: %w", err)
 	}
 
 	// 04. update and find min synced ticket for garbage collection.
@@ -101,7 +101,7 @@ func PushPull(
 		reqPack.Checkpoint.ServerSeq,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("update and find min synced ticket: %w", err)
 	}
 	respPack.MinSyncedTicket = minSyncedTicket
 
@@ -169,7 +169,7 @@ func BuildDocumentForServerSeq(
 ) (*document.InternalDocument, error) {
 	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, serverSeq)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find closest snapshot info: %w", err)
 	}
 
 	doc, err := document.NewInternalDocumentFromSnapshot(
@@ -179,7 +179,7 @@ func BuildDocumentForServerSeq(
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new internal document from snapshot: %w", err)
 	}
 
 	// TODO(hackerwins): If the Snapshot is missing, we may have a very large
@@ -192,7 +192,7 @@ func BuildDocumentForServerSeq(
 		serverSeq,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find changes between server seqs: %w", err)
 	}
 
 	if err := doc.ApplyChangePack(change.NewPack(
@@ -201,7 +201,7 @@ func BuildDocumentForServerSeq(
 		changes,
 		nil,
 	)); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("apply change pack: %w", err)
 	}
 
 	if logging.Enabled(zap.DebugLevel) {

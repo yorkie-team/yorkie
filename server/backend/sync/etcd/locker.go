@@ -84,5 +84,9 @@ func (il *internalLocker) Unlock(ctx context.Context) error {
 		return fmt.Errorf("unlock: %w", err)
 	}
 
-	return il.session.Close()
+	if err := il.session.Close(); err != nil {
+		return fmt.Errorf("close session: %w", err)
+	}
+
+	return nil
 }

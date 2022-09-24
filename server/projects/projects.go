@@ -18,6 +18,7 @@ package projects
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -33,7 +34,7 @@ func CreateProject(
 ) (*types.Project, error) {
 	info, err := be.DB.CreateProjectInfo(ctx, name, owner)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create project info: %w", err)
 	}
 
 	return info.ToProject(), nil
@@ -47,7 +48,7 @@ func ListProjects(
 ) ([]*types.Project, error) {
 	infos, err := be.DB.ListProjectInfos(ctx, owner)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get list of project info: %w", err)
 	}
 
 	var projects []*types.Project

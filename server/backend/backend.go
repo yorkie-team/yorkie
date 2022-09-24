@@ -18,6 +18,7 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -63,7 +64,7 @@ func New(
 ) (*Backend, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get hostname: %w", err)
 	}
 
 	serverInfo := &sync.ServerInfo{
@@ -79,12 +80,12 @@ func New(
 	if mongoConf != nil {
 		db, err = mongo.Dial(mongoConf)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("dial mongo: %w", err)
 		}
 	} else {
 		db, err = memdb.New()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("new memDB: %w", err)
 		}
 	}
 
@@ -92,10 +93,10 @@ func New(
 	if etcdConf != nil {
 		etcdClient, err := etcd.Dial(etcdConf, serverInfo)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("dial etcd: %w", err)
 		}
 		if err := etcdClient.Initialize(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("init etcd: %w", err)
 		}
 
 		coordinator = etcdClient
@@ -114,7 +115,7 @@ func New(
 		coordinator,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("start housekeeping: %w", err)
 	}
 
 	dbInfo := "memory"
@@ -135,7 +136,7 @@ func New(
 		conf.AdminPassword,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ensure default user and project: %w", err)
 	}
 
 	return &Backend{
@@ -157,7 +158,7 @@ func (b *Backend) Shutdown() error {
 	b.Background.Close()
 
 	if err := b.Housekeeping.Stop(); err != nil {
-		return err
+		return fmt.Errorf("stop housekeeping: %w", err)
 	}
 
 	if err := b.Coordinator.Close(); err != nil {

@@ -17,6 +17,8 @@
 package packs
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -86,7 +88,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	for _, info := range p.ChangeInfos {
 		actorID, err := time.ActorIDFromHex(info.ActorID.String())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("hex to actor id: %w", err)
 		}
 		changeID := change.NewID(info.ClientSeq, info.ServerSeq, info.Lamport, actorID)
 
