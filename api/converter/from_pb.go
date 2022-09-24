@@ -97,15 +97,15 @@ func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) ([]*types.Documen
 func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary, error) {
 	createdAt, err := protoTypes.TimestampFromProto(pbSummary.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert timestam proto to CreatedAt: %w", err)
 	}
 	accessedAt, err := protoTypes.TimestampFromProto(pbSummary.AccessedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert timestam proto to AccessedAt: %w", err)
 	}
 	updatedAt, err := protoTypes.TimestampFromProto(pbSummary.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert timestam proto to UpdatedAt: %w", err)
 	}
 	return &types.DocumentSummary{
 		ID:         types.ID(pbSummary.Id),
@@ -121,7 +121,7 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary
 func FromClient(pbClient *api.Client) (*types.Client, error) {
 	id, err := time.ActorIDFromBytes(pbClient.Id)
 	if err != nil {
-		return nil, fmt.Errorf("convert bytes to ActorID: %w", err)
+		return nil, fmt.Errorf("decode bytes to actor id: %w", err)
 	}
 
 	return &types.Client{
@@ -198,7 +198,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 func fromChangeID(id *api.ChangeID) (change.ID, error) {
 	actorID, err := time.ActorIDFromBytes(id.ActorId)
 	if err != nil {
-		return change.InitialID, fmt.Errorf("convert bytes to ActorID: %w", err)
+		return change.InitialID, fmt.Errorf("decode bytes to actor id: %w", err)
 	}
 	return change.NewID(
 		id.ClientSeq,
@@ -566,7 +566,7 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 
 	actorID, err := time.ActorIDFromBytes(pbTicket.ActorId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode bytes to actor id: %w", err)
 	}
 	return time.NewTicket(
 		pbTicket.Lamport,

@@ -42,7 +42,7 @@ type DB struct {
 func New() (*DB, error) {
 	memDB, err := memdb.NewMemDB(schema)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create memDB: %w", err)
 	}
 
 	return &DB{
@@ -65,7 +65,7 @@ func (d *DB) FindProjectInfoByPublicKey(
 
 	raw, err := txn.First(tblProjects, "public_key", publicKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find project by public key %s: %w", publicKey, err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", publicKey, database.ErrProjectNotFound)
@@ -85,7 +85,7 @@ func (d *DB) FindProjectInfoByName(
 
 	raw, err := txn.First(tblProjects, "name", name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find project by name %s: %w", name, err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectNotFound)
@@ -105,7 +105,7 @@ func (d *DB) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.Pr
 	defer txn.Abort()
 	raw, err := txn.First(tblProjects, "id", id.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find project by ID %s: %w", id.String(), err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
@@ -156,7 +156,7 @@ func (d *DB) ensureDefaultUserInfo(
 		info = database.NewUserInfo(username, hashedPassword)
 		info.ID = newID()
 		if err := txn.Insert(tblUsers, info); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("insert user: %w", err)
 		}
 	} else {
 		info = raw.(*database.UserInfo).DeepCopy()

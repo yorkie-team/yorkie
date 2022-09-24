@@ -251,7 +251,7 @@ func (c *Client) UpdateProject(
 		return nil, fmt.Errorf("convert project: %w", err)
 	}
 
-	return project, err
+	return project, nil
 }
 
 // ListDocuments lists documents.

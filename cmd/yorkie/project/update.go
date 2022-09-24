@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -63,7 +64,7 @@ func newUpdateCommand() *cobra.Command {
 			ctx := context.Background()
 			project, err := cli.GetProject(ctx, name)
 			if err != nil {
-				return err
+				return fmt.Errorf("get project: %w", err)
 			}
 			id := project.ID.String()
 
@@ -95,12 +96,12 @@ func newUpdateCommand() *cobra.Command {
 					}
 				}
 
-				return err
+				return fmt.Errorf("update project: %w", err)
 			}
 
 			encoded, err := json.Marshal(updated)
 			if err != nil {
-				return err
+				return fmt.Errorf("marshal updated project: %w", err)
 			}
 
 			cmd.Println(string(encoded))

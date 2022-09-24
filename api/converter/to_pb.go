@@ -64,11 +64,11 @@ func ToProjects(projects []*types.Project) ([]*api.Project, error) {
 func ToProject(project *types.Project) (*api.Project, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(project.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("faield to convert a CreatedAt: %w", err)
+		return nil, fmt.Errorf("convert CreatedAt: %w", err)
 	}
 	pbUpdatedAt, err := protoTypes.TimestampProto(project.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("faield to convert a UpdatedAt: %w", err)
+		return nil, fmt.Errorf("convert UpdatedAt: %w", err)
 	}
 
 	return &api.Project{
@@ -100,15 +100,15 @@ func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSum
 func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(summary.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert CreatedAt to timestamp proto: %w", err)
 	}
 	pbAccessedAt, err := protoTypes.TimestampProto(summary.AccessedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert AccessedAt to timestamp proto: %w", err)
 	}
 	pbUpdatedAt, err := protoTypes.TimestampProto(summary.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert UpdatedAt to timestamp proto: %w", err)
 	}
 
 	return &api.DocumentSummary{

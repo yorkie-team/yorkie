@@ -18,6 +18,7 @@ package database
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -48,7 +49,7 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 
 	changes, err := converter.ToOperations(operations)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert operations: %w", err)
 	}
 
 	for _, pbOp := range changes {
@@ -66,7 +67,7 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	actorID, err := time.ActorIDFromHex(i.ActorID.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("hex to actor id: %w", err)
 	}
 
 	changeID := change.NewID(i.ClientSeq, i.ServerSeq, i.Lamport, actorID)
@@ -75,14 +76,14 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	for _, bytesOp := range i.Operations {
 		pbOp := api.Operation{}
 		if err := pbOp.Unmarshal(bytesOp); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unmarshal bytes: %w", err)
 		}
 		pbOps = append(pbOps, &pbOp)
 	}
 
 	ops, err := converter.FromOperations(pbOps)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert operations: %w", err)
 	}
 
 	c := change.New(changeID, i.Message, ops)

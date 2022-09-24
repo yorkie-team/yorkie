@@ -18,6 +18,7 @@ package project
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -35,12 +36,12 @@ func newListCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			token, err := config.LoadToken(config.AdminAddr)
 			if err != nil {
-				return err
+				return fmt.Errorf("load token: %w", err)
 			}
 
 			cli, err := admin.Dial(config.AdminAddr, admin.WithToken(token))
 			if err != nil {
-				return err
+				return fmt.Errorf("dial admin: %w", err)
 			}
 			defer func() {
 				_ = cli.Close()
@@ -49,7 +50,7 @@ func newListCommand() *cobra.Command {
 			ctx := context.Background()
 			projects, err := cli.ListProjects(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("get projects: %w", err)
 			}
 
 			tw := table.NewWriter()

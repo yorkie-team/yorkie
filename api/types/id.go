@@ -69,7 +69,7 @@ func (id *ID) ToActorID() (*time.ActorID, error) {
 
 	actorID, err := time.ActorIDFromBytes(b)
 	if err != nil {
-		return nil, fmt.Errorf("convert bytes to ActorID: %w", err)
+		return nil, fmt.Errorf("decode bytes to actor id: %w", err)
 	}
 
 	return actorID, nil
