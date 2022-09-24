@@ -18,6 +18,7 @@ package etcd
 
 import (
 	"context"
+	"fmt"
 
 	"go.etcd.io/etcd/client/v3/concurrency"
 
@@ -38,7 +39,7 @@ func (c *Client) NewLocker(
 	)
 	if err != nil {
 		logging.DefaultLogger().Error(err)
-		return nil, err
+		return nil, fmt.Errorf("new session: %w", err)
 	}
 
 	return &internalLocker{
@@ -56,7 +57,7 @@ type internalLocker struct {
 func (il *internalLocker) Lock(ctx context.Context) error {
 	if err := il.mu.Lock(ctx); err != nil {
 		logging.DefaultLogger().Error(err)
-		return err
+		return fmt.Errorf("lock: %w", err)
 	}
 
 	return nil
@@ -70,7 +71,7 @@ func (il *internalLocker) TryLock(ctx context.Context) error {
 		}
 
 		logging.DefaultLogger().Error(err)
-		return err
+		return fmt.Errorf("try lock: %w", err)
 	}
 
 	return nil
@@ -80,7 +81,7 @@ func (il *internalLocker) TryLock(ctx context.Context) error {
 func (il *internalLocker) Unlock(ctx context.Context) error {
 	if err := il.mu.Unlock(ctx); err != nil {
 		logging.DefaultLogger().Error(err)
-		return err
+		return fmt.Errorf("unlock: %w", err)
 	}
 
 	return il.session.Close()

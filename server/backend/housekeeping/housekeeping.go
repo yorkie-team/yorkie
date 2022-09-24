@@ -105,12 +105,12 @@ func New(
 ) (*Housekeeping, error) {
 	interval, err := time.ParseDuration(conf.Interval)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse interval: %w", err)
 	}
 
 	deactivateThreshold, err := time.ParseDuration(conf.DeactivateThreshold)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse deactivate threshold: %w", err)
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -162,11 +162,11 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 	start := time.Now()
 	locker, err := h.coordinator.NewLocker(ctx, deactivateCandidatesKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("new locker %s: %w", deactivateCandidatesKey, err)
 	}
 
 	if err := locker.Lock(ctx); err != nil {
-		return err
+		return fmt.Errorf("lock %s: %w", deactivateCandidatesKey, err)
 	}
 
 	defer func() {
@@ -181,7 +181,7 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 		h.candidatesLimit,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("find deactivate candidates: %w", err)
 	}
 
 	deactivatedCount := 0
@@ -192,7 +192,7 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 			clientInfo.ProjectID,
 			clientInfo.ID,
 		); err != nil {
-			return err
+			return fmt.Errorf("deactivate clients: %w", err)
 		}
 
 		deactivatedCount++

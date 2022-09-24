@@ -19,6 +19,7 @@ package clients
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -40,7 +41,12 @@ func Activate(
 	project *types.Project,
 	clientKey string,
 ) (*database.ClientInfo, error) {
-	return db.ActivateClient(ctx, project.ID, clientKey)
+	clientInfo, err := db.ActivateClient(ctx, project.ID, clientKey)
+	if err != nil {
+		return nil, fmt.Errorf("activate client: %w", err)
+	}
+
+	return clientInfo, nil
 }
 
 // Deactivate deactivates the given client.
@@ -56,20 +62,20 @@ func Deactivate(
 		clientID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find client info by ID: %w", err)
 	}
 
 	for id, clientDocInfo := range clientInfo.Documents {
 		isAttached, err := clientInfo.IsAttached(id)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("check attached document: %w", err)
 		}
 		if !isAttached {
 			continue
 		}
 
 		if err := clientInfo.DetachDocument(id); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("detach document: %w", err)
 		}
 
 		if err := db.UpdateSyncedSeq(
@@ -78,11 +84,16 @@ func Deactivate(
 			id,
 			clientDocInfo.ServerSeq,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("update synced seq: %w", err)
 		}
 	}
 
-	return db.DeactivateClient(ctx, projectID, clientID)
+	clientInfo, err = db.DeactivateClient(ctx, projectID, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("deactivate client: %w", err)
+	}
+
+	return clientInfo, nil
 }
 
 // FindClientInfo finds the client with the given id.
@@ -92,9 +103,14 @@ func FindClientInfo(
 	project *types.Project,
 	clientID *time.ActorID,
 ) (*database.ClientInfo, error) {
-	return db.FindClientInfoByID(
+	clientInfo, err := db.FindClientInfoByID(
 		ctx,
 		project.ID,
 		types.IDFromActorID(clientID),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("find client info by ID: %w", err)
+	}
+
+	return clientInfo, err
 }

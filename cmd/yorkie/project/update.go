@@ -50,12 +50,12 @@ func newUpdateCommand() *cobra.Command {
 
 			token, err := config.LoadToken(config.AdminAddr)
 			if err != nil {
-				return err
+				return fmt.Errorf("load token: %w", err)
 			}
 
 			cli, err := admin.Dial(config.AdminAddr, admin.WithToken(token))
 			if err != nil {
-				return err
+				return fmt.Errorf("dial admin: %w", err)
 			}
 			defer func() {
 				_ = cli.Close()

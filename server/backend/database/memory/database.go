@@ -144,14 +144,14 @@ func (d *DB) ensureDefaultUserInfo(
 
 	raw, err := txn.First(tblUsers, "username", username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find user by username(%s): %w", username, err)
 	}
 
 	var info *database.UserInfo
 	if raw == nil {
 		hashedPassword, err := database.HashedPassword(password)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("hashed password: %w", err)
 		}
 		info = database.NewUserInfo(username, hashedPassword)
 		info.ID = newID()
@@ -176,7 +176,7 @@ func (d *DB) ensureDefaultProjectInfo(
 
 	raw, err := txn.First(tblProjects, "id", database.DefaultProjectID.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find project by default project id(%s): %w", database.DefaultProjectID.String(), err)
 	}
 
 	var info *database.ProjectInfo
@@ -184,7 +184,7 @@ func (d *DB) ensureDefaultProjectInfo(
 		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID)
 		info.ID = database.DefaultProjectID
 		if err := txn.Insert(tblProjects, info); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("insert project: %w", err)
 		}
 	} else {
 		info = raw.(*database.ProjectInfo).DeepCopy()
@@ -207,7 +207,7 @@ func (d *DB) CreateProjectInfo(
 	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
 	existing, err := txn.First(tblProjects, "name", name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find project by name(%s): %w", name, err)
 	}
 	if existing != nil {
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectAlreadyExists)
@@ -216,7 +216,7 @@ func (d *DB) CreateProjectInfo(
 	info := database.NewProjectInfo(name, owner)
 	info.ID = newID()
 	if err := txn.Insert(tblProjects, info); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("insert project: %w", err)
 	}
 	txn.Commit()
 
@@ -239,7 +239,7 @@ func (d *DB) ListProjectInfos(
 		defaultProjectID.String(),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lower bound projects by owner_id: %w", err)
 	}
 
 	var infos []*database.ProjectInfo
@@ -291,7 +291,7 @@ func (d *DB) UpdateProjectInfo(
 	info.UpdateFields(fields)
 	info.UpdatedAt = gotime.Now()
 	if err := txn.Insert(tblProjects, info); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("insert project: %w", err)
 	}
 	txn.Commit()
 
@@ -350,7 +350,7 @@ func (d *DB) ListUserInfos(
 
 	iter, err := txn.Get(tblUsers, "id")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get user by id: %w", err)
 	}
 
 	var infos []*database.UserInfo
@@ -408,7 +408,7 @@ func (d *DB) ActivateClient(
 // DeactivateClient deactivates a client.
 func (d *DB) DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate client id: %w", err)
 	}
 
 	txn := d.db.Txn(true)
@@ -425,7 +425,7 @@ func (d *DB) DeactivateClient(ctx context.Context, projectID, clientID types.ID)
 
 	clientInfo := raw.(*database.ClientInfo)
 	if err := clientInfo.CheckIfInProject(projectID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check client is in project: %w", err)
 	}
 
 	// NOTE(hackerwins): When retrieving objects from go-memdb, references to
@@ -444,7 +444,7 @@ func (d *DB) DeactivateClient(ctx context.Context, projectID, clientID types.ID)
 // FindClientInfoByID finds a client by ID.
 func (d *DB) FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate client id: %w", err)
 	}
 
 	txn := d.db.Txn(false)
@@ -460,7 +460,7 @@ func (d *DB) FindClientInfoByID(ctx context.Context, projectID, clientID types.I
 
 	clientInfo := raw.(*database.ClientInfo)
 	if err := clientInfo.CheckIfInProject(projectID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check client is in project: %w", err)
 	}
 
 	return clientInfo.DeepCopy(), nil
@@ -476,7 +476,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	clientDocInfo := clientInfo.Documents[docInfo.ID]
 	attached, err := clientInfo.IsAttached(docInfo.ID)
 	if err != nil {
-		return err
+		return fmt.Errorf("check attached document: %w", err)
 	}
 
 	txn := d.db.Txn(true)
@@ -546,7 +546,7 @@ func (d *DB) FindDeactivateCandidates(
 		offset,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reverse lower bound clients by status_updated_at: %w", err)
 	}
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
@@ -661,7 +661,7 @@ func (d *DB) CreateChangeInfos(
 	for _, cn := range changes {
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
-			return err
+			return fmt.Errorf("encode operations: %w", err)
 		}
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
@@ -713,7 +713,7 @@ func (d *DB) PurgeStaleChanges(
 	// Because offline client can pull changes when it becomes online.
 	it, err := txn.Get(tblSyncedSeqs, "id")
 	if err != nil {
-		return err
+		return fmt.Errorf("get synced seqs by id: %w", err)
 	}
 
 	minSyncedServerSeq := change.MaxServerSeq
@@ -735,13 +735,13 @@ func (d *DB) PurgeStaleChanges(
 		minSyncedServerSeq,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("reverse lower bound change by doc_id_server_seq: %w", err)
 	}
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.ChangeInfo)
 		if err = txn.Delete(tblChanges, info); err != nil {
-			return err
+			return fmt.Errorf("delete changes by change info: %w", err)
 		}
 	}
 	return nil
@@ -763,7 +763,7 @@ func (d *DB) FindChangesBetweenServerSeqs(
 	for _, info := range infos {
 		c, err := info.ToChange()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("convert change info to change model: %w", err)
 		}
 
 		changes = append(changes, c)
@@ -791,7 +791,7 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 		from,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lower bound changes by doc_id_server_seq: %w", err)
 	}
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
@@ -812,7 +812,7 @@ func (d *DB) CreateSnapshotInfo(
 ) error {
 	snapshot, err := converter.ObjectToBytes(doc.RootObject())
 	if err != nil {
-		return err
+		return fmt.Errorf("convert root object to bytes: %w", err)
 	}
 
 	txn := d.db.Txn(true)
@@ -848,7 +848,7 @@ func (d *DB) FindClosestSnapshotInfo(
 		serverSeq,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reverse lower bound snapshots by doc_id_server_seq: %w", err)
 	}
 
 	var snapshotInfo *database.SnapshotInfo
@@ -877,7 +877,7 @@ func (d *DB) FindMinSyncedSeqInfo(
 
 	it, err := txn.Get(tblSyncedSeqs, "id")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get synced seqs by id: %w", err)
 	}
 
 	syncedSeqInfo := &database.SyncedSeqInfo{}
@@ -919,7 +919,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		time.InitialActorID.String(),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lower bound synced seqs by doc_id_lamport_actor_id: %w", err)
 	}
 
 	var syncedSeqInfo *database.SyncedSeqInfo
@@ -936,7 +936,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 
 	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("hex to actor id: %w", err)
 	}
 
 	return time.NewTicket(
@@ -958,7 +958,7 @@ func (d *DB) UpdateSyncedSeq(
 
 	isAttached, err := clientInfo.IsAttached(docID)
 	if err != nil {
-		return err
+		return fmt.Errorf("check attached document: %w", err)
 	}
 
 	if !isAttached {
@@ -968,7 +968,7 @@ func (d *DB) UpdateSyncedSeq(
 			docID.String(),
 			clientInfo.ID.String(),
 		); err != nil {
-			return err
+			return fmt.Errorf("delete all synced seqs by doc_id_client_id: %w", err)
 		}
 		txn.Commit()
 		return nil
@@ -1132,7 +1132,7 @@ func (d *DB) findTicketByServerSeq(
 	changeInfo := raw.(*database.ChangeInfo)
 	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("hex to actor id: %w", err)
 	}
 
 	return time.NewTicket(

@@ -18,6 +18,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/locker"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -49,7 +50,7 @@ func (il *internalLocker) TryLock(ctx context.Context) error {
 func (il *internalLocker) Unlock(ctx context.Context) error {
 	if err := il.locks.Unlock(il.key); err != nil {
 		logging.DefaultLogger().Error(err)
-		return err
+		return fmt.Errorf("unlock: %w", err)
 	}
 
 	return nil

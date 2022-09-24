@@ -18,6 +18,7 @@ package etcd
 
 import (
 	"context"
+	"fmt"
 	gosync "sync"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -102,7 +103,7 @@ func (c *Client) Dial() error {
 	})
 	if err != nil {
 		logging.DefaultLogger().Error(err)
-		return err
+		return fmt.Errorf("new etcd client: %w", err)
 	}
 
 	logging.DefaultLogger().Infof("etcd connected, URI: %s", c.config.Endpoints)
@@ -123,5 +124,9 @@ func (c *Client) Close() error {
 		c.removeClusterClient(id)
 	}
 
-	return c.client.Close()
+	if err := c.client.Close(); err != nil {
+		return fmt.Errorf("close etcd: %w", err)
+	}
+
+	return nil
 }
