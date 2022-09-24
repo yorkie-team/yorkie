@@ -49,7 +49,7 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 
 	changes, err := converter.ToOperations(operations)
 	if err != nil {
-		return nil, fmt.Errorf("convert operations: %w", err)
+		return nil, fmt.Errorf("convert to operations protobuf: %w", err)
 	}
 
 	for _, pbOp := range changes {
@@ -83,7 +83,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 
 	ops, err := converter.FromOperations(pbOps)
 	if err != nil {
-		return nil, fmt.Errorf("convert operations: %w", err)
+		return nil, fmt.Errorf("convert to operations: %w", err)
 	}
 
 	c := change.New(changeID, i.Message, ops)

@@ -165,7 +165,7 @@ func (c *Client) SignUp(
 
 	user, err := converter.FromUser(response.User)
 	if err != nil {
-		return nil, fmt.Errorf("convert user: %w", err)
+		return nil, fmt.Errorf("convert to user: %w", err)
 	}
 
 	return user, nil
@@ -185,7 +185,7 @@ func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project
 
 	project, err := converter.FromProject(response.Project)
 	if err != nil {
-		return nil, fmt.Errorf("convert project: %w", err)
+		return nil, fmt.Errorf("convert to project: %w", err)
 	}
 
 	return project, nil
@@ -203,7 +203,7 @@ func (c *Client) GetProject(ctx context.Context, name string) (*types.Project, e
 
 	project, err := converter.FromProject(response.Project)
 	if err != nil {
-		return nil, fmt.Errorf("convert project: %w", err)
+		return nil, fmt.Errorf("convert to project: %w", err)
 	}
 
 	return project, nil
@@ -221,7 +221,7 @@ func (c *Client) ListProjects(ctx context.Context) ([]*types.Project, error) {
 
 	projects, err := converter.FromProjects(response.Projects)
 	if err != nil {
-		return nil, fmt.Errorf("convert projects: %w", err)
+		return nil, fmt.Errorf("convert to projects: %w", err)
 	}
 
 	return projects, nil
@@ -235,7 +235,7 @@ func (c *Client) UpdateProject(
 ) (*types.Project, error) {
 	pbProjectField, err := converter.ToUpdatableProjectFields(fields)
 	if err != nil {
-		return nil, fmt.Errorf("convert project fields to protobuf format: %w", err)
+		return nil, fmt.Errorf("convert to project fields protobuf: %w", err)
 	}
 
 	response, err := c.client.UpdateProject(ctx, &api.UpdateProjectRequest{
@@ -248,7 +248,7 @@ func (c *Client) UpdateProject(
 
 	project, err := converter.FromProject(response.Project)
 	if err != nil {
-		return nil, fmt.Errorf("convert project: %w", err)
+		return nil, fmt.Errorf("convert to project: %w", err)
 	}
 
 	return project, nil
@@ -268,7 +268,7 @@ func (c *Client) ListDocuments(ctx context.Context, projectName string) ([]*type
 
 	summaries, err := converter.FromDocumentSummaries(response.Documents)
 	if err != nil {
-		return nil, fmt.Errorf("convert document summaries: %w", err)
+		return nil, fmt.Errorf("cconvert to document summaries: %w", err)
 	}
 
 	return summaries, nil
@@ -296,7 +296,7 @@ func (c *Client) ListChangeSummaries(
 
 	changes, err := converter.FromChanges(resp.Changes)
 	if err != nil {
-		return nil, fmt.Errorf("convert changes: %w", err)
+		return nil, fmt.Errorf("convert to changes: %w", err)
 	}
 
 	if len(changes) == 0 {

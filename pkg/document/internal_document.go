@@ -70,7 +70,7 @@ func NewInternalDocumentFromSnapshot(
 ) (*InternalDocument, error) {
 	obj, err := converter.BytesToObject(snapshot)
 	if err != nil {
-		return nil, fmt.Errorf("convert snapshot: %w", err)
+		return nil, fmt.Errorf("convert bytes to snapshot: %w", err)
 	}
 
 	return &InternalDocument{
@@ -194,7 +194,7 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error {
 	rootObj, err := converter.BytesToObject(snapshot)
 	if err != nil {
-		return fmt.Errorf("convert snapshot: %w", err)
+		return fmt.Errorf("convert bytes to snapshot: %w", err)
 	}
 
 	d.root = crdt.NewRoot(rootObj)

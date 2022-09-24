@@ -247,7 +247,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
-		return fmt.Errorf("convert change pack: %w", err)
+		return fmt.Errorf("convert to change pack protobuf: %w", err)
 	}
 
 	res, err := c.client.AttachDocument(ctx, &api.AttachDocumentRequest{
@@ -260,7 +260,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 
 	pack, err := converter.FromChangePack(res.ChangePack)
 	if err != nil {
-		return fmt.Errorf("convert change pack: %w", err)
+		return fmt.Errorf("convert to change pack: %w", err)
 	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
@@ -301,7 +301,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
-		return fmt.Errorf("convert change pack: %w", err)
+		return fmt.Errorf("convert to change pack protobuf: %w", err)
 	}
 
 	res, err := c.client.DetachDocument(ctx, &api.DetachDocumentRequest{
@@ -314,7 +314,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 
 	pack, err := converter.FromChangePack(res.ChangePack)
 	if err != nil {
-		return fmt.Errorf("convert change pack: %w", err)
+		return fmt.Errorf("convert to change pack: %w", err)
 	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
@@ -369,7 +369,7 @@ func (c *Client) Watch(
 		DocumentKeys: converter.ToDocumentKeys(keys),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("convert document keys: %w", err)
+		return nil, fmt.Errorf("document keys: %w", err)
 	}
 
 	handleResponse := func(pbResp *api.WatchDocumentsResponse) (*WatchResponse, error) {
@@ -378,7 +378,7 @@ func (c *Client) Watch(
 			for docID, peers := range resp.Initialization.PeersMapByDoc {
 				clients, err := converter.FromClients(peers)
 				if err != nil {
-					return nil, fmt.Errorf("convert peers: %w", err)
+					return nil, fmt.Errorf("convert to clients: %w", err)
 				}
 
 				attachment := c.attachments[docID]
@@ -391,7 +391,7 @@ func (c *Client) Watch(
 		case *api.WatchDocumentsResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
 			if err != nil {
-				return nil, fmt.Errorf("convert event type: %w", err)
+				return nil, fmt.Errorf("convert to event type: %w", err)
 			}
 
 			switch eventType {
@@ -404,7 +404,7 @@ func (c *Client) Watch(
 				for _, k := range converter.FromDocumentKeys(resp.Event.DocumentKeys) {
 					cli, err := converter.FromClient(resp.Event.Publisher)
 					if err != nil {
-						return nil, fmt.Errorf("convert publisher: %w", err)
+						return nil, fmt.Errorf("convert to client: %w", err)
 					}
 
 					attachment := c.attachments[k.String()]
@@ -485,7 +485,7 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 		}),
 		DocumentKeys: converter.ToDocumentKeys(keys),
 	}); err != nil {
-		return fmt.Errorf("convert document keys: %w", err)
+		return fmt.Errorf("update presence: %w", err)
 	}
 
 	return nil
@@ -541,7 +541,7 @@ func (c *Client) sync(ctx context.Context, key key.Key) error {
 
 	pbChangePack, err := converter.ToChangePack(attachment.doc.CreateChangePack())
 	if err != nil {
-		return fmt.Errorf("convert change pack: %w", err)
+		return fmt.Errorf("convert to change pack protobuf: %w", err)
 	}
 
 	res, err := c.client.PushPull(ctx, &api.PushPullRequest{
@@ -555,7 +555,7 @@ func (c *Client) sync(ctx context.Context, key key.Key) error {
 
 	pack, err := converter.FromChangePack(res.ChangePack)
 	if err != nil {
-		return fmt.Errorf("convert change pack: %w", err)
+		return fmt.Errorf("convert to change pack: %w", err)
 	}
 
 	if err := attachment.doc.ApplyChangePack(pack); err != nil {
