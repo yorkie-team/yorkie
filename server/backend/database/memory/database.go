@@ -230,8 +230,9 @@ func (d *DB) ListProjectInfos(
 
 	iter, err := txn.LowerBound(
 		tblProjects,
-		"owner",
+		"owner_name",
 		owner.String(),
+		"",
 	)
 	if err != nil {
 		return nil, err

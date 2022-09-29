@@ -213,17 +213,6 @@ func (c *Client) CreateProjectInfo(
 		return nil, err
 	}
 
-	count, err := c.collection(colProjects).CountDocuments(ctx, bson.M{
-		"name":  name,
-		"owner": encodedOwner,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if count > 0 {
-		return nil, database.ErrProjectAlreadyExists
-	}
-
 	info := database.NewProjectInfo(name, owner)
 	result, err := c.collection(colProjects).InsertOne(ctx, bson.M{
 		"name":       info.Name,
@@ -233,6 +222,10 @@ func (c *Client) CreateProjectInfo(
 		"created_at": info.CreatedAt,
 	})
 	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, database.ErrProjectAlreadyExists
+		}
+
 		logging.From(ctx).Error(err)
 		return nil, err
 	}
@@ -359,17 +352,6 @@ func (c *Client) UpdateProjectInfo(
 		return nil, err
 	}
 
-	count, err := c.collection(colProjects).CountDocuments(ctx, bson.M{
-		"name":  fields.Name,
-		"owner": encodedOwner,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if count > 0 {
-		return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
-	}
-
 	updatableFields["updated_at"] = gotime.Now()
 
 	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
@@ -383,6 +365,9 @@ func (c *Client) UpdateProjectInfo(
 	if err := res.Decode(&info); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+		}
+		if mongo.IsDuplicateKeyError(err) {
+			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
 		}
 		return nil, err
 	}

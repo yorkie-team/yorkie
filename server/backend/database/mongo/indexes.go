@@ -44,19 +44,18 @@ var collectionInfos = []collectionInfo{
 	{
 		name: colProjects,
 		indexes: []mongo.IndexModel{{
-			Keys:    bsonx.Doc{{Key: "name", Value: bsonx.Int32(1)}},
-			Options: options.Index().SetUnique(false),
+			Keys: bsonx.Doc{
+				{Key: "owner", Value: bsonx.Int32(1)},
+				{Key: "name", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
 		}, {
 			Keys:    bsonx.Doc{{Key: "public_key", Value: bsonx.Int32(1)}},
 			Options: options.Index().SetUnique(true),
 		}, {
 			Keys:    bsonx.Doc{{Key: "secret_key", Value: bsonx.Int32(1)}},
 			Options: options.Index().SetUnique(true),
-		}, {
-			Keys:    bsonx.Doc{{Key: "owner", Value: bsonx.Int32(1)}},
-			Options: options.Index().SetUnique(false),
-		},
-		},
+		}},
 	},
 	{
 		name: colUsers,
