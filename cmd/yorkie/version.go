@@ -27,33 +27,35 @@ import (
 )
 
 const commitRevisionKey = "vcs.revision"
-const buildTimeKey = "vcs.time"
 
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print the version number of Yorkie",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			revision := settingByKey(commitRevisionKey)
 			fmt.Printf("Yorkie: %s\n", version.Version)
-			fmt.Printf("Commit: %s\n", getBuildInfoByKey(commitRevisionKey))
+			fmt.Printf("Commit: %s\n", revision[:7])
 			fmt.Printf("Go: %s\n", runtime.Version())
-			fmt.Printf("Build date: %s\n", getBuildInfoByKey(buildTimeKey))
+			fmt.Printf("Build date: %s\n", version.BuildDate)
 			return nil
 		},
 	}
 }
 
-func getBuildInfoByKey(key string) string {
-	return func() string {
-		if info, ok := debug.ReadBuildInfo(); ok {
-			for _, setting := range info.Settings {
-				if setting.Key == key {
-					return setting.Value
-				}
-			}
-		}
+func settingByKey(key string) string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
 		return ""
-	}()
+	}
+
+	for _, setting := range info.Settings {
+		if setting.Key == key {
+			return setting.Value
+		}
+	}
+
+	return ""
 }
 
 func init() {

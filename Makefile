@@ -3,14 +3,19 @@ YORKIE_VERSION := 0.2.18
 GO_PROJECT = github.com/yorkie-team/yorkie
 
 ifeq ($(OS),Windows_NT)
+    BUILD_DATE := $(shell echo %date:~6,4%-%date:~0,2%-%date:~3,2%)
+    GO_SRC := $(shell dir /s /b *.go | findstr /v "vendor")
     EXECUTABLE = ./bin/yorkie.exe
 else
+    BUILD_DATE := $(shell date "+%Y-%m-%d")
+    GO_SRC := $(shell find . -path ./vendor -prune -o -type f -name '*.go' -print)
     EXECUTABLE = ./bin/yorkie
 endif
 
 # inject the version number into the golang version package using the -X linker flag
 GO_LDFLAGS ?=
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.Version=${YORKIE_VERSION}
+GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.BuildDate=${BUILD_DATE}
 
 default: help
 
