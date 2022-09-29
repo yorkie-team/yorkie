@@ -1,6 +1,5 @@
 YORKIE_VERSION := 0.2.18
 
-GIT_COMMIT := $(shell /usr/bin/git rev-parse --short HEAD)
 GO_PROJECT = github.com/yorkie-team/yorkie
 
 ifeq ($(OS),Windows_NT)
@@ -15,7 +14,6 @@ endif
 
 # inject the version number into the golang version package using the -X linker flag
 GO_LDFLAGS ?=
-GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.GitCommit=${GIT_COMMIT}
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.Version=${YORKIE_VERSION}
 GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.BuildDate=${BUILD_DATE}
 
