@@ -113,6 +113,5 @@ func TestClient(t *testing.T) {
 		info2, err := cli.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
 		assert.NoError(t, err)
 		assert.Equal(t, info1.ID, info2.ID)
-
 	})
 }
