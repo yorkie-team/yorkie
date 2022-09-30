@@ -122,8 +122,7 @@ func (c *Client) Dial(adminAddr string) error {
 
 // Close closes the connection to the admin service.
 func (c *Client) Close() error {
-	err := c.conn.Close()
-	if err != nil {
+	if err := c.conn.Close(); err != nil {
 		return fmt.Errorf("close grpc: %w", err)
 	}
 

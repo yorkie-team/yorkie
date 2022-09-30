@@ -57,7 +57,7 @@ func verifyAccess(
 		Attributes: accessInfo.Attributes,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("marshalliong request body: %w", err)
 	}
 
 	cacheKey := string(reqBody)
@@ -77,7 +77,7 @@ func verifyAccess(
 			bytes.NewBuffer(reqBody),
 		)
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("posting to webhook %s: %w", authWebhookURL, err)
 		}
 
 		defer func() {
@@ -92,7 +92,7 @@ func verifyAccess(
 
 		authResp, err = types.NewAuthWebhookResponse(resp.Body)
 		if err != nil {
-			return resp.StatusCode, err
+			return resp.StatusCode, fmt.Errorf("parsing response body: %w", err)
 		}
 
 		if !authResp.Allowed {

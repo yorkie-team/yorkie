@@ -178,7 +178,7 @@ func pullChangeInfos(
 		initialServerSeq,
 	)
 	if err != nil {
-		return change.InitialCheckpoint, nil, err
+		return change.InitialCheckpoint, nil, fmt.Errorf("find change infos: %w", err)
 	}
 
 	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)

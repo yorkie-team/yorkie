@@ -130,8 +130,7 @@ func (s *Server) GRPCServer() *grpc.Server {
 func (s *Server) listenAndServeGRPC() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
 	if err != nil {
-		logging.DefaultLogger().Error(err)
-		return err
+		return fmt.Errorf("listennig on port %d failed: %w", s.conf.Port, err)
 	}
 
 	go func() {
@@ -154,17 +153,17 @@ func (s *Server) SignUp(
 ) (*api.SignUpResponse, error) {
 	fields := &types.SignupFields{Username: &req.Username, Password: &req.Password}
 	if err := fields.Validate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate signup fields: %w", err)
 	}
 
 	user, err := users.SignUp(ctx, s.backend, req.Username, req.Password)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sign up: %w", err)
 	}
 
 	pbUser, err := converter.ToUser(user)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert to user: %w", err)
 	}
 
 	return &api.SignUpResponse{
@@ -184,12 +183,12 @@ func (s *Server) LogIn(
 		req.Password,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("check password: %w", err)
 	}
 
 	token, err := s.tokenManager.Generate(user.Username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("generate token: %w", err)
 	}
 
 	return &api.LogInResponse{

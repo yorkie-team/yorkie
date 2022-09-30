@@ -18,6 +18,7 @@ package documents
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -37,14 +38,14 @@ func ListDocumentSummaries(
 ) ([]*types.DocumentSummary, error) {
 	docInfo, err := be.DB.FindDocInfosByPaging(ctx, project.ID, paging)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find doc infos by paging: %w", err)
 	}
 
 	var summaries []*types.DocumentSummary
 	for _, docInfo := range docInfo {
 		doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("build document for server seq: %w", err)
 		}
 
 		var snapshot string
@@ -86,12 +87,12 @@ func GetDocumentSummary(
 		false,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find doc info by key and owner: %w", err)
 	}
 
 	doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build document for server seq: %w", err)
 	}
 
 	return &types.DocumentSummary{
@@ -120,12 +121,12 @@ func GetDocumentByServerSeq(
 		false,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find doc info by key and owner: %w", err)
 	}
 
 	doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, serverSeq)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build document for server seq: %w", err)
 	}
 
 	return doc, nil
@@ -141,7 +142,7 @@ func SearchDocumentSummaries(
 ) (*types.SearchResult[*types.DocumentSummary], error) {
 	res, err := be.DB.FindDocInfosByQuery(ctx, project.ID, query, pageSize)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find doc infos by query: %w", err)
 	}
 
 	var summaries []*types.DocumentSummary
@@ -168,11 +169,16 @@ func FindDocInfoByKey(
 	project *types.Project,
 	docKey key.Key,
 ) (*database.DocInfo, error) {
-	return be.DB.FindDocInfoByKey(
+	info, err := be.DB.FindDocInfoByKey(
 		ctx,
 		project.ID,
 		docKey,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("find document info by key: %w", err)
+	}
+
+	return info, nil
 }
 
 // FindDocInfoByKeyAndOwner returns a document for the given document key and owner.
@@ -184,11 +190,16 @@ func FindDocInfoByKeyAndOwner(
 	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
-	return be.DB.FindDocInfoByKeyAndOwner(
+	info, err := be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
 		project.ID,
 		clientInfo.ID,
 		docKey,
 		createDocIfNotExist,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("find doc info: %w", err)
+	}
+
+	return info, nil
 }

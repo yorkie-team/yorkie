@@ -37,9 +37,9 @@ func SignUp(
 		return nil, fmt.Errorf("cannot hash password: %w", err)
 	}
 
-	info, err := be.DB.CreateUserInfo(ctx, username, string(hashed))
+	info, err := be.DB.CreateUserInfo(ctx, username, hashed)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create user info: %w", err)
 	}
 
 	return info.ToUser(), nil
@@ -54,14 +54,14 @@ func IsCorrectPassword(
 ) (*types.User, error) {
 	info, err := be.DB.FindUserInfo(ctx, username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find user info: %w", err)
 	}
 
 	if err := database.CompareHashAndPassword(
 		info.HashedPassword,
 		password,
 	); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("compare hash and password: %w", err)
 	}
 
 	return info.ToUser(), nil
@@ -75,7 +75,7 @@ func GetUser(
 ) (*types.User, error) {
 	info, err := be.DB.FindUserInfo(ctx, username)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find user info: %w", err)
 	}
 
 	return info.ToUser(), nil

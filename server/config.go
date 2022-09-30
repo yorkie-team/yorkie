@@ -29,7 +29,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
@@ -90,13 +89,11 @@ func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
 	bytes, err := ioutil.ReadFile(filepath.Clean(path))
 	if err != nil {
-		logging.DefaultLogger().Error(err)
-		return nil, err
+		return nil, fmt.Errorf("reading config file: %w", err)
 	}
 
 	if err = yaml.Unmarshal(bytes, conf); err != nil {
-		logging.DefaultLogger().Error(err)
-		return nil, err
+		return nil, fmt.Errorf("unmarshall config: %w", err)
 	}
 
 	conf.ensureDefaultValue()
@@ -116,28 +113,28 @@ func (c *Config) AdminAddr() string {
 // Validate returns an error if the provided Config is invalidated.
 func (c *Config) Validate() error {
 	if err := c.RPC.Validate(); err != nil {
-		return err
+		return fmt.Errorf("validate RPC config: %w", err)
 	}
 
 	if err := c.Profiling.Validate(); err != nil {
-		return err
+		return fmt.Errorf("validate profiling config: %w", err)
 	}
 
 	if err := c.Admin.Validate(); err != nil {
-		return err
+		return fmt.Errorf("validate admin config: %w", err)
 	}
 
 	if err := c.Housekeeping.Validate(); err != nil {
-		return err
+		return fmt.Errorf("validate housekeeping config: %w", err)
 	}
 
 	if err := c.Backend.Validate(); err != nil {
-		return err
+		return fmt.Errorf("validate backend config: %w", err)
 	}
 
 	if c.Mongo != nil {
 		if err := c.Mongo.Validate(); err != nil {
-			return err
+			return fmt.Errorf("validate mongo config: %w", err)
 		}
 	}
 

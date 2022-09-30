@@ -372,7 +372,7 @@ func (d *DB) ActivateClient(
 
 	raw, err := txn.First(tblClients, "project_id_key", projectID.String(), key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("finding client %s: %w", key, err)
 	}
 
 	now := gotime.Now()
@@ -412,7 +412,7 @@ func (d *DB) DeactivateClient(ctx context.Context, projectID, clientID types.ID)
 
 	raw, err := txn.First(tblClients, "id", clientID.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("finding client %s: %w", clientID.String(), err)
 	}
 
 	if raw == nil {
@@ -448,7 +448,7 @@ func (d *DB) FindClientInfoByID(ctx context.Context, projectID, clientID types.I
 
 	raw, err := txn.First(tblClients, "id", clientID.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("finding client %s: %w", clientID.String(), err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
@@ -480,7 +480,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 
 	raw, err := txn.First(tblClients, "id", clientInfo.ID.String())
 	if err != nil {
-		return err
+		return fmt.Errorf("finding client %s: %w", clientInfo.ID.String(), err)
 	}
 	if raw == nil {
 		return fmt.Errorf("%s: %w", clientInfo.ID, database.ErrClientNotFound)
@@ -516,7 +516,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	}
 
 	if err := txn.Insert(tblClients, loaded); err != nil {
-		return err
+		return fmt.Errorf("inserting client: %w", err)
 	}
 	txn.Commit()
 
@@ -573,7 +573,7 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 
 	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("finding document %s: %w", key.String(), err)
 	}
 	if !createDocIfNotExist && raw == nil {
 		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
@@ -592,7 +592,7 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 			AccessedAt: now,
 		}
 		if err := txn.Insert(tblDocuments, docInfo); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("inserting document: %w", err)
 		}
 		txn.Commit()
 	} else {
@@ -613,7 +613,7 @@ func (d *DB) FindDocInfoByKey(
 
 	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("finding document %s: %w", key.String(), err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
@@ -632,7 +632,7 @@ func (d *DB) FindDocInfoByID(
 
 	raw, err := txn.First(tblDocuments, "id", id.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("finding document %s: %w", id.String(), err)
 	}
 
 	if raw == nil {
@@ -670,13 +670,13 @@ func (d *DB) CreateChangeInfos(
 			Message:    cn.Message(),
 			Operations: encodedOperations,
 		}); err != nil {
-			return err
+			return fmt.Errorf("inserting change: %w", err)
 		}
 	}
 
 	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), docInfo.Key.String())
 	if err != nil {
-		return err
+		return fmt.Errorf("finding document %s: %w", docInfo.Key.String(), err)
 	}
 	if raw == nil {
 		return fmt.Errorf("%s: %w", docInfo.Key, database.ErrDocumentNotFound)
@@ -689,7 +689,7 @@ func (d *DB) CreateChangeInfos(
 	loadedDocInfo.ServerSeq = docInfo.ServerSeq
 	loadedDocInfo.UpdatedAt = gotime.Now()
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
-		return err
+		return fmt.Errorf("inserting document %s: %w", docInfo.Key, err)
 	}
 
 	txn.Commit()
@@ -822,7 +822,7 @@ func (d *DB) CreateSnapshotInfo(
 		Snapshot:  snapshot,
 		CreatedAt: gotime.Now(),
 	}); err != nil {
-		return err
+		return fmt.Errorf("inserting snapshot %s: %w", docID.String(), err)
 	}
 	txn.Commit()
 	return nil
@@ -992,7 +992,7 @@ func (d *DB) UpdateSyncedSeq(
 		clientInfo.ID.String(),
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("finding synced seq: %w", err)
 	}
 
 	syncedSeqInfo := &database.SyncedSeqInfo{
@@ -1009,7 +1009,7 @@ func (d *DB) UpdateSyncedSeq(
 	}
 
 	if err := txn.Insert(tblSyncedSeqs, syncedSeqInfo); err != nil {
-		return err
+		return fmt.Errorf("inserting synced seq %s: %w", docID.String(), err)
 	}
 
 	txn.Commit()
@@ -1116,7 +1116,7 @@ func (d *DB) findTicketByServerSeq(
 		serverSeq,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("finding change %s: %w", docID.String(), err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf(

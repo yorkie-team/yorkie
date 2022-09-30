@@ -29,5 +29,8 @@ linters-settings:
     excludes:
       - G107  # Potential HTTP request made with variable url
 
+  wrapcheck:
+    ignoreSigRegexps:
+      - Err[a-zA-Z]+
 issues:
   exclude-use-default: false

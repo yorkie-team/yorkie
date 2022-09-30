@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -59,17 +60,17 @@ func (s *yorkieServer) ActivateClient(
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method: types.ActivateClient,
 	}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("verify access: %w", err)
 	}
 
 	cli, err := clients.Activate(ctx, s.backend.DB, projects.From(ctx), req.ClientKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("activate client: %w", err)
 	}
 
 	pbClientID, err := cli.ID.Bytes()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode client id: %w", err)
 	}
 
 	return &api.ActivateClientResponse{
@@ -85,13 +86,13 @@ func (s *yorkieServer) DeactivateClient(
 ) (*api.DeactivateClientResponse, error) {
 	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parsing client id: %w", err)
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method: types.DeactivateClient,
 	}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("verify access: %w", err)
 	}
 
 	cli, err := clients.Deactivate(
@@ -101,12 +102,12 @@ func (s *yorkieServer) DeactivateClient(
 		types.IDFromActorID(actorID),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("deactivate client: %w", err)
 	}
 
 	pbClientID, err := cli.ID.Bytes()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert client id to bytes: %w", err)
 	}
 
 	return &api.DeactivateClientResponse{
@@ -121,19 +122,19 @@ func (s *yorkieServer) AttachDocument(
 ) (*api.AttachDocumentResponse, error) {
 	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parsing client id: %w", err)
 	}
 
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert from change pack: %w", err)
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachDocument,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("verifying access: %w", err)
 	}
 
 	if pack.HasChanges() {
@@ -142,7 +143,7 @@ func (s *yorkieServer) AttachDocument(
 			packs.PushPullKey(projects.From(ctx).ID, pack.DocumentKey),
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("new locker: %w", err)
 		}
 
 		if err := locker.Lock(ctx); err != nil {
@@ -162,7 +163,7 @@ func (s *yorkieServer) AttachDocument(
 		actorID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find client info: %w", err)
 	}
 	docInfo, err := documents.FindDocInfoByKeyAndOwner(
 		ctx,
@@ -177,12 +178,12 @@ func (s *yorkieServer) AttachDocument(
 	}
 
 	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("attach document: %w", err)
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("push pull pack: %w", err)
 	}
 
 	pbChangePack, err := pulled.ToPBChangePack()
@@ -202,12 +203,12 @@ func (s *yorkieServer) DetachDocument(
 ) (*api.DetachDocumentResponse, error) {
 	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse client id: %w", err)
 	}
 
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert from change pack: %w", err)
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
@@ -223,11 +224,11 @@ func (s *yorkieServer) DetachDocument(
 			packs.PushPullKey(projects.From(ctx).ID, pack.DocumentKey),
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("new locker: %w", err)
 		}
 
 		if err := locker.Lock(ctx); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("lock: %w", err)
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
@@ -243,7 +244,7 @@ func (s *yorkieServer) DetachDocument(
 		actorID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find client info: %w", err)
 	}
 	docInfo, err := documents.FindDocInfoByKeyAndOwner(
 		ctx,
@@ -258,20 +259,20 @@ func (s *yorkieServer) DetachDocument(
 	}
 
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ensure document attached: %w", err)
 	}
 	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("detach document: %w", err)
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("push pull pack: %w", err)
 	}
 
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert change pack to pb: %w", err)
 	}
 
 	return &api.DetachDocumentResponse{
@@ -292,7 +293,7 @@ func (s *yorkieServer) PushPull(
 
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert change pack: %w", err)
 	}
 
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
@@ -308,12 +309,11 @@ func (s *yorkieServer) PushPull(
 			packs.PushPullKey(projects.From(ctx).ID, pack.DocumentKey),
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("new locker: %w", err)
 		}
 
 		if err := locker.Lock(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
-			return nil, err
+			return nil, fmt.Errorf("lock: %w", err)
 		}
 		defer func() {
 			if err := locker.Unlock(ctx); err != nil {
@@ -340,21 +340,21 @@ func (s *yorkieServer) PushPull(
 		false,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find document info: %w", err)
 	}
 
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ensure document attached: %w", err)
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("push pull pack: %w", err)
 	}
 
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert change pack to protobuf: %w", err)
 	}
 
 	return &api.PushPullResponse{
@@ -370,7 +370,7 @@ func (s *yorkieServer) WatchDocuments(
 ) error {
 	cli, err := converter.FromClient(req.Client)
 	if err != nil {
-		return err
+		return fmt.Errorf("convert client: %w", err)
 	}
 	docKeys := converter.FromDocumentKeys(req.DocumentKeys)
 
@@ -415,9 +415,8 @@ func (s *yorkieServer) WatchDocuments(
 			},
 		},
 	}); err != nil {
-		logging.From(stream.Context()).Error(err)
 		s.unwatchDocs(docKeys, subscription)
-		return err
+		return fmt.Errorf("sending initialization: %w", err)
 	}
 
 	for {
@@ -431,7 +430,7 @@ func (s *yorkieServer) WatchDocuments(
 		case event := <-subscription.Events():
 			eventType, err := converter.ToDocEventType(event.Type)
 			if err != nil {
-				return err
+				return fmt.Errorf("converting event type: %w", err)
 			}
 
 			if err := stream.Send(&api.WatchDocumentsResponse{
@@ -443,9 +442,8 @@ func (s *yorkieServer) WatchDocuments(
 					},
 				},
 			}); err != nil {
-				logging.From(stream.Context()).Error(err)
 				s.unwatchDocs(docKeys, subscription)
-				return err
+				return fmt.Errorf("sending watch document event to client: %w", err)
 			}
 		}
 	}
@@ -458,13 +456,13 @@ func (s *yorkieServer) UpdatePresence(
 ) (*api.UpdatePresenceResponse, error) {
 	cli, err := converter.FromClient(req.Client)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("converting client: %w", err)
 	}
 	keys := converter.FromDocumentKeys(req.DocumentKeys)
 
 	docEvent, err := s.backend.Coordinator.UpdatePresence(ctx, cli, keys)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("update presence: %w", err)
 	}
 
 	s.backend.Coordinator.Publish(ctx, docEvent.Publisher.ID, *docEvent)
@@ -483,8 +481,7 @@ func (s *yorkieServer) watchDocs(
 		docKeys,
 	)
 	if err != nil {
-		logging.From(ctx).Error(err)
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("subscribe: %w", err)
 	}
 
 	s.backend.Coordinator.Publish(

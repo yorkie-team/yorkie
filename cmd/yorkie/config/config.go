@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 )
 
 // AdminAddr is the address of the admin server.
@@ -66,7 +67,7 @@ func LoadToken(addr string) (string, error) {
 // Load loads the configuration from the given path.
 func Load() (*Config, error) {
 	confPath := configPath()
-	file, err := os.Open(confPath)
+	file, err := os.Open(filepath.Clean(confPath))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return New(), nil
@@ -89,7 +90,7 @@ func Load() (*Config, error) {
 // Save saves the configuration to the given path.
 func Save(config *Config) error {
 	confPath := configPath()
-	file, err := os.Create(confPath)
+	file, err := os.Create(filepath.Clean(confPath))
 	if err != nil {
 		return fmt.Errorf("create config file %s: %w", confPath, err)
 	}

@@ -68,7 +68,7 @@ func GetProject(
 ) (*types.Project, error) {
 	info, err := be.DB.FindProjectInfoByName(ctx, owner, name)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("finding project info by name: %w", err)
 	}
 
 	return info.ToProject(), nil
@@ -84,7 +84,7 @@ func UpdateProject(
 ) (*types.Project, error) {
 	info, err := be.DB.UpdateProjectInfo(ctx, owner, id, fields)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("update project info: %w", err)
 	}
 
 	return info.ToProject(), nil
@@ -95,14 +95,14 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 	if apiKey == "" {
 		info, err := be.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("find project info by id: %w", err)
 		}
 		return info.ToProject(), nil
 	}
 
 	info, err := be.DB.FindProjectInfoByPublicKey(ctx, apiKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find project info by public key: %w", err)
 	}
 
 	return info.ToProject(), nil

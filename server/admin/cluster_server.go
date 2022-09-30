@@ -18,13 +18,13 @@ package admin
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 // clusterServer is a normal server that processes the broadcast by the server.
@@ -44,14 +44,12 @@ func (s *clusterServer) BroadcastEvent(
 ) (*api.BroadcastEventResponse, error) {
 	actorID, err := time.ActorIDFromBytes(request.PublisherId)
 	if err != nil {
-		logging.DefaultLogger().Error(err)
-		return nil, err
+		return nil, fmt.Errorf("parse publisher id: %w", err)
 	}
 
 	docEvent, err := converter.FromDocEvent(request.Event)
 	if err != nil {
-		logging.DefaultLogger().Error(err)
-		return nil, err
+		return nil, fmt.Errorf("convert doc event: %w", err)
 	}
 
 	switch docEvent.Type {
@@ -65,7 +63,7 @@ func (s *clusterServer) BroadcastEvent(
 			&docEvent.Publisher,
 			docEvent.DocumentKeys,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("update presence: %w", err)
 		}
 
 		s.backend.Coordinator.PublishToLocal(ctx, actorID, *docEvent)
