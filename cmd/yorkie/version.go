@@ -19,24 +19,43 @@ package main
 import (
 	"fmt"
 	"runtime"
+	"runtime/debug"
 
 	"github.com/spf13/cobra"
 
 	"github.com/yorkie-team/yorkie/internal/version"
 )
 
+const commitRevisionKey = "vcs.revision"
+
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print the version number of Yorkie",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			revision := settingByKey(commitRevisionKey)
 			fmt.Printf("Yorkie: %s\n", version.Version)
-			fmt.Printf("Commit: %s\n", version.GitCommit)
+			fmt.Printf("Commit: %s\n", revision[:7])
 			fmt.Printf("Go: %s\n", runtime.Version())
 			fmt.Printf("Build date: %s\n", version.BuildDate)
 			return nil
 		},
 	}
+}
+
+func settingByKey(key string) string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+
+	for _, setting := range info.Settings {
+		if setting.Key == key {
+			return setting.Value
+		}
+	}
+
+	return ""
 }
 
 func init() {
