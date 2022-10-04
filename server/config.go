@@ -91,12 +91,12 @@ func NewConfigFromFile(path string) (*Config, error) {
 	bytes, err := ioutil.ReadFile(filepath.Clean(path))
 	if err != nil {
 		logging.DefaultLogger().Error(err)
-		return nil, err
+		return nil, fmt.Errorf("read config file: %w", err)
 	}
 
 	if err = yaml.Unmarshal(bytes, conf); err != nil {
 		logging.DefaultLogger().Error(err)
-		return nil, err
+		return nil, fmt.Errorf("unmarshal config file: %w", err)
 	}
 
 	conf.ensureDefaultValue()

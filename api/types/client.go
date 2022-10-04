@@ -2,6 +2,7 @@ package types
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -17,7 +18,7 @@ func NewClient(encoded []byte) (*Client, error) {
 	cli := &Client{}
 	err := json.Unmarshal(encoded, cli)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal client: %w", err)
 	}
 	return cli, nil
 }
@@ -26,7 +27,7 @@ func NewClient(encoded []byte) (*Client, error) {
 func (c *Client) Marshal() (string, error) {
 	encoded, err := json.Marshal(c)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("marshal client: %w", err)
 	}
 
 	return string(encoded), nil

@@ -57,7 +57,7 @@ func verifyAccess(
 		Attributes: accessInfo.Attributes,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal auth webhook request: %w", err)
 	}
 
 	cacheKey := string(reqBody)
@@ -77,7 +77,7 @@ func verifyAccess(
 			bytes.NewBuffer(reqBody),
 		)
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("post to webhook: %w", err)
 		}
 
 		defer func() {

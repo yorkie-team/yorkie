@@ -18,6 +18,7 @@ package grpchelper
 
 import (
 	"errors"
+	"fmt"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -118,5 +119,9 @@ func ToStatusError(err error) error {
 		return st.Err()
 	}
 
-	return status.Error(codes.Internal, err.Error())
+	if err := status.Error(codes.Internal, err.Error()); err != nil {
+		return fmt.Errorf("create status error: %w", err)
+	}
+
+	return nil
 }

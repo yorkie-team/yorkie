@@ -58,7 +58,7 @@ func Dial(conf *Config) (*Client, error) {
 	)
 	if err != nil {
 		logging.DefaultLogger().Error(err)
-		return nil, err
+		return nil, fmt.Errorf("connect to mongo: %w", err)
 	}
 
 	pingTimeout := conf.ParsePingTimeout()
@@ -67,7 +67,7 @@ func Dial(conf *Config) (*Client, error) {
 
 	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
 		logging.DefaultLogger().Errorf("fail to connect to %s in %f sec", conf.ConnectionURI, pingTimeout.Seconds())
-		return nil, err
+		return nil, fmt.Errorf("ping mongo: %w", err)
 	}
 
 	if err := ensureIndexes(ctx, client.Database(conf.YorkieDatabase)); err != nil {
@@ -87,7 +87,7 @@ func Dial(conf *Config) (*Client, error) {
 func (c *Client) Close() error {
 	if err := c.client.Disconnect(context.Background()); err != nil {
 		logging.DefaultLogger().Error(err)
-		return err
+		return fmt.Errorf("close mongo client: %w", err)
 	}
 
 	return nil
@@ -138,7 +138,7 @@ func (c *Client) ensureDefaultUserInfo(
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("upsert default user info: %w", err)
 	}
 
 	result := c.collection(colUsers).FindOne(ctx, bson.M{
@@ -150,7 +150,7 @@ func (c *Client) ensureDefaultUserInfo(
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("default: %w", database.ErrUserNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("decode user info: %w", err)
 	}
 
 	return &info, nil
@@ -184,7 +184,7 @@ func (c *Client) ensureDefaultProjectInfo(
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create default project: %w", err)
 	}
 
 	result := c.collection(colProjects).FindOne(ctx, bson.M{
@@ -196,7 +196,7 @@ func (c *Client) ensureDefaultProjectInfo(
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("default: %w", database.ErrProjectNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("decode project info: %w", err)
 	}
 
 	return &info, nil
@@ -227,7 +227,7 @@ func (c *Client) CreateProjectInfo(
 		}
 
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("create project info: %w", err)
 	}
 
 	info.ID = types.ID(result.InsertedID.(primitive.ObjectID).Hex())
@@ -249,12 +249,12 @@ func (c *Client) ListProjectInfos(
 	})
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("fetch project infos: %w", err)
 	}
 
 	var infos []*database.ProjectInfo
 	if err := cursor.All(ctx, &infos); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch project infos: %w", err)
 	}
 
 	return infos, nil
@@ -271,7 +271,7 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", publicKey, database.ErrProjectNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("decode project info: %w", err)
 	}
 
 	return &projectInfo, nil
@@ -298,7 +298,7 @@ func (c *Client) FindProjectInfoByName(
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", name, database.ErrProjectNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("decode project info: %w", err)
 	}
 
 	return &projectInfo, nil
@@ -320,7 +320,7 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("decode project info: %w", err)
 	}
 
 	return &projectInfo, nil
@@ -342,16 +342,15 @@ func (c *Client) UpdateProjectInfo(
 		return nil, err
 	}
 
+	// Convert UpdatableProjectFields to bson.M
 	updatableFields := bson.M{}
 	data, err := bson.Marshal(fields)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("marshal fields: %w", err)
 	}
-	err = bson.Unmarshal(data, &updatableFields)
-	if err != nil {
-		return nil, err
+	if err = bson.Unmarshal(data, &updatableFields); err != nil {
+		return nil, fmt.Errorf("unmarshal updatable fields: %w", err)
 	}
-
 	updatableFields["updated_at"] = gotime.Now()
 
 	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
@@ -369,7 +368,7 @@ func (c *Client) UpdateProjectInfo(
 		if mongo.IsDuplicateKeyError(err) {
 			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
 		}
-		return nil, err
+		return nil, fmt.Errorf("decode project info: %w", err)
 	}
 
 	return &info, nil
@@ -393,7 +392,7 @@ func (c *Client) CreateUserInfo(
 		}
 
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("create user info: %w", err)
 	}
 
 	info.ID = types.ID(result.InsertedID.(primitive.ObjectID).Hex())
@@ -411,7 +410,7 @@ func (c *Client) FindUserInfo(ctx context.Context, username string) (*database.U
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("decode user info: %w", err)
 	}
 
 	return &userInfo, nil
@@ -424,12 +423,12 @@ func (c *Client) ListUserInfos(
 	cursor, err := c.collection(colUsers).Find(ctx, bson.M{})
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("list user infos: %w", err)
 	}
 
 	var infos []*database.UserInfo
 	if err := cursor.All(ctx, &infos); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch all user infos: %w", err)
 	}
 
 	return infos, nil
@@ -454,7 +453,7 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	}, options.Update().SetUpsert(true))
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("upsert client: %w", err)
 	}
 
 	var result *mongo.SingleResult
@@ -474,7 +473,7 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 
 	clientInfo := database.ClientInfo{}
 	if err = result.Decode(&clientInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode client info: %w", err)
 	}
 
 	return &clientInfo, nil
@@ -506,7 +505,7 @@ func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("decode client info: %w", err)
 	}
 
 	return &clientInfo, nil
@@ -588,7 +587,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
 		}
 		logging.From(ctx).Error(result.Err())
-		return result.Err()
+		return fmt.Errorf("update client info: %w", result.Err())
 	}
 
 	return nil
@@ -608,12 +607,12 @@ func (c *Client) FindDeactivateCandidates(
 	}, options.Find().SetLimit(int64(candidatesLimit)))
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find deactivate candidates: %w", err)
 	}
 
 	var clientInfos []*database.ClientInfo
 	if err := cursor.All(ctx, &clientInfos); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch deactivate candidates: %w", err)
 	}
 
 	return clientInfos, nil
@@ -649,7 +648,7 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 	}, options.Update().SetUpsert(createDocIfNotExist))
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("upsert document: %w", err)
 	}
 
 	var result *mongo.SingleResult
@@ -673,13 +672,13 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 		}
 		if result.Err() != nil {
 			logging.From(ctx).Error(result.Err())
-			return nil, result.Err()
+			return nil, fmt.Errorf("find document: %w", result.Err())
 		}
 	}
 
 	docInfo := database.DocInfo{}
 	if err := result.Decode(&docInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
 	return &docInfo, nil
@@ -705,12 +704,12 @@ func (c *Client) FindDocInfoByKey(
 	}
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
-		return nil, result.Err()
+		return nil, fmt.Errorf("find document: %w", result.Err())
 	}
 
 	docInfo := database.DocInfo{}
 	if err := result.Decode(&docInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
 	return &docInfo, nil
@@ -732,12 +731,12 @@ func (c *Client) FindDocInfoByID(ctx context.Context, id types.ID) (*database.Do
 	}
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
-		return nil, result.Err()
+		return nil, fmt.Errorf("find document: %w", result.Err())
 	}
 
 	docInfo := database.DocInfo{}
 	if err := result.Decode(&docInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
 	return &docInfo, nil
@@ -783,7 +782,7 @@ func (c *Client) CreateChangeInfos(
 		options.BulkWrite().SetOrdered(true),
 	); err != nil {
 		logging.From(ctx).Error(err)
-		return err
+		return fmt.Errorf("bulk write changes: %w", err)
 	}
 
 	res, err := c.collection(colDocuments).UpdateOne(ctx, bson.M{
@@ -797,7 +796,7 @@ func (c *Client) CreateChangeInfos(
 	})
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return err
+		return fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
 		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
@@ -829,11 +828,11 @@ func (c *Client) PurgeStaleChanges(
 	}
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
-		return result.Err()
+		return fmt.Errorf("find syncedseqs: %w", result.Err())
 	}
 	minSyncedSeqInfo := database.SyncedSeqInfo{}
 	if err := result.Decode(&minSyncedSeqInfo); err != nil {
-		return err
+		return fmt.Errorf("decode syncedseq: %w", err)
 	}
 
 	// Delete all changes before the smallest server seq.
@@ -846,7 +845,7 @@ func (c *Client) PurgeStaleChanges(
 		options.Delete(),
 	); err != nil {
 		logging.From(ctx).Error(err)
-		return err
+		return fmt.Errorf("delete changes: %w", err)
 	}
 
 	return nil
@@ -897,13 +896,13 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	}, options.Find())
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("find changes: %w", err)
 	}
 
 	var infos []*database.ChangeInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		logging.From(ctx).Error(cursor.Err())
-		return nil, cursor.Err()
+		return nil, fmt.Errorf("fetch changes: %w", err)
 	}
 
 	return infos, nil
@@ -932,7 +931,7 @@ func (c *Client) CreateSnapshotInfo(
 		"created_at": gotime.Now(),
 	}); err != nil {
 		logging.From(ctx).Error(err)
-		return err
+		return fmt.Errorf("insert snapshot: %w", err)
 	}
 
 	return nil
@@ -962,14 +961,13 @@ func (c *Client) FindClosestSnapshotInfo(
 	if result.Err() == mongo.ErrNoDocuments {
 		return snapshotInfo, nil
 	}
-
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
-		return nil, result.Err()
+		return nil, fmt.Errorf("find snapshot: %w", result.Err())
 	}
 
 	if err := result.Decode(snapshotInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode snapshot: %w", err)
 	}
 
 	return snapshotInfo, nil
@@ -996,12 +994,12 @@ func (c *Client) FindMinSyncedSeqInfo(
 	}
 	if syncedSeqResult.Err() != nil {
 		logging.From(ctx).Error(syncedSeqResult.Err())
-		return nil, syncedSeqResult.Err()
+		return nil, fmt.Errorf("find synced seq: %w", syncedSeqResult.Err())
 	}
 
 	syncedSeqInfo := database.SyncedSeqInfo{}
 	if err := syncedSeqResult.Decode(&syncedSeqInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode syncedseq: %w", err)
 	}
 
 	return &syncedSeqInfo, nil
@@ -1036,11 +1034,11 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	}
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
-		return nil, result.Err()
+		return nil, fmt.Errorf("find smallest syncedseq: %w", result.Err())
 	}
 	syncedSeqInfo := database.SyncedSeqInfo{}
 	if err := result.Decode(&syncedSeqInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode syncedseq: %w", err)
 	}
 
 	if syncedSeqInfo.ServerSeq == change.InitialServerSeq {
@@ -1098,13 +1096,12 @@ func (c *Client) FindDocInfosByPaging(
 	cursor, err := c.collection(colDocuments).Find(ctx, filter, opts)
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("find documents: %w", err)
 	}
 
 	var infos []*database.DocInfo
 	if err := cursor.All(ctx, &infos); err != nil {
-		logging.From(ctx).Error(cursor.Err())
-		return nil, cursor.Err()
+		return nil, fmt.Errorf("fetch document infos: %w", err)
 	}
 
 	return infos, nil
@@ -1130,13 +1127,12 @@ func (c *Client) FindDocInfosByQuery(
 	})
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("find document infos: %w", err)
 	}
 
 	var infos []*database.DocInfo
 	if err := cursor.All(ctx, &infos); err != nil {
-		logging.From(ctx).Error(cursor.Err())
-		return nil, cursor.Err()
+		return nil, fmt.Errorf("fetch documents: %w", err)
 	}
 
 	limit := pageSize
@@ -1177,7 +1173,7 @@ func (c *Client) UpdateSyncedSeq(
 			"client_id": encodedClientID,
 		}, options.Delete()); err != nil {
 			logging.From(ctx).Error(err)
-			return err
+			return fmt.Errorf("delete synced seq: %w", err)
 		}
 		return nil
 	}
@@ -1208,7 +1204,7 @@ func (c *Client) UpdateSyncedSeq(
 		},
 	}, options.Update().SetUpsert(true)); err != nil {
 		logging.From(ctx).Error(err)
-		return err
+		return fmt.Errorf("upsert synced seq: %w", err)
 	}
 
 	return nil
@@ -1240,15 +1236,14 @@ func (c *Client) findTicketByServerSeq(
 			database.ErrDocumentNotFound,
 		)
 	}
-
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
-		return nil, result.Err()
+		return nil, fmt.Errorf("find change: %w", result.Err())
 	}
 
 	changeInfo := database.ChangeInfo{}
 	if err := result.Decode(&changeInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode change: %w", err)
 	}
 
 	actorID, err := time.ActorIDFromHex(changeInfo.ActorID.String())

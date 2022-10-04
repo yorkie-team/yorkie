@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -70,7 +71,7 @@ func newCreateCommand() *cobra.Command {
 
 			encoded, err := json.Marshal(project)
 			if err != nil {
-				return err
+				return fmt.Errorf("marshal project: %w", err)
 			}
 
 			cmd.Println(string(encoded))

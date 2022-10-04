@@ -18,6 +18,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
 )
@@ -70,7 +71,7 @@ func Load() (*Config, error) {
 			return New(), nil
 		}
 
-		return nil, err
+		return nil, fmt.Errorf("open config file: %w", err)
 	}
 	defer func() {
 		_ = file.Close()
@@ -78,7 +79,7 @@ func Load() (*Config, error) {
 
 	var config *Config
 	if err := json.NewDecoder(file).Decode(&config); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode config file: %w", err)
 	}
 
 	return config, nil
@@ -88,14 +89,14 @@ func Load() (*Config, error) {
 func Save(config *Config) error {
 	file, err := os.Create(configPath())
 	if err != nil {
-		return err
+		return fmt.Errorf("create config file: %w", err)
 	}
 	defer func() {
 		_ = file.Close()
 	}()
 
 	if err := json.NewEncoder(file).Encode(config); err != nil {
-		return err
+		return fmt.Errorf("encode config file: %w", err)
 	}
 
 	return nil

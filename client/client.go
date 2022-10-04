@@ -118,7 +118,7 @@ func New(opts ...Option) (*Client, error) {
 	if options.CertFile != "" {
 		creds, err := credentials.NewClientTLSFromFile(options.CertFile, options.ServerNameOverride)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("create client tls from file: %w", err)
 		}
 		transportCreds = grpc.WithTransportCredentials(creds)
 	}
@@ -136,7 +136,7 @@ func New(opts ...Option) (*Client, error) {
 	if logger == nil {
 		l, err := zap.NewProduction()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("create logger: %w", err)
 		}
 		logger = l
 	}
@@ -170,7 +170,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 func (c *Client) Dial(rpcAddr string) error {
 	conn, err := grpc.Dial(rpcAddr, c.dialOptions...)
 	if err != nil {
-		return err
+		return fmt.Errorf("dial to %s: %w", rpcAddr, err)
 	}
 
 	c.conn = conn
@@ -185,7 +185,11 @@ func (c *Client) Close() error {
 		return err
 	}
 
-	return c.conn.Close()
+	if err := c.conn.Close(); err != nil {
+		return fmt.Errorf("close connection: %w", err)
+	}
+
+	return nil
 }
 
 // Activate activates this client. That is, it registers itself to the server

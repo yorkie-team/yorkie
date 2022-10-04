@@ -18,6 +18,7 @@ package mongo
 
 import (
 	"context"
+	"fmt"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -127,7 +128,7 @@ func ensureIndexes(ctx context.Context, db *mongo.Database) error {
 	for _, info := range collectionInfos {
 		_, err := db.Collection(info.name).Indexes().CreateMany(ctx, info.indexes)
 		if err != nil {
-			return err
+			return fmt.Errorf("create indexes: %w", err)
 		}
 	}
 	return nil

@@ -127,9 +127,14 @@ func (id *ActorID) Compare(other *ActorID) int {
 // MarshalJSON ensures that when calling json.Marshal(),
 // it is marshaled including private field.
 func (id *ActorID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&struct{ Bytes [actorIDSize]byte }{
+	result, err := json.Marshal(&struct{ Bytes [actorIDSize]byte }{
 		Bytes: id.bytes,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal JSON: %w", err)
+	}
+
+	return result, nil
 }
 
 // UnmarshalJSON ensures that when calling json.Unmarshal(),
@@ -139,7 +144,7 @@ func (id *ActorID) UnmarshalJSON(bytes []byte) error {
 		Bytes: id.bytes,
 	})
 	if err := json.Unmarshal(bytes, temp); err != nil {
-		return err
+		return fmt.Errorf("unmarshal JSON: %w", err)
 	}
 
 	id.bytes = temp.Bytes

@@ -105,12 +105,12 @@ func New(
 ) (*Housekeeping, error) {
 	interval, err := time.ParseDuration(conf.Interval)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse interval %s: %w", conf.Interval, err)
 	}
 
 	deactivateThreshold, err := time.ParseDuration(conf.DeactivateThreshold)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse deactivate threshold %s: %w", conf.DeactivateThreshold, err)
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())

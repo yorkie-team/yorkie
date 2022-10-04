@@ -155,7 +155,7 @@ func (c *Client) ensureClusterClient(
 		conn, err := grpc.Dial(member.ClusterAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			logging.DefaultLogger().Error(err)
-			return nil, err
+			return nil, fmt.Errorf("dial to %s: %w", member.ClusterAddr, err)
 		}
 
 		c.clusterClientMap[member.ID] = &clusterClientInfo{
@@ -240,7 +240,7 @@ func (c *Client) pullSubscriptions(
 	)
 	if err != nil {
 		logging.From(ctx).Error(err)
-		return nil, err
+		return nil, fmt.Errorf("get %s: %w", k, err)
 	}
 
 	var clients []types.Client
@@ -265,7 +265,7 @@ func (c *Client) removeSubscriptions(
 		k := path.Join(subscriptionsPath, docKey.String(), sub.ID())
 		if _, err := c.client.Delete(ctx, k); err != nil {
 			logging.From(ctx).Error(err)
-			return err
+			return fmt.Errorf("delete %s: %w", k, err)
 		}
 	}
 
