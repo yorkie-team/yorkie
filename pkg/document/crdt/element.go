@@ -24,7 +24,7 @@ import (
 type Container interface {
 	Element
 
-	// Purge physically purges the given chile element.
+	// Purge physically purges the given child element.
 	Purge(child Element)
 
 	// Descendants returns all descendants of this container.
