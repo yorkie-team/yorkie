@@ -151,7 +151,7 @@ func (p *Counter) RemovedAt() *time.Ticket {
 	return p.removedAt
 }
 
-// SetRemovedAt sets the removal time of this array.
+// SetRemovedAt sets the removal time of this element.
 func (p *Counter) SetRemovedAt(removedAt *time.Ticket) {
 	p.removedAt = removedAt
 }
