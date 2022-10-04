@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.19] - 2022-10-04
+
+### Added
+
+- Add signup validation: #407
+
+### Fixed
+
+- Remove unused nodeMapByCreatedAt in RHT: #408
+- Remove size cache from RGATreeList and use SplayTree instead: #415
+- Adjust indexes so that each user has separate project names: #418
+
 ## [0.2.18] - 2022-09-05
 
 ### Added
