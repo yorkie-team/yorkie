@@ -74,13 +74,13 @@ func (c *Client) Members() map[string]*sync.ServerInfo {
 func (c *Client) initializeMemberMap(ctx context.Context) error {
 	getResponse, err := c.client.Get(ctx, serversPath, clientv3.WithPrefix())
 	if err != nil {
-		return err
+		return fmt.Errorf("get %s: %w", serversPath, err)
 	}
 
 	for _, kv := range getResponse.Kvs {
 		var info sync.ServerInfo
 		if err := json.Unmarshal(kv.Value, &info); err != nil {
-			return err
+			return fmt.Errorf("unmarshal %s: %w", kv.Key, err)
 		}
 
 		c.setServerInfo(string(kv.Key), info)

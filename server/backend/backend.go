@@ -18,6 +18,7 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -63,7 +64,7 @@ func New(
 ) (*Backend, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get hostname: %w", err)
 	}
 
 	serverInfo := &sync.ServerInfo{

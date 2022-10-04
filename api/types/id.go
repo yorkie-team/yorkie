@@ -41,7 +41,7 @@ func (id *ID) String() string {
 func (id *ID) Bytes() ([]byte, error) {
 	decoded, err := hex.DecodeString(id.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode hex string: %w", err)
 	}
 	return decoded, nil
 }

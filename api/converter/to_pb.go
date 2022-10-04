@@ -36,7 +36,7 @@ import (
 func ToUser(user *types.User) (*api.User, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(user.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
 	}
 
 	return &api.User{
@@ -64,11 +64,11 @@ func ToProjects(projects []*types.Project) ([]*api.Project, error) {
 func ToProject(project *types.Project) (*api.Project, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(project.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
 	}
 	pbUpdatedAt, err := protoTypes.TimestampProto(project.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert updatedAt to protobuf: %w", err)
 	}
 
 	return &api.Project{
@@ -100,15 +100,15 @@ func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSum
 func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(summary.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
 	}
 	pbAccessedAt, err := protoTypes.TimestampProto(summary.AccessedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert accessedAt to protobuf: %w", err)
 	}
 	pbUpdatedAt, err := protoTypes.TimestampProto(summary.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert updatedAt to protobuf: %w", err)
 	}
 
 	return &api.DocumentSummary{

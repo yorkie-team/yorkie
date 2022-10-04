@@ -41,7 +41,7 @@ func TestClient(t *testing.T) {
 		}()
 		wg.Wait()
 
-		assert.ErrorIs(t, context.DeadlineExceeded, err)
+		assert.ErrorAs(t, err, &context.DeadlineExceeded)
 	})
 }
 

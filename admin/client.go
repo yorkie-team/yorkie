@@ -18,6 +18,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -80,7 +81,7 @@ func New(opts ...Option) (*Client, error) {
 	if logger == nil {
 		l, err := zap.NewProduction()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("create logger: %w", err)
 		}
 		logger = l
 	}
@@ -110,7 +111,7 @@ func Dial(adminAddr string, opts ...Option) (*Client, error) {
 func (c *Client) Dial(adminAddr string) error {
 	conn, err := grpc.Dial(adminAddr, c.dialOptions...)
 	if err != nil {
-		return err
+		return fmt.Errorf("dial to %s: %w", adminAddr, err)
 	}
 
 	c.conn = conn
@@ -121,7 +122,11 @@ func (c *Client) Dial(adminAddr string) error {
 
 // Close closes the connection to the admin service.
 func (c *Client) Close() error {
-	return c.conn.Close()
+	if err := c.conn.Close(); err != nil {
+		return fmt.Errorf("close connection: %w", err)
+	}
+
+	return nil
 }
 
 // LogIn logs in a user.
