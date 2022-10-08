@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         go_version:
-          - '1.18'
+          - '1.19'
     runs-on: ubuntu-latest
     steps:
 
