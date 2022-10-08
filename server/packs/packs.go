@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package packs implements PushPullPack which is used to sync the document
+// between the client and the server.
 package packs
 
 import (

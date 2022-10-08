@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package document provides the document command.
 package document
 
 import "github.com/spf13/cobra"

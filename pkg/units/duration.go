@@ -17,6 +17,8 @@
  * https://github.com/docker/go-units/blob/master/duration.go
  */
 
+// Package units provides a set of functions to convert between bytes and
+// human-readable formats.
 package units
 
 import (
@@ -25,7 +27,7 @@ import (
 )
 
 // HumanDuration returns a human-readable approximation of a duration
-// (eg. "About a minute", "4 hours ago", etc.).
+// (e.g. "About a minute", "4 hours ago", etc.).
 func HumanDuration(d time.Duration) string {
 	if seconds := int(d.Seconds()); seconds < 1 {
 		return "Less than a second"

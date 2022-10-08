@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package operations implements the operations that can be executed on the
+// document.
 package operations
 
 import (

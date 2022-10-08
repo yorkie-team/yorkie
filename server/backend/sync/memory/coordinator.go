@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package memory provides the memory implementation of the sync package.
 package memory
 
 import (

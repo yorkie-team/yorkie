@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package sync provides the synchronization primitives for the server.
 package sync
 
 import (

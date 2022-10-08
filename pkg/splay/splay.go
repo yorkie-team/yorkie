@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package splay provides splay tree implementation. It is used to implement
+// List by using splay tree.
 package splay
 
 import (
@@ -85,8 +87,7 @@ func (t *Node[V]) hasLinks() bool {
 }
 
 // Tree is weighted binary search tree which is based on Splay tree.
-// original paper on Splay Trees:
-//  - https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
+// original paper on Splay Trees: https://www.cs.cmu.edu/~sleator/papers/self-adjusting.pdf
 type Tree[V Value] struct {
 	root *Node[V]
 }
@@ -388,6 +389,7 @@ func (t *Tree[V]) rightmost() *Node[V] {
 	return node
 }
 
+// Len returns the size of this Tree.
 func (t *Tree[V]) Len() int {
 	if t.root == nil {
 		return 0

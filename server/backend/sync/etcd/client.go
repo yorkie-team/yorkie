@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package etcd provides etcd implementation of the sync. It is used to
+// synchronize the state of the cluster.
 package etcd
 
 import (

@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+// Package housekeeping provides the housekeeping service. The housekeeping
+// service is responsible for deactivating clients that have not been used for
+// a long time.
 package housekeeping
 
 import (

@@ -37,3 +37,8 @@ linters-settings:
 
 issues:
   exclude-use-default: false
+  # Excluding configuration per-path, per-linter, per-text and per-source
+  exclude-rules:
+    - text: "G112:"
+      linters:
+        - gosec

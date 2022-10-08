@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package prometheus provides a Prometheus metrics exporter.
 package prometheus
 
 import (

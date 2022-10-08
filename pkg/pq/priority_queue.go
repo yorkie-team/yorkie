@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package pq provides the priority queue implementation.
 package pq
 
 import (

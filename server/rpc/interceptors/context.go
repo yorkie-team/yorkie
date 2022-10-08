@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package interceptors provides the interceptors for RPC.
 package interceptors
 
 import (

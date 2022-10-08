@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+// Package crdt provides the implementation of the CRDT data structure.
+// The CRDT data structure is a data structure that can be replicated and
+// shared among multiple replicas.
 package crdt
 
 import (

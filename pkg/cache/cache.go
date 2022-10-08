@@ -17,6 +17,7 @@
  * https://github.com/kubernetes/kubernetes/blob/master/staging/src/k8s.io/apimachinery/pkg/util/cache/lruexpirecache.go
  */
 
+// Package cache provides a cache implementation.
 package cache
 
 import (

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package time provides logical clock and ticket for document.
 package time
 
 import (

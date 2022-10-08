@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package document provides JSON-like document(CRDT) implementation.
 package document
 
 import (

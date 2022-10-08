@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package metadata provides metadata for RPC.
 package metadata
 
 import (

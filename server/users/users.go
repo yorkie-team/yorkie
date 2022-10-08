@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package users provides the user related business logic.
 package users
 
 import (
