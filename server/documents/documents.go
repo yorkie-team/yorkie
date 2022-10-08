@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package documents provides the document related business logic.
 package documents
 
 import (

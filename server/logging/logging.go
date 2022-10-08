@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package logging provides logging facilities for Yorkie Server.
 package logging
 
 import (

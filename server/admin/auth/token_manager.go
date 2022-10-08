@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package auth provides the authentication and authorization of the admin server.
 package auth
 
 import (

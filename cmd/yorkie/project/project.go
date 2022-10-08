@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package project provides the project command.
 package project
 
 import "github.com/spf13/cobra"

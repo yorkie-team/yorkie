@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package change provides the implementation of Change. Change is a set of
+// operations that can be applied to a document.
 package change
 
 import (

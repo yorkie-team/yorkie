@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package admin provides the client for the admin service.
 package admin
 
 import (

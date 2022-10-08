@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package key provides the key implementation of the document.
 package key
 
 // Key represents a document key.

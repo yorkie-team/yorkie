@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package clients provides the client related business logic.
 package clients
 
 import (

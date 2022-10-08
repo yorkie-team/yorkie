@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+// Package server provides the Yorkie server which is the main entry point of the
+// Yorkie system. The server is responsible for starting the RPC server and
+// admin server.
 package server
 
 import (

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package helper provides helper functions for testing.
 package helper
 
 import (

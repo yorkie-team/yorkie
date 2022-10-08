@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package rpc provides the rpc server which is responsible for handling
+// requests from the client.
 package rpc
 
 import (

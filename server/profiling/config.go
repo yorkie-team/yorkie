@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package profiling provides profiling server.
 package profiling
 
 import (

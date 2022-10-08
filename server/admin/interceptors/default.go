@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package interceptors provides interceptors for Admin server.
 package interceptors
 
 import (

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package converter provides the converter for converting model to
+// Protobuf, bytes and vice versa.
 package converter
 
 import "errors"

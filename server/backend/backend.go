@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+// Package backend provides the backend implementation of the Yorkie.
+// This package is responsible for managing the database and other
+// resources required to run Yorkie.
 package backend
 
 import (

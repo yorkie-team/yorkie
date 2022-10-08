@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package config provides the configuration for Admin server.
 package config
 
 import (

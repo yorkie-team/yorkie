@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package types provides the types used in the Yorkie API. This package is
+// used by both the server and the client.
 package types
 
 import (

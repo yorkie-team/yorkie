@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package projects provides the project related business logic.
 package projects
 
 import (

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+// Package client provides the client implementation of Yorkie. It is used to
+// connect to the server and attach documents.
 package client
 
 import (

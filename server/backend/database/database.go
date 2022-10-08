@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package database provides the database interface for the Yorkie backend.
 package database
 
 import (

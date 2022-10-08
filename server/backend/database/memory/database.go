@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package memory implements the database interface using in-memory database.
 package memory
 
 import (

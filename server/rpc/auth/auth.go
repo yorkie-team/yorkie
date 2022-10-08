@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package auth provides authentication and authorization for RPCs.
 package auth
 
 import (

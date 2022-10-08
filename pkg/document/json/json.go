@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package json provides the JSON document implementation.
 package json
 
 import "github.com/yorkie-team/yorkie/pkg/document/crdt"

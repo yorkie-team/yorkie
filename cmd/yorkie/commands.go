@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package main is the entry point of the Yorkie CLI.
 package main
 
 import (

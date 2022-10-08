@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package mongo implements database interfaces using MongoDB.
 package mongo
 
 import (
