@@ -18,7 +18,7 @@ package server
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -88,7 +88,7 @@ func NewConfig() *Config {
 // NewConfigFromFile returns a Config struct for the given conf file.
 func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
-	bytes, err := ioutil.ReadFile(filepath.Clean(path))
+	bytes, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		logging.DefaultLogger().Error(err)
 		return nil, fmt.Errorf("read config file: %w", err)
