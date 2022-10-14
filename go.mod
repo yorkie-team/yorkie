@@ -3,7 +3,6 @@ module github.com/yorkie-team/yorkie
 go 1.19
 
 require (
-	bou.ke/monkey v1.0.2
 	github.com/go-playground/locales v0.14.0
 	github.com/go-playground/universal-translator v0.18.0
 	github.com/go-playground/validator/v10 v10.11.1
@@ -18,6 +17,7 @@ require (
 	github.com/rs/xid v1.4.0
 	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.8.0
+	github.com/undefinedlabs/go-mpatch v1.0.6
 	go.etcd.io/etcd/api/v3 v3.5.5
 	go.etcd.io/etcd/client/v3 v3.5.5
 	go.mongodb.org/mongo-driver v1.10.3

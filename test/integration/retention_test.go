@@ -25,8 +25,8 @@ import (
 	"reflect"
 	"testing"
 
-	"bou.ke/monkey"
 	"github.com/stretchr/testify/assert"
+	monkey "github.com/undefinedlabs/go-mpatch"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
@@ -43,17 +43,17 @@ import (
 
 func TestRetention(t *testing.T) {
 	var b *background.Background
-	monkey.PatchInstanceMethod(
+	patch, err := monkey.PatchInstanceMethodByName(
 		reflect.TypeOf(b),
 		"AttachGoroutine",
 		func(_ *background.Background, f func(c context.Context)) {
 			f(context.Background())
 		},
 	)
-	defer monkey.UnpatchInstanceMethod(
-		reflect.TypeOf(b),
-		"AttachGoroutine",
-	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer patch.Unpatch()
 
 	t.Run("history test with purging changes", func(t *testing.T) {
 		conf := helper.TestConfig()
