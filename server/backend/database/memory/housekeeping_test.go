@@ -49,7 +49,10 @@ func TestHousekeeping(t *testing.T) {
 		assert.NoError(t, err)
 		clientB, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-B", t.Name()))
 		assert.NoError(t, err)
-		patch.Unpatch()
+		err = patch.Unpatch()
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		clientC, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-C", t.Name()))
 		assert.NoError(t, err)
