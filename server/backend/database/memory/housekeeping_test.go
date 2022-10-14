@@ -21,11 +21,12 @@ package memory_test
 import (
 	"context"
 	"fmt"
+	"log"
 	"testing"
 	gotime "time"
 
-	"bou.ke/monkey"
 	"github.com/stretchr/testify/assert"
+	monkey "github.com/undefinedlabs/go-mpatch"
 
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
@@ -40,12 +41,15 @@ func TestHousekeeping(t *testing.T) {
 		ctx := context.Background()
 
 		yesterday := gotime.Now().Add(-24 * gotime.Hour)
-		guard := monkey.Patch(gotime.Now, func() gotime.Time { return yesterday })
+		patch, err := monkey.PatchMethod(gotime.Now, func() gotime.Time { return yesterday })
+		if err != nil {
+			log.Fatal(err)
+		}
 		clientA, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-A", t.Name()))
 		assert.NoError(t, err)
 		clientB, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-B", t.Name()))
 		assert.NoError(t, err)
-		guard.Unpatch()
+		patch.Unpatch()
 
 		clientC, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-C", t.Name()))
 		assert.NoError(t, err)

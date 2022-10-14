@@ -21,11 +21,12 @@ package integration
 import (
 	"context"
 	"fmt"
+	"log"
 	"reflect"
 	"testing"
 
-	"bou.ke/monkey"
 	"github.com/stretchr/testify/assert"
+	monkey "github.com/undefinedlabs/go-mpatch"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -36,17 +37,17 @@ import (
 
 func TestSnapshot(t *testing.T) {
 	var b *background.Background
-	monkey.PatchInstanceMethod(
+	patch, err := monkey.PatchInstanceMethodByName(
 		reflect.TypeOf(b),
 		"AttachGoroutine",
 		func(_ *background.Background, f func(c context.Context)) {
 			f(context.Background())
 		},
 	)
-	defer monkey.UnpatchInstanceMethod(
-		reflect.TypeOf(b),
-		"AttachGoroutine",
-	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer patch.Unpatch()
 
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
