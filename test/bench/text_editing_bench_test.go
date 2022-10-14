@@ -20,7 +20,7 @@ package bench
 
 import (
 	gojson "encoding/json"
-	"io/ioutil"
+	"io"
 	"os"
 	"testing"
 
@@ -91,7 +91,7 @@ func readEditingTraceFromFile(b *testing.B) (*editTrace, error) {
 		}
 	}()
 
-	byteValue, err := ioutil.ReadAll(file)
+	byteValue, err := io.ReadAll(file)
 	if err != nil {
 		return nil, err
 	}
