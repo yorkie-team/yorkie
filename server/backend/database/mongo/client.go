@@ -58,7 +58,6 @@ func Dial(conf *Config) (*Client, error) {
 			SetRegistry(newRegistryBuilder().Build()),
 	)
 	if err != nil {
-		logging.DefaultLogger().Error(err)
 		return nil, fmt.Errorf("connect to mongo: %w", err)
 	}
 
@@ -67,12 +66,10 @@ func Dial(conf *Config) (*Client, error) {
 	defer cancel()
 
 	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
-		logging.DefaultLogger().Errorf("fail to connect to %s in %f sec", conf.ConnectionURI, pingTimeout.Seconds())
 		return nil, fmt.Errorf("ping mongo: %w", err)
 	}
 
 	if err := ensureIndexes(ctx, client.Database(conf.YorkieDatabase)); err != nil {
-		logging.DefaultLogger().Error(err)
 		return nil, err
 	}
 
@@ -87,7 +84,6 @@ func Dial(conf *Config) (*Client, error) {
 // Close all resources of this client.
 func (c *Client) Close() error {
 	if err := c.client.Disconnect(context.Background()); err != nil {
-		logging.DefaultLogger().Error(err)
 		return fmt.Errorf("close mongo client: %w", err)
 	}
 

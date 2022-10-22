@@ -131,7 +131,6 @@ func (s *Server) GRPCServer() *grpc.Server {
 func (s *Server) listenAndServeGRPC() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
 	if err != nil {
-		logging.DefaultLogger().Error(err)
 		return fmt.Errorf("listen port %d: %w", s.conf.Port, err)
 	}
 

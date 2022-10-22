@@ -68,7 +68,6 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	if conf.CertFile != "" && conf.KeyFile != "" {
 		creds, err := credentials.NewServerTLSFromFile(conf.CertFile, conf.KeyFile)
 		if err != nil {
-			logging.DefaultLogger().Error(err)
 			return nil, fmt.Errorf("load TLS cert: %w", err)
 		}
 		opts = append(opts, grpc.Creds(creds))
@@ -111,7 +110,6 @@ func (s *Server) Shutdown(graceful bool) {
 func (s *Server) listenAndServeGRPC() error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
 	if err != nil {
-		logging.DefaultLogger().Error(err)
 		return fmt.Errorf("listen port %d: %w", s.conf.Port, err)
 	}
 

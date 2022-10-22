@@ -154,7 +154,6 @@ func (c *Client) ensureClusterClient(
 	if _, ok := c.clusterClientMap[member.ID]; !ok {
 		conn, err := grpc.Dial(member.ClusterAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
-			logging.DefaultLogger().Error(err)
 			return nil, fmt.Errorf("dial to %s: %w", member.ClusterAddr, err)
 		}
 

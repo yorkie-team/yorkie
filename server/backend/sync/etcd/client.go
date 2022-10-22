@@ -104,7 +104,6 @@ func (c *Client) Dial() error {
 		Password:    c.config.Password,
 	})
 	if err != nil {
-		logging.DefaultLogger().Error(err)
 		return fmt.Errorf("connect to etcd: %w", err)
 	}
 

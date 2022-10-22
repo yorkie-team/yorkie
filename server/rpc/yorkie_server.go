@@ -312,7 +312,6 @@ func (s *yorkieServer) PushPull(
 		}
 
 		if err := locker.Lock(ctx); err != nil {
-			logging.DefaultLogger().Error(err)
 			return nil, err
 		}
 		defer func() {

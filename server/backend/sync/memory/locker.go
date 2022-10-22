@@ -21,7 +21,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/locker"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
-	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 type internalLocker struct {
@@ -48,7 +47,6 @@ func (il *internalLocker) TryLock(ctx context.Context) error {
 // Unlock unlocks the mutex.
 func (il *internalLocker) Unlock(ctx context.Context) error {
 	if err := il.locks.Unlock(il.key); err != nil {
-		logging.DefaultLogger().Error(err)
 		return err
 	}
 

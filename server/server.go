@@ -25,7 +25,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/admin"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
-	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/server/rpc"
@@ -104,7 +103,6 @@ func (r *Yorkie) Start() error {
 	if r.profilingServer != nil {
 		err := r.profilingServer.Start()
 		if err != nil {
-			logging.DefaultLogger().Error(err)
 			return err
 		}
 	}

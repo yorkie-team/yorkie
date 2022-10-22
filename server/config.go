@@ -29,7 +29,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
-	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
@@ -90,12 +89,10 @@ func NewConfigFromFile(path string) (*Config, error) {
 	conf := &Config{}
 	bytes, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		logging.DefaultLogger().Error(err)
 		return nil, fmt.Errorf("read config file: %w", err)
 	}
 
 	if err = yaml.Unmarshal(bytes, conf); err != nil {
-		logging.DefaultLogger().Error(err)
 		return nil, fmt.Errorf("unmarshal config file: %w", err)
 	}
 
