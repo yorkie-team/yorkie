@@ -24,7 +24,6 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 // clusterServer is a normal server that processes the broadcast by the server.
@@ -44,13 +43,11 @@ func (s *clusterServer) BroadcastEvent(
 ) (*api.BroadcastEventResponse, error) {
 	actorID, err := time.ActorIDFromBytes(request.PublisherId)
 	if err != nil {
-		logging.DefaultLogger().Error(err)
 		return nil, err
 	}
 
 	docEvent, err := converter.FromDocEvent(request.Event)
 	if err != nil {
-		logging.DefaultLogger().Error(err)
 		return nil, err
 	}
 
