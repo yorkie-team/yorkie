@@ -7,19 +7,30 @@ We hope that the items listed below will inspire further engagement from the com
 Any dates listed below and the specific issues that will ship in a given milestone are subject to change but should give a general idea of what we are planning.
 We use the [Projects](https://github.com/orgs/yorkie-team/projects) feature in GitHub so look there for the most up-to-date and issue plan.
 
+## Yorkie v1.0
+
+Yorkie v1.0 focuses on improving the stability of the server and client to make Yorkie more reliable.
+
+### 2023
+
+- History API [#52](https://github.com/yorkie-team/yorkie/issues/52)
+- Undo/Redo [#49](https://github.com/yorkie-team/yorkie/issues/49)
+- Limits [#158](https://github.com/yorkie-team/yorkie/issues/158)
+- Retention [retention.md](https://github.com/yorkie-team/yorkie/blob/main/design/retention.md)
+- QoS [#270](https://github.com/yorkie-team/yorkie/issues/270)
+- P2P using WebRTC, LocalStorage [yorkie-js-sdk#271](https://github.com/yorkie-team/yorkie-js-sdk/issues/271)
+
 ## Yorkie v0.3
 
-Yorkie v0.3 should provide APIs in the form of service(SaaS) to make it easier for users to Yorkie.
+Yorkie v0.3 should provide APIs in the form of service(PaaS) to make it easier for users to Yorkie.
 
 ### 2022
 
- - Release [Yorkie House](https://github.com/yorkie-team/yorkie-house)
- - Multitenancy [#310](https://github.com/yorkie-team/yorkie/issues/310)
+ - Renewal of [Homepage](https://github.com/yorkie-team/homepage)
+ - Admin Web: [Yorkie House](https://github.com/yorkie-team/yorkie-house)
  - Admin API [#273](https://github.com/yorkie-team/yorkie/issues/273)
- - History API [#52](https://github.com/yorkie-team/yorkie/issues/52)
- - Limits [#158](https://github.com/yorkie-team/yorkie/issues/158)
- - QoS [#270](https://github.com/yorkie-team/yorkie/issues/270)
- - P2P using WebRTC, LocalStorage [yorkie-js-sdk#271](https://github.com/yorkie-team/yorkie-js-sdk/issues/271)
+ - Multi-tenancy [#310](https://github.com/yorkie-team/yorkie/issues/310)
+ - Mobile SDKs [#54](https://github.com/yorkie-team/yorkie/issues/54)
 
 ## Yorkie v0.2
 
@@ -54,4 +65,3 @@ Yorkie's first release version, v0.1, aims to implement the basic features of th
 ### 2019
  - Nov: Start the project with adding basic structure(Agent, Client, Document)
  - Dec: JS-SDK(Client, Document) [yorkie-js-sdk](https://github.com/yorkie-team/yorkie-js-sdk)
-
