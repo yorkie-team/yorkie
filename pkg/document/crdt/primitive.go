@@ -63,7 +63,7 @@ func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 		return value
 	case Date:
 		v := int64(binary.LittleEndian.Uint64(value))
-		return gotime.Unix(v, 0)
+		return gotime.UnixMilli(v)
 	}
 
 	panic("unsupported type")
@@ -173,7 +173,7 @@ func (p *Primitive) Bytes() []byte {
 		return val
 	case gotime.Time:
 		bytes := [8]byte{}
-		binary.LittleEndian.PutUint64(bytes[:], uint64(val.UTC().Unix()))
+		binary.LittleEndian.PutUint64(bytes[:], uint64(val.UTC().UnixMilli()))
 		return bytes[:]
 	}
 
@@ -200,7 +200,7 @@ func (p *Primitive) Marshal() string {
 		// {"a":{"0":1,"1":2},"b":2}
 		return fmt.Sprintf(`"%s"`, p.value)
 	case Date:
-		return p.value.(gotime.Time).Format(gotime.RFC3339)
+		return fmt.Sprintf(`"%s"`, p.value.(gotime.Time).Format(gotime.RFC3339))
 	}
 
 	panic("unsupported type")

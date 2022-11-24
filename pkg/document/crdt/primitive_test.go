@@ -17,6 +17,7 @@
 package crdt_test
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	gotime "time"
@@ -41,7 +42,7 @@ func TestPrimitive(t *testing.T) {
 		{float64(0), crdt.Double, "0.000000"},
 		{"0", crdt.String, `"0"`},
 		{[]byte{}, crdt.Bytes, `""`},
-		{gotime.Unix(0, 0), crdt.Date, gotime.Unix(0, 0).Format(gotime.RFC3339)},
+		{gotime.Unix(0, 0), crdt.Date, fmt.Sprintf(`"%s"`, gotime.Unix(0, 0).Format(gotime.RFC3339))},
 	}
 
 	t.Run("creation and deep copy test", func(t *testing.T) {
