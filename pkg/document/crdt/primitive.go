@@ -200,7 +200,7 @@ func (p *Primitive) Marshal() string {
 		// {"a":{"0":1,"1":2},"b":2}
 		return fmt.Sprintf(`"%s"`, p.value)
 	case Date:
-		return p.value.(gotime.Time).Format(gotime.RFC3339)
+		return fmt.Sprintf(`"%s"`, p.value.(gotime.Time).Format(gotime.RFC3339))
 	}
 
 	panic("unsupported type")
