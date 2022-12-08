@@ -8,8 +8,7 @@ into Yorkie.
 ### Contacts
 
 If you have any questions along the way, please don’t hesitate to ask us
-- Slack: [Dev Yorkie](https://dev-yorkie.slack.com/): You can sign up for our
- [Slack here](https://communityinviter.com/apps/dev-yorkie/yorkie).
+- Discord: [Yorkie Discord](https://discord.com/invite/MVEAwz9sBy).
 
 ### Getting started
 
