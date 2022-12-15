@@ -48,13 +48,14 @@ Yorkie consists of three main components: Client, Document and Server.
   - Client: https://github.com/yorkie-team/yorkie/tree/main/client
   - Document: https://github.com/yorkie-team/yorkie/tree/main/pkg/document
 - JS SDK: https://github.com/yorkie-team/yorkie-js-sdk
-- Admin
-  - Web: https://github.com/yorkie-team/yorkie-house
-  - CLI: https://yorkie.dev/docs/server#commands-cli
+- iOS SDK: https://github.com/yorkie-team/yorkie-ios-sdk
+- Android SDK: https://github.com/yorkie-team/yorkie-android-sdk
+- CLI: https://yorkie.dev/docs/cli
+- Dashboard: https://github.com/yorkie-team/dashboard
 
-## Quick Start
+## Getting Started
 
-https://yorkie.dev/docs/quick-start
+https://yorkie.dev/docs/getting-started
 
 ## Documentation
 
