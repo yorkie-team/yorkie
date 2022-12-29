@@ -100,9 +100,9 @@ func detailsFromError(err error) (protoiface.MessageV1, bool) {
 // occurs while executing logic in API handler, gRPC status.error should be
 // returned so that the client can know more about the status of the request.
 func ToStatusError(err error) error {
-	cause := errors.Unwrap(err)
-	if cause == nil {
-		cause = err
+	cause := err
+	for errors.Unwrap(cause) != nil {
+		cause = errors.Unwrap(cause)
 	}
 	if code, ok := errorToCode[cause]; ok {
 		return status.Error(code, err.Error())
