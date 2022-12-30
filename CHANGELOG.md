@@ -7,6 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.20] - 2022-12-30
+
+### Changed
+
+* Bump up Go to 1.19.2 by @hackerwins in https://github.com/yorkie-team/yorkie/pull/425
+* Bump up libraries to the latest version by @hackerwins in https://github.com/yorkie-team/yorkie/pull/426
+* Remove use of bou.ke/monkey library by @chromato99 in https://github.com/yorkie-team/yorkie/pull/427
+* Replace deprecated ioutil library by @chromato99 in https://github.com/yorkie-team/yorkie/pull/428
+* Remove duplicate logging when the function returns error by @hackerwins in https://github.com/yorkie-team/yorkie/pull/429
+
+### Fixed
+
+* Fix typo by @ppeeou in https://github.com/yorkie-team/yorkie/pull/421
+* Fix invalid JSON from marshaling dates and use UNIX ms for Date by @hackerwins in https://github.com/yorkie-team/yorkie/pull/432
+* Add additional unwrap code in ToStatusError gRPC error handler by @Krapi0314 in https://github.com/yorkie-team/yorkie/pull/434
+
 ## [0.2.19] - 2022-10-04
 
 ### Added
@@ -434,12 +450,3 @@ First public release
 - Add Peer Awareness API: #48
 - Add Prometheus metrics: #76
 - Add Custom CRDT data type `Counter`: #82
-
-### Changed
-
-### Removed
-
-### Deprecated
-
-[unreleased]: https://github.com/yorkie-team/yorkie/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/yorkie-team/yorkie/releases/tag/v0.1.0#
