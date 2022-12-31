@@ -18,11 +18,18 @@ services:
     depends_on:
       - prometheus
   etcd:
-    image: bitnami/etcd:latest
+    image: quay.io/coreos/etcd:latest
     container_name: etcd
-    environment:
-      - ALLOW_NONE_AUTHENTICATION=yes
-      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+    entrypoint: /usr/local/bin/etcd
+    command:
+      - '--name=etcd'
+      - '--initial-advertise-peer-urls=http://etcd:2379,http://etcd:2380'
+      - '--advertise-client-urls=http://etcd:2379,http://etcd:2380'
+      - '--listen-client-urls=http://0.0.0.0:2379'
+      - '--listen-peer-urls=http://0.0.0.0:2380'
+      - '--initial-cluster=etcd=http://etcd:2379,etcd=http://etcd:2380'
+      - '--initial-cluster-token=etcd'
+      - '--initial-cluster-state=new'
     ports:
       - '2379:2379'
       - '2380:2380'
