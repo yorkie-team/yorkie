@@ -70,18 +70,6 @@ func (p *Object) SetNewText(k string) *Text {
 	return v.(*Text)
 }
 
-// SetNewRichText sets a new RichText for the given key.
-func (p *Object) SetNewRichText(k string) *RichText {
-	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return NewRichText(
-			p.context,
-			crdt.NewInitialRichText(crdt.NewRGATreeSplit(crdt.InitialRichTextNode()), ticket),
-		)
-	})
-
-	return v.(*RichText)
-}
-
 // SetNewCounter sets a new NewCounter for the given key.
 func (p *Object) SetNewCounter(k string, n interface{}) *Counter {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
@@ -228,23 +216,6 @@ func (p *Object) GetText(k string) *Text {
 	case *crdt.Text:
 		return NewText(p.context, elem)
 	case *Text:
-		return elem
-	default:
-		panic("unsupported type")
-	}
-}
-
-// GetRichText returns RichText of the given key.
-func (p *Object) GetRichText(k string) *RichText {
-	elem := p.Object.Get(k)
-	if elem == nil {
-		return nil
-	}
-
-	switch elem := p.Object.Get(k).(type) {
-	case *crdt.RichText:
-		return NewRichText(p.context, elem)
-	case *RichText:
 		return elem
 	default:
 		panic("unsupported type")

@@ -34,7 +34,7 @@ type Container interface {
 	DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element
 }
 
-// TextElement represents Text or RichText.
+// TextElement represents Text.
 type TextElement interface {
 	Element
 	removedNodesLen() int

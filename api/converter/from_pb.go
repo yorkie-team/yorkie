@@ -284,8 +284,6 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 			op, err = fromEdit(decoded.Edit)
 		case *api.Operation_Select_:
 			op, err = fromSelect(decoded.Select)
-		case *api.Operation_RichEdit_:
-			op, err = fromRichEdit(decoded.RichEdit)
 		case *api.Operation_Style_:
 			op, err = fromStyle(decoded.Style)
 		case *api.Operation_Increase_:
@@ -394,39 +392,6 @@ func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
 	), nil
 }
 
-func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
-	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	from, err := fromTextNodePos(pbEdit.From)
-	if err != nil {
-		return nil, err
-	}
-	to, err := fromTextNodePos(pbEdit.To)
-	if err != nil {
-		return nil, err
-	}
-	createdAtMapByActor, err := fromCreatedAtMapByActor(
-		pbEdit.CreatedAtMapByActor,
-	)
-	if err != nil {
-		return nil, err
-	}
-	executedAt, err := fromTimeTicket(pbEdit.ExecutedAt)
-	if err != nil {
-		return nil, err
-	}
-	return operations.NewEdit(
-		parentCreatedAt,
-		from,
-		to,
-		createdAtMapByActor,
-		pbEdit.Content,
-		executedAt,
-	), nil
-}
-
 func fromSelect(pbSelect *api.Operation_Select) (*operations.Select, error) {
 	parentCreatedAt, err := fromTimeTicket(pbSelect.ParentCreatedAt)
 	if err != nil {
@@ -452,7 +417,7 @@ func fromSelect(pbSelect *api.Operation_Select) (*operations.Select, error) {
 	), nil
 }
 
-func fromRichEdit(pbEdit *api.Operation_RichEdit) (*operations.RichEdit, error) {
+func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
 	if err != nil {
 		return nil, err
@@ -475,7 +440,7 @@ func fromRichEdit(pbEdit *api.Operation_RichEdit) (*operations.RichEdit, error) 
 	if err != nil {
 		return nil, err
 	}
-	return operations.NewRichEdit(
+	return operations.NewEdit(
 		parentCreatedAt,
 		from,
 		to,
@@ -629,15 +594,6 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		}
 		return crdt.NewText(
 			crdt.NewRGATreeSplit(crdt.InitialTextNode()),
-			createdAt,
-		), nil
-	case api.ValueType_VALUE_TYPE_RICH_TEXT:
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		return crdt.NewInitialRichText(
-			crdt.NewRGATreeSplit(crdt.InitialRichTextNode()),
 			createdAt,
 		), nil
 	case api.ValueType_VALUE_TYPE_INTEGER_CNT:

@@ -558,20 +558,6 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 	}
 }
 
-func (s *RGATreeSplit[V]) marshal() string {
-	builder := strings.Builder{}
-
-	node := s.initialHead.next
-	for node != nil {
-		if node.removedAt == nil {
-			builder.WriteString(node.Marshal())
-		}
-		node = node.next
-	}
-
-	return builder.String()
-}
-
 func (s *RGATreeSplit[V]) string() string {
 	builder := strings.Builder{}
 

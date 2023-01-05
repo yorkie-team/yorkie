@@ -50,6 +50,8 @@ var (
 
 	AdminPort = 21103
 
+	AdminUser                       = server.DefaultAdminUser
+	AdminPassword                   = server.DefaultAdminPassword
 	HousekeepingInterval            = 1 * gotime.Second
 	HousekeepingDeactivateThreshold = 1 * gotime.Minute
 	HousekeepingCandidatesLimit     = 10

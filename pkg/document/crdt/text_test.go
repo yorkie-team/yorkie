@@ -32,12 +32,12 @@ func TestText(t *testing.T) {
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)
-		text.Edit(fromPos, toPos, nil, "Hello World", ctx.IssueTimeTicket())
-		assert.Equal(t, `"Hello World"`, text.Marshal())
+		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		assert.Equal(t, `[{"attrs":{},"val":"Hello World"}]`, text.Marshal())
 
 		fromPos, toPos = text.CreateRange(6, 11)
-		text.Edit(fromPos, toPos, nil, "Yorkie", ctx.IssueTimeTicket())
-		assert.Equal(t, `"Hello Yorkie"`, text.Marshal())
+		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		assert.Equal(t, `[{"attrs":{},"val":"Hello "},{"attrs":{},"val":"Yorkie"}]`, text.Marshal())
 	})
 
 	t.Run("UTF-16 code units test", func(t *testing.T) {
@@ -52,13 +52,36 @@ func TestText(t *testing.T) {
 			{10, "Ĺo͂řȩm̅"},
 		}
 		for _, test := range tests {
-			val := crdt.NewTextValue(test.value)
+			val := crdt.NewTextValue(test.value, crdt.NewRHT())
 			assert.Equal(t, test.length, val.Len())
 			assert.Equal(t, test.length-2, val.Split(2).Len())
 
-			richVal := crdt.NewRichTextValue(crdt.NewRHT(), test.value)
+			richVal := crdt.NewTextValue(test.value, crdt.NewRHT())
 			assert.Equal(t, test.length, richVal.Len())
 			assert.Equal(t, test.length-2, richVal.Split(2).Len())
 		}
+	})
+
+	t.Run("marshal test", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+		fromPos, toPos := text.CreateRange(0, 0)
+		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		assert.Equal(t, `[{"attrs":{},"val":"Hello World"}]`, text.Marshal())
+
+		fromPos, toPos = text.CreateRange(6, 11)
+		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		assert.Equal(t, `[{"attrs":{},"val":"Hello "},{"attrs":{},"val":"Yorkie"}]`, text.Marshal())
+
+		fromPos, toPos = text.CreateRange(0, 1)
+		text.Style(fromPos, toPos, map[string]string{"b": "1"}, ctx.IssueTimeTicket())
+		assert.Equal(
+			t,
+			`[{"attrs":{"b":"1"},"val":"H"},{"attrs":{},"val":"ello "},{"attrs":{},"val":"Yorkie"}]`,
+			text.Marshal(),
+		)
 	})
 }

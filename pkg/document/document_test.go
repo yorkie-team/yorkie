@@ -205,16 +205,16 @@ func TestDocument(t *testing.T) {
 			root.SetNewText("k1").
 				Edit(0, 0, "ABCD").
 				Edit(1, 3, "12")
-			assert.Equal(t, `{"k1":"A12D"}`, root.Marshal())
+			assert.Equal(t, `{"k1":[{"attrs":{},"val":"A"},{"attrs":{},"val":"12"},{"attrs":{},"val":"D"}]}`, root.Marshal())
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":"A12D"}`, doc.Marshal())
+		assert.Equal(t, `{"k1":[{"attrs":{},"val":"A"},{"attrs":{},"val":"12"},{"attrs":{},"val":"D"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			text := root.GetText("k1")
 			assert.Equal(t,
-				"[0:0:00:0 ][1:2:00:0 A][1:3:00:0 12]{1:2:00:1 BC}[1:2:00:3 D]",
+				`[0:0:00:0 {} ""][1:2:00:0 {} "A"][1:3:00:0 {} "12"]{1:2:00:1 {} "BC"}[1:2:00:3 {} "D"]`,
 				text.StructureAsString(),
 			)
 
@@ -248,22 +248,22 @@ func TestDocument(t *testing.T) {
 				Edit(0, 1, "하").
 				Edit(1, 1, "느").
 				Edit(1, 2, "늘")
-			assert.Equal(t, `{"k1":"하늘"}`, root.Marshal())
+			assert.Equal(t, `{"k1":[{"attrs":{},"val":"하"},{"attrs":{},"val":"늘"}]}`, root.Marshal())
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":"하늘"}`, doc.Marshal())
+		assert.Equal(t, `{"k1":[{"attrs":{},"val":"하"},{"attrs":{},"val":"늘"}]}`, doc.Marshal())
 	})
 
 	t.Run("rich text test", func(t *testing.T) {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object) error {
-			text := root.SetNewRichText("k1")
+			text := root.SetNewText("k1")
 			text.Edit(0, 0, "Hello world", nil)
 			assert.Equal(
 				t,
-				`[0:0:00:0 {} ""][1:2:00:0 {} "Hello world"][1:1:00:0 {} "\n"]`,
+				`[0:0:00:0 {} ""][1:2:00:0 {} "Hello world"]`,
 				text.StructureAsString(),
 			)
 			return nil
@@ -272,10 +272,10 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"attrs":{},"val":"Hello world"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
-			text := root.GetRichText("k1")
-			text.SetStyle(0, 5, map[string]string{"b": "1"})
+			text := root.GetText("k1")
+			text.Style(0, 5, map[string]string{"b": "1"})
 			assert.Equal(t,
-				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"][1:1:00:0 {} "\n"]`,
+				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
 				text.StructureAsString(),
 			)
 			return nil
@@ -288,19 +288,18 @@ func TestDocument(t *testing.T) {
 		)
 
 		err = doc.Update(func(root *json.Object) error {
-			text := root.GetRichText("k1")
-			text.SetStyle(0, 5, map[string]string{"b": "1"})
+			text := root.GetText("k1")
+			text.Style(0, 5, map[string]string{"b": "1"})
 			assert.Equal(
 				t,
-				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"][1:1:00:0 {} "\n"]`,
+				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
 				text.StructureAsString(),
 			)
 
-			text.SetStyle(3, 5, map[string]string{"i": "1"})
+			text.Style(3, 5, map[string]string{"i": "1"})
 			assert.Equal(
 				t,
-				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][1:2:00:5 {} " world"]`+
-					`[1:1:00:0 {} "\n"]`,
+				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][1:2:00:5 {} " world"]`,
 				text.StructureAsString(),
 			)
 			return nil
@@ -313,12 +312,12 @@ func TestDocument(t *testing.T) {
 		)
 
 		err = doc.Update(func(root *json.Object) error {
-			text := root.GetRichText("k1")
+			text := root.GetText("k1")
 			text.Edit(5, 11, " Yorkie", nil)
 			assert.Equal(
 				t,
 				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"]`+
-					`[4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}[1:1:00:0 {} "\n"]`,
+					`[4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
 				text.StructureAsString(),
 			)
 			return nil
@@ -331,12 +330,12 @@ func TestDocument(t *testing.T) {
 		)
 
 		err = doc.Update(func(root *json.Object) error {
-			text := root.GetRichText("k1")
+			text := root.GetText("k1")
 			text.Edit(5, 5, "\n", map[string]string{"list": "true"})
 			assert.Equal(
 				t,
 				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"]`+
-					`[5:1:00:0 {"list":"true"} "\n"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}[1:1:00:0 {} "\n"]`,
+					`[5:1:00:0 {"list":"true"} "\n"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
 				text.StructureAsString(),
 			)
 			return nil
@@ -499,7 +498,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(
 			t,
-			`[0:0:00:0 ][1:3:00:0 12]{1:2:00:0 AB}[1:2:00:2 CD]`,
+			`[0:0:00:0 {} ""][1:3:00:0 {} "12"]{1:2:00:0 {} "AB"}[1:2:00:2 {} "CD"]`,
 			doc.Root().GetText("text").StructureAsString(),
 		)
 
@@ -508,7 +507,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, 0, doc.GarbageLen())
 		assert.Equal(
 			t,
-			`[0:0:00:0 ][1:3:00:0 12][1:2:00:2 CD]`,
+			`[0:0:00:0 {} ""][1:3:00:0 {} "12"][1:2:00:2 {} "CD"]`,
 			doc.Root().GetText("text").StructureAsString(),
 		)
 
@@ -519,7 +518,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(
 			t,
-			`[0:0:00:0 ][1:3:00:0 12]{1:2:00:2 CD}`,
+			`[0:0:00:0 {} ""][1:3:00:0 {} "12"]{1:2:00:2 {} "CD"}`,
 			doc.Root().GetText("text").StructureAsString(),
 		)
 	})

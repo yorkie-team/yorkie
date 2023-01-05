@@ -18,21 +18,35 @@ package crdt
 
 import (
 	"fmt"
+	"strings"
 	"unicode/utf16"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// TextValue is a value of Text.
+// TextValue is a value of Text which has an attributes that represent
+// the text style.
 type TextValue struct {
 	value string
+	attrs *RHT
 }
 
 // NewTextValue creates a value of Text.
-func NewTextValue(value string) *TextValue {
+func NewTextValue(value string, attrs *RHT) *TextValue {
 	return &TextValue{
 		value: value,
+		attrs: attrs,
 	}
+}
+
+// Attrs returns the attributes of this value.
+func (t *TextValue) Attrs() *RHT {
+	return t.attrs
+}
+
+// Value returns the value of this text value.
+func (t *TextValue) Value() string {
+	return t.value
 }
 
 // Len returns the length of this value.
@@ -49,13 +63,21 @@ func (t *TextValue) String() string {
 
 // Marshal returns the JSON encoding of this text.
 func (t *TextValue) Marshal() string {
-	return EscapeString(t.value)
+	return fmt.Sprintf(
+		`{"attrs":%s,"val":"%s"}`,
+		t.attrs.Marshal(),
+		EscapeString(t.value),
+	)
 }
 
 // structureAsString returns a String containing the metadata of this value
 // for debugging purpose.
 func (t *TextValue) structureAsString() string {
-	return EscapeString(t.value)
+	return fmt.Sprintf(
+		`%s "%s"`,
+		t.attrs.Marshal(),
+		EscapeString(t.value),
+	)
 }
 
 // Split splits this value by the given offset.
@@ -63,12 +85,17 @@ func (t *TextValue) Split(offset int) RGATreeSplitValue {
 	value := t.value
 	encoded := utf16.Encode([]rune(value))
 	t.value = string(utf16.Decode(encoded[0:offset]))
-	return NewTextValue(string(utf16.Decode(encoded[offset:])))
+
+	return NewTextValue(
+		string(utf16.Decode(encoded[offset:])),
+		t.attrs.DeepCopy(),
+	)
 }
 
 // DeepCopy copies itself deeply.
 func (t *TextValue) DeepCopy() RGATreeSplitValue {
 	return &TextValue{
+		attrs: t.attrs.DeepCopy(),
 		value: t.value,
 	}
 }
@@ -77,6 +104,7 @@ func (t *TextValue) DeepCopy() RGATreeSplitValue {
 // as this node is split into multiple nodes.
 func InitialTextNode() *RGATreeSplitNode[*TextValue] {
 	return NewRGATreeSplitNode(initialNodeID, &TextValue{
+		attrs: NewRHT(),
 		value: "",
 	})
 }
@@ -99,14 +127,38 @@ func NewText(elements *RGATreeSplit[*TextValue], createdAt *time.Ticket) *Text {
 	}
 }
 
-// Marshal returns the JSON encoding of this text.
-func (t *Text) Marshal() string {
-	return fmt.Sprintf(`"%s"`, t.rgaTreeSplit.marshal())
+// String returns the string representation of this Text.
+func (t *Text) String() string {
+	var values []string
+
+	node := t.rgaTreeSplit.initialHead.next
+	for node != nil {
+		if node.createdAt().Compare(t.createdAt) == 0 {
+			// last line
+		} else if node.removedAt == nil {
+			values = append(values, node.String())
+		}
+		node = node.next
+	}
+
+	return strings.Join(values, "")
 }
 
-// String returns a string representation of this text.
-func (t *Text) String() string {
-	return t.rgaTreeSplit.string()
+// Marshal returns the JSON encoding of this Text.
+func (t *Text) Marshal() string {
+	var values []string
+
+	node := t.rgaTreeSplit.initialHead.next
+	for node != nil {
+		if node.createdAt().Compare(t.createdAt) == 0 {
+			// last line
+		} else if node.removedAt == nil {
+			values = append(values, node.Marshal())
+		}
+		node = node.next
+	}
+
+	return fmt.Sprintf("[%s]", strings.Join(values, ","))
 }
 
 // DeepCopy copies itself deeply.
@@ -169,23 +221,50 @@ func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNod
 	return t.rgaTreeSplit.createRange(from, to)
 }
 
-// Edit edits the given range with the given content.
+// Edit edits the given range with the given content and attributes.
 func (t *Text) Edit(
 	from,
 	to *RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
+	attributes map[string]string,
 	executedAt *time.Ticket,
 ) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
+	val := NewTextValue(content, NewRHT())
+	for key, value := range attributes {
+		val.attrs.Set(key, value, executedAt)
+	}
+
 	cursorPos, latestCreatedAtMapByActor := t.rgaTreeSplit.edit(
 		from,
 		to,
 		latestCreatedAtMapByActor,
-		NewTextValue(content),
+		val,
 		executedAt,
 	)
 
 	return cursorPos, latestCreatedAtMapByActor
+}
+
+// Style applies the given attributes of the given range.
+func (t *Text) Style(
+	from,
+	to *RGATreeSplitNodePos,
+	attributes map[string]string,
+	executedAt *time.Ticket,
+) {
+	// 01. Split nodes with from and to
+	_, toRight := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
+	_, fromRight := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
+
+	// 02. style nodes between from and to
+	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
+	for _, node := range nodes {
+		val := node.value
+		for key, value := range attributes {
+			val.attrs.Set(key, value, executedAt)
+		}
+	}
 }
 
 // Select stores that the given range has been selected.
@@ -194,18 +273,12 @@ func (t *Text) Select(
 	to *RGATreeSplitNodePos,
 	executedAt *time.Ticket,
 ) {
-	if _, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok {
-		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
-		return
-	}
-
-	prevSelection := t.selectionMap[executedAt.ActorIDHex()]
-	if executedAt.After(prevSelection.updatedAt) {
+	if prev, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok || executedAt.After(prev.updatedAt) {
 		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
 	}
 }
 
-// Nodes returns the internal nodes of this text.
+// Nodes returns the internal nodes of this Text.
 func (t *Text) Nodes() []*RGATreeSplitNode[*TextValue] {
 	return t.rgaTreeSplit.nodes()
 }

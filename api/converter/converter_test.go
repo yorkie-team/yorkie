@@ -44,21 +44,21 @@ func TestConverter(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":"A"}`, doc.Marshal())
+		assert.Equal(t, `{"k1":[{"attrs":{},"val":"A"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			root.SetNewText("k1").Edit(0, 0, "B")
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":"B"}`, doc.Marshal())
+		assert.Equal(t, `{"k1":[{"attrs":{},"val":"B"}]}`, doc.Marshal())
 
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
 
 		obj, err = converter.BytesToObject(bytes)
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":"B"}`, obj.Marshal())
+		assert.Equal(t, `{"k1":[{"attrs":{},"val":"B"}]}`, obj.Marshal())
 	})
 
 	t.Run("snapshot test", func(t *testing.T) {
@@ -101,10 +101,10 @@ func TestConverter(t *testing.T) {
 				Edit(2, 3, "뭉게구")
 
 			// rich text
-			root.SetNewRichText("k4").
+			root.SetNewText("k4").
 				Edit(0, 0, "Hello world", nil).
 				Edit(6, 11, "sky", nil).
-				SetStyle(0, 5, map[string]string{"b": "1"})
+				Style(0, 5, map[string]string{"b": "1"})
 
 			// a counter
 			root.SetNewCounter("k5", 0).
@@ -163,10 +163,10 @@ func TestConverter(t *testing.T) {
 				Edit(1, 2, "늘").
 				Select(1, 2)
 
-			// plain text
-			root.SetNewRichText("k3").
+			// rich text
+			root.SetNewText("k3").
 				Edit(0, 0, "Hello World", nil).
-				SetStyle(0, 5, map[string]string{"b": "1"})
+				Style(0, 5, map[string]string{"b": "1"})
 
 			// counter
 			root.SetNewCounter("k4", 0).Increase(5)
