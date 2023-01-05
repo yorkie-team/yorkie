@@ -35,8 +35,6 @@ func EscapeString(s string) string {
 		case '\\':
 			buf.WriteByte('\\')
 			buf.WriteByte('\\')
-			buf.WriteByte('\\')
-			buf.WriteByte('\\')
 		case '"':
 			buf.WriteByte('\\')
 			buf.WriteByte('\\')

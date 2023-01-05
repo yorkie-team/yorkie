@@ -8,10 +8,10 @@ import (
 
 func TestMarshal(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
-		key1 := "hello\\\t"
+		key1 := `hello\\\t`
 		value1 := "world\"\f\b"
 		key2 := "hi"
-		value2 := "test\r"
+		value2 := `test\r`
 		expected := `{"hello\\\\\\t":"world\\"\\f\\b","hi":"test\\r"}`
 
 		rht := NewRHT()
