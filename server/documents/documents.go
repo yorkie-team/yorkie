@@ -29,6 +29,10 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 )
 
+// SnapshotMaxLen is the maximum length of the document snapshot in the
+// document summary.
+const SnapshotMaxLen = 50
+
 // ListDocumentSummaries returns a list of document summaries.
 func ListDocumentSummaries(
 	ctx context.Context,
@@ -48,14 +52,9 @@ func ListDocumentSummaries(
 			return nil, err
 		}
 
-		var snapshot string
-		fullSnapshot := doc.Marshal()
-		snapshotCutline := 50
-
-		if len(fullSnapshot) < snapshotCutline {
-			snapshot = fullSnapshot
-		} else {
-			snapshot = fullSnapshot[:snapshotCutline] + " ..."
+		snapshot := doc.Marshal()
+		if len(snapshot) > SnapshotMaxLen {
+			snapshot = snapshot[:SnapshotMaxLen] + "..."
 		}
 
 		summaries = append(summaries, &types.DocumentSummary{
