@@ -373,17 +373,9 @@ func (s *yorkieServer) WatchDocuments(
 	}
 	docKeys := converter.FromDocumentKeys(req.DocumentKeys)
 
-	var attrs []types.AccessAttribute
-	for _, k := range docKeys {
-		attrs = append(attrs, types.AccessAttribute{
-			Key:  k.String(),
-			Verb: types.Read,
-		})
-	}
-
 	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
-		Attributes: attrs,
+		Attributes: types.NewAccessAttributes(docKeys, types.Read),
 	}); err != nil {
 		return err
 	}
@@ -397,15 +389,14 @@ func (s *yorkieServer) WatchDocuments(
 		return err
 	}
 
-	subscription, peersMap, err := s.watchDocs(
-		stream.Context(),
-		*cli,
-		docKeys,
-	)
+	subscription, peersMap, err := s.watchDocs(stream.Context(), *cli, docKeys)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
 	}
+	defer func() {
+		s.unwatchDocs(docKeys, subscription)
+	}()
 
 	if err := stream.Send(&api.WatchDocumentsResponse{
 		Body: &api.WatchDocumentsResponse_Initialization_{
@@ -414,18 +405,14 @@ func (s *yorkieServer) WatchDocuments(
 			},
 		},
 	}); err != nil {
-		logging.From(stream.Context()).Error(err)
-		s.unwatchDocs(docKeys, subscription)
 		return err
 	}
 
 	for {
 		select {
 		case <-s.serviceCtx.Done():
-			s.unwatchDocs(docKeys, subscription)
 			return nil
 		case <-stream.Context().Done():
-			s.unwatchDocs(docKeys, subscription)
 			return nil
 		case event := <-subscription.Events():
 			eventType, err := converter.ToDocEventType(event.Type)
@@ -442,8 +429,6 @@ func (s *yorkieServer) WatchDocuments(
 					},
 				},
 			}); err != nil {
-				logging.From(stream.Context()).Error(err)
-				s.unwatchDocs(docKeys, subscription)
 				return err
 			}
 		}
