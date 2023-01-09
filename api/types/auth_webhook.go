@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 // VerbType represents an action taken on the document.
@@ -82,6 +84,18 @@ func AuthMethods() []Method {
 type AccessAttribute struct {
 	Key  string   `json:"key"`
 	Verb VerbType `json:"verb"`
+}
+
+// NewAccessAttributes creates a new instance of AccessAttributes.
+func NewAccessAttributes(docKeys []key.Key, verb VerbType) []AccessAttribute {
+	attrs := make([]AccessAttribute, len(docKeys))
+	for i, docKey := range docKeys {
+		attrs[i] = AccessAttribute{
+			Key:  docKey.String(),
+			Verb: verb,
+		}
+	}
+	return attrs
 }
 
 // AccessInfo represents an access information.
