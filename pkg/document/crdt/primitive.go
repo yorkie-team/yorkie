@@ -52,7 +52,7 @@ func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 		return false
 	case Integer:
 		val := int32(binary.LittleEndian.Uint32(value))
-		return int(val)
+		return int32(val)
 	case Long:
 		return int64(binary.LittleEndian.Uint64(value))
 	case Double:
@@ -95,6 +95,18 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 			value:     val,
 			createdAt: createdAt,
 		}
+	case int32:
+		return &Primitive{
+			valueType: Integer,
+			value:     val,
+			createdAt: createdAt,
+		}
+	case int64:
+		return &Primitive{
+			valueType: Long,
+			value:     val,
+			createdAt: createdAt,
+		}
 	case int:
 		if val > math.MaxInt32 || val < math.MinInt32 {
 			return &Primitive{
@@ -105,13 +117,13 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) *Primitive {
 		}
 		return &Primitive{
 			valueType: Integer,
-			value:     val,
+			value:     int32(val),
 			createdAt: createdAt,
 		}
-	case int64:
+	case float32:
 		return &Primitive{
-			valueType: Long,
-			value:     val,
+			valueType: Double,
+			value:     float64(val),
 			createdAt: createdAt,
 		}
 	case float64:
@@ -155,7 +167,7 @@ func (p *Primitive) Bytes() []byte {
 			return []byte{1}
 		}
 		return []byte{0}
-	case int:
+	case int32:
 		bytes := [4]byte{}
 		binary.LittleEndian.PutUint32(bytes[:], uint32(val))
 		return bytes[:]

@@ -654,6 +654,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 			return nil, err
 		}
 		return crdt.NewCounter(
+			counterType,
 			crdt.CounterValueFromBytes(counterType, pbElement.Value),
 			createdAt,
 		), nil
@@ -691,8 +692,6 @@ func fromCounterType(valueType api.ValueType) (crdt.CounterType, error) {
 		return crdt.IntegerCnt, nil
 	case api.ValueType_VALUE_TYPE_LONG_CNT:
 		return crdt.LongCnt, nil
-	case api.ValueType_VALUE_TYPE_DOUBLE_CNT:
-		return crdt.DoubleCnt, nil
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)

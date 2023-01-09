@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
@@ -42,7 +43,7 @@ func TestCounter(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.SetNewCounter("age", 1).
+			root.SetNewCounter("age", crdt.LongCnt, 1).
 				Increase(2).
 				Increase(2.5).
 				Increase(-100000000).
@@ -67,9 +68,9 @@ func TestCounter(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.SetNewCounter("age", 0)
-			root.SetNewCounter("width", 0)
-			root.SetNewCounter("height", 0)
+			root.SetNewCounter("age", crdt.IntegerCnt, 0)
+			root.SetNewCounter("width", crdt.LongCnt, 0)
+			root.SetNewCounter("height", crdt.LongCnt, 0)
 			return nil
 		})
 		assert.NoError(t, err)

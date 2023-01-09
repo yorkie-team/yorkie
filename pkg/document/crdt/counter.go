@@ -19,7 +19,6 @@ package crdt
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -31,7 +30,6 @@ type CounterType int
 const (
 	IntegerCnt CounterType = iota
 	LongCnt
-	DoubleCnt
 )
 
 // CounterValueFromBytes parses the given bytes into value.
@@ -42,8 +40,6 @@ func CounterValueFromBytes(counterType CounterType, value []byte) interface{} {
 		return int(val)
 	case LongCnt:
 		return int64(binary.LittleEndian.Uint64(value))
-	case DoubleCnt:
-		return math.Float64frombits(binary.LittleEndian.Uint64(value))
 	}
 
 	panic("unsupported type")
@@ -59,32 +55,77 @@ type Counter struct {
 }
 
 // NewCounter creates a new instance of Counter.
-func NewCounter(value interface{}, createdAt *time.Ticket) *Counter {
-	switch val := value.(type) {
-	case int:
-		if math.MaxInt32 < val || math.MinInt32 > val {
+func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket) *Counter {
+	switch valueType {
+	case IntegerCnt:
+		switch val := value.(type) {
+		case int32:
+			return &Counter{
+				valueType: IntegerCnt,
+				value:     val,
+				createdAt: createdAt,
+			}
+		case int64:
+			return &Counter{
+				valueType: IntegerCnt,
+				value:     int32(val),
+				createdAt: createdAt,
+			}
+		case int:
+			return &Counter{
+				valueType: IntegerCnt,
+				value:     int32(val),
+				createdAt: createdAt,
+			}
+		case float32:
+			return &Counter{
+				valueType: IntegerCnt,
+				value:     int32(val),
+				createdAt: createdAt,
+			}
+		case float64:
+			return &Counter{
+				valueType: IntegerCnt,
+				value:     int32(val),
+				createdAt: createdAt,
+			}
+		default:
+			panic("unsupported type")
+		}
+	case LongCnt:
+		switch val := value.(type) {
+		case int64:
+			return &Counter{
+				valueType: LongCnt,
+				value:     val,
+				createdAt: createdAt,
+			}
+		case int32:
 			return &Counter{
 				valueType: LongCnt,
 				value:     int64(val),
 				createdAt: createdAt,
 			}
-		}
-		return &Counter{
-			valueType: IntegerCnt,
-			value:     val,
-			createdAt: createdAt,
-		}
-	case int64:
-		return &Counter{
-			valueType: LongCnt,
-			value:     val,
-			createdAt: createdAt,
-		}
-	case float64:
-		return &Counter{
-			valueType: DoubleCnt,
-			value:     val,
-			createdAt: createdAt,
+		case int:
+			return &Counter{
+				valueType: LongCnt,
+				value:     int64(val),
+				createdAt: createdAt,
+			}
+		case float32:
+			return &Counter{
+				valueType: LongCnt,
+				value:     int64(val),
+				createdAt: createdAt,
+			}
+		case float64:
+			return &Counter{
+				valueType: LongCnt,
+				value:     int64(val),
+				createdAt: createdAt,
+			}
+		default:
+			panic("unsupported type")
 		}
 	}
 
@@ -94,17 +135,13 @@ func NewCounter(value interface{}, createdAt *time.Ticket) *Counter {
 // Bytes creates an array representing the value.
 func (p *Counter) Bytes() []byte {
 	switch val := p.value.(type) {
-	case int:
+	case int32:
 		bytes := [4]byte{}
 		binary.LittleEndian.PutUint32(bytes[:], uint32(val))
 		return bytes[:]
 	case int64:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], uint64(val))
-		return bytes[:]
-	case float64:
-		bytes := [8]byte{}
-		binary.LittleEndian.PutUint64(bytes[:], math.Float64bits(val))
 		return bytes[:]
 	}
 
@@ -113,16 +150,7 @@ func (p *Counter) Bytes() []byte {
 
 // Marshal returns the JSON encoding of the value.
 func (p *Counter) Marshal() string {
-	switch p.valueType {
-	case IntegerCnt:
-		return fmt.Sprintf("%d", p.value)
-	case LongCnt:
-		return fmt.Sprintf("%d", p.value)
-	case DoubleCnt:
-		return fmt.Sprintf("%f", p.value)
-	}
-
-	panic("unsupported type")
+	return fmt.Sprintf("%d", p.value)
 }
 
 // DeepCopy copies itself deeply.
@@ -184,34 +212,20 @@ func (p *Counter) Increase(v *Primitive) *Counter {
 	case IntegerCnt:
 		switch v.valueType {
 		case Long:
-			p.value = p.value.(int) + int(v.value.(int64))
+			p.value = p.value.(int32) + int32(v.value.(int64))
 		case Double:
-			p.value = p.value.(int) + int(v.value.(float64))
+			p.value = p.value.(int32) + int32(v.value.(float64))
 		default:
-			p.value = p.value.(int) + v.value.(int)
-		}
-
-		if p.value.(int) > math.MaxInt32 || p.value.(int) < math.MinInt32 {
-			p.value = int64(p.value.(int))
-			p.valueType = LongCnt
+			p.value = p.value.(int32) + v.value.(int32)
 		}
 	case LongCnt:
 		switch v.valueType {
 		case Integer:
-			p.value = p.value.(int64) + int64(v.value.(int))
+			p.value = p.value.(int64) + int64(v.value.(int32))
 		case Double:
 			p.value = p.value.(int64) + int64(v.value.(float64))
 		default:
 			p.value = p.value.(int64) + v.value.(int64)
-		}
-	case DoubleCnt:
-		switch v.valueType {
-		case Integer:
-			p.value = p.value.(float64) + float64(v.value.(int))
-		case Long:
-			p.value = p.value.(float64) + float64(v.value.(int64))
-		default:
-			p.value = p.value.(float64) + v.value.(float64)
 		}
 	}
 
@@ -221,5 +235,5 @@ func (p *Counter) Increase(v *Primitive) *Counter {
 // IsNumericType checks for numeric types.
 func (p *Counter) IsNumericType() bool {
 	t := p.valueType
-	return t == IntegerCnt || t == LongCnt || t == DoubleCnt
+	return t == IntegerCnt || t == LongCnt
 }

@@ -273,6 +273,7 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*crdt.Counter, error) {
 	}
 
 	counter := crdt.NewCounter(
+		counterType,
 		crdt.CounterValueFromBytes(counterType, pbCnt.Value),
 		createdAt,
 	)
