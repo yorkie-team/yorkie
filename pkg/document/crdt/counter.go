@@ -58,74 +58,16 @@ type Counter struct {
 func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket) *Counter {
 	switch valueType {
 	case IntegerCnt:
-		switch val := value.(type) {
-		case int32:
-			return &Counter{
-				valueType: IntegerCnt,
-				value:     val,
-				createdAt: createdAt,
-			}
-		case int64:
-			return &Counter{
-				valueType: IntegerCnt,
-				value:     int32(val),
-				createdAt: createdAt,
-			}
-		case int:
-			return &Counter{
-				valueType: IntegerCnt,
-				value:     int32(val),
-				createdAt: createdAt,
-			}
-		case float32:
-			return &Counter{
-				valueType: IntegerCnt,
-				value:     int32(val),
-				createdAt: createdAt,
-			}
-		case float64:
-			return &Counter{
-				valueType: IntegerCnt,
-				value:     int32(val),
-				createdAt: createdAt,
-			}
-		default:
-			panic("unsupported type")
+		return &Counter{
+			valueType: IntegerCnt,
+			value:     castToInt(value),
+			createdAt: createdAt,
 		}
 	case LongCnt:
-		switch val := value.(type) {
-		case int64:
-			return &Counter{
-				valueType: LongCnt,
-				value:     val,
-				createdAt: createdAt,
-			}
-		case int32:
-			return &Counter{
-				valueType: LongCnt,
-				value:     int64(val),
-				createdAt: createdAt,
-			}
-		case int:
-			return &Counter{
-				valueType: LongCnt,
-				value:     int64(val),
-				createdAt: createdAt,
-			}
-		case float32:
-			return &Counter{
-				valueType: LongCnt,
-				value:     int64(val),
-				createdAt: createdAt,
-			}
-		case float64:
-			return &Counter{
-				valueType: LongCnt,
-				value:     int64(val),
-				createdAt: createdAt,
-			}
-		default:
-			panic("unsupported type")
+		return &Counter{
+			valueType: LongCnt,
+			value:     castToLong(value),
+			createdAt: createdAt,
 		}
 	}
 
@@ -210,23 +152,11 @@ func (p *Counter) Increase(v *Primitive) *Counter {
 	}
 	switch p.valueType {
 	case IntegerCnt:
-		switch v.valueType {
-		case Long:
-			p.value = p.value.(int32) + int32(v.value.(int64))
-		case Double:
-			p.value = p.value.(int32) + int32(v.value.(float64))
-		default:
-			p.value = p.value.(int32) + v.value.(int32)
-		}
+		p.value = p.value.(int32) + castToInt(v.value)
 	case LongCnt:
-		switch v.valueType {
-		case Integer:
-			p.value = p.value.(int64) + int64(v.value.(int32))
-		case Double:
-			p.value = p.value.(int64) + int64(v.value.(float64))
-		default:
-			p.value = p.value.(int64) + v.value.(int64)
-		}
+		p.value = p.value.(int64) + castToLong(v.value)
+	default:
+		panic("unsupported type")
 	}
 
 	return p
@@ -236,4 +166,40 @@ func (p *Counter) Increase(v *Primitive) *Counter {
 func (p *Counter) IsNumericType() bool {
 	t := p.valueType
 	return t == IntegerCnt || t == LongCnt
+}
+
+// castToInt casts numeric type to int32.
+func castToInt(value interface{}) int32 {
+	switch val := value.(type) {
+	case int32:
+		return val
+	case int64:
+		return int32(val)
+	case int:
+		return int32(val)
+	case float32:
+		return int32(val)
+	case float64:
+		return int32(val)
+	default:
+		panic("unsupported type")
+	}
+}
+
+// castToLong casts numeric type to int64.
+func castToLong(value interface{}) int64 {
+	switch val := value.(type) {
+	case int64:
+		return val
+	case int32:
+		return int64(val)
+	case int:
+		return int64(val)
+	case float32:
+		return int64(val)
+	case float64:
+		return int64(val)
+	default:
+		panic("unsupported type")
+	}
 }
