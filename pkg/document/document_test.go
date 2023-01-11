@@ -25,6 +25,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -360,7 +361,7 @@ func TestDocument(t *testing.T) {
 
 		// integer type test
 		err := doc.Update(func(root *json.Object) error {
-			root.SetNewCounter("age", 5)
+			root.SetNewCounter("age", crdt.IntegerCnt, 5)
 
 			age := root.GetCounter("age")
 			age.Increase(long)
@@ -376,8 +377,9 @@ func TestDocument(t *testing.T) {
 
 		// long type test
 		err = doc.Update(func(root *json.Object) error {
-			root.SetNewCounter("price", 9000000000000000000)
+			root.SetNewCounter("price", crdt.LongCnt, 9000000000000000000)
 			price := root.GetCounter("price")
+			println(price.ValueType())
 			price.Increase(long)
 			price.Increase(double)
 			price.Increase(float)
@@ -389,21 +391,6 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"age":128,"price":9000000000000000123}`, doc.Marshal())
 
-		// double type test
-		err = doc.Update(func(root *json.Object) error {
-			root.SetNewCounter("width", 10.5)
-			width := root.GetCounter("width")
-			width.Increase(long)
-			width.Increase(double)
-			width.Increase(float)
-			width.Increase(uinteger)
-			width.Increase(integer)
-
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, `{"age":128,"price":9000000000000000123,"width":134.300000}`, doc.Marshal())
-
 		// negative operator test
 		err = doc.Update(func(root *json.Object) error {
 			age := root.GetCounter("age")
@@ -414,14 +401,10 @@ func TestDocument(t *testing.T) {
 			price.Increase(-100)
 			price.Increase(-20.5)
 
-			width := root.GetCounter("width")
-			width.Increase(-4)
-			width.Increase(-0.3)
-
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"age":120,"price":9000000000000000003,"width":130.000000}`, doc.Marshal())
+		assert.Equal(t, `{"age":120,"price":9000000000000000003}`, doc.Marshal())
 
 		// TODO: it should be modified to error check
 		// when 'Remove panic from server code (#50)' is completed.
@@ -439,7 +422,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"age":120,"price":9000000000000000003,"width":130.000000}`, doc.Marshal())
+		assert.Equal(t, `{"age":120,"price":9000000000000000003}`, doc.Marshal())
 	})
 
 	t.Run("rollback test", func(t *testing.T) {

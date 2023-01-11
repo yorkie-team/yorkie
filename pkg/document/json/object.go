@@ -83,12 +83,22 @@ func (p *Object) SetNewRichText(k string) *RichText {
 }
 
 // SetNewCounter sets a new NewCounter for the given key.
-func (p *Object) SetNewCounter(k string, n interface{}) *Counter {
+func (p *Object) SetNewCounter(k string, t crdt.CounterType, n interface{}) *Counter {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return NewCounter(
-			p.context,
-			crdt.NewCounter(n, ticket),
-		)
+		switch t {
+		case crdt.IntegerCnt:
+			return NewCounter(
+				p.context,
+				crdt.NewCounter(crdt.IntegerCnt, n, ticket),
+			)
+		case crdt.LongCnt:
+			return NewCounter(
+				p.context,
+				crdt.NewCounter(crdt.LongCnt, n, ticket),
+			)
+		default:
+			panic("unsupported type")
+		}
 	})
 
 	return v.(*Counter)

@@ -63,15 +63,9 @@ func (p *Counter) Increase(v interface{}) *Counter {
 		}
 	case crdt.IntegerCnt:
 		if isInt {
-			primitive = crdt.NewPrimitive(value, ticket)
+			primitive = crdt.NewPrimitive(int32(value.(int)), ticket)
 		} else {
-			primitive = crdt.NewPrimitive(int(value.(float64)), ticket)
-		}
-	case crdt.DoubleCnt:
-		if isInt {
-			primitive = crdt.NewPrimitive(float64(value.(int)), ticket)
-		} else {
-			primitive = crdt.NewPrimitive(value, ticket)
+			primitive = crdt.NewPrimitive(int32(value.(float64)), ticket)
 		}
 	default:
 		panic("unsupported type")

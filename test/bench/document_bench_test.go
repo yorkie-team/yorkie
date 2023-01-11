@@ -27,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -341,7 +342,7 @@ func BenchmarkDocument(b *testing.B) {
 
 			// integer type test
 			err := doc.Update(func(root *json.Object) error {
-				root.SetNewCounter("age", 5)
+				root.SetNewCounter("age", crdt.IntegerCnt, 5)
 
 				age := root.GetCounter("age")
 				age.Increase(long)
@@ -357,7 +358,7 @@ func BenchmarkDocument(b *testing.B) {
 
 			// long type test
 			err = doc.Update(func(root *json.Object) error {
-				root.SetNewCounter("price", 9000000000000000000)
+				root.SetNewCounter("price", crdt.LongCnt, 9000000000000000000)
 				price := root.GetCounter("price")
 				price.Increase(long)
 				price.Increase(double)
@@ -370,21 +371,6 @@ func BenchmarkDocument(b *testing.B) {
 			assert.NoError(b, err)
 			assert.Equal(b, `{"age":128,"price":9000000000000000123}`, doc.Marshal())
 
-			// double type test
-			err = doc.Update(func(root *json.Object) error {
-				root.SetNewCounter("width", 10.5)
-				width := root.GetCounter("width")
-				width.Increase(long)
-				width.Increase(double)
-				width.Increase(float)
-				width.Increase(uinteger)
-				width.Increase(integer)
-
-				return nil
-			})
-			assert.NoError(b, err)
-			assert.Equal(b, `{"age":128,"price":9000000000000000123,"width":134.300000}`, doc.Marshal())
-
 			// negative operator test
 			err = doc.Update(func(root *json.Object) error {
 				age := root.GetCounter("age")
@@ -395,14 +381,10 @@ func BenchmarkDocument(b *testing.B) {
 				price.Increase(-100)
 				price.Increase(-20.5)
 
-				width := root.GetCounter("width")
-				width.Increase(-4)
-				width.Increase(-0.3)
-
 				return nil
 			})
 			assert.NoError(b, err)
-			assert.Equal(b, `{"age":120,"price":9000000000000000003,"width":130.000000}`, doc.Marshal())
+			assert.Equal(b, `{"age":120,"price":9000000000000000003}`, doc.Marshal())
 
 			// TODO: it should be modified to error check
 			// when 'Remove panic from server code (#50)' is completed.
@@ -420,7 +402,7 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			assert.Equal(b, `{"age":120,"price":9000000000000000003,"width":130.000000}`, doc.Marshal())
+			assert.Equal(b, `{"age":120,"price":9000000000000000003}`, doc.Marshal())
 		}
 	})
 
@@ -642,7 +624,7 @@ func benchmarkCounter(cnt int, b *testing.B) {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object) error {
-			counter := root.SetNewCounter("k1", 0)
+			counter := root.SetNewCounter("k1", crdt.IntegerCnt, 0)
 			for c := 0; c < cnt; c++ {
 				counter.Increase(c)
 			}
