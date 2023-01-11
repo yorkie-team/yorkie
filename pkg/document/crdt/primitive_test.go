@@ -38,6 +38,7 @@ func TestPrimitive(t *testing.T) {
 		{false, crdt.Boolean, "false"},
 		{true, crdt.Boolean, "true"},
 		{0, crdt.Integer, "0"},
+		{int32(0), crdt.Integer, "0"},
 		{int64(0), crdt.Long, "0"},
 		{float64(0), crdt.Double, "0.000000"},
 		{"0", crdt.String, `"0"`},
