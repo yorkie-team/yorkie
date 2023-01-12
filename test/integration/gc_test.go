@@ -116,7 +116,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = d1.Update(func(root *json.Object) error {
 			root.SetNewText("text").
 				Edit(0, 0, "Hello world")
-			root.SetNewRichText("richText").
+			root.SetNewText("richText").
 				Edit(0, 0, "Hello world", nil)
 			return nil
 		}, "sets test and richText")
@@ -136,7 +136,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetText("text").
 				Edit(0, 1, "a").
 				Edit(1, 2, "b")
-			root.GetRichText("richText").
+			root.GetText("richText").
 				Edit(0, 1, "a", map[string]string{"b": "1"})
 			return nil
 		}, "edit text type elements")
@@ -191,7 +191,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.SetNewArray("2").AddInteger(1, 2, 3)
 			root.SetInteger("3", 3)
 			root.SetNewText("4").Edit(0, 0, "Hi")
-			root.SetNewRichText("5").Edit(0, 0, "Hi", nil)
+			root.SetNewText("5").Edit(0, 0, "Hi", nil)
 			return nil
 		}, "sets 1,2,3,4,5")
 		assert.NoError(t, err)
@@ -209,7 +209,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = d1.Update(func(root *json.Object) error {
 			root.Delete("2")
 			root.GetText("4").Edit(0, 1, "h")
-			root.GetRichText("5").Edit(0, 1, "h", map[string]string{"b": "1"})
+			root.GetText("5").Edit(0, 1, "h", map[string]string{"b": "1"})
 			return nil
 		}, "removes 2 and edit text type elements")
 		assert.NoError(t, err)

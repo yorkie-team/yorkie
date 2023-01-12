@@ -58,8 +58,6 @@ func (s *Select) Execute(root *crdt.Root) error {
 	switch obj := parent.(type) {
 	case *crdt.Text:
 		obj.Select(s.from, s.to, s.executedAt)
-	case *crdt.RichText:
-		obj.Select(s.from, s.to, s.executedAt)
 	default:
 		return ErrNotApplicableDataType
 	}

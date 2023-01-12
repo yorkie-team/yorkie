@@ -21,9 +21,11 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// Edit is an operation representing editing Text.
+// Edit is an operation representing editing Text. Most of the same as
+// Edit, but with additional style properties, attributes.
 type Edit struct {
-	// parentCreatedAt is the creation time of the Text that executes Edit.
+	// parentCreatedAt is the creation time of the Text that executes
+	// Edit.
 	parentCreatedAt *time.Ticket
 
 	// from represents the start point of the editing range.
@@ -39,6 +41,9 @@ type Edit struct {
 	// content is the content of text added when editing.
 	content string
 
+	// attributes represents the text style.
+	attributes map[string]string
+
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
 }
@@ -50,6 +55,7 @@ func NewEdit(
 	to *crdt.RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
+	attributes map[string]string,
 	executedAt *time.Ticket,
 ) *Edit {
 	return &Edit{
@@ -58,6 +64,7 @@ func NewEdit(
 		to:                        to,
 		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
 		content:                   content,
+		attributes:                attributes,
 		executedAt:                executedAt,
 	}
 }
@@ -68,7 +75,7 @@ func (e *Edit) Execute(root *crdt.Root) error {
 
 	switch obj := parent.(type) {
 	case *crdt.Text:
-		obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.executedAt)
+		obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
 		if !e.from.Equal(e.to) {
 			root.RegisterTextElementWithGarbage(obj)
 		}
@@ -107,6 +114,11 @@ func (e *Edit) ParentCreatedAt() *time.Ticket {
 // Content returns the content of Edit.
 func (e *Edit) Content() string {
 	return e.content
+}
+
+// Attributes returns the attributes of this Edit.
+func (e *Edit) Attributes() map[string]string {
+	return e.attributes
 }
 
 // CreatedAtMapByActor returns the map that stores the latest creation time

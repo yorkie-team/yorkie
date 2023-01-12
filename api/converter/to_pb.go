@@ -248,8 +248,6 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toEdit(op)
 		case *operations.Select:
 			pbOperation.Body, err = toSelect(op)
-		case *operations.RichEdit:
-			pbOperation.Body, err = toRichEdit(op)
 		case *operations.Style:
 			pbOperation.Body, err = toStyle(op)
 		case *operations.Increase:
@@ -352,15 +350,16 @@ func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
 	}, nil
 }
 
-func toEdit(edit *operations.Edit) (*api.Operation_Edit_, error) {
+func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 	return &api.Operation_Edit_{
 		Edit: &api.Operation_Edit{
-			ParentCreatedAt:     ToTimeTicket(edit.ParentCreatedAt()),
-			From:                toTextNodePos(edit.From()),
-			To:                  toTextNodePos(edit.To()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(edit.CreatedAtMapByActor()),
-			Content:             edit.Content(),
-			ExecutedAt:          ToTimeTicket(edit.ExecutedAt()),
+			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
+			From:                toTextNodePos(e.From()),
+			To:                  toTextNodePos(e.To()),
+			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
+			Content:             e.Content(),
+			Attributes:          e.Attributes(),
+			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
 }
@@ -372,20 +371,6 @@ func toSelect(s *operations.Select) (*api.Operation_Select_, error) {
 			From:            toTextNodePos(s.From()),
 			To:              toTextNodePos(s.To()),
 			ExecutedAt:      ToTimeTicket(s.ExecutedAt()),
-		},
-	}, nil
-}
-
-func toRichEdit(richEdit *operations.RichEdit) (*api.Operation_RichEdit_, error) {
-	return &api.Operation_RichEdit_{
-		RichEdit: &api.Operation_RichEdit{
-			ParentCreatedAt:     ToTimeTicket(richEdit.ParentCreatedAt()),
-			From:                toTextNodePos(richEdit.From()),
-			To:                  toTextNodePos(richEdit.To()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(richEdit.CreatedAtMapByActor()),
-			Content:             richEdit.Content(),
-			Attributes:          richEdit.Attributes(),
-			ExecutedAt:          ToTimeTicket(richEdit.ExecutedAt()),
 		},
 	}, nil
 }
@@ -443,11 +428,6 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 	case *crdt.Text:
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_TEXT,
-			CreatedAt: ToTimeTicket(elem.CreatedAt()),
-		}, nil
-	case *crdt.RichText:
-		return &api.JSONElementSimple{
-			Type:      api.ValueType_VALUE_TYPE_RICH_TEXT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 		}, nil
 	case *crdt.Counter:

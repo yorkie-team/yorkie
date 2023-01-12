@@ -55,8 +55,6 @@ func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
 		return fromJSONPrimitive(decoded.Primitive)
 	case *api.JSONElement_Text_:
 		return fromJSONText(decoded.Text)
-	case *api.JSONElement_RichText_:
-		return fromJSONRichText(decoded.RichText)
 	case *api.JSONElement_Counter_:
 		return fromJSONCounter(decoded.Counter)
 	default:
@@ -160,7 +158,9 @@ func fromJSONPrimitive(
 	return primitive, nil
 }
 
-func fromJSONText(pbText *api.JSONElement_Text) (*crdt.Text, error) {
+func fromJSONText(
+	pbText *api.JSONElement_Text,
+) (*crdt.Text, error) {
 	createdAt, err := fromTimeTicket(pbText.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -206,54 +206,6 @@ func fromJSONText(pbText *api.JSONElement_Text) (*crdt.Text, error) {
 	return text, nil
 }
 
-func fromJSONRichText(
-	pbText *api.JSONElement_RichText,
-) (*crdt.RichText, error) {
-	createdAt, err := fromTimeTicket(pbText.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	movedAt, err := fromTimeTicket(pbText.MovedAt)
-	if err != nil {
-		return nil, err
-	}
-	removedAt, err := fromTimeTicket(pbText.RemovedAt)
-	if err != nil {
-		return nil, err
-	}
-
-	rgaTreeSplit := crdt.NewRGATreeSplit(crdt.InitialRichTextNode())
-
-	current := rgaTreeSplit.InitialHead()
-	for _, pbNode := range pbText.Nodes {
-		textNode, err := fromRichTextNode(pbNode)
-		if err != nil {
-			return nil, err
-		}
-		current = rgaTreeSplit.InsertAfter(current, textNode)
-		insPrevID, err := fromTextNodeID(pbNode.InsPrevId)
-		if err != nil {
-			return nil, err
-		}
-		if insPrevID != nil {
-			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
-			if insPrevNode == nil {
-				panic("insPrevNode should be presence")
-			}
-			current.SetInsPrev(insPrevNode)
-		}
-	}
-
-	text := crdt.NewRichText(
-		rgaTreeSplit,
-		createdAt,
-	)
-	text.SetMovedAt(movedAt)
-	text.SetRemovedAt(removedAt)
-
-	return text, nil
-}
-
 func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*crdt.Counter, error) {
 	createdAt, err := fromTimeTicket(pbCnt.CreatedAt)
 	if err != nil {
@@ -283,28 +235,9 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*crdt.Counter, error) {
 	return counter, nil
 }
 
-func fromTextNode(pbTextNode *api.TextNode) (*crdt.RGATreeSplitNode[*crdt.TextValue], error) {
-	id, err := fromTextNodeID(pbTextNode.Id)
-	if err != nil {
-		return nil, err
-	}
-	textNode := crdt.NewRGATreeSplitNode(
-		id,
-		crdt.NewTextValue(pbTextNode.Value),
-	)
-	if pbTextNode.RemovedAt != nil {
-		removedAt, err := fromTimeTicket(pbTextNode.RemovedAt)
-		if err != nil {
-			return nil, err
-		}
-		textNode.Remove(removedAt, time.MaxTicket)
-	}
-	return textNode, nil
-}
-
-func fromRichTextNode(
-	pbNode *api.RichTextNode,
-) (*crdt.RGATreeSplitNode[*crdt.RichTextValue], error) {
+func fromTextNode(
+	pbNode *api.TextNode,
+) (*crdt.RGATreeSplitNode[*crdt.TextValue], error) {
 	id, err := fromTextNodeID(pbNode.Id)
 	if err != nil {
 		return nil, err
@@ -321,7 +254,7 @@ func fromRichTextNode(
 
 	textNode := crdt.NewRGATreeSplitNode(
 		id,
-		crdt.NewRichTextValue(attrs, pbNode.Value),
+		crdt.NewTextValue(pbNode.Value, attrs),
 	)
 	if pbNode.RemovedAt != nil {
 		removedAt, err := fromTimeTicket(pbNode.RemovedAt)
