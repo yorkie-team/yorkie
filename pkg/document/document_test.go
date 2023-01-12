@@ -336,7 +336,7 @@ func TestDocument(t *testing.T) {
 			assert.Equal(
 				t,
 				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"]`+
-					`[5:1:00:0 {"list":"true"} "\n"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
+					`[5:1:00:0 {"list":"true"} "\\n"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
 				text.StructureAsString(),
 			)
 			return nil
@@ -345,7 +345,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(
 			t,
 			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},`+
-				`{"attrs":{"list":"true"},"val":"\n"},{"attrs":{},"val":" Yorkie"}]}`,
+				`{"attrs":{"list":"true"},"val":"\\n"},{"attrs":{},"val":" Yorkie"}]}`,
 			doc.Marshal(),
 		)
 	})
