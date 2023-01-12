@@ -50,8 +50,6 @@ func toJSONElement(elem crdt.Element) (*api.JSONElement, error) {
 		return toPrimitive(elem)
 	case *crdt.Text:
 		return toText(elem), nil
-	case *crdt.RichText:
-		return toRichText(elem), nil
 	case *crdt.Counter:
 		return toCounter(elem)
 	default:
@@ -121,17 +119,6 @@ func toText(text *crdt.Text) *api.JSONElement {
 	}
 }
 
-func toRichText(text *crdt.RichText) *api.JSONElement {
-	return &api.JSONElement{
-		Body: &api.JSONElement_RichText_{RichText: &api.JSONElement_RichText{
-			Nodes:     toRichTextNodes(text.Nodes()),
-			CreatedAt: ToTimeTicket(text.CreatedAt()),
-			MovedAt:   ToTimeTicket(text.MovedAt()),
-			RemovedAt: ToTimeTicket(text.RemovedAt()),
-		}},
-	}
-}
-
 func toCounter(counter *crdt.Counter) (*api.JSONElement, error) {
 	pbCounterType, err := toCounterType(counter.ValueType())
 	if err != nil {
@@ -183,36 +170,18 @@ func toRGANodes(rgaNodes []*crdt.RGATreeListNode) ([]*api.RGANode, error) {
 func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.TextNode {
 	var pbTextNodes []*api.TextNode
 	for _, textNode := range textNodes {
-		pbTextNode := &api.TextNode{
-			Id:        toTextNodeID(textNode.ID()),
-			Value:     textNode.String(),
-			RemovedAt: ToTimeTicket(textNode.RemovedAt()),
-		}
-
-		if textNode.InsPrevID() != nil {
-			pbTextNode.InsPrevId = toTextNodeID(textNode.InsPrevID())
-		}
-
-		pbTextNodes = append(pbTextNodes, pbTextNode)
-	}
-	return pbTextNodes
-}
-
-func toRichTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.RichTextValue]) []*api.RichTextNode {
-	var pbTextNodes []*api.RichTextNode
-	for _, textNode := range textNodes {
 		value := textNode.Value()
 
-		attrs := make(map[string]*api.RichTextNodeAttr)
+		attrs := make(map[string]*api.TextNodeAttr)
 		for _, node := range value.Attrs().Nodes() {
-			attrs[node.Key()] = &api.RichTextNodeAttr{
+			attrs[node.Key()] = &api.TextNodeAttr{
 				Key:       node.Key(),
 				Value:     node.Value(),
 				UpdatedAt: ToTimeTicket(node.UpdatedAt()),
 			}
 		}
 
-		pbTextNode := &api.RichTextNode{
+		pbTextNode := &api.TextNode{
 			Id:         toTextNodeID(textNode.ID()),
 			Attributes: attrs,
 			Value:      value.Value(),

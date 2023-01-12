@@ -21,9 +21,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// Style is an operation applies the style of the given range to RichText.
+// Style is an operation applies the style of the given range to Text.
 type Style struct {
-	// parentCreatedAt is the creation time of the RichText that executes Style.
+	// parentCreatedAt is the creation time of the Text that executes Style.
 	parentCreatedAt *time.Ticket
 
 	// from is the starting point of the range to apply the style to.
@@ -59,12 +59,12 @@ func NewStyle(
 // Execute executes this operation on the given document(`root`).
 func (e *Style) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
-	obj, ok := parent.(*crdt.RichText)
+	obj, ok := parent.(*crdt.Text)
 	if !ok {
 		return ErrNotApplicableDataType
 	}
 
-	obj.SetStyle(e.from, e.to, e.attributes, e.executedAt)
+	obj.Style(e.from, e.to, e.attributes, e.executedAt)
 	return nil
 }
 
@@ -88,7 +88,7 @@ func (e *Style) SetActor(actorID *time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
 }
 
-// ParentCreatedAt returns the creation time of the RichText.
+// ParentCreatedAt returns the creation time of the Text.
 func (e *Style) ParentCreatedAt() *time.Ticket {
 	return e.parentCreatedAt
 }

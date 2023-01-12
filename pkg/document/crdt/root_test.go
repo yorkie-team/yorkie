@@ -59,27 +59,27 @@ func TestRoot(t *testing.T) {
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)
-		text.Edit(fromPos, toPos, nil, "Hello World", ctx.IssueTimeTicket())
+		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		assert.Equal(t, `"Hello World"`, text.Marshal())
+		assert.Equal(t, "Hello World", text.String())
 		assert.Equal(t, 0, root.GarbageLen())
 
 		fromPos, toPos = text.CreateRange(5, 10)
-		text.Edit(fromPos, toPos, nil, "Yorkie", ctx.IssueTimeTicket())
+		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		assert.Equal(t, `"HelloYorkied"`, text.Marshal())
+		assert.Equal(t, "HelloYorkied", text.String())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		fromPos, toPos = text.CreateRange(0, 5)
-		text.Edit(fromPos, toPos, nil, "", ctx.IssueTimeTicket())
+		text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		assert.Equal(t, `"Yorkied"`, text.Marshal())
+		assert.Equal(t, "Yorkied", text.String())
 		assert.Equal(t, 2, root.GarbageLen())
 
 		fromPos, toPos = text.CreateRange(6, 7)
-		text.Edit(fromPos, toPos, nil, "", ctx.IssueTimeTicket())
+		text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		assert.Equal(t, `"Yorkie"`, text.Marshal())
+		assert.Equal(t, "Yorkie", text.String())
 		assert.Equal(t, 3, root.GarbageLen())
 
 		// It contains code marked tombstone.
@@ -107,17 +107,17 @@ func TestRoot(t *testing.T) {
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		tests := []test{
-			{from: 0, to: 0, content: "Yorkie", want: `"Yorkie"`, garbage: 0},
-			{from: 4, to: 5, content: "", want: `"Yorke"`, garbage: 1},
-			{from: 2, to: 3, content: "", want: `"Yoke"`, garbage: 2},
-			{from: 0, to: 1, content: "", want: `"oke"`, garbage: 3},
+			{from: 0, to: 0, content: "Yorkie", want: "Yorkie", garbage: 0},
+			{from: 4, to: 5, content: "", want: "Yorke", garbage: 1},
+			{from: 2, to: 3, content: "", want: "Yoke", garbage: 2},
+			{from: 0, to: 1, content: "", want: "oke", garbage: 3},
 		}
 
 		for _, tc := range tests {
 			fromPos, toPos := text.CreateRange(tc.from, tc.to)
-			text.Edit(fromPos, toPos, nil, tc.content, ctx.IssueTimeTicket())
+			text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
 			registerTextElementWithGarbage(fromPos, toPos, root, text)
-			assert.Equal(t, tc.want, text.Marshal())
+			assert.Equal(t, tc.want, text.String())
 			assert.Equal(t, tc.garbage, root.GarbageLen())
 		}
 
@@ -128,7 +128,7 @@ func TestRoot(t *testing.T) {
 	t.Run("garbage collection for rich text test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		richText := crdt.NewRichText(crdt.NewRGATreeSplit(crdt.InitialRichTextNode()), ctx.IssueTimeTicket())
+		richText := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := richText.CreateRange(0, 0)
 		richText.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())

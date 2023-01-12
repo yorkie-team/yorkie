@@ -65,6 +65,8 @@ func TestMain(m *testing.M) {
 	}
 
 	be, err := backend.New(&backend.Config{
+		AdminUser:            helper.AdminUser,
+		AdminPassword:        helper.AdminPassword,
 		SnapshotThreshold:    helper.SnapshotThreshold,
 		AuthWebhookCacheSize: helper.AuthWebhookSize,
 	}, &mongo.Config{

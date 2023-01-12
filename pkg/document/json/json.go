@@ -27,8 +27,6 @@ func toOriginal(elem crdt.Element) crdt.Element {
 		return elem.Array
 	case *Text:
 		return elem.Text
-	case *RichText:
-		return elem.RichText
 	case *Counter:
 		return elem.Counter
 	case *crdt.Primitive:
