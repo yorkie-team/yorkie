@@ -175,7 +175,6 @@ func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.Tex
 		attrs := make(map[string]*api.TextNodeAttr)
 		for _, node := range value.Attrs().Nodes() {
 			attrs[node.Key()] = &api.TextNodeAttr{
-				Key:       node.Key(),
 				Value:     node.Value(),
 				UpdatedAt: ToTimeTicket(node.UpdatedAt()),
 			}
