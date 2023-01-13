@@ -244,12 +244,12 @@ func fromTextNode(
 	}
 
 	attrs := crdt.NewRHT()
-	for _, pbAttr := range pbNode.Attributes {
+	for key, pbAttr := range pbNode.Attributes {
 		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
-		attrs.Set(pbAttr.Key, pbAttr.Value, updatedAt)
+		attrs.Set(key, pbAttr.Value, updatedAt)
 	}
 
 	textNode := crdt.NewRGATreeSplitNode(

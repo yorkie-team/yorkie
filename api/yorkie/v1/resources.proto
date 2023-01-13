@@ -180,9 +180,8 @@ message RGANode {
 }
 
 message TextNodeAttr {
-  string key = 1;
-  string value = 2;
-  TimeTicket updated_at = 3;
+  string value = 1;
+  TimeTicket updated_at = 2;
 }
 
 message TextNode {
