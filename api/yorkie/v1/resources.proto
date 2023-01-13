@@ -283,7 +283,6 @@ enum ValueType {
   VALUE_TYPE_TEXT = 10;
   VALUE_TYPE_INTEGER_CNT = 11;
   VALUE_TYPE_LONG_CNT = 12;
-  VALUE_TYPE_DOUBLE_CNT = 13;
 }
 
 enum DocEventType {

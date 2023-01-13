@@ -599,8 +599,6 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	case api.ValueType_VALUE_TYPE_INTEGER_CNT:
 		fallthrough
 	case api.ValueType_VALUE_TYPE_LONG_CNT:
-		fallthrough
-	case api.ValueType_VALUE_TYPE_DOUBLE_CNT:
 		counterType, err := fromCounterType(pbType)
 		if err != nil {
 			return nil, err
