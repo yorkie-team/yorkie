@@ -63,6 +63,10 @@ func (t *TextValue) String() string {
 
 // Marshal returns the JSON encoding of this text.
 func (t *TextValue) Marshal() string {
+	if len(t.attrs.Elements()) == 0 {
+		return fmt.Sprintf(`{"val":"%s"}`, EscapeString(t.value))
+	}
+
 	return fmt.Sprintf(
 		`{"attrs":%s,"val":"%s"}`,
 		t.attrs.Marshal(),

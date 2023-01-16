@@ -33,11 +33,11 @@ func TestText(t *testing.T) {
 
 		fromPos, toPos := text.CreateRange(0, 0)
 		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
-		assert.Equal(t, `[{"attrs":{},"val":"Hello World"}]`, text.Marshal())
+		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 
 		fromPos, toPos = text.CreateRange(6, 11)
 		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
-		assert.Equal(t, `[{"attrs":{},"val":"Hello "},{"attrs":{},"val":"Yorkie"}]`, text.Marshal())
+		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 	})
 
 	t.Run("UTF-16 code units test", func(t *testing.T) {
@@ -70,17 +70,17 @@ func TestText(t *testing.T) {
 
 		fromPos, toPos := text.CreateRange(0, 0)
 		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
-		assert.Equal(t, `[{"attrs":{},"val":"Hello World"}]`, text.Marshal())
+		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 
 		fromPos, toPos = text.CreateRange(6, 11)
 		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
-		assert.Equal(t, `[{"attrs":{},"val":"Hello "},{"attrs":{},"val":"Yorkie"}]`, text.Marshal())
+		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 
 		fromPos, toPos = text.CreateRange(0, 1)
 		text.Style(fromPos, toPos, map[string]string{"b": "1"}, ctx.IssueTimeTicket())
 		assert.Equal(
 			t,
-			`[{"attrs":{"b":"1"},"val":"H"},{"attrs":{},"val":"ello "},{"attrs":{},"val":"Yorkie"}]`,
+			`[{"attrs":{"b":"1"},"val":"H"},{"val":"ello "},{"val":"Yorkie"}]`,
 			text.Marshal(),
 		)
 	})
