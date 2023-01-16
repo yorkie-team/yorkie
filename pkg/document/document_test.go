@@ -206,11 +206,11 @@ func TestDocument(t *testing.T) {
 			root.SetNewText("k1").
 				Edit(0, 0, "ABCD").
 				Edit(1, 3, "12")
-			assert.Equal(t, `{"k1":[{"attrs":{},"val":"A"},{"attrs":{},"val":"12"},{"attrs":{},"val":"D"}]}`, root.Marshal())
+			assert.Equal(t, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, root.Marshal())
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"A"},{"attrs":{},"val":"12"},{"attrs":{},"val":"D"}]}`, doc.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			text := root.GetText("k1")
@@ -249,11 +249,11 @@ func TestDocument(t *testing.T) {
 				Edit(0, 1, "하").
 				Edit(1, 1, "느").
 				Edit(1, 2, "늘")
-			assert.Equal(t, `{"k1":[{"attrs":{},"val":"하"},{"attrs":{},"val":"늘"}]}`, root.Marshal())
+			assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"}]}`, root.Marshal())
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"하"},{"attrs":{},"val":"늘"}]}`, doc.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"}]}`, doc.Marshal())
 	})
 
 	t.Run("rich text test", func(t *testing.T) {
@@ -270,7 +270,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"Hello world"}]}`, doc.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"Hello world"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			text := root.GetText("k1")
@@ -284,7 +284,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(
 			t,
-			`{"k1":[{"attrs":{"b":"1"},"val":"Hello"},{"attrs":{},"val":" world"}]}`,
+			`{"k1":[{"attrs":{"b":"1"},"val":"Hello"},{"val":" world"}]}`,
 			doc.Marshal(),
 		)
 
@@ -308,7 +308,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(
 			t,
-			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{},"val":" world"}]}`,
+			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"val":" world"}]}`,
 			doc.Marshal(),
 		)
 
@@ -326,7 +326,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(
 			t,
-			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{},"val":" Yorkie"}]}`,
+			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"val":" Yorkie"}]}`,
 			doc.Marshal(),
 		)
 
@@ -345,7 +345,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(
 			t,
 			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},`+
-				`{"attrs":{"list":"true"},"val":"\\n"},{"attrs":{},"val":" Yorkie"}]}`,
+				`{"attrs":{"list":"true"},"val":"\\n"},{"val":" Yorkie"}]}`,
 			doc.Marshal(),
 		)
 	})

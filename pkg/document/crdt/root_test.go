@@ -128,35 +128,35 @@ func TestRoot(t *testing.T) {
 	t.Run("garbage collection for rich text test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		richText := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
-		fromPos, toPos := richText.CreateRange(0, 0)
-		richText.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
-		registerTextElementWithGarbage(fromPos, toPos, root, richText)
-		assert.Equal(t, `[{"attrs":{},"val":"Hello World"}]`, richText.Marshal())
+		fromPos, toPos := text.CreateRange(0, 0)
+		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		registerTextElementWithGarbage(fromPos, toPos, root, text)
+		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 		assert.Equal(t, 0, root.GarbageLen())
 
-		fromPos, toPos = richText.CreateRange(6, 11)
-		richText.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
-		registerTextElementWithGarbage(fromPos, toPos, root, richText)
-		assert.Equal(t, `[{"attrs":{},"val":"Hello "},{"attrs":{},"val":"Yorkie"}]`, richText.Marshal())
+		fromPos, toPos = text.CreateRange(6, 11)
+		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		registerTextElementWithGarbage(fromPos, toPos, root, text)
+		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		fromPos, toPos = richText.CreateRange(0, 6)
-		richText.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
-		registerTextElementWithGarbage(fromPos, toPos, root, richText)
-		assert.Equal(t, `[{"attrs":{},"val":"Yorkie"}]`, richText.Marshal())
+		fromPos, toPos = text.CreateRange(0, 6)
+		text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
+		registerTextElementWithGarbage(fromPos, toPos, root, text)
+		assert.Equal(t, `[{"val":"Yorkie"}]`, text.Marshal())
 		assert.Equal(t, 2, root.GarbageLen())
 
 		// It contains code marked tombstone.
 		// After calling the garbage collector, the node will be removed.
-		nodeLen := len(richText.Nodes())
+		nodeLen := len(text.Nodes())
 		assert.Equal(t, 3, nodeLen)
 
 		assert.Equal(t, 2, root.GarbageCollect(time.MaxTicket))
 		assert.Equal(t, 0, root.GarbageLen())
 
-		nodeLen = len(richText.Nodes())
+		nodeLen = len(text.Nodes())
 		assert.Equal(t, 1, nodeLen)
 	})
 

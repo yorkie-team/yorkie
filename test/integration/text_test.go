@@ -160,21 +160,21 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"123"},{"attrs":{},"val":"456"},{"attrs":{},"val":"789"}]}`, d2.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"123"},{"val":"456"},{"val":"789"}]}`, d2.Marshal())
 
 		err = d1.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(1, 7, "")
 			return nil
 		}, "delete block by c1")
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"1"},{"attrs":{},"val":"89"}]}`, d1.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"1"},{"val":"89"}]}`, d1.Marshal())
 
 		err = d2.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(2, 5, "")
 			return nil
 		}, "delete block by c2")
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"12"},{"attrs":{},"val":"6"},{"attrs":{},"val":"789"}]}`, d2.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"12"},{"val":"6"},{"val":"789"}]}`, d2.Marshal())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
@@ -207,7 +207,7 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"0"},{"attrs":{},"val":"0"},{"attrs":{},"val":"0"}]}`, d2.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"},{"val":"0"}]}`, d2.Marshal())
 
 		err = d1.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(1, 2, "1")
@@ -216,7 +216,7 @@ func TestText(t *testing.T) {
 			return nil
 		}, "newly create then delete by c1")
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"0"},{"attrs":{},"val":"0"}]}`, d1.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"}]}`, d1.Marshal())
 
 		err = d2.Update(func(root *json.Object) error {
 			root.GetText("k1").Edit(0, 3, "")

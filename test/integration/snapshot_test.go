@@ -130,7 +130,7 @@ func TestSnapshot(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"하"},{"attrs":{},"val":"늘"},{"attrs":{},"val":"구"},{"attrs":{},"val":"름"}]}`, d1.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"},{"val":"구"},{"val":"름"}]}`, d1.Marshal())
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 

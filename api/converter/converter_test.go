@@ -45,21 +45,21 @@ func TestConverter(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"A"}]}`, doc.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"A"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			root.SetNewText("k1").Edit(0, 0, "B")
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"B"}]}`, doc.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"B"}]}`, doc.Marshal())
 
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
 
 		obj, err = converter.BytesToObject(bytes)
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"attrs":{},"val":"B"}]}`, obj.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"B"}]}`, obj.Marshal())
 	})
 
 	t.Run("snapshot test", func(t *testing.T) {

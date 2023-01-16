@@ -184,11 +184,11 @@ func BenchmarkDocument(b *testing.B) {
 				root.SetNewText("k1").
 					Edit(0, 0, "ABCD").
 					Edit(1, 3, "12")
-				assert.Equal(b, `{"k1":[{"attrs":{},"val":"A"},{"attrs":{},"val":"12"},{"attrs":{},"val":"D"}]}`, root.Marshal())
+				assert.Equal(b, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, root.Marshal())
 				return nil
 			})
 			assert.NoError(b, err)
-			assert.Equal(b, `{"k1":[{"attrs":{},"val":"A"},{"attrs":{},"val":"12"},{"attrs":{},"val":"D"}]}`, doc.Marshal())
+			assert.Equal(b, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, doc.Marshal())
 
 			err = doc.Update(func(root *json.Object) error {
 				text := root.GetText("k1")
@@ -229,11 +229,11 @@ func BenchmarkDocument(b *testing.B) {
 					Edit(0, 1, "하").
 					Edit(1, 1, "느").
 					Edit(1, 2, "늘")
-				assert.Equal(b, `{"k1":[{"attrs":{},"val":"하"},{"attrs":{},"val":"늘"}]}`, root.Marshal())
+				assert.Equal(b, `{"k1":[{"val":"하"},{"val":"늘"}]}`, root.Marshal())
 				return nil
 			})
 			assert.NoError(b, err)
-			assert.Equal(b, `{"k1":[{"attrs":{},"val":"하"},{"attrs":{},"val":"늘"}]}`, doc.Marshal())
+			assert.Equal(b, `{"k1":[{"val":"하"},{"val":"늘"}]}`, doc.Marshal())
 		}
 	})
 
@@ -252,7 +252,7 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			assert.Equal(b, `{"k1":[{"attrs":{},"val":"Hello world"}]}`, doc.Marshal())
+			assert.Equal(b, `{"k1":[{"val":"Hello world"}]}`, doc.Marshal())
 
 			err = doc.Update(func(root *json.Object) error {
 				text := root.GetText("k1")
@@ -266,7 +266,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.NoError(b, err)
 			assert.Equal(
 				b,
-				`{"k1":[{"attrs":{"b":"1"},"val":"Hello"},{"attrs":{},"val":" world"}]}`,
+				`{"k1":[{"attrs":{"b":"1"},"val":"Hello"},{"val":" world"}]}`,
 				doc.Marshal(),
 			)
 
@@ -290,7 +290,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.NoError(b, err)
 			assert.Equal(
 				b,
-				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{},"val":" world"}]}`,
+				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"val":" world"}]}`,
 				doc.Marshal(),
 			)
 
@@ -308,7 +308,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.NoError(b, err)
 			assert.Equal(
 				b,
-				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{},"val":" Yorkie"}]}`,
+				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"val":" Yorkie"}]}`,
 				doc.Marshal(),
 			)
 
@@ -325,7 +325,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.NoError(b, err)
 			assert.Equal(
 				b,
-				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{"list":"true"},"val":"\n"},{"attrs":{},"val":" Yorkie"}]}`,
+				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{"list":"true"},"val":"\n"},{"val":" Yorkie"}]}`,
 				doc.Marshal(),
 			)
 		}
@@ -460,14 +460,6 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("counter 10000", func(b *testing.B) {
 		benchmarkCounter(10000, b)
-	})
-
-	b.Run("rich text 100", func(b *testing.B) {
-		benchmarkRichText(100, b)
-	})
-
-	b.Run("rich text 1000", func(b *testing.B) {
-		benchmarkRichText(1000, b)
 	})
 
 	b.Run("object 1000", func(b *testing.B) {
@@ -627,21 +619,6 @@ func benchmarkCounter(cnt int, b *testing.B) {
 			counter := root.SetNewCounter("k1", crdt.IntegerCnt, 0)
 			for c := 0; c < cnt; c++ {
 				counter.Increase(c)
-			}
-			return nil
-		})
-		assert.NoError(b, err)
-	}
-}
-
-func benchmarkRichText(cnt int, b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		doc := document.New("d1")
-
-		err := doc.Update(func(root *json.Object) error {
-			text := root.SetNewText("k1")
-			for c := 0; c < cnt; c++ {
-				text.Edit(0, 0, "a", nil)
 			}
 			return nil
 		})
