@@ -373,6 +373,7 @@ func TestDocument(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"age":128}`, doc.Marshal())
+		assert.Equal(t, "128", doc.Root().GetCounter("age").Counter.Marshal())
 
 		// long type test
 		err = doc.Update(func(root *json.Object) error {
