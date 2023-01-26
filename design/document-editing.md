@@ -9,7 +9,7 @@ This document covers document editing executed in the SDK.
 
 ## Summary
 
-Document Editing is a mechanism to modify the document. It consists of two parts, Local and Remote.
+Document Editing is a mechanism to modify the document. It consists of two parts, **Local** and **Remote**.
 We will provide a simple document editing example in the SDK to show how it works.
 
 ### Goals
@@ -48,13 +48,13 @@ Local Editing is started by calling the `Document.Update`. `Document.Update` is 
 
 ![document-editing-upstream](media/document-editing-upstream.png)
 
-The figure above explains the Document in more detail, and three internal components are added.
+The figure above explains Document in more detail. Three internal components are in the Document.
 
-- `Root` represents the root of JSON object. This component is a `Proxy` and is used to create `Changes` when editing of the `Root` is executed.
-- `CRDT` represents the real document(SOT, source of truth) and keep the consistency even if changes are applied asynchronously.
-- `LocalChanges` is a buffer used to collect locally generated Changes before sending them to the server. The Client checks if changes are exist in LocalChanges and sends them to the server.
+- `Clone` represents a JSON proxy object of the document. It creates `Changes` when it is edited through the external editor.
+- `Root` represents the real document (**SOT**, source of truth). It keeps consistency for both synchronous and asynchronous changes.
+- `LocalChanges` is a buffer for local `Changes`. It keeps all the changes until the client sends them to the server.
 
-Local Editing consists of tree logic parts.
+Local Editing consists of three logic parts.
 
 1. Calling `Document.Update`.
 2. Pushing Changes to Server.
@@ -66,9 +66,9 @@ Let's take a closer look at the logics.
 
 This logic is executed with 3 sub-logics.
 
-- 1-1. When the function is called, `Proxy` creates Changes.
-- 1-2. And then the changes are added to LocalChanges.
-- 1-3. The changes also apply to the `CRDT`. The `CRDT` is only updated by changes.
+- 1-1. When `Document.Update` is called, the `Clone` proxy creates Changes.
+- 1-2. Those changes are added to `LocalChanges`.
+- 1-3. Changes are applied to `Root`. The `Root` can be only updated by changes.
 
 Here's a real code example:
 
@@ -80,7 +80,7 @@ doc.Update(func(root *json.Object) {
 fmt.Println(doc.Marshal()) // {"foo": "bar"}
 ```
 
-The updater function, the first argument of `Document.Update`, provides the `root` as the first argument. The external editor executes the methods of the `root` to edit the Document. The `root` is a proxy, and whenever editing occurs, changes are created internally and the changes are pushed to `LocalChanges`. These logics work synchronously.
+The updater function, the first argument of `Document.Update`, provides the `root` as the first argument. The external editor can use methods in `root` to edit the Document. Whenever editing occurs, `clone`, acting as a proxy, creates changes and push them to `LocalStorage`. These logics work **synchronously**.
 
 #### 2. Pushing Changes to Server
 
@@ -89,7 +89,7 @@ This logic is executed with 2 sub-logics.
 - 2-1. `Client` checks `LocalChanges` of `Document` at specific intervals.
 - 2-2. If there are changes in `LocalChanges`, `Client` sends them to the `Server`.
 
-If LocalChanges has changes that need to be synchronized with other peers, it collects them and sends them to the server. These logics work asynchronously.
+If `LocalChanges` has changes that need to be synchronized with other peers, it collects them and sends them to the server. These logics work **asynchronously**.
 
 #### 3. Propagating Changes to Peers
 
@@ -101,7 +101,7 @@ Remote Editing starts when the server responds the changes to the client at the 
 
 ![document-editing-downstream](media/document-editing-downstream.png)
 
-The `Client` that receives the changes applies the changes in the `CRDT` inside the `Document`. If there are handlers that are externally subscribed to changes through `Doc.Subscribe`, these handlers are called and the ChangeEvents are passed as an argument. All of these logic work synchronously.
+The `Client` who received the changes applies them to the `Root` inside the `Document`. Externally subscribed handlers through `Document.Subscribe` are called if exists, receiving `ChangeEvents` as an argument. These logics work **synchronously**.
 
 ```js
 // JS SDK
@@ -115,4 +115,4 @@ For more details: [Subscribing to Document events](https://yorkie.dev/docs/js-sd
 ### Risks and Mitigation
 
 Proxy can vary by language or environment. For example, in JS SDK, the Proxy is implemented as [JavaScript Proxy](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy), but in the Go SDK, it is just a struct.
-This is to provide users with an interface that suits the characteristics of the language or environment. Proxy component is likely to change to other interfaces later when we find a better way.
+This is to provide users with an interface that suits the characteristics of the language or environment. If we find a better way later, Proxy component is likely to be changed to other interfaces.
