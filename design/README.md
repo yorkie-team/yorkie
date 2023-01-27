@@ -7,7 +7,7 @@
 - [Data Structure](data-structure.md): CRDT data structures in `crdt` package
   - [Range Deletion in Splay Tree](range-deletion-in-splay-tree.md): Rotation-free range deletion algorithm for splay tree
 - [PubSub](pub-sub.md): Client-side event sharing with gRPC server-side stream and PubSub pattern
-- [Garbage Collection](https://yorkie.dev/docs/internals#garbage-collection): Deleting unused nodes in CRDT system
+- [Garbage Collection](garbage-collection.md): Deleting unused nodes in CRDT system
   - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text nodes
   - [Housekeeping](housekeeping.md): Deactivating outdated clients for efficient garbage collection
 
