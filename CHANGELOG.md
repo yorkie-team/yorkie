@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.0] - 2023-01-31
+
+### Changed
+* Merge Text and RichText by @hackerwins in https://github.com/yorkie-team/yorkie/pull/438
+* Fix the value type of Counter and remove double type from Counter by @cozitive in https://github.com/yorkie-team/yorkie/pull/441
+
+### Fixed
+* Fix wrong string escape in Text's attrs by @cozitive in https://github.com/yorkie-team/yorkie/pull/443
+* Increase CRDT Counter in local change by @cozitive in https://github.com/yorkie-team/yorkie/pull/449
+
 ## [0.2.20] - 2022-12-30
 
 ### Changed
