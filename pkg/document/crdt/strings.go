@@ -18,8 +18,6 @@ package crdt
 
 import "bytes"
 
-const hex = "0123456789abcdef"
-
 // EscapeString returns a string that is safe to embed in a JSON document.
 func EscapeString(s string) string {
 	var buf bytes.Buffer
@@ -27,48 +25,31 @@ func EscapeString(s string) string {
 	l := len(s)
 	for i := 0; i < l; i++ {
 		c := s[i]
-		if c >= 0x20 && c != '\\' && c != '"' {
-			buf.WriteByte(c)
-			continue
-		}
 		switch c {
 		case '\\':
 			buf.WriteByte('\\')
 			buf.WriteByte('\\')
 		case '"':
 			buf.WriteByte('\\')
-			buf.WriteByte('\\')
 			buf.WriteByte('"')
 		case '\n':
-			buf.WriteByte('\\')
 			buf.WriteByte('\\')
 			buf.WriteByte('n')
 		case '\f':
 			buf.WriteByte('\\')
-			buf.WriteByte('\\')
 			buf.WriteByte('f')
 		case '\b':
-			buf.WriteByte('\\')
 			buf.WriteByte('\\')
 			buf.WriteByte('b')
 		case '\r':
 			buf.WriteByte('\\')
-			buf.WriteByte('\\')
 			buf.WriteByte('r')
 		case '\t':
 			buf.WriteByte('\\')
-			buf.WriteByte('\\')
 			buf.WriteByte('t')
 		default:
-			buf.WriteByte('\\')
-			buf.WriteByte('\\')
-			buf.WriteByte('u')
-			buf.WriteByte('0')
-			buf.WriteByte('0')
-			buf.WriteByte(hex[c>>4])
-			buf.WriteByte(hex[c&0xF])
+			buf.WriteByte(c)
 		}
-		continue
 	}
 
 	return buf.String()

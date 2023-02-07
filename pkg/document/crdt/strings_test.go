@@ -30,30 +30,16 @@ func TestEscapeString(t *testing.T) {
 		assert.Equal(t, expected, actual)
 	})
 
-	t.Run("escape string with doublequote", func(t *testing.T) {
-		str := `hello world"`
-		expected := `hello world\\"`
+	t.Run("escape string with backslash, doublequote and control characters", func(t *testing.T) {
+		str := "hello world\"\\\n\f\b\r\t"
+		expected := `hello world\"\\\n\f\b\r\t`
 		actual := EscapeString(str)
 		assert.Equal(t, expected, actual)
 	})
 
-	t.Run("escape string with raw control character", func(t *testing.T) {
-		str := "hello world\n"
-		expected := `hello world\\n`
-		actual := EscapeString(str)
-		assert.Equal(t, expected, actual)
-	})
-
-	t.Run("escape string with escaped control character", func(t *testing.T) {
-		str := `hello world\n`
-		expected := `hello world\\n`
-		actual := EscapeString(str)
-		assert.Equal(t, expected, actual)
-	})
-
-	t.Run("escape string with raw unicode character", func(t *testing.T) {
-		str := "hello world\u1234"
-		expected := "hello world\u1234"
+	t.Run("escape string with unicode characters", func(t *testing.T) {
+		str := "hello world\u1234\u6645"
+		expected := "hello world\u1234\u6645"
 		actual := EscapeString(str)
 		assert.Equal(t, expected, actual)
 	})
