@@ -30,11 +30,8 @@ Housekeeping:
   # Interval is the time between housekeeping runs (default: 1m).
   Interval: 1m
 
-  # DeactivateThreshold is the time after which clients are considered deactivate (default: 7d).
-  DeactivateThreshold: 7d
-
-  # CandidatesLimit is the maximum number of candidates to be returned (default: 100).
-  CandidatesLimit: 100
+  # CandidatesLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
+  CandidatesLimitPerProject: 100
 
 # Backend is the configuration for the backend of Yorkie.
 Backend:
@@ -42,6 +39,9 @@ Backend:
   # If public key is not provided from the client, the default project will be
   # used. If we are using server as single-tenant mode, this should be set to true.
   UseDefaultProject: true
+  
+  # ClientDeactivateThreshold is deactivate threshold of clients in specific project for housekeeping.
+  ClientDeactivateThreshold: "24h"
 
   # SnapshotThreshold is the threshold that determines if changes should be
   # sent with snapshot when the number of changes is greater than this value.

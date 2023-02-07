@@ -42,9 +42,8 @@ const (
 
 	DefaultAdminPort = 11103
 
-	DefaultHousekeepingInterval            = time.Minute
-	DefaultHousekeepingDeactivateThreshold = 7 * 24 * time.Hour
-	DefaultHousekeepingCandidateLimit      = 500
+	DefaultHousekeepingInterval                  = time.Minute
+	DefaultHousekeepingCandidatesLimitPerProject = 500
 
 	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout = 5 * time.Second
@@ -56,6 +55,7 @@ const (
 	DefaultSecretKey                  = "yorkie-secret"
 	DefaultAdminTokenDuration         = 7 * 24 * time.Hour
 	DefaultUseDefaultProject          = true
+	DefaultClientDeactivateThreshold  = 24 * time.Hour
 	DefaultSnapshotThreshold          = 500
 	DefaultSnapshotInterval           = 1000
 	DefaultSnapshotWithPurgingChanges = false
@@ -179,6 +179,10 @@ func (c *Config) ensureDefaultValue() {
 		c.Backend.AdminTokenDuration = DefaultAdminTokenDuration.String()
 	}
 
+	if c.Backend.ClientDeactivateThreshold == "" {
+		c.Backend.ClientDeactivateThreshold = DefaultClientDeactivateThreshold.String()
+	}
+
 	if c.Backend.SnapshotThreshold == 0 {
 		c.Backend.SnapshotThreshold = DefaultSnapshotThreshold
 	}
@@ -248,11 +252,11 @@ func newConfig(port int, profilingPort int) *Config {
 			Port: DefaultAdminPort,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:            DefaultHousekeepingInterval.String(),
-			DeactivateThreshold: DefaultHousekeepingDeactivateThreshold.String(),
-			CandidatesLimit:     DefaultHousekeepingCandidateLimit,
+			Interval:                  DefaultHousekeepingInterval.String(),
+			CandidatesLimitPerProject: DefaultHousekeepingCandidatesLimitPerProject,
 		},
 		Backend: &backend.Config{
+			ClientDeactivateThreshold:  DefaultClientDeactivateThreshold.String(),
 			SnapshotThreshold:          DefaultSnapshotThreshold,
 			SnapshotInterval:           DefaultSnapshotInterval,
 			SnapshotWithPurgingChanges: DefaultSnapshotWithPurgingChanges,

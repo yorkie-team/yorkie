@@ -39,9 +39,9 @@ var (
 	flagConfPath string
 	flagLogLevel string
 
-	adminTokenDuration              time.Duration
-	housekeepingInterval            time.Duration
-	housekeepingDeactivateThreshold time.Duration
+	adminTokenDuration        time.Duration
+	housekeepingInterval      time.Duration
+	clientDeactivateThreshold time.Duration
 
 	mongoConnectionURI     string
 	mongoConnectionTimeout time.Duration
@@ -67,12 +67,14 @@ func newServerCmd() *cobra.Command {
 		Short: "Start Yorkie server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf.Backend.AdminTokenDuration = adminTokenDuration.String()
+
+			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold.String()
+
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
 			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
-			conf.Housekeeping.DeactivateThreshold = housekeepingDeactivateThreshold.String()
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -224,17 +226,11 @@ func init() {
 		server.DefaultHousekeepingInterval,
 		"housekeeping interval between housekeeping runs",
 	)
-	cmd.Flags().DurationVar(
-		&housekeepingDeactivateThreshold,
-		"housekeeping-deactivate-threshold",
-		server.DefaultHousekeepingDeactivateThreshold,
-		"time after which clients are considered deactivate",
-	)
 	cmd.Flags().IntVar(
-		&conf.Housekeeping.CandidatesLimit,
-		"housekeeping-candidates-limit",
-		server.DefaultHousekeepingCandidateLimit,
-		"candidates limit for a single housekeeping run",
+		&conf.Housekeeping.CandidatesLimitPerProject,
+		"housekeeping-candidates-limit-per-project",
+		server.DefaultHousekeepingCandidatesLimitPerProject,
+		"candidates limit per project for a single housekeeping run",
 	)
 	cmd.Flags().StringVar(
 		&mongoConnectionURI,
@@ -320,6 +316,12 @@ func init() {
 		server.DefaultUseDefaultProject,
 		"Whether to use the default project. Even if public key is not provided from the client, "+
 			"the default project will be used for the request.",
+	)
+	cmd.Flags().DurationVar(
+		&clientDeactivateThreshold,
+		"client-deactivate-threshold",
+		server.DefaultClientDeactivateThreshold,
+		"Deactivate threshold of clients in specific project for housekeeping.",
 	)
 	cmd.Flags().Int64Var(
 		&conf.Backend.SnapshotThreshold,

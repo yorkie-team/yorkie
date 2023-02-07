@@ -18,6 +18,7 @@ package types_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -33,10 +34,12 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
+		newClientDeactivateThreshold := 1 * time.Hour
 		fields := &types.UpdatableProjectFields{
-			Name:               &newName,
-			AuthWebhookURL:     &newAuthWebhookURL,
-			AuthWebhookMethods: &newAuthWebhookMethods,
+			Name:                      &newName,
+			AuthWebhookURL:            &newAuthWebhookURL,
+			AuthWebhookMethods:        &newAuthWebhookMethods,
+			ClientDeactivateThreshold: newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -49,8 +52,9 @@ func TestUpdatableProjectFields(t *testing.T) {
 		assert.NoError(t, fields.Validate())
 
 		fields = &types.UpdatableProjectFields{
-			Name:           &newName,
-			AuthWebhookURL: &newAuthWebhookURL,
+			Name:                      &newName,
+			AuthWebhookURL:            &newAuthWebhookURL,
+			ClientDeactivateThreshold: newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -59,9 +63,10 @@ func TestUpdatableProjectFields(t *testing.T) {
 			"InvalidMethods",
 		}
 		fields = &types.UpdatableProjectFields{
-			Name:               &newName,
-			AuthWebhookURL:     &newAuthWebhookURL,
-			AuthWebhookMethods: &newAuthWebhookMethods,
+			Name:                      &newName,
+			AuthWebhookURL:            &newAuthWebhookURL,
+			AuthWebhookMethods:        &newAuthWebhookMethods,
+			ClientDeactivateThreshold: newClientDeactivateThreshold,
 		}
 		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
 	})

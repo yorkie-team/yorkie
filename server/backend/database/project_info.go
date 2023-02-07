@@ -53,6 +53,10 @@ type ProjectInfo struct {
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods []string `bson:"auth_webhook_methods"`
 
+	// ClientDeactivateThreshold is the time after which clients in
+	// specific project are considered deactivate for housekeeping.
+	ClientDeactivateThreshold time.Duration `bson:"client_deactivate_threshold"`
+
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `bson:"created_at"`
 
@@ -61,10 +65,11 @@ type ProjectInfo struct {
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
-func NewProjectInfo(name string, owner types.ID) *ProjectInfo {
+func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold time.Duration) *ProjectInfo {
 	return &ProjectInfo{
-		Name:  name,
-		Owner: owner,
+		Name:                      name,
+		Owner:                     owner,
+		ClientDeactivateThreshold: clientDeactivateThreshold,
 		// TODO(hackerwins): Use random generated Key.
 		PublicKey: xid.New().String(),
 		SecretKey: xid.New().String(),
@@ -75,15 +80,16 @@ func NewProjectInfo(name string, owner types.ID) *ProjectInfo {
 // ToProjectInfo converts the given types.Project to ProjectInfo.
 func ToProjectInfo(project *types.Project) *ProjectInfo {
 	return &ProjectInfo{
-		ID:                 project.ID,
-		Name:               project.Name,
-		Owner:              project.Owner,
-		PublicKey:          project.PublicKey,
-		SecretKey:          project.SecretKey,
-		AuthWebhookURL:     project.AuthWebhookURL,
-		AuthWebhookMethods: project.AuthWebhookMethods,
-		CreatedAt:          project.CreatedAt,
-		UpdatedAt:          project.UpdatedAt,
+		ID:                        project.ID,
+		Name:                      project.Name,
+		Owner:                     project.Owner,
+		PublicKey:                 project.PublicKey,
+		SecretKey:                 project.SecretKey,
+		AuthWebhookURL:            project.AuthWebhookURL,
+		AuthWebhookMethods:        project.AuthWebhookMethods,
+		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
+		CreatedAt:                 project.CreatedAt,
+		UpdatedAt:                 project.UpdatedAt,
 	}
 }
 
@@ -94,15 +100,16 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 	}
 
 	return &ProjectInfo{
-		ID:                 i.ID,
-		Name:               i.Name,
-		Owner:              i.Owner,
-		PublicKey:          i.PublicKey,
-		SecretKey:          i.SecretKey,
-		AuthWebhookURL:     i.AuthWebhookURL,
-		AuthWebhookMethods: i.AuthWebhookMethods,
-		CreatedAt:          i.CreatedAt,
-		UpdatedAt:          i.UpdatedAt,
+		ID:                        i.ID,
+		Name:                      i.Name,
+		Owner:                     i.Owner,
+		PublicKey:                 i.PublicKey,
+		SecretKey:                 i.SecretKey,
+		AuthWebhookURL:            i.AuthWebhookURL,
+		AuthWebhookMethods:        i.AuthWebhookMethods,
+		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
+		CreatedAt:                 i.CreatedAt,
+		UpdatedAt:                 i.UpdatedAt,
 	}
 }
 
@@ -117,19 +124,23 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.AuthWebhookMethods != nil {
 		i.AuthWebhookMethods = *fields.AuthWebhookMethods
 	}
+	if fields.ClientDeactivateThreshold != 0 {
+		i.ClientDeactivateThreshold = time.Duration(fields.ClientDeactivateThreshold)
+	}
 }
 
 // ToProject converts the ProjectInfo to the Project.
 func (i *ProjectInfo) ToProject() *types.Project {
 	return &types.Project{
-		ID:                 i.ID,
-		Name:               i.Name,
-		Owner:              i.Owner,
-		AuthWebhookURL:     i.AuthWebhookURL,
-		AuthWebhookMethods: i.AuthWebhookMethods,
-		PublicKey:          i.PublicKey,
-		SecretKey:          i.SecretKey,
-		CreatedAt:          i.CreatedAt,
-		UpdatedAt:          i.UpdatedAt,
+		ID:                        i.ID,
+		Name:                      i.Name,
+		Owner:                     i.Owner,
+		AuthWebhookURL:            i.AuthWebhookURL,
+		AuthWebhookMethods:        i.AuthWebhookMethods,
+		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
+		PublicKey:                 i.PublicKey,
+		SecretKey:                 i.SecretKey,
+		CreatedAt:                 i.CreatedAt,
+		UpdatedAt:                 i.UpdatedAt,
 	}
 }

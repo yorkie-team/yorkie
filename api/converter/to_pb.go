@@ -72,14 +72,15 @@ func ToProject(project *types.Project) (*api.Project, error) {
 	}
 
 	return &api.Project{
-		Id:                 project.ID.String(),
-		Name:               project.Name,
-		AuthWebhookUrl:     project.AuthWebhookURL,
-		AuthWebhookMethods: project.AuthWebhookMethods,
-		PublicKey:          project.PublicKey,
-		SecretKey:          project.SecretKey,
-		CreatedAt:          pbCreatedAt,
-		UpdatedAt:          pbUpdatedAt,
+		Id:                        project.ID.String(),
+		Name:                      project.Name,
+		AuthWebhookUrl:            project.AuthWebhookURL,
+		AuthWebhookMethods:        project.AuthWebhookMethods,
+		ClientDeactivateThreshold: int64(project.ClientDeactivateThreshold),
+		PublicKey:                 project.PublicKey,
+		SecretKey:                 project.SecretKey,
+		CreatedAt:                 pbCreatedAt,
+		UpdatedAt:                 pbUpdatedAt,
 	}, nil
 }
 
@@ -513,6 +514,9 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 		}
 	} else {
 		pbUpdatableProjectFields.AuthWebhookMethods = nil
+	}
+	if fields.ClientDeactivateThreshold != 0 {
+		pbUpdatableProjectFields.ClientDeactivateThreshold = int64(fields.ClientDeactivateThreshold)
 	}
 	return pbUpdatableProjectFields, nil
 }
