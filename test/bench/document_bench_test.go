@@ -317,7 +317,7 @@ func BenchmarkDocument(b *testing.B) {
 				text.Edit(5, 5, "\n", map[string]string{"list": "true"})
 				assert.Equal(
 					b,
-					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][5:1:00:0 {"list":"true"} "\\n"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
+					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][5:1:00:0 {"list":"true"} "\n"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
 					text.StructureAsString(),
 				)
 				return nil
@@ -325,7 +325,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.NoError(b, err)
 			assert.Equal(
 				b,
-				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{"list":"true"},"val":"\\n"},{"val":" Yorkie"}]}`,
+				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{"list":"true"},"val":"\n"},{"val":" Yorkie"}]}`,
 				doc.Marshal(),
 			)
 		}
