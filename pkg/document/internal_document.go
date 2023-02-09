@@ -48,7 +48,7 @@ type InternalDocument struct {
 
 // NewInternalDocument creates a new instance of InternalDocument.
 func NewInternalDocument(k key.Key) *InternalDocument {
-	root := crdt.NewObject(crdt.NewRHTPriorityQueueMap(), time.InitialTicket)
+	root := crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket)
 
 	return &InternalDocument{
 		key:        k,

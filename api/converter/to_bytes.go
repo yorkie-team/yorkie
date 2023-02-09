@@ -136,7 +136,7 @@ func toCounter(counter *crdt.Counter) (*api.JSONElement, error) {
 	}, nil
 }
 
-func toRHTNodes(rhtNodes []*crdt.RHTPQMapNode) ([]*api.RHTNode, error) {
+func toRHTNodes(rhtNodes []*crdt.ElementRHTNode) ([]*api.RHTNode, error) {
 	var pbRHTNodes []*api.RHTNode
 	for _, rhtNode := range rhtNodes {
 		pbElem, err := toJSONElement(rhtNode.Element())

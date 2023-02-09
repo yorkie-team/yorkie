@@ -23,14 +23,14 @@ import (
 // Object represents a JSON object, but unlike regular JSON, it has time
 // tickets which is created by logical clock.
 type Object struct {
-	memberNodes *RHTPriorityQueueMap
+	memberNodes *ElementRHT
 	createdAt   *time.Ticket
 	movedAt     *time.Ticket
 	removedAt   *time.Ticket
 }
 
 // NewObject creates a new instance of Object.
-func NewObject(memberNodes *RHTPriorityQueueMap, createdAt *time.Ticket) *Object {
+func NewObject(memberNodes *ElementRHT, createdAt *time.Ticket) *Object {
 	return &Object{
 		memberNodes: memberNodes,
 		createdAt:   createdAt,
@@ -95,10 +95,10 @@ func (o *Object) Marshal() string {
 
 // DeepCopy copies itself deeply.
 func (o *Object) DeepCopy() Element {
-	members := NewRHTPriorityQueueMap()
+	members := NewElementRHT()
 
 	for _, node := range o.memberNodes.Nodes() {
-		members.SetInternal(node.key, node.elem.DeepCopy())
+		members.Set(node.key, node.elem.DeepCopy())
 	}
 
 	obj := NewObject(members, o.createdAt)
@@ -141,7 +141,7 @@ func (o *Object) Remove(removedAt *time.Ticket) bool {
 	return false
 }
 
-// RHTNodes returns the RHTPriorityQueueMap nodes.
-func (o *Object) RHTNodes() []*RHTPQMapNode {
+// RHTNodes returns the ElementRHT nodes.
+func (o *Object) RHTNodes() []*ElementRHTNode {
 	return o.memberNodes.Nodes()
 }

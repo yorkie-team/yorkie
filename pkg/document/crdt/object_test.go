@@ -30,7 +30,7 @@ func TestObject(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
 
-		obj := crdt.NewObject(crdt.NewRHTPriorityQueueMap(), ctx.IssueTimeTicket())
+		obj := crdt.NewObject(crdt.NewElementRHT(), ctx.IssueTimeTicket())
 
 		obj.Set("k1", crdt.NewPrimitive("v1", ctx.IssueTimeTicket()))
 		assert.Equal(t, `{"k1":"v1"}`, obj.Marshal())

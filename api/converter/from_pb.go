@@ -548,7 +548,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 			return nil, err
 		}
 		return crdt.NewObject(
-			crdt.NewRHTPriorityQueueMap(),
+			crdt.NewElementRHT(),
 			createdAt,
 		), nil
 	case api.ValueType_VALUE_TYPE_JSON_ARRAY:

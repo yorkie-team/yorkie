@@ -43,7 +43,7 @@ func NewObject(ctx *change.Context, root *crdt.Object) *Object {
 // SetNewObject sets a new Object for the given key.
 func (p *Object) SetNewObject(k string) *Object {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return NewObject(p.context, crdt.NewObject(crdt.NewRHTPriorityQueueMap(), ticket))
+		return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
 	})
 
 	return v.(*Object)
