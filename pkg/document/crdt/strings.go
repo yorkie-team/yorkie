@@ -37,30 +37,23 @@ func EscapeString(s string) string {
 			buf.WriteByte('\\')
 		case '"':
 			buf.WriteByte('\\')
-			buf.WriteByte('\\')
 			buf.WriteByte('"')
 		case '\n':
-			buf.WriteByte('\\')
 			buf.WriteByte('\\')
 			buf.WriteByte('n')
 		case '\f':
 			buf.WriteByte('\\')
-			buf.WriteByte('\\')
 			buf.WriteByte('f')
 		case '\b':
-			buf.WriteByte('\\')
 			buf.WriteByte('\\')
 			buf.WriteByte('b')
 		case '\r':
 			buf.WriteByte('\\')
-			buf.WriteByte('\\')
 			buf.WriteByte('r')
 		case '\t':
 			buf.WriteByte('\\')
-			buf.WriteByte('\\')
 			buf.WriteByte('t')
 		default:
-			buf.WriteByte('\\')
 			buf.WriteByte('\\')
 			buf.WriteByte('u')
 			buf.WriteByte('0')

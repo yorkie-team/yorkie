@@ -12,7 +12,7 @@ func TestMarshal(t *testing.T) {
 		value1 := "world\"\f\b"
 		key2 := "hi"
 		value2 := `test\r`
-		expected := `{"hello\\\\\\t":"world\\"\\f\\b","hi":"test\\r"}`
+		expected := `{"hello\\\\\\t":"world\"\f\b","hi":"test\\r"}`
 
 		rht := NewRHT()
 		rht.Set(key1, value1, nil)
