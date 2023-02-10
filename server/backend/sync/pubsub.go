@@ -27,15 +27,17 @@ import (
 type Subscription struct {
 	id         string
 	subscriber types.Client
+	docKeys    []key.Key
 	closed     bool
 	events     chan DocEvent
 }
 
 // NewSubscription creates a new instance of Subscription.
-func NewSubscription(subscriber types.Client) *Subscription {
+func NewSubscription(subscriber types.Client, keys []key.Key) *Subscription {
 	return &Subscription{
 		id:         xid.New().String(),
 		subscriber: subscriber,
+		docKeys:    keys,
 		events:     make(chan DocEvent, 1),
 	}
 }
@@ -55,6 +57,12 @@ type DocEvent struct {
 // Events returns the DocEvent channel of this subscription.
 func (s *Subscription) Events() chan DocEvent {
 	return s.events
+}
+
+// DocKeys returns an array of the keys of the documents
+// that the subscription is subscribed to.
+func (s *Subscription) DocKeys() []key.Key {
+	return s.docKeys
 }
 
 // Subscriber returns the subscriber of this subscription.

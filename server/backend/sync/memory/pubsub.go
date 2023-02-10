@@ -101,7 +101,7 @@ func (m *PubSub) Subscribe(
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	sub := sync.NewSubscription(subscriber)
+	sub := sync.NewSubscription(subscriber, keys)
 	m.subscriptionMapBySubscriber[sub.SubscriberID()] = sub
 
 	for _, docKey := range keys {
@@ -206,6 +206,17 @@ func (m *PubSub) Publish(
 						sub.SubscriberID(),
 					)
 				}
+
+				var eventDocumentKeys []key.Key
+				for _, key := range event.DocumentKeys {
+					for _, docKey := range sub.DocKeys() {
+						if key == docKey {
+							eventDocumentKeys = append(eventDocumentKeys, key)
+							break
+						}
+					}
+				}
+				event.DocumentKeys = eventDocumentKeys
 
 				// NOTE: When a subscription is being closed by a subscriber,
 				// the subscriber may not receive messages.

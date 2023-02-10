@@ -420,22 +420,12 @@ func (s *yorkieServer) WatchDocuments(
 				return err
 			}
 
-			var eventDocumentKeys []key.Key
-			for _, key := range event.DocumentKeys {
-				for _, docKey := range docKeys {
-					if key == docKey {
-						eventDocumentKeys = append(eventDocumentKeys, key)
-						break
-					}
-				}
-			}
-
 			if err := stream.Send(&api.WatchDocumentsResponse{
 				Body: &api.WatchDocumentsResponse_Event{
 					Event: &api.DocEvent{
 						Type:         eventType,
 						Publisher:    converter.ToClient(event.Publisher),
-						DocumentKeys: converter.ToDocumentKeys(eventDocumentKeys),
+						DocumentKeys: converter.ToDocumentKeys(event.DocumentKeys),
 					},
 				},
 			}); err != nil {
