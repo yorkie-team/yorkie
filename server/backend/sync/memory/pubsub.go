@@ -207,21 +207,15 @@ func (m *PubSub) Publish(
 					)
 				}
 
-				var eventDocumentKeys []key.Key
-				for _, key := range event.DocumentKeys {
-					for _, docKey := range sub.DocKeys() {
-						if key == docKey {
-							eventDocumentKeys = append(eventDocumentKeys, key)
-							break
-						}
-					}
+				watchDocEvent := sync.DocEvent{
+					Type:         event.Type,
+					Publisher:    event.Publisher,
+					DocumentKeys: []key.Key{docKey},
 				}
-				event.DocumentKeys = eventDocumentKeys
-
 				// NOTE: When a subscription is being closed by a subscriber,
 				// the subscriber may not receive messages.
 				select {
-				case sub.Events() <- event:
+				case sub.Events() <- watchDocEvent:
 				case <-gotime.After(100 * gotime.Millisecond):
 					logging.From(ctx).Warnf(
 						`Publish(%s,%s) to %s timeout`,
