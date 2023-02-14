@@ -55,7 +55,7 @@ type Subscription struct {
 
 #### 2. Publish Event
 
-The client can send a `DocEvent` to the `Subscription` instances that subscribe to the same document through the `Publish` method.
+The publisher can send a `DocEvent` to the `Subscription` instances that subscribe to the same document through the `Publish` method.
 
 ```go
 type DocEvent struct {
@@ -87,12 +87,12 @@ func (m *PubSub) Publish(
 
 		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
 			for _, sub := range subs.Map() {
-            // If the subscriber is itself, do not send
+            	// If the subscriber is itself, do not send
 				if sub.Subscriber().ID.Compare(publisherID) == 0 {
 					continue
 				}
 
-            // Send the event to the peer's event channel
+            	// Send the event to the peer's event channel
 				sub.Events() <- event
 			}
 		}
@@ -100,7 +100,7 @@ func (m *PubSub) Publish(
 }
 ```
 
-#### 4. Send response to stream
+#### 4. Send watchDocuments response to stream
 
 In the `select` statement from step 1, when the `Subscription` channel receives an event, the event is sent to the `watchDocumentsResponse` of the rpc stream.
 
