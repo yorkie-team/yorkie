@@ -17,10 +17,24 @@
 // Package key provides the key implementation of the document.
 package key
 
+import (
+	"github.com/yorkie-team/yorkie/pkg/validation"
+)
+
 // Key represents a document key.
 type Key string
 
 // String returns the string representation of the key.
 func (k Key) String() string {
 	return string(k)
+}
+
+// IsValid returns true if the key is valid.
+func (k Key) IsValid() error {
+	err := validation.ValidateValue(k.String(), "required,slug,min=4,max=30")
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
