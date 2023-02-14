@@ -54,6 +54,7 @@ const (
 	DeactivateClient Method = "DeactivateClient"
 	AttachDocument   Method = "AttachDocument"
 	DetachDocument   Method = "DetachDocument"
+	DeleteDocument   Method = "DeleteDocument"
 	PushPull         Method = "PushPull"
 	WatchDocuments   Method = "WatchDocuments"
 )

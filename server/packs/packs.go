@@ -162,6 +162,56 @@ func PushPull(
 	return respPack, nil
 }
 
+func DeleteDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
+	reqPack *change.Pack,
+) error {
+	start := gotime.Now()
+	defer func() {
+		be.Metrics.ObserveDeleteResponseSeconds(gotime.Since(start).Seconds())
+	}()
+
+	if err := be.DB.DeleteSnapshotInfos(ctx, docInfo.ID); err != nil {
+		return err
+	}
+
+	if err := be.DB.DeleteSyncedSeqInfos(ctx, clientInfo, docInfo.ID); err != nil {
+		return err
+	}
+
+	if err := be.DB.DeleteChangeInfos(ctx, docInfo.ID); err != nil {
+		return err
+	}
+
+	if err := be.DB.DeleteClientDocInfos(ctx, docInfo.ID); err != nil {
+		return err
+	}
+
+	be.Background.AttachGoroutine(func(ctx context.Context) {
+		publisherID, err := clientInfo.ID.ToActorID()
+		if err != nil {
+			logging.From(ctx).Error(err)
+			return
+		}
+
+		be.Coordinator.Publish(
+			ctx,
+			publisherID,
+			sync.DocEvent{
+				Type:         types.DocumentDeletedEvent,
+				Publisher:    types.Client{ID: publisherID},
+				DocumentKeys: []key.Key{reqPack.DocumentKey},
+			},
+		)
+	})
+
+	return nil
+}
+
 // BuildDocumentForServerSeq returns a new document for the given serverSeq.
 func BuildDocumentForServerSeq(
 	ctx context.Context,

@@ -279,6 +279,109 @@ func (s *yorkieServer) DetachDocument(
 	}, nil
 }
 
+func (s *yorkieServer) DeleteDocument(
+	ctx context.Context,
+	req *api.DeleteDocumentRequest,
+) (*api.DeleteDocumentResponse, error) {
+	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	pack, err := converter.FromChangePack(req.ChangePack)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: access authentication
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.DeleteDocument,
+		Attributes: auth.AccessAttributes(pack),
+	}); err != nil {
+		return nil, err
+	}
+
+	if pack.HasChanges() {
+		locker, err := s.backend.Coordinator.NewLocker(
+			ctx,
+			packs.PushPullKey(projects.From(ctx).ID, pack.DocumentKey),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := locker.Lock(ctx); err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err := locker.Unlock(ctx); err != nil {
+				logging.DefaultLogger().Error(err)
+			}
+		}()
+	}
+
+	clientInfo, err := clients.FindClientInfo(
+		ctx,
+		s.backend.DB,
+		projects.From(ctx),
+		actorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	docInfo, err := documents.FindDocInfoByKeyAndOwner(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		clientInfo,
+		pack.DocumentKey,
+		false,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
+		return nil, err
+	}
+	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
+		return nil, err
+	}
+
+	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
+	if err != nil {
+		return nil, err
+	}
+
+	pbChangePack, err := pulled.ToPBChangePack()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: execute DB delete operations in a single transaction
+	if err := packs.DeleteDocument(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		clientInfo, docInfo,
+		pack,
+	); err != nil {
+		return nil, err
+	}
+	if err := documents.DeleteDocInfoByKey(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		pack.DocumentKey,
+	); err != nil {
+		return nil, err
+	}
+
+	return &api.DeleteDocumentResponse{
+		ChangePack: pbChangePack,
+	}, nil
+}
+
 // PushPull stores the changes sent by the client and delivers the changes
 // accumulated in the server to the client.
 func (s *yorkieServer) PushPull(

@@ -192,3 +192,17 @@ func FindDocInfoByKeyAndOwner(
 		createDocIfNotExist,
 	)
 }
+
+// DeleteDocInfoByKey removes a document for the given document key and owner.
+func DeleteDocInfoByKey(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docKey key.Key,
+) error {
+	return be.DB.DeleteDocInfoByKey(
+		ctx,
+		project.ID,
+		docKey,
+	)
+}

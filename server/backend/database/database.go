@@ -130,6 +130,9 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
+	// DeleteClientDocInfos removes ClientDocInfos of the given document from all clinetInfos.
+	DeleteClientDocInfos(ctx context.Context, docID types.ID) error
+
 	// FindDeactivateCandidates finds the housekeeping candidates.
 	FindDeactivateCandidates(
 		ctx context.Context,
@@ -154,6 +157,13 @@ type Database interface {
 		docKey key.Key,
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
+
+	// DeleteDocInfoByKey removes the document of the given key.
+	DeleteDocInfoByKey(
+		ctx context.Context,
+		projectID types.ID,
+		docKey key.Key,
+	) error
 
 	// FindDocInfoByID finds the document of the given ID.
 	FindDocInfoByID(
@@ -193,11 +203,17 @@ type Database interface {
 		to int64,
 	) ([]*ChangeInfo, error)
 
+	// DeleteChangeInfos removes all changeInfos of the given document.
+	DeleteChangeInfos(ctx context.Context, docID types.ID) error
+
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(ctx context.Context, docID types.ID, doc *document.InternalDocument) error
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
 	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq int64) (*SnapshotInfo, error)
+
+	// DeleteSnapshotInfos removes all snapshots of the given document.
+	DeleteSnapshotInfos(ctx context.Context, docID types.ID) error
 
 	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
 	FindMinSyncedSeqInfo(ctx context.Context, docID types.ID) (*SyncedSeqInfo, error)
@@ -217,6 +233,13 @@ type Database interface {
 		clientInfo *ClientInfo,
 		docID types.ID,
 		serverSeq int64,
+	) error
+
+	// DeleteSyncedSeqInfos removes the syncedSeq of the given document.
+	DeleteSyncedSeqInfos(
+		ctx context.Context,
+		clientInfo *ClientInfo,
+		docID types.ID,
 	) error
 
 	// FindDocInfosByPaging returns the documentInfos of the given paging.
