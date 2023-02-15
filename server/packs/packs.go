@@ -55,6 +55,10 @@ func PushPull(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 ) (*ServerPack, error) {
+	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
+		return nil, err
+	}
+
 	start := gotime.Now()
 	defer func() {
 		be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
@@ -170,6 +174,10 @@ func RemoveDocument(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 ) error {
+	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
+		return err
+	}
+
 	start := gotime.Now()
 	defer func() {
 		be.Metrics.ObserveRemoveResponseSeconds(gotime.Since(start).Seconds())

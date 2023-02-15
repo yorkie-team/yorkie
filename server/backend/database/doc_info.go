@@ -17,10 +17,15 @@
 package database
 
 import (
+	"errors"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+)
+
+var (
+	ErrDocumentAlreadyRemoved = errors.New("document is already removed")
 )
 
 // DocInfo is a structure representing information of the document.
@@ -76,4 +81,13 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 		UpdatedAt:  info.UpdatedAt,
 		IsRemoved:  info.IsRemoved,
 	}
+}
+
+// EnsureDocumentNotRemoved ensures the given document is attached.
+func (info *DocInfo) EnsureDocumentNotRemoved() error {
+	if info.IsRemoved {
+		return ErrDocumentAlreadyRemoved
+	}
+
+	return nil
 }
