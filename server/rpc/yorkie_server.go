@@ -279,10 +279,10 @@ func (s *yorkieServer) DetachDocument(
 	}, nil
 }
 
-func (s *yorkieServer) DeleteDocument(
+func (s *yorkieServer) RemoveDocument(
 	ctx context.Context,
-	req *api.DeleteDocumentRequest,
-) (*api.DeleteDocumentResponse, error) {
+	req *api.RemoveDocumentRequest,
+) (*api.RemoveDocumentResponse, error) {
 	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
 		return nil, err
@@ -295,7 +295,7 @@ func (s *yorkieServer) DeleteDocument(
 
 	// TODO: access authentication
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.DeleteDocument,
+		Method:     types.RemoveDocument,
 		Attributes: auth.AccessAttributes(pack),
 	}); err != nil {
 		return nil, err
@@ -359,7 +359,7 @@ func (s *yorkieServer) DeleteDocument(
 	}
 
 	// TODO: execute DB delete operations in a single transaction
-	if err := packs.DeleteDocument(
+	if err := packs.RemoveDocument(
 		ctx,
 		s.backend,
 		projects.From(ctx),
@@ -368,7 +368,7 @@ func (s *yorkieServer) DeleteDocument(
 	); err != nil {
 		return nil, err
 	}
-	if err := documents.DeleteDocInfoByKey(
+	if err := documents.RemoveDocInfoByKey(
 		ctx,
 		s.backend,
 		projects.From(ctx),
@@ -377,7 +377,7 @@ func (s *yorkieServer) DeleteDocument(
 		return nil, err
 	}
 
-	return &api.DeleteDocumentResponse{
+	return &api.RemoveDocumentResponse{
 		ChangePack: pbChangePack,
 	}, nil
 }

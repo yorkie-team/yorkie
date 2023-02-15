@@ -162,7 +162,7 @@ func PushPull(
 	return respPack, nil
 }
 
-func DeleteDocument(
+func RemoveDocument(
 	ctx context.Context,
 	be *backend.Backend,
 	project *types.Project,
@@ -172,22 +172,22 @@ func DeleteDocument(
 ) error {
 	start := gotime.Now()
 	defer func() {
-		be.Metrics.ObserveDeleteResponseSeconds(gotime.Since(start).Seconds())
+		be.Metrics.ObserveRemoveResponseSeconds(gotime.Since(start).Seconds())
 	}()
 
-	if err := be.DB.DeleteSnapshotInfos(ctx, docInfo.ID); err != nil {
+	if err := be.DB.RemoveSnapshotInfos(ctx, docInfo.ID); err != nil {
 		return err
 	}
 
-	if err := be.DB.DeleteSyncedSeqInfos(ctx, clientInfo, docInfo.ID); err != nil {
+	if err := be.DB.RemoveSyncedSeqInfos(ctx, clientInfo, docInfo.ID); err != nil {
 		return err
 	}
 
-	if err := be.DB.DeleteChangeInfos(ctx, docInfo.ID); err != nil {
+	if err := be.DB.RemoveChangeInfos(ctx, docInfo.ID); err != nil {
 		return err
 	}
 
-	if err := be.DB.DeleteClientDocInfos(ctx, docInfo.ID); err != nil {
+	if err := be.DB.RemoveClientDocInfos(ctx, docInfo.ID); err != nil {
 		return err
 	}
 
@@ -202,7 +202,7 @@ func DeleteDocument(
 			ctx,
 			publisherID,
 			sync.DocEvent{
-				Type:         types.DocumentDeletedEvent,
+				Type:         types.DocumentRemovedEvent,
 				Publisher:    types.Client{ID: publisherID},
 				DocumentKeys: []key.Key{reqPack.DocumentKey},
 			},

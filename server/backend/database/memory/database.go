@@ -524,22 +524,22 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// DeleteClientDocInfos removes ClientDocInfos of the given document from all clinetInfos.
-func (d *DB) DeleteClientDocInfos(ctx context.Context, docID types.ID) error {
+// RemoveClientDocInfos removes ClientDocInfos of the given document from all clinetInfos.
+func (d *DB) RemoveClientDocInfos(ctx context.Context, docID types.ID) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	it, err := txn.Get(tblClients, "id")
+	iter, err := txn.Get(tblClients, "id")
 	if err != nil {
 		return fmt.Errorf("find all clients: %w", err)
 	}
 
-	for raw := it.Next(); raw != nil; raw = it.Next() {
-		loadedClientInfo := raw.(*database.ClientInfo).DeepCopy()
-		loadedClientInfo.Documents[docID] = nil
-		loadedClientInfo.UpdatedAt = gotime.Now()
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		clientInfo := raw.(*database.ClientInfo).DeepCopy()
+		clientInfo.Documents[docID] = nil
+		clientInfo.UpdatedAt = gotime.Now()
 
-		if err := txn.Insert(tblClients, loadedClientInfo); err != nil {
+		if err := txn.Insert(tblClients, clientInfo); err != nil {
 			return fmt.Errorf("update client: %w", err)
 		}
 	}
@@ -668,8 +668,8 @@ func (d *DB) FindDocInfoByID(
 	return docInfo.DeepCopy(), nil
 }
 
-// DeleteDocInfoByKey removes the document of the given key.
-func (d *DB) DeleteDocInfoByKey(
+// RemoveDocInfoByKey removes the document of the given key.
+func (d *DB) RemoveDocInfoByKey(
 	ctx context.Context,
 	projectID types.ID,
 	docKey key.Key,
@@ -685,10 +685,13 @@ func (d *DB) DeleteDocInfoByKey(
 		return fmt.Errorf("%s: %w", docKey, database.ErrDocumentNotFound)
 	}
 
-	docInfo := raw.(*database.DocInfo)
-	if err := txn.Delete(tblDocuments, docInfo); err != nil {
-		return fmt.Errorf("delete changes of %s: %w", docKey, err)
+	docInfo := raw.(*database.DocInfo).DeepCopy()
+	docInfo.IsRemoved = true
+	docInfo.UpdatedAt = gotime.Now()
+	if err := txn.Insert(tblDocuments, docInfo); err != nil {
+		return fmt.Errorf("remove document of %s: %w", docKey, err)
 	}
+
 	txn.Commit()
 	return nil
 }
@@ -850,21 +853,28 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 	return infos, nil
 }
 
-// DeleteChangeInfos removes all changeInfos of the given document.
-func (d *DB) DeleteChangeInfos(
+// RemoveChangeInfos removes all changeInfos of the given document.
+func (d *DB) RemoveChangeInfos(
 	ctx context.Context,
 	docID types.ID,
 ) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	if _, err := txn.DeleteAll(
-		tblChanges,
-		"doc_id",
-		docID.String(),
-	); err != nil {
-		return fmt.Errorf("delete changes of %s: %w", docID.String(), err)
+	iter, err := txn.Get(tblChanges, "doc_id", docID.String())
+	if err != nil {
+		return fmt.Errorf("find changes of %s: %w", docID.String(), err)
 	}
+
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		changeInfo := raw.(*database.ChangeInfo).DeepCopy()
+		changeInfo.IsRemoved = true
+
+		if err := txn.Insert(tblChanges, changeInfo); err != nil {
+			return fmt.Errorf("remove change: %w", err)
+		}
+	}
+
 	txn.Commit()
 	return nil
 }
@@ -932,21 +942,28 @@ func (d *DB) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// DeleteSnapshotInfos removes all snapshots of the given document.
-func (d *DB) DeleteSnapshotInfos(
+// RemoveSnapshotInfos removes all snapshots of the given document.
+func (d *DB) RemoveSnapshotInfos(
 	ctx context.Context,
 	docID types.ID,
 ) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	if _, err := txn.DeleteAll(
-		tblSnapshots,
-		"doc_id",
-		docID.String(),
-	); err != nil {
-		return fmt.Errorf("delete snapshots of %s: %w", docID.String(), err)
+	iter, err := txn.Get(tblSnapshots, "doc_id", docID.String())
+	if err != nil {
+		return fmt.Errorf("find snapshots of %s: %w", docID.String(), err)
 	}
+
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		snapshotInfo := raw.(*database.SnapshotInfo).DeepCopy()
+		snapshotInfo.IsRemoved = true
+
+		if err := txn.Insert(tblSnapshots, snapshotInfo); err != nil {
+			return fmt.Errorf("remove snapshot: %w", err)
+		}
+	}
+
 	txn.Commit()
 	return nil
 }
@@ -1104,8 +1121,8 @@ func (d *DB) UpdateSyncedSeq(
 	return nil
 }
 
-// DeleteSyncedSeqInfos removes the syncedSeq of the given Document.
-func (d *DB) DeleteSyncedSeqInfos(
+// RemoveSyncedSeqInfos removes the syncedSeq of the given Document.
+func (d *DB) RemoveSyncedSeqInfos(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docID types.ID,
@@ -1113,13 +1130,20 @@ func (d *DB) DeleteSyncedSeqInfos(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	if _, err := txn.DeleteAll(
-		tblSyncedSeqs,
-		"doc_id",
-		docID.String(),
-	); err != nil {
-		return fmt.Errorf("delete syncedseqs of %s: %w", docID.String(), err)
+	iter, err := txn.Get(tblSyncedSeqs, "doc_id", docID.String())
+	if err != nil {
+		return fmt.Errorf("find synced seqs of %s: %w", docID.String(), err)
 	}
+
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		syncedSeqInfo := raw.(*database.SyncedSeqInfo).DeepCopy()
+		syncedSeqInfo.IsRemoved = true
+
+		if err := txn.Insert(tblSyncedSeqs, syncedSeqInfo); err != nil {
+			return fmt.Errorf("remove synced seq: %w", err)
+		}
+	}
+
 	txn.Commit()
 	return nil
 }

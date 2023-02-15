@@ -590,11 +590,10 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// DeleteClientDocInfos removes ClientDocInfos of the given document from all clinetInfos.
-func (c *Client) DeleteClientDocInfos(ctx context.Context, docID types.ID) error {
+// RemoveClientDocInfos removes ClientDocInfos of the given document from all clinetInfos.
+func (c *Client) RemoveClientDocInfos(ctx context.Context, docID types.ID) error {
 	clientDocInfoKey := "documents." + docID.String() + "."
 
-	now := gotime.Now()
 	if _, err := c.collection(colClients).UpdateMany(ctx, bson.M{}, bson.M{
 		"$unset": bson.M{
 			clientDocInfoKey + "server_seq": "",
@@ -602,7 +601,7 @@ func (c *Client) DeleteClientDocInfos(ctx context.Context, docID types.ID) error
 			clientDocInfoKey + "status":     "",
 		},
 		"$set": bson.M{
-			"updated_at": now,
+			"updated_at": gotime.Now(),
 		},
 	}, options.Update()); err != nil {
 		return err
@@ -760,8 +759,8 @@ func (c *Client) FindDocInfoByID(ctx context.Context, id types.ID) (*database.Do
 	return &docInfo, nil
 }
 
-// DeleteDocInfoByKey removes the document of the given key.
-func (c *Client) DeleteDocInfoByKey(
+// RemoveDocInfoByKey removes the document of the given key.
+func (c *Client) RemoveDocInfoByKey(
 	ctx context.Context,
 	projectID types.ID,
 	docKey key.Key,
@@ -771,12 +770,15 @@ func (c *Client) DeleteDocInfoByKey(
 		return err
 	}
 
-	if _, err = c.collection(colDocuments).DeleteOne(ctx, bson.M{
+	if _, err = c.collection(colDocuments).UpdateOne(ctx, bson.M{
 		"project_id": encodedProjectID,
 		"key":        docKey,
-	}, options.Delete()); err != nil {
+	}, bson.M{
+		"is_removed": true,
+		"updated_at": gotime.Now(),
+	}, options.Update()); err != nil {
 		logging.From(ctx).Error(err)
-		return fmt.Errorf("delete document: %w", err)
+		return fmt.Errorf("rmove document of %s: %w", docKey, err)
 	}
 
 	return nil
@@ -948,8 +950,8 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	return infos, nil
 }
 
-// DeleteChangeInfos removes all changeInfos of the given document.
-func (c *Client) DeleteChangeInfos(
+// RemoveChangeInfos removes all changeInfos of the given document.
+func (c *Client) RemoveChangeInfos(
 	ctx context.Context,
 	docID types.ID,
 ) error {
@@ -958,9 +960,11 @@ func (c *Client) DeleteChangeInfos(
 		return err
 	}
 
-	if _, err = c.collection(colChanges).DeleteMany(ctx, bson.M{
+	if _, err = c.collection(colChanges).UpdateMany(ctx, bson.M{
 		"doc_id": encodedDocID,
-	}, options.Delete()); err != nil {
+	}, bson.M{
+		"is_removed": true,
+	}, options.Update()); err != nil {
 		logging.From(ctx).Error(err)
 		return fmt.Errorf("delete changes: %w", err)
 	}
@@ -1033,8 +1037,8 @@ func (c *Client) FindClosestSnapshotInfo(
 	return snapshotInfo, nil
 }
 
-// DeleteSnapshotInfos removes all snapshots of the given document.
-func (c *Client) DeleteSnapshotInfos(
+// RemoveSnapshotInfos removes all snapshots of the given document.
+func (c *Client) RemoveSnapshotInfos(
 	ctx context.Context,
 	docID types.ID,
 ) error {
@@ -1043,11 +1047,13 @@ func (c *Client) DeleteSnapshotInfos(
 		return err
 	}
 
-	if _, err = c.collection(colSnapshots).DeleteMany(ctx, bson.M{
+	if _, err = c.collection(colSnapshots).UpdateMany(ctx, bson.M{
 		"doc_id": encodedDocID,
-	}, options.Delete()); err != nil {
+	}, bson.M{
+		"is_removed": true,
+	}, options.Update()); err != nil {
 		logging.From(ctx).Error(err)
-		return fmt.Errorf("delete snapshot: %w", err)
+		return fmt.Errorf("remove snapshot: %w", err)
 	}
 
 	return nil
@@ -1290,8 +1296,8 @@ func (c *Client) UpdateSyncedSeq(
 	return nil
 }
 
-// DeleteSyncedSeqInfos removes the syncedSeq of the given Document.
-func (c *Client) DeleteSyncedSeqInfos(
+// RemoveSyncedSeqInfos removes the syncedSeq of the given Document.
+func (c *Client) RemoveSyncedSeqInfos(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docID types.ID,
@@ -1301,11 +1307,13 @@ func (c *Client) DeleteSyncedSeqInfos(
 		return err
 	}
 
-	if _, err = c.collection(colSyncedSeqs).DeleteMany(ctx, bson.M{
+	if _, err = c.collection(colSyncedSeqs).UpdateMany(ctx, bson.M{
 		"doc_id": encodedDocID,
-	}, options.Delete()); err != nil {
+	}, bson.M{
+		"is_removed": true,
+	}, options.Update()); err != nil {
 		logging.From(ctx).Error(err)
-		return fmt.Errorf("delete synced seq: %w", err)
+		return fmt.Errorf("remove synced seq: %w", err)
 	}
 
 	return nil

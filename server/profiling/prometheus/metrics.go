@@ -47,7 +47,7 @@ type Metrics struct {
 	pushPullSentOperationsTotal     prometheus.Counter
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytesTotal      prometheus.Counter
-	deleteResponseSeconds           prometheus.Histogram
+	removeResponseSeconds           prometheus.Histogram
 }
 
 // NewMetrics creates a new instance of Metrics.
@@ -119,11 +119,11 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "snapshot_bytes_total",
 			Help:      "The total bytes of snapshots for response packs in PushPull.",
 		}),
-		deleteResponseSeconds: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+		removeResponseSeconds: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
-			Subsystem: "delete",
+			Subsystem: "remove",
 			Name:      "response_seconds",
-			Help:      "The response time of Delete.",
+			Help:      "The response time of Remove.",
 		}),
 	}
 
@@ -175,8 +175,8 @@ func (m *Metrics) AddPushPullSnapshotBytes(bytes int) {
 	m.pushPullSnapshotBytesTotal.Add(float64(bytes))
 }
 
-func (m *Metrics) ObserveDeleteResponseSeconds(seconds float64) {
-	m.deleteResponseSeconds.Observe(seconds)
+func (m *Metrics) ObserveRemoveResponseSeconds(seconds float64) {
+	m.removeResponseSeconds.Observe(seconds)
 }
 
 // RegisterGRPCServer registers the given gRPC server.

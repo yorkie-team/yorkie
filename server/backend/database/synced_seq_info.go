@@ -27,4 +27,21 @@ type SyncedSeqInfo struct {
 	Lamport   int64    `bson:"lamport"`
 	ActorID   types.ID `bson:"actor_id"`
 	ServerSeq int64    `bson:"server_seq"`
+	IsRemoved bool     `bson:"is_removed"`
+}
+
+func (i *SyncedSeqInfo) DeepCopy() *SyncedSeqInfo {
+	if i == nil {
+		return nil
+	}
+
+	return &SyncedSeqInfo{
+		ID:        i.ID,
+		DocID:     i.DocID,
+		ClientID:  i.ClientID,
+		Lamport:   i.Lamport,
+		ActorID:   i.ActorID,
+		ServerSeq: i.ServerSeq,
+		IsRemoved: i.IsRemoved,
+	}
 }

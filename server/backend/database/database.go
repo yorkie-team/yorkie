@@ -130,8 +130,8 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
-	// DeleteClientDocInfos removes ClientDocInfos of the given document from all clinetInfos.
-	DeleteClientDocInfos(ctx context.Context, docID types.ID) error
+	// RemoveClientDocInfos removes ClientDocInfos of the given document from all clinetInfos.
+	RemoveClientDocInfos(ctx context.Context, docID types.ID) error
 
 	// FindDeactivateCandidates finds the housekeeping candidates.
 	FindDeactivateCandidates(
@@ -158,8 +158,8 @@ type Database interface {
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
-	// DeleteDocInfoByKey removes the document of the given key.
-	DeleteDocInfoByKey(
+	// RemoveDocInfoByKey removes the document of the given key.
+	RemoveDocInfoByKey(
 		ctx context.Context,
 		projectID types.ID,
 		docKey key.Key,
@@ -203,8 +203,8 @@ type Database interface {
 		to int64,
 	) ([]*ChangeInfo, error)
 
-	// DeleteChangeInfos removes all changeInfos of the given document.
-	DeleteChangeInfos(ctx context.Context, docID types.ID) error
+	// RemoveChangeInfos removes all changeInfos of the given document.
+	RemoveChangeInfos(ctx context.Context, docID types.ID) error
 
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(ctx context.Context, docID types.ID, doc *document.InternalDocument) error
@@ -212,8 +212,8 @@ type Database interface {
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
 	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq int64) (*SnapshotInfo, error)
 
-	// DeleteSnapshotInfos removes all snapshots of the given document.
-	DeleteSnapshotInfos(ctx context.Context, docID types.ID) error
+	// RemoveSnapshotInfos removes all snapshots of the given document.
+	RemoveSnapshotInfos(ctx context.Context, docID types.ID) error
 
 	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
 	FindMinSyncedSeqInfo(ctx context.Context, docID types.ID) (*SyncedSeqInfo, error)
@@ -235,8 +235,8 @@ type Database interface {
 		serverSeq int64,
 	) error
 
-	// DeleteSyncedSeqInfos removes the syncedSeq of the given document.
-	DeleteSyncedSeqInfos(
+	// RemoveSyncedSeqInfos removes the syncedSeq of the given document.
+	RemoveSyncedSeqInfos(
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docID types.ID,

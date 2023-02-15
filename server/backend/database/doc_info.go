@@ -48,6 +48,9 @@ type DocInfo struct {
 
 	// UpdatedAt is the time when the document is updated.
 	UpdatedAt time.Time `bson:"updated_at"`
+
+	// IsRemoved represents whether the document is deleted.
+	IsRemoved bool `bson:"is_removed"`
 }
 
 // IncreaseServerSeq increases server sequence of the document.
@@ -71,5 +74,6 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 		CreatedAt:  info.CreatedAt,
 		AccessedAt: info.AccessedAt,
 		UpdatedAt:  info.UpdatedAt,
+		IsRemoved:  info.IsRemoved,
 	}
 }
