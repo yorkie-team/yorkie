@@ -87,6 +87,7 @@ type WatchResponseType string
 const (
 	DocumentsChanged WatchResponseType = "documents-changed"
 	PeersChanged     WatchResponseType = "peers-changed"
+	DocumentsRemoved WatchResponseType = "documents-removed"
 )
 
 // WatchResponse is a structure representing response of Watch.
@@ -423,6 +424,11 @@ func (c *Client) Watch(
 				return &WatchResponse{
 					Type:          PeersChanged,
 					PeersMapByDoc: c.PeersMapByDoc(),
+				}, nil
+			case types.DocumentsRemovedEvent:
+				return &WatchResponse{
+					Type: DocumentsRemoved,
+					Keys: converter.FromDocumentKeys(resp.Event.DocumentKeys),
 				}, nil
 			}
 		}

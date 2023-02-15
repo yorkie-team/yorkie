@@ -228,6 +228,8 @@ func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) 
 		return types.DocumentsUnwatchedEvent, nil
 	case api.DocEventType_DOC_EVENT_TYPE_PRESENCE_CHANGED:
 		return types.PresenceChangedEvent, nil
+	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_REMOVED:
+		return types.DocumentsRemovedEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
 }

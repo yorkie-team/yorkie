@@ -387,7 +387,7 @@ func (s *yorkieServer) RemoveDocument(
 		ctx,
 		publisherID,
 		sync.DocEvent{
-			Type:         types.DocumentRemovedEvent,
+			Type:         types.DocumentsRemovedEvent,
 			Publisher:    types.Client{ID: publisherID},
 			DocumentKeys: []key.Key{pack.DocumentKey},
 		},
