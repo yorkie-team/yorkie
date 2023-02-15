@@ -101,7 +101,7 @@ func (m *PubSub) Subscribe(
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	sub := sync.NewSubscription(subscriber, keys)
+	sub := sync.NewSubscription(subscriber)
 	m.subscriptionMapBySubscriber[sub.SubscriberID()] = sub
 
 	for _, docKey := range keys {
