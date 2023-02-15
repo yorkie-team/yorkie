@@ -5,12 +5,11 @@
 - [Document Editing](document-editing.md): Local and remote document editing mechanism
 - [Peer Awareness](peer-awareness.md): Algorithm for managing end-user status
 - [Data Structure](data-structure.md): CRDT data structures in `crdt` package
-  - [Range Deletion in Splay Tree](range-deletion-in-splay-tree.md): Rotation-free range deletion algorithm for splay tree
+- [Range Deletion in Splay Tree](range-deletion-in-splay-tree.md): Rotation-free range deletion algorithm for splay tree
 - [PubSub](pub-sub.md): Client-side event sharing with gRPC server-side stream and PubSub pattern
 - [Garbage Collection](garbage-collection.md): Deleting unused nodes in CRDT system
-  - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text nodes
-  - [Housekeeping](housekeeping.md): Deactivating outdated clients for efficient garbage collection
-
+- [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text nodes
+- [Housekeeping](housekeeping.md): Deactivating outdated clients for efficient garbage collection
 - [Retention](retention.md): Clearing unnecessary changes with `--backend-snapshot-with-purging-changes` flag
 - [Cluster Mode](cluster-mode.md): Multiple-agent cluster mode with ETCD
 

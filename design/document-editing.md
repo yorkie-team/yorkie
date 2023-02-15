@@ -1,6 +1,6 @@
 ---
 title: document-editing
-target-version: 0.1.0
+target-version: 0.3.0
 ---
 
 # Document Editing
@@ -31,6 +31,7 @@ A high-level overview of Yorkie is as follows:
 ![document-editing-overview](media/document-editing-overview.png)
 
 A description of the main components is as follows:
+
 - `SDK` consists of `Client` and `Document`.
 - `Client`: A `Client` is a normal client that can communicate with `Server`. Changes on a `Document` can be synchronized by using a `Client`.
 - `Document`: A Document is a CRDT-based data type through which the model of the application is represented.
@@ -50,9 +51,9 @@ Local Editing is started by calling the `Document.Update`. `Document.Update` is 
 
 The figure above explains Document in more detail. Three internal components are in the Document.
 
-- `Clone` represents a JSON proxy object of the document. It creates `Changes` when it is edited through the external editor.
 - `Root` represents the real document (**SOT**, source of truth). It keeps consistency for both synchronous and asynchronous changes.
-- `LocalChanges` is a buffer for local `Changes`. It keeps all the changes until the client sends them to the server.
+- `Clone` represents a JSON **proxy** object of the document. It creates `Change` when the document is edited through the external editor.
+- `LocalChanges` is a buffer for local `Change`. It keeps all the changes until the client sends them to the server.
 
 Local Editing consists of three logic parts.
 
@@ -66,9 +67,11 @@ Let's take a closer look at the logics.
 
 This logic is executed with 3 sub-logics.
 
-- 1-1. When `Document.Update` is called, the `Clone` proxy creates Changes.
-- 1-2. Those changes are added to `LocalChanges`.
-- 1-3. Changes are applied to `Root`. The `Root` can be only updated by changes.
+- 1-1. When [`Document.Update`](https://github.com/yorkie-team/yorkie/blob/3d3123f6e96a91db935ece49a29701360e764392/pkg/document/document.go#L53-L83) is called, the proxy applies the user's edits to the `Clone` and creates a `Change` for it.
+- 1-2. Changes are applied to `Root`. The `Root` can be only updated by changes.
+  - To implement transaction processing, user's edits are first applied to the `Clone` instead of the `Root`. If applying to the clone fails, the changes won't be reflected in the root.
+- 1-3. Those changes are added to `LocalChanges`. It is used later to send local changes to the server.
+  - Changes are first applied locally and then later reflected on the remote. Refer to the [local-first software](https://www.inkandswitch.com/local-first/) for more information.
 
 Here's a real code example:
 
@@ -80,7 +83,7 @@ doc.Update(func(root *json.Object) {
 fmt.Println(doc.Marshal()) // {"foo": "bar"}
 ```
 
-The updater function, the first argument of `Document.Update`, provides the `root` as the first argument. The external editor can use methods in `root` to edit the Document. Whenever editing occurs, `clone`, acting as a proxy, creates changes and push them to `LocalStorage`. These logics work **synchronously**.
+The updater function, the first argument of `Document.Update`, provides the `root` as the first argument. The external editor can use methods in `root` to edit the Document. Whenever editing occurs, `clone`, acting as a proxy, creates changes and push them to `LocalChanges`. These logics work **synchronously**.
 
 #### 2. Pushing Changes to Server
 
@@ -89,7 +92,7 @@ This logic is executed with 2 sub-logics.
 - 2-1. `Client` checks `LocalChanges` of `Document` at specific intervals.
 - 2-2. If there are changes in `LocalChanges`, `Client` sends them to the `Server`.
 
-If `LocalChanges` has changes that need to be synchronized with other peers, it collects them and sends them to the server. These logics work **asynchronously**.
+If `LocalChanges` has changes that need to be synchronized with other peers, it collects them and [sends them to the server](https://github.com/yorkie-team/yorkie/blob/3d3123f6e96a91db935ece49a29701360e764392/client/client.go#L544-L552). These logics work **asynchronously**.
 
 #### 3. Propagating Changes to Peers
 
@@ -106,7 +109,7 @@ The `Client` who received the changes applies them to the `Root` inside the `Doc
 ```js
 // JS SDK
 doc.subscribe((event) => {
-    console.log(event.type)
+  console.log(event.type);
 });
 ```
 
