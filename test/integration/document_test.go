@@ -39,7 +39,8 @@ func TestDocument(t *testing.T) {
 
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
-		doc := document.New(key.Key(t.Name()))
+		testDocumentKey := "attach-detach-test"
+		doc := document.New(key.Key(testDocumentKey))
 		err := doc.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
 			return nil
@@ -54,7 +55,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 
-		doc2 := document.New(key.Key(t.Name()))
+		doc2 := document.New(key.Key(testDocumentKey))
 		err = doc2.Update(func(root *json.Object) error {
 			root.SetString("k1", "v2")
 			return nil
@@ -68,12 +69,12 @@ func TestDocument(t *testing.T) {
 
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
+		testDocumentKey := "concurrent-complex"
+		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(testDocumentKey))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -107,12 +108,12 @@ func TestDocument(t *testing.T) {
 
 	t.Run("watch document changed event test", func(t *testing.T) {
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
+		testDocumentKey := "watch-document-changed"
+		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(testDocumentKey))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

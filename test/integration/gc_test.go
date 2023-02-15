@@ -36,12 +36,12 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for container type test", func(t *testing.T) {
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
+		testDocumentKey := "garbage-collection-test"
+		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(testDocumentKey))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -104,12 +104,12 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for text type test", func(t *testing.T) {
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
+		testDocumentKey := "garbage-collection-text-type"
+		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(testDocumentKey))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -177,12 +177,12 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
+		testDocumentKey := "garbage-collection-detached"
+		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(testDocumentKey))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

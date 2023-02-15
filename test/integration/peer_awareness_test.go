@@ -39,9 +39,9 @@ func TestPeerAwareness(t *testing.T) {
 
 	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
-		d2 := document.New(key.Key(t.Name()))
+		testDocumentKey := "watch-started-peers-test"
+		d1 := document.New(key.Key(testDocumentKey))
+		d2 := document.New(key.Key(testDocumentKey))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2))
