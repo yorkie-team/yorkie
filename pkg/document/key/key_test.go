@@ -46,22 +46,22 @@ func TestKey_Validate(t *testing.T) {
 
 		err := key.Validate()
 
-		assert.NotNil(t, err, "key should be invalid: with space")
+		assert.Equal(t, err, ErrInvalidKey, "key should be invalid: with space")
 
 		key = Key("invalid-key-~$a") // last character should be alphanumeric
 		err = key.Validate()
-		assert.NotNil(t, err, "key should be invalid: with -")
+		assert.Equal(t, err, ErrInvalidKey, "key should be invalid: with -")
 
 		key = Key("invalid-key-$") // last character should be alphanumeric
 		err = key.Validate()
-		assert.NotNil(t, err, "key should be invalid: with $")
+		assert.Equal(t, err, ErrInvalidKey, "key should be invalid: with $")
 
 		key = Key("invalid-key-sample-key-validator") // last character should be alphanumeric
 		err = key.Validate()
-		assert.NotNil(t, err, "key should be invalid: check max length, 30 ")
+		assert.Equal(t, err, ErrInvalidKey, "key should be invalid: check max length, 30 ")
 
 		key = Key("inv") // last character should be alphanumeric
 		err = key.Validate()
-		assert.NotNil(t, err, "key should be invalid: check min length, 4 ")
+		assert.Equal(t, err, ErrInvalidKey, "key should be invalid: check min length, 4 ")
 	})
 }
