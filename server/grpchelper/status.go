@@ -27,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
@@ -44,6 +45,7 @@ var errorToCode = map[error]codes.Code{
 	types.ErrInvalidID:              codes.InvalidArgument,
 	clients.ErrInvalidClientID:      codes.InvalidArgument,
 	clients.ErrInvalidClientKey:     codes.InvalidArgument,
+	key.ErrInvalidKey:               codes.InvalidArgument, // DocumentKey validation error
 	types.ErrEmptyProjectFields:     codes.InvalidArgument,
 
 	// NotFound means the requested resource does not exist.

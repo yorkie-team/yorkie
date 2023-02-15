@@ -18,7 +18,13 @@
 package key
 
 import (
+	errors "errors"
 	"github.com/yorkie-team/yorkie/pkg/validation"
+)
+
+var (
+	// ErrInvalidKey is returned when the key is invalid.
+	ErrInvalidKey = errors.New("invalid key, key must be a slug with 4-30 characters")
 )
 
 // Key represents a document key.
@@ -29,11 +35,11 @@ func (k Key) String() string {
 	return string(k)
 }
 
-// IsValid returns true if the key is valid.
-func (k Key) IsValid() error {
+// Validate returns true if the key is valid.
+func (k Key) Validate() error {
 	err := validation.ValidateValue(k.String(), "required,slug,min=4,max=30")
 	if err != nil {
-		return err
+		return ErrInvalidKey
 	}
 
 	return nil

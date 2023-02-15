@@ -17,61 +17,50 @@
 package key
 
 import (
-	"github.com/go-playground/validator/v10"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
-func findErrorOnErrors(errs error, tag string) bool {
-	for _, v := range errs.(validator.ValidationErrors) {
-		if v.Tag() == tag {
-			return true
-		}
-	}
-
-	return false
-}
-
-func TestKey_IsValid(t *testing.T) {
+func TestKey_Validate(t *testing.T) {
 	t.Run("valid key", func(t *testing.T) {
 		key := Key("valid-key")
-		ret := key.IsValid()
+		ret := key.Validate()
 		assert.Nil(t, ret, "key should be valid")
 
 		key = Key("valid-key-1")
-		ret = key.IsValid()
+		ret = key.Validate()
 		assert.Nil(t, ret, "key should be valid")
 
 		key = Key("fdsxfdsf")
-		ret = key.IsValid()
+		ret = key.Validate()
 		assert.Nil(t, ret, "key should be valid")
 
 		key = Key("-----_________________-a")
-		ret = key.IsValid()
+		ret = key.Validate()
 		assert.Nil(t, ret, "key should be valid")
 	})
 
 	t.Run("invalid key", func(t *testing.T) {
 		key := Key("invalid key") // space is not allowed
 
-		errs := key.IsValid()
+		err := key.Validate()
 
-		assert.True(t, findErrorOnErrors(errs, "slug"), "key should be invalid: with space")
+		assert.NotNil(t, err, "key should be invalid: with space")
 
 		key = Key("invalid-key-~$a") // last character should be alphanumeric
-		errs = key.IsValid()
-		assert.True(t, findErrorOnErrors(errs, "slug"), "key should be invalid: with -")
+		err = key.Validate()
+		assert.NotNil(t, err, "key should be invalid: with -")
 
 		key = Key("invalid-key-$") // last character should be alphanumeric
-		errs = key.IsValid()
-		assert.True(t, findErrorOnErrors(errs, "slug"), "key should be invalid: with $")
+		err = key.Validate()
+		assert.NotNil(t, err, "key should be invalid: with $")
 
 		key = Key("invalid-key-sample-key-validator") // last character should be alphanumeric
-		errs = key.IsValid()
-		assert.True(t, findErrorOnErrors(errs, "max"), "key should be invalid: check max length, 30 ")
+		err = key.Validate()
+		assert.NotNil(t, err, "key should be invalid: check max length, 30 ")
 
 		key = Key("inv") // last character should be alphanumeric
-		errs = key.IsValid()
-		assert.True(t, findErrorOnErrors(errs, "min"), "key should be invalid: check min length, 4 ")
+		err = key.Validate()
+		assert.NotNil(t, err, "key should be invalid: check min length, 4 ")
 	})
 }

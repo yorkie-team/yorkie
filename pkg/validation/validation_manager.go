@@ -27,6 +27,16 @@ var (
 	trans, _ = uni.GetTranslator(defaultEn.Locale()) //
 )
 
+// ValidError is the error returned by the validation
+type ValidError struct {
+	Tag string
+	Err error
+}
+
+func (e ValidError) Error() string {
+	panic(e.Err.Error())
+}
+
 func registerValidation(tag string, fn func(fl validator.FieldLevel) bool) {
 	if err := defaultValidator.RegisterValidation(
 		tag,
@@ -50,8 +60,19 @@ func registerTranslation(tag, msg string) {
 	}
 }
 
+// ValidateValue validates the value with the tag
 func ValidateValue(v interface{}, tag string) error {
-	return defaultValidator.Var(v, tag)
+	if err := defaultValidator.Var(v, tag); err != nil {
+		for _, e := range err.(validator.ValidationErrors) {
+
+			return ValidError{
+				Tag: e.Tag(),
+				Err: e,
+			}
+		}
+	}
+
+	return nil
 }
 
 func init() {
