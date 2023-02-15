@@ -353,6 +353,17 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
+	publisherID, err := clientInfo.ID.ToActorID()
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	pbChangePack, err := pulled.ToPBChangePack()
+	if err != nil {
+		return nil, err
+	}
+
 	if err := packs.RemoveDocument(
 		ctx,
 		s.backend,
@@ -372,10 +383,15 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pbChangePack, err := pulled.ToPBChangePack()
-	if err != nil {
-		return nil, err
-	}
+	s.backend.Coordinator.Publish(
+		ctx,
+		publisherID,
+		sync.DocEvent{
+			Type:         types.DocumentRemovedEvent,
+			Publisher:    types.Client{ID: publisherID},
+			DocumentKeys: []key.Key{pack.DocumentKey},
+		},
+	)
 
 	return &api.RemoveDocumentResponse{
 		ChangePack: pbChangePack,

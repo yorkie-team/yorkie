@@ -200,24 +200,6 @@ func RemoveDocument(
 		return err
 	}
 
-	be.Background.AttachGoroutine(func(ctx context.Context) {
-		publisherID, err := clientInfo.ID.ToActorID()
-		if err != nil {
-			logging.From(ctx).Error(err)
-			return
-		}
-
-		be.Coordinator.Publish(
-			ctx,
-			publisherID,
-			sync.DocEvent{
-				Type:         types.DocumentRemovedEvent,
-				Publisher:    types.Client{ID: publisherID},
-				DocumentKeys: []key.Key{reqPack.DocumentKey},
-			},
-		)
-	})
-
 	return nil
 }
 
