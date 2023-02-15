@@ -357,7 +357,8 @@ func (s *yorkieServer) RemoveDocument(
 		ctx,
 		s.backend,
 		projects.From(ctx),
-		clientInfo, docInfo,
+		clientInfo,
+		docInfo,
 		pack,
 	); err != nil {
 		return nil, err

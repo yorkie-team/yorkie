@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
+// Below are the errors may occur depending on the document status.
 var (
 	ErrDocumentAlreadyRemoved = errors.New("document is already removed")
 )

@@ -30,6 +30,7 @@ type SyncedSeqInfo struct {
 	IsRemoved bool     `bson:"is_removed"`
 }
 
+// DeepCopy returns a deep copy of this synced seq info.
 func (i *SyncedSeqInfo) DeepCopy() *SyncedSeqInfo {
 	if i == nil {
 		return nil

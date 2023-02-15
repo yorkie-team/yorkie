@@ -8,7 +8,7 @@ const (
 	// modified by a change.
 	DocumentsChangedEvent DocEventType = "documents-changed"
 
-	// Documents
+	// DocumentRemovedEvent is an event indicating that documents are removed.
 	DocumentRemovedEvent DocEventType = "documents-removed"
 
 	// DocumentsWatchedEvent is an event that occurs when documents are watched

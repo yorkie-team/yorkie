@@ -166,6 +166,7 @@ func PushPull(
 	return respPack, nil
 }
 
+// RemoveDocument removes a given document and all relevant data.
 func RemoveDocument(
 	ctx context.Context,
 	be *backend.Backend,

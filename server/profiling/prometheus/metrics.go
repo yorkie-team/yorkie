@@ -175,6 +175,7 @@ func (m *Metrics) AddPushPullSnapshotBytes(bytes int) {
 	m.pushPullSnapshotBytesTotal.Add(float64(bytes))
 }
 
+// ObserveRemoveResponseSeconds adds an observation for response time of DocumentRemove.
 func (m *Metrics) ObserveRemoveResponseSeconds(seconds float64) {
 	m.removeResponseSeconds.Observe(seconds)
 }
