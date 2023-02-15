@@ -176,7 +176,7 @@ func BenchmarkRPC(b *testing.B) {
 		err = cli.Activate(ctx)
 		assert.NoError(b, err)
 
-		d1 := document.New("doc1")
+		d1 := document.New(key.Key("doc1"))
 		err = cli.Attach(ctx, d1)
 		assert.NoError(b, err)
 
@@ -199,7 +199,8 @@ func BenchmarkRPC(b *testing.B) {
 
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(b.Name()))
+		testDocumentKey := "client-to-client"
+		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(b, err)
 		testKey1 := "testKey1"
@@ -209,7 +210,7 @@ func BenchmarkRPC(b *testing.B) {
 		})
 		assert.NoError(b, err)
 
-		d2 := document.New(key.Key(b.Name()))
+		d2 := document.New(key.Key(testDocumentKey))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
@@ -265,8 +266,9 @@ func BenchmarkRPC(b *testing.B) {
 				defer cleanupClients(b, clients)
 
 				ctx := context.Background()
-				doc1 := document.New(key.Key(b.Name()))
-				doc2 := document.New(key.Key(b.Name()))
+				testDocumentKey := "attach-large-document"
+				doc1 := document.New(key.Key(testDocumentKey))
+				doc2 := document.New(key.Key(testDocumentKey))
 
 				err := doc1.Update(func(root *json.Object) error {
 					text := root.SetNewText("k1")
