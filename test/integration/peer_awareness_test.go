@@ -126,9 +126,10 @@ func TestPeerAwareness(t *testing.T) {
 	t.Run("Watch multiple documents test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(t.Name()))
-		d2 := document.New(key.Key(t.Name()))
-		d3 := document.New(key.Key(t.Name() + "2"))
+		testDocumentKey := "watch-multiple-test"
+		d1 := document.New(key.Key(testDocumentKey))
+		d2 := document.New(key.Key(testDocumentKey))
+		d3 := document.New(key.Key(testDocumentKey + "2"))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 
