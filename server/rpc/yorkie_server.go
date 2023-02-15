@@ -353,12 +353,6 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pbChangePack, err := pulled.ToPBChangePack()
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: execute DB delete operations in a single transaction
 	if err := packs.RemoveDocument(
 		ctx,
 		s.backend,
@@ -374,6 +368,11 @@ func (s *yorkieServer) RemoveDocument(
 		projects.From(ctx),
 		pack.DocumentKey,
 	); err != nil {
+		return nil, err
+	}
+
+	pbChangePack, err := pulled.ToPBChangePack()
+	if err != nil {
 		return nil, err
 	}
 

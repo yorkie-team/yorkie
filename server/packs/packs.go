@@ -175,11 +175,11 @@ func RemoveDocument(
 		be.Metrics.ObserveRemoveResponseSeconds(gotime.Since(start).Seconds())
 	}()
 
-	if err := be.DB.RemoveSnapshotInfos(ctx, docInfo.ID); err != nil {
+	if err := be.DB.RemoveSyncedSeqInfos(ctx, clientInfo, docInfo.ID); err != nil {
 		return err
 	}
 
-	if err := be.DB.RemoveSyncedSeqInfos(ctx, clientInfo, docInfo.ID); err != nil {
+	if err := be.DB.RemoveSnapshotInfos(ctx, docInfo.ID); err != nil {
 		return err
 	}
 
