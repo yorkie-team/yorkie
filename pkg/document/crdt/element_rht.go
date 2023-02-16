@@ -131,7 +131,7 @@ func (rht *ElementRHT) Delete(k string, deletedAt *time.Ticket) Element {
 // DeleteByCreatedAt deletes the Element of the given creation time.
 func (rht *ElementRHT) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
 	node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]
-	if !ok || node == nil {
+	if !ok {
 		return nil
 	}
 
