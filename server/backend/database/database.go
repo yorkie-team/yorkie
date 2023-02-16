@@ -130,9 +130,6 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
-	// RemoveClientDocInfos removes ClientDocInfos of the given document from all clinetInfos.
-	RemoveClientDocInfos(ctx context.Context, docID types.ID) error
-
 	// FindDeactivateCandidates finds the housekeeping candidates.
 	FindDeactivateCandidates(
 		ctx context.Context,
@@ -158,13 +155,6 @@ type Database interface {
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
-	// RemoveDocInfoByKey removes the document of the given key.
-	RemoveDocInfoByKey(
-		ctx context.Context,
-		projectID types.ID,
-		docKey key.Key,
-	) error
-
 	// FindDocInfoByID finds the document of the given ID.
 	FindDocInfoByID(
 		ctx context.Context,
@@ -178,6 +168,7 @@ type Database interface {
 		docInfo *DocInfo,
 		initialServerSeq int64,
 		changes []*change.Change,
+		removeDoc bool,
 	) error
 
 	// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
@@ -203,17 +194,11 @@ type Database interface {
 		to int64,
 	) ([]*ChangeInfo, error)
 
-	// RemoveChangeInfos removes all changeInfos of the given document.
-	RemoveChangeInfos(ctx context.Context, docID types.ID) error
-
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(ctx context.Context, docID types.ID, doc *document.InternalDocument) error
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
 	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq int64) (*SnapshotInfo, error)
-
-	// RemoveSnapshotInfos removes all snapshots of the given document.
-	RemoveSnapshotInfos(ctx context.Context, docID types.ID) error
 
 	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
 	FindMinSyncedSeqInfo(ctx context.Context, docID types.ID) (*SyncedSeqInfo, error)
@@ -233,13 +218,6 @@ type Database interface {
 		clientInfo *ClientInfo,
 		docID types.ID,
 		serverSeq int64,
-	) error
-
-	// RemoveSyncedSeqInfos removes the syncedSeq of the given document.
-	RemoveSyncedSeqInfos(
-		ctx context.Context,
-		clientInfo *ClientInfo,
-		docID types.ID,
 	) error
 
 	// FindDocInfosByPaging returns the documentInfos of the given paging.

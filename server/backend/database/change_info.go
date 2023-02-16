@@ -40,7 +40,6 @@ type ChangeInfo struct {
 	ActorID    types.ID `bson:"actor_id"`
 	Message    string   `bson:"message"`
 	Operations [][]byte `bson:"operations"`
-	IsRemoved  bool     `bson:"is_removed"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -90,23 +89,4 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	c.SetServerSeq(i.ServerSeq)
 
 	return c, nil
-}
-
-// DeepCopy returns a deep copy of this change info.
-func (i *ChangeInfo) DeepCopy() *ChangeInfo {
-	if i == nil {
-		return nil
-	}
-
-	return &ChangeInfo{
-		ID:         i.ID,
-		DocID:      i.DocID,
-		ServerSeq:  i.ServerSeq,
-		ClientSeq:  i.ClientSeq,
-		Lamport:    i.Lamport,
-		ActorID:    i.ActorID,
-		Message:    i.Message,
-		Operations: i.Operations,
-		IsRemoved:  i.IsRemoved,
-	}
 }

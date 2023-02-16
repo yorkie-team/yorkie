@@ -175,12 +175,22 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
+	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
+		return nil, err
+	}
 
 	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
 		return nil, err
 	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		clientInfo,
+		docInfo,
+		pack,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +266,9 @@ func (s *yorkieServer) DetachDocument(
 	if err != nil {
 		return nil, err
 	}
+	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
+		return nil, err
+	}
 
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
 		return nil, err
@@ -264,7 +277,15 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		clientInfo,
+		docInfo,
+		pack,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -340,6 +361,9 @@ func (s *yorkieServer) RemoveDocument(
 	if err != nil {
 		return nil, err
 	}
+	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
+		return nil, err
+	}
 
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
 		return nil, err
@@ -347,39 +371,21 @@ func (s *yorkieServer) RemoveDocument(
 	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
 		return nil, err
 	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
-	if err != nil {
-		return nil, err
-	}
-
-	publisherID, err := clientInfo.ID.ToActorID()
-	if err != nil {
-		logging.From(ctx).Error(err)
-		return nil, err
-	}
-
-	pbChangePack, err := pulled.ToPBChangePack()
-	if err != nil {
-		return nil, err
-	}
-
-	if err := packs.RemoveDocument(
+	pulled, err := packs.PushPull(
 		ctx,
 		s.backend,
 		projects.From(ctx),
 		clientInfo,
 		docInfo,
 		pack,
-	); err != nil {
+		true,
+	)
+	if err != nil {
 		return nil, err
 	}
-	if err := documents.RemoveDocInfoByKey(
-		ctx,
-		s.backend,
-		projects.From(ctx),
-		pack.DocumentKey,
-	); err != nil {
+
+	pbChangePack, err := pulled.ToPBChangePack()
+	if err != nil {
 		return nil, err
 	}
 
@@ -450,12 +456,23 @@ func (s *yorkieServer) PushPull(
 	if err != nil {
 		return nil, err
 	}
+	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
+		return nil, err
+	}
 
 	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		clientInfo,
+		docInfo,
+		pack,
+		false,
+	)
 	if err != nil {
 		return nil, err
 	}

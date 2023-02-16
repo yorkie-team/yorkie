@@ -41,24 +41,4 @@ type SnapshotInfo struct {
 
 	// CreatedAt is the time when the snapshot is created.
 	CreatedAt time.Time `bson:"created_at"`
-
-	// IsRemoved represents whether the snapshot is deleted.
-	IsRemoved bool `bson:"is_removed"`
-}
-
-// DeepCopy returns a deep copy of this snapshot info.
-func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
-	if i == nil {
-		return nil
-	}
-
-	return &SnapshotInfo{
-		ID:        i.ID,
-		DocID:     i.DocID,
-		ServerSeq: i.ServerSeq,
-		Lamport:   i.Lamport,
-		Snapshot:  i.Snapshot,
-		CreatedAt: i.CreatedAt,
-		IsRemoved: i.IsRemoved,
-	}
 }

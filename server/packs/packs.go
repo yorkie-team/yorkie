@@ -54,11 +54,8 @@ func PushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
+	removeDoc bool,
 ) (*ServerPack, error) {
-	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
-		return nil, err
-	}
-
 	start := gotime.Now()
 	defer func() {
 		be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
@@ -87,8 +84,16 @@ func PushPull(
 	}
 
 	// 03. store pushed changes, docInfo and checkpoint of the client to DB.
+	// remove the document if needed.
 	if len(pushedChanges) > 0 {
-		if err := be.DB.CreateChangeInfos(ctx, project.ID, docInfo, initialServerSeq, pushedChanges); err != nil {
+		if err := be.DB.CreateChangeInfos(
+			ctx,
+			project.ID,
+			docInfo,
+			initialServerSeq,
+			pushedChanges,
+			removeDoc,
+		); err != nil {
 			return nil, err
 		}
 	}
@@ -164,43 +169,6 @@ func PushPull(
 	}
 
 	return respPack, nil
-}
-
-// RemoveDocument removes a given document and all relevant data.
-func RemoveDocument(
-	ctx context.Context,
-	be *backend.Backend,
-	project *types.Project,
-	clientInfo *database.ClientInfo,
-	docInfo *database.DocInfo,
-	reqPack *change.Pack,
-) error {
-	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
-		return err
-	}
-
-	start := gotime.Now()
-	defer func() {
-		be.Metrics.ObserveRemoveResponseSeconds(gotime.Since(start).Seconds())
-	}()
-
-	if err := be.DB.RemoveSyncedSeqInfos(ctx, clientInfo, docInfo.ID); err != nil {
-		return err
-	}
-
-	if err := be.DB.RemoveSnapshotInfos(ctx, docInfo.ID); err != nil {
-		return err
-	}
-
-	if err := be.DB.RemoveChangeInfos(ctx, docInfo.ID); err != nil {
-		return err
-	}
-
-	if err := be.DB.RemoveClientDocInfos(ctx, docInfo.ID); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // BuildDocumentForServerSeq returns a new document for the given serverSeq.

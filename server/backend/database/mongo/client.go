@@ -590,26 +590,6 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// RemoveClientDocInfos removes ClientDocInfos of the given document from all clinetInfos.
-func (c *Client) RemoveClientDocInfos(ctx context.Context, docID types.ID) error {
-	clientDocInfoKey := "documents." + docID.String() + "."
-
-	if _, err := c.collection(colClients).UpdateMany(ctx, bson.M{}, bson.M{
-		"$unset": bson.M{
-			clientDocInfoKey + "server_seq": "",
-			clientDocInfoKey + "cilent_seq": "",
-			clientDocInfoKey + "status":     "",
-		},
-		"$set": bson.M{
-			"updated_at": gotime.Now(),
-		},
-	}, options.Update()); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // FindDeactivateCandidates finds the clients that need housekeeping.
 func (c *Client) FindDeactivateCandidates(
 	ctx context.Context,
@@ -677,6 +657,7 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 				"owner":      encodedOwnerID,
 				"server_seq": 0,
 				"created_at": now,
+				"is_removed": false,
 			},
 		})
 	} else {
@@ -759,31 +740,6 @@ func (c *Client) FindDocInfoByID(ctx context.Context, id types.ID) (*database.Do
 	return &docInfo, nil
 }
 
-// RemoveDocInfoByKey removes the document of the given key.
-func (c *Client) RemoveDocInfoByKey(
-	ctx context.Context,
-	projectID types.ID,
-	docKey key.Key,
-) error {
-	encodedProjectID, err := encodeID(projectID)
-	if err != nil {
-		return err
-	}
-
-	if _, err = c.collection(colDocuments).UpdateOne(ctx, bson.M{
-		"project_id": encodedProjectID,
-		"key":        docKey,
-	}, bson.M{
-		"is_removed": true,
-		"updated_at": gotime.Now(),
-	}, options.Update()); err != nil {
-		logging.From(ctx).Error(err)
-		return fmt.Errorf("rmove document of %s: %w", docKey, err)
-	}
-
-	return nil
-}
-
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
@@ -791,6 +747,7 @@ func (c *Client) CreateChangeInfos(
 	docInfo *database.DocInfo,
 	initialServerSeq int64,
 	changes []*change.Change,
+	removeDoc bool,
 ) error {
 	encodedDocID, err := encodeID(docInfo.ID)
 	if err != nil {
@@ -834,6 +791,7 @@ func (c *Client) CreateChangeInfos(
 		"$set": bson.M{
 			"server_seq": docInfo.ServerSeq,
 			"updated_at": gotime.Now(),
+			"is_removed": removeDoc,
 		},
 	})
 	if err != nil {
@@ -950,28 +908,6 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	return infos, nil
 }
 
-// RemoveChangeInfos removes all changeInfos of the given document.
-func (c *Client) RemoveChangeInfos(
-	ctx context.Context,
-	docID types.ID,
-) error {
-	encodedDocID, err := encodeID(docID)
-	if err != nil {
-		return err
-	}
-
-	if _, err = c.collection(colChanges).UpdateMany(ctx, bson.M{
-		"doc_id": encodedDocID,
-	}, bson.M{
-		"is_removed": true,
-	}, options.Update()); err != nil {
-		logging.From(ctx).Error(err)
-		return fmt.Errorf("delete changes: %w", err)
-	}
-
-	return nil
-}
-
 // CreateSnapshotInfo stores the snapshot of the given document.
 func (c *Client) CreateSnapshotInfo(
 	ctx context.Context,
@@ -1035,28 +971,6 @@ func (c *Client) FindClosestSnapshotInfo(
 	}
 
 	return snapshotInfo, nil
-}
-
-// RemoveSnapshotInfos removes all snapshots of the given document.
-func (c *Client) RemoveSnapshotInfos(
-	ctx context.Context,
-	docID types.ID,
-) error {
-	encodedDocID, err := encodeID(docID)
-	if err != nil {
-		return err
-	}
-
-	if _, err = c.collection(colSnapshots).UpdateMany(ctx, bson.M{
-		"doc_id": encodedDocID,
-	}, bson.M{
-		"is_removed": true,
-	}, options.Update()); err != nil {
-		logging.From(ctx).Error(err)
-		return fmt.Errorf("remove snapshot: %w", err)
-	}
-
-	return nil
 }
 
 // FindMinSyncedSeqInfo finds the minimum synced sequence info.
@@ -1291,29 +1205,6 @@ func (c *Client) UpdateSyncedSeq(
 	}, options.Update().SetUpsert(true)); err != nil {
 		logging.From(ctx).Error(err)
 		return fmt.Errorf("upsert synced seq: %w", err)
-	}
-
-	return nil
-}
-
-// RemoveSyncedSeqInfos removes the syncedSeq of the given Document.
-func (c *Client) RemoveSyncedSeqInfos(
-	ctx context.Context,
-	clientInfo *database.ClientInfo,
-	docID types.ID,
-) error {
-	encodedDocID, err := encodeID(docID)
-	if err != nil {
-		return err
-	}
-
-	if _, err = c.collection(colSyncedSeqs).UpdateMany(ctx, bson.M{
-		"doc_id": encodedDocID,
-	}, bson.M{
-		"is_removed": true,
-	}, options.Update()); err != nil {
-		logging.From(ctx).Error(err)
-		return fmt.Errorf("remove synced seq: %w", err)
 	}
 
 	return nil
