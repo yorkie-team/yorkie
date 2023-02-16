@@ -63,6 +63,7 @@ func (n *ElementRHTNode) Element() Element {
 
 // ElementRHT is a hashtable with logical clock(Replicated hashtable).
 type ElementRHT struct {
+	// nodeMapByKey is a map with values of nodes by key.
 	nodeMapByKey       map[string]*ElementRHTNode
 	// nodeMapByCreatedAt is a map with values ​​of nodes by creation time.
 	// Even if an element is removed by `set` or `delete`, it remains in
