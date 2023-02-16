@@ -219,7 +219,7 @@ func TestDB(t *testing.T) {
 		}
 
 		// Store changes
-		err = db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes)
+		err = db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, false)
 		assert.NoError(t, err)
 
 		// Find changes

@@ -497,7 +497,10 @@ func (s *yorkieServer) WatchDocuments(
 	if err != nil {
 		return err
 	}
-	docKeys := converter.FromDocumentKeys(req.DocumentKeys)
+	docKeys := s.excludeRemovedDocuments(
+		stream.Context(),
+		converter.FromDocumentKeys(req.DocumentKeys),
+	)
 
 	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
@@ -625,4 +628,28 @@ func (s *yorkieServer) unwatchDocs(
 			DocumentKeys: docKeys,
 		},
 	)
+}
+
+func (s *yorkieServer) excludeRemovedDocuments(
+	ctx context.Context,
+	docKeys []key.Key,
+) []key.Key {
+	for i, docKey := range docKeys {
+		docInfo, err := documents.FindDocInfoByKey(
+			ctx,
+			s.backend,
+			projects.From(ctx),
+			docKey,
+		)
+		if err != nil {
+			docKeys = append(docKeys[:i], docKeys[i+1:]...)
+			continue
+		}
+
+		if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
+			docKeys = append(docKeys[:i], docKeys[i+1:]...)
+		}
+	}
+
+	return docKeys
 }
