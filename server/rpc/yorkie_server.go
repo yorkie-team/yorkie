@@ -383,16 +383,6 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	s.backend.Coordinator.Publish(
-		ctx,
-		publisherID,
-		sync.DocEvent{
-			Type:         types.DocumentsRemovedEvent,
-			Publisher:    types.Client{ID: publisherID},
-			DocumentKeys: []key.Key{pack.DocumentKey},
-		},
-	)
-
 	return &api.RemoveDocumentResponse{
 		ChangePack: pbChangePack,
 	}, nil

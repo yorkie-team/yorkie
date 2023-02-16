@@ -253,6 +253,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
+	// TODO: handle ErrDocumentAlreadyRemoved
 	res, err := c.client.AttachDocument(ctx, &api.AttachDocumentRequest{
 		ClientId:   c.id.Bytes(),
 		ChangePack: pbChangePack,
@@ -307,6 +308,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
+	// TODO: handle ErrDocumentAlreadyRemoved
 	res, err := c.client.DetachDocument(ctx, &api.DetachDocumentRequest{
 		ClientId:   c.id.Bytes(),
 		ChangePack: pbChangePack,
@@ -363,6 +365,7 @@ func (c *Client) Watch(
 		keys = append(keys, doc.Key())
 	}
 
+	// TODO: handle ErrDocumentAlreadyRemoved
 	rch := make(chan WatchResponse)
 	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
 		Client: converter.ToClient(types.Client{
@@ -424,11 +427,6 @@ func (c *Client) Watch(
 				return &WatchResponse{
 					Type:          PeersChanged,
 					PeersMapByDoc: c.PeersMapByDoc(),
-				}, nil
-			case types.DocumentsRemovedEvent:
-				return &WatchResponse{
-					Type: DocumentsRemoved,
-					Keys: converter.FromDocumentKeys(resp.Event.DocumentKeys),
 				}, nil
 			}
 		}
@@ -552,6 +550,7 @@ func (c *Client) sync(ctx context.Context, key key.Key) error {
 		return err
 	}
 
+	// TODO: handle ErrDocumentAlreadyRemoved
 	res, err := c.client.PushPull(ctx, &api.PushPullRequest{
 		ClientId:   c.id.Bytes(),
 		ChangePack: pbChangePack,
