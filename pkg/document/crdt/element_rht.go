@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 The Yorkie Authors. All rights reserved.
+ * Copyright 2023 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,11 +62,11 @@ func (n *ElementRHTNode) Element() Element {
 }
 
 // ElementRHT is a hashtable with logical clock(Replicated hashtable).
-// The difference from RHT is that it keeps multiple values in one key. Using
-// Max Heap, the recently inserted value from the logical clock is returned
-// to the outside.
 type ElementRHT struct {
 	nodeMapByKey       map[string]*ElementRHTNode
+	// nodeMapByCreatedAt is a map with values ​​of nodes by creation time.
+	// Even if an element is removed by `set` or `delete`, it remains in
+	// nodeMapByCreatedAt and will be deleted physically by GC.
 	nodeMapByCreatedAt map[string]*ElementRHTNode
 }
 
