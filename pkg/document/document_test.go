@@ -88,7 +88,6 @@ func TestDocument(t *testing.T) {
 		doc := document.New("d1")
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
-
 		expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 		err := doc.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")

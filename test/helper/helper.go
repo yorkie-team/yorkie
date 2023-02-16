@@ -96,7 +96,7 @@ func CreateAdminCli(t assert.TestingT, adminAddr string) *adminClient.Client {
 
 // TestRoot returns the root
 func TestRoot() *crdt.Root {
-	return crdt.NewRoot(crdt.NewObject(crdt.NewRHTPriorityQueueMap(), time.InitialTicket))
+	return crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
 }
 
 // TextChangeContext returns the context of test change.

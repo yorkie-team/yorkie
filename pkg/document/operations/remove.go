@@ -60,7 +60,6 @@ func (o *Remove) Execute(root *crdt.Root) error {
 	default:
 		return ErrNotApplicableDataType
 	}
-
 	return nil
 }
 
