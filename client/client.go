@@ -334,6 +334,48 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	return nil
 }
 
+// Remove removes the given document from the server.
+func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
+	if c.status != activated {
+		return ErrClientNotActivated
+	}
+
+	if _, ok := c.attachments[doc.Key().String()]; !ok {
+		return ErrDocumentNotAttached
+	}
+
+	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
+	if err != nil {
+		return err
+	}
+
+	res, err := c.client.RemoveDocument(ctx, &api.RemoveDocumentRequest{
+		ClientId:   c.id.Bytes(),
+		ChangePack: pbChangePack,
+	})
+	if errors.Is(err, types.ErrDocumentNotFound) {
+		doc.SetStatus(document.Removed)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+
+	pack, err := converter.FromChangePack(res.ChangePack)
+	if err != nil {
+		return err
+	}
+
+	if err := doc.ApplyChangePack(pack); err != nil {
+		return err
+	}
+
+	doc.SetStatus(document.Removed)
+	delete(c.attachments, doc.Key().String())
+
+	return nil
+}
+
 // Sync pushes local changes of the attached documents to the server and
 // receives changes of the remote replica from the server then apply them to
 // local documents.
