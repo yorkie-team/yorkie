@@ -102,8 +102,7 @@ func (rht *ElementRHT) Has(key string) bool {
 func (rht *ElementRHT) Set(k string, v Element) Element {
 	node, ok := rht.nodeMapByKey[k]
 	var removed Element
-	if ok && !node.isRemoved() && v.CreatedAt().After(node.elem.CreatedAt()) {
-		node.Remove(v.CreatedAt())
+	if ok && node.Remove(v.CreatedAt()) {
 		removed = node.elem
 	}
 	newNode := newElementRHTNode(k, v)
