@@ -64,8 +64,8 @@ func (n *ElementRHTNode) Element() Element {
 // ElementRHT is a hashtable with logical clock(Replicated hashtable).
 type ElementRHT struct {
 	// nodeMapByKey is a map with values of nodes by key.
-	nodeMapByKey       map[string]*ElementRHTNode
-	// nodeMapByCreatedAt is a map with values ​​of nodes by creation time.
+	nodeMapByKey map[string]*ElementRHTNode
+	// nodeMapByCreatedAt is a map with values of nodes by creation time.
 	// Even if an element is removed by `set` or `delete`, it remains in
 	// nodeMapByCreatedAt and will be deleted physically by GC.
 	nodeMapByCreatedAt map[string]*ElementRHTNode
@@ -171,9 +171,6 @@ func (rht *ElementRHT) purge(elem Element) {
 	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
 		panic("fail to find: " + elem.CreatedAt().Key())
-	}
-	if node == nil {
-		return
 	}
 	delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
 
