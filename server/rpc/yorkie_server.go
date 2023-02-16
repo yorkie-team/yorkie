@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -25,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -175,9 +177,6 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
-	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
-		return nil, err
-	}
 
 	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
 		return nil, err
@@ -263,10 +262,10 @@ func (s *yorkieServer) DetachDocument(
 		pack.DocumentKey,
 		false,
 	)
-	if err != nil {
-		return nil, err
+	if errors.Is(err, database.ErrDocumentNotFound) {
+		return nil, types.ErrDocumentNotFound
 	}
-	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -358,10 +357,10 @@ func (s *yorkieServer) RemoveDocument(
 		pack.DocumentKey,
 		false,
 	)
-	if err != nil {
-		return nil, err
+	if errors.Is(err, database.ErrDocumentNotFound) {
+		return nil, types.ErrDocumentNotFound
 	}
-	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -453,10 +452,10 @@ func (s *yorkieServer) PushPull(
 		pack.DocumentKey,
 		false,
 	)
-	if err != nil {
-		return nil, err
+	if errors.Is(err, database.ErrDocumentNotFound) {
+		return nil, types.ErrDocumentNotFound
 	}
-	if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -497,10 +496,13 @@ func (s *yorkieServer) WatchDocuments(
 	if err != nil {
 		return err
 	}
-	docKeys := s.excludeRemovedDocuments(
+	docKeys, err := s.excludeRemovedDocuments(
 		stream.Context(),
 		converter.FromDocumentKeys(req.DocumentKeys),
 	)
+	if err != nil {
+		return err
+	}
 
 	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
@@ -633,23 +635,22 @@ func (s *yorkieServer) unwatchDocs(
 func (s *yorkieServer) excludeRemovedDocuments(
 	ctx context.Context,
 	docKeys []key.Key,
-) []key.Key {
+) ([]key.Key, error) {
 	for i, docKey := range docKeys {
-		docInfo, err := documents.FindDocInfoByKey(
+		_, err := documents.FindDocInfoByKey(
 			ctx,
 			s.backend,
 			projects.From(ctx),
 			docKey,
 		)
-		if err != nil {
+		if errors.Is(err, database.ErrDocumentNotFound) {
 			docKeys = append(docKeys[:i], docKeys[i+1:]...)
 			continue
 		}
-
-		if err := docInfo.EnsureDocumentNotRemoved(); err != nil {
-			docKeys = append(docKeys[:i], docKeys[i+1:]...)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	return docKeys
+	return docKeys, nil
 }

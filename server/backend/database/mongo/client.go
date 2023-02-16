@@ -638,6 +638,7 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 	res, err := c.collection(colDocuments).UpdateOne(ctx, bson.M{
 		"project_id": encodedProjectID,
 		"key":        docKey,
+		"is_removed": false,
 	}, bson.M{
 		"$set": bson.M{
 			"accessed_at": now,
@@ -696,6 +697,7 @@ func (c *Client) FindDocInfoByKey(
 	result := c.collection(colDocuments).FindOne(ctx, bson.M{
 		"project_id": encodedProjectID,
 		"key":        docKey,
+		"is_removed": false,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
 		return nil, fmt.Errorf("%s %s: %w", projectID, docKey, database.ErrDocumentNotFound)

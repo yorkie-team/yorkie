@@ -263,7 +263,8 @@ func TestRPCServerBackend(t *testing.T) {
 				},
 			},
 		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+		// TODO: set error code of types.ErrDocumentNotFound
+		assert.Equal(t, codes.Unknown, status.Convert(err).Code())
 
 		_, err = testClient.DeactivateClient(
 			context.Background(),

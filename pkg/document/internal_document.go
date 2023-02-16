@@ -34,6 +34,9 @@ const (
 	// Attached means that this document is attached to the client.
 	// The actor of the ticket is created with being assigned by the client.
 	Attached
+
+	// Removed means that this document is removed at the server.
+	Removed
 )
 
 // InternalDocument represents a document in MongoDB and contains logical clocks.

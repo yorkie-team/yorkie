@@ -132,6 +132,17 @@ var schema = &memdb.DBSchema{
 						},
 					},
 				},
+				"project_id_key_is_removed": {
+					Name:   "project_id_key_is_removed",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "Key"},
+							&memdb.BoolFieldIndex{Field: "IsRemoved"},
+						},
+					},
+				},
 			},
 		},
 		tblChanges: {

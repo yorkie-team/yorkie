@@ -572,7 +572,13 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
+	raw, err := txn.First(
+		tblDocuments,
+		"project_id_key_is_removed",
+		projectID.String(),
+		key.String(),
+		false,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("find document by key: %w", err)
 	}
@@ -613,7 +619,13 @@ func (d *DB) FindDocInfoByKey(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
+	raw, err := txn.First(
+		tblDocuments,
+		"project_id_key_is_removed",
+		projectID.String(),
+		key.String(),
+		false,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("find document by key: %w", err)
 	}
