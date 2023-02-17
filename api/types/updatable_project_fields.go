@@ -19,6 +19,7 @@ package types
 
 import (
 	"errors"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -36,11 +37,14 @@ type UpdatableProjectFields struct {
 
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods *[]string `bson:"auth_webhook_methods,omitempty" validate:"omitempty,invalid_webhook_method"`
+
+	// ClientDeactivateThreshold is the time after which clients in specific project are considered deactivate.
+	ClientDeactivateThreshold time.Duration `bson:"client_deactivate_threshold,omitempty" validate:"omitempty"`
 }
 
 // Validate validates the UpdatableProjectFields.
 func (i *UpdatableProjectFields) Validate() error {
-	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil {
+	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil && i.ClientDeactivateThreshold == 0 {
 		return ErrEmptyProjectFields
 	}
 

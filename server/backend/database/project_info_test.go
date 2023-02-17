@@ -18,6 +18,7 @@ package database_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -28,11 +29,13 @@ import (
 func TestProjectInfo(t *testing.T) {
 	t.Run("update fields test", func(t *testing.T) {
 		dummyOwnerID := types.ID("000000000000000000000000")
-		project := database.NewProjectInfo(t.Name(), dummyOwnerID)
+		clientDeactivateThreshold := 1 * time.Hour
+		project := database.NewProjectInfo(t.Name(), dummyOwnerID, clientDeactivateThreshold)
 
 		testName := "testName"
 		testURL := "testUrl"
 		testMethods := []string{"testMethod"}
+		testClientDeactivateThreshold := 2 * time.Hour
 
 		project.UpdateFields(&types.UpdatableProjectFields{Name: &testName})
 		assert.Equal(t, testName, project.Name)
@@ -43,5 +46,10 @@ func TestProjectInfo(t *testing.T) {
 		project.UpdateFields(&types.UpdatableProjectFields{AuthWebhookMethods: &testMethods})
 		assert.Equal(t, testMethods, project.AuthWebhookMethods)
 		assert.Equal(t, dummyOwnerID, project.Owner)
+
+		project.UpdateFields(&types.UpdatableProjectFields{
+			ClientDeactivateThreshold: testClientDeactivateThreshold,
+		})
+		assert.Equal(t, testClientDeactivateThreshold, project.ClientDeactivateThreshold)
 	})
 }

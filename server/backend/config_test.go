@@ -27,11 +27,16 @@ import (
 func TestConfig(t *testing.T) {
 	t.Run("validate test", func(t *testing.T) {
 		validConf := backend.Config{
+			ClientDeactivateThreshold:  "1h",
 			AuthWebhookMaxWaitInterval: "0ms",
 			AuthWebhookCacheAuthTTL:    "10s",
 			AuthWebhookCacheUnauthTTL:  "10s",
 		}
 		assert.NoError(t, validConf.Validate())
+
+		conf1 := validConf
+		conf1.ClientDeactivateThreshold = "5"
+		assert.Error(t, conf1.Validate())
 
 		conf2 := validConf
 		conf2.AuthWebhookMaxWaitInterval = "5"

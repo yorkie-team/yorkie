@@ -65,6 +65,10 @@ func TestNewConfigFromFile(t *testing.T) {
 		assert.Equal(t, conf.Backend.SnapshotInterval, int64(server.DefaultSnapshotInterval))
 		assert.Equal(t, conf.Backend.AuthWebhookMaxRetries, uint64(server.DefaultAuthWebhookMaxRetries))
 
+		ClientDeactivateThreshold, err := time.ParseDuration(conf.Backend.ClientDeactivateThreshold)
+		assert.NoError(t, err)
+		assert.Equal(t, ClientDeactivateThreshold, server.DefaultClientDeactivateThreshold)
+
 		authWebhookMaxWaitInterval, err := time.ParseDuration(conf.Backend.AuthWebhookMaxWaitInterval)
 		assert.NoError(t, err)
 		assert.Equal(t, authWebhookMaxWaitInterval, server.DefaultAuthWebhookMaxWaitInterval)

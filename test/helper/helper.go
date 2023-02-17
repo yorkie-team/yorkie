@@ -50,12 +50,12 @@ var (
 
 	AdminPort = 21103
 
-	AdminUser                       = server.DefaultAdminUser
-	AdminPassword                   = server.DefaultAdminPassword
-	HousekeepingInterval            = 1 * gotime.Second
-	HousekeepingDeactivateThreshold = 1 * gotime.Minute
-	HousekeepingCandidatesLimit     = 10
+	AdminUser                             = server.DefaultAdminUser
+	AdminPassword                         = server.DefaultAdminPassword
+	HousekeepingInterval                  = 1 * gotime.Second
+	HousekeepingCandidatesLimitPerProject = 10
 
+	ClientDeactivateThreshold  = 10 * gotime.Second
 	SnapshotThreshold          = int64(10)
 	SnapshotWithPurgingChanges = false
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
@@ -125,9 +125,8 @@ func TestConfig() *server.Config {
 			Port: AdminPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:            HousekeepingInterval.String(),
-			DeactivateThreshold: HousekeepingDeactivateThreshold.String(),
-			CandidatesLimit:     HousekeepingCandidatesLimit,
+			Interval:                  HousekeepingInterval.String(),
+			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
 		},
 		Backend: &backend.Config{
 			AdminUser:                  server.DefaultAdminUser,
@@ -135,6 +134,7 @@ func TestConfig() *server.Config {
 			SecretKey:                  server.DefaultSecretKey,
 			AdminTokenDuration:         server.DefaultAdminTokenDuration.String(),
 			UseDefaultProject:          true,
+			ClientDeactivateThreshold:  server.DefaultClientDeactivateThreshold.String(),
 			SnapshotThreshold:          SnapshotThreshold,
 			SnapshotWithPurgingChanges: SnapshotWithPurgingChanges,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
