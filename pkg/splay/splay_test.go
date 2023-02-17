@@ -143,6 +143,14 @@ func TestSplayTree(t *testing.T) {
 			tree.StructureAsString(),
 		)
 	})
+
+	t.Run("single node index test", func(t *testing.T) {
+		tree := splay.NewTree[*stringValue](nil)
+		node := tree.Insert(newSplayNode("A"))
+		assert.Equal(t, 0, tree.IndexOf(node))
+		tree.Delete(node)
+		assert.Equal(t, -1, tree.IndexOf(node))
+	})
 }
 
 func makeSampleTree() (*splay.Tree[*stringValue], []*splay.Node[*stringValue]) {
