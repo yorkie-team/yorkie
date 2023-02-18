@@ -19,7 +19,6 @@ package mongo_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -44,7 +43,7 @@ func TestClient(t *testing.T) {
 
 	dummyOwnerID := types.ID("000000000000000000000000")
 	otherOwnerID := types.ID("000000000000000000000001")
-	clientDeactivateThreshold := 1 * time.Hour
+	clientDeactivateThreshold := "1h"
 
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {
 		info, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
@@ -60,14 +59,14 @@ func TestClient(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
-		newClientDeactivateThreshold := 2 * time.Hour
+		newClientDeactivateThreshold := "2h"
 
 		// update total project_field
 		fields := &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
-			ClientDeactivateThreshold: newClientDeactivateThreshold,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 
 		err = fields.Validate()
