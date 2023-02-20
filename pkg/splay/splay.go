@@ -165,7 +165,7 @@ func (t *Tree[V]) Splay(node *Node[V]) {
 
 // IndexOf Find the index of the given node.
 func (t *Tree[V]) IndexOf(node *Node[V]) int {
-	if node == nil || !node.hasLinks() {
+	if node == nil || node != t.root && !node.hasLinks() {
 		return -1
 	}
 

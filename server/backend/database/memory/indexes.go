@@ -93,10 +93,11 @@ var schema = &memdb.DBSchema{
 						},
 					},
 				},
-				"status_updated_at": {
-					Name: "status_updated_at",
+				"project_id_status_updated_at": {
+					Name: "project_id_status_updated_at",
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
 							&memdb.StringFieldIndex{Field: "Status"},
 							&memdb.TimeFieldIndex{Field: "UpdatedAt"},
 						},

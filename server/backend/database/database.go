@@ -84,6 +84,7 @@ type Database interface {
 		ctx context.Context,
 		username,
 		password string,
+		clientDeactivateThreshold gotime.Duration,
 	) (*UserInfo, *ProjectInfo, error)
 
 	// CreateProjectInfo creates a new project.
@@ -91,9 +92,10 @@ type Database interface {
 		ctx context.Context,
 		name string,
 		owner types.ID,
+		clientDeactivateThreshold gotime.Duration,
 	) (*ProjectInfo, error)
 
-	// ListProjectInfos returns all projects.
+	// ListProjectInfos returns all project infos owned by owner.
 	ListProjectInfos(ctx context.Context, owner types.ID) ([]*ProjectInfo, error)
 
 	// UpdateProjectInfo updates the project.
@@ -133,8 +135,7 @@ type Database interface {
 	// FindDeactivateCandidates finds the housekeeping candidates.
 	FindDeactivateCandidates(
 		ctx context.Context,
-		deactivateThreshold gotime.Duration,
-		candidatesLimit int,
+		candidatesLimitPerProject int,
 	) ([]*ClientInfo, error)
 
 	// FindDocInfoByKey finds the document of the given key.

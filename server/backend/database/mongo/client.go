@@ -95,13 +95,14 @@ func (c *Client) EnsureDefaultUserAndProject(
 	ctx context.Context,
 	username,
 	password string,
+	clientDeactivateThreshold gotime.Duration,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	userInfo, err := c.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID)
+	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID, clientDeactivateThreshold)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -157,8 +158,9 @@ func (c *Client) ensureDefaultUserInfo(
 func (c *Client) ensureDefaultProjectInfo(
 	ctx context.Context,
 	defaultUserID types.ID,
+	defaultClientDeactivateThreshold gotime.Duration,
 ) (*database.ProjectInfo, error) {
-	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID)
+	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
 	candidate.ID = database.DefaultProjectID
 	encodedID, err := encodeID(candidate.ID)
 	if err != nil {
@@ -173,11 +175,12 @@ func (c *Client) ensureDefaultProjectInfo(
 		"_id": encodedID,
 	}, bson.M{
 		"$setOnInsert": bson.M{
-			"name":       candidate.Name,
-			"owner":      encodedDefaultUserID,
-			"public_key": candidate.PublicKey,
-			"secret_key": candidate.SecretKey,
-			"created_at": candidate.CreatedAt,
+			"name":                        candidate.Name,
+			"owner":                       encodedDefaultUserID,
+			"client_deactivate_threshold": candidate.ClientDeactivateThreshold,
+			"public_key":                  candidate.PublicKey,
+			"secret_key":                  candidate.SecretKey,
+			"created_at":                  candidate.CreatedAt,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
@@ -204,19 +207,21 @@ func (c *Client) CreateProjectInfo(
 	ctx context.Context,
 	name string,
 	owner types.ID,
+	clientDeactivateThreshold gotime.Duration,
 ) (*database.ProjectInfo, error) {
 	encodedOwner, err := encodeID(owner)
 	if err != nil {
 		return nil, err
 	}
 
-	info := database.NewProjectInfo(name, owner)
+	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
 	result, err := c.collection(colProjects).InsertOne(ctx, bson.M{
-		"name":       info.Name,
-		"owner":      encodedOwner,
-		"public_key": info.PublicKey,
-		"secret_key": info.SecretKey,
-		"created_at": info.CreatedAt,
+		"name":                        info.Name,
+		"owner":                       encodedOwner,
+		"client_deactivate_threshold": info.ClientDeactivateThreshold,
+		"public_key":                  info.PublicKey,
+		"secret_key":                  info.SecretKey,
+		"created_at":                  info.CreatedAt,
 	})
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
@@ -231,7 +236,28 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// ListProjectInfos returns all project infos.
+// ListAllProjectInfos returns all project infos.
+func (c *Client) listAllProjectInfos(
+	ctx context.Context,
+) ([]*database.ProjectInfo, error) {
+	// TODO(krapie): Find(ctx, bson.D{{}}) loads all projects in memory,
+	// which will cause performance issue as number of projects in DB grows.
+	// Therefore, pagination of projects is needed to avoid this issue.
+	cursor, err := c.collection(colProjects).Find(ctx, bson.D{{}})
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, fmt.Errorf("fetch all project infos: %w", err)
+	}
+
+	var infos []*database.ProjectInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, fmt.Errorf("fetch all project infos: %w", err)
+	}
+
+	return infos, nil
+}
+
+// ListProjectInfos returns all project infos owned by owner.
 func (c *Client) ListProjectInfos(
 	ctx context.Context,
 	owner types.ID,
@@ -590,16 +616,17 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// FindDeactivateCandidates finds the clients that need housekeeping.
-func (c *Client) FindDeactivateCandidates(
+// findDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
+func (c *Client) findDeactivateCandidatesPerProject(
 	ctx context.Context,
-	deactivateThreshold gotime.Duration,
+	project *database.ProjectInfo,
 	candidatesLimit int,
 ) ([]*database.ClientInfo, error) {
 	cursor, err := c.collection(colClients).Find(ctx, bson.M{
-		"status": database.ClientActivated,
+		"project_id": project.ID,
+		"status":     database.ClientActivated,
 		"updated_at": bson.M{
-			"$lte": gotime.Now().Add(-deactivateThreshold),
+			"$lte": gotime.Now().Add(-project.ClientDeactivateThreshold),
 		},
 	}, options.Find().SetLimit(int64(candidatesLimit)))
 
@@ -613,6 +640,29 @@ func (c *Client) FindDeactivateCandidates(
 	}
 
 	return clientInfos, nil
+}
+
+// FindDeactivateCandidates finds the clients that need housekeeping.
+func (c *Client) FindDeactivateCandidates(
+	ctx context.Context,
+	candidatesLimitPerProject int,
+) ([]*database.ClientInfo, error) {
+	projects, err := c.listAllProjectInfos(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var candidates []*database.ClientInfo
+	for _, project := range projects {
+		clientInfos, err := c.findDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		if err != nil {
+			return nil, err
+		}
+
+		candidates = append(candidates, clientInfos...)
+	}
+
+	return candidates, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

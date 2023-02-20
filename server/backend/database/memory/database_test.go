@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -42,6 +43,7 @@ func TestDB(t *testing.T) {
 	dummyOwnerID := types.ID("000000000000000000000000")
 	otherOwnerID := types.ID("000000000000000000000001")
 	notExistsID := types.ID("000000000000000000000000")
+	clientDeactivateThreshold := 1 * gotime.Hour
 
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		// try to deactivate the client with not exists ID.
@@ -77,11 +79,11 @@ func TestDB(t *testing.T) {
 	t.Run("project test", func(t *testing.T) {
 		suffixes := []int{0, 1, 2}
 		for _, suffix := range suffixes {
-			_, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%s-%d", t.Name(), suffix), dummyOwnerID)
+			_, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%s-%d", t.Name(), suffix), dummyOwnerID, clientDeactivateThreshold)
 			assert.NoError(t, err)
 		}
 
-		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID)
+		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		// Lists all projects that the dummyOwnerID is the owner.
@@ -89,7 +91,7 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, projects, len(suffixes))
 
-		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		project, err := db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
@@ -344,7 +346,7 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("FindProjectInfoByID test", func(t *testing.T) {
-		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		_, err = db.FindProjectInfoByName(ctx, dummyOwnerID, info.Name)
@@ -363,19 +365,21 @@ func TestDB(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
+		newClientDeactivateThreshold := 1 * gotime.Hour
 
-		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
-		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID)
+		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		id := info.ID
 
 		// 01. Update all fields test
 		fields := &types.UpdatableProjectFields{
-			Name:               &newName,
-			AuthWebhookURL:     &newAuthWebhookURL,
-			AuthWebhookMethods: &newAuthWebhookMethods,
+			Name:                      &newName,
+			AuthWebhookURL:            &newAuthWebhookURL,
+			AuthWebhookMethods:        &newAuthWebhookMethods,
+			ClientDeactivateThreshold: newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err := db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
@@ -386,6 +390,7 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, newName, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
 		// 02. Update name field test
 		fields = &types.UpdatableProjectFields{
@@ -400,6 +405,7 @@ func TestDB(t *testing.T) {
 		assert.NotEqual(t, newName, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
 		// 03. Update authWebhookURL test
 		newAuthWebhookURL2 := newAuthWebhookURL + "2"
@@ -415,13 +421,30 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, newName2, updateInfo.Name)
 		assert.NotEqual(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
-		// 04. Duplicated name test
+		// 04. Update clientDeactivateThreshold test
+		clientDeactivateThreshold2 := clientDeactivateThreshold + 1*gotime.Hour
+		fields = &types.UpdatableProjectFields{
+			ClientDeactivateThreshold: clientDeactivateThreshold2,
+		}
+		assert.NoError(t, fields.Validate())
+		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		assert.NoError(t, err)
+		updateInfo, err = db.FindProjectInfoByID(ctx, id)
+		assert.NoError(t, err)
+		assert.Equal(t, res, updateInfo)
+		assert.Equal(t, newName2, updateInfo.Name)
+		assert.Equal(t, newAuthWebhookURL2, updateInfo.AuthWebhookURL)
+		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.NotEqual(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
+
+		// 05. Duplicated name test
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
 
-		// 05. OwnerID not match test
+		// 06. OwnerID not match test
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = db.UpdateProjectInfo(ctx, otherOwnerID, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNotFound)

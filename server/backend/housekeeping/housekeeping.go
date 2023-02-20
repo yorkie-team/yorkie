@@ -39,12 +39,8 @@ type Config struct {
 	// Interval is the time between housekeeping runs.
 	Interval string `yaml:"Interval"`
 
-	// deactivateThreshold is the time after which clients are considered
-	// deactivate.
-	DeactivateThreshold string `yaml:"DeactivateThreshold"`
-
-	// CandidatesLimit is the maximum number of candidates to be returned.
-	CandidatesLimit int `yaml:"CandidatesLimit"`
+	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
+	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
 }
 
 // Validate validates the configuration.
@@ -52,14 +48,6 @@ func (c *Config) Validate() error {
 	if _, err := time.ParseDuration(c.Interval); err != nil {
 		return fmt.Errorf(
 			`invalid argument %s for "--housekeeping-interval" flag: %w`,
-			c.Interval,
-			err,
-		)
-	}
-
-	if _, err := time.ParseDuration(c.DeactivateThreshold); err != nil {
-		return fmt.Errorf(
-			`invalid argument %s for "--housekeeping-deactivate-threshold" flag: %w`,
 			c.Interval,
 			err,
 		)
@@ -75,9 +63,8 @@ type Housekeeping struct {
 	database    database.Database
 	coordinator sync.Coordinator
 
-	interval            time.Duration
-	deactivateThreshold time.Duration
-	candidatesLimit     int
+	interval                  time.Duration
+	candidatesLimitPerProject int
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
@@ -111,20 +98,14 @@ func New(
 		return nil, fmt.Errorf("parse interval %s: %w", conf.Interval, err)
 	}
 
-	deactivateThreshold, err := time.ParseDuration(conf.DeactivateThreshold)
-	if err != nil {
-		return nil, fmt.Errorf("parse deactivate threshold %s: %w", conf.DeactivateThreshold, err)
-	}
-
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	return &Housekeeping{
 		database:    database,
 		coordinator: coordinator,
 
-		interval:            interval,
-		deactivateThreshold: deactivateThreshold,
-		candidatesLimit:     conf.CandidatesLimit,
+		interval:                  interval,
+		candidatesLimitPerProject: conf.CandidatesLimitPerProject,
 
 		ctx:        ctx,
 		cancelFunc: cancelFunc,
@@ -180,8 +161,7 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 
 	candidates, err := h.database.FindDeactivateCandidates(
 		ctx,
-		h.deactivateThreshold,
-		h.candidatesLimit,
+		h.candidatesLimitPerProject,
 	)
 	if err != nil {
 		return err

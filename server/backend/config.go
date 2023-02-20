@@ -41,6 +41,9 @@ type Config struct {
 	// we are using server as single-tenant mode, this should be set to true.
 	UseDefaultProject bool `yaml:"UseDefaultProject"`
 
+	// ClientDeactivateThreshold is deactivate threshold of clients in specific project for housekeeping.
+	ClientDeactivateThreshold string `yaml:"ClientDeactivateThreshold"`
+
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold int64 `yaml:"SnapshotThreshold"`
@@ -69,6 +72,14 @@ type Config struct {
 
 // Validate validates this config.
 func (c *Config) Validate() error {
+	if _, err := time.ParseDuration(c.ClientDeactivateThreshold); err != nil {
+		return fmt.Errorf(
+			`invalid argument "%s" for "--client-deactivate-threshold" flag: %w`,
+			c.ClientDeactivateThreshold,
+			err,
+		)
+	}
+
 	if _, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval); err != nil {
 		return fmt.Errorf(
 			`invalid argument "%s" for "--auth-webhook-max-wait-interval" flag: %w`,
@@ -94,6 +105,16 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// ParseClientDeactivateThreshold returns client deactivate threshold.
+func (c *Config) ParseClientDeactivateThreshold() time.Duration {
+	result, err := time.ParseDuration(c.ClientDeactivateThreshold)
+	if err != nil {
+		panic(err)
+	}
+
+	return result
 }
 
 // ParseAdminTokenDuration returns admin token duration.

@@ -19,6 +19,7 @@ package mongo_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -43,12 +44,13 @@ func TestClient(t *testing.T) {
 
 	dummyOwnerID := types.ID("000000000000000000000000")
 	otherOwnerID := types.ID("000000000000000000000001")
+	clientDeactivateThreshold := 1 * time.Hour
 
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {
-		info, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		info, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 		existName := "already"
-		_, err = cli.CreateProjectInfo(ctx, existName, dummyOwnerID)
+		_, err = cli.CreateProjectInfo(ctx, existName, dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		id := info.ID
@@ -58,12 +60,14 @@ func TestClient(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
+		newClientDeactivateThreshold := 2 * time.Hour
 
 		// update total project_field
 		fields := &types.UpdatableProjectFields{
-			Name:               &newName,
-			AuthWebhookURL:     &newAuthWebhookURL,
-			AuthWebhookMethods: &newAuthWebhookMethods,
+			Name:                      &newName,
+			AuthWebhookURL:            &newAuthWebhookURL,
+			AuthWebhookMethods:        &newAuthWebhookMethods,
+			ClientDeactivateThreshold: newClientDeactivateThreshold,
 		}
 
 		err = fields.Validate()
@@ -78,6 +82,7 @@ func TestClient(t *testing.T) {
 		assert.Equal(t, newName, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
 		// update one field
 		newName2 := newName + "2"
@@ -97,6 +102,7 @@ func TestClient(t *testing.T) {
 		assert.NotEqual(t, newName, updateInfo.Name)
 		assert.Equal(t, newAuthWebhookURL, updateInfo.AuthWebhookURL)
 		assert.Equal(t, newAuthWebhookMethods, updateInfo.AuthWebhookMethods)
+		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
 		// check duplicate name error
 		fields = &types.UpdatableProjectFields{Name: &existName}
@@ -105,9 +111,9 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("FindProjectInfoByName test", func(t *testing.T) {
-		info1, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		info1, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
-		_, err = cli.CreateProjectInfo(ctx, t.Name(), otherOwnerID)
+		_, err = cli.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		info2, err := cli.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())

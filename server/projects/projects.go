@@ -32,7 +32,7 @@ func CreateProject(
 	owner types.ID,
 	name string,
 ) (*types.Project, error) {
-	info, err := be.DB.CreateProjectInfo(ctx, name, owner)
+	info, err := be.DB.CreateProjectInfo(ctx, name, owner, be.Config.ParseClientDeactivateThreshold())
 	if err != nil {
 		return nil, err
 	}

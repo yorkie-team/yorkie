@@ -117,13 +117,14 @@ func (d *DB) EnsureDefaultUserAndProject(
 	ctx context.Context,
 	username,
 	password string,
+	clientDeactivateThreshold gotime.Duration,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	user, err := d.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	project, err := d.ensureDefaultProjectInfo(ctx, user.ID)
+	project, err := d.ensureDefaultProjectInfo(ctx, user.ID, clientDeactivateThreshold)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -168,6 +169,7 @@ func (d *DB) ensureDefaultUserInfo(
 func (d *DB) ensureDefaultProjectInfo(
 	ctx context.Context,
 	defaultUserID types.ID,
+	defaultClientDeactivateThreshold gotime.Duration,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -179,7 +181,7 @@ func (d *DB) ensureDefaultProjectInfo(
 
 	var info *database.ProjectInfo
 	if raw == nil {
-		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID)
+		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
 		info.ID = database.DefaultProjectID
 		if err := txn.Insert(tblProjects, info); err != nil {
 			return nil, fmt.Errorf("insert project: %w", err)
@@ -197,6 +199,7 @@ func (d *DB) CreateProjectInfo(
 	ctx context.Context,
 	name string,
 	owner types.ID,
+	clientDeactivateThreshold gotime.Duration,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -211,7 +214,7 @@ func (d *DB) CreateProjectInfo(
 		return nil, fmt.Errorf("%s: %w", name, database.ErrProjectAlreadyExists)
 	}
 
-	info := database.NewProjectInfo(name, owner)
+	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
 	info.ID = newID()
 	if err := txn.Insert(tblProjects, info); err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)
@@ -221,7 +224,34 @@ func (d *DB) CreateProjectInfo(
 	return info, nil
 }
 
-// ListProjectInfos returns all projects.
+// ListAllProjectInfos returns all project infos.
+func (d *DB) listAllProjectInfos(
+	ctx context.Context,
+) ([]*database.ProjectInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	// TODO(krapie): txn.Get() loads all projects in memory,
+	// which will cause performance issue as number of projects in DB grows.
+	// Therefore, pagination of projects is needed to avoid this issue.
+	iter, err := txn.Get(
+		tblProjects,
+		"id",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetch all projects: %w", err)
+	}
+
+	var infos []*database.ProjectInfo
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ProjectInfo).DeepCopy()
+		infos = append(infos, info)
+	}
+
+	return infos, nil
+}
+
+// ListProjectInfos returns all project infos owned by owner.
 func (d *DB) ListProjectInfos(
 	ctx context.Context,
 	owner types.ID,
@@ -524,21 +554,22 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// FindDeactivateCandidates finds the clients that need housekeeping.
-func (d *DB) FindDeactivateCandidates(
+// findDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
+func (d *DB) findDeactivateCandidatesPerProject(
 	ctx context.Context,
-	inactiveThreshold gotime.Duration,
+	project *database.ProjectInfo,
 	candidatesLimit int,
 ) ([]*database.ClientInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	offset := gotime.Now().Add(-inactiveThreshold)
+	offset := gotime.Now().Add(-project.ClientDeactivateThreshold)
 
 	var infos []*database.ClientInfo
 	iterator, err := txn.ReverseLowerBound(
 		tblClients,
-		"status_updated_at",
+		"project_id_status_updated_at",
+		project.ID.String(),
 		database.ClientActivated,
 		offset,
 	)
@@ -557,6 +588,29 @@ func (d *DB) FindDeactivateCandidates(
 		infos = append(infos, info)
 	}
 	return infos, nil
+}
+
+// FindDeactivateCandidates finds the clients that need housekeeping.
+func (d *DB) FindDeactivateCandidates(
+	ctx context.Context,
+	candidatesLimitPerProject int,
+) ([]*database.ClientInfo, error) {
+	projects, err := d.listAllProjectInfos(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var candidates []*database.ClientInfo
+	for _, project := range projects {
+		infos, err := d.findDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		if err != nil {
+			return nil, err
+		}
+
+		candidates = append(candidates, infos...)
+	}
+
+	return candidates, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the
