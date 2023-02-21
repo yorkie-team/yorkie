@@ -161,7 +161,8 @@ func TestDocument(t *testing.T) {
 	t.Run("document tombstone test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(t.Name()))
+		testDocumentKey := helper.TestDocumentKey(t)
+		d1 := document.New(key.Key(testDocumentKey))
 		err := d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddInteger(1, 2)
 			return nil
@@ -171,7 +172,7 @@ func TestDocument(t *testing.T) {
 		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(testDocumentKey))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
