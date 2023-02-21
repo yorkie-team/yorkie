@@ -45,8 +45,18 @@ var errorToCode = map[error]codes.Code{
 	types.ErrInvalidID:              codes.InvalidArgument,
 	clients.ErrInvalidClientID:      codes.InvalidArgument,
 	clients.ErrInvalidClientKey:     codes.InvalidArgument,
-	key.ErrInvalidKey:               codes.InvalidArgument, // DocumentKey validation error
 	types.ErrEmptyProjectFields:     codes.InvalidArgument,
+
+	converter.ErrPackRequired:             codes.InvalidArgument,
+	converter.ErrCheckpointRequired:       codes.InvalidArgument,
+	database.ErrInvalidTimeDurationString: codes.InvalidArgument,
+	time.ErrInvalidHexString:              codes.InvalidArgument,
+	time.ErrInvalidActorID:                codes.InvalidArgument,
+	types.ErrInvalidID:                    codes.InvalidArgument,
+	clients.ErrInvalidClientID:            codes.InvalidArgument,
+	clients.ErrInvalidClientKey:           codes.InvalidArgument,
+	types.ErrEmptyProjectFields:           codes.InvalidArgument,
+	key.ErrInvalidKey:                     codes.InvalidArgument,
 
 	// NotFound means the requested resource does not exist.
 	database.ErrProjectNotFound:  codes.NotFound,

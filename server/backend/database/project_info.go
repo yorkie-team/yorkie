@@ -17,12 +17,16 @@
 package database
 
 import (
+	"errors"
 	"time"
 
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/api/types"
 )
+
+// ErrInvalidTimeDurationString is returned when the given time duration string is not in valid format.
+var ErrInvalidTimeDurationString = errors.New("invalid time duration string format")
 
 // DefaultProjectID is the default project ID.
 var DefaultProjectID = types.ID("000000000000000000000000")
@@ -55,7 +59,7 @@ type ProjectInfo struct {
 
 	// ClientDeactivateThreshold is the time after which clients in
 	// specific project are considered deactivate for housekeeping.
-	ClientDeactivateThreshold time.Duration `bson:"client_deactivate_threshold"`
+	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `bson:"created_at"`
@@ -65,7 +69,7 @@ type ProjectInfo struct {
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
-func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold time.Duration) *ProjectInfo {
+func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold string) *ProjectInfo {
 	return &ProjectInfo{
 		Name:                      name,
 		Owner:                     owner,
@@ -124,8 +128,8 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.AuthWebhookMethods != nil {
 		i.AuthWebhookMethods = *fields.AuthWebhookMethods
 	}
-	if fields.ClientDeactivateThreshold != 0 {
-		i.ClientDeactivateThreshold = time.Duration(fields.ClientDeactivateThreshold)
+	if fields.ClientDeactivateThreshold != nil {
+		i.ClientDeactivateThreshold = *fields.ClientDeactivateThreshold
 	}
 }
 
@@ -143,4 +147,14 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		CreatedAt:                 i.CreatedAt,
 		UpdatedAt:                 i.UpdatedAt,
 	}
+}
+
+// ClientDeactivateThresholdAsTimeDuration converts ClientDeactivateThreshold string to time.Duration.
+func (i *ProjectInfo) ClientDeactivateThresholdAsTimeDuration() (time.Duration, error) {
+	clientDeactivateThreshold, err := time.ParseDuration(i.ClientDeactivateThreshold)
+	if err != nil {
+		return 0, ErrInvalidTimeDurationString
+	}
+
+	return clientDeactivateThreshold, nil
 }

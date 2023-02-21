@@ -38,7 +38,7 @@ func TestHousekeeping(t *testing.T) {
 	t.Run("housekeeping test", func(t *testing.T) {
 		ctx := context.Background()
 
-		clientDeactivateThreshold := 23 * gotime.Hour
+		clientDeactivateThreshold := "23h"
 		_, project, err := memdb.EnsureDefaultUserAndProject(ctx, "test", "test", clientDeactivateThreshold)
 		assert.NoError(t, err)
 

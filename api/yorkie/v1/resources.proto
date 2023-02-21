@@ -214,7 +214,7 @@ message Project {
   string secret_key = 4;
   string auth_webhook_url = 5;
   repeated string auth_webhook_methods = 6;
-  int64 client_deactivate_threshold = 7;
+  string client_deactivate_threshold = 7;
   google.protobuf.Timestamp created_at = 8;
   google.protobuf.Timestamp updated_at = 9;
 }
@@ -227,7 +227,7 @@ message UpdatableProjectFields {
   google.protobuf.StringValue name = 1;
   google.protobuf.StringValue auth_webhook_url = 2;
   AuthWebhookMethods auth_webhook_methods = 3;
-  int64 client_deactivate_threshold = 4;
+  google.protobuf.StringValue client_deactivate_threshold = 4;
 }
 
 message DocumentSummary {
