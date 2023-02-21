@@ -18,7 +18,6 @@ package types_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -34,12 +33,12 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
-		newClientDeactivateThreshold := 1 * time.Hour
+		newClientDeactivateThreshold := "1h"
 		fields := &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
-			ClientDeactivateThreshold: newClientDeactivateThreshold,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -54,7 +53,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 		fields = &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
-			ClientDeactivateThreshold: newClientDeactivateThreshold,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -66,7 +65,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
-			ClientDeactivateThreshold: newClientDeactivateThreshold,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
 	})

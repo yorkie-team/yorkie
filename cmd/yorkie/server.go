@@ -41,7 +41,7 @@ var (
 
 	adminTokenDuration        time.Duration
 	housekeepingInterval      time.Duration
-	clientDeactivateThreshold time.Duration
+	clientDeactivateThreshold string
 
 	mongoConnectionURI     string
 	mongoConnectionTimeout time.Duration
@@ -68,7 +68,7 @@ func newServerCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf.Backend.AdminTokenDuration = adminTokenDuration.String()
 
-			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold.String()
+			conf.Backend.ClientDeactivateThreshold = clientDeactivateThreshold
 
 			conf.Backend.AuthWebhookMaxWaitInterval = authWebhookMaxWaitInterval.String()
 			conf.Backend.AuthWebhookCacheAuthTTL = authWebhookCacheAuthTTL.String()
@@ -317,7 +317,7 @@ func init() {
 		"Whether to use the default project. Even if public key is not provided from the client, "+
 			"the default project will be used for the request.",
 	)
-	cmd.Flags().DurationVar(
+	cmd.Flags().StringVar(
 		&clientDeactivateThreshold,
 		"client-deactivate-threshold",
 		server.DefaultClientDeactivateThreshold,

@@ -32,6 +32,7 @@ const (
 	containNumberRegexString          = `[0-9]`
 	containSpecialCharRegexString     = `[\{\}\[\]\/?.,;:|\)*~!^\-_+<>@\#$%&\\\=\(\'\"\x60]`
 	alphaNumberSpecialCharRegexString = `^[a-zA-Z0-9\{\}\[\]\/?.,;:|\)*~!^\-_+<>@\#$%&\\\=\(\'\"\x60]+$`
+	timeDurationFormatRegexString     = `^(\d{1,2}h\s?)?(\d{1,2}m\s?)?(\d{1,2}s)?$`
 )
 
 var (
@@ -44,6 +45,7 @@ var (
 	containNumberRegex          = regexp.MustCompile(containNumberRegexString)
 	containSpecialCharRegex     = regexp.MustCompile(containSpecialCharRegexString)
 	alphaNumberSpecialCharRegex = regexp.MustCompile(alphaNumberSpecialCharRegexString)
+	timeDurationFormatRegex     = regexp.MustCompile(timeDurationFormatRegexString)
 )
 
 func isReservedProjectName(name string) bool {
@@ -72,6 +74,10 @@ func hasAlphaNumSpecial(str string) bool {
 		}
 	}
 	return isValid
+}
+
+func isValidTimeDurationStringFormat(str string) bool {
+	return timeDurationFormatRegex.MatchString(str)
 }
 
 func init() {
@@ -109,4 +115,10 @@ func init() {
 		return val == ""
 	})
 	registerTranslation("url|emptystring", "{0} must be a valid URL")
+
+	registerValidation("duration", func(level validator.FieldLevel) bool {
+		val := level.Field().String()
+		return isValidTimeDurationStringFormat(val)
+	})
+	registerTranslation("duration", "{0} must be a valid time duration string format")
 }
