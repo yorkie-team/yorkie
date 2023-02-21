@@ -53,12 +53,12 @@ var (
 
 	AdminPort = 21103
 
-	AdminUser                       = server.DefaultAdminUser
-	AdminPassword                   = server.DefaultAdminPassword
-	HousekeepingInterval            = 1 * gotime.Second
-	HousekeepingDeactivateThreshold = 1 * gotime.Minute
-	HousekeepingCandidatesLimit     = 10
+	AdminUser                             = server.DefaultAdminUser
+	AdminPassword                         = server.DefaultAdminPassword
+	HousekeepingInterval                  = 1 * gotime.Second
+	HousekeepingCandidatesLimitPerProject = 10
 
+	ClientDeactivateThreshold  = 10 * gotime.Second
 	SnapshotThreshold          = int64(10)
 	SnapshotWithPurgingChanges = false
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
@@ -102,7 +102,7 @@ func CreateAdminCli(t assert.TestingT, adminAddr string) *adminClient.Client {
 
 // TestRoot returns the root
 func TestRoot() *crdt.Root {
-	return crdt.NewRoot(crdt.NewObject(crdt.NewRHTPriorityQueueMap(), time.InitialTicket))
+	return crdt.NewRoot(crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket))
 }
 
 // TextChangeContext returns the context of test change.
@@ -131,9 +131,8 @@ func TestConfig() *server.Config {
 			Port: AdminPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:            HousekeepingInterval.String(),
-			DeactivateThreshold: HousekeepingDeactivateThreshold.String(),
-			CandidatesLimit:     HousekeepingCandidatesLimit,
+			Interval:                  HousekeepingInterval.String(),
+			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
 		},
 		Backend: &backend.Config{
 			AdminUser:                  server.DefaultAdminUser,
@@ -141,6 +140,7 @@ func TestConfig() *server.Config {
 			SecretKey:                  server.DefaultSecretKey,
 			AdminTokenDuration:         server.DefaultAdminTokenDuration.String(),
 			UseDefaultProject:          true,
+			ClientDeactivateThreshold:  server.DefaultClientDeactivateThreshold.String(),
 			SnapshotThreshold:          SnapshotThreshold,
 			SnapshotWithPurgingChanges: SnapshotWithPurgingChanges,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),

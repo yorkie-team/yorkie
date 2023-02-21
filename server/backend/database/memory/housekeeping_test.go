@@ -28,38 +28,39 @@ import (
 	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
 
-	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 )
 
 func TestHousekeeping(t *testing.T) {
 	memdb, err := memory.New()
 	assert.NoError(t, err)
-	projectID := database.DefaultProjectID
 
 	t.Run("housekeeping test", func(t *testing.T) {
 		ctx := context.Background()
+
+		clientDeactivateThreshold := 23 * gotime.Hour
+		_, project, err := memdb.EnsureDefaultUserAndProject(ctx, "test", "test", clientDeactivateThreshold)
+		assert.NoError(t, err)
 
 		yesterday := gotime.Now().Add(-24 * gotime.Hour)
 		patch, err := monkey.PatchMethod(gotime.Now, func() gotime.Time { return yesterday })
 		if err != nil {
 			log.Fatal(err)
 		}
-		clientA, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-A", t.Name()))
+		clientA, err := memdb.ActivateClient(ctx, project.ID, fmt.Sprintf("%s-A", t.Name()))
 		assert.NoError(t, err)
-		clientB, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-B", t.Name()))
+		clientB, err := memdb.ActivateClient(ctx, project.ID, fmt.Sprintf("%s-B", t.Name()))
 		assert.NoError(t, err)
 		err = patch.Unpatch()
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		clientC, err := memdb.ActivateClient(ctx, projectID, fmt.Sprintf("%s-C", t.Name()))
+		clientC, err := memdb.ActivateClient(ctx, project.ID, fmt.Sprintf("%s-C", t.Name()))
 		assert.NoError(t, err)
 
 		candidates, err := memdb.FindDeactivateCandidates(
 			ctx,
-			gotime.Hour,
 			10,
 		)
 		assert.NoError(t, err)

@@ -29,7 +29,7 @@ import (
 // BytesToObject creates an Object from the given byte array.
 func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 	if snapshot == nil {
-		return crdt.NewObject(crdt.NewRHTPriorityQueueMap(), time.InitialTicket), nil
+		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), nil
 	}
 
 	pbElem := &api.JSONElement{}
@@ -63,13 +63,13 @@ func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
 }
 
 func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
-	members := crdt.NewRHTPriorityQueueMap()
+	members := crdt.NewElementRHT()
 	for _, pbNode := range pbObj.Nodes {
 		elem, err := fromJSONElement(pbNode.Element)
 		if err != nil {
 			return nil, err
 		}
-		members.SetInternal(pbNode.Key, elem)
+		members.Set(pbNode.Key, elem)
 	}
 
 	createdAt, err := fromTimeTicket(pbObj.CreatedAt)

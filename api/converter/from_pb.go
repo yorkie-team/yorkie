@@ -18,6 +18,7 @@ package converter
 
 import (
 	"fmt"
+	gotime "time"
 
 	protoTypes "github.com/gogo/protobuf/types"
 
@@ -69,14 +70,15 @@ func FromProject(pbProject *api.Project) (*types.Project, error) {
 		return nil, fmt.Errorf("convert updatedAt to timestamp: %w", err)
 	}
 	return &types.Project{
-		ID:                 types.ID(pbProject.Id),
-		Name:               pbProject.Name,
-		AuthWebhookURL:     pbProject.AuthWebhookUrl,
-		AuthWebhookMethods: pbProject.AuthWebhookMethods,
-		PublicKey:          pbProject.PublicKey,
-		SecretKey:          pbProject.SecretKey,
-		CreatedAt:          createdAt,
-		UpdatedAt:          updatedAt,
+		ID:                        types.ID(pbProject.Id),
+		Name:                      pbProject.Name,
+		AuthWebhookURL:            pbProject.AuthWebhookUrl,
+		AuthWebhookMethods:        pbProject.AuthWebhookMethods,
+		ClientDeactivateThreshold: gotime.Duration(pbProject.ClientDeactivateThreshold),
+		PublicKey:                 pbProject.PublicKey,
+		SecretKey:                 pbProject.SecretKey,
+		CreatedAt:                 createdAt,
+		UpdatedAt:                 updatedAt,
 	}, nil
 }
 
@@ -548,7 +550,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 			return nil, err
 		}
 		return crdt.NewObject(
-			crdt.NewRHTPriorityQueueMap(),
+			crdt.NewElementRHT(),
 			createdAt,
 		), nil
 	case api.ValueType_VALUE_TYPE_JSON_ARRAY:
@@ -662,6 +664,9 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	}
 	if pbProjectFields.AuthWebhookMethods != nil {
 		updatableProjectFields.AuthWebhookMethods = &pbProjectFields.AuthWebhookMethods.Methods
+	}
+	if pbProjectFields.ClientDeactivateThreshold != 0 {
+		updatableProjectFields.ClientDeactivateThreshold = gotime.Duration(pbProjectFields.ClientDeactivateThreshold)
 	}
 
 	return updatableProjectFields, nil

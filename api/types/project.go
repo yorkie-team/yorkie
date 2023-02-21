@@ -37,6 +37,10 @@ type Project struct {
 	// AuthWebhookMethods is the methods that run the authorization webhook.
 	AuthWebhookMethods []string `json:"auth_webhook_methods"`
 
+	// ClientDeactivateThreshold is the time after which clients in
+	// specific project are considered deactivate for housekeeping.
+	ClientDeactivateThreshold time.Duration `bson:"client_deactivate_threshold"`
+
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`
 

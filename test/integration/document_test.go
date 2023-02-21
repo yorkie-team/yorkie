@@ -157,4 +157,42 @@ func TestDocument(t *testing.T) {
 
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
+
+	t.Run("document tombstone test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(key.Key(t.Name()))
+		err := d1.Update(func(root *json.Object) error {
+			root.SetNewArray("k1").AddInteger(1, 2)
+			return nil
+		})
+		assert.NoError(t, err)
+
+		err = c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(key.Key(t.Name()))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d1.Update(func(root *json.Object) error {
+			root.GetArray("k1").AddInteger(3)
+			return nil
+		})
+		assert.NoError(t, err)
+
+		prevArray := d1.Root().Get("k1")
+		assert.Nil(t, prevArray.RemovedAt())
+
+		err = d2.Update(func(root *json.Object) error {
+			root.SetNewArray("k1")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.NotNil(t, prevArray.RemovedAt())
+	})
 }

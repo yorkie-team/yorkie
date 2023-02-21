@@ -65,10 +65,11 @@ func TestMain(m *testing.M) {
 	}
 
 	be, err := backend.New(&backend.Config{
-		AdminUser:            helper.AdminUser,
-		AdminPassword:        helper.AdminPassword,
-		SnapshotThreshold:    helper.SnapshotThreshold,
-		AuthWebhookCacheSize: helper.AuthWebhookSize,
+		AdminUser:                 helper.AdminUser,
+		AdminPassword:             helper.AdminPassword,
+		ClientDeactivateThreshold: helper.ClientDeactivateThreshold.String(),
+		SnapshotThreshold:         helper.SnapshotThreshold,
+		AuthWebhookCacheSize:      helper.AuthWebhookSize,
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    helper.TestDBName(),
@@ -79,9 +80,8 @@ func TestMain(m *testing.M) {
 		DialTimeout:   helper.ETCDDialTimeout.String(),
 		LockLeaseTime: helper.ETCDLockLeaseTime.String(),
 	}, &housekeeping.Config{
-		Interval:            helper.HousekeepingInterval.String(),
-		DeactivateThreshold: helper.HousekeepingDeactivateThreshold.String(),
-		CandidatesLimit:     helper.HousekeepingCandidatesLimit,
+		Interval:                  helper.HousekeepingInterval.String(),
+		CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
 	}, testAdminAddr, met)
 	if err != nil {
 		log.Fatal(err)
