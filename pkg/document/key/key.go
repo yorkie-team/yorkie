@@ -36,7 +36,7 @@ func (k Key) String() string {
 	return string(k)
 }
 
-// Validate returns true if the key is valid.
+// Validate checks whether the key is valid or not.
 func (k Key) Validate() error {
 
 	err := validation.ValidateDynamically(k.String(), []any{

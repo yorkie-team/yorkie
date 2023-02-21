@@ -171,7 +171,7 @@ func TestServer() *server.Yorkie {
 	return y
 }
 
-func getDocumentKey(name string) string {
+func testDocumentKey(name string) string {
 	testDocumentKey := key.Key(name)
 	err := testDocumentKey.Validate()
 
@@ -212,10 +212,10 @@ func getDocumentKey(name string) string {
 
 // TestDocumentKey returns a new instance of document key for testing.
 func TestDocumentKey(t *testing.T) string {
-	return getDocumentKey(t.Name())
+	return testDocumentKey(t.Name())
 }
 
 // BenchDocumentKey returns a new instance of document key for benchmarking.
 func BenchDocumentKey(b *testing.B) string {
-	return getDocumentKey(b.Name())
+	return testDocumentKey(b.Name())
 }

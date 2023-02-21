@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Yorkie Authors. All rights reserved.
+ * Copyright 2023 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	// slugRegexString regular expression for key validation
+	// slugRegexString regular expression for slug validation.
 	slugRegexString = `^[a-z0-9\-._~]+$`
 )
 
@@ -172,7 +172,6 @@ func ValidateStruct(s interface{}) error {
 }
 
 func init() {
-	// register validation for key
 	RegisterValidation("slug", func(v validator.FieldLevel) bool {
 		if slugRegex.MatchString(v.Field().String()) == false {
 			return false
