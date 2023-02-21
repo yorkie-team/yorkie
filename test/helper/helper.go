@@ -20,16 +20,17 @@ package helper
 import (
 	"context"
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	key "github.com/yorkie-team/yorkie/pkg/document/key"
 	"log"
 	"strings"
 	"testing"
 	gotime "time"
 
+	"github.com/stretchr/testify/assert"
+
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	key "github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/admin"

@@ -46,8 +46,10 @@ var (
 	trans, _ = uni.GetTranslator(defaultEn.Locale()) //
 )
 
+// CustomRuleFunc custom rule check function
 type CustomRuleFunc func(fl validator.FieldLevel) bool
 
+// CustomRule is the custom rule struct
 type CustomRule struct {
 	Tag  string
 	Func CustomRuleFunc
