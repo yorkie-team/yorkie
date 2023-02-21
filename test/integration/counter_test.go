@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestCounter(t *testing.T) {
@@ -38,7 +39,7 @@ func TestCounter(t *testing.T) {
 
 	t.Run("causal counter.increase test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := "causal-counter-test"
+		testDocumentKey := helper.TestDocumentKey(t)
 		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
@@ -63,7 +64,7 @@ func TestCounter(t *testing.T) {
 
 	t.Run("concurrent counter increase test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := "counter-increase-test"
+		testDocumentKey := helper.TestDocumentKey(t)
 		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)

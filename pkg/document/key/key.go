@@ -19,8 +19,7 @@ package key
 
 import (
 	"errors"
-
-	"github.com/yorkie-team/yorkie/pkg/validation"
+	"github.com/yorkie-team/yorkie/internal/validation"
 )
 
 var (
@@ -38,7 +37,14 @@ func (k Key) String() string {
 
 // Validate returns true if the key is valid.
 func (k Key) Validate() error {
-	err := validation.ValidateValue(k.String(), "required,slug,min=4,max=30")
+
+	err := validation.ValidateDynamically(k.String(), []any{
+		"required",
+		"slug",
+		"min=4",
+		"max=30",
+	})
+
 	if err != nil {
 		return ErrInvalidKey
 	}

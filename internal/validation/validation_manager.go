@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/go-playground/locales/en"
 	ut "github.com/go-playground/universal-translator"
@@ -45,17 +46,37 @@ var (
 	trans, _ = uni.GetTranslator(defaultEn.Locale()) //
 )
 
+type CustomRuleFunc func(fl validator.FieldLevel) bool
+
+type CustomRule struct {
+	Tag  string
+	Func CustomRuleFunc
+	Err  error
+}
+
 // ValidError is the error returned by the validation
 type ValidError struct {
-	Tag string
-	Err error
+	Tag   string
+	Field string
+	Err   error
+	Trans string
+}
+
+// StructError is the error list
+type StructError struct {
+	Violations []ValidError
+}
+
+func (s StructError) Error() string {
+	return "invalid fields"
 }
 
 func (e ValidError) Error() string {
-	panic(e.Err.Error())
+	return e.Err.Error()
 }
 
-func registerValidation(tag string, fn func(fl validator.FieldLevel) bool) {
+// RegisterValidation register validation rule
+func RegisterValidation(tag string, fn func(fl validator.FieldLevel) bool) {
 	if err := defaultValidator.RegisterValidation(
 		tag,
 		fn,
@@ -64,7 +85,8 @@ func registerValidation(tag string, fn func(fl validator.FieldLevel) bool) {
 	}
 }
 
-func registerTranslation(tag, msg string) {
+// RegisterTranslation set to register validation rule translation
+func RegisterTranslation(tag string, msg string) {
 	if err := defaultValidator.RegisterTranslation(tag, trans, func(ut ut.Translator) error {
 		if err := ut.Add(tag, msg, true); err != nil {
 			return fmt.Errorf("add translation: %w", err)
@@ -84,8 +106,9 @@ func ValidateValue(v interface{}, tag string) error {
 		for _, e := range err.(validator.ValidationErrors) {
 
 			return ValidError{
-				Tag: e.Tag(),
-				Err: e,
+				Tag:   e.Tag(),
+				Err:   e,
+				Trans: e.Translate(trans),
 			}
 		}
 	}
@@ -93,9 +116,62 @@ func ValidateValue(v interface{}, tag string) error {
 	return nil
 }
 
+// ValidateDynamically validate value by dynamically rule
+func ValidateDynamically(v interface{}, tag []interface{}) error {
+	var tags []string
+	var customTags []string
+
+	for i, v := range tag {
+		switch v.(type) {
+		case string:
+			tags = append(tags, fmt.Sprintf("%v", v))
+		case CustomRule:
+
+			var NewCustomRule = v.(CustomRule)
+			var NewCustomRuleTag = fmt.Sprintf("custom_key_%v", i)
+
+			if NewCustomRule.Tag != "" {
+				NewCustomRuleTag = NewCustomRule.Tag
+			} else {
+				customTags = append(customTags, NewCustomRuleTag)
+			}
+
+			if NewCustomRule.Func != nil {
+				RegisterValidation(NewCustomRuleTag, NewCustomRule.Func)
+			}
+
+			if NewCustomRule.Err != nil {
+				RegisterTranslation(NewCustomRuleTag, NewCustomRule.Err.Error())
+			}
+
+			tags = append(tags, NewCustomRuleTag)
+		}
+	}
+
+	err := ValidateValue(v, strings.Join(tags, ","))
+
+	return err
+
+}
+
+// ValidateStruct validates the struct
+func ValidateStruct(s interface{}) error {
+	if err := defaultValidator.Struct(s); err != nil {
+		for _, e := range err.(validator.ValidationErrors) {
+			return ValidError{
+				Tag:   e.Tag(),
+				Field: e.StructField(),
+				Err:   e,
+				Trans: e.Translate(trans),
+			}
+		}
+	}
+	return nil
+}
+
 func init() {
 	// register validation for key
-	registerValidation("slug", func(v validator.FieldLevel) bool {
+	RegisterValidation("slug", func(v validator.FieldLevel) bool {
 		if slugRegex.MatchString(v.Field().String()) == false {
 			return false
 		}
@@ -103,5 +179,5 @@ func init() {
 		return true
 	})
 
-	registerTranslation("slug", ErrKeyInvalid.Error())
+	RegisterTranslation("slug", ErrKeyInvalid.Error())
 }

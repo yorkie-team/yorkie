@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"io"
 	"sync"
 	"testing"
@@ -29,7 +28,9 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestDocument(t *testing.T) {
@@ -39,7 +40,7 @@ func TestDocument(t *testing.T) {
 
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := "attach-detach-test"
+		testDocumentKey := helper.TestDocumentKey(t)
 		doc := document.New(key.Key(testDocumentKey))
 		err := doc.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
@@ -69,7 +70,7 @@ func TestDocument(t *testing.T) {
 
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := "concurrent-complex"
+		testDocumentKey := helper.TestDocumentKey(t)
 		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
@@ -108,7 +109,7 @@ func TestDocument(t *testing.T) {
 
 	t.Run("watch document changed event test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := "watch-document-changed"
+		testDocumentKey := helper.TestDocumentKey(t)
 		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)

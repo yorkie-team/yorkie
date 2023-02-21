@@ -56,7 +56,7 @@ func TestSnapshot(t *testing.T) {
 	t.Run("snapshot test", func(t *testing.T) {
 		ctx := context.Background()
 
-		testDocumentKey := "snapshot-test"
+		testDocumentKey := helper.TestDocumentKey(t)
 		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
@@ -93,7 +93,7 @@ func TestSnapshot(t *testing.T) {
 	t.Run("text snapshot test", func(t *testing.T) {
 		ctx := context.Background()
 
-		testDocumentKey := "text-snapshot-test"
+		testDocumentKey := helper.TestDocumentKey(t)
 		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
@@ -139,7 +139,7 @@ func TestSnapshot(t *testing.T) {
 	t.Run("text snapshot with concurrent local change test", func(t *testing.T) {
 		ctx := context.Background()
 
-		testDocumentKey := "text-snapshot-concurrent"
+		testDocumentKey := helper.TestDocumentKey(t)
 		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)

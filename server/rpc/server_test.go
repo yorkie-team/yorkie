@@ -283,7 +283,7 @@ func TestRPCServerBackend(t *testing.T) {
 	})
 
 	t.Run("push/pull changes test", func(t *testing.T) {
-		testDocumentKey := "push-pull-changes-test"
+		testDocumentKey := helper.TestDocumentKey(t)
 		packWithNoChanges := &api.ChangePack{
 			DocumentKey: testDocumentKey,
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},

@@ -199,7 +199,7 @@ func BenchmarkRPC(b *testing.B) {
 
 		ctx := context.Background()
 
-		testDocumentKey := "client-to-client"
+		testDocumentKey := helper.BenchDocumentKey(b)
 		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(b, err)
@@ -266,7 +266,7 @@ func BenchmarkRPC(b *testing.B) {
 				defer cleanupClients(b, clients)
 
 				ctx := context.Background()
-				testDocumentKey := "attach-large-document"
+				testDocumentKey := helper.BenchDocumentKey(b)
 				doc1 := document.New(key.Key(testDocumentKey))
 				doc2 := document.New(key.Key(testDocumentKey))
 

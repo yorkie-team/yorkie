@@ -84,7 +84,7 @@ func TestRetention(t *testing.T) {
 
 		ctx := context.Background()
 
-		testDocumentKey := "history-test-with-purging"
+		testDocumentKey := helper.TestDocumentKey(t)
 		doc := document.New(key.Key(testDocumentKey))
 		assert.NoError(t, cli.Attach(ctx, doc))
 		defer func() { assert.NoError(t, cli.Detach(ctx, doc)) }()
@@ -148,7 +148,7 @@ func TestRetention(t *testing.T) {
 
 		ctx := context.Background()
 
-		testDocumentKey := "snapshot-with-purging-test"
+		testDocumentKey := helper.TestDocumentKey(t)
 		d1 := document.New(key.Key(testDocumentKey))
 		assert.NoError(t, cli1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, cli1.Detach(ctx, d1)) }()

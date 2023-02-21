@@ -20,10 +20,12 @@ package helper
 import (
 	"context"
 	"fmt"
-	"log"
-	gotime "time"
-
 	"github.com/stretchr/testify/assert"
+	key "github.com/yorkie-team/yorkie/pkg/document/key"
+	"log"
+	"strings"
+	"testing"
+	gotime "time"
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -70,6 +72,9 @@ var (
 	ETCDEndpoints     = []string{"localhost:2379"}
 	ETCDDialTimeout   = 5 * gotime.Second
 	ETCDLockLeaseTime = 30 * gotime.Second
+
+	// TestCounter is used to generate unique keys for testing.
+	testCounter = 0
 )
 
 func init() {
@@ -163,4 +168,53 @@ func TestServer() *server.Yorkie {
 		log.Fatal(err)
 	}
 	return y
+}
+
+func getDocumentKey(name string) string {
+	testDocumentKey := key.Key(name)
+	err := testDocumentKey.Validate()
+
+	if err == nil {
+		return name
+	}
+
+	if len(name) > 30 {
+		name = name[:30]
+	}
+
+	maxLength := len(name)
+
+	if maxLength > 29 {
+		maxLength = 29
+	}
+
+	// add unique key string to the start of the name
+	name = fmt.Sprintf("%v%s", testCounter%10, name[:maxLength])
+
+	testCounter++
+
+	sb := strings.Builder{}
+	for _, c := range name {
+		if c >= 'A' && c <= 'Z' {
+			sb.WriteRune(c + ('a' - 'A'))
+		} else if c >= 'a' && c <= 'z' {
+			sb.WriteRune(c)
+		} else if c >= '0' && c <= '9' {
+			sb.WriteRune(c)
+		} else {
+			sb.WriteRune('-')
+		}
+	}
+
+	return sb.String()
+}
+
+// TestDocumentKey returns a new instance of document key for testing.
+func TestDocumentKey(t *testing.T) string {
+	return getDocumentKey(t.Name())
+}
+
+// BenchDocumentKey returns a new instance of document key for benchmarking.
+func BenchDocumentKey(b *testing.B) string {
+	return getDocumentKey(b.Name())
 }
