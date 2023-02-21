@@ -38,14 +38,15 @@ import (
 // errorToCode maps an error to gRPC status code.
 var errorToCode = map[error]codes.Code{
 	// InvalidArgument means the request is malformed.
-	converter.ErrPackRequired:       codes.InvalidArgument,
-	converter.ErrCheckpointRequired: codes.InvalidArgument,
-	time.ErrInvalidHexString:        codes.InvalidArgument,
-	time.ErrInvalidActorID:          codes.InvalidArgument,
-	types.ErrInvalidID:              codes.InvalidArgument,
-	clients.ErrInvalidClientID:      codes.InvalidArgument,
-	clients.ErrInvalidClientKey:     codes.InvalidArgument,
-	types.ErrEmptyProjectFields:     codes.InvalidArgument,
+	converter.ErrPackRequired:             codes.InvalidArgument,
+	converter.ErrCheckpointRequired:       codes.InvalidArgument,
+	database.ErrInvalidTimeDurationString: codes.InvalidArgument,
+	time.ErrInvalidHexString:              codes.InvalidArgument,
+	time.ErrInvalidActorID:                codes.InvalidArgument,
+	types.ErrInvalidID:                    codes.InvalidArgument,
+	clients.ErrInvalidClientID:            codes.InvalidArgument,
+	clients.ErrInvalidClientKey:           codes.InvalidArgument,
+	types.ErrEmptyProjectFields:           codes.InvalidArgument,
 
 	converter.ErrPackRequired:             codes.InvalidArgument,
 	converter.ErrCheckpointRequired:       codes.InvalidArgument,
