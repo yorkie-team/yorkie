@@ -59,6 +59,7 @@ test: ## runs integration tests that require local applications such as MongoDB
 	go test -tags integration -race ./...
 
 bench: ## runs benchmark tests
+	rm -f pipe output.txt mem.prof cpu.prof bench.test
 	mkfifo pipe
 	tee output.txt < pipe &
 	go test -tags bench -benchmem -bench=. ./test/bench -memprofile=mem.prof -cpuprofile=cpu.prof > pipe

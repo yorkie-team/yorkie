@@ -18,7 +18,7 @@
 package types
 
 import (
-	"github.com/go-playground/validator/v10"
+	"github.com/yorkie-team/yorkie/internal/validation"
 )
 
 // SignupFields is a set of fields that use to sign up to yorkie server.
@@ -32,17 +32,5 @@ type SignupFields struct {
 
 // Validate validates the SignupFields.
 func (i *SignupFields) Validate() error {
-	if err := defaultValidator.Struct(i); err != nil {
-		invalidFieldsError := &InvalidFieldsError{}
-		for _, err := range err.(validator.ValidationErrors) {
-			v := &FieldViolation{
-				Field:       err.StructField(),
-				Description: err.Translate(trans),
-			}
-			invalidFieldsError.Violations = append(invalidFieldsError.Violations, v)
-		}
-		return invalidFieldsError
-	}
-
-	return nil
+	return validation.ValidateStruct(i)
 }
