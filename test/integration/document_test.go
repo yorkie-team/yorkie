@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"io"
 	"sync"
 	"testing"
@@ -29,7 +28,9 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestDocument(t *testing.T) {
@@ -39,7 +40,7 @@ func TestDocument(t *testing.T) {
 
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
-		doc := document.New(key.Key(t.Name()))
+		doc := document.New(key.Key(helper.TestDocKey(t)))
 		err := doc.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
 			return nil
@@ -54,7 +55,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 
-		doc2 := document.New(key.Key(t.Name()))
+		doc2 := document.New(key.Key(helper.TestDocKey(t)))
 		err = doc2.Update(func(root *json.Object) error {
 			root.SetString("k1", "v2")
 			return nil
@@ -64,16 +65,19 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, doc2.IsAttached())
 		assert.Equal(t, `{"k1":"v2"}`, doc2.Marshal())
+
+		doc3 := document.New(key.Key("invalid$key"))
+		err = c1.Attach(ctx, doc3)
+		assert.Error(t, err)
 	})
 
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -107,12 +111,11 @@ func TestDocument(t *testing.T) {
 
 	t.Run("watch document changed event test", func(t *testing.T) {
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -159,7 +162,7 @@ func TestDocument(t *testing.T) {
 	t.Run("document tombstone test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(t.Name()))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		err := d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddInteger(1, 2)
 			return nil
@@ -169,7 +172,7 @@ func TestDocument(t *testing.T) {
 		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

@@ -82,8 +82,8 @@ func withTwoClientsAndDocsInClusterMode(
 		assert.NoError(t, client2.Close())
 	}()
 
-	doc1 := document.New(key.Key(t.Name()))
-	doc2 := document.New(key.Key(t.Name()))
+	doc1 := document.New(key.Key(helper.TestDocKey(t)))
+	doc2 := document.New(key.Key(helper.TestDocKey(t)))
 
 	assert.NoError(t, client1.Attach(ctx, doc1))
 	assert.NoError(t, client2.Attach(ctx, doc2))

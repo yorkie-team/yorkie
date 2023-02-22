@@ -84,7 +84,7 @@ func TestRetention(t *testing.T) {
 
 		ctx := context.Background()
 
-		doc := document.New(key.Key(t.Name()))
+		doc := document.New(key.Key(helper.TestDocKey(t)))
 		assert.NoError(t, cli.Attach(ctx, doc))
 		defer func() { assert.NoError(t, cli.Detach(ctx, doc)) }()
 
@@ -118,9 +118,9 @@ func TestRetention(t *testing.T) {
 		assert.Len(t, changes2, 0)
 	})
 
-	t.Run("snapshot with purging chagnes test", func(t *testing.T) {
+	t.Run("snapshot with purging changes test", func(t *testing.T) {
 		serverConfig := helper.TestConfig()
-		// Default SnapshotInterval is 0, SnashotThreshold must also be 0
+		// Default SnapshotInterval is 0, SnapshotThreshold must also be 0
 		serverConfig.Backend.SnapshotThreshold = 0
 		serverConfig.Backend.SnapshotWithPurgingChanges = true
 		testServer, err := server.New(serverConfig)
@@ -146,8 +146,7 @@ func TestRetention(t *testing.T) {
 		}()
 
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		assert.NoError(t, cli1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, cli1.Detach(ctx, d1)) }()
 
@@ -222,7 +221,7 @@ func TestRetention(t *testing.T) {
 			assert.NoError(t, cli2.Close())
 		}()
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		assert.NoError(t, cli2.Attach(ctx, d2))
 		defer func() { assert.NoError(t, cli2.Detach(ctx, d2)) }()
 

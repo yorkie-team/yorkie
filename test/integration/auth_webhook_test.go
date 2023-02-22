@@ -116,7 +116,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		assert.NoError(t, cli.Activate(ctx))
 		defer func() { assert.NoError(t, cli.Deactivate(ctx)) }()
 
-		doc := document.New(key.Key(t.Name()))
+		doc := document.New(key.Key(helper.TestDocKey(t)))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		// client without token
@@ -172,7 +172,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc := document.New(key.Key(t.Name()))
+		doc := document.New(key.Key(helper.TestDocKey(t)))
 		err = cli.Attach(ctx, doc)
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 
@@ -222,7 +222,7 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc := document.New(key.Key(t.Name()))
+		doc := document.New(key.Key(helper.TestDocKey(t)))
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
 	})
@@ -317,7 +317,7 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc := document.New(key.Key(t.Name()))
+		doc := document.New(key.Key(helper.TestDocKey(t)))
 		err = cli.Attach(ctx, doc)
 		assert.NoError(t, err)
 

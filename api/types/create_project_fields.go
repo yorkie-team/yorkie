@@ -18,7 +18,12 @@
 package types
 
 import (
-	"github.com/go-playground/validator/v10"
+	"github.com/yorkie-team/yorkie/internal/validation"
+)
+
+var (
+	// reservedProjectNames is a map of reserved project names.
+	reservedProjectNames = map[string]bool{"new": true, "default": true}
 )
 
 // CreateProjectFields is a set of fields that use to create a project.
@@ -29,17 +34,14 @@ type CreateProjectFields struct {
 
 // Validate validates the CreateProjectFields.
 func (i *CreateProjectFields) Validate() error {
-	if err := defaultValidator.Struct(i); err != nil {
-		invalidFieldsError := &InvalidFieldsError{}
-		for _, err := range err.(validator.ValidationErrors) {
-			v := &FieldViolation{
-				Field:       err.StructField(),
-				Description: err.Translate(trans),
-			}
-			invalidFieldsError.Violations = append(invalidFieldsError.Violations, v)
-		}
-		return invalidFieldsError
-	}
+	return validation.ValidateStruct(i)
+}
 
-	return nil
+func init() {
+	validation.RegisterValidation("reserved_project_name", func(level validation.FieldLevel) bool {
+		_, ok := reservedProjectNames[level.Field().String()]
+		return !ok
+	})
+
+	validation.RegisterTranslation("reserved_project_name", "given {0} is reserved name")
 }

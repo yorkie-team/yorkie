@@ -20,7 +20,7 @@ package types
 import (
 	"errors"
 
-	"github.com/go-playground/validator/v10"
+	"github.com/yorkie-team/yorkie/internal/validation"
 )
 
 // ErrEmptyProjectFields is returned when all the fields are empty.
@@ -47,17 +47,18 @@ func (i *UpdatableProjectFields) Validate() error {
 		return ErrEmptyProjectFields
 	}
 
-	if err := defaultValidator.Struct(i); err != nil {
-		invalidFieldsError := &InvalidFieldsError{}
-		for _, err := range err.(validator.ValidationErrors) {
-			v := &FieldViolation{
-				Field:       err.StructField(),
-				Description: err.Translate(trans),
-			}
-			invalidFieldsError.Violations = append(invalidFieldsError.Violations, v)
-		}
-		return invalidFieldsError
-	}
+	return validation.ValidateStruct(i)
+}
 
-	return nil
+func init() {
+	validation.RegisterValidation("invalid_webhook_method", func(level validation.FieldLevel) bool {
+		methods := level.Field().Interface().([]string)
+		for _, method := range methods {
+			if !IsAuthMethod(method) {
+				return false
+			}
+		}
+		return true
+	})
+	validation.RegisterTranslation("invalid_webhook_method", "given {0} is invalid method")
 }

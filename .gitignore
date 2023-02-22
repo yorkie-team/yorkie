@@ -56,6 +56,7 @@ binaries
 
 # pprof output
 *.prof
+output.txt
 
 # protoset output
 *.protoset

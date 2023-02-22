@@ -27,6 +27,8 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/internal/validation"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
@@ -37,15 +39,15 @@ import (
 // errorToCode maps an error to gRPC status code.
 var errorToCode = map[error]codes.Code{
 	// InvalidArgument means the request is malformed.
-	converter.ErrPackRequired:             codes.InvalidArgument,
-	converter.ErrCheckpointRequired:       codes.InvalidArgument,
-	database.ErrInvalidTimeDurationString: codes.InvalidArgument,
-	time.ErrInvalidHexString:              codes.InvalidArgument,
-	time.ErrInvalidActorID:                codes.InvalidArgument,
-	types.ErrInvalidID:                    codes.InvalidArgument,
-	clients.ErrInvalidClientID:            codes.InvalidArgument,
-	clients.ErrInvalidClientKey:           codes.InvalidArgument,
-	types.ErrEmptyProjectFields:           codes.InvalidArgument,
+	converter.ErrPackRequired:       codes.InvalidArgument,
+	converter.ErrCheckpointRequired: codes.InvalidArgument,
+	time.ErrInvalidHexString:        codes.InvalidArgument,
+	time.ErrInvalidActorID:          codes.InvalidArgument,
+	types.ErrInvalidID:              codes.InvalidArgument,
+	clients.ErrInvalidClientID:      codes.InvalidArgument,
+	clients.ErrInvalidClientKey:     codes.InvalidArgument,
+	key.ErrInvalidKey:               codes.InvalidArgument,
+	types.ErrEmptyProjectFields:     codes.InvalidArgument,
 
 	// NotFound means the requested resource does not exist.
 	database.ErrProjectNotFound:  codes.NotFound,
@@ -80,7 +82,7 @@ var errorToCode = map[error]codes.Code{
 }
 
 func detailsFromError(err error) (protoiface.MessageV1, bool) {
-	invalidFieldsError, ok := err.(*types.InvalidFieldsError)
+	invalidFieldsError, ok := err.(*validation.StructError)
 	if !ok {
 		return nil, false
 	}
@@ -111,7 +113,7 @@ func ToStatusError(err error) error {
 
 	// NOTE(hackerwins): InvalidFieldsError has details of invalid fields in
 	// the error message.
-	var invalidFieldsError *types.InvalidFieldsError
+	var invalidFieldsError *validation.StructError
 	if errors.As(err, &invalidFieldsError) {
 		st := status.New(codes.InvalidArgument, err.Error())
 		if details, ok := detailsFromError(err); ok {
