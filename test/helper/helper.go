@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"testing"
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
@@ -171,7 +172,7 @@ func TestServer() *server.Yorkie {
 }
 
 // TestDocumentKey returns a new instance of document key for testing.
-func TestDocumentKey(t interface{ Name() string }) string {
+func TestDocumentKey(t testing.TB) string {
 	name := t.Name()
 	if err := key.Key(name).Validate(); err == nil {
 		return name

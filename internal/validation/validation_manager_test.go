@@ -17,58 +17,27 @@ package validation
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestValidationManager_Validate(t *testing.T) {
-	t.Run("use ValidationManager to validate value", func(t *testing.T) {
-
+func TestValidation(t *testing.T) {
+	t.Run("ValidateValue test", func(t *testing.T) {
 		err := ValidateValue("valid-key", "required,slug,min=4,max=30")
+		assert.Nil(t, err, "valid key")
 
-		assert.Nil(t, err, "key should be valid")
+		err = ValidateValue("invalid key", "required,slug,min=4,max=30")
+		assert.Equal(t, err.(Violation).Tag, "slug")
+
+		err = ValidateValue("invalid-key-~$a", "required,slug,min=4,max=30")
+		assert.Equal(t, err.(Violation).Tag, "slug")
+
+		err = ValidateValue("invalid-key-$-wrong-string-value", "required,slug,min=4,max=30")
+		assert.Equal(t, err.(Violation).Tag, "slug")
 	})
 
-	t.Run("use ValidationManager to validate value", func(t *testing.T) {
-
-		err := ValidateValue("invalid key", "required,slug,min=4,max=30")
-
-		assert.NotNil(t, err, "key should be invalid")
-	})
-
-	t.Run("use ValidationManager to validate value", func(t *testing.T) {
-
-		err := ValidateValue("invalid-key-~$a", "required,slug,min=4,max=30")
-
-		assert.NotNil(t, err, "key should be invalid")
-	})
-
-	t.Run("use ValidationManager to validate value", func(t *testing.T) {
-
-		err := ValidateValue("invalid-key-$-wrong-string-value", "required,slug,min=4,max=30")
-
-		assert.NotNil(t, err, "key should be invalid")
-	})
-
-	t.Run("invalid value", func(t *testing.T) {
-
-		err := ValidateValue("invalid-key-$-wrong-string-value", "required,slug,min=4,max=30")
-
-		switch err.(Violation).Tag {
-		case "slug":
-			fmt.Println("slug error")
-		case "max":
-			fmt.Println("max error")
-		case "min":
-			fmt.Println("min error")
-		}
-
-		assert.NotNil(t, err, "key should be invalid")
-	})
-
-	t.Run("invalid struct value", func(t *testing.T) {
+	t.Run("ValidateStruct test", func(t *testing.T) {
 		type User struct {
 			Name    string `validate:"required,slug,min=4,max=30"`
 			Country string `validate:"required,min=2,max=2"`
@@ -81,7 +50,7 @@ func TestValidationManager_Validate(t *testing.T) {
 		assert.Len(t, structError.Violations, 2, "user should be invalid")
 	})
 
-	t.Run("add custom rule", func(t *testing.T) {
+	t.Run("custom rule test", func(t *testing.T) {
 		// register custom rule tag and validation function
 		RegisterValidation("custom", func(v FieldLevel) bool {
 			return v.Field().String() == "custom"
@@ -96,7 +65,7 @@ func TestValidationManager_Validate(t *testing.T) {
 		assert.NotNil(t, err, "value is must 'custom' string")
 	})
 
-	t.Run("simple custom rule", func(t *testing.T) {
+	t.Run("tag and custom rule mix test", func(t *testing.T) {
 		err := Validate(
 			"invalid custom rule",
 			[]any{
@@ -109,12 +78,9 @@ func TestValidationManager_Validate(t *testing.T) {
 				},
 			},
 		)
-
 		assert.Equal(t, "custom", err.(Violation).Tag, "value is must 'custom' string")
-	})
 
-	t.Run("custom rule with error message", func(t *testing.T) {
-		err := Validate(
+		err = Validate(
 			"invalid custom rule",
 			[]interface{}{
 				"required",
@@ -122,17 +88,6 @@ func TestValidationManager_Validate(t *testing.T) {
 				"max=10",
 			},
 		)
-		if err != nil {
-			switch err.(Violation).Tag {
-			case "min":
-				fmt.Println("min error")
-			case "max":
-				fmt.Println("max error")
-			case "required":
-				fmt.Println("required error")
-			}
-		}
-
 		assert.Equal(t, "max", err.(Violation).Tag, "value is must 'custom' string")
 	})
 }
