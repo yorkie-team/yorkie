@@ -25,7 +25,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -109,7 +108,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 		for _, m := range types.AuthMethods() {
 			authWebhookMethods = append(authWebhookMethods, string(m))
 		}
-		clientDeactivateThreshold := 1 * time.Hour
+		clientDeactivateThreshold := "1h"
 
 		_, err := adminCli.UpdateProject(
 			ctx,
@@ -118,7 +117,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 				Name:                      &name,
 				AuthWebhookURL:            &authWebhookURL,
 				AuthWebhookMethods:        &authWebhookMethods,
-				ClientDeactivateThreshold: clientDeactivateThreshold,
+				ClientDeactivateThreshold: &clientDeactivateThreshold,
 			},
 		)
 		assert.NoError(b, err)

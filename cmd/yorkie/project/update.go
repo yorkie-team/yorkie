@@ -32,8 +32,9 @@ import (
 )
 
 var (
-	flagAuthWebhookURL string
-	flagName           string
+	flagAuthWebhookURL            string
+	flagName                      string
+	flagClientDeactivateThreshold string
 )
 
 func newUpdateCommand() *cobra.Command {
@@ -78,9 +79,15 @@ func newUpdateCommand() *cobra.Command {
 				newAuthWebhookURL = flagAuthWebhookURL
 			}
 
+			newClientDeactivateThreshold := project.ClientDeactivateThreshold
+			if flagClientDeactivateThreshold != "" {
+				newClientDeactivateThreshold = flagClientDeactivateThreshold
+			}
+
 			updatableProjectFields := &types.UpdatableProjectFields{
-				Name:           &newName,
-				AuthWebhookURL: &newAuthWebhookURL,
+				Name:                      &newName,
+				AuthWebhookURL:            &newAuthWebhookURL,
+				ClientDeactivateThreshold: &newClientDeactivateThreshold,
 			}
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)
@@ -124,6 +131,12 @@ func init() {
 		"auth-webhook-url",
 		"",
 		"authorization-webhook update url",
+	)
+	cmd.Flags().StringVar(
+		&flagClientDeactivateThreshold,
+		"client-deactivate-threshold",
+		"",
+		"client deactivate threshold for housekeeping",
 	)
 	SubCmd.AddCommand(cmd)
 }

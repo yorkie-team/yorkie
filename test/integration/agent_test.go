@@ -44,7 +44,8 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(key.Key("closing-watch-document-stream"))
+		testDocumentKey := helper.TestDocumentKey(t)
+		doc := document.New(key.Key(testDocumentKey))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		wg := sync.WaitGroup{}

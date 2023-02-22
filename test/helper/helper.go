@@ -58,7 +58,7 @@ var (
 	HousekeepingInterval                  = 1 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 
-	ClientDeactivateThreshold  = 10 * gotime.Second
+	ClientDeactivateThreshold  = "10s"
 	SnapshotThreshold          = int64(10)
 	SnapshotWithPurgingChanges = false
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
@@ -140,7 +140,7 @@ func TestConfig() *server.Config {
 			SecretKey:                  server.DefaultSecretKey,
 			AdminTokenDuration:         server.DefaultAdminTokenDuration.String(),
 			UseDefaultProject:          true,
-			ClientDeactivateThreshold:  server.DefaultClientDeactivateThreshold.String(),
+			ClientDeactivateThreshold:  server.DefaultClientDeactivateThreshold,
 			SnapshotThreshold:          SnapshotThreshold,
 			SnapshotWithPurgingChanges: SnapshotWithPurgingChanges,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),

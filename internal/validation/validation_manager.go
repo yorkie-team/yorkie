@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	// slugRegexString regular expression for slug validation.
+	// slugRegexString regular expression for slug validation
 	slugRegexString = `^[a-z0-9\-._~]+$`
 )
 

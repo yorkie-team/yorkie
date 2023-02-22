@@ -18,7 +18,6 @@ package converter
 
 import (
 	"fmt"
-	gotime "time"
 
 	protoTypes "github.com/gogo/protobuf/types"
 
@@ -69,12 +68,13 @@ func FromProject(pbProject *api.Project) (*types.Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("convert updatedAt to timestamp: %w", err)
 	}
+
 	return &types.Project{
 		ID:                        types.ID(pbProject.Id),
 		Name:                      pbProject.Name,
 		AuthWebhookURL:            pbProject.AuthWebhookUrl,
 		AuthWebhookMethods:        pbProject.AuthWebhookMethods,
-		ClientDeactivateThreshold: gotime.Duration(pbProject.ClientDeactivateThreshold),
+		ClientDeactivateThreshold: pbProject.ClientDeactivateThreshold,
 		PublicKey:                 pbProject.PublicKey,
 		SecretKey:                 pbProject.SecretKey,
 		CreatedAt:                 createdAt,
@@ -665,8 +665,8 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	if pbProjectFields.AuthWebhookMethods != nil {
 		updatableProjectFields.AuthWebhookMethods = &pbProjectFields.AuthWebhookMethods.Methods
 	}
-	if pbProjectFields.ClientDeactivateThreshold != 0 {
-		updatableProjectFields.ClientDeactivateThreshold = gotime.Duration(pbProjectFields.ClientDeactivateThreshold)
+	if pbProjectFields.ClientDeactivateThreshold != nil {
+		updatableProjectFields.ClientDeactivateThreshold = &pbProjectFields.ClientDeactivateThreshold.Value
 	}
 
 	return updatableProjectFields, nil
