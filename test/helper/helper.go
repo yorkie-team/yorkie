@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"testing"
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
@@ -74,8 +73,8 @@ var (
 	ETCDDialTimeout   = 5 * gotime.Second
 	ETCDLockLeaseTime = 30 * gotime.Second
 
-	// TestCounter is used to generate unique keys for testing.
-	testCounter = 0
+	// documentKeyCounter is used to generate a unique document key.
+	documentKeyCounter = 0
 )
 
 func init() {
@@ -171,11 +170,10 @@ func TestServer() *server.Yorkie {
 	return y
 }
 
-func testDocumentKey(name string) string {
-	testDocumentKey := key.Key(name)
-	err := testDocumentKey.Validate()
-
-	if err == nil {
+// TestDocumentKey returns a new instance of document key for testing.
+func TestDocumentKey(t interface{ Name() string }) string {
+	name := t.Name()
+	if err := key.Key(name).Validate(); err == nil {
 		return name
 	}
 
@@ -190,9 +188,9 @@ func testDocumentKey(name string) string {
 	}
 
 	// add unique key string to the start of the name
-	name = fmt.Sprintf("%v%s", testCounter%10, name[:maxLength])
+	name = fmt.Sprintf("%d%s", documentKeyCounter%10, name[:maxLength])
 
-	testCounter++
+	documentKeyCounter++
 
 	sb := strings.Builder{}
 	for _, c := range name {
@@ -208,14 +206,4 @@ func testDocumentKey(name string) string {
 	}
 
 	return sb.String()
-}
-
-// TestDocumentKey returns a new instance of document key for testing.
-func TestDocumentKey(t *testing.T) string {
-	return testDocumentKey(t.Name())
-}
-
-// BenchDocumentKey returns a new instance of document key for benchmarking.
-func BenchDocumentKey(b *testing.B) string {
-	return testDocumentKey(b.Name())
 }

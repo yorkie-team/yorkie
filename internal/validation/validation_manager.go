@@ -18,7 +18,6 @@
 package validation
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -26,28 +25,76 @@ import (
 	"github.com/go-playground/locales/en"
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
+	entranslations "github.com/go-playground/validator/v10/translations/en"
 )
 
 const (
-	// slugRegexString regular expression for slug validation
-	slugRegexString = `^[a-z0-9\-._~]+$`
+	// NOTE(DongjinS): regular expression is referenced unreserved characters
+	// (https://datatracker.ietf.org/doc/html/rfc3986#section-2.3)
+	// and copied from https://gist.github.com/dpk/4757681
+	slugRegexString                   = `^[a-z0-9\-._~]+$`
+	containAlphaRegexString           = `[a-zA-Z]`
+	containNumberRegexString          = `[0-9]`
+	containSpecialCharRegexString     = `[\{\}\[\]\/?.,;:|\)*~!^\-_+<>@\#$%&\\\=\(\'\"\x60]`
+	alphaNumberSpecialCharRegexString = `^[a-zA-Z0-9\{\}\[\]\/?.,;:|\)*~!^\-_+<>@\#$%&\\\=\(\'\"\x60]+$`
+	timeDurationFormatRegexString     = `^(\d{1,2}h\s?)?(\d{1,2}m\s?)?(\d{1,2}s)?$`
 )
 
 var (
-	slugRegex = regexp.MustCompile(slugRegexString)
-
-	// ErrKeyInvalid is returned when the key is invalid
-	ErrKeyInvalid = errors.New("key should be alphanumeric, _, ., ~, ")
-
-	defaultValidator = validator.New()
-	defaultEn        = en.New()
-	uni              = ut.New(defaultEn, defaultEn)
-
-	trans, _ = uni.GetTranslator(defaultEn.Locale()) //
+	slugRegex                   = regexp.MustCompile(slugRegexString)
+	containAlphaRegex           = regexp.MustCompile(containAlphaRegexString)
+	containNumberRegex          = regexp.MustCompile(containNumberRegexString)
+	containSpecialCharRegex     = regexp.MustCompile(containSpecialCharRegexString)
+	alphaNumberSpecialCharRegex = regexp.MustCompile(alphaNumberSpecialCharRegexString)
+	timeDurationFormatRegex     = regexp.MustCompile(timeDurationFormatRegexString)
 )
 
-// CustomRuleFunc custom rule check function
-type CustomRuleFunc func(fl validator.FieldLevel) bool
+var (
+	// defaultValidator is the default validation instance that is used in this
+	// api package. In this package, some fields are provided by the user, and
+	// we need to validate them.
+	defaultValidator = validator.New()
+	// defaultEn is the default translator instance for the 'en' locale.
+	defaultEn = en.New()
+	// uni is the UniversalTranslator instance set with
+	// the fallback locale and locales it should support.
+	uni = ut.New(defaultEn, defaultEn)
+
+	// trans is the specified translator for the given locale,
+	// or fallback if not found.
+	trans, _ = uni.GetTranslator(defaultEn.Locale())
+)
+
+func hasAlphaNumSpecial(str string) bool {
+	isValid := true
+	// NOTE(chacha912): Re2 in Go doesn't support lookahead assertion(?!re)
+	// so iterate over the string to check if the regular expression is matching.
+	// https://github.com/golang/go/issues/18868
+	testRegexes := []*regexp.Regexp{
+		alphaNumberSpecialCharRegex,
+		containAlphaRegex,
+		containNumberRegex,
+		containSpecialCharRegex}
+
+	for _, regex := range testRegexes {
+		t := regex.MatchString(str)
+		if !t {
+			isValid = false
+			break
+		}
+	}
+	return isValid
+}
+
+func isValidTimeDurationStringFormat(str string) bool {
+	return timeDurationFormatRegex.MatchString(str)
+}
+
+// CustomRuleFunc custom rule check function.
+type CustomRuleFunc = validator.Func
+
+// FieldLevel is the field level interface.
+type FieldLevel = validator.FieldLevel
 
 // CustomRule is the custom rule struct
 type CustomRule struct {
@@ -56,39 +103,47 @@ type CustomRule struct {
 	Err  error
 }
 
-// ValidError is the error returned by the validation
-type ValidError struct {
+// Violation is the error returned by the validation
+type Violation struct {
 	Tag   string
 	Field string
 	Err   error
 	Trans string
 }
 
-// StructError is the error list
-type StructError struct {
-	Violations []ValidError
-}
-
-func (s StructError) Error() string {
-	return "invalid fields"
-}
-
-func (e ValidError) Error() string {
+// Error returns the error message.
+func (e Violation) Error() string {
 	return e.Err.Error()
 }
 
-// RegisterValidation register validation rule
-func RegisterValidation(tag string, fn func(fl validator.FieldLevel) bool) {
-	if err := defaultValidator.RegisterValidation(
-		tag,
-		fn,
-	); err != nil {
+// StructError is the error list
+type StructError struct {
+	Violations []Violation
+}
+
+// Error returns the error message.
+func (s StructError) Error() string {
+	sb := strings.Builder{}
+
+	for _, v := range s.Violations {
+		sb.WriteString(v.Error())
+		sb.WriteString("\n")
+	}
+
+	return strings.TrimSpace(sb.String())
+}
+
+// RegisterValidation is shortcut of defaultValidator.RegisterValidation
+// that register custom validation with given tag, and it can be used in init.
+func RegisterValidation(tag string, fn validator.Func) {
+	if err := defaultValidator.RegisterValidation(tag, fn); err != nil {
 		panic(err)
 	}
 }
 
-// RegisterTranslation set to register validation rule translation
-func RegisterTranslation(tag string, msg string) {
+// RegisterTranslation is shortcut of defaultValidator.RegisterTranslation
+// that registers translations against the provided tag with given msg.
+func RegisterTranslation(tag, msg string) {
 	if err := defaultValidator.RegisterTranslation(tag, trans, func(ut ut.Translator) error {
 		if err := ut.Add(tag, msg, true); err != nil {
 			return fmt.Errorf("add translation: %w", err)
@@ -106,8 +161,7 @@ func RegisterTranslation(tag string, msg string) {
 func ValidateValue(v interface{}, tag string) error {
 	if err := defaultValidator.Var(v, tag); err != nil {
 		for _, e := range err.(validator.ValidationErrors) {
-
-			return ValidError{
+			return Violation{
 				Tag:   e.Tag(),
 				Err:   e,
 				Trans: e.Translate(trans),
@@ -118,67 +172,83 @@ func ValidateValue(v interface{}, tag string) error {
 	return nil
 }
 
-// ValidateDynamically validate value by dynamically rule
-func ValidateDynamically(v interface{}, tag []interface{}) error {
-	var tags []string
-	var customTags []string
+// Validate validates the given string with tag.
+func Validate(v string, tagOrRules []interface{}) error {
+	sb := strings.Builder{}
 
-	for i, v := range tag {
-		switch v.(type) {
+	for i, tagOrRule := range tagOrRules {
+		if i != 0 {
+			sb.WriteString(",")
+		}
+
+		switch value := tagOrRule.(type) {
 		case string:
-			tags = append(tags, fmt.Sprintf("%v", v))
+			sb.WriteString(value)
 		case CustomRule:
-
-			var NewCustomRule = v.(CustomRule)
-			var NewCustomRuleTag = fmt.Sprintf("custom_key_%v", i)
-
-			if NewCustomRule.Tag != "" {
-				NewCustomRuleTag = NewCustomRule.Tag
-			} else {
-				customTags = append(customTags, NewCustomRuleTag)
+			var tag = fmt.Sprintf("custom_key_%d", i)
+			if value.Tag != "" {
+				tag = value.Tag
 			}
 
-			if NewCustomRule.Func != nil {
-				RegisterValidation(NewCustomRuleTag, NewCustomRule.Func)
+			if value.Func != nil {
+				RegisterValidation(tag, value.Func)
 			}
 
-			if NewCustomRule.Err != nil {
-				RegisterTranslation(NewCustomRuleTag, NewCustomRule.Err.Error())
+			if value.Err != nil {
+				RegisterTranslation(tag, value.Err.Error())
 			}
 
-			tags = append(tags, NewCustomRuleTag)
+			sb.WriteString(tag)
 		}
 	}
 
-	err := ValidateValue(v, strings.Join(tags, ","))
-
-	return err
-
+	return ValidateValue(v, sb.String())
 }
 
 // ValidateStruct validates the struct
 func ValidateStruct(s interface{}) error {
 	if err := defaultValidator.Struct(s); err != nil {
+		structError := &StructError{}
 		for _, e := range err.(validator.ValidationErrors) {
-			return ValidError{
+			structError.Violations = append(structError.Violations, Violation{
 				Tag:   e.Tag(),
 				Field: e.StructField(),
 				Err:   e,
 				Trans: e.Translate(trans),
-			}
+			})
 		}
+		return structError
 	}
+
 	return nil
 }
 
 func init() {
-	RegisterValidation("slug", func(v validator.FieldLevel) bool {
-		if slugRegex.MatchString(v.Field().String()) == false {
-			return false
-		}
+	if err := entranslations.RegisterDefaultTranslations(defaultValidator, trans); err != nil {
+		panic(err)
+	}
 
-		return true
+	RegisterValidation("slug", func(level validator.FieldLevel) bool {
+		val := level.Field().String()
+		return slugRegex.MatchString(val)
 	})
+	RegisterTranslation("slug", "{0} must only contain letters, numbers, hyphen, period, underscore, and tilde")
 
-	RegisterTranslation("slug", ErrKeyInvalid.Error())
+	RegisterValidation("alpha_num_special", func(level validator.FieldLevel) bool {
+		val := level.Field().String()
+		return hasAlphaNumSpecial(val)
+	})
+	RegisterTranslation("alpha_num_special", "{0} must include letters, numbers, and special characters")
+
+	RegisterValidation("emptystring", func(level validator.FieldLevel) bool {
+		val := level.Field().String()
+		return val == ""
+	})
+	RegisterTranslation("url|emptystring", "{0} must be a valid URL")
+
+	RegisterValidation("duration", func(level validator.FieldLevel) bool {
+		val := level.Field().String()
+		return isValidTimeDurationStringFormat(val)
+	})
+	RegisterTranslation("duration", "{0} must be a valid time duration string format")
 }

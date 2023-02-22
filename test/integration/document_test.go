@@ -66,6 +66,10 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, doc2.IsAttached())
 		assert.Equal(t, `{"k1":"v2"}`, doc2.Marshal())
+
+		doc3 := document.New(key.Key("invalid$key"))
+		err = c1.Attach(ctx, doc3)
+		assert.Error(t, err)
 	})
 
 	t.Run("concurrent complex test", func(t *testing.T) {

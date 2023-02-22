@@ -27,6 +27,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/internal/validation"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -81,7 +82,7 @@ var errorToCode = map[error]codes.Code{
 }
 
 func detailsFromError(err error) (protoiface.MessageV1, bool) {
-	invalidFieldsError, ok := err.(*types.InvalidFieldsError)
+	invalidFieldsError, ok := err.(*validation.StructError)
 	if !ok {
 		return nil, false
 	}
@@ -91,7 +92,7 @@ func detailsFromError(err error) (protoiface.MessageV1, bool) {
 	for _, violation := range violations {
 		v := &errdetails.BadRequest_FieldViolation{
 			Field:       violation.Field,
-			Description: violation.Description,
+			Description: violation.Trans,
 		}
 		br.FieldViolations = append(br.FieldViolations, v)
 	}
@@ -112,7 +113,7 @@ func ToStatusError(err error) error {
 
 	// NOTE(hackerwins): InvalidFieldsError has details of invalid fields in
 	// the error message.
-	var invalidFieldsError *types.InvalidFieldsError
+	var invalidFieldsError *validation.StructError
 	if errors.As(err, &invalidFieldsError) {
 		st := status.New(codes.InvalidArgument, err.Error())
 		if details, ok := detailsFromError(err); ok {

@@ -38,15 +38,12 @@ func (k Key) String() string {
 
 // Validate checks whether the key is valid or not.
 func (k Key) Validate() error {
-
-	err := validation.ValidateDynamically(k.String(), []any{
+	if err := validation.Validate(k.String(), []any{
 		"required",
 		"slug",
 		"min=4",
 		"max=30",
-	})
-
-	if err != nil {
+	}); err != nil {
 		return ErrInvalidKey
 	}
 

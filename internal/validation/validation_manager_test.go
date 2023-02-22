@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -57,7 +56,7 @@ func TestValidationManager_Validate(t *testing.T) {
 
 		err := ValidateValue("invalid-key-$-wrong-string-value", "required,slug,min=4,max=30")
 
-		switch err.(ValidError).Tag {
+		switch err.(Violation).Tag {
 		case "slug":
 			fmt.Println("slug error")
 		case "max":
@@ -70,60 +69,52 @@ func TestValidationManager_Validate(t *testing.T) {
 	})
 
 	t.Run("invalid struct value", func(t *testing.T) {
-
 		type User struct {
-			Name string `validate:"required,slug,min=4,max=30"`
+			Name    string `validate:"required,slug,min=4,max=30"`
+			Country string `validate:"required,min=2,max=2"`
 		}
 
-		user := User{Name: "invalid-key-$-wrong-string-value"}
+		user := User{Name: "invalid-key-$-wrong-string-value", Country: "korea"}
 
 		err := ValidateStruct(user)
-
-		fmt.Println(err.(ValidError).Field, err.(ValidError).Tag, err.(ValidError).Trans)
-
-		assert.NotNil(t, err, "key should be invalid")
-
+		structError := err.(*StructError)
+		assert.Len(t, structError.Violations, 2, "user should be invalid")
 	})
 
 	t.Run("add custom rule", func(t *testing.T) {
-
 		// register custom rule tag and validation function
-		RegisterValidation("custom", func(v validator.FieldLevel) bool {
-			if v.Field().String() != "custom" {
-				return false
-			}
-
-			return true
+		RegisterValidation("custom", func(v FieldLevel) bool {
+			return v.Field().String() == "custom"
 		})
 
 		// custom error message for custom rule
-		MyError := errors.New("custom error")
-		RegisterTranslation("custom", MyError.Error())
+		myError := errors.New("custom error")
+		RegisterTranslation("custom", myError.Error())
 
 		// validate value
 		err := ValidateValue("custom-invalid-value", "required,custom")
-
 		assert.NotNil(t, err, "value is must 'custom' string")
 	})
 
 	t.Run("simple custom rule", func(t *testing.T) {
-		err := ValidateDynamically(
+		err := Validate(
 			"invalid custom rule",
 			[]any{
 				"required",
 				CustomRule{
-					Func: func(v validator.FieldLevel) bool {
+					Tag: "custom",
+					Func: func(v FieldLevel) bool {
 						return v.Field().String() == "custom"
 					},
 				},
 			},
 		)
 
-		assert.NotNil(t, err, "value is must 'custom' string")
+		assert.Equal(t, "custom", err.(Violation).Tag, "value is must 'custom' string")
 	})
 
 	t.Run("custom rule with error message", func(t *testing.T) {
-		err := ValidateDynamically(
+		err := Validate(
 			"invalid custom rule",
 			[]interface{}{
 				"required",
@@ -131,9 +122,8 @@ func TestValidationManager_Validate(t *testing.T) {
 				"max=10",
 			},
 		)
-
 		if err != nil {
-			switch err.(ValidError).Tag {
+			switch err.(Violation).Tag {
 			case "min":
 				fmt.Println("min error")
 			case "max":
@@ -143,6 +133,6 @@ func TestValidationManager_Validate(t *testing.T) {
 			}
 		}
 
-		assert.NotNil(t, err, "value is must 'custom' string")
+		assert.Equal(t, "max", err.(Violation).Tag, "value is must 'custom' string")
 	})
 }
