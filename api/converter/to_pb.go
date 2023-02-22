@@ -76,7 +76,7 @@ func ToProject(project *types.Project) (*api.Project, error) {
 		Name:                      project.Name,
 		AuthWebhookUrl:            project.AuthWebhookURL,
 		AuthWebhookMethods:        project.AuthWebhookMethods,
-		ClientDeactivateThreshold: int64(project.ClientDeactivateThreshold),
+		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
 		PublicKey:                 project.PublicKey,
 		SecretKey:                 project.SecretKey,
 		CreatedAt:                 pbCreatedAt,
@@ -515,8 +515,10 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 	} else {
 		pbUpdatableProjectFields.AuthWebhookMethods = nil
 	}
-	if fields.ClientDeactivateThreshold != 0 {
-		pbUpdatableProjectFields.ClientDeactivateThreshold = int64(fields.ClientDeactivateThreshold)
+	if fields.ClientDeactivateThreshold != nil {
+		pbUpdatableProjectFields.ClientDeactivateThreshold = &protoTypes.StringValue{
+			Value: *fields.ClientDeactivateThreshold,
+		}
 	}
 	return pbUpdatableProjectFields, nil
 }

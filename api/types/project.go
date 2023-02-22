@@ -39,7 +39,7 @@ type Project struct {
 
 	// ClientDeactivateThreshold is the time after which clients in
 	// specific project are considered deactivate for housekeeping.
-	ClientDeactivateThreshold time.Duration `bson:"client_deactivate_threshold"`
+	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`

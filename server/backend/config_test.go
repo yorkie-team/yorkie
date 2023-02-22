@@ -35,7 +35,7 @@ func TestConfig(t *testing.T) {
 		assert.NoError(t, validConf.Validate())
 
 		conf1 := validConf
-		conf1.ClientDeactivateThreshold = "5"
+		conf1.ClientDeactivateThreshold = "1 hour"
 		assert.Error(t, conf1.Validate())
 
 		conf2 := validConf

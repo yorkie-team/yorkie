@@ -67,7 +67,7 @@ func TestMain(m *testing.M) {
 	be, err := backend.New(&backend.Config{
 		AdminUser:                 helper.AdminUser,
 		AdminPassword:             helper.AdminPassword,
-		ClientDeactivateThreshold: helper.ClientDeactivateThreshold.String(),
+		ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
 		SnapshotThreshold:         helper.SnapshotThreshold,
 		AuthWebhookCacheSize:      helper.AuthWebhookSize,
 	}, &mongo.Config{
