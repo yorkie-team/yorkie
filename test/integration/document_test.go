@@ -69,10 +69,6 @@ func TestDocument(t *testing.T) {
 		doc3 := document.New(key.Key("invalid$key"))
 		err = c1.Attach(ctx, doc3)
 		assert.Error(t, err)
-
-		doc3 := document.New(key.Key("invalid$key"))
-		err = c1.Attach(ctx, doc3)
-		assert.Error(t, err)
 	})
 
 	t.Run("concurrent complex test", func(t *testing.T) {

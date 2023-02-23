@@ -53,7 +53,6 @@ func withTwoClientsAndDocsInClusterMode(
 	fn func(t *testing.T, c1, c2 *client.Client, d1, d2 *document.Document),
 ) {
 	ctx := context.Background()
-	testDocumentKey := helper.TestDocumentKey(t)
 
 	// creates two servers
 	svr1 := helper.TestServer()

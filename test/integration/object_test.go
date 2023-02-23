@@ -37,7 +37,6 @@ func TestObject(t *testing.T) {
 
 	t.Run("causal object.set/delete test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := helper.TestDocumentKey(t)
 
 		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		err := c1.Attach(ctx, d1)

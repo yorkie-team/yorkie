@@ -93,7 +93,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 	t.Run("authorization webhook test", func(t *testing.T) {
 		ctx := context.Background()
 		authServer, token := newAuthServer(t)
-		testDocumentKey := helper.TestDocumentKey(t)
+
 		// project with authorization webhook
 		project.AuthWebhookURL = authServer.URL
 		_, err := adminCli.UpdateProject(
@@ -144,7 +144,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 	t.Run("Selected method authorization webhook test", func(t *testing.T) {
 		ctx := context.Background()
 		authServer, _ := newAuthServer(t)
-		testDocumentKey := helper.TestDocumentKey(t)
+
 		// project with authorization webhook
 		project.AuthWebhookURL = authServer.URL
 		project.AuthWebhookMethods = []string{
@@ -184,7 +184,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 func TestAuthWebhook(t *testing.T) {
 	t.Run("authorization webhook that success after retries test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := helper.TestDocumentKey(t)
+
 		var recoveryCnt uint64
 		recoveryCnt = 4
 		authServer := newUnavailableAuthServer(t, recoveryCnt)
@@ -267,7 +267,6 @@ func TestAuthWebhook(t *testing.T) {
 
 	t.Run("authorized request cache test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := helper.TestDocumentKey(t)
 		reqCnt := 0
 		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			req, err := types.NewAuthWebhookRequest(r.Body)

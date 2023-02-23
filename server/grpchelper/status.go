@@ -92,7 +92,7 @@ func detailsFromError(err error) (protoiface.MessageV1, bool) {
 	for _, violation := range violations {
 		v := &errdetails.BadRequest_FieldViolation{
 			Field:       violation.Field,
-			Description: violation.Trans,
+			Description: violation.Description,
 		}
 		br.FieldViolations = append(br.FieldViolations, v)
 	}

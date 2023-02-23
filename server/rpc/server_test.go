@@ -263,7 +263,6 @@ func TestRPCServerBackend(t *testing.T) {
 				},
 			},
 		)
-		// TODO: set error code of types.ErrDocumentNotFound
 		assert.Equal(t, codes.Unknown, status.Convert(err).Code())
 
 		_, err = testClient.DeactivateClient(
@@ -284,7 +283,6 @@ func TestRPCServerBackend(t *testing.T) {
 	})
 
 	t.Run("push/pull changes test", func(t *testing.T) {
-		testDocumentKey := helper.TestDocumentKey(t)
 		packWithNoChanges := &api.ChangePack{
 			DocumentKey: helper.TestDocKey(t),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
