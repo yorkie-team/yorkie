@@ -95,7 +95,7 @@ func (c *Client) EnsureDefaultUserAndProject(
 	ctx context.Context,
 	username,
 	password string,
-	clientDeactivateThreshold gotime.Duration,
+	clientDeactivateThreshold string,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	userInfo, err := c.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
@@ -158,7 +158,7 @@ func (c *Client) ensureDefaultUserInfo(
 func (c *Client) ensureDefaultProjectInfo(
 	ctx context.Context,
 	defaultUserID types.ID,
-	defaultClientDeactivateThreshold gotime.Duration,
+	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
 	candidate.ID = database.DefaultProjectID
@@ -207,7 +207,7 @@ func (c *Client) CreateProjectInfo(
 	ctx context.Context,
 	name string,
 	owner types.ID,
-	clientDeactivateThreshold gotime.Duration,
+	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	encodedOwner, err := encodeID(owner)
 	if err != nil {
@@ -622,11 +622,21 @@ func (c *Client) findDeactivateCandidatesPerProject(
 	project *database.ProjectInfo,
 	candidatesLimit int,
 ) ([]*database.ClientInfo, error) {
+	encodedProjectID, err := encodeID(project.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	clientDeactivateThreshold, err := project.ClientDeactivateThresholdAsTimeDuration()
+	if err != nil {
+		return nil, err
+	}
+
 	cursor, err := c.collection(colClients).Find(ctx, bson.M{
-		"project_id": project.ID,
+		"project_id": encodedProjectID,
 		"status":     database.ClientActivated,
 		"updated_at": bson.M{
-			"$lte": gotime.Now().Add(-project.ClientDeactivateThreshold),
+			"$lte": gotime.Now().Add(-clientDeactivateThreshold),
 		},
 	}, options.Find().SetLimit(int64(candidatesLimit)))
 

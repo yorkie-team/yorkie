@@ -18,15 +18,15 @@ package types_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/internal/validation"
 )
 
 func TestUpdatableProjectFields(t *testing.T) {
-	var invalidFieldsError *types.InvalidFieldsError
+	var structError *validation.StructError
 	t.Run("validation test", func(t *testing.T) {
 		newName := "changed-name"
 		newAuthWebhookURL := "http://localhost:3000"
@@ -34,12 +34,12 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
-		newClientDeactivateThreshold := 1 * time.Hour
+		newClientDeactivateThreshold := "1h"
 		fields := &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
-			ClientDeactivateThreshold: newClientDeactivateThreshold,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -54,7 +54,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 		fields = &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
-			ClientDeactivateThreshold: newClientDeactivateThreshold,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -66,9 +66,9 @@ func TestUpdatableProjectFields(t *testing.T) {
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
-			ClientDeactivateThreshold: newClientDeactivateThreshold,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
-		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
+		assert.ErrorAs(t, fields.Validate(), &structError)
 	})
 
 	t.Run("project name format test", func(t *testing.T) {
@@ -82,36 +82,36 @@ func TestUpdatableProjectFields(t *testing.T) {
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
+		assert.ErrorAs(t, fields.Validate(), &structError)
 
 		reservedName := "new"
 		fields = &types.UpdatableProjectFields{
 			Name: &reservedName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
+		assert.ErrorAs(t, fields.Validate(), &structError)
 
 		reservedName = "default"
 		fields = &types.UpdatableProjectFields{
 			Name: &reservedName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
+		assert.ErrorAs(t, fields.Validate(), &structError)
 
 		invalidName = "1"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
+		assert.ErrorAs(t, fields.Validate(), &structError)
 
 		invalidName = "over_30_chracaters_is_invalid_name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
+		assert.ErrorAs(t, fields.Validate(), &structError)
 
 		invalidName = "invalid/name"
 		fields = &types.UpdatableProjectFields{
 			Name: &invalidName,
 		}
-		assert.ErrorAs(t, fields.Validate(), &invalidFieldsError)
+		assert.ErrorAs(t, fields.Validate(), &structError)
 	})
 }

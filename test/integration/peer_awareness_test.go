@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestPeerAwareness(t *testing.T) {
@@ -39,9 +40,9 @@ func TestPeerAwareness(t *testing.T) {
 
 	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
-		d2 := document.New(key.Key(t.Name()))
+		testDocumentKey := helper.TestDocumentKey(t)
+		d1 := document.New(key.Key(testDocumentKey))
+		d2 := document.New(key.Key(testDocumentKey))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2))
@@ -126,9 +127,11 @@ func TestPeerAwareness(t *testing.T) {
 	t.Run("Watch multiple documents test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(t.Name()))
-		d2 := document.New(key.Key(t.Name()))
-		d3 := document.New(key.Key(t.Name() + "2"))
+		testDocumentKey := helper.TestDocumentKey(t)
+		testDocumentKey2 := helper.TestDocumentKey(t)
+		d1 := document.New(key.Key(testDocumentKey))
+		d2 := document.New(key.Key(testDocumentKey))
+		d3 := document.New(key.Key(testDocumentKey2))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 

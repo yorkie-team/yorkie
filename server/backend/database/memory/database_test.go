@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -43,7 +42,7 @@ func TestDB(t *testing.T) {
 	dummyOwnerID := types.ID("000000000000000000000000")
 	otherOwnerID := types.ID("000000000000000000000001")
 	notExistsID := types.ID("000000000000000000000000")
-	clientDeactivateThreshold := 1 * gotime.Hour
+	clientDeactivateThreshold := "1h"
 
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		// try to deactivate the client with not exists ID.
@@ -365,7 +364,7 @@ func TestDB(t *testing.T) {
 			string(types.AttachDocument),
 			string(types.WatchDocuments),
 		}
-		newClientDeactivateThreshold := 1 * gotime.Hour
+		newClientDeactivateThreshold := "1h"
 
 		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
@@ -379,7 +378,7 @@ func TestDB(t *testing.T) {
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
-			ClientDeactivateThreshold: newClientDeactivateThreshold,
+			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err := db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
@@ -424,9 +423,9 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 
 		// 04. Update clientDeactivateThreshold test
-		clientDeactivateThreshold2 := clientDeactivateThreshold + 1*gotime.Hour
+		clientDeactivateThreshold2 := "2h"
 		fields = &types.UpdatableProjectFields{
-			ClientDeactivateThreshold: clientDeactivateThreshold2,
+			ClientDeactivateThreshold: &clientDeactivateThreshold2,
 		}
 		assert.NoError(t, fields.Validate())
 		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)

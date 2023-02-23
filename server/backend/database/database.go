@@ -20,7 +20,6 @@ package database
 import (
 	"context"
 	"errors"
-	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -84,7 +83,7 @@ type Database interface {
 		ctx context.Context,
 		username,
 		password string,
-		clientDeactivateThreshold gotime.Duration,
+		clientDeactivateThreshold string,
 	) (*UserInfo, *ProjectInfo, error)
 
 	// CreateProjectInfo creates a new project.
@@ -92,7 +91,7 @@ type Database interface {
 		ctx context.Context,
 		name string,
 		owner types.ID,
-		clientDeactivateThreshold gotime.Duration,
+		clientDeactivateThreshold string,
 	) (*ProjectInfo, error)
 
 	// ListProjectInfos returns all project infos owned by owner.

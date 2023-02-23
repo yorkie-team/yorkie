@@ -117,7 +117,7 @@ func (d *DB) EnsureDefaultUserAndProject(
 	ctx context.Context,
 	username,
 	password string,
-	clientDeactivateThreshold gotime.Duration,
+	clientDeactivateThreshold string,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	user, err := d.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
@@ -169,7 +169,7 @@ func (d *DB) ensureDefaultUserInfo(
 func (d *DB) ensureDefaultProjectInfo(
 	ctx context.Context,
 	defaultUserID types.ID,
-	defaultClientDeactivateThreshold gotime.Duration,
+	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -199,7 +199,7 @@ func (d *DB) CreateProjectInfo(
 	ctx context.Context,
 	name string,
 	owner types.ID,
-	clientDeactivateThreshold gotime.Duration,
+	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -563,7 +563,12 @@ func (d *DB) findDeactivateCandidatesPerProject(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	offset := gotime.Now().Add(-project.ClientDeactivateThreshold)
+	clientDeactivateThreshold, err := project.ClientDeactivateThresholdAsTimeDuration()
+	if err != nil {
+		return nil, err
+	}
+
+	offset := gotime.Now().Add(-clientDeactivateThreshold)
 
 	var infos []*database.ClientInfo
 	iterator, err := txn.ReverseLowerBound(

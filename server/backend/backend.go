@@ -137,7 +137,7 @@ func New(
 		context.Background(),
 		conf.AdminUser,
 		conf.AdminPassword,
-		conf.ParseClientDeactivateThreshold(),
+		conf.ClientDeactivateThreshold,
 	)
 	if err != nil {
 		return nil, err

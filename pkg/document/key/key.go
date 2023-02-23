@@ -17,10 +17,35 @@
 // Package key provides the key implementation of the document.
 package key
 
+import (
+	errors "errors"
+
+	"github.com/yorkie-team/yorkie/internal/validation"
+)
+
+var (
+	// ErrInvalidKey is returned when the key is invalid.
+	ErrInvalidKey = errors.New("invalid key, key must be a slug with 4-30 characters")
+)
+
 // Key represents a document key.
 type Key string
 
 // String returns the string representation of the key.
 func (k Key) String() string {
 	return string(k)
+}
+
+// Validate checks whether the key is valid or not.
+func (k Key) Validate() error {
+	if err := validation.Validate(k.String(), []any{
+		"required",
+		"slug",
+		"min=4",
+		"max=30",
+	}); err != nil {
+		return ErrInvalidKey
+	}
+
+	return nil
 }

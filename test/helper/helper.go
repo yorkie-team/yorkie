@@ -21,6 +21,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
+	"testing"
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
@@ -28,6 +30,7 @@ import (
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	key "github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/admin"
@@ -55,7 +58,7 @@ var (
 	HousekeepingInterval                  = 1 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 
-	ClientDeactivateThreshold  = 10 * gotime.Second
+	ClientDeactivateThreshold  = "10s"
 	SnapshotThreshold          = int64(10)
 	SnapshotWithPurgingChanges = false
 	AuthWebhookMaxWaitInterval = 3 * gotime.Millisecond
@@ -70,6 +73,9 @@ var (
 	ETCDEndpoints     = []string{"localhost:2379"}
 	ETCDDialTimeout   = 5 * gotime.Second
 	ETCDLockLeaseTime = 30 * gotime.Second
+
+	// documentKeyCounter is used to generate a unique document key.
+	documentKeyCounter = 0
 )
 
 func init() {
@@ -134,7 +140,7 @@ func TestConfig() *server.Config {
 			SecretKey:                  server.DefaultSecretKey,
 			AdminTokenDuration:         server.DefaultAdminTokenDuration.String(),
 			UseDefaultProject:          true,
-			ClientDeactivateThreshold:  server.DefaultClientDeactivateThreshold.String(),
+			ClientDeactivateThreshold:  server.DefaultClientDeactivateThreshold,
 			SnapshotThreshold:          SnapshotThreshold,
 			SnapshotWithPurgingChanges: SnapshotWithPurgingChanges,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),
@@ -163,4 +169,42 @@ func TestServer() *server.Yorkie {
 		log.Fatal(err)
 	}
 	return y
+}
+
+// TestDocumentKey returns a new instance of document key for testing.
+func TestDocumentKey(t testing.TB) string {
+	name := t.Name()
+	if err := key.Key(name).Validate(); err == nil {
+		return name
+	}
+
+	if len(name) > 30 {
+		name = name[:30]
+	}
+
+	maxLength := len(name)
+
+	if maxLength > 29 {
+		maxLength = 29
+	}
+
+	// add unique key string to the start of the name
+	name = fmt.Sprintf("%d%s", documentKeyCounter%10, name[:maxLength])
+
+	documentKeyCounter++
+
+	sb := strings.Builder{}
+	for _, c := range name {
+		if c >= 'A' && c <= 'Z' {
+			sb.WriteRune(c + ('a' - 'A'))
+		} else if c >= 'a' && c <= 'z' {
+			sb.WriteRune(c)
+		} else if c >= '0' && c <= '9' {
+			sb.WriteRune(c)
+		} else {
+			sb.WriteRune('-')
+		}
+	}
+
+	return sb.String()
 }

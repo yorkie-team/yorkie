@@ -107,16 +107,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// ParseClientDeactivateThreshold returns client deactivate threshold.
-func (c *Config) ParseClientDeactivateThreshold() time.Duration {
-	result, err := time.ParseDuration(c.ClientDeactivateThreshold)
-	if err != nil {
-		panic(err)
-	}
-
-	return result
-}
-
 // ParseAdminTokenDuration returns admin token duration.
 func (c *Config) ParseAdminTokenDuration() time.Duration {
 	result, err := time.ParseDuration(c.AdminTokenDuration)

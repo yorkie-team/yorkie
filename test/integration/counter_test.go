@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestCounter(t *testing.T) {
@@ -38,7 +39,8 @@ func TestCounter(t *testing.T) {
 
 	t.Run("causal counter.increase test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(key.Key(t.Name()))
+		testDocumentKey := helper.TestDocumentKey(t)
+		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -53,7 +55,7 @@ func TestCounter(t *testing.T) {
 		}, "nested update by c1")
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(testDocumentKey))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -62,8 +64,8 @@ func TestCounter(t *testing.T) {
 
 	t.Run("concurrent counter increase test", func(t *testing.T) {
 		ctx := context.Background()
-
-		d1 := document.New(key.Key(t.Name()))
+		testDocumentKey := helper.TestDocumentKey(t)
+		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -77,7 +79,7 @@ func TestCounter(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(t.Name()))
+		d2 := document.New(key.Key(testDocumentKey))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

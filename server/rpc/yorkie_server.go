@@ -131,6 +131,11 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
+	// check DocumentKey is valid before it is attached
+	if err := pack.DocumentKey.Validate(); err != nil {
+		return nil, err
+	}
+
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.AttachDocument,
 		Attributes: auth.AccessAttributes(pack),

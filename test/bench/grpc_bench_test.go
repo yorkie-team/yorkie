@@ -25,7 +25,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -109,7 +108,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 		for _, m := range types.AuthMethods() {
 			authWebhookMethods = append(authWebhookMethods, string(m))
 		}
-		clientDeactivateThreshold := 1 * time.Hour
+		clientDeactivateThreshold := "1h"
 
 		_, err := adminCli.UpdateProject(
 			ctx,
@@ -118,7 +117,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 				Name:                      &name,
 				AuthWebhookURL:            &authWebhookURL,
 				AuthWebhookMethods:        &authWebhookMethods,
-				ClientDeactivateThreshold: clientDeactivateThreshold,
+				ClientDeactivateThreshold: &clientDeactivateThreshold,
 			},
 		)
 		assert.NoError(b, err)
@@ -179,7 +178,7 @@ func BenchmarkRPC(b *testing.B) {
 		err = cli.Activate(ctx)
 		assert.NoError(b, err)
 
-		d1 := document.New("doc1")
+		d1 := document.New(key.Key("doc1"))
 		err = cli.Attach(ctx, d1)
 		assert.NoError(b, err)
 
@@ -202,7 +201,8 @@ func BenchmarkRPC(b *testing.B) {
 
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(b.Name()))
+		testDocumentKey := helper.TestDocumentKey(b)
+		d1 := document.New(key.Key(testDocumentKey))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(b, err)
 		testKey1 := "testKey1"
@@ -212,7 +212,7 @@ func BenchmarkRPC(b *testing.B) {
 		})
 		assert.NoError(b, err)
 
-		d2 := document.New(key.Key(b.Name()))
+		d2 := document.New(key.Key(testDocumentKey))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
@@ -268,8 +268,9 @@ func BenchmarkRPC(b *testing.B) {
 				defer cleanupClients(b, clients)
 
 				ctx := context.Background()
-				doc1 := document.New(key.Key(b.Name()))
-				doc2 := document.New(key.Key(b.Name()))
+				testDocumentKey := helper.TestDocumentKey(b)
+				doc1 := document.New(key.Key(testDocumentKey))
+				doc2 := document.New(key.Key(testDocumentKey))
 
 				err := doc1.Update(func(root *json.Object) error {
 					text := root.SetNewText("k1")
