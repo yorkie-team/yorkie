@@ -171,7 +171,7 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: "attach-detach-document-test",
+			DocumentKey: helper.TestDocKey(t),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
@@ -286,13 +286,13 @@ func TestRPCServerBackend(t *testing.T) {
 	t.Run("push/pull changes test", func(t *testing.T) {
 		testDocumentKey := helper.TestDocumentKey(t)
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: testDocumentKey,
+			DocumentKey: helper.TestDocKey(t),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: testDocumentKey},
+			&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t)},
 		)
 		assert.NoError(t, err)
 
@@ -301,7 +301,7 @@ func TestRPCServerBackend(t *testing.T) {
 			&api.AttachDocumentRequest{
 				ClientId: activateResp.ClientId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: testDocumentKey,
+					DocumentKey: helper.TestDocKey(t),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
 					Changes: []*api.Change{{
 						Id: &api.ChangeID{
@@ -320,7 +320,7 @@ func TestRPCServerBackend(t *testing.T) {
 			&api.PushPullRequest{
 				ClientId: activateResp.ClientId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: testDocumentKey,
+					DocumentKey: helper.TestDocKey(t),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
 					Changes: []*api.Change{{
 						Id: &api.ChangeID{
@@ -339,7 +339,7 @@ func TestRPCServerBackend(t *testing.T) {
 			&api.DetachDocumentRequest{
 				ClientId: activateResp.ClientId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: testDocumentKey,
+					DocumentKey: helper.TestDocKey(t),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
 					Changes: []*api.Change{{
 						Id: &api.ChangeID{

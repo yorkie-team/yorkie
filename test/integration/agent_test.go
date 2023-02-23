@@ -44,8 +44,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(ctx))
 
-		testDocumentKey := helper.TestDocumentKey(t)
-		doc := document.New(key.Key(testDocumentKey))
+		doc := document.New(key.Key(helper.TestDocKey(t)))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		wg := sync.WaitGroup{}

@@ -63,6 +63,7 @@ bench: ## runs benchmark tests
 	mkfifo pipe
 	tee output.txt < pipe &
 	go test -tags bench -benchmem -bench=. ./test/bench -memprofile=mem.prof -cpuprofile=cpu.prof > pipe
+	rm -f pipe
 
 docker: ## builds docker images with the current version and latest tag
 	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:$(YORKIE_VERSION) -t yorkieteam/yorkie:latest .

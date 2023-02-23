@@ -17,51 +17,41 @@
 package key
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestKey_Validate(t *testing.T) {
-	t.Run("valid key", func(t *testing.T) {
-		key := Key("valid-key")
-		ret := key.Validate()
-		assert.Nil(t, ret, "key should be valid")
+func TestKey(t *testing.T) {
+	t.Run("valid key test", func(t *testing.T) {
+		err := Key("valid-key").Validate()
+		assert.Nil(t, err, "key should be valid")
 
-		key = Key("valid-key-1")
-		ret = key.Validate()
-		assert.Nil(t, ret, "key should be valid")
+		err = Key("valid-key-1").Validate()
+		assert.Nil(t, err, "key should be valid")
 
-		key = Key("fdsxfdsf")
-		ret = key.Validate()
-		assert.Nil(t, ret, "key should be valid")
+		err = Key("fdsxfdsf").Validate()
+		assert.Nil(t, err, "key should be valid")
 
-		key = Key("-----_________________-a")
-		ret = key.Validate()
-		assert.Nil(t, ret, "key should be valid")
+		err = Key("-----_________________-a").Validate()
+		assert.Nil(t, err, "key should be valid")
 	})
 
-	t.Run("invalid key", func(t *testing.T) {
-		key := Key("invalid key") // space is not allowed
+	t.Run("invalid key test", func(t *testing.T) {
+		err := Key("invalid key").Validate() // space is not allowed
+		assert.Equal(t, err, ErrInvalidKey, "space is not allowed")
 
-		err := key.Validate()
+		err = Key("invalid-key-~$a").Validate() // special character $ is not allowed
+		assert.Equal(t, err, ErrInvalidKey, "special character $ is not allowed")
 
-		assert.Equal(t, err, ErrInvalidKey, "key should be invalid: with space")
+		err = Key("invalid-key-$").Validate() // special character $ is not allowed
+		assert.Equal(t, err, ErrInvalidKey, "special character $ is not allowed")
 
-		key = Key("invalid-key-~$a") // last character should be alphanumeric
-		err = key.Validate()
-		assert.Equal(t, err, ErrInvalidKey, "key should be invalid: with -")
+		err = Key(strings.Repeat("invalid-key-sample", 8)).Validate()
+		assert.Equal(t, err, ErrInvalidKey, "over 120 characters is not allowed")
 
-		key = Key("invalid-key-$") // last character should be alphanumeric
-		err = key.Validate()
-		assert.Equal(t, err, ErrInvalidKey, "key should be invalid: with $")
-
-		key = Key("invalid-key-sample-key-validator") // last character should be alphanumeric
-		err = key.Validate()
-		assert.Equal(t, err, ErrInvalidKey, "key should be invalid: check max length, 30 ")
-
-		key = Key("inv") // last character should be alphanumeric
-		err = key.Validate()
-		assert.Equal(t, err, ErrInvalidKey, "key should be invalid: check min length, 4 ")
+		err = Key("inv").Validate()
+		assert.Equal(t, err, ErrInvalidKey, "less than 4 characters is not allowed")
 	})
 }

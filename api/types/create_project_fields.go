@@ -21,9 +21,8 @@ import (
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
 
-// reservedProjectNames is a map of reserved names. It is used to check if the
-// given project name is reserved or not.
 var (
+	// reservedProjectNames is a map of reserved project names.
 	reservedProjectNames = map[string]bool{"new": true, "default": true}
 )
 
@@ -38,15 +37,10 @@ func (i *CreateProjectFields) Validate() error {
 	return validation.ValidateStruct(i)
 }
 
-func isReservedProjectName(name string) bool {
-	_, ok := reservedProjectNames[name]
-	return ok
-}
-
 func init() {
 	validation.RegisterValidation("reserved_project_name", func(level validation.FieldLevel) bool {
-		name := level.Field().String()
-		return !isReservedProjectName(name)
+		_, ok := reservedProjectNames[level.Field().String()]
+		return !ok
 	})
 
 	validation.RegisterTranslation("reserved_project_name", "given {0} is reserved name")

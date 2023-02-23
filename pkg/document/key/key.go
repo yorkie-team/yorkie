@@ -25,7 +25,7 @@ import (
 
 var (
 	// ErrInvalidKey is returned when the key is invalid.
-	ErrInvalidKey = errors.New("invalid key, key must be a slug with 4-30 characters")
+	ErrInvalidKey = errors.New("invalid key, key must be a slug with 4-120 characters")
 )
 
 // Key represents a document key.
@@ -42,7 +42,7 @@ func (k Key) Validate() error {
 		"required",
 		"slug",
 		"min=4",
-		"max=30",
+		"max=120",
 	}); err != nil {
 		return ErrInvalidKey
 	}

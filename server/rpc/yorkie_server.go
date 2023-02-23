@@ -130,6 +130,9 @@ func (s *yorkieServer) AttachDocument(
 	if err != nil {
 		return nil, err
 	}
+	if err := pack.DocumentKey.Validate(); err != nil {
+		return nil, err
+	}
 
 	// check DocumentKey is valid before it is attached
 	if err := pack.DocumentKey.Validate(); err != nil {

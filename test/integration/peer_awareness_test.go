@@ -40,9 +40,8 @@ func TestPeerAwareness(t *testing.T) {
 
 	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := helper.TestDocumentKey(t)
-		d1 := document.New(key.Key(testDocumentKey))
-		d2 := document.New(key.Key(testDocumentKey))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		assert.NoError(t, c2.Attach(ctx, d2))
@@ -127,11 +126,9 @@ func TestPeerAwareness(t *testing.T) {
 	t.Run("Watch multiple documents test", func(t *testing.T) {
 		ctx := context.Background()
 
-		testDocumentKey := helper.TestDocumentKey(t)
-		testDocumentKey2 := helper.TestDocumentKey(t)
-		d1 := document.New(key.Key(testDocumentKey))
-		d2 := document.New(key.Key(testDocumentKey))
-		d3 := document.New(key.Key(testDocumentKey2))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d3 := document.New(key.Key(helper.TestDocKey(t) + "2"))
 		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 

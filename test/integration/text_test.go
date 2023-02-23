@@ -37,8 +37,7 @@ func TestText(t *testing.T) {
 
 	t.Run("text test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := helper.TestDocumentKey(t)
-		d1 := document.New(key.Key(testDocumentKey))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -50,7 +49,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(testDocumentKey))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -99,8 +98,7 @@ func TestText(t *testing.T) {
 
 	t.Run("rich text test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := helper.TestDocumentKey(t)
-		d1 := document.New(key.Key(testDocumentKey))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -112,7 +110,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(testDocumentKey))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -135,8 +133,7 @@ func TestText(t *testing.T) {
 
 	t.Run("concurrent block deletions test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := helper.TestDocumentKey(t)
-		d1 := document.New(key.Key(testDocumentKey))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -148,7 +145,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(testDocumentKey))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -182,8 +179,7 @@ func TestText(t *testing.T) {
 
 	t.Run("new creation then concurrent deletion test", func(t *testing.T) {
 		ctx := context.Background()
-		testDocumentKey := helper.TestDocumentKey(t)
-		d1 := document.New(key.Key(testDocumentKey))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -195,7 +191,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(testDocumentKey))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

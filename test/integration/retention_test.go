@@ -84,8 +84,7 @@ func TestRetention(t *testing.T) {
 
 		ctx := context.Background()
 
-		testDocumentKey := helper.TestDocumentKey(t)
-		doc := document.New(key.Key(testDocumentKey))
+		doc := document.New(key.Key(helper.TestDocKey(t)))
 		assert.NoError(t, cli.Attach(ctx, doc))
 		defer func() { assert.NoError(t, cli.Detach(ctx, doc)) }()
 
@@ -147,9 +146,7 @@ func TestRetention(t *testing.T) {
 		}()
 
 		ctx := context.Background()
-
-		testDocumentKey := helper.TestDocumentKey(t)
-		d1 := document.New(key.Key(testDocumentKey))
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		assert.NoError(t, cli1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, cli1.Detach(ctx, d1)) }()
 
@@ -224,7 +221,7 @@ func TestRetention(t *testing.T) {
 			assert.NoError(t, cli2.Close())
 		}()
 
-		d2 := document.New(key.Key(testDocumentKey))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		assert.NoError(t, cli2.Attach(ctx, d2))
 		defer func() { assert.NoError(t, cli2.Detach(ctx, d2)) }()
 

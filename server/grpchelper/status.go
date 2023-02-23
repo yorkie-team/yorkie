@@ -46,7 +46,7 @@ var errorToCode = map[error]codes.Code{
 	types.ErrInvalidID:              codes.InvalidArgument,
 	clients.ErrInvalidClientID:      codes.InvalidArgument,
 	clients.ErrInvalidClientKey:     codes.InvalidArgument,
-	key.ErrInvalidKey:               codes.InvalidArgument, // DocumentKey validation error
+	key.ErrInvalidKey:               codes.InvalidArgument,
 	types.ErrEmptyProjectFields:     codes.InvalidArgument,
 
 	// NotFound means the requested resource does not exist.

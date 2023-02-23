@@ -30,7 +30,7 @@ import (
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	key "github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/admin"
@@ -171,27 +171,16 @@ func TestServer() *server.Yorkie {
 	return y
 }
 
-// TestDocumentKey returns a new instance of document key for testing.
-func TestDocumentKey(t testing.TB) string {
+// TestDocKey returns a new instance of document key for testing.
+func TestDocKey(t testing.TB) string {
 	name := t.Name()
 	if err := key.Key(name).Validate(); err == nil {
 		return name
 	}
 
-	if len(name) > 30 {
-		name = name[:30]
+	if len(name) > 60 {
+		name = name[:60]
 	}
-
-	maxLength := len(name)
-
-	if maxLength > 29 {
-		maxLength = 29
-	}
-
-	// add unique key string to the start of the name
-	name = fmt.Sprintf("%d%s", documentKeyCounter%10, name[:maxLength])
-
-	documentKeyCounter++
 
 	sb := strings.Builder{}
 	for _, c := range name {
