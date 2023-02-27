@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.1] - 2023-02-27
+
+
+### Added
+* Add ClientDeactivateThreshold in Project by @krapie in https://github.com/yorkie-team/yorkie/pull/454
+* Add validation module and document key validation by @easylogic in https://github.com/yorkie-team/yorkie/pull/467
+
+### Changed
+* Filter out unsubscribed documents key in DocEvent  by @chacha912 in https://github.com/yorkie-team/yorkie/pull/463
+* Remove priority queue from RHTPQMap and entire project by @blurfx in https://github.com/yorkie-team/yorkie/pull/462
+
+### Fixed
+* Remove duplicated backslash in string escaping by @cozitive in https://github.com/yorkie-team/yorkie/pull/458
+* Fix invalid index of SplayTree with single node by @hackerwins in https://github.com/yorkie-team/yorkie/pull/470
+
 ## [0.3.0] - 2023-01-31
 
 ### Changed
