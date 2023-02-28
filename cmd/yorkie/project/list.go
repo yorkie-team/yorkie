@@ -64,6 +64,7 @@ func newListCommand() *cobra.Command {
 				"SECRET KEY",
 				"AUTH WEBHOOK URL",
 				"AUTH WEBHOOK METHODS",
+				"CLIENT DEACTIVATE THRESHOLD",
 				"CREATED AT",
 			})
 			for _, project := range projects {
@@ -73,6 +74,7 @@ func newListCommand() *cobra.Command {
 					project.SecretKey,
 					project.AuthWebhookURL,
 					project.AuthWebhookMethods,
+					project.ClientDeactivateThreshold,
 					units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
 				})
 			}
