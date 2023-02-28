@@ -35,6 +35,12 @@ func TestValidation(t *testing.T) {
 
 		err = ValidateValue("invalid-key-$-wrong-string-value", "required,slug,min=4,max=30")
 		assert.Equal(t, err.(Violation).Tag, "slug")
+
+		err = ValidateValue("1h30m20s", "duration,min=2")
+		assert.Nil(t, err, "valid time duration string format")
+
+		err = ValidateValue("one hour", "duration,min=2")
+		assert.Equal(t, err.(Violation).Tag, "duration")
 	})
 
 	t.Run("ValidateStruct test", func(t *testing.T) {
