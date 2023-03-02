@@ -200,7 +200,8 @@ func (m *PubSub) Publish(
 
 				if logging.Enabled(zap.DebugLevel) {
 					logging.From(ctx).Debugf(
-						`Publish(%s,%s) to %s`,
+						`Publish %s(%s,%s) to %s`,
+						event.Type,
 						k,
 						publisherID.String(),
 						sub.SubscriberID(),

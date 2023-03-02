@@ -392,6 +392,17 @@ func (s *yorkieServer) WatchDocuments(
 		return err
 	}
 
+	locker, err := s.backend.Coordinator.NewLocker(
+		stream.Context(),
+		sync.NewKey(cli.ID.String()),
+	)
+	if err != nil {
+		return err
+	}
+	if err := locker.Lock(stream.Context()); err != nil {
+		return err
+	}
+
 	subscription, peersMap, err := s.watchDocs(stream.Context(), *cli, docKeys)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
@@ -399,6 +410,9 @@ func (s *yorkieServer) WatchDocuments(
 	}
 	defer func() {
 		s.unwatchDocs(docKeys, subscription)
+		if err := locker.Unlock(stream.Context()); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
 	}()
 
 	if err := stream.Send(&api.WatchDocumentsResponse{
