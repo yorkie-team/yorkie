@@ -51,13 +51,13 @@ func (k Key) Validate() error {
 	return nil
 }
 
-// JoinKeys concatenates all the keys in slice into a single string.
-func JoinKeys(keys []Key) string {
+// Join concatenates all the keys in slice into a single string.
+func Join(keys []Key) string {
 	var s strings.Builder
 	for i, key := range keys {
 		s.WriteString(key.String())
 		if i != len(keys)-1 {
-			s.WriteString(", ")
+			s.WriteString(",")
 		}
 	}
 	return s.String()

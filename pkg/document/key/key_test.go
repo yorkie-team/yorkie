@@ -57,7 +57,7 @@ func TestKey(t *testing.T) {
 
 	t.Run("join key test", func(t *testing.T) {
 		keys := []Key{Key("key1"), Key("key2"), Key("key3")}
-		result := JoinKeys(keys)
-		assert.Equal(t, "key1, key2, key3", result)
+		result := Join(keys)
+		assert.Equal(t, "key1,key2,key3", result)
 	})
 }

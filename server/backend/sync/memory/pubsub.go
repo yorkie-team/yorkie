@@ -93,7 +93,7 @@ func (m *PubSub) Subscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
-			key.JoinKeys(keys),
+			key.Join(keys),
 			subscriber.ID.String(),
 		)
 	}
@@ -115,7 +115,7 @@ func (m *PubSub) Subscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
-			key.JoinKeys(keys),
+			key.Join(keys),
 			subscriber.ID.String(),
 		)
 	}
@@ -148,7 +148,7 @@ func (m *PubSub) Unsubscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
-			key.JoinKeys(docKeys),
+			key.Join(docKeys),
 			sub.SubscriberID(),
 		)
 	}
@@ -170,7 +170,7 @@ func (m *PubSub) Unsubscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
-			key.JoinKeys(docKeys),
+			key.Join(docKeys),
 			sub.SubscriberID(),
 		)
 	}
