@@ -19,6 +19,7 @@ package key
 
 import (
 	errors "errors"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
@@ -48,4 +49,16 @@ func (k Key) Validate() error {
 	}
 
 	return nil
+}
+
+// Join concatenates all the keys in slice into a single string.
+func Join(keys []Key) string {
+	var s strings.Builder
+	for i, key := range keys {
+		s.WriteString(key.String())
+		if i != len(keys)-1 {
+			s.WriteString(",")
+		}
+	}
+	return s.String()
 }
