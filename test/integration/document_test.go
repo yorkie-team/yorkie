@@ -196,4 +196,51 @@ func TestDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.NotNil(t, prevArray.RemovedAt())
 	})
+
+	t.Run("document delete test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		err := d1.Update(func(root *json.Object) error {
+			root.SetString("k1", "v1")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		assert.NoError(t, c1.Remove(ctx, d1))
+	})
+
+	t.Run("document delete on client/document status test", func(t *testing.T) {
+		ctx := context.Background()
+
+		cli, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, cli.Close())
+		}()
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+
+		// 01. client is not activated.
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrClientNotActivated)
+
+		// 02. document is not attached.
+		assert.NoError(t, cli.Activate(ctx))
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
+
+		// 03. document is attached.
+		assert.NoError(t, cli.Attach(ctx, d1))
+		assert.NoError(t, cli.Remove(ctx, d1))
+		assert.Equal(t, document.Removed, d1.Status())
+
+		// 04. document is removed.
+		assert.ErrorIs(t, d1.Update(func(root *json.Object) error {
+			root.SetString("k1", "v1")
+			return nil
+		}), document.ErrDocumentRemoved)
+	})
 }

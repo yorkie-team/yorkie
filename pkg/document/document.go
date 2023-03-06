@@ -55,6 +55,10 @@ func (d *Document) Update(
 	updater func(root *json.Object) error,
 	msgAndArgs ...interface{},
 ) error {
+	if d.doc.status == Removed {
+		return ErrDocumentRemoved
+	}
+
 	d.ensureClone()
 
 	ctx := change.NewContext(
@@ -164,8 +168,13 @@ func (d *Document) ActorID() *time.ActorID {
 }
 
 // SetStatus updates the status of this document.
-func (d *Document) SetStatus(status statusType) {
+func (d *Document) SetStatus(status StatusType) {
 	d.doc.SetStatus(status)
+}
+
+// Status returns the status of this document.
+func (d *Document) Status() StatusType {
+	return d.doc.status
 }
 
 // IsAttached returns the whether this document is attached or not.

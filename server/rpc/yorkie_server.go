@@ -455,6 +455,21 @@ func (s *yorkieServer) WatchDocuments(
 	}
 }
 
+// RemoveDocument removes the given document.
+func (s *yorkieServer) RemoveDocument(
+	ctx context.Context,
+	req *api.RemoveDocumentRequest,
+) (*api.RemoveDocumentResponse, error) {
+	_, err := time.ActorIDFromBytes(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(hackerwins): Implement RemoveDocument.
+
+	return &api.RemoveDocumentResponse{}, nil
+}
+
 // UpdatePresence updates the presence of the given client.
 func (s *yorkieServer) UpdatePresence(
 	ctx context.Context,

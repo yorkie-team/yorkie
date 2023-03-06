@@ -387,6 +387,96 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 	})
+
+	t.Run("remove document test", func(t *testing.T) {
+		// normal behavior
+		activateResp, err := testClient.ActivateClient(
+			context.Background(),
+			&api.ActivateClientRequest{ClientKey: t.Name()},
+		)
+		assert.NoError(t, err)
+
+		packWithNoChanges := &api.ChangePack{
+			DocumentKey: helper.TestDocKey(t),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+		}
+
+		_, err = testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		_, err = testClient.RemoveDocument(
+			context.Background(),
+			&api.RemoveDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		// document not found
+		_, err = testClient.RemoveDocument(
+			context.Background(),
+			&api.RemoveDocumentRequest{
+				ClientId: activateResp.ClientId,
+				ChangePack: &api.ChangePack{
+					DocumentKey: "invalid",
+					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+				},
+			},
+		)
+		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+
+		// try to remove removed document
+		_, err = testClient.RemoveDocument(
+			context.Background(),
+			&api.RemoveDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+
+		// try to remove detached document
+		_, err = testClient.DetachDocument(
+			context.Background(),
+			&api.DetachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		_, err = testClient.RemoveDocument(
+			context.Background(),
+			&api.RemoveDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+
+		// try to remove document with a deactivated client
+		_, err = testClient.DeactivateClient(
+			context.Background(),
+			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
+		)
+		assert.NoError(t, err)
+
+		_, err = testClient.RemoveDocument(
+			context.Background(),
+			&api.RemoveDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+	})
 }
 
 func TestConfig_Validate(t *testing.T) {

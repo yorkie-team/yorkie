@@ -17,6 +17,8 @@
 package document
 
 import (
+	"errors"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -24,22 +26,32 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-type statusType int
+// StatusType represents the status of the document.
+type StatusType int
 
 const (
 	// Detached means that the document is not attached to the client.
 	// The actor of the ticket is created without being assigned.
-	Detached statusType = iota
+	Detached StatusType = iota
 
 	// Attached means that this document is attached to the client.
 	// The actor of the ticket is created with being assigned by the client.
 	Attached
+
+	// Removed means that this document is removed. If the document is removed,
+	// it cannot be edited.
+	Removed
+)
+
+var (
+	// ErrDocumentRemoved occurs when the document is removed.
+	ErrDocumentRemoved = errors.New("document is removed")
 )
 
 // InternalDocument represents a document in MongoDB and contains logical clocks.
 type InternalDocument struct {
 	key          key.Key
-	status       statusType
+	status       StatusType
 	root         *crdt.Root
 	checkpoint   change.Checkpoint
 	changeID     change.ID
@@ -170,7 +182,7 @@ func (d *InternalDocument) ActorID() *time.ActorID {
 }
 
 // SetStatus sets the status of this document.
-func (d *InternalDocument) SetStatus(status statusType) {
+func (d *InternalDocument) SetStatus(status StatusType) {
 	d.status = status
 }
 

@@ -632,6 +632,116 @@ func (m *WatchDocumentsResponse_Initialization) GetPeersMapByDoc() map[string]*C
 	return nil
 }
 
+type RemoveDocumentRequest struct {
+	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_unrecognized     []byte      `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
+}
+
+func (m *RemoveDocumentRequest) Reset()         { *m = RemoveDocumentRequest{} }
+func (m *RemoveDocumentRequest) String() string { return proto.CompactTextString(m) }
+func (*RemoveDocumentRequest) ProtoMessage()    {}
+func (*RemoveDocumentRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_40070c858814ab24, []int{10}
+}
+func (m *RemoveDocumentRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RemoveDocumentRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_RemoveDocumentRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *RemoveDocumentRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoveDocumentRequest.Merge(m, src)
+}
+func (m *RemoveDocumentRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *RemoveDocumentRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoveDocumentRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RemoveDocumentRequest proto.InternalMessageInfo
+
+func (m *RemoveDocumentRequest) GetClientId() []byte {
+	if m != nil {
+		return m.ClientId
+	}
+	return nil
+}
+
+func (m *RemoveDocumentRequest) GetChangePack() *ChangePack {
+	if m != nil {
+		return m.ChangePack
+	}
+	return nil
+}
+
+type RemoveDocumentResponse struct {
+	ClientKey            string      `protobuf:"bytes,1,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
+	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_unrecognized     []byte      `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
+}
+
+func (m *RemoveDocumentResponse) Reset()         { *m = RemoveDocumentResponse{} }
+func (m *RemoveDocumentResponse) String() string { return proto.CompactTextString(m) }
+func (*RemoveDocumentResponse) ProtoMessage()    {}
+func (*RemoveDocumentResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_40070c858814ab24, []int{11}
+}
+func (m *RemoveDocumentResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RemoveDocumentResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_RemoveDocumentResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *RemoveDocumentResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoveDocumentResponse.Merge(m, src)
+}
+func (m *RemoveDocumentResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *RemoveDocumentResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoveDocumentResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RemoveDocumentResponse proto.InternalMessageInfo
+
+func (m *RemoveDocumentResponse) GetClientKey() string {
+	if m != nil {
+		return m.ClientKey
+	}
+	return ""
+}
+
+func (m *RemoveDocumentResponse) GetChangePack() *ChangePack {
+	if m != nil {
+		return m.ChangePack
+	}
+	return nil
+}
+
 type PushPullRequest struct {
 	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
@@ -644,7 +754,7 @@ func (m *PushPullRequest) Reset()         { *m = PushPullRequest{} }
 func (m *PushPullRequest) String() string { return proto.CompactTextString(m) }
 func (*PushPullRequest) ProtoMessage()    {}
 func (*PushPullRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{10}
+	return fileDescriptor_40070c858814ab24, []int{12}
 }
 func (m *PushPullRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -699,7 +809,7 @@ func (m *PushPullResponse) Reset()         { *m = PushPullResponse{} }
 func (m *PushPullResponse) String() string { return proto.CompactTextString(m) }
 func (*PushPullResponse) ProtoMessage()    {}
 func (*PushPullResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{11}
+	return fileDescriptor_40070c858814ab24, []int{13}
 }
 func (m *PushPullResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -754,7 +864,7 @@ func (m *UpdatePresenceRequest) Reset()         { *m = UpdatePresenceRequest{} }
 func (m *UpdatePresenceRequest) String() string { return proto.CompactTextString(m) }
 func (*UpdatePresenceRequest) ProtoMessage()    {}
 func (*UpdatePresenceRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{12}
+	return fileDescriptor_40070c858814ab24, []int{14}
 }
 func (m *UpdatePresenceRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -807,7 +917,7 @@ func (m *UpdatePresenceResponse) Reset()         { *m = UpdatePresenceResponse{}
 func (m *UpdatePresenceResponse) String() string { return proto.CompactTextString(m) }
 func (*UpdatePresenceResponse) ProtoMessage()    {}
 func (*UpdatePresenceResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{13}
+	return fileDescriptor_40070c858814ab24, []int{15}
 }
 func (m *UpdatePresenceResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -849,6 +959,8 @@ func init() {
 	proto.RegisterType((*WatchDocumentsResponse)(nil), "yorkie.v1.WatchDocumentsResponse")
 	proto.RegisterType((*WatchDocumentsResponse_Initialization)(nil), "yorkie.v1.WatchDocumentsResponse.Initialization")
 	proto.RegisterMapType((map[string]*Clients)(nil), "yorkie.v1.WatchDocumentsResponse.Initialization.PeersMapByDocEntry")
+	proto.RegisterType((*RemoveDocumentRequest)(nil), "yorkie.v1.RemoveDocumentRequest")
+	proto.RegisterType((*RemoveDocumentResponse)(nil), "yorkie.v1.RemoveDocumentResponse")
 	proto.RegisterType((*PushPullRequest)(nil), "yorkie.v1.PushPullRequest")
 	proto.RegisterType((*PushPullResponse)(nil), "yorkie.v1.PushPullResponse")
 	proto.RegisterType((*UpdatePresenceRequest)(nil), "yorkie.v1.UpdatePresenceRequest")
@@ -858,50 +970,52 @@ func init() {
 func init() { proto.RegisterFile("yorkie/v1/yorkie.proto", fileDescriptor_40070c858814ab24) }
 
 var fileDescriptor_40070c858814ab24 = []byte{
-	// 681 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x56, 0xc1, 0x4e, 0xdb, 0x4c,
-	0x10, 0x8e, 0x09, 0x20, 0x32, 0x81, 0xfc, 0x61, 0x7f, 0x25, 0x4d, 0x8d, 0x1a, 0xa5, 0xe6, 0x92,
-	0x0a, 0xc9, 0x90, 0x54, 0xa2, 0x55, 0x7b, 0x02, 0x82, 0x04, 0x42, 0x95, 0x22, 0x97, 0x0a, 0x81,
-	0x54, 0x45, 0xcb, 0x7a, 0x1a, 0xac, 0x18, 0xdb, 0xb5, 0x1d, 0x4b, 0xee, 0xa9, 0x8f, 0xd1, 0x47,
-	0xea, 0xb1, 0x87, 0x3e, 0x40, 0x45, 0x5f, 0xa1, 0x0f, 0x50, 0xc5, 0xeb, 0x10, 0xaf, 0x59, 0x51,
-	0x8a, 0x44, 0x6f, 0xeb, 0xdd, 0xf9, 0xbe, 0x6f, 0x66, 0x3c, 0xfb, 0xd9, 0x50, 0x8f, 0x5d, 0x7f,
-	0x64, 0xe1, 0x66, 0xd4, 0xd9, 0xe4, 0x2b, 0xdd, 0xf3, 0xdd, 0xd0, 0x25, 0xa5, 0xf4, 0x29, 0xea,
-	0xa8, 0x8f, 0x67, 0x21, 0x3e, 0x06, 0xee, 0xd8, 0x67, 0x18, 0xf0, 0x28, 0x6d, 0x1b, 0x6a, 0x3b,
-	0x2c, 0xb4, 0x22, 0x1a, 0xe2, 0x9e, 0x6d, 0xa1, 0x13, 0x1a, 0xf8, 0x71, 0x8c, 0x41, 0x48, 0x9e,
-	0x00, 0xb0, 0x64, 0x63, 0x30, 0xc2, 0xb8, 0xa1, 0xb4, 0x94, 0x76, 0xc9, 0x28, 0xf1, 0x9d, 0x23,
-	0x8c, 0xb5, 0x63, 0xa8, 0xe7, 0x71, 0x81, 0xe7, 0x3a, 0x01, 0xfe, 0x01, 0x48, 0xd6, 0x20, 0x7d,
-	0x18, 0x58, 0x66, 0x63, 0xae, 0xa5, 0xb4, 0x97, 0x8d, 0x25, 0xbe, 0x71, 0x68, 0x6a, 0xdb, 0xf0,
-	0xa8, 0x87, 0x54, 0x9a, 0x8f, 0x80, 0x53, 0x72, 0xb8, 0x17, 0xd0, 0xb8, 0x89, 0x4b, 0xf3, 0xb9,
-	0x15, 0x68, 0x43, 0x6d, 0x27, 0x0c, 0x29, 0xbb, 0xe8, 0xb9, 0x6c, 0x7c, 0x79, 0x47, 0x39, 0xb2,
-	0x0d, 0x65, 0x76, 0x41, 0x9d, 0x21, 0x0e, 0x3c, 0xca, 0x46, 0x49, 0x15, 0xe5, 0x6e, 0x4d, 0xbf,
-	0x6e, 0xb8, 0xbe, 0x97, 0x9c, 0xf6, 0x29, 0x1b, 0x19, 0xc0, 0xae, 0xd7, 0xda, 0x25, 0xd4, 0xf3,
-	0x6a, 0x77, 0x48, 0xf2, 0xde, 0x72, 0x36, 0xd4, 0x7a, 0xf8, 0xcf, 0x8a, 0x73, 0xa1, 0x9e, 0x57,
-	0xbb, 0xdb, 0x44, 0xdc, 0x57, 0x70, 0x08, 0xb5, 0x13, 0x1a, 0xce, 0xf4, 0x82, 0x69, 0x79, 0xcf,
-	0x60, 0x91, 0xb3, 0x27, 0x5a, 0xe5, 0xee, 0x6a, 0x96, 0x8b, 0x0f, 0x47, 0x1a, 0x40, 0xd6, 0x61,
-	0xc5, 0x4c, 0xe1, 0x93, 0xe4, 0x82, 0xc6, 0x5c, 0xab, 0xd8, 0x2e, 0x19, 0xcb, 0xd3, 0xcd, 0x23,
-	0x8c, 0x03, 0xed, 0x73, 0x11, 0xea, 0x79, 0xa5, 0xb4, 0xb4, 0x33, 0xa8, 0x58, 0x8e, 0x15, 0x5a,
-	0xd4, 0xb6, 0x3e, 0xd1, 0xd0, 0x72, 0x9d, 0x54, 0x72, 0x2b, 0x23, 0x29, 0x87, 0xea, 0x87, 0x02,
-	0xee, 0xa0, 0x60, 0xe4, 0x98, 0xc8, 0x06, 0x2c, 0x60, 0x34, 0xa9, 0x82, 0x77, 0xe4, 0xff, 0x0c,
-	0x65, 0xcf, 0x65, 0xfb, 0x93, 0xa3, 0x83, 0x82, 0xc1, 0x63, 0xd4, 0xef, 0x0a, 0x54, 0x44, 0x46,
-	0x62, 0x43, 0xd5, 0x43, 0xf4, 0x83, 0xc1, 0x25, 0xf5, 0x06, 0xe7, 0xf1, 0xc0, 0x74, 0x59, 0x43,
-	0x69, 0x15, 0xdb, 0xe5, 0xee, 0xde, 0xdf, 0x66, 0xa7, 0xf7, 0x27, 0x44, 0x6f, 0xa8, 0xb7, 0x1b,
-	0x4f, 0xa4, 0x9d, 0xd0, 0x8f, 0x8d, 0x15, 0x2f, 0xbb, 0xa7, 0x1e, 0x03, 0xb9, 0x19, 0x44, 0xaa,
-	0x50, 0x9c, 0xbd, 0xf3, 0xc9, 0x92, 0xb4, 0x61, 0x21, 0xa2, 0xf6, 0x18, 0xd3, 0xaa, 0xc8, 0x8d,
-	0x77, 0x13, 0x18, 0x3c, 0xe0, 0xd5, 0xdc, 0x4b, 0x65, 0x77, 0x11, 0xe6, 0xcf, 0x5d, 0x33, 0xd6,
-	0x3e, 0xc0, 0x7f, 0xfd, 0x71, 0x70, 0xd1, 0x1f, 0xdb, 0xf6, 0x83, 0x0e, 0xf1, 0x10, 0xaa, 0x33,
-	0x9d, 0x87, 0xbc, 0x9b, 0x43, 0xa8, 0xbd, 0xf3, 0x4c, 0x1a, 0x62, 0xdf, 0xc7, 0x00, 0x1d, 0x86,
-	0x0f, 0x35, 0xbc, 0x0d, 0xa8, 0xe7, 0x85, 0x78, 0x5d, 0xdd, 0x5f, 0xf3, 0xb0, 0x72, 0x9a, 0x70,
-	0xbf, 0x45, 0x3f, 0xb2, 0x18, 0x92, 0x13, 0xa8, 0x88, 0xa6, 0x4e, 0x5a, 0x19, 0x75, 0xe9, 0x77,
-	0x42, 0x7d, 0x7a, 0x4b, 0x04, 0x17, 0xd2, 0x0a, 0xe4, 0x3d, 0x54, 0xf3, 0xfe, 0x4c, 0xb4, 0xec,
-	0x3c, 0xcb, 0x4d, 0x5f, 0x5d, 0xbf, 0x35, 0xe6, 0x9a, 0xfe, 0x04, 0x2a, 0x62, 0x8d, 0x42, 0xde,
-	0xd2, 0x3e, 0x0b, 0x79, 0xcb, 0x1b, 0xc4, 0x89, 0x45, 0xc3, 0x16, 0x1b, 0x22, 0xfb, 0x72, 0x88,
-	0x0d, 0x91, 0xba, 0x3d, 0x27, 0x16, 0xcd, 0x52, 0x20, 0x96, 0xba, 0xb6, 0x40, 0x2c, 0x77, 0x5a,
-	0xad, 0x40, 0x4e, 0xa1, 0x22, 0xde, 0x68, 0x81, 0x58, 0xea, 0x97, 0x02, 0xb1, 0xdc, 0x0e, 0xb4,
-	0xc2, 0x96, 0x42, 0xf6, 0x61, 0x69, 0x7a, 0x37, 0x88, 0x9a, 0x81, 0xe4, 0x2e, 0xa6, 0xba, 0x26,
-	0x3d, 0x9b, 0x12, 0xed, 0x6e, 0x7c, 0xbd, 0x6a, 0x2a, 0xdf, 0xae, 0x9a, 0xca, 0x8f, 0xab, 0xa6,
-	0xf2, 0xe5, 0x67, 0xb3, 0x00, 0xab, 0x26, 0x46, 0x53, 0x0c, 0xf5, 0x2c, 0x3d, 0xea, 0xf4, 0x95,
-	0xb3, 0x79, 0xfd, 0x75, 0xd4, 0x39, 0x5f, 0x4c, 0xfe, 0x52, 0x9e, 0xff, 0x0e, 0x00, 0x00, 0xff,
-	0xff, 0xe9, 0xa4, 0xcb, 0xd5, 0xe5, 0x08, 0x00, 0x00,
+	// 709 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x56, 0xd1, 0x4e, 0xdb, 0x4a,
+	0x10, 0xb5, 0x09, 0x20, 0x32, 0x81, 0xdc, 0xb0, 0x57, 0xc9, 0xcd, 0x35, 0x6a, 0x94, 0x9a, 0x97,
+	0x54, 0x48, 0x86, 0xa4, 0x12, 0xad, 0xda, 0x27, 0x20, 0x48, 0x20, 0x54, 0x29, 0x72, 0xa9, 0x10,
+	0x48, 0x55, 0xb4, 0xd8, 0xd3, 0x60, 0xc5, 0xb1, 0x5d, 0xdb, 0xb1, 0xe4, 0x3e, 0xf5, 0x33, 0xfa,
+	0x49, 0x7d, 0xa9, 0xd4, 0x87, 0x7e, 0x40, 0x45, 0x7f, 0xa4, 0x72, 0xd6, 0x21, 0x5e, 0xb3, 0xa2,
+	0x14, 0x29, 0xbc, 0x6d, 0x76, 0xe7, 0x9c, 0x33, 0x33, 0xde, 0x9d, 0x13, 0xa8, 0xc5, 0xae, 0x3f,
+	0xb4, 0x70, 0x3b, 0x6a, 0x6f, 0xb3, 0x95, 0xe6, 0xf9, 0x6e, 0xe8, 0x92, 0x62, 0xfa, 0x2b, 0x6a,
+	0x2b, 0xff, 0xcf, 0x42, 0x7c, 0x0c, 0xdc, 0xb1, 0x6f, 0x60, 0xc0, 0xa2, 0xd4, 0x5d, 0xa8, 0xee,
+	0x19, 0xa1, 0x15, 0xd1, 0x10, 0x0f, 0x6c, 0x0b, 0x9d, 0x50, 0xc7, 0x8f, 0x63, 0x0c, 0x42, 0xf2,
+	0x04, 0xc0, 0x98, 0x6c, 0xf4, 0x87, 0x18, 0xd7, 0xe5, 0xa6, 0xdc, 0x2a, 0xea, 0x45, 0xb6, 0x73,
+	0x82, 0xb1, 0x7a, 0x0a, 0xb5, 0x3c, 0x2e, 0xf0, 0x5c, 0x27, 0xc0, 0x3f, 0x00, 0xc9, 0x06, 0xa4,
+	0x3f, 0xfa, 0x96, 0x59, 0x5f, 0x68, 0xca, 0xad, 0x55, 0x7d, 0x85, 0x6d, 0x1c, 0x9b, 0xea, 0x2e,
+	0xfc, 0xd7, 0x45, 0x2a, 0xcc, 0x87, 0xc3, 0xc9, 0x39, 0xdc, 0x0b, 0xa8, 0xdf, 0xc6, 0xa5, 0xf9,
+	0xdc, 0x09, 0xb4, 0xa1, 0xba, 0x17, 0x86, 0xd4, 0xb8, 0xea, 0xba, 0xc6, 0x78, 0x74, 0x4f, 0x39,
+	0xb2, 0x0b, 0x25, 0xe3, 0x8a, 0x3a, 0x03, 0xec, 0x7b, 0xd4, 0x18, 0x4e, 0xaa, 0x28, 0x75, 0xaa,
+	0xda, 0x4d, 0xc3, 0xb5, 0x83, 0xc9, 0x69, 0x8f, 0x1a, 0x43, 0x1d, 0x8c, 0x9b, 0xb5, 0x3a, 0x82,
+	0x5a, 0x5e, 0xed, 0x1e, 0x49, 0x3e, 0x58, 0xce, 0x86, 0x6a, 0x17, 0x1f, 0xad, 0x38, 0x17, 0x6a,
+	0x79, 0xb5, 0xfb, 0xdd, 0x88, 0x87, 0x0a, 0x0e, 0xa0, 0x7a, 0x46, 0xc3, 0x99, 0x5e, 0x30, 0x2d,
+	0xef, 0x19, 0x2c, 0x33, 0xf6, 0x89, 0x56, 0xa9, 0xb3, 0x9e, 0xe5, 0x62, 0x97, 0x23, 0x0d, 0x20,
+	0x9b, 0xb0, 0x66, 0xa6, 0xf0, 0x24, 0xb9, 0xa0, 0xbe, 0xd0, 0x2c, 0xb4, 0x8a, 0xfa, 0xea, 0x74,
+	0xf3, 0x04, 0xe3, 0x40, 0xfd, 0x5c, 0x80, 0x5a, 0x5e, 0x29, 0x2d, 0xed, 0x02, 0xca, 0x96, 0x63,
+	0x85, 0x16, 0xb5, 0xad, 0x4f, 0x34, 0xb4, 0x5c, 0x27, 0x95, 0xdc, 0xc9, 0x48, 0x8a, 0xa1, 0xda,
+	0x31, 0x87, 0x3b, 0x92, 0xf4, 0x1c, 0x13, 0xd9, 0x82, 0x25, 0x8c, 0x92, 0x2a, 0x58, 0x47, 0xfe,
+	0xcd, 0x50, 0x76, 0x5d, 0xe3, 0x30, 0x39, 0x3a, 0x92, 0x74, 0x16, 0xa3, 0xfc, 0x90, 0xa1, 0xcc,
+	0x33, 0x12, 0x1b, 0x2a, 0x1e, 0xa2, 0x1f, 0xf4, 0x47, 0xd4, 0xeb, 0x5f, 0xc6, 0x7d, 0xd3, 0x35,
+	0xea, 0x72, 0xb3, 0xd0, 0x2a, 0x75, 0x0e, 0xfe, 0x36, 0x3b, 0xad, 0x97, 0x10, 0xbd, 0xa1, 0xde,
+	0x7e, 0x9c, 0x48, 0x3b, 0xa1, 0x1f, 0xeb, 0x6b, 0x5e, 0x76, 0x4f, 0x39, 0x05, 0x72, 0x3b, 0x88,
+	0x54, 0xa0, 0x30, 0xfb, 0xe6, 0xc9, 0x92, 0xb4, 0x60, 0x29, 0xa2, 0xf6, 0x18, 0xd3, 0xaa, 0xc8,
+	0xad, 0x6f, 0x13, 0xe8, 0x2c, 0xe0, 0xd5, 0xc2, 0x4b, 0x79, 0x7f, 0x19, 0x16, 0x2f, 0x5d, 0x33,
+	0x4e, 0xae, 0xb2, 0x8e, 0x23, 0x37, 0xc2, 0xc7, 0xba, 0xca, 0x79, 0xb5, 0xf9, 0x5e, 0xe5, 0x0f,
+	0xf0, 0x4f, 0x6f, 0x1c, 0x5c, 0xf5, 0xc6, 0xb6, 0x3d, 0xd7, 0xc2, 0x06, 0x50, 0x99, 0xe9, 0xcc,
+	0x73, 0xf4, 0x0c, 0xa0, 0xfa, 0xce, 0x33, 0x69, 0x88, 0x3d, 0x1f, 0x03, 0x74, 0x0c, 0x9c, 0xd7,
+	0xdb, 0xac, 0x43, 0x2d, 0x2f, 0xc4, 0xea, 0xea, 0x7c, 0x5b, 0x82, 0xb5, 0xf3, 0x09, 0xf7, 0x5b,
+	0xf4, 0x23, 0xcb, 0x40, 0x72, 0x06, 0x65, 0xde, 0xb3, 0x48, 0x33, 0xa3, 0x2e, 0xb4, 0x41, 0xe5,
+	0xe9, 0x1d, 0x11, 0x4c, 0x48, 0x95, 0xc8, 0x7b, 0xa8, 0xe4, 0xed, 0x87, 0xa8, 0xd9, 0xe7, 0x2a,
+	0xf6, 0x34, 0x65, 0xf3, 0xce, 0x98, 0x1b, 0xfa, 0x33, 0x28, 0xf3, 0x35, 0x72, 0x79, 0x0b, 0xfb,
+	0xcc, 0xe5, 0x2d, 0x6e, 0x10, 0x23, 0xe6, 0xfd, 0x88, 0x6f, 0x88, 0xc8, 0x18, 0xf9, 0x86, 0x08,
+	0xcd, 0x8c, 0x11, 0xf3, 0x5e, 0xc0, 0x11, 0x0b, 0x4d, 0x89, 0x23, 0x16, 0x1b, 0x89, 0x2a, 0x91,
+	0x73, 0x28, 0xf3, 0x03, 0x8b, 0x23, 0x16, 0xda, 0x01, 0x47, 0x2c, 0x9e, 0x76, 0xaa, 0xb4, 0x23,
+	0x27, 0x39, 0xf3, 0x8f, 0x9e, 0xa3, 0x16, 0x4e, 0x1f, 0x8e, 0x5a, 0x3c, 0x31, 0x54, 0x89, 0x1c,
+	0xc2, 0xca, 0xf4, 0xd1, 0x11, 0x25, 0x03, 0xc8, 0xbd, 0x78, 0x65, 0x43, 0x78, 0x36, 0xa5, 0xd9,
+	0xdf, 0xfa, 0x7a, 0xdd, 0x90, 0xbf, 0x5f, 0x37, 0xe4, 0x9f, 0xd7, 0x0d, 0xf9, 0xcb, 0xaf, 0x86,
+	0x04, 0xeb, 0x26, 0x46, 0x53, 0x0c, 0xf5, 0x2c, 0x2d, 0x6a, 0xf7, 0xe4, 0x8b, 0x45, 0xed, 0x75,
+	0xd4, 0xbe, 0x5c, 0x9e, 0xfc, 0xbb, 0x7b, 0xfe, 0x3b, 0x00, 0x00, 0xff, 0xff, 0x39, 0xc3, 0x39,
+	0x61, 0x1d, 0x0a, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -922,6 +1036,7 @@ type YorkieServiceClient interface {
 	AttachDocument(ctx context.Context, in *AttachDocumentRequest, opts ...grpc.CallOption) (*AttachDocumentResponse, error)
 	DetachDocument(ctx context.Context, in *DetachDocumentRequest, opts ...grpc.CallOption) (*DetachDocumentResponse, error)
 	WatchDocuments(ctx context.Context, in *WatchDocumentsRequest, opts ...grpc.CallOption) (YorkieService_WatchDocumentsClient, error)
+	RemoveDocument(ctx context.Context, in *RemoveDocumentRequest, opts ...grpc.CallOption) (*RemoveDocumentResponse, error)
 	PushPull(ctx context.Context, in *PushPullRequest, opts ...grpc.CallOption) (*PushPullResponse, error)
 }
 
@@ -1010,6 +1125,15 @@ func (x *yorkieServiceWatchDocumentsClient) Recv() (*WatchDocumentsResponse, err
 	return m, nil
 }
 
+func (c *yorkieServiceClient) RemoveDocument(ctx context.Context, in *RemoveDocumentRequest, opts ...grpc.CallOption) (*RemoveDocumentResponse, error) {
+	out := new(RemoveDocumentResponse)
+	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/RemoveDocument", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *yorkieServiceClient) PushPull(ctx context.Context, in *PushPullRequest, opts ...grpc.CallOption) (*PushPullResponse, error) {
 	out := new(PushPullResponse)
 	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/PushPull", in, out, opts...)
@@ -1027,6 +1151,7 @@ type YorkieServiceServer interface {
 	AttachDocument(context.Context, *AttachDocumentRequest) (*AttachDocumentResponse, error)
 	DetachDocument(context.Context, *DetachDocumentRequest) (*DetachDocumentResponse, error)
 	WatchDocuments(*WatchDocumentsRequest, YorkieService_WatchDocumentsServer) error
+	RemoveDocument(context.Context, *RemoveDocumentRequest) (*RemoveDocumentResponse, error)
 	PushPull(context.Context, *PushPullRequest) (*PushPullResponse, error)
 }
 
@@ -1051,6 +1176,9 @@ func (*UnimplementedYorkieServiceServer) DetachDocument(ctx context.Context, req
 }
 func (*UnimplementedYorkieServiceServer) WatchDocuments(req *WatchDocumentsRequest, srv YorkieService_WatchDocumentsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchDocuments not implemented")
+}
+func (*UnimplementedYorkieServiceServer) RemoveDocument(ctx context.Context, req *RemoveDocumentRequest) (*RemoveDocumentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveDocument not implemented")
 }
 func (*UnimplementedYorkieServiceServer) PushPull(ctx context.Context, req *PushPullRequest) (*PushPullResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PushPull not implemented")
@@ -1171,6 +1299,24 @@ func (x *yorkieServiceWatchDocumentsServer) Send(m *WatchDocumentsResponse) erro
 	return x.ServerStream.SendMsg(m)
 }
 
+func _YorkieService_RemoveDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveDocumentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(YorkieServiceServer).RemoveDocument(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/yorkie.v1.YorkieService/RemoveDocument",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(YorkieServiceServer).RemoveDocument(ctx, req.(*RemoveDocumentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _YorkieService_PushPull_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PushPullRequest)
 	if err := dec(in); err != nil {
@@ -1212,6 +1358,10 @@ var _YorkieService_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DetachDocument",
 			Handler:    _YorkieService_DetachDocument_Handler,
+		},
+		{
+			MethodName: "RemoveDocument",
+			Handler:    _YorkieService_RemoveDocument_Handler,
 		},
 		{
 			MethodName: "PushPull",
@@ -1734,6 +1884,98 @@ func (m *WatchDocumentsResponse_Initialization) MarshalToSizedBuffer(dAtA []byte
 	return len(dAtA) - i, nil
 }
 
+func (m *RemoveDocumentRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RemoveDocumentRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RemoveDocumentRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.ChangePack != nil {
+		{
+			size, err := m.ChangePack.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintYorkie(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ClientId) > 0 {
+		i -= len(m.ClientId)
+		copy(dAtA[i:], m.ClientId)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RemoveDocumentResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RemoveDocumentResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RemoveDocumentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.ChangePack != nil {
+		{
+			size, err := m.ChangePack.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintYorkie(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ClientKey) > 0 {
+		i -= len(m.ClientKey)
+		copy(dAtA[i:], m.ClientKey)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientKey)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *PushPullRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -2139,6 +2381,46 @@ func (m *WatchDocumentsResponse_Initialization) Size() (n int) {
 			mapEntrySize := 1 + len(k) + sovYorkie(uint64(len(k))) + l
 			n += mapEntrySize + 1 + sovYorkie(uint64(mapEntrySize))
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *RemoveDocumentRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ClientId)
+	if l > 0 {
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	if m.ChangePack != nil {
+		l = m.ChangePack.Size()
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *RemoveDocumentResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ClientKey)
+	if l > 0 {
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	if m.ChangePack != nil {
+		l = m.ChangePack.Size()
+		n += 1 + l + sovYorkie(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3475,6 +3757,246 @@ func (m *WatchDocumentsResponse_Initialization) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.PeersMapByDoc[mapkey] = mapvalue
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipYorkie(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RemoveDocumentRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowYorkie
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RemoveDocumentRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RemoveDocumentRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
+			if m.ClientId == nil {
+				m.ClientId = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChangePack", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ChangePack == nil {
+				m.ChangePack = &ChangePack{}
+			}
+			if err := m.ChangePack.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipYorkie(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RemoveDocumentResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowYorkie
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RemoveDocumentResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RemoveDocumentResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClientKey", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ClientKey = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChangePack", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ChangePack == nil {
+				m.ChangePack = &ChangePack{}
+			}
+			if err := m.ChangePack.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
