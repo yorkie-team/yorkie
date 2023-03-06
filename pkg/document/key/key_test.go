@@ -36,6 +36,9 @@ func TestKey(t *testing.T) {
 
 		err = Key("-----_________________-a").Validate()
 		assert.Nil(t, err, "key should be valid")
+
+		err = Key("Capital-Character-Key").Validate()
+		assert.Nil(t, err, "key should be valid")
 	})
 
 	t.Run("invalid key test", func(t *testing.T) {
