@@ -78,7 +78,7 @@ type ClientInfo struct {
 }
 
 // CheckIfInProject checks if the client is in the project.
-func (i ClientInfo) CheckIfInProject(projectID types.ID) error {
+func (i *ClientInfo) CheckIfInProject(projectID types.ID) error {
 	if i.ProjectID != projectID {
 		return ErrClientNotFound
 	}

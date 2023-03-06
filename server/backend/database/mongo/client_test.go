@@ -18,7 +18,12 @@ package mongo_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
+
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 
 	"github.com/stretchr/testify/assert"
 
@@ -41,6 +46,7 @@ func TestClient(t *testing.T) {
 	cli, err := mongo.Dial(config)
 	assert.NoError(t, err)
 
+	dummyProjectID := types.ID("000000000000000000000000")
 	dummyOwnerID := types.ID("000000000000000000000000")
 	otherOwnerID := types.ID("000000000000000000000001")
 	clientDeactivateThreshold := "1h"
@@ -118,5 +124,52 @@ func TestClient(t *testing.T) {
 		info2, err := cli.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
 		assert.NoError(t, err)
 		assert.Equal(t, info1.ID, info2.ID)
+	})
+
+	t.Run("Set removed_at in docInfo test", func(t *testing.T) {
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+		docInfo, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		doc := document.New(key.Key(t.Name()))
+		pack := doc.CreateChangePack()
+
+		// Set removed_at in docInfo and store changes
+		err = cli.CreateChangeInfos(ctx, dummyProjectID, docInfo, 0, pack.Changes, true)
+		assert.NoError(t, err)
+
+		// Check whether removed_at is set in docInfo
+		docInfo, err = cli.FindDocInfoByID(ctx, docInfo.ID)
+		assert.NoError(t, err)
+		assert.NotEqual(t, time.Time{}, docInfo.RemovedAt)
+	})
+
+	t.Run("Reuse same key to create docInfo test ", func(t *testing.T) {
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo1, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+		docInfo1, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo1.ID, docKey, true)
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
+
+		doc := document.New(key.Key(t.Name()))
+		pack := doc.CreateChangePack()
+
+		// Set removed_at in docInfo and store changes
+		err = cli.CreateChangeInfos(ctx, dummyProjectID, docInfo1, 0, pack.Changes, true)
+		assert.NoError(t, err)
+
+		// Use same key to create docInfo
+		clientInfo2, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+		docInfo2, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo2.ID, docKey, true)
+		assert.NoError(t, clientInfo2.AttachDocument(docInfo2.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo2))
+
+		// Check they have same key but different id
+		assert.Equal(t, docInfo1.Key, docInfo2.Key)
+		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
 	})
 }

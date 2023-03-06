@@ -35,6 +35,7 @@ message ChangePack {
   bytes snapshot = 3;
   repeated Change changes = 4;
   TimeTicket min_synced_ticket = 5;
+  bool is_doc_removed = 6;
 }
 
 message Change {

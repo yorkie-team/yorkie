@@ -165,6 +165,7 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		Changes:         changes,
 		Snapshot:        pbPack.Snapshot,
 		MinSyncedTicket: minSyncedTicket,
+		IsDocRemoved:    pbPack.IsDocRemoved,
 	}, nil
 }
 

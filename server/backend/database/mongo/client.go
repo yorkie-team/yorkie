@@ -694,11 +694,15 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 		return nil, err
 	}
 
-	now := gotime.Now()
-	res, err := c.collection(colDocuments).UpdateOne(ctx, bson.M{
+	filter := bson.M{
 		"project_id": encodedProjectID,
 		"key":        docKey,
-	}, bson.M{
+		"removed_at": bson.M{
+			"$exists": false,
+		},
+	}
+	now := gotime.Now()
+	res, err := c.collection(colDocuments).UpdateOne(ctx, filter, bson.M{
 		"$set": bson.M{
 			"accessed_at": now,
 		},
@@ -720,10 +724,7 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 			},
 		})
 	} else {
-		result = c.collection(colDocuments).FindOne(ctx, bson.M{
-			"project_id": encodedProjectID,
-			"key":        docKey,
-		})
+		result = c.collection(colDocuments).FindOne(ctx, filter)
 		if result.Err() == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s %s: %w", projectID, docKey, database.ErrDocumentNotFound)
 		}
@@ -755,6 +756,9 @@ func (c *Client) FindDocInfoByKey(
 	result := c.collection(colDocuments).FindOne(ctx, bson.M{
 		"project_id": encodedProjectID,
 		"key":        docKey,
+		"removed_at": bson.M{
+			"$exists": false,
+		},
 	})
 	if result.Err() == mongo.ErrNoDocuments {
 		return nil, fmt.Errorf("%s %s: %w", projectID, docKey, database.ErrDocumentNotFound)
@@ -806,6 +810,7 @@ func (c *Client) CreateChangeInfos(
 	docInfo *database.DocInfo,
 	initialServerSeq int64,
 	changes []*change.Change,
+	isDocRemoved bool,
 ) error {
 	encodedDocID, err := encodeID(docInfo.ID)
 	if err != nil {
@@ -833,23 +838,32 @@ func (c *Client) CreateChangeInfos(
 
 	// TODO(hackerwins): We need to handle the updates for the two collections
 	// below atomically.
-	if _, err = c.collection(colChanges).BulkWrite(
-		ctx,
-		models,
-		options.BulkWrite().SetOrdered(true),
-	); err != nil {
-		logging.From(ctx).Error(err)
-		return fmt.Errorf("bulk write changes: %w", err)
+	if len(changes) > 0 {
+		if _, err = c.collection(colChanges).BulkWrite(
+			ctx,
+			models,
+			options.BulkWrite().SetOrdered(true),
+		); err != nil {
+			logging.From(ctx).Error(err)
+			return fmt.Errorf("bulk write changes: %w", err)
+		}
+	}
+
+	now := gotime.Now()
+	updateFields := bson.M{
+		"server_seq": docInfo.ServerSeq,
+		"updated_at": now,
+	}
+
+	if isDocRemoved {
+		updateFields["removed_at"] = now
 	}
 
 	res, err := c.collection(colDocuments).UpdateOne(ctx, bson.M{
 		"_id":        encodedDocID,
 		"server_seq": initialServerSeq,
 	}, bson.M{
-		"$set": bson.M{
-			"server_seq": docInfo.ServerSeq,
-			"updated_at": gotime.Now(),
-		},
+		"$set": updateFields,
 	})
 	if err != nil {
 		logging.From(ctx).Error(err)

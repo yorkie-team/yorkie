@@ -83,10 +83,15 @@ func PushPull(
 	}
 
 	// 03. store pushed changes, docInfo and checkpoint of the client to DB.
-	if len(pushedChanges) > 0 {
-		if err := be.DB.CreateChangeInfos(ctx, project.ID, docInfo, initialServerSeq, pushedChanges); err != nil {
-			return nil, err
-		}
+	if err := be.DB.CreateChangeInfos(
+		ctx,
+		project.ID,
+		docInfo,
+		initialServerSeq,
+		pushedChanges,
+		reqPack.IsDocRemoved,
+	); err != nil {
+		return nil, err
 	}
 
 	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
@@ -108,7 +113,7 @@ func PushPull(
 	respPack.MinSyncedTicket = minSyncedTicket
 
 	// 05. publish document change event then store snapshot asynchronously.
-	if reqPack.HasChanges() {
+	if reqPack.HasChanges() || docInfo.IsRemoved() {
 		be.Background.AttachGoroutine(func(ctx context.Context) {
 			publisherID, err := clientInfo.ID.ToActorID()
 			if err != nil {

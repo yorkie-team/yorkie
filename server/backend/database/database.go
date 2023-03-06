@@ -168,6 +168,7 @@ type Database interface {
 		docInfo *DocInfo,
 		initialServerSeq int64,
 		changes []*change.Change,
+		isDocRemoved bool,
 	) error
 
 	// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to

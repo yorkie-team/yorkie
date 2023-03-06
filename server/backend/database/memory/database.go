@@ -631,12 +631,18 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
+	raw, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
 	if err != nil {
 		return nil, fmt.Errorf("find document by key: %w", err)
 	}
 	if !createDocIfNotExist && raw == nil {
-		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
+		raw, err = txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
+		if err != nil {
+			return nil, fmt.Errorf("find document by key: %w", err)
+		}
+		if raw == nil {
+			return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
+		}
 	}
 
 	now := gotime.Now()
@@ -671,7 +677,7 @@ func (d *DB) FindDocInfoByKey(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
+	raw, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
 	if err != nil {
 		return nil, fmt.Errorf("find document by key: %w", err)
 	}
@@ -703,13 +709,15 @@ func (d *DB) FindDocInfoByID(
 	return docInfo.DeepCopy(), nil
 }
 
-// CreateChangeInfos stores the given changes and doc info.
+// CreateChangeInfos stores the given changes and doc info. If the
+// removeDoc condition is true, mark IsRemoved to true in doc info.
 func (d *DB) CreateChangeInfos(
 	ctx context.Context,
 	projectID types.ID,
 	docInfo *database.DocInfo,
 	initialServerSeq int64,
 	changes []*change.Change,
+	isDocRemoved bool,
 ) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -734,7 +742,13 @@ func (d *DB) CreateChangeInfos(
 		}
 	}
 
-	raw, err := txn.First(tblDocuments, "project_id_key", projectID.String(), docInfo.Key.String())
+	raw, err := txn.First(
+		tblDocuments,
+		"project_id_key_removed_at",
+		projectID.String(),
+		docInfo.Key.String(),
+		gotime.Time{},
+	)
 	if err != nil {
 		return fmt.Errorf("find document by key: %w", err)
 	}
@@ -746,8 +760,12 @@ func (d *DB) CreateChangeInfos(
 		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
+	now := gotime.Now()
 	loadedDocInfo.ServerSeq = docInfo.ServerSeq
-	loadedDocInfo.UpdatedAt = gotime.Now()
+	loadedDocInfo.UpdatedAt = now
+	if isDocRemoved {
+		loadedDocInfo.RemovedAt = now
+	}
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
 		return fmt.Errorf("update document: %w", err)
 	}

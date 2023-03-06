@@ -178,6 +178,53 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, 15, res.TotalCount)
 	})
 
+	t.Run("set RemovedAt in docInfo test", func(t *testing.T) {
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		doc := document.New(key.Key(t.Name()))
+		pack := doc.CreateChangePack()
+
+		// Set RemovedAt in docInfo and store changes
+		err = db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, true)
+		assert.NoError(t, err)
+
+		// Check whether RemovedAt is set in docInfo
+		docInfo, err = db.FindDocInfoByID(ctx, docInfo.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, false, docInfo.RemovedAt.IsZero())
+	})
+
+	t.Run("reuse same key to create docInfo test ", func(t *testing.T) {
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo1, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo1.ID, docKey, true)
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
+
+		doc := document.New(key.Key(t.Name()))
+		pack := doc.CreateChangePack()
+
+		// Set RemovedAt in docInfo and store changes
+		err = db.CreateChangeInfos(ctx, projectID, docInfo1, 0, pack.Changes, true)
+		assert.NoError(t, err)
+
+		// Use same key to create docInfo
+		clientInfo2, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo2, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo2.ID, docKey, true)
+		assert.NoError(t, clientInfo2.AttachDocument(docInfo2.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo2))
+
+		// Check they have same key but different id
+		assert.Equal(t, docInfo1.Key, docInfo2.Key)
+		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
+	})
+
 	t.Run("update clientInfo after PushPull test", func(t *testing.T) {
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
@@ -220,7 +267,7 @@ func TestDB(t *testing.T) {
 		}
 
 		// Store changes
-		err = db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes)
+		err = db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, false)
 		assert.NoError(t, err)
 
 		// Find changes

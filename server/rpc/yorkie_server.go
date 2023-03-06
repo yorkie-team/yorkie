@@ -176,6 +176,7 @@ func (s *yorkieServer) AttachDocument(
 		pack.DocumentKey,
 		true,
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -460,14 +461,80 @@ func (s *yorkieServer) RemoveDocument(
 	ctx context.Context,
 	req *api.RemoveDocumentRequest,
 ) (*api.RemoveDocumentResponse, error) {
-	_, err := time.ActorIDFromBytes(req.ClientId)
+	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO(hackerwins): Implement RemoveDocument.
+	pack, err := converter.FromChangePack(req.ChangePack)
+	if err != nil {
+		return nil, err
+	}
 
-	return &api.RemoveDocumentResponse{}, nil
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.RemoveDocument,
+		Attributes: auth.AccessAttributes(pack),
+	}); err != nil {
+		return nil, err
+	}
+
+	if pack.HasChanges() {
+		locker, err := s.backend.Coordinator.NewLocker(
+			ctx,
+			packs.PushPullKey(projects.From(ctx).ID, pack.DocumentKey),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := locker.Lock(ctx); err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err := locker.Unlock(ctx); err != nil {
+				logging.DefaultLogger().Error(err)
+			}
+		}()
+	}
+
+	clientInfo, err := clients.FindClientInfo(
+		ctx,
+		s.backend.DB,
+		projects.From(ctx),
+		actorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	docInfo, err := documents.FindDocInfoByKeyAndOwner(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		clientInfo,
+		pack.DocumentKey,
+		false,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
+		return nil, err
+	}
+
+	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
+	if err != nil {
+		return nil, err
+	}
+
+	pbChangePack, err := pulled.ToPBChangePack()
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.RemoveDocumentResponse{
+		ChangePack: pbChangePack,
+	}, nil
 }
 
 // UpdatePresence updates the presence of the given client.
