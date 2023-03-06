@@ -32,7 +32,7 @@ const (
 	// NOTE(DongjinS): regular expression is referenced unreserved characters
 	// (https://datatracker.ietf.org/doc/html/rfc3986#section-2.3)
 	// and copied from https://gist.github.com/dpk/4757681
-	slugRegexString                   = `^[a-z0-9\-._~]+$`
+	slugRegexString                   = `^[a-zA-Z0-9\-._~]+$`
 	containAlphaRegexString           = `[a-zA-Z]`
 	containNumberRegexString          = `[0-9]`
 	containSpecialCharRegexString     = `[\{\}\[\]\/?.,;:|\)*~!^\-_+<>@\#$%&\\\=\(\'\"\x60]`
