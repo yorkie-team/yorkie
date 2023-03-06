@@ -24,7 +24,7 @@ import (
 
 func TestValidation(t *testing.T) {
 	t.Run("ValidateValue test", func(t *testing.T) {
-		err := ValidateValue("Valid-Key", "required,slug,min=4,max=30")
+		err := ValidateValue("valid-key", "required,slug,min=4,max=30")
 		assert.Nil(t, err, "valid key")
 
 		err = ValidateValue("invalid key", "required,slug,min=4,max=30")
@@ -35,6 +35,15 @@ func TestValidation(t *testing.T) {
 
 		err = ValidateValue("invalid-key-$-wrong-string-value", "required,slug,min=4,max=30")
 		assert.Equal(t, err.(Violation).Tag, "slug")
+
+		err = ValidateValue("Invalid-Key", "required,slug,min=4,max=30")
+		assert.Equal(t, err.(Violation).Tag, "slug")
+
+		err = ValidateValue("Valid-Doc-Key", "required,case_sensitive_slug,min=4,max=30")
+		assert.Nil(t, err, "Valid document Key with case-sensitive letters")
+
+		err = ValidateValue("Invalid Doc Key", "required,case_sensitive_slug,min=4,max=30")
+		assert.Equal(t, err.(Violation).Tag, "case_sensitive_slug")
 
 		err = ValidateValue("1h30m20s", "duration,min=2")
 		assert.Nil(t, err, "valid time duration string format")
