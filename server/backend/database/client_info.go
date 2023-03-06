@@ -174,11 +174,19 @@ func (i *ClientInfo) UpdateCheckpoint(
 // EnsureDocumentAttached ensures the given document is attached.
 func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 	if i.Status != ClientActivated {
-		return fmt.Errorf("ensure attached document(%s) in client(%s): %w", docID.String(), i.ID.String(), ErrClientNotActivated)
+		return fmt.Errorf("ensure attached document(%s) in client(%s): %w",
+			docID.String(),
+			i.ID.String(),
+			ErrClientNotActivated,
+		)
 	}
 
 	if !i.hasDocument(docID) || i.Documents[docID].Status == documentDetached {
-		return fmt.Errorf("ensure attached document(%s) in client(%s) : %w", docID.String(), i.ID.String(), ErrDocumentNotAttached)
+		return fmt.Errorf("ensure attached document(%s) in client(%s): %w",
+			docID.String(),
+			i.ID.String(),
+			ErrDocumentNotAttached,
+		)
 	}
 
 	return nil
