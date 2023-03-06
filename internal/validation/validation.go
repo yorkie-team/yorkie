@@ -240,7 +240,9 @@ func init() {
 		val := level.Field().String()
 		return caseSensitiveSlugRegex.MatchString(val)
 	})
-	RegisterTranslation("case_sensitive_slug", "{0} must only contain case-sensitive letters, numbers, hyphen, period, underscore, and tilde")
+	RegisterTranslation(
+		"case_sensitive_slug",
+		"{0} must only contain case-sensitive letters, numbers, hyphen, period, underscore, and tilde")
 
 	RegisterValidation("alpha_num_special", func(level validator.FieldLevel) bool {
 		val := level.Field().String()
