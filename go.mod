@@ -58,10 +58,10 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.5.5 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
-	golang.org/x/net v0.0.0-20221004154528-8021a29435af // indirect
+	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/sync v0.0.0-20220929204114-8fcdb60fdcc0 // indirect
-	golang.org/x/sys v0.0.0-20221006211917-84dc82d7e875 // indirect
-	golang.org/x/text v0.3.8 // indirect
+	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/text v0.7.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
