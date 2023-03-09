@@ -197,7 +197,7 @@ func TestDocument(t *testing.T) {
 		assert.NotNil(t, prevArray.RemovedAt())
 	})
 
-	t.Run("document delete test", func(t *testing.T) {
+	t.Run("document deletion test", func(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(key.Key(helper.TestDocKey(t)))
@@ -213,6 +213,9 @@ func TestDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		assert.NoError(t, c1.Remove(ctx, d1))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, d1.Status(), document.StatusRemoved)
+		assert.Equal(t, d2.Status(), document.StatusRemoved)
 	})
 
 	t.Run("document delete on client/document status test", func(t *testing.T) {
@@ -235,7 +238,7 @@ func TestDocument(t *testing.T) {
 		// 03. document is attached.
 		assert.NoError(t, cli.Attach(ctx, d1))
 		assert.NoError(t, cli.Remove(ctx, d1))
-		assert.Equal(t, document.Removed, d1.Status())
+		assert.Equal(t, document.StatusRemoved, d1.Status())
 
 		// 04. document is removed.
 		assert.ErrorIs(t, d1.Update(func(root *json.Object) error {

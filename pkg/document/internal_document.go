@@ -30,17 +30,17 @@ import (
 type StatusType int
 
 const (
-	// Detached means that the document is not attached to the client.
+	// StatusDetached means that the document is not attached to the client.
 	// The actor of the ticket is created without being assigned.
-	Detached StatusType = iota
+	StatusDetached StatusType = iota
 
-	// Attached means that this document is attached to the client.
+	// StatusAttached means that this document is attached to the client.
 	// The actor of the ticket is created with being assigned by the client.
-	Attached
+	StatusAttached
 
-	// Removed means that this document is removed. If the document is removed,
+	// StatusRemoved means that this document is removed. If the document is removed,
 	// it cannot be edited.
-	Removed
+	StatusRemoved
 )
 
 var (
@@ -64,7 +64,7 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 
 	return &InternalDocument{
 		key:        k,
-		status:     Detached,
+		status:     StatusDetached,
 		root:       crdt.NewRoot(root),
 		checkpoint: change.InitialCheckpoint,
 		changeID:   change.InitialID,
@@ -85,7 +85,7 @@ func NewInternalDocumentFromSnapshot(
 
 	return &InternalDocument{
 		key:        k,
-		status:     Detached,
+		status:     StatusDetached,
 		root:       crdt.NewRoot(obj),
 		checkpoint: change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changeID:   change.InitialID.SyncLamport(lamport),
@@ -188,7 +188,7 @@ func (d *InternalDocument) SetStatus(status StatusType) {
 
 // IsAttached returns the whether this document is attached or not.
 func (d *InternalDocument) IsAttached() bool {
-	return d.status == Attached
+	return d.status == StatusAttached
 }
 
 // Root returns the root of this document.

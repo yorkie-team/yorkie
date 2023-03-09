@@ -45,7 +45,7 @@ func TestDocument(t *testing.T) {
 	t.Run("status test", func(t *testing.T) {
 		doc := document.New("d1")
 		assert.False(t, doc.IsAttached())
-		doc.SetStatus(document.Attached)
+		doc.SetStatus(document.StatusAttached)
 		assert.True(t, doc.IsAttached())
 	})
 

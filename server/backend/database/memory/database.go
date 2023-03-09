@@ -691,6 +691,7 @@ func (d *DB) FindDocInfoByKey(
 // FindDocInfoByID finds a docInfo of the given ID.
 func (d *DB) FindDocInfoByID(
 	ctx context.Context,
+	projectID types.ID,
 	id types.ID,
 ) (*database.DocInfo, error) {
 	txn := d.db.Txn(true)
@@ -702,10 +703,14 @@ func (d *DB) FindDocInfoByID(
 	}
 
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("finding doc info by ID(%s): %w", id, database.ErrDocumentNotFound)
 	}
 
 	docInfo := raw.(*database.DocInfo)
+	if docInfo.ProjectID != projectID {
+		return nil, fmt.Errorf("finding doc info by ID(%s): %w", id, database.ErrDocumentNotFound)
+	}
+
 	return docInfo.DeepCopy(), nil
 }
 
@@ -717,7 +722,7 @@ func (d *DB) CreateChangeInfos(
 	docInfo *database.DocInfo,
 	initialServerSeq int64,
 	changes []*change.Change,
-	isDocRemoved bool,
+	isRemoved bool,
 ) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -763,14 +768,18 @@ func (d *DB) CreateChangeInfos(
 	now := gotime.Now()
 	loadedDocInfo.ServerSeq = docInfo.ServerSeq
 	loadedDocInfo.UpdatedAt = now
-	if isDocRemoved {
+	if isRemoved {
 		loadedDocInfo.RemovedAt = now
 	}
 	if err := txn.Insert(tblDocuments, loadedDocInfo); err != nil {
 		return fmt.Errorf("update document: %w", err)
 	}
-
 	txn.Commit()
+
+	if isRemoved {
+		docInfo.RemovedAt = now
+	}
+
 	return nil
 }
 

@@ -32,9 +32,10 @@ service YorkieService {
 
   rpc AttachDocument (AttachDocumentRequest) returns (AttachDocumentResponse) {}
   rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
-  rpc WatchDocuments (WatchDocumentsRequest) returns (stream WatchDocumentsResponse) {}
   rpc RemoveDocument (RemoveDocumentRequest) returns (RemoveDocumentResponse) {}
-  rpc PushPull (PushPullRequest) returns (PushPullResponse) {}
+  rpc PushPullChanges (PushPullChangesRequest) returns (PushPullChangesResponse) {}
+
+  rpc WatchDocuments (WatchDocumentsRequest) returns (stream WatchDocumentsResponse) {}
 }
 
 message ActivateClientRequest {
@@ -61,12 +62,14 @@ message AttachDocumentRequest {
 
 message AttachDocumentResponse {
   bytes client_id = 1;
-  ChangePack change_pack = 2;
+  string document_id = 2;
+  ChangePack change_pack = 3;
 }
 
 message DetachDocumentRequest {
   bytes client_id = 1;
-  ChangePack change_pack = 2;
+  string document_id = 2;
+  ChangePack change_pack = 3;
 }
 
 message DetachDocumentResponse {
@@ -92,7 +95,8 @@ message WatchDocumentsResponse {
 
 message RemoveDocumentRequest {
   bytes client_id = 1;
-  ChangePack change_pack = 2;
+  string document_id = 2;
+  ChangePack change_pack = 3;
 }
 
 message RemoveDocumentResponse {
@@ -100,12 +104,13 @@ message RemoveDocumentResponse {
   ChangePack change_pack = 2;
 }
 
-message PushPullRequest {
+message PushPullChangesRequest {
   bytes client_id = 1;
-  ChangePack change_pack = 2;
+  string document_id = 2;
+  ChangePack change_pack = 3;
 }
 
-message PushPullResponse {
+message PushPullChangesResponse {
   bytes client_id = 1;
   ChangePack change_pack = 2;
 }

@@ -61,6 +61,7 @@ var (
 // Attachment represents the document attached and peers.
 type Attachment struct {
 	doc   *document.Document
+	docID types.ID
 	peers map[string]types.PresenceInfo
 }
 
@@ -268,7 +269,6 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	if err := doc.ApplyChangePack(pack); err != nil {
 		return err
 	}
-
 	if c.logger.Core().Enabled(zap.DebugLevel) {
 		c.logger.Debug(fmt.Sprintf(
 			"after apply %d changes: %s",
@@ -277,9 +277,14 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		))
 	}
 
-	doc.SetStatus(document.Attached)
+	if doc.Status() == document.StatusRemoved {
+		return nil
+	}
+
+	doc.SetStatus(document.StatusAttached)
 	c.attachments[doc.Key().String()] = &Attachment{
 		doc:   doc,
+		docID: types.ID(res.DocumentId),
 		peers: make(map[string]types.PresenceInfo),
 	}
 
@@ -297,7 +302,8 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return ErrClientNotActivated
 	}
 
-	if _, ok := c.attachments[doc.Key().String()]; !ok {
+	attachment, ok := c.attachments[doc.Key().String()]
+	if !ok {
 		return ErrDocumentNotAttached
 	}
 
@@ -308,6 +314,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 
 	res, err := c.client.DetachDocument(ctx, &api.DetachDocumentRequest{
 		ClientId:   c.id.Bytes(),
+		DocumentId: attachment.docID.String(),
 		ChangePack: pbChangePack,
 	})
 	if err != nil {
@@ -323,7 +330,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
-	doc.SetStatus(document.Detached)
+	doc.SetStatus(document.StatusDetached)
 	delete(c.attachments, doc.Key().String())
 
 	return nil
@@ -340,7 +347,7 @@ func (c *Client) Sync(ctx context.Context, keys ...key.Key) error {
 	}
 
 	for _, k := range keys {
-		if err := c.sync(ctx, k); err != nil {
+		if err := c.pushPull(ctx, k); err != nil {
 			return err
 		}
 	}
@@ -531,7 +538,7 @@ func (c *Client) IsActive() bool {
 	return c.status == activated
 }
 
-func (c *Client) sync(ctx context.Context, key key.Key) error {
+func (c *Client) pushPull(ctx context.Context, key key.Key) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}
@@ -546,12 +553,12 @@ func (c *Client) sync(ctx context.Context, key key.Key) error {
 		return err
 	}
 
-	res, err := c.client.PushPull(ctx, &api.PushPullRequest{
+	res, err := c.client.PushPullChanges(ctx, &api.PushPullChangesRequest{
 		ClientId:   c.id.Bytes(),
+		DocumentId: attachment.docID.String(),
 		ChangePack: pbChangePack,
 	})
 	if err != nil {
-		c.logger.Error("failed to sync", zap.Error(err))
 		return err
 	}
 
@@ -561,8 +568,10 @@ func (c *Client) sync(ctx context.Context, key key.Key) error {
 	}
 
 	if err := attachment.doc.ApplyChangePack(pack); err != nil {
-		c.logger.Error("failed to apply change pack", zap.Error(err))
 		return err
+	}
+	if attachment.doc.Status() == document.StatusRemoved {
+		delete(c.attachments, attachment.doc.Key().String())
 	}
 
 	return nil
@@ -574,7 +583,8 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 		return ErrClientNotActivated
 	}
 
-	if _, ok := c.attachments[doc.Key().String()]; !ok {
+	attachment, ok := c.attachments[doc.Key().String()]
+	if !ok {
 		return ErrDocumentNotAttached
 	}
 
@@ -582,9 +592,11 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	if err != nil {
 		return err
 	}
+	pbChangePack.IsRemoved = true
 
 	res, err := c.client.RemoveDocument(ctx, &api.RemoveDocumentRequest{
 		ClientId:   c.id.Bytes(),
+		DocumentId: attachment.docID.String(),
 		ChangePack: pbChangePack,
 	})
 	if err != nil {
@@ -599,9 +611,9 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	if err := doc.ApplyChangePack(pack); err != nil {
 		return err
 	}
-
-	doc.SetStatus(document.Removed)
-	delete(c.attachments, doc.Key().String())
+	if doc.Status() == document.StatusRemoved {
+		delete(c.attachments, doc.Key().String())
+	}
 
 	return nil
 }

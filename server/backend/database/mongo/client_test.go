@@ -126,7 +126,7 @@ func TestClient(t *testing.T) {
 		assert.Equal(t, info1.ID, info2.ID)
 	})
 
-	t.Run("Set removed_at in docInfo test", func(t *testing.T) {
+	t.Run("set removed_at in docInfo test", func(t *testing.T) {
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
 		clientInfo, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
@@ -142,12 +142,12 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Check whether removed_at is set in docInfo
-		docInfo, err = cli.FindDocInfoByID(ctx, docInfo.ID)
+		docInfo, err = cli.FindDocInfoByID(ctx, dummyProjectID, docInfo.ID)
 		assert.NoError(t, err)
 		assert.NotEqual(t, time.Time{}, docInfo.RemovedAt)
 	})
 
-	t.Run("Reuse same key to create docInfo test ", func(t *testing.T) {
+	t.Run("reuse same key to create docInfo test ", func(t *testing.T) {
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
 		clientInfo1, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())

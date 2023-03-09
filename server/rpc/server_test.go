@@ -175,7 +175,7 @@ func TestRPCServerBackend(t *testing.T) {
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
-		_, err = testClient.AttachDocument(
+		resPack, err := testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -228,6 +228,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
 		)
@@ -238,6 +239,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
 		)
@@ -256,10 +258,10 @@ func TestRPCServerBackend(t *testing.T) {
 		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
-				ClientId: activateResp.ClientId,
+				ClientId:   activateResp.ClientId,
+				DocumentId: "000000000000000000000000",
 				ChangePack: &api.ChangePack{
-					DocumentKey: "invalid",
-					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+					Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 				},
 			},
 		)
@@ -295,12 +297,12 @@ func TestRPCServerBackend(t *testing.T) {
 		}
 
 		packWithRemoveRequest := &api.ChangePack{
-			DocumentKey:  helper.TestDocKey(t),
-			Checkpoint:   &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
-			IsDocRemoved: true,
+			DocumentKey: helper.TestDocKey(t),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			IsRemoved:   true,
 		}
 
-		_, err = testClient.AttachDocument(
+		resPack, err := testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -313,23 +315,26 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.RemoveDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
 		)
 		assert.NoError(t, err)
 
-		// try to detach document with same key as removed document (with no document created on same key)
+		// try to detach document with same ID as removed document
+		// FailedPrecondition because document is not attached.
 		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
 		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 
 		// try to create new document with same key as removed document
-		_, err = testClient.AttachDocument(
+		resPack, err = testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -342,6 +347,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.RemoveDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
 		)
@@ -360,7 +366,7 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		_, err = testClient.AttachDocument(
+		resPack, err := testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId: activateResp.ClientId,
@@ -379,10 +385,11 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		_, err = testClient.PushPull(
+		_, err = testClient.PushPullChanges(
 			context.Background(),
-			&api.PushPullRequest{
-				ClientId: activateResp.ClientId,
+			&api.PushPullChangesRequest{
+				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: &api.ChangePack{
 					DocumentKey: helper.TestDocKey(t),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
@@ -401,7 +408,8 @@ func TestRPCServerBackend(t *testing.T) {
 		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
-				ClientId: activateResp.ClientId,
+				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: &api.ChangePack{
 					DocumentKey: helper.TestDocKey(t),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
@@ -418,20 +426,22 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		// try to push/pull with detached document
-		_, err = testClient.PushPull(
+		_, err = testClient.PushPullChanges(
 			context.Background(),
-			&api.PushPullRequest{
+			&api.PushPullChangesRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
 		)
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 
 		// try to push/pull with invalid pack
-		_, err = testClient.PushPull(
+		_, err = testClient.PushPullChanges(
 			context.Background(),
-			&api.PushPullRequest{
+			&api.PushPullChangesRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: invalidChangePack,
 			},
 		)
@@ -444,10 +454,11 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		// try to push/pull with deactivated client
-		_, err = testClient.PushPull(
+		_, err = testClient.PushPullChanges(
 			context.Background(),
-			&api.PushPullRequest{
+			&api.PushPullChangesRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
 		)
@@ -461,9 +472,9 @@ func TestRPCServerBackend(t *testing.T) {
 		}
 
 		packWithRemoveRequest := &api.ChangePack{
-			DocumentKey:  helper.TestDocKey(t),
-			Checkpoint:   &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
-			IsDocRemoved: true,
+			DocumentKey: helper.TestDocKey(t),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			IsRemoved:   true,
 		}
 
 		activateResp, err := testClient.ActivateClient(
@@ -472,7 +483,7 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		_, err = testClient.AttachDocument(
+		resPack, err := testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -485,20 +496,22 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.RemoveDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
 		)
 		assert.NoError(t, err)
 
 		// try to push/pull on removed document
-		_, err = testClient.PushPull(
+		_, err = testClient.PushPullChanges(
 			context.Background(),
-			&api.PushPullRequest{
+			&api.PushPullChangesRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
 		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 	})
 
 	t.Run("remove document test", func(t *testing.T) {
@@ -514,12 +527,12 @@ func TestRPCServerBackend(t *testing.T) {
 		}
 
 		packWithRemoveRequest := &api.ChangePack{
-			DocumentKey:  helper.TestDocKey(t),
-			Checkpoint:   &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
-			IsDocRemoved: true,
+			DocumentKey: helper.TestDocKey(t),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			IsRemoved:   true,
 		}
 
-		_, err = testClient.AttachDocument(
+		resPack, err := testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -532,6 +545,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.RemoveDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
 		)
@@ -542,10 +556,11 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.RemoveDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
 		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 	})
 
 	t.Run("remove document with invalid client state test", func(t *testing.T) {
@@ -561,12 +576,12 @@ func TestRPCServerBackend(t *testing.T) {
 		}
 
 		packWithRemoveRequest := &api.ChangePack{
-			DocumentKey:  helper.TestDocKey(t),
-			Checkpoint:   &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
-			IsDocRemoved: true,
+			DocumentKey: helper.TestDocKey(t),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+			IsRemoved:   true,
 		}
 
-		_, err = testClient.AttachDocument(
+		resPack, err := testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
 				ClientId:   activateResp.ClientId,
@@ -579,6 +594,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
 		)
@@ -589,6 +605,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.RemoveDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
 		)
@@ -605,6 +622,7 @@ func TestRPCServerBackend(t *testing.T) {
 			context.Background(),
 			&api.RemoveDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
 		)

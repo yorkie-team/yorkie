@@ -777,14 +777,24 @@ func (c *Client) FindDocInfoByKey(
 }
 
 // FindDocInfoByID finds a docInfo of the given ID.
-func (c *Client) FindDocInfoByID(ctx context.Context, id types.ID) (*database.DocInfo, error) {
+func (c *Client) FindDocInfoByID(
+	ctx context.Context,
+	projectID types.ID,
+	id types.ID,
+) (*database.DocInfo, error) {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
+
 	encodedDocID, err := encodeID(id)
 	if err != nil {
 		return nil, err
 	}
 
 	result := c.collection(colDocuments).FindOne(ctx, bson.M{
-		"_id": encodedDocID,
+		"_id":        encodedDocID,
+		"project_id": encodedProjectID,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
 		logging.From(ctx).Error(result.Err())
@@ -810,7 +820,7 @@ func (c *Client) CreateChangeInfos(
 	docInfo *database.DocInfo,
 	initialServerSeq int64,
 	changes []*change.Change,
-	isDocRemoved bool,
+	isRemoved bool,
 ) error {
 	encodedDocID, err := encodeID(docInfo.ID)
 	if err != nil {
@@ -854,8 +864,7 @@ func (c *Client) CreateChangeInfos(
 		"server_seq": docInfo.ServerSeq,
 		"updated_at": now,
 	}
-
-	if isDocRemoved {
+	if isRemoved {
 		updateFields["removed_at"] = now
 	}
 
@@ -871,6 +880,9 @@ func (c *Client) CreateChangeInfos(
 	}
 	if res.MatchedCount == 0 {
 		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
+	}
+	if isRemoved {
+		docInfo.RemovedAt = now
 	}
 
 	return nil

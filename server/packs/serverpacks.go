@@ -44,8 +44,8 @@ type ServerPack struct {
 	// It used to collect garbage on the replica on the client.
 	MinSyncedTicket *time.Ticket
 
-	// IsDocRemoved is a flag that indicates whether the document is removed.
-	IsDocRemoved bool
+	// IsRemoved is a flag that indicates whether the document is removed.
+	IsRemoved bool
 }
 
 // NewServerPack creates a new instance of ServerPack.
@@ -54,14 +54,12 @@ func NewServerPack(
 	cp change.Checkpoint,
 	changeInfos []*database.ChangeInfo,
 	snapshot []byte,
-	IsDocRemoved bool,
 ) *ServerPack {
 	return &ServerPack{
-		DocumentKey:  key,
-		Checkpoint:   cp,
-		ChangeInfos:  changeInfos,
-		Snapshot:     snapshot,
-		IsDocRemoved: IsDocRemoved,
+		DocumentKey: key,
+		Checkpoint:  cp,
+		ChangeInfos: changeInfos,
+		Snapshot:    snapshot,
 	}
 }
 
@@ -116,6 +114,13 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		Changes:         pbChanges,
 		Snapshot:        p.Snapshot,
 		MinSyncedTicket: converter.ToTimeTicket(p.MinSyncedTicket),
-		IsDocRemoved:    p.IsDocRemoved,
+		IsRemoved:       p.IsRemoved,
 	}, nil
+}
+
+// ApplyDocInfo applies the given DocInfo to the ServerPack.
+func (p *ServerPack) ApplyDocInfo(info *database.DocInfo) {
+	if info.IsRemoved() {
+		p.IsRemoved = true
+	}
 }

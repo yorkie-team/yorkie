@@ -47,6 +47,9 @@ func SnapshotKey(projectID types.ID, docKey key.Key) sync.Key {
 
 // PushPull stores the given changes and returns accumulated changes of the
 // given document.
+//
+// CAUTION(hackerwins, krapie): docInfo's state is constantly mutating as they are
+// constantly used as parameters in subsequent subroutines.
 func PushPull(
 	ctx context.Context,
 	be *backend.Backend,
@@ -83,15 +86,17 @@ func PushPull(
 	}
 
 	// 03. store pushed changes, docInfo and checkpoint of the client to DB.
-	if err := be.DB.CreateChangeInfos(
-		ctx,
-		project.ID,
-		docInfo,
-		initialServerSeq,
-		pushedChanges,
-		reqPack.IsDocRemoved,
-	); err != nil {
-		return nil, err
+	if len(pushedChanges) > 0 || reqPack.IsRemoved {
+		if err := be.DB.CreateChangeInfos(
+			ctx,
+			project.ID,
+			docInfo,
+			initialServerSeq,
+			pushedChanges,
+			reqPack.IsRemoved,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
@@ -111,9 +116,10 @@ func PushPull(
 		return nil, err
 	}
 	respPack.MinSyncedTicket = minSyncedTicket
+	respPack.ApplyDocInfo(docInfo)
 
 	// 05. publish document change event then store snapshot asynchronously.
-	if reqPack.HasChanges() || docInfo.IsRemoved() {
+	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Background.AttachGoroutine(func(ctx context.Context) {
 			publisherID, err := clientInfo.ID.ToActorID()
 			if err != nil {

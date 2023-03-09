@@ -46,7 +46,7 @@ func BenchmarkDocument(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			doc := document.New("d1")
 			assert.False(b, doc.IsAttached())
-			doc.SetStatus(document.Attached)
+			doc.SetStatus(document.StatusAttached)
 			assert.True(b, doc.IsAttached())
 		}
 	})

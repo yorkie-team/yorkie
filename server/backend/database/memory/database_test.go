@@ -194,7 +194,7 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Check whether RemovedAt is set in docInfo
-		docInfo, err = db.FindDocInfoByID(ctx, docInfo.ID)
+		docInfo, err = db.FindDocInfoByID(ctx, projectID, docInfo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, false, docInfo.RemovedAt.IsZero())
 	})
@@ -387,7 +387,7 @@ func TestDB(t *testing.T) {
 		localDB, err := memory.New()
 		assert.NoError(t, err)
 
-		_, err = localDB.FindDocInfoByID(context.Background(), notExistsID)
+		_, err = localDB.FindDocInfoByID(context.Background(), projectID, notExistsID)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 

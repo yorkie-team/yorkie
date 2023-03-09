@@ -111,11 +111,7 @@ func pullPack(
 			return nil, err
 		}
 
-		docIsRemoved := reqPack.IsDocRemoved
-		if docInfo.IsRemoved() {
-			docIsRemoved = true
-		}
-		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil, docIsRemoved), err
+		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil), nil
 	}
 
 	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
@@ -164,11 +160,7 @@ func pullSnapshot(
 		cpAfterPull.String(),
 	)
 
-	docIsRemoved := reqPack.IsDocRemoved
-	if docInfo.IsRemoved() {
-		docIsRemoved = true
-	}
-	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot, docIsRemoved), err
+	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot), err
 }
 
 func pullChangeInfos(

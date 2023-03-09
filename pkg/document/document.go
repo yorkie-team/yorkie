@@ -55,7 +55,7 @@ func (d *Document) Update(
 	updater func(root *json.Object) error,
 	msgAndArgs ...interface{},
 ) error {
-	if d.doc.status == Removed {
+	if d.doc.status == StatusRemoved {
 		return ErrDocumentRemoved
 	}
 
@@ -122,6 +122,11 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 
 	// 04. Do Garbage collection.
 	d.GarbageCollect(pack.MinSyncedTicket)
+
+	// 05. Update the status.
+	if pack.IsRemoved {
+		d.SetStatus(StatusRemoved)
+	}
 
 	return nil
 }

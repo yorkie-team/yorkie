@@ -39,8 +39,8 @@ type Pack struct {
 	// It used to collect garbage on the replica on the client.
 	MinSyncedTicket *time.Ticket
 
-	// IsDocRemoved is a flag that indicates whether the document is removed.
-	IsDocRemoved bool
+	// IsRemoved is a flag that indicates whether the document is removed.
+	IsRemoved bool
 }
 
 // NewPack creates a new instance of Pack.

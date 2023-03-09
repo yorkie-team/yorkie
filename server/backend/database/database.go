@@ -158,6 +158,7 @@ type Database interface {
 	// FindDocInfoByID finds the document of the given ID.
 	FindDocInfoByID(
 		ctx context.Context,
+		projectID types.ID,
 		id types.ID,
 	) (*DocInfo, error)
 
@@ -168,7 +169,7 @@ type Database interface {
 		docInfo *DocInfo,
 		initialServerSeq int64,
 		changes []*change.Change,
-		isDocRemoved bool,
+		isRemoved bool,
 	) error
 
 	// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
