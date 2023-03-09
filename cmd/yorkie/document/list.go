@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	previousId string
+	previousID string
 	pageSize   int32
 	isForward  bool
 )
@@ -58,7 +58,7 @@ func newListCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			documents, err := cli.ListDocuments(ctx, projectName, previousId, pageSize, isForward)
+			documents, err := cli.ListDocuments(ctx, projectName, previousID, pageSize, isForward)
 			if err != nil {
 				return err
 			}
@@ -96,7 +96,7 @@ func newListCommand() *cobra.Command {
 func init() {
 	cmd := newListCommand()
 	cmd.Flags().StringVar(
-		&previousId,
+		&previousID,
 		"previous-id",
 		"",
 		"The previous document ID to start from",

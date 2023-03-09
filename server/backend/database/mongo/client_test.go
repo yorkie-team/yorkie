@@ -72,11 +72,10 @@ func setupTestWithDummyData(t *testing.T) {
 	}
 }
 
-func cleanupTest(cli *mongo.Client, testDBName string) error {
+func cleanupTest(cli *mongo.Client, testDBName string) {
 	if err := cli.DropDatabase(testDBName); err != nil {
-		return fmt.Errorf("test cleanup fail: %w", err)
+		_ = fmt.Errorf("test cleanup fail: %w", err)
 	}
-	return nil
 }
 
 func TestClient(t *testing.T) {

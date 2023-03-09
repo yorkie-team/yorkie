@@ -233,7 +233,7 @@ func (c *Client) UpdateProject(
 func (c *Client) ListDocuments(
 	ctx context.Context,
 	projectName string,
-	previousId string,
+	previousID string,
 	pageSize int32,
 	isForward bool,
 ) ([]*types.DocumentSummary, error) {
@@ -241,7 +241,7 @@ func (c *Client) ListDocuments(
 		ctx,
 		&api.ListDocumentsRequest{
 			ProjectName: projectName,
-			PreviousId:  previousId,
+			PreviousId:  previousID,
 			PageSize:    pageSize,
 			IsForward:   isForward,
 		},
