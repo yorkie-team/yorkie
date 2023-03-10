@@ -33,6 +33,9 @@ import (
 // document summary.
 const SnapshotMaxLen = 50
 
+// DocumentPageSizeLimit is the limit of the pagination size of documents.
+const documentPageSizeLimit = 100
+
 // ListDocumentSummaries returns a list of document summaries.
 func ListDocumentSummaries(
 	ctx context.Context,
@@ -40,6 +43,10 @@ func ListDocumentSummaries(
 	project *types.Project,
 	paging types.Paging[types.ID],
 ) ([]*types.DocumentSummary, error) {
+	if paging.PageSize > documentPageSizeLimit {
+		paging.PageSize = documentPageSizeLimit
+	}
+
 	docInfo, err := be.DB.FindDocInfosByPaging(ctx, project.ID, paging)
 	if err != nil {
 		return nil, err
