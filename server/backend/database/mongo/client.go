@@ -1146,7 +1146,9 @@ func (c *Client) FindDocInfosByPaging(
 	}
 
 	opts := options.Find().SetLimit(int64(paging.PageSize))
-	if !paging.IsForward {
+	if paging.IsForward {
+		opts = opts.SetSort(map[string]int{"_id": 1})
+	} else {
 		opts = opts.SetSort(map[string]int{"_id": -1})
 	}
 

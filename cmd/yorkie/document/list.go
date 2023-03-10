@@ -29,6 +29,12 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/units"
 )
 
+var (
+	previousID string
+	pageSize   int32
+	isForward  bool
+)
+
 func newListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "ls [project name]",
@@ -52,7 +58,7 @@ func newListCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			documents, err := cli.ListDocuments(ctx, projectName)
+			documents, err := cli.ListDocuments(ctx, projectName, previousID, pageSize, isForward)
 			if err != nil {
 				return err
 			}
@@ -88,5 +94,24 @@ func newListCommand() *cobra.Command {
 }
 
 func init() {
-	SubCmd.AddCommand(newListCommand())
+	cmd := newListCommand()
+	cmd.Flags().StringVar(
+		&previousID,
+		"previous-id",
+		"",
+		"The previous document ID to start from",
+	)
+	cmd.Flags().Int32Var(
+		&pageSize,
+		"size",
+		0,
+		"The number of document to output per page",
+	)
+	cmd.Flags().BoolVar(
+		&isForward,
+		"forward",
+		false,
+		"Whether to search forward or backward",
+	)
+	SubCmd.AddCommand(cmd)
 }
