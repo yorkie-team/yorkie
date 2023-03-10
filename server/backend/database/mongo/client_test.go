@@ -18,7 +18,6 @@ package mongo_test
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"testing"
 
@@ -31,61 +30,39 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-var (
-	ctx        = context.Background()
-	testDBName = helper.TestDBName()
-	config     = &mongo.Config{
-		ConnectionTimeout: "5s",
-		ConnectionURI:     "mongodb://localhost:27017",
-		YorkieDatabase:    testDBName,
-		PingTimeout:       "5s",
-	}
-
-	cli  *mongo.Client
-	_err error
-
+const (
 	dummyOwnerID              = types.ID("000000000000000000000000")
 	otherOwnerID              = types.ID("000000000000000000000001")
 	dummyClientID             = types.ID("000000000000000000000000")
-	dummyProjectName          = "dummyProject"
 	clientDeactivateThreshold = "1h"
-
-	testProjectInfo *database.ProjectInfo
-	testDocCnt      = 25
 )
 
-func setupTestWithDummyData(t *testing.T) {
+func setupTestWithDummyData(t *testing.T) *mongo.Client {
+	config := &mongo.Config{
+		ConnectionTimeout: "5s",
+		ConnectionURI:     "mongodb://localhost:27017",
+		YorkieDatabase:    helper.TestDBName(),
+		PingTimeout:       "5s",
+	}
 	assert.NoError(t, config.Validate())
 
-	cli, _err = mongo.Dial(config)
-	assert.NoError(t, _err)
+	cli, err := mongo.Dial(config)
+	assert.NoError(t, err)
 
-	// dummy project setup
-	testProjectInfo, _err = cli.CreateProjectInfo(ctx, dummyProjectName, dummyOwnerID, clientDeactivateThreshold)
-	assert.NoError(t, _err)
-
-	// dummy document setup
-	for i := 0; i <= testDocCnt; i++ {
-		testDocKey := key.Key("testdockey" + strconv.Itoa(i))
-		_, err := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, dummyClientID, testDocKey, true)
-		assert.NoError(t, err)
-	}
-}
-
-func cleanupTest(cli *mongo.Client, testDBName string) {
-	if err := cli.DropDatabase(testDBName); err != nil {
-		_ = fmt.Errorf("test cleanup fail: %w", err)
-	}
+	return cli
 }
 
 func TestClient(t *testing.T) {
-
-	setupTestWithDummyData(t)
-	defer cleanupTest(cli, testDBName)
+	cli := setupTestWithDummyData(t)
 
 	t.Run("UpdateProjectInfo test", func(t *testing.T) {
+		ctx := context.Background()
+
+		testProjectInfo, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
 		existName := "already"
-		_, err := cli.CreateProjectInfo(ctx, existName, dummyOwnerID, clientDeactivateThreshold)
+		_, err = cli.CreateProjectInfo(ctx, existName, dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		id := testProjectInfo.ID
@@ -146,101 +123,122 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("FindProjectInfoByName test", func(t *testing.T) {
-		info1, err := cli.CreateProjectInfo(ctx, dummyProjectName, dummyOwnerID, clientDeactivateThreshold)
+		ctx := context.Background()
+
+		info1, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
-		_, err = cli.CreateProjectInfo(ctx, dummyProjectName, otherOwnerID, clientDeactivateThreshold)
+		_, err = cli.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
-		info2, err := cli.FindProjectInfoByName(ctx, dummyOwnerID, dummyProjectName)
-		fmt.Println(info2)
+		info2, err := cli.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
 		assert.NoError(t, err)
 		assert.Equal(t, info1.ID, info2.ID)
 	})
 
-	cases := []struct {
-		name       string
-		offset     string
-		pageSize   int
-		isForward  bool
-		testResult []int
-	}{
-		{
-			name:       "FindDocInfosByPaging no flag test",
-			offset:     "",
-			pageSize:   0,
-			isForward:  false,
-			testResult: makeRangeSlice(25, 0),
-		},
-		{
-			name:       "FindDocInfosByPaging --forward test",
-			offset:     "",
-			pageSize:   0,
-			isForward:  true,
-			testResult: makeRangeSlice(0, 25),
-		},
-		{
-			name:       "FindDocInfosByPaging --size test",
-			offset:     "",
-			pageSize:   4,
-			isForward:  false,
-			testResult: makeRangeSlice(25, 22),
-		},
-		{
-			name:       "FindDocInfosByPaging --size --forward test",
-			offset:     "",
-			pageSize:   4,
-			isForward:  true,
-			testResult: makeRangeSlice(0, 3),
-		},
-		{
-			name:       "FindDocInfosByPaging --offset test",
-			offset:     findDocIDByDocKey(testProjectInfo.ID, "testdockey13"),
-			pageSize:   0,
-			isForward:  false,
-			testResult: makeRangeSlice(12, 0),
-		},
-		{
-			name:       "FindDocInfosByPaging --forward --offset test",
-			offset:     findDocIDByDocKey(testProjectInfo.ID, "testdockey13"),
-			pageSize:   0,
-			isForward:  true,
-			testResult: makeRangeSlice(14, 25),
-		},
-		{
-			name:       "FindDocInfosByPaging --size --offset test",
-			offset:     findDocIDByDocKey(testProjectInfo.ID, "testdockey13"),
-			pageSize:   10,
-			isForward:  false,
-			testResult: makeRangeSlice(12, 3),
-		},
-		{
-			name:       "FindDocInfosByPaging --size --forward --offset test",
-			offset:     findDocIDByDocKey(testProjectInfo.ID, "testdockey13"),
-			pageSize:   10,
-			isForward:  true,
-			testResult: makeRangeSlice(14, 23),
-		},
-	}
+	t.Run("FindDocInfosByPaging test", func(t *testing.T) {
+		const testDocCnt = 25
 
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			testPaging := types.Paging[types.ID]{
-				Offset:    types.ID(c.offset),
-				PageSize:  c.pageSize,
-				IsForward: c.isForward,
-			}
+		ctx := context.Background()
 
-			docInfos, err := cli.FindDocInfosByPaging(ctx, testProjectInfo.ID, testPaging)
+		// dummy project setup
+		testProjectInfo, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		// dummy document setup
+		var dummyDocInfos []*database.DocInfo
+		for i := 0; i <= testDocCnt; i++ {
+			testDocKey := key.Key("testdockey" + strconv.Itoa(i))
+			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, dummyClientID, testDocKey, true)
 			assert.NoError(t, err)
+			dummyDocInfos = append(dummyDocInfos, docInfo)
+		}
 
-			fmt.Println(len(docInfos))
-			for idx, docInfo := range docInfos {
-				fmt.Println(docInfo)
-				testDocKey := key.Key("testdockey" + strconv.Itoa(c.testResult[idx]))
-				assert.Equal(t, docInfo.Key, testDocKey)
-			}
-		})
-	}
+		cases := []struct {
+			name       string
+			offset     string
+			pageSize   int
+			isForward  bool
+			testResult []int
+		}{
+			{
+				name:       "FindDocInfosByPaging no flag test",
+				offset:     "",
+				pageSize:   0,
+				isForward:  false,
+				testResult: makeRangeSlice(testDocCnt, 0),
+			},
+			{
+				name:       "FindDocInfosByPaging --forward test",
+				offset:     "",
+				pageSize:   0,
+				isForward:  true,
+				testResult: makeRangeSlice(0, testDocCnt),
+			},
+			{
+				name:       "FindDocInfosByPaging --size test",
+				offset:     "",
+				pageSize:   4,
+				isForward:  false,
+				testResult: makeRangeSlice(testDocCnt, testDocCnt-4),
+			},
+			{
+				name:       "FindDocInfosByPaging --size --forward test",
+				offset:     "",
+				pageSize:   4,
+				isForward:  true,
+				testResult: makeRangeSlice(0, 3),
+			},
+			{
+				name:       "FindDocInfosByPaging --offset test",
+				offset:     dummyDocInfos[13].ID.String(),
+				pageSize:   0,
+				isForward:  false,
+				testResult: makeRangeSlice(12, 0),
+			},
+			{
+				name:       "FindDocInfosByPaging --forward --offset test",
+				offset:     dummyDocInfos[13].ID.String(),
+				pageSize:   0,
+				isForward:  true,
+				testResult: makeRangeSlice(14, testDocCnt),
+			},
+			{
+				name:       "FindDocInfosByPaging --size --offset test",
+				offset:     dummyDocInfos[13].ID.String(),
+				pageSize:   10,
+				isForward:  false,
+				testResult: makeRangeSlice(12, 3),
+			},
+			{
+				name:       "FindDocInfosByPaging --size --forward --offset test",
+				offset:     dummyDocInfos[13].ID.String(),
+				pageSize:   10,
+				isForward:  true,
+				testResult: makeRangeSlice(14, 23),
+			},
+		}
+
+		for _, c := range cases {
+			t.Run(c.name, func(t *testing.T) {
+				ctx := context.Background()
+				testPaging := types.Paging[types.ID]{
+					Offset:    types.ID(c.offset),
+					PageSize:  c.pageSize,
+					IsForward: c.isForward,
+				}
+
+				docInfos, err := cli.FindDocInfosByPaging(ctx, testProjectInfo.ID, testPaging)
+				assert.NoError(t, err)
+
+				for idx, docInfo := range docInfos {
+					resultIdx := c.testResult[idx]
+					assert.Equal(t, docInfo.Key, dummyDocInfos[resultIdx].Key)
+					assert.Equal(t, docInfo.ID, dummyDocInfos[resultIdx].ID)
+					assert.Equal(t, docInfo.ProjectID, dummyDocInfos[resultIdx].ProjectID)
+				}
+			})
+		}
+	})
 }
 
 func makeRangeSlice(start, end int) []int {
@@ -255,13 +253,4 @@ func makeRangeSlice(start, end int) []int {
 		}
 	}
 	return slice
-}
-
-func findDocIDByDocKey(projectID types.ID, docKey string) string {
-	docInfo, err := cli.FindDocInfoByKey(ctx, projectID, key.Key(docKey))
-	if err != nil {
-		_ = fmt.Errorf("cannot find docID by docKey: %w", err)
-		return ""
-	}
-	return docInfo.ID.String()
 }

@@ -90,14 +90,6 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// DropDatabase drop mongodb table (only use in test cleanup)
-func (c *Client) DropDatabase(databaseName string) error {
-	if err := c.client.Database(databaseName).Drop(context.Background()); err != nil {
-		return fmt.Errorf("drop database(%s): %w", databaseName, err)
-	}
-	return nil
-}
-
 // EnsureDefaultUserAndProject creates the default user and project if they do not exist.
 func (c *Client) EnsureDefaultUserAndProject(
 	ctx context.Context,
@@ -1154,10 +1146,10 @@ func (c *Client) FindDocInfosByPaging(
 	}
 
 	opts := options.Find().SetLimit(int64(paging.PageSize))
-	if !paging.IsForward {
-		opts = opts.SetSort(map[string]int{"_id": -1})
-	} else {
+	if paging.IsForward {
 		opts = opts.SetSort(map[string]int{"_id": 1})
+	} else {
+		opts = opts.SetSort(map[string]int{"_id": -1})
 	}
 
 	cursor, err := c.collection(colDocuments).Find(ctx, filter, opts)
