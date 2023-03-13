@@ -230,11 +230,20 @@ func (c *Client) UpdateProject(
 }
 
 // ListDocuments lists documents.
-func (c *Client) ListDocuments(ctx context.Context, projectName string) ([]*types.DocumentSummary, error) {
+func (c *Client) ListDocuments(
+	ctx context.Context,
+	projectName string,
+	previousID string,
+	pageSize int32,
+	isForward bool,
+) ([]*types.DocumentSummary, error) {
 	response, err := c.client.ListDocuments(
 		ctx,
 		&api.ListDocumentsRequest{
 			ProjectName: projectName,
+			PreviousId:  previousID,
+			PageSize:    pageSize,
+			IsForward:   isForward,
 		},
 	)
 	if err != nil {

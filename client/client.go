@@ -337,8 +337,9 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	if err := doc.ApplyChangePack(pack); err != nil {
 		return err
 	}
-
-	doc.SetStatus(document.StatusDetached)
+	if doc.Status() != document.StatusRemoved {
+		doc.SetStatus(document.StatusDetached)
+	}
 	delete(c.attachments, doc.Key().String())
 
 	return nil

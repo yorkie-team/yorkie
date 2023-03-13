@@ -226,7 +226,7 @@ func TestDocument(t *testing.T) {
 		}), document.ErrDocumentRemoved)
 
 		// 05. try to attach a removed document.
-		assert.ErrorIs(t, cli.Attach(ctx, d1), document.ErrDocumentRemoved)
+		assert.ErrorIs(t, cli.Attach(ctx, d1), client.ErrDocumentNotDetached)
 	})
 
 	t.Run("removed document creation test", func(t *testing.T) {

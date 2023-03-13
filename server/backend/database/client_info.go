@@ -18,6 +18,7 @@ package database
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -82,7 +83,13 @@ type ClientInfo struct {
 // CheckIfInProject checks if the client is in the project.
 func (i *ClientInfo) CheckIfInProject(projectID types.ID) error {
 	if i.ProjectID != projectID {
-		return ErrClientNotFound
+		return fmt.Errorf(
+			"check client(%s,%s) in project(%s): %w",
+			i.ID.String(),
+			i.ProjectID.String(),
+			projectID.String(),
+			ErrClientNotFound,
+		)
 	}
 	return nil
 }
@@ -96,7 +103,7 @@ func (i *ClientInfo) Deactivate() {
 // AttachDocument attaches the given document to this client.
 func (i *ClientInfo) AttachDocument(docID types.ID) error {
 	if i.Status != ClientActivated {
-		return ErrClientNotActivated
+		return fmt.Errorf("client(%s) attaches document(%s): %w", i.ID.String(), docID.String(), ErrClientNotActivated)
 	}
 
 	if i.Documents == nil {
@@ -104,7 +111,7 @@ func (i *ClientInfo) AttachDocument(docID types.ID) error {
 	}
 
 	if i.hasDocument(docID) && i.Documents[docID].Status == DocumentAttached {
-		return ErrDocumentAlreadyAttached
+		return fmt.Errorf("client(%s) attaches document(%s): %w", i.ID.String(), docID.String(), ErrDocumentAlreadyAttached)
 	}
 
 	i.Documents[docID] = &ClientDocInfo{
@@ -148,7 +155,7 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 // IsAttached returns whether the given document is attached to this client.
 func (i *ClientInfo) IsAttached(docID types.ID) (bool, error) {
 	if !i.hasDocument(docID) {
-		return false, ErrDocumentNeverAttached
+		return false, fmt.Errorf("check document(%s) is attached: %w", docID.String(), ErrDocumentNeverAttached)
 	}
 
 	return i.Documents[docID].Status == DocumentAttached, nil
@@ -170,7 +177,7 @@ func (i *ClientInfo) UpdateCheckpoint(
 	cp change.Checkpoint,
 ) error {
 	if !i.hasDocument(docID) {
-		return ErrDocumentNeverAttached
+		return fmt.Errorf("update checkpoint in document(%s): %w", docID.String(), ErrDocumentNeverAttached)
 	}
 
 	i.Documents[docID].ServerSeq = cp.ServerSeq
@@ -183,11 +190,19 @@ func (i *ClientInfo) UpdateCheckpoint(
 // EnsureDocumentAttached ensures the given document is attached.
 func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 	if i.Status != ClientActivated {
-		return ErrClientNotActivated
+		return fmt.Errorf("ensure attached document(%s) in client(%s): %w",
+			docID.String(),
+			i.ID.String(),
+			ErrClientNotActivated,
+		)
 	}
 
-	if !i.hasDocument(docID) || i.Documents[docID].Status == DocumentDetached {
-		return ErrDocumentNotAttached
+	if !i.hasDocument(docID) || i.Documents[docID].Status != DocumentAttached {
+		return fmt.Errorf("ensure attached document(%s) in client(%s): %w",
+			docID.String(),
+			i.ID.String(),
+			ErrDocumentNotAttached,
+		)
 	}
 
 	return nil

@@ -194,3 +194,19 @@ func TestDocKey(t testing.TB) string {
 
 	return sb.String()
 }
+
+// NewRangeSlice returns a slice of integers from start to end.
+func NewRangeSlice(start, end int) []int {
+	var slice []int
+	if start < end {
+		for i := start; i <= end; i++ {
+			slice = append(slice, i)
+		}
+		return slice
+	}
+
+	for i := start; i >= end; i-- {
+		slice = append(slice, i)
+	}
+	return slice
+}

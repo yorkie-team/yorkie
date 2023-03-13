@@ -41,7 +41,7 @@ func (k Key) String() string {
 func (k Key) Validate() error {
 	if err := validation.Validate(k.String(), []any{
 		"required",
-		"slug",
+		"case_sensitive_slug",
 		"min=4",
 		"max=120",
 	}); err != nil {

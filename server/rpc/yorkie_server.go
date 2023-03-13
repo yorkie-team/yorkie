@@ -265,9 +265,6 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
-		return nil, err
-	}
 	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
 		return nil, err
 	}

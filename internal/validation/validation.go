@@ -33,6 +33,7 @@ const (
 	// (https://datatracker.ietf.org/doc/html/rfc3986#section-2.3)
 	// and copied from https://gist.github.com/dpk/4757681
 	slugRegexString                   = `^[a-z0-9\-._~]+$`
+	caseSensitiveSlugRegexString      = `^[a-zA-Z0-9\-._~]+$`
 	containAlphaRegexString           = `[a-zA-Z]`
 	containNumberRegexString          = `[0-9]`
 	containSpecialCharRegexString     = `[\{\}\[\]\/?.,;:|\)*~!^\-_+<>@\#$%&\\\=\(\'\"\x60]`
@@ -42,6 +43,7 @@ const (
 
 var (
 	slugRegex                   = regexp.MustCompile(slugRegexString)
+	caseSensitiveSlugRegex      = regexp.MustCompile(caseSensitiveSlugRegexString)
 	containAlphaRegex           = regexp.MustCompile(containAlphaRegexString)
 	containNumberRegex          = regexp.MustCompile(containNumberRegexString)
 	containSpecialCharRegex     = regexp.MustCompile(containSpecialCharRegexString)
@@ -233,6 +235,14 @@ func init() {
 		return slugRegex.MatchString(val)
 	})
 	RegisterTranslation("slug", "{0} must only contain letters, numbers, hyphen, period, underscore, and tilde")
+
+	RegisterValidation("case_sensitive_slug", func(level validator.FieldLevel) bool {
+		val := level.Field().String()
+		return caseSensitiveSlugRegex.MatchString(val)
+	})
+	RegisterTranslation(
+		"case_sensitive_slug",
+		"{0} must only contain case-sensitive letters, numbers, hyphen, period, underscore, and tilde")
 
 	RegisterValidation("alpha_num_special", func(level validator.FieldLevel) bool {
 		val := level.Field().String()
