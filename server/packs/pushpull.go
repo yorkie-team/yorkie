@@ -110,7 +110,8 @@ func pullPack(
 		if err != nil {
 			return nil, err
 		}
-		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil), err
+
+		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil), nil
 	}
 
 	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)

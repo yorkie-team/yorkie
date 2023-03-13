@@ -38,6 +38,9 @@ type Pack struct {
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
 	MinSyncedTicket *time.Ticket
+
+	// IsRemoved is a flag that indicates whether the document is removed.
+	IsRemoved bool
 }
 
 // NewPack creates a new instance of Pack.

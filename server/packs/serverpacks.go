@@ -43,6 +43,9 @@ type ServerPack struct {
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
 	MinSyncedTicket *time.Ticket
+
+	// IsRemoved is a flag that indicates whether the document is removed.
+	IsRemoved bool
 }
 
 // NewServerPack creates a new instance of ServerPack.
@@ -111,5 +114,13 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		Changes:         pbChanges,
 		Snapshot:        p.Snapshot,
 		MinSyncedTicket: converter.ToTimeTicket(p.MinSyncedTicket),
+		IsRemoved:       p.IsRemoved,
 	}, nil
+}
+
+// ApplyDocInfo applies the given DocInfo to the ServerPack.
+func (p *ServerPack) ApplyDocInfo(info *database.DocInfo) {
+	if info.IsRemoved() {
+		p.IsRemoved = true
+	}
 }

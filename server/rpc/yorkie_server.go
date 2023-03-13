@@ -176,6 +176,7 @@ func (s *yorkieServer) AttachDocument(
 		pack.DocumentKey,
 		true,
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +197,7 @@ func (s *yorkieServer) AttachDocument(
 
 	return &api.AttachDocumentResponse{
 		ChangePack: pbChangePack,
+		DocumentId: docInfo.ID.String(),
 	}, nil
 }
 
@@ -211,6 +213,10 @@ func (s *yorkieServer) DetachDocument(
 
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
+		return nil, err
+	}
+	docID := types.ID(req.DocumentId)
+	if err := docID.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -249,13 +255,11 @@ func (s *yorkieServer) DetachDocument(
 	if err != nil {
 		return nil, err
 	}
-	docInfo, err := documents.FindDocInfoByKeyAndOwner(
+	docInfo, err := documents.FindDocInfo(
 		ctx,
 		s.backend,
 		projects.From(ctx),
-		clientInfo,
-		pack.DocumentKey,
-		false,
+		docID,
 	)
 	if err != nil {
 		return nil, err
@@ -280,12 +284,12 @@ func (s *yorkieServer) DetachDocument(
 	}, nil
 }
 
-// PushPull stores the changes sent by the client and delivers the changes
+// PushPullChanges stores the changes sent by the client and delivers the changes
 // accumulated in the server to the client.
-func (s *yorkieServer) PushPull(
+func (s *yorkieServer) PushPullChanges(
 	ctx context.Context,
-	req *api.PushPullRequest,
-) (*api.PushPullResponse, error) {
+	req *api.PushPullChangesRequest,
+) (*api.PushPullChangesResponse, error) {
 	actorID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
 		return nil, err
@@ -293,6 +297,10 @@ func (s *yorkieServer) PushPull(
 
 	pack, err := converter.FromChangePack(req.ChangePack)
 	if err != nil {
+		return nil, err
+	}
+	docID := types.ID(req.DocumentId)
+	if err := docID.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -331,13 +339,11 @@ func (s *yorkieServer) PushPull(
 	if err != nil {
 		return nil, err
 	}
-	docInfo, err := documents.FindDocInfoByKeyAndOwner(
+	docInfo, err := documents.FindDocInfo(
 		ctx,
 		s.backend,
 		projects.From(ctx),
-		clientInfo,
-		pack.DocumentKey,
-		false,
+		docID,
 	)
 	if err != nil {
 		return nil, err
@@ -357,7 +363,7 @@ func (s *yorkieServer) PushPull(
 		return nil, err
 	}
 
-	return &api.PushPullResponse{
+	return &api.PushPullChangesResponse{
 		ChangePack: pbChangePack,
 	}, nil
 }
@@ -450,6 +456,89 @@ func (s *yorkieServer) WatchDocuments(
 			}
 		}
 	}
+}
+
+// RemoveDocument removes the given document.
+func (s *yorkieServer) RemoveDocument(
+	ctx context.Context,
+	req *api.RemoveDocumentRequest,
+) (*api.RemoveDocumentResponse, error) {
+	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	pack, err := converter.FromChangePack(req.ChangePack)
+	if err != nil {
+		return nil, err
+	}
+	docID := types.ID(req.DocumentId)
+	if err := docID.Validate(); err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.RemoveDocument,
+		Attributes: auth.AccessAttributes(pack),
+	}); err != nil {
+		return nil, err
+	}
+
+	if pack.HasChanges() {
+		locker, err := s.backend.Coordinator.NewLocker(
+			ctx,
+			packs.PushPullKey(projects.From(ctx).ID, pack.DocumentKey),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := locker.Lock(ctx); err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err := locker.Unlock(ctx); err != nil {
+				logging.DefaultLogger().Error(err)
+			}
+		}()
+	}
+
+	clientInfo, err := clients.FindClientInfo(
+		ctx,
+		s.backend.DB,
+		projects.From(ctx),
+		actorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	docInfo, err := documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		docID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
+		return nil, err
+	}
+
+	pulled, err := packs.PushPull(ctx, s.backend, projects.From(ctx), clientInfo, docInfo, pack)
+	if err != nil {
+		return nil, err
+	}
+
+	pbChangePack, err := pulled.ToPBChangePack()
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.RemoveDocumentResponse{
+		ChangePack: pbChangePack,
+	}, nil
 }
 
 // UpdatePresence updates the presence of the given client.

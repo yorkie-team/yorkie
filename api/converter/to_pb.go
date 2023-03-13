@@ -151,6 +151,7 @@ func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 		Changes:         pbChanges,
 		Snapshot:        pack.Snapshot,
 		MinSyncedTicket: ToTimeTicket(pack.MinSyncedTicket),
+		IsRemoved:       pack.IsRemoved,
 	}, nil
 }
 

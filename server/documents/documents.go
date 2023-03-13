@@ -182,7 +182,18 @@ func FindDocInfoByKey(
 	)
 }
 
-// FindDocInfoByKeyAndOwner returns a document for the given document key and owner.
+// FindDocInfo returns a document for the given document ID.
+func FindDocInfo(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docID types.ID,
+) (*database.DocInfo, error) {
+	return be.DB.FindDocInfoByID(ctx, project.ID, docID)
+}
+
+// FindDocInfoByKeyAndOwner returns a document for the given document key. If
+// createDocIfNotExist is true, it creates a new document if it does not exist.
 func FindDocInfoByKeyAndOwner(
 	ctx context.Context,
 	be *backend.Backend,

@@ -29,12 +29,15 @@ option java_package = "dev.yorkie.api.v1";
 // Messages for ChangePack             //
 /////////////////////////////////////////
 
+// ChangePack is a message that contains all changes that occurred in a document.
+// It is used to synchronize changes between clients and servers.
 message ChangePack {
   string document_key = 1;
   Checkpoint checkpoint = 2;
   bytes snapshot = 3;
   repeated Change changes = 4;
   TimeTicket min_synced_ticket = 5;
+  bool is_removed = 6;
 }
 
 message Change {

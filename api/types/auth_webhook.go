@@ -54,6 +54,7 @@ const (
 	DeactivateClient Method = "DeactivateClient"
 	AttachDocument   Method = "AttachDocument"
 	DetachDocument   Method = "DetachDocument"
+	RemoveDocument   Method = "RemoveDocument"
 	PushPull         Method = "PushPull"
 	WatchDocuments   Method = "WatchDocuments"
 )
@@ -75,6 +76,7 @@ func AuthMethods() []Method {
 		DeactivateClient,
 		AttachDocument,
 		DetachDocument,
+		RemoveDocument,
 		PushPull,
 		WatchDocuments,
 	}

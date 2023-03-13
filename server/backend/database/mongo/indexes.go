@@ -87,7 +87,11 @@ var collectionInfos = []collectionInfo{
 				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "key", Value: bsonx.Int32(1)},
 			},
-			Options: options.Index().SetUnique(true),
+			Options: options.Index().SetPartialFilterExpression(
+				bsonx.Doc{
+					{Key: "removed_at", Value: bsonx.Null()},
+				},
+			).SetUnique(true),
 		}},
 	}, {
 		name: colChanges,

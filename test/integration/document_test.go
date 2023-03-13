@@ -196,4 +196,167 @@ func TestDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.NotNil(t, prevArray.RemovedAt())
 	})
+
+	t.Run("single-client document deletion test", func(t *testing.T) {
+		ctx := context.Background()
+
+		cli, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		defer func() {
+			assert.NoError(t, cli.Close())
+		}()
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+
+		// 01. client is not activated.
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrClientNotActivated)
+
+		// 02. document is not attached.
+		assert.NoError(t, cli.Activate(ctx))
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
+
+		// 03. document is attached.
+		assert.NoError(t, cli.Attach(ctx, d1))
+		assert.NoError(t, cli.Remove(ctx, d1))
+		assert.Equal(t, document.StatusRemoved, d1.Status())
+
+		// 04. try to update a removed document.
+		assert.ErrorIs(t, d1.Update(func(root *json.Object) error {
+			root.SetString("k1", "v1")
+			return nil
+		}), document.ErrDocumentRemoved)
+
+		// 05. try to attach a removed document.
+		assert.ErrorIs(t, cli.Attach(ctx, d1), client.ErrDocumentNotDetached)
+	})
+
+	t.Run("removed document creation test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. cli1 creates d1 and removes it.
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		err := d1.Update(func(root *json.Object) error {
+			root.SetString("k1", "v1")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c1.Remove(ctx, d1))
+
+		// 02. cli2 creates d2 with the same key.
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		// 03. cli1 creates d3 with the same key.
+		d3 := document.New(key.Key(helper.TestDocKey(t)))
+		assert.NoError(t, c1.Attach(ctx, d3))
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d3}, {c2, d2}})
+	})
+
+	t.Run("removed document pushpull test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. cli1 creates d1 and cli2 syncs.
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		err := d1.Update(func(root *json.Object) error {
+			root.SetString("k1", "v1")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// 02. cli1 updates d1 and removes it.
+		err = d1.Update(func(root *json.Object) error {
+			root.SetString("k1", "v2")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Remove(ctx, d1))
+
+		// 03. cli2 syncs and checks that d2 is removed.
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, d1.Status(), document.StatusRemoved)
+		assert.Equal(t, d2.Status(), document.StatusRemoved)
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
+	})
+
+	t.Run("removed document detachment test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. cli1 creates d1 and cli2 syncs.
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		err := d1.Update(func(root *json.Object) error {
+			root.SetString("k1", "v1")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// 02. cli1 removes d1 and cli2 detaches d2.
+		assert.NoError(t, c1.Remove(ctx, d1))
+		assert.NoError(t, c2.Detach(ctx, d2))
+		assert.Equal(t, d1.Status(), document.StatusRemoved)
+		assert.Equal(t, d2.Status(), document.StatusRemoved)
+	})
+
+	t.Run("removed document removal test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. cli1 creates d1 and cli2 syncs.
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		err := d1.Update(func(root *json.Object) error {
+			root.SetString("k1", "v1")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		// 02. cli1 removes d1 and cli2 removes d2.
+		assert.NoError(t, c1.Remove(ctx, d1))
+		assert.NoError(t, c2.Remove(ctx, d2))
+		assert.Equal(t, d1.Status(), document.StatusRemoved)
+		assert.Equal(t, d2.Status(), document.StatusRemoved)
+	})
+
+	// State transition of document
+	// ┌──────────┐ Attach ┌──────────┐ Remove ┌─────────┐
+	// │ Detached ├───────►│ Attached ├───────►│ Removed │
+	// └──────────┘        └─┬─┬──────┘        └─────────┘
+	//           ▲           │ │     ▲
+	//           └───────────┘ └─────┘
+	//              Detach     PushPull
+	t.Run("document state transition test", func(t *testing.T) {
+		ctx := context.Background()
+		cli, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
+		defer func() {
+			assert.NoError(t, cli.Close())
+		}()
+
+		// 01. abnormal behavior on detached state
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Sync(ctx, d1.Key()), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
+
+		// 02. abnormal behavior on attached state
+		assert.NoError(t, cli.Attach(ctx, d1))
+		assert.ErrorIs(t, cli.Attach(ctx, d1), client.ErrDocumentNotDetached)
+
+		// 03. abnormal behavior on removed state
+		assert.NoError(t, cli.Remove(ctx, d1))
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Sync(ctx, d1.Key()), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
+	})
 }

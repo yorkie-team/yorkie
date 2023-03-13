@@ -279,7 +279,8 @@ func (m *AttachDocumentRequest) GetChangePack() *ChangePack {
 
 type AttachDocumentResponse struct {
 	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	DocumentId           string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	ChangePack           *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
 	XXX_sizecache        int32       `json:"-"`
@@ -325,6 +326,13 @@ func (m *AttachDocumentResponse) GetClientId() []byte {
 	return nil
 }
 
+func (m *AttachDocumentResponse) GetDocumentId() string {
+	if m != nil {
+		return m.DocumentId
+	}
+	return ""
+}
+
 func (m *AttachDocumentResponse) GetChangePack() *ChangePack {
 	if m != nil {
 		return m.ChangePack
@@ -334,7 +342,8 @@ func (m *AttachDocumentResponse) GetChangePack() *ChangePack {
 
 type DetachDocumentRequest struct {
 	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	DocumentId           string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	ChangePack           *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
 	XXX_sizecache        int32       `json:"-"`
@@ -378,6 +387,13 @@ func (m *DetachDocumentRequest) GetClientId() []byte {
 		return m.ClientId
 	}
 	return nil
+}
+
+func (m *DetachDocumentRequest) GetDocumentId() string {
+	if m != nil {
+		return m.DocumentId
+	}
+	return ""
 }
 
 func (m *DetachDocumentRequest) GetChangePack() *ChangePack {
@@ -632,26 +648,27 @@ func (m *WatchDocumentsResponse_Initialization) GetPeersMapByDoc() map[string]*C
 	return nil
 }
 
-type PushPullRequest struct {
+type RemoveDocumentRequest struct {
 	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	DocumentId           string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	ChangePack           *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
 	XXX_sizecache        int32       `json:"-"`
 }
 
-func (m *PushPullRequest) Reset()         { *m = PushPullRequest{} }
-func (m *PushPullRequest) String() string { return proto.CompactTextString(m) }
-func (*PushPullRequest) ProtoMessage()    {}
-func (*PushPullRequest) Descriptor() ([]byte, []int) {
+func (m *RemoveDocumentRequest) Reset()         { *m = RemoveDocumentRequest{} }
+func (m *RemoveDocumentRequest) String() string { return proto.CompactTextString(m) }
+func (*RemoveDocumentRequest) ProtoMessage()    {}
+func (*RemoveDocumentRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_40070c858814ab24, []int{10}
 }
-func (m *PushPullRequest) XXX_Unmarshal(b []byte) error {
+func (m *RemoveDocumentRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *PushPullRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *RemoveDocumentRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_PushPullRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_RemoveDocumentRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -661,52 +678,59 @@ func (m *PushPullRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, err
 		return b[:n], nil
 	}
 }
-func (m *PushPullRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PushPullRequest.Merge(m, src)
+func (m *RemoveDocumentRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoveDocumentRequest.Merge(m, src)
 }
-func (m *PushPullRequest) XXX_Size() int {
+func (m *RemoveDocumentRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *PushPullRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_PushPullRequest.DiscardUnknown(m)
+func (m *RemoveDocumentRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoveDocumentRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_PushPullRequest proto.InternalMessageInfo
+var xxx_messageInfo_RemoveDocumentRequest proto.InternalMessageInfo
 
-func (m *PushPullRequest) GetClientId() []byte {
+func (m *RemoveDocumentRequest) GetClientId() []byte {
 	if m != nil {
 		return m.ClientId
 	}
 	return nil
 }
 
-func (m *PushPullRequest) GetChangePack() *ChangePack {
+func (m *RemoveDocumentRequest) GetDocumentId() string {
+	if m != nil {
+		return m.DocumentId
+	}
+	return ""
+}
+
+func (m *RemoveDocumentRequest) GetChangePack() *ChangePack {
 	if m != nil {
 		return m.ChangePack
 	}
 	return nil
 }
 
-type PushPullResponse struct {
-	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+type RemoveDocumentResponse struct {
+	ClientKey            string      `protobuf:"bytes,1,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
 	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
 	XXX_sizecache        int32       `json:"-"`
 }
 
-func (m *PushPullResponse) Reset()         { *m = PushPullResponse{} }
-func (m *PushPullResponse) String() string { return proto.CompactTextString(m) }
-func (*PushPullResponse) ProtoMessage()    {}
-func (*PushPullResponse) Descriptor() ([]byte, []int) {
+func (m *RemoveDocumentResponse) Reset()         { *m = RemoveDocumentResponse{} }
+func (m *RemoveDocumentResponse) String() string { return proto.CompactTextString(m) }
+func (*RemoveDocumentResponse) ProtoMessage()    {}
+func (*RemoveDocumentResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_40070c858814ab24, []int{11}
 }
-func (m *PushPullResponse) XXX_Unmarshal(b []byte) error {
+func (m *RemoveDocumentResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *PushPullResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *RemoveDocumentResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_PushPullResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_RemoveDocumentResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -716,26 +740,144 @@ func (m *PushPullResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, er
 		return b[:n], nil
 	}
 }
-func (m *PushPullResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PushPullResponse.Merge(m, src)
+func (m *RemoveDocumentResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RemoveDocumentResponse.Merge(m, src)
 }
-func (m *PushPullResponse) XXX_Size() int {
+func (m *RemoveDocumentResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *PushPullResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_PushPullResponse.DiscardUnknown(m)
+func (m *RemoveDocumentResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RemoveDocumentResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_PushPullResponse proto.InternalMessageInfo
+var xxx_messageInfo_RemoveDocumentResponse proto.InternalMessageInfo
 
-func (m *PushPullResponse) GetClientId() []byte {
+func (m *RemoveDocumentResponse) GetClientKey() string {
+	if m != nil {
+		return m.ClientKey
+	}
+	return ""
+}
+
+func (m *RemoveDocumentResponse) GetChangePack() *ChangePack {
+	if m != nil {
+		return m.ChangePack
+	}
+	return nil
+}
+
+type PushPullChangesRequest struct {
+	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	DocumentId           string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	ChangePack           *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_unrecognized     []byte      `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
+}
+
+func (m *PushPullChangesRequest) Reset()         { *m = PushPullChangesRequest{} }
+func (m *PushPullChangesRequest) String() string { return proto.CompactTextString(m) }
+func (*PushPullChangesRequest) ProtoMessage()    {}
+func (*PushPullChangesRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_40070c858814ab24, []int{12}
+}
+func (m *PushPullChangesRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PushPullChangesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PushPullChangesRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PushPullChangesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PushPullChangesRequest.Merge(m, src)
+}
+func (m *PushPullChangesRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *PushPullChangesRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PushPullChangesRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PushPullChangesRequest proto.InternalMessageInfo
+
+func (m *PushPullChangesRequest) GetClientId() []byte {
 	if m != nil {
 		return m.ClientId
 	}
 	return nil
 }
 
-func (m *PushPullResponse) GetChangePack() *ChangePack {
+func (m *PushPullChangesRequest) GetDocumentId() string {
+	if m != nil {
+		return m.DocumentId
+	}
+	return ""
+}
+
+func (m *PushPullChangesRequest) GetChangePack() *ChangePack {
+	if m != nil {
+		return m.ChangePack
+	}
+	return nil
+}
+
+type PushPullChangesResponse struct {
+	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_unrecognized     []byte      `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
+}
+
+func (m *PushPullChangesResponse) Reset()         { *m = PushPullChangesResponse{} }
+func (m *PushPullChangesResponse) String() string { return proto.CompactTextString(m) }
+func (*PushPullChangesResponse) ProtoMessage()    {}
+func (*PushPullChangesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_40070c858814ab24, []int{13}
+}
+func (m *PushPullChangesResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PushPullChangesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PushPullChangesResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PushPullChangesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PushPullChangesResponse.Merge(m, src)
+}
+func (m *PushPullChangesResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *PushPullChangesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_PushPullChangesResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PushPullChangesResponse proto.InternalMessageInfo
+
+func (m *PushPullChangesResponse) GetClientId() []byte {
+	if m != nil {
+		return m.ClientId
+	}
+	return nil
+}
+
+func (m *PushPullChangesResponse) GetChangePack() *ChangePack {
 	if m != nil {
 		return m.ChangePack
 	}
@@ -754,7 +896,7 @@ func (m *UpdatePresenceRequest) Reset()         { *m = UpdatePresenceRequest{} }
 func (m *UpdatePresenceRequest) String() string { return proto.CompactTextString(m) }
 func (*UpdatePresenceRequest) ProtoMessage()    {}
 func (*UpdatePresenceRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{12}
+	return fileDescriptor_40070c858814ab24, []int{14}
 }
 func (m *UpdatePresenceRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -807,7 +949,7 @@ func (m *UpdatePresenceResponse) Reset()         { *m = UpdatePresenceResponse{}
 func (m *UpdatePresenceResponse) String() string { return proto.CompactTextString(m) }
 func (*UpdatePresenceResponse) ProtoMessage()    {}
 func (*UpdatePresenceResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{13}
+	return fileDescriptor_40070c858814ab24, []int{15}
 }
 func (m *UpdatePresenceResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -849,8 +991,10 @@ func init() {
 	proto.RegisterType((*WatchDocumentsResponse)(nil), "yorkie.v1.WatchDocumentsResponse")
 	proto.RegisterType((*WatchDocumentsResponse_Initialization)(nil), "yorkie.v1.WatchDocumentsResponse.Initialization")
 	proto.RegisterMapType((map[string]*Clients)(nil), "yorkie.v1.WatchDocumentsResponse.Initialization.PeersMapByDocEntry")
-	proto.RegisterType((*PushPullRequest)(nil), "yorkie.v1.PushPullRequest")
-	proto.RegisterType((*PushPullResponse)(nil), "yorkie.v1.PushPullResponse")
+	proto.RegisterType((*RemoveDocumentRequest)(nil), "yorkie.v1.RemoveDocumentRequest")
+	proto.RegisterType((*RemoveDocumentResponse)(nil), "yorkie.v1.RemoveDocumentResponse")
+	proto.RegisterType((*PushPullChangesRequest)(nil), "yorkie.v1.PushPullChangesRequest")
+	proto.RegisterType((*PushPullChangesResponse)(nil), "yorkie.v1.PushPullChangesResponse")
 	proto.RegisterType((*UpdatePresenceRequest)(nil), "yorkie.v1.UpdatePresenceRequest")
 	proto.RegisterType((*UpdatePresenceResponse)(nil), "yorkie.v1.UpdatePresenceResponse")
 }
@@ -858,50 +1002,53 @@ func init() {
 func init() { proto.RegisterFile("yorkie/v1/yorkie.proto", fileDescriptor_40070c858814ab24) }
 
 var fileDescriptor_40070c858814ab24 = []byte{
-	// 681 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x56, 0xc1, 0x4e, 0xdb, 0x4c,
-	0x10, 0x8e, 0x09, 0x20, 0x32, 0x81, 0xfc, 0x61, 0x7f, 0x25, 0x4d, 0x8d, 0x1a, 0xa5, 0xe6, 0x92,
-	0x0a, 0xc9, 0x90, 0x54, 0xa2, 0x55, 0x7b, 0x02, 0x82, 0x04, 0x42, 0x95, 0x22, 0x97, 0x0a, 0x81,
-	0x54, 0x45, 0xcb, 0x7a, 0x1a, 0xac, 0x18, 0xdb, 0xb5, 0x1d, 0x4b, 0xee, 0xa9, 0x8f, 0xd1, 0x47,
-	0xea, 0xb1, 0x87, 0x3e, 0x40, 0x45, 0x5f, 0xa1, 0x0f, 0x50, 0xc5, 0xeb, 0x10, 0xaf, 0x59, 0x51,
-	0x8a, 0x44, 0x6f, 0xeb, 0xdd, 0xf9, 0xbe, 0x6f, 0x66, 0x3c, 0xfb, 0xd9, 0x50, 0x8f, 0x5d, 0x7f,
-	0x64, 0xe1, 0x66, 0xd4, 0xd9, 0xe4, 0x2b, 0xdd, 0xf3, 0xdd, 0xd0, 0x25, 0xa5, 0xf4, 0x29, 0xea,
-	0xa8, 0x8f, 0x67, 0x21, 0x3e, 0x06, 0xee, 0xd8, 0x67, 0x18, 0xf0, 0x28, 0x6d, 0x1b, 0x6a, 0x3b,
-	0x2c, 0xb4, 0x22, 0x1a, 0xe2, 0x9e, 0x6d, 0xa1, 0x13, 0x1a, 0xf8, 0x71, 0x8c, 0x41, 0x48, 0x9e,
-	0x00, 0xb0, 0x64, 0x63, 0x30, 0xc2, 0xb8, 0xa1, 0xb4, 0x94, 0x76, 0xc9, 0x28, 0xf1, 0x9d, 0x23,
-	0x8c, 0xb5, 0x63, 0xa8, 0xe7, 0x71, 0x81, 0xe7, 0x3a, 0x01, 0xfe, 0x01, 0x48, 0xd6, 0x20, 0x7d,
-	0x18, 0x58, 0x66, 0x63, 0xae, 0xa5, 0xb4, 0x97, 0x8d, 0x25, 0xbe, 0x71, 0x68, 0x6a, 0xdb, 0xf0,
-	0xa8, 0x87, 0x54, 0x9a, 0x8f, 0x80, 0x53, 0x72, 0xb8, 0x17, 0xd0, 0xb8, 0x89, 0x4b, 0xf3, 0xb9,
-	0x15, 0x68, 0x43, 0x6d, 0x27, 0x0c, 0x29, 0xbb, 0xe8, 0xb9, 0x6c, 0x7c, 0x79, 0x47, 0x39, 0xb2,
-	0x0d, 0x65, 0x76, 0x41, 0x9d, 0x21, 0x0e, 0x3c, 0xca, 0x46, 0x49, 0x15, 0xe5, 0x6e, 0x4d, 0xbf,
-	0x6e, 0xb8, 0xbe, 0x97, 0x9c, 0xf6, 0x29, 0x1b, 0x19, 0xc0, 0xae, 0xd7, 0xda, 0x25, 0xd4, 0xf3,
-	0x6a, 0x77, 0x48, 0xf2, 0xde, 0x72, 0x36, 0xd4, 0x7a, 0xf8, 0xcf, 0x8a, 0x73, 0xa1, 0x9e, 0x57,
-	0xbb, 0xdb, 0x44, 0xdc, 0x57, 0x70, 0x08, 0xb5, 0x13, 0x1a, 0xce, 0xf4, 0x82, 0x69, 0x79, 0xcf,
-	0x60, 0x91, 0xb3, 0x27, 0x5a, 0xe5, 0xee, 0x6a, 0x96, 0x8b, 0x0f, 0x47, 0x1a, 0x40, 0xd6, 0x61,
-	0xc5, 0x4c, 0xe1, 0x93, 0xe4, 0x82, 0xc6, 0x5c, 0xab, 0xd8, 0x2e, 0x19, 0xcb, 0xd3, 0xcd, 0x23,
-	0x8c, 0x03, 0xed, 0x73, 0x11, 0xea, 0x79, 0xa5, 0xb4, 0xb4, 0x33, 0xa8, 0x58, 0x8e, 0x15, 0x5a,
-	0xd4, 0xb6, 0x3e, 0xd1, 0xd0, 0x72, 0x9d, 0x54, 0x72, 0x2b, 0x23, 0x29, 0x87, 0xea, 0x87, 0x02,
-	0xee, 0xa0, 0x60, 0xe4, 0x98, 0xc8, 0x06, 0x2c, 0x60, 0x34, 0xa9, 0x82, 0x77, 0xe4, 0xff, 0x0c,
-	0x65, 0xcf, 0x65, 0xfb, 0x93, 0xa3, 0x83, 0x82, 0xc1, 0x63, 0xd4, 0xef, 0x0a, 0x54, 0x44, 0x46,
-	0x62, 0x43, 0xd5, 0x43, 0xf4, 0x83, 0xc1, 0x25, 0xf5, 0x06, 0xe7, 0xf1, 0xc0, 0x74, 0x59, 0x43,
-	0x69, 0x15, 0xdb, 0xe5, 0xee, 0xde, 0xdf, 0x66, 0xa7, 0xf7, 0x27, 0x44, 0x6f, 0xa8, 0xb7, 0x1b,
-	0x4f, 0xa4, 0x9d, 0xd0, 0x8f, 0x8d, 0x15, 0x2f, 0xbb, 0xa7, 0x1e, 0x03, 0xb9, 0x19, 0x44, 0xaa,
-	0x50, 0x9c, 0xbd, 0xf3, 0xc9, 0x92, 0xb4, 0x61, 0x21, 0xa2, 0xf6, 0x18, 0xd3, 0xaa, 0xc8, 0x8d,
-	0x77, 0x13, 0x18, 0x3c, 0xe0, 0xd5, 0xdc, 0x4b, 0x65, 0x77, 0x11, 0xe6, 0xcf, 0x5d, 0x33, 0xd6,
-	0x3e, 0xc0, 0x7f, 0xfd, 0x71, 0x70, 0xd1, 0x1f, 0xdb, 0xf6, 0x83, 0x0e, 0xf1, 0x10, 0xaa, 0x33,
-	0x9d, 0x87, 0xbc, 0x9b, 0x43, 0xa8, 0xbd, 0xf3, 0x4c, 0x1a, 0x62, 0xdf, 0xc7, 0x00, 0x1d, 0x86,
-	0x0f, 0x35, 0xbc, 0x0d, 0xa8, 0xe7, 0x85, 0x78, 0x5d, 0xdd, 0x5f, 0xf3, 0xb0, 0x72, 0x9a, 0x70,
-	0xbf, 0x45, 0x3f, 0xb2, 0x18, 0x92, 0x13, 0xa8, 0x88, 0xa6, 0x4e, 0x5a, 0x19, 0x75, 0xe9, 0x77,
-	0x42, 0x7d, 0x7a, 0x4b, 0x04, 0x17, 0xd2, 0x0a, 0xe4, 0x3d, 0x54, 0xf3, 0xfe, 0x4c, 0xb4, 0xec,
-	0x3c, 0xcb, 0x4d, 0x5f, 0x5d, 0xbf, 0x35, 0xe6, 0x9a, 0xfe, 0x04, 0x2a, 0x62, 0x8d, 0x42, 0xde,
-	0xd2, 0x3e, 0x0b, 0x79, 0xcb, 0x1b, 0xc4, 0x89, 0x45, 0xc3, 0x16, 0x1b, 0x22, 0xfb, 0x72, 0x88,
-	0x0d, 0x91, 0xba, 0x3d, 0x27, 0x16, 0xcd, 0x52, 0x20, 0x96, 0xba, 0xb6, 0x40, 0x2c, 0x77, 0x5a,
-	0xad, 0x40, 0x4e, 0xa1, 0x22, 0xde, 0x68, 0x81, 0x58, 0xea, 0x97, 0x02, 0xb1, 0xdc, 0x0e, 0xb4,
-	0xc2, 0x96, 0x42, 0xf6, 0x61, 0x69, 0x7a, 0x37, 0x88, 0x9a, 0x81, 0xe4, 0x2e, 0xa6, 0xba, 0x26,
-	0x3d, 0x9b, 0x12, 0xed, 0x6e, 0x7c, 0xbd, 0x6a, 0x2a, 0xdf, 0xae, 0x9a, 0xca, 0x8f, 0xab, 0xa6,
-	0xf2, 0xe5, 0x67, 0xb3, 0x00, 0xab, 0x26, 0x46, 0x53, 0x0c, 0xf5, 0x2c, 0x3d, 0xea, 0xf4, 0x95,
-	0xb3, 0x79, 0xfd, 0x75, 0xd4, 0x39, 0x5f, 0x4c, 0xfe, 0x52, 0x9e, 0xff, 0x0e, 0x00, 0x00, 0xff,
-	0xff, 0xe9, 0xa4, 0xcb, 0xd5, 0xe5, 0x08, 0x00, 0x00,
+	// 732 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0xd1, 0x6e, 0xd3, 0x4a,
+	0x10, 0xcd, 0x36, 0x6d, 0x75, 0x33, 0x69, 0x73, 0xdb, 0xbd, 0x4a, 0x9a, 0x1b, 0x44, 0x08, 0xee,
+	0x4b, 0x50, 0x25, 0xb7, 0x09, 0x52, 0x41, 0xf0, 0xd4, 0x36, 0x48, 0xad, 0x2a, 0xa4, 0xc8, 0x14,
+	0x55, 0xad, 0x84, 0xa2, 0xad, 0x3d, 0x6a, 0xad, 0xb8, 0xb6, 0xb1, 0x1d, 0x4b, 0xe6, 0x89, 0x1f,
+	0x80, 0x67, 0x3e, 0x89, 0x47, 0x1e, 0xf8, 0x00, 0x14, 0x7e, 0x04, 0xc5, 0xeb, 0xa4, 0x5e, 0x67,
+	0x15, 0x52, 0x50, 0x05, 0x6f, 0xce, 0x78, 0xe6, 0x9c, 0x33, 0xe3, 0xdd, 0x39, 0x81, 0x4a, 0xe4,
+	0x78, 0x7d, 0x13, 0xb7, 0xc3, 0xd6, 0x36, 0x7f, 0x52, 0x5d, 0xcf, 0x09, 0x1c, 0x5a, 0x48, 0x7e,
+	0x85, 0xad, 0xda, 0xff, 0x37, 0x29, 0x1e, 0xfa, 0xce, 0xc0, 0xd3, 0xd1, 0xe7, 0x59, 0xca, 0x2e,
+	0x94, 0xf7, 0xf4, 0xc0, 0x0c, 0x59, 0x80, 0x07, 0x96, 0x89, 0x76, 0xa0, 0xe1, 0xdb, 0x01, 0xfa,
+	0x01, 0xbd, 0x0f, 0xa0, 0xc7, 0x81, 0x5e, 0x1f, 0xa3, 0x2a, 0x69, 0x90, 0x66, 0x41, 0x2b, 0xf0,
+	0xc8, 0x31, 0x46, 0xca, 0x09, 0x54, 0xb2, 0x75, 0xbe, 0xeb, 0xd8, 0x3e, 0xfe, 0xa4, 0x90, 0xde,
+	0x83, 0xe4, 0x47, 0xcf, 0x34, 0xaa, 0x0b, 0x0d, 0xd2, 0x5c, 0xd1, 0xfe, 0xe1, 0x81, 0x23, 0x43,
+	0xd9, 0x85, 0x8d, 0x0e, 0x32, 0xa9, 0x1e, 0xa1, 0x8e, 0x64, 0xea, 0x9e, 0x40, 0x75, 0xba, 0x2e,
+	0xd1, 0x33, 0xb3, 0xd0, 0x82, 0xf2, 0x5e, 0x10, 0x30, 0xfd, 0xaa, 0xe3, 0xe8, 0x83, 0xeb, 0x39,
+	0xe9, 0xe8, 0x2e, 0x14, 0xf5, 0x2b, 0x66, 0x5f, 0x62, 0xcf, 0x65, 0x7a, 0x3f, 0xee, 0xa2, 0xd8,
+	0x2e, 0xab, 0x93, 0x81, 0xab, 0x07, 0xf1, 0xdb, 0x2e, 0xd3, 0xfb, 0x1a, 0xe8, 0x93, 0x67, 0xe5,
+	0x23, 0x81, 0x4a, 0x96, 0x6e, 0x0e, 0x95, 0xf4, 0x01, 0x14, 0x8d, 0xa4, 0x60, 0x3c, 0xb5, 0x82,
+	0x06, 0xe3, 0xd0, 0xb4, 0xa0, 0xfc, 0xbc, 0x82, 0x3e, 0x10, 0x28, 0x77, 0xf0, 0xd6, 0xfd, 0xdf,
+	0x99, 0x1e, 0x07, 0x2a, 0x59, 0x39, 0xf3, 0x9d, 0xaa, 0x5f, 0xfd, 0x22, 0x97, 0x50, 0x3e, 0x65,
+	0xc1, 0x0d, 0x9f, 0x3f, 0xee, 0xff, 0x11, 0x2c, 0x73, 0xf4, 0x98, 0xab, 0xd8, 0x5e, 0x4f, 0x63,
+	0xf1, 0x03, 0x96, 0x24, 0xd0, 0x4d, 0x58, 0x9d, 0x4c, 0xa3, 0x8f, 0x91, 0x5f, 0x5d, 0x68, 0xe4,
+	0x9b, 0x05, 0x6d, 0x65, 0x1c, 0x3c, 0xc6, 0xc8, 0x57, 0xde, 0xe7, 0xa1, 0x92, 0x65, 0x4a, 0x5a,
+	0x3b, 0x87, 0x92, 0x69, 0x9b, 0x81, 0xc9, 0x2c, 0xf3, 0x1d, 0x0b, 0x4c, 0xc7, 0x4e, 0x28, 0x77,
+	0x52, 0x94, 0xf2, 0x52, 0xf5, 0x48, 0xa8, 0x3b, 0xcc, 0x69, 0x19, 0x24, 0xba, 0x05, 0x4b, 0x18,
+	0x8e, 0xba, 0xe0, 0x13, 0xf9, 0x2f, 0x05, 0xd9, 0x71, 0xf4, 0x17, 0xa3, 0x57, 0x87, 0x39, 0x8d,
+	0xe7, 0xd4, 0xbe, 0x12, 0x28, 0x89, 0x88, 0xd4, 0x82, 0x35, 0x17, 0xd1, 0xf3, 0x7b, 0xd7, 0xcc,
+	0xed, 0x5d, 0x44, 0x3d, 0xc3, 0xd1, 0xab, 0xa4, 0x91, 0x6f, 0x16, 0xdb, 0x07, 0xb7, 0x55, 0xa7,
+	0x76, 0x47, 0x40, 0x2f, 0x99, 0xbb, 0x1f, 0x8d, 0xa8, 0xed, 0xc0, 0x8b, 0xb4, 0x55, 0x37, 0x1d,
+	0xab, 0x9d, 0x00, 0x9d, 0x4e, 0xa2, 0x6b, 0x90, 0xbf, 0xf9, 0xe6, 0xa3, 0x47, 0xda, 0x84, 0xa5,
+	0x90, 0x59, 0x03, 0x4c, 0xba, 0xa2, 0x53, 0xdf, 0xc6, 0xd7, 0x78, 0xc2, 0xb3, 0x85, 0xa7, 0x64,
+	0x7f, 0x19, 0x16, 0x2f, 0x1c, 0x23, 0x8a, 0x0f, 0xbb, 0x86, 0xd7, 0x4e, 0x88, 0x7f, 0xcd, 0x61,
+	0xcf, 0xca, 0xb9, 0xdb, 0xc3, 0x3e, 0x5a, 0x3f, 0xdd, 0x81, 0x7f, 0xd5, 0x1d, 0x58, 0x16, 0x4f,
+	0xf1, 0xff, 0xec, 0x04, 0x6c, 0xd8, 0x98, 0xd2, 0x33, 0xcf, 0x3e, 0xfc, 0x8d, 0xdb, 0xfe, 0xda,
+	0x35, 0x58, 0x80, 0x5d, 0x0f, 0x7d, 0xb4, 0x75, 0xbc, 0xab, 0xdb, 0x5e, 0x85, 0x4a, 0x96, 0x88,
+	0xf7, 0xd5, 0x1e, 0x2e, 0xc1, 0xea, 0x59, 0x8c, 0xfd, 0x0a, 0xbd, 0xd0, 0xd4, 0x91, 0x9e, 0x42,
+	0x49, 0x74, 0x52, 0xda, 0x48, 0xb1, 0x4b, 0xcd, 0xb9, 0xf6, 0x70, 0x46, 0x06, 0x27, 0x52, 0x72,
+	0xf4, 0x0d, 0xac, 0x65, 0x4d, 0x91, 0x2a, 0xe9, 0x05, 0x20, 0x77, 0xda, 0xda, 0xe6, 0xcc, 0x9c,
+	0x09, 0xfc, 0x29, 0x94, 0xc4, 0x1e, 0x05, 0xdd, 0xd2, 0x39, 0x0b, 0xba, 0xe5, 0x03, 0xe2, 0xc0,
+	0xa2, 0x49, 0x8a, 0x03, 0x91, 0xd9, 0xb5, 0x38, 0x10, 0xa9, 0xc3, 0x72, 0x60, 0xd1, 0x5d, 0x04,
+	0x60, 0xa9, 0x0f, 0x0a, 0xc0, 0x72, 0x6b, 0xe2, 0xc0, 0xe2, 0x4d, 0x16, 0x80, 0xa5, 0x3b, 0x47,
+	0x00, 0x96, 0xaf, 0x01, 0x25, 0x47, 0xcf, 0xe1, 0xdf, 0xcc, 0x05, 0xa1, 0xe9, 0x3a, 0xf9, 0x65,
+	0xae, 0x29, 0xb3, 0x52, 0x26, 0xd8, 0x67, 0x50, 0x12, 0xf7, 0xb6, 0x20, 0x5a, 0xea, 0x8a, 0x82,
+	0x68, 0xf9, 0xd2, 0x57, 0x72, 0x3b, 0x64, 0x7f, 0xeb, 0xf3, 0xb0, 0x4e, 0xbe, 0x0c, 0xeb, 0xe4,
+	0xdb, 0xb0, 0x4e, 0x3e, 0x7d, 0xaf, 0xe7, 0x60, 0xdd, 0xc0, 0x70, 0x5c, 0xcb, 0x5c, 0x53, 0x0d,
+	0x5b, 0x5d, 0x72, 0xbe, 0xa8, 0x3e, 0x0f, 0x5b, 0x17, 0xcb, 0xf1, 0x1f, 0xd1, 0xc7, 0x3f, 0x02,
+	0x00, 0x00, 0xff, 0xff, 0xa0, 0xa4, 0x94, 0x72, 0xc8, 0x0a, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -921,8 +1068,9 @@ type YorkieServiceClient interface {
 	UpdatePresence(ctx context.Context, in *UpdatePresenceRequest, opts ...grpc.CallOption) (*UpdatePresenceResponse, error)
 	AttachDocument(ctx context.Context, in *AttachDocumentRequest, opts ...grpc.CallOption) (*AttachDocumentResponse, error)
 	DetachDocument(ctx context.Context, in *DetachDocumentRequest, opts ...grpc.CallOption) (*DetachDocumentResponse, error)
+	RemoveDocument(ctx context.Context, in *RemoveDocumentRequest, opts ...grpc.CallOption) (*RemoveDocumentResponse, error)
+	PushPullChanges(ctx context.Context, in *PushPullChangesRequest, opts ...grpc.CallOption) (*PushPullChangesResponse, error)
 	WatchDocuments(ctx context.Context, in *WatchDocumentsRequest, opts ...grpc.CallOption) (YorkieService_WatchDocumentsClient, error)
-	PushPull(ctx context.Context, in *PushPullRequest, opts ...grpc.CallOption) (*PushPullResponse, error)
 }
 
 type yorkieServiceClient struct {
@@ -978,6 +1126,24 @@ func (c *yorkieServiceClient) DetachDocument(ctx context.Context, in *DetachDocu
 	return out, nil
 }
 
+func (c *yorkieServiceClient) RemoveDocument(ctx context.Context, in *RemoveDocumentRequest, opts ...grpc.CallOption) (*RemoveDocumentResponse, error) {
+	out := new(RemoveDocumentResponse)
+	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/RemoveDocument", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *yorkieServiceClient) PushPullChanges(ctx context.Context, in *PushPullChangesRequest, opts ...grpc.CallOption) (*PushPullChangesResponse, error) {
+	out := new(PushPullChangesResponse)
+	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/PushPullChanges", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *yorkieServiceClient) WatchDocuments(ctx context.Context, in *WatchDocumentsRequest, opts ...grpc.CallOption) (YorkieService_WatchDocumentsClient, error) {
 	stream, err := c.cc.NewStream(ctx, &_YorkieService_serviceDesc.Streams[0], "/yorkie.v1.YorkieService/WatchDocuments", opts...)
 	if err != nil {
@@ -1010,15 +1176,6 @@ func (x *yorkieServiceWatchDocumentsClient) Recv() (*WatchDocumentsResponse, err
 	return m, nil
 }
 
-func (c *yorkieServiceClient) PushPull(ctx context.Context, in *PushPullRequest, opts ...grpc.CallOption) (*PushPullResponse, error) {
-	out := new(PushPullResponse)
-	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/PushPull", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // YorkieServiceServer is the server API for YorkieService service.
 type YorkieServiceServer interface {
 	ActivateClient(context.Context, *ActivateClientRequest) (*ActivateClientResponse, error)
@@ -1026,8 +1183,9 @@ type YorkieServiceServer interface {
 	UpdatePresence(context.Context, *UpdatePresenceRequest) (*UpdatePresenceResponse, error)
 	AttachDocument(context.Context, *AttachDocumentRequest) (*AttachDocumentResponse, error)
 	DetachDocument(context.Context, *DetachDocumentRequest) (*DetachDocumentResponse, error)
+	RemoveDocument(context.Context, *RemoveDocumentRequest) (*RemoveDocumentResponse, error)
+	PushPullChanges(context.Context, *PushPullChangesRequest) (*PushPullChangesResponse, error)
 	WatchDocuments(*WatchDocumentsRequest, YorkieService_WatchDocumentsServer) error
-	PushPull(context.Context, *PushPullRequest) (*PushPullResponse, error)
 }
 
 // UnimplementedYorkieServiceServer can be embedded to have forward compatible implementations.
@@ -1049,11 +1207,14 @@ func (*UnimplementedYorkieServiceServer) AttachDocument(ctx context.Context, req
 func (*UnimplementedYorkieServiceServer) DetachDocument(ctx context.Context, req *DetachDocumentRequest) (*DetachDocumentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DetachDocument not implemented")
 }
+func (*UnimplementedYorkieServiceServer) RemoveDocument(ctx context.Context, req *RemoveDocumentRequest) (*RemoveDocumentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveDocument not implemented")
+}
+func (*UnimplementedYorkieServiceServer) PushPullChanges(ctx context.Context, req *PushPullChangesRequest) (*PushPullChangesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PushPullChanges not implemented")
+}
 func (*UnimplementedYorkieServiceServer) WatchDocuments(req *WatchDocumentsRequest, srv YorkieService_WatchDocumentsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchDocuments not implemented")
-}
-func (*UnimplementedYorkieServiceServer) PushPull(ctx context.Context, req *PushPullRequest) (*PushPullResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method PushPull not implemented")
 }
 
 func RegisterYorkieServiceServer(s *grpc.Server, srv YorkieServiceServer) {
@@ -1150,6 +1311,42 @@ func _YorkieService_DetachDocument_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _YorkieService_RemoveDocument_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveDocumentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(YorkieServiceServer).RemoveDocument(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/yorkie.v1.YorkieService/RemoveDocument",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(YorkieServiceServer).RemoveDocument(ctx, req.(*RemoveDocumentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _YorkieService_PushPullChanges_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PushPullChangesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(YorkieServiceServer).PushPullChanges(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/yorkie.v1.YorkieService/PushPullChanges",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(YorkieServiceServer).PushPullChanges(ctx, req.(*PushPullChangesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _YorkieService_WatchDocuments_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(WatchDocumentsRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1169,24 +1366,6 @@ type yorkieServiceWatchDocumentsServer struct {
 
 func (x *yorkieServiceWatchDocumentsServer) Send(m *WatchDocumentsResponse) error {
 	return x.ServerStream.SendMsg(m)
-}
-
-func _YorkieService_PushPull_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PushPullRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(YorkieServiceServer).PushPull(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/yorkie.v1.YorkieService/PushPull",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(YorkieServiceServer).PushPull(ctx, req.(*PushPullRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 var _YorkieService_serviceDesc = grpc.ServiceDesc{
@@ -1214,8 +1393,12 @@ var _YorkieService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _YorkieService_DetachDocument_Handler,
 		},
 		{
-			MethodName: "PushPull",
-			Handler:    _YorkieService_PushPull_Handler,
+			MethodName: "RemoveDocument",
+			Handler:    _YorkieService_RemoveDocument_Handler,
+		},
+		{
+			MethodName: "PushPullChanges",
+			Handler:    _YorkieService_PushPullChanges_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
@@ -1451,6 +1634,13 @@ func (m *AttachDocumentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 			i = encodeVarintYorkie(dAtA, i, uint64(size))
 		}
 		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.DocumentId) > 0 {
+		i -= len(m.DocumentId)
+		copy(dAtA[i:], m.DocumentId)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentId)))
+		i--
 		dAtA[i] = 0x12
 	}
 	if len(m.ClientId) > 0 {
@@ -1496,6 +1686,13 @@ func (m *DetachDocumentRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			i -= size
 			i = encodeVarintYorkie(dAtA, i, uint64(size))
 		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.DocumentId) > 0 {
+		i -= len(m.DocumentId)
+		copy(dAtA[i:], m.DocumentId)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentId)))
 		i--
 		dAtA[i] = 0x12
 	}
@@ -1734,7 +1931,7 @@ func (m *WatchDocumentsResponse_Initialization) MarshalToSizedBuffer(dAtA []byte
 	return len(dAtA) - i, nil
 }
 
-func (m *PushPullRequest) Marshal() (dAtA []byte, err error) {
+func (m *RemoveDocumentRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1744,12 +1941,65 @@ func (m *PushPullRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *PushPullRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *RemoveDocumentRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *PushPullRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *RemoveDocumentRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.ChangePack != nil {
+		{
+			size, err := m.ChangePack.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintYorkie(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.DocumentId) > 0 {
+		i -= len(m.DocumentId)
+		copy(dAtA[i:], m.DocumentId)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentId)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ClientId) > 0 {
+		i -= len(m.ClientId)
+		copy(dAtA[i:], m.ClientId)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RemoveDocumentResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RemoveDocumentResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RemoveDocumentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1770,6 +2020,59 @@ func (m *PushPullRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x12
 	}
+	if len(m.ClientKey) > 0 {
+		i -= len(m.ClientKey)
+		copy(dAtA[i:], m.ClientKey)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientKey)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PushPullChangesRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PushPullChangesRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PushPullChangesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.ChangePack != nil {
+		{
+			size, err := m.ChangePack.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintYorkie(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.DocumentId) > 0 {
+		i -= len(m.DocumentId)
+		copy(dAtA[i:], m.DocumentId)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentId)))
+		i--
+		dAtA[i] = 0x12
+	}
 	if len(m.ClientId) > 0 {
 		i -= len(m.ClientId)
 		copy(dAtA[i:], m.ClientId)
@@ -1780,7 +2083,7 @@ func (m *PushPullRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *PushPullResponse) Marshal() (dAtA []byte, err error) {
+func (m *PushPullChangesResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1790,12 +2093,12 @@ func (m *PushPullResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *PushPullResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *PushPullChangesResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *PushPullResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *PushPullChangesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2010,6 +2313,10 @@ func (m *AttachDocumentResponse) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovYorkie(uint64(l))
 	}
+	l = len(m.DocumentId)
+	if l > 0 {
+		n += 1 + l + sovYorkie(uint64(l))
+	}
 	if m.ChangePack != nil {
 		l = m.ChangePack.Size()
 		n += 1 + l + sovYorkie(uint64(l))
@@ -2027,6 +2334,10 @@ func (m *DetachDocumentRequest) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.ClientId)
+	if l > 0 {
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	l = len(m.DocumentId)
 	if l > 0 {
 		n += 1 + l + sovYorkie(uint64(l))
 	}
@@ -2146,13 +2457,17 @@ func (m *WatchDocumentsResponse_Initialization) Size() (n int) {
 	return n
 }
 
-func (m *PushPullRequest) Size() (n int) {
+func (m *RemoveDocumentRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
 	l = len(m.ClientId)
+	if l > 0 {
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	l = len(m.DocumentId)
 	if l > 0 {
 		n += 1 + l + sovYorkie(uint64(l))
 	}
@@ -2166,7 +2481,51 @@ func (m *PushPullRequest) Size() (n int) {
 	return n
 }
 
-func (m *PushPullResponse) Size() (n int) {
+func (m *RemoveDocumentResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ClientKey)
+	if l > 0 {
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	if m.ChangePack != nil {
+		l = m.ChangePack.Size()
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *PushPullChangesRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ClientId)
+	if l > 0 {
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	l = len(m.DocumentId)
+	if l > 0 {
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	if m.ChangePack != nil {
+		l = m.ChangePack.Size()
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *PushPullChangesResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2782,6 +3141,38 @@ func (m *AttachDocumentResponse) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DocumentId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DocumentId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ChangePack", wireType)
 			}
 			var msglen int
@@ -2902,6 +3293,38 @@ func (m *DetachDocumentRequest) Unmarshal(dAtA []byte) error {
 			}
 			iNdEx = postIndex
 		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DocumentId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DocumentId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ChangePack", wireType)
 			}
@@ -3498,7 +3921,7 @@ func (m *WatchDocumentsResponse_Initialization) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *PushPullRequest) Unmarshal(dAtA []byte) error {
+func (m *RemoveDocumentRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -3521,10 +3944,10 @@ func (m *PushPullRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: PushPullRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: RemoveDocumentRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: PushPullRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: RemoveDocumentRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -3560,6 +3983,157 @@ func (m *PushPullRequest) Unmarshal(dAtA []byte) error {
 			if m.ClientId == nil {
 				m.ClientId = []byte{}
 			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DocumentId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DocumentId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChangePack", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ChangePack == nil {
+				m.ChangePack = &ChangePack{}
+			}
+			if err := m.ChangePack.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipYorkie(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RemoveDocumentResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowYorkie
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RemoveDocumentResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RemoveDocumentResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClientKey", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ClientKey = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -3619,7 +4193,7 @@ func (m *PushPullRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *PushPullResponse) Unmarshal(dAtA []byte) error {
+func (m *PushPullChangesRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -3642,10 +4216,163 @@ func (m *PushPullResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: PushPullResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: PushPullChangesRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: PushPullResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: PushPullChangesRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
+			if m.ClientId == nil {
+				m.ClientId = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DocumentId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DocumentId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChangePack", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ChangePack == nil {
+				m.ChangePack = &ChangePack{}
+			}
+			if err := m.ChangePack.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipYorkie(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PushPullChangesResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowYorkie
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PushPullChangesResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PushPullChangesResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
