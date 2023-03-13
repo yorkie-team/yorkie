@@ -525,7 +525,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
+	if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
 		return nil, err
 	}
 

@@ -53,6 +53,10 @@ var (
 	// this client.
 	ErrDocumentNotAttached = errors.New("document is not attached")
 
+	// ErrDocumentNotDetached occurs when the given document is not detached from
+	// this client.
+	ErrDocumentNotDetached = errors.New("document is not detached")
+
 	// ErrUnsupportedWatchResponseType occurs when the given WatchResponseType
 	// is not supported.
 	ErrUnsupportedWatchResponseType = errors.New("unsupported watch response type")
@@ -244,6 +248,10 @@ func (c *Client) Deactivate(ctx context.Context) error {
 func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	if c.status != activated {
 		return ErrClientNotActivated
+	}
+
+	if doc.Status() != document.StatusDetached {
+		return ErrDocumentNotDetached
 	}
 
 	doc.SetActor(c.id)

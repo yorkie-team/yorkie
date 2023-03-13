@@ -326,4 +326,37 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, d1.Status(), document.StatusRemoved)
 		assert.Equal(t, d2.Status(), document.StatusRemoved)
 	})
+
+	// State transition of document
+	// ┌──────────┐ Attach ┌──────────┐ Remove ┌─────────┐
+	// │ Detached ├───────►│ Attached ├───────►│ Removed │
+	// └──────────┘        └─┬─┬──────┘        └─────────┘
+	//	         ▲           │ │     ▲
+	//	         └───────────┘ └─────┘
+	//	             Detach     PushPull
+	t.Run("document state transition test", func(t *testing.T) {
+		ctx := context.Background()
+		cli, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
+		defer func() {
+			assert.NoError(t, cli.Close())
+		}()
+
+		// 01. abnormal behavior on detached state
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Sync(ctx, d1.Key()), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
+
+		// 02. abnormal behavior on attached state
+		assert.NoError(t, cli.Attach(ctx, d1))
+		assert.ErrorIs(t, cli.Attach(ctx, d1), client.ErrDocumentNotDetached)
+
+		// 03. abnormal behavior on removed state
+		assert.NoError(t, cli.Remove(ctx, d1))
+		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Sync(ctx, d1.Key()), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
+	})
 }

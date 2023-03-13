@@ -138,6 +138,7 @@ func TestClient(t *testing.T) {
 		pack := doc.CreateChangePack()
 
 		// Set removed_at in docInfo and store changes
+		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
 		err = cli.CreateChangeInfos(ctx, dummyProjectID, docInfo, 0, pack.Changes, true)
 		assert.NoError(t, err)
 
@@ -145,6 +146,11 @@ func TestClient(t *testing.T) {
 		docInfo, err = cli.FindDocInfoByID(ctx, dummyProjectID, docInfo.ID)
 		assert.NoError(t, err)
 		assert.NotEqual(t, time.Time{}, docInfo.RemovedAt)
+
+		// Check whether DocumentRemoved status is set in clientInfo
+		clientInfo, err := cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
+		assert.NoError(t, err)
+		assert.NotEqual(t, database.DocumentRemoved, clientInfo.Documents[docInfo.ID].Status)
 	})
 
 	t.Run("reuse same key to create docInfo test ", func(t *testing.T) {

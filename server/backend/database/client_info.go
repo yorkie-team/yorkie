@@ -38,9 +38,11 @@ const (
 	ClientActivated   = "activated"
 )
 
+// Below are statuses of the document.
 const (
-	documentAttached = "attached"
-	documentDetached = "detached"
+	DocumentAttached = "attached"
+	DocumentDetached = "detached"
+	DocumentRemoved  = "removed"
 )
 
 // ClientDocInfo is a structure representing information of the document
@@ -101,12 +103,12 @@ func (i *ClientInfo) AttachDocument(docID types.ID) error {
 		i.Documents = make(map[types.ID]*ClientDocInfo)
 	}
 
-	if i.hasDocument(docID) && i.Documents[docID].Status == documentAttached {
+	if i.hasDocument(docID) && i.Documents[docID].Status == DocumentAttached {
 		return ErrDocumentAlreadyAttached
 	}
 
 	i.Documents[docID] = &ClientDocInfo{
-		Status:    documentAttached,
+		Status:    DocumentAttached,
 		ServerSeq: 0,
 		ClientSeq: 0,
 	}
@@ -121,7 +123,21 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 		return err
 	}
 
-	i.Documents[docID].Status = documentDetached
+	i.Documents[docID].Status = DocumentDetached
+	i.Documents[docID].ClientSeq = 0
+	i.Documents[docID].ServerSeq = 0
+	i.UpdatedAt = time.Now()
+
+	return nil
+}
+
+// RemoveDocument removes the given document from this client.
+func (i *ClientInfo) RemoveDocument(docID types.ID) error {
+	if err := i.EnsureDocumentAttached(docID); err != nil {
+		return err
+	}
+
+	i.Documents[docID].Status = DocumentRemoved
 	i.Documents[docID].ClientSeq = 0
 	i.Documents[docID].ServerSeq = 0
 	i.UpdatedAt = time.Now()
@@ -135,7 +151,7 @@ func (i *ClientInfo) IsAttached(docID types.ID) (bool, error) {
 		return false, ErrDocumentNeverAttached
 	}
 
-	return i.Documents[docID].Status == documentAttached, nil
+	return i.Documents[docID].Status == DocumentAttached, nil
 }
 
 // Checkpoint returns the checkpoint of the given document.
@@ -170,7 +186,7 @@ func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 		return ErrClientNotActivated
 	}
 
-	if !i.hasDocument(docID) || i.Documents[docID].Status == documentDetached {
+	if !i.hasDocument(docID) || i.Documents[docID].Status == DocumentDetached {
 		return ErrDocumentNotAttached
 	}
 
