@@ -331,9 +331,9 @@ func TestDocument(t *testing.T) {
 	// ┌──────────┐ Attach ┌──────────┐ Remove ┌─────────┐
 	// │ Detached ├───────►│ Attached ├───────►│ Removed │
 	// └──────────┘        └─┬─┬──────┘        └─────────┘
-	//	         ▲           │ │     ▲
-	//	         └───────────┘ └─────┘
-	//	             Detach     PushPull
+	//           ▲           │ │     ▲
+	//           └───────────┘ └─────┘
+	//              Detach     PushPull
 	t.Run("document state transition test", func(t *testing.T) {
 		ctx := context.Background()
 		cli, err := client.Dial(defaultServer.RPCAddr())
