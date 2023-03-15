@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -212,7 +213,7 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, cli.ID.Bytes(), decodedCli.ID.Bytes())
 		assert.Equal(t, cli.PresenceInfo, decodedCli.PresenceInfo)
 
-		pbClientsMap := converter.ToClientsMap(map[string][]types.Client{
+		pbClientsMap := converter.ToClientsMap(map[key.Key][]types.Client{
 			"test": {cli},
 		})
 

@@ -50,7 +50,8 @@ type Coordinator interface {
 		ctx context.Context,
 		subscriber types.Client,
 		documentIDs []types.ID,
-	) (*Subscription, map[string][]types.Client, error)
+		documentKeys []key.Key,
+	) (*Subscription, map[key.Key][]types.Client, error)
 
 	// Unsubscribe unsubscribes from the given documents.
 	Unsubscribe(
@@ -69,8 +70,8 @@ type Coordinator interface {
 	UpdatePresence(
 		ctx context.Context,
 		publisher *types.Client,
-		keys []key.Key,
-	) (*DocEvent, error)
+		documentIDs []types.ID,
+	) error
 
 	// Members returns the members of this cluster.
 	Members() map[string]*ServerInfo

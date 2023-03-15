@@ -121,19 +121,6 @@ func (m *PubSub) Subscribe(
 	return sub, nil
 }
 
-// BuildPeersMap builds the peers map of the given documentIDs.
-func (m *PubSub) BuildPeersMap(documentIDs []types.ID) map[string][]types.Client {
-	peersMap := make(map[string][]types.Client)
-	for _, documentID := range documentIDs {
-		var peers []types.Client
-		for _, sub := range m.subscriptionsMapByDocID[documentID].Map() {
-			peers = append(peers, sub.Subscriber())
-		}
-		peersMap[documentID.String()] = peers
-	}
-	return peersMap
-}
-
 // Unsubscribe unsubscribes the given docKeys.
 func (m *PubSub) Unsubscribe(
 	ctx context.Context,
@@ -231,7 +218,7 @@ func (m *PubSub) Publish(
 // UpdatePresence updates the presence of the given client.
 func (m *PubSub) UpdatePresence(
 	publisher *types.Client,
-	keys []key.Key,
+	documentIDs []types.ID,
 ) *sync.Subscription {
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()

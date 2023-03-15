@@ -23,6 +23,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -381,10 +382,11 @@ func (s *yorkieServer) WatchDocuments(
 	if err != nil {
 		return err
 	}
+	documentKeys := converter.FromDocumentKeys(req.DocumentKeys)
 
 	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
-		Attributes: types.NewAccessAttributes(converter.FromDocumentKeys(req.DocumentKeys), types.Read),
+		Attributes: types.NewAccessAttributes(documentKeys, types.Read),
 	}); err != nil {
 		return err
 	}
@@ -424,13 +426,13 @@ func (s *yorkieServer) WatchDocuments(
 		}
 	}()
 
-	subscription, peersMap, err := s.watchDocs(stream.Context(), *cli, documentIDs)
+	subscription, peersMap, err := s.watchDocs(stream.Context(), *cli, documentIDs, documentKeys)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
 	}
 	defer func() {
-		s.unwatchDocs(documentIDs, subscription)
+		s.unwatchDocs(subscription, documentIDs, documentKeys)
 	}()
 
 	if err := stream.Send(&api.WatchDocumentsResponse{
@@ -457,7 +459,7 @@ func (s *yorkieServer) WatchDocuments(
 
 			if err := stream.Send(&api.WatchDocumentsResponse{
 				Body: &api.WatchDocumentsResponse_Event{
-					Event: &api.DocEvent{
+					Event: &api.ClientDocEvent{
 						Type:         eventType,
 						Publisher:    converter.ToClient(event.Publisher),
 						DocumentKeys: converter.ToDocumentKeys(event.DocumentKeys),
@@ -562,14 +564,23 @@ func (s *yorkieServer) UpdatePresence(
 	if err != nil {
 		return nil, err
 	}
-	documentIDs := converter.FromDocumentKeys(req.DocumentIds)
+	documentIDs, err := converter.FromDocumentIDs(req.DocumentIds)
+	if err != nil {
+		return nil, err
+	}
+	documentKeys := converter.FromDocumentKeys(req.DocumentKeys)
 
-	docEvent, err := s.backend.Coordinator.UpdatePresence(ctx, cli, documentIDs)
+	err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	s.backend.Coordinator.Publish(ctx, docEvent.Publisher.ID, *docEvent)
+	s.backend.Coordinator.Publish(ctx, cli.ID, sync.DocEvent{
+		Type:         types.DocumentsWatchedEvent,
+		Publisher:    *cli,
+		DocumentIDs:  documentIDs,
+		DocumentKeys: documentKeys,
+	})
 
 	return &api.UpdatePresenceResponse{}, nil
 }
@@ -578,25 +589,27 @@ func (s *yorkieServer) watchDocs(
 	ctx context.Context,
 	client types.Client,
 	documentIDs []types.ID,
-) (*sync.Subscription, map[string][]types.Client, error) {
+	documentKeys []key.Key,
+) (*sync.Subscription, map[key.Key][]types.Client, error) {
 	subscription, peersMap, err := s.backend.Coordinator.Subscribe(
 		ctx,
 		client,
 		documentIDs,
+		documentKeys,
 	)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, nil, err
 	}
 
-	// TODO(hackerwins): Fill documentKeys in the event.
 	s.backend.Coordinator.Publish(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:        types.DocumentsWatchedEvent,
-			Publisher:   subscription.Subscriber(),
-			DocumentIDs: documentIDs,
+			Type:         types.DocumentsWatchedEvent,
+			Publisher:    subscription.Subscriber(),
+			DocumentIDs:  documentIDs,
+			DocumentKeys: documentKeys,
 		},
 	)
 
@@ -604,8 +617,9 @@ func (s *yorkieServer) watchDocs(
 }
 
 func (s *yorkieServer) unwatchDocs(
-	documentIDs []types.ID,
 	subscription *sync.Subscription,
+	documentIDs []types.ID,
+	documentKeys []key.Key,
 ) {
 	ctx := context.Background()
 	_ = s.backend.Coordinator.Unsubscribe(ctx, documentIDs, subscription)
@@ -613,11 +627,10 @@ func (s *yorkieServer) unwatchDocs(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:        types.DocumentsUnwatchedEvent,
-			Publisher:   subscription.Subscriber(),
-			DocumentIDs: documentIDs,
-			// TODO(hackerwins): Fill documentKeys in the event.
-			// DocumentKeys: nil,
+			Type:         types.DocumentsUnwatchedEvent,
+			Publisher:    subscription.Subscriber(),
+			DocumentIDs:  documentIDs,
+			DocumentKeys: documentKeys,
 		},
 	)
 }

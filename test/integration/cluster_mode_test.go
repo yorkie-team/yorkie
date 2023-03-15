@@ -144,7 +144,7 @@ func TestClusterMode(t *testing.T) {
 						assert.NoError(t, wr.Err)
 
 						if wr.Type == client.PeersChanged {
-							peers := wr.PeersMapByDoc[d1.Key().String()]
+							peers := wr.PeersMapByDoc[d1.Key()]
 							responsePairs = append(responsePairs, watchResponsePair{
 								Type:  wr.Type,
 								Peers: peers,

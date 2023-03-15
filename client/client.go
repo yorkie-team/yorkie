@@ -82,7 +82,7 @@ type Client struct {
 	key          string
 	presenceInfo types.PresenceInfo
 	status       status
-	attachments  map[string]*Attachment
+	attachments  map[key.Key]*Attachment
 }
 
 // WatchResponseType is type of watch response.
@@ -98,7 +98,7 @@ const (
 type WatchResponse struct {
 	Type          WatchResponseType
 	Keys          []key.Key
-	PeersMapByDoc map[string]map[string]types.Presence
+	PeersMapByDoc map[key.Key]map[string]types.Presence
 	Err           error
 }
 
@@ -155,7 +155,7 @@ func New(opts ...Option) (*Client, error) {
 		key:          k,
 		presenceInfo: types.PresenceInfo{Presence: presence},
 		status:       deactivated,
-		attachments:  make(map[string]*Attachment),
+		attachments:  make(map[key.Key]*Attachment),
 	}, nil
 }
 
@@ -290,7 +290,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	}
 
 	doc.SetStatus(document.StatusAttached)
-	c.attachments[doc.Key().String()] = &Attachment{
+	c.attachments[doc.Key()] = &Attachment{
 		doc:   doc,
 		docID: types.ID(res.DocumentId),
 		peers: make(map[string]types.PresenceInfo),
@@ -310,7 +310,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return ErrClientNotActivated
 	}
 
-	attachment, ok := c.attachments[doc.Key().String()]
+	attachment, ok := c.attachments[doc.Key()]
 	if !ok {
 		return ErrDocumentNotAttached
 	}
@@ -340,7 +340,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	if doc.Status() != document.StatusRemoved {
 		doc.SetStatus(document.StatusDetached)
 	}
-	delete(c.attachments, doc.Key().String())
+	delete(c.attachments, doc.Key())
 
 	return nil
 }
@@ -376,7 +376,7 @@ func (c *Client) Watch(
 	var docKeys []key.Key
 	var docIDs []types.ID
 	for _, doc := range docs {
-		attachment, ok := c.attachments[doc.Key().String()]
+		attachment, ok := c.attachments[doc.Key()]
 		if !ok {
 			return nil, ErrDocumentNotAttached
 		}
@@ -400,13 +400,13 @@ func (c *Client) Watch(
 	handleResponse := func(pbResp *api.WatchDocumentsResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentsResponse_Initialization_:
-			for docID, peers := range resp.Initialization.PeersMapByDoc {
+			for docKey, peers := range resp.Initialization.PeersMapByDoc {
 				clients, err := converter.FromClients(peers)
 				if err != nil {
 					return nil, err
 				}
 
-				attachment := c.attachments[docID]
+				attachment := c.attachments[key.Key(docKey)]
 				for _, cli := range clients {
 					attachment.peers[cli.ID.String()] = cli.PresenceInfo
 				}
@@ -426,13 +426,13 @@ func (c *Client) Watch(
 					Keys: converter.FromDocumentKeys(resp.Event.DocumentKeys),
 				}, nil
 			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent, types.PresenceChangedEvent:
-				for _, k := range converter.FromDocumentKeys(resp.Event.DocumentKeys) {
+				for _, docKey := range converter.FromDocumentKeys(resp.Event.DocumentKeys) {
 					cli, err := converter.FromClient(resp.Event.Publisher)
 					if err != nil {
 						return nil, err
 					}
 
-					attachment := c.attachments[k.String()]
+					attachment := c.attachments[docKey]
 					if eventType == types.DocumentsWatchedEvent ||
 						eventType == types.PresenceChangedEvent {
 						if info, ok := attachment.peers[cli.ID.String()]; ok {
@@ -494,9 +494,11 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 		return nil
 	}
 
-	var documentIDs []types.ID
-	for _, attachment := range c.attachments {
-		documentIDs = append(documentIDs, attachment.docID)
+	var docIDs []types.ID
+	var docKeys []key.Key
+	for docKey, attachment := range c.attachments {
+		docIDs = append(docIDs, attachment.docID)
+		docKeys = append(docKeys, key.Key(docKey))
 	}
 
 	// TODO(hackerwins): We temporarily use Unary Call to update presence,
@@ -508,7 +510,8 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 			ID:           c.id,
 			PresenceInfo: c.presenceInfo,
 		}),
-		DocumentIds: converter.ToDocumentIDs(documentIDs),
+		DocumentIds:  converter.ToDocumentIDs(docIDs),
+		DocumentKeys: converter.ToDocumentKeys(docKeys),
 	}); err != nil {
 		return err
 	}
@@ -537,14 +540,14 @@ func (c *Client) Presence() types.Presence {
 }
 
 // PeersMapByDoc returns the peersMap.
-func (c *Client) PeersMapByDoc() map[string]map[string]types.Presence {
-	peersMapByDoc := make(map[string]map[string]types.Presence)
-	for doc, attachment := range c.attachments {
+func (c *Client) PeersMapByDoc() map[key.Key]map[string]types.Presence {
+	peersMapByDoc := make(map[key.Key]map[string]types.Presence)
+	for docKey, attachment := range c.attachments {
 		peers := make(map[string]types.Presence)
 		for id, info := range attachment.peers {
 			peers[id] = info.Presence
 		}
-		peersMapByDoc[doc] = peers
+		peersMapByDoc[docKey] = peers
 	}
 	return peersMapByDoc
 }
@@ -559,7 +562,7 @@ func (c *Client) pushPull(ctx context.Context, key key.Key) error {
 		return ErrClientNotActivated
 	}
 
-	attachment, ok := c.attachments[key.String()]
+	attachment, ok := c.attachments[key]
 	if !ok {
 		return ErrDocumentNotAttached
 	}
@@ -587,7 +590,7 @@ func (c *Client) pushPull(ctx context.Context, key key.Key) error {
 		return err
 	}
 	if attachment.doc.Status() == document.StatusRemoved {
-		delete(c.attachments, attachment.doc.Key().String())
+		delete(c.attachments, attachment.doc.Key())
 	}
 
 	return nil
@@ -599,7 +602,7 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 		return ErrClientNotActivated
 	}
 
-	attachment, ok := c.attachments[doc.Key().String()]
+	attachment, ok := c.attachments[doc.Key()]
 	if !ok {
 		return ErrDocumentNotAttached
 	}
@@ -628,7 +631,7 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 	if doc.Status() == document.StatusRemoved {
-		delete(c.attachments, doc.Key().String())
+		delete(c.attachments, doc.Key())
 	}
 
 	return nil

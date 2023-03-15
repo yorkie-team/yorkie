@@ -79,7 +79,6 @@ message DetachDocumentResponse {
 
 message WatchDocumentsRequest {
   Client client = 1;
-
   // TODO(hackerwins): Consider combining document_ids and document_keys.
   repeated string document_ids = 2;
   repeated string document_keys = 3;
@@ -92,7 +91,7 @@ message WatchDocumentsResponse {
 
   oneof body {
     Initialization initialization = 1;
-    DocEvent event = 2;
+    ClientDocEvent event = 2;
   }
 }
 
@@ -120,7 +119,9 @@ message PushPullChangesResponse {
 
 message UpdatePresenceRequest {
   Client client = 1;
+  // TODO(hackerwins): Consider combining document_ids and document_keys.
   repeated string document_ids = 2;
+  repeated string document_keys = 3;
 }
 
 message UpdatePresenceResponse {}

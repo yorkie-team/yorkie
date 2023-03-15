@@ -60,13 +60,21 @@ func (c *Coordinator) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
 	documentIDs []types.ID,
-) (*sync.Subscription, map[string][]types.Client, error) {
+	documentKeys []key.Key,
+) (*sync.Subscription, map[key.Key][]types.Client, error) {
 	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentIDs)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	peersMap := c.pubSub.BuildPeersMap(documentIDs)
+	peersMap := make(map[key.Key][]types.Client)
+	for idx, documentID := range documentIDs {
+		var peers []types.Client
+		for _, sub := range c.pubSub.subscriptionsMapByDocID[documentID].Map() {
+			peers = append(peers, sub.Subscriber())
+		}
+		peersMap[documentKeys[idx]] = peers
+	}
 	return sub, peersMap, nil
 }
 
@@ -102,15 +110,10 @@ func (c *Coordinator) PublishToLocal(
 func (c *Coordinator) UpdatePresence(
 	_ context.Context,
 	publisher *types.Client,
-	keys []key.Key,
-) (*sync.DocEvent, error) {
-	c.pubSub.UpdatePresence(publisher, keys)
-
-	return &sync.DocEvent{
-		Type:         types.PresenceChangedEvent,
-		Publisher:    *publisher,
-		DocumentKeys: keys,
-	}, nil
+	documentIDs []types.ID,
+) error {
+	c.pubSub.UpdatePresence(publisher, documentIDs)
+	return nil
 }
 
 // Members returns the members of this cluster.

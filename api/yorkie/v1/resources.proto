@@ -299,5 +299,12 @@ enum DocEventType {
 message DocEvent {
   DocEventType type = 1;
   Client publisher = 2;
+  repeated string document_ids = 3;
+  repeated string document_keys = 4;
+}
+
+message ClientDocEvent {
+  DocEventType type = 1;
+  Client publisher = 2;
   repeated string document_keys = 3;
 }

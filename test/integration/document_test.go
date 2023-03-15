@@ -20,13 +20,13 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -391,12 +391,21 @@ func TestDocumentWithProject(t *testing.T) {
 
 		c2, err := client.Dial(
 			svr.RPCAddr(),
-			client.WithAPIKey(project2.PublicKey),
+			client.WithAPIKey(project1.PublicKey),
 		)
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c2.Close()) }()
 		assert.NoError(t, c2.Activate(ctx))
 		defer func() { assert.NoError(t, c2.Deactivate(ctx)) }()
+
+		c3, err := client.Dial(
+			svr.RPCAddr(),
+			client.WithAPIKey(project2.PublicKey),
+		)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c3.Close()) }()
+		assert.NoError(t, c3.Activate(ctx))
+		defer func() { assert.NoError(t, c3.Deactivate(ctx)) }()
 
 		d1 := document.New(key.Key(helper.TestDocKey(t)))
 		err = c1.Attach(ctx, d1)
@@ -412,6 +421,7 @@ func TestDocumentWithProject(t *testing.T) {
 		defer cancel1()
 		rch, err := c1.Watch(watch1Ctx, d1)
 		assert.NoError(t, err)
+
 		go func() {
 			defer wg.Done()
 
@@ -424,7 +434,6 @@ func TestDocumentWithProject(t *testing.T) {
 				assert.NoError(t, resp.Err)
 
 				if resp.Type == client.DocumentsChanged {
-					fmt.Println("---document changed---")
 					err := c1.Sync(ctx, resp.Keys...)
 					assert.NoError(t, err)
 					responsePairs = append(responsePairs, watchResponsePair{
@@ -434,8 +443,7 @@ func TestDocumentWithProject(t *testing.T) {
 				}
 
 				if resp.Type == client.PeersChanged {
-					peers := resp.PeersMapByDoc[d1.Key().String()]
-					fmt.Println("---peers changed---")
+					peers := resp.PeersMapByDoc[d1.Key()]
 					responsePairs = append(responsePairs, watchResponsePair{
 						Type:  resp.Type,
 						Peers: peers,
@@ -445,8 +453,14 @@ func TestDocumentWithProject(t *testing.T) {
 		}()
 
 		// 02. cli2 watches doc2.
-		// Although the keys of the documents are the same,
-		// events should not be sent because the projects are different.
+		expected = append(expected, watchResponsePair{
+			Type: client.PeersChanged,
+			Peers: map[string]types.Presence{
+				c1.ID().String(): nil,
+				c2.ID().String(): nil,
+			},
+		})
+
 		d2 := document.New(key.Key(helper.TestDocKey(t)))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
@@ -457,6 +471,9 @@ func TestDocumentWithProject(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 03. cli2 updates doc2.
+		expected = append(expected, watchResponsePair{
+			Type: client.DocumentsChanged,
+		})
 		err = d2.Update(func(root *json.Object) error {
 			root.SetString("key", "value")
 			return nil
@@ -466,10 +483,32 @@ func TestDocumentWithProject(t *testing.T) {
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		wg.Wait()
+		// 04. cli3 watches doc3.
+		// Although the keys of the documents are the same,
+		// events should not be sent because the projects are different.
+		d3 := document.New(key.Key(helper.TestDocKey(t)))
+		err = c3.Attach(ctx, d3)
+		assert.NoError(t, err)
 
+		watch3Ctx, cancel3 := context.WithCancel(ctx)
+		defer cancel3()
+		_, err = c3.Watch(watch3Ctx, d3)
+		assert.NoError(t, err)
+
+		// 05. cli3 updates doc3.
+		err = d3.Update(func(root *json.Object) error {
+			root.SetString("key3", "value3")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
+		wg.Wait()
 		assert.Equal(t, expected, responsePairs)
-		assert.Equal(t, "{}", d1.Marshal())
+		assert.Equal(t, "{\"key\":\"value\"}", d1.Marshal())
 		assert.Equal(t, "{\"key\":\"value\"}", d2.Marshal())
+		assert.Equal(t, "{\"key3\":\"value3\"}", d3.Marshal())
 	})
 }

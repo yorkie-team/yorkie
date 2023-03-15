@@ -42,9 +42,10 @@ const (
 func (c *Client) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	ids []types.ID,
-) (*sync.Subscription, map[string][]types.Client, error) {
-	sub, err := c.localPubSub.Subscribe(ctx, subscriber, ids)
+	documentIDs []types.ID,
+	documentKeys []key.Key,
+) (*sync.Subscription, map[key.Key][]types.Client, error) {
+	sub, err := c.localPubSub.Subscribe(ctx, subscriber, documentIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -52,18 +53,17 @@ func (c *Client) Subscribe(
 	// TODO(hackerwins): If the server is not stopped gracefully, there may
 	// be garbage subscriptions left. Consider introducing a TTL and
 	// updating it periodically.
-	if err := c.putSubscriptions(ctx, ids, sub); err != nil {
+	if err := c.putSubscriptions(ctx, documentIDs, sub); err != nil {
 		return nil, nil, err
 	}
 
-	peersMap := make(map[string][]types.Client)
-	for _, id := range ids {
-		subs, err := c.pullSubscriptions(ctx, id)
+	peersMap := make(map[key.Key][]types.Client)
+	for idx, documentID := range documentIDs {
+		peers, err := c.pullSubscriptions(ctx, documentID)
 		if err != nil {
 			return nil, nil, err
 		}
-
-		peersMap[id.String()] = subs
+		peersMap[documentKeys[idx]] = peers
 	}
 
 	return sub, peersMap, nil
@@ -102,20 +102,15 @@ func (c *Client) PublishToLocal(
 func (c *Client) UpdatePresence(
 	ctx context.Context,
 	publisher *types.Client,
-	keys []key.Key,
-) (*sync.DocEvent, error) {
-	// TODO(hackerwins): Uncomment this when changing key.Key to types.ID.
-	// if sub := c.localPubSub.UpdatePresence(publisher, keys); sub != nil {
-	// 	if err := c.putSubscriptions(ctx, keys, sub); err != nil {
-	// 		return nil, err
-	// 	}
-	// }
+	documentIDs []types.ID,
+) error {
+	if sub := c.localPubSub.UpdatePresence(publisher, documentIDs); sub != nil {
+		if err := c.putSubscriptions(ctx, documentIDs, sub); err != nil {
+			return err
+		}
+	}
 
-	return &sync.DocEvent{
-		Type:         types.PresenceChangedEvent,
-		Publisher:    *publisher,
-		DocumentKeys: keys,
-	}, nil
+	return nil
 }
 
 // broadcastToMembers broadcasts the given event to all members.
