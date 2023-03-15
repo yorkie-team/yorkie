@@ -55,9 +55,9 @@ type DocEvent struct {
 
 // ClientDocEvent represents doc events that should be sent to the client.
 type ClientDocEvent struct {
-	Type         types.DocEventType
-	Publisher    types.Client
-	DocumentKeys []key.Key
+	Type        types.DocEventType
+	Publisher   types.Client
+	DocumentKey key.Key
 }
 
 // Events returns the DocEvent channel of this subscription.

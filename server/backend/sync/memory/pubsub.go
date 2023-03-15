@@ -24,7 +24,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -191,9 +190,9 @@ func (m *PubSub) Publish(
 				}
 
 				watchDocEvent := sync.ClientDocEvent{
-					Type:         event.Type,
-					Publisher:    event.Publisher,
-					DocumentKeys: []key.Key{event.DocumentKeys[idx]},
+					Type:        event.Type,
+					Publisher:   event.Publisher,
+					DocumentKey: event.DocumentKeys[idx],
 				}
 				// NOTE: When a subscription is being closed by a subscriber,
 				// the subscriber may not receive messages.

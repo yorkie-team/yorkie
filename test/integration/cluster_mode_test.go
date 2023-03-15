@@ -150,7 +150,7 @@ func TestClusterMode(t *testing.T) {
 								Peers: peers,
 							})
 						} else if wr.Type == client.DocumentsChanged {
-							assert.NoError(t, c1.Sync(ctx, wr.Keys...))
+							assert.NoError(t, c1.Sync(ctx, wr.Key))
 						}
 					case <-time.After(time.Second):
 						return

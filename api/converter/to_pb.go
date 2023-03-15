@@ -173,6 +173,11 @@ func ToChangeID(id change.ID) *api.ChangeID {
 	}
 }
 
+// ToDocumentKey converts the given model format to Protobuf format.
+func ToDocumentKey(key key.Key) string {
+	return key.String()
+}
+
 // ToDocumentKeys converts the given model format to Protobuf format.
 func ToDocumentKeys(keys []key.Key) []string {
 	var pbKeys []string

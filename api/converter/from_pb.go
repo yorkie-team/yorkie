@@ -211,6 +211,11 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 	), nil
 }
 
+// FromDocumentKey converts the given Protobuf formats to model format.
+func FromDocumentKey(pbKey string) key.Key {
+	return key.Key(pbKey)
+}
+
 // FromDocumentKeys converts the given Protobuf formats to model format.
 func FromDocumentKeys(pbKeys []string) []key.Key {
 	var keys []key.Key

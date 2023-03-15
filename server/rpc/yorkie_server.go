@@ -460,9 +460,9 @@ func (s *yorkieServer) WatchDocuments(
 			if err := stream.Send(&api.WatchDocumentsResponse{
 				Body: &api.WatchDocumentsResponse_Event{
 					Event: &api.ClientDocEvent{
-						Type:         eventType,
-						Publisher:    converter.ToClient(event.Publisher),
-						DocumentKeys: converter.ToDocumentKeys(event.DocumentKeys),
+						Type:        eventType,
+						Publisher:   converter.ToClient(event.Publisher),
+						DocumentKey: converter.ToDocumentKey(event.DocumentKey),
 					},
 				},
 			}); err != nil {

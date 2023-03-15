@@ -40,8 +40,8 @@ func TestPubSub(t *testing.T) {
 
 	t.Run("publish subscribe test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
-		documentIDs := []types.ID{types.ID(t.Name())}
-		documentKeys := []key.Key{key.Key(t.Name())}
+		documentIDs := []types.ID{types.ID(t.Name() + "id")}
+		documentKeys := []key.Key{key.Key(t.Name() + "key")}
 		docEvent := sync.DocEvent{
 			Type:         types.DocumentsWatchedEvent,
 			Publisher:    actorB,
@@ -49,9 +49,9 @@ func TestPubSub(t *testing.T) {
 			DocumentKeys: documentKeys,
 		}
 		clientDocEvent := sync.ClientDocEvent{
-			Type:         types.DocumentsWatchedEvent,
-			Publisher:    actorB,
-			DocumentKeys: documentKeys,
+			Type:        types.DocumentsWatchedEvent,
+			Publisher:   actorB,
+			DocumentKey: key.Key(t.Name() + "key"),
 		}
 
 		ctx := context.Background()

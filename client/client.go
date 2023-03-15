@@ -97,7 +97,7 @@ const (
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
 	Type          WatchResponseType
-	Keys          []key.Key
+	Key           key.Key
 	PeersMapByDoc map[key.Key]map[string]types.Presence
 	Err           error
 }
@@ -419,30 +419,30 @@ func (c *Client) Watch(
 				return nil, err
 			}
 
+			docKey := converter.FromDocumentKey(resp.Event.DocumentKey)
 			switch eventType {
 			case types.DocumentsChangedEvent:
 				return &WatchResponse{
 					Type: DocumentsChanged,
-					Keys: converter.FromDocumentKeys(resp.Event.DocumentKeys),
+					Key:  docKey,
 				}, nil
 			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent, types.PresenceChangedEvent:
-				for _, docKey := range converter.FromDocumentKeys(resp.Event.DocumentKeys) {
-					cli, err := converter.FromClient(resp.Event.Publisher)
-					if err != nil {
-						return nil, err
-					}
-
-					attachment := c.attachments[docKey]
-					if eventType == types.DocumentsWatchedEvent ||
-						eventType == types.PresenceChangedEvent {
-						if info, ok := attachment.peers[cli.ID.String()]; ok {
-							cli.PresenceInfo.Update(info)
-						}
-						attachment.peers[cli.ID.String()] = cli.PresenceInfo
-					} else {
-						delete(attachment.peers, cli.ID.String())
-					}
+				cli, err := converter.FromClient(resp.Event.Publisher)
+				if err != nil {
+					return nil, err
 				}
+
+				attachment := c.attachments[docKey]
+				if eventType == types.DocumentsWatchedEvent ||
+					eventType == types.PresenceChangedEvent {
+					if info, ok := attachment.peers[cli.ID.String()]; ok {
+						cli.PresenceInfo.Update(info)
+					}
+					attachment.peers[cli.ID.String()] = cli.PresenceInfo
+				} else {
+					delete(attachment.peers, cli.ID.String())
+				}
+
 				return &WatchResponse{
 					Type:          PeersChanged,
 					PeersMapByDoc: c.PeersMapByDoc(),

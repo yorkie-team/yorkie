@@ -141,7 +141,7 @@ func watchDoc(
 			assert.NoError(b, resp.Err)
 
 			if resp.Type == client.DocumentsChanged {
-				err := cli.Sync(ctx, resp.Keys...)
+				err := cli.Sync(ctx, resp.Key)
 				assert.NoError(b, err)
 			}
 		case <-done:
