@@ -79,7 +79,10 @@ message DetachDocumentResponse {
 
 message WatchDocumentsRequest {
   Client client = 1;
-  repeated string document_keys = 2;
+
+  // TODO(hackerwins): Consider combining document_ids and document_keys.
+  repeated string document_ids = 2;
+  repeated string document_keys = 3;
 }
 
 message WatchDocumentsResponse {
@@ -117,7 +120,7 @@ message PushPullChangesResponse {
 
 message UpdatePresenceRequest {
   Client client = 1;
-  repeated string document_keys = 2;
+  repeated string document_ids = 2;
 }
 
 message UpdatePresenceResponse {}

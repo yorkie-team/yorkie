@@ -59,24 +59,24 @@ func (c *Coordinator) NewLocker(
 func (c *Coordinator) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	keys []key.Key,
+	documentIDs []types.ID,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	sub, err := c.pubSub.Subscribe(ctx, subscriber, keys)
+	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentIDs)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	peersMap := c.pubSub.BuildPeersMap(keys)
+	peersMap := c.pubSub.BuildPeersMap(documentIDs)
 	return sub, peersMap, nil
 }
 
 // Unsubscribe unsubscribes the given documents.
 func (c *Coordinator) Unsubscribe(
 	ctx context.Context,
-	keys []key.Key,
+	documentIDs []types.ID,
 	sub *sync.Subscription,
 ) error {
-	c.pubSub.Unsubscribe(ctx, keys, sub)
+	c.pubSub.Unsubscribe(ctx, documentIDs, sub)
 	return nil
 }
 

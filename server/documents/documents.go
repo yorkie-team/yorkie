@@ -192,6 +192,24 @@ func FindDocInfo(
 	return be.DB.FindDocInfoByID(ctx, project.ID, docID)
 }
 
+// CheckDocumentsInProject checks if the given document IDs are in the project.
+func CheckDocumentsInProject(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docIDs []types.ID,
+) error {
+	// TODO(hackerwins): We will change WatchDocuments to WatchDocument.
+	// So, we can remove loop here.
+	for _, docID := range docIDs {
+		if _, err := FindDocInfo(ctx, be, project, docID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // FindDocInfoByKeyAndOwner returns a document for the given document key. If
 // createDocIfNotExist is true, it creates a new document if it does not exist.
 func FindDocInfoByKeyAndOwner(

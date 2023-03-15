@@ -68,7 +68,7 @@ func (s *subscriptions) Len() int {
 type PubSub struct {
 	subscriptionsMapMu          *gosync.RWMutex
 	subscriptionMapBySubscriber map[string]*sync.Subscription
-	subscriptionsMapByDocKey    map[string]*subscriptions
+	subscriptionsMapByDocID     map[types.ID]*subscriptions
 }
 
 // NewPubSub creates an instance of PubSub.
@@ -76,7 +76,7 @@ func NewPubSub() *PubSub {
 	return &PubSub{
 		subscriptionsMapMu:          &gosync.RWMutex{},
 		subscriptionMapBySubscriber: make(map[string]*sync.Subscription),
-		subscriptionsMapByDocKey:    make(map[string]*subscriptions),
+		subscriptionsMapByDocID:     make(map[types.ID]*subscriptions),
 	}
 }
 
@@ -84,16 +84,16 @@ func NewPubSub() *PubSub {
 func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	keys []key.Key,
+	documentIDs []types.ID,
 ) (*sync.Subscription, error) {
-	if len(keys) == 0 {
+	if len(documentIDs) == 0 {
 		return nil, sync.ErrEmptyDocKeys
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
-			key.Join(keys),
+			types.JoinIDs(documentIDs),
 			subscriber.ID.String(),
 		)
 	}
@@ -104,34 +104,32 @@ func (m *PubSub) Subscribe(
 	sub := sync.NewSubscription(subscriber)
 	m.subscriptionMapBySubscriber[sub.SubscriberID()] = sub
 
-	for _, docKey := range keys {
-		key := docKey.String()
-		if _, ok := m.subscriptionsMapByDocKey[key]; !ok {
-			m.subscriptionsMapByDocKey[key] = newSubscriptions()
+	for _, documentID := range documentIDs {
+		if _, ok := m.subscriptionsMapByDocID[documentID]; !ok {
+			m.subscriptionsMapByDocID[documentID] = newSubscriptions()
 		}
-		m.subscriptionsMapByDocKey[key].Add(sub)
+		m.subscriptionsMapByDocID[documentID].Add(sub)
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
-			key.Join(keys),
+			types.JoinIDs(documentIDs),
 			subscriber.ID.String(),
 		)
 	}
 	return sub, nil
 }
 
-// BuildPeersMap builds the peers map of the given keys.
-func (m *PubSub) BuildPeersMap(keys []key.Key) map[string][]types.Client {
+// BuildPeersMap builds the peers map of the given documentIDs.
+func (m *PubSub) BuildPeersMap(documentIDs []types.ID) map[string][]types.Client {
 	peersMap := make(map[string][]types.Client)
-	for _, docKey := range keys {
-		combinedKey := docKey.String()
+	for _, documentID := range documentIDs {
 		var peers []types.Client
-		for _, sub := range m.subscriptionsMapByDocKey[combinedKey].Map() {
+		for _, sub := range m.subscriptionsMapByDocID[documentID].Map() {
 			peers = append(peers, sub.Subscriber())
 		}
-		peersMap[combinedKey] = peers
+		peersMap[documentID.String()] = peers
 	}
 	return peersMap
 }
@@ -139,7 +137,7 @@ func (m *PubSub) BuildPeersMap(keys []key.Key) map[string][]types.Client {
 // Unsubscribe unsubscribes the given docKeys.
 func (m *PubSub) Unsubscribe(
 	ctx context.Context,
-	docKeys []key.Key,
+	documentIDs []types.ID,
 	sub *sync.Subscription,
 ) {
 	m.subscriptionsMapMu.Lock()
@@ -148,7 +146,7 @@ func (m *PubSub) Unsubscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
-			key.Join(docKeys),
+			types.JoinIDs(documentIDs),
 			sub.SubscriberID(),
 		)
 	}
@@ -156,13 +154,12 @@ func (m *PubSub) Unsubscribe(
 	sub.Close()
 
 	delete(m.subscriptionMapBySubscriber, sub.SubscriberID())
-	for _, docKey := range docKeys {
-		k := docKey.String()
-		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
+	for _, documentID := range documentIDs {
+		if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
 			subs.Delete(sub.ID())
 
 			if subs.Len() == 0 {
-				delete(m.subscriptionsMapByDocKey, k)
+				delete(m.subscriptionsMapByDocID, documentID)
 			}
 		}
 	}
@@ -170,7 +167,7 @@ func (m *PubSub) Unsubscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
-			key.Join(docKeys),
+			types.JoinIDs(documentIDs),
 			sub.SubscriberID(),
 		)
 	}
@@ -185,14 +182,12 @@ func (m *PubSub) Publish(
 	m.subscriptionsMapMu.RLock()
 	defer m.subscriptionsMapMu.RUnlock()
 
-	for _, docKey := range event.DocumentKeys {
-		k := docKey.String()
-
+	for idx, documentID := range event.DocumentIDs {
 		if logging.Enabled(zap.DebugLevel) {
-			logging.From(ctx).Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
+			logging.From(ctx).Debugf(`Publish(%s,%s) Start`, documentID.String(), publisherID.String())
 		}
 
-		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
+		if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
 			for _, sub := range subs.Map() {
 				if sub.Subscriber().ID.Compare(publisherID) == 0 {
 					continue
@@ -202,16 +197,16 @@ func (m *PubSub) Publish(
 					logging.From(ctx).Debugf(
 						`Publish %s(%s,%s) to %s`,
 						event.Type,
-						k,
+						documentID.String(),
 						publisherID.String(),
 						sub.SubscriberID(),
 					)
 				}
 
-				watchDocEvent := sync.DocEvent{
+				watchDocEvent := sync.ClientDocEvent{
 					Type:         event.Type,
 					Publisher:    event.Publisher,
-					DocumentKeys: []key.Key{docKey},
+					DocumentKeys: []key.Key{event.DocumentKeys[idx]},
 				}
 				// NOTE: When a subscription is being closed by a subscriber,
 				// the subscriber may not receive messages.
@@ -220,7 +215,7 @@ func (m *PubSub) Publish(
 				case <-gotime.After(100 * gotime.Millisecond):
 					logging.From(ctx).Warnf(
 						`Publish(%s,%s) to %s timeout`,
-						k,
+						documentID.String(),
 						publisherID.String(),
 						sub.SubscriberID(),
 					)
@@ -228,7 +223,7 @@ func (m *PubSub) Publish(
 			}
 		}
 		if logging.Enabled(zap.DebugLevel) {
-			logging.From(ctx).Debugf(`Publish(%s,%s) End`, k, publisherID.String())
+			logging.From(ctx).Debugf(`Publish(%s,%s) End`, documentID.String(), publisherID.String())
 		}
 	}
 }

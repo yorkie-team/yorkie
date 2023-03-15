@@ -42,9 +42,9 @@ const (
 func (c *Client) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	keys []key.Key,
+	ids []types.ID,
 ) (*sync.Subscription, map[string][]types.Client, error) {
-	sub, err := c.localPubSub.Subscribe(ctx, subscriber, keys)
+	sub, err := c.localPubSub.Subscribe(ctx, subscriber, ids)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -52,18 +52,18 @@ func (c *Client) Subscribe(
 	// TODO(hackerwins): If the server is not stopped gracefully, there may
 	// be garbage subscriptions left. Consider introducing a TTL and
 	// updating it periodically.
-	if err := c.putSubscriptions(ctx, keys, sub); err != nil {
+	if err := c.putSubscriptions(ctx, ids, sub); err != nil {
 		return nil, nil, err
 	}
 
 	peersMap := make(map[string][]types.Client)
-	for _, k := range keys {
-		subs, err := c.pullSubscriptions(ctx, k)
+	for _, id := range ids {
+		subs, err := c.pullSubscriptions(ctx, id)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		peersMap[k.String()] = subs
+		peersMap[id.String()] = subs
 	}
 
 	return sub, peersMap, nil
@@ -72,7 +72,7 @@ func (c *Client) Subscribe(
 // Unsubscribe unsubscribes the given keys.
 func (c *Client) Unsubscribe(
 	ctx context.Context,
-	keys []key.Key,
+	keys []types.ID,
 	sub *sync.Subscription,
 ) error {
 	c.localPubSub.Unsubscribe(ctx, keys, sub)
@@ -104,11 +104,12 @@ func (c *Client) UpdatePresence(
 	publisher *types.Client,
 	keys []key.Key,
 ) (*sync.DocEvent, error) {
-	if sub := c.localPubSub.UpdatePresence(publisher, keys); sub != nil {
-		if err := c.putSubscriptions(ctx, keys, sub); err != nil {
-			return nil, err
-		}
-	}
+	// TODO(hackerwins): Uncomment this when changing key.Key to types.ID.
+	// if sub := c.localPubSub.UpdatePresence(publisher, keys); sub != nil {
+	// 	if err := c.putSubscriptions(ctx, keys, sub); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
 
 	return &sync.DocEvent{
 		Type:         types.PresenceChangedEvent,
@@ -207,7 +208,7 @@ func (c *Client) publishToMember(
 // putSubscriptions puts the given subscriptions in etcd.
 func (c *Client) putSubscriptions(
 	ctx context.Context,
-	keys []key.Key,
+	ids []types.ID,
 	sub *sync.Subscription,
 ) error {
 	cli := sub.Subscriber()
@@ -216,8 +217,8 @@ func (c *Client) putSubscriptions(
 		return fmt.Errorf("marshal %s: %w", sub.ID(), err)
 	}
 
-	for _, k := range keys {
-		k := path.Join(subscriptionsPath, k.String(), sub.ID())
+	for _, id := range ids {
+		k := path.Join(subscriptionsPath, id.String(), sub.ID())
 		if _, err = c.client.Put(ctx, k, encoded); err != nil {
 			logging.From(ctx).Error(err)
 			return fmt.Errorf("put %s: %w", k, err)
@@ -230,7 +231,7 @@ func (c *Client) putSubscriptions(
 // pullSubscriptions pulls the subscriptions of the given document key.
 func (c *Client) pullSubscriptions(
 	ctx context.Context,
-	k key.Key,
+	k types.ID,
 ) ([]types.Client, error) {
 	getResponse, err := c.client.Get(
 		ctx,
@@ -257,11 +258,11 @@ func (c *Client) pullSubscriptions(
 // removeSubscriptions removes the given subscription in etcd.
 func (c *Client) removeSubscriptions(
 	ctx context.Context,
-	keys []key.Key,
+	ids []types.ID,
 	sub *sync.Subscription,
 ) error {
-	for _, docKey := range keys {
-		k := path.Join(subscriptionsPath, docKey.String(), sub.ID())
+	for _, id := range ids {
+		k := path.Join(subscriptionsPath, id.String(), sub.ID())
 		if _, err := c.client.Delete(ctx, k); err != nil {
 			logging.From(ctx).Error(err)
 			return fmt.Errorf("delete %s: %w", k, err)

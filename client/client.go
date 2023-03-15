@@ -364,7 +364,7 @@ func (c *Client) Sync(ctx context.Context, keys ...key.Key) error {
 	return nil
 }
 
-// Watch subscribes to events on a given document.
+// Watch subscribes to events on a given documentIDs.
 // If an error occurs before stream initialization, the second response, error,
 // is returned. If the context "ctx" is canceled or timed out, returned channel
 // is closed, and "WatchResponse" from this closed channel has zero events and
@@ -373,9 +373,15 @@ func (c *Client) Watch(
 	ctx context.Context,
 	docs ...*document.Document,
 ) (<-chan WatchResponse, error) {
-	var keys []key.Key
+	var docKeys []key.Key
+	var docIDs []types.ID
 	for _, doc := range docs {
-		keys = append(keys, doc.Key())
+		attachment, ok := c.attachments[doc.Key().String()]
+		if !ok {
+			return nil, ErrDocumentNotAttached
+		}
+		docKeys = append(docKeys, doc.Key())
+		docIDs = append(docIDs, attachment.docID)
 	}
 
 	rch := make(chan WatchResponse)
@@ -384,7 +390,8 @@ func (c *Client) Watch(
 			ID:           c.id,
 			PresenceInfo: c.presenceInfo,
 		}),
-		DocumentKeys: converter.ToDocumentKeys(keys),
+		DocumentKeys: converter.ToDocumentKeys(docKeys),
+		DocumentIds:  converter.ToDocumentIDs(docIDs),
 	})
 	if err != nil {
 		return nil, err
@@ -487,9 +494,9 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 		return nil
 	}
 
-	var keys []key.Key
+	var documentIDs []types.ID
 	for _, attachment := range c.attachments {
-		keys = append(keys, attachment.doc.Key())
+		documentIDs = append(documentIDs, attachment.docID)
 	}
 
 	// TODO(hackerwins): We temporarily use Unary Call to update presence,
@@ -501,7 +508,7 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 			ID:           c.id,
 			PresenceInfo: c.presenceInfo,
 		}),
-		DocumentKeys: converter.ToDocumentKeys(keys),
+		DocumentIds: converter.ToDocumentIDs(documentIDs),
 	}); err != nil {
 		return err
 	}

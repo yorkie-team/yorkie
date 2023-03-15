@@ -220,6 +220,19 @@ func FromDocumentKeys(pbKeys []string) []key.Key {
 	return keys
 }
 
+// FromDocumentIDs converts the given Protobuf formats to model format.
+func FromDocumentIDs(pbIDs []string) ([]types.ID, error) {
+	var ids []types.ID
+	for _, pbID := range pbIDs {
+		id := types.ID(pbID)
+		if err := id.Validate(); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
 // FromEventType converts the given Protobuf formats to model format.
 func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) {
 	switch pbDocEventType {

@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
@@ -40,19 +39,19 @@ func TestPubSub(t *testing.T) {
 
 	t.Run("publish subscribe test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
-		docKeys := []key.Key{key.Key(t.Name())}
+		documentIDs := []types.ID{types.ID(t.Name())}
 		event := sync.DocEvent{
-			Type:         types.DocumentsWatchedEvent,
-			Publisher:    actorB,
-			DocumentKeys: docKeys,
+			Type:        types.DocumentsWatchedEvent,
+			Publisher:   actorB,
+			DocumentIDs: documentIDs,
 		}
 
 		ctx := context.Background()
 		// subscribe the documents by actorA
-		subA, err := pubSub.Subscribe(ctx, actorA, docKeys)
+		subA, err := pubSub.Subscribe(ctx, actorA, documentIDs)
 		assert.NoError(t, err)
 		defer func() {
-			pubSub.Unsubscribe(ctx, docKeys, subA)
+			pubSub.Unsubscribe(ctx, documentIDs, subA)
 		}()
 
 		var wg gosync.WaitGroup
@@ -70,16 +69,16 @@ func TestPubSub(t *testing.T) {
 
 	t.Run("subscriptions map test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
-		docKeys := []key.Key{key.Key(t.Name())}
+		documentIDs := []types.ID{types.ID(t.Name())}
 
 		ctx := context.Background()
 
 		for i := 0; i < 5; i++ {
-			_, err := pubSub.Subscribe(ctx, actorA, docKeys)
+			_, err := pubSub.Subscribe(ctx, actorA, documentIDs)
 			assert.NoError(t, err)
 
-			subs := pubSub.BuildPeersMap(docKeys)
-			assert.Len(t, subs[docKeys[0].String()], i+1)
+			subs := pubSub.BuildPeersMap(documentIDs)
+			assert.Len(t, subs[documentIDs[0].String()], i+1)
 		}
 	})
 }

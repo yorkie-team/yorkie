@@ -175,11 +175,20 @@ func ToChangeID(id change.ID) *api.ChangeID {
 
 // ToDocumentKeys converts the given model format to Protobuf format.
 func ToDocumentKeys(keys []key.Key) []string {
-	var keyList []string
+	var pbKeys []string
 	for _, k := range keys {
-		keyList = append(keyList, k.String())
+		pbKeys = append(pbKeys, k.String())
 	}
-	return keyList
+	return pbKeys
+}
+
+// ToDocumentIDs converts the given model format to Protobuf format.
+func ToDocumentIDs(documentIDs []types.ID) []string {
+	var pbDocumentIDs []string
+	for _, k := range documentIDs {
+		pbDocumentIDs = append(pbDocumentIDs, k.String())
+	}
+	return pbDocumentIDs
 }
 
 // ToClientsMap converts the given model to Protobuf format.

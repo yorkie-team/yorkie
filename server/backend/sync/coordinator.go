@@ -49,13 +49,13 @@ type Coordinator interface {
 	Subscribe(
 		ctx context.Context,
 		subscriber types.Client,
-		docKeys []key.Key,
+		documentIDs []types.ID,
 	) (*Subscription, map[string][]types.Client, error)
 
 	// Unsubscribe unsubscribes from the given documents.
 	Unsubscribe(
 		ctx context.Context,
-		docKeys []key.Key,
+		documentIDs []types.ID,
 		sub *Subscription,
 	) error
 
