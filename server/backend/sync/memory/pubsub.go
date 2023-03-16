@@ -83,16 +83,12 @@ func NewPubSub() *PubSub {
 func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	documentIDs []types.ID,
+	documentID types.ID,
 ) (*sync.Subscription, error) {
-	if len(documentIDs) == 0 {
-		return nil, sync.ErrEmptyDocKeys
-	}
-
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
-			types.JoinIDs(documentIDs),
+			documentID.String(),
 			subscriber.ID.String(),
 		)
 	}
@@ -103,17 +99,15 @@ func (m *PubSub) Subscribe(
 	sub := sync.NewSubscription(subscriber)
 	m.subscriptionMapBySubscriber[sub.SubscriberID()] = sub
 
-	for _, documentID := range documentIDs {
-		if _, ok := m.subscriptionsMapByDocID[documentID]; !ok {
-			m.subscriptionsMapByDocID[documentID] = newSubscriptions()
-		}
-		m.subscriptionsMapByDocID[documentID].Add(sub)
+	if _, ok := m.subscriptionsMapByDocID[documentID]; !ok {
+		m.subscriptionsMapByDocID[documentID] = newSubscriptions()
 	}
+	m.subscriptionsMapByDocID[documentID].Add(sub)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
-			types.JoinIDs(documentIDs),
+			documentID.String(),
 			subscriber.ID.String(),
 		)
 	}
@@ -123,7 +117,7 @@ func (m *PubSub) Subscribe(
 // Unsubscribe unsubscribes the given docKeys.
 func (m *PubSub) Unsubscribe(
 	ctx context.Context,
-	documentIDs []types.ID,
+	documentID types.ID,
 	sub *sync.Subscription,
 ) {
 	m.subscriptionsMapMu.Lock()
@@ -132,7 +126,7 @@ func (m *PubSub) Unsubscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
-			types.JoinIDs(documentIDs),
+			documentID,
 			sub.SubscriberID(),
 		)
 	}
@@ -140,20 +134,19 @@ func (m *PubSub) Unsubscribe(
 	sub.Close()
 
 	delete(m.subscriptionMapBySubscriber, sub.SubscriberID())
-	for _, documentID := range documentIDs {
-		if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
-			subs.Delete(sub.ID())
 
-			if subs.Len() == 0 {
-				delete(m.subscriptionsMapByDocID, documentID)
-			}
+	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
+		subs.Delete(sub.ID())
+
+		if subs.Len() == 0 {
+			delete(m.subscriptionsMapByDocID, documentID)
 		}
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
-			types.JoinIDs(documentIDs),
+			documentID,
 			sub.SubscriberID(),
 		)
 	}
@@ -217,7 +210,7 @@ func (m *PubSub) Publish(
 // UpdatePresence updates the presence of the given client.
 func (m *PubSub) UpdatePresence(
 	publisher *types.Client,
-	documentIDs []types.ID,
+	documentID types.ID,
 ) *sync.Subscription {
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()

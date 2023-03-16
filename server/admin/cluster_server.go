@@ -60,7 +60,7 @@ func (s *clusterServer) BroadcastEvent(
 		if err := s.backend.Coordinator.UpdatePresence(
 			ctx,
 			&docEvent.Publisher,
-			docEvent.DocumentIDs,
+			docEvent.DocumentIDs[0],
 		); err != nil {
 			return nil, err
 		}

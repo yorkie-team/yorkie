@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -552,7 +553,8 @@ func (s *yorkieServer) UpdatePresence(
 	}
 	documentKeys := converter.FromDocumentKeys(req.DocumentKeys)
 
-	err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentIDs)
+	// TODO(hackerwins): We need change documents to document.
+	err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentIDs[0])
 	if err != nil {
 		return nil, err
 	}
@@ -574,11 +576,10 @@ func (s *yorkieServer) watchDoc(
 	documentKey key.Key,
 ) (*sync.Subscription, []types.Client, error) {
 	// TODO(hackerwins): We need change documents to document.
-	subscription, peersMap, err := s.backend.Coordinator.Subscribe(
+	subscription, peers, err := s.backend.Coordinator.Subscribe(
 		ctx,
 		client,
-		[]types.ID{documentID},
-		[]key.Key{documentKey},
+		documentID,
 	)
 	if err != nil {
 		logging.From(ctx).Error(err)
@@ -596,7 +597,7 @@ func (s *yorkieServer) watchDoc(
 		},
 	)
 
-	return subscription, peersMap[documentKey], nil
+	return subscription, peers, nil
 }
 
 func (s *yorkieServer) unwatchDoc(
@@ -604,9 +605,8 @@ func (s *yorkieServer) unwatchDoc(
 	documentID types.ID,
 	documentKey key.Key,
 ) {
-	// TODO(hackerwins): We need change documents to document.
 	ctx := context.Background()
-	_ = s.backend.Coordinator.Unsubscribe(ctx, []types.ID{documentID}, subscription)
+	_ = s.backend.Coordinator.Unsubscribe(ctx, documentID, subscription)
 	s.backend.Coordinator.Publish(
 		ctx,
 		subscription.Subscriber().ID,

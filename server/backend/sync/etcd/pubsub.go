@@ -28,7 +28,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -42,10 +41,9 @@ const (
 func (c *Client) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	documentIDs []types.ID,
-	documentKeys []key.Key,
-) (*sync.Subscription, map[key.Key][]types.Client, error) {
-	sub, err := c.localPubSub.Subscribe(ctx, subscriber, documentIDs)
+	documentID types.ID,
+) (*sync.Subscription, []types.Client, error) {
+	sub, err := c.localPubSub.Subscribe(ctx, subscriber, documentID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -53,30 +51,25 @@ func (c *Client) Subscribe(
 	// TODO(hackerwins): If the server is not stopped gracefully, there may
 	// be garbage subscriptions left. Consider introducing a TTL and
 	// updating it periodically.
-	if err := c.putSubscriptions(ctx, documentIDs, sub); err != nil {
+	if err := c.putSubscriptions(ctx, documentID, sub); err != nil {
 		return nil, nil, err
 	}
 
-	peersMap := make(map[key.Key][]types.Client)
-	for idx, documentID := range documentIDs {
-		peers, err := c.pullSubscriptions(ctx, documentID)
-		if err != nil {
-			return nil, nil, err
-		}
-		peersMap[documentKeys[idx]] = peers
+	peers, err := c.pullSubscriptions(ctx, documentID)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	return sub, peersMap, nil
+	return sub, peers, nil
 }
 
 // Unsubscribe unsubscribes the given keys.
 func (c *Client) Unsubscribe(
 	ctx context.Context,
-	ids []types.ID,
+	documentID types.ID,
 	sub *sync.Subscription,
 ) error {
-	c.localPubSub.Unsubscribe(ctx, ids, sub)
-	return c.removeSubscriptions(ctx, ids, sub)
+	c.localPubSub.Unsubscribe(ctx, documentID, sub)
+	return c.removeSubscriptions(ctx, documentID, sub)
 }
 
 // Publish publishes the given event.
@@ -102,10 +95,10 @@ func (c *Client) PublishToLocal(
 func (c *Client) UpdatePresence(
 	ctx context.Context,
 	publisher *types.Client,
-	documentIDs []types.ID,
+	documentID types.ID,
 ) error {
-	if sub := c.localPubSub.UpdatePresence(publisher, documentIDs); sub != nil {
-		if err := c.putSubscriptions(ctx, documentIDs, sub); err != nil {
+	if sub := c.localPubSub.UpdatePresence(publisher, documentID); sub != nil {
+		if err := c.putSubscriptions(ctx, documentID, sub); err != nil {
 			return err
 		}
 	}
@@ -203,7 +196,7 @@ func (c *Client) publishToMember(
 // putSubscriptions puts the given subscriptions in etcd.
 func (c *Client) putSubscriptions(
 	ctx context.Context,
-	ids []types.ID,
+	id types.ID,
 	sub *sync.Subscription,
 ) error {
 	cli := sub.Subscriber()
@@ -212,12 +205,10 @@ func (c *Client) putSubscriptions(
 		return fmt.Errorf("marshal %s: %w", sub.ID(), err)
 	}
 
-	for _, id := range ids {
-		k := path.Join(subscriptionsPath, id.String(), sub.ID())
-		if _, err = c.client.Put(ctx, k, encoded); err != nil {
-			logging.From(ctx).Error(err)
-			return fmt.Errorf("put %s: %w", k, err)
-		}
+	k := path.Join(subscriptionsPath, id.String(), sub.ID())
+	if _, err = c.client.Put(ctx, k, encoded); err != nil {
+		logging.From(ctx).Error(err)
+		return fmt.Errorf("put %s: %w", k, err)
 	}
 
 	return nil
@@ -253,15 +244,13 @@ func (c *Client) pullSubscriptions(
 // removeSubscriptions removes the given subscription in etcd.
 func (c *Client) removeSubscriptions(
 	ctx context.Context,
-	ids []types.ID,
+	id types.ID,
 	sub *sync.Subscription,
 ) error {
-	for _, id := range ids {
-		k := path.Join(subscriptionsPath, id.String(), sub.ID())
-		if _, err := c.client.Delete(ctx, k); err != nil {
-			logging.From(ctx).Error(err)
-			return fmt.Errorf("delete %s: %w", k, err)
-		}
+	k := path.Join(subscriptionsPath, id.String(), sub.ID())
+	if _, err := c.client.Delete(ctx, k); err != nil {
+		logging.From(ctx).Error(err)
+		return fmt.Errorf("delete %s: %w", k, err)
 	}
 
 	return nil

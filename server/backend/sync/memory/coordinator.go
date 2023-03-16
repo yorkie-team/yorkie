@@ -21,7 +21,6 @@ import (
 	"context"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/locker"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -59,32 +58,27 @@ func (c *Coordinator) NewLocker(
 func (c *Coordinator) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	documentIDs []types.ID,
-	documentKeys []key.Key,
-) (*sync.Subscription, map[key.Key][]types.Client, error) {
-	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentIDs)
+	documentID types.ID,
+) (*sync.Subscription, []types.Client, error) {
+	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	peersMap := make(map[key.Key][]types.Client)
-	for idx, documentID := range documentIDs {
-		var peers []types.Client
-		for _, sub := range c.pubSub.subscriptionsMapByDocID[documentID].Map() {
-			peers = append(peers, sub.Subscriber())
-		}
-		peersMap[documentKeys[idx]] = peers
+	var peers []types.Client
+	for _, sub := range c.pubSub.subscriptionsMapByDocID[documentID].Map() {
+		peers = append(peers, sub.Subscriber())
 	}
-	return sub, peersMap, nil
+	return sub, peers, nil
 }
 
 // Unsubscribe unsubscribes the given documents.
 func (c *Coordinator) Unsubscribe(
 	ctx context.Context,
-	documentIDs []types.ID,
+	documentID types.ID,
 	sub *sync.Subscription,
 ) error {
-	c.pubSub.Unsubscribe(ctx, documentIDs, sub)
+	c.pubSub.Unsubscribe(ctx, documentID, sub)
 	return nil
 }
 
@@ -110,9 +104,9 @@ func (c *Coordinator) PublishToLocal(
 func (c *Coordinator) UpdatePresence(
 	_ context.Context,
 	publisher *types.Client,
-	documentIDs []types.ID,
+	documentID types.ID,
 ) error {
-	c.pubSub.UpdatePresence(publisher, documentIDs)
+	c.pubSub.UpdatePresence(publisher, documentID)
 	return nil
 }
 

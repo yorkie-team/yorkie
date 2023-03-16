@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
 )
@@ -31,17 +30,16 @@ import (
 func TestCoordinator(t *testing.T) {
 	t.Run("subscriptions map test", func(t *testing.T) {
 		coordinator := memory.NewCoordinator(nil)
-		documentIDs := []types.ID{types.ID(t.Name() + "id")}
-		documentKeys := []key.Key{key.Key(t.Name() + "key")}
+		docID := types.ID(t.Name() + "id")
 		ctx := context.Background()
 
 		for i := 0; i < 5; i++ {
 			id, err := time.ActorIDFromBytes([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i)})
 			assert.NoError(t, err)
 
-			_, peersMap, err := coordinator.Subscribe(ctx, types.Client{ID: id}, documentIDs, documentKeys)
+			_, peers, err := coordinator.Subscribe(ctx, types.Client{ID: id}, docID)
 			assert.NoError(t, err)
-			assert.Len(t, peersMap[documentKeys[0]], i+1)
+			assert.Len(t, peers, i+1)
 		}
 	})
 }
