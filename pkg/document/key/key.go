@@ -18,7 +18,7 @@
 package key
 
 import (
-	errors "errors"
+	"errors"
 
 	"github.com/yorkie-team/yorkie/internal/validation"
 )

@@ -177,8 +177,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 
 		_, err = cli.Watch(ctx, doc)
-		// TODO(chacha912): Modify to pass the test verification
-		// assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		assert.Equal(t, client.ErrDocumentNotAttached, err)
 	})
 }
 

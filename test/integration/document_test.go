@@ -377,6 +377,7 @@ func TestDocumentWithProject(t *testing.T) {
 
 	project2, err := adminCli.CreateProject(context.Background(), "project2")
 	assert.NoError(t, err)
+
 	t.Run("watch document with different project test", func(t *testing.T) {
 		ctx := context.Background()
 

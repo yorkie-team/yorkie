@@ -72,11 +72,11 @@ func (c *Client) Subscribe(
 // Unsubscribe unsubscribes the given keys.
 func (c *Client) Unsubscribe(
 	ctx context.Context,
-	keys []types.ID,
+	ids []types.ID,
 	sub *sync.Subscription,
 ) error {
-	c.localPubSub.Unsubscribe(ctx, keys, sub)
-	return c.removeSubscriptions(ctx, keys, sub)
+	c.localPubSub.Unsubscribe(ctx, ids, sub)
+	return c.removeSubscriptions(ctx, ids, sub)
 }
 
 // Publish publishes the given event.
