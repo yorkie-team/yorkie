@@ -366,35 +366,35 @@ func (s *yorkieServer) PushPullChanges(
 	}, nil
 }
 
-// WatchDocuments connects the stream to deliver events from the given documents
+// WatchDocument connects the stream to deliver events from the given documents
 // to the requesting client.
-func (s *yorkieServer) WatchDocuments(
-	req *api.WatchDocumentsRequest,
-	stream api.YorkieService_WatchDocumentsServer,
+func (s *yorkieServer) WatchDocument(
+	req *api.WatchDocumentRequest,
+	stream api.YorkieService_WatchDocumentServer,
 ) error {
 	cli, err := converter.FromClient(req.Client)
 	if err != nil {
 		return err
 	}
-	documentIDs, err := converter.FromDocumentIDs(req.DocumentIds)
+	docID, err := converter.FromDocumentID(req.DocumentId)
 	if err != nil {
 		return err
 	}
-	documentKeys := converter.FromDocumentKeys(req.DocumentKeys)
+	docKey := converter.FromDocumentKey(req.DocumentKey)
 
 	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
-		Attributes: types.NewAccessAttributes(documentKeys, types.Read),
+		Attributes: types.NewAccessAttributes([]key.Key{docKey}, types.Read),
 	}); err != nil {
 		return err
 	}
 
 	project := projects.From(stream.Context())
-	if err := documents.CheckDocumentsInProject(
+	if err := documents.CheckDocInProject(
 		stream.Context(),
 		s.backend,
 		project,
-		documentIDs,
+		docID,
 	); err != nil {
 		return nil
 	}
@@ -408,19 +408,19 @@ func (s *yorkieServer) WatchDocuments(
 		return err
 	}
 
-	subscription, peersMap, err := s.watchDocs(stream.Context(), *cli, documentIDs, documentKeys)
+	subscription, peersMap, err := s.watchDoc(stream.Context(), *cli, docID, docKey)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
 	}
 	defer func() {
-		s.unwatchDocs(subscription, documentIDs, documentKeys)
+		s.unwatchDoc(subscription, docID, docKey)
 	}()
 
-	if err := stream.Send(&api.WatchDocumentsResponse{
-		Body: &api.WatchDocumentsResponse_Initialization_{
-			Initialization: &api.WatchDocumentsResponse_Initialization{
-				PeersMapByDoc: converter.ToClientsMap(peersMap),
+	if err := stream.Send(&api.WatchDocumentResponse{
+		Body: &api.WatchDocumentResponse_Initialization_{
+			Initialization: &api.WatchDocumentResponse_Initialization{
+				PeersMap: converter.ToClients(peersMap),
 			},
 		},
 	}); err != nil {
@@ -439,8 +439,8 @@ func (s *yorkieServer) WatchDocuments(
 				return err
 			}
 
-			if err := stream.Send(&api.WatchDocumentsResponse{
-				Body: &api.WatchDocumentsResponse_Event{
+			if err := stream.Send(&api.WatchDocumentResponse{
+				Body: &api.WatchDocumentResponse_Event{
 					Event: &api.ClientDocEvent{
 						Type:        eventType,
 						Publisher:   converter.ToClient(event.Publisher),
@@ -567,17 +567,18 @@ func (s *yorkieServer) UpdatePresence(
 	return &api.UpdatePresenceResponse{}, nil
 }
 
-func (s *yorkieServer) watchDocs(
+func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	client types.Client,
-	documentIDs []types.ID,
-	documentKeys []key.Key,
-) (*sync.Subscription, map[key.Key][]types.Client, error) {
+	documentID types.ID,
+	documentKey key.Key,
+) (*sync.Subscription, []types.Client, error) {
+	// TODO(hackerwins): We need change documents to document.
 	subscription, peersMap, err := s.backend.Coordinator.Subscribe(
 		ctx,
 		client,
-		documentIDs,
-		documentKeys,
+		[]types.ID{documentID},
+		[]key.Key{documentKey},
 	)
 	if err != nil {
 		logging.From(ctx).Error(err)
@@ -590,29 +591,30 @@ func (s *yorkieServer) watchDocs(
 		sync.DocEvent{
 			Type:         types.DocumentsWatchedEvent,
 			Publisher:    subscription.Subscriber(),
-			DocumentIDs:  documentIDs,
-			DocumentKeys: documentKeys,
+			DocumentIDs:  []types.ID{documentID},
+			DocumentKeys: []key.Key{documentKey},
 		},
 	)
 
-	return subscription, peersMap, nil
+	return subscription, peersMap[documentKey], nil
 }
 
-func (s *yorkieServer) unwatchDocs(
+func (s *yorkieServer) unwatchDoc(
 	subscription *sync.Subscription,
-	documentIDs []types.ID,
-	documentKeys []key.Key,
+	documentID types.ID,
+	documentKey key.Key,
 ) {
+	// TODO(hackerwins): We need change documents to document.
 	ctx := context.Background()
-	_ = s.backend.Coordinator.Unsubscribe(ctx, documentIDs, subscription)
+	_ = s.backend.Coordinator.Unsubscribe(ctx, []types.ID{documentID}, subscription)
 	s.backend.Coordinator.Publish(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
 			Type:         types.DocumentsUnwatchedEvent,
 			Publisher:    subscription.Subscriber(),
-			DocumentIDs:  documentIDs,
-			DocumentKeys: documentKeys,
+			DocumentIDs:  []types.ID{documentID},
+			DocumentKeys: []key.Key{documentKey},
 		},
 	)
 }

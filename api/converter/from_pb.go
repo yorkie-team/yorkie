@@ -213,6 +213,7 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 
 // FromDocumentKey converts the given Protobuf formats to model format.
 func FromDocumentKey(pbKey string) key.Key {
+	// TODO(hackerwins): validate key.
 	return key.Key(pbKey)
 }
 
@@ -223,6 +224,16 @@ func FromDocumentKeys(pbKeys []string) []key.Key {
 		keys = append(keys, key.Key(pbKey))
 	}
 	return keys
+}
+
+// FromDocumentID converts the given Protobuf formats to model format.
+func FromDocumentID(pbID string) (types.ID, error) {
+	id := types.ID(pbID)
+	if err := id.Validate(); err != nil {
+		return "", err
+	}
+
+	return id, nil
 }
 
 // FromDocumentIDs converts the given Protobuf formats to model format.

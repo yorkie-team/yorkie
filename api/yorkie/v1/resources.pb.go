@@ -337,6 +337,7 @@ func (m *ChangeID) GetActorId() []byte {
 
 type Operation struct {
 	// Types that are valid to be assigned to Body:
+	//
 	//	*Operation_Set_
 	//	*Operation_Add_
 	//	*Operation_Move_
@@ -1166,6 +1167,7 @@ func (m *JSONElementSimple) GetValue() []byte {
 
 type JSONElement struct {
 	// Types that are valid to be assigned to Body:
+	//
 	//	*JSONElement_JsonObject
 	//	*JSONElement_JsonArray
 	//	*JSONElement_Primitive_

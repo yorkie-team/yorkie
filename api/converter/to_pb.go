@@ -201,22 +201,15 @@ func ToDocumentIDs(documentIDs []types.ID) []string {
 	return pbDocumentIDs
 }
 
-// ToClientsMap converts the given model to Protobuf format.
-func ToClientsMap(clientsMap map[key.Key][]types.Client) map[string]*api.Clients {
-	pbClientsMap := make(map[string]*api.Clients)
-
-	for docKey, clients := range clientsMap {
-		var pbClients []*api.Client
-		for _, client := range clients {
-			pbClients = append(pbClients, ToClient(client))
-		}
-
-		pbClientsMap[docKey.String()] = &api.Clients{
-			Clients: pbClients,
-		}
+// ToClients converts the given model to Protobuf format.
+func ToClients(clients []types.Client) *api.Clients {
+	var pbClients []*api.Client
+	for _, client := range clients {
+		pbClients = append(pbClients, ToClient(client))
 	}
-
-	return pbClientsMap
+	return &api.Clients{
+		Clients: pbClients,
+	}
 }
 
 // ToDocEventType converts the given model format to Protobuf format.

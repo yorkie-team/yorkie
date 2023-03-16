@@ -379,35 +379,33 @@ func (c *Client) Watch(
 	}
 
 	rch := make(chan WatchResponse)
-	stream, err := c.client.WatchDocuments(ctx, &api.WatchDocumentsRequest{
+	stream, err := c.client.WatchDocument(ctx, &api.WatchDocumentRequest{
 		Client: converter.ToClient(types.Client{
 			ID:           c.id,
 			PresenceInfo: c.presenceInfo,
 		}),
-		DocumentKeys: []string{converter.ToDocumentKey(doc.Key())},
-		DocumentIds:  []string{converter.ToDocumentID(attachment.docID)},
+		DocumentKey: converter.ToDocumentKey(doc.Key()),
+		DocumentId:  converter.ToDocumentID(attachment.docID),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	handleResponse := func(pbResp *api.WatchDocumentsResponse) (*WatchResponse, error) {
+	handleResponse := func(pbResp *api.WatchDocumentResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
-		case *api.WatchDocumentsResponse_Initialization_:
-			for docKey, peers := range resp.Initialization.PeersMapByDoc {
-				clients, err := converter.FromClients(peers)
-				if err != nil {
-					return nil, err
-				}
+		case *api.WatchDocumentResponse_Initialization_:
+			clients, err := converter.FromClients(resp.Initialization.PeersMap)
+			if err != nil {
+				return nil, err
+			}
 
-				attachment := c.attachments[key.Key(docKey)]
-				for _, cli := range clients {
-					attachment.peers[cli.ID.String()] = cli.PresenceInfo
-				}
+			attachment := c.attachments[doc.Key()]
+			for _, cli := range clients {
+				attachment.peers[cli.ID.String()] = cli.PresenceInfo
 			}
 
 			return nil, nil
-		case *api.WatchDocumentsResponse_Event:
+		case *api.WatchDocumentResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
 			if err != nil {
 				return nil, err
