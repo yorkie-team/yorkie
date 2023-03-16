@@ -371,17 +371,11 @@ func (c *Client) Sync(ctx context.Context, keys ...key.Key) error {
 // nil "Err()".
 func (c *Client) Watch(
 	ctx context.Context,
-	docs ...*document.Document,
+	doc *document.Document,
 ) (<-chan WatchResponse, error) {
-	var docKeys []key.Key
-	var docIDs []types.ID
-	for _, doc := range docs {
-		attachment, ok := c.attachments[doc.Key()]
-		if !ok {
-			return nil, ErrDocumentNotAttached
-		}
-		docKeys = append(docKeys, doc.Key())
-		docIDs = append(docIDs, attachment.docID)
+	attachment, ok := c.attachments[doc.Key()]
+	if !ok {
+		return nil, ErrDocumentNotAttached
 	}
 
 	rch := make(chan WatchResponse)
@@ -390,8 +384,8 @@ func (c *Client) Watch(
 			ID:           c.id,
 			PresenceInfo: c.presenceInfo,
 		}),
-		DocumentKeys: converter.ToDocumentKeys(docKeys),
-		DocumentIds:  converter.ToDocumentIDs(docIDs),
+		DocumentKeys: []string{converter.ToDocumentKey(doc.Key())},
+		DocumentIds:  []string{converter.ToDocumentID(attachment.docID)},
 	})
 	if err != nil {
 		return nil, err

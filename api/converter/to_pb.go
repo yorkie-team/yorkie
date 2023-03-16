@@ -187,11 +187,16 @@ func ToDocumentKeys(keys []key.Key) []string {
 	return pbKeys
 }
 
+// ToDocumentID converts the given model format to Protobuf format.
+func ToDocumentID(documentID types.ID) string {
+	return documentID.String()
+}
+
 // ToDocumentIDs converts the given model format to Protobuf format.
 func ToDocumentIDs(documentIDs []types.ID) []string {
 	var pbDocumentIDs []string
-	for _, k := range documentIDs {
-		pbDocumentIDs = append(pbDocumentIDs, k.String())
+	for _, id := range documentIDs {
+		pbDocumentIDs = append(pbDocumentIDs, id.String())
 	}
 	return pbDocumentIDs
 }

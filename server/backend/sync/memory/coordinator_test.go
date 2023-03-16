@@ -29,10 +29,6 @@ import (
 )
 
 func TestCoordinator(t *testing.T) {
-	idA, err := time.ActorIDFromBytes([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
-	assert.NoError(t, err)
-	actorA := types.Client{ID: idA}
-
 	t.Run("subscriptions map test", func(t *testing.T) {
 		coordinator := memory.NewCoordinator(nil)
 		documentIDs := []types.ID{types.ID(t.Name() + "id")}
@@ -40,7 +36,10 @@ func TestCoordinator(t *testing.T) {
 		ctx := context.Background()
 
 		for i := 0; i < 5; i++ {
-			_, peersMap, err := coordinator.Subscribe(ctx, actorA, documentIDs, documentKeys)
+			id, err := time.ActorIDFromBytes([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i)})
+			assert.NoError(t, err)
+
+			_, peersMap, err := coordinator.Subscribe(ctx, types.Client{ID: id}, documentIDs, documentKeys)
 			assert.NoError(t, err)
 			assert.Len(t, peersMap[documentKeys[0]], i+1)
 		}
