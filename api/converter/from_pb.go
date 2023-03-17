@@ -263,16 +263,10 @@ func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
 		return nil, err
 	}
 
-	documentKey, err := FromDocumentKey(docEvent.DocumentKey)
-	if err != nil {
-		return nil, err
-	}
-
 	return &sync.DocEvent{
-		Type:        eventType,
-		Publisher:   *client,
-		DocumentID:  documentID,
-		DocumentKey: documentKey,
+		Type:       eventType,
+		Publisher:  *client,
+		DocumentID: documentID,
 	}, nil
 }
 

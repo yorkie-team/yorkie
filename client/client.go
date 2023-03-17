@@ -410,7 +410,7 @@ func (c *Client) Watch(
 				return nil, err
 			}
 
-			docKey, err := converter.FromDocumentKey(resp.Event.DocumentKey)
+			docKey, err := c.findDocKey(resp.Event.DocumentId)
 			if err != nil {
 				return nil, err
 			}
@@ -474,6 +474,16 @@ func (c *Client) Watch(
 	}()
 
 	return rch, nil
+}
+
+func (c *Client) findDocKey(docID string) (key.Key, error) {
+	for _, attachment := range c.attachments {
+		if attachment.docID.String() == docID {
+			return attachment.doc.Key(), nil
+		}
+	}
+
+	return "", ErrDocumentNotAttached
 }
 
 // UpdatePresence updates the presence of this client.

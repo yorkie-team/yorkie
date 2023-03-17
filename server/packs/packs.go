@@ -131,10 +131,9 @@ func PushPull(
 				ctx,
 				publisherID,
 				sync.DocEvent{
-					Type:        types.DocumentsChangedEvent,
-					Publisher:   types.Client{ID: publisherID},
-					DocumentID:  docInfo.ID,
-					DocumentKey: docInfo.Key,
+					Type:       types.DocumentsChangedEvent,
+					Publisher:  types.Client{ID: publisherID},
+					DocumentID: docInfo.ID,
 				},
 			)
 

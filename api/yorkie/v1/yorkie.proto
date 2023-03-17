@@ -89,7 +89,7 @@ message WatchDocumentResponse {
 
   oneof body {
     Initialization initialization = 1;
-    ClientDocEvent event = 2;
+    DocEvent event = 2;
   }
 }
 

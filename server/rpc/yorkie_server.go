@@ -414,7 +414,7 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 	defer func() {
-		s.unwatchDoc(subscription, docID, docInfo.Key)
+		s.unwatchDoc(subscription, docID)
 	}()
 
 	if err := stream.Send(&api.WatchDocumentResponse{
@@ -441,10 +441,10 @@ func (s *yorkieServer) WatchDocument(
 
 			if err := stream.Send(&api.WatchDocumentResponse{
 				Body: &api.WatchDocumentResponse_Event{
-					Event: &api.ClientDocEvent{
-						Type:        eventType,
-						Publisher:   converter.ToClient(event.Publisher),
-						DocumentKey: event.DocumentKey.String(),
+					Event: &api.DocEvent{
+						Type:       eventType,
+						Publisher:  converter.ToClient(event.Publisher),
+						DocumentId: event.DocumentID.String(),
 					},
 				},
 			}); err != nil {
@@ -551,7 +551,7 @@ func (s *yorkieServer) UpdatePresence(
 		return nil, err
 	}
 
-	docInfo, err := documents.FindDocInfo(
+	_, err = documents.FindDocInfo(
 		ctx,
 		s.backend,
 		projects.From(ctx),
@@ -566,10 +566,9 @@ func (s *yorkieServer) UpdatePresence(
 	}
 
 	s.backend.Coordinator.Publish(ctx, cli.ID, sync.DocEvent{
-		Type:        types.DocumentsWatchedEvent,
-		Publisher:   *cli,
-		DocumentID:  documentID,
-		DocumentKey: docInfo.Key,
+		Type:       types.DocumentsWatchedEvent,
+		Publisher:  *cli,
+		DocumentID: documentID,
 	})
 
 	return &api.UpdatePresenceResponse{}, nil
@@ -595,10 +594,9 @@ func (s *yorkieServer) watchDoc(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:        types.DocumentsWatchedEvent,
-			Publisher:   subscription.Subscriber(),
-			DocumentID:  documentID,
-			DocumentKey: documentKey,
+			Type:       types.DocumentsWatchedEvent,
+			Publisher:  subscription.Subscriber(),
+			DocumentID: documentID,
 		},
 	)
 
@@ -608,7 +606,6 @@ func (s *yorkieServer) watchDoc(
 func (s *yorkieServer) unwatchDoc(
 	subscription *sync.Subscription,
 	documentID types.ID,
-	documentKey key.Key,
 ) {
 	ctx := context.Background()
 	_ = s.backend.Coordinator.Unsubscribe(ctx, documentID, subscription)
@@ -616,10 +613,9 @@ func (s *yorkieServer) unwatchDoc(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:        types.DocumentsUnwatchedEvent,
-			Publisher:   subscription.Subscriber(),
-			DocumentID:  documentID,
-			DocumentKey: documentKey,
+			Type:       types.DocumentsUnwatchedEvent,
+			Publisher:  subscription.Subscriber(),
+			DocumentID: documentID,
 		},
 	)
 }

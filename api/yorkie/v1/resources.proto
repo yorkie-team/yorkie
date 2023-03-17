@@ -296,11 +296,4 @@ message DocEvent {
   DocEventType type = 1;
   Client publisher = 2;
   string document_id = 3;
-  string document_key = 4;
-}
-
-message ClientDocEvent {
-  DocEventType type = 1;
-  Client publisher = 2;
-  string document_key = 3;
 }
