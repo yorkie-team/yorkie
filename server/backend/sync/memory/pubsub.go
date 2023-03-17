@@ -182,15 +182,10 @@ func (m *PubSub) Publish(
 				)
 			}
 
-			watchDocEvent := sync.ClientDocEvent{
-				Type:        event.Type,
-				Publisher:   event.Publisher,
-				DocumentKey: event.DocumentKey,
-			}
 			// NOTE: When a subscription is being closed by a subscriber,
 			// the subscriber may not receive messages.
 			select {
-			case sub.Events() <- watchDocEvent:
+			case sub.Events() <- event:
 			case <-gotime.After(100 * gotime.Millisecond):
 				logging.From(ctx).Warnf(
 					`Publish(%s,%s) to %s timeout`,

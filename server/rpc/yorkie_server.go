@@ -381,23 +381,22 @@ func (s *yorkieServer) WatchDocument(
 	if err != nil {
 		return err
 	}
-	docKey := converter.FromDocumentKey(req.DocumentKey)
+
+	docInfo, err := documents.FindDocInfo(
+		stream.Context(),
+		s.backend,
+		projects.From(stream.Context()),
+		docID,
+	)
+	if err != nil {
+		return nil
+	}
 
 	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
-		Attributes: types.NewAccessAttributes([]key.Key{docKey}, types.Read),
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
 	}); err != nil {
 		return err
-	}
-
-	project := projects.From(stream.Context())
-	if err := documents.CheckDocInProject(
-		stream.Context(),
-		s.backend,
-		project,
-		docID,
-	); err != nil {
-		return nil
 	}
 
 	if _, err = clients.FindClientInfo(
@@ -409,19 +408,19 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	subscription, peersMap, err := s.watchDoc(stream.Context(), *cli, docID, docKey)
+	subscription, peersMap, err := s.watchDoc(stream.Context(), *cli, docID)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
 	}
 	defer func() {
-		s.unwatchDoc(subscription, docID, docKey)
+		s.unwatchDoc(subscription, docID)
 	}()
 
 	if err := stream.Send(&api.WatchDocumentResponse{
 		Body: &api.WatchDocumentResponse_Initialization_{
 			Initialization: &api.WatchDocumentResponse_Initialization{
-				PeersMap: converter.ToClients(peersMap),
+				Peers: converter.ToClients(peersMap),
 			},
 		},
 	}); err != nil {
@@ -442,10 +441,10 @@ func (s *yorkieServer) WatchDocument(
 
 			if err := stream.Send(&api.WatchDocumentResponse{
 				Body: &api.WatchDocumentResponse_Event{
-					Event: &api.ClientDocEvent{
-						Type:        eventType,
-						Publisher:   converter.ToClient(event.Publisher),
-						DocumentKey: converter.ToDocumentKey(event.DocumentKey),
+					Event: &api.DocEvent{
+						Type:       eventType,
+						Publisher:  converter.ToClient(event.Publisher),
+						DocumentId: event.DocumentID.String(),
 					},
 				},
 			}); err != nil {
@@ -551,18 +550,25 @@ func (s *yorkieServer) UpdatePresence(
 	if err != nil {
 		return nil, err
 	}
-	documentKey := converter.FromDocumentKey(req.DocumentKey)
 
-	err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID)
+	_, err = documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		documentID,
+	)
 	if err != nil {
 		return nil, err
 	}
 
+	if err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID); err != nil {
+		return nil, err
+	}
+
 	s.backend.Coordinator.Publish(ctx, cli.ID, sync.DocEvent{
-		Type:        types.DocumentsWatchedEvent,
-		Publisher:   *cli,
-		DocumentID:  documentID,
-		DocumentKey: documentKey,
+		Type:       types.DocumentsWatchedEvent,
+		Publisher:  *cli,
+		DocumentID: documentID,
 	})
 
 	return &api.UpdatePresenceResponse{}, nil
@@ -572,7 +578,6 @@ func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	client types.Client,
 	documentID types.ID,
-	documentKey key.Key,
 ) (*sync.Subscription, []types.Client, error) {
 	subscription, peers, err := s.backend.Coordinator.Subscribe(
 		ctx,
@@ -588,10 +593,9 @@ func (s *yorkieServer) watchDoc(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:        types.DocumentsWatchedEvent,
-			Publisher:   subscription.Subscriber(),
-			DocumentID:  documentID,
-			DocumentKey: documentKey,
+			Type:       types.DocumentsWatchedEvent,
+			Publisher:  subscription.Subscriber(),
+			DocumentID: documentID,
 		},
 	)
 
@@ -601,7 +605,6 @@ func (s *yorkieServer) watchDoc(
 func (s *yorkieServer) unwatchDoc(
 	subscription *sync.Subscription,
 	documentID types.ID,
-	documentKey key.Key,
 ) {
 	ctx := context.Background()
 	_ = s.backend.Coordinator.Unsubscribe(ctx, documentID, subscription)
@@ -609,10 +612,9 @@ func (s *yorkieServer) unwatchDoc(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:        types.DocumentsUnwatchedEvent,
-			Publisher:   subscription.Subscriber(),
-			DocumentID:  documentID,
-			DocumentKey: documentKey,
+			Type:       types.DocumentsUnwatchedEvent,
+			Publisher:  subscription.Subscriber(),
+			DocumentID: documentID,
 		},
 	)
 }

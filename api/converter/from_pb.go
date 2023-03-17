@@ -212,17 +212,13 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 }
 
 // FromDocumentKey converts the given Protobuf formats to model format.
-func FromDocumentKey(pbKey string) key.Key {
-	return key.Key(pbKey)
-}
-
-// FromDocumentKeys converts the given Protobuf formats to model format.
-func FromDocumentKeys(pbKeys []string) []key.Key {
-	var keys []key.Key
-	for _, pbKey := range pbKeys {
-		keys = append(keys, key.Key(pbKey))
+func FromDocumentKey(pbKey string) (key.Key, error) {
+	k := key.Key(pbKey)
+	if err := k.Validate(); err != nil {
+		return "", err
 	}
-	return keys
+
+	return k, nil
 }
 
 // FromDocumentID converts the given Protobuf formats to model format.
@@ -233,19 +229,6 @@ func FromDocumentID(pbID string) (types.ID, error) {
 	}
 
 	return id, nil
-}
-
-// FromDocumentIDs converts the given Protobuf formats to model format.
-func FromDocumentIDs(pbIDs []string) ([]types.ID, error) {
-	var ids []types.ID
-	for _, pbID := range pbIDs {
-		id := types.ID(pbID)
-		if err := id.Validate(); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil
 }
 
 // FromEventType converts the given Protobuf formats to model format.
@@ -275,23 +258,22 @@ func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
 		return nil, err
 	}
 
-	documentIDs, err := FromDocumentID(docEvent.DocumentId)
+	documentID, err := FromDocumentID(docEvent.DocumentId)
 	if err != nil {
 		return nil, err
 	}
 
 	return &sync.DocEvent{
-		Type:        eventType,
-		Publisher:   *client,
-		DocumentID:  documentIDs,
-		DocumentKey: FromDocumentKey(docEvent.DocumentKey),
+		Type:       eventType,
+		Publisher:  *client,
+		DocumentID: documentID,
 	}, nil
 }
 
 // FromClients converts the given Protobuf formats to model format.
-func FromClients(pbClients *api.Clients) ([]*types.Client, error) {
+func FromClients(pbClients []*api.Client) ([]*types.Client, error) {
 	var clients []*types.Client
-	for _, pbClient := range pbClients.Clients {
+	for _, pbClient := range pbClients {
 		client, err := FromClient(pbClient)
 		if err != nil {
 			return nil, err

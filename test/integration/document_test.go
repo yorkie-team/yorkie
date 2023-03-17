@@ -31,7 +31,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -364,61 +363,48 @@ func TestDocument(t *testing.T) {
 	})
 }
 
-func TestDocumentWithProject(t *testing.T) {
-	svr, err := server.New(helper.TestConfig())
-	assert.NoError(t, err)
-	assert.NoError(t, svr.Start())
-	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
-
-	adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
+func TestDocumentWithProjects(t *testing.T) {
+	ctx := context.Background()
+	adminCli := helper.CreateAdminCli(t, defaultServer.AdminAddr())
 	defer func() { assert.NoError(t, adminCli.Close()) }()
 
-	project1, err := adminCli.CreateProject(context.Background(), "project1")
+	project1, err := adminCli.CreateProject(ctx, "project1")
 	assert.NoError(t, err)
 
-	project2, err := adminCli.CreateProject(context.Background(), "project2")
+	project2, err := adminCli.CreateProject(ctx, "project2")
 	assert.NoError(t, err)
 
-	t.Run("watch document with different project test", func(t *testing.T) {
+	t.Run("watch document with different projects test", func(t *testing.T) {
 		ctx := context.Background()
 
-		c1, err := client.Dial(
-			svr.RPCAddr(),
-			client.WithAPIKey(project1.PublicKey),
-		)
+		// 01. c1 and c2 are in the same project and c3 is in another project.
+		c1, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project1.PublicKey))
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c1.Close()) }()
 		assert.NoError(t, c1.Activate(ctx))
 		defer func() { assert.NoError(t, c1.Deactivate(ctx)) }()
 
-		c2, err := client.Dial(
-			svr.RPCAddr(),
-			client.WithAPIKey(project1.PublicKey),
-		)
+		c2, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project1.PublicKey))
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c2.Close()) }()
 		assert.NoError(t, c2.Activate(ctx))
 		defer func() { assert.NoError(t, c2.Deactivate(ctx)) }()
 
-		c3, err := client.Dial(
-			svr.RPCAddr(),
-			client.WithAPIKey(project2.PublicKey),
-		)
+		c3, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project2.PublicKey))
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c3.Close()) }()
 		assert.NoError(t, c3.Activate(ctx))
 		defer func() { assert.NoError(t, c3.Deactivate(ctx)) }()
 
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
-		err = c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-
+		// 02. c1 and c2 watch the same document and c3 watches another document but the same key.
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 
-		// 01. cli1 watches doc1.
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		err = c1.Attach(ctx, d1)
+		assert.NoError(t, err)
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
 		defer cancel1()
 		rch, err := c1.Watch(watch1Ctx, d1)
@@ -454,7 +440,7 @@ func TestDocumentWithProject(t *testing.T) {
 			}
 		}()
 
-		// 02. cli2 watches doc2.
+		// c2 watches the same document, so c1 receives a peers changed event.
 		expected = append(expected, watchResponsePair{
 			Type: client.PeersChanged,
 			Peers: map[string]types.Presence{
@@ -462,52 +448,37 @@ func TestDocumentWithProject(t *testing.T) {
 				c2.ID().String(): nil,
 			},
 		})
-
 		d2 := document.New(key.Key(helper.TestDocKey(t)))
-		err = c2.Attach(ctx, d2)
-		assert.NoError(t, err)
-
+		assert.NoError(t, c2.Attach(ctx, d2))
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
 		defer cancel2()
 		_, err = c2.Watch(watch2Ctx, d2)
 		assert.NoError(t, err)
 
-		// 03. cli2 updates doc2.
+		// c2 updates the document, so c1 receives a documents changed event.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentsChanged,
 		})
-		err = d2.Update(func(root *json.Object) error {
+		assert.NoError(t, d2.Update(func(root *json.Object) error {
 			root.SetString("key", "value")
 			return nil
-		})
-		assert.NoError(t, err)
+		}))
 
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-
-		// 04. cli3 watches doc3.
-		// Although the keys of the documents are the same,
-		// events should not be sent because the projects are different.
+		// d3 is in another project, so c1 and c2 should not receive events.
 		d3 := document.New(key.Key(helper.TestDocKey(t)))
-		err = c3.Attach(ctx, d3)
-		assert.NoError(t, err)
-
+		assert.NoError(t, c3.Attach(ctx, d3))
 		watch3Ctx, cancel3 := context.WithCancel(ctx)
 		defer cancel3()
 		_, err = c3.Watch(watch3Ctx, d3)
 		assert.NoError(t, err)
-
-		// 05. cli3 updates doc3.
-		err = d3.Update(func(root *json.Object) error {
+		assert.NoError(t, d3.Update(func(root *json.Object) error {
 			root.SetString("key3", "value3")
 			return nil
-		})
-		assert.NoError(t, err)
-
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
+		}))
+		assert.NoError(t, c2.Sync(ctx))
 
 		wg.Wait()
+
 		assert.Equal(t, expected, responsePairs)
 		assert.Equal(t, "{\"key\":\"value\"}", d1.Marshal())
 		assert.Equal(t, "{\"key\":\"value\"}", d2.Marshal())

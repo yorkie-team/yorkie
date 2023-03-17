@@ -384,8 +384,7 @@ func (c *Client) Watch(
 			ID:           c.id,
 			PresenceInfo: c.presenceInfo,
 		}),
-		DocumentKey: converter.ToDocumentKey(doc.Key()),
-		DocumentId:  converter.ToDocumentID(attachment.docID),
+		DocumentId: attachment.docID.String(),
 	})
 	if err != nil {
 		return nil, err
@@ -394,7 +393,7 @@ func (c *Client) Watch(
 	handleResponse := func(pbResp *api.WatchDocumentResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentResponse_Initialization_:
-			clients, err := converter.FromClients(resp.Initialization.PeersMap)
+			clients, err := converter.FromClients(resp.Initialization.Peers)
 			if err != nil {
 				return nil, err
 			}
@@ -411,7 +410,11 @@ func (c *Client) Watch(
 				return nil, err
 			}
 
-			docKey := converter.FromDocumentKey(resp.Event.DocumentKey)
+			docKey, err := c.findDocKey(resp.Event.DocumentId)
+			if err != nil {
+				return nil, err
+			}
+
 			switch eventType {
 			case types.DocumentsChangedEvent:
 				return &WatchResponse{
@@ -473,6 +476,16 @@ func (c *Client) Watch(
 	return rch, nil
 }
 
+func (c *Client) findDocKey(docID string) (key.Key, error) {
+	for _, attachment := range c.attachments {
+		if attachment.docID.String() == docID {
+			return attachment.doc.Key(), nil
+		}
+	}
+
+	return "", ErrDocumentNotAttached
+}
+
 // UpdatePresence updates the presence of this client.
 func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 	if c.status != activated {
@@ -491,14 +504,13 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 	// After grpc-web supports bi-directional streaming, we can remove the
 	// following.
 	// TODO(hackerwins): We will move Presence from client-level to document-level.
-	for docKey, attachment := range c.attachments {
+	for _, attachment := range c.attachments {
 		if _, err := c.client.UpdatePresence(ctx, &api.UpdatePresenceRequest{
 			Client: converter.ToClient(types.Client{
 				ID:           c.id,
 				PresenceInfo: c.presenceInfo,
 			}),
-			DocumentId:  converter.ToDocumentID(attachment.docID),
-			DocumentKey: converter.ToDocumentKey(docKey),
+			DocumentId: attachment.docID.String(),
 		}); err != nil {
 			return err
 		}

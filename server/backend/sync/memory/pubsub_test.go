@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
@@ -41,17 +40,10 @@ func TestPubSub(t *testing.T) {
 	t.Run("publish subscribe test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
 		id := types.ID(t.Name() + "id")
-		docKey := key.Key(t.Name() + "docKey")
 		docEvent := sync.DocEvent{
-			Type:        types.DocumentsWatchedEvent,
-			Publisher:   actorB,
-			DocumentID:  id,
-			DocumentKey: docKey,
-		}
-		clientDocEvent := sync.ClientDocEvent{
-			Type:        types.DocumentsWatchedEvent,
-			Publisher:   actorB,
-			DocumentKey: key.Key(t.Name() + "docKey"),
+			Type:       types.DocumentsWatchedEvent,
+			Publisher:  actorB,
+			DocumentID: id,
 		}
 
 		ctx := context.Background()
@@ -67,7 +59,7 @@ func TestPubSub(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			e := <-subA.Events()
-			assert.Equal(t, e, clientDocEvent)
+			assert.Equal(t, e, docEvent)
 		}()
 
 		// publish the event to the documents by actorB

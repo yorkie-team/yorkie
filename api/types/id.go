@@ -22,7 +22,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -81,16 +80,4 @@ func IDFromBytes(bytes []byte) ID {
 // IDFromActorID returns ID represented by the encoded hexadecimal string from actor ID.
 func IDFromActorID(actorID *time.ActorID) ID {
 	return IDFromBytes(actorID.Bytes())
-}
-
-// JoinIDs concatenates all the ids in slice into a single string.
-func JoinIDs(ids []ID) string {
-	var s strings.Builder
-	for i, id := range ids {
-		s.WriteString(id.String())
-		if i != len(ids)-1 {
-			s.WriteString(",")
-		}
-	}
-	return s.String()
 }

@@ -192,20 +192,6 @@ func FindDocInfo(
 	return be.DB.FindDocInfoByID(ctx, project.ID, docID)
 }
 
-// CheckDocInProject checks if the document is in the project.
-func CheckDocInProject(
-	ctx context.Context,
-	be *backend.Backend,
-	project *types.Project,
-	docID types.ID,
-) error {
-	if _, err := FindDocInfo(ctx, be, project, docID); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // FindDocInfoByKeyAndOwner returns a document for the given document key. If
 // createDocIfNotExist is true, it creates a new document if it does not exist.
 func FindDocInfoByKeyAndOwner(
