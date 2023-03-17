@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -368,21 +367,34 @@ func (s *yorkieServer) PushPullChanges(
 	}, nil
 }
 
-// WatchDocuments connects the stream to deliver events from the given documents
+// WatchDocument connects the stream to deliver events from the given documents
 // to the requesting client.
-func (s *yorkieServer) WatchDocuments(
-	req *api.WatchDocumentsRequest,
-	stream api.YorkieService_WatchDocumentsServer,
+func (s *yorkieServer) WatchDocument(
+	req *api.WatchDocumentRequest,
+	stream api.YorkieService_WatchDocumentServer,
 ) error {
 	cli, err := converter.FromClient(req.Client)
 	if err != nil {
 		return err
 	}
-	docKeys := converter.FromDocumentKeys(req.DocumentKeys)
+	docID, err := converter.FromDocumentID(req.DocumentId)
+	if err != nil {
+		return err
+	}
+
+	docInfo, err := documents.FindDocInfo(
+		stream.Context(),
+		s.backend,
+		projects.From(stream.Context()),
+		docID,
+	)
+	if err != nil {
+		return nil
+	}
 
 	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
-		Attributes: types.NewAccessAttributes(docKeys, types.Read),
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
 	}); err != nil {
 		return err
 	}
@@ -396,35 +408,19 @@ func (s *yorkieServer) WatchDocuments(
 		return err
 	}
 
-	locker, err := s.backend.Coordinator.NewLocker(
-		stream.Context(),
-		sync.NewKey(fmt.Sprintf("watchdocs-%s", cli.ID.String())),
-	)
-	if err != nil {
-		return err
-	}
-	if err := locker.Lock(stream.Context()); err != nil {
-		return err
-	}
-	defer func() {
-		if err := locker.Unlock(context.Background()); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
-	subscription, peersMap, err := s.watchDocs(stream.Context(), *cli, docKeys)
+	subscription, peersMap, err := s.watchDoc(stream.Context(), *cli, docID)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
 	}
 	defer func() {
-		s.unwatchDocs(docKeys, subscription)
+		s.unwatchDoc(subscription, docID)
 	}()
 
-	if err := stream.Send(&api.WatchDocumentsResponse{
-		Body: &api.WatchDocumentsResponse_Initialization_{
-			Initialization: &api.WatchDocumentsResponse_Initialization{
-				PeersMapByDoc: converter.ToClientsMap(peersMap),
+	if err := stream.Send(&api.WatchDocumentResponse{
+		Body: &api.WatchDocumentResponse_Initialization_{
+			Initialization: &api.WatchDocumentResponse_Initialization{
+				Peers: converter.ToClients(peersMap),
 			},
 		},
 	}); err != nil {
@@ -443,12 +439,12 @@ func (s *yorkieServer) WatchDocuments(
 				return err
 			}
 
-			if err := stream.Send(&api.WatchDocumentsResponse{
-				Body: &api.WatchDocumentsResponse_Event{
+			if err := stream.Send(&api.WatchDocumentResponse{
+				Body: &api.WatchDocumentResponse_Event{
 					Event: &api.DocEvent{
-						Type:         eventType,
-						Publisher:    converter.ToClient(event.Publisher),
-						DocumentKeys: converter.ToDocumentKeys(event.DocumentKeys),
+						Type:       eventType,
+						Publisher:  converter.ToClient(event.Publisher),
+						DocumentId: event.DocumentID.String(),
 					},
 				},
 			}); err != nil {
@@ -550,27 +546,43 @@ func (s *yorkieServer) UpdatePresence(
 	if err != nil {
 		return nil, err
 	}
-	keys := converter.FromDocumentKeys(req.DocumentKeys)
-
-	docEvent, err := s.backend.Coordinator.UpdatePresence(ctx, cli, keys)
+	documentID, err := converter.FromDocumentID(req.DocumentId)
 	if err != nil {
 		return nil, err
 	}
 
-	s.backend.Coordinator.Publish(ctx, docEvent.Publisher.ID, *docEvent)
+	_, err = documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		documentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID); err != nil {
+		return nil, err
+	}
+
+	s.backend.Coordinator.Publish(ctx, cli.ID, sync.DocEvent{
+		Type:       types.DocumentsWatchedEvent,
+		Publisher:  *cli,
+		DocumentID: documentID,
+	})
 
 	return &api.UpdatePresenceResponse{}, nil
 }
 
-func (s *yorkieServer) watchDocs(
+func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	client types.Client,
-	docKeys []key.Key,
-) (*sync.Subscription, map[string][]types.Client, error) {
-	subscription, peersMap, err := s.backend.Coordinator.Subscribe(
+	documentID types.ID,
+) (*sync.Subscription, []types.Client, error) {
+	subscription, peers, err := s.backend.Coordinator.Subscribe(
 		ctx,
 		client,
-		docKeys,
+		documentID,
 	)
 	if err != nil {
 		logging.From(ctx).Error(err)
@@ -581,28 +593,28 @@ func (s *yorkieServer) watchDocs(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:         types.DocumentsWatchedEvent,
-			Publisher:    subscription.Subscriber(),
-			DocumentKeys: docKeys,
+			Type:       types.DocumentsWatchedEvent,
+			Publisher:  subscription.Subscriber(),
+			DocumentID: documentID,
 		},
 	)
 
-	return subscription, peersMap, nil
+	return subscription, peers, nil
 }
 
-func (s *yorkieServer) unwatchDocs(
-	docKeys []key.Key,
+func (s *yorkieServer) unwatchDoc(
 	subscription *sync.Subscription,
+	documentID types.ID,
 ) {
 	ctx := context.Background()
-	_ = s.backend.Coordinator.Unsubscribe(ctx, docKeys, subscription)
+	_ = s.backend.Coordinator.Unsubscribe(ctx, documentID, subscription)
 	s.backend.Coordinator.Publish(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:         types.DocumentsUnwatchedEvent,
-			Publisher:    subscription.Subscriber(),
-			DocumentKeys: docKeys,
+			Type:       types.DocumentsUnwatchedEvent,
+			Publisher:  subscription.Subscriber(),
+			DocumentID: documentID,
 		},
 	)
 }

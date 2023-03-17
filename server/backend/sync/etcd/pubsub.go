@@ -28,7 +28,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -42,9 +41,9 @@ const (
 func (c *Client) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	keys []key.Key,
-) (*sync.Subscription, map[string][]types.Client, error) {
-	sub, err := c.localPubSub.Subscribe(ctx, subscriber, keys)
+	documentID types.ID,
+) (*sync.Subscription, []types.Client, error) {
+	sub, err := c.localPubSub.Subscribe(ctx, subscriber, documentID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -52,31 +51,25 @@ func (c *Client) Subscribe(
 	// TODO(hackerwins): If the server is not stopped gracefully, there may
 	// be garbage subscriptions left. Consider introducing a TTL and
 	// updating it periodically.
-	if err := c.putSubscriptions(ctx, keys, sub); err != nil {
+	if err := c.putSubscriptions(ctx, documentID, sub); err != nil {
 		return nil, nil, err
 	}
 
-	peersMap := make(map[string][]types.Client)
-	for _, k := range keys {
-		subs, err := c.pullSubscriptions(ctx, k)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		peersMap[k.String()] = subs
+	peers, err := c.pullSubscriptions(ctx, documentID)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	return sub, peersMap, nil
+	return sub, peers, nil
 }
 
 // Unsubscribe unsubscribes the given keys.
 func (c *Client) Unsubscribe(
 	ctx context.Context,
-	keys []key.Key,
+	documentID types.ID,
 	sub *sync.Subscription,
 ) error {
-	c.localPubSub.Unsubscribe(ctx, keys, sub)
-	return c.removeSubscriptions(ctx, keys, sub)
+	c.localPubSub.Unsubscribe(ctx, documentID, sub)
+	return c.removeSubscriptions(ctx, documentID, sub)
 }
 
 // Publish publishes the given event.
@@ -102,19 +95,15 @@ func (c *Client) PublishToLocal(
 func (c *Client) UpdatePresence(
 	ctx context.Context,
 	publisher *types.Client,
-	keys []key.Key,
-) (*sync.DocEvent, error) {
-	if sub := c.localPubSub.UpdatePresence(publisher, keys); sub != nil {
-		if err := c.putSubscriptions(ctx, keys, sub); err != nil {
-			return nil, err
+	documentID types.ID,
+) error {
+	if sub := c.localPubSub.UpdatePresence(publisher, documentID); sub != nil {
+		if err := c.putSubscriptions(ctx, documentID, sub); err != nil {
+			return err
 		}
 	}
 
-	return &sync.DocEvent{
-		Type:         types.PresenceChangedEvent,
-		Publisher:    *publisher,
-		DocumentKeys: keys,
-	}, nil
+	return nil
 }
 
 // broadcastToMembers broadcasts the given event to all members.
@@ -207,7 +196,7 @@ func (c *Client) publishToMember(
 // putSubscriptions puts the given subscriptions in etcd.
 func (c *Client) putSubscriptions(
 	ctx context.Context,
-	keys []key.Key,
+	id types.ID,
 	sub *sync.Subscription,
 ) error {
 	cli := sub.Subscriber()
@@ -216,12 +205,10 @@ func (c *Client) putSubscriptions(
 		return fmt.Errorf("marshal %s: %w", sub.ID(), err)
 	}
 
-	for _, k := range keys {
-		k := path.Join(subscriptionsPath, k.String(), sub.ID())
-		if _, err = c.client.Put(ctx, k, encoded); err != nil {
-			logging.From(ctx).Error(err)
-			return fmt.Errorf("put %s: %w", k, err)
-		}
+	k := path.Join(subscriptionsPath, id.String(), sub.ID())
+	if _, err = c.client.Put(ctx, k, encoded); err != nil {
+		logging.From(ctx).Error(err)
+		return fmt.Errorf("put %s: %w", k, err)
 	}
 
 	return nil
@@ -230,7 +217,7 @@ func (c *Client) putSubscriptions(
 // pullSubscriptions pulls the subscriptions of the given document key.
 func (c *Client) pullSubscriptions(
 	ctx context.Context,
-	k key.Key,
+	k types.ID,
 ) ([]types.Client, error) {
 	getResponse, err := c.client.Get(
 		ctx,
@@ -257,15 +244,13 @@ func (c *Client) pullSubscriptions(
 // removeSubscriptions removes the given subscription in etcd.
 func (c *Client) removeSubscriptions(
 	ctx context.Context,
-	keys []key.Key,
+	id types.ID,
 	sub *sync.Subscription,
 ) error {
-	for _, docKey := range keys {
-		k := path.Join(subscriptionsPath, docKey.String(), sub.ID())
-		if _, err := c.client.Delete(ctx, k); err != nil {
-			logging.From(ctx).Error(err)
-			return fmt.Errorf("delete %s: %w", k, err)
-		}
+	k := path.Join(subscriptionsPath, id.String(), sub.ID())
+	if _, err := c.client.Delete(ctx, k); err != nil {
+		logging.From(ctx).Error(err)
+		return fmt.Errorf("delete %s: %w", k, err)
 	}
 
 	return nil

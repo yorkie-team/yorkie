@@ -211,13 +211,24 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 	), nil
 }
 
-// FromDocumentKeys converts the given Protobuf formats to model format.
-func FromDocumentKeys(pbKeys []string) []key.Key {
-	var keys []key.Key
-	for _, pbKey := range pbKeys {
-		keys = append(keys, key.Key(pbKey))
+// FromDocumentKey converts the given Protobuf formats to model format.
+func FromDocumentKey(pbKey string) (key.Key, error) {
+	k := key.Key(pbKey)
+	if err := k.Validate(); err != nil {
+		return "", err
 	}
-	return keys
+
+	return k, nil
+}
+
+// FromDocumentID converts the given Protobuf formats to model format.
+func FromDocumentID(pbID string) (types.ID, error) {
+	id := types.ID(pbID)
+	if err := id.Validate(); err != nil {
+		return "", err
+	}
+
+	return id, nil
 }
 
 // FromEventType converts the given Protobuf formats to model format.
@@ -247,17 +258,22 @@ func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
 		return nil, err
 	}
 
+	documentID, err := FromDocumentID(docEvent.DocumentId)
+	if err != nil {
+		return nil, err
+	}
+
 	return &sync.DocEvent{
-		Type:         eventType,
-		Publisher:    *client,
-		DocumentKeys: FromDocumentKeys(docEvent.DocumentKeys),
+		Type:       eventType,
+		Publisher:  *client,
+		DocumentID: documentID,
 	}, nil
 }
 
 // FromClients converts the given Protobuf formats to model format.
-func FromClients(pbClients *api.Clients) ([]*types.Client, error) {
+func FromClients(pbClients []*api.Client) ([]*types.Client, error) {
 	var clients []*types.Client
-	for _, pbClient := range pbClients.Clients {
+	for _, pbClient := range pbClients {
 		client, err := FromClient(pbClient)
 		if err != nil {
 			return nil, err

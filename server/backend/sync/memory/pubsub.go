@@ -24,7 +24,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -68,7 +67,7 @@ func (s *subscriptions) Len() int {
 type PubSub struct {
 	subscriptionsMapMu          *gosync.RWMutex
 	subscriptionMapBySubscriber map[string]*sync.Subscription
-	subscriptionsMapByDocKey    map[string]*subscriptions
+	subscriptionsMapByDocID     map[types.ID]*subscriptions
 }
 
 // NewPubSub creates an instance of PubSub.
@@ -76,7 +75,7 @@ func NewPubSub() *PubSub {
 	return &PubSub{
 		subscriptionsMapMu:          &gosync.RWMutex{},
 		subscriptionMapBySubscriber: make(map[string]*sync.Subscription),
-		subscriptionsMapByDocKey:    make(map[string]*subscriptions),
+		subscriptionsMapByDocID:     make(map[types.ID]*subscriptions),
 	}
 }
 
@@ -84,16 +83,12 @@ func NewPubSub() *PubSub {
 func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	keys []key.Key,
+	documentID types.ID,
 ) (*sync.Subscription, error) {
-	if len(keys) == 0 {
-		return nil, sync.ErrEmptyDocKeys
-	}
-
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
-			key.Join(keys),
+			documentID.String(),
 			subscriber.ID.String(),
 		)
 	}
@@ -104,42 +99,25 @@ func (m *PubSub) Subscribe(
 	sub := sync.NewSubscription(subscriber)
 	m.subscriptionMapBySubscriber[sub.SubscriberID()] = sub
 
-	for _, docKey := range keys {
-		key := docKey.String()
-		if _, ok := m.subscriptionsMapByDocKey[key]; !ok {
-			m.subscriptionsMapByDocKey[key] = newSubscriptions()
-		}
-		m.subscriptionsMapByDocKey[key].Add(sub)
+	if _, ok := m.subscriptionsMapByDocID[documentID]; !ok {
+		m.subscriptionsMapByDocID[documentID] = newSubscriptions()
 	}
+	m.subscriptionsMapByDocID[documentID].Add(sub)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
-			key.Join(keys),
+			documentID.String(),
 			subscriber.ID.String(),
 		)
 	}
 	return sub, nil
 }
 
-// BuildPeersMap builds the peers map of the given keys.
-func (m *PubSub) BuildPeersMap(keys []key.Key) map[string][]types.Client {
-	peersMap := make(map[string][]types.Client)
-	for _, docKey := range keys {
-		combinedKey := docKey.String()
-		var peers []types.Client
-		for _, sub := range m.subscriptionsMapByDocKey[combinedKey].Map() {
-			peers = append(peers, sub.Subscriber())
-		}
-		peersMap[combinedKey] = peers
-	}
-	return peersMap
-}
-
 // Unsubscribe unsubscribes the given docKeys.
 func (m *PubSub) Unsubscribe(
 	ctx context.Context,
-	docKeys []key.Key,
+	documentID types.ID,
 	sub *sync.Subscription,
 ) {
 	m.subscriptionsMapMu.Lock()
@@ -148,7 +126,7 @@ func (m *PubSub) Unsubscribe(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
-			key.Join(docKeys),
+			documentID,
 			sub.SubscriberID(),
 		)
 	}
@@ -156,21 +134,19 @@ func (m *PubSub) Unsubscribe(
 	sub.Close()
 
 	delete(m.subscriptionMapBySubscriber, sub.SubscriberID())
-	for _, docKey := range docKeys {
-		k := docKey.String()
-		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
-			subs.Delete(sub.ID())
 
-			if subs.Len() == 0 {
-				delete(m.subscriptionsMapByDocKey, k)
-			}
+	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
+		subs.Delete(sub.ID())
+
+		if subs.Len() == 0 {
+			delete(m.subscriptionsMapByDocID, documentID)
 		}
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
-			key.Join(docKeys),
+			documentID,
 			sub.SubscriberID(),
 		)
 	}
@@ -185,58 +161,50 @@ func (m *PubSub) Publish(
 	m.subscriptionsMapMu.RLock()
 	defer m.subscriptionsMapMu.RUnlock()
 
-	for _, docKey := range event.DocumentKeys {
-		k := docKey.String()
+	documentID := event.DocumentID
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(`Publish(%s,%s) Start`, documentID.String(), publisherID.String())
+	}
 
-		if logging.Enabled(zap.DebugLevel) {
-			logging.From(ctx).Debugf(`Publish(%s,%s) Start`, k, publisherID.String())
-		}
+	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
+		for _, sub := range subs.Map() {
+			if sub.Subscriber().ID.Compare(publisherID) == 0 {
+				continue
+			}
 
-		if subs, ok := m.subscriptionsMapByDocKey[k]; ok {
-			for _, sub := range subs.Map() {
-				if sub.Subscriber().ID.Compare(publisherID) == 0 {
-					continue
-				}
+			if logging.Enabled(zap.DebugLevel) {
+				logging.From(ctx).Debugf(
+					`Publish %s(%s,%s) to %s`,
+					event.Type,
+					documentID.String(),
+					publisherID.String(),
+					sub.SubscriberID(),
+				)
+			}
 
-				if logging.Enabled(zap.DebugLevel) {
-					logging.From(ctx).Debugf(
-						`Publish %s(%s,%s) to %s`,
-						event.Type,
-						k,
-						publisherID.String(),
-						sub.SubscriberID(),
-					)
-				}
-
-				watchDocEvent := sync.DocEvent{
-					Type:         event.Type,
-					Publisher:    event.Publisher,
-					DocumentKeys: []key.Key{docKey},
-				}
-				// NOTE: When a subscription is being closed by a subscriber,
-				// the subscriber may not receive messages.
-				select {
-				case sub.Events() <- watchDocEvent:
-				case <-gotime.After(100 * gotime.Millisecond):
-					logging.From(ctx).Warnf(
-						`Publish(%s,%s) to %s timeout`,
-						k,
-						publisherID.String(),
-						sub.SubscriberID(),
-					)
-				}
+			// NOTE: When a subscription is being closed by a subscriber,
+			// the subscriber may not receive messages.
+			select {
+			case sub.Events() <- event:
+			case <-gotime.After(100 * gotime.Millisecond):
+				logging.From(ctx).Warnf(
+					`Publish(%s,%s) to %s timeout`,
+					documentID.String(),
+					publisherID.String(),
+					sub.SubscriberID(),
+				)
 			}
 		}
-		if logging.Enabled(zap.DebugLevel) {
-			logging.From(ctx).Debugf(`Publish(%s,%s) End`, k, publisherID.String())
-		}
+	}
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(`Publish(%s,%s) End`, documentID.String(), publisherID.String())
 	}
 }
 
 // UpdatePresence updates the presence of the given client.
 func (m *PubSub) UpdatePresence(
 	publisher *types.Client,
-	keys []key.Key,
+	documentID types.ID,
 ) *sync.Subscription {
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()

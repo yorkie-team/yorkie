@@ -23,7 +23,6 @@ import (
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -49,13 +48,13 @@ type Coordinator interface {
 	Subscribe(
 		ctx context.Context,
 		subscriber types.Client,
-		docKeys []key.Key,
-	) (*Subscription, map[string][]types.Client, error)
+		documentID types.ID,
+	) (*Subscription, []types.Client, error)
 
 	// Unsubscribe unsubscribes from the given documents.
 	Unsubscribe(
 		ctx context.Context,
-		docKeys []key.Key,
+		documentID types.ID,
 		sub *Subscription,
 	) error
 
@@ -69,8 +68,8 @@ type Coordinator interface {
 	UpdatePresence(
 		ctx context.Context,
 		publisher *types.Client,
-		keys []key.Key,
-	) (*DocEvent, error)
+		documentID types.ID,
+	) error
 
 	// Members returns the members of this cluster.
 	Members() map[string]*ServerInfo

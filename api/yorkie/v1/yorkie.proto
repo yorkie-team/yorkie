@@ -35,7 +35,7 @@ service YorkieService {
   rpc RemoveDocument (RemoveDocumentRequest) returns (RemoveDocumentResponse) {}
   rpc PushPullChanges (PushPullChangesRequest) returns (PushPullChangesResponse) {}
 
-  rpc WatchDocuments (WatchDocumentsRequest) returns (stream WatchDocumentsResponse) {}
+  rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
 }
 
 message ActivateClientRequest {
@@ -77,14 +77,14 @@ message DetachDocumentResponse {
   ChangePack change_pack = 2;
 }
 
-message WatchDocumentsRequest {
+message WatchDocumentRequest {
   Client client = 1;
-  repeated string document_keys = 2;
+  string document_id = 2;
 }
 
-message WatchDocumentsResponse {
+message WatchDocumentResponse {
   message Initialization {
-    map<string, Clients> peers_map_by_doc = 1;
+    repeated Client peers = 1;
   }
 
   oneof body {
@@ -117,7 +117,7 @@ message PushPullChangesResponse {
 
 message UpdatePresenceRequest {
   Client client = 1;
-  repeated string document_keys = 2;
+  string document_id = 2;
 }
 
 message UpdatePresenceResponse {}

@@ -144,13 +144,13 @@ func TestClusterMode(t *testing.T) {
 						assert.NoError(t, wr.Err)
 
 						if wr.Type == client.PeersChanged {
-							peers := wr.PeersMapByDoc[d1.Key().String()]
+							peers := wr.PeersMapByDoc[d1.Key()]
 							responsePairs = append(responsePairs, watchResponsePair{
 								Type:  wr.Type,
 								Peers: peers,
 							})
 						} else if wr.Type == client.DocumentsChanged {
-							assert.NoError(t, c1.Sync(ctx, wr.Keys...))
+							assert.NoError(t, c1.Sync(ctx, wr.Key))
 						}
 					case <-time.After(time.Second):
 						return

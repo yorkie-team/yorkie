@@ -252,10 +252,6 @@ message Client {
   Presence presence = 2;
 }
 
-message Clients {
-  repeated Client clients = 1;
-}
-
 message Checkpoint {
   int64 server_seq = 1 [jstype = JS_STRING];
   uint32 client_seq = 2;
@@ -299,5 +295,5 @@ enum DocEventType {
 message DocEvent {
   DocEventType type = 1;
   Client publisher = 2;
-  repeated string document_keys = 3;
+  string document_id = 3;
 }

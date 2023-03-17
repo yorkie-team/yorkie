@@ -26,7 +26,6 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -173,31 +172,13 @@ func ToChangeID(id change.ID) *api.ChangeID {
 	}
 }
 
-// ToDocumentKeys converts the given model format to Protobuf format.
-func ToDocumentKeys(keys []key.Key) []string {
-	var keyList []string
-	for _, k := range keys {
-		keyList = append(keyList, k.String())
+// ToClients converts the given model to Protobuf format.
+func ToClients(clients []types.Client) []*api.Client {
+	var pbClients []*api.Client
+	for _, client := range clients {
+		pbClients = append(pbClients, ToClient(client))
 	}
-	return keyList
-}
-
-// ToClientsMap converts the given model to Protobuf format.
-func ToClientsMap(clientsMap map[string][]types.Client) map[string]*api.Clients {
-	pbClientsMap := make(map[string]*api.Clients)
-
-	for k, clients := range clientsMap {
-		var pbClients []*api.Client
-		for _, client := range clients {
-			pbClients = append(pbClients, ToClient(client))
-		}
-
-		pbClientsMap[k] = &api.Clients{
-			Clients: pbClients,
-		}
-	}
-
-	return pbClientsMap
+	return pbClients
 }
 
 // ToDocEventType converts the given model format to Protobuf format.
@@ -224,9 +205,9 @@ func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
 	}
 
 	return &api.DocEvent{
-		Type:         eventType,
-		Publisher:    ToClient(docEvent.Publisher),
-		DocumentKeys: ToDocumentKeys(docEvent.DocumentKeys),
+		Type:       eventType,
+		Publisher:  ToClient(docEvent.Publisher),
+		DocumentId: docEvent.DocumentID.String(),
 	}, nil
 }
 

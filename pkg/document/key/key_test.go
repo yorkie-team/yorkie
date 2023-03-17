@@ -57,10 +57,4 @@ func TestKey(t *testing.T) {
 		err = Key("inv").Validate()
 		assert.Equal(t, err, ErrInvalidKey, "less than 4 characters is not allowed")
 	})
-
-	t.Run("join key test", func(t *testing.T) {
-		keys := []Key{Key("key1"), Key("key2"), Key("key3")}
-		result := Join(keys)
-		assert.Equal(t, "key1,key2,key3", result)
-	})
 }

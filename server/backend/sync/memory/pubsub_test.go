@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
@@ -40,19 +39,19 @@ func TestPubSub(t *testing.T) {
 
 	t.Run("publish subscribe test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
-		docKeys := []key.Key{key.Key(t.Name())}
-		event := sync.DocEvent{
-			Type:         types.DocumentsWatchedEvent,
-			Publisher:    actorB,
-			DocumentKeys: docKeys,
+		id := types.ID(t.Name() + "id")
+		docEvent := sync.DocEvent{
+			Type:       types.DocumentsWatchedEvent,
+			Publisher:  actorB,
+			DocumentID: id,
 		}
 
 		ctx := context.Background()
 		// subscribe the documents by actorA
-		subA, err := pubSub.Subscribe(ctx, actorA, docKeys)
+		subA, err := pubSub.Subscribe(ctx, actorA, id)
 		assert.NoError(t, err)
 		defer func() {
-			pubSub.Unsubscribe(ctx, docKeys, subA)
+			pubSub.Unsubscribe(ctx, id, subA)
 		}()
 
 		var wg gosync.WaitGroup
@@ -60,26 +59,11 @@ func TestPubSub(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			e := <-subA.Events()
-			assert.Equal(t, e, event)
+			assert.Equal(t, e, docEvent)
 		}()
 
 		// publish the event to the documents by actorB
-		pubSub.Publish(ctx, actorB.ID, event)
+		pubSub.Publish(ctx, actorB.ID, docEvent)
 		wg.Wait()
-	})
-
-	t.Run("subscriptions map test", func(t *testing.T) {
-		pubSub := memory.NewPubSub()
-		docKeys := []key.Key{key.Key(t.Name())}
-
-		ctx := context.Background()
-
-		for i := 0; i < 5; i++ {
-			_, err := pubSub.Subscribe(ctx, actorA, docKeys)
-			assert.NoError(t, err)
-
-			subs := pubSub.BuildPeersMap(docKeys)
-			assert.Len(t, subs[docKeys[0].String()], i+1)
-		}
 	})
 }

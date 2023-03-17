@@ -458,26 +458,26 @@ func (m *DetachDocumentResponse) GetChangePack() *ChangePack {
 	return nil
 }
 
-type WatchDocumentsRequest struct {
+type WatchDocumentRequest struct {
 	Client               *Client  `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
-	DocumentKeys         []string `protobuf:"bytes,2,rep,name=document_keys,json=documentKeys,proto3" json:"document_keys,omitempty"`
+	DocumentId           string   `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *WatchDocumentsRequest) Reset()         { *m = WatchDocumentsRequest{} }
-func (m *WatchDocumentsRequest) String() string { return proto.CompactTextString(m) }
-func (*WatchDocumentsRequest) ProtoMessage()    {}
-func (*WatchDocumentsRequest) Descriptor() ([]byte, []int) {
+func (m *WatchDocumentRequest) Reset()         { *m = WatchDocumentRequest{} }
+func (m *WatchDocumentRequest) String() string { return proto.CompactTextString(m) }
+func (*WatchDocumentRequest) ProtoMessage()    {}
+func (*WatchDocumentRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_40070c858814ab24, []int{8}
 }
-func (m *WatchDocumentsRequest) XXX_Unmarshal(b []byte) error {
+func (m *WatchDocumentRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *WatchDocumentsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *WatchDocumentRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_WatchDocumentsRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_WatchDocumentRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -487,54 +487,54 @@ func (m *WatchDocumentsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byt
 		return b[:n], nil
 	}
 }
-func (m *WatchDocumentsRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WatchDocumentsRequest.Merge(m, src)
+func (m *WatchDocumentRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WatchDocumentRequest.Merge(m, src)
 }
-func (m *WatchDocumentsRequest) XXX_Size() int {
+func (m *WatchDocumentRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *WatchDocumentsRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_WatchDocumentsRequest.DiscardUnknown(m)
+func (m *WatchDocumentRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_WatchDocumentRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_WatchDocumentsRequest proto.InternalMessageInfo
+var xxx_messageInfo_WatchDocumentRequest proto.InternalMessageInfo
 
-func (m *WatchDocumentsRequest) GetClient() *Client {
+func (m *WatchDocumentRequest) GetClient() *Client {
 	if m != nil {
 		return m.Client
 	}
 	return nil
 }
 
-func (m *WatchDocumentsRequest) GetDocumentKeys() []string {
+func (m *WatchDocumentRequest) GetDocumentId() string {
 	if m != nil {
-		return m.DocumentKeys
+		return m.DocumentId
 	}
-	return nil
+	return ""
 }
 
-type WatchDocumentsResponse struct {
+type WatchDocumentResponse struct {
 	// Types that are valid to be assigned to Body:
-	//	*WatchDocumentsResponse_Initialization_
-	//	*WatchDocumentsResponse_Event
-	Body                 isWatchDocumentsResponse_Body `protobuf_oneof:"body"`
-	XXX_NoUnkeyedLiteral struct{}                      `json:"-"`
-	XXX_unrecognized     []byte                        `json:"-"`
-	XXX_sizecache        int32                         `json:"-"`
+	//	*WatchDocumentResponse_Initialization_
+	//	*WatchDocumentResponse_Event
+	Body                 isWatchDocumentResponse_Body `protobuf_oneof:"body"`
+	XXX_NoUnkeyedLiteral struct{}                     `json:"-"`
+	XXX_unrecognized     []byte                       `json:"-"`
+	XXX_sizecache        int32                        `json:"-"`
 }
 
-func (m *WatchDocumentsResponse) Reset()         { *m = WatchDocumentsResponse{} }
-func (m *WatchDocumentsResponse) String() string { return proto.CompactTextString(m) }
-func (*WatchDocumentsResponse) ProtoMessage()    {}
-func (*WatchDocumentsResponse) Descriptor() ([]byte, []int) {
+func (m *WatchDocumentResponse) Reset()         { *m = WatchDocumentResponse{} }
+func (m *WatchDocumentResponse) String() string { return proto.CompactTextString(m) }
+func (*WatchDocumentResponse) ProtoMessage()    {}
+func (*WatchDocumentResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_40070c858814ab24, []int{9}
 }
-func (m *WatchDocumentsResponse) XXX_Unmarshal(b []byte) error {
+func (m *WatchDocumentResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *WatchDocumentsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *WatchDocumentResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_WatchDocumentsResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_WatchDocumentResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -544,82 +544,82 @@ func (m *WatchDocumentsResponse) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-func (m *WatchDocumentsResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WatchDocumentsResponse.Merge(m, src)
+func (m *WatchDocumentResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WatchDocumentResponse.Merge(m, src)
 }
-func (m *WatchDocumentsResponse) XXX_Size() int {
+func (m *WatchDocumentResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *WatchDocumentsResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_WatchDocumentsResponse.DiscardUnknown(m)
+func (m *WatchDocumentResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_WatchDocumentResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_WatchDocumentsResponse proto.InternalMessageInfo
+var xxx_messageInfo_WatchDocumentResponse proto.InternalMessageInfo
 
-type isWatchDocumentsResponse_Body interface {
-	isWatchDocumentsResponse_Body()
+type isWatchDocumentResponse_Body interface {
+	isWatchDocumentResponse_Body()
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
 
-type WatchDocumentsResponse_Initialization_ struct {
-	Initialization *WatchDocumentsResponse_Initialization `protobuf:"bytes,1,opt,name=initialization,proto3,oneof" json:"initialization,omitempty"`
+type WatchDocumentResponse_Initialization_ struct {
+	Initialization *WatchDocumentResponse_Initialization `protobuf:"bytes,1,opt,name=initialization,proto3,oneof" json:"initialization,omitempty"`
 }
-type WatchDocumentsResponse_Event struct {
+type WatchDocumentResponse_Event struct {
 	Event *DocEvent `protobuf:"bytes,2,opt,name=event,proto3,oneof" json:"event,omitempty"`
 }
 
-func (*WatchDocumentsResponse_Initialization_) isWatchDocumentsResponse_Body() {}
-func (*WatchDocumentsResponse_Event) isWatchDocumentsResponse_Body()           {}
+func (*WatchDocumentResponse_Initialization_) isWatchDocumentResponse_Body() {}
+func (*WatchDocumentResponse_Event) isWatchDocumentResponse_Body()           {}
 
-func (m *WatchDocumentsResponse) GetBody() isWatchDocumentsResponse_Body {
+func (m *WatchDocumentResponse) GetBody() isWatchDocumentResponse_Body {
 	if m != nil {
 		return m.Body
 	}
 	return nil
 }
 
-func (m *WatchDocumentsResponse) GetInitialization() *WatchDocumentsResponse_Initialization {
-	if x, ok := m.GetBody().(*WatchDocumentsResponse_Initialization_); ok {
+func (m *WatchDocumentResponse) GetInitialization() *WatchDocumentResponse_Initialization {
+	if x, ok := m.GetBody().(*WatchDocumentResponse_Initialization_); ok {
 		return x.Initialization
 	}
 	return nil
 }
 
-func (m *WatchDocumentsResponse) GetEvent() *DocEvent {
-	if x, ok := m.GetBody().(*WatchDocumentsResponse_Event); ok {
+func (m *WatchDocumentResponse) GetEvent() *DocEvent {
+	if x, ok := m.GetBody().(*WatchDocumentResponse_Event); ok {
 		return x.Event
 	}
 	return nil
 }
 
 // XXX_OneofWrappers is for the internal use of the proto package.
-func (*WatchDocumentsResponse) XXX_OneofWrappers() []interface{} {
+func (*WatchDocumentResponse) XXX_OneofWrappers() []interface{} {
 	return []interface{}{
-		(*WatchDocumentsResponse_Initialization_)(nil),
-		(*WatchDocumentsResponse_Event)(nil),
+		(*WatchDocumentResponse_Initialization_)(nil),
+		(*WatchDocumentResponse_Event)(nil),
 	}
 }
 
-type WatchDocumentsResponse_Initialization struct {
-	PeersMapByDoc        map[string]*Clients `protobuf:"bytes,1,rep,name=peers_map_by_doc,json=peersMapByDoc,proto3" json:"peers_map_by_doc,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
-	XXX_unrecognized     []byte              `json:"-"`
-	XXX_sizecache        int32               `json:"-"`
+type WatchDocumentResponse_Initialization struct {
+	Peers                []*Client `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+	XXX_unrecognized     []byte    `json:"-"`
+	XXX_sizecache        int32     `json:"-"`
 }
 
-func (m *WatchDocumentsResponse_Initialization) Reset()         { *m = WatchDocumentsResponse_Initialization{} }
-func (m *WatchDocumentsResponse_Initialization) String() string { return proto.CompactTextString(m) }
-func (*WatchDocumentsResponse_Initialization) ProtoMessage()    {}
-func (*WatchDocumentsResponse_Initialization) Descriptor() ([]byte, []int) {
+func (m *WatchDocumentResponse_Initialization) Reset()         { *m = WatchDocumentResponse_Initialization{} }
+func (m *WatchDocumentResponse_Initialization) String() string { return proto.CompactTextString(m) }
+func (*WatchDocumentResponse_Initialization) ProtoMessage()    {}
+func (*WatchDocumentResponse_Initialization) Descriptor() ([]byte, []int) {
 	return fileDescriptor_40070c858814ab24, []int{9, 0}
 }
-func (m *WatchDocumentsResponse_Initialization) XXX_Unmarshal(b []byte) error {
+func (m *WatchDocumentResponse_Initialization) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *WatchDocumentsResponse_Initialization) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *WatchDocumentResponse_Initialization) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_WatchDocumentsResponse_Initialization.Marshal(b, m, deterministic)
+		return xxx_messageInfo_WatchDocumentResponse_Initialization.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -629,21 +629,21 @@ func (m *WatchDocumentsResponse_Initialization) XXX_Marshal(b []byte, determinis
 		return b[:n], nil
 	}
 }
-func (m *WatchDocumentsResponse_Initialization) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WatchDocumentsResponse_Initialization.Merge(m, src)
+func (m *WatchDocumentResponse_Initialization) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WatchDocumentResponse_Initialization.Merge(m, src)
 }
-func (m *WatchDocumentsResponse_Initialization) XXX_Size() int {
+func (m *WatchDocumentResponse_Initialization) XXX_Size() int {
 	return m.Size()
 }
-func (m *WatchDocumentsResponse_Initialization) XXX_DiscardUnknown() {
-	xxx_messageInfo_WatchDocumentsResponse_Initialization.DiscardUnknown(m)
+func (m *WatchDocumentResponse_Initialization) XXX_DiscardUnknown() {
+	xxx_messageInfo_WatchDocumentResponse_Initialization.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_WatchDocumentsResponse_Initialization proto.InternalMessageInfo
+var xxx_messageInfo_WatchDocumentResponse_Initialization proto.InternalMessageInfo
 
-func (m *WatchDocumentsResponse_Initialization) GetPeersMapByDoc() map[string]*Clients {
+func (m *WatchDocumentResponse_Initialization) GetPeers() []*Client {
 	if m != nil {
-		return m.PeersMapByDoc
+		return m.Peers
 	}
 	return nil
 }
@@ -886,7 +886,7 @@ func (m *PushPullChangesResponse) GetChangePack() *ChangePack {
 
 type UpdatePresenceRequest struct {
 	Client               *Client  `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
-	DocumentKeys         []string `protobuf:"bytes,2,rep,name=document_keys,json=documentKeys,proto3" json:"document_keys,omitempty"`
+	DocumentId           string   `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -932,11 +932,11 @@ func (m *UpdatePresenceRequest) GetClient() *Client {
 	return nil
 }
 
-func (m *UpdatePresenceRequest) GetDocumentKeys() []string {
+func (m *UpdatePresenceRequest) GetDocumentId() string {
 	if m != nil {
-		return m.DocumentKeys
+		return m.DocumentId
 	}
-	return nil
+	return ""
 }
 
 type UpdatePresenceResponse struct {
@@ -987,10 +987,9 @@ func init() {
 	proto.RegisterType((*AttachDocumentResponse)(nil), "yorkie.v1.AttachDocumentResponse")
 	proto.RegisterType((*DetachDocumentRequest)(nil), "yorkie.v1.DetachDocumentRequest")
 	proto.RegisterType((*DetachDocumentResponse)(nil), "yorkie.v1.DetachDocumentResponse")
-	proto.RegisterType((*WatchDocumentsRequest)(nil), "yorkie.v1.WatchDocumentsRequest")
-	proto.RegisterType((*WatchDocumentsResponse)(nil), "yorkie.v1.WatchDocumentsResponse")
-	proto.RegisterType((*WatchDocumentsResponse_Initialization)(nil), "yorkie.v1.WatchDocumentsResponse.Initialization")
-	proto.RegisterMapType((map[string]*Clients)(nil), "yorkie.v1.WatchDocumentsResponse.Initialization.PeersMapByDocEntry")
+	proto.RegisterType((*WatchDocumentRequest)(nil), "yorkie.v1.WatchDocumentRequest")
+	proto.RegisterType((*WatchDocumentResponse)(nil), "yorkie.v1.WatchDocumentResponse")
+	proto.RegisterType((*WatchDocumentResponse_Initialization)(nil), "yorkie.v1.WatchDocumentResponse.Initialization")
 	proto.RegisterType((*RemoveDocumentRequest)(nil), "yorkie.v1.RemoveDocumentRequest")
 	proto.RegisterType((*RemoveDocumentResponse)(nil), "yorkie.v1.RemoveDocumentResponse")
 	proto.RegisterType((*PushPullChangesRequest)(nil), "yorkie.v1.PushPullChangesRequest")
@@ -1002,53 +1001,48 @@ func init() {
 func init() { proto.RegisterFile("yorkie/v1/yorkie.proto", fileDescriptor_40070c858814ab24) }
 
 var fileDescriptor_40070c858814ab24 = []byte{
-	// 732 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0xd1, 0x6e, 0xd3, 0x4a,
-	0x10, 0xcd, 0x36, 0x6d, 0x75, 0x33, 0x69, 0x73, 0xdb, 0xbd, 0x4a, 0x9a, 0x1b, 0x44, 0x08, 0xee,
-	0x4b, 0x50, 0x25, 0xb7, 0x09, 0x52, 0x41, 0xf0, 0xd4, 0x36, 0x48, 0xad, 0x2a, 0xa4, 0xc8, 0x14,
-	0x55, 0xad, 0x84, 0xa2, 0xad, 0x3d, 0x6a, 0xad, 0xb8, 0xb6, 0xb1, 0x1d, 0x4b, 0xe6, 0x89, 0x1f,
-	0x80, 0x67, 0x3e, 0x89, 0x47, 0x1e, 0xf8, 0x00, 0x14, 0x7e, 0x04, 0xc5, 0xeb, 0xa4, 0x5e, 0x67,
-	0x15, 0x52, 0x50, 0x05, 0x6f, 0xce, 0x78, 0xe6, 0x9c, 0x33, 0xe3, 0xdd, 0x39, 0x81, 0x4a, 0xe4,
-	0x78, 0x7d, 0x13, 0xb7, 0xc3, 0xd6, 0x36, 0x7f, 0x52, 0x5d, 0xcf, 0x09, 0x1c, 0x5a, 0x48, 0x7e,
-	0x85, 0xad, 0xda, 0xff, 0x37, 0x29, 0x1e, 0xfa, 0xce, 0xc0, 0xd3, 0xd1, 0xe7, 0x59, 0xca, 0x2e,
-	0x94, 0xf7, 0xf4, 0xc0, 0x0c, 0x59, 0x80, 0x07, 0x96, 0x89, 0x76, 0xa0, 0xe1, 0xdb, 0x01, 0xfa,
-	0x01, 0xbd, 0x0f, 0xa0, 0xc7, 0x81, 0x5e, 0x1f, 0xa3, 0x2a, 0x69, 0x90, 0x66, 0x41, 0x2b, 0xf0,
-	0xc8, 0x31, 0x46, 0xca, 0x09, 0x54, 0xb2, 0x75, 0xbe, 0xeb, 0xd8, 0x3e, 0xfe, 0xa4, 0x90, 0xde,
-	0x83, 0xe4, 0x47, 0xcf, 0x34, 0xaa, 0x0b, 0x0d, 0xd2, 0x5c, 0xd1, 0xfe, 0xe1, 0x81, 0x23, 0x43,
-	0xd9, 0x85, 0x8d, 0x0e, 0x32, 0xa9, 0x1e, 0xa1, 0x8e, 0x64, 0xea, 0x9e, 0x40, 0x75, 0xba, 0x2e,
-	0xd1, 0x33, 0xb3, 0xd0, 0x82, 0xf2, 0x5e, 0x10, 0x30, 0xfd, 0xaa, 0xe3, 0xe8, 0x83, 0xeb, 0x39,
-	0xe9, 0xe8, 0x2e, 0x14, 0xf5, 0x2b, 0x66, 0x5f, 0x62, 0xcf, 0x65, 0x7a, 0x3f, 0xee, 0xa2, 0xd8,
-	0x2e, 0xab, 0x93, 0x81, 0xab, 0x07, 0xf1, 0xdb, 0x2e, 0xd3, 0xfb, 0x1a, 0xe8, 0x93, 0x67, 0xe5,
-	0x23, 0x81, 0x4a, 0x96, 0x6e, 0x0e, 0x95, 0xf4, 0x01, 0x14, 0x8d, 0xa4, 0x60, 0x3c, 0xb5, 0x82,
-	0x06, 0xe3, 0xd0, 0xb4, 0xa0, 0xfc, 0xbc, 0x82, 0x3e, 0x10, 0x28, 0x77, 0xf0, 0xd6, 0xfd, 0xdf,
-	0x99, 0x1e, 0x07, 0x2a, 0x59, 0x39, 0xf3, 0x9d, 0xaa, 0x5f, 0xfd, 0x22, 0x97, 0x50, 0x3e, 0x65,
-	0xc1, 0x0d, 0x9f, 0x3f, 0xee, 0xff, 0x11, 0x2c, 0x73, 0xf4, 0x98, 0xab, 0xd8, 0x5e, 0x4f, 0x63,
-	0xf1, 0x03, 0x96, 0x24, 0xd0, 0x4d, 0x58, 0x9d, 0x4c, 0xa3, 0x8f, 0x91, 0x5f, 0x5d, 0x68, 0xe4,
-	0x9b, 0x05, 0x6d, 0x65, 0x1c, 0x3c, 0xc6, 0xc8, 0x57, 0xde, 0xe7, 0xa1, 0x92, 0x65, 0x4a, 0x5a,
-	0x3b, 0x87, 0x92, 0x69, 0x9b, 0x81, 0xc9, 0x2c, 0xf3, 0x1d, 0x0b, 0x4c, 0xc7, 0x4e, 0x28, 0x77,
-	0x52, 0x94, 0xf2, 0x52, 0xf5, 0x48, 0xa8, 0x3b, 0xcc, 0x69, 0x19, 0x24, 0xba, 0x05, 0x4b, 0x18,
-	0x8e, 0xba, 0xe0, 0x13, 0xf9, 0x2f, 0x05, 0xd9, 0x71, 0xf4, 0x17, 0xa3, 0x57, 0x87, 0x39, 0x8d,
-	0xe7, 0xd4, 0xbe, 0x12, 0x28, 0x89, 0x88, 0xd4, 0x82, 0x35, 0x17, 0xd1, 0xf3, 0x7b, 0xd7, 0xcc,
-	0xed, 0x5d, 0x44, 0x3d, 0xc3, 0xd1, 0xab, 0xa4, 0x91, 0x6f, 0x16, 0xdb, 0x07, 0xb7, 0x55, 0xa7,
-	0x76, 0x47, 0x40, 0x2f, 0x99, 0xbb, 0x1f, 0x8d, 0xa8, 0xed, 0xc0, 0x8b, 0xb4, 0x55, 0x37, 0x1d,
-	0xab, 0x9d, 0x00, 0x9d, 0x4e, 0xa2, 0x6b, 0x90, 0xbf, 0xf9, 0xe6, 0xa3, 0x47, 0xda, 0x84, 0xa5,
-	0x90, 0x59, 0x03, 0x4c, 0xba, 0xa2, 0x53, 0xdf, 0xc6, 0xd7, 0x78, 0xc2, 0xb3, 0x85, 0xa7, 0x64,
-	0x7f, 0x19, 0x16, 0x2f, 0x1c, 0x23, 0x8a, 0x0f, 0xbb, 0x86, 0xd7, 0x4e, 0x88, 0x7f, 0xcd, 0x61,
-	0xcf, 0xca, 0xb9, 0xdb, 0xc3, 0x3e, 0x5a, 0x3f, 0xdd, 0x81, 0x7f, 0xd5, 0x1d, 0x58, 0x16, 0x4f,
-	0xf1, 0xff, 0xec, 0x04, 0x6c, 0xd8, 0x98, 0xd2, 0x33, 0xcf, 0x3e, 0xfc, 0x8d, 0xdb, 0xfe, 0xda,
-	0x35, 0x58, 0x80, 0x5d, 0x0f, 0x7d, 0xb4, 0x75, 0xbc, 0xab, 0xdb, 0x5e, 0x85, 0x4a, 0x96, 0x88,
-	0xf7, 0xd5, 0x1e, 0x2e, 0xc1, 0xea, 0x59, 0x8c, 0xfd, 0x0a, 0xbd, 0xd0, 0xd4, 0x91, 0x9e, 0x42,
-	0x49, 0x74, 0x52, 0xda, 0x48, 0xb1, 0x4b, 0xcd, 0xb9, 0xf6, 0x70, 0x46, 0x06, 0x27, 0x52, 0x72,
-	0xf4, 0x0d, 0xac, 0x65, 0x4d, 0x91, 0x2a, 0xe9, 0x05, 0x20, 0x77, 0xda, 0xda, 0xe6, 0xcc, 0x9c,
-	0x09, 0xfc, 0x29, 0x94, 0xc4, 0x1e, 0x05, 0xdd, 0xd2, 0x39, 0x0b, 0xba, 0xe5, 0x03, 0xe2, 0xc0,
-	0xa2, 0x49, 0x8a, 0x03, 0x91, 0xd9, 0xb5, 0x38, 0x10, 0xa9, 0xc3, 0x72, 0x60, 0xd1, 0x5d, 0x04,
-	0x60, 0xa9, 0x0f, 0x0a, 0xc0, 0x72, 0x6b, 0xe2, 0xc0, 0xe2, 0x4d, 0x16, 0x80, 0xa5, 0x3b, 0x47,
-	0x00, 0x96, 0xaf, 0x01, 0x25, 0x47, 0xcf, 0xe1, 0xdf, 0xcc, 0x05, 0xa1, 0xe9, 0x3a, 0xf9, 0x65,
-	0xae, 0x29, 0xb3, 0x52, 0x26, 0xd8, 0x67, 0x50, 0x12, 0xf7, 0xb6, 0x20, 0x5a, 0xea, 0x8a, 0x82,
-	0x68, 0xf9, 0xd2, 0x57, 0x72, 0x3b, 0x64, 0x7f, 0xeb, 0xf3, 0xb0, 0x4e, 0xbe, 0x0c, 0xeb, 0xe4,
-	0xdb, 0xb0, 0x4e, 0x3e, 0x7d, 0xaf, 0xe7, 0x60, 0xdd, 0xc0, 0x70, 0x5c, 0xcb, 0x5c, 0x53, 0x0d,
-	0x5b, 0x5d, 0x72, 0xbe, 0xa8, 0x3e, 0x0f, 0x5b, 0x17, 0xcb, 0xf1, 0x1f, 0xd1, 0xc7, 0x3f, 0x02,
-	0x00, 0x00, 0xff, 0xff, 0xa0, 0xa4, 0x94, 0x72, 0xc8, 0x0a, 0x00, 0x00,
+	// 650 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0xdd, 0x6e, 0xd3, 0x4c,
+	0x10, 0xf5, 0x7e, 0xfd, 0xd1, 0x97, 0x09, 0x0d, 0x74, 0xc1, 0x69, 0x08, 0x22, 0x0d, 0xe6, 0x82,
+	0xa2, 0x4a, 0x2e, 0x29, 0x52, 0x10, 0xe2, 0xaa, 0x6d, 0x90, 0x5a, 0x71, 0x13, 0x99, 0x9f, 0xa8,
+	0x95, 0x50, 0xe4, 0xac, 0x47, 0xc4, 0x4a, 0x6a, 0x1b, 0xdb, 0xb1, 0x14, 0xde, 0x01, 0xae, 0x79,
+	0x24, 0x2e, 0x79, 0x03, 0x50, 0x78, 0x11, 0x14, 0xaf, 0x13, 0xbc, 0xce, 0x92, 0x84, 0x4a, 0x11,
+	0xdc, 0xd9, 0xeb, 0x39, 0x67, 0xce, 0x9c, 0xec, 0xcc, 0x04, 0x8a, 0x43, 0xd7, 0xef, 0xd9, 0x78,
+	0x10, 0xd5, 0x0e, 0xf8, 0x93, 0xee, 0xf9, 0x6e, 0xe8, 0xd2, 0x5c, 0xf2, 0x16, 0xd5, 0xca, 0xb7,
+	0x7f, 0x85, 0xf8, 0x18, 0xb8, 0x03, 0x9f, 0x61, 0xc0, 0xa3, 0xb4, 0x3a, 0xa8, 0x47, 0x2c, 0xb4,
+	0x23, 0x33, 0xc4, 0x93, 0xbe, 0x8d, 0x4e, 0x68, 0xe0, 0xfb, 0x01, 0x06, 0x21, 0xbd, 0x0b, 0xc0,
+	0xe2, 0x83, 0x76, 0x0f, 0x87, 0x25, 0x52, 0x25, 0x7b, 0x39, 0x23, 0xc7, 0x4f, 0x5e, 0xe0, 0x50,
+	0x7b, 0x05, 0xc5, 0x2c, 0x2e, 0xf0, 0x5c, 0x27, 0xc0, 0x05, 0x40, 0x7a, 0x07, 0x92, 0x97, 0xb6,
+	0x6d, 0x95, 0xfe, 0xab, 0x92, 0xbd, 0x6b, 0xc6, 0xff, 0xfc, 0xe0, 0xcc, 0xd2, 0xea, 0xb0, 0xd3,
+	0x40, 0x53, 0xaa, 0x47, 0xc0, 0x91, 0x0c, 0xee, 0x09, 0x94, 0x66, 0x71, 0x89, 0x9e, 0xb9, 0xc0,
+	0x3e, 0xa8, 0x47, 0x61, 0x68, 0xb2, 0x6e, 0xc3, 0x65, 0x83, 0xcb, 0x25, 0xd3, 0xd1, 0x3a, 0xe4,
+	0x59, 0xd7, 0x74, 0xde, 0x61, 0xdb, 0x33, 0x59, 0x2f, 0xae, 0x22, 0x7f, 0xa8, 0xea, 0x53, 0xc3,
+	0xf5, 0x93, 0xf8, 0x6b, 0xd3, 0x64, 0x3d, 0x03, 0xd8, 0xf4, 0x59, 0xfb, 0x44, 0xa0, 0x98, 0x4d,
+	0xb7, 0x84, 0x4a, 0xba, 0x0b, 0x79, 0x2b, 0x01, 0x4c, 0x5c, 0xcb, 0x19, 0x30, 0x39, 0x9a, 0x15,
+	0xb4, 0xb6, 0xac, 0xa0, 0x8f, 0x04, 0xd4, 0x06, 0xfe, 0x71, 0xfd, 0x2b, 0xd3, 0xe3, 0x42, 0x31,
+	0x2b, 0x67, 0xb9, 0x5b, 0x75, 0xd5, 0x5f, 0xa4, 0x03, 0xb7, 0x5a, 0x66, 0x38, 0x5b, 0xfe, 0x43,
+	0xd8, 0xe4, 0xe4, 0x71, 0xaa, 0xfc, 0xe1, 0x76, 0x9a, 0x8a, 0xdf, 0xaf, 0x24, 0x60, 0xa1, 0x19,
+	0xda, 0x88, 0x80, 0x9a, 0x49, 0x92, 0x14, 0x75, 0x0e, 0x05, 0xdb, 0xb1, 0x43, 0xdb, 0xec, 0xdb,
+	0x1f, 0xcc, 0xd0, 0x76, 0x9d, 0x24, 0xdb, 0x41, 0x2a, 0x9b, 0x14, 0xa9, 0x9f, 0x09, 0xb0, 0x53,
+	0xc5, 0xc8, 0x10, 0xd1, 0x7d, 0xd8, 0xc0, 0x68, 0xac, 0x9f, 0x5b, 0x71, 0x33, 0xc5, 0xd8, 0x70,
+	0xd9, 0xf3, 0xf1, 0xa7, 0x53, 0xc5, 0xe0, 0x31, 0xe5, 0xa7, 0x50, 0x10, 0x09, 0xe9, 0x03, 0xd8,
+	0xf0, 0x10, 0xfd, 0xa0, 0x44, 0xaa, 0x6b, 0xf2, 0xf2, 0xf9, 0xf7, 0xe3, 0x4d, 0x58, 0xef, 0xb8,
+	0xd6, 0x30, 0xbe, 0x49, 0x06, 0x5e, 0xba, 0x11, 0xfe, 0x33, 0x37, 0x29, 0x2b, 0x67, 0xb5, 0x37,
+	0x69, 0xdc, 0xdb, 0xcd, 0x41, 0xd0, 0x6d, 0x0e, 0xfa, 0x7d, 0x1e, 0x12, 0xfc, 0x5d, 0x07, 0x1c,
+	0xd8, 0x99, 0xd1, 0xb3, 0xcc, 0xb0, 0xb9, 0xaa, 0x01, 0x0c, 0xd4, 0xd7, 0x9e, 0x65, 0x86, 0xd8,
+	0xf4, 0x31, 0x40, 0x87, 0xe1, 0x2a, 0x7a, 0xa9, 0x04, 0xc5, 0x6c, 0x12, 0x5e, 0xd3, 0xe1, 0xb7,
+	0x0d, 0xd8, 0x3a, 0x8f, 0x79, 0x5f, 0xa2, 0x1f, 0xd9, 0x0c, 0x69, 0x0b, 0x0a, 0xe2, 0x8a, 0xa2,
+	0xd5, 0x54, 0x66, 0xe9, 0xd6, 0x2b, 0xdf, 0x9b, 0x13, 0xc1, 0x13, 0x69, 0x0a, 0x7d, 0x0b, 0x37,
+	0xb2, 0xdb, 0x86, 0x6a, 0xe9, 0x06, 0x93, 0xaf, 0xb0, 0xf2, 0xfd, 0xb9, 0x31, 0x53, 0xfa, 0x16,
+	0x14, 0xc4, 0x1a, 0x05, 0xdd, 0x52, 0x8f, 0x05, 0xdd, 0x72, 0x83, 0x38, 0xb1, 0xb8, 0x7d, 0x44,
+	0x43, 0x64, 0x7b, 0x50, 0x34, 0x44, 0xba, 0xba, 0x38, 0xb1, 0x38, 0xb6, 0x05, 0x62, 0xe9, 0x82,
+	0x11, 0x88, 0xe5, 0x33, 0x9f, 0x13, 0x8b, 0x5d, 0x2c, 0x10, 0x4b, 0xe7, 0x8d, 0x40, 0x2c, 0x1f,
+	0x01, 0x9a, 0x42, 0x2f, 0xe0, 0x7a, 0xa6, 0x39, 0x68, 0x1a, 0x27, 0x6f, 0xe4, 0xb2, 0x36, 0x2f,
+	0x64, 0xca, 0xfd, 0x06, 0xb6, 0x84, 0xa1, 0x4d, 0x77, 0x7f, 0x3f, 0xce, 0x39, 0x6f, 0x75, 0xd1,
+	0xbc, 0xd7, 0x94, 0x47, 0xe4, 0x78, 0xff, 0xcb, 0xa8, 0x42, 0xbe, 0x8e, 0x2a, 0xe4, 0xfb, 0xa8,
+	0x42, 0x3e, 0xff, 0xa8, 0x28, 0xb0, 0x6d, 0x61, 0x34, 0x81, 0x9a, 0x9e, 0xad, 0x47, 0xb5, 0x26,
+	0xb9, 0x58, 0xd7, 0x9f, 0x45, 0xb5, 0xce, 0x66, 0xfc, 0xf7, 0xee, 0xf1, 0xcf, 0x00, 0x00, 0x00,
+	0xff, 0xff, 0x7e, 0x3b, 0x23, 0xdf, 0x1e, 0x0a, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1070,7 +1064,7 @@ type YorkieServiceClient interface {
 	DetachDocument(ctx context.Context, in *DetachDocumentRequest, opts ...grpc.CallOption) (*DetachDocumentResponse, error)
 	RemoveDocument(ctx context.Context, in *RemoveDocumentRequest, opts ...grpc.CallOption) (*RemoveDocumentResponse, error)
 	PushPullChanges(ctx context.Context, in *PushPullChangesRequest, opts ...grpc.CallOption) (*PushPullChangesResponse, error)
-	WatchDocuments(ctx context.Context, in *WatchDocumentsRequest, opts ...grpc.CallOption) (YorkieService_WatchDocumentsClient, error)
+	WatchDocument(ctx context.Context, in *WatchDocumentRequest, opts ...grpc.CallOption) (YorkieService_WatchDocumentClient, error)
 }
 
 type yorkieServiceClient struct {
@@ -1144,12 +1138,12 @@ func (c *yorkieServiceClient) PushPullChanges(ctx context.Context, in *PushPullC
 	return out, nil
 }
 
-func (c *yorkieServiceClient) WatchDocuments(ctx context.Context, in *WatchDocumentsRequest, opts ...grpc.CallOption) (YorkieService_WatchDocumentsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_YorkieService_serviceDesc.Streams[0], "/yorkie.v1.YorkieService/WatchDocuments", opts...)
+func (c *yorkieServiceClient) WatchDocument(ctx context.Context, in *WatchDocumentRequest, opts ...grpc.CallOption) (YorkieService_WatchDocumentClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_YorkieService_serviceDesc.Streams[0], "/yorkie.v1.YorkieService/WatchDocument", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &yorkieServiceWatchDocumentsClient{stream}
+	x := &yorkieServiceWatchDocumentClient{stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -1159,17 +1153,17 @@ func (c *yorkieServiceClient) WatchDocuments(ctx context.Context, in *WatchDocum
 	return x, nil
 }
 
-type YorkieService_WatchDocumentsClient interface {
-	Recv() (*WatchDocumentsResponse, error)
+type YorkieService_WatchDocumentClient interface {
+	Recv() (*WatchDocumentResponse, error)
 	grpc.ClientStream
 }
 
-type yorkieServiceWatchDocumentsClient struct {
+type yorkieServiceWatchDocumentClient struct {
 	grpc.ClientStream
 }
 
-func (x *yorkieServiceWatchDocumentsClient) Recv() (*WatchDocumentsResponse, error) {
-	m := new(WatchDocumentsResponse)
+func (x *yorkieServiceWatchDocumentClient) Recv() (*WatchDocumentResponse, error) {
+	m := new(WatchDocumentResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -1185,7 +1179,7 @@ type YorkieServiceServer interface {
 	DetachDocument(context.Context, *DetachDocumentRequest) (*DetachDocumentResponse, error)
 	RemoveDocument(context.Context, *RemoveDocumentRequest) (*RemoveDocumentResponse, error)
 	PushPullChanges(context.Context, *PushPullChangesRequest) (*PushPullChangesResponse, error)
-	WatchDocuments(*WatchDocumentsRequest, YorkieService_WatchDocumentsServer) error
+	WatchDocument(*WatchDocumentRequest, YorkieService_WatchDocumentServer) error
 }
 
 // UnimplementedYorkieServiceServer can be embedded to have forward compatible implementations.
@@ -1213,8 +1207,8 @@ func (*UnimplementedYorkieServiceServer) RemoveDocument(ctx context.Context, req
 func (*UnimplementedYorkieServiceServer) PushPullChanges(ctx context.Context, req *PushPullChangesRequest) (*PushPullChangesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PushPullChanges not implemented")
 }
-func (*UnimplementedYorkieServiceServer) WatchDocuments(req *WatchDocumentsRequest, srv YorkieService_WatchDocumentsServer) error {
-	return status.Errorf(codes.Unimplemented, "method WatchDocuments not implemented")
+func (*UnimplementedYorkieServiceServer) WatchDocument(req *WatchDocumentRequest, srv YorkieService_WatchDocumentServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchDocument not implemented")
 }
 
 func RegisterYorkieServiceServer(s *grpc.Server, srv YorkieServiceServer) {
@@ -1347,24 +1341,24 @@ func _YorkieService_PushPullChanges_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
-func _YorkieService_WatchDocuments_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(WatchDocumentsRequest)
+func _YorkieService_WatchDocument_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchDocumentRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(YorkieServiceServer).WatchDocuments(m, &yorkieServiceWatchDocumentsServer{stream})
+	return srv.(YorkieServiceServer).WatchDocument(m, &yorkieServiceWatchDocumentServer{stream})
 }
 
-type YorkieService_WatchDocumentsServer interface {
-	Send(*WatchDocumentsResponse) error
+type YorkieService_WatchDocumentServer interface {
+	Send(*WatchDocumentResponse) error
 	grpc.ServerStream
 }
 
-type yorkieServiceWatchDocumentsServer struct {
+type yorkieServiceWatchDocumentServer struct {
 	grpc.ServerStream
 }
 
-func (x *yorkieServiceWatchDocumentsServer) Send(m *WatchDocumentsResponse) error {
+func (x *yorkieServiceWatchDocumentServer) Send(m *WatchDocumentResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -1403,8 +1397,8 @@ var _YorkieService_serviceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "WatchDocuments",
-			Handler:       _YorkieService_WatchDocuments_Handler,
+			StreamName:    "WatchDocument",
+			Handler:       _YorkieService_WatchDocument_Handler,
 			ServerStreams: true,
 		},
 	},
@@ -1752,7 +1746,7 @@ func (m *DetachDocumentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	return len(dAtA) - i, nil
 }
 
-func (m *WatchDocumentsRequest) Marshal() (dAtA []byte, err error) {
+func (m *WatchDocumentRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1762,12 +1756,12 @@ func (m *WatchDocumentsRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *WatchDocumentsRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *WatchDocumentRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WatchDocumentsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *WatchDocumentRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1776,14 +1770,12 @@ func (m *WatchDocumentsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if len(m.DocumentKeys) > 0 {
-		for iNdEx := len(m.DocumentKeys) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.DocumentKeys[iNdEx])
-			copy(dAtA[i:], m.DocumentKeys[iNdEx])
-			i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentKeys[iNdEx])))
-			i--
-			dAtA[i] = 0x12
-		}
+	if len(m.DocumentId) > 0 {
+		i -= len(m.DocumentId)
+		copy(dAtA[i:], m.DocumentId)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentId)))
+		i--
+		dAtA[i] = 0x12
 	}
 	if m.Client != nil {
 		{
@@ -1800,7 +1792,7 @@ func (m *WatchDocumentsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *WatchDocumentsResponse) Marshal() (dAtA []byte, err error) {
+func (m *WatchDocumentResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1810,12 +1802,12 @@ func (m *WatchDocumentsResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *WatchDocumentsResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *WatchDocumentResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WatchDocumentsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *WatchDocumentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1836,12 +1828,12 @@ func (m *WatchDocumentsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	return len(dAtA) - i, nil
 }
 
-func (m *WatchDocumentsResponse_Initialization_) MarshalTo(dAtA []byte) (int, error) {
+func (m *WatchDocumentResponse_Initialization_) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WatchDocumentsResponse_Initialization_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *WatchDocumentResponse_Initialization_) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	if m.Initialization != nil {
 		{
@@ -1857,12 +1849,12 @@ func (m *WatchDocumentsResponse_Initialization_) MarshalToSizedBuffer(dAtA []byt
 	}
 	return len(dAtA) - i, nil
 }
-func (m *WatchDocumentsResponse_Event) MarshalTo(dAtA []byte) (int, error) {
+func (m *WatchDocumentResponse_Event) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WatchDocumentsResponse_Event) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *WatchDocumentResponse_Event) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	if m.Event != nil {
 		{
@@ -1878,7 +1870,7 @@ func (m *WatchDocumentsResponse_Event) MarshalToSizedBuffer(dAtA []byte) (int, e
 	}
 	return len(dAtA) - i, nil
 }
-func (m *WatchDocumentsResponse_Initialization) Marshal() (dAtA []byte, err error) {
+func (m *WatchDocumentResponse_Initialization) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1888,12 +1880,12 @@ func (m *WatchDocumentsResponse_Initialization) Marshal() (dAtA []byte, err erro
 	return dAtA[:n], nil
 }
 
-func (m *WatchDocumentsResponse_Initialization) MarshalTo(dAtA []byte) (int, error) {
+func (m *WatchDocumentResponse_Initialization) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WatchDocumentsResponse_Initialization) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *WatchDocumentResponse_Initialization) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1902,28 +1894,16 @@ func (m *WatchDocumentsResponse_Initialization) MarshalToSizedBuffer(dAtA []byte
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if len(m.PeersMapByDoc) > 0 {
-		for k := range m.PeersMapByDoc {
-			v := m.PeersMapByDoc[k]
-			baseI := i
-			if v != nil {
-				{
-					size, err := v.MarshalToSizedBuffer(dAtA[:i])
-					if err != nil {
-						return 0, err
-					}
-					i -= size
-					i = encodeVarintYorkie(dAtA, i, uint64(size))
+	if len(m.Peers) > 0 {
+		for iNdEx := len(m.Peers) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Peers[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
 				}
-				i--
-				dAtA[i] = 0x12
+				i -= size
+				i = encodeVarintYorkie(dAtA, i, uint64(size))
 			}
-			i -= len(k)
-			copy(dAtA[i:], k)
-			i = encodeVarintYorkie(dAtA, i, uint64(len(k)))
-			i--
-			dAtA[i] = 0xa
-			i = encodeVarintYorkie(dAtA, i, uint64(baseI-i))
 			i--
 			dAtA[i] = 0xa
 		}
@@ -2153,14 +2133,12 @@ func (m *UpdatePresenceRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
-	if len(m.DocumentKeys) > 0 {
-		for iNdEx := len(m.DocumentKeys) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.DocumentKeys[iNdEx])
-			copy(dAtA[i:], m.DocumentKeys[iNdEx])
-			i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentKeys[iNdEx])))
-			i--
-			dAtA[i] = 0x12
-		}
+	if len(m.DocumentId) > 0 {
+		i -= len(m.DocumentId)
+		copy(dAtA[i:], m.DocumentId)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentId)))
+		i--
+		dAtA[i] = 0x12
 	}
 	if m.Client != nil {
 		{
@@ -2371,7 +2349,7 @@ func (m *DetachDocumentResponse) Size() (n int) {
 	return n
 }
 
-func (m *WatchDocumentsRequest) Size() (n int) {
+func (m *WatchDocumentRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2381,11 +2359,9 @@ func (m *WatchDocumentsRequest) Size() (n int) {
 		l = m.Client.Size()
 		n += 1 + l + sovYorkie(uint64(l))
 	}
-	if len(m.DocumentKeys) > 0 {
-		for _, s := range m.DocumentKeys {
-			l = len(s)
-			n += 1 + l + sovYorkie(uint64(l))
-		}
+	l = len(m.DocumentId)
+	if l > 0 {
+		n += 1 + l + sovYorkie(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -2393,7 +2369,7 @@ func (m *WatchDocumentsRequest) Size() (n int) {
 	return n
 }
 
-func (m *WatchDocumentsResponse) Size() (n int) {
+func (m *WatchDocumentResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2408,7 +2384,7 @@ func (m *WatchDocumentsResponse) Size() (n int) {
 	return n
 }
 
-func (m *WatchDocumentsResponse_Initialization_) Size() (n int) {
+func (m *WatchDocumentResponse_Initialization_) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2420,7 +2396,7 @@ func (m *WatchDocumentsResponse_Initialization_) Size() (n int) {
 	}
 	return n
 }
-func (m *WatchDocumentsResponse_Event) Size() (n int) {
+func (m *WatchDocumentResponse_Event) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2432,23 +2408,16 @@ func (m *WatchDocumentsResponse_Event) Size() (n int) {
 	}
 	return n
 }
-func (m *WatchDocumentsResponse_Initialization) Size() (n int) {
+func (m *WatchDocumentResponse_Initialization) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if len(m.PeersMapByDoc) > 0 {
-		for k, v := range m.PeersMapByDoc {
-			_ = k
-			_ = v
-			l = 0
-			if v != nil {
-				l = v.Size()
-				l += 1 + sovYorkie(uint64(l))
-			}
-			mapEntrySize := 1 + len(k) + sovYorkie(uint64(len(k))) + l
-			n += mapEntrySize + 1 + sovYorkie(uint64(mapEntrySize))
+	if len(m.Peers) > 0 {
+		for _, e := range m.Peers {
+			l = e.Size()
+			n += 1 + l + sovYorkie(uint64(l))
 		}
 	}
 	if m.XXX_unrecognized != nil {
@@ -2555,11 +2524,9 @@ func (m *UpdatePresenceRequest) Size() (n int) {
 		l = m.Client.Size()
 		n += 1 + l + sovYorkie(uint64(l))
 	}
-	if len(m.DocumentKeys) > 0 {
-		for _, s := range m.DocumentKeys {
-			l = len(s)
-			n += 1 + l + sovYorkie(uint64(l))
-		}
+	l = len(m.DocumentId)
+	if l > 0 {
+		n += 1 + l + sovYorkie(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3501,7 +3468,7 @@ func (m *DetachDocumentResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *WatchDocumentsRequest) Unmarshal(dAtA []byte) error {
+func (m *WatchDocumentRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -3524,10 +3491,10 @@ func (m *WatchDocumentsRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: WatchDocumentsRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: WatchDocumentRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: WatchDocumentsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: WatchDocumentRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -3568,7 +3535,7 @@ func (m *WatchDocumentsRequest) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DocumentKeys", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field DocumentId", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -3596,7 +3563,7 @@ func (m *WatchDocumentsRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.DocumentKeys = append(m.DocumentKeys, string(dAtA[iNdEx:postIndex]))
+			m.DocumentId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -3620,7 +3587,7 @@ func (m *WatchDocumentsRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *WatchDocumentsResponse) Unmarshal(dAtA []byte) error {
+func (m *WatchDocumentResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -3643,10 +3610,10 @@ func (m *WatchDocumentsResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: WatchDocumentsResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: WatchDocumentResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: WatchDocumentsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: WatchDocumentResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -3678,11 +3645,11 @@ func (m *WatchDocumentsResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &WatchDocumentsResponse_Initialization{}
+			v := &WatchDocumentResponse_Initialization{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Body = &WatchDocumentsResponse_Initialization_{v}
+			m.Body = &WatchDocumentResponse_Initialization_{v}
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -3717,7 +3684,7 @@ func (m *WatchDocumentsResponse) Unmarshal(dAtA []byte) error {
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Body = &WatchDocumentsResponse_Event{v}
+			m.Body = &WatchDocumentResponse_Event{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -3741,7 +3708,7 @@ func (m *WatchDocumentsResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *WatchDocumentsResponse_Initialization) Unmarshal(dAtA []byte) error {
+func (m *WatchDocumentResponse_Initialization) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -3772,7 +3739,7 @@ func (m *WatchDocumentsResponse_Initialization) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field PeersMapByDoc", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Peers", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -3799,105 +3766,10 @@ func (m *WatchDocumentsResponse_Initialization) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.PeersMapByDoc == nil {
-				m.PeersMapByDoc = make(map[string]*Clients)
+			m.Peers = append(m.Peers, &Client{})
+			if err := m.Peers[len(m.Peers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
 			}
-			var mapkey string
-			var mapvalue *Clients
-			for iNdEx < postIndex {
-				entryPreIndex := iNdEx
-				var wire uint64
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return ErrIntOverflowYorkie
-					}
-					if iNdEx >= l {
-						return io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					wire |= uint64(b&0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				fieldNum := int32(wire >> 3)
-				if fieldNum == 1 {
-					var stringLenmapkey uint64
-					for shift := uint(0); ; shift += 7 {
-						if shift >= 64 {
-							return ErrIntOverflowYorkie
-						}
-						if iNdEx >= l {
-							return io.ErrUnexpectedEOF
-						}
-						b := dAtA[iNdEx]
-						iNdEx++
-						stringLenmapkey |= uint64(b&0x7F) << shift
-						if b < 0x80 {
-							break
-						}
-					}
-					intStringLenmapkey := int(stringLenmapkey)
-					if intStringLenmapkey < 0 {
-						return ErrInvalidLengthYorkie
-					}
-					postStringIndexmapkey := iNdEx + intStringLenmapkey
-					if postStringIndexmapkey < 0 {
-						return ErrInvalidLengthYorkie
-					}
-					if postStringIndexmapkey > l {
-						return io.ErrUnexpectedEOF
-					}
-					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
-					iNdEx = postStringIndexmapkey
-				} else if fieldNum == 2 {
-					var mapmsglen int
-					for shift := uint(0); ; shift += 7 {
-						if shift >= 64 {
-							return ErrIntOverflowYorkie
-						}
-						if iNdEx >= l {
-							return io.ErrUnexpectedEOF
-						}
-						b := dAtA[iNdEx]
-						iNdEx++
-						mapmsglen |= int(b&0x7F) << shift
-						if b < 0x80 {
-							break
-						}
-					}
-					if mapmsglen < 0 {
-						return ErrInvalidLengthYorkie
-					}
-					postmsgIndex := iNdEx + mapmsglen
-					if postmsgIndex < 0 {
-						return ErrInvalidLengthYorkie
-					}
-					if postmsgIndex > l {
-						return io.ErrUnexpectedEOF
-					}
-					mapvalue = &Clients{}
-					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
-						return err
-					}
-					iNdEx = postmsgIndex
-				} else {
-					iNdEx = entryPreIndex
-					skippy, err := skipYorkie(dAtA[iNdEx:])
-					if err != nil {
-						return err
-					}
-					if (skippy < 0) || (iNdEx+skippy) < 0 {
-						return ErrInvalidLengthYorkie
-					}
-					if (iNdEx + skippy) > postIndex {
-						return io.ErrUnexpectedEOF
-					}
-					iNdEx += skippy
-				}
-			}
-			m.PeersMapByDoc[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4534,7 +4406,7 @@ func (m *UpdatePresenceRequest) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DocumentKeys", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field DocumentId", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -4562,7 +4434,7 @@ func (m *UpdatePresenceRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.DocumentKeys = append(m.DocumentKeys, string(dAtA[iNdEx:postIndex]))
+			m.DocumentId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

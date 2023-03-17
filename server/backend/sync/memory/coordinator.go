@@ -21,7 +21,6 @@ import (
 	"context"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/locker"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -59,24 +58,27 @@ func (c *Coordinator) NewLocker(
 func (c *Coordinator) Subscribe(
 	ctx context.Context,
 	subscriber types.Client,
-	keys []key.Key,
-) (*sync.Subscription, map[string][]types.Client, error) {
-	sub, err := c.pubSub.Subscribe(ctx, subscriber, keys)
+	documentID types.ID,
+) (*sync.Subscription, []types.Client, error) {
+	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	peersMap := c.pubSub.BuildPeersMap(keys)
-	return sub, peersMap, nil
+	var peers []types.Client
+	for _, sub := range c.pubSub.subscriptionsMapByDocID[documentID].Map() {
+		peers = append(peers, sub.Subscriber())
+	}
+	return sub, peers, nil
 }
 
 // Unsubscribe unsubscribes the given documents.
 func (c *Coordinator) Unsubscribe(
 	ctx context.Context,
-	keys []key.Key,
+	documentID types.ID,
 	sub *sync.Subscription,
 ) error {
-	c.pubSub.Unsubscribe(ctx, keys, sub)
+	c.pubSub.Unsubscribe(ctx, documentID, sub)
 	return nil
 }
 
@@ -102,15 +104,10 @@ func (c *Coordinator) PublishToLocal(
 func (c *Coordinator) UpdatePresence(
 	_ context.Context,
 	publisher *types.Client,
-	keys []key.Key,
-) (*sync.DocEvent, error) {
-	c.pubSub.UpdatePresence(publisher, keys)
-
-	return &sync.DocEvent{
-		Type:         types.PresenceChangedEvent,
-		Publisher:    *publisher,
-		DocumentKeys: keys,
-	}, nil
+	documentID types.ID,
+) error {
+	c.pubSub.UpdatePresence(publisher, documentID)
+	return nil
 }
 
 // Members returns the members of this cluster.

@@ -57,10 +57,10 @@ func (s *clusterServer) BroadcastEvent(
 		types.DocumentsChangedEvent:
 		s.backend.Coordinator.PublishToLocal(ctx, actorID, *docEvent)
 	case types.PresenceChangedEvent:
-		if _, err := s.backend.Coordinator.UpdatePresence(
+		if err := s.backend.Coordinator.UpdatePresence(
 			ctx,
 			&docEvent.Publisher,
-			docEvent.DocumentKeys,
+			docEvent.DocumentID,
 		); err != nil {
 			return nil, err
 		}

@@ -73,7 +73,7 @@ func TestPeerAwareness(t *testing.T) {
 					}
 
 					if wr.Type == client.PeersChanged {
-						peers := wr.PeersMapByDoc[d1.Key().String()]
+						peers := wr.PeersMapByDoc[d1.Key()]
 						responsePairs = append(responsePairs, watchResponsePair{
 							Type:  wr.Type,
 							Peers: peers,
@@ -158,7 +158,7 @@ func TestPeerAwareness(t *testing.T) {
 					}
 
 					if wr.Type == client.PeersChanged {
-						peers := wr.PeersMapByDoc[d1.Key().String()]
+						peers := wr.PeersMapByDoc[d1.Key()]
 						responsePairs = append(responsePairs, watchResponsePair{
 							Type:  wr.Type,
 							Peers: peers,
@@ -184,8 +184,13 @@ func TestPeerAwareness(t *testing.T) {
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 		assert.NoError(t, c2.Attach(ctx, d3))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d3)) }()
+
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		_, err = c2.Watch(watch2Ctx, d2, d3)
+		_, err = c2.Watch(watch2Ctx, d2)
+		assert.NoError(t, err)
+
+		watch3Ctx, cancel3 := context.WithCancel(ctx)
+		_, err = c2.Watch(watch3Ctx, d3)
 		assert.NoError(t, err)
 
 		// 02. PeersChanged is triggered when another client closes the watch
@@ -196,6 +201,7 @@ func TestPeerAwareness(t *testing.T) {
 			},
 		})
 		cancel2()
+		cancel3()
 
 		wgEvents.Wait()
 

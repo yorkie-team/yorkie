@@ -26,6 +26,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -137,7 +138,7 @@ func TestDocument(t *testing.T) {
 				assert.NoError(t, resp.Err)
 
 				if resp.Type == client.DocumentsChanged {
-					err := c1.Sync(ctx, resp.Keys...)
+					err := c1.Sync(ctx, resp.Key)
 					assert.NoError(t, err)
 					return
 				}
@@ -358,5 +359,150 @@ func TestDocument(t *testing.T) {
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Sync(ctx, d1.Key()), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
+	})
+
+	t.Run("removed document removal with watching test", func(t *testing.T) {
+		ctx := context.Background()
+		watchCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		// 01. c1 creates d1 without attaching.
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		_, err := c1.Watch(watchCtx, d1)
+		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
+
+		// 02. c1 attaches d1 and watches it.
+		assert.NoError(t, c1.Attach(ctx, d1))
+		_, err = c1.Watch(watchCtx, d1)
+		assert.NoError(t, err)
+
+		// 03. c1 removes d1 and watches it.
+		assert.NoError(t, c1.Remove(ctx, d1))
+		assert.Equal(t, d1.Status(), document.StatusRemoved)
+		_, err = c1.Watch(watchCtx, d1)
+		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
+	})
+}
+
+func TestDocumentWithProjects(t *testing.T) {
+	ctx := context.Background()
+	adminCli := helper.CreateAdminCli(t, defaultServer.AdminAddr())
+	defer func() { assert.NoError(t, adminCli.Close()) }()
+
+	project1, err := adminCli.CreateProject(ctx, "project1")
+	assert.NoError(t, err)
+
+	project2, err := adminCli.CreateProject(ctx, "project2")
+	assert.NoError(t, err)
+
+	t.Run("watch document with different projects test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. c1 and c2 are in the same project and c3 is in another project.
+		c1, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project1.PublicKey))
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c1.Close()) }()
+		assert.NoError(t, c1.Activate(ctx))
+		defer func() { assert.NoError(t, c1.Deactivate(ctx)) }()
+
+		c2, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project1.PublicKey))
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c2.Close()) }()
+		assert.NoError(t, c2.Activate(ctx))
+		defer func() { assert.NoError(t, c2.Deactivate(ctx)) }()
+
+		c3, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project2.PublicKey))
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c3.Close()) }()
+		assert.NoError(t, c3.Activate(ctx))
+		defer func() { assert.NoError(t, c3.Deactivate(ctx)) }()
+
+		// 02. c1 and c2 watch the same document and c3 watches another document but the same key.
+		var expected []watchResponsePair
+		var responsePairs []watchResponsePair
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		err = c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+		watch1Ctx, cancel1 := context.WithCancel(ctx)
+		defer cancel1()
+		rch, err := c1.Watch(watch1Ctx, d1)
+		assert.NoError(t, err)
+
+		go func() {
+			defer wg.Done()
+
+			for {
+				resp := <-rch
+				if resp.Err == io.EOF {
+					assert.Fail(t, resp.Err.Error())
+					return
+				}
+				assert.NoError(t, resp.Err)
+
+				if resp.Type == client.DocumentsChanged {
+					err := c1.Sync(ctx, resp.Key)
+					assert.NoError(t, err)
+					responsePairs = append(responsePairs, watchResponsePair{
+						Type: resp.Type,
+					})
+					return
+				}
+
+				if resp.Type == client.PeersChanged {
+					peers := resp.PeersMapByDoc[d1.Key()]
+					responsePairs = append(responsePairs, watchResponsePair{
+						Type:  resp.Type,
+						Peers: peers,
+					})
+				}
+			}
+		}()
+
+		// c2 watches the same document, so c1 receives a peers changed event.
+		expected = append(expected, watchResponsePair{
+			Type: client.PeersChanged,
+			Peers: map[string]types.Presence{
+				c1.ID().String(): nil,
+				c2.ID().String(): nil,
+			},
+		})
+		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		watch2Ctx, cancel2 := context.WithCancel(ctx)
+		defer cancel2()
+		_, err = c2.Watch(watch2Ctx, d2)
+		assert.NoError(t, err)
+
+		// c2 updates the document, so c1 receives a documents changed event.
+		expected = append(expected, watchResponsePair{
+			Type: client.DocumentsChanged,
+		})
+		assert.NoError(t, d2.Update(func(root *json.Object) error {
+			root.SetString("key", "value")
+			return nil
+		}))
+
+		// d3 is in another project, so c1 and c2 should not receive events.
+		d3 := document.New(key.Key(helper.TestDocKey(t)))
+		assert.NoError(t, c3.Attach(ctx, d3))
+		watch3Ctx, cancel3 := context.WithCancel(ctx)
+		defer cancel3()
+		_, err = c3.Watch(watch3Ctx, d3)
+		assert.NoError(t, err)
+		assert.NoError(t, d3.Update(func(root *json.Object) error {
+			root.SetString("key3", "value3")
+			return nil
+		}))
+		assert.NoError(t, c2.Sync(ctx))
+
+		wg.Wait()
+
+		assert.Equal(t, expected, responsePairs)
+		assert.Equal(t, "{\"key\":\"value\"}", d1.Marshal())
+		assert.Equal(t, "{\"key\":\"value\"}", d2.Marshal())
+		assert.Equal(t, "{\"key3\":\"value3\"}", d3.Marshal())
 	})
 }
