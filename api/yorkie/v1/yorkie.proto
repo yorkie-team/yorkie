@@ -80,7 +80,6 @@ message DetachDocumentResponse {
 message WatchDocumentRequest {
   Client client = 1;
   string document_id = 2;
-  string document_key = 3;
 }
 
 message WatchDocumentResponse {
@@ -119,7 +118,6 @@ message PushPullChangesResponse {
 message UpdatePresenceRequest {
   Client client = 1;
   string document_id = 2;
-  string document_key = 3;
 }
 
 message UpdatePresenceResponse {}

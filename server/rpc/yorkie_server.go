@@ -381,26 +381,22 @@ func (s *yorkieServer) WatchDocument(
 	if err != nil {
 		return err
 	}
-	docKey, err := converter.FromDocumentKey(req.DocumentKey)
+
+	docInfo, err := documents.FindDocInfo(
+		stream.Context(),
+		s.backend,
+		projects.From(stream.Context()),
+		docID,
+	)
 	if err != nil {
-		return err
+		return nil
 	}
 
 	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
-		Attributes: types.NewAccessAttributes([]key.Key{docKey}, types.Read),
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
 	}); err != nil {
 		return err
-	}
-
-	project := projects.From(stream.Context())
-	if err := documents.CheckDocInProject(
-		stream.Context(),
-		s.backend,
-		project,
-		docID,
-	); err != nil {
-		return nil
 	}
 
 	if _, err = clients.FindClientInfo(
@@ -412,13 +408,13 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	subscription, peersMap, err := s.watchDoc(stream.Context(), *cli, docID, docKey)
+	subscription, peersMap, err := s.watchDoc(stream.Context(), *cli, docID, docInfo.Key)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
 	}
 	defer func() {
-		s.unwatchDoc(subscription, docID, docKey)
+		s.unwatchDoc(subscription, docID, docInfo.Key)
 	}()
 
 	if err := stream.Send(&api.WatchDocumentResponse{
@@ -554,13 +550,18 @@ func (s *yorkieServer) UpdatePresence(
 	if err != nil {
 		return nil, err
 	}
-	documentKey, err := converter.FromDocumentKey(req.DocumentKey)
+
+	docInfo, err := documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		documentID,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID)
-	if err != nil {
+	if err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID); err != nil {
 		return nil, err
 	}
 
@@ -568,7 +569,7 @@ func (s *yorkieServer) UpdatePresence(
 		Type:        types.DocumentsWatchedEvent,
 		Publisher:   *cli,
 		DocumentID:  documentID,
-		DocumentKey: documentKey,
+		DocumentKey: docInfo.Key,
 	})
 
 	return &api.UpdatePresenceResponse{}, nil

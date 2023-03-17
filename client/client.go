@@ -384,8 +384,7 @@ func (c *Client) Watch(
 			ID:           c.id,
 			PresenceInfo: c.presenceInfo,
 		}),
-		DocumentKey: converter.ToDocumentKey(doc.Key()),
-		DocumentId:  converter.ToDocumentID(attachment.docID),
+		DocumentId: converter.ToDocumentID(attachment.docID),
 	})
 	if err != nil {
 		return nil, err
@@ -495,14 +494,13 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 	// After grpc-web supports bi-directional streaming, we can remove the
 	// following.
 	// TODO(hackerwins): We will move Presence from client-level to document-level.
-	for docKey, attachment := range c.attachments {
+	for _, attachment := range c.attachments {
 		if _, err := c.client.UpdatePresence(ctx, &api.UpdatePresenceRequest{
 			Client: converter.ToClient(types.Client{
 				ID:           c.id,
 				PresenceInfo: c.presenceInfo,
 			}),
-			DocumentId:  converter.ToDocumentID(attachment.docID),
-			DocumentKey: converter.ToDocumentKey(docKey),
+			DocumentId: converter.ToDocumentID(attachment.docID),
 		}); err != nil {
 			return err
 		}
