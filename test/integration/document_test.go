@@ -322,7 +322,6 @@ func TestDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		// 02. cli1 removes d1 and cli2 removes d2.
-		// If both clients try to remove the document, the document will be removed without error.
 		assert.NoError(t, c1.Remove(ctx, d1))
 		assert.NoError(t, c2.Remove(ctx, d2))
 		assert.Equal(t, d1.Status(), document.StatusRemoved)
