@@ -553,17 +553,16 @@ func (s *yorkieServer) UpdatePresence(
 	}
 	documentKey := converter.FromDocumentKey(req.DocumentKey)
 
-	// TODO(hackerwins): We need change documents to document.
 	err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID)
 	if err != nil {
 		return nil, err
 	}
 
 	s.backend.Coordinator.Publish(ctx, cli.ID, sync.DocEvent{
-		Type:         types.DocumentsWatchedEvent,
-		Publisher:    *cli,
-		DocumentIDs:  []types.ID{documentID},
-		DocumentKeys: []key.Key{documentKey},
+		Type:        types.DocumentsWatchedEvent,
+		Publisher:   *cli,
+		DocumentID:  documentID,
+		DocumentKey: documentKey,
 	})
 
 	return &api.UpdatePresenceResponse{}, nil
@@ -575,7 +574,6 @@ func (s *yorkieServer) watchDoc(
 	documentID types.ID,
 	documentKey key.Key,
 ) (*sync.Subscription, []types.Client, error) {
-	// TODO(hackerwins): We need change documents to document.
 	subscription, peers, err := s.backend.Coordinator.Subscribe(
 		ctx,
 		client,
@@ -590,10 +588,10 @@ func (s *yorkieServer) watchDoc(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:         types.DocumentsWatchedEvent,
-			Publisher:    subscription.Subscriber(),
-			DocumentIDs:  []types.ID{documentID},
-			DocumentKeys: []key.Key{documentKey},
+			Type:        types.DocumentsWatchedEvent,
+			Publisher:   subscription.Subscriber(),
+			DocumentID:  documentID,
+			DocumentKey: documentKey,
 		},
 	)
 
@@ -611,10 +609,10 @@ func (s *yorkieServer) unwatchDoc(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:         types.DocumentsUnwatchedEvent,
-			Publisher:    subscription.Subscriber(),
-			DocumentIDs:  []types.ID{documentID},
-			DocumentKeys: []key.Key{documentKey},
+			Type:        types.DocumentsUnwatchedEvent,
+			Publisher:   subscription.Subscriber(),
+			DocumentID:  documentID,
+			DocumentKey: documentKey,
 		},
 	)
 }
