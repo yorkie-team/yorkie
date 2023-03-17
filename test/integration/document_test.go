@@ -361,6 +361,28 @@ func TestDocument(t *testing.T) {
 		assert.ErrorIs(t, cli.Sync(ctx, d1.Key()), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
 	})
+
+	t.Run("removed document removal with watching test", func(t *testing.T) {
+		ctx := context.Background()
+		watchCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		// 01. c1 creates d1 without attaching.
+		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		_, err := c1.Watch(watchCtx, d1)
+		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
+
+		// 02. c1 attaches d1 and watches it.
+		assert.NoError(t, c1.Attach(ctx, d1))
+		_, err = c1.Watch(watchCtx, d1)
+		assert.NoError(t, err)
+
+		// 03. c1 removes d1 and watches it.
+		assert.NoError(t, c1.Remove(ctx, d1))
+		assert.Equal(t, d1.Status(), document.StatusRemoved)
+		_, err = c1.Watch(watchCtx, d1)
+		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
+	})
 }
 
 func TestDocumentWithProjects(t *testing.T) {
