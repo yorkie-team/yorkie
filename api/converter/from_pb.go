@@ -212,17 +212,13 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 }
 
 // FromDocumentKey converts the given Protobuf formats to model format.
-func FromDocumentKey(pbKey string) key.Key {
-	return key.Key(pbKey)
-}
-
-// FromDocumentKeys converts the given Protobuf formats to model format.
-func FromDocumentKeys(pbKeys []string) []key.Key {
-	var keys []key.Key
-	for _, pbKey := range pbKeys {
-		keys = append(keys, key.Key(pbKey))
+func FromDocumentKey(pbKey string) (key.Key, error) {
+	k := key.Key(pbKey)
+	if err := k.Validate(); err != nil {
+		return "", err
 	}
-	return keys
+
+	return k, nil
 }
 
 // FromDocumentID converts the given Protobuf formats to model format.
@@ -280,11 +276,16 @@ func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
 		return nil, err
 	}
 
+	k, err := FromDocumentKey(docEvent.DocumentKey)
+	if err != nil {
+		return nil, err
+	}
+
 	return &sync.DocEvent{
 		Type:        eventType,
 		Publisher:   *client,
 		DocumentID:  documentIDs,
-		DocumentKey: FromDocumentKey(docEvent.DocumentKey),
+		DocumentKey: k,
 	}, nil
 }
 

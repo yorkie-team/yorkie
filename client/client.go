@@ -411,7 +411,11 @@ func (c *Client) Watch(
 				return nil, err
 			}
 
-			docKey := converter.FromDocumentKey(resp.Event.DocumentKey)
+			docKey, err := converter.FromDocumentKey(resp.Event.DocumentKey)
+			if err != nil {
+				return nil, err
+			}
+
 			switch eventType {
 			case types.DocumentsChangedEvent:
 				return &WatchResponse{

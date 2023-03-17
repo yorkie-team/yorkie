@@ -381,7 +381,10 @@ func (s *yorkieServer) WatchDocument(
 	if err != nil {
 		return err
 	}
-	docKey := converter.FromDocumentKey(req.DocumentKey)
+	docKey, err := converter.FromDocumentKey(req.DocumentKey)
+	if err != nil {
+		return err
+	}
 
 	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
@@ -551,7 +554,10 @@ func (s *yorkieServer) UpdatePresence(
 	if err != nil {
 		return nil, err
 	}
-	documentKey := converter.FromDocumentKey(req.DocumentKey)
+	documentKey, err := converter.FromDocumentKey(req.DocumentKey)
+	if err != nil {
+		return nil, err
+	}
 
 	err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID)
 	if err != nil {
