@@ -547,14 +547,14 @@ func (s *yorkieServer) UpdatePresence(
 	if err != nil {
 		return nil, err
 	}
-	documentIDs, err := converter.FromDocumentIDs(req.DocumentIds)
+	documentID, err := converter.FromDocumentID(req.DocumentId)
 	if err != nil {
 		return nil, err
 	}
-	documentKeys := converter.FromDocumentKeys(req.DocumentKeys)
+	documentKey := converter.FromDocumentKey(req.DocumentKey)
 
 	// TODO(hackerwins): We need change documents to document.
-	err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentIDs[0])
+	err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID)
 	if err != nil {
 		return nil, err
 	}
@@ -562,8 +562,8 @@ func (s *yorkieServer) UpdatePresence(
 	s.backend.Coordinator.Publish(ctx, cli.ID, sync.DocEvent{
 		Type:         types.DocumentsWatchedEvent,
 		Publisher:    *cli,
-		DocumentIDs:  documentIDs,
-		DocumentKeys: documentKeys,
+		DocumentIDs:  []types.ID{documentID},
+		DocumentKeys: []key.Key{documentKey},
 	})
 
 	return &api.UpdatePresenceResponse{}, nil

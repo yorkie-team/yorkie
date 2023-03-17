@@ -213,7 +213,6 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 
 // FromDocumentKey converts the given Protobuf formats to model format.
 func FromDocumentKey(pbKey string) key.Key {
-	// TODO(hackerwins): validate key.
 	return key.Key(pbKey)
 }
 

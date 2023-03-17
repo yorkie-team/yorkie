@@ -486,26 +486,22 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 		return nil
 	}
 
-	var docIDs []types.ID
-	var docKeys []key.Key
-	for docKey, attachment := range c.attachments {
-		docIDs = append(docIDs, attachment.docID)
-		docKeys = append(docKeys, key.Key(docKey))
-	}
-
 	// TODO(hackerwins): We temporarily use Unary Call to update presence,
 	// because grpc-web can't handle Bi-Directional streaming for now.
 	// After grpc-web supports bi-directional streaming, we can remove the
 	// following.
-	if _, err := c.client.UpdatePresence(ctx, &api.UpdatePresenceRequest{
-		Client: converter.ToClient(types.Client{
-			ID:           c.id,
-			PresenceInfo: c.presenceInfo,
-		}),
-		DocumentIds:  converter.ToDocumentIDs(docIDs),
-		DocumentKeys: converter.ToDocumentKeys(docKeys),
-	}); err != nil {
-		return err
+	// TODO(hackerwins): We will move Presence from client-level to document-level.
+	for docKey, attachment := range c.attachments {
+		if _, err := c.client.UpdatePresence(ctx, &api.UpdatePresenceRequest{
+			Client: converter.ToClient(types.Client{
+				ID:           c.id,
+				PresenceInfo: c.presenceInfo,
+			}),
+			DocumentId:  converter.ToDocumentID(attachment.docID),
+			DocumentKey: converter.ToDocumentKey(docKey),
+		}); err != nil {
+			return err
+		}
 	}
 
 	return nil
