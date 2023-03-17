@@ -408,7 +408,7 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	subscription, peersMap, err := s.watchDoc(stream.Context(), *cli, docID, docInfo.Key)
+	subscription, peersMap, err := s.watchDoc(stream.Context(), *cli, docID)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
@@ -578,7 +578,6 @@ func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	client types.Client,
 	documentID types.ID,
-	documentKey key.Key,
 ) (*sync.Subscription, []types.Client, error) {
 	subscription, peers, err := s.backend.Coordinator.Subscribe(
 		ctx,
