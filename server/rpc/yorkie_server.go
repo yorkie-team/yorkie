@@ -553,7 +553,6 @@ func (s *yorkieServer) UpdatePresence(
 	}
 	documentKey := converter.FromDocumentKey(req.DocumentKey)
 
-	// TODO(hackerwins): We need change documents to document.
 	err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID)
 	if err != nil {
 		return nil, err
@@ -575,7 +574,6 @@ func (s *yorkieServer) watchDoc(
 	documentID types.ID,
 	documentKey key.Key,
 ) (*sync.Subscription, []types.Client, error) {
-	// TODO(hackerwins): We need change documents to document.
 	subscription, peers, err := s.backend.Coordinator.Subscribe(
 		ctx,
 		client,
