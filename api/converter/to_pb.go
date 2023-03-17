@@ -236,10 +236,10 @@ func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
 	}
 
 	return &api.DocEvent{
-		Type:         eventType,
-		Publisher:    ToClient(docEvent.Publisher),
-		DocumentIds:  ToDocumentIDs(docEvent.DocumentIDs),
-		DocumentKeys: ToDocumentKeys(docEvent.DocumentKeys),
+		Type:        eventType,
+		Publisher:   ToClient(docEvent.Publisher),
+		DocumentId:  ToDocumentID(docEvent.DocumentID),
+		DocumentKey: ToDocumentKey(docEvent.DocumentKey),
 	}, nil
 }
 

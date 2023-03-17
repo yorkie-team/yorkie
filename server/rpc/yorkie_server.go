@@ -560,10 +560,10 @@ func (s *yorkieServer) UpdatePresence(
 	}
 
 	s.backend.Coordinator.Publish(ctx, cli.ID, sync.DocEvent{
-		Type:         types.DocumentsWatchedEvent,
-		Publisher:    *cli,
-		DocumentIDs:  []types.ID{documentID},
-		DocumentKeys: []key.Key{documentKey},
+		Type:        types.DocumentsWatchedEvent,
+		Publisher:   *cli,
+		DocumentID:  documentID,
+		DocumentKey: documentKey,
 	})
 
 	return &api.UpdatePresenceResponse{}, nil
@@ -590,10 +590,10 @@ func (s *yorkieServer) watchDoc(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:         types.DocumentsWatchedEvent,
-			Publisher:    subscription.Subscriber(),
-			DocumentIDs:  []types.ID{documentID},
-			DocumentKeys: []key.Key{documentKey},
+			Type:        types.DocumentsWatchedEvent,
+			Publisher:   subscription.Subscriber(),
+			DocumentID:  documentID,
+			DocumentKey: documentKey,
 		},
 	)
 
@@ -611,10 +611,10 @@ func (s *yorkieServer) unwatchDoc(
 		ctx,
 		subscription.Subscriber().ID,
 		sync.DocEvent{
-			Type:         types.DocumentsUnwatchedEvent,
-			Publisher:    subscription.Subscriber(),
-			DocumentIDs:  []types.ID{documentID},
-			DocumentKeys: []key.Key{documentKey},
+			Type:        types.DocumentsUnwatchedEvent,
+			Publisher:   subscription.Subscriber(),
+			DocumentID:  documentID,
+			DocumentKey: documentKey,
 		},
 	)
 }

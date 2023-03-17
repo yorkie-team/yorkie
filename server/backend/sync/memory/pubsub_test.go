@@ -43,10 +43,10 @@ func TestPubSub(t *testing.T) {
 		id := types.ID(t.Name() + "id")
 		docKey := key.Key(t.Name() + "docKey")
 		docEvent := sync.DocEvent{
-			Type:         types.DocumentsWatchedEvent,
-			Publisher:    actorB,
-			DocumentIDs:  []types.ID{id},
-			DocumentKeys: []key.Key{docKey},
+			Type:        types.DocumentsWatchedEvent,
+			Publisher:   actorB,
+			DocumentID:  id,
+			DocumentKey: docKey,
 		}
 		clientDocEvent := sync.ClientDocEvent{
 			Type:        types.DocumentsWatchedEvent,

@@ -161,49 +161,48 @@ func (m *PubSub) Publish(
 	m.subscriptionsMapMu.RLock()
 	defer m.subscriptionsMapMu.RUnlock()
 
-	for idx, documentID := range event.DocumentIDs {
-		if logging.Enabled(zap.DebugLevel) {
-			logging.From(ctx).Debugf(`Publish(%s,%s) Start`, documentID.String(), publisherID.String())
-		}
+	documentID := event.DocumentID
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(`Publish(%s,%s) Start`, documentID.String(), publisherID.String())
+	}
 
-		if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
-			for _, sub := range subs.Map() {
-				if sub.Subscriber().ID.Compare(publisherID) == 0 {
-					continue
-				}
+	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
+		for _, sub := range subs.Map() {
+			if sub.Subscriber().ID.Compare(publisherID) == 0 {
+				continue
+			}
 
-				if logging.Enabled(zap.DebugLevel) {
-					logging.From(ctx).Debugf(
-						`Publish %s(%s,%s) to %s`,
-						event.Type,
-						documentID.String(),
-						publisherID.String(),
-						sub.SubscriberID(),
-					)
-				}
+			if logging.Enabled(zap.DebugLevel) {
+				logging.From(ctx).Debugf(
+					`Publish %s(%s,%s) to %s`,
+					event.Type,
+					documentID.String(),
+					publisherID.String(),
+					sub.SubscriberID(),
+				)
+			}
 
-				watchDocEvent := sync.ClientDocEvent{
-					Type:        event.Type,
-					Publisher:   event.Publisher,
-					DocumentKey: event.DocumentKeys[idx],
-				}
-				// NOTE: When a subscription is being closed by a subscriber,
-				// the subscriber may not receive messages.
-				select {
-				case sub.Events() <- watchDocEvent:
-				case <-gotime.After(100 * gotime.Millisecond):
-					logging.From(ctx).Warnf(
-						`Publish(%s,%s) to %s timeout`,
-						documentID.String(),
-						publisherID.String(),
-						sub.SubscriberID(),
-					)
-				}
+			watchDocEvent := sync.ClientDocEvent{
+				Type:        event.Type,
+				Publisher:   event.Publisher,
+				DocumentKey: event.DocumentKey,
+			}
+			// NOTE: When a subscription is being closed by a subscriber,
+			// the subscriber may not receive messages.
+			select {
+			case sub.Events() <- watchDocEvent:
+			case <-gotime.After(100 * gotime.Millisecond):
+				logging.From(ctx).Warnf(
+					`Publish(%s,%s) to %s timeout`,
+					documentID.String(),
+					publisherID.String(),
+					sub.SubscriberID(),
+				)
 			}
 		}
-		if logging.Enabled(zap.DebugLevel) {
-			logging.From(ctx).Debugf(`Publish(%s,%s) End`, documentID.String(), publisherID.String())
-		}
+	}
+	if logging.Enabled(zap.DebugLevel) {
+		logging.From(ctx).Debugf(`Publish(%s,%s) End`, documentID.String(), publisherID.String())
 	}
 }
 
