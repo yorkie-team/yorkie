@@ -384,7 +384,7 @@ func (c *Client) Watch(
 			ID:           c.id,
 			PresenceInfo: c.presenceInfo,
 		}),
-		DocumentId: converter.ToDocumentID(attachment.docID),
+		DocumentId: attachment.docID.String(),
 	})
 	if err != nil {
 		return nil, err
@@ -393,7 +393,7 @@ func (c *Client) Watch(
 	handleResponse := func(pbResp *api.WatchDocumentResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentResponse_Initialization_:
-			clients, err := converter.FromClients(resp.Initialization.PeersMap)
+			clients, err := converter.FromClients(resp.Initialization.Peers)
 			if err != nil {
 				return nil, err
 			}
@@ -500,7 +500,7 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 				ID:           c.id,
 				PresenceInfo: c.presenceInfo,
 			}),
-			DocumentId: converter.ToDocumentID(attachment.docID),
+			DocumentId: attachment.docID.String(),
 		}); err != nil {
 			return err
 		}

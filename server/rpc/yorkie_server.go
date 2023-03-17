@@ -420,7 +420,7 @@ func (s *yorkieServer) WatchDocument(
 	if err := stream.Send(&api.WatchDocumentResponse{
 		Body: &api.WatchDocumentResponse_Initialization_{
 			Initialization: &api.WatchDocumentResponse_Initialization{
-				PeersMap: converter.ToClients(peersMap),
+				Peers: converter.ToClients(peersMap),
 			},
 		},
 	}); err != nil {
@@ -444,7 +444,7 @@ func (s *yorkieServer) WatchDocument(
 					Event: &api.ClientDocEvent{
 						Type:        eventType,
 						Publisher:   converter.ToClient(event.Publisher),
-						DocumentKey: converter.ToDocumentKey(event.DocumentKey),
+						DocumentKey: event.DocumentKey.String(),
 					},
 				},
 			}); err != nil {

@@ -84,7 +84,7 @@ message WatchDocumentRequest {
 
 message WatchDocumentResponse {
   message Initialization {
-    Clients peers_map = 1;
+    repeated Client peers = 1;
   }
 
   oneof body {
