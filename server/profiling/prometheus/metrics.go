@@ -19,35 +19,36 @@ package prometheus
 
 import (
 	"fmt"
-	"github.com/yorkie-team/yorkie/api/types"
-	"golang.org/x/net/context"
-	grpcmetadata "google.golang.org/grpc/metadata"
 	"os"
 	"strings"
+
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	grpcmetadata "google.golang.org/grpc/metadata"
 
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"google.golang.org/grpc"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/internal/version"
 )
 
 const (
 	namespace          = "yorkie"
-	YorkieSDKType      = "yorkie_sdk_type"
-	YorkieSDKVersion   = "yorkie_sdk_version"
-	GRPCMethod         = "grpc_method"
-	ProjectID          = "project_id"
-	ProjectName        = "project_name"
-	ServerInstanceName = "server_instance_name"
+	yorkieSDKType      = "yorkie_sdk_type"
+	yorkieSDKVersion   = "yorkie_sdk_version"
+	grpcMethod         = "grpc_method"
+	projectID          = "project_id"
+	projectName        = "project_name"
+	serverInstanceName = "server_instance_name"
 )
 
 var (
-	PodName       = os.Getenv("POD_NAME") // TODO: add pod name env in cluster mode
-	ContainerName = os.Getenv("HOSTNAME") // docker container name
-	DefaultName   = "local"
+	podName       = os.Getenv("POD_NAME") // TODO: add pod name env in cluster mode
+	containerName = os.Getenv("HOSTNAME") // docker container name
+	defaultName   = "local"
 )
 
 // Metrics manages the metric information that Yorkie is trying to measure.
@@ -143,12 +144,12 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "type_version_count",
 			Help:      "description",
 		}, []string{
-			YorkieSDKType,
-			YorkieSDKVersion,
-			GRPCMethod,
-			ProjectID,
-			ProjectName,
-			ServerInstanceName,
+			yorkieSDKType,
+			yorkieSDKVersion,
+			grpcMethod,
+			projectID,
+			projectName,
+			serverInstanceName,
 		}),
 	}
 
@@ -221,25 +222,25 @@ func (m *Metrics) Registry() *prometheus.Registry {
 }
 
 // MetricYorkieUserAgent metric yorkie sdk with information
-func (m *Metrics) MetricYorkieUserAgent(ctx context.Context, project *types.Project, grpcMethod string) {
+func (m *Metrics) MetricYorkieUserAgent(ctx context.Context, project *types.Project, methodName string) {
 
 	data, ok := grpcmetadata.FromIncomingContext(ctx)
 	if !ok {
 		return
 	}
 
-	yorkieSDKType, yorkieSDKVersion := getYorkieSDKTypeAndVersion(data)
-	if yorkieSDKType == "" || yorkieSDKVersion == "" {
+	sdkType, sdkVersion := getYorkieSDKTypeAndVersion(data)
+	if sdkType == "" || sdkVersion == "" {
 		return
 	}
 
 	m.AddYorkieUserAgent(prometheus.Labels{
-		YorkieSDKType:      yorkieSDKType,
-		YorkieSDKVersion:   yorkieSDKVersion,
-		GRPCMethod:         grpcMethod,
-		ProjectID:          project.ID.String(),
-		ProjectName:        project.Name,
-		ServerInstanceName: getServerInstanceName(),
+		yorkieSDKType:      sdkType,
+		yorkieSDKVersion:   sdkVersion,
+		grpcMethod:         methodName,
+		projectID:          project.ID.String(),
+		projectName:        project.Name,
+		serverInstanceName: getServerInstanceName(),
 	})
 }
 
@@ -266,11 +267,11 @@ func getYorkieSDKTypeAndVersion(data grpcmetadata.MD) (string, string) {
 
 func getServerInstanceName() string {
 	switch {
-	case PodName != "":
-		return PodName
-	case ContainerName != "":
-		return ContainerName
+	case podName != "":
+		return podName
+	case containerName != "":
+		return containerName
 	default:
-		return DefaultName
+		return defaultName
 	}
 }

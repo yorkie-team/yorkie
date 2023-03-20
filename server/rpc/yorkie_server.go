@@ -35,14 +35,14 @@ import (
 )
 
 const (
-	ActivateClient   = "ActivateClient"
-	DeactivateClient = "DeactivateClient"
-	AttachDocument   = "AttachDocument"
-	DetachDocument   = "DetachDocument"
-	PushPullChanges  = "PushPullChanges"
-	WatchDocument    = "WatchDocument"
-	RemoveDocument   = "RemoveDocument"
-	UpdatePresence   = "UpdatePresence"
+	activateClient   = "ActivateClient"
+	deactivateClient = "DeactivateClient"
+	attachDocument   = "AttachDocument"
+	detachDocument   = "DetachDocument"
+	pushPullChanges  = "PushPullChanges"
+	watchDocument    = "WatchDocument"
+	removeDocument   = "RemoveDocument"
+	updatePresence   = "UpdatePresence"
 )
 
 type yorkieServer struct {
@@ -84,7 +84,7 @@ func (s *yorkieServer) ActivateClient(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, ActivateClient)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, activateClient)
 
 	return &api.ActivateClientResponse{
 		ClientKey: cli.Key,
@@ -119,7 +119,7 @@ func (s *yorkieServer) DeactivateClient(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, DeactivateClient)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, deactivateClient)
 
 	return &api.DeactivateClientResponse{
 		ClientId: pbClientID,
@@ -191,7 +191,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, AttachDocument)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, attachDocument)
 
 	return &api.AttachDocumentResponse{
 		ChangePack: pbChangePack,
@@ -265,7 +265,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, DetachDocument)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, detachDocument)
 
 	return &api.DetachDocumentResponse{
 		ChangePack: pbChangePack,
@@ -342,7 +342,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, PushPullChanges)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, pushPullChanges)
 
 	return &api.PushPullChangesResponse{
 		ChangePack: pbChangePack,
@@ -405,7 +405,7 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(stream.Context(), project, WatchDocument)
+	s.backend.Metrics.MetricYorkieUserAgent(stream.Context(), project, watchDocument)
 
 	for {
 		select {
@@ -500,7 +500,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, RemoveDocument)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, removeDocument)
 
 	return &api.RemoveDocumentResponse{
 		ChangePack: pbChangePack,
@@ -537,7 +537,7 @@ func (s *yorkieServer) UpdatePresence(
 		DocumentID: documentID,
 	})
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, UpdatePresence)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, updatePresence)
 
 	return &api.UpdatePresenceResponse{}, nil
 }
