@@ -49,6 +49,10 @@ var (
 	podName       = os.Getenv("POD_NAME") // TODO: add pod name env in cluster mode
 	containerName = os.Getenv("HOSTNAME") // docker container name
 	defaultName   = "local"
+	emptyProject  = &types.Project{
+		Name: "",
+		ID:   types.ID(""),
+	}
 )
 
 // Metrics manages the metric information that Yorkie is trying to measure.
@@ -246,12 +250,7 @@ func (m *Metrics) MetricYorkieUserAgent(ctx context.Context, project *types.Proj
 
 // MetricYorkieUserAgentWithDefaultProject metric yorkie sdk with information (default project)
 func (m *Metrics) MetricYorkieUserAgentWithDefaultProject(ctx context.Context, grpcMethod string) {
-	project := &types.Project{
-		Name: "default",
-		ID:   types.ID("000000000000000000000000"),
-	}
-
-	m.MetricYorkieUserAgent(ctx, project, grpcMethod)
+	m.MetricYorkieUserAgent(ctx, emptyProject, grpcMethod)
 }
 
 func getYorkieSDKTypeAndVersion(data grpcmetadata.MD) (string, string) {
