@@ -19,6 +19,11 @@ package prometheus
 
 import (
 	"fmt"
+	"github.com/yorkie-team/yorkie/api/types"
+	"golang.org/x/net/context"
+	grpcmetadata "google.golang.org/grpc/metadata"
+	"os"
+	"strings"
 
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
@@ -30,7 +35,19 @@ import (
 )
 
 const (
-	namespace = "yorkie"
+	namespace          = "yorkie"
+	YorkieSDKType      = "yorkie_sdk_type"
+	YorkieSDKVersion   = "yorkie_sdk_version"
+	GRPCMethod         = "grpc_method"
+	ProjectID          = "project_id"
+	ProjectName        = "project_name"
+	ServerInstanceName = "server_instance_name"
+)
+
+var (
+	PodName       = os.Getenv("POD_NAME") // TODO: add pod name env in cluster mode
+	ContainerName = os.Getenv("HOSTNAME") // docker container name
+	DefaultName   = "local"
 )
 
 // Metrics manages the metric information that Yorkie is trying to measure.
@@ -47,6 +64,8 @@ type Metrics struct {
 	pushPullSentOperationsTotal     prometheus.Counter
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytesTotal      prometheus.Counter
+
+	yorkieUserAgent *prometheus.CounterVec
 }
 
 // NewMetrics creates a new instance of Metrics.
@@ -118,6 +137,19 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "snapshot_bytes_total",
 			Help:      "The total bytes of snapshots for response packs in PushPull.",
 		}),
+		yorkieUserAgent: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "user_agent",
+			Name:      "type_version_count",
+			Help:      "description",
+		}, []string{
+			YorkieSDKType,
+			YorkieSDKVersion,
+			GRPCMethod,
+			ProjectID,
+			ProjectName,
+			ServerInstanceName,
+		}),
 	}
 
 	metrics.serverVersion.With(prometheus.Labels{
@@ -168,6 +200,11 @@ func (m *Metrics) AddPushPullSnapshotBytes(bytes int) {
 	m.pushPullSnapshotBytesTotal.Add(float64(bytes))
 }
 
+// AddYorkieUserAgent adds the request count per yorkie sdk type and version
+func (m *Metrics) AddYorkieUserAgent(labels prometheus.Labels) {
+	m.yorkieUserAgent.With(labels).Inc()
+}
+
 // RegisterGRPCServer registers the given gRPC server.
 func (m *Metrics) RegisterGRPCServer(server *grpc.Server) {
 	m.serverMetrics.InitializeMetrics(server)
@@ -181,4 +218,59 @@ func (m *Metrics) ServerMetrics() *grpcprometheus.ServerMetrics {
 // Registry returns the registry of this metrics.
 func (m *Metrics) Registry() *prometheus.Registry {
 	return m.registry
+}
+
+// MetricYorkieUserAgent metric yorkie sdk with information
+func (m *Metrics) MetricYorkieUserAgent(ctx context.Context, project *types.Project, grpcMethod string) {
+
+	data, ok := grpcmetadata.FromIncomingContext(ctx)
+	if !ok {
+		return
+	}
+
+	yorkieSDKType, yorkieSDKVersion := getYorkieSDKTypeAndVersion(data)
+	if yorkieSDKType == "" || yorkieSDKVersion == "" {
+		return
+	}
+
+	m.AddYorkieUserAgent(prometheus.Labels{
+		YorkieSDKType:      yorkieSDKType,
+		YorkieSDKVersion:   yorkieSDKVersion,
+		GRPCMethod:         grpcMethod,
+		ProjectID:          project.ID.String(),
+		ProjectName:        project.Name,
+		ServerInstanceName: getServerInstanceName(),
+	})
+}
+
+// MetricYorkieUserAgentWithDefaultProject metric yorkie sdk with information (default project)
+func (m *Metrics) MetricYorkieUserAgentWithDefaultProject(ctx context.Context, grpcMethod string) {
+	project := &types.Project{
+		Name: "default",
+		ID:   types.ID("000000000000000000000000"),
+	}
+
+	m.MetricYorkieUserAgent(ctx, project, grpcMethod)
+}
+
+func getYorkieSDKTypeAndVersion(data grpcmetadata.MD) (string, string) {
+	yorkieUserAgentSlice := data["x-yorkie-user-agent"]
+	if len(yorkieUserAgentSlice) == 0 {
+		return "", ""
+	}
+
+	yorkieUserAgent := yorkieUserAgentSlice[0]
+	agent := strings.Split(yorkieUserAgent, "/")
+	return agent[0], agent[1]
+}
+
+func getServerInstanceName() string {
+	switch {
+	case PodName != "":
+		return PodName
+	case ContainerName != "":
+		return ContainerName
+	default:
+		return DefaultName
+	}
 }

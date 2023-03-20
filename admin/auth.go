@@ -18,10 +18,13 @@ package admin
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/internal/version"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
+
+const YorkieSDKType = "yorkie-go-sdk"
 
 // AuthInterceptor is an interceptor for authentication.
 type AuthInterceptor struct {
@@ -53,6 +56,7 @@ func (i *AuthInterceptor) Unary() grpc.UnaryClientInterceptor {
 	) error {
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 			"authorization", i.token,
+			"x-yorkie-user-agent", YorkieSDKType+"/"+version.Version,
 		))
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
@@ -70,6 +74,7 @@ func (i *AuthInterceptor) Stream() grpc.StreamClientInterceptor {
 	) (grpc.ClientStream, error) {
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 			"authorization", i.token,
+			"x-yorkie-user-agent", YorkieSDKType+"/"+version.Version,
 		))
 		return streamer(ctx, desc, cc, method, opts...)
 	}
