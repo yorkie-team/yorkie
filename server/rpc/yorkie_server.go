@@ -566,7 +566,7 @@ func (s *yorkieServer) UpdatePresence(
 	}
 
 	s.backend.Coordinator.Publish(ctx, cli.ID, sync.DocEvent{
-		Type:       types.DocumentsWatchedEvent,
+		Type:       types.PresenceChangedEvent,
 		Publisher:  *cli,
 		DocumentID: documentID,
 	})
