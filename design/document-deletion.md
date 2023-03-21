@@ -53,42 +53,42 @@ As you can see above, by introducing document deletion, `Attached` document can 
 
 The overall document deletion process looks like this:
 
-1. Client sends document delete API(`RemoveDocument`) with  `DocIsRemoved = true` in request `ChangePack`
-2. In `PushPull` of `RemoveDocument`(or other APIs), check `DocIsRemoved`. And if `DocIsRemoved = true`, simply set `RemovedAt` date in `docInfo` to logically(soft) remove document.
-3. Set response `ChangePack`'s `DocIsRemoved` to `true` to inform document deletion.
-4. After certain period of time(`DocumentRemoveDuration`), document is physically removed from database.
+1. Client sends document delete API(`RemoveDocument`) with  `IsRemoved = true` in request `ChangePack`
+2. In `PushPull` of `RemoveDocument`(or other APIs), check `IsRemoved`. And if `IsRemoved = true`, simply set `RemovedAt` date in `docInfo` to logically(soft) remove the document.
+3. Set response `ChangePack`'s `IsRemoved` to `true` to inform document deletion.
+4. After a certain period of time(`DocumentRemoveDuration`), the document is physically removed from the database.
 
-The very first step of document deletion is to perform soft deletion of the document, which is shown as _Step 1_ ~ _Step_ 3 in above.
+The very first step of document deletion is to perform soft deletion of the document, which is shown as _Step 1_ ~ _Step_ 3 above.
 
-**Step 1: Client sends document delete API(`RemoveDocument`) with  `DocIsRemoved = true` in request `ChangePack`**
+**Step 1: Client sends document delete API(`RemoveDocument`) with  `IsRemoved = true` in request `ChangePack`**
 
 https://github.com/yorkie-team/yorkie/blob/dcf4cfb6ff98173c6d02a0abed89cb847f8aaa1e/client/client.go#L599-L638
 
-The first step is to receive client document delete request and validate document state.
+The first step is to receive client document deletion request and validate the document state.
 
-As we have discussed earlier, only `Attached` document can perform `Remove` action and change state to `Removed`. This is implemented in first few lines of codes in above.
+As we have discussed earlier, only `Attached` document can perform `Remove` action and change the state to `Removed`. This is implemented in the first few lines of codes above.
 
-**Step 2: In `PushPull` of `RemoveDocument`(or other APIs), check `DocIsRemoved`. And if `DocIsRemoved = true`, simply set `RemovedAt` date in `docInfo` to logically(soft) remove document.**
+**Step 2: In `PushPull` of `RemoveDocument`(or other APIs), check `IsRemoved`. And if `IsRemoved = true`, simply set `RemovedAt` date in `docInfo` to logically(soft) remove document.**
 
 https://github.com/yorkie-team/yorkie/blob/dcf4cfb6ff98173c6d02a0abed89cb847f8aaa1e/server/packs/packs.go#L48-L100
 
-The second step is to check deletion flag `DocIsRemoved` in `RemoveDocument` API's `PushPull()` method, and if `DocIsRemoved` is true, use `be.DB.CreateChangeInfos()` method to logically(soft) remove document.
+The second step is to check the deletion flag `IsRemoved` in `RemoveDocument` API's `PushPull()` method, and if `IsRemoved` is true, use `be.DB.CreateChangeInfos()` method to logically(soft) remove the document.
 
 https://github.com/yorkie-team/yorkie/blob/dcf4cfb6ff98173c6d02a0abed89cb847f8aaa1e/server/backend/database/mongo/client.go#L816-L889
 
-In `be.DB.CreateChangeInfos()`, if `isRemoved` flag is `true`,  `RemovedAt` date is updated to `now` in `docInfo`. This is how we perform soft deletion of document: just initialize date in `RemovedAt` of `docInfo`. If `isRemoved` is `false`, `RemovedAt` date will not be set and stay as `not exists`.
+In `be.DB.CreateChangeInfos()`, if `isRemoved` flag is `true`,  `RemovedAt` date is updated to `now` in `docInfo`. This is how we perform soft deletion of document: just initialize the date in `RemovedAt` of `docInfo`. If `isRemoved` is `false`, `RemovedAt` date will not be set and stay as `not exists`.
 
-By this mechanism, we can filter out soft(logical) removed document by checking `RemovedAt` exists or not. And perform hard(physical) deletion.
+By this mechanism, we can filter out soft(logical) removed documents by checking `RemovedAt` exists or not. And perform hard(physical) deletion.
 
-**Step 3: Set response `ChangePack`'s `DocIsRemoved` to `true` to inform document deletion.**
+**Step 3: Set response `ChangePack`'s `IsRemoved` to `true` to inform document deletion.**
 
 https://github.com/yorkie-team/yorkie/blob/dcf4cfb6ff98173c6d02a0abed89cb847f8aaa1e/server/rpc/yorkie_server.go#L457-L538
 
-After the soft(logical) deletion of document is done, we inform client that document is removed by setting `DocIsRemoved` to `true` in response `ChangePack`.
+After the soft(logical) deletion of the document is done, we inform client that the document is removed by setting `IsRemoved` to `true` in response `ChangePack`.
 
-Since we have set `docInfo`'s `RemovedAt` date, all other APIs' response will also include `DocIsRemoved` as `true`. This is because all APIs' use `PushPull()` method as a common method to perform document operation, and it will also set `DocIsRemoved` to `true` if `RemovedAt` date exists in `docInfo`.
+Since we have set `docInfo`'s `RemovedAt` date, all other APIs' responses will also include `IsRemoved` as `true`. This is because all APIs use `PushPull()` method as a common method to perform document operations, and it will also set `IsRemoved` to `true` if `RemovedAt` date exists in `docInfo`.
 
-This will ensure that if a document is removed, all other peers who currently use it will also know that the document is removed by the next API response's `DocIsRemoved` flag. This is how we ensure document deletion propagation among peers.
+This will ensure that if a document is removed, all other peers who currently use it will also know that the document is removed by the next API response's `IsRemoved` flag. This is how we ensure document deletion propagation among peers.
 
 ### New Key - ID Mapping in Document
 
