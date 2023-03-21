@@ -749,16 +749,15 @@ func (d *DB) CreateChangeInfos(
 
 	raw, err := txn.First(
 		tblDocuments,
-		"project_id_key_removed_at",
+		"project_id_id",
 		projectID.String(),
-		docInfo.Key.String(),
-		gotime.Time{},
+		docInfo.ID.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("find document by key: %w", err)
+		return fmt.Errorf("find document: %w", err)
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", docInfo.Key, database.ErrDocumentNotFound)
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
 	if loadedDocInfo.ServerSeq != initialServerSeq {
