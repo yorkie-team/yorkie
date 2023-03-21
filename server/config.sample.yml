@@ -71,6 +71,9 @@ Backend:
   # AuthWebhookCacheUnauthTTL is the TTL value to set when caching the unauthorized result.
   AuthWebhookCacheUnauthTTL: "10s"
 
+  # Hostname is yorkie server hostname. hostname is used by metrics.
+  Hostname: "test-hostname"
+
 # Mongo is the MongoDB configuration (Optional).
 Mongo:
   # ConnectionTimeout is the timeout for connecting to MongoDB.

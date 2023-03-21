@@ -65,6 +65,8 @@ const (
 	DefaultAuthWebhookCacheSize       = 5000
 	DefaultAuthWebhookCacheAuthTTL    = 10 * time.Second
 	DefaultAuthWebhookCacheUnauthTTL  = 10 * time.Second
+
+	DefaultHostname = ""
 )
 
 // Config is the configuration for creating a Yorkie instance.

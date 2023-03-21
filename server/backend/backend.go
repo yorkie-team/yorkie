@@ -69,6 +69,11 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("get hostname: %w", err)
 	}
+	if conf.Hostname != "" {
+		hostname = conf.Hostname
+	} else {
+		conf.Hostname = hostname
+	}
 
 	serverInfo := &sync.ServerInfo{
 		ID:          xid.New().String(),

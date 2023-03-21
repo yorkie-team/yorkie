@@ -372,6 +372,12 @@ func init() {
 		server.DefaultAuthWebhookCacheUnauthTTL,
 		"TTL value to set when caching unauthorized webhook response.",
 	)
+	cmd.Flags().StringVar(
+		&conf.Backend.Hostname,
+		"hostname",
+		server.DefaultHostname,
+		"Yorkie Server Hostname",
+	)
 
 	rootCmd.AddCommand(cmd)
 }

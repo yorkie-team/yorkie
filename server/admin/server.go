@@ -181,7 +181,7 @@ func (s *Server) SignUp(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgentWithDefaultProject(ctx, signUp)
+	s.backend.Metrics.MetricYorkieUserAgentWithDefaultProject(ctx, s.backend.Config.Hostname, signUp)
 
 	return &api.SignUpResponse{
 		User: pbUser,
@@ -208,7 +208,7 @@ func (s *Server) LogIn(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgentWithDefaultProject(ctx, logIn)
+	s.backend.Metrics.MetricYorkieUserAgentWithDefaultProject(ctx, s.backend.Config.Hostname, logIn)
 
 	return &api.LogInResponse{
 		Token: token,
@@ -236,7 +236,7 @@ func (s *Server) CreateProject(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, createProject)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, createProject)
 
 	return &api.CreateProjectResponse{
 		Project: pbProject,
@@ -259,7 +259,7 @@ func (s *Server) ListProjects(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgentWithDefaultProject(ctx, listProjects)
+	s.backend.Metrics.MetricYorkieUserAgentWithDefaultProject(ctx, s.backend.Config.Hostname, listProjects)
 
 	return &api.ListProjectsResponse{
 		Projects: pbProjects,
@@ -282,7 +282,7 @@ func (s *Server) GetProject(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, getProject)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, getProject)
 
 	return &api.GetProjectResponse{
 		Project: pbProject,
@@ -319,7 +319,7 @@ func (s *Server) UpdateProject(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, updateProject)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, updateProject)
 
 	return &api.UpdateProjectResponse{
 		Project: pbProject,
@@ -352,7 +352,7 @@ func (s *Server) GetDocument(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, getDocument)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, getDocument)
 
 	return &api.GetDocumentResponse{
 		Document: pbDocument,
@@ -386,7 +386,7 @@ func (s *Server) GetSnapshotMeta(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, getSnapshotMeta)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, getSnapshotMeta)
 
 	return &api.GetSnapshotMetaResponse{
 		Lamport:  doc.Lamport(),
@@ -424,7 +424,7 @@ func (s *Server) ListDocuments(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, listDocuments)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, listDocuments)
 
 	return &api.ListDocumentsResponse{
 		Documents: pbDocuments,
@@ -458,7 +458,7 @@ func (s *Server) SearchDocuments(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, searchDocuments)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, searchDocuments)
 
 	return &api.SearchDocumentsResponse{
 		TotalCount: int32(result.TotalCount),
@@ -510,7 +510,7 @@ func (s *Server) ListChanges(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, project, listChanges)
+	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, listChanges)
 
 	return &api.ListChangesResponse{
 		Changes: pbChanges,

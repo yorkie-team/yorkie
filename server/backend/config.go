@@ -68,6 +68,9 @@ type Config struct {
 
 	// AuthWebhookCacheUnauthTTL is the TTL value to set when caching the unauthorized result.
 	AuthWebhookCacheUnauthTTL string `yaml:"AuthWebhookCacheUnauthTTL"`
+
+	// Hostname is yorkie server hostname. hostname is used by metrics.
+	Hostname string `yaml:"Hostname"`
 }
 
 // Validate validates this config.
