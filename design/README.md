@@ -12,7 +12,7 @@
 - [Housekeeping](housekeeping.md): Deactivating outdated clients for efficient garbage collection
 - [Retention](retention.md): Clearing unnecessary changes with `--backend-snapshot-with-purging-changes` flag
 - [Cluster Mode](cluster-mode.md): Multiple-agent cluster mode with ETCD
-- [Document Deletion](document-deletion.md): Soft deletion of document
+- [Document Removal](document-removal.md): Soft deletion of document
 
 ## Maintaining the Document
 
