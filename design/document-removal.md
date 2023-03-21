@@ -53,14 +53,14 @@ As you can see above, by introducing document removal, `Attached` document can n
 
 The overall document removal process looks like this:
 
-1. The client sends the remove document API(`RemoveDocument`) with `IsRemoved = true` in the request `ChangePack`
+1. The client calls the remove document API(`RemoveDocument`) with `IsRemoved = true` in the request `ChangePack`
 2. In `PushPull` of `RemoveDocument`(or other APIs), check `IsRemoved`. And if `IsRemoved = true`, simply set `RemovedAt` date in `docInfo` to logically (softly) remove the document.
 3. Set response `ChangePack`'s `IsRemoved` to `true` to inform document removal.
 4. After a certain period of time(`DocumentRemoveDuration`), the document is physically removed from the database.
 
 The very first step of document removal is to perform soft removal of the document, which is shown as _Step 1_ ~ _Step_ 3 above.
 
-**Step 1: The client sends the document remove API(`RemoveDocument`) with `IsRemoved = true` in the request `ChangePack`**
+**Step 1: The client calls the document remove API(`RemoveDocument`) with `IsRemoved = true` in the request `ChangePack`**
 
 https://github.com/yorkie-team/yorkie/blob/dcf4cfb6ff98173c6d02a0abed89cb847f8aaa1e/client/client.go#L599-L638
 
