@@ -65,13 +65,12 @@ func New(
 	clusterAddr string,
 	metrics *prometheus.Metrics,
 ) (*Backend, error) {
-	hostname, err := os.Hostname()
-	if err != nil {
-		return nil, fmt.Errorf("get hostname: %w", err)
-	}
-	if conf.Hostname != "" {
-		hostname = conf.Hostname
-	} else {
+	hostname := conf.Hostname
+	if hostname == "" {
+		hostname, err := os.Hostname()
+		if err != nil {
+			return nil, fmt.Errorf("os.Hostname: %w", err)
+		}
 		conf.Hostname = hostname
 	}
 
@@ -85,6 +84,7 @@ func New(
 	bg := background.New()
 
 	var db database.Database
+	var err error
 	if mongoConf != nil {
 		db, err = mongo.Dial(mongoConf)
 		if err != nil {

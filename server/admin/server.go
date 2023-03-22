@@ -41,20 +41,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
-const (
-	signUp          = "SignUp"
-	logIn           = "LogIn"
-	createProject   = "CreateProject"
-	listProjects    = "ListProjects"
-	getProject      = "GetProject"
-	updateProject   = "UpdateProject"
-	getDocument     = "GetDocument"
-	getSnapshotMeta = "GetSnapshotMeta"
-	listDocuments   = "ListDocuments"
-	searchDocuments = "SearchDocuments"
-	listChanges     = "ListChanges"
-)
-
 // ErrInvalidAdminPort occurs when the port in the config is invalid.
 var ErrInvalidAdminPort = errors.New("invalid port number for Admin server")
 
@@ -181,8 +167,6 @@ func (s *Server) SignUp(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgentWithDefaultProject(ctx, s.backend.Config.Hostname, signUp)
-
 	return &api.SignUpResponse{
 		User: pbUser,
 	}, nil
@@ -207,8 +191,6 @@ func (s *Server) LogIn(
 	if err != nil {
 		return nil, err
 	}
-
-	s.backend.Metrics.MetricYorkieUserAgentWithDefaultProject(ctx, s.backend.Config.Hostname, logIn)
 
 	return &api.LogInResponse{
 		Token: token,
@@ -236,8 +218,6 @@ func (s *Server) CreateProject(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, createProject)
-
 	return &api.CreateProjectResponse{
 		Project: pbProject,
 	}, nil
@@ -259,8 +239,6 @@ func (s *Server) ListProjects(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgentWithDefaultProject(ctx, s.backend.Config.Hostname, listProjects)
-
 	return &api.ListProjectsResponse{
 		Projects: pbProjects,
 	}, nil
@@ -281,8 +259,6 @@ func (s *Server) GetProject(
 	if err != nil {
 		return nil, err
 	}
-
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, getProject)
 
 	return &api.GetProjectResponse{
 		Project: pbProject,
@@ -319,8 +295,6 @@ func (s *Server) UpdateProject(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, updateProject)
-
 	return &api.UpdateProjectResponse{
 		Project: pbProject,
 	}, nil
@@ -351,8 +325,6 @@ func (s *Server) GetDocument(
 	if err != nil {
 		return nil, err
 	}
-
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, getDocument)
 
 	return &api.GetDocumentResponse{
 		Document: pbDocument,
@@ -385,8 +357,6 @@ func (s *Server) GetSnapshotMeta(
 	if err != nil {
 		return nil, err
 	}
-
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, getSnapshotMeta)
 
 	return &api.GetSnapshotMetaResponse{
 		Lamport:  doc.Lamport(),
@@ -424,8 +394,6 @@ func (s *Server) ListDocuments(
 		return nil, err
 	}
 
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, listDocuments)
-
 	return &api.ListDocumentsResponse{
 		Documents: pbDocuments,
 	}, nil
@@ -457,8 +425,6 @@ func (s *Server) SearchDocuments(
 	if err != nil {
 		return nil, err
 	}
-
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, searchDocuments)
 
 	return &api.SearchDocumentsResponse{
 		TotalCount: int32(result.TotalCount),
@@ -509,8 +475,6 @@ func (s *Server) ListChanges(
 	if err != nil {
 		return nil, err
 	}
-
-	s.backend.Metrics.MetricYorkieUserAgent(ctx, s.backend.Config.Hostname, project, listChanges)
 
 	return &api.ListChangesResponse{
 		Changes: pbChanges,

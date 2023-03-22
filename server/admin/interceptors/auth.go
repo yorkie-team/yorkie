@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/admin/auth"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
@@ -59,11 +60,24 @@ func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 			if err != nil {
 				return nil, err
 			}
-
-			return handler(users.With(ctx, user), req)
+			ctx = users.With(ctx, user)
 		}
 
-		return handler(ctx, req)
+		resp, err = handler(ctx, req)
+
+		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
+		data, ok := grpcmetadata.FromIncomingContext(ctx)
+		if ok {
+			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+			i.backend.Metrics.AddUserAgentWithEmptyProject(
+				i.backend.Config.Hostname,
+				sdkType,
+				sdkVersion,
+				info.FullMethod,
+			)
+		}
+
+		return resp, err
 	}
 }
 
@@ -74,9 +88,9 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 		stream grpc.ServerStream,
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
-	) error {
+	) (err error) {
+		ctx := stream.Context()
 		if isRequiredAuth(info.FullMethod) {
-			ctx := stream.Context()
 			user, err := i.authenticate(ctx, info.FullMethod)
 			if err != nil {
 				return err
@@ -84,10 +98,24 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 
 			wrapped := grpcmiddleware.WrapServerStream(stream)
 			wrapped.WrappedContext = users.With(ctx, user)
-			return handler(srv, wrapped)
+			stream = wrapped
 		}
 
-		return handler(srv, stream)
+		err = handler(srv, stream)
+
+		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
+		data, ok := grpcmetadata.FromIncomingContext(ctx)
+		if ok {
+			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+			i.backend.Metrics.AddUserAgentWithEmptyProject(
+				i.backend.Config.Hostname,
+				sdkType,
+				sdkVersion,
+				info.FullMethod,
+			)
+		}
+
+		return err
 	}
 }
 
@@ -113,7 +141,7 @@ func (i *AuthInterceptor) authenticate(
 		return nil, grpcstatus.Errorf(codes.Unauthenticated, "metadata is not provided")
 	}
 
-	authorization := data["authorization"]
+	authorization := data[types.AuthorizationKey]
 	if len(authorization) == 0 {
 		return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is not provided")
 	}
