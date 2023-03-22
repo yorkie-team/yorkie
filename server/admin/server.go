@@ -217,6 +217,7 @@ func (s *Server) CreateProject(
 	if err != nil {
 		return nil, err
 	}
+
 	return &api.CreateProjectResponse{
 		Project: pbProject,
 	}, nil
@@ -225,7 +226,7 @@ func (s *Server) CreateProject(
 // ListProjects lists all projects.
 func (s *Server) ListProjects(
 	ctx context.Context,
-	req *api.ListProjectsRequest,
+	_ *api.ListProjectsRequest,
 ) (*api.ListProjectsResponse, error) {
 	user := users.From(ctx)
 	projectList, err := projects.ListProjects(ctx, s.backend, user.ID)
@@ -258,6 +259,7 @@ func (s *Server) GetProject(
 	if err != nil {
 		return nil, err
 	}
+
 	return &api.GetProjectResponse{
 		Project: pbProject,
 	}, nil

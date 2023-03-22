@@ -71,6 +71,10 @@ Backend:
   # AuthWebhookCacheUnauthTTL is the TTL value to set when caching the unauthorized result.
   AuthWebhookCacheUnauthTTL: "10s"
 
+  # Hostname is the hostname of the server. If not provided, the hostname will be
+  # determined automatically by the OS (Optional, default: os.Hostname()).
+  Hostname: ""
+
 # Mongo is the MongoDB configuration (Optional).
 Mongo:
   # ConnectionTimeout is the timeout for connecting to MongoDB.

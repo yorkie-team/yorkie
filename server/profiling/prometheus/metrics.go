@@ -26,11 +26,26 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"google.golang.org/grpc"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/internal/version"
 )
 
 const (
-	namespace = "yorkie"
+	namespace        = "yorkie"
+	sdkTypeLabel     = "sdk_type"
+	sdkVersionLabel  = "sdk_version"
+	methodLabel      = "grpc_method"
+	projectIDLabel   = "project_id"
+	projectNameLabel = "project_name"
+	hostnameLabel    = "hostname"
+)
+
+var (
+	// emptyProject is used when the project is not specified.
+	emptyProject = &types.Project{
+		Name: "",
+		ID:   types.ID(""),
+	}
 )
 
 // Metrics manages the metric information that Yorkie is trying to measure.
@@ -47,6 +62,8 @@ type Metrics struct {
 	pushPullSentOperationsTotal     prometheus.Counter
 	pushPullSnapshotDurationSeconds prometheus.Histogram
 	pushPullSnapshotBytesTotal      prometheus.Counter
+
+	userAgentTotal *prometheus.CounterVec
 }
 
 // NewMetrics creates a new instance of Metrics.
@@ -118,6 +135,19 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "snapshot_bytes_total",
 			Help:      "The total bytes of snapshots for response packs in PushPull.",
 		}),
+		userAgentTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "user_agent",
+			Name:      "total",
+			Help:      "description",
+		}, []string{
+			sdkTypeLabel,
+			sdkVersionLabel,
+			methodLabel,
+			projectIDLabel,
+			projectNameLabel,
+			hostnameLabel,
+		}),
 	}
 
 	metrics.serverVersion.With(prometheus.Labels{
@@ -166,6 +196,28 @@ func (m *Metrics) ObservePushPullSnapshotDurationSeconds(seconds float64) {
 // AddPushPullSnapshotBytes adds the snapshot byte size of response pack.
 func (m *Metrics) AddPushPullSnapshotBytes(bytes int) {
 	m.pushPullSnapshotBytesTotal.Add(float64(bytes))
+}
+
+// AddUserAgent adds the number of user agent.
+func (m *Metrics) AddUserAgent(
+	hostname string,
+	project *types.Project,
+	sdkType, sdkVersion string,
+	methodName string,
+) {
+	m.userAgentTotal.With(prometheus.Labels{
+		sdkTypeLabel:     sdkType,
+		sdkVersionLabel:  sdkVersion,
+		methodLabel:      methodName,
+		projectIDLabel:   project.ID.String(),
+		projectNameLabel: project.Name,
+		hostnameLabel:    hostname,
+	}).Inc()
+}
+
+// AddUserAgentWithEmptyProject adds the number of user agent with empty project.
+func (m *Metrics) AddUserAgentWithEmptyProject(hostname string, sdkType, sdkVersion, methodName string) {
+	m.AddUserAgent(hostname, emptyProject, sdkType, sdkVersion, methodName)
 }
 
 // RegisterGRPCServer registers the given gRPC server.

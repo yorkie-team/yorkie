@@ -27,6 +27,7 @@ import (
 	grpcmetadata "google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/projects"
@@ -53,16 +54,32 @@ func (i *ContextInterceptor) Unary() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
-		if isRPCService(info.FullMethod) {
-			ctx, err := i.buildContext(ctx)
-			if err != nil {
-				return nil, err
-			}
-
+		// TODO(hackerwins): We need to remove this condition after
+		// extracting cluster service from this server.
+		if !isRPCService(info.FullMethod) {
 			return handler(ctx, req)
 		}
 
-		return handler(ctx, req)
+		ctx, err = i.buildContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err = handler(ctx, req)
+
+		data, ok := grpcmetadata.FromIncomingContext(ctx)
+		if ok {
+			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+			i.backend.Metrics.AddUserAgent(
+				i.backend.Config.Hostname,
+				projects.From(ctx),
+				sdkType,
+				sdkVersion,
+				info.FullMethod,
+			)
+		}
+
+		return resp, err
 	}
 }
 
@@ -74,20 +91,35 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
-		if isRPCService(info.FullMethod) {
-			ctx := ss.Context()
-
-			ctx, err := i.buildContext(ctx)
-			if err != nil {
-				return err
-			}
-
-			wrapped := grpcmiddleware.WrapServerStream(ss)
-			wrapped.WrappedContext = ctx
-			return handler(srv, wrapped)
+		// TODO(hackerwins): We need to remove this condition after
+		// extracting cluster service from this server.
+		if !isRPCService(info.FullMethod) {
+			return handler(srv, ss)
 		}
 
-		return handler(srv, ss)
+		ctx := ss.Context()
+		ctx, err := i.buildContext(ctx)
+		if err != nil {
+			return err
+		}
+		wrapped := grpcmiddleware.WrapServerStream(ss)
+		wrapped.WrappedContext = ctx
+
+		err = handler(srv, wrapped)
+
+		data, ok := grpcmetadata.FromIncomingContext(ctx)
+		if ok {
+			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+			i.backend.Metrics.AddUserAgent(
+				i.backend.Config.Hostname,
+				projects.From(ctx),
+				sdkType,
+				sdkVersion,
+				info.FullMethod,
+			)
+		}
+
+		return err
 	}
 }
 
@@ -105,7 +137,7 @@ func (i *ContextInterceptor) buildContext(ctx context.Context) (context.Context,
 		return nil, grpcstatus.Errorf(codes.Unauthenticated, "metadata is not provided")
 	}
 
-	apiKey := data["x-api-key"]
+	apiKey := data[types.APIKeyKey]
 	if len(apiKey) == 0 && !i.backend.Config.UseDefaultProject {
 		return nil, grpcstatus.Errorf(codes.Unauthenticated, "api key is not provided")
 	}
@@ -113,7 +145,7 @@ func (i *ContextInterceptor) buildContext(ctx context.Context) (context.Context,
 		md.APIKey = apiKey[0]
 	}
 
-	authorization := data["authorization"]
+	authorization := data[types.AuthorizationKey]
 	if len(authorization) > 0 {
 		md.Authorization = authorization[0]
 	}
