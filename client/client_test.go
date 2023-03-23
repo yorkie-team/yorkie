@@ -28,6 +28,7 @@ import (
 	monkey "github.com/undefinedlabs/go-mpatch"
 	"golang.org/x/net/nettest"
 	"google.golang.org/grpc"
+	grpcmetadata "google.golang.org/grpc/metadata"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -35,50 +36,23 @@ import (
 )
 
 type testYorkieServer struct {
-	grpcServer *grpc.Server
+	grpcServer   *grpc.Server
+	yorkieServer *api.UnimplementedYorkieServiceServer
 }
 
-func (t *testYorkieServer) ActivateClient(ctx context.Context, request *api.ActivateClientRequest) (*api.ActivateClientResponse, error) {
-	panic("implement me")
-}
-
-func (t *testYorkieServer) DeactivateClient(ctx context.Context, request *api.DeactivateClientRequest) (*api.DeactivateClientResponse, error) {
-	panic("implement me")
-}
-
-func (t *testYorkieServer) UpdatePresence(ctx context.Context, request *api.UpdatePresenceRequest) (*api.UpdatePresenceResponse, error) {
-	panic("implement me")
-}
-
-func (t *testYorkieServer) AttachDocument(ctx context.Context, request *api.AttachDocumentRequest) (*api.AttachDocumentResponse, error) {
-	panic("implement me")
-}
-
-func (t *testYorkieServer) DetachDocument(ctx context.Context, request *api.DetachDocumentRequest) (*api.DetachDocumentResponse, error) {
-	panic("implement me")
-}
-
-func (t *testYorkieServer) RemoveDocument(ctx context.Context, request *api.RemoveDocumentRequest) (*api.RemoveDocumentResponse, error) {
-	panic("implement me")
-}
-
-func (t *testYorkieServer) PushPullChanges(ctx context.Context, request *api.PushPullChangesRequest) (*api.PushPullChangesResponse, error) {
-	panic("implement me")
-}
-
-func (t *testYorkieServer) WatchDocument(request *api.WatchDocumentRequest, server api.YorkieService_WatchDocumentServer) error {
-	panic("implement me")
-}
-
-// newYorkieServer creates a new instance of yorkieServer.
+// dialTestYorkieServer creates a new instance of testYorkieServer and
+// dials it with LocalListener.
 func dialTestYorkieServer(t *testing.T) (*testYorkieServer, string) {
-	testYorkieServer := &testYorkieServer{}
+	yorkieServer := &api.UnimplementedYorkieServiceServer{}
 	grpcServer := grpc.NewServer()
-	api.RegisterYorkieServiceServer(grpcServer, testYorkieServer)
-	testYorkieServer.grpcServer = grpcServer
+	api.RegisterYorkieServiceServer(grpcServer, yorkieServer)
 
-	addr := testYorkieServer.listenAndServe(t)
-	return testYorkieServer, addr
+	testYorkieServer := &testYorkieServer{
+		grpcServer:   grpcServer,
+		yorkieServer: yorkieServer,
+	}
+
+	return testYorkieServer, testYorkieServer.listenAndServe(t)
 }
 
 func (s *testYorkieServer) listenAndServe(t *testing.T) string {
@@ -113,25 +87,40 @@ func TestClient(t *testing.T) {
 		assert.Equal(t, presence, cli.Presence())
 	})
 
-	// t.Run("x-shard-key test", func(t *testing.T) {
-	// 	testServer, addr := dialTestYorkieServer(t)
-	// 	defer testServer.Stop()
+	t.Run("x-shard-key test", func(t *testing.T) {
+		dummyID := types.ID("000000000000000000000000")
+		dummyActorID, err := dummyID.Bytes()
+		assert.NoError(t, err)
 
-	// 	cli, err := client.Dial(addr, client.WithAPIKey("dummy-api-key"))
-	// 	assert.NoError(t, err)
+		testServer, addr := dialTestYorkieServer(t)
+		defer testServer.Stop()
 
-	// 	var patch *monkey.Patch
-	// 	patch, err = monkey.PatchInstanceMethodByName(reflect.TypeOf(testServer), "ActivateClient", func(m *testYorkieServer, ctx context.Context, req *api.ActivateClientRequest) (*api.ActivateClientResponse, error) {
-	// 		patch.Unpatch()
-	// 		defer patch.Patch()
-	// 		t.Log("ActivateClient called")
-	// 		return &api.ActivateClientResponse{}, nil
-	// 	})
-	// 	if err != nil {
-	// 		t.Fatal(err)
-	// 	}
+		cli, err := client.Dial(addr, client.WithAPIKey("dummy-api-key"))
+		assert.NoError(t, err)
 
-	// 	ctx := context.Background()
-	// 	err = cli.Activate(ctx)
-	// })
+		var patch *monkey.Patch
+		patch, err = monkey.PatchInstanceMethodByName(
+			reflect.TypeOf(testServer.yorkieServer),
+			"ActivateClient",
+			func(
+				m *api.UnimplementedYorkieServiceServer,
+				ctx context.Context,
+				req *api.ActivateClientRequest,
+			) (*api.ActivateClientResponse, error) {
+				assert.NoError(t, patch.Unpatch())
+				defer func() {
+					assert.NoError(t, patch.Patch())
+				}()
+
+				data, _ := grpcmetadata.FromIncomingContext(ctx)
+				assert.Equal(t, "dummy-api-key", data[types.ShardKey][0])
+
+				return &api.ActivateClientResponse{
+					ClientId: dummyActorID,
+				}, nil
+			},
+		)
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(context.Background()))
+	})
 }

@@ -51,11 +51,11 @@ func (i *AuthInterceptor) Unary() grpc.UnaryClientInterceptor {
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+		ctx = metadata.AppendToOutgoingContext(ctx,
 			types.APIKeyKey, i.apiKey,
 			types.AuthorizationKey, i.token,
 			types.UserAgentKey, types.GoSDKType+"/"+version.Version,
-		))
+		)
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }
@@ -70,11 +70,11 @@ func (i *AuthInterceptor) Stream() grpc.StreamClientInterceptor {
 		streamer grpc.Streamer,
 		opts ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
-		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+		ctx = metadata.AppendToOutgoingContext(ctx,
 			types.APIKeyKey, i.apiKey,
 			types.AuthorizationKey, i.token,
 			types.UserAgentKey, types.GoSDKType+"/"+version.Version,
-		))
+		)
 		return streamer(ctx, desc, cc, method, opts...)
 	}
 }
