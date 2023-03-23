@@ -881,7 +881,11 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 		if info.DocID != docID || info.ServerSeq > to {
 			break
 		}
-		infos = append(infos, info)
+
+		resultInfo := &database.ChangeInfo{}
+		*resultInfo = *info
+
+		infos = append(infos, resultInfo)
 	}
 	return infos, nil
 }

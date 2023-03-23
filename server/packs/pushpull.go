@@ -86,7 +86,14 @@ func pullPack(
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialServerSeq int64,
+	isPushOnly bool,
 ) (*ServerPack, error) {
+	if isPushOnly {
+		// Pretend there is no change on the server.
+		pushOnlyCheckpoint := change.Checkpoint{ServerSeq: reqPack.Checkpoint.ServerSeq, ClientSeq: cpAfterPush.ClientSeq}
+		return NewServerPack(docInfo.Key, pushOnlyCheckpoint, nil, nil), nil
+	}
+
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
 		return nil, fmt.Errorf(
 			"serverSeq of CP greater than serverSeq of clientInfo(clientInfo %d, cp %d): %w",
@@ -180,6 +187,13 @@ func pullChangeInfos(
 	)
 	if err != nil {
 		return change.InitialCheckpoint, nil, err
+	}
+
+	// Remove Operations that were performed already by local changes.
+	for _, change := range pulledChanges {
+		if clientInfo.ID == change.ActorID && cpAfterPush.ClientSeq >= change.ClientSeq {
+			change.Operations = nil
+		}
 	}
 
 	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)
