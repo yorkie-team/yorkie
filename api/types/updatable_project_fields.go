@@ -19,6 +19,8 @@ package types
 
 import (
 	"errors"
+	"fmt"
+	"os"
 
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
@@ -51,14 +53,23 @@ func (i *UpdatableProjectFields) Validate() error {
 }
 
 func init() {
-	validation.RegisterValidation("invalid_webhook_method", func(level validation.FieldLevel) bool {
-		methods := level.Field().Interface().([]string)
-		for _, method := range methods {
-			if !IsAuthMethod(method) {
-				return false
+	if err := validation.RegisterValidation(
+		"invalid_webhook_method",
+		func(level validation.FieldLevel) bool {
+			methods := level.Field().Interface().([]string)
+			for _, method := range methods {
+				if !IsAuthMethod(method) {
+					return false
+				}
 			}
-		}
-		return true
-	})
-	validation.RegisterTranslation("invalid_webhook_method", "given {0} is invalid method")
+			return true
+		},
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+	if err := validation.RegisterTranslation("invalid_webhook_method", "given {0} is invalid method"); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
 }

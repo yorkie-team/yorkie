@@ -18,6 +18,9 @@
 package types
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
 
@@ -38,10 +41,19 @@ func (i *CreateProjectFields) Validate() error {
 }
 
 func init() {
-	validation.RegisterValidation("reserved_project_name", func(level validation.FieldLevel) bool {
-		_, ok := reservedProjectNames[level.Field().String()]
-		return !ok
-	})
+	if err := validation.RegisterValidation(
+		"reserved_project_name",
+		func(level validation.FieldLevel) bool {
+			_, ok := reservedProjectNames[level.Field().String()]
+			return !ok
+		},
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "create project fields: ", err)
+		os.Exit(1)
+	}
 
-	validation.RegisterTranslation("reserved_project_name", "given {0} is reserved name")
+	if err := validation.RegisterTranslation("reserved_project_name", "given {0} is reserved name"); err != nil {
+		fmt.Fprintln(os.Stderr, "create project fields: ", err)
+		os.Exit(1)
+	}
 }

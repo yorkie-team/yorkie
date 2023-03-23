@@ -18,6 +18,7 @@ package mongo
 
 import (
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -54,7 +55,8 @@ func (c *Config) Validate() error {
 func (c *Config) ParseConnectionTimeout() time.Duration {
 	result, err := time.ParseDuration(c.ConnectionTimeout)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "parse connection timeout: %w", err)
+		os.Exit(1)
 	}
 
 	return result
@@ -64,7 +66,8 @@ func (c *Config) ParseConnectionTimeout() time.Duration {
 func (c *Config) ParsePingTimeout() time.Duration {
 	result, err := time.ParseDuration(c.PingTimeout)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "parse ping timeout: %w", err)
+		os.Exit(1)
 	}
 
 	return result

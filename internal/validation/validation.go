@@ -19,6 +19,7 @@ package validation
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
@@ -137,26 +138,33 @@ func (s StructError) Error() string {
 
 // RegisterValidation is shortcut of defaultValidator.RegisterValidation
 // that register custom validation with given tag, and it can be used in init.
-func RegisterValidation(tag string, fn validator.Func) {
+func RegisterValidation(tag string, fn validator.Func) error {
 	if err := defaultValidator.RegisterValidation(tag, fn); err != nil {
-		panic(err)
+		return fmt.Errorf("register validation: %w", err)
 	}
+	return nil
 }
 
 // RegisterTranslation is shortcut of defaultValidator.RegisterTranslation
 // that registers translations against the provided tag with given msg.
-func RegisterTranslation(tag, msg string) {
-	if err := defaultValidator.RegisterTranslation(tag, trans, func(ut ut.Translator) error {
-		if err := ut.Add(tag, msg, true); err != nil {
-			return fmt.Errorf("add translation: %w", err)
-		}
-		return nil
-	}, func(ut ut.Translator, fe validator.FieldError) string {
-		t, _ := ut.T(tag, fe.Field())
-		return t
-	}); err != nil {
-		panic(err)
+func RegisterTranslation(tag, msg string) error {
+	if err := defaultValidator.RegisterTranslation(
+		tag,
+		trans,
+		func(ut ut.Translator) error {
+			if err := ut.Add(tag, msg, true); err != nil {
+				return fmt.Errorf("register translation: %w", err)
+			}
+			return nil
+		},
+		func(ut ut.Translator, fe validator.FieldError) string {
+			t, _ := ut.T(tag, fe.Field())
+			return t
+		},
+	); err != nil {
+		return fmt.Errorf("register translation: %w", err)
 	}
+	return nil
 }
 
 // ValidateValue validates the value with the tag
@@ -170,7 +178,6 @@ func ValidateValue(v interface{}, tag string) error {
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -193,11 +200,17 @@ func Validate(v string, tagOrRules []interface{}) error {
 			}
 
 			if value.Func != nil {
-				RegisterValidation(tag, value.Func)
+				if err := RegisterValidation(tag, value.Func); err != nil {
+					fmt.Fprintln(os.Stderr, "validation custom rule: %w", err)
+					os.Exit(1)
+				}
 			}
 
 			if value.Err != nil {
-				RegisterTranslation(tag, value.Err.Error())
+				if err := RegisterTranslation(tag, value.Err.Error()); err != nil {
+					fmt.Fprintln(os.Stderr, "validation custom rule: %w", err)
+					os.Exit(1)
+				}
 			}
 
 			sb.WriteString(tag)
@@ -227,38 +240,76 @@ func ValidateStruct(s interface{}) error {
 
 func init() {
 	if err := entranslations.RegisterDefaultTranslations(defaultValidator, trans); err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "validation register default translations: %w", err)
+		os.Exit(1)
 	}
 
-	RegisterValidation("slug", func(level validator.FieldLevel) bool {
+	if err := RegisterValidation("slug", func(level validator.FieldLevel) bool {
 		val := level.Field().String()
 		return slugRegex.MatchString(val)
-	})
-	RegisterTranslation("slug", "{0} must only contain letters, numbers, hyphen, period, underscore, and tilde")
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, "validation slug: %w", err)
+		os.Exit(1)
+	}
+	if err := RegisterTranslation(
+		"slug",
+		"{0} must only contain letters, numbers, hyphen, period, underscore, and tilde",
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "validation slug: %w", err)
+		os.Exit(1)
+	}
 
-	RegisterValidation("case_sensitive_slug", func(level validator.FieldLevel) bool {
+	if err := RegisterValidation("case_sensitive_slug", func(level validator.FieldLevel) bool {
 		val := level.Field().String()
 		return caseSensitiveSlugRegex.MatchString(val)
-	})
-	RegisterTranslation(
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, "validation case_sensitive_slug: %w", err)
+		os.Exit(1)
+	}
+	if err := RegisterTranslation(
 		"case_sensitive_slug",
-		"{0} must only contain case-sensitive letters, numbers, hyphen, period, underscore, and tilde")
+		"{0} must only contain case-sensitive letters, numbers, hyphen, period, underscore, and tilde",
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "validation case_sensitive_slug: %w", err)
+		os.Exit(1)
+	}
 
-	RegisterValidation("alpha_num_special", func(level validator.FieldLevel) bool {
+	if err := RegisterValidation("alpha_num_special", func(level validator.FieldLevel) bool {
 		val := level.Field().String()
 		return hasAlphaNumSpecial(val)
-	})
-	RegisterTranslation("alpha_num_special", "{0} must include letters, numbers, and special characters")
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, "validation alpha_num_special: %w", err)
+		os.Exit(1)
+	}
+	if err := RegisterTranslation(
+		"alpha_num_special",
+		"{0} must include letters, numbers, and special characters",
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "validation alpha_num_special: %w", err)
+		os.Exit(1)
+	}
 
-	RegisterValidation("emptystring", func(level validator.FieldLevel) bool {
+	if err := RegisterValidation("emptystring", func(level validator.FieldLevel) bool {
 		val := level.Field().String()
 		return val == ""
-	})
-	RegisterTranslation("url|emptystring", "{0} must be a valid URL")
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, "validation emptystring: %w", err)
+		os.Exit(1)
+	}
+	if err := RegisterTranslation("url|emptystring", "{0} must be a valid URL"); err != nil {
+		fmt.Fprintln(os.Stderr, "validation emptystring: %w", err)
+		os.Exit(1)
+	}
 
-	RegisterValidation("duration", func(level validator.FieldLevel) bool {
+	if err := RegisterValidation("duration", func(level validator.FieldLevel) bool {
 		val := level.Field().String()
 		return isValidTimeDurationStringFormat(val)
-	})
-	RegisterTranslation("duration", "{0} must be a valid time duration string format")
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, "validation duration: %w", err)
+		os.Exit(1)
+	}
+	if err := RegisterTranslation("duration", "{0} must be a valid time duration string format"); err != nil {
+		fmt.Fprintln(os.Stderr, "validation duration: %w", err)
+		os.Exit(1)
+	}
 }
