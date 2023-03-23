@@ -22,6 +22,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+
+	"google.golang.org/grpc/metadata"
 
 	"github.com/rs/xid"
 	"go.uber.org/zap"
@@ -75,6 +78,7 @@ type Attachment struct {
 type Client struct {
 	conn        *grpc.ClientConn
 	client      api.YorkieServiceClient
+	options     Options
 	dialOptions []grpc.DialOption
 	logger      *zap.Logger
 
@@ -150,6 +154,7 @@ func New(opts ...Option) (*Client, error) {
 
 	return &Client{
 		dialOptions: dialOptions,
+		options:     options,
 		logger:      logger,
 
 		key:          k,
@@ -207,7 +212,7 @@ func (c *Client) Activate(ctx context.Context) error {
 		return nil
 	}
 
-	response, err := c.client.ActivateClient(ctx, &api.ActivateClientRequest{
+	response, err := c.client.ActivateClient(withShardKey(ctx, c.options.APIKey), &api.ActivateClientRequest{
 		ClientKey: c.key,
 	})
 	if err != nil {
@@ -231,7 +236,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		return nil
 	}
 
-	_, err := c.client.DeactivateClient(ctx, &api.DeactivateClientRequest{
+	_, err := c.client.DeactivateClient(withShardKey(ctx, c.options.APIKey), &api.DeactivateClientRequest{
 		ClientId: c.id.Bytes(),
 	})
 	if err != nil {
@@ -261,10 +266,13 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
-	res, err := c.client.AttachDocument(ctx, &api.AttachDocumentRequest{
-		ClientId:   c.id.Bytes(),
-		ChangePack: pbChangePack,
-	})
+	res, err := c.client.AttachDocument(
+		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
+		&api.AttachDocumentRequest{
+			ClientId:   c.id.Bytes(),
+			ChangePack: pbChangePack,
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -320,11 +328,14 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
-	res, err := c.client.DetachDocument(ctx, &api.DetachDocumentRequest{
-		ClientId:   c.id.Bytes(),
-		DocumentId: attachment.docID.String(),
-		ChangePack: pbChangePack,
-	})
+	res, err := c.client.DetachDocument(
+		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
+		&api.DetachDocumentRequest{
+			ClientId:   c.id.Bytes(),
+			DocumentId: attachment.docID.String(),
+			ChangePack: pbChangePack,
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -379,13 +390,16 @@ func (c *Client) Watch(
 	}
 
 	rch := make(chan WatchResponse)
-	stream, err := c.client.WatchDocument(ctx, &api.WatchDocumentRequest{
-		Client: converter.ToClient(types.Client{
-			ID:           c.id,
-			PresenceInfo: c.presenceInfo,
-		}),
-		DocumentId: attachment.docID.String(),
-	})
+	stream, err := c.client.WatchDocument(
+		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
+		&api.WatchDocumentRequest{
+			Client: converter.ToClient(types.Client{
+				ID:           c.id,
+				PresenceInfo: c.presenceInfo,
+			}),
+			DocumentId: attachment.docID.String(),
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -505,13 +519,15 @@ func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
 	// following.
 	// TODO(hackerwins): We will move Presence from client-level to document-level.
 	for _, attachment := range c.attachments {
-		if _, err := c.client.UpdatePresence(ctx, &api.UpdatePresenceRequest{
-			Client: converter.ToClient(types.Client{
-				ID:           c.id,
-				PresenceInfo: c.presenceInfo,
-			}),
-			DocumentId: attachment.docID.String(),
-		}); err != nil {
+		if _, err := c.client.UpdatePresence(
+			withShardKey(ctx, c.options.APIKey, attachment.doc.Key().String()),
+			&api.UpdatePresenceRequest{
+				Client: converter.ToClient(types.Client{
+					ID:           c.id,
+					PresenceInfo: c.presenceInfo,
+				}),
+				DocumentId: attachment.docID.String(),
+			}); err != nil {
 			return err
 		}
 	}
@@ -572,11 +588,14 @@ func (c *Client) pushPull(ctx context.Context, key key.Key) error {
 		return err
 	}
 
-	res, err := c.client.PushPullChanges(ctx, &api.PushPullChangesRequest{
-		ClientId:   c.id.Bytes(),
-		DocumentId: attachment.docID.String(),
-		ChangePack: pbChangePack,
-	})
+	res, err := c.client.PushPullChanges(
+		withShardKey(ctx, c.options.APIKey, key.String()),
+		&api.PushPullChangesRequest{
+			ClientId:   c.id.Bytes(),
+			DocumentId: attachment.docID.String(),
+			ChangePack: pbChangePack,
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -613,11 +632,14 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	}
 	pbChangePack.IsRemoved = true
 
-	res, err := c.client.RemoveDocument(ctx, &api.RemoveDocumentRequest{
-		ClientId:   c.id.Bytes(),
-		DocumentId: attachment.docID.String(),
-		ChangePack: pbChangePack,
-	})
+	res, err := c.client.RemoveDocument(
+		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
+		&api.RemoveDocumentRequest{
+			ClientId:   c.id.Bytes(),
+			DocumentId: attachment.docID.String(),
+			ChangePack: pbChangePack,
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -635,4 +657,15 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	}
 
 	return nil
+}
+
+/**
+ * withShardKey returns a context with the given shard key in metadata.
+ */
+func withShardKey(ctx context.Context, keys ...string) context.Context {
+	return metadata.AppendToOutgoingContext(
+		ctx,
+		types.ShardKey,
+		strings.Join(keys, "/"),
+	)
 }
