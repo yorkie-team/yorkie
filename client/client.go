@@ -23,6 +23,8 @@ import (
 	"errors"
 	"fmt"
 
+	"google.golang.org/grpc/metadata"
+
 	"github.com/rs/xid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -75,6 +77,7 @@ type Attachment struct {
 type Client struct {
 	conn        *grpc.ClientConn
 	client      api.YorkieServiceClient
+	options     Options
 	dialOptions []grpc.DialOption
 	logger      *zap.Logger
 
@@ -150,6 +153,7 @@ func New(opts ...Option) (*Client, error) {
 
 	return &Client{
 		dialOptions: dialOptions,
+		options:     options,
 		logger:      logger,
 
 		key:          k,
@@ -207,6 +211,7 @@ func (c *Client) Activate(ctx context.Context) error {
 		return nil
 	}
 
+	ctx = metadata.AppendToOutgoingContext(ctx, types.ShardKey, c.options.APIKey)
 	response, err := c.client.ActivateClient(ctx, &api.ActivateClientRequest{
 		ClientKey: c.key,
 	})
@@ -231,6 +236,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		return nil
 	}
 
+	ctx = metadata.AppendToOutgoingContext(ctx, types.ShardKey, c.options.APIKey)
 	_, err := c.client.DeactivateClient(ctx, &api.DeactivateClientRequest{
 		ClientId: c.id.Bytes(),
 	})
@@ -261,6 +267,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
+	ctx = metadata.AppendToOutgoingContext(ctx, types.ShardKey, fmt.Sprintf("%s/%s", c.options.APIKey, doc.Key().String()))
 	res, err := c.client.AttachDocument(ctx, &api.AttachDocumentRequest{
 		ClientId:   c.id.Bytes(),
 		ChangePack: pbChangePack,
@@ -320,6 +327,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
+	ctx = metadata.AppendToOutgoingContext(ctx, types.ShardKey, fmt.Sprintf("%s/%s", c.options.APIKey, doc.Key().String()))
 	res, err := c.client.DetachDocument(ctx, &api.DetachDocumentRequest{
 		ClientId:   c.id.Bytes(),
 		DocumentId: attachment.docID.String(),
@@ -378,6 +386,7 @@ func (c *Client) Watch(
 		return nil, ErrDocumentNotAttached
 	}
 
+	ctx = metadata.AppendToOutgoingContext(ctx, types.ShardKey, fmt.Sprintf("%s/%s", c.options.APIKey, doc.Key().String()))
 	rch := make(chan WatchResponse)
 	stream, err := c.client.WatchDocument(ctx, &api.WatchDocumentRequest{
 		Client: converter.ToClient(types.Client{
@@ -572,6 +581,7 @@ func (c *Client) pushPull(ctx context.Context, key key.Key) error {
 		return err
 	}
 
+	ctx = metadata.AppendToOutgoingContext(ctx, types.ShardKey, fmt.Sprintf("%s/%s", c.options.APIKey, key.String()))
 	res, err := c.client.PushPullChanges(ctx, &api.PushPullChangesRequest{
 		ClientId:   c.id.Bytes(),
 		DocumentId: attachment.docID.String(),
@@ -613,6 +623,7 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	}
 	pbChangePack.IsRemoved = true
 
+	ctx = metadata.AppendToOutgoingContext(ctx, types.ShardKey, fmt.Sprintf("%s/%s", c.options.APIKey, doc.Key().String()))
 	res, err := c.client.RemoveDocument(ctx, &api.RemoveDocumentRequest{
 		ClientId:   c.id.Bytes(),
 		DocumentId: attachment.docID.String(),

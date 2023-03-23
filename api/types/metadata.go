@@ -26,5 +26,8 @@ const UserAgentKey = "x-yorkie-user-agent"
 // APIKeyKey is the key of the api key header.
 const APIKeyKey = "x-api-key"
 
+// ShardKey is the key of the shard header.
+const ShardKey = "x-shard-key"
+
 // GoSDKType is the type part of Go SDK in value of UserAgent.
 const GoSDKType = "yorkie-go-sdk"
