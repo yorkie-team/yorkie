@@ -7,8 +7,23 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## [0.3.1] - 2023-02-27
+## [0.3.3] - 2023-03-24
 
+### Added
+* Add ClientDeactivateThreshold field in admin CLI project list by @krapie in https://github.com/yorkie-team/yorkie/pull/477
+* Add RemoveDocument API by @hackerwins in https://github.com/yorkie-team/yorkie/pull/484
+* Add user agent metrics by @emplam27 in https://github.com/yorkie-team/yorkie/pull/492
+* Add shard key in context by @hackerwins in https://github.com/yorkie-team/yorkie/pull/499
+* Add pagination flags to document ls command by @emplam27 in https://github.com/yorkie-team/yorkie/pull/489
+
+### Changed
+* Allow uppercase letters(A-Z) for document keys by @shiningsoo in https://github.com/yorkie-team/yorkie/pull/483
+* Bump golang.org/x/net from 0.0.0-20221004154528-8021a29435af to 0.7.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/486
+* Change the structure of WatchDocument API by @chacha912 in https://github.com/yorkie-team/yorkie/pull/491
+
+### Fixed
+
+## [0.3.1] - 2023-02-27
 
 ### Added
 * Add ClientDeactivateThreshold in Project by @krapie in https://github.com/yorkie-team/yorkie/pull/454
