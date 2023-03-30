@@ -65,6 +65,21 @@ var (
 	ErrUnsupportedWatchResponseType = errors.New("unsupported watch response type")
 )
 
+// SyncOption is an option for sync. It contains the key of the document to
+// sync and the sync mode.
+type SyncOption struct {
+	key  key.Key
+	mode types.SyncMode
+}
+
+// WithPushOnly returns a SyncOption with the sync mode set to PushOnly.
+func (o SyncOption) WithPushOnly() SyncOption {
+	return SyncOption{
+		key:  o.key,
+		mode: types.SyncModePushOnly,
+	}
+}
+
 // Attachment represents the document attached and peers.
 type Attachment struct {
 	doc   *document.Document
@@ -356,18 +371,26 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	return nil
 }
 
+// WithDocKey creates a SyncOption with the given document key.
+func WithDocKey(k key.Key) SyncOption {
+	return SyncOption{
+		key:  k,
+		mode: types.SyncModePushPull,
+	}
+}
+
 // Sync pushes local changes of the attached documents to the server and
 // receives changes of the remote replica from the server then apply them to
 // local documents.
-func (c *Client) Sync(ctx context.Context, keys ...key.Key) error {
-	if len(keys) == 0 {
+func (c *Client) Sync(ctx context.Context, options ...SyncOption) error {
+	if len(options) == 0 {
 		for _, attachment := range c.attachments {
-			keys = append(keys, attachment.doc.Key())
+			options = append(options, WithDocKey(attachment.doc.Key()))
 		}
 	}
 
-	for _, k := range keys {
-		if err := c.pushPull(ctx, k); err != nil {
+	for _, opt := range options {
+		if err := c.pushPullChanges(ctx, opt); err != nil {
 			return err
 		}
 	}
@@ -573,12 +596,13 @@ func (c *Client) IsActive() bool {
 	return c.status == activated
 }
 
-func (c *Client) pushPull(ctx context.Context, key key.Key) error {
+// pushPullChanges pushes the changes of the document to the server and pulls the changes from the server.
+func (c *Client) pushPullChanges(ctx context.Context, opt SyncOption) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}
 
-	attachment, ok := c.attachments[key]
+	attachment, ok := c.attachments[opt.key]
 	if !ok {
 		return ErrDocumentNotAttached
 	}
@@ -589,11 +613,12 @@ func (c *Client) pushPull(ctx context.Context, key key.Key) error {
 	}
 
 	res, err := c.client.PushPullChanges(
-		withShardKey(ctx, c.options.APIKey, key.String()),
+		withShardKey(ctx, c.options.APIKey, opt.key.String()),
 		&api.PushPullChangesRequest{
 			ClientId:   c.id.Bytes(),
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
+			PushOnly:   opt.mode == types.SyncModePushOnly,
 		},
 	)
 	if err != nil {

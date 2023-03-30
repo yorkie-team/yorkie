@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -86,12 +87,15 @@ func pullPack(
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialServerSeq int64,
-	isPushOnly bool,
+	mode types.SyncMode,
 ) (*ServerPack, error) {
-	if isPushOnly {
-		// Pretend there is no change on the server.
-		pushOnlyCheckpoint := change.Checkpoint{ServerSeq: reqPack.Checkpoint.ServerSeq, ClientSeq: cpAfterPush.ClientSeq}
-		return NewServerPack(docInfo.Key, pushOnlyCheckpoint, nil, nil), nil
+	// If the client is push-only, it does not need to pull changes.
+	// So, just return the checkpoint with server seq after pushing changes.
+	if mode == types.SyncModePushOnly {
+		return NewServerPack(docInfo.Key, change.Checkpoint{
+			ServerSeq: reqPack.Checkpoint.ServerSeq,
+			ClientSeq: cpAfterPush.ClientSeq,
+		}, nil, nil), nil
 	}
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {

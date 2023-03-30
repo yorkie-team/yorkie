@@ -138,7 +138,7 @@ func TestDocument(t *testing.T) {
 				assert.NoError(t, resp.Err)
 
 				if resp.Type == client.DocumentsChanged {
-					err := c1.Sync(ctx, resp.Key)
+					err := c1.Sync(ctx, client.WithDocKey(resp.Key))
 					assert.NoError(t, err)
 					return
 				}
@@ -347,7 +347,7 @@ func TestDocument(t *testing.T) {
 		// 01. abnormal behavior on detached state
 		d1 := document.New(helper.TestDocKey(t))
 		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
-		assert.ErrorIs(t, cli.Sync(ctx, d1.Key()), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
 
 		// 02. abnormal behavior on attached state
@@ -357,7 +357,7 @@ func TestDocument(t *testing.T) {
 		// 03. abnormal behavior on removed state
 		assert.NoError(t, cli.Remove(ctx, d1))
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
-		assert.ErrorIs(t, cli.Sync(ctx, d1.Key()), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
 	})
 
@@ -443,7 +443,7 @@ func TestDocumentWithProjects(t *testing.T) {
 				assert.NoError(t, resp.Err)
 
 				if resp.Type == client.DocumentsChanged {
-					err := c1.Sync(ctx, resp.Key)
+					err := c1.Sync(ctx, client.WithDocKey(resp.Key))
 					assert.NoError(t, err)
 					responsePairs = append(responsePairs, watchResponsePair{
 						Type: resp.Type,

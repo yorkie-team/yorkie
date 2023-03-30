@@ -57,7 +57,7 @@ func PushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
-	isPushOnly bool,
+	mode types.SyncMode,
 ) (*ServerPack, error) {
 	start := gotime.Now()
 	defer func() {
@@ -74,7 +74,7 @@ func PushPull(
 	be.Metrics.AddPushPullReceivedOperations(reqPack.OperationsLen())
 
 	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
-	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, isPushOnly)
+	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, mode)
 	if err != nil {
 		return nil, err
 	}
