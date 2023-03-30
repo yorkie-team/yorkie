@@ -19,7 +19,6 @@ package packs
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -47,6 +46,11 @@ func pushChanges(
 	var pushedChanges []*change.Change
 	for _, cn := range reqPack.Changes {
 		if cn.ID().ClientSeq() > cp.ClientSeq {
+			// Verify Client Sequence.
+			if cp.ClientSeq+1 != cn.ID().ClientSeq() {
+				break
+			}
+
 			serverSeq := docInfo.IncreaseServerSeq()
 			cp = cp.NextServerSeq(serverSeq)
 			cn.SetServerSeq(serverSeq)
@@ -88,12 +92,15 @@ func pullPack(
 	initialServerSeq int64,
 ) (*ServerPack, error) {
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
-		return nil, fmt.Errorf(
+		logging.From(ctx).Warnf(
 			"serverSeq of CP greater than serverSeq of clientInfo(clientInfo %d, cp %d): %w",
 			initialServerSeq,
 			reqPack.Checkpoint.ServerSeq,
 			ErrInvalidServerSeq,
 		)
+
+		// Try to correct data of the client by sending snapshot.
+		return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
 	}
 
 	// Pull changes from DB if the size of changes for the response is less than the snapshot threshold.
