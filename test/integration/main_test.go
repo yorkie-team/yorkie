@@ -103,7 +103,7 @@ func clientConn() (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-// activeClient is a helper function to create active clients.
+// activeClients creates and activates the given number of clients.
 func activeClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
@@ -111,17 +111,15 @@ func activeClients(t *testing.T, n int) (clients []*client.Client) {
 			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", i)}),
 		)
 		assert.NoError(t, err)
-
-		err = c.Activate(context.Background())
-		assert.NoError(t, err)
+		assert.NoError(t, c.Activate(context.Background()))
 
 		clients = append(clients, c)
 	}
 	return
 }
 
-// cleanupClients is a helper function to clean up clients.
-func cleanupClients(t *testing.T, clients []*client.Client) {
+// deactivateAndCloseClients deactivates and closes the given clients.
+func deactivateAndCloseClients(t *testing.T, clients []*client.Client) {
 	for _, c := range clients {
 		assert.NoError(t, c.Deactivate(context.Background()))
 		assert.NoError(t, c.Close())

@@ -60,9 +60,7 @@ func New(conf *Config) (*Yorkie, error) {
 	be, err := backend.New(
 		conf.Backend,
 		conf.Mongo,
-		conf.ETCD,
 		conf.Housekeeping,
-		conf.AdminAddr(),
 		metrics,
 	)
 	if err != nil {

@@ -19,24 +19,17 @@ package sync
 
 import (
 	"context"
-	"errors"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-var (
-	// ErrEmptyDocKeys is returned when the given keys is empty.
-	ErrEmptyDocKeys = errors.New("empty doc keys")
-)
-
 // ServerInfo represents the information of the Server.
 type ServerInfo struct {
-	ID          string      `json:"id"`
-	Hostname    string      `json:"hostname"`
-	ClusterAddr string      `json:"cluster_addr"`
-	UpdatedAt   gotime.Time `json:"updated_at"`
+	ID        string      `json:"id"`
+	Hostname  string      `json:"hostname"`
+	UpdatedAt gotime.Time `json:"updated_at"`
 }
 
 // Coordinator provides synchronization functions such as locks and event Pub/Sub.

@@ -23,29 +23,13 @@ import (
 	gosync "sync"
 	"testing"
 
-	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/server/backend/sync"
-	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
-	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func BenchmarkSync(b *testing.B) {
-	cli, err := etcd.Dial(&etcd.Config{
-		Endpoints:     helper.ETCDEndpoints,
-		DialTimeout:   helper.ETCDDialTimeout.String(),
-		LockLeaseTime: helper.ETCDLockLeaseTime.String(),
-	}, &sync.ServerInfo{
-		ID: xid.New().String(),
-	})
-	assert.NoError(b, err)
-	defer func() {
-		err := cli.Close()
-		assert.NoError(b, err)
-	}()
-
 	b.Run("memory sync 10 test", func(b *testing.B) {
 		benchmarkMemorySync(10, b)
 	})
@@ -60,10 +44,6 @@ func BenchmarkSync(b *testing.B) {
 
 	b.Run("memory sync 10000 test", func(b *testing.B) {
 		benchmarkMemorySync(10000, b)
-	})
-
-	b.Run("etcd sync 100 test", func(t *testing.B) {
-		benchmarkETCDSync(100, b, cli)
 	})
 }
 
@@ -80,28 +60,6 @@ func benchmarkMemorySync(cnt int, b *testing.B) {
 
 				ctx := context.Background()
 				locker, err := coordinator.NewLocker(ctx, sync.Key(b.Name()))
-				assert.NoError(b, err)
-				assert.NoError(b, locker.Lock(ctx))
-				sum += 1
-				assert.NoError(b, locker.Unlock(ctx))
-			}()
-		}
-		wg.Wait()
-		assert.Equal(b, cnt, sum)
-	}
-}
-
-func benchmarkETCDSync(cnt int, b *testing.B, cli *etcd.Client) {
-	for i := 0; i < b.N; i++ {
-		sum := 0
-		var wg gosync.WaitGroup
-		for i := 0; i < cnt; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
-				ctx := context.Background()
-				locker, err := cli.NewLocker(ctx, sync.Key(b.Name()))
 				assert.NoError(b, err)
 				assert.NoError(b, locker.Lock(ctx))
 				sum += 1

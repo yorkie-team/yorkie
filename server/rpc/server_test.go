@@ -36,7 +36,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
-	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/server/rpc"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -49,7 +48,6 @@ var (
 
 	testRPCServer *rpc.Server
 	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.RPCPort)
-	testAdminAddr = fmt.Sprintf("localhost:%d", helper.AdminPort)
 	testClient    api.YorkieServiceClient
 
 	invalidChangePack = &api.ChangePack{
@@ -75,14 +73,10 @@ func TestMain(m *testing.M) {
 		YorkieDatabase:    helper.TestDBName(),
 		ConnectionTimeout: helper.MongoConnectionTimeout,
 		PingTimeout:       helper.MongoPingTimeout,
-	}, &etcd.Config{
-		Endpoints:     helper.ETCDEndpoints,
-		DialTimeout:   helper.ETCDDialTimeout.String(),
-		LockLeaseTime: helper.ETCDLockLeaseTime.String(),
 	}, &housekeeping.Config{
 		Interval:                  helper.HousekeepingInterval.String(),
 		CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
-	}, testAdminAddr, met)
+	}, met)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -171,7 +165,7 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t),
+			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
@@ -292,12 +286,12 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t),
+			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
 		packWithRemoveRequest := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t),
+			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 			IsRemoved:   true,
 		}
@@ -356,13 +350,13 @@ func TestRPCServerBackend(t *testing.T) {
 
 	t.Run("push/pull changes test", func(t *testing.T) {
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t),
+			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t)},
+			&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()},
 		)
 		assert.NoError(t, err)
 
@@ -371,7 +365,7 @@ func TestRPCServerBackend(t *testing.T) {
 			&api.AttachDocumentRequest{
 				ClientId: activateResp.ClientId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: helper.TestDocKey(t),
+					DocumentKey: helper.TestDocKey(t).String(),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
 					Changes: []*api.Change{{
 						Id: &api.ChangeID{
@@ -391,7 +385,7 @@ func TestRPCServerBackend(t *testing.T) {
 				ClientId:   activateResp.ClientId,
 				DocumentId: resPack.DocumentId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: helper.TestDocKey(t),
+					DocumentKey: helper.TestDocKey(t).String(),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
 					Changes: []*api.Change{{
 						Id: &api.ChangeID{
@@ -411,7 +405,7 @@ func TestRPCServerBackend(t *testing.T) {
 				ClientId:   activateResp.ClientId,
 				DocumentId: resPack.DocumentId,
 				ChangePack: &api.ChangePack{
-					DocumentKey: helper.TestDocKey(t),
+					DocumentKey: helper.TestDocKey(t).String(),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
 					Changes: []*api.Change{{
 						Id: &api.ChangeID{
@@ -467,19 +461,19 @@ func TestRPCServerBackend(t *testing.T) {
 
 	t.Run("push/pull on removed document test", func(t *testing.T) {
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t),
+			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
 		packWithRemoveRequest := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t),
+			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 			IsRemoved:   true,
 		}
 
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t)},
+			&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()},
 		)
 		assert.NoError(t, err)
 
@@ -522,12 +516,12 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t),
+			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
 		packWithRemoveRequest := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t),
+			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 			IsRemoved:   true,
 		}
@@ -571,12 +565,12 @@ func TestRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t),
+			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
 		packWithRemoveRequest := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t),
+			DocumentKey: helper.TestDocKey(t).String(),
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 			IsRemoved:   true,
 		}
