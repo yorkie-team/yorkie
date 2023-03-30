@@ -20,7 +20,6 @@ package types
 import "time"
 
 // Project is a project that consists of multiple documents and clients.
-// It allows developers to work on the same cluster.
 type Project struct {
 	// ID is the unique ID of the project.
 	ID ID `json:"id"`

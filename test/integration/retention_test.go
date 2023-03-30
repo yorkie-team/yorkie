@@ -33,7 +33,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -84,7 +83,7 @@ func TestRetention(t *testing.T) {
 
 		ctx := context.Background()
 
-		doc := document.New(key.Key(helper.TestDocKey(t)))
+		doc := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
 		defer func() { assert.NoError(t, cli.Detach(ctx, doc)) }()
 
@@ -146,7 +145,7 @@ func TestRetention(t *testing.T) {
 		}()
 
 		ctx := context.Background()
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, cli1.Detach(ctx, d1)) }()
 
@@ -221,7 +220,7 @@ func TestRetention(t *testing.T) {
 			assert.NoError(t, cli2.Close())
 		}()
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli2.Attach(ctx, d2))
 		defer func() { assert.NoError(t, cli2.Detach(ctx, d2)) }()
 

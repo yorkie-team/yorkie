@@ -30,7 +30,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -51,16 +50,16 @@ func TestSnapshot(t *testing.T) {
 
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
-	defer cleanupClients(t, clients)
+	defer deactivateAndCloseClients(t, clients)
 
 	t.Run("snapshot test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -92,7 +91,7 @@ func TestSnapshot(t *testing.T) {
 	t.Run("text snapshot test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -126,7 +125,7 @@ func TestSnapshot(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -137,7 +136,7 @@ func TestSnapshot(t *testing.T) {
 	t.Run("text snapshot with concurrent local change test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
@@ -149,7 +148,7 @@ func TestSnapshot(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

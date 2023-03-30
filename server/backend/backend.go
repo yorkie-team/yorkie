@@ -35,7 +35,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
-	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
 	memsync "github.com/yorkie-team/yorkie/server/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
@@ -60,9 +59,7 @@ type Backend struct {
 func New(
 	conf *Config,
 	mongoConf *mongo.Config,
-	etcdConf *etcd.Config,
 	housekeepingConf *housekeeping.Config,
-	clusterAddr string,
 	metrics *prometheus.Metrics,
 ) (*Backend, error) {
 	hostname := conf.Hostname
@@ -75,10 +72,9 @@ func New(
 	}
 
 	serverInfo := &sync.ServerInfo{
-		ID:          xid.New().String(),
-		Hostname:    hostname,
-		ClusterAddr: clusterAddr,
-		UpdatedAt:   time.Now(),
+		ID:        xid.New().String(),
+		Hostname:  hostname,
+		UpdatedAt: time.Now(),
 	}
 
 	bg := background.New()
@@ -97,20 +93,10 @@ func New(
 		}
 	}
 
-	var coordinator sync.Coordinator
-	if etcdConf != nil {
-		etcdClient, err := etcd.Dial(etcdConf, serverInfo)
-		if err != nil {
-			return nil, err
-		}
-		if err := etcdClient.Initialize(); err != nil {
-			return nil, err
-		}
-
-		coordinator = etcdClient
-	} else {
-		coordinator = memsync.NewCoordinator(serverInfo)
-	}
+	// TODO(hackerwins): Implement the coordinator for a shard. For now, we
+	//  distribute workloads to all shards per document. In the future, we
+	//  will need to distribute workloads of a document.
+	coordinator := memsync.NewCoordinator(serverInfo)
 
 	authWebhookCache, err := cache.NewLRUExpireCache[string, *types.AuthWebhookResponse](conf.AuthWebhookCacheSize)
 	if err != nil {
@@ -134,7 +120,6 @@ func New(
 	logging.DefaultLogger().Infof(
 		"backend created: id: %s, rpc: %s: db: %s",
 		serverInfo.ID,
-		serverInfo.ClusterAddr,
 		dbInfo,
 	)
 
@@ -178,12 +163,7 @@ func (b *Backend) Shutdown() error {
 		logging.DefaultLogger().Error(err)
 	}
 
-	logging.DefaultLogger().Infof(
-		"backend stoped: id: %s, rpc: %s",
-		b.serverInfo.ID,
-		b.serverInfo.ClusterAddr,
-	)
-
+	logging.DefaultLogger().Infof("backend stoped: id: %s", b.serverInfo.ID)
 	return nil
 }
 

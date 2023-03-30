@@ -26,21 +26,20 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestHistory(t *testing.T) {
 	clients := activeClients(t, 1)
 	cli := clients[0]
-	defer cleanupClients(t, clients)
+	defer deactivateAndCloseClients(t, clients)
 
 	adminCli := helper.CreateAdminCli(t, defaultServer.AdminAddr())
 	defer func() { assert.NoError(t, adminCli.Close()) }()
 
 	t.Run("history test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, d1))
 		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 

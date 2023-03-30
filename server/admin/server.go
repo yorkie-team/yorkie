@@ -93,18 +93,13 @@ func NewServer(conf *Config, be *backend.Backend) *Server {
 	}
 
 	grpcServer := grpc.NewServer(opts...)
-
 	server := &Server{
 		conf:         conf,
 		grpcServer:   grpcServer,
 		backend:      be,
 		tokenManager: tokenManager,
 	}
-
 	api.RegisterAdminServiceServer(grpcServer, server)
-	// TODO(hackerwins): ClusterServer need to be handled by different authentication mechanism.
-	// Consider extracting the servers to another grpcServer.
-	api.RegisterClusterServiceServer(grpcServer, newClusterServer(be))
 
 	return server
 }

@@ -18,7 +18,6 @@ package interceptors
 
 import (
 	"context"
-	"strings"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -120,11 +119,8 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 }
 
 func isRequiredAuth(method string) bool {
-	// NOTE(hackerwins): We don't need to authenticate the request if the
-	// request is from the peer clusters.
 	return method != "/yorkie.v1.AdminService/LogIn" &&
-		method != "/yorkie.v1.AdminService/SignUp" &&
-		strings.HasPrefix(method, "/yorkie.v1.AdminService/")
+		method != "/yorkie.v1.AdminService/SignUp"
 }
 
 // authenticate does authenticate the request.

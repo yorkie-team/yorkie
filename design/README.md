@@ -11,7 +11,6 @@
 - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text nodes
 - [Housekeeping](housekeeping.md): Deactivating outdated clients for efficient garbage collection
 - [Retention](retention.md): Clearing unnecessary changes with `--backend-snapshot-with-purging-changes` flag
-- [Cluster Mode](cluster-mode.md): Multiple-agent cluster mode with ETCD
 - [Document Removal](document-removal.md): Soft deletion of document
 
 ## Maintaining the Document

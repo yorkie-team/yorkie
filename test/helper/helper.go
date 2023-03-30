@@ -37,7 +37,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
-	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
@@ -69,10 +68,6 @@ var (
 	MongoConnectionURI     = "mongodb://localhost:27017"
 	MongoConnectionTimeout = "5s"
 	MongoPingTimeout       = "5s"
-
-	ETCDEndpoints     = []string{"localhost:2379"}
-	ETCDDialTimeout   = 5 * gotime.Second
-	ETCDLockLeaseTime = 30 * gotime.Second
 )
 
 func init() {
@@ -151,11 +146,6 @@ func TestConfig() *server.Config {
 			PingTimeout:       MongoPingTimeout,
 			YorkieDatabase:    TestDBName(),
 		},
-		ETCD: &etcd.Config{
-			Endpoints:     ETCDEndpoints,
-			DialTimeout:   ETCDDialTimeout.String(),
-			LockLeaseTime: ETCDLockLeaseTime.String(),
-		},
 	}
 }
 
@@ -169,10 +159,10 @@ func TestServer() *server.Yorkie {
 }
 
 // TestDocKey returns a new instance of document key for testing.
-func TestDocKey(t testing.TB) string {
+func TestDocKey(t testing.TB) key.Key {
 	name := t.Name()
 	if err := key.Key(name).Validate(); err == nil {
-		return name
+		return key.Key(name)
 	}
 
 	if len(name) > 60 {
@@ -192,7 +182,7 @@ func TestDocKey(t testing.TB) string {
 		}
 	}
 
-	return sb.String()
+	return key.Key(sb.String())
 }
 
 // NewRangeSlice returns a slice of integers from start to end.
