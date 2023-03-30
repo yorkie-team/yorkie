@@ -36,7 +36,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
-	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/server/rpc"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -49,7 +48,6 @@ var (
 
 	testRPCServer *rpc.Server
 	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.RPCPort)
-	testAdminAddr = fmt.Sprintf("localhost:%d", helper.AdminPort)
 	testClient    api.YorkieServiceClient
 
 	invalidChangePack = &api.ChangePack{
@@ -75,14 +73,10 @@ func TestMain(m *testing.M) {
 		YorkieDatabase:    helper.TestDBName(),
 		ConnectionTimeout: helper.MongoConnectionTimeout,
 		PingTimeout:       helper.MongoPingTimeout,
-	}, &etcd.Config{
-		Endpoints:     helper.ETCDEndpoints,
-		DialTimeout:   helper.ETCDDialTimeout.String(),
-		LockLeaseTime: helper.ETCDLockLeaseTime.String(),
 	}, &housekeeping.Config{
 		Interval:                  helper.HousekeepingInterval.String(),
 		CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
-	}, testAdminAddr, met)
+	}, met)
 	if err != nil {
 		log.Fatal(err)
 	}

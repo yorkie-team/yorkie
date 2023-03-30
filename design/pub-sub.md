@@ -137,7 +137,4 @@ func (s *yorkieServer) WatchDocuments(
 
 ### Risks and Mitigation
 
-Currently, Subscription instances are managed in memory. This can be a problem
-when building a cluster of servers.  
-To solve this problem, we are planning to support cluster-mode
-using [etcd](https://github.com/etcd-io/etcd).
+Currently, Subscription instances are managed in memory.

@@ -19,7 +19,6 @@ package interceptors
 
 import (
 	"context"
-	"strings"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -54,12 +53,6 @@ func (i *ContextInterceptor) Unary() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
-		// TODO(hackerwins): We need to remove this condition after
-		// extracting cluster service from this server.
-		if !isRPCService(info.FullMethod) {
-			return handler(ctx, req)
-		}
-
 		ctx, err = i.buildContext(ctx)
 		if err != nil {
 			return nil, err
@@ -91,12 +84,6 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) error {
-		// TODO(hackerwins): We need to remove this condition after
-		// extracting cluster service from this server.
-		if !isRPCService(info.FullMethod) {
-			return handler(srv, ss)
-		}
-
 		ctx := ss.Context()
 		ctx, err := i.buildContext(ctx)
 		if err != nil {
@@ -121,10 +108,6 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 
 		return err
 	}
-}
-
-func isRPCService(method string) bool {
-	return strings.HasPrefix(method, "/yorkie.v1.YorkieService/")
 }
 
 // buildContext builds a context data for RPC. It includes the metadata of the

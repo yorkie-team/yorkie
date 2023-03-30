@@ -37,7 +37,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
-	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
@@ -69,10 +68,6 @@ var (
 	MongoConnectionURI     = "mongodb://localhost:27017"
 	MongoConnectionTimeout = "5s"
 	MongoPingTimeout       = "5s"
-
-	ETCDEndpoints     = []string{"localhost:2379"}
-	ETCDDialTimeout   = 5 * gotime.Second
-	ETCDLockLeaseTime = 30 * gotime.Second
 )
 
 func init() {
@@ -150,11 +145,6 @@ func TestConfig() *server.Config {
 			ConnectionTimeout: MongoConnectionTimeout,
 			PingTimeout:       MongoPingTimeout,
 			YorkieDatabase:    TestDBName(),
-		},
-		ETCD: &etcd.Config{
-			Endpoints:     ETCDEndpoints,
-			DialTimeout:   ETCDDialTimeout.String(),
-			LockLeaseTime: ETCDLockLeaseTime.String(),
 		},
 	}
 }

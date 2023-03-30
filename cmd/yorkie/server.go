@@ -27,7 +27,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
-	"github.com/yorkie-team/yorkie/server/backend/sync/etcd"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -82,16 +81,6 @@ func newServerCmd() *cobra.Command {
 					ConnectionTimeout: mongoConnectionTimeout.String(),
 					YorkieDatabase:    mongoYorkieDatabase,
 					PingTimeout:       mongoPingTimeout.String(),
-				}
-			}
-
-			if etcdEndpoints != nil {
-				conf.ETCD = &etcd.Config{
-					Endpoints:     etcdEndpoints,
-					DialTimeout:   etcdDialTimeout.String(),
-					Username:      etcdUsername,
-					Password:      etcdPassword,
-					LockLeaseTime: etcdLockLeaseTime.String(),
 				}
 			}
 
@@ -255,36 +244,6 @@ func init() {
 		"mongo-ping-timeout",
 		server.DefaultMongoPingTimeout,
 		"Mongo DB's ping timeout",
-	)
-	cmd.Flags().StringSliceVar(
-		&etcdEndpoints,
-		"etcd-endpoints",
-		nil,
-		"Comma separated list of etcd endpoints",
-	)
-	cmd.Flags().DurationVar(
-		&etcdDialTimeout,
-		"etcd-dial-timeout",
-		etcd.DefaultDialTimeout,
-		"ETCD's dial timeout",
-	)
-	cmd.Flags().StringVar(
-		&etcdUsername,
-		"etcd-username",
-		"",
-		"ETCD's user name",
-	)
-	cmd.Flags().StringVar(
-		&etcdPassword,
-		"etcd-password",
-		"",
-		"ETCD's password",
-	)
-	cmd.Flags().DurationVar(
-		&etcdLockLeaseTime,
-		"etcd-lock-lease-time",
-		etcd.DefaultLockLeaseTime,
-		"ETCD's lease time for lock",
 	)
 	cmd.Flags().StringVar(
 		&conf.Backend.AdminUser,

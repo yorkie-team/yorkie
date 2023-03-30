@@ -88,20 +88,3 @@ Mongo:
 
   # PingTimeout is the timeout for pinging MongoDB.
   PingTimeout: "5s"
-
-# ETCD is the configuration for the etcd client (Optional).
-ETCD:
-  # Endpoints is the list of endpoints to connect to for etcd.
-  Endpoints: [ "localhost:2379" ]
-
-  # DialTimeout is the timeout for connecting to etcd.
-  DialTimeout: "5s"
-
-  # Username is the username to use for etcd.
-  Username: ""
-
-  # Password is the password to use for etcd.
-  Password: ""
-
-  # LockLeaseTime is the lease time for locks.
-  LockLeaseTime: "30s"
