@@ -169,10 +169,10 @@ func TestServer() *server.Yorkie {
 }
 
 // TestDocKey returns a new instance of document key for testing.
-func TestDocKey(t testing.TB) string {
+func TestDocKey(t testing.TB) key.Key {
 	name := t.Name()
 	if err := key.Key(name).Validate(); err == nil {
-		return name
+		return key.Key(name)
 	}
 
 	if len(name) > 60 {
@@ -192,7 +192,7 @@ func TestDocKey(t testing.TB) string {
 		}
 	}
 
-	return sb.String()
+	return key.Key(sb.String())
 }
 
 // NewRangeSlice returns a slice of integers from start to end.

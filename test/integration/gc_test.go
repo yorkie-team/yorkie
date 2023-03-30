@@ -26,22 +26,21 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestGarbageCollection(t *testing.T) {
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
-	defer cleanupClients(t, clients)
+	defer deactivateAndCloseClients(t, clients)
 
 	t.Run("garbage collection for container type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -104,11 +103,11 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for text type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -176,11 +175,11 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

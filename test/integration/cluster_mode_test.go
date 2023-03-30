@@ -32,7 +32,6 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -82,8 +81,8 @@ func withTwoClientsAndDocsInClusterMode(
 		assert.NoError(t, client2.Close())
 	}()
 
-	doc1 := document.New(key.Key(helper.TestDocKey(t)))
-	doc2 := document.New(key.Key(helper.TestDocKey(t)))
+	doc1 := document.New(helper.TestDocKey(t))
+	doc2 := document.New(helper.TestDocKey(t))
 
 	assert.NoError(t, client1.Attach(ctx, doc1))
 	assert.NoError(t, client2.Attach(ctx, doc2))

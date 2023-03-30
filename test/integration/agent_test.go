@@ -30,7 +30,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -44,7 +43,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(key.Key(helper.TestDocKey(t)))
+		doc := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		wg := sync.WaitGroup{}

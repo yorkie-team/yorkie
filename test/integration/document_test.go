@@ -37,11 +37,11 @@ import (
 func TestDocument(t *testing.T) {
 	clients := activeClients(t, 2)
 	c1, c2 := clients[0], clients[1]
-	defer cleanupClients(t, clients)
+	defer deactivateAndCloseClients(t, clients)
 
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
-		doc := document.New(key.Key(helper.TestDocKey(t)))
+		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
 			return nil
@@ -56,7 +56,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 
-		doc2 := document.New(key.Key(helper.TestDocKey(t)))
+		doc2 := document.New(helper.TestDocKey(t))
 		err = doc2.Update(func(root *json.Object) error {
 			root.SetString("k1", "v2")
 			return nil
@@ -74,11 +74,11 @@ func TestDocument(t *testing.T) {
 
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -112,11 +112,11 @@ func TestDocument(t *testing.T) {
 
 	t.Run("watch document changed event test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -163,7 +163,7 @@ func TestDocument(t *testing.T) {
 	t.Run("document tombstone test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddInteger(1, 2)
 			return nil
@@ -173,7 +173,7 @@ func TestDocument(t *testing.T) {
 		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
@@ -206,7 +206,7 @@ func TestDocument(t *testing.T) {
 		defer func() {
 			assert.NoError(t, cli.Close())
 		}()
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 
 		// 01. client is not activated.
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrClientNotActivated)
@@ -234,7 +234,7 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. cli1 creates d1 and removes it.
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := d1.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
 			return nil
@@ -244,11 +244,11 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c1.Remove(ctx, d1))
 
 		// 02. cli2 creates d2 with the same key.
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		// 03. cli1 creates d3 with the same key.
-		d3 := document.New(key.Key(helper.TestDocKey(t)))
+		d3 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d3))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d3}, {c2, d2}})
 	})
@@ -257,7 +257,7 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. cli1 creates d1 and cli2 syncs.
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := d1.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
 			return nil
@@ -265,7 +265,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
@@ -288,14 +288,14 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. cli1 creates d1 and cli2 syncs.
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := d1.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
@@ -310,14 +310,14 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. cli1 creates d1 and cli2 syncs.
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err := d1.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
@@ -345,7 +345,7 @@ func TestDocument(t *testing.T) {
 		}()
 
 		// 01. abnormal behavior on detached state
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Sync(ctx, d1.Key()), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
@@ -367,7 +367,7 @@ func TestDocument(t *testing.T) {
 		defer cancel()
 
 		// 01. c1 creates d1 without attaching.
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		_, err := c1.Watch(watchCtx, d1)
 		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
 
@@ -423,7 +423,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 
-		d1 := document.New(key.Key(helper.TestDocKey(t)))
+		d1 := document.New(helper.TestDocKey(t))
 		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
@@ -469,7 +469,7 @@ func TestDocumentWithProjects(t *testing.T) {
 				c2.ID().String(): nil,
 			},
 		})
-		d2 := document.New(key.Key(helper.TestDocKey(t)))
+		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
 		defer cancel2()
@@ -486,7 +486,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		}))
 
 		// d3 is in another project, so c1 and c2 should not receive events.
-		d3 := document.New(key.Key(helper.TestDocKey(t)))
+		d3 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c3.Attach(ctx, d3))
 		watch3Ctx, cancel3 := context.WithCancel(ctx)
 		defer cancel3()
