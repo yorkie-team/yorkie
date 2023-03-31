@@ -193,10 +193,17 @@ func pullChangeInfos(
 		return change.InitialCheckpoint, nil, err
 	}
 
-	// Remove Operations that were performed already by local changes.
-	for _, change := range pulledChanges {
-		if clientInfo.ID == change.ActorID && cpAfterPush.ClientSeq >= change.ClientSeq {
-			change.Operations = nil
+	// NOTE(hackerwins, humdrum): Remove operations from the pulled changes if the client already has them.
+	// This could happen when the client has pushed changes and the server receives the changes
+	// and stores them in the DB, but fails to send the response to the client.
+	// And it could also happen when the client sync with push-only mode and then sync with pull mode.
+	//
+	// See the following test case for more details:
+	//   "sync option with mixed mode test" in integration/client_test.go
+	for _, pulledChange := range pulledChanges {
+		if clientInfo.ID == pulledChange.ActorID &&
+			cpAfterPush.ClientSeq >= pulledChange.ClientSeq {
+			pulledChange.Operations = nil
 		}
 	}
 
