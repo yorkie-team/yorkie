@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -86,7 +87,17 @@ func pullPack(
 	reqPack *change.Pack,
 	cpAfterPush change.Checkpoint,
 	initialServerSeq int64,
+	mode types.SyncMode,
 ) (*ServerPack, error) {
+	// If the client is push-only, it does not need to pull changes.
+	// So, just return the checkpoint with server seq after pushing changes.
+	if mode == types.SyncModePushOnly {
+		return NewServerPack(docInfo.Key, change.Checkpoint{
+			ServerSeq: reqPack.Checkpoint.ServerSeq,
+			ClientSeq: cpAfterPush.ClientSeq,
+		}, nil, nil), nil
+	}
+
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
 		return nil, fmt.Errorf(
 			"serverSeq of CP greater than serverSeq of clientInfo(clientInfo %d, cp %d): %w",
@@ -182,19 +193,35 @@ func pullChangeInfos(
 		return change.InitialCheckpoint, nil, err
 	}
 
+	// NOTE(hackerwins, humdrum): Remove changes from the pulled if the client already has them.
+	// This could happen when the client has pushed changes and the server receives the changes
+	// and stores them in the DB, but fails to send the response to the client.
+	// And it could also happen when the client sync with push-only mode and then sync with pull mode.
+	//
+	// See the following test case for more details:
+	//   "sync option with mixed mode test" in integration/client_test.go
+	var filteredChanges []*database.ChangeInfo
+	for _, pulledChange := range pulledChanges {
+		if clientInfo.ID == pulledChange.ActorID && cpAfterPush.ClientSeq >= pulledChange.ClientSeq {
+			continue
+		}
+		filteredChanges = append(filteredChanges, pulledChange)
+	}
+
 	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)
 
 	if len(pulledChanges) > 0 {
 		logging.From(ctx).Infof(
-			"PULL: '%s' pulls %d changes(%d~%d) from '%s', cp: %s",
+			"PULL: '%s' pulls %d changes(%d~%d) from '%s', cp: %s, filtered changes: %d",
 			clientInfo.ID,
 			len(pulledChanges),
 			pulledChanges[0].ServerSeq,
 			pulledChanges[len(pulledChanges)-1].ServerSeq,
 			docInfo.Key,
 			cpAfterPull.String(),
+			len(filteredChanges),
 		)
 	}
 
-	return cpAfterPull, pulledChanges, nil
+	return cpAfterPull, filteredChanges, nil
 }

@@ -166,7 +166,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
 	if err != nil {
 		return nil, err
 	}
@@ -300,6 +300,11 @@ func (s *yorkieServer) PushPullChanges(
 		}()
 	}
 
+	syncMode := types.SyncModePushPull
+	if req.PushOnly {
+		syncMode = types.SyncModePushOnly
+	}
+
 	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, project, actorID)
 	if err != nil {
 		return nil, err
@@ -313,7 +318,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, syncMode)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +472,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
 	if err != nil {
 		return nil, err
 	}

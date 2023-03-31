@@ -881,7 +881,7 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 		if info.DocID != docID || info.ServerSeq > to {
 			break
 		}
-		infos = append(infos, info)
+		infos = append(infos, info.DeepCopy())
 	}
 	return infos, nil
 }

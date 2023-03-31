@@ -90,3 +90,15 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 
 	return c, nil
 }
+
+// DeepCopy returns a deep copy of this ChangeInfo.
+func (i *ChangeInfo) DeepCopy() *ChangeInfo {
+	if i == nil {
+		return nil
+	}
+
+	clone := &ChangeInfo{}
+	*clone = *i
+
+	return clone
+}

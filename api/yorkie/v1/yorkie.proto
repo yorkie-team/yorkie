@@ -108,6 +108,7 @@ message PushPullChangesRequest {
   bytes client_id = 1;
   string document_id = 2;
   ChangePack change_pack = 3;
+  bool push_only = 4;
 }
 
 message PushPullChangesResponse {
