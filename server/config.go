@@ -36,6 +36,7 @@ import (
 const (
 	DefaultRPCPort             = 11101
 	DefaultRPCMaxRequestsBytes = 4 * 1024 * 1024 // 4MiB
+	DefaultRPCMaxConnectionAge = 1 * time.Minute
 
 	DefaultProfilingPort = 11102
 
@@ -150,6 +151,10 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.RPC.MaxRequestBytes == 0 {
 		c.RPC.MaxRequestBytes = DefaultRPCMaxRequestsBytes
+	}
+
+	if c.RPC.MaxConnectionAge == "" {
+		c.RPC.MaxConnectionAge = DefaultRPCMaxConnectionAge.String()
 	}
 
 	if c.Profiling.Port == 0 {

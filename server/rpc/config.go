@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 )
 
 var (
@@ -29,6 +30,8 @@ var (
 	ErrInvalidCertFile = errors.New("invalid cert file for RPC server")
 	// ErrInvalidKeyFile occurs when the key file is invalid.
 	ErrInvalidKeyFile = errors.New("invalid key file for RPC server")
+	// ErrInvalidMaxConnectionAge occurs when the max connection age is invalid.
+	ErrInvalidMaxConnectionAge = errors.New("invalid max connection age for RPC server")
 )
 
 // Config is the configuration for creating a Server instance.
@@ -44,6 +47,10 @@ type Config struct {
 
 	// MaxRequestBytes is the maximum client request size in bytes the server will accept.
 	MaxRequestBytes uint64 `yaml:"MaxRequestBytes"`
+
+	// MaxConnectionAge is a duration for the maximum amount of time a connection may exist
+	// before it will be closed by sending a GoAway.
+	MaxConnectionAge string `yaml:"MaxConnectionAge"`
 }
 
 // Validate validates the port number and the files for certification.
@@ -63,6 +70,14 @@ func (c *Config) Validate() error {
 		if _, err := os.Stat(c.KeyFile); err != nil {
 			return fmt.Errorf("%s: %w", c.KeyFile, ErrInvalidKeyFile)
 		}
+	}
+
+	if _, err := time.ParseDuration(c.MaxConnectionAge); err != nil {
+		return fmt.Errorf(
+			"must be a valid time duration string format %d: %w",
+			c.MaxConnectionAge,
+			ErrInvalidMaxConnectionAge,
+		)
 	}
 
 	return nil

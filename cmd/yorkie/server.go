@@ -191,6 +191,12 @@ func init() {
 		server.DefaultRPCMaxRequestsBytes,
 		"Maximum client request size in bytes the server will accept.",
 	)
+	cmd.Flags().StringVar(
+		&conf.RPC.MaxConnectionAge,
+		"rpc-max-connection-age",
+		server.DefaultRPCMaxConnectionAge.String(),
+		"Maximum duration of connection may exist before it will be closed by sending a GoAway.",
+	)
 	cmd.Flags().IntVar(
 		&conf.Profiling.Port,
 		"profiling-port",

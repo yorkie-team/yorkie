@@ -6,6 +6,10 @@ RPC:
   # MaxRequestBytes is the maximum client request size in bytes the server will accept (default: 4194304, 4MiB).
   MaxRequestBytes: 4194304
 
+  # MaxConnectionAge is a duration for the maximum amount of time a connection may exist
+  # before it will be closed by sending a GoAway.
+  MaxConnectionAge: "60s"
+
   # CertFile is the file containing the TLS certificate.
   CertFile: ""
 
