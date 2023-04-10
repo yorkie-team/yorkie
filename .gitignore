@@ -67,3 +67,5 @@ output.txt
 # vscode
 .vscode
 
+# Chart dependencies
+/charts/*/charts
