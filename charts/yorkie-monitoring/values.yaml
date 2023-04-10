@@ -1,0 +1,123 @@
+# Configuration for name of yorkie app
+yorkie:
+  name: yorkie
+  namespace: yorkie
+  profilingPort: 11102
+
+# Configuration for monitoring system
+monitoring:
+  name: &monitoringName yorkie-monitoring
+
+  enableEnhancements: &monitoringEnhancementsEnable false
+
+# Configuration for manual prometheus monitoring stack
+kube-prometheus-stack:
+  nameOverride: *monitoringName
+  namespaceOverride: monitoring
+
+  # Configuration for alertmanager
+  # ref: https://prometheus.io/docs/alerting/alertmanager/
+  alertmanager:
+    enabled: *monitoringEnhancementsEnable
+
+  # Using default values from
+  # ref: https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
+  grafana:
+    enabled: true
+
+    defaultDashboardsTimezone: utc
+    defaultDashboardsEnabled: false
+    adminPassword: krapie
+
+    # For grafana data persistence
+    persistence:
+      enabled: true
+      type: pvc
+      # storageClassName: k8s
+      accessModes:
+      - ReadWriteOnce
+      size: 1Gi
+      finalizers:
+      - kubernetes.io/pvc-protection
+
+  # Component scraping the kube api server
+  kubeApiServer:
+    enabled: *monitoringEnhancementsEnable
+  
+  # Component scraping the kubelet and kubelet-hosted cAdvisor
+  kubelet:
+    enabled: *monitoringEnhancementsEnable
+  
+  # Component scraping the kube controller manager
+  kubeControllerManager:
+    enabled: *monitoringEnhancementsEnable
+
+  # Component scraping coreDns. Use either this or kubeDns
+  coreDns:
+    enabled: *monitoringEnhancementsEnable
+
+  # Component scraping kubeDns. Use either this or coreDns
+  kubeDns:
+    enabled: *monitoringEnhancementsEnable
+
+  # Component scraping etcd
+  kubeEtcd:
+    enabled: *monitoringEnhancementsEnable
+  
+  # Component scraping kube scheduler
+  kubeScheduler:
+    enabled: *monitoringEnhancementsEnable
+  
+  # Component scraping kube proxy
+  kubeProxy:
+    enabled: *monitoringEnhancementsEnable
+
+  # Component scraping kube state metrics
+  kubeStateMetrics:
+    enabled: *monitoringEnhancementsEnable
+
+  # Deploy node exporter as a daemonset to all nodes
+  nodeExporter:
+    enabled: true
+
+  # Manages Prometheus and Alertmanager components
+  prometheusOperator:
+    enabled: true
+
+  # Configuration for thanosRuler
+  thanosRuler:
+    enabled: *monitoringEnhancementsEnable
+  
+  # Deploy a Prometheus instance
+  prometheus:
+    enabled: true
+
+    # Use this configuration to allow servicemonitor after helm chart creation
+    prometheusSpec:
+      serviceMonitorSelectorNilUsesHelmValues: false
+
+      # Prometheus StorageSpec for persistent data
+      # ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/user-guides/storage.md
+      #
+      storageSpec: {}
+      # Using PersistentVolumeClaim
+      #
+      volumeClaimTemplate:
+        spec:
+          # storageClassName: gluster
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+        selector: {}
+
+# Configuration for external gateway (eg: AWS ALB)
+externalGateway:
+  alb:
+    enabled: false
+
+    certArn: arn:aws:acm:ap-northeast-2:031403140314:certificate/4ae32f71-39df-43b6-bf19-c0428827920a
+    # Use same host for yorkie cluster
+    apiHost: api.yorkie.dev
+  
+    grafanaPath: /grafana

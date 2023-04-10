@@ -1,0 +1,24 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: {{ .Values.monitoring.name }}
+    app.kubernetes.io/name: {{ .Values.monitoring.name }}
+    app.kubernetes.io/instance: {{ .Values.monitoring.name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    app.kubernetes.io/component: servicemonitor
+    app.kubernetes.io/part-of: {{ .Values.monitoring.name }}
+    app.kubernetes.io/managed-by: Helm
+    prometheus: monitoring
+  name: {{ .Values.monitoring.name }}
+  namespace: monitoring
+spec:
+  endpoints:
+  - path: /metrics
+    port: {{ .Values.yorkie.name }}-profiling
+  namespaceSelector:
+    matchNames:
+    - {{ .Values.yorkie.namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.yorkie.name }}

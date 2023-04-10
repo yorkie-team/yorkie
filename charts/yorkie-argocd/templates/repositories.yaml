@@ -1,0 +1,13 @@
+{{ if .Values.argocd.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.yorkie.name }}-repo
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  url: {{ .Values.argocd.source.repoURL }}
+  username: {{ .Values.argocd.source.username }}
+  password: {{ .Values.argocd.source.password }}
+{{ end }}

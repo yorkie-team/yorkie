@@ -1,0 +1,27 @@
+{{ if .Values.externalGateway.alb.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.argocd.name }}
+  namespace: argocd
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # Set alb.ingress.kubernetes.io/certificate-arn annotation to TLS certificate's ARN issued in AWS ACM 
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.externalGateway.alb.certArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/group.name: {{ .Values.externalGateway.alb.apiHost }}
+    alb.ingress.kubernetes.io/group.order: '2'
+spec:
+  ingressClassName: alb
+  rules:
+    - host: {{ .Values.externalGateway.alb.apiHost }}
+      http:
+        paths:
+          - path: {{ .Values.externalGateway.alb.argoCDPath }}/
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80
+{{ end }}

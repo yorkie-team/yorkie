@@ -1,0 +1,56 @@
+{{ if .Values.externalGateway.alb.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.yorkie.name }}
+  namespace: istio-system
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # Set alb.ingress.kubernetes.io/certificate-arn annotation to TLS certificate's ARN issued in AWS ACM 
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.externalGateway.alb.certArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/backend-protocol-version: HTTP2
+    alb.ingress.kubernetes.io/group.name: {{ .Values.externalGateway.alb.apiHost }}
+    alb.ingress.kubernetes.io/group.order: '10'
+spec:
+  ingressClassName: alb
+  rules:
+    - host: {{ .Values.externalGateway.alb.apiHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.gateway.name }}
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.yorkie.name }}-admin
+  namespace: istio-system
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # Set alb.ingress.kubernetes.io/certificate-arn annotation to TLS certificate's ARN issued in AWS ACM 
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.externalGateway.alb.certArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/group.name: {{ .Values.externalGateway.alb.apiHost }}
+    alb.ingress.kubernetes.io/group.order: '3'
+spec:
+  ingressClassName: alb
+  rules:
+    - host: {{ .Values.externalGateway.alb.adminHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.gateway.name }}
+                port:
+                  number: 80
+{{ end }}
