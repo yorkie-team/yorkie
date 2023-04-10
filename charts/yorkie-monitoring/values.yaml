@@ -27,7 +27,7 @@ kube-prometheus-stack:
 
     defaultDashboardsTimezone: utc
     defaultDashboardsEnabled: false
-    adminPassword: krapie
+    adminPassword: yorkie
 
     # For grafana data persistence
     persistence:

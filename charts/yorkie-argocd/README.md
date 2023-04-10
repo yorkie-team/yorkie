@@ -10,7 +10,7 @@ Installs the yorkie-argocd, which provides GitOps based continuous delivery for 
 ## Get Helm Repository Info
 
 ```bash
-helm repo add yorkie https://yorkie-team.github.io/yorkie
+helm repo add yorkie https://yorkie-team.github.io/yorkie/helm-charts
 helm repo update
 ```
 
@@ -66,7 +66,9 @@ _See [`helm uninstall`](https://helm.sh/docs/helm/helm_uninstall/) for command d
 CRDs created by this chart are not removed by default and should be manually cleaned up:
 
 ```bash
-kubectl delete crds -n argocd
+kubectl delete crd applications.argoproj.io
+kubectl delete crd applicationsets.argoproj.io
+kubectl delete crd appprojects.argoproj.io
 ```
 
 ## Upgrading Chart

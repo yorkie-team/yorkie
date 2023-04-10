@@ -13,15 +13,15 @@ argocd:
   project: default
 
   source:
-    repoURL: https://github.com/krapie/yorkie-cluster.git
+    repoURL: https://github.com/yorkie-team/yorkie.git
     targetRevision: main
 
-    yorkieAppPath: helm/yorkie-cluster
-    monitoringPath: helm/yorkie-addons
+    yorkieAppPath: charts/yorkie-cluster
+    monitoringPath: charts/yorkie-monitoring
 
     # Set usename & password for private repository
-    username: krapie
-    password: ghp_031403140314
+    username: yorkie
+    password: ghp_12341234
   destination:
     server: https://kubernetes.default.svc
     namespace: default

@@ -10,7 +10,7 @@ Installs the yorkie-monitoring, which provides monitoring system with prometheus
 ## Get Helm Repository Info
 
 ```bash
-helm repo add yorkie https://yorkie-team.github.io/yorkie
+helm repo add yorkie https://yorkie-team.github.io/yorkie/helm-charts
 helm repo update
 ```
 
@@ -69,7 +69,14 @@ _See [`helm uninstall`](https://helm.sh/docs/helm/helm_uninstall/) for command d
 CRDs created by this chart are not removed by default and should be manually cleaned up:
 
 ```bash
-kubectl delete crds -n monitoring
+kubectl delete crd alertmanagerconfigs.monitoring.coreos.com
+kubectl delete crd alertmanagers.monitoring.coreos.com
+kubectl delete crd podmonitors.monitoring.coreos.com
+kubectl delete crd probes.monitoring.coreos.com
+kubectl delete crd prometheuses.monitoring.coreos.com
+kubectl delete crd prometheusrules.monitoring.coreos.com
+kubectl delete crd servicemonitors.monitoring.coreos.com
+kubectl delete crd thanosrulers.monitoring.coreos.com
 ```
 
 ## Upgrading Chart

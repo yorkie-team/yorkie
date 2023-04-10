@@ -10,7 +10,7 @@ Installs the yorkie-cluster, which provides cluster mode for Yorkie server to ha
 ## Get Helm Repository Info
 
 ```bash
-helm repo add yorkie https://yorkie-team.github.io/yorkie
+helm repo add yorkie https://yorkie-team.github.io/yorkie/helm-charts
 helm repo update
 ```
 
@@ -71,7 +71,21 @@ _See [`helm uninstall`](https://helm.sh/docs/helm/helm_uninstall/) for command d
 CRDs created by this chart are not removed by default and should be manually cleaned up:
 
 ```bash
-kubectl delete crds -n istio-system
+kubectl delete crd authorizationpolicies.security.istio.io
+kubectl delete crd destinationrules.networking.istio.io
+kubectl delete crd envoyfilters.networking.istio.io
+kubectl delete crd gateways.networking.istio.io
+kubectl delete crd istiooperators.install.istio.io
+kubectl delete crd peerauthentications.security.istio.io
+kubectl delete crd proxyconfigs.networking.istio.io
+kubectl delete crd requestauthentications.security.istio.io
+kubectl delete crd serviceentries.networking.istio.io
+kubectl delete crd sidecars.networking.istio.io
+kubectl delete crd telemetries.telemetry.istio.io
+kubectl delete crd virtualservices.networking.istio.io
+kubectl delete crd wasmplugins.extensions.istio.io
+kubectl delete crd workloadentries.networking.istio.io
+kubectl delete crd workloadgroups.networking.istio.io
 ```
 
 ## Upgrading Chart
