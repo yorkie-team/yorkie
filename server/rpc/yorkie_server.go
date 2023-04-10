@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -369,6 +370,22 @@ func (s *yorkieServer) WatchDocument(
 	if _, err = clients.FindClientInfo(stream.Context(), s.backend.DB, project, cli.ID); err != nil {
 		return err
 	}
+
+	locker, err := s.backend.Coordinator.NewLocker(
+		stream.Context(),
+		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", cli.ID.String(), docID)),
+	)
+	if err != nil {
+		return err
+	}
+	if err := locker.Lock(stream.Context()); err != nil {
+		return err
+	}
+	defer func() {
+		if err := locker.Unlock(context.Background()); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
 
 	subscription, peersMap, err := s.watchDoc(stream.Context(), *cli, docID)
 	if err != nil {
