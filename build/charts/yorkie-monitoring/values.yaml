@@ -10,6 +10,21 @@ monitoring:
 
   enableEnhancements: &monitoringEnhancementsEnable false
 
+# Configuration for external gateway (eg: AWS ALB)
+externalGateway:
+  ingressClassName: nginx
+  ## Set to alb if you are using AWS ALB
+  # ingressClassName: alb
+
+  # Use same host for yorkie cluster
+  apiHost: &apiHost api.yorkie.dev
+  grafanaPath: /grafana
+
+  alb:
+    enabled: false
+
+    certArn: arn:aws:acm:ap-northeast-2:123412341234:certificate/1234-1234-1234-1234-1234
+
 # Configuration for manual prometheus monitoring stack
 kube-prometheus-stack:
   nameOverride: *monitoringName
@@ -39,6 +54,15 @@ kube-prometheus-stack:
       size: 1Gi
       finalizers:
       - kubernetes.io/pvc-protection
+
+    grafana.ini:
+      server:
+        domain: *apiHost
+        root_url: "%(protocol)s://%(domain)s/grafana"
+        serve_from_sub_path: true
+      
+      service:
+        type: NodePort
 
   # Component scraping the kube api server
   kubeApiServer:
@@ -110,14 +134,3 @@ kube-prometheus-stack:
             requests:
               storage: 1Gi
         selector: {}
-
-# Configuration for external gateway (eg: AWS ALB)
-externalGateway:
-  alb:
-    enabled: false
-
-    certArn: arn:aws:acm:ap-northeast-2:031403140314:certificate/4ae32f71-39df-43b6-bf19-c0428827920a
-    # Use same host for yorkie cluster
-    apiHost: api.yorkie.dev
-  
-    grafanaPath: /grafana

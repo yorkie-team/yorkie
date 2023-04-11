@@ -679,7 +679,7 @@ spec:
   {{ if .Values.externalGateway.alb.enabled }}
   type: NodePort
   {{ else }}
-  type: ClusterIP
+  type: LoadBalancer
   {{ end }}
   ports:
   - name: http

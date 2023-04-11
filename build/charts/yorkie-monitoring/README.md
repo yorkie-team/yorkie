@@ -31,6 +31,11 @@ _See [configuration](#configuration) below for custom installation_
 
 _See [`helm install`](https://helm.sh/docs/helm/helm_install/) for command documentation._
 
+## Expose Yorkie Monitoring
+
+By default, Grafana web dashboard is exposed via ingress with nginx ingress controller and domain `api.yorkie.dev`.
+For other environments like AWS, follow the steps below:
+
 ## Expose Yorkie Monitoring using AWS ALB
 
 If you are using AWS EKS and want to expose Grafana Dashboard using AWS ALB, follow the steps below:
@@ -38,8 +43,13 @@ If you are using AWS EKS and want to expose Grafana Dashboard using AWS ALB, fol
 ```bash
 # Change externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
 helm upgrade [RELEASE_NAME] yorkie/yorkie-monitoring -n monitoring \
---set externalGateway.alb.enabled=true \
---set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
+  --set externalGateway.ingressClassName=alb \
+  --set externalGateway.apiHost={YOUR_DOMAIN_NAME} \
+  --set externalGateway.alb.enabled=true \
+  --set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
+
+# Open Grafana Dashboard
+curl https://{YOUR_DOMAIN_NAME}/grafana
 ```
 
 Or, set configuration values in `values.yaml` file before installing the chart.

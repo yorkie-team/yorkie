@@ -58,8 +58,8 @@ gateway:
   name: istio-ingressgateway
 
   service:
-    # WARNING: Set ingress gateway service type to NodePort to use AWS ALB
-    type: LoadBalancer
+    # Set ingress gateway service type to NodePort to connect with external ingress
+    type: NodePort
     #  Set Health check by ALB
     anntoations:
       alb.ingress.kubernetes.io/healthcheck-path: /healthz/ready
@@ -69,9 +69,13 @@ gateway:
 
 # Configuration for external gateway (eg: AWS ALB)
 externalGateway:
+  ingressClassName: nginx
+  ## Set to alb if you are using AWS ALB
+  # ingressClassName: alb
+
+  apiHost: api.yorkie.dev
+  adminHost: admin.yorkie.dev
+    
   alb:
     enabled: false
-    
-    certArn: arn:aws:acm:ap-northeast-2:031403140314:certificate/4ae32f71-39df-43b6-bf19-c0428827920a
-    apiHost: api.yorkie.dev
-    adminHost: admin.yorkie.dev
+    certArn: arn:aws:acm:ap-northeast-2:123412341234:certificate/1234-1234-1234-1234-1234

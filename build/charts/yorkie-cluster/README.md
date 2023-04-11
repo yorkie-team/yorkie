@@ -30,6 +30,11 @@ _See [configuration](#configuration) below for custom installation_
 
 _See [`helm install`](https://helm.sh/docs/helm/helm_install/) for command documentation._
 
+## Expose Yorkie Cluster
+
+By default, Yorkie API is exposed via ingress with nginx ingress controller and domain `api.yorkie.dev`.
+For other environments like AWS, follow the steps below:
+
 ## Expose Yorkie Cluster using AWS ALB
 
 If you are using AWS EKS and want to expose Yorkie Cluster using AWS ALB, follow the steps below:
@@ -37,9 +42,13 @@ If you are using AWS EKS and want to expose Yorkie Cluster using AWS ALB, follow
 ```bash
 # Change istio-ingressgateway service type to NodePort, externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
 helm upgrade [RELEASE_NAME] yorkie/yorkie-cluster -n istio-system \
-    --set gateways.istio-ingressgateway.type=NodePort \
+    --set externalGateway.ingressClassName=alb \
+    --set externalGateway.apiHost={YOUR_DOMAIN_NAME} \
     --set externalGateway.alb.enabled=true \
     --set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
+
+# Test Yorkie API
+const client = new yorkie.Client('{YOUR_DOMAIN_NAME}');
 ```
 
 Or, set configuration values in `values.yaml` file before installing the chart.

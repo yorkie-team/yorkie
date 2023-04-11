@@ -68,4 +68,4 @@ output.txt
 .vscode
 
 # Chart dependencies
-/charts/*/charts
+/build/charts/*/charts

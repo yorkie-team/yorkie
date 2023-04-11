@@ -16,23 +16,27 @@ argocd:
     repoURL: https://github.com/yorkie-team/yorkie.git
     targetRevision: main
 
-    yorkieAppPath: charts/yorkie-cluster
-    monitoringPath: charts/yorkie-monitoring
+    yorkieAppPath: build/charts/yorkie-cluster
+    monitoringPath: build/charts/yorkie-monitoring
 
     # Set usename & password for private repository
     username: yorkie
-    password: ghp_12341234
+    password: ghp_123412341234
   destination:
     server: https://kubernetes.default.svc
     namespace: default
 
 # Configuration for external gateway (eg: AWS ALB)
 externalGateway:
+  ingressClassName: nginx
+  ## Set to alb if you are using AWS ALB
+  # ingressClassName: alb
+
+  # Use same host for yorkie cluster
+  apiHost: api.yorkie.dev
+  argoCDPath: /argocd
+
   alb:
     enabled: false
 
-    certArn: arn:aws:acm:ap-northeast-2:031403140314:certificate/4ae32f71-39df-43b6-bf19-c0428827920a
-    # Use same host for yorkie cluster
-    apiHost: api.yorkie.dev
-  
-    argoCDPath: /argocd
+    certArn: arn:aws:acm:ap-northeast-2:123412341234:certificate/1234-1234-1234-1234-1234
