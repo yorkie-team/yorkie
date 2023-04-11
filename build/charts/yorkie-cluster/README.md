@@ -20,7 +20,7 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 
 ```bash
 # Install yorkie cluster helm chart
-helm install [RELEASE_NAME] yorkie/yorkie-cluster -n istio-system --create-namespace
+helm install [RELEASE_NAME] yorkie-team/yorkie-cluster -n istio-system --create-namespace
 
 # Redeploy istio ingress gateway with auto injecton
 kubectl rollout restart deployment istio-ingressgateway -n istio-system
@@ -41,9 +41,10 @@ If you are using AWS EKS and want to expose Yorkie Cluster using AWS ALB, follow
 
 ```bash
 # Change istio-ingressgateway service type to NodePort, externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
-helm upgrade [RELEASE_NAME] yorkie/yorkie-cluster -n istio-system \
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster -n istio-system \
     --set externalGateway.ingressClassName=alb \
     --set externalGateway.apiHost={YOUR_DOMAIN_NAME} \
+    --set externalGateway.adminHost={YOUR_ADMIN_DOMAIN_NAME} \
     --set externalGateway.alb.enabled=true \
     --set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
 
@@ -100,7 +101,7 @@ kubectl delete crd workloadgroups.networking.istio.io
 ## Upgrading Chart
 
 ```bash
-helm upgrade [RELEASE_NAME] yorkie/yorkie-cluster -n istio-system
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster -n istio-system
 ```
 
 With Helm v3, CRDs created by this chart are not updated by default and should be manually updated.
@@ -113,7 +114,7 @@ _See [`helm upgrade`](https://helm.sh/docs/helm/helm_upgrade/) for command docum
 See [Customizing the Chart Before Installing](https://helm.sh/docs/intro/using_helm/#customizing-the-chart-before-installing). To see all configurable options with detailed comments:
 
 ```console
-helm show values yorkie/yorkie-cluster
+helm show values yorkie-team/yorkie-cluster
 ```
 
 You may also `helm show values` on this chart's [dependencies](#dependencies) for additional options.
