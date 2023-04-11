@@ -1,0 +1,97 @@
+apiVersion: v1
+entries:
+  yorkie-argocd:
+  - apiVersion: v2
+    appVersion: 0.3.3
+    created: "2023-04-11T16:00:37.391372+09:00"
+    description: yorkie-argocd provides GitOps based continuous delivery for yorkie
+      cluster
+    digest: c9bea40c5e025f9d3e9cf561a1212cf771ff8331158dbb5c9ecaec0207f8e2ae
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - argocd
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    - email: krapi0314@gmail.com
+      name: krapie
+    name: yorkie-argocd
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - yorkie-argocd-0.3.3.tgz
+    version: 0.3.3
+  yorkie-cluster:
+  - apiVersion: v2
+    appVersion: 0.3.3
+    created: "2023-04-11T16:00:37.396638+09:00"
+    dependencies:
+    - name: base
+      repository: https://istio-release.storage.googleapis.com/charts
+      version: 1.17.2
+    - name: istiod
+      repository: https://istio-release.storage.googleapis.com/charts
+      version: 1.17.2
+    - name: gateway
+      repository: https://istio-release.storage.googleapis.com/charts
+      version: 1.17.2
+    description: yorkie-cluster provides cluster mode for Yorkie server to handle
+      large amount of workloads with ensuring high availability, reliability, and
+      scalability.
+    digest: fd90d4413e9342b70aa458ed3f495ee46ca27d19766b68a7538321957a6330f7
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - istio
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    - email: krapi0314@gmail.com
+      name: krapie
+    name: yorkie-cluster
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - yorkie-cluster-0.3.3.tgz
+    version: 0.3.3
+  yorkie-monitoring:
+  - apiVersion: v2
+    appVersion: 0.3.3
+    created: "2023-04-11T16:00:37.413756+09:00"
+    dependencies:
+    - name: kube-prometheus-stack
+      repository: https://prometheus-community.github.io/helm-charts
+      version: 45.9.0
+    description: yorkie-monitoring provides monitoring system with prometheus and
+      grafana for monitoring yorkie cluster
+    digest: 2a0db3a7f36471e0b7673609a52e20e39e9424baf9d51f04a03096bc03992abe
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - prometheus
+    - grafana
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    - email: krapi0314@gmail.com
+      name: krapie
+    name: yorkie-monitoring
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - yorkie-monitoring-0.3.3.tgz
+    version: 0.3.3
+generated: "2023-04-11T16:00:37.388114+09:00"
