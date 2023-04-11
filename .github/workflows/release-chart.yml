@@ -1,9 +1,8 @@
 name: Release Charts
 
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
 
 jobs:
   release:
@@ -25,6 +24,8 @@ jobs:
 
       - name: Install Helm
         uses: azure/setup-helm@v3
+        with:
+          token: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Add dependency chart repos
         run: |
@@ -37,6 +38,6 @@ jobs:
         uses: helm/chart-releaser-action@v1.5.0
         with:
           charts_dir: build/charts
-          charts_repo_url: https://yorkie-team.github.io/yorkie/helm-charts
+          config: .github/cr.yaml
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
