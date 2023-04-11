@@ -1,0 +1,58 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.yorkie.name }}
+  namespace: istio-system
+  {{ if .Values.externalGateway.alb.enabled }}
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # Set alb.ingress.kubernetes.io/certificate-arn annotation to TLS certificate's ARN issued in AWS ACM 
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.externalGateway.alb.certArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/backend-protocol-version: HTTP2
+    alb.ingress.kubernetes.io/group.name: {{ .Values.externalGateway.apiHost }}
+    alb.ingress.kubernetes.io/group.order: '10'
+  {{ end }}
+spec:
+  ingressClassName: {{ .Values.externalGateway.ingressClassName }}
+  rules:
+    - host: {{ .Values.externalGateway.apiHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.gateway.name }}
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Values.yorkie.name }}-admin
+  namespace: istio-system
+  {{ if .Values.externalGateway.alb.enabled }}
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # Set alb.ingress.kubernetes.io/certificate-arn annotation to TLS certificate's ARN issued in AWS ACM 
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.externalGateway.alb.certArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/group.name: {{ .Values.externalGateway.apiHost }}
+    alb.ingress.kubernetes.io/group.order: '3'
+  {{ end }}
+spec:
+  ingressClassName: {{ .Values.externalGateway.ingressClassName }}
+  rules:
+    - host: {{ .Values.externalGateway.adminHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.gateway.name }}
+                port:
+                  number: 80

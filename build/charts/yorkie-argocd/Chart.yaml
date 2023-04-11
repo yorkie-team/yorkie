@@ -1,0 +1,22 @@
+apiVersion: v2
+name: yorkie-argocd
+description: yorkie-argocd provides GitOps based continuous delivery for yorkie cluster
+type: application
+icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+maintainers:
+  - name: hackerwins
+    email: susukang98@gmail.com
+  - name: krapie
+    email: krapi0314@gmail.com
+
+sources:
+  - https://github.com/yorkie-team/yorkie
+version: 0.3.3
+appVersion: "0.3.3"
+kubeVersion: ">=1.24.0-0"
+
+keywords:
+  - yorkie
+  - cluster
+  - kubernetes
+  - argocd

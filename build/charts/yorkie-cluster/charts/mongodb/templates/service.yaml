@@ -1,0 +1,26 @@
+{{ if .Values.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.name }}
+    app.kubernetes.io/instance: {{ .Values.name }}
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: yorkie
+    app.kubernetes.io/managed-by: kubernetes
+spec:
+  type: ClusterIP
+  ports:
+  - name: {{ .Values.name }}
+    port: {{ .Values.port }}
+    targetPort: {{ .Values.port }}
+    appProtocol: tcp
+# TODO(hackerwins): Find an image for ARM64
+#  - name: mongodb-exporter
+#    port: 9216
+#    targetPort: 9216
+  selector:
+    app.kubernetes.io/instance: {{ .Values.name }}
+{{ end }}

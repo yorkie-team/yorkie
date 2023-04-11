@@ -1,0 +1,42 @@
+# Configuration for name of yorkie app
+yorkie:
+  name: yorkie
+  namespace: yorkie
+  profilingPort: 11102
+
+# Configuration for argocd CD
+argocd:
+  enabled: true
+
+  name: yorkie-argocd
+
+  project: default
+
+  source:
+    repoURL: https://github.com/yorkie-team/yorkie.git
+    targetRevision: main
+
+    yorkieAppPath: build/charts/yorkie-cluster
+    monitoringPath: build/charts/yorkie-monitoring
+
+    # Set usename & password for private repository
+    username: yorkie
+    password: ghp_123412341234
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+
+# Configuration for external gateway (eg: AWS ALB)
+externalGateway:
+  ingressClassName: nginx
+  ## Set to alb if you are using AWS ALB
+  # ingressClassName: alb
+
+  # Use same host for yorkie cluster
+  apiHost: api.yorkie.dev
+  argoCDPath: /argocd
+
+  alb:
+    enabled: false
+
+    certArn: arn:aws:acm:ap-northeast-2:123412341234:certificate/1234-1234-1234-1234-1234

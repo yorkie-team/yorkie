@@ -46,7 +46,7 @@ build: ## builds an executable that runs in the current environment
 
 build-binaries: ## builds binaries to attach a new release
 	rm -rf binaries
-	./scripts/build-binaries.sh $(YORKIE_VERSION) "$(GO_LDFLAGS)"
+	./build/build-binaries.sh $(YORKIE_VERSION) "$(GO_LDFLAGS)"
 
 fmt: ## applies format and simplify codes
 	gofmt -s -w $(GO_SRC)

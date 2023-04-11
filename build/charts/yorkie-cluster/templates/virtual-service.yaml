@@ -1,0 +1,67 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: {{ .Values.yorkie.name }}
+  namespace: {{ .Values.yorkie.namespace }}
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - {{ .Values.yorkie.name }}-gateway
+  http:
+    # route to yorkie sdk service on "/yorkie.v1.YorkieService" uri prefix
+    - name: {{ .Values.yorkie.name }}-service
+      match:
+        - uri:
+            prefix: "/yorkie.v1.YorkieService"
+      route:
+        - destination:
+            host: {{ .Values.yorkie.name }}
+            port:
+              number: {{ .Values.yorkie.ports.sdkPort }}
+      # set cors policy for grpc-web protocols
+      corsPolicy: &apiCorsPolicy
+        allowOrigin:
+          - "*"
+        allowMethods:
+          - POST
+          - GET
+          - OPTIONS
+          - PUT
+          - DELETE
+        allowHeaders:
+          - grpc-timeout
+          - content-type
+          - keep-alive
+          - user-agent
+          - cache-control
+          - content-type
+          - content-transfer-encoding
+          - custom-header-1
+          - x-accept-content-transfer-encoding
+          - x-accept-response-streaming
+          - x-user-agent
+          - x-yorkie-user-agent
+          - x-grpc-web
+          - authorization
+          - x-api-key
+          - x-shard-key
+        maxAge: 1728s
+        exposeHeaders:
+          - custom-header-1
+          - grpc-status
+          - grpc-message
+          - grpc-status-details-bin
+        allowCredentials: true
+    # route to yorkie admin service on "/yorkie.v1.AdminService" uri prefix
+    - name: {{ .Values.yorkie.name }}-admin-service
+      match:
+        - uri:
+            prefix: "/yorkie.v1.AdminService"
+      route:
+        - destination:
+            host: {{ .Values.yorkie.name }}
+            port:
+              number: {{ .Values.yorkie.ports.adminPort }}
+      # refer to apiCorsPolicy anchor above
+      corsPolicy: *apiCorsPolicy

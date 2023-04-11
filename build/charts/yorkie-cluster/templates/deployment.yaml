@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.yorkie.name }}
+  namespace: {{ .Values.yorkie.namespace }}
+  labels:
+    app: {{ .Values.yorkie.name }}
+    app.kubernetes.io/name: {{ .Values.yorkie.name }}
+    app.kubernetes.io/instance: {{ .Values.yorkie.name }}
+    app.kubernetes.io/version: {{ .Values.yorkie.image.tag | default .Chart.AppVersion }}
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: {{ .Values.yorkie.name }}
+    app.kubernetes.io/managed-by: istio
+    version: {{ .Values.yorkie.image.tag | default .Chart.AppVersion }}
+spec:
+  {{ if not .Values.yorkie.autoscaling.enabled }}
+  replicas: {{ .Values.yorkie.autoscaling.replicaCount }}
+  {{ end }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Values.yorkie.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.yorkie.name }}
+        app.kubernetes.io/instance: {{ .Values.yorkie.name }}
+        app.kubernetes.io/version: {{ .Values.yorkie.image.tag | default .Chart.AppVersion }}
+        version: {{ .Values.yorkie.image.tag | default .Chart.AppVersion }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: yorkie
+        image: "{{ .Values.yorkie.image.repository }}:{{ .Values.yorkie.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.yorkie.image.pullPolicy }}
+        args: [
+          "server",
+          "--mongo-connection-uri",
+          "mongodb://{{ .Values.yorkie.args.dbUrl }}:{{ .Values.yorkie.args.dbPort }}/yorkie-meta",
+          "--enable-pprof",
+        ]
+        ports:
+          - containerPort: {{ .Values.yorkie.ports.sdkPort }}
+          - containerPort: {{ .Values.yorkie.ports.profilingPort }}
+          - containerPort: {{ .Values.yorkie.ports.adminPort }}
+        livenessProbe:
+          grpc:
+            port: {{ .Values.yorkie.ports.sdkPort }}
+          initialDelaySeconds: 10
+        resources:
+          {{ toYaml .Values.yorkie.resources | nindent 12 }}

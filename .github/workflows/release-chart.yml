@@ -1,0 +1,42 @@
+name: Release Charts
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    permissions:
+      contents: write
+
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Add dependency chart repos
+        run: |
+          helm repo add base https://istio-release.storage.googleapis.com/charts
+          helm repo add istiod https://istio-release.storage.googleapis.com/charts
+          helm repo add gateway https://istio-release.storage.googleapis.com/charts
+          helm repo add kube-prometheus-stack https://prometheus-community.github.io/helm-charts
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.5.0
+        with:
+          charts_dir: build/charts
+          charts_repo_url: https://yorkie-team.github.io/yorkie/helm-charts
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
