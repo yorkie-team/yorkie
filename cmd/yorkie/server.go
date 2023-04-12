@@ -197,6 +197,12 @@ func init() {
 		server.DefaultRPCMaxConnectionAge.String(),
 		"Maximum duration of connection may exist before it will be closed by sending a GoAway.",
 	)
+	cmd.Flags().StringVar(
+		&conf.RPC.MaxConnectionAgeGrace,
+		"rpc-max-connection-age-grace",
+		server.DefaultRPCMaxConnectionAgeGrace.String(),
+		"Additional grace period after MaxConnectionAge after which connections will be forcibly closed.",
+	)
 	cmd.Flags().IntVar(
 		&conf.Profiling.Port,
 		"profiling-port",

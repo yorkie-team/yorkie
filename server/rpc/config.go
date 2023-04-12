@@ -32,6 +32,8 @@ var (
 	ErrInvalidKeyFile = errors.New("invalid key file for RPC server")
 	// ErrInvalidMaxConnectionAge occurs when the max connection age is invalid.
 	ErrInvalidMaxConnectionAge = errors.New("invalid max connection age for RPC server")
+	// ErrInvalidMaxConnectionAgeGrace occurs when the max connection age grace is invalid.
+	ErrInvalidMaxConnectionAgeGrace = errors.New("invalid max connection age grace for RPC server")
 )
 
 // Config is the configuration for creating a Server instance.
@@ -51,6 +53,10 @@ type Config struct {
 	// MaxConnectionAge is a duration for the maximum amount of time a connection may exist
 	// before it will be closed by sending a GoAway.
 	MaxConnectionAge string `yaml:"MaxConnectionAge"`
+
+	// MaxConnectionAgeGrace is a duration for the amount of time after receiving a GoAway
+	// for pending RPCs to complete before forcibly closing connections.
+	MaxConnectionAgeGrace string `yaml:"MaxConnectionAgeGrace"`
 }
 
 // Validate validates the port number and the files for certification.
@@ -74,9 +80,17 @@ func (c *Config) Validate() error {
 
 	if _, err := time.ParseDuration(c.MaxConnectionAge); err != nil {
 		return fmt.Errorf(
-			"must be a valid time duration string format %d: %w",
+			"%s: %w",
 			c.MaxConnectionAge,
 			ErrInvalidMaxConnectionAge,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.MaxConnectionAgeGrace); err != nil {
+		return fmt.Errorf(
+			"%s: %w",
+			c.MaxConnectionAgeGrace,
+			ErrInvalidMaxConnectionAgeGrace,
 		)
 	}
 

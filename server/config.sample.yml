@@ -8,7 +8,11 @@ RPC:
 
   # MaxConnectionAge is a duration for the maximum amount of time a connection may exist
   # before it will be closed by sending a GoAway.
-  MaxConnectionAge: "60s"
+  MaxConnectionAge: "50s"
+
+  # MaxConnectionAgeGrace is a duration for the amount of time after receiving a GoAway
+  # for pending RPCs to complete before forcibly closing connections.
+  MaxConnectionAgeGrace: "10s"
 
   # CertFile is the file containing the TLS certificate.
   CertFile: ""
