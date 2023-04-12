@@ -43,11 +43,11 @@ func TestCounter(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.SetNewCounter("age", crdt.LongCnt, 1).
-				Increase(2).
-				Increase(2.5).
-				Increase(-100000000).
-				Increase(9223372036854775000)
+			c, _ := root.SetNewCounter("age", crdt.LongCnt, 1)
+			c.Increase(2)
+			c.Increase(2.5)
+			c.Increase(-100000000)
+			c.Increase(9223372036854775000)
 
 			return nil
 		}, "nested update by c1")
@@ -81,25 +81,31 @@ func TestCounter(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetCounter("age").
-				Increase(1).
-				Increase(2).
-				Increase(-2).
-				Increase(-.25)
+			c, _ := root.GetCounter("age")
+			c.Increase(1)
+			c.Increase(2)
+			c.Increase(-2)
+			c.Increase(-.25)
 			return nil
 		})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetCounter("width").Increase(math.MaxInt32 + 100).Increase(10)
+			c, _ := root.GetCounter("width")
+			c.Increase(math.MaxInt32 + 100)
+			c.Increase(10)
 			return nil
 		})
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetCounter("age").Increase(20)
-			root.GetCounter("width").Increase(100).Increase(200)
-			root.GetCounter("height").Increase(50)
+			c1, _ := root.GetCounter("age")
+			c1.Increase(20)
+			c2, _ := root.GetCounter("width")
+			c2.Increase(100)
+			c2.Increase(200)
+			c3, _ := root.GetCounter("height")
+			c3.Increase(50)
 			return nil
 		})
 		assert.NoError(t, err)

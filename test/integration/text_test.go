@@ -53,13 +53,15 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 0, "ABCD")
+			txt, _ := root.GetText("k1")
+			txt.Edit(0, 0, "ABCD")
 			return nil
 		}, "edit 0,0 ABCD by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 0, "1234")
+			txt, _ := root.GetText("k1")
+			txt.Edit(0, 0, "1234")
 			return nil
 		}, "edit 0,0 1234 by c2")
 		assert.NoError(t, err)
@@ -67,13 +69,15 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(2, 3, "XX")
+			txt, _ := root.GetText("k1")
+			txt.Edit(2, 3, "XX")
 			return nil
 		}, "edit 2,3 XX by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(2, 3, "YY")
+			txt, _ := root.GetText("k1")
+			txt.Edit(2, 3, "YY")
 			return nil
 		}, "edit 2,3 YY by c2")
 		assert.NoError(t, err)
@@ -81,13 +85,15 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(4, 5, "ZZ")
+			txt, _ := root.GetText("k1")
+			txt.Edit(4, 5, "ZZ")
 			return nil
 		}, "edit 4,5 ZZ by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(2, 3, "TT")
+			txt, _ := root.GetText("k1")
+			txt.Edit(2, 3, "TT")
 			return nil
 		}, "edit 2,3 TT by c2")
 		assert.NoError(t, err)
@@ -102,7 +108,8 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.SetNewText("k1").Edit(0, 0, "Hello world", nil)
+			txt, _ := root.SetNewText("k1")
+			txt.Edit(0, 0, "Hello world", nil)
 			return nil
 		}, `set a new text with "Hello world" by c1`)
 		assert.NoError(t, err)
@@ -114,14 +121,14 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			text := root.GetText("k1")
+			text, _ := root.GetText("k1")
 			_, _ = text.Style(0, 1, map[string]string{"b": "1"})
 			return nil
 		}, `set style b to "H" by c1`)
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			text := root.GetText("k1")
+			text, _ := root.GetText("k1")
 			_, _ = text.Style(0, 5, map[string]string{"i": "1"})
 			return nil
 		}, `set style i to "Hello" by c2`)
@@ -149,29 +156,37 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 0, "123")
-			root.GetText("k1").Edit(3, 3, "456")
-			root.GetText("k1").Edit(6, 6, "789")
+			txt1, _ := root.GetText("k1")
+			txt1.Edit(0, 0, "123")
+			txt2, _ := root.GetText("k1")
+			txt2.Edit(3, 3, "456")
+			txt3, _ := root.GetText("k1")
+			txt3.Edit(6, 6, "789")
 			return nil
 		}, "set new text by c1")
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.Equal(t, `{"k1":[{"val":"123"},{"val":"456"},{"val":"789"}]}`, d2.Marshal())
+		dm2, _ := d2.Marshal()
+		assert.Equal(t, `{"k1":[{"val":"123"},{"val":"456"},{"val":"789"}]}`, dm2)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(1, 7, "")
+			txt, _ := root.GetText("k1")
+			txt.Edit(1, 7, "")
 			return nil
 		}, "delete block by c1")
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"val":"1"},{"val":"89"}]}`, d1.Marshal())
+		dm1, _ := d1.Marshal()
+		assert.Equal(t, `{"k1":[{"val":"1"},{"val":"89"}]}`, dm1)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(2, 5, "")
+			txt, _ := root.GetText("k1")
+			txt.Edit(2, 5, "")
 			return nil
 		}, "delete block by c2")
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"val":"12"},{"val":"6"},{"val":"789"}]}`, d2.Marshal())
+		dm2, _ = d2.Marshal()
+		assert.Equal(t, `{"k1":[{"val":"12"},{"val":"6"},{"val":"789"}]}`, dm2)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
@@ -195,34 +210,49 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 0, "0")
-			root.GetText("k1").Edit(1, 1, "0")
-			root.GetText("k1").Edit(2, 2, "0")
+			txt1, _ := root.GetText("k1")
+			txt1.Edit(0, 0, "0")
+			txt2, _ := root.GetText("k1")
+			txt2.Edit(1, 1, "0")
+			txt3, _ := root.GetText("k1")
+			txt3.Edit(2, 2, "0")
 			return nil
 		}, "set new text by c1")
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"},{"val":"0"}]}`, d2.Marshal())
+		dm2, _ := d2.Marshal()
+		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"},{"val":"0"}]}`, dm2)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(1, 2, "1")
-			root.GetText("k1").Edit(1, 2, "1")
-			root.GetText("k1").Edit(1, 2, "")
+			txt1, _ := root.GetText("k1")
+			txt1.Edit(1, 2, "1")
+			txt2, _ := root.GetText("k1")
+			txt2.Edit(1, 2, "1")
+			txt3, _ := root.GetText("k1")
+			txt3.Edit(1, 2, "")
 			return nil
 		}, "newly create then delete by c1")
+
+		dm1, _ := d1.Marshal()
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"}]}`, d1.Marshal())
+		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"}]}`, dm1)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 3, "")
+			txt, _ := root.GetText("k1")
+			txt.Edit(0, 3, "")
 			return nil
 		}, "delete the range includes above new nodes")
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[]}`, d2.Marshal())
+		dm2, _ = d2.Marshal()
+		assert.Equal(t, `{"k1":[]}`, dm2)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.True(t, d1.Root().GetText("k1").CheckWeight())
-		assert.True(t, d2.Root().GetText("k1").CheckWeight())
+		r1, _ := d1.Root()
+		t1, _ := r1.GetText("k1")
+		r2, _ := d2.Root()
+		t2, _ := r2.GetText("k1")
+		assert.True(t, t1.CheckWeight())
+		assert.True(t, t2.CheckWeight())
 	})
 }

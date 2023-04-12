@@ -42,23 +42,23 @@ func TestPrimitive(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.SetNewObject("k1").
-				SetBool("k1.1", true).
-				SetInteger("k1.2", 2147483647).
-				SetLong("k1.3", 9223372036854775807).
-				SetDouble("1.4", 1.79).
-				SetString("k1.5", "4").
-				SetBytes("k1.6", []byte{65, 66}).
-				SetDate("k1.7", time.Now())
+			obj, _ := root.SetNewObject("k1")
+			obj.SetBool("k1.1", true)
+			obj.SetInteger("k1.2", 2147483647)
+			obj.SetLong("k1.3", 9223372036854775807)
+			obj.SetDouble("1.4", 1.79)
+			obj.SetString("k1.5", "4")
+			obj.SetBytes("k1.6", []byte{65, 66})
+			obj.SetDate("k1.7", time.Now())
 
-			root.SetNewArray("k2").
-				AddBool(true).
-				AddInteger(1).
-				AddLong(2).
-				AddDouble(3.0).
-				AddString("4").
-				AddBytes([]byte{65}).
-				AddDate(time.Now())
+			arr, _ := root.SetNewArray("k2")
+			arr.AddBool(true)
+			arr.AddInteger(1)
+			arr.AddLong(2)
+			arr.AddDouble(3.0)
+			arr.AddString("4")
+			arr.AddBytes([]byte{65})
+			arr.AddDate(time.Now())
 
 			return nil
 		}, "nested update by c1")

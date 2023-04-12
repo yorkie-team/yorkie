@@ -99,7 +99,9 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
 		assert.NoError(t, c1.Sync(ctx))
-		assert.Equal(t, d1.Marshal(), d2.Marshal())
+		dm1, _ := d1.Marshal()
+		dm2, _ := d2.Marshal()
+		assert.Equal(t, dm1, dm2)
 
 		// 03. c1 and c2 sync with push-only mode. So, the changes of c1 and c2
 		// are not reflected to each other.
@@ -116,15 +118,31 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key()).WithPushOnly()))
 		assert.NoError(t, c1.Sync(ctx), client.WithDocKey(d1.Key()).WithPushOnly())
 		assert.NoError(t, c3.Sync(ctx))
-		assert.NotEqual(t, d1.Marshal(), d2.Marshal())
-		assert.Equal(t, d1.Root().Get("c1").Marshal(), d3.Root().Get("c1").Marshal())
-		assert.Equal(t, d2.Root().Get("c2").Marshal(), d3.Root().Get("c2").Marshal())
+		dm1, _ = d1.Marshal()
+		dm2, _ = d2.Marshal()
+		assert.NotEqual(t, dm1, dm2)
+		doc1Root, _ := d1.Root()
+		doc1RootC1 := doc1Root.Get("c1")
+		doc1RootC1Marshal, _ := doc1RootC1.Marshal()
+		doc2Root, _ := d2.Root()
+		doc2RootC2 := doc2Root.Get("c2")
+		doc2RootC2Marshal, _ := doc2RootC2.Marshal()
+		doc3Root, _ := d3.Root()
+		doc3RootC1 := doc3Root.Get("c1")
+		doc3RootC1Marshal, _ := doc3RootC1.Marshal()
+		doc3RootC2 := doc3Root.Get("c2")
+		doc3RootC2Marshal, _ := doc3RootC2.Marshal()
+		assert.Equal(t, doc1RootC1Marshal, doc3RootC1Marshal)
+		assert.Equal(t, doc2RootC2Marshal, doc3RootC2Marshal)
 
 		// 04. c1 and c2 sync with push-pull mode.
 		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key())))
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(d2.Key())))
-		assert.Equal(t, d1.Marshal(), d2.Marshal())
-		assert.Equal(t, d1.Marshal(), d3.Marshal())
+		dm1, _ = d1.Marshal()
+		dm2, _ = d2.Marshal()
+		dm3, _ := d3.Marshal()
+		assert.Equal(t, dm1, dm2)
+		assert.Equal(t, dm1, dm3)
 	})
 
 	t.Run("sync option with mixed mode test", func(t *testing.T) {
@@ -150,7 +168,8 @@ func TestClient(t *testing.T) {
 		// 03. cli update the document with increasing the counter(0 -> 1)
 		//     and sync with push-only mode: CP(1, 1) -> CP(2, 1)
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
-			root.GetCounter("counter").Increase(1)
+			c, _ := root.GetCounter("counter")
+			c.Increase(1)
 			return nil
 		}))
 		assert.Len(t, doc.CreateChangePack().Changes, 1)
@@ -160,7 +179,8 @@ func TestClient(t *testing.T) {
 		// 04. cli update the document with increasing the counter(1 -> 2)
 		//     and sync with push-pull mode. CP(2, 1) -> CP(3, 3)
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
-			root.GetCounter("counter").Increase(1)
+			c, _ := root.GetCounter("counter")
+			c.Increase(1)
 			return nil
 		}))
 
@@ -169,6 +189,9 @@ func TestClient(t *testing.T) {
 		assert.Len(t, doc.CreateChangePack().Changes, 1)
 		assert.NoError(t, cli.Sync(ctx, client.WithDocKey(doc.Key())))
 		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 3, ServerSeq: 3})
-		assert.Equal(t, "2", doc.Root().GetCounter("counter").Marshal())
+		dr, _ := doc.Root()
+		c, _ := dr.GetCounter("counter")
+		cm, _ := c.Marshal()
+		assert.Equal(t, "2", cm)
 	})
 }

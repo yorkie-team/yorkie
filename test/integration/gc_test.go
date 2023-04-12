@@ -46,7 +46,8 @@ func TestGarbageCollection(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object) error {
 			root.SetInteger("1", 1)
-			root.SetNewArray("2").AddInteger(1, 2, 3)
+			arr, _ := root.SetNewArray("2")
+			arr.AddInteger(1, 2, 3)
 			root.SetInteger("3", 3)
 			return nil
 		}, "sets 1,2,3")
@@ -112,10 +113,10 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.SetNewText("text").
-				Edit(0, 0, "Hello world")
-			root.SetNewText("richText").
-				Edit(0, 0, "Hello world", nil)
+			txt1, _ := root.SetNewText("text")
+			txt1.Edit(0, 0, "Hello world")
+			txt2, _ := root.SetNewText("richText")
+			txt2.Edit(0, 0, "Hello world", nil)
 			return nil
 		}, "sets test and richText")
 		assert.NoError(t, err)
@@ -131,11 +132,11 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("text").
-				Edit(0, 1, "a").
-				Edit(1, 2, "b")
-			root.GetText("richText").
-				Edit(0, 1, "a", map[string]string{"b": "1"})
+			txt1, _ := root.GetText("text")
+			txt1.Edit(0, 1, "a")
+			txt1.Edit(1, 2, "b")
+			txt2, _ := root.GetText("richText")
+			txt2.Edit(0, 1, "a", map[string]string{"b": "1"})
 			return nil
 		}, "edit text type elements")
 		assert.NoError(t, err)
@@ -185,10 +186,13 @@ func TestGarbageCollection(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object) error {
 			root.SetInteger("1", 1)
-			root.SetNewArray("2").AddInteger(1, 2, 3)
+			arr, _ := root.SetNewArray("2")
+			arr.AddInteger(1, 2, 3)
 			root.SetInteger("3", 3)
-			root.SetNewText("4").Edit(0, 0, "Hi")
-			root.SetNewText("5").Edit(0, 0, "Hi", nil)
+			txt1, _ := root.SetNewText("4")
+			txt1.Edit(0, 0, "Hi")
+			txt2, _ := root.SetNewText("5")
+			txt2.Edit(0, 0, "Hi", nil)
 			return nil
 		}, "sets 1,2,3,4,5")
 		assert.NoError(t, err)
@@ -205,8 +209,10 @@ func TestGarbageCollection(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object) error {
 			root.Delete("2")
-			root.GetText("4").Edit(0, 1, "h")
-			root.GetText("5").Edit(0, 1, "h", map[string]string{"b": "1"})
+			txt1, _ := root.GetText("4")
+			txt1.Edit(0, 1, "h")
+			txt2, _ := root.GetText("5")
+			txt2.Edit(0, 1, "h", map[string]string{"b": "1"})
 			return nil
 		}, "removes 2 and edit text type elements")
 		assert.NoError(t, err)

@@ -83,7 +83,8 @@ func TestSnapshot(t *testing.T) {
 
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, `"value"`, d2.RootObject().Get("key").Marshal())
+		dm, _ := d2.RootObject().Get("key").Marshal()
+		assert.Equal(t, `"value"`, dm)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
@@ -117,7 +118,8 @@ func TestSnapshot(t *testing.T) {
 
 		for _, edit := range edits {
 			err = d1.Update(func(root *json.Object) error {
-				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
+				txt, _ := root.GetText("k1")
+				txt.Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
 			assert.NoError(t, err)
@@ -129,8 +131,10 @@ func TestSnapshot(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"},{"val":"구"},{"val":"름"}]}`, d1.Marshal())
-		assert.Equal(t, d1.Marshal(), d2.Marshal())
+		dm1, _ := d1.Marshal()
+		dm2, _ := d2.Marshal()
+		assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"},{"val":"구"},{"val":"름"}]}`, dm1)
+		assert.Equal(t, dm1, dm2)
 	})
 
 	t.Run("text snapshot with concurrent local change test", func(t *testing.T) {
@@ -154,14 +158,16 @@ func TestSnapshot(t *testing.T) {
 
 		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
 			err = d1.Update(func(root *json.Object) error {
-				root.GetText("k1").Edit(i, i, "x")
+				txt, _ := root.GetText("k1")
+				txt.Edit(i, i, "x")
 				return nil
 			})
 			assert.NoError(t, err)
 		}
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 0, "o")
+			txt, _ := root.GetText("k1")
+			txt.Edit(0, 0, "o")
 			return nil
 		})
 		assert.NoError(t, err)

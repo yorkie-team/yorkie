@@ -65,7 +65,8 @@ func TestDocument(t *testing.T) {
 		err = c1.Attach(ctx, doc2)
 		assert.NoError(t, err)
 		assert.True(t, doc2.IsAttached())
-		assert.Equal(t, `{"k1":"v2"}`, doc2.Marshal())
+		dm2, _ := doc2.Marshal()
+		assert.Equal(t, `{"k1":"v2"}`, dm2)
 
 		doc3 := document.New(key.Key("invalid$key"))
 		err = c1.Attach(ctx, doc3)
@@ -83,20 +84,25 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.SetNewObject("k1").SetNewArray("k1.1").AddString("1", "2")
+			obj, _ := root.SetNewObject("k1")
+			arr, _ := obj.SetNewArray("k1.1")
+			arr.AddString("1", "2")
 			return nil
 		})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.SetNewArray("k2").AddString("1", "2", "3")
+			arr, _ := root.SetNewArray("k2")
+			arr.AddString("1", "2", "3")
 			return nil
 		})
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.SetNewArray("k1").AddString("4", "5")
-			root.SetNewArray("k2").AddString("6", "7")
+			arr1, _ := root.SetNewArray("k1")
+			arr1.AddString("4", "5")
+			arr2, _ := root.SetNewArray("k2")
+			arr2.AddString("6", "7")
 			return nil
 		})
 		assert.NoError(t, err)
@@ -157,7 +163,9 @@ func TestDocument(t *testing.T) {
 
 		wg.Wait()
 
-		assert.Equal(t, d1.Marshal(), d2.Marshal())
+		dm1, _ := d1.Marshal()
+		dm2, _ := d2.Marshal()
+		assert.Equal(t, dm1, dm2)
 	})
 
 	t.Run("document tombstone test", func(t *testing.T) {
@@ -165,7 +173,8 @@ func TestDocument(t *testing.T) {
 
 		d1 := document.New(helper.TestDocKey(t))
 		err := d1.Update(func(root *json.Object) error {
-			root.SetNewArray("k1").AddInteger(1, 2)
+			arr, _ := root.SetNewArray("k1")
+			arr.AddInteger(1, 2)
 			return nil
 		})
 		assert.NoError(t, err)
@@ -180,13 +189,15 @@ func TestDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetArray("k1").AddInteger(3)
+			arr, _ := root.GetArray("k1")
+			arr.AddInteger(3)
 			return nil
 		})
 		assert.NoError(t, err)
 
-		prevArray := d1.Root().Get("k1")
-		assert.Nil(t, prevArray.RemovedAt())
+		prevArray, _ := d1.Root()
+		prev := prevArray.Get("k1")
+		assert.Nil(t, prev.RemovedAt())
 
 		err = d2.Update(func(root *json.Object) error {
 			root.SetNewArray("k1")
@@ -195,7 +206,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.NotNil(t, prevArray.RemovedAt())
+		assert.NotNil(t, prev.RemovedAt())
 	})
 
 	t.Run("single-client document deletion test", func(t *testing.T) {
@@ -281,7 +292,9 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 		assert.Equal(t, d1.Status(), document.StatusRemoved)
 		assert.Equal(t, d2.Status(), document.StatusRemoved)
-		assert.Equal(t, d1.Marshal(), d2.Marshal())
+		dm1, _ := d1.Marshal()
+		dm2, _ := d2.Marshal()
+		assert.Equal(t, dm1, dm2)
 	})
 
 	t.Run("removed document detachment test", func(t *testing.T) {
@@ -500,9 +513,12 @@ func TestDocumentWithProjects(t *testing.T) {
 
 		wg.Wait()
 
+		dm1, _ := d1.Marshal()
+		dm2, _ := d2.Marshal()
+		dm3, _ := d3.Marshal()
 		assert.Equal(t, expected, responsePairs)
-		assert.Equal(t, "{\"key\":\"value\"}", d1.Marshal())
-		assert.Equal(t, "{\"key\":\"value\"}", d2.Marshal())
-		assert.Equal(t, "{\"key3\":\"value3\"}", d3.Marshal())
+		assert.Equal(t, "{\"key\":\"value\"}", dm1)
+		assert.Equal(t, "{\"key\":\"value\"}", dm2)
+		assert.Equal(t, "{\"key3\":\"value3\"}", dm3)
 	})
 }

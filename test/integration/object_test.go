@@ -46,14 +46,14 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.SetNewObject("k1").
-				SetString("k1.1", "v1").
-				SetString("k1.2", "v2").
-				SetString("k1.3", "v3")
-			root.SetNewObject("k2").
-				SetString("k2.1", "v4").
-				SetString("k2.2", "v5").
-				SetString("k2.3", "v6")
+			obj1, _ := root.SetNewObject("k1")
+			obj1.SetString("k1.1", "v1")
+			obj1.SetString("k1.2", "v2")
+			obj1.SetString("k1.3", "v3")
+			obj2, _ := root.SetNewObject("k2")
+			obj2.SetString("k2.1", "v4")
+			obj2.SetString("k2.2", "v5")
+			obj2.SetString("k2.3", "v6")
 			return nil
 		}, "nested update by c1")
 		assert.NoError(t, err)
@@ -61,7 +61,8 @@ func TestObject(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object) error {
 			root.Delete("k1")
-			root.GetObject("k2").Delete("k2.2")
+			obj, _ := root.GetObject("k2")
+			obj.Delete("k2.2")
 			return nil
 		}, "nested update by c1")
 		assert.NoError(t, err)
@@ -79,7 +80,8 @@ func TestObject(t *testing.T) {
 			return nil
 		}, "set v1 by c1")
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":{}}`, d1.Marshal())
+		dm1, _ := d1.Marshal()
+		assert.Equal(t, `{"k1":{}}`, dm1)
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
@@ -93,7 +95,8 @@ func TestObject(t *testing.T) {
 			return nil
 		}, "delete and set v1 by c1")
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":"v1"}`, d1.Marshal())
+		dm1, _ = d1.Marshal()
+		assert.Equal(t, `{"k1":"v1"}`, dm1)
 
 		err = d2.Update(func(root *json.Object) error {
 			root.Delete("k1")
@@ -101,7 +104,8 @@ func TestObject(t *testing.T) {
 			return nil
 		}, "delete and set v2 by c2")
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":"v2"}`, d2.Marshal())
+		dm2, _ := d2.Marshal()
+		assert.Equal(t, `{"k1":"v2"}`, dm2)
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
@@ -142,7 +146,9 @@ func TestObject(t *testing.T) {
 		}, "set k2 by c1")
 		assert.NoError(t, err)
 		err = d2.Update(func(root *json.Object) error {
-			root.GetObject("k2").SetNewObject("k2.1").SetString("k2.1.1", "v2")
+			obj, _ := root.GetObject("k2")
+			obj.SetNewObject("k2.1")
+			obj.SetString("k2.1.1", "v2")
 			return nil
 		}, "set k2.1.1 by c2")
 		assert.NoError(t, err)

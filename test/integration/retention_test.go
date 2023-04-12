@@ -91,19 +91,24 @@ func TestRetention(t *testing.T) {
 			root.SetNewArray("todos")
 			return nil
 		}, "create todos"))
-		assert.Equal(t, `{"todos":[]}`, doc.Marshal())
+		dm, _ := doc.Marshal()
+		assert.Equal(t, `{"todos":[]}`, dm)
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
-			root.GetArray("todos").AddString("buy coffee")
+			arr, _ := root.GetArray("todos")
+			arr.AddString("buy coffee")
 			return nil
 		}, "buy coffee"))
-		assert.Equal(t, `{"todos":["buy coffee"]}`, doc.Marshal())
+		dm, _ = doc.Marshal()
+		assert.Equal(t, `{"todos":["buy coffee"]}`, dm)
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
-			root.GetArray("todos").AddString("buy bread")
+			arr, _ := root.GetArray("todos")
+			arr.AddString("buy bread")
 			return nil
 		}, "buy bread"))
-		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, doc.Marshal())
+		dm, _ = doc.Marshal()
+		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, dm)
 		assert.NoError(t, cli.Sync(ctx))
 
 		changes, err := adminCli.ListChangeSummaries(ctx, "default", doc.Key(), 0, 0, true)
@@ -168,7 +173,8 @@ func TestRetention(t *testing.T) {
 		// Create 6 changes
 		for _, edit := range edits {
 			err = d1.Update(func(root *json.Object) error {
-				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
+				txt, _ := root.GetText("k1")
+				txt.Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
 			assert.NoError(t, err)
@@ -227,7 +233,8 @@ func TestRetention(t *testing.T) {
 		// Create 6 changes
 		for _, edit := range edits {
 			err = d2.Update(func(root *json.Object) error {
-				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
+				txt, _ := root.GetText("k1")
+				txt.Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
 			assert.NoError(t, err)
