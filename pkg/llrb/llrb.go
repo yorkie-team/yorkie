@@ -9,7 +9,7 @@
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * WITHOUT WARRANTIES OR CONDITIOxNS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
@@ -18,6 +18,7 @@
 package llrb
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -27,12 +28,12 @@ type Key interface {
 	// a.Compare(b) = 1 => a > b
 	// a.Compare(b) = 0 => a == b
 	// a.Compare(b) = -1 => a < b
-	Compare(k Key) int
+	Compare(k Key) (int, error)
 }
 
 // Value represents the data stored in the nodes of Tree.
 type Value interface {
-	String() string
+	String() (string, error)
 }
 
 // Node is a node of Tree.
@@ -72,44 +73,68 @@ func NewTree[K Key, V Value]() *Tree[K, V] {
 }
 
 // Put puts the value of the given key.
-func (t *Tree[K, V]) Put(k K, v V) V {
-	t.root = t.put(t.root, k, v)
+func (t *Tree[K, V]) Put(k K, v V) (V, error) {
+	var zeroV V
+	var err error
+	t.root, err = t.put(t.root, k, v)
+	if err != nil {
+		return zeroV, fmt.Errorf("llrb put(key: %v): %w", k, err)
+	}
 	t.root.isRed = false
-	return v
+	return v, nil
 }
 
-func (t *Tree[K, V]) String() string {
+func (t *Tree[K, V]) String() (string, error) {
 	var str []string
-	traverseInOrder(t.root, func(node *Node[K, V]) {
-		str = append(str, node.value.String())
+	err := traverseInOrder(t.root, func(node *Node[K, V]) error {
+		s, err := node.value.String()
+		if err != nil {
+			return err
+		}
+		str = append(str, s)
+		return nil
 	})
-	return strings.Join(str, ",")
+	if err != nil {
+		return "", fmt.Errorf("llrb traverseInOrder: %w", err)
+	}
+	return strings.Join(str, ","), nil
 }
 
 // Remove removes the value of the given key.
-func (t *Tree[K, V]) Remove(key K) {
+func (t *Tree[K, V]) Remove(key K) error {
 	if !isRed(t.root.left) && !isRed(t.root.right) {
 		t.root.isRed = true
 	}
 
-	t.root = t.remove(t.root, key)
+	var err error
+	t.root, err = t.remove(t.root, key)
+	if err != nil {
+		return fmt.Errorf("llrb remove(key: %v): %w", key, err)
+	}
 	if t.root != nil {
 		t.root.isRed = false
 	}
+
+	return nil
 }
 
 // Floor returns the greatest key less than or equal to the given key.
-func (t *Tree[K, V]) Floor(key K) (K, V) {
-	node := t.root
+func (t *Tree[K, V]) Floor(key K) (K, V, error) {
+	var zeroK K
+	var zeroV V
 
+	node := t.root
 	for node != nil {
-		compare := key.Compare(node.key)
+		compare, err := key.Compare(node.key)
+		if err != nil {
+			return zeroK, zeroV, fmt.Errorf("llrb floor: %w", err)
+		}
 		if compare > 0 {
 			if node.right != nil {
 				node.right.parent = node
 				node = node.right
 			} else {
-				return node.key, node.value
+				return node.key, node.value, nil
 			}
 		} else if compare < 0 {
 			if node.left != nil {
@@ -124,29 +149,36 @@ func (t *Tree[K, V]) Floor(key K) (K, V) {
 				}
 
 				// TODO(hackerwins): check below warning
-				return parent.key, parent.value
+				return parent.key, parent.value, nil
 			}
 		} else {
-			return node.key, node.value
+			return node.key, node.value, nil
 		}
 	}
 
-	var zeroK K
-	var zeroV V
-	return zeroK, zeroV
+	return zeroK, zeroV, nil
 }
 
-func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) *Node[K, V] {
+func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) (*Node[K, V], error) {
 	if node == nil {
 		t.size++
-		return NewNode(key, value, true)
+		return NewNode(key, value, true), nil
 	}
 
-	compare := key.Compare(node.key)
+	compare, err := key.Compare(node.key)
+	if err != nil {
+		return nil, fmt.Errorf("node put(node: %v, key: %v, value: %v): %w", node.key, key, value, err)
+	}
 	if compare < 0 {
-		node.left = t.put(node.left, key, value)
+		node.left, err = t.put(node.left, key, value)
+		if err != nil {
+			return nil, fmt.Errorf("node put(node: %v, key: %v, value: %v): %w", node.key, key, value, err)
+		}
 	} else if compare > 0 {
-		node.right = t.put(node.right, key, value)
+		node.right, err = t.put(node.right, key, value)
+		if err != nil {
+			return nil, fmt.Errorf("node put(node: %v, key: %v, value: %v): %w", node.key, key, value, err)
+		}
 	} else {
 		node.value = value
 	}
@@ -163,41 +195,59 @@ func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) *Node[K, V] {
 		flipColors(node)
 	}
 
-	return node
+	return node, nil
 }
 
-func (t *Tree[K, V]) remove(node *Node[K, V], key K) *Node[K, V] {
-	if key.Compare(node.key) < 0 {
+func (t *Tree[K, V]) remove(node *Node[K, V], key K) (*Node[K, V], error) {
+	keyCompare, err := key.Compare(node.key)
+	if err != nil {
+		return nil, fmt.Errorf("remove node: %w", err)
+	}
+	if keyCompare < 0 {
 		if !isRed(node.left) && !isRed(node.left.left) {
 			node = moveRedLeft(node)
 		}
-		node.left = t.remove(node.left, key)
+		node.left, err = t.remove(node.left, key)
+		if err != nil {
+			return nil, fmt.Errorf("remove node: %w", err)
+		}
 	} else {
 		if isRed(node.left) {
 			node = rotateRight(node)
 		}
 
-		if key.Compare(node.key) == 0 && node.right == nil {
+		keyCompare, err = key.Compare(node.key)
+		if err != nil {
+			return nil, fmt.Errorf("remove node: %w", err)
+		}
+		if keyCompare == 0 && node.right == nil {
 			t.size--
-			return nil
+			return nil, nil
 		}
 
 		if !isRed(node.right) && !isRed(node.right.left) {
 			node = moveRedRight(node)
 		}
 
-		if key.Compare(node.key) == 0 {
+		keyCompare, err = key.Compare(node.key)
+		if err != nil {
+			return nil, fmt.Errorf("remove node: %w", err)
+		}
+		if keyCompare == 0 {
 			t.size--
 			smallest := min(node.right)
 			node.value = smallest.value
 			node.key = smallest.key
 			node.right = removeMin(node.right)
 		} else {
-			node.right = t.remove(node.right, key)
+			node.right, err = t.remove(node.right, key)
+			if err != nil {
+				return nil, fmt.Errorf("remove node: %w", err)
+			}
 		}
 	}
 
-	return fixUp(node)
+	return fixUp(node), nil
 }
 
 func rotateLeft[K Key, V Value](node *Node[K, V]) *Node[K, V] {
@@ -285,12 +335,19 @@ func isRed[K Key, V Value](node *Node[K, V]) bool {
 	return node != nil && node.isRed
 }
 
-func traverseInOrder[K Key, V Value](node *Node[K, V], callback func(node *Node[K, V])) {
+func traverseInOrder[K Key, V Value](node *Node[K, V], callback func(node *Node[K, V]) error) error {
 	if node == nil {
-		return
+		return nil
 	}
 
-	traverseInOrder(node.left, callback)
-	callback(node)
-	traverseInOrder(node.right, callback)
+	if err := traverseInOrder(node.left, callback); err != nil {
+		return fmt.Errorf("traverseInOrder node left(node: %v): %w", node.key, err)
+	}
+	if err := callback(node); err != nil {
+		return fmt.Errorf("traverseInOrder callback(node: %v): %w", node.key, err)
+	}
+	if err := traverseInOrder(node.right, callback); err != nil {
+		return fmt.Errorf("traverseInOrder node right(node: %v): %w", node.key, err)
+	}
+	return nil
 }

@@ -17,6 +17,7 @@
 package json
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -32,24 +33,25 @@ type Counter struct {
 }
 
 // NewCounter create Counter instance.
-func NewCounter(ctx *change.Context, counter *crdt.Counter) *Counter {
+func NewCounter(ctx *change.Context, counter *crdt.Counter) (*Counter, error) {
 	if !counter.IsNumericType() {
-		panic("unsupported type")
+		return nil, fmt.Errorf("new counter: not numeric type")
 	}
 	return &Counter{
 		Counter: counter,
 		context: ctx,
-	}
+	}, nil
 }
 
 // Increase adds an increase operations.
 // Only numeric types are allowed as operand values, excluding
 // uint64 and uintptr.
-func (p *Counter) Increase(v interface{}) *Counter {
+func (p *Counter) Increase(v interface{}) (*Counter, error) {
 	if !isAllowedOperand(v) {
-		panic("unsupported type")
+		return nil, fmt.Errorf("json counter increase: not allowed operand")
 	}
 	var primitive *crdt.Primitive
+	var err error
 	ticket := p.context.IssueTimeTicket()
 
 	value, kind := convertAssertableOperand(v)
@@ -57,21 +59,35 @@ func (p *Counter) Increase(v interface{}) *Counter {
 	switch p.ValueType() {
 	case crdt.LongCnt:
 		if isInt {
-			primitive = crdt.NewPrimitive(int64(value.(int)), ticket)
+			primitive, err = crdt.NewPrimitive(int64(value.(int)), ticket)
+			if err != nil {
+				return nil, fmt.Errorf("json counter increase: %w", err)
+			}
 		} else {
-			primitive = crdt.NewPrimitive(int64(value.(float64)), ticket)
+			primitive, err = crdt.NewPrimitive(int64(value.(float64)), ticket)
+			if err != nil {
+				return nil, fmt.Errorf("json counter increase: %w", err)
+			}
 		}
 	case crdt.IntegerCnt:
 		if isInt {
-			primitive = crdt.NewPrimitive(int32(value.(int)), ticket)
+			primitive, err = crdt.NewPrimitive(int32(value.(int)), ticket)
+			if err != nil {
+				return nil, fmt.Errorf("json counter increase: %w", err)
+			}
 		} else {
-			primitive = crdt.NewPrimitive(int32(value.(float64)), ticket)
+			primitive, err = crdt.NewPrimitive(int32(value.(float64)), ticket)
+			if err != nil {
+				return nil, fmt.Errorf("json counter increase: %w", err)
+			}
 		}
 	default:
-		panic("unsupported type")
+		return nil, fmt.Errorf("json counter increase: unsupported type")
 	}
 
-	p.Counter.Increase(primitive)
+	if err := p.Counter.Increase(primitive); err != nil {
+		return nil, fmt.Errorf("json counter increase: %w", err)
+	}
 
 	p.context.Push(operations.NewIncrease(
 		p.CreatedAt(),
@@ -79,7 +95,7 @@ func (p *Counter) Increase(v interface{}) *Counter {
 		ticket,
 	))
 
-	return p
+	return p, nil
 }
 
 // isAllowedOperand indicates whether

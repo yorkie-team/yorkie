@@ -30,94 +30,97 @@ import (
 
 func TestCounter(t *testing.T) {
 	t.Run("new counter test", func(t *testing.T) {
-		intCntWithInt32Value := crdt.NewCounter(crdt.IntegerCnt, int32(math.MaxInt32), time.InitialTicket)
+		intCntWithInt32Value, _ := crdt.NewCounter(crdt.IntegerCnt, int32(math.MaxInt32), time.InitialTicket)
 		assert.Equal(t, crdt.IntegerCnt, intCntWithInt32Value.ValueType())
 
-		intCntWithInt64Value := crdt.NewCounter(crdt.IntegerCnt, int64(math.MaxInt32+1), time.InitialTicket)
+		intCntWithInt64Value, _ := crdt.NewCounter(crdt.IntegerCnt, int64(math.MaxInt32+1), time.InitialTicket)
 		assert.Equal(t, crdt.IntegerCnt, intCntWithInt64Value.ValueType())
 
-		intCntWithIntValue := crdt.NewCounter(crdt.IntegerCnt, math.MaxInt32, time.InitialTicket)
+		intCntWithIntValue, _ := crdt.NewCounter(crdt.IntegerCnt, math.MaxInt32, time.InitialTicket)
 		assert.Equal(t, crdt.IntegerCnt, intCntWithIntValue.ValueType())
 
-		intCntWithDoubleValue := crdt.NewCounter(crdt.IntegerCnt, 0.5, time.InitialTicket)
+		intCntWithDoubleValue, _ := crdt.NewCounter(crdt.IntegerCnt, 0.5, time.InitialTicket)
 		assert.Equal(t, crdt.IntegerCnt, intCntWithDoubleValue.ValueType())
 
-		intCntWithUnsupportedValue := func() { crdt.NewCounter(crdt.IntegerCnt, "", time.InitialTicket) }
-		assert.Panics(t, intCntWithUnsupportedValue)
+		intCntWithUnsupportedValue, err := crdt.NewCounter(crdt.IntegerCnt, "", time.InitialTicket)
+		assert.Nil(t, intCntWithUnsupportedValue)
+		assert.Error(t, err)
 
-		longCntWithInt32Value := crdt.NewCounter(crdt.LongCnt, int32(math.MaxInt32), time.InitialTicket)
+		longCntWithInt32Value, _ := crdt.NewCounter(crdt.LongCnt, int32(math.MaxInt32), time.InitialTicket)
 		assert.Equal(t, crdt.LongCnt, longCntWithInt32Value.ValueType())
 
-		longCntWithInt64Value := crdt.NewCounter(crdt.LongCnt, int64(math.MaxInt32+1), time.InitialTicket)
+		longCntWithInt64Value, _ := crdt.NewCounter(crdt.LongCnt, int64(math.MaxInt32+1), time.InitialTicket)
 		assert.Equal(t, crdt.LongCnt, longCntWithInt64Value.ValueType())
 
-		longCntWithIntValue := crdt.NewCounter(crdt.LongCnt, math.MaxInt32+1, time.InitialTicket)
+		longCntWithIntValue, _ := crdt.NewCounter(crdt.LongCnt, math.MaxInt32+1, time.InitialTicket)
 		assert.Equal(t, crdt.LongCnt, longCntWithIntValue.ValueType())
 
-		longCntWithDoubleValue := crdt.NewCounter(crdt.LongCnt, 0.5, time.InitialTicket)
+		longCntWithDoubleValue, _ := crdt.NewCounter(crdt.LongCnt, 0.5, time.InitialTicket)
 		assert.Equal(t, crdt.LongCnt, longCntWithDoubleValue.ValueType())
 
-		longCntWithUnsupportedValue := func() { crdt.NewCounter(crdt.LongCnt, "", time.InitialTicket) }
-		assert.Panics(t, longCntWithUnsupportedValue)
+		longCntWithUnsupportedValue, err := crdt.NewCounter(crdt.LongCnt, "", time.InitialTicket)
+		assert.Nil(t, longCntWithUnsupportedValue)
+		assert.Error(t, err)
 	})
 
 	t.Run("increase test", func(t *testing.T) {
 		var x = 5
 		var y int64 = 10
 		var z = 3.14
-		integer := crdt.NewCounter(crdt.IntegerCnt, x, time.InitialTicket)
-		long := crdt.NewCounter(crdt.LongCnt, y, time.InitialTicket)
-		double := crdt.NewCounter(crdt.IntegerCnt, z, time.InitialTicket)
+		integer, _ := crdt.NewCounter(crdt.IntegerCnt, x, time.InitialTicket)
+		long, _ := crdt.NewCounter(crdt.LongCnt, y, time.InitialTicket)
+		double, _ := crdt.NewCounter(crdt.IntegerCnt, z, time.InitialTicket)
 
-		integerOperand := crdt.NewPrimitive(x, time.InitialTicket)
-		longOperand := crdt.NewPrimitive(y, time.InitialTicket)
-		doubleOperand := crdt.NewPrimitive(z, time.InitialTicket)
+		integerOperand, _ := crdt.NewPrimitive(x, time.InitialTicket)
+		longOperand, _ := crdt.NewPrimitive(y, time.InitialTicket)
+		doubleOperand, _ := crdt.NewPrimitive(z, time.InitialTicket)
 
 		// normal process test
-		integer.Increase(integerOperand)
-		integer.Increase(longOperand)
-		integer.Increase(doubleOperand)
-		assert.Equal(t, integer.Marshal(), "23")
+		_ = integer.Increase(integerOperand)
+		_ = integer.Increase(longOperand)
+		_ = integer.Increase(doubleOperand)
+		str, _ := integer.Marshal()
+		assert.Equal(t, str, "23")
 
-		long.Increase(integerOperand)
-		long.Increase(longOperand)
-		long.Increase(doubleOperand)
-		assert.Equal(t, long.Marshal(), "28")
+		_ = long.Increase(integerOperand)
+		_ = long.Increase(longOperand)
+		_ = long.Increase(doubleOperand)
+		str, _ = long.Marshal()
+		assert.Equal(t, str, "28")
 
-		double.Increase(integerOperand)
-		double.Increase(longOperand)
-		double.Increase(doubleOperand)
-		assert.Equal(t, double.Marshal(), "21")
+		_ = double.Increase(integerOperand)
+		_ = double.Increase(longOperand)
+		_ = double.Increase(doubleOperand)
+		str, _ = double.Marshal()
+		assert.Equal(t, str, "21")
 
 		// error process test
-		// TODO: it should be modified to error check
-		// when 'Remove panic from server code (#50)' is completed.
-		unsupportedTypePanicTest := func() {
-			r := recover()
-			assert.NotNil(t, r)
-			assert.Equal(t, r, "unsupported type")
-		}
 		unsupportedTest := func(v interface{}) {
-			defer unsupportedTypePanicTest()
-			crdt.NewCounter(crdt.IntegerCnt, v, time.InitialTicket)
+			counter, err := crdt.NewCounter(crdt.IntegerCnt, v, time.InitialTicket)
+			assert.Nil(t, counter)
+			assert.Error(t, err)
 		}
 		unsupportedTest("str")
 		unsupportedTest(true)
 		unsupportedTest([]byte{2})
 		unsupportedTest(gotime.Now())
 
-		assert.Equal(t, integer.Marshal(), "23")
-		assert.Equal(t, long.Marshal(), "28")
-		assert.Equal(t, double.Marshal(), "21")
+		str, _ = integer.Marshal()
+		assert.Equal(t, str, "23")
+		str, _ = long.Marshal()
+		assert.Equal(t, str, "28")
+		str, _ = double.Marshal()
+		assert.Equal(t, str, "21")
 	})
 
 	t.Run("Counter value overflow test", func(t *testing.T) {
-		integer := crdt.NewCounter(crdt.IntegerCnt, math.MaxInt32, time.InitialTicket)
+		integer, _ := crdt.NewCounter(crdt.IntegerCnt, math.MaxInt32, time.InitialTicket)
 		assert.Equal(t, integer.ValueType(), crdt.IntegerCnt)
 
-		operand := crdt.NewPrimitive(1, time.InitialTicket)
-		integer.Increase(operand)
+		operand, _ := crdt.NewPrimitive(1, time.InitialTicket)
+		_ = integer.Increase(operand)
 		assert.Equal(t, integer.ValueType(), crdt.IntegerCnt)
-		assert.Equal(t, integer.Marshal(), strconv.FormatInt(math.MinInt32, 10))
+		str, _ := integer.Marshal()
+		assert.Equal(t, str, strconv.FormatInt(math.MinInt32, 10))
 	})
 }

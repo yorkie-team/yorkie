@@ -34,12 +34,12 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 
 	pbElem := &api.JSONElement{}
 	if err := proto.Unmarshal(snapshot, pbElem); err != nil {
-		return nil, fmt.Errorf("unmarshal element: %w", err)
+		return nil, fmt.Errorf("convert byte to object: unmarshal element: %w", err)
 	}
 
 	obj, err := fromJSONObject(pbElem.GetJsonObject())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert byte to object: %w", err)
 	}
 
 	return obj, nil
@@ -67,24 +67,24 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 	for _, pbNode := range pbObj.Nodes {
 		elem, err := fromJSONElement(pbNode.Element)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from json object: %w", err)
 		}
 		members.Set(pbNode.Key, elem)
 	}
 
 	createdAt, err := fromTimeTicket(pbObj.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json object: %w", err)
 	}
 
 	movedAt, err := fromTimeTicket(pbObj.MovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json object: %w", err)
 	}
 
 	removedAt, err := fromTimeTicket(pbObj.RemovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json object: %w", err)
 	}
 
 	obj := crdt.NewObject(
@@ -98,99 +98,110 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 }
 
 func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
-	elements := crdt.NewRGATreeList()
+	elements, err := crdt.NewRGATreeList()
+	if err != nil {
+		return nil, fmt.Errorf("from json array: %w", err)
+	}
 	for _, pbNode := range pbArr.Nodes {
 		elem, err := fromJSONElement(pbNode.Element)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from json array: %w", err)
 		}
-		elements.Add(elem)
+		if err := elements.Add(elem); err != nil {
+			return nil, fmt.Errorf("from json array: %w", err)
+		}
 	}
 
 	createdAt, err := fromTimeTicket(pbArr.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json array: %w", err)
 	}
 	movedAt, err := fromTimeTicket(pbArr.MovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json array: %w", err)
 	}
 	removedAt, err := fromTimeTicket(pbArr.RemovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json array: %w", err)
 	}
 
-	arr := crdt.NewArray(
-		elements,
-		createdAt,
-	)
+	arr := crdt.NewArray(elements, createdAt)
 	arr.SetMovedAt(movedAt)
 	arr.SetRemovedAt(removedAt)
 	return arr, nil
 }
 
-func fromJSONPrimitive(
-	pbPrim *api.JSONElement_Primitive,
-) (*crdt.Primitive, error) {
+func fromJSONPrimitive(pbPrim *api.JSONElement_Primitive) (*crdt.Primitive, error) {
 	createdAt, err := fromTimeTicket(pbPrim.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json primitive: %w", err)
 	}
 	movedAt, err := fromTimeTicket(pbPrim.MovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json primitive: %w", err)
 	}
 	removedAt, err := fromTimeTicket(pbPrim.RemovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json primitive: %w", err)
 	}
 	valueType, err := fromPrimitiveValueType(pbPrim.Type)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json primitive: %w", err)
 	}
 
-	primitive := crdt.NewPrimitive(
-		crdt.ValueFromBytes(valueType, pbPrim.Value),
-		createdAt,
-	)
+	value, err := crdt.ValueFromBytes(valueType, pbPrim.Value)
+	if err != nil {
+		return nil, fmt.Errorf("from json primitive: %w", err)
+	}
+	primitive, err := crdt.NewPrimitive(value, createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("from json primitive: %w", err)
+	}
 	primitive.SetMovedAt(movedAt)
 	primitive.SetRemovedAt(removedAt)
 	return primitive, nil
 }
 
-func fromJSONText(
-	pbText *api.JSONElement_Text,
-) (*crdt.Text, error) {
+func fromJSONText(pbText *api.JSONElement_Text) (*crdt.Text, error) {
 	createdAt, err := fromTimeTicket(pbText.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json text: %w", err)
 	}
 	movedAt, err := fromTimeTicket(pbText.MovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json text: %w", err)
 	}
 	removedAt, err := fromTimeTicket(pbText.RemovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json text: %w", err)
 	}
 
-	rgaTreeSplit := crdt.NewRGATreeSplit(crdt.InitialTextNode())
+	rgaTreeSplit, err := crdt.NewRGATreeSplit(crdt.InitialTextNode())
+	if err != nil {
+		return nil, fmt.Errorf("from json text: %w", err)
+	}
 
 	current := rgaTreeSplit.InitialHead()
 	for _, pbNode := range pbText.Nodes {
 		textNode, err := fromTextNode(pbNode)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from json text: %w", err)
 		}
-		current = rgaTreeSplit.InsertAfter(current, textNode)
+		current, err = rgaTreeSplit.InsertAfter(current, textNode)
+		if err != nil {
+			return nil, fmt.Errorf("from json text: %w", err)
+		}
 		insPrevID, err := fromTextNodeID(pbNode.InsPrevId)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from json text: %w", err)
 		}
 		if insPrevID != nil {
-			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
+			insPrevNode, err := rgaTreeSplit.FindNode(insPrevID)
+			if err != nil {
+				return nil, fmt.Errorf("from json text: %w", err)
+			}
 			if insPrevNode == nil {
-				panic("insPrevNode should be presence")
+				return nil, fmt.Errorf("from json text: %w", err)
 			}
 			current.SetInsPrev(insPrevNode)
 		}
@@ -209,26 +220,30 @@ func fromJSONText(
 func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*crdt.Counter, error) {
 	createdAt, err := fromTimeTicket(pbCnt.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json counter: %w", err)
 	}
 	movedAt, err := fromTimeTicket(pbCnt.MovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json counter: %w", err)
 	}
 	removedAt, err := fromTimeTicket(pbCnt.RemovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json counter: %w", err)
 	}
 	counterType, err := fromCounterType(pbCnt.Type)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from json counter: %w", err)
 	}
 
-	counter := crdt.NewCounter(
-		counterType,
-		crdt.CounterValueFromBytes(counterType, pbCnt.Value),
-		createdAt,
-	)
+	counterValue, err := crdt.CounterValueFromBytes(counterType, pbCnt.Value)
+	if err != nil {
+		return nil, fmt.Errorf("from json counter: %w", err)
+	}
+
+	counter, err := crdt.NewCounter(counterType, counterValue, createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("from json counter: %w", err)
+	}
 	counter.SetMovedAt(movedAt)
 	counter.SetRemovedAt(removedAt)
 
@@ -240,14 +255,14 @@ func fromTextNode(
 ) (*crdt.RGATreeSplitNode[*crdt.TextValue], error) {
 	id, err := fromTextNodeID(pbNode.Id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from text node: %w", err)
 	}
 
 	attrs := crdt.NewRHT()
 	for key, pbAttr := range pbNode.Attributes {
 		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from text node: %w", err)
 		}
 		attrs.Set(key, pbAttr.Value, updatedAt)
 	}
@@ -259,7 +274,7 @@ func fromTextNode(
 	if pbNode.RemovedAt != nil {
 		removedAt, err := fromTimeTicket(pbNode.RemovedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from text node: %w", err)
 		}
 		textNode.Remove(removedAt, time.MaxTicket)
 	}
@@ -275,7 +290,7 @@ func fromTextNodeID(
 
 	createdAt, err := fromTimeTicket(pbTextNodeID.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from text id: %w", err)
 	}
 
 	return crdt.NewRGATreeSplitNodeID(

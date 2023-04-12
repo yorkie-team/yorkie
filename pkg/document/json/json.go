@@ -17,21 +17,25 @@
 // Package json provides the JSON document implementation.
 package json
 
-import "github.com/yorkie-team/yorkie/pkg/document/crdt"
+import (
+	"fmt"
 
-func toOriginal(elem crdt.Element) crdt.Element {
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+)
+
+func toOriginal(elem crdt.Element) (crdt.Element, error) {
 	switch elem := elem.(type) {
 	case *Object:
-		return elem.Object
+		return elem.Object, nil
 	case *Array:
-		return elem.Array
+		return elem.Array, nil
 	case *Text:
-		return elem.Text
+		return elem.Text, nil
 	case *Counter:
-		return elem.Counter
+		return elem.Counter, nil
 	case *crdt.Primitive:
-		return elem
+		return elem, nil
 	}
 
-	panic("unsupported type")
+	return nil, fmt.Errorf("to origin: unsupported type(%T)", elem)
 }

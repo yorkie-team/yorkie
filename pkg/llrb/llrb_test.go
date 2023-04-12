@@ -27,35 +27,38 @@ import (
 
 type intKey struct {
 	key int
+	err error
 }
 
 func newIntKey(key int) *intKey {
 	return &intKey{
 		key: key,
+		err: nil,
 	}
 }
 
-func (k *intKey) Compare(other llrb.Key) int {
+func (k *intKey) Compare(other llrb.Key) (int, error) {
 	o := other.(*intKey)
 	if k.key > o.key {
-		return 1
+		return 1, nil
 	} else if k.key < o.key {
-		return -1
+		return -1, nil
 	} else {
-		return 0
+		return 0, nil
 	}
 }
 
 type intValue struct {
 	value int
+	err   error
 }
 
 func newIntValue(value int) *intValue {
 	return &intValue{value: value}
 }
 
-func (v *intValue) String() string {
-	return fmt.Sprintf("%d", v.value)
+func (v *intValue) String() (string, error) {
+	return fmt.Sprintf("%d", v.value), nil
 }
 
 func TestTree(t *testing.T) {
@@ -73,18 +76,22 @@ func TestTree(t *testing.T) {
 		for _, array := range arrays {
 			tree := llrb.NewTree[*intKey, *intValue]()
 			for _, value := range array {
-				tree.Put(newIntKey(value), newIntValue(value))
+				_, _ = tree.Put(newIntKey(value), newIntValue(value))
 			}
-			assert.Equal(t, "0,1,2,3,4,5,6,7,8,9", tree.String())
+			str, _ := tree.String()
+			assert.Equal(t, "0,1,2,3,4,5,6,7,8,9", str)
 
-			tree.Remove(newIntKey(8))
-			assert.Equal(t, "0,1,2,3,4,5,6,7,9", tree.String())
+			_ = tree.Remove(newIntKey(8))
+			str, _ = tree.String()
+			assert.Equal(t, "0,1,2,3,4,5,6,7,9", str)
 
-			tree.Remove(newIntKey(2))
-			assert.Equal(t, "0,1,3,4,5,6,7,9", tree.String())
+			_ = tree.Remove(newIntKey(2))
+			str, _ = tree.String()
+			assert.Equal(t, "0,1,3,4,5,6,7,9", str)
 
-			tree.Remove(newIntKey(5))
-			assert.Equal(t, "0,1,3,4,6,7,9", tree.String())
+			_ = tree.Remove(newIntKey(5))
+			str, _ = tree.String()
+			assert.Equal(t, "0,1,3,4,6,7,9", str)
 		}
 	})
 }

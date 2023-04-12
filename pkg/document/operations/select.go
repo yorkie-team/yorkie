@@ -17,6 +17,8 @@
 package operations
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -59,7 +61,7 @@ func (s *Select) Execute(root *crdt.Root) error {
 	case *crdt.Text:
 		obj.Select(s.from, s.to, s.executedAt)
 	default:
-		return ErrNotApplicableDataType
+		return fmt.Errorf("operation select execute: %w", ErrNotApplicableDataType)
 	}
 
 	return nil

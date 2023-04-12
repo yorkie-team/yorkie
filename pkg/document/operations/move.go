@@ -17,6 +17,8 @@
 package operations
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -57,10 +59,12 @@ func (o *Move) Execute(root *crdt.Root) error {
 
 	obj, ok := parent.(*crdt.Array)
 	if !ok {
-		return ErrNotApplicableDataType
+		return fmt.Errorf("operation move execute: %w", ErrNotApplicableDataType)
 	}
 
-	obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
+	if err := obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt); err != nil {
+		return fmt.Errorf("operation move execute: %w", err)
+	}
 
 	return nil
 }

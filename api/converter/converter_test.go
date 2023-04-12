@@ -36,30 +36,36 @@ func TestConverter(t *testing.T) {
 	t.Run("snapshot simple test", func(t *testing.T) {
 		obj, err := converter.BytesToObject(nil)
 		assert.NoError(t, err)
-		assert.Equal(t, "{}", obj.Marshal())
+		str, _ := obj.Marshal()
+		assert.Equal(t, "{}", str)
 
 		doc := document.New("d1")
 
 		err = doc.Update(func(root *json.Object) error {
-			root.SetNewText("k1").Edit(0, 0, "A")
+			text, _ := root.SetNewText("k1")
+			_, _ = text.Edit(0, 0, "A")
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"val":"A"}]}`, doc.Marshal())
+		str, _ = doc.Marshal()
+		assert.Equal(t, `{"k1":[{"val":"A"}]}`, str)
 
 		err = doc.Update(func(root *json.Object) error {
-			root.SetNewText("k1").Edit(0, 0, "B")
+			text, _ := root.SetNewText("k1")
+			_, _ = text.Edit(0, 0, "B")
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"val":"B"}]}`, doc.Marshal())
+		str, _ = doc.Marshal()
+		assert.Equal(t, `{"k1":[{"val":"B"}]}`, str)
 
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
 
 		obj, err = converter.BytesToObject(bytes)
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"val":"B"}]}`, obj.Marshal())
+		str, _ = obj.Marshal()
+		assert.Equal(t, `{"k1":[{"val":"B"}]}`, str)
 	})
 
 	t.Run("snapshot test", func(t *testing.T) {
@@ -67,50 +73,50 @@ func TestConverter(t *testing.T) {
 
 		err := doc.Update(func(root *json.Object) error {
 			// an object and primitive types
-			root.SetNewObject("k1").
-				SetNull("k1.0").
-				SetBool("k1.1", true).
-				SetInteger("k1.2", 2147483647).
-				SetLong("k1.3", 9223372036854775807).
-				SetDouble("1.4", 1.79).
-				SetString("k1.5", "4").
-				SetBytes("k1.6", []byte{65, 66}).
-				SetDate("k1.7", gotime.Now()).
-				Delete("k1.5")
+			object, _ := root.SetNewObject("k1")
+			_, _ = object.SetNull("k1.0")
+			_, _ = object.SetBool("k1.1", true)
+			_, _ = object.SetInteger("k1.2", 2147483647)
+			_, _ = object.SetLong("k1.3", 9223372036854775807)
+			_, _ = object.SetDouble("1.4", 1.79)
+			_, _ = object.SetString("k1.5", "4")
+			_, _ = object.SetBytes("k1.6", []byte{65, 66})
+			_, _ = object.SetDate("k1.7", gotime.Now())
+			_, _ = object.Delete("k1.5")
 
 			// an array
-			root.SetNewArray("k2").
-				AddNull().
-				AddBool(true).
-				AddInteger(1).
-				AddLong(2).
-				AddDouble(3.0).
-				AddString("4").
-				AddBytes([]byte{65}).
-				AddDate(gotime.Now()).
-				Delete(4)
+			array, _ := root.SetNewArray("k2")
+			_, _ = array.AddNull()
+			_, _ = array.AddBool(true)
+			_, _ = array.AddInteger(1)
+			_, _ = array.AddLong(2)
+			_, _ = array.AddDouble(3.0)
+			_, _ = array.AddString("4")
+			_, _ = array.AddBytes([]byte{65})
+			_, _ = array.AddDate(gotime.Now())
+			_, _ = array.Delete(4)
 
 			// plain text
-			root.SetNewText("k3").
-				Edit(0, 0, "ㅎ").
-				Edit(0, 1, "하").
-				Edit(0, 1, "한").
-				Edit(0, 1, "하").
-				Edit(1, 1, "느").
-				Edit(1, 2, "늘").
-				Edit(2, 2, "구름").
-				Edit(2, 3, "뭉게구")
+			plainText, _ := root.SetNewText("k3")
+			_, _ = plainText.Edit(0, 0, "ㅎ")
+			_, _ = plainText.Edit(0, 1, "하")
+			_, _ = plainText.Edit(0, 1, "한")
+			_, _ = plainText.Edit(0, 1, "하")
+			_, _ = plainText.Edit(1, 1, "느")
+			_, _ = plainText.Edit(1, 2, "늘")
+			_, _ = plainText.Edit(2, 2, "구름")
+			_, _ = plainText.Edit(2, 3, "뭉게구")
 
 			// rich text
-			root.SetNewText("k4").
-				Edit(0, 0, "Hello world", nil).
-				Edit(6, 11, "sky", nil).
-				Style(0, 5, map[string]string{"b": "1"})
+			richText, _ := root.SetNewText("k4")
+			_, _ = richText.Edit(0, 0, "Hello world", nil)
+			_, _ = richText.Edit(6, 11, "sky", nil)
+			_, _ = richText.Style(0, 5, map[string]string{"b": "1"})
 
 			// a counter
-			root.SetNewCounter("k5", crdt.LongCnt, 0).
-				Increase(10).
-				Increase(math.MaxInt64)
+			counter, _ := root.SetNewCounter("k5", crdt.LongCnt, 0)
+			_, _ = counter.Increase(10)
+			_, _ = counter.Increase(math.MaxInt64)
 
 			return nil
 		})
@@ -121,7 +127,9 @@ func TestConverter(t *testing.T) {
 
 		obj, err := converter.BytesToObject(bytes)
 		assert.NoError(t, err)
-		assert.Equal(t, doc.Marshal(), obj.Marshal())
+		strObject, _ := obj.Marshal()
+		strDoc, _ := doc.Marshal()
+		assert.Equal(t, strDoc, strObject)
 	})
 
 	t.Run("change pack test", func(t *testing.T) {
@@ -129,48 +137,52 @@ func TestConverter(t *testing.T) {
 
 		err := d1.Update(func(root *json.Object) error {
 			// an object and primitive types
-			root.SetNewObject("k1").
-				SetBool("k1.1", true).
-				SetInteger("k1.2", 2147483647).
-				SetLong("k1.3", 9223372036854775807).
-				SetDouble("1.4", 1.79).
-				SetString("k1.5", "4").
-				SetBytes("k1.6", []byte{65, 66}).
-				SetDate("k1.7", gotime.Now()).
-				Delete("k1.5")
+			object, _ := root.SetNewObject("k1")
+			_, _ = object.SetBool("k1.1", true)
+			_, _ = object.SetInteger("k1.2", 2147483647)
+			_, _ = object.SetLong("k1.3", 9223372036854775807)
+			_, _ = object.SetDouble("1.4", 1.79)
+			_, _ = object.SetString("k1.5", "4")
+			_, _ = object.SetBytes("k1.6", []byte{65, 66})
+			_, _ = object.SetDate("k1.7", gotime.Now())
+			_, _ = object.Delete("k1.5")
 
 			// an array
-			root.SetNewArray("k2").
-				AddBool(true).
-				AddInteger(1).
-				AddLong(2).
-				AddDouble(3.0).
-				AddString("4").
-				AddBytes([]byte{65}).
-				AddDate(gotime.Now()).
-				Delete(4)
+			array, _ := root.SetNewArray("k2")
+			_, _ = array.AddBool(true)
+			_, _ = array.AddInteger(1)
+			_, _ = array.AddLong(2)
+			_, _ = array.AddDouble(3.0)
+			_, _ = array.AddString("4")
+			_, _ = array.AddBytes([]byte{65})
+			_, _ = array.AddDate(gotime.Now())
+			_, _ = array.Delete(4)
 
-			nextCreatedAt := root.GetArray("k2").Get(0).CreatedAt()
-			targetCreatedAt := root.GetArray("k2").Get(1).CreatedAt()
-			root.GetArray("k2").MoveBefore(nextCreatedAt, targetCreatedAt)
+			arrayK2, _ := root.GetArray("k2")
+			rgaTreeListNode0, _ := arrayK2.Get(0)
+			nextCreatedAt := rgaTreeListNode0.CreatedAt()
+			rgaTreeListNode1, _ := arrayK2.Get(1)
+			targetCreatedAt := rgaTreeListNode1.CreatedAt()
+			_ = arrayK2.MoveBefore(nextCreatedAt, targetCreatedAt)
 
 			// plain text
-			root.SetNewText("k3").
-				Edit(0, 0, "ㅎ").
-				Edit(0, 1, "하").
-				Edit(0, 1, "한").
-				Edit(0, 1, "하").
-				Edit(1, 1, "느").
-				Edit(1, 2, "늘").
-				Select(1, 2)
+			plainText, _ := root.SetNewText("k3")
+			_, _ = plainText.Edit(0, 0, "ㅎ")
+			_, _ = plainText.Edit(0, 1, "하")
+			_, _ = plainText.Edit(0, 1, "한")
+			_, _ = plainText.Edit(0, 1, "하")
+			_, _ = plainText.Edit(1, 1, "느")
+			_, _ = plainText.Edit(1, 2, "늘")
+			_, _ = plainText.Select(1, 2)
 
 			// rich text
-			root.SetNewText("k3").
-				Edit(0, 0, "Hello World", nil).
-				Style(0, 5, map[string]string{"b": "1"})
+			richText, _ := root.SetNewText("k3")
+			_, _ = richText.Edit(0, 0, "Hello World", nil)
+			_, _ = richText.Style(0, 5, map[string]string{"b": "1"})
 
 			// counter
-			root.SetNewCounter("k4", crdt.IntegerCnt, 0).Increase(5)
+			counter, _ := root.SetNewCounter("k4", crdt.IntegerCnt, 0)
+			_, _ = counter.Increase(5)
 
 			return nil
 		})
@@ -187,7 +199,9 @@ func TestConverter(t *testing.T) {
 		err = d2.ApplyChangePack(pack)
 		assert.NoError(t, err)
 
-		assert.Equal(t, d1.Marshal(), d2.Marshal())
+		str1, _ := d1.Marshal()
+		str2, _ := d2.Marshal()
+		assert.Equal(t, str1, str2)
 	})
 
 	t.Run("change pack error test", func(t *testing.T) {

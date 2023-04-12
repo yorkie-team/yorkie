@@ -35,7 +35,7 @@ import (
 func FromUser(pbUser *api.User) (*types.User, error) {
 	createdAt, err := protoTypes.TimestampFromProto(pbUser.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to timestamp: %w", err)
+		return nil, fmt.Errorf("from user: createdAt to timestamp: %w", err)
 	}
 
 	return &types.User{
@@ -51,7 +51,7 @@ func FromProjects(pbProjects []*api.Project) ([]*types.Project, error) {
 	for _, pbProject := range pbProjects {
 		project, err := FromProject(pbProject)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from projects: %w", err)
 		}
 		projects = append(projects, project)
 	}
@@ -62,11 +62,11 @@ func FromProjects(pbProjects []*api.Project) ([]*types.Project, error) {
 func FromProject(pbProject *api.Project) (*types.Project, error) {
 	createdAt, err := protoTypes.TimestampFromProto(pbProject.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to timestamp: %w", err)
+		return nil, fmt.Errorf("createdAt to timestamp: %w", err)
 	}
 	updatedAt, err := protoTypes.TimestampFromProto(pbProject.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to timestamp: %w", err)
+		return nil, fmt.Errorf("updatedAt to timestamp: %w", err)
 	}
 
 	return &types.Project{
@@ -88,7 +88,7 @@ func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) ([]*types.Documen
 	for _, pbSummary := range pbSummaries {
 		summary, err := FromDocumentSummary(pbSummary)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from document summaries: %w", err)
 		}
 		summaries = append(summaries, summary)
 	}
@@ -99,15 +99,15 @@ func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) ([]*types.Documen
 func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary, error) {
 	createdAt, err := protoTypes.TimestampFromProto(pbSummary.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to timestamp: %w", err)
+		return nil, fmt.Errorf("createdAt to timestamp: %w", err)
 	}
 	accessedAt, err := protoTypes.TimestampFromProto(pbSummary.AccessedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert accessedAt to timestamp: %w", err)
+		return nil, fmt.Errorf("accessedAt to timestamp: %w", err)
 	}
 	updatedAt, err := protoTypes.TimestampFromProto(pbSummary.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to timestamp: %w", err)
+		return nil, fmt.Errorf("updatedAt to timestamp: %w", err)
 	}
 	return &types.DocumentSummary{
 		ID:         types.ID(pbSummary.Id),
@@ -123,7 +123,7 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary
 func FromClient(pbClient *api.Client) (*types.Client, error) {
 	id, err := time.ActorIDFromBytes(pbClient.Id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from client: %w", err)
 	}
 
 	return &types.Client{
@@ -143,20 +143,22 @@ func FromPresenceInfo(pbPresence *api.Presence) types.PresenceInfo {
 // FromChangePack converts the given Protobuf formats to model format.
 func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	if pbPack == nil {
-		return nil, ErrPackRequired
+		return nil, fmt.Errorf("from change pack: %w", ErrPackRequired)
+
 	}
 	if pbPack.Checkpoint == nil {
-		return nil, ErrCheckpointRequired
+		return nil, fmt.Errorf("from change pack: %w", ErrCheckpointRequired)
+
 	}
 
 	changes, err := FromChanges(pbPack.Changes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from change pack: %w", err)
 	}
 
 	minSyncedTicket, err := fromTimeTicket(pbPack.MinSyncedTicket)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from change pack: %w", err)
 	}
 
 	return &change.Pack{
@@ -182,11 +184,11 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 	for _, pbChange := range pbChanges {
 		changeID, err := fromChangeID(pbChange.Id)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from changes: %w", err)
 		}
 		ops, err := FromOperations(pbChange.Operations)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from changes: %w", err)
 		}
 		changes = append(changes, change.New(
 			changeID,
@@ -201,7 +203,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 func fromChangeID(id *api.ChangeID) (change.ID, error) {
 	actorID, err := time.ActorIDFromBytes(id.ActorId)
 	if err != nil {
-		return change.InitialID, err
+		return change.InitialID, fmt.Errorf("from change id: %w", err)
 	}
 	return change.NewID(
 		id.ClientSeq,
@@ -215,7 +217,7 @@ func fromChangeID(id *api.ChangeID) (change.ID, error) {
 func FromDocumentKey(pbKey string) (key.Key, error) {
 	k := key.Key(pbKey)
 	if err := k.Validate(); err != nil {
-		return "", err
+		return "", fmt.Errorf("from document key: %w", err)
 	}
 
 	return k, nil
@@ -225,7 +227,7 @@ func FromDocumentKey(pbKey string) (key.Key, error) {
 func FromDocumentID(pbID string) (types.ID, error) {
 	id := types.ID(pbID)
 	if err := id.Validate(); err != nil {
-		return "", err
+		return "", fmt.Errorf("from document id: %w", err)
 	}
 
 	return id, nil
@@ -243,24 +245,24 @@ func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) 
 	case api.DocEventType_DOC_EVENT_TYPE_PRESENCE_CHANGED:
 		return types.PresenceChangedEvent, nil
 	}
-	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
+	return "", fmt.Errorf("from event type(%v): %w", pbDocEventType, ErrUnsupportedEventType)
 }
 
 // FromDocEvent converts the given Protobuf formats to model format.
 func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
 	client, err := FromClient(docEvent.Publisher)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from doc event: %w", err)
 	}
 
 	eventType, err := FromEventType(docEvent.Type)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from doc event: %w", err)
 	}
 
 	documentID, err := FromDocumentID(docEvent.DocumentId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from doc event: %w", err)
 	}
 
 	return &sync.DocEvent{
@@ -276,7 +278,7 @@ func FromClients(pbClients []*api.Client) ([]*types.Client, error) {
 	for _, pbClient := range pbClients {
 		client, err := FromClient(pbClient)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from clients: %w", err)
 		}
 		clients = append(clients, client)
 	}
@@ -308,10 +310,10 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 		case *api.Operation_Increase_:
 			op, err = fromIncrease(decoded.Increase)
 		default:
-			return nil, ErrUnsupportedOperation
+			return nil, fmt.Errorf("from operations: %w", ErrUnsupportedOperation)
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from operations: %w", err)
 		}
 		ops = append(ops, op)
 	}
@@ -322,15 +324,15 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 	parentCreatedAt, err := fromTimeTicket(pbSet.ParentCreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from set: %w", err)
 	}
 	executedAt, err := fromTimeTicket(pbSet.ExecutedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from set: %w", err)
 	}
 	elem, err := fromElement(pbSet.Value)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from set: %w", err)
 	}
 
 	return operations.NewSet(
@@ -344,19 +346,19 @@ func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {
 func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
 	parentCreatedAt, err := fromTimeTicket(pbAdd.ParentCreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from add: %w", err)
 	}
 	prevCreatedAt, err := fromTimeTicket(pbAdd.PrevCreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from add: %w", err)
 	}
 	elem, err := fromElement(pbAdd.Value)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from add: %w", err)
 	}
 	executedAt, err := fromTimeTicket(pbAdd.ExecutedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from add: %w", err)
 	}
 	return operations.NewAdd(
 		parentCreatedAt,
@@ -369,19 +371,19 @@ func fromAdd(pbAdd *api.Operation_Add) (*operations.Add, error) {
 func fromMove(pbMove *api.Operation_Move) (*operations.Move, error) {
 	parentCreatedAt, err := fromTimeTicket(pbMove.ParentCreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from move: %w", err)
 	}
 	prevCreatedAt, err := fromTimeTicket(pbMove.PrevCreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from move: %w", err)
 	}
 	createdAt, err := fromTimeTicket(pbMove.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from move: %w", err)
 	}
 	executedAt, err := fromTimeTicket(pbMove.ExecutedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from move: %w", err)
 	}
 	return operations.NewMove(
 		parentCreatedAt,
@@ -394,15 +396,15 @@ func fromMove(pbMove *api.Operation_Move) (*operations.Move, error) {
 func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
 	parentCreatedAt, err := fromTimeTicket(pbRemove.ParentCreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from remove: %w", err)
 	}
 	createdAt, err := fromTimeTicket(pbRemove.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from remove: %w", err)
 	}
 	executedAt, err := fromTimeTicket(pbRemove.ExecutedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from remove: %w", err)
 	}
 	return operations.NewRemove(
 		parentCreatedAt,
@@ -414,19 +416,19 @@ func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
 func fromSelect(pbSelect *api.Operation_Select) (*operations.Select, error) {
 	parentCreatedAt, err := fromTimeTicket(pbSelect.ParentCreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from select: %w", err)
 	}
 	from, err := fromTextNodePos(pbSelect.From)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from select: %w", err)
 	}
 	to, err := fromTextNodePos(pbSelect.To)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from select: %w", err)
 	}
 	executedAt, err := fromTimeTicket(pbSelect.ExecutedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from select: %w", err)
 	}
 	return operations.NewSelect(
 		parentCreatedAt,
@@ -439,25 +441,25 @@ func fromSelect(pbSelect *api.Operation_Select) (*operations.Select, error) {
 func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	parentCreatedAt, err := fromTimeTicket(pbEdit.ParentCreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from edit: %w", err)
 	}
 	from, err := fromTextNodePos(pbEdit.From)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from edit: %w", err)
 	}
 	to, err := fromTextNodePos(pbEdit.To)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from edit: %w", err)
 	}
 	createdAtMapByActor, err := fromCreatedAtMapByActor(
 		pbEdit.CreatedAtMapByActor,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from edit: %w", err)
 	}
 	executedAt, err := fromTimeTicket(pbEdit.ExecutedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from edit: %w", err)
 	}
 	return operations.NewEdit(
 		parentCreatedAt,
@@ -473,19 +475,19 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 	parentCreatedAt, err := fromTimeTicket(pbStyle.ParentCreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from style: %w", err)
 	}
 	from, err := fromTextNodePos(pbStyle.From)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from style: %w", err)
 	}
 	to, err := fromTextNodePos(pbStyle.To)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from style: %w", err)
 	}
 	executedAt, err := fromTimeTicket(pbStyle.ExecutedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from style: %w", err)
 	}
 	return operations.NewStyle(
 		parentCreatedAt,
@@ -499,15 +501,15 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 	parentCreatedAt, err := fromTimeTicket(pbInc.ParentCreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from increase: %w", err)
 	}
 	elem, err := fromElement(pbInc.Value)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from increase: %w", err)
 	}
 	executedAt, err := fromTimeTicket(pbInc.ExecutedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from increase: %w", err)
 	}
 	return operations.NewIncrease(
 		parentCreatedAt,
@@ -523,7 +525,7 @@ func fromCreatedAtMapByActor(
 	for actor, pbTicket := range pbCreatedAtMapByActor {
 		ticket, err := fromTimeTicket(pbTicket)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from createdAt map by actor: %w", err)
 		}
 		createdAtMapByActor[actor] = ticket
 	}
@@ -535,7 +537,7 @@ func fromTextNodePos(
 ) (*crdt.RGATreeSplitNodePos, error) {
 	createdAt, err := fromTimeTicket(pbPos.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from text node pos: %w", err)
 	}
 	return crdt.NewRGATreeSplitNodePos(
 		crdt.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
@@ -550,7 +552,7 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 
 	actorID, err := time.ActorIDFromBytes(pbTicket.ActorId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from time ticket: %w", err)
 	}
 	return time.NewTicket(
 		pbTicket.Lamport,
@@ -564,7 +566,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	case api.ValueType_VALUE_TYPE_JSON_OBJECT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from element: %w", err)
 		}
 		return crdt.NewObject(
 			crdt.NewElementRHT(),
@@ -573,12 +575,13 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	case api.ValueType_VALUE_TYPE_JSON_ARRAY:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from element: %w", err)
 		}
-		return crdt.NewArray(
-			crdt.NewRGATreeList(),
-			createdAt,
-		), nil
+		elements, err := crdt.NewRGATreeList()
+		if err != nil {
+			return nil, fmt.Errorf("from element: %w", err)
+		}
+		return crdt.NewArray(elements, createdAt), nil
 	case api.ValueType_VALUE_TYPE_NULL:
 		fallthrough
 	case api.ValueType_VALUE_TYPE_BOOLEAN:
@@ -596,41 +599,51 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	case api.ValueType_VALUE_TYPE_DATE:
 		valueType, err := fromPrimitiveValueType(pbElement.Type)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from element: %w", err)
 		}
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from element: %w", err)
 		}
-		return crdt.NewPrimitive(
-			crdt.ValueFromBytes(valueType, pbElement.Value),
-			createdAt,
-		), nil
+		value, err := crdt.ValueFromBytes(valueType, pbElement.Value)
+		if err != nil {
+			return nil, fmt.Errorf("from element: %w", err)
+		}
+		primitive, err := crdt.NewPrimitive(value, createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("from element: %w", err)
+		}
+		return primitive, nil
 	case api.ValueType_VALUE_TYPE_TEXT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from element: %w", err)
 		}
-		return crdt.NewText(
-			crdt.NewRGATreeSplit(crdt.InitialTextNode()),
-			createdAt,
-		), nil
+		rgaTreeSplit, err := crdt.NewRGATreeSplit(crdt.InitialTextNode())
+		if err != nil {
+			return nil, fmt.Errorf("from element: %w", err)
+		}
+		return crdt.NewText(rgaTreeSplit, createdAt), nil
 	case api.ValueType_VALUE_TYPE_INTEGER_CNT:
 		fallthrough
 	case api.ValueType_VALUE_TYPE_LONG_CNT:
 		counterType, err := fromCounterType(pbType)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from element: %w", err)
 		}
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from element: %w", err)
 		}
-		return crdt.NewCounter(
-			counterType,
-			crdt.CounterValueFromBytes(counterType, pbElement.Value),
-			createdAt,
-		), nil
+		counterValue, err := crdt.CounterValueFromBytes(counterType, pbElement.Value)
+		if err != nil {
+			return nil, fmt.Errorf("from element: %w", err)
+		}
+		counter, err := crdt.NewCounter(counterType, counterValue, createdAt)
+		if err != nil {
+			return nil, fmt.Errorf("from element: %w", err)
+		}
+		return counter, nil
 	}
 
 	return nil, fmt.Errorf("%d, %w", pbElement.Type, ErrUnsupportedElement)

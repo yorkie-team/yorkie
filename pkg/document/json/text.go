@@ -17,6 +17,8 @@
 package json
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -38,11 +40,14 @@ func NewText(ctx *change.Context, text *crdt.Text) *Text {
 }
 
 // Edit edits the given range with the given content and attributes.
-func (p *Text) Edit(from, to int, content string, attributes ...map[string]string) *Text {
+func (p *Text) Edit(from, to int, content string, attributes ...map[string]string) (*Text, error) {
 	if from > to {
-		panic("from should be less than or equal to to")
+		return nil, fmt.Errorf("json text edit: from should be less than or equal to to")
 	}
-	fromPos, toPos := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	if err != nil {
+		return nil, fmt.Errorf("json text edit: %w", err)
+	}
 
 	// TODO(hackerwins): We need to consider the case where the length of
 	//  attributes is greater than 1.
@@ -52,7 +57,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	_, maxCreationMapByActor := p.Text.Edit(
+	_, maxCreationMapByActor, err := p.Text.Edit(
 		fromPos,
 		toPos,
 		nil,
@@ -60,6 +65,9 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 		attrs,
 		ticket,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("json text edit: %w", err)
+	}
 
 	p.context.Push(operations.NewEdit(
 		p.CreatedAt(),
@@ -70,27 +78,31 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 		attrs,
 		ticket,
 	))
-	if !fromPos.Equal(toPos) {
+	isPosEqual, err := fromPos.Equal(toPos)
+	if err != nil {
+		return nil, fmt.Errorf("json text edit: %w", err)
+	}
+	if !isPosEqual {
 		p.context.RegisterTextElementWithGarbage(p)
 	}
 
-	return p
+	return p, nil
 }
 
 // Style applies the style of the given range.
-func (p *Text) Style(from, to int, attributes map[string]string) *Text {
+func (p *Text) Style(from, to int, attributes map[string]string) (*Text, error) {
 	if from > to {
-		panic("from should be less than or equal to to")
+		return nil, fmt.Errorf("json text style: from should be less than or equal to to")
 	}
-	fromPos, toPos := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	if err != nil {
+		return nil, fmt.Errorf("json text style: %w", err)
+	}
 
 	ticket := p.context.IssueTimeTicket()
-	p.Text.Style(
-		fromPos,
-		toPos,
-		attributes,
-		ticket,
-	)
+	if err = p.Text.Style(fromPos, toPos, attributes, ticket); err != nil {
+		return nil, fmt.Errorf("json text style: %w", err)
+	}
 
 	p.context.Push(operations.NewStyle(
 		p.CreatedAt(),
@@ -100,15 +112,18 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 		ticket,
 	))
 
-	return p
+	return p, nil
 }
 
 // Select stores that the given range has been selected.
-func (p *Text) Select(from, to int) *Text {
+func (p *Text) Select(from, to int) (*Text, error) {
 	if from > to {
-		panic("from should be less than or equal to to")
+		return nil, fmt.Errorf("json text select: from should be less than or equal to to")
 	}
-	fromPos, toPos := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	if err != nil {
+		return nil, fmt.Errorf("json text select: %w", err)
+	}
 
 	ticket := p.context.IssueTimeTicket()
 	p.Text.Select(
@@ -123,5 +138,5 @@ func (p *Text) Select(from, to int) *Text {
 		toPos,
 		ticket,
 	))
-	return p
+	return p, nil
 }

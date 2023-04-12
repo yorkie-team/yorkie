@@ -130,7 +130,7 @@ func withExponentialBackoff(ctx context.Context, cfg *backend.Config, webhookFn 
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("unexpected status code from webhook: %w", ctx.Err())
 		case <-time.After(waitBeforeRetry):
 		}
 

@@ -35,6 +35,11 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
+const (
+	errFormatPushPull                  = "push pull : %w"
+	errFormatBuildDocumentForServerSeq = "build document for server seq: %w"
+)
+
 // PushPullKey creates a new sync.Key of PushPull for the given document.
 func PushPullKey(projectID types.ID, docKey key.Key) sync.Key {
 	return sync.NewKey(fmt.Sprintf("pushpull-%s-%s", projectID, docKey))
@@ -76,14 +81,14 @@ func PushPull(
 	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
 	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, mode)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(errFormatPushPull, err)
 	}
 	be.Metrics.AddPushPullSentChanges(respPack.ChangesLen())
 	be.Metrics.AddPushPullSentOperations(respPack.OperationsLen())
 	be.Metrics.AddPushPullSnapshotBytes(respPack.SnapshotLen())
 
 	if err := clientInfo.UpdateCheckpoint(docInfo.ID, respPack.Checkpoint); err != nil {
-		return nil, err
+		return nil, fmt.Errorf(errFormatPushPull, err)
 	}
 
 	// 03. store pushed changes, docInfo and checkpoint of the client to DB.
@@ -101,7 +106,7 @@ func PushPull(
 	}
 
 	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
-		return nil, err
+		return nil, fmt.Errorf(errFormatPushPull, err)
 	}
 
 	// 04. update and find min synced ticket for garbage collection.
@@ -215,7 +220,12 @@ func BuildDocumentForServerSeq(
 		changes,
 		nil,
 	)); err != nil {
-		return nil, err
+		return nil, fmt.Errorf(errFormatBuildDocumentForServerSeq, err)
+	}
+
+	docRootObject, err := doc.RootObject().Marshal()
+	if err != nil {
+		return nil, fmt.Errorf(errFormatBuildDocumentForServerSeq, err)
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
@@ -224,7 +234,7 @@ func BuildDocumentForServerSeq(
 			len(changes),
 			doc.Root().ElementMapLen(),
 			doc.Root().RemovedElementLen(),
-			doc.RootObject().Marshal(),
+			docRootObject,
 		)
 	}
 

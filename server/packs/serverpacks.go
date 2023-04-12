@@ -17,12 +17,18 @@
 package packs
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+)
+
+const (
+	errFormatToPBChangePack = "to PB change pack: %w"
 )
 
 // ServerPack is similar to change.Pack, but has ChangeInfos instead of Changes
@@ -88,7 +94,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	for _, info := range p.ChangeInfos {
 		actorID, err := time.ActorIDFromHex(info.ActorID.String())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf(errFormatToPBChangePack, err)
 		}
 		changeID := change.NewID(info.ClientSeq, info.ServerSeq, info.Lamport, actorID)
 
@@ -96,7 +102,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		for _, bytesOp := range info.Operations {
 			pbOp := api.Operation{}
 			if err := pbOp.Unmarshal(bytesOp); err != nil {
-				return nil, err
+				return nil, fmt.Errorf(errFormatToPBChangePack, err)
 			}
 			pbOps = append(pbOps, &pbOp)
 		}

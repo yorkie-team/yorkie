@@ -17,6 +17,8 @@
 package operations
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -61,10 +63,12 @@ func (e *Style) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(e.parentCreatedAt)
 	obj, ok := parent.(*crdt.Text)
 	if !ok {
-		return ErrNotApplicableDataType
+		return fmt.Errorf("operation style execution: %w", ErrNotApplicableDataType)
 	}
 
-	obj.Style(e.from, e.to, e.attributes, e.executedAt)
+	if err := obj.Style(e.from, e.to, e.attributes, e.executedAt); err != nil {
+		return fmt.Errorf("operation style execution: %w", err)
+	}
 	return nil
 }
 

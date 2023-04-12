@@ -182,8 +182,8 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			prev := root.GetArray("k1").Get(0)
-			elem := root.GetArray("k1").Get(2)
+			prev, _ := root.GetArray("k1").Get(0)
+			elem, _ := root.GetArray("k1").Get(2)
 			root.GetArray("k1").MoveBefore(prev.CreatedAt(), elem.CreatedAt())
 			assert.Equal(t, `{"k1":[2,0,1]}`, root.Marshal())
 			return nil
@@ -191,8 +191,8 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			prev := root.GetArray("k1").Get(1)
-			elem := root.GetArray("k1").Get(2)
+			prev, _ := root.GetArray("k1").Get(1)
+			elem, _ := root.GetArray("k1").Get(2)
 			root.GetArray("k1").MoveBefore(prev.CreatedAt(), elem.CreatedAt())
 			assert.Equal(t, `{"k1":[0,2,1]}`, root.Marshal())
 			return nil
@@ -216,16 +216,16 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
-			next := root.GetArray("k1").Get(0)
-			elem := root.GetArray("k1").Get(2)
+			next, _ := root.GetArray("k1").Get(0)
+			elem, _ := root.GetArray("k1").Get(2)
 			root.GetArray("k1").MoveBefore(next.CreatedAt(), elem.CreatedAt())
 			assert.Equal(t, `{"k1":[2,0,1]}`, root.Marshal())
 			return nil
 		}))
 
 		assert.NoError(t, d2.Update(func(root *json.Object) error {
-			next := root.GetArray("k1").Get(0)
-			elem := root.GetArray("k1").Get(1)
+			next, _ := root.GetArray("k1").Get(0)
+			elem, _ := root.GetArray("k1").Get(1)
 			root.GetArray("k1").MoveBefore(next.CreatedAt(), elem.CreatedAt())
 			assert.Equal(t, `{"k1":[1,0,2]}`, root.Marshal())
 			return nil

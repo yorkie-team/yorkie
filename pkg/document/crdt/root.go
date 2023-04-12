@@ -20,6 +20,8 @@
 package crdt
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -101,30 +103,39 @@ func (r *Root) RegisterTextElementWithGarbage(textType TextElement) {
 }
 
 // DeepCopy copies itself deeply.
-func (r *Root) DeepCopy() *Root {
-	return NewRoot(r.object.DeepCopy().(*Object))
+func (r *Root) DeepCopy() (*Root, error) {
+	copiedObject, err := r.object.DeepCopy()
+	if err != nil {
+		return nil, fmt.Errorf("crdt root deep copy: %w", err)
+	}
+	return NewRoot(copiedObject.(*Object)), nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (r *Root) GarbageCollect(ticket *time.Ticket) int {
+func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	count := 0
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
 		if pair.elem.RemovedAt() != nil && ticket.Compare(pair.elem.RemovedAt()) >= 0 {
-			pair.parent.Purge(pair.elem)
+			if err := pair.parent.Purge(pair.elem); err != nil {
+				return 0, fmt.Errorf("root garbage collect: %w", err)
+			}
 			count += r.garbageCollect(pair.elem)
 		}
 	}
 
 	for _, text := range r.textElementWithGarbageMapByCreatedAt {
-		purgedTextNodes := text.purgeTextNodesWithGarbage(ticket)
+		purgedTextNodes, err := text.purgeTextNodesWithGarbage(ticket)
+		if err != nil {
+			return 0, fmt.Errorf("root garbage collect: %w", err)
+		}
 		if purgedTextNodes > 0 {
 			delete(r.textElementWithGarbageMapByCreatedAt, text.CreatedAt().Key())
 		}
 		count += purgedTextNodes
 	}
 
-	return count
+	return count, nil
 }
 
 // ElementMapLen returns the size of element map.

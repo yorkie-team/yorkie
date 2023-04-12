@@ -35,7 +35,7 @@ import (
 func ToUser(user *types.User) (*api.User, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(user.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
+		return nil, fmt.Errorf("convert to user: createdAt to protobuf: %w", err)
 	}
 
 	return &api.User{
@@ -51,7 +51,7 @@ func ToProjects(projects []*types.Project) ([]*api.Project, error) {
 	for _, project := range projects {
 		pbProject, err := ToProject(project)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("convert to project: %w", err)
 		}
 		pbProjects = append(pbProjects, pbProject)
 	}
@@ -63,11 +63,11 @@ func ToProjects(projects []*types.Project) ([]*api.Project, error) {
 func ToProject(project *types.Project) (*api.Project, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(project.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
+		return nil, fmt.Errorf("createdAt to protobuf: %w", err)
 	}
 	pbUpdatedAt, err := protoTypes.TimestampProto(project.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to protobuf: %w", err)
+		return nil, fmt.Errorf("updatedAt to protobuf: %w", err)
 	}
 
 	return &api.Project{
@@ -89,7 +89,7 @@ func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSum
 	for _, summary := range summaries {
 		pbSummary, err := ToDocumentSummary(summary)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("to document summaries: %w", err)
 		}
 		pbSummaries = append(pbSummaries, pbSummary)
 	}
@@ -100,15 +100,15 @@ func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSum
 func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, error) {
 	pbCreatedAt, err := protoTypes.TimestampProto(summary.CreatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
+		return nil, fmt.Errorf("createdAt to protobuf: %w", err)
 	}
 	pbAccessedAt, err := protoTypes.TimestampProto(summary.AccessedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert accessedAt to protobuf: %w", err)
+		return nil, fmt.Errorf("accessedAt to protobuf: %w", err)
 	}
 	pbUpdatedAt, err := protoTypes.TimestampProto(summary.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to protobuf: %w", err)
+		return nil, fmt.Errorf("updatedAt to protobuf: %w", err)
 	}
 
 	return &api.DocumentSummary{
@@ -141,7 +141,7 @@ func ToPresenceInfo(info types.PresenceInfo) *api.Presence {
 func ToChangePack(pack *change.Pack) (*api.ChangePack, error) {
 	pbChanges, err := ToChanges(pack.Changes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("to change pack: %w", err)
 	}
 
 	return &api.ChangePack{
@@ -193,7 +193,7 @@ func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 	case types.PresenceChangedEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_PRESENCE_CHANGED, nil
 	default:
-		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
+		return 0, fmt.Errorf("to doc event type(%s): %w", eventType, ErrUnsupportedEventType)
 	}
 }
 
@@ -201,7 +201,7 @@ func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
 	eventType, err := ToDocEventType(docEvent.Type)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("to doc evnet: %w", err)
 	}
 
 	return &api.DocEvent{
@@ -239,7 +239,7 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			return nil, ErrUnsupportedOperation
 		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("to operations: %w", err)
 		}
 		pbOperations = append(pbOperations, pbOperation)
 	}
@@ -267,7 +267,7 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 	for _, c := range changes {
 		pbOperations, err := ToOperations(c.Operations())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("to changes: %w", err)
 		}
 
 		pbChanges = append(pbChanges, &api.Change{
@@ -283,7 +283,7 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 func toSet(set *operations.Set) (*api.Operation_Set_, error) {
 	pbElem, err := toJSONElementSimple(set.Value())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("to set: %w", err)
 	}
 
 	return &api.Operation_Set_{
@@ -299,7 +299,7 @@ func toSet(set *operations.Set) (*api.Operation_Set_, error) {
 func toAdd(add *operations.Add) (*api.Operation_Add_, error) {
 	pbElem, err := toJSONElementSimple(add.Value())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("to add: %w", err)
 	}
 
 	return &api.Operation_Add_{
@@ -373,7 +373,7 @@ func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error) {
 	pbElem, err := toJSONElementSimple(increase.Value())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("to increase: %w", err)
 	}
 
 	return &api.Operation_Increase_{
@@ -400,13 +400,17 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 	case *crdt.Primitive:
 		pbValueType, err := toValueType(elem.ValueType())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("to json element simple: %w", err)
 		}
 
+		byteValue, err := elem.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("to json element simple: %w", err)
+		}
 		return &api.JSONElementSimple{
 			Type:      pbValueType,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
-			Value:     elem.Bytes(),
+			Value:     byteValue,
 		}, nil
 	case *crdt.Text:
 		return &api.JSONElementSimple{
@@ -416,17 +420,21 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 	case *crdt.Counter:
 		pbCounterType, err := toCounterType(elem.ValueType())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("to json element simple: %w", err)
 		}
 
+		elemBytes, err := elem.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("to json element simple: %w", err)
+		}
 		return &api.JSONElementSimple{
 			Type:      pbCounterType,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
-			Value:     elem.Bytes(),
+			Value:     elemBytes,
 		}, nil
 	}
 
-	return nil, fmt.Errorf("%v, %w", reflect.TypeOf(elem), ErrUnsupportedElement)
+	return nil, fmt.Errorf("to json element simple: unsupported type(%v), %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 }
 
 func toTextNodePos(pos *crdt.RGATreeSplitNodePos) *api.TextNodePos {
@@ -467,7 +475,7 @@ func toValueType(valueType crdt.ValueType) (api.ValueType, error) {
 		return api.ValueType_VALUE_TYPE_DATE, nil
 	}
 
-	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedValueType)
+	return 0, fmt.Errorf("to value type(%d), %w", valueType, ErrUnsupportedValueType)
 }
 
 func toCounterType(valueType crdt.CounterType) (api.ValueType, error) {
@@ -478,7 +486,7 @@ func toCounterType(valueType crdt.CounterType) (api.ValueType, error) {
 		return api.ValueType_VALUE_TYPE_LONG_CNT, nil
 	}
 
-	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
+	return 0, fmt.Errorf("to counter type(%d), %w", valueType, ErrUnsupportedCounterType)
 }
 
 // ToUpdatableProjectFields converts the given model format to Protobuf format.

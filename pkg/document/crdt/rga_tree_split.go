@@ -19,7 +19,7 @@ type RGATreeSplitValue interface {
 	Split(offset int) RGATreeSplitValue
 	Len() int
 	DeepCopy() RGATreeSplitValue
-	String() string
+	String() (string, error)
 	Marshal() string
 	structureAsString() string
 }
@@ -44,29 +44,33 @@ func NewRGATreeSplitNodeID(createdAt *time.Ticket, offset int) *RGATreeSplitNode
 // Compare returns an integer comparing two ID. The result will be 0 if
 // id==other, -1 if id < other, and +1 if id > other. If the receiver or
 // argument is nil, it would panic at runtime.
-func (id *RGATreeSplitNodeID) Compare(other llrb.Key) int {
+func (id *RGATreeSplitNodeID) Compare(other llrb.Key) (int, error) {
 	if id == nil || other == nil {
-		panic("RGATreeSplitNodeID cannot be null")
+		return 0, fmt.Errorf("RGA tree split node id compare: RGATreeSplitNodeID cannot be null")
 	}
 
 	o := other.(*RGATreeSplitNodeID)
 	compare := id.createdAt.Compare(o.createdAt)
 	if compare != 0 {
-		return compare
+		return compare, nil
 	}
 
 	if id.offset > o.offset {
-		return 1
+		return 1, nil
 	} else if id.offset < o.offset {
-		return -1
+		return -1, nil
 	}
 
-	return 0
+	return 0, nil
 }
 
 // Equal returns whether given ID equals to this ID or not.
-func (id *RGATreeSplitNodeID) Equal(other llrb.Key) bool {
-	return id.Compare(other) == 0
+func (id *RGATreeSplitNodeID) Equal(other llrb.Key) (bool, error) {
+	idCompare, err := id.Compare(other)
+	if err != nil {
+		return true, fmt.Errorf("RGA tree split node id equal: %w", err)
+	}
+	return idCompare == 0, nil
 }
 
 // CreatedAt returns the creation time of this ID.
@@ -136,11 +140,15 @@ func (pos *RGATreeSplitNodePos) RelativeOffset() int {
 }
 
 // Equal returns the whether the given pos equals or not.
-func (pos *RGATreeSplitNodePos) Equal(other *RGATreeSplitNodePos) bool {
-	if !pos.id.Equal(other.id) {
-		return false
+func (pos *RGATreeSplitNodePos) Equal(other *RGATreeSplitNodePos) (bool, error) {
+	isIDEqual, err := pos.id.Equal(other.id)
+	if err != nil {
+		return true, fmt.Errorf("RGA tree split node pos equal: %w", err)
 	}
-	return pos.relativeOffset == other.relativeOffset
+	if !isIDEqual {
+		return false, nil
+	}
+	return pos.relativeOffset == other.relativeOffset, nil
 }
 
 // Selection represents the selection of text range in the editor.
@@ -219,8 +227,12 @@ func (s *RGATreeSplitNode[V]) Marshal() string {
 }
 
 // String returns the string representation of this node.
-func (s *RGATreeSplitNode[V]) String() string {
-	return s.value.String()
+func (s *RGATreeSplitNode[V]) String() (string, error) {
+	str, err := s.value.String()
+	if err != nil {
+		return "", fmt.Errorf("RGA tree split node string: %w", err)
+	}
+	return str, nil
 }
 
 // DeepCopy returns a new instance of this RGATreeSplitNode without structural info.
@@ -296,86 +308,114 @@ type RGATreeSplit[V RGATreeSplitValue] struct {
 }
 
 // NewRGATreeSplit creates a new instance of RGATreeSplit.
-func NewRGATreeSplit[V RGATreeSplitValue](initialHead *RGATreeSplitNode[V]) *RGATreeSplit[V] {
+func NewRGATreeSplit[V RGATreeSplitValue](initialHead *RGATreeSplitNode[V]) (*RGATreeSplit[V], error) {
 	treeByIndex := splay.NewTree(initialHead.indexNode)
 	treeByID := llrb.NewTree[*RGATreeSplitNodeID, *RGATreeSplitNode[V]]()
-	treeByID.Put(initialHead.ID(), initialHead)
+	_, err := treeByID.Put(initialHead.ID(), initialHead)
+	if err != nil {
+		return nil, fmt.Errorf("new RGA tree split: %w", err)
+	}
 
 	return &RGATreeSplit[V]{
 		initialHead:    initialHead,
 		treeByIndex:    treeByIndex,
 		treeByID:       treeByID,
 		removedNodeMap: make(map[string]*RGATreeSplitNode[V]),
-	}
+	}, nil
 }
 
-func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
-	fromPos := s.findNodePos(from)
+func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos, error) {
+	fromPos, err := s.findNodePos(from)
+	if err != nil {
+		return nil, nil, fmt.Errorf("RGA tree split create range: %w", err)
+	}
 	if from == to {
-		return fromPos, fromPos
+		return fromPos, fromPos, nil
 	}
-
-	return fromPos, s.findNodePos(to)
+	toPos, err := s.findNodePos(to)
+	if err != nil {
+		return nil, nil, fmt.Errorf("RGA tree split create range: %w", err)
+	}
+	return fromPos, toPos, nil
 }
 
-func (s *RGATreeSplit[V]) findNodePos(index int) *RGATreeSplitNodePos {
-	splayNode, offset := s.treeByIndex.Find(index)
+func (s *RGATreeSplit[V]) findNodePos(index int) (*RGATreeSplitNodePos, error) {
+	splayNode, offset, err := s.treeByIndex.Find(index)
+	if err != nil {
+		return nil, fmt.Errorf("RGA tree split find node pos: %w", err)
+	}
 	node := splayNode.Value()
 	return &RGATreeSplitNodePos{
 		id:             node.ID(),
 		relativeOffset: offset,
-	}
+	}, nil
 }
 
 func (s *RGATreeSplit[V]) findNodeWithSplit(
 	pos *RGATreeSplitNodePos,
 	updatedAt *time.Ticket,
-) (*RGATreeSplitNode[V], *RGATreeSplitNode[V]) {
+) (*RGATreeSplitNode[V], *RGATreeSplitNode[V], error) {
 	absoluteID := pos.getAbsoluteID()
-	node := s.findFloorNodePreferToLeft(absoluteID)
+	node, err := s.findFloorNodePreferToLeft(absoluteID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("RGA tree split find node with split: %w", err)
+	}
 
 	relativeOffset := absoluteID.offset - node.id.offset
 
-	s.splitNode(node, relativeOffset)
+	_, err = s.splitNode(node, relativeOffset)
+	if err != nil {
+		return nil, nil, fmt.Errorf("RGA tree split find node with split: %w", err)
+	}
 
 	for node.next != nil && node.next.createdAt().After(updatedAt) {
 		node = node.next
 	}
 
-	return node, node.next
+	return node, node.next, nil
 }
 
-func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] {
-	node := s.findFloorNode(id)
+func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
+	node, err := s.findFloorNode(id)
+	if err != nil {
+		return nil, fmt.Errorf("RGA tree split find floor node prefer to left: %w", err)
+	}
+
 	if node == nil {
-		panic("the node of the given id should be found: " + s.StructureAsString())
+		return nil, fmt.Errorf(
+			"RGA tree split find floor node prefer to left: the node of the given id should be found: %s",
+			s.StructureAsString(),
+		)
 	}
 
 	if id.offset > 0 && node.id.offset == id.offset {
 		// NOTE: InsPrev may not be present due to GC.
 		if node.insPrev == nil {
-			return node
+			return node, nil
 		}
 		node = node.insPrev
 	}
 
-	return node
+	return node, nil
 }
 
-func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) *RGATreeSplitNode[V] {
+func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) (*RGATreeSplitNode[V], error) {
 	if offset > node.contentLen() {
-		panic("offset should be less than or equal to length: " + s.StructureAsString())
+		return nil, fmt.Errorf("offset should be less than or equal to length: %s", s.StructureAsString())
 	}
 
 	if offset == 0 {
-		return node
+		return node, nil
 	} else if offset == node.contentLen() {
-		return node.next
+		return node.next, nil
 	}
 
 	splitNode := node.split(offset)
 	s.treeByIndex.UpdateWeight(splitNode.indexNode)
-	s.InsertAfter(node, splitNode)
+	_, err := s.InsertAfter(node, splitNode)
+	if err != nil {
+		return nil, fmt.Errorf("split node(offset: %d): %w", offset, err)
+	}
 
 	insNext := node.insNext
 	if insNext != nil {
@@ -383,21 +423,24 @@ func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) *RGAT
 	}
 	splitNode.SetInsPrev(node)
 
-	return splitNode
+	return splitNode, nil
 }
 
 // InsertAfter inserts the given node after the given previous node.
-func (s *RGATreeSplit[V]) InsertAfter(prev, node *RGATreeSplitNode[V]) *RGATreeSplitNode[V] {
+func (s *RGATreeSplit[V]) InsertAfter(prev, node *RGATreeSplitNode[V]) (*RGATreeSplitNode[V], error) {
 	next := prev.next
 	node.setPrev(prev)
 	if next != nil {
 		next.setPrev(node)
 	}
 
-	s.treeByID.Put(node.id, node)
+	_, err := s.treeByID.Put(node.id, node)
+	if err != nil {
+		return nil, fmt.Errorf("RGA tree split insert after: %w", err)
+	}
 	s.treeByIndex.InsertAfter(prev.indexNode, node.indexNode)
 
-	return node
+	return node, nil
 }
 
 // InitialHead returns the head node of this RGATreeSplit.
@@ -406,12 +449,16 @@ func (s *RGATreeSplit[V]) InitialHead() *RGATreeSplitNode[V] {
 }
 
 // FindNode returns the node of the given ID.
-func (s *RGATreeSplit[V]) FindNode(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] {
+func (s *RGATreeSplit[V]) FindNode(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
 	if id == nil {
-		return nil
+		return nil, nil
 	}
 
-	return s.findFloorNode(id)
+	node, err := s.findFloorNode(id)
+	if err != nil {
+		return nil, fmt.Errorf("RGA tree split find node: %w", err)
+	}
+	return node, nil
 }
 
 // CheckWeight returns false when there is an incorrect weight node.
@@ -420,17 +467,24 @@ func (s *RGATreeSplit[V]) CheckWeight() bool {
 	return s.treeByIndex.CheckWeight()
 }
 
-func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] {
-	key, value := s.treeByID.Floor(id)
+func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
+	key, value, err := s.treeByID.Floor(id)
+	if err != nil {
+		return nil, fmt.Errorf("RGA tree split find floor node: %w", err)
+	}
 	if key == nil {
-		return nil
+		return nil, nil
 	}
 
-	if !key.Equal(id) && !key.hasSameCreatedAt(id) {
-		return nil
+	isIDEqual, err := key.Equal(id)
+	if err != nil {
+		return nil, fmt.Errorf("RGA tree split find floor node: %w", err)
+	}
+	if !isIDEqual && !key.hasSameCreatedAt(id) {
+		return nil, nil
 	}
 
-	return value
+	return value, nil
 }
 
 func (s *RGATreeSplit[V]) edit(
@@ -439,10 +493,16 @@ func (s *RGATreeSplit[V]) edit(
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content V,
 	editedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
+) (*RGATreeSplitNodePos, map[string]*time.Ticket, error) {
 	// 01. Split nodes with from and to
-	toLeft, toRight := s.findNodeWithSplit(to, editedAt)
-	fromLeft, fromRight := s.findNodeWithSplit(from, editedAt)
+	toLeft, toRight, err := s.findNodeWithSplit(to, editedAt)
+	if err != nil {
+		return nil, nil, fmt.Errorf("edit(to: %v): %w", to, err)
+	}
+	fromLeft, fromRight, err := s.findNodeWithSplit(from, editedAt)
+	if err != nil {
+		return nil, nil, fmt.Errorf("edit(from: %v): %w", from, err)
+	}
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
@@ -458,7 +518,10 @@ func (s *RGATreeSplit[V]) edit(
 
 	// 03. insert a new node
 	if content.Len() > 0 {
-		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content))
+		inserted, err := s.InsertAfter(fromLeft, NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content))
+		if err != nil {
+			return nil, nil, fmt.Errorf("edit(from: %v): %w", from, err)
+		}
 		caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
 	}
 
@@ -467,7 +530,7 @@ func (s *RGATreeSplit[V]) edit(
 		s.removedNodeMap[key] = removedNode
 	}
 
-	return caretPos, latestCreatedAtMap
+	return caretPos, latestCreatedAtMap, nil
 }
 
 func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeSplitNode[V] {
@@ -558,18 +621,22 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 	}
 }
 
-func (s *RGATreeSplit[V]) string() string {
+func (s *RGATreeSplit[V]) string() (string, error) {
 	builder := strings.Builder{}
 
 	node := s.initialHead.next
 	for node != nil {
 		if node.removedAt == nil {
-			builder.WriteString(node.String())
+			str, err := node.String()
+			if err != nil {
+				return "", err
+			}
+			builder.WriteString(str)
 		}
 		node = node.next
 	}
 
-	return builder.String()
+	return builder.String(), nil
 }
 
 func (s *RGATreeSplit[V]) nodes() []*RGATreeSplitNode[V] {
@@ -608,19 +675,21 @@ func (s *RGATreeSplit[V]) removedNodesLen() int {
 }
 
 // purgeTextNodesWithGarbage physically purges nodes that have been removed.
-func (s *RGATreeSplit[V]) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
+func (s *RGATreeSplit[V]) purgeTextNodesWithGarbage(ticket *time.Ticket) (int, error) {
 	count := 0
 	for _, node := range s.removedNodeMap {
 		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {
 			s.treeByIndex.Delete(node.indexNode)
 			s.purge(node)
-			s.treeByID.Remove(node.id)
+			if err := s.treeByID.Remove(node.id); err != nil {
+				return 0, fmt.Errorf("crdt rga tree split purge text nodes with garbage: %w", err)
+			}
 			delete(s.removedNodeMap, node.id.key())
 			count++
 		}
 	}
 
-	return count
+	return count, nil
 }
 
 // purge physically purge the given node from RGATreeSplit.

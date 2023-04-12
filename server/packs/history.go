@@ -18,11 +18,14 @@ package packs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
+
+const errFormatFindChanges = "find changes: %w"
 
 // FindChanges fetches changes of the given document.
 func FindChanges(
@@ -35,7 +38,7 @@ func FindChanges(
 	if be.Config.SnapshotWithPurgingChanges {
 		minSyncedSeqInfo, err := be.DB.FindMinSyncedSeqInfo(ctx, docInfo.ID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf(errFormatFindChanges, err)
 		}
 
 		snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
@@ -43,7 +46,7 @@ func FindChanges(
 			minSyncedSeqInfo.ServerSeq+be.Config.SnapshotInterval,
 		)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf(errFormatFindChanges, err)
 		}
 
 		if snapshotInfo != nil && from < snapshotInfo.ServerSeq+1 {
@@ -57,5 +60,9 @@ func FindChanges(
 		from,
 		to,
 	)
-	return changes, err
+	if err != nil {
+		return nil, fmt.Errorf(errFormatFindChanges, err)
+	}
+
+	return changes, nil
 }

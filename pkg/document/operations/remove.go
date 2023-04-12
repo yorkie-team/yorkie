@@ -17,6 +17,8 @@
 package operations
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -53,12 +55,15 @@ func (o *Remove) Execute(root *crdt.Root) error {
 
 	switch parent := parentElem.(type) {
 	case crdt.Container:
-		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
+		elem, err := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
+		if err != nil {
+			return fmt.Errorf("operation remove execute: %w", err)
+		}
 		if elem != nil {
 			root.RegisterRemovedElementPair(parent, elem)
 		}
 	default:
-		return ErrNotApplicableDataType
+		return fmt.Errorf("operation remove execute: %w", ErrNotApplicableDataType)
 	}
 	return nil
 }

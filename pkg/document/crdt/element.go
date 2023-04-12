@@ -25,29 +25,29 @@ type Container interface {
 	Element
 
 	// Purge physically purges the given child element.
-	Purge(child Element)
+	Purge(child Element) error
 
 	// Descendants returns all descendants of this container.
 	Descendants(callback func(elem Element, parent Container) bool)
 
 	// DeleteByCreatedAt removes the given element from this container.
-	DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element
+	DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (Element, error)
 }
 
 // TextElement represents Text.
 type TextElement interface {
 	Element
 	removedNodesLen() int
-	purgeTextNodesWithGarbage(ticket *time.Ticket) int
+	purgeTextNodesWithGarbage(ticket *time.Ticket) (int, error)
 }
 
 // Element represents JSON element.
 type Element interface {
 	// Marshal returns the JSON encoding of this element.
-	Marshal() string
+	Marshal() (string, error)
 
 	// DeepCopy copies itself deeply.
-	DeepCopy() Element
+	DeepCopy() (Element, error)
 
 	// CreatedAt returns the creation time of this element.
 	CreatedAt() *time.Ticket

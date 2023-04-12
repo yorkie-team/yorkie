@@ -159,10 +159,11 @@ func BenchmarkDocument(b *testing.B) {
 				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", root.GetArray("k1").StructureAsString())
 
 				for i := 0; i < root.GetArray("k1").Len(); i++ {
+					rgaTreeListNode, _ := root.GetArray("k1").Get(i)
 					assert.Equal(
 						b,
 						fmt.Sprintf("%d", i+1),
-						root.GetArray("k1").Get(i).Marshal(),
+						rgaTreeListNode.Marshal(),
 					)
 				}
 
@@ -197,19 +198,19 @@ func BenchmarkDocument(b *testing.B) {
 					text.StructureAsString(),
 				)
 
-				from, _ := text.CreateRange(0, 0)
+				from, _, _ := text.CreateRange(0, 0)
 				assert.Equal(b, "0:0:00:0:0", from.StructureAsString())
 
-				from, _ = text.CreateRange(1, 1)
+				from, _, _ = text.CreateRange(1, 1)
 				assert.Equal(b, "1:2:00:0:1", from.StructureAsString())
 
-				from, _ = text.CreateRange(2, 2)
+				from, _, _ = text.CreateRange(2, 2)
 				assert.Equal(b, "1:3:00:0:1", from.StructureAsString())
 
-				from, _ = text.CreateRange(3, 3)
+				from, _, _ = text.CreateRange(3, 3)
 				assert.Equal(b, "1:3:00:0:2", from.StructureAsString())
 
-				from, _ = text.CreateRange(4, 4)
+				from, _, _ = text.CreateRange(4, 4)
 				assert.Equal(b, "1:2:00:3:1", from.StructureAsString())
 				return nil
 			})
@@ -256,7 +257,7 @@ func BenchmarkDocument(b *testing.B) {
 
 			err = doc.Update(func(root *json.Object) error {
 				text := root.GetText("k1")
-				text.Style(0, 5, map[string]string{"b": "1"})
+				_, _ = text.Style(0, 5, map[string]string{"b": "1"})
 				assert.Equal(b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
 					text.StructureAsString(),
@@ -272,14 +273,14 @@ func BenchmarkDocument(b *testing.B) {
 
 			err = doc.Update(func(root *json.Object) error {
 				text := root.GetText("k1")
-				text.Style(0, 5, map[string]string{"b": "1"})
+				_, _ = text.Style(0, 5, map[string]string{"b": "1"})
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
 					text.StructureAsString(),
 				)
 
-				text.Style(3, 5, map[string]string{"i": "1"})
+				_, _ = text.Style(3, 5, map[string]string{"i": "1"})
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][1:2:00:5 {} " world"]`,
@@ -536,7 +537,8 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 		}, "replace contents with b")
 		assert.NoError(b, err)
 		assert.Equal(b, cnt, doc.GarbageLen())
-		assert.Equal(b, cnt, doc.GarbageCollect(time.MaxTicket))
+		gc, _ := doc.GarbageCollect(time.MaxTicket)
+		assert.Equal(b, cnt, gc)
 	}
 }
 
@@ -568,7 +570,8 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 		assert.NoError(b, err)
 
 		assert.Equal(b, cnt, doc.GarbageLen())
-		assert.Equal(b, cnt, doc.GarbageCollect(time.MaxTicket))
+		gc, _ := doc.GarbageCollect(time.MaxTicket)
+		assert.Equal(b, cnt, gc)
 	}
 }
 
@@ -606,7 +609,8 @@ func benchmarkArrayGC(cnt int, b *testing.B) {
 		}, "deletes the array")
 		assert.NoError(b, err)
 
-		assert.Equal(b, cnt+1, doc.GarbageCollect(time.MaxTicket))
+		gc, _ := doc.GarbageCollect(time.MaxTicket)
+		assert.Equal(b, cnt+1, gc)
 		assert.NoError(b, err)
 	}
 }

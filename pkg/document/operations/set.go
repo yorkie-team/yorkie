@@ -17,6 +17,8 @@
 package operations
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -58,12 +60,15 @@ func (o *Set) Execute(root *crdt.Root) error {
 
 	obj, ok := parent.(*crdt.Object)
 	if !ok {
-		return ErrNotApplicableDataType
+		return fmt.Errorf("operation set execute: %w", ErrNotApplicableDataType)
 	}
 
-	value := o.value.DeepCopy()
-	removed := obj.Set(o.key, value)
-	root.RegisterElement(value)
+	copiedValue, err := o.value.DeepCopy()
+	if err != nil {
+		return fmt.Errorf("operation add execute: %w", err)
+	}
+	removed := obj.Set(o.key, copiedValue)
+	root.RegisterElement(copiedValue)
 	if removed != nil {
 		root.RegisterRemovedElementPair(obj, removed)
 	}

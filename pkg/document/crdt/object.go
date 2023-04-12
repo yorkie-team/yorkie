@@ -17,6 +17,8 @@
 package crdt
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -38,8 +40,11 @@ func NewObject(memberNodes *ElementRHT, createdAt *time.Ticket) *Object {
 }
 
 // Purge physically purge child element.
-func (o *Object) Purge(elem Element) {
-	o.memberNodes.purge(elem)
+func (o *Object) Purge(elem Element) error {
+	if err := o.memberNodes.purge(elem); err != nil {
+		return fmt.Errorf("crdt object purge element: %w", err)
+	}
+	return nil
 }
 
 // Set sets the given element of the given key.
@@ -63,7 +68,7 @@ func (o *Object) Has(k string) bool {
 }
 
 // DeleteByCreatedAt deletes the element of the given creation time.
-func (o *Object) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+func (o *Object) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (Element, error) {
 	return o.memberNodes.DeleteByCreatedAt(createdAt, deletedAt)
 }
 
@@ -89,21 +94,29 @@ func (o *Object) Descendants(callback func(elem Element, parent Container) bool)
 }
 
 // Marshal returns the JSON encoding of this object.
-func (o *Object) Marshal() string {
-	return o.memberNodes.Marshal()
+func (o *Object) Marshal() (string, error) {
+	str, err := o.memberNodes.Marshal()
+	if err != nil {
+		return "", fmt.Errorf("crdt object marshal: %w", err)
+	}
+	return str, nil
 }
 
 // DeepCopy copies itself deeply.
-func (o *Object) DeepCopy() Element {
+func (o *Object) DeepCopy() (Element, error) {
 	members := NewElementRHT()
 
 	for _, node := range o.memberNodes.Nodes() {
-		members.Set(node.key, node.elem.DeepCopy())
+		copiedNode, err := node.elem.DeepCopy()
+		if err != nil {
+			return nil, fmt.Errorf("crdt object deep copy: %w", err)
+		}
+		members.Set(node.key, copiedNode)
 	}
 
 	obj := NewObject(members, o.createdAt)
 	obj.removedAt = o.removedAt
-	return obj
+	return obj, nil
 }
 
 // CreatedAt returns the creation time of this object.

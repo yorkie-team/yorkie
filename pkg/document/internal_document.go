@@ -18,6 +18,7 @@ package document
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -80,7 +81,7 @@ func NewInternalDocumentFromSnapshot(
 ) (*InternalDocument, error) {
 	obj, err := converter.BytesToObject(snapshot)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new internal document from snapshot: %w", err)
 	}
 
 	return &InternalDocument{
@@ -112,11 +113,11 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	// 01. Apply remote changes to both the clone and the document.
 	if len(pack.Snapshot) > 0 {
 		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
-			return err
+			return fmt.Errorf("internal document apply change pack: %w", err)
 		}
 	} else {
 		if err := d.ApplyChanges(pack.Changes...); err != nil {
-			return err
+			return fmt.Errorf("internal document apply change pack: %w", err)
 		}
 	}
 
@@ -133,15 +134,22 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
 	if pack.MinSyncedTicket != nil {
-		d.GarbageCollect(pack.MinSyncedTicket)
+		_, err := d.GarbageCollect(pack.MinSyncedTicket)
+		if err != nil {
+			return fmt.Errorf("internal document apply change pack: %w", err)
+		}
 	}
 
 	return nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *InternalDocument) GarbageCollect(ticket *time.Ticket) int {
-	return d.root.GarbageCollect(ticket)
+func (d *InternalDocument) GarbageCollect(ticket *time.Ticket) (int, error) {
+	i, err := d.root.GarbageCollect(ticket)
+	if err != nil {
+		return 0, fmt.Errorf("internal document garbage collect: %w", err)
+	}
+	return i, nil
 }
 
 // GarbageLen returns the count of removed elements.
@@ -150,8 +158,12 @@ func (d *InternalDocument) GarbageLen() int {
 }
 
 // Marshal returns the JSON encoding of this document.
-func (d *InternalDocument) Marshal() string {
-	return d.root.Object().Marshal()
+func (d *InternalDocument) Marshal() (string, error) {
+	str, err := d.root.Object().Marshal()
+	if err != nil {
+		return "", fmt.Errorf("internal document marshal: %w", err)
+	}
+	return str, nil
 }
 
 // CreateChangePack creates pack of the local changes to send to the server.
@@ -201,6 +213,18 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 	return d.root.Object()
 }
 
+// ApplyChanges applies remote changes to the document.
+func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
+	for _, c := range changes {
+		if err := c.Execute(d.root); err != nil {
+			return fmt.Errorf("internal document apply changes: %w", err)
+		}
+		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
+	}
+
+	return nil
+}
+
 func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error {
 	rootObj, err := converter.BytesToObject(snapshot)
 	if err != nil {
@@ -209,18 +233,6 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error
 
 	d.root = crdt.NewRoot(rootObj)
 	d.changeID = d.changeID.SyncLamport(serverSeq)
-
-	return nil
-}
-
-// ApplyChanges applies remote changes to the document.
-func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
-	for _, c := range changes {
-		if err := c.Execute(d.root); err != nil {
-			return err
-		}
-		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
-	}
 
 	return nil
 }

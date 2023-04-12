@@ -201,15 +201,13 @@ func Validate(v string, tagOrRules []interface{}) error {
 
 			if value.Func != nil {
 				if err := RegisterValidation(tag, value.Func); err != nil {
-					fmt.Fprintln(os.Stderr, "validation custom rule: %w", err)
-					os.Exit(1)
+					return fmt.Errorf("validation custom rule: %w", err)
 				}
 			}
 
 			if value.Err != nil {
 				if err := RegisterTranslation(tag, value.Err.Error()); err != nil {
-					fmt.Fprintln(os.Stderr, "validation custom rule: %w", err)
-					os.Exit(1)
+					return fmt.Errorf("validation custom rule: %w", err)
 				}
 			}
 

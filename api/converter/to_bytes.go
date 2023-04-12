@@ -30,12 +30,12 @@ import (
 func ObjectToBytes(obj *crdt.Object) ([]byte, error) {
 	pbElem, err := toJSONElement(obj)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("convert object to bytes: %w", err)
 	}
 
 	bytes, err := proto.Marshal(pbElem)
 	if err != nil {
-		return nil, fmt.Errorf("marshal JSON element to bytes: %w", err)
+		return nil, fmt.Errorf("convert object to bytes: %w", err)
 	}
 	return bytes, nil
 }
@@ -60,7 +60,7 @@ func toJSONElement(elem crdt.Element) (*api.JSONElement, error) {
 func toJSONObject(obj *crdt.Object) (*api.JSONElement, error) {
 	pbRHTNodes, err := toRHTNodes(obj.RHTNodes())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("to json object: %w", err)
 	}
 
 	pbElem := &api.JSONElement{
@@ -77,7 +77,7 @@ func toJSONObject(obj *crdt.Object) (*api.JSONElement, error) {
 func toJSONArray(arr *crdt.Array) (*api.JSONElement, error) {
 	pbRGANodes, err := toRGANodes(arr.RGANodes())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("to json array: %w", err)
 	}
 
 	pbElem := &api.JSONElement{
@@ -94,13 +94,16 @@ func toJSONArray(arr *crdt.Array) (*api.JSONElement, error) {
 func toPrimitive(primitive *crdt.Primitive) (*api.JSONElement, error) {
 	pbValueType, err := toValueType(primitive.ValueType())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("to primitive: %w", err)
 	}
-
+	byteValue, err := primitive.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("to primitive: %w", err)
+	}
 	return &api.JSONElement{
 		Body: &api.JSONElement_Primitive_{Primitive: &api.JSONElement_Primitive{
 			Type:      pbValueType,
-			Value:     primitive.Bytes(),
+			Value:     byteValue,
 			CreatedAt: ToTimeTicket(primitive.CreatedAt()),
 			MovedAt:   ToTimeTicket(primitive.MovedAt()),
 			RemovedAt: ToTimeTicket(primitive.RemovedAt()),
@@ -122,13 +125,17 @@ func toText(text *crdt.Text) *api.JSONElement {
 func toCounter(counter *crdt.Counter) (*api.JSONElement, error) {
 	pbCounterType, err := toCounterType(counter.ValueType())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("to counter: %w", err)
 	}
 
+	counterBytes, err := counter.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("to counter: %w", err)
+	}
 	return &api.JSONElement{
 		Body: &api.JSONElement_Counter_{Counter: &api.JSONElement_Counter{
 			Type:      pbCounterType,
-			Value:     counter.Bytes(),
+			Value:     counterBytes,
 			CreatedAt: ToTimeTicket(counter.CreatedAt()),
 			MovedAt:   ToTimeTicket(counter.MovedAt()),
 			RemovedAt: ToTimeTicket(counter.RemovedAt()),
@@ -141,7 +148,7 @@ func toRHTNodes(rhtNodes []*crdt.ElementRHTNode) ([]*api.RHTNode, error) {
 	for _, rhtNode := range rhtNodes {
 		pbElem, err := toJSONElement(rhtNode.Element())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("to RHT nodes: %w", err)
 		}
 
 		pbRHTNodes = append(pbRHTNodes, &api.RHTNode{
@@ -157,7 +164,7 @@ func toRGANodes(rgaNodes []*crdt.RGATreeListNode) ([]*api.RGANode, error) {
 	for _, rgaNode := range rgaNodes {
 		pbElem, err := toJSONElement(rgaNode.Element())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("to RGA nodes: %w", err)
 		}
 
 		pbRGANodes = append(pbRGANodes, &api.RGANode{

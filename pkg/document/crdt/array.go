@@ -17,6 +17,8 @@
 package crdt
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -38,36 +40,56 @@ func NewArray(elements *RGATreeList, createdAt *time.Ticket) *Array {
 }
 
 // Purge physically purge child element.
-func (a *Array) Purge(elem Element) {
-	a.elements.purge(elem)
+func (a *Array) Purge(elem Element) error {
+	if err := a.elements.purge(elem); err != nil {
+		return fmt.Errorf("crdt array purge element: %w", err)
+	}
+	return nil
 }
 
 // Add adds the given element at the last.
-func (a *Array) Add(elem Element) *Array {
-	a.elements.Add(elem)
-	return a
+func (a *Array) Add(elem Element) (*Array, error) {
+	if err := a.elements.Add(elem); err != nil {
+		return nil, fmt.Errorf("crdt array add element: %w", err)
+	}
+	return a, nil
 }
 
 // Get returns the element of the given index.
-func (a *Array) Get(idx int) Element {
-	return a.elements.Get(idx).elem
+func (a *Array) Get(idx int) (Element, error) {
+	rgaTreeListNode, err := a.elements.Get(idx)
+	if err != nil {
+		return nil, fmt.Errorf("crdt array get element: %w", err)
+	}
+	return rgaTreeListNode.elem, nil
 }
 
 // FindPrevCreatedAt returns the creation time of the previous element of the
 // given element.
-func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
-	return a.elements.FindPrevCreatedAt(createdAt)
+func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, error) {
+	ticket, err := a.elements.FindPrevCreatedAt(createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("crdt array find prev created at: %w", err)
+	}
+	return ticket, nil
 }
 
 // Delete deletes the element of the given index.
-func (a *Array) Delete(idx int, deletedAt *time.Ticket) Element {
-	return a.elements.Delete(idx, deletedAt).elem
+func (a *Array) Delete(idx int, deletedAt *time.Ticket) (Element, error) {
+	rgaTreeListNode, err := a.elements.Delete(idx, deletedAt)
+	if err != nil {
+		return nil, fmt.Errorf("crdt array delete element: %w", err)
+	}
+	return rgaTreeListNode.elem, nil
 }
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
 // element.
-func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) {
-	a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt)
+func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) error {
+	if err := a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt); err != nil {
+		return fmt.Errorf("crdt array move after: %s", err)
+	}
+	return nil
 }
 
 // Elements returns an array of elements contained in this RGATreeList.
@@ -84,27 +106,36 @@ func (a *Array) Elements() []Element {
 }
 
 // Marshal returns the JSON encoding of this Array.
-func (a *Array) Marshal() string {
+func (a *Array) Marshal() (string, error) {
 	return a.elements.Marshal()
 }
 
 // StructureAsString returns a String containing the metadata of the elements
 // for debugging purpose.
-func (a *Array) StructureAsString() string {
+func (a *Array) StructureAsString() (string, error) {
 	return a.elements.StructureAsString()
 }
 
 // DeepCopy copies itself deeply.
-func (a *Array) DeepCopy() Element {
-	elements := NewRGATreeList()
+func (a *Array) DeepCopy() (Element, error) {
+	elements, err := NewRGATreeList()
+	if err != nil {
+		return nil, fmt.Errorf("crdt array deep copy: %w", err)
+	}
 
 	for _, node := range a.elements.Nodes() {
-		elements.Add(node.elem.DeepCopy())
+		copiedNode, err := node.elem.DeepCopy()
+		if err != nil {
+			return nil, fmt.Errorf("crdt array deep copy: %w", err)
+		}
+		if err := elements.Add(copiedNode); err != nil {
+			return nil, fmt.Errorf("crdt array deep copy: %w", err)
+		}
 	}
 
 	array := NewArray(elements, a.createdAt)
 	array.removedAt = a.removedAt
-	return array
+	return array, nil
 }
 
 // CreatedAt returns the creation time of this array.
@@ -148,13 +179,20 @@ func (a *Array) LastCreatedAt() *time.Ticket {
 }
 
 // InsertAfter inserts the given element after the given previous element.
-func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
-	a.elements.InsertAfter(prevCreatedAt, element)
+func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) error {
+	if err := a.elements.InsertAfter(prevCreatedAt, element); err != nil {
+		return fmt.Errorf("crdt array insert after: %w", err)
+	}
+	return nil
 }
 
 // DeleteByCreatedAt deletes the given element.
-func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
-	return a.elements.DeleteByCreatedAt(createdAt, deletedAt).elem
+func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (Element, error) {
+	node, err := a.elements.DeleteByCreatedAt(createdAt, deletedAt)
+	if err != nil {
+		return nil, fmt.Errorf("crdt array delete by created at: %w", err)
+	}
+	return node.elem, nil
 }
 
 // Len returns length of this Array.

@@ -29,15 +29,18 @@ func TestText(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+		rgaTreeSplit, _ := crdt.NewRGATreeSplit(crdt.InitialTextNode())
+		text := crdt.NewText(rgaTreeSplit, ctx.IssueTimeTicket())
 
-		fromPos, toPos := text.CreateRange(0, 0)
-		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
-		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
+		fromPos, toPos, _ := text.CreateRange(0, 0)
+		_, _, _ = text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		str, _ := text.Marshal()
+		assert.Equal(t, `[{"val":"Hello World"}]`, str)
 
-		fromPos, toPos = text.CreateRange(6, 11)
-		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
-		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
+		fromPos, toPos, _ = text.CreateRange(6, 11)
+		_, _, _ = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		str, _ = text.Marshal()
+		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, str)
 	})
 
 	t.Run("UTF-16 code units test", func(t *testing.T) {
@@ -66,22 +69,22 @@ func TestText(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
 
-		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+		rgaTreeSplit, _ := crdt.NewRGATreeSplit(crdt.InitialTextNode())
+		text := crdt.NewText(rgaTreeSplit, ctx.IssueTimeTicket())
 
-		fromPos, toPos := text.CreateRange(0, 0)
-		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
-		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
+		fromPos, toPos, _ := text.CreateRange(0, 0)
+		_, _, _ = text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		str, _ := text.Marshal()
+		assert.Equal(t, `[{"val":"Hello World"}]`, str)
 
-		fromPos, toPos = text.CreateRange(6, 11)
-		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
-		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
+		fromPos, toPos, _ = text.CreateRange(6, 11)
+		_, _, _ = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		str, _ = text.Marshal()
+		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, str)
 
-		fromPos, toPos = text.CreateRange(0, 1)
-		text.Style(fromPos, toPos, map[string]string{"b": "1"}, ctx.IssueTimeTicket())
-		assert.Equal(
-			t,
-			`[{"attrs":{"b":"1"},"val":"H"},{"val":"ello "},{"val":"Yorkie"}]`,
-			text.Marshal(),
-		)
+		fromPos, toPos, _ = text.CreateRange(0, 1)
+		_ = text.Style(fromPos, toPos, map[string]string{"b": "1"}, ctx.IssueTimeTicket())
+		str, _ = text.Marshal()
+		assert.Equal(t, `[{"attrs":{"b":"1"},"val":"H"},{"val":"ello "},{"val":"Yorkie"}]`, str)
 	})
 }

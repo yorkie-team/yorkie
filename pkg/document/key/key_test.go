@@ -17,6 +17,7 @@
 package key
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -43,18 +44,18 @@ func TestKey(t *testing.T) {
 
 	t.Run("invalid key test", func(t *testing.T) {
 		err := Key("invalid key").Validate() // space is not allowed
-		assert.Equal(t, err, ErrInvalidKey, "space is not allowed")
+		assert.Equal(t, err, fmt.Errorf("key validate: %w", ErrInvalidKey), "space is not allowed")
 
 		err = Key("invalid-key-~$a").Validate() // special character $ is not allowed
-		assert.Equal(t, err, ErrInvalidKey, "special character $ is not allowed")
+		assert.Equal(t, err, fmt.Errorf("key validate: %w", ErrInvalidKey), "special character $ is not allowed")
 
 		err = Key("invalid-key-$").Validate() // special character $ is not allowed
-		assert.Equal(t, err, ErrInvalidKey, "special character $ is not allowed")
+		assert.Equal(t, err, fmt.Errorf("key validate: %w", ErrInvalidKey), "special character $ is not allowed")
 
 		err = Key(strings.Repeat("invalid-key-sample", 8)).Validate()
-		assert.Equal(t, err, ErrInvalidKey, "over 120 characters is not allowed")
+		assert.Equal(t, err, fmt.Errorf("key validate: %w", ErrInvalidKey), "over 120 characters is not allowed")
 
 		err = Key("inv").Validate()
-		assert.Equal(t, err, ErrInvalidKey, "less than 4 characters is not allowed")
+		assert.Equal(t, err, fmt.Errorf("key validate: %w", ErrInvalidKey), "less than 4 characters is not allowed")
 	})
 }

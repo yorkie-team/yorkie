@@ -129,17 +129,17 @@ func (rht *ElementRHT) Delete(k string, deletedAt *time.Ticket) Element {
 }
 
 // DeleteByCreatedAt deletes the Element of the given creation time.
-func (rht *ElementRHT) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+func (rht *ElementRHT) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (Element, error) {
 	node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	if !node.Remove(deletedAt) {
-		return nil
+		return nil, nil
 	}
 
-	return node.elem
+	return node.elem, nil
 }
 
 // Elements returns a map of elements because the map easy to use for loop.
@@ -167,10 +167,10 @@ func (rht *ElementRHT) Nodes() []*ElementRHTNode {
 }
 
 // purge physically purge child element.
-func (rht *ElementRHT) purge(elem Element) {
+func (rht *ElementRHT) purge(elem Element) error {
 	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
-		panic("fail to find: " + elem.CreatedAt().Key())
+		return fmt.Errorf("purge element RHT: %s", elem.CreatedAt().Key())
 	}
 	delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
 
@@ -178,10 +178,12 @@ func (rht *ElementRHT) purge(elem Element) {
 	if ok && node == nodeByKey {
 		delete(rht.nodeMapByKey, nodeByKey.key)
 	}
+
+	return nil
 }
 
 // Marshal returns the JSON encoding of this map.
-func (rht *ElementRHT) Marshal() string {
+func (rht *ElementRHT) Marshal() (string, error) {
 	members := rht.Elements()
 
 	size := len(members)
@@ -200,9 +202,13 @@ func (rht *ElementRHT) Marshal() string {
 			sb.WriteString(",")
 		}
 		value := members[k]
-		sb.WriteString(fmt.Sprintf(`"%s":%s`, EscapeString(k), value.Marshal()))
+		str, err := value.Marshal()
+		if err != nil {
+			return "", fmt.Errorf("marshal element RHT: %w", err)
+		}
+		sb.WriteString(fmt.Sprintf(`"%s":%s`, EscapeString(k), str))
 	}
 	sb.WriteString("}")
 
-	return sb.String()
+	return sb.String(), nil
 }

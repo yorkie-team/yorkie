@@ -48,21 +48,26 @@ func TestPrimitive(t *testing.T) {
 
 	t.Run("creation and deep copy test", func(t *testing.T) {
 		for _, test := range tests {
-			prim := crdt.NewPrimitive(test.value, time.InitialTicket)
+			prim, _ := crdt.NewPrimitive(test.value, time.InitialTicket)
 			assert.Equal(t, prim.ValueType(), test.valueType)
-			assert.Equal(t, prim.Value(), crdt.ValueFromBytes(prim.ValueType(), prim.Bytes()))
-			assert.Equal(t, prim.Marshal(), test.marshal)
+			bytes, _ := prim.Bytes()
+			value, _ := crdt.ValueFromBytes(prim.ValueType(), bytes)
+			assert.Equal(t, prim.Value(), value)
+			str, _ := prim.Marshal()
+			assert.Equal(t, str, test.marshal)
 
-			copied := prim.DeepCopy()
+			copied, _ := prim.DeepCopy()
 			assert.Equal(t, prim.CreatedAt(), copied.CreatedAt())
 			assert.Equal(t, prim.MovedAt(), copied.MovedAt())
-			assert.Equal(t, prim.Marshal(), copied.Marshal())
+			str, _ = prim.Marshal()
+			copiedStr, _ := copied.Marshal()
+			assert.Equal(t, str, copiedStr)
 
 			actorID, _ := time.ActorIDFromHex("0")
 			prim.SetMovedAt(time.NewTicket(0, 0, actorID))
 			assert.NotEqual(t, prim.MovedAt(), copied.MovedAt())
 		}
-		longPrim := crdt.NewPrimitive(math.MaxInt32+1, time.InitialTicket)
+		longPrim, _ := crdt.NewPrimitive(math.MaxInt32+1, time.InitialTicket)
 		assert.Equal(t, longPrim.ValueType(), crdt.Long)
 	})
 }

@@ -26,7 +26,7 @@ import (
 // Value represents the data stored in the nodes of Tree.
 type Value interface {
 	Len() int
-	String() string
+	String() (string, error)
 }
 
 // Node is a node of Tree.
@@ -183,9 +183,9 @@ func (t *Tree[V]) IndexOf(node *Node[V]) int {
 }
 
 // Find returns the Node and offset of the given index.
-func (t *Tree[V]) Find(index int) (*Node[V], int) {
+func (t *Tree[V]) Find(index int) (*Node[V], int, error) {
 	if t.root == nil {
-		return nil, 0
+		return nil, 0, nil
 	}
 
 	node := t.root
@@ -203,39 +203,55 @@ func (t *Tree[V]) Find(index int) (*Node[V], int) {
 	}
 
 	if offset > node.value.Len() {
-		panic(fmt.Sprintf(
+		return nil, 0, fmt.Errorf(
 			"out of bound of text index: node.length %d, pos %d",
 			node.value.Len(),
 			offset,
-		))
+		)
 	}
 
-	return node, offset
+	return node, offset, nil
 }
 
 // String returns a string containing node values.
-func (t *Tree[V]) String() string {
+func (t *Tree[V]) String() (string, error) {
 	var builder strings.Builder
-	traverseInOrder(t.root, func(node *Node[V]) {
-		builder.WriteString(node.value.String())
+	err := traverseInOrder(t.root, func(node *Node[V]) error {
+		str, err := node.value.String()
+		if err != nil {
+			return err
+		}
+		builder.WriteString(str)
+		return nil
 	})
-	return builder.String()
+	if err != nil {
+		return "", fmt.Errorf("tree string: %w", err)
+	}
+	return builder.String(), nil
 }
 
 // StructureAsString returns a string containing the metadata of the Node
 // for debugging purpose.
-func (t *Tree[V]) StructureAsString() string {
+func (t *Tree[V]) StructureAsString() (string, error) {
 	var builder strings.Builder
 
-	traverseInOrder(t.root, func(node *Node[V]) {
+	err := traverseInOrder(t.root, func(node *Node[V]) error {
+		str, err := node.value.String()
+		if err != nil {
+			return err
+		}
 		builder.WriteString(fmt.Sprintf(
 			"[%d,%d]%s",
 			node.weight,
 			node.value.Len(),
-			node.value.String(),
+			str,
 		))
+		return nil
 	})
-	return builder.String()
+	if err != nil {
+		return "", fmt.Errorf("tree structure as string: %w", err)
+	}
+	return builder.String(), nil
 }
 
 // CheckWeight returns false when there is an incorrect weight node.
@@ -398,14 +414,21 @@ func (t *Tree[V]) Len() int {
 	return t.root.weight
 }
 
-func traverseInOrder[V Value](node *Node[V], callback func(node *Node[V])) {
+func traverseInOrder[V Value](node *Node[V], callback func(node *Node[V]) error) error {
 	if node == nil {
-		return
+		return nil
 	}
 
-	traverseInOrder(node.left, callback)
-	callback(node)
-	traverseInOrder(node.right, callback)
+	if err := traverseInOrder(node.left, callback); err != nil {
+		return fmt.Errorf("traverseInOrder node left: %w", err)
+	}
+	if err := callback(node); err != nil {
+		return fmt.Errorf("traverseInOrder callback: %w", err)
+	}
+	if err := traverseInOrder(node.right, callback); err != nil {
+		return fmt.Errorf("traverseInOrder node right: %w", err)
+	}
+	return nil
 }
 
 func traversePostOrder[V Value](node *Node[V], callback func(node *Node[V])) {

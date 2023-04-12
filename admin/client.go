@@ -269,7 +269,6 @@ func (c *Client) ListChangeSummaries(
 		PageSize:    pageSize,
 		IsForward:   isForward,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +284,6 @@ func (c *Client) ListChangeSummaries(
 	}
 
 	seq := changes[0].ServerSeq() - 1
-
 	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &api.GetSnapshotMetaRequest{
 		ProjectName: projectName,
 		DocumentKey: key.String(),
@@ -301,10 +299,10 @@ func (c *Client) ListChangeSummaries(
 		snapshotMeta.Lamport,
 		snapshotMeta.Snapshot,
 	)
-
 	if err != nil {
 		return nil, err
 	}
+
 	var summaries []*types.ChangeSummary
 	for _, c := range changes {
 		if err := newDoc.ApplyChanges(c); err != nil {
@@ -312,10 +310,15 @@ func (c *Client) ListChangeSummaries(
 		}
 
 		// TODO(hackerwins): doc.Marshal is expensive function. We need to optimize it.
+		snapshot, err := newDoc.Marshal()
+		if err != nil {
+			return nil, err
+		}
+
 		summaries = append([]*types.ChangeSummary{{
 			ID:       c.ID(),
 			Message:  c.Message(),
-			Snapshot: newDoc.Marshal(),
+			Snapshot: snapshot,
 		}}, summaries...)
 	}
 

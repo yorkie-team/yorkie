@@ -56,10 +56,12 @@ func (d *Document) Update(
 	msgAndArgs ...interface{},
 ) error {
 	if d.doc.status == StatusRemoved {
-		return ErrDocumentRemoved
+		return fmt.Errorf("document update: %w", ErrDocumentRemoved)
 	}
 
-	d.ensureClone()
+	if err := d.ensureClone(); err != nil {
+		return fmt.Errorf("document update: %w", err)
+	}
 
 	ctx := change.NewContext(
 		d.doc.changeID.Next(),
@@ -70,13 +72,13 @@ func (d *Document) Update(
 	if err := updater(json.NewObject(ctx, d.clone.Object())); err != nil {
 		// drop clone because it is contaminated.
 		d.clone = nil
-		return err
+		return fmt.Errorf("document update: %w", err)
 	}
 
 	if ctx.HasOperations() {
 		c := ctx.ToChange()
 		if err := c.Execute(d.doc.root); err != nil {
-			return err
+			return fmt.Errorf("document update: %w", err)
 		}
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
@@ -92,19 +94,21 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	if len(pack.Snapshot) > 0 {
 		d.clone = nil
 		if err := d.doc.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
-			return err
+			return fmt.Errorf("document apply change pack: %w", err)
 		}
 	} else {
-		d.ensureClone()
+		if err := d.ensureClone(); err != nil {
+			return fmt.Errorf("document apply change pack: %w", err)
+		}
 
 		for _, c := range pack.Changes {
 			if err := c.Execute(d.clone); err != nil {
-				return err
+				return fmt.Errorf("document apply change pack: %w", err)
 			}
 		}
 
 		if err := d.doc.ApplyChanges(pack.Changes...); err != nil {
-			return err
+			return fmt.Errorf("document apply change pack: %w", err)
 		}
 	}
 
@@ -121,7 +125,10 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	d.GarbageCollect(pack.MinSyncedTicket)
+	_, err := d.GarbageCollect(pack.MinSyncedTicket)
+	if err != nil {
+		return fmt.Errorf("document apply change pack: %w", err)
+	}
 
 	// 05. Update the status.
 	if pack.IsRemoved {
@@ -152,8 +159,12 @@ func (d *Document) HasLocalChanges() bool {
 }
 
 // Marshal returns the JSON encoding of this document.
-func (d *Document) Marshal() string {
-	return d.doc.Marshal()
+func (d *Document) Marshal() (string, error) {
+	str, err := d.doc.Marshal()
+	if err != nil {
+		return "", fmt.Errorf("document marshal: %w", err)
+	}
+	return str, nil
 }
 
 // CreateChangePack creates pack of the local changes to send to the server.
@@ -193,19 +204,28 @@ func (d *Document) RootObject() *crdt.Object {
 }
 
 // Root returns the root object of this document.
-func (d *Document) Root() *json.Object {
-	d.ensureClone()
+func (d *Document) Root() (*json.Object, error) {
+	if err := d.ensureClone(); err != nil {
+		return nil, fmt.Errorf("document root: %w", err)
+	}
 
 	ctx := change.NewContext(d.doc.changeID.Next(), "", d.clone)
-	return json.NewObject(ctx, d.clone.Object())
+	return json.NewObject(ctx, d.clone.Object()), nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *Document) GarbageCollect(ticket *time.Ticket) int {
+func (d *Document) GarbageCollect(ticket *time.Ticket) (int, error) {
 	if d.clone != nil {
-		d.clone.GarbageCollect(ticket)
+		_, err := d.clone.GarbageCollect(ticket)
+		if err != nil {
+			return 0, fmt.Errorf("document clone garbage collect: %w", err)
+		}
 	}
-	return d.doc.GarbageCollect(ticket)
+	i, err := d.doc.GarbageCollect(ticket)
+	if err != nil {
+		return 0, fmt.Errorf("document garbage collect: %w", err)
+	}
+	return i, nil
 }
 
 // GarbageLen returns the count of removed elements.
@@ -213,10 +233,15 @@ func (d *Document) GarbageLen() int {
 	return d.doc.GarbageLen()
 }
 
-func (d *Document) ensureClone() {
+func (d *Document) ensureClone() error {
+	var err error
 	if d.clone == nil {
-		d.clone = d.doc.root.DeepCopy()
+		d.clone, err = d.doc.root.DeepCopy()
+		if err != nil {
+			return fmt.Errorf("document ensure clone: %w", err)
+		}
 	}
+	return nil
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

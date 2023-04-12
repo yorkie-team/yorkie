@@ -252,12 +252,13 @@ func TestDB(t *testing.T) {
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
-			root.SetNewArray("array")
+			_, _ = root.SetNewArray("array")
 			return nil
 		}))
 		for idx := 0; idx < 10; idx++ {
 			assert.NoError(t, doc.Update(func(root *json.Object) error {
-				root.GetArray("array").AddInteger(idx)
+				array, _ := root.GetArray("array")
+				_, _ = array.AddInteger(idx)
 				return nil
 			}))
 		}
@@ -294,7 +295,7 @@ func TestDB(t *testing.T) {
 		doc.SetActor(actorID)
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
-			root.SetNewArray("array")
+			_, _ = root.SetNewArray("array")
 			return nil
 		}))
 

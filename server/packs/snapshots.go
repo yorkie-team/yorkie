@@ -18,6 +18,7 @@ package packs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -26,6 +27,8 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
+
+const errFormatStoreSnapshot = "store snapshot: %w"
 
 func storeSnapshot(
 	ctx context.Context,
@@ -37,7 +40,7 @@ func storeSnapshot(
 	// TODO: For performance issue, we only need to read the snapshot's metadata.
 	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, docInfo.ServerSeq)
 	if err != nil {
-		return err
+		return fmt.Errorf(errFormatStoreSnapshot, err)
 	}
 	if snapshotInfo.ServerSeq == docInfo.ServerSeq {
 		return nil
@@ -54,7 +57,7 @@ func storeSnapshot(
 		docInfo.ServerSeq,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf(errFormatStoreSnapshot, err)
 	}
 
 	// 03. create document instance of the docInfo
@@ -65,7 +68,7 @@ func storeSnapshot(
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf(errFormatStoreSnapshot, err)
 	}
 
 	pack := change.NewPack(
@@ -77,12 +80,12 @@ func storeSnapshot(
 	pack.MinSyncedTicket = minSyncedTicket
 
 	if err := doc.ApplyChangePack(pack); err != nil {
-		return err
+		return fmt.Errorf(errFormatStoreSnapshot, err)
 	}
 
 	// 04. save the snapshot of the docInfo
 	if err := be.DB.CreateSnapshotInfo(ctx, docInfo.ID, doc); err != nil {
-		return err
+		return fmt.Errorf(errFormatStoreSnapshot, err)
 	}
 
 	// 05. delete changes before the smallest in `syncedseqs` to save storage.
@@ -91,14 +94,15 @@ func storeSnapshot(
 			ctx,
 			docInfo.ID,
 		); err != nil {
-			logging.From(ctx).Error(err)
+			logging.From(ctx).Error(fmt.Errorf(errFormatStoreSnapshot, err))
 		}
 	}
 
 	logging.From(ctx).Infof(
-		"SNAP: '%s', serverSeq: %d",
+		"store snapshot: SNAP: '%s', serverSeq: %d",
 		docInfo.Key,
 		doc.Checkpoint().ServerSeq,
 	)
+
 	return nil
 }

@@ -19,6 +19,7 @@ package key
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
@@ -44,7 +45,7 @@ func (k Key) Validate() error {
 		"min=4",
 		"max=120",
 	}); err != nil {
-		return ErrInvalidKey
+		return fmt.Errorf("key validate: %w", ErrInvalidKey)
 	}
 
 	return nil

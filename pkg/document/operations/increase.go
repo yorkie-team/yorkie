@@ -17,6 +17,8 @@
 package operations
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -47,11 +49,13 @@ func (o *Increase) Execute(root *crdt.Root) error {
 	parent := root.FindByCreatedAt(o.parentCreatedAt)
 	cnt, ok := parent.(*crdt.Counter)
 	if !ok {
-		return ErrNotApplicableDataType
+		return fmt.Errorf("operation increase execute: %w", ErrNotApplicableDataType)
 	}
 
 	value := o.value.(*crdt.Primitive)
-	cnt.Increase(value)
+	if err := cnt.Increase(value); err != nil {
+		return fmt.Errorf("operation increase execute: %w", err)
+	}
 
 	return nil
 }
