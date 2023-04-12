@@ -44,12 +44,12 @@ If you are using AWS EKS and want to expose Grafana Dashboard using AWS ALB, fol
 # Change externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-monitoring -n monitoring \
   --set externalGateway.ingressClassName=alb \
-  --set externalGateway.apiHost={YOUR_DOMAIN_NAME} \
+  --set externalGateway.apiHost={YOUR_API_DOMAIN_NAME} \
   --set externalGateway.alb.enabled=true \
   --set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
 
 # Open Grafana Dashboard
-curl https://{YOUR_DOMAIN_NAME}/grafana
+curl https://{YOUR_API_DOMAIN_NAME}/grafana
 ```
 
 Or, set configuration values in `values.yaml` file before installing the chart.

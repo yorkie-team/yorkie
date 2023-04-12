@@ -27,7 +27,7 @@ externalGateway:
 
 # Configuration for manual prometheus monitoring stack
 kube-prometheus-stack:
-  nameOverride: *monitoringName
+  fullnameOverride: *monitoringName
   namespaceOverride: monitoring
 
   # Configuration for alertmanager

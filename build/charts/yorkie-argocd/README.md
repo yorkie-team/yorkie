@@ -56,7 +56,7 @@ helm upgrade [RELEASE_NAME] yorkie-team/yorkie-argocd -n argocd \
   --set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
 
 # Open ArgoCD Web UI
-curl https://{YOUR_DOMAIN_NAME}/argocd
+curl https://{YOUR_API_DOMAIN_NAME}/argocd
 ```
 
 Or, set configuration values in `values.yaml` file before installing the chart.

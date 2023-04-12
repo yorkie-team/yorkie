@@ -43,13 +43,13 @@ If you are using AWS EKS and want to expose Yorkie Cluster using AWS ALB, follow
 # Change istio-ingressgateway service type to NodePort, externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster -n istio-system \
     --set externalGateway.ingressClassName=alb \
-    --set externalGateway.apiHost={YOUR_DOMAIN_NAME} \
+    --set externalGateway.apiHost={YOUR_API_DOMAIN_NAME} \
     --set externalGateway.adminHost={YOUR_ADMIN_DOMAIN_NAME} \
     --set externalGateway.alb.enabled=true \
     --set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
 
 # Test Yorkie API
-const client = new yorkie.Client('{YOUR_DOMAIN_NAME}');
+const client = new yorkie.Client('{YOUR_API_DOMAIN_NAME}');
 ```
 
 Or, set configuration values in `values.yaml` file before installing the chart.
