@@ -20,7 +20,7 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 
 ```bash
 # Install yorkie monitoring helm chart
-helm install [RELEASE_NAME] yorkie/yorkie-monitoring -n monitoring --create-namespace
+helm install [RELEASE_NAME] yorkie-team/yorkie-monitoring -n monitoring --create-namespace
 
 # import yorkie grafana dashboard and go process dashboard
 curl https://grafana.com/grafana/dashboards/18451
@@ -42,7 +42,7 @@ If you are using AWS EKS and want to expose Grafana Dashboard using AWS ALB, fol
 
 ```bash
 # Change externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
-helm upgrade [RELEASE_NAME] yorkie/yorkie-monitoring -n monitoring \
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-monitoring -n monitoring \
   --set externalGateway.ingressClassName=alb \
   --set externalGateway.apiHost={YOUR_DOMAIN_NAME} \
   --set externalGateway.alb.enabled=true \
@@ -92,7 +92,7 @@ kubectl delete crd thanosrulers.monitoring.coreos.com
 ## Upgrading Chart
 
 ```bash
-helm upgrade [RELEASE_NAME] yorkie/yorkie-monitoring -n monitoring
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-monitoring -n monitoring
 ```
 
 With Helm v3, CRDs created by this chart are not updated by default and should be manually updated.
@@ -105,7 +105,7 @@ _See [`helm upgrade`](https://helm.sh/docs/helm/helm_upgrade/) for command docum
 See [Customizing the Chart Before Installing](https://helm.sh/docs/intro/using_helm/#customizing-the-chart-before-installing). To see all configurable options with detailed comments:
 
 ```console
-helm show values yorkie/yorkie-monitoring
+helm show values yorkie-team/yorkie-monitoring
 ```
 
 You may also `helm show values` on this chart's [dependencies](#dependencies) for additional options.

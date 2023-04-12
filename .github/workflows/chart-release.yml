@@ -38,6 +38,7 @@ jobs:
         uses: helm/chart-releaser-action@v1.5.0
         with:
           charts_dir: build/charts
-          config: .github/cr.yaml
+          mark_as_latest: false
+          config: ${{ github.workspace }}/.cr.yaml
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

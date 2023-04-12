@@ -20,7 +20,7 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 
 ```bash
 # Install yorkie argocd helm chart
-helm install [RELEASE_NAME] yorkie/yorkie-argocd -n argocd --create-namespace
+helm install [RELEASE_NAME] yorkie-team/yorkie-argocd -n argocd --create-namespace
 
 # Update admin password
 ## bcrypt(yorkie)=$2a$12$fJoZj9CnNyD5Yfi02nZh7.XcH4Ds9M.oftQOQDP5oytyra9cP6Dny
@@ -49,9 +49,9 @@ If you are using AWS EKS and want to expose ArgoCD Web UI using AWS ALB, follow 
 
 ```bash
 # Change externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
-helm upgrade [RELEASE_NAME] yorkie/yorkie-argocd -n argocd \
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-argocd -n argocd \
   --set externalGateway.ingressClassName=alb \
-  --set externalGateway.apiHost={YOUR_DOMAIN_NAME} \
+  --set externalGateway.apiHost={YOUR_API_DOMAIN_NAME} \
   --set externalGateway.alb.enabled=true \
   --set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
 
@@ -84,7 +84,7 @@ kubectl delete crd appprojects.argoproj.io
 ## Upgrading Chart
 
 ```bash
-$ helm upgrade [RELEASE_NAME] yorkie/yorkie-argocd -n argocd
+$ helm upgrade [RELEASE_NAME] yorkie-team/yorkie-argocd -n argocd
 ```
 
 With Helm v3, CRDs created by this chart are not updated by default and should be manually updated.
@@ -97,7 +97,7 @@ _See [`helm upgrade`](https://helm.sh/docs/helm/helm_upgrade/) for command docum
 See [Customizing the Chart Before Installing](https://helm.sh/docs/intro/using_helm/#customizing-the-chart-before-installing). To see all configurable options with detailed comments:
 
 ```console
-helm show values yorkie/yorkie-argocd
+helm show values yorkie-team/yorkie-argocd
 ```
 
 You may also `helm show values` on this chart's [dependencies](#dependencies) for additional options.
