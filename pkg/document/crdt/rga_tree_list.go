@@ -89,7 +89,7 @@ func (n *RGATreeListNode) Len() int {
 func (n *RGATreeListNode) String() (string, error) {
 	str, err := n.elem.Marshal()
 	if err != nil {
-		return "", fmt.Errorf("string RGA tree list node %w", err)
+		return "", fmt.Errorf("string RGATreeList node %w", err)
 	}
 	return str, nil
 }
@@ -113,7 +113,7 @@ type RGATreeList struct {
 func NewRGATreeList() (*RGATreeList, error) {
 	dummyValue, err := NewPrimitive(0, time.InitialTicket)
 	if err != nil {
-		return nil, fmt.Errorf("new RGA tree list: %w", err)
+		return nil, fmt.Errorf("new RGATreeList: %w", err)
 	}
 	dummyValue.SetRemovedAt(time.InitialTicket)
 	dummyHead := newRGATreeListNode(dummyValue)
@@ -146,7 +146,7 @@ func (a *RGATreeList) Marshal() (string, error) {
 
 			str, err := current.elem.Marshal()
 			if err != nil {
-				return "", fmt.Errorf("marshal RGA tree list node: %w", err)
+				return "", fmt.Errorf("marshal RGATreeList node: %w", err)
 			}
 			sb.WriteString(str)
 		}
@@ -162,7 +162,7 @@ func (a *RGATreeList) Marshal() (string, error) {
 // Add adds the given element at the last.
 func (a *RGATreeList) Add(elem Element) error {
 	if err := a.insertAfter(a.last.CreatedAt(), elem, elem.CreatedAt()); err != nil {
-		return fmt.Errorf("add RGA tree list node: %w", err)
+		return fmt.Errorf("add RGATreeList node: %w", err)
 	}
 	return nil
 }
@@ -191,7 +191,7 @@ func (a *RGATreeList) LastCreatedAt() *time.Ticket {
 // InsertAfter inserts the given element after the given previous element.
 func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element) error {
 	if err := a.insertAfter(prevCreatedAt, elem, elem.CreatedAt()); err != nil {
-		return fmt.Errorf("insert after RGA tree list node: %w", err)
+		return fmt.Errorf("insert after RGATreeList node: %w", err)
 	}
 	return nil
 }
@@ -200,7 +200,7 @@ func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element) erro
 func (a *RGATreeList) Get(idx int) (*RGATreeListNode, error) {
 	splayNode, offset, err := a.nodeMapByIndex.Find(idx)
 	if err != nil {
-		return nil, fmt.Errorf("get RGA tree list node: %w", err)
+		return nil, fmt.Errorf("get RGATreeList node: %w", err)
 	}
 	node := splayNode.Value()
 
@@ -228,7 +228,7 @@ func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
 		return nil, fmt.Errorf(
-			"delete by created at RGA tree list node: fail to find the given createdAt: %s",
+			"delete by created at RGATreeList node: fail to find the given createdAt: %s",
 			createdAt.Key(),
 		)
 	}
@@ -256,11 +256,11 @@ func (a *RGATreeList) StructureAsString() (string, error) {
 func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) (*RGATreeListNode, error) {
 	target, err := a.Get(idx)
 	if err != nil {
-		return nil, fmt.Errorf("delete RGA tree list node: %w", err)
+		return nil, fmt.Errorf("delete RGATreeList node: %w", err)
 	}
 	node, err := a.DeleteByCreatedAt(target.CreatedAt(), deletedAt)
 	if err != nil {
-		return nil, fmt.Errorf("delete RGA tree list node: %w", err)
+		return nil, fmt.Errorf("delete RGATreeList node: %w", err)
 	}
 	return node, nil
 }
@@ -271,20 +271,20 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 	prevNode, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
 	if !ok {
 		return fmt.Errorf(
-			"move after RGA tree list node: fail to find the given prevCreatedAt: %s",
+			"move after RGATreeList node: fail to find the given prevCreatedAt: %s",
 			prevCreatedAt.Key(),
 		)
 	}
 
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		return fmt.Errorf("move after RGA tree list node: fail to find the given createdAt: %s", createdAt.Key())
+		return fmt.Errorf("move after RGATreeList node: fail to find the given createdAt: %s", createdAt.Key())
 	}
 
 	if node.elem.MovedAt() == nil || executedAt.After(node.elem.MovedAt()) {
 		a.release(node)
 		if err := a.insertAfter(prevNode.CreatedAt(), node.elem, executedAt); err != nil {
-			return fmt.Errorf("move after RGA tree list node: %w", err)
+			return fmt.Errorf("move after RGATreeList node: %w", err)
 		}
 		node.elem.SetMovedAt(executedAt)
 	}
@@ -298,7 +298,7 @@ func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, e
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
 		return nil, fmt.Errorf(
-			"find prev RGA tree list node: fail to find the given prevCreatedAt: %s",
+			"find prev RGATreeList node: fail to find the given prevCreatedAt: %s",
 			createdAt.Key(),
 		)
 	}
@@ -317,7 +317,7 @@ func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, e
 func (a *RGATreeList) purge(elem Element) error {
 	node, ok := a.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
-		return fmt.Errorf("purge RGA tree list node: fail to find the given createdAt: %s", elem.CreatedAt().Key())
+		return fmt.Errorf("purge RGATreeList node: fail to find the given createdAt: %s", elem.CreatedAt().Key())
 	}
 
 	a.release(node)
