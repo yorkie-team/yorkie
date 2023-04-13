@@ -1,12 +1,10 @@
-# Configuration for name of yorkie app
-yorkie:
-  name: yorkie
-  namespace: yorkie
-  profilingPort: 11102
-
 # Configuration for monitoring system
 monitoring:
   name: &monitoringName yorkie-monitoring
+
+  # Name of yorkie used for yorkie cluster
+  yorkieName: yorkie
+  yorkieNamespace: yorkie
 
   enableEnhancements: &monitoringEnhancementsEnable false
 
@@ -44,6 +42,9 @@ kube-prometheus-stack:
     defaultDashboardsEnabled: false
     adminPassword: yorkie
 
+    service:
+      type: NodePort
+      
     # For grafana data persistence
     persistence:
       enabled: true

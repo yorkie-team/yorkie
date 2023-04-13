@@ -1,31 +1,41 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: {{ .Values.yorkie.name }}-app
+  name: yorkie-cluster
   namespace: argocd
 spec:
   project: {{ .Values.argocd.project }}
-  source:
-    repoURL: {{ .Values.argocd.source.repoURL }}
-    # Set branch to watch revision (in production, main)
-    targetRevision: {{ .Values.argocd.source.targetRevision }}
-    path: {{ .Values.argocd.source.yorkieAppPath }}
+  sources:
+  - repoURL: {{ .Values.argocd.source.helmChartRepoURL }}
+    chart: yorkie-cluster
+    targetRevision: {{ .Values.argocd.source.helmChartTargetRevision }}
+    helm:
+      valueFiles:
+      - $gitops/{{ .Values.argocd.source.clusterValuesPath }}
+  - repoURL: {{ .Values.argocd.source.gitOpsRepoURL }}
+    targetRevision: {{ .Values.argocd.source.gitOpsRepoTargetRevision }}
+    ref: gitops
   destination:
     server: {{ .Values.argocd.destination.server }}
-    namespace: {{ .Values.argocd.destination.namespace }}
+    namespace: {{ .Values.argocd.destination.yorkieNamespace }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: {{ .Values.argocd.name }}-monitoring
+  name: yorkie-monitoring
   namespace: argocd
 spec:
   project: {{ .Values.argocd.project }}
-  source:
-    repoURL: {{ .Values.argocd.source.repoURL }}
-    # Set branch to watch revision (in production, main)
-    targetRevision: {{ .Values.argocd.source.targetRevision }}
-    path: {{ .Values.argocd.source.monitoringPath }}
+  sources:
+  - repoURL: {{ .Values.argocd.source.helmChartRepoURL }}
+    chart: yorkie-monitoring
+    targetRevision: {{ .Values.argocd.source.helmChartTargetRevision }}
+    helm:
+      valueFiles:
+      - $gitops/{{ .Values.argocd.source.monitoringValuesPath }}
+  - repoURL: {{ .Values.argocd.source.gitOpsRepoURL }}
+    targetRevision: {{ .Values.argocd.source.gitOpsRepoTargetRevision }}
+    ref: gitops
   destination:
     server: {{ .Values.argocd.destination.server }}
-    namespace: {{ .Values.argocd.destination.namespace }}
+    namespace: {{ .Values.monitoring.destination.monitoringNamespace }}

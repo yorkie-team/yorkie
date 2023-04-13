@@ -40,7 +40,7 @@ For other environments like AWS, follow the steps below:
 If you are using AWS EKS and want to expose Yorkie Cluster using AWS ALB, follow the steps below:
 
 ```bash
-# Change istio-ingressgateway service type to NodePort, externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
+# Enable ALB, and change domain name and certificate arn for ALB
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster -n istio-system \
     --set externalGateway.ingressClassName=alb \
     --set externalGateway.apiHost={YOUR_API_DOMAIN_NAME} \
