@@ -38,4 +38,4 @@ spec:
     ref: gitops
   destination:
     server: {{ .Values.argocd.destination.server }}
-    namespace: {{ .Values.monitoring.destination.monitoringNamespace }}
+    namespace: {{ .Values.argocd.destination.monitoringNamespace }}

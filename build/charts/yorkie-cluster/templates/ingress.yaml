@@ -24,7 +24,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ .Values.gateway.name }}
+                name: istio-ingressgateway
                 port:
                   number: 80
 ---
@@ -53,6 +53,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ .Values.gateway.name }}
+                name: istio-ingressgateway
                 port:
                   number: 80

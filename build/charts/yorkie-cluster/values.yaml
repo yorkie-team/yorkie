@@ -55,14 +55,6 @@ ingressGateway:
 
   resources: {}
 
-# Configuration for istio gateway dependency
-gateway:
-  name: istio-ingressgateway
-
-  service:
-    # Set ingress gateway service type to NodePort to connect with external ingress
-    type: NodePort
-
 # Configuration for external gateway (eg: AWS ALB)
 externalGateway:
   ingressClassName: nginx
