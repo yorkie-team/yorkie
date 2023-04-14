@@ -183,7 +183,7 @@ func (rht *ElementRHT) purge(elem Element) error {
 }
 
 // Marshal returns the JSON encoding of this map.
-func (rht *ElementRHT) Marshal() (string, error) {
+func (rht *ElementRHT) Marshal() string {
 	members := rht.Elements()
 
 	size := len(members)
@@ -202,13 +202,9 @@ func (rht *ElementRHT) Marshal() (string, error) {
 			sb.WriteString(",")
 		}
 		value := members[k]
-		str, err := value.Marshal()
-		if err != nil {
-			return "", fmt.Errorf("marshal element RHT: %w", err)
-		}
-		sb.WriteString(fmt.Sprintf(`"%s":%s`, EscapeString(k), str))
+		sb.WriteString(fmt.Sprintf(`"%s":%s`, EscapeString(k), value.Marshal()))
 	}
 	sb.WriteString("}")
 
-	return sb.String(), nil
+	return sb.String()
 }

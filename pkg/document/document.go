@@ -159,12 +159,8 @@ func (d *Document) HasLocalChanges() bool {
 }
 
 // Marshal returns the JSON encoding of this document.
-func (d *Document) Marshal() (string, error) {
-	str, err := d.doc.Marshal()
-	if err != nil {
-		return "", fmt.Errorf("document marshal: %w", err)
-	}
-	return str, nil
+func (d *Document) Marshal() string {
+	return d.doc.Marshal()
 }
 
 // CreateChangePack creates pack of the local changes to send to the server.

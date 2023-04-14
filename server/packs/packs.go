@@ -223,18 +223,13 @@ func BuildDocumentForServerSeq(
 		return nil, fmt.Errorf(errFormatBuildDocumentForServerSeq, err)
 	}
 
-	docRootObject, err := doc.RootObject().Marshal()
-	if err != nil {
-		return nil, fmt.Errorf(errFormatBuildDocumentForServerSeq, err)
-	}
-
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			"after apply %d changes: elements: %d removeds: %d, %s",
 			len(changes),
 			doc.Root().ElementMapLen(),
 			doc.Root().RemovedElementLen(),
-			docRootObject,
+			doc.RootObject().Marshal(),
 		)
 	}
 

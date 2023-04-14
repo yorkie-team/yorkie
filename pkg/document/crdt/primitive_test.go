@@ -50,18 +50,15 @@ func TestPrimitive(t *testing.T) {
 		for _, test := range tests {
 			prim, _ := crdt.NewPrimitive(test.value, time.InitialTicket)
 			assert.Equal(t, prim.ValueType(), test.valueType)
-			bytes, _ := prim.Bytes()
-			value, _ := crdt.ValueFromBytes(prim.ValueType(), bytes)
+			bytes := prim.Bytes()
+			value := crdt.ValueFromBytes(prim.ValueType(), bytes)
 			assert.Equal(t, prim.Value(), value)
-			str, _ := prim.Marshal()
-			assert.Equal(t, str, test.marshal)
+			assert.Equal(t, prim.Marshal(), test.marshal)
 
 			copied, _ := prim.DeepCopy()
 			assert.Equal(t, prim.CreatedAt(), copied.CreatedAt())
 			assert.Equal(t, prim.MovedAt(), copied.MovedAt())
-			str, _ = prim.Marshal()
-			copiedStr, _ := copied.Marshal()
-			assert.Equal(t, str, copiedStr)
+			assert.Equal(t, prim.Marshal(), copied.Marshal())
 
 			actorID, _ := time.ActorIDFromHex("0")
 			prim.SetMovedAt(time.NewTicket(0, 0, actorID))

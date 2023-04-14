@@ -63,11 +63,8 @@ func BenchmarkDocument(b *testing.B) {
 			}, "updates k1")
 			assert.NoError(b, err)
 
-			dm1, _ := doc1.Marshal()
-			dm2, _ := doc2.Marshal()
-			dm3, _ := doc3.Marshal()
-			assert.NotEqual(b, dm1, dm2)
-			assert.Equal(b, dm2, dm3)
+			assert.NotEqual(b, doc1.Marshal(), doc2.Marshal())
+			assert.Equal(b, doc2.Marshal(), doc3.Marshal())
 		}
 	})
 
@@ -76,8 +73,7 @@ func BenchmarkDocument(b *testing.B) {
 			expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 
 			doc := document.New("d1")
-			dm, _ := doc.Marshal()
-			assert.Equal(b, "{}", dm)
+			assert.Equal(b, "{}", doc.Marshal())
 			assert.False(b, doc.HasLocalChanges())
 
 			err := doc.Update(func(root *json.Object) error {
@@ -86,14 +82,12 @@ func BenchmarkDocument(b *testing.B) {
 				obj.SetString("k4", "v4")
 				arr, _ := root.SetNewArray("k3")
 				arr.AddString("v5", "v6")
-				rm, _ := root.Marshal()
-				assert.Equal(b, expected, rm)
+				assert.Equal(b, expected, root.Marshal())
 				return nil
 			}, "updates k1,k2,k3")
 			assert.NoError(b, err)
 
-			dm, _ = doc.Marshal()
-			assert.Equal(b, expected, dm)
+			assert.Equal(b, expected, doc.Marshal())
 			assert.True(b, doc.HasLocalChanges())
 		}
 	})
@@ -101,8 +95,7 @@ func BenchmarkDocument(b *testing.B) {
 	b.Run("delete test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			doc := document.New("d1")
-			dm, _ := doc.Marshal()
-			assert.Equal(b, "{}", dm)
+			assert.Equal(b, "{}", doc.Marshal())
 			assert.False(b, doc.HasLocalChanges())
 
 			expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
@@ -112,24 +105,20 @@ func BenchmarkDocument(b *testing.B) {
 				obj.SetString("k4", "v4")
 				arr, _ := root.SetNewArray("k3")
 				arr.AddString("v5", "v6")
-				rm, _ := root.Marshal()
-				assert.Equal(b, expected, rm)
+				assert.Equal(b, expected, root.Marshal())
 				return nil
 			}, "updates k1,k2,k3")
 			assert.NoError(b, err)
-			dm, _ = doc.Marshal()
-			assert.Equal(b, expected, dm)
+			assert.Equal(b, expected, doc.Marshal())
 
 			expected = `{"k1":"v1","k3":["v5","v6"]}`
 			err = doc.Update(func(root *json.Object) error {
 				root.Delete("k2")
-				rm, _ := root.Marshal()
-				assert.Equal(b, expected, rm)
+				assert.Equal(b, expected, root.Marshal())
 				return nil
 			}, "deletes k2")
 			assert.NoError(b, err)
-			dm, _ = doc.Marshal()
-			assert.Equal(b, expected, dm)
+			assert.Equal(b, expected, doc.Marshal())
 		}
 	})
 
@@ -138,16 +127,13 @@ func BenchmarkDocument(b *testing.B) {
 			doc := document.New("d1")
 			err := doc.Update(func(root *json.Object) error {
 				root.SetString("k1", "v1")
-				rm, _ := root.Marshal()
-				assert.Equal(b, `{"k1":"v1"}`, rm)
+				assert.Equal(b, `{"k1":"v1"}`, root.Marshal())
 				root.SetString("k1", "v2")
-				rm, _ = root.Marshal()
-				assert.Equal(b, `{"k1":"v2"}`, rm)
+				assert.Equal(b, `{"k1":"v2"}`, root.Marshal())
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ := doc.Marshal()
-			assert.Equal(b, `{"k1":"v2"}`, dm)
+			assert.Equal(b, `{"k1":"v2"}`, doc.Marshal())
 		}
 	})
 
@@ -162,52 +148,39 @@ func BenchmarkDocument(b *testing.B) {
 				arr.AddInteger(3)
 				arr, _ = root.GetArray("k1")
 				assert.Equal(b, 3, arr.Len())
-				rm, _ := root.Marshal()
-				assert.Equal(b, `{"k1":[1,2,3]}`, rm)
+				assert.Equal(b, `{"k1":[1,2,3]}`, root.Marshal())
 				arr, _ = root.GetArray("k1")
-				str, _ := arr.StructureAsString()
-				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[3,1]3", str)
+				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[3,1]3", arr.StructureAsString())
 
 				arr, _ = root.GetArray("k1")
 				arr.Delete(1)
-				rm, _ = root.Marshal()
-				assert.Equal(b, `{"k1":[1,3]}`, rm)
+				assert.Equal(b, `{"k1":[1,3]}`, root.Marshal())
 				arr, _ = root.GetArray("k1")
 				assert.Equal(b, 2, arr.Len())
 				arr, _ = root.GetArray("k1")
-				str, _ = arr.StructureAsString()
-				assert.Equal(b, "[0,0]0[1,1]1[2,0]2[1,1]3", str)
+				assert.Equal(b, "[0,0]0[1,1]1[2,0]2[1,1]3", arr.StructureAsString())
 
 				arr, _ = root.GetArray("k1")
 				arr.InsertIntegerAfter(0, 2)
-				rm, _ = root.Marshal()
-				assert.Equal(b, `{"k1":[1,2,3]}`, rm)
+				assert.Equal(b, `{"k1":[1,2,3]}`, root.Marshal())
 				arr, _ = root.GetArray("k1")
 				assert.Equal(b, 3, arr.Len())
 				arr, _ = root.GetArray("k1")
-				str, _ = arr.StructureAsString()
-				assert.Equal(b, "[0,0]0[1,1]1[3,1]2[1,0]2[1,1]3", str)
+				assert.Equal(b, "[0,0]0[1,1]1[3,1]2[1,0]2[1,1]3", arr.StructureAsString())
 
 				arr, _ = root.GetArray("k1")
 				arr.InsertIntegerAfter(2, 4)
-				rm, _ = root.Marshal()
-				assert.Equal(b, `{"k1":[1,2,3,4]}`, rm)
+				assert.Equal(b, `{"k1":[1,2,3,4]}`, root.Marshal())
 				arr, _ = root.GetArray("k1")
 				assert.Equal(b, 4, arr.Len())
 				arr, _ = root.GetArray("k1")
-				str, _ = arr.StructureAsString()
-				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", str)
+				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", arr.StructureAsString())
 
 				arr, _ = root.GetArray("k1")
 				for i := 0; i < arr.Len(); i++ {
 					rgaTreeListNodeArr, _ := root.GetArray("k1")
 					rgaTreeListNode, _ := rgaTreeListNodeArr.Get(i)
-					rma, _ := rgaTreeListNode.Marshal()
-					assert.Equal(
-						b,
-						fmt.Sprintf("%d", i+1),
-						rma,
-					)
+					assert.Equal(b, fmt.Sprintf("%d", i+1), rgaTreeListNode.Marshal())
 				}
 
 				return nil
@@ -228,13 +201,11 @@ func BenchmarkDocument(b *testing.B) {
 				txt, _ := root.SetNewText("k1")
 				txt.Edit(0, 0, "ABCD")
 				txt.Edit(1, 3, "12")
-				rm, _ := root.Marshal()
-				assert.Equal(b, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, rm)
+				assert.Equal(b, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, root.Marshal())
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ := doc.Marshal()
-			assert.Equal(b, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, dm)
+			assert.Equal(b, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, doc.Marshal())
 
 			err = doc.Update(func(root *json.Object) error {
 				text, _ := root.GetText("k1")
@@ -275,13 +246,11 @@ func BenchmarkDocument(b *testing.B) {
 				txt.Edit(0, 1, "하")
 				txt.Edit(1, 1, "느")
 				txt.Edit(1, 2, "늘")
-				rm, _ := root.Marshal()
-				assert.Equal(b, `{"k1":[{"val":"하"},{"val":"늘"}]}`, rm)
+				assert.Equal(b, `{"k1":[{"val":"하"},{"val":"늘"}]}`, root.Marshal())
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ := doc.Marshal()
-			assert.Equal(b, `{"k1":[{"val":"하"},{"val":"늘"}]}`, dm)
+			assert.Equal(b, `{"k1":[{"val":"하"},{"val":"늘"}]}`, doc.Marshal())
 		}
 	})
 
@@ -300,12 +269,7 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ := doc.Marshal()
-			assert.Equal(
-				b,
-				`{"k1":[{"val":"Hello world"}]}`,
-				dm,
-			)
+			assert.Equal(b, `{"k1":[{"val":"Hello world"}]}`, doc.Marshal())
 
 			err = doc.Update(func(root *json.Object) error {
 				text, _ := root.GetText("k1")
@@ -317,8 +281,7 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ = doc.Marshal()
-			assert.Equal(b, `{"k1":[{"attrs":{"b":"1"},"val":"Hello"},{"val":" world"}]}`, dm)
+			assert.Equal(b, `{"k1":[{"attrs":{"b":"1"},"val":"Hello"},{"val":" world"}]}`, doc.Marshal())
 
 			err = doc.Update(func(root *json.Object) error {
 				text, _ := root.GetText("k1")
@@ -338,11 +301,10 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ = doc.Marshal()
 			assert.Equal(
 				b,
 				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"val":" world"}]}`,
-				dm,
+				doc.Marshal(),
 			)
 
 			err = doc.Update(func(root *json.Object) error {
@@ -357,11 +319,10 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ = doc.Marshal()
 			assert.Equal(
 				b,
 				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"val":" Yorkie"}]}`,
-				dm,
+				doc.Marshal(),
 			)
 
 			err = doc.Update(func(root *json.Object) error {
@@ -375,11 +336,10 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ = doc.Marshal()
 			assert.Equal(
 				b,
 				`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"attrs":{"list":"true"},"val":"\n"},{"val":" Yorkie"}]}`,
-				dm,
+				doc.Marshal(),
 			)
 		}
 	})
@@ -407,8 +367,7 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ := doc.Marshal()
-			assert.Equal(b, `{"age":128}`, dm)
+			assert.Equal(b, `{"age":128}`, doc.Marshal())
 
 			// long type test
 			err = doc.Update(func(root *json.Object) error {
@@ -423,8 +382,7 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ = doc.Marshal()
-			assert.Equal(b, `{"age":128,"price":9000000000000000123}`, dm)
+			assert.Equal(b, `{"age":128,"price":9000000000000000123}`, doc.Marshal())
 
 			// negative operator test
 			err = doc.Update(func(root *json.Object) error {
@@ -439,8 +397,7 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ = doc.Marshal()
-			assert.Equal(b, `{"age":120,"price":9000000000000000003}`, dm)
+			assert.Equal(b, `{"age":120,"price":9000000000000000003}`, doc.Marshal())
 
 			// TODO: it should be modified to error check
 			// when 'Remove panic from server code (#50)' is completed.
@@ -453,8 +410,7 @@ func BenchmarkDocument(b *testing.B) {
 				return nil
 			})
 			assert.NoError(b, err)
-			dm, _ = doc.Marshal()
-			assert.Equal(b, `{"age":120,"price":9000000000000000003}`, dm)
+			assert.Equal(b, `{"age":120,"price":9000000000000000003}`, doc.Marshal())
 		}
 	})
 
@@ -560,16 +516,14 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 		}, "Delete all at a time")
 		assert.NoError(b, err)
 
-		dm, _ := doc.Marshal()
-		assert.Equal(b, `{"k1":[]}`, dm)
+		assert.Equal(b, `{"k1":[]}`, doc.Marshal())
 	}
 }
 
 func benchmarkTextEditGC(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		doc := document.New("d1")
-		dm, _ := doc.Marshal()
-		assert.Equal(b, "{}", dm)
+		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
 
 		err := doc.Update(func(root *json.Object) error {
@@ -598,8 +552,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 func benchmarkTextSplitGC(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		doc := document.New("d1")
-		dm, _ := doc.Marshal()
-		assert.Equal(b, "{}", dm)
+		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
 		var builder strings.Builder
 		for i := 0; i < cnt; i++ {

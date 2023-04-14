@@ -67,12 +67,7 @@ func BenchmarkTextEditing(b *testing.B) {
 
 	docRoot, _ := doc.Root()
 	txt, _ := docRoot.GetText("text")
-	str, _ := txt.String()
-	assert.Equal(
-		b,
-		editingTrace.FinalText,
-		str,
-	)
+	assert.Equal(b, editingTrace.FinalText, txt.String())
 }
 
 type editTrace struct {

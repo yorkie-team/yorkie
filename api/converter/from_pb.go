@@ -605,10 +605,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, fmt.Errorf("from element: %w", err)
 		}
-		value, err := crdt.ValueFromBytes(valueType, pbElement.Value)
-		if err != nil {
-			return nil, fmt.Errorf("from element: %w", err)
-		}
+		value := crdt.ValueFromBytes(valueType, pbElement.Value)
 		primitive, err := crdt.NewPrimitive(value, createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("from element: %w", err)
@@ -635,10 +632,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, fmt.Errorf("from element: %w", err)
 		}
-		counterValue, err := crdt.CounterValueFromBytes(counterType, pbElement.Value)
-		if err != nil {
-			return nil, fmt.Errorf("from element: %w", err)
-		}
+		counterValue := crdt.CounterValueFromBytes(counterType, pbElement.Value)
 		counter, err := crdt.NewCounter(counterType, counterValue, createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("from element: %w", err)

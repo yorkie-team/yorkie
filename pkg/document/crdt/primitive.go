@@ -41,32 +41,32 @@ const (
 )
 
 // ValueFromBytes parses the given bytes into value.
-func ValueFromBytes(valueType ValueType, value []byte) (interface{}, error) {
+func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 	switch valueType {
 	case Null:
-		return nil, nil
+		return nil
 	case Boolean:
 		if value[0] == 1 {
-			return true, nil
+			return true
 		}
-		return false, nil
+		return false
 	case Integer:
 		val := int32(binary.LittleEndian.Uint32(value))
-		return int32(val), nil
+		return int32(val)
 	case Long:
-		return int64(binary.LittleEndian.Uint64(value)), nil
+		return int64(binary.LittleEndian.Uint64(value))
 	case Double:
-		return math.Float64frombits(binary.LittleEndian.Uint64(value)), nil
+		return math.Float64frombits(binary.LittleEndian.Uint64(value))
 	case String:
-		return string(value), nil
+		return string(value)
 	case Bytes:
-		return value, nil
+		return value
 	case Date:
 		v := int64(binary.LittleEndian.Uint64(value))
-		return gotime.UnixMilli(v), nil
+		return gotime.UnixMilli(v)
 	}
 
-	return nil, fmt.Errorf("primitive value from bytes: unsupported type(valueType: %d, value: %s)", valueType, value)
+	panic(fmt.Sprintf("unsupported type(valueType: %d, value: %s)", valueType, value))
 }
 
 // Primitive represents JSON primitive data type including logical lock.
@@ -156,66 +156,66 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) (*Primitive, error)
 }
 
 // Bytes creates an array representing the value.
-func (p *Primitive) Bytes() ([]byte, error) {
+func (p *Primitive) Bytes() []byte {
 	if p.valueType == Null {
-		return nil, nil
+		return nil
 	}
 
 	switch val := p.value.(type) {
 	case bool:
 		if val {
-			return []byte{1}, nil
+			return []byte{1}
 		}
-		return []byte{0}, nil
+		return []byte{0}
 	case int32:
 		bytes := [4]byte{}
 		binary.LittleEndian.PutUint32(bytes[:], uint32(val))
-		return bytes[:], nil
+		return bytes[:]
 	case int64:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], uint64(val))
-		return bytes[:], nil
+		return bytes[:]
 	case float64:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], math.Float64bits(val))
-		return bytes[:], nil
+		return bytes[:]
 	case string:
-		return []byte(val), nil
+		return []byte(val)
 	case []byte:
-		return val, nil
+		return val
 	case gotime.Time:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], uint64(val.UTC().UnixMilli()))
-		return bytes[:], nil
+		return bytes[:]
 	}
 
-	return nil, fmt.Errorf("primitive create bytes: unsupported type: %T", p.value)
+	panic(fmt.Sprintf("primitive bytes: unsupported type: %T", p.value))
 }
 
 // Marshal returns the JSON encoding of the value.
-func (p *Primitive) Marshal() (string, error) {
+func (p *Primitive) Marshal() string {
 	switch p.valueType {
 	case Null:
-		return "null", nil
+		return "null"
 	case Boolean:
-		return fmt.Sprintf("%t", p.value), nil
+		return fmt.Sprintf("%t", p.value)
 	case Integer:
-		return fmt.Sprintf("%d", p.value), nil
+		return fmt.Sprintf("%d", p.value)
 	case Long:
-		return fmt.Sprintf("%d", p.value), nil
+		return fmt.Sprintf("%d", p.value)
 	case Double:
-		return fmt.Sprintf("%f", p.value), nil
+		return fmt.Sprintf("%f", p.value)
 	case String:
-		return fmt.Sprintf(`"%s"`, EscapeString(p.value.(string))), nil
+		return fmt.Sprintf(`"%s"`, EscapeString(p.value.(string)))
 	case Bytes:
 		// TODO: JSON.stringify({a: new Uint8Array([1,2]), b: 2})
 		// {"a":{"0":1,"1":2},"b":2}
-		return fmt.Sprintf(`"%s"`, p.value), nil
+		return fmt.Sprintf(`"%s"`, p.value)
 	case Date:
-		return fmt.Sprintf(`"%s"`, p.value.(gotime.Time).Format(gotime.RFC3339)), nil
+		return fmt.Sprintf(`"%s"`, p.value.(gotime.Time).Format(gotime.RFC3339))
 	}
 
-	return "", fmt.Errorf("primitive marshal json: unsupported type: %T", p.value)
+	panic(fmt.Sprintf("primitive marshal: unsupported type: %T", p.value))
 }
 
 // DeepCopy copies itself deeply.

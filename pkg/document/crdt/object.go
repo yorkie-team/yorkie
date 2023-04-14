@@ -94,12 +94,8 @@ func (o *Object) Descendants(callback func(elem Element, parent Container) bool)
 }
 
 // Marshal returns the JSON encoding of this object.
-func (o *Object) Marshal() (string, error) {
-	str, err := o.memberNodes.Marshal()
-	if err != nil {
-		return "", fmt.Errorf("crdt object marshal: %w", err)
-	}
-	return str, nil
+func (o *Object) Marshal() string {
+	return o.memberNodes.Marshal()
 }
 
 // DeepCopy copies itself deeply.

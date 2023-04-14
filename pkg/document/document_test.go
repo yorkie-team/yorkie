@@ -61,19 +61,15 @@ func TestDocument(t *testing.T) {
 		}, "updates k1")
 		assert.NoError(t, err)
 
-		str1, _ := doc1.Marshal()
-		str2, _ := doc2.Marshal()
-		str3, _ := doc3.Marshal()
-		assert.NotEqual(t, str1, str2)
-		assert.Equal(t, str2, str3)
+		assert.NotEqual(t, doc1.Marshal(), doc2.Marshal())
+		assert.Equal(t, doc2.Marshal(), doc3.Marshal())
 	})
 
 	t.Run("nested update test", func(t *testing.T) {
 		expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 
 		doc := document.New("d1")
-		str, _ := doc.Marshal()
-		assert.Equal(t, "{}", str)
+		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
 
 		err := doc.Update(func(root *json.Object) error {
@@ -82,21 +78,18 @@ func TestDocument(t *testing.T) {
 			_, _ = object.SetString("k4", "v4")
 			array, _ := root.SetNewArray("k3")
 			_, _ = array.AddString("v5", "v6")
-			str, _ := root.Marshal()
-			assert.Equal(t, expected, str)
+			assert.Equal(t, expected, root.Marshal())
 			return nil
 		}, "updates k1,k2,k3")
 		assert.NoError(t, err)
 
-		str, _ = doc.Marshal()
-		assert.Equal(t, expected, str)
+		assert.Equal(t, expected, doc.Marshal())
 		assert.True(t, doc.HasLocalChanges())
 	})
 
 	t.Run("delete test", func(t *testing.T) {
 		doc := document.New("d1")
-		str, _ := doc.Marshal()
-		assert.Equal(t, "{}", str)
+		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
 		expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 		err := doc.Update(func(root *json.Object) error {
@@ -105,40 +98,33 @@ func TestDocument(t *testing.T) {
 			_, _ = object.SetString("k4", "v4")
 			array, _ := root.SetNewArray("k3")
 			_, _ = array.AddString("v5", "v6")
-			str, _ := root.Marshal()
-			assert.Equal(t, expected, str)
+			assert.Equal(t, expected, root.Marshal())
 			return nil
 		}, "updates k1,k2,k3")
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, expected, str)
+		assert.Equal(t, expected, doc.Marshal())
 
 		expected = `{"k1":"v1","k3":["v5","v6"]}`
 		err = doc.Update(func(root *json.Object) error {
 			_, _ = root.Delete("k2")
-			str, _ := root.Marshal()
-			assert.Equal(t, expected, str)
+			assert.Equal(t, expected, root.Marshal())
 			return nil
 		}, "deletes k2")
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, expected, str)
+		assert.Equal(t, expected, doc.Marshal())
 	})
 
 	t.Run("object test", func(t *testing.T) {
 		doc := document.New("d1")
 		err := doc.Update(func(root *json.Object) error {
 			_, _ = root.SetString("k1", "v1")
-			str, _ := root.Marshal()
-			assert.Equal(t, `{"k1":"v1"}`, str)
+			assert.Equal(t, `{"k1":"v1"}`, root.Marshal())
 			_, _ = root.SetString("k1", "v2")
-			str, _ = root.Marshal()
-			assert.Equal(t, `{"k1":"v2"}`, str)
+			assert.Equal(t, `{"k1":"v2"}`, root.Marshal())
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ := doc.Marshal()
-		assert.Equal(t, `{"k1":"v2"}`, str)
+		assert.Equal(t, `{"k1":"v2"}`, doc.Marshal())
 	})
 
 	t.Run("array test", func(t *testing.T) {
@@ -151,48 +137,39 @@ func TestDocument(t *testing.T) {
 			_, _ = array.AddInteger(3)
 			array, _ = root.GetArray("k1")
 			assert.Equal(t, 3, array.Len())
-			str, _ := root.Marshal()
-			assert.Equal(t, `{"k1":[1,2,3]}`, str)
+			assert.Equal(t, `{"k1":[1,2,3]}`, root.Marshal())
 			array, _ = root.GetArray("k1")
-			str, _ = array.StructureAsString()
-			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[3,1]3", str)
+			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[3,1]3", array.StructureAsString())
 
 			array, _ = root.GetArray("k1")
 			_, _ = array.Delete(1)
-			str, _ = root.Marshal()
-			assert.Equal(t, `{"k1":[1,3]}`, str)
+			assert.Equal(t, `{"k1":[1,3]}`, root.Marshal())
 			array, _ = root.GetArray("k1")
 			assert.Equal(t, 2, array.Len())
 			array, _ = root.GetArray("k1")
-			str, _ = array.StructureAsString()
-			assert.Equal(t, "[0,0]0[1,1]1[2,0]2[1,1]3", str)
+			assert.Equal(t, "[0,0]0[1,1]1[2,0]2[1,1]3", array.StructureAsString())
 
 			array, _ = root.GetArray("k1")
 			_, _ = array.InsertIntegerAfter(0, 2)
-			str, _ = root.Marshal()
-			assert.Equal(t, `{"k1":[1,2,3]}`, str)
+			assert.Equal(t, `{"k1":[1,2,3]}`, root.Marshal())
 			array, _ = root.GetArray("k1")
 			assert.Equal(t, 3, array.Len())
 			array, _ = root.GetArray("k1")
-			str, _ = array.StructureAsString()
-			assert.Equal(t, "[0,0]0[1,1]1[3,1]2[1,0]2[1,1]3", str)
+			assert.Equal(t, "[0,0]0[1,1]1[3,1]2[1,0]2[1,1]3", array.StructureAsString())
 
 			array, _ = root.GetArray("k1")
 			_, _ = array.InsertIntegerAfter(2, 4)
-			str, _ = root.Marshal()
-			assert.Equal(t, `{"k1":[1,2,3,4]}`, str)
+			assert.Equal(t, `{"k1":[1,2,3,4]}`, root.Marshal())
 			array, _ = root.GetArray("k1")
 			assert.Equal(t, 4, array.Len())
 			array, _ = root.GetArray("k1")
-			str, _ = array.StructureAsString()
-			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", str)
+			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", array.StructureAsString())
 
 			array, _ = root.GetArray("k1")
 			for i := 0; i < array.Len(); i++ {
 				array, _ = root.GetArray("k1")
 				elem, _ := array.Get(i)
-				str, _ = elem.Marshal()
-				assert.Equal(t, fmt.Sprintf("%d", i+1), str)
+				assert.Equal(t, fmt.Sprintf("%d", i+1), elem.Marshal())
 			}
 
 			return nil
@@ -211,8 +188,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ := doc.Marshal()
-		assert.Equal(t, `{"data":[0,1,2]}`, str)
+		assert.Equal(t, `{"data":[0,1,2]}`, doc.Marshal())
 		docRoot, _ := doc.Root()
 		array, _ := docRoot.GetArray("data")
 		assert.Equal(t, 3, array.Len())
@@ -223,8 +199,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"data":[1,2]}`, str)
+		assert.Equal(t, `{"data":[1,2]}`, doc.Marshal())
 		docRoot, _ = doc.Root()
 		array, _ = docRoot.GetArray("data")
 		assert.Equal(t, 2, array.Len())
@@ -235,8 +210,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"data":[1]}`, str)
+		assert.Equal(t, `{"data":[1]}`, doc.Marshal())
 		docRoot, _ = doc.Root()
 		array, _ = docRoot.GetArray("data")
 		assert.Equal(t, 1, array.Len())
@@ -247,8 +221,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"data":[]}`, str)
+		assert.Equal(t, `{"data":[]}`, doc.Marshal())
 		docRoot, _ = doc.Root()
 		array, _ = docRoot.GetArray("data")
 		assert.Equal(t, 0, array.Len())
@@ -264,13 +237,11 @@ func TestDocument(t *testing.T) {
 			text, _ := root.SetNewText("k1")
 			_, _ = text.Edit(0, 0, "ABCD")
 			_, _ = text.Edit(1, 3, "12")
-			str, _ := root.Marshal()
-			assert.Equal(t, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, str)
+			assert.Equal(t, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, root.Marshal())
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ := doc.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, str)
+		assert.Equal(t, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			text, _ := root.GetText("k1")
@@ -309,13 +280,11 @@ func TestDocument(t *testing.T) {
 			_, _ = text.Edit(0, 1, "하")
 			_, _ = text.Edit(1, 1, "느")
 			_, _ = text.Edit(1, 2, "늘")
-			str, _ := root.Marshal()
-			assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"}]}`, str)
+			assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"}]}`, root.Marshal())
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ := doc.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"}]}`, str)
+		assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"}]}`, doc.Marshal())
 	})
 
 	t.Run("rich text test", func(t *testing.T) {
@@ -332,8 +301,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ := doc.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"Hello world"}]}`, str)
+		assert.Equal(t, `{"k1":[{"val":"Hello world"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			text, _ := root.GetText("k1")
@@ -345,8 +313,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"k1":[{"attrs":{"b":"1"},"val":"Hello"},{"val":" world"}]}`, str)
+		assert.Equal(t, `{"k1":[{"attrs":{"b":"1"},"val":"Hello"},{"val":" world"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			text, _ := root.GetText("k1")
@@ -366,11 +333,10 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
 		assert.Equal(
 			t,
 			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"val":" world"}]}`,
-			str,
+			doc.Marshal(),
 		)
 
 		err = doc.Update(func(root *json.Object) error {
@@ -385,11 +351,10 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
 		assert.Equal(
 			t,
 			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},{"val":" Yorkie"}]}`,
-			str,
+			doc.Marshal(),
 		)
 
 		err = doc.Update(func(root *json.Object) error {
@@ -404,12 +369,11 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
 		assert.Equal(
 			t,
 			`{"k1":[{"attrs":{"b":"1"},"val":"Hel"},{"attrs":{"b":"1","i":"1"},"val":"lo"},`+
 				`{"attrs":{"list":"true"},"val":"\n"},{"val":" Yorkie"}]}`,
-			str,
+			doc.Marshal(),
 		)
 	})
 
@@ -435,12 +399,10 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ := doc.Marshal()
-		assert.Equal(t, `{"age":128}`, str)
+		assert.Equal(t, `{"age":128}`, doc.Marshal())
 		docRoot, _ := doc.Root()
 		counter, _ := docRoot.GetCounter("age")
-		str, _ = counter.Counter.Marshal()
-		assert.Equal(t, "128", str)
+		assert.Equal(t, "128", counter.Counter.Marshal())
 
 		// long type test
 		err = doc.Update(func(root *json.Object) error {
@@ -456,8 +418,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"age":128,"price":9000000000000000123}`, str)
+		assert.Equal(t, `{"age":128,"price":9000000000000000123}`, doc.Marshal())
 
 		// negative operator test
 		err = doc.Update(func(root *json.Object) error {
@@ -472,8 +433,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"age":120,"price":9000000000000000003}`, str)
+		assert.Equal(t, `{"age":120,"price":9000000000000000003}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			var notAllowType uint64 = 18300000000000000000
@@ -484,8 +444,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"age":120,"price":9000000000000000003}`, str)
+		assert.Equal(t, `{"age":120,"price":9000000000000000003}`, doc.Marshal())
 	})
 
 	t.Run("rollback test", func(t *testing.T) {
@@ -497,8 +456,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ := doc.Marshal()
-		assert.Equal(t, `{"k1":[1,2,3]}`, str)
+		assert.Equal(t, `{"k1":[1,2,3]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			arr, _ := root.GetArray("k1")
@@ -506,8 +464,7 @@ func TestDocument(t *testing.T) {
 			return errDummy
 		})
 		assert.Equal(t, err, errDocUpdateDummy, "should returns the dummy error")
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"k1":[1,2,3]}`, str)
+		assert.Equal(t, `{"k1":[1,2,3]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			arr, _ := root.GetArray("k1")
@@ -515,8 +472,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"k1":[1,2,3,4,5]}`, str)
+		assert.Equal(t, `{"k1":[1,2,3,4,5]}`, doc.Marshal())
 	})
 
 	t.Run("rollback test, primitive deepcopy", func(t *testing.T) {
@@ -529,8 +485,7 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ := doc.Marshal()
-		assert.Equal(t, `{"k1":{"k1.1":1,"k1.2":2}}`, str)
+		assert.Equal(t, `{"k1":{"k1.1":1,"k1.2":2}}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			obj, _ := root.GetObject("k1")
@@ -538,8 +493,7 @@ func TestDocument(t *testing.T) {
 			return errDummy
 		})
 		assert.Equal(t, err, errDocUpdateDummy, "should returns the dummy error")
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"k1":{"k1.1":1,"k1.2":2}}`, str)
+		assert.Equal(t, `{"k1":{"k1.1":1,"k1.2":2}}`, doc.Marshal())
 	})
 
 	t.Run("text garbage collection test", func(t *testing.T) {
@@ -598,13 +552,11 @@ func TestDocument(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ := doc.Marshal()
-		assert.Equal(t, "{}", str)
+		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 2, doc.GarbageLen())
 
 		_, _ = doc.GarbageCollect(time.MaxTicket)
-		str, _ = doc.Marshal()
-		assert.Equal(t, "{}", str)
+		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 	})
 }

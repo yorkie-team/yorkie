@@ -19,7 +19,7 @@ type RGATreeSplitValue interface {
 	Split(offset int) RGATreeSplitValue
 	Len() int
 	DeepCopy() RGATreeSplitValue
-	String() (string, error)
+	String() string
 	Marshal() string
 	structureAsString() string
 }
@@ -227,12 +227,8 @@ func (s *RGATreeSplitNode[V]) Marshal() string {
 }
 
 // String returns the string representation of this node.
-func (s *RGATreeSplitNode[V]) String() (string, error) {
-	str, err := s.value.String()
-	if err != nil {
-		return "", fmt.Errorf("RGATreeSplit node string: %w", err)
-	}
-	return str, nil
+func (s *RGATreeSplitNode[V]) String() string {
+	return s.value.String()
 }
 
 // DeepCopy returns a new instance of this RGATreeSplitNode without structural info.
@@ -621,22 +617,18 @@ func (s *RGATreeSplit[V]) deleteIndexNodes(boundaries []*RGATreeSplitNode[V]) {
 	}
 }
 
-func (s *RGATreeSplit[V]) string() (string, error) {
+func (s *RGATreeSplit[V]) string() string {
 	builder := strings.Builder{}
 
 	node := s.initialHead.next
 	for node != nil {
 		if node.removedAt == nil {
-			str, err := node.String()
-			if err != nil {
-				return "", err
-			}
-			builder.WriteString(str)
+			builder.WriteString(node.String())
 		}
 		node = node.next
 	}
 
-	return builder.String(), nil
+	return builder.String()
 }
 
 func (s *RGATreeSplit[V]) nodes() []*RGATreeSplitNode[V] {

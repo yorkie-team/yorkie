@@ -33,7 +33,7 @@ type Key interface {
 
 // Value represents the data stored in the nodes of Tree.
 type Value interface {
-	String() (string, error)
+	String() string
 }
 
 // Node is a node of Tree.
@@ -84,20 +84,16 @@ func (t *Tree[K, V]) Put(k K, v V) (V, error) {
 	return v, nil
 }
 
-func (t *Tree[K, V]) String() (string, error) {
+func (t *Tree[K, V]) String() string {
 	var str []string
 	err := traverseInOrder(t.root, func(node *Node[K, V]) error {
-		s, err := node.value.String()
-		if err != nil {
-			return err
-		}
-		str = append(str, s)
+		str = append(str, node.value.String())
 		return nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("llrb traverseInOrder: %w", err)
+		return ""
 	}
-	return strings.Join(str, ","), nil
+	return strings.Join(str, ",")
 }
 
 // Remove removes the value of the given key.

@@ -310,15 +310,10 @@ func (c *Client) ListChangeSummaries(
 		}
 
 		// TODO(hackerwins): doc.Marshal is expensive function. We need to optimize it.
-		snapshot, err := newDoc.Marshal()
-		if err != nil {
-			return nil, err
-		}
-
 		summaries = append([]*types.ChangeSummary{{
 			ID:       c.ID(),
 			Message:  c.Message(),
-			Snapshot: snapshot,
+			Snapshot: newDoc.Marshal(),
 		}}, summaries...)
 	}
 

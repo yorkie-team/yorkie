@@ -301,16 +301,11 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		return err
 	}
 
-	rootObjectMarshal, err := doc.RootObject().Marshal()
-	if err != nil {
-		return err
-	}
-
 	if c.logger.Core().Enabled(zap.DebugLevel) {
 		c.logger.Debug(fmt.Sprintf(
 			"after apply %d changes: %s",
 			len(pack.Changes),
-			rootObjectMarshal,
+			doc.RootObject().Marshal(),
 		))
 	}
 

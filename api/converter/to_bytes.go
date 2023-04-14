@@ -96,14 +96,11 @@ func toPrimitive(primitive *crdt.Primitive) (*api.JSONElement, error) {
 	if err != nil {
 		return nil, fmt.Errorf("to primitive: %w", err)
 	}
-	byteValue, err := primitive.Bytes()
-	if err != nil {
-		return nil, fmt.Errorf("to primitive: %w", err)
-	}
+
 	return &api.JSONElement{
 		Body: &api.JSONElement_Primitive_{Primitive: &api.JSONElement_Primitive{
 			Type:      pbValueType,
-			Value:     byteValue,
+			Value:     primitive.Bytes(),
 			CreatedAt: ToTimeTicket(primitive.CreatedAt()),
 			MovedAt:   ToTimeTicket(primitive.MovedAt()),
 			RemovedAt: ToTimeTicket(primitive.RemovedAt()),
@@ -128,14 +125,10 @@ func toCounter(counter *crdt.Counter) (*api.JSONElement, error) {
 		return nil, fmt.Errorf("to counter: %w", err)
 	}
 
-	counterBytes, err := counter.Bytes()
-	if err != nil {
-		return nil, fmt.Errorf("to counter: %w", err)
-	}
 	return &api.JSONElement{
 		Body: &api.JSONElement_Counter_{Counter: &api.JSONElement_Counter{
 			Type:      pbCounterType,
-			Value:     counterBytes,
+			Value:     counter.Bytes(),
 			CreatedAt: ToTimeTicket(counter.CreatedAt()),
 			MovedAt:   ToTimeTicket(counter.MovedAt()),
 			RemovedAt: ToTimeTicket(counter.RemovedAt()),

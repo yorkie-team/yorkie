@@ -167,8 +167,7 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		dm2, _ := d2.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"123"},{"val":"456"},{"val":"789"}]}`, dm2)
+		assert.Equal(t, `{"k1":[{"val":"123"},{"val":"456"},{"val":"789"}]}`, d2.Marshal())
 
 		err = d1.Update(func(root *json.Object) error {
 			txt, _ := root.GetText("k1")
@@ -176,8 +175,7 @@ func TestText(t *testing.T) {
 			return nil
 		}, "delete block by c1")
 		assert.NoError(t, err)
-		dm1, _ := d1.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"1"},{"val":"89"}]}`, dm1)
+		assert.Equal(t, `{"k1":[{"val":"1"},{"val":"89"}]}`, d1.Marshal())
 
 		err = d2.Update(func(root *json.Object) error {
 			txt, _ := root.GetText("k1")
@@ -185,8 +183,7 @@ func TestText(t *testing.T) {
 			return nil
 		}, "delete block by c2")
 		assert.NoError(t, err)
-		dm2, _ = d2.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"12"},{"val":"6"},{"val":"789"}]}`, dm2)
+		assert.Equal(t, `{"k1":[{"val":"12"},{"val":"6"},{"val":"789"}]}`, d2.Marshal())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
@@ -221,8 +218,7 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		dm2, _ := d2.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"},{"val":"0"}]}`, dm2)
+		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"},{"val":"0"}]}`, d2.Marshal())
 
 		err = d1.Update(func(root *json.Object) error {
 			txt1, _ := root.GetText("k1")
@@ -234,9 +230,8 @@ func TestText(t *testing.T) {
 			return nil
 		}, "newly create then delete by c1")
 
-		dm1, _ := d1.Marshal()
 		assert.NoError(t, err)
-		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"}]}`, dm1)
+		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"}]}`, d1.Marshal())
 
 		err = d2.Update(func(root *json.Object) error {
 			txt, _ := root.GetText("k1")
@@ -244,8 +239,7 @@ func TestText(t *testing.T) {
 			return nil
 		}, "delete the range includes above new nodes")
 		assert.NoError(t, err)
-		dm2, _ = d2.Marshal()
-		assert.Equal(t, `{"k1":[]}`, dm2)
+		assert.Equal(t, `{"k1":[]}`, d2.Marshal())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		r1, _ := d1.Root()

@@ -26,7 +26,7 @@ import (
 // Value represents the data stored in the nodes of Tree.
 type Value interface {
 	Len() int
-	String() (string, error)
+	String() string
 }
 
 // Node is a node of Tree.
@@ -214,44 +214,36 @@ func (t *Tree[V]) Find(index int) (*Node[V], int, error) {
 }
 
 // String returns a string containing node values.
-func (t *Tree[V]) String() (string, error) {
+func (t *Tree[V]) String() string {
 	var builder strings.Builder
 	err := traverseInOrder(t.root, func(node *Node[V]) error {
-		str, err := node.value.String()
-		if err != nil {
-			return err
-		}
-		builder.WriteString(str)
+		builder.WriteString(node.value.String())
 		return nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("tree string: %w", err)
+		return ""
 	}
-	return builder.String(), nil
+	return builder.String()
 }
 
 // StructureAsString returns a string containing the metadata of the Node
 // for debugging purpose.
-func (t *Tree[V]) StructureAsString() (string, error) {
+func (t *Tree[V]) StructureAsString() string {
 	var builder strings.Builder
 
 	err := traverseInOrder(t.root, func(node *Node[V]) error {
-		str, err := node.value.String()
-		if err != nil {
-			return err
-		}
 		builder.WriteString(fmt.Sprintf(
 			"[%d,%d]%s",
 			node.weight,
 			node.value.Len(),
-			str,
+			node.value.String(),
 		))
 		return nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("tree structure as string: %w", err)
+		return ""
 	}
-	return builder.String(), nil
+	return builder.String()
 }
 
 // CheckWeight returns false when there is an incorrect weight node.

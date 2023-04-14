@@ -44,7 +44,7 @@ type TextElement interface {
 // Element represents JSON element.
 type Element interface {
 	// Marshal returns the JSON encoding of this element.
-	Marshal() (string, error)
+	Marshal() string
 
 	// DeepCopy copies itself deeply.
 	DeepCopy() (Element, error)

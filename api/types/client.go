@@ -24,13 +24,12 @@ func NewClient(encoded []byte) (*Client, error) {
 }
 
 // Marshal serializes the Client to JSON.
-func (c *Client) Marshal() (string, error) {
+func (c *Client) Marshal() string {
 	encoded, err := json.Marshal(c)
 	if err != nil {
-		return "", fmt.Errorf("marshal client: %w", err)
+		return ""
 	}
-
-	return string(encoded), nil
+	return string(encoded)
 }
 
 // Presence represents custom presence that can be defined in the client.

@@ -149,10 +149,7 @@ func fromJSONPrimitive(pbPrim *api.JSONElement_Primitive) (*crdt.Primitive, erro
 		return nil, fmt.Errorf("from json primitive: %w", err)
 	}
 
-	value, err := crdt.ValueFromBytes(valueType, pbPrim.Value)
-	if err != nil {
-		return nil, fmt.Errorf("from json primitive: %w", err)
-	}
+	value := crdt.ValueFromBytes(valueType, pbPrim.Value)
 	primitive, err := crdt.NewPrimitive(value, createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("from json primitive: %w", err)
@@ -235,11 +232,7 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*crdt.Counter, error) {
 		return nil, fmt.Errorf("from json counter: %w", err)
 	}
 
-	counterValue, err := crdt.CounterValueFromBytes(counterType, pbCnt.Value)
-	if err != nil {
-		return nil, fmt.Errorf("from json counter: %w", err)
-	}
-
+	counterValue := crdt.CounterValueFromBytes(counterType, pbCnt.Value)
 	counter, err := crdt.NewCounter(counterType, counterValue, createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("from json counter: %w", err)

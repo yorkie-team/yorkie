@@ -79,20 +79,17 @@ func TestCounter(t *testing.T) {
 		_ = integer.Increase(integerOperand)
 		_ = integer.Increase(longOperand)
 		_ = integer.Increase(doubleOperand)
-		str, _ := integer.Marshal()
-		assert.Equal(t, str, "23")
+		assert.Equal(t, integer.Marshal(), "23")
 
 		_ = long.Increase(integerOperand)
 		_ = long.Increase(longOperand)
 		_ = long.Increase(doubleOperand)
-		str, _ = long.Marshal()
-		assert.Equal(t, str, "28")
+		assert.Equal(t, long.Marshal(), "28")
 
 		_ = double.Increase(integerOperand)
 		_ = double.Increase(longOperand)
 		_ = double.Increase(doubleOperand)
-		str, _ = double.Marshal()
-		assert.Equal(t, str, "21")
+		assert.Equal(t, double.Marshal(), "21")
 
 		// error process test
 		unsupportedTest := func(v interface{}) {
@@ -105,12 +102,9 @@ func TestCounter(t *testing.T) {
 		unsupportedTest([]byte{2})
 		unsupportedTest(gotime.Now())
 
-		str, _ = integer.Marshal()
-		assert.Equal(t, str, "23")
-		str, _ = long.Marshal()
-		assert.Equal(t, str, "28")
-		str, _ = double.Marshal()
-		assert.Equal(t, str, "21")
+		assert.Equal(t, integer.Marshal(), "23")
+		assert.Equal(t, long.Marshal(), "28")
+		assert.Equal(t, double.Marshal(), "21")
 	})
 
 	t.Run("Counter value overflow test", func(t *testing.T) {
@@ -120,7 +114,6 @@ func TestCounter(t *testing.T) {
 		operand, _ := crdt.NewPrimitive(1, time.InitialTicket)
 		_ = integer.Increase(operand)
 		assert.Equal(t, integer.ValueType(), crdt.IntegerCnt)
-		str, _ := integer.Marshal()
-		assert.Equal(t, str, strconv.FormatInt(math.MinInt32, 10))
+		assert.Equal(t, integer.Marshal(), strconv.FormatInt(math.MinInt32, 10))
 	})
 }

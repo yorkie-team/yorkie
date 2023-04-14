@@ -183,8 +183,7 @@ func TestArray(t *testing.T) {
 		err = d1.Update(func(root *json.Object) error {
 			arr, _ := root.SetNewArray("k1")
 			arr.AddInteger(0, 1, 2)
-			r, _ := root.Marshal()
-			assert.Equal(t, `{"k1":[0,1,2]}`, r)
+			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
 			return nil
 		}, "[0,1,2]")
 		assert.NoError(t, err)
@@ -202,8 +201,7 @@ func TestArray(t *testing.T) {
 			elem, _ := elemArr.Get(2)
 			arr, _ := root.GetArray("k1")
 			arr.MoveBefore(prev.CreatedAt(), elem.CreatedAt())
-			r, _ := root.Marshal()
-			assert.Equal(t, `{"k1":[2,0,1]}`, r)
+			assert.Equal(t, `{"k1":[2,0,1]}`, root.Marshal())
 			return nil
 		}, "move 2 before 0")
 		assert.NoError(t, err)
@@ -215,8 +213,7 @@ func TestArray(t *testing.T) {
 			elem, _ := elemArr.Get(2)
 			arr, _ := root.GetArray("k1")
 			arr.MoveBefore(prev.CreatedAt(), elem.CreatedAt())
-			r, _ := root.Marshal()
-			assert.Equal(t, `{"k1":[0,2,1]}`, r)
+			assert.Equal(t, `{"k1":[0,2,1]}`, root.Marshal())
 			return nil
 		}, "move 2 before 1")
 		assert.NoError(t, err)
@@ -231,8 +228,7 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			arr, _ := root.SetNewArray("k1")
 			arr.AddInteger(0, 1, 2)
-			r, _ := root.Marshal()
-			assert.Equal(t, `{"k1":[0,1,2]}`, r)
+			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx))
@@ -246,8 +242,7 @@ func TestArray(t *testing.T) {
 			elem, _ := elemArr.Get(2)
 			arr, _ := root.GetArray("k1")
 			arr.MoveBefore(next.CreatedAt(), elem.CreatedAt())
-			r1, _ := root.Marshal()
-			assert.Equal(t, `{"k1":[2,0,1]}`, r1)
+			assert.Equal(t, `{"k1":[2,0,1]}`, root.Marshal())
 			return nil
 		}))
 
@@ -258,8 +253,7 @@ func TestArray(t *testing.T) {
 			elem, _ := elemArr.Get(1)
 			arr, _ := root.GetArray("k1")
 			arr.MoveBefore(next.CreatedAt(), elem.CreatedAt())
-			r, _ := root.Marshal()
-			assert.Equal(t, `{"k1":[1,0,2]}`, r)
+			assert.Equal(t, `{"k1":[1,0,2]}`, root.Marshal())
 			return nil
 		}))
 

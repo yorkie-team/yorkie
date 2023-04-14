@@ -57,8 +57,8 @@ func newIntValue(value int) *intValue {
 	return &intValue{value: value}
 }
 
-func (v *intValue) String() (string, error) {
-	return fmt.Sprintf("%d", v.value), nil
+func (v *intValue) String() string {
+	return fmt.Sprintf("%d", v.value)
 }
 
 func TestTree(t *testing.T) {
@@ -78,20 +78,16 @@ func TestTree(t *testing.T) {
 			for _, value := range array {
 				_, _ = tree.Put(newIntKey(value), newIntValue(value))
 			}
-			str, _ := tree.String()
-			assert.Equal(t, "0,1,2,3,4,5,6,7,8,9", str)
+			assert.Equal(t, "0,1,2,3,4,5,6,7,8,9", tree.String())
 
 			_ = tree.Remove(newIntKey(8))
-			str, _ = tree.String()
-			assert.Equal(t, "0,1,2,3,4,5,6,7,9", str)
+			assert.Equal(t, "0,1,2,3,4,5,6,7,9", tree.String())
 
 			_ = tree.Remove(newIntKey(2))
-			str, _ = tree.String()
-			assert.Equal(t, "0,1,3,4,5,6,7,9", str)
+			assert.Equal(t, "0,1,3,4,5,6,7,9", tree.String())
 
 			_ = tree.Remove(newIntKey(5))
-			str, _ = tree.String()
-			assert.Equal(t, "0,1,3,4,6,7,9", str)
+			assert.Equal(t, "0,1,3,4,6,7,9", tree.String())
 		}
 	})
 }

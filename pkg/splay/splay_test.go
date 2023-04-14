@@ -42,8 +42,8 @@ func (v *stringValue) Len() int {
 	return len(v.content)
 }
 
-func (v *stringValue) String() (string, error) {
-	return v.content, nil
+func (v *stringValue) String() string {
+	return v.content
 }
 
 func TestSplayTree(t *testing.T) {
@@ -55,21 +55,20 @@ func TestSplayTree(t *testing.T) {
 		assert.Equal(t, 0, idx)
 
 		nodeA := tree.Insert(newSplayNode("A2"))
-		str, _ := tree.StructureAsString()
-		assert.Equal(t, "[2,2]A2", str)
+		assert.Equal(t, "[2,2]A2", tree.StructureAsString())
 		nodeB := tree.Insert(newSplayNode("B23"))
-		str, _ = tree.StructureAsString()
-		assert.Equal(t, "[2,2]A2[5,3]B23", str)
+
+		assert.Equal(t, "[2,2]A2[5,3]B23", tree.StructureAsString())
 		nodeC := tree.Insert(newSplayNode("C234"))
-		str, _ = tree.StructureAsString()
-		assert.Equal(t, "[2,2]A2[5,3]B23[9,4]C234", str)
+
+		assert.Equal(t, "[2,2]A2[5,3]B23[9,4]C234", tree.StructureAsString())
 		nodeD := tree.Insert(newSplayNode("D2345"))
-		str, _ = tree.StructureAsString()
-		assert.Equal(t, "[2,2]A2[5,3]B23[9,4]C234[14,5]D2345", str)
+
+		assert.Equal(t, "[2,2]A2[5,3]B23[9,4]C234[14,5]D2345", tree.StructureAsString())
 
 		tree.Splay(nodeB)
-		str, _ = tree.StructureAsString()
-		assert.Equal(t, "[2,2]A2[14,3]B23[9,4]C234[5,5]D2345", str)
+
+		assert.Equal(t, "[2,2]A2[14,3]B23[9,4]C234[5,5]D2345", tree.StructureAsString())
 
 		assert.Equal(t, 0, tree.IndexOf(nodeA))
 		assert.Equal(t, 2, tree.IndexOf(nodeB))
@@ -93,25 +92,24 @@ func TestSplayTree(t *testing.T) {
 		tree := splay.NewTree[*stringValue](nil)
 
 		nodeH := tree.Insert(newSplayNode("H"))
-		str, _ := tree.StructureAsString()
-		assert.Equal(t, "[1,1]H", str)
+		assert.Equal(t, "[1,1]H", tree.StructureAsString())
 		assert.Equal(t, 1, tree.Len())
 		nodeE := tree.Insert(newSplayNode("E"))
-		str, _ = tree.StructureAsString()
-		assert.Equal(t, "[1,1]H[2,1]E", str)
+
+		assert.Equal(t, "[1,1]H[2,1]E", tree.StructureAsString())
 		assert.Equal(t, 2, tree.Len())
 		nodeL := tree.Insert(newSplayNode("LL"))
-		str, _ = tree.StructureAsString()
-		assert.Equal(t, "[1,1]H[2,1]E[4,2]LL", str)
+
+		assert.Equal(t, "[1,1]H[2,1]E[4,2]LL", tree.StructureAsString())
 		assert.Equal(t, 4, tree.Len())
 		nodeO := tree.Insert(newSplayNode("O"))
-		str, _ = tree.StructureAsString()
-		assert.Equal(t, "[1,1]H[2,1]E[4,2]LL[5,1]O", str)
+
+		assert.Equal(t, "[1,1]H[2,1]E[4,2]LL[5,1]O", tree.StructureAsString())
 		assert.Equal(t, 5, tree.Len())
 
 		tree.Delete(nodeE)
-		str, _ = tree.StructureAsString()
-		assert.Equal(t, "[4,1]H[3,2]LL[1,1]O", str)
+
+		assert.Equal(t, "[4,1]H[3,2]LL[1,1]O", tree.StructureAsString())
 		assert.Equal(t, 4, tree.Len())
 
 		assert.Equal(t, tree.IndexOf(nodeH), 0)
@@ -125,15 +123,19 @@ func TestSplayTree(t *testing.T) {
 		// check the filtering of DeleteRange
 		removeNodes(nodes, 7, 8)
 		tree.DeleteRange(nodes[6], nil)
-		str, _ := tree.StructureAsString()
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG[0,0]HH[0,0]I", str)
+		assert.Equal(t,
+			"[1,1]A[3,2]BB[6,3]CCC[10,4]DDDD[15,5]EEEEE[19,4]FFFF[22,3]GGG[0,0]HH[0,0]I",
+			tree.StructureAsString(),
+		)
 
 		tree, nodes = makeSampleTree()
 		// check the case 1 of DeleteRange
 		removeNodes(nodes, 3, 6)
 		tree.DeleteRange(nodes[2], nodes[7])
-		str, _ = tree.StructureAsString()
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[0,0]DDDD[0,0]EEEEE[0,0]FFFF[0,0]GGG[9,2]HH[1,1]I", str)
+		assert.Equal(t,
+			"[1,1]A[3,2]BB[6,3]CCC[0,0]DDDD[0,0]EEEEE[0,0]FFFF[0,0]GGG[9,2]HH[1,1]I",
+			tree.StructureAsString(),
+		)
 
 		tree, nodes = makeSampleTree()
 		tree.Splay(nodes[6])
@@ -141,8 +143,10 @@ func TestSplayTree(t *testing.T) {
 		// check the case 2 of DeleteRange
 		removeNodes(nodes, 3, 7)
 		tree.DeleteRange(nodes[2], nodes[8])
-		str, _ = tree.StructureAsString()
-		assert.Equal(t, "[1,1]A[3,2]BB[6,3]CCC[0,0]DDDD[0,0]EEEEE[0,0]FFFF[0,0]GGG[0,0]HH[7,1]I", str)
+		assert.Equal(t,
+			"[1,1]A[3,2]BB[6,3]CCC[0,0]DDDD[0,0]EEEEE[0,0]FFFF[0,0]GGG[0,0]HH[7,1]I",
+			tree.StructureAsString(),
+		)
 	})
 
 	t.Run("single node index test", func(t *testing.T) {

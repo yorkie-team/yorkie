@@ -33,20 +33,20 @@ const (
 )
 
 // CounterValueFromBytes parses the given bytes into value.
-func CounterValueFromBytes(counterType CounterType, value []byte) (interface{}, error) {
+func CounterValueFromBytes(counterType CounterType, value []byte) interface{} {
 	switch counterType {
 	case IntegerCnt:
 		val := int32(binary.LittleEndian.Uint32(value))
-		return int(val), nil
+		return int(val)
 	case LongCnt:
-		return int64(binary.LittleEndian.Uint64(value)), nil
+		return int64(binary.LittleEndian.Uint64(value))
 	}
 
-	return nil, fmt.Errorf(
+	panic(fmt.Sprintf(
 		"counter value from bytes: unsupported type(counterType: %d, value: %s)",
 		counterType,
 		value,
-	)
+	))
 }
 
 // Counter represents changeable number data type.
@@ -92,24 +92,24 @@ func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket
 }
 
 // Bytes creates an array representing the value.
-func (p *Counter) Bytes() ([]byte, error) {
+func (p *Counter) Bytes() []byte {
 	switch val := p.value.(type) {
 	case int32:
 		bytes := [4]byte{}
 		binary.LittleEndian.PutUint32(bytes[:], uint32(val))
-		return bytes[:], nil
+		return bytes[:]
 	case int64:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], uint64(val))
-		return bytes[:], nil
+		return bytes[:]
 	}
 
-	return nil, fmt.Errorf("crdt counter create bytes: unsupported type(value: %s)", p.value)
+	panic(fmt.Sprintf("crdt counter bytes: unsupported type(value: %s)", p.value))
 }
 
 // Marshal returns the JSON encoding of the value.
-func (p *Counter) Marshal() (string, error) {
-	return fmt.Sprintf("%d", p.value), nil
+func (p *Counter) Marshal() string {
+	return fmt.Sprintf("%d", p.value)
 }
 
 // DeepCopy copies itself deeply.

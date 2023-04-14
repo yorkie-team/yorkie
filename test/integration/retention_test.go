@@ -91,24 +91,21 @@ func TestRetention(t *testing.T) {
 			root.SetNewArray("todos")
 			return nil
 		}, "create todos"))
-		dm, _ := doc.Marshal()
-		assert.Equal(t, `{"todos":[]}`, dm)
+		assert.Equal(t, `{"todos":[]}`, doc.Marshal())
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			arr, _ := root.GetArray("todos")
 			arr.AddString("buy coffee")
 			return nil
 		}, "buy coffee"))
-		dm, _ = doc.Marshal()
-		assert.Equal(t, `{"todos":["buy coffee"]}`, dm)
+		assert.Equal(t, `{"todos":["buy coffee"]}`, doc.Marshal())
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			arr, _ := root.GetArray("todos")
 			arr.AddString("buy bread")
 			return nil
 		}, "buy bread"))
-		dm, _ = doc.Marshal()
-		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, dm)
+		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, doc.Marshal())
 		assert.NoError(t, cli.Sync(ctx))
 
 		changes, err := adminCli.ListChangeSummaries(ctx, "default", doc.Key(), 0, 0, true)

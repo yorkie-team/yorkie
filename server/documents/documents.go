@@ -59,11 +59,7 @@ func ListDocumentSummaries(
 			return nil, err
 		}
 
-		snapshot, err := doc.Marshal()
-		if err != nil {
-			return nil, err
-		}
-
+		snapshot := doc.Marshal()
 		if len(snapshot) > SnapshotMaxLen {
 			snapshot = snapshot[:SnapshotMaxLen] + "..."
 		}
@@ -105,18 +101,13 @@ func GetDocumentSummary(
 		return nil, err
 	}
 
-	docMarshal, err := doc.Marshal()
-	if err != nil {
-		return nil, err
-	}
-
 	return &types.DocumentSummary{
 		ID:         docInfo.ID,
 		Key:        docInfo.Key,
 		CreatedAt:  docInfo.CreatedAt,
 		AccessedAt: docInfo.AccessedAt,
 		UpdatedAt:  docInfo.UpdatedAt,
-		Snapshot:   docMarshal,
+		Snapshot:   doc.Marshal(),
 	}, nil
 }
 

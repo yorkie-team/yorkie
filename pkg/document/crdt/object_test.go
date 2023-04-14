@@ -34,14 +34,11 @@ func TestObject(t *testing.T) {
 
 		primitive, _ := crdt.NewPrimitive("v1", ctx.IssueTimeTicket())
 		obj.Set("k1", primitive)
-		str, _ := obj.Marshal()
-		assert.Equal(t, `{"k1":"v1"}`, str)
+		assert.Equal(t, `{"k1":"v1"}`, obj.Marshal())
 		primitive, _ = crdt.NewPrimitive("v2", ctx.IssueTimeTicket())
 		obj.Set("k2", primitive)
-		str, _ = obj.Marshal()
-		assert.Equal(t, `{"k1":"v1","k2":"v2"}`, str)
+		assert.Equal(t, `{"k1":"v1","k2":"v2"}`, obj.Marshal())
 		obj.Delete("k1", ctx.IssueTimeTicket())
-		str, _ = obj.Marshal()
-		assert.Equal(t, `{"k2":"v2"}`, str)
+		assert.Equal(t, `{"k2":"v2"}`, obj.Marshal())
 	})
 }

@@ -83,8 +83,7 @@ func TestSnapshot(t *testing.T) {
 
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
-		dm, _ := d2.RootObject().Get("key").Marshal()
-		assert.Equal(t, `"value"`, dm)
+		assert.Equal(t, `"value"`, d2.RootObject().Get("key").Marshal())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
@@ -131,10 +130,8 @@ func TestSnapshot(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		dm1, _ := d1.Marshal()
-		dm2, _ := d2.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"},{"val":"구"},{"val":"름"}]}`, dm1)
-		assert.Equal(t, dm1, dm2)
+		assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"},{"val":"구"},{"val":"름"}]}`, d1.Marshal())
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 
 	t.Run("text snapshot with concurrent local change test", func(t *testing.T) {

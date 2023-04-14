@@ -35,15 +35,12 @@ func TestArray(t *testing.T) {
 
 		primitive, _ := crdt.NewPrimitive("1", ctx.IssueTimeTicket())
 		_, _ = a.Add(primitive)
-		str, _ := a.Marshal()
-		assert.Equal(t, `["1"]`, str)
+		assert.Equal(t, `["1"]`, a.Marshal())
 		primitive, _ = crdt.NewPrimitive("2", ctx.IssueTimeTicket())
 		_, _ = a.Add(primitive)
-		str, _ = a.Marshal()
-		assert.Equal(t, `["1","2"]`, str)
+		assert.Equal(t, `["1","2"]`, a.Marshal())
 		primitive, _ = crdt.NewPrimitive("3", ctx.IssueTimeTicket())
 		_, _ = a.Add(primitive)
-		str, _ = a.Marshal()
-		assert.Equal(t, `["1","2","3"]`, str)
+		assert.Equal(t, `["1","2","3"]`, a.Marshal())
 	})
 }

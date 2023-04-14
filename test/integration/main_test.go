@@ -68,8 +68,7 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 	ctx := context.Background()
 	// Save own changes and get previous changes.
 	for i, pair := range pairs {
-		dm, _ := pair.doc.Marshal()
-		fmt.Printf("before d%d: %s\n", i+1, dm)
+		fmt.Printf("before d%d: %s\n", i+1, pair.doc.Marshal())
 		err := pair.cli.Sync(ctx)
 		assert.NoError(t, err)
 	}
@@ -82,10 +81,10 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 	}
 
 	// Assert start.
-	expected, _ := pairs[0].doc.Marshal()
+	expected := pairs[0].doc.Marshal()
 	fmt.Printf("after d1: %s\n", expected)
 	for i, pair := range pairs[1:] {
-		v, _ := pair.doc.Marshal()
+		v := pair.doc.Marshal()
 		fmt.Printf("after d%d: %s\n", i+2, v)
 		assert.Equal(t, expected, v)
 	}

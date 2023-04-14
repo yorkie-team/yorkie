@@ -47,24 +47,21 @@ func TestHistory(t *testing.T) {
 			root.SetNewArray("todos")
 			return nil
 		}, "create todos"))
-		dm1, _ := d1.Marshal()
-		assert.Equal(t, `{"todos":[]}`, dm1)
+		assert.Equal(t, `{"todos":[]}`, d1.Marshal())
 
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			arr, _ := root.GetArray("todos")
 			arr.AddString("buy coffee")
 			return nil
 		}, "buy coffee"))
-		dm1, _ = d1.Marshal()
-		assert.Equal(t, `{"todos":["buy coffee"]}`, dm1)
+		assert.Equal(t, `{"todos":["buy coffee"]}`, d1.Marshal())
 
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			arr, _ := root.GetArray("todos")
 			arr.AddString("buy bread")
 			return nil
 		}, "buy bread"))
-		dm1, _ = d1.Marshal()
-		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, dm1)
+		assert.Equal(t, `{"todos":["buy coffee","buy bread"]}`, d1.Marshal())
 		assert.NoError(t, cli.Sync(ctx))
 
 		changes, err := adminCli.ListChangeSummaries(ctx, "default", d1.Key(), 0, 0, true)

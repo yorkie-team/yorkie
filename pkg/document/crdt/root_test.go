@@ -49,14 +49,12 @@ func TestRoot(t *testing.T) {
 		_, _ = array.Add(primitive)
 		primitive, _ = crdt.NewPrimitive(2, ctx.IssueTimeTicket())
 		_, _ = array.Add(primitive)
-		str, _ := array.Marshal()
-		assert.Equal(t, "[0,1,2]", str)
+		assert.Equal(t, "[0,1,2]", array.Marshal())
 
 		targetElement, _ := array.Get(1)
 		_, _ = array.DeleteByCreatedAt(targetElement.CreatedAt(), ctx.IssueTimeTicket())
 		root.RegisterRemovedElementPair(array, targetElement)
-		str, _ = array.Marshal()
-		assert.Equal(t, "[0,2]", str)
+		assert.Equal(t, "[0,2]", array.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		gc, _ := root.GarbageCollect(time.MaxTicket)
@@ -73,29 +71,25 @@ func TestRoot(t *testing.T) {
 		fromPos, toPos, _ := text.CreateRange(0, 0)
 		_, _, _ = text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		str, _ := text.String()
-		assert.Equal(t, "Hello World", str)
+		assert.Equal(t, "Hello World", text.String())
 		assert.Equal(t, 0, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(5, 10)
 		_, _, _ = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		str, _ = text.String()
-		assert.Equal(t, "HelloYorkied", str)
+		assert.Equal(t, "HelloYorkied", text.String())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(0, 5)
 		_, _, _ = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		str, _ = text.String()
-		assert.Equal(t, "Yorkied", str)
+		assert.Equal(t, "Yorkied", text.String())
 		assert.Equal(t, 2, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(6, 7)
 		_, _, _ = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		str, _ = text.String()
-		assert.Equal(t, "Yorkie", str)
+		assert.Equal(t, "Yorkie", text.String())
 		assert.Equal(t, 3, root.GarbageLen())
 
 		// It contains code marked tombstone.
@@ -135,8 +129,7 @@ func TestRoot(t *testing.T) {
 			fromPos, toPos, _ := text.CreateRange(tc.from, tc.to)
 			_, _, _ = text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
 			registerTextElementWithGarbage(fromPos, toPos, root, text)
-			str, _ := text.String()
-			assert.Equal(t, tc.want, str)
+			assert.Equal(t, tc.want, text.String())
 			assert.Equal(t, tc.garbage, root.GarbageLen())
 		}
 
@@ -154,22 +147,19 @@ func TestRoot(t *testing.T) {
 		fromPos, toPos, _ := text.CreateRange(0, 0)
 		_, _, _ = text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		str, _ := text.Marshal()
-		assert.Equal(t, `[{"val":"Hello World"}]`, str)
+		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 		assert.Equal(t, 0, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(6, 11)
 		_, _, _ = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		str, _ = text.Marshal()
-		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, str)
+		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(0, 6)
 		_, _, _ = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
-		str, _ = text.Marshal()
-		assert.Equal(t, `[{"val":"Yorkie"}]`, str)
+		assert.Equal(t, `[{"val":"Yorkie"}]`, text.Marshal())
 		assert.Equal(t, 2, root.GarbageLen())
 
 		// It contains code marked tombstone.
@@ -203,13 +193,11 @@ func TestRoot(t *testing.T) {
 		obj.Set("2", arr)
 		primitive, _ = crdt.NewPrimitive(3, ctx.IssueTimeTicket())
 		obj.Set("3", primitive)
-		str, _ := root.Object().Marshal()
-		assert.Equal(t, `{"1":1,"2":[1,2,3],"3":3}`, str)
+		assert.Equal(t, `{"1":1,"2":[1,2,3],"3":3}`, root.Object().Marshal())
 
 		deleted := obj.Delete("2", ctx.IssueTimeTicket())
 		root.RegisterRemovedElementPair(obj, deleted)
-		str, _ = obj.Marshal()
-		assert.Equal(t, `{"1":1,"3":3}`, str)
+		assert.Equal(t, `{"1":1,"3":3}`, obj.Marshal())
 		assert.Equal(t, 4, root.GarbageLen())
 
 		gc, _ := root.GarbageCollect(time.MaxTicket)
@@ -218,8 +206,7 @@ func TestRoot(t *testing.T) {
 
 		deleted = obj.Delete("3", ctx.IssueTimeTicket())
 		root.RegisterRemovedElementPair(obj, deleted)
-		str, _ = obj.Marshal()
-		assert.Equal(t, `{"1":1}`, str)
+		assert.Equal(t, `{"1":1}`, obj.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		gc, _ = root.GarbageCollect(time.MaxTicket)

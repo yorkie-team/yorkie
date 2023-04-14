@@ -106,13 +106,13 @@ func (a *Array) Elements() []Element {
 }
 
 // Marshal returns the JSON encoding of this Array.
-func (a *Array) Marshal() (string, error) {
+func (a *Array) Marshal() string {
 	return a.elements.Marshal()
 }
 
 // StructureAsString returns a String containing the metadata of the elements
 // for debugging purpose.
-func (a *Array) StructureAsString() (string, error) {
+func (a *Array) StructureAsString() string {
 	return a.elements.StructureAsString()
 }
 

@@ -80,8 +80,7 @@ func TestObject(t *testing.T) {
 			return nil
 		}, "set v1 by c1")
 		assert.NoError(t, err)
-		dm1, _ := d1.Marshal()
-		assert.Equal(t, `{"k1":{}}`, dm1)
+		assert.Equal(t, `{"k1":{}}`, d1.Marshal())
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
@@ -95,8 +94,7 @@ func TestObject(t *testing.T) {
 			return nil
 		}, "delete and set v1 by c1")
 		assert.NoError(t, err)
-		dm1, _ = d1.Marshal()
-		assert.Equal(t, `{"k1":"v1"}`, dm1)
+		assert.Equal(t, `{"k1":"v1"}`, d1.Marshal())
 
 		err = d2.Update(func(root *json.Object) error {
 			root.Delete("k1")
@@ -104,8 +102,7 @@ func TestObject(t *testing.T) {
 			return nil
 		}, "delete and set v2 by c2")
 		assert.NoError(t, err)
-		dm2, _ := d2.Marshal()
-		assert.Equal(t, `{"k1":"v2"}`, dm2)
+		assert.Equal(t, `{"k1":"v2"}`, d2.Marshal())
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 

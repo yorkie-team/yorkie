@@ -36,8 +36,7 @@ func TestConverter(t *testing.T) {
 	t.Run("snapshot simple test", func(t *testing.T) {
 		obj, err := converter.BytesToObject(nil)
 		assert.NoError(t, err)
-		str, _ := obj.Marshal()
-		assert.Equal(t, "{}", str)
+		assert.Equal(t, "{}", obj.Marshal())
 
 		doc := document.New("d1")
 
@@ -47,8 +46,7 @@ func TestConverter(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"A"}]}`, str)
+		assert.Equal(t, `{"k1":[{"val":"A"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
 			text, _ := root.SetNewText("k1")
@@ -56,16 +54,14 @@ func TestConverter(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		str, _ = doc.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"B"}]}`, str)
+		assert.Equal(t, `{"k1":[{"val":"B"}]}`, doc.Marshal())
 
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
 
 		obj, err = converter.BytesToObject(bytes)
 		assert.NoError(t, err)
-		str, _ = obj.Marshal()
-		assert.Equal(t, `{"k1":[{"val":"B"}]}`, str)
+		assert.Equal(t, `{"k1":[{"val":"B"}]}`, obj.Marshal())
 	})
 
 	t.Run("snapshot test", func(t *testing.T) {
@@ -127,9 +123,7 @@ func TestConverter(t *testing.T) {
 
 		obj, err := converter.BytesToObject(bytes)
 		assert.NoError(t, err)
-		strObject, _ := obj.Marshal()
-		strDoc, _ := doc.Marshal()
-		assert.Equal(t, strDoc, strObject)
+		assert.Equal(t, doc.Marshal(), obj.Marshal())
 	})
 
 	t.Run("change pack test", func(t *testing.T) {
@@ -199,9 +193,7 @@ func TestConverter(t *testing.T) {
 		err = d2.ApplyChangePack(pack)
 		assert.NoError(t, err)
 
-		str1, _ := d1.Marshal()
-		str2, _ := d2.Marshal()
-		assert.Equal(t, str1, str2)
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 
 	t.Run("change pack error test", func(t *testing.T) {

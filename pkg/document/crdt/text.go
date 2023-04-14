@@ -57,8 +57,8 @@ func (t *TextValue) Len() int {
 }
 
 // String returns the string representation of this value.
-func (t *TextValue) String() (string, error) {
-	return t.value, nil
+func (t *TextValue) String() string {
+	return t.value
 }
 
 // Marshal returns the JSON encoding of this text.
@@ -132,7 +132,7 @@ func NewText(elements *RGATreeSplit[*TextValue], createdAt *time.Ticket) *Text {
 }
 
 // String returns the string representation of this Text.
-func (t *Text) String() (string, error) {
+func (t *Text) String() string {
 	var values []string
 
 	node := t.rgaTreeSplit.initialHead.next
@@ -140,20 +140,16 @@ func (t *Text) String() (string, error) {
 		if node.createdAt().Compare(t.createdAt) == 0 {
 			// last line
 		} else if node.removedAt == nil {
-			str, err := node.String()
-			if err != nil {
-				return "", fmt.Errorf("crdt text string: %w", err)
-			}
-			values = append(values, str)
+			values = append(values, node.String())
 		}
 		node = node.next
 	}
 
-	return strings.Join(values, ""), nil
+	return strings.Join(values, "")
 }
 
 // Marshal returns the JSON encoding of this Text.
-func (t *Text) Marshal() (string, error) {
+func (t *Text) Marshal() string {
 	var values []string
 
 	node := t.rgaTreeSplit.initialHead.next
@@ -166,7 +162,7 @@ func (t *Text) Marshal() (string, error) {
 		node = node.next
 	}
 
-	return fmt.Sprintf("[%s]", strings.Join(values, ",")), nil
+	return fmt.Sprintf("[%s]", strings.Join(values, ","))
 }
 
 // DeepCopy copies itself deeply.

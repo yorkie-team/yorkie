@@ -65,8 +65,7 @@ func TestDocument(t *testing.T) {
 		err = c1.Attach(ctx, doc2)
 		assert.NoError(t, err)
 		assert.True(t, doc2.IsAttached())
-		dm2, _ := doc2.Marshal()
-		assert.Equal(t, `{"k1":"v2"}`, dm2)
+		assert.Equal(t, `{"k1":"v2"}`, doc2.Marshal())
 
 		doc3 := document.New(key.Key("invalid$key"))
 		err = c1.Attach(ctx, doc3)
@@ -163,9 +162,7 @@ func TestDocument(t *testing.T) {
 
 		wg.Wait()
 
-		dm1, _ := d1.Marshal()
-		dm2, _ := d2.Marshal()
-		assert.Equal(t, dm1, dm2)
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 
 	t.Run("document tombstone test", func(t *testing.T) {
@@ -292,9 +289,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 		assert.Equal(t, d1.Status(), document.StatusRemoved)
 		assert.Equal(t, d2.Status(), document.StatusRemoved)
-		dm1, _ := d1.Marshal()
-		dm2, _ := d2.Marshal()
-		assert.Equal(t, dm1, dm2)
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
 	})
 
 	t.Run("removed document detachment test", func(t *testing.T) {
@@ -513,12 +508,9 @@ func TestDocumentWithProjects(t *testing.T) {
 
 		wg.Wait()
 
-		dm1, _ := d1.Marshal()
-		dm2, _ := d2.Marshal()
-		dm3, _ := d3.Marshal()
 		assert.Equal(t, expected, responsePairs)
-		assert.Equal(t, "{\"key\":\"value\"}", dm1)
-		assert.Equal(t, "{\"key\":\"value\"}", dm2)
-		assert.Equal(t, "{\"key3\":\"value3\"}", dm3)
+		assert.Equal(t, "{\"key\":\"value\"}", d1.Marshal())
+		assert.Equal(t, "{\"key\":\"value\"}", d2.Marshal())
+		assert.Equal(t, "{\"key3\":\"value3\"}", d3.Marshal())
 	})
 }

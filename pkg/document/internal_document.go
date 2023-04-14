@@ -158,12 +158,8 @@ func (d *InternalDocument) GarbageLen() int {
 }
 
 // Marshal returns the JSON encoding of this document.
-func (d *InternalDocument) Marshal() (string, error) {
-	str, err := d.root.Object().Marshal()
-	if err != nil {
-		return "", fmt.Errorf("internal document marshal: %w", err)
-	}
-	return str, nil
+func (d *InternalDocument) Marshal() string {
+	return d.root.Object().Marshal()
 }
 
 // CreateChangePack creates pack of the local changes to send to the server.

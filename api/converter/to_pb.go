@@ -403,14 +403,10 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 			return nil, fmt.Errorf("to json element simple: %w", err)
 		}
 
-		byteValue, err := elem.Bytes()
-		if err != nil {
-			return nil, fmt.Errorf("to json element simple: %w", err)
-		}
 		return &api.JSONElementSimple{
 			Type:      pbValueType,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
-			Value:     byteValue,
+			Value:     elem.Bytes(),
 		}, nil
 	case *crdt.Text:
 		return &api.JSONElementSimple{
@@ -423,14 +419,10 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 			return nil, fmt.Errorf("to json element simple: %w", err)
 		}
 
-		elemBytes, err := elem.Bytes()
-		if err != nil {
-			return nil, fmt.Errorf("to json element simple: %w", err)
-		}
 		return &api.JSONElementSimple{
 			Type:      pbCounterType,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
-			Value:     elemBytes,
+			Value:     elem.Bytes(),
 		}, nil
 	}
 
