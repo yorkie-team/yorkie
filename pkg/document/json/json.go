@@ -23,19 +23,19 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 )
 
-func toOriginal(elem crdt.Element) (crdt.Element, error) {
+func toOriginal(elem crdt.Element) crdt.Element {
 	switch elem := elem.(type) {
 	case *Object:
-		return elem.Object, nil
+		return elem.Object
 	case *Array:
-		return elem.Array, nil
+		return elem.Array
 	case *Text:
-		return elem.Text, nil
+		return elem.Text
 	case *Counter:
-		return elem.Counter, nil
+		return elem.Counter
 	case *crdt.Primitive:
-		return elem, nil
+		return elem
 	}
 
-	return nil, fmt.Errorf("to origin: unsupported type(%T)", elem)
+	panic(fmt.Sprintf("to origin: unsupported type(%T)", elem))
 }

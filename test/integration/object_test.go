@@ -61,7 +61,7 @@ func TestObject(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object) error {
 			root.Delete("k1")
-			obj, _ := root.GetObject("k2")
+			obj := root.GetObject("k2")
 			obj.Delete("k2.2")
 			return nil
 		}, "nested update by c1")
@@ -143,7 +143,7 @@ func TestObject(t *testing.T) {
 		}, "set k2 by c1")
 		assert.NoError(t, err)
 		err = d2.Update(func(root *json.Object) error {
-			obj, _ := root.GetObject("k2")
+			obj := root.GetObject("k2")
 			obj.SetNewObject("k2.1")
 			obj.SetString("k2.1.1", "v2")
 			return nil

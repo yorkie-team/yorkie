@@ -186,7 +186,7 @@ func TestDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			arr.AddInteger(3)
 			return nil
 		})

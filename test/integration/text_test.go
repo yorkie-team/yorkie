@@ -53,14 +53,14 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("k1")
+			txt := root.GetText("k1")
 			txt.Edit(0, 0, "ABCD")
 			return nil
 		}, "edit 0,0 ABCD by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("k1")
+			txt := root.GetText("k1")
 			txt.Edit(0, 0, "1234")
 			return nil
 		}, "edit 0,0 1234 by c2")
@@ -69,14 +69,14 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("k1")
+			txt := root.GetText("k1")
 			txt.Edit(2, 3, "XX")
 			return nil
 		}, "edit 2,3 XX by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("k1")
+			txt := root.GetText("k1")
 			txt.Edit(2, 3, "YY")
 			return nil
 		}, "edit 2,3 YY by c2")
@@ -85,14 +85,14 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("k1")
+			txt := root.GetText("k1")
 			txt.Edit(4, 5, "ZZ")
 			return nil
 		}, "edit 4,5 ZZ by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("k1")
+			txt := root.GetText("k1")
 			txt.Edit(2, 3, "TT")
 			return nil
 		}, "edit 2,3 TT by c2")
@@ -121,14 +121,14 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			text, _ := root.GetText("k1")
+			text := root.GetText("k1")
 			_, _ = text.Style(0, 1, map[string]string{"b": "1"})
 			return nil
 		}, `set style b to "H" by c1`)
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			text, _ := root.GetText("k1")
+			text := root.GetText("k1")
 			_, _ = text.Style(0, 5, map[string]string{"i": "1"})
 			return nil
 		}, `set style i to "Hello" by c2`)
@@ -156,11 +156,11 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			txt1, _ := root.GetText("k1")
+			txt1 := root.GetText("k1")
 			txt1.Edit(0, 0, "123")
-			txt2, _ := root.GetText("k1")
+			txt2 := root.GetText("k1")
 			txt2.Edit(3, 3, "456")
-			txt3, _ := root.GetText("k1")
+			txt3 := root.GetText("k1")
 			txt3.Edit(6, 6, "789")
 			return nil
 		}, "set new text by c1")
@@ -170,7 +170,7 @@ func TestText(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"val":"123"},{"val":"456"},{"val":"789"}]}`, d2.Marshal())
 
 		err = d1.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("k1")
+			txt := root.GetText("k1")
 			txt.Edit(1, 7, "")
 			return nil
 		}, "delete block by c1")
@@ -178,7 +178,7 @@ func TestText(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"val":"1"},{"val":"89"}]}`, d1.Marshal())
 
 		err = d2.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("k1")
+			txt := root.GetText("k1")
 			txt.Edit(2, 5, "")
 			return nil
 		}, "delete block by c2")
@@ -207,11 +207,11 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			txt1, _ := root.GetText("k1")
+			txt1 := root.GetText("k1")
 			txt1.Edit(0, 0, "0")
-			txt2, _ := root.GetText("k1")
+			txt2 := root.GetText("k1")
 			txt2.Edit(1, 1, "0")
-			txt3, _ := root.GetText("k1")
+			txt3 := root.GetText("k1")
 			txt3.Edit(2, 2, "0")
 			return nil
 		}, "set new text by c1")
@@ -221,11 +221,11 @@ func TestText(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"},{"val":"0"}]}`, d2.Marshal())
 
 		err = d1.Update(func(root *json.Object) error {
-			txt1, _ := root.GetText("k1")
+			txt1 := root.GetText("k1")
 			txt1.Edit(1, 2, "1")
-			txt2, _ := root.GetText("k1")
+			txt2 := root.GetText("k1")
 			txt2.Edit(1, 2, "1")
-			txt3, _ := root.GetText("k1")
+			txt3 := root.GetText("k1")
 			txt3.Edit(1, 2, "")
 			return nil
 		}, "newly create then delete by c1")
@@ -234,7 +234,7 @@ func TestText(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"}]}`, d1.Marshal())
 
 		err = d2.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("k1")
+			txt := root.GetText("k1")
 			txt.Edit(0, 3, "")
 			return nil
 		}, "delete the range includes above new nodes")
@@ -243,9 +243,9 @@ func TestText(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		r1, _ := d1.Root()
-		t1, _ := r1.GetText("k1")
+		t1 := r1.GetText("k1")
 		r2, _ := d2.Root()
-		t2, _ := r2.GetText("k1")
+		t2 := r2.GetText("k1")
 		assert.True(t, t1.CheckWeight())
 		assert.True(t, t2.CheckWeight())
 	})

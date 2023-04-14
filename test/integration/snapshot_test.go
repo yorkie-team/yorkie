@@ -117,7 +117,7 @@ func TestSnapshot(t *testing.T) {
 
 		for _, edit := range edits {
 			err = d1.Update(func(root *json.Object) error {
-				txt, _ := root.GetText("k1")
+				txt := root.GetText("k1")
 				txt.Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
@@ -155,7 +155,7 @@ func TestSnapshot(t *testing.T) {
 
 		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
 			err = d1.Update(func(root *json.Object) error {
-				txt, _ := root.GetText("k1")
+				txt := root.GetText("k1")
 				txt.Edit(i, i, "x")
 				return nil
 			})
@@ -163,7 +163,7 @@ func TestSnapshot(t *testing.T) {
 		}
 
 		err = d2.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("k1")
+			txt := root.GetText("k1")
 			txt.Edit(0, 0, "o")
 			return nil
 		})

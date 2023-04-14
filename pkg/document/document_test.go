@@ -135,39 +135,39 @@ func TestDocument(t *testing.T) {
 			_, _ = array.AddInteger(1)
 			_, _ = array.AddInteger(2)
 			_, _ = array.AddInteger(3)
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			assert.Equal(t, 3, array.Len())
 			assert.Equal(t, `{"k1":[1,2,3]}`, root.Marshal())
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[3,1]3", array.StructureAsString())
 
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			_, _ = array.Delete(1)
 			assert.Equal(t, `{"k1":[1,3]}`, root.Marshal())
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			assert.Equal(t, 2, array.Len())
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			assert.Equal(t, "[0,0]0[1,1]1[2,0]2[1,1]3", array.StructureAsString())
 
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			_, _ = array.InsertIntegerAfter(0, 2)
 			assert.Equal(t, `{"k1":[1,2,3]}`, root.Marshal())
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			assert.Equal(t, 3, array.Len())
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			assert.Equal(t, "[0,0]0[1,1]1[3,1]2[1,0]2[1,1]3", array.StructureAsString())
 
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			_, _ = array.InsertIntegerAfter(2, 4)
 			assert.Equal(t, `{"k1":[1,2,3,4]}`, root.Marshal())
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			assert.Equal(t, 4, array.Len())
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", array.StructureAsString())
 
-			array, _ = root.GetArray("k1")
+			array = root.GetArray("k1")
 			for i := 0; i < array.Len(); i++ {
-				array, _ = root.GetArray("k1")
+				array = root.GetArray("k1")
 				elem, _ := array.Get(i)
 				assert.Equal(t, fmt.Sprintf("%d", i+1), elem.Marshal())
 			}
@@ -190,40 +190,40 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"data":[0,1,2]}`, doc.Marshal())
 		docRoot, _ := doc.Root()
-		array, _ := docRoot.GetArray("data")
+		array := docRoot.GetArray("data")
 		assert.Equal(t, 3, array.Len())
 
 		err = doc.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("data")
+			arr := root.GetArray("data")
 			_, _ = arr.Delete(0)
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"data":[1,2]}`, doc.Marshal())
 		docRoot, _ = doc.Root()
-		array, _ = docRoot.GetArray("data")
+		array = docRoot.GetArray("data")
 		assert.Equal(t, 2, array.Len())
 
 		err = doc.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("data")
+			arr := root.GetArray("data")
 			_, _ = arr.Delete(1)
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"data":[1]}`, doc.Marshal())
 		docRoot, _ = doc.Root()
-		array, _ = docRoot.GetArray("data")
+		array = docRoot.GetArray("data")
 		assert.Equal(t, 1, array.Len())
 
 		err = doc.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("data")
+			arr := root.GetArray("data")
 			_, _ = arr.Delete(0)
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"data":[]}`, doc.Marshal())
 		docRoot, _ = doc.Root()
-		array, _ = docRoot.GetArray("data")
+		array = docRoot.GetArray("data")
 		assert.Equal(t, 0, array.Len())
 	})
 
@@ -244,7 +244,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
-			text, _ := root.GetText("k1")
+			text := root.GetText("k1")
 			assert.Equal(t,
 				`[0:0:00:0 {} ""][1:2:00:0 {} "A"][1:3:00:0 {} "12"]{1:2:00:1 {} "BC"}[1:2:00:3 {} "D"]`,
 				text.StructureAsString(),
@@ -304,7 +304,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"val":"Hello world"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
-			text, _ := root.GetText("k1")
+			text := root.GetText("k1")
 			_, _ = text.Style(0, 5, map[string]string{"b": "1"})
 			assert.Equal(t,
 				`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
@@ -316,7 +316,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"attrs":{"b":"1"},"val":"Hello"},{"val":" world"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
-			text, _ := root.GetText("k1")
+			text := root.GetText("k1")
 			_, _ = text.Style(0, 5, map[string]string{"b": "1"})
 			assert.Equal(
 				t,
@@ -340,7 +340,7 @@ func TestDocument(t *testing.T) {
 		)
 
 		err = doc.Update(func(root *json.Object) error {
-			text, _ := root.GetText("k1")
+			text := root.GetText("k1")
 			_, _ = text.Edit(5, 11, " Yorkie", nil)
 			assert.Equal(
 				t,
@@ -358,7 +358,7 @@ func TestDocument(t *testing.T) {
 		)
 
 		err = doc.Update(func(root *json.Object) error {
-			text, _ := root.GetText("k1")
+			text := root.GetText("k1")
 			_, _ = text.Edit(5, 5, "\n", map[string]string{"list": "true"})
 			assert.Equal(
 				t,
@@ -389,7 +389,7 @@ func TestDocument(t *testing.T) {
 		err := doc.Update(func(root *json.Object) error {
 			_, _ = root.SetNewCounter("age", crdt.IntegerCnt, 5)
 
-			age, _ := root.GetCounter("age")
+			age := root.GetCounter("age")
 			_, _ = age.Increase(long)
 			_, _ = age.Increase(double)
 			_, _ = age.Increase(float)
@@ -401,13 +401,13 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"age":128}`, doc.Marshal())
 		docRoot, _ := doc.Root()
-		counter, _ := docRoot.GetCounter("age")
+		counter := docRoot.GetCounter("age")
 		assert.Equal(t, "128", counter.Counter.Marshal())
 
 		// long type test
 		err = doc.Update(func(root *json.Object) error {
 			_, _ = root.SetNewCounter("price", crdt.LongCnt, 9000000000000000000)
-			price, _ := root.GetCounter("price")
+			price := root.GetCounter("price")
 			println(price.ValueType())
 			_, _ = price.Increase(long)
 			_, _ = price.Increase(double)
@@ -422,11 +422,11 @@ func TestDocument(t *testing.T) {
 
 		// negative operator test
 		err = doc.Update(func(root *json.Object) error {
-			age, _ := root.GetCounter("age")
+			age := root.GetCounter("age")
 			_, _ = age.Increase(-5)
 			_, _ = age.Increase(-3.14)
 
-			price, _ := root.GetCounter("price")
+			price := root.GetCounter("price")
 			_, _ = price.Increase(-100)
 			_, _ = price.Increase(-20.5)
 
@@ -437,7 +437,7 @@ func TestDocument(t *testing.T) {
 
 		err = doc.Update(func(root *json.Object) error {
 			var notAllowType uint64 = 18300000000000000000
-			age, _ := root.GetCounter("age")
+			age := root.GetCounter("age")
 			_, err = age.Increase(notAllowType)
 			assert.Error(t, err, "unsupported type")
 
@@ -459,7 +459,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"k1":[1,2,3]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			_, _ = arr.AddInteger(4, 5)
 			return errDummy
 		})
@@ -467,7 +467,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"k1":[1,2,3]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			_, _ = arr.AddInteger(4, 5)
 			return nil
 		})
@@ -488,7 +488,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"k1":{"k1.1":1,"k1.2":2}}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
-			obj, _ := root.GetObject("k1")
+			obj := root.GetObject("k1")
 			_, _ = obj.Delete("k1.1")
 			return errDummy
 		})
@@ -501,15 +501,15 @@ func TestDocument(t *testing.T) {
 
 		err := doc.Update(func(root *json.Object) error {
 			_, _ = root.SetNewText("text")
-			txt, _ := root.GetText("text")
+			txt := root.GetText("text")
 			_, _ = txt.Edit(0, 0, "ABCD")
-			txt, _ = root.GetText("text")
+			txt = root.GetText("text")
 			_, _ = txt.Edit(0, 2, "12")
 			return nil
 		})
 		assert.NoError(t, err)
 		docRoot, _ := doc.Root()
-		text, _ := docRoot.GetText("text")
+		text := docRoot.GetText("text")
 		assert.Equal(
 			t,
 			`[0:0:00:0 {} ""][1:3:00:0 {} "12"]{1:2:00:0 {} "AB"}[1:2:00:2 {} "CD"]`,
@@ -520,7 +520,7 @@ func TestDocument(t *testing.T) {
 		_, _ = doc.GarbageCollect(time.MaxTicket)
 		assert.Equal(t, 0, doc.GarbageLen())
 		docRoot, _ = doc.Root()
-		text, _ = docRoot.GetText("text")
+		text = docRoot.GetText("text")
 		assert.Equal(
 			t,
 			`[0:0:00:0 {} ""][1:3:00:0 {} "12"][1:2:00:2 {} "CD"]`,
@@ -528,13 +528,13 @@ func TestDocument(t *testing.T) {
 		)
 
 		err = doc.Update(func(root *json.Object) error {
-			txt, _ := root.GetText("text")
+			txt := root.GetText("text")
 			_, _ = txt.Edit(2, 4, "")
 			return nil
 		})
 		assert.NoError(t, err)
 		docRoot, _ = doc.Root()
-		text, _ = docRoot.GetText("text")
+		text = docRoot.GetText("text")
 		assert.Equal(
 			t,
 			`[0:0:00:0 {} ""][1:3:00:0 {} "12"]{1:2:00:2 {} "CD"}`,

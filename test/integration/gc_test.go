@@ -132,10 +132,10 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			txt1, _ := root.GetText("text")
+			txt1 := root.GetText("text")
 			txt1.Edit(0, 1, "a")
 			txt1.Edit(1, 2, "b")
-			txt2, _ := root.GetText("richText")
+			txt2 := root.GetText("richText")
 			txt2.Edit(0, 1, "a", map[string]string{"b": "1"})
 			return nil
 		}, "edit text type elements")
@@ -209,9 +209,9 @@ func TestGarbageCollection(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object) error {
 			root.Delete("2")
-			txt1, _ := root.GetText("4")
+			txt1 := root.GetText("4")
 			txt1.Edit(0, 1, "h")
-			txt2, _ := root.GetText("5")
+			txt2 := root.GetText("5")
 			txt2.Edit(0, 1, "h", map[string]string{"b": "1"})
 			return nil
 		}, "removes 2 and edit text type elements")

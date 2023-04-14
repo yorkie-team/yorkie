@@ -152,7 +152,7 @@ func TestConverter(t *testing.T) {
 			_, _ = array.AddDate(gotime.Now())
 			_, _ = array.Delete(4)
 
-			arrayK2, _ := root.GetArray("k2")
+			arrayK2 := root.GetArray("k2")
 			rgaTreeListNode0, _ := arrayK2.Get(0)
 			nextCreatedAt := rgaTreeListNode0.CreatedAt()
 			rgaTreeListNode1, _ := arrayK2.Get(1)

@@ -157,7 +157,7 @@ func TestClient(t *testing.T) {
 		// 03. cli update the document with increasing the counter(0 -> 1)
 		//     and sync with push-only mode: CP(1, 1) -> CP(2, 1)
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
-			c, _ := root.GetCounter("counter")
+			c := root.GetCounter("counter")
 			c.Increase(1)
 			return nil
 		}))
@@ -168,7 +168,7 @@ func TestClient(t *testing.T) {
 		// 04. cli update the document with increasing the counter(1 -> 2)
 		//     and sync with push-pull mode. CP(2, 1) -> CP(3, 3)
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
-			c, _ := root.GetCounter("counter")
+			c := root.GetCounter("counter")
 			c.Increase(1)
 			return nil
 		}))
@@ -179,7 +179,7 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, cli.Sync(ctx, client.WithDocKey(doc.Key())))
 		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 3, ServerSeq: 3})
 		dr, _ := doc.Root()
-		c, _ := dr.GetCounter("counter")
+		c := dr.GetCounter("counter")
 		assert.Equal(t, "2", c.Marshal())
 	})
 }

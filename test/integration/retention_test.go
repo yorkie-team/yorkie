@@ -94,14 +94,14 @@ func TestRetention(t *testing.T) {
 		assert.Equal(t, `{"todos":[]}`, doc.Marshal())
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("todos")
+			arr := root.GetArray("todos")
 			arr.AddString("buy coffee")
 			return nil
 		}, "buy coffee"))
 		assert.Equal(t, `{"todos":["buy coffee"]}`, doc.Marshal())
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("todos")
+			arr := root.GetArray("todos")
 			arr.AddString("buy bread")
 			return nil
 		}, "buy bread"))
@@ -170,7 +170,7 @@ func TestRetention(t *testing.T) {
 		// Create 6 changes
 		for _, edit := range edits {
 			err = d1.Update(func(root *json.Object) error {
-				txt, _ := root.GetText("k1")
+				txt := root.GetText("k1")
 				txt.Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
@@ -230,7 +230,7 @@ func TestRetention(t *testing.T) {
 		// Create 6 changes
 		for _, edit := range edits {
 			err = d2.Update(func(root *json.Object) error {
-				txt, _ := root.GetText("k1")
+				txt := root.GetText("k1")
 				txt.Edit(edit.from, edit.to, edit.content)
 				return nil
 			})

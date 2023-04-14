@@ -81,7 +81,7 @@ func TestCounter(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			c, _ := root.GetCounter("age")
+			c := root.GetCounter("age")
 			c.Increase(1)
 			c.Increase(2)
 			c.Increase(-2)
@@ -91,7 +91,7 @@ func TestCounter(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			c, _ := root.GetCounter("width")
+			c := root.GetCounter("width")
 			c.Increase(math.MaxInt32 + 100)
 			c.Increase(10)
 			return nil
@@ -99,12 +99,12 @@ func TestCounter(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			c1, _ := root.GetCounter("age")
+			c1 := root.GetCounter("age")
 			c1.Increase(20)
-			c2, _ := root.GetCounter("width")
+			c2 := root.GetCounter("width")
 			c2.Increase(100)
 			c2.Increase(200)
-			c3, _ := root.GetCounter("height")
+			c3 := root.GetCounter("height")
 			c3.Increase(50)
 			return nil
 		})

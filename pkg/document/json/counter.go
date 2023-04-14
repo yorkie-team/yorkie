@@ -82,7 +82,7 @@ func (p *Counter) Increase(v interface{}) (*Counter, error) {
 			}
 		}
 	default:
-		return nil, fmt.Errorf("json counter increase: unsupported type")
+		panic("json counter increase: unsupported type")
 	}
 
 	if err := p.Counter.Increase(primitive); err != nil {

@@ -269,74 +269,74 @@ func (p *Object) Delete(k string) (crdt.Element, error) {
 }
 
 // GetObject returns Object of the given key.
-func (p *Object) GetObject(k string) (*Object, error) {
+func (p *Object) GetObject(k string) *Object {
 	elem := p.Object.Get(k)
 	if elem == nil {
-		return nil, nil
+		return nil
 	}
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Object:
-		return NewObject(p.context, elem), nil
+		return NewObject(p.context, elem)
 	case *Object:
-		return elem, nil
+		return elem
 	default:
-		return nil, fmt.Errorf("json object get object: unsupported type")
+		panic(fmt.Sprintf("json object get object: unsupported type: %T", elem))
 	}
 }
 
 // GetArray returns Array of the given key.
-func (p *Object) GetArray(k string) (*Array, error) {
+func (p *Object) GetArray(k string) *Array {
 	elem := p.Object.Get(k)
 	if elem == nil {
-		return nil, nil
+		return nil
 	}
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Array:
-		return NewArray(p.context, elem), nil
+		return NewArray(p.context, elem)
 	case *Array:
-		return elem, nil
+		return elem
 	default:
-		return nil, fmt.Errorf("json object get array: unsupported type")
+		panic(fmt.Sprintf("json object get array: unsupported type: %T", elem))
 	}
 }
 
 // GetText returns Text of the given key.
-func (p *Object) GetText(k string) (*Text, error) {
+func (p *Object) GetText(k string) *Text {
 	elem := p.Object.Get(k)
 	if elem == nil {
-		return nil, nil
+		return nil
 	}
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Text:
-		return NewText(p.context, elem), nil
+		return NewText(p.context, elem)
 	case *Text:
-		return elem, nil
+		return elem
 	default:
-		return nil, fmt.Errorf("json object get text: unsupported type")
+		panic(fmt.Sprintf("json object get text: unsupported type: %T", elem))
 	}
 }
 
 // GetCounter returns Counter of the given key.
-func (p *Object) GetCounter(k string) (*Counter, error) {
+func (p *Object) GetCounter(k string) *Counter {
 	elem := p.Object.Get(k)
 	if elem == nil {
-		return nil, nil
+		return nil
 	}
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Counter:
 		newCounter, err := NewCounter(p.context, elem)
 		if err != nil {
-			return nil, fmt.Errorf("json object get counter: %w", err)
+			return nil
 		}
-		return newCounter, nil
+		return newCounter
 	case *Counter:
-		return elem, nil
+		return elem
 	default:
-		return nil, fmt.Errorf("json object get counter: unsupported type")
+		panic(fmt.Sprintf("json object get counter: unsupported type: %T", elem))
 	}
 }
 
@@ -349,11 +349,7 @@ func (p *Object) setInternal(
 	if err != nil {
 		return nil, fmt.Errorf("json object set internal: %w", err)
 	}
-	value, err := toOriginal(elem)
-	if err != nil {
-		return nil, fmt.Errorf("json object set internal: %w", err)
-	}
-
+	value := toOriginal(elem)
 	copiedValue, err := value.DeepCopy()
 	if err != nil {
 		return nil, fmt.Errorf("json object set internal: %w", err)

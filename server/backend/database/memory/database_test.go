@@ -257,7 +257,7 @@ func TestDB(t *testing.T) {
 		}))
 		for idx := 0; idx < 10; idx++ {
 			assert.NoError(t, doc.Update(func(root *json.Object) error {
-				array, _ := root.GetArray("array")
+				array := root.GetArray("array")
 				_, _ = array.AddInteger(idx)
 				return nil
 			}))

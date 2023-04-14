@@ -272,11 +272,7 @@ func (p *Array) insertAfterInternal(
 	if err != nil {
 		return nil, fmt.Errorf("json array insert after internal: %w", err)
 	}
-	value, err := toOriginal(elem)
-	if err != nil {
-		return nil, fmt.Errorf("json array insert after internal: %w", err)
-	}
-
+	value := toOriginal(elem)
 	copiedValue, err := value.DeepCopy()
 	if err != nil {
 		return nil, fmt.Errorf("json array insert after internal: %w", err)

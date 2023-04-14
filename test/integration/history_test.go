@@ -50,14 +50,14 @@ func TestHistory(t *testing.T) {
 		assert.Equal(t, `{"todos":[]}`, d1.Marshal())
 
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("todos")
+			arr := root.GetArray("todos")
 			arr.AddString("buy coffee")
 			return nil
 		}, "buy coffee"))
 		assert.Equal(t, `{"todos":["buy coffee"]}`, d1.Marshal())
 
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("todos")
+			arr := root.GetArray("todos")
 			arr.AddString("buy bread")
 			return nil
 		}, "buy bread"))

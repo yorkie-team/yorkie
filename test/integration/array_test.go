@@ -77,14 +77,14 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			arr.Delete(1)
 			return nil
 		}, "delete v2 by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			arr.AddString("v3")
 			return nil
 		}, "add v3 by c2")
@@ -113,16 +113,16 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			arr1, _ := root.GetArray("k1")
+			arr1 := root.GetArray("k1")
 			arr1.AddString("v2", "v3")
-			arr2, _ := root.GetArray("k1")
+			arr2 := root.GetArray("k1")
 			arr2.Delete(1)
 			return nil
 		}, "add v2, v3 and delete v2 by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			arr.AddString("v4", "v5")
 			return nil
 		}, "add v4, v5 by c2")
@@ -151,14 +151,14 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			arr.Delete(1)
 			return nil
 		}, "delete v2")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			arr.Delete(1)
 			return nil
 		}, "delete v2")
@@ -166,7 +166,7 @@ func TestArray(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object) error {
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			assert.Equal(t, 2, arr.Len())
 			return nil
 		}, "check array length")
@@ -195,11 +195,11 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			prevArr, _ := root.GetArray("k1")
+			prevArr := root.GetArray("k1")
 			prev, _ := prevArr.Get(0)
-			elemArr, _ := root.GetArray("k1")
+			elemArr := root.GetArray("k1")
 			elem, _ := elemArr.Get(2)
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			arr.MoveBefore(prev.CreatedAt(), elem.CreatedAt())
 			assert.Equal(t, `{"k1":[2,0,1]}`, root.Marshal())
 			return nil
@@ -207,11 +207,11 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			prevArr, _ := root.GetArray("k1")
+			prevArr := root.GetArray("k1")
 			prev, _ := prevArr.Get(1)
-			elemArr, _ := root.GetArray("k1")
+			elemArr := root.GetArray("k1")
 			elem, _ := elemArr.Get(2)
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			arr.MoveBefore(prev.CreatedAt(), elem.CreatedAt())
 			assert.Equal(t, `{"k1":[0,2,1]}`, root.Marshal())
 			return nil
@@ -236,22 +236,22 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
-			nextArr, _ := root.GetArray("k1")
+			nextArr := root.GetArray("k1")
 			next, _ := nextArr.Get(0)
-			elemArr, _ := root.GetArray("k1")
+			elemArr := root.GetArray("k1")
 			elem, _ := elemArr.Get(2)
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			arr.MoveBefore(next.CreatedAt(), elem.CreatedAt())
 			assert.Equal(t, `{"k1":[2,0,1]}`, root.Marshal())
 			return nil
 		}))
 
 		assert.NoError(t, d2.Update(func(root *json.Object) error {
-			nextArr, _ := root.GetArray("k1")
+			nextArr := root.GetArray("k1")
 			next, _ := nextArr.Get(0)
-			elemArr, _ := root.GetArray("k1")
+			elemArr := root.GetArray("k1")
 			elem, _ := elemArr.Get(1)
-			arr, _ := root.GetArray("k1")
+			arr := root.GetArray("k1")
 			arr.MoveBefore(next.CreatedAt(), elem.CreatedAt())
 			assert.Equal(t, `{"k1":[1,0,2]}`, root.Marshal())
 			return nil
