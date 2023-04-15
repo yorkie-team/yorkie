@@ -135,3 +135,20 @@ kube-prometheus-stack:
             requests:
               storage: 1Gi
         selector: {}
+
+# Configuration for loki monitoring stack
+loki-stack:
+  loki:
+    # Use 
+    fullnameOverride: yorkie-monitoring-loki
+
+    persistence:
+      enabled: true
+      size: 1Gi
+
+  promtail:
+    fullnameOverride: yorkie-monitoring-promtail
+    
+    config:
+      clients:
+        - url: http://yorkie-monitoring-loki:3100/loki/api/v1/push

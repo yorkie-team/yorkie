@@ -22,9 +22,13 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 # Install yorkie monitoring helm chart
 helm install [RELEASE_NAME] yorkie-team/yorkie-monitoring -n monitoring --create-namespace
 
-# import yorkie grafana dashboard and go process dashboard
-curl https://grafana.com/grafana/dashboards/18451
-curl https://grafana.com/grafana/dashboards/18452
+# Configure Loki datasource in Grafana
+# Set Loki datasource url to http://yorkie-monitoring-loki:3100
+curl https://{YOUR_API_DOMAIN_NAME}/grafana/datasources
+
+# Import yorkie grafana dashboard and Loki grafana dashboard
+curl https://grafana.com/grafana/dashboards/18451-yorkie-dashboard/
+curl https://grafana.com/grafana/dashboards/13186-loki-dashboard/
 ```
 
 _See [configuration](#configuration) below for custom installation_
