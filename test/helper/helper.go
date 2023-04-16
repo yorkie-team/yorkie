@@ -45,8 +45,10 @@ var testStartedAt int64
 
 // Below are the values of the Yorkie config used in the test.
 var (
-	RPCPort            = 21101
-	RPCMaxRequestBytes = uint64(4 * 1024 * 1024)
+	RPCPort                  = 21101
+	RPCMaxRequestBytes       = uint64(4 * 1024 * 1024)
+	RPCMaxConnectionAge      = 4 * gotime.Second
+	RPCMaxConnectionAgeGrace = 1 * gotime.Second
 
 	ProfilingPort = 21102
 
@@ -54,7 +56,7 @@ var (
 
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword
-	HousekeepingInterval                  = 1 * gotime.Second
+	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 
 	ClientDeactivateThreshold  = "10s"
@@ -113,8 +115,10 @@ func TestConfig() *server.Config {
 	portOffset += 100
 	return &server.Config{
 		RPC: &rpc.Config{
-			Port:            RPCPort + portOffset,
-			MaxRequestBytes: RPCMaxRequestBytes,
+			Port:                  RPCPort + portOffset,
+			MaxRequestBytes:       RPCMaxRequestBytes,
+			MaxConnectionAge:      RPCMaxConnectionAge.String(),
+			MaxConnectionAgeGrace: RPCMaxConnectionAgeGrace.String(),
 		},
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,

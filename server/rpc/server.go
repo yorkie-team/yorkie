@@ -23,12 +23,14 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"time"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -73,9 +75,23 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		opts = append(opts, grpc.Creds(creds))
 	}
 
+	maxConnectionAge, err := time.ParseDuration(conf.MaxConnectionAge)
+	if err != nil {
+		return nil, fmt.Errorf("parse max connection age: %w", err)
+	}
+
+	maxConnectionAgeGrace, err := time.ParseDuration(conf.MaxConnectionAgeGrace)
+	if err != nil {
+		return nil, fmt.Errorf("parse max connection age grace: %w", err)
+	}
+
 	opts = append(opts, grpc.MaxRecvMsgSize(int(conf.MaxRequestBytes)))
 	opts = append(opts, grpc.MaxSendMsgSize(math.MaxInt32))
 	opts = append(opts, grpc.MaxConcurrentStreams(math.MaxUint32))
+	opts = append(opts, grpc.KeepaliveParams(keepalive.ServerParameters{
+		MaxConnectionAge:      maxConnectionAge,
+		MaxConnectionAgeGrace: maxConnectionAgeGrace,
+	}))
 
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
 

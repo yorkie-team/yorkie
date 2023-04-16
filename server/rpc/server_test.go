@@ -23,6 +23,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -90,8 +91,10 @@ func TestMain(m *testing.M) {
 	}
 
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
-		Port:            helper.RPCPort,
-		MaxRequestBytes: helper.RPCMaxRequestBytes,
+		Port:                  helper.RPCPort,
+		MaxRequestBytes:       helper.RPCMaxRequestBytes,
+		MaxConnectionAge:      helper.RPCMaxConnectionAge.String(),
+		MaxConnectionAgeGrace: helper.RPCMaxConnectionAgeGrace.String(),
 	}, be)
 	if err != nil {
 		log.Fatal(err)
@@ -622,6 +625,50 @@ func TestRPCServerBackend(t *testing.T) {
 		)
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 	})
+
+	t.Run("watch document test", func(t *testing.T) {
+		activateResp, err := testClient.ActivateClient(
+			context.Background(),
+			&api.ActivateClientRequest{ClientKey: t.Name()},
+		)
+		assert.NoError(t, err)
+
+		packWithNoChanges := &api.ChangePack{
+			DocumentKey: helper.TestDocKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+		}
+
+		resPack, err := testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		// watch document
+		watchResp, err := testClient.WatchDocument(
+			context.Background(),
+			&api.WatchDocumentRequest{
+				Client:     &api.Client{Id: activateResp.ClientId, Presence: &api.Presence{}},
+				DocumentId: resPack.DocumentId,
+			},
+		)
+		assert.NoError(t, err)
+
+		// check if stream is open
+		_, err = watchResp.Recv()
+		assert.NoError(t, err)
+
+		// wait for MaxConnectionAge + MaxConnectionAgeGrace
+		time.Sleep(helper.RPCMaxConnectionAge + helper.RPCMaxConnectionAgeGrace)
+
+		// check if stream has closed by server (EOF)
+		_, err = watchResp.Recv()
+		assert.Equal(t, codes.Unavailable, status.Code(err))
+		assert.Contains(t, err.Error(), "EOF")
+	})
 }
 
 func TestConfig_Validate(t *testing.T) {
@@ -633,9 +680,23 @@ func TestConfig_Validate(t *testing.T) {
 		{config: &rpc.Config{Port: 11101, CertFile: "noSuchCertFile"}, expected: rpc.ErrInvalidCertFile},
 		{config: &rpc.Config{Port: 11101, KeyFile: "noSuchKeyFile"}, expected: rpc.ErrInvalidKeyFile},
 		// not to use tls
-		{config: &rpc.Config{Port: 11101, CertFile: "", KeyFile: ""}, expected: nil},
+		{config: &rpc.Config{
+			Port:                  11101,
+			CertFile:              "",
+			KeyFile:               "",
+			MaxConnectionAge:      "50s",
+			MaxConnectionAgeGrace: "10s",
+		},
+			expected: nil},
 		// pass any file existing
-		{config: &rpc.Config{Port: 11101, CertFile: "server_test.go", KeyFile: "server_test.go"}, expected: nil},
+		{config: &rpc.Config{
+			Port:                  11101,
+			CertFile:              "server_test.go",
+			KeyFile:               "server_test.go",
+			MaxConnectionAge:      "50s",
+			MaxConnectionAgeGrace: "10s",
+		},
+			expected: nil},
 	}
 	for _, scenario := range scenarios {
 		assert.ErrorIs(t, scenario.config.Validate(), scenario.expected, "provided config: %#v", scenario.config)
