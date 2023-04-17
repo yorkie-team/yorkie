@@ -21,3 +21,6 @@
 .idea/
 *.tmproj
 .vscode/
+
+# Istio Operator
+istio-operator.yaml

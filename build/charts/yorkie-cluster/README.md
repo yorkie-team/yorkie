@@ -5,7 +5,16 @@ Installs the yorkie-cluster, which provides cluster mode for Yorkie server to ha
 ## Prerequisites
 
 - Kubernetes 1.24+
+- Istioctl 1.17+
 - Helm 3+
+
+## Install Istio with Istio Operator
+
+Before installing the chart, you need to install Istio with [Istio Operator](https://istio.io/latest/docs/setup/install/operator/) using [istioctl](https://istio.io/latest/docs/setup/getting-started/#download).
+
+```bash
+istioctl install -f <(curl -s https://raw.githubusercontent.com/yorkie-team/yorkie/main/build/charts/yorkie-cluster/istio-operator.yaml)
+```
 
 ## Get Helm Repository Info
 
@@ -21,9 +30,6 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 ```bash
 # Install yorkie cluster helm chart
 helm install [RELEASE_NAME] yorkie-team/yorkie-cluster -n istio-system --create-namespace
-
-# Redeploy istio ingress gateway with auto injecton
-kubectl rollout restart deployment istio-ingressgateway -n istio-system
 ```
 
 _See [configuration](#configuration) below for custom installation_
@@ -40,33 +46,21 @@ For other environments like AWS, follow the steps below:
 If you are using AWS EKS and want to expose Yorkie Cluster using AWS ALB, follow the steps below:
 
 ```bash
-# Change istio-ingressgateway service type to NodePort, externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
+# Enable ALB, and change domain name and certificate arn for ALB
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-cluster -n istio-system \
     --set externalGateway.ingressClassName=alb \
-    --set externalGateway.apiHost={YOUR_DOMAIN_NAME} \
+    --set externalGateway.apiHost={YOUR_API_DOMAIN_NAME} \
     --set externalGateway.adminHost={YOUR_ADMIN_DOMAIN_NAME} \
     --set externalGateway.alb.enabled=true \
     --set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
 
 # Test Yorkie API
-const client = new yorkie.Client('{YOUR_DOMAIN_NAME}');
+const client = new yorkie.Client('{YOUR_API_DOMAIN_NAME}');
 ```
 
 Or, set configuration values in `values.yaml` file before installing the chart.
 
 _See [configuration](#configuration) below._
-
-## Dependencies
-
-By default this chart installs additional, dependent charts:
-
-- [base](https://github.com/istio/istio/tree/master/manifests/charts/base)
-- [istiod](https://github.com/istio/istio/tree/master/manifests/charts/istio-control/istio-discovery)
-- [gateway](https://github.com/istio/istio/tree/master/manifests/charts/gateway)
-
-To disable dependencies during installation, see [multiple releases](#multiple-releases) below.
-
-_See [`helm dependency`](https://helm.sh/docs/helm/helm_dependency/) for command documentation._
 
 ## Uninstall Helm Chart
 
@@ -78,25 +72,13 @@ This removes all the Kubernetes components associated with the chart and deletes
 
 _See [`helm uninstall`](https://helm.sh/docs/helm/helm_uninstall/) for command documentation._
 
-CRDs created by this chart are not removed by default and should be manually cleaned up:
+Also, you need to uninstall istio with [istioctl](https://istio.io/latest/docs/setup/getting-started/#download).
 
 ```bash
-kubectl delete crd authorizationpolicies.security.istio.io
-kubectl delete crd destinationrules.networking.istio.io
-kubectl delete crd envoyfilters.networking.istio.io
-kubectl delete crd gateways.networking.istio.io
-kubectl delete crd istiooperators.install.istio.io
-kubectl delete crd peerauthentications.security.istio.io
-kubectl delete crd proxyconfigs.networking.istio.io
-kubectl delete crd requestauthentications.security.istio.io
-kubectl delete crd serviceentries.networking.istio.io
-kubectl delete crd sidecars.networking.istio.io
-kubectl delete crd telemetries.telemetry.istio.io
-kubectl delete crd virtualservices.networking.istio.io
-kubectl delete crd wasmplugins.extensions.istio.io
-kubectl delete crd workloadentries.networking.istio.io
-kubectl delete crd workloadgroups.networking.istio.io
+istioctl uninstall --purge
 ```
+
+This will remove all the istio components including CRDs.
 
 ## Upgrading Chart
 

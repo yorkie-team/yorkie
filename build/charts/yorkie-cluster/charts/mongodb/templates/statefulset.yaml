@@ -39,7 +39,7 @@ spec:
         name: {{ .Values.name }}-storage
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: standard
+        storageClassName: {{ .Values.storageClassName }}
         resources:
           requests:
             storage: {{ .Values.storageSize }}

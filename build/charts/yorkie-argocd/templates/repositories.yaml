@@ -1,13 +1,13 @@
-{{ if .Values.argocd.enabled }}
+{{ if .Values.argocd.source.gitOpsRepoIsPrivate }}
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ .Values.yorkie.name }}-repo
+  name: gitops-repo
   namespace: argocd
   labels:
     argocd.argoproj.io/secret-type: repository
 stringData:
-  url: {{ .Values.argocd.source.repoURL }}
-  username: {{ .Values.argocd.source.username }}
-  password: {{ .Values.argocd.source.password }}
+  url: {{ .Values.argocd.source.gitOpsRepoURL }}
+  username: {{ .Values.argocd.source.gitOpsRepoUsername }}
+  password: {{ .Values.argocd.source.gitOpsRepoPassword }}
 {{ end }}
