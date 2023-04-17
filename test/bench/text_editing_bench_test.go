@@ -51,7 +51,7 @@ func BenchmarkTextEditing(b *testing.B) {
 		mode := int(edit[1].(float64))
 
 		err = doc.Update(func(root *json.Object) error {
-			text, _ := root.GetText("text")
+			text := root.GetText("text")
 			if mode == 0 {
 				value := edit[2].(string)
 				text.Edit(cursor, cursor, value)
@@ -66,7 +66,7 @@ func BenchmarkTextEditing(b *testing.B) {
 	b.StopTimer()
 
 	docRoot, _ := doc.Root()
-	txt, _ := docRoot.GetText("text")
+	txt := docRoot.GetText("text")
 	assert.Equal(b, editingTrace.FinalText, txt.String())
 }
 

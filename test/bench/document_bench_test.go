@@ -146,39 +146,39 @@ func BenchmarkDocument(b *testing.B) {
 				arr.AddInteger(1)
 				arr.AddInteger(2)
 				arr.AddInteger(3)
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				assert.Equal(b, 3, arr.Len())
 				assert.Equal(b, `{"k1":[1,2,3]}`, root.Marshal())
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[3,1]3", arr.StructureAsString())
 
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				arr.Delete(1)
 				assert.Equal(b, `{"k1":[1,3]}`, root.Marshal())
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				assert.Equal(b, 2, arr.Len())
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				assert.Equal(b, "[0,0]0[1,1]1[2,0]2[1,1]3", arr.StructureAsString())
 
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				arr.InsertIntegerAfter(0, 2)
 				assert.Equal(b, `{"k1":[1,2,3]}`, root.Marshal())
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				assert.Equal(b, 3, arr.Len())
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				assert.Equal(b, "[0,0]0[1,1]1[3,1]2[1,0]2[1,1]3", arr.StructureAsString())
 
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				arr.InsertIntegerAfter(2, 4)
 				assert.Equal(b, `{"k1":[1,2,3,4]}`, root.Marshal())
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				assert.Equal(b, 4, arr.Len())
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", arr.StructureAsString())
 
-				arr, _ = root.GetArray("k1")
+				arr = root.GetArray("k1")
 				for i := 0; i < arr.Len(); i++ {
-					rgaTreeListNodeArr, _ := root.GetArray("k1")
+					rgaTreeListNodeArr := root.GetArray("k1")
 					rgaTreeListNode, _ := rgaTreeListNodeArr.Get(i)
 					assert.Equal(b, fmt.Sprintf("%d", i+1), rgaTreeListNode.Marshal())
 				}
@@ -208,7 +208,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.Equal(b, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, doc.Marshal())
 
 			err = doc.Update(func(root *json.Object) error {
-				text, _ := root.GetText("k1")
+				text := root.GetText("k1")
 				assert.Equal(b,
 					`[0:0:00:0 {} ""][1:2:00:0 {} "A"][1:3:00:0 {} "12"]{1:2:00:1 {} "BC"}[1:2:00:3 {} "D"]`,
 					text.StructureAsString(),
@@ -272,7 +272,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.Equal(b, `{"k1":[{"val":"Hello world"}]}`, doc.Marshal())
 
 			err = doc.Update(func(root *json.Object) error {
-				text, _ := root.GetText("k1")
+				text := root.GetText("k1")
 				_, _ = text.Style(0, 5, map[string]string{"b": "1"})
 				assert.Equal(b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
@@ -284,7 +284,7 @@ func BenchmarkDocument(b *testing.B) {
 			assert.Equal(b, `{"k1":[{"attrs":{"b":"1"},"val":"Hello"},{"val":" world"}]}`, doc.Marshal())
 
 			err = doc.Update(func(root *json.Object) error {
-				text, _ := root.GetText("k1")
+				text := root.GetText("k1")
 				_, _ = text.Style(0, 5, map[string]string{"b": "1"})
 				assert.Equal(
 					b,
@@ -308,7 +308,7 @@ func BenchmarkDocument(b *testing.B) {
 			)
 
 			err = doc.Update(func(root *json.Object) error {
-				text, _ := root.GetText("k1")
+				text := root.GetText("k1")
 				text.Edit(5, 11, " Yorkie", nil)
 				assert.Equal(
 					b,
@@ -326,7 +326,7 @@ func BenchmarkDocument(b *testing.B) {
 			)
 
 			err = doc.Update(func(root *json.Object) error {
-				text, _ := root.GetText("k1")
+				text := root.GetText("k1")
 				text.Edit(5, 5, "\n", map[string]string{"list": "true"})
 				assert.Equal(
 					b,
@@ -357,7 +357,7 @@ func BenchmarkDocument(b *testing.B) {
 			err := doc.Update(func(root *json.Object) error {
 				root.SetNewCounter("age", crdt.IntegerCnt, 5)
 
-				age, _ := root.GetCounter("age")
+				age := root.GetCounter("age")
 				age.Increase(long)
 				age.Increase(double)
 				age.Increase(float)
@@ -372,7 +372,7 @@ func BenchmarkDocument(b *testing.B) {
 			// long type test
 			err = doc.Update(func(root *json.Object) error {
 				root.SetNewCounter("price", crdt.LongCnt, 9000000000000000000)
-				price, _ := root.GetCounter("price")
+				price := root.GetCounter("price")
 				price.Increase(long)
 				price.Increase(double)
 				price.Increase(float)
@@ -386,11 +386,11 @@ func BenchmarkDocument(b *testing.B) {
 
 			// negative operator test
 			err = doc.Update(func(root *json.Object) error {
-				age, _ := root.GetCounter("age")
+				age := root.GetCounter("age")
 				age.Increase(-5)
 				age.Increase(-3.14)
 
-				price, _ := root.GetCounter("price")
+				price := root.GetCounter("price")
 				price.Increase(-100)
 				price.Increase(-20.5)
 
@@ -403,7 +403,7 @@ func BenchmarkDocument(b *testing.B) {
 			// when 'Remove panic from server code (#50)' is completed.
 			err = doc.Update(func(root *json.Object) error {
 				var notAllowType uint64 = 18300000000000000000
-				age, _ := root.GetCounter("age")
+				age := root.GetCounter("age")
 				_, err := age.Increase(notAllowType)
 				assert.Error(b, err, "unsupported type")
 
@@ -510,7 +510,7 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 
 		b.StartTimer()
 		err = doc.Update(func(root *json.Object) error {
-			text, _ := root.GetText("k1")
+			text := root.GetText("k1")
 			text.Edit(0, cnt, "")
 			return nil
 		}, "Delete all at a time")
@@ -536,7 +536,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 		assert.NoError(b, err)
 
 		err = doc.Update(func(root *json.Object) error {
-			text, _ := root.GetText("k1")
+			text := root.GetText("k1")
 			for i := 0; i < cnt; i++ {
 				text.Edit(i, i+1, "b")
 			}
@@ -566,7 +566,7 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 		assert.NoError(b, err)
 
 		err = doc.Update(func(root *json.Object) error {
-			text, _ := root.GetText("k2")
+			text := root.GetText("k2")
 			for i := 0; i < cnt; i++ {
 				if i != cnt {
 					text.Edit(i, i+1, "b")
@@ -603,7 +603,7 @@ func benchmarkArrayGC(cnt int, b *testing.B) {
 		err := doc.Update(func(root *json.Object) error {
 			root.SetNewArray("1")
 			for i := 0; i < cnt; i++ {
-				arr, _ := root.GetArray("1")
+				arr := root.GetArray("1")
 				arr.AddInteger(i)
 			}
 

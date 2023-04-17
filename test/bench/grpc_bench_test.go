@@ -90,7 +90,7 @@ func benchmarkUpdateAndSync(
 ) {
 	for i := 0; i < cnt; i++ {
 		err := d.Update(func(root *json.Object) error {
-			text, _ := root.GetText(key)
+			text := root.GetText(key)
 			text.Edit(0, 0, "c")
 			return nil
 		})
