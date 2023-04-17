@@ -36,8 +36,8 @@ import (
 const (
 	DefaultRPCPort                  = 11101
 	DefaultRPCMaxRequestsBytes      = 4 * 1024 * 1024 // 4MiB
-	DefaultRPCMaxConnectionAge      = 50 * time.Second
-	DefaultRPCMaxConnectionAgeGrace = 10 * time.Second
+	DefaultRPCMaxConnectionAge      = 0 * time.Second
+	DefaultRPCMaxConnectionAgeGrace = 0 * time.Second
 
 	DefaultProfilingPort = 11102
 
