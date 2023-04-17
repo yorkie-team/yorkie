@@ -76,9 +76,7 @@ _See [`helm uninstall`](https://helm.sh/docs/helm/helm_uninstall/) for command d
 CRDs created by this chart are not removed by default and should be manually cleaned up:
 
 ```bash
-kubectl delete crd applications.argoproj.io
-kubectl delete crd applicationsets.argoproj.io
-kubectl delete crd appprojects.argoproj.io
+kubectl get crd -oname | grep --color=never 'argoproj.io' | xargs kubectl delete
 ```
 
 ## Upgrading Chart

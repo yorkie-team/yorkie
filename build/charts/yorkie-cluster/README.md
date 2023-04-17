@@ -5,7 +5,7 @@ Installs the yorkie-cluster, which provides cluster mode for Yorkie server to ha
 ## Prerequisites
 
 - Kubernetes 1.24+
-- Istioctl 1.17.1+
+- Istioctl 1.17+
 - Helm 3+
 
 ## Install Istio with Istio Operator
