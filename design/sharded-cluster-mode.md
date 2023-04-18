@@ -1,9 +1,9 @@
 ---
-title: shard-cluster-mode
+title: sharded-cluster-mode
 target-version: 0.3.4
 ---
 
-# Shard Cluster Mode
+# Sharded Cluster Mode
 
 ## Summary
 
@@ -15,31 +15,31 @@ Broadcast cluster mode is based on broadcasting, pub/sub, and distributed lock b
 
 The root cause of these limitations is that workloads are distributed throughout the servers in the cluster, additional synchronization is needed.
 
-Shard(Lookup-based) cluster mode’s main idea is to assign each server to process same workloads to avoid multiple servers accessing to same data, and put lookup system to route same workloads to same servers.
+Sharded(Lookup-based) cluster mode’s main idea is to assign each server to process same workloads to avoid multiple servers accessing to same data, and put lookup system to route same workloads to same servers.
 
-Shard cluster mode can reduce/remove additional overheads needed for workload synchronization in previous broadcast cluster mode, and become capable of handling large amount of workloads with ensuring high availability, reliability, and scalability.
+Sharded cluster mode can reduce/remove additional overheads needed for workload synchronization in previous broadcast cluster mode, and become capable of handling large amount of workloads with ensuring high availability, reliability, and scalability.
 
 ### Goals
 
-Provide shard cluster mode on server on Kubernetes based production environment.
+Provide sharded cluster mode on server on Kubernetes based production environment.
 
 ### Non-Goals
 
-This document will only explain about core concepts and implementation of shard cluster mode. Addtional configuration on K8s/Istio environment will not be covered in this document.
+This document will only explain about core concepts and implementation of sharded cluster mode. Addtional configuration on K8s/Istio environment will not be covered in this document.
 
 ## Proposal Details
 
 ### How does it work?
 
-There are three aspects to be considered for designing shard cluster mode.
+There are three aspects to be considered for designing sharded cluster mode.
 
 **Workload Unit**
 
-Shard cluster mode uses `document` as workload unit to assign each server to process same workloads. This assigns and seperates `document`’s state and data to each server, which remove needs for share and sync states and data between server cluster.
+Sharded cluster mode uses `document` as workload unit to assign each server to process same workloads. This assigns and seperates `document`’s state and data to each server, which remove needs for share and sync states and data between server cluster.
 
 **Sharding Strategy**
 
-Shard cluster mode uses [Consistent Hashing](https://en.wikipedia.org/wiki/Consistent_hashing) for sharding strategy.
+Sharded cluster mode uses [Consistent Hashing](https://en.wikipedia.org/wiki/Consistent_hashing) for sharding strategy.
 
 Consistent hashing is a technique used to map a range of input values (such as request header) to a corresponding range of output values (such as server IDs).
 
@@ -61,7 +61,7 @@ Maglev ensures minimal disruption like Ring hash. But unlike Ring hash, Maglev a
 
 This is because Ring Hash always recalculates hash table whenever there are changes in upstream hosts, but Maglev only recaulcates preference list for changed host, and repopulate only the changes made in preference list to lookup table. This makes Maglev more efficient than Ring hash on rehashing calculation.
 
-Shard cluster mode in Yorkie supports both Ring hash and Maglev algorithm for hash-based sharding.
+Sharded cluster mode in Yorkie supports both Ring hash and Maglev algorithm for hash-based sharding.
 
 For more information about Maglev, follow: [Maglev: A Fast and Reliable Software Network Load Balancer](https://ai.google/research/pubs/pub44824)
 
@@ -75,11 +75,11 @@ In server side discovery, there is proxy server(load balancer) in front of servi
 
 **System Design & Architecture**
 
-Considering all these factors mentioned above, here is a architecture for shard cluster.
+Considering all these factors mentioned above, here is a architecture for sharded cluster.
 
-![Lookup Cluster Mode Architecture](media/shard-cluster-mode-architecture.jpg)
+![Lookup Cluster Mode Architecture](media/sharded-cluster-mode-architecture.jpg)
 
-There are only three components needed for implementing shard cluster.
+There are only three components needed for implementing sharded cluster.
 
 - `Yorkies`: Yorkies is router(proxy) responsible for two tasks.
   - Routing based on request: Yorkies receives requests from client and route to server based on computed request’s hash key and ring hash algorithm.
@@ -88,9 +88,9 @@ There are only three components needed for implementing shard cluster.
 
 These components are very similiar to mongoDB's sharding component, which `Yorkies` corresponds to `mongos(Router)`, `Yorkie Service Registry` with `config server(Registry)`, and `Yorkie Service(s)` with `mongod(Shard)`
 
-**Shard Cluster Mode Implementation (K8s & Istio)**
+**Sharded Cluster Mode Implementation (K8s & Istio)**
 
-Shard cluster mode can be easily implemented by using [Kubernetes](https://kubernetes.io/) and [Istio](https://istio.io/). Kubernetes is container orchestration system, and Istio is service mesh for Kubernetes which internally uses [envoy](https://github.com/envoyproxy/envoy) L7 proxy for traffic control.
+Sharded cluster mode can be easily implemented by using [Kubernetes](https://kubernetes.io/) and [Istio](https://istio.io/). Kubernetes is container orchestration system, and Istio is service mesh for Kubernetes which internally uses [envoy](https://github.com/envoyproxy/envoy) L7 proxy for traffic control.
 
 ![K8s Istio Implementation Internal Architecture](media/k8s-istio-implementation-internal-architecture.jpg)
 
