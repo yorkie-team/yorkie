@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.4] - 2023-04-18
+
+### Added
+* Add Helm Charts for Yorkie server cluster and monitoring/ArgoCD addons to support K8s cluster by @krapie in https://github.com/yorkie-team/yorkie/pull/507
+* Add a `push_only` flag to support sync mode in PushPull by @humdrum in https://github.com/yorkie-team/yorkie/pull/500
+
+### Changed
+* Replace the etcd-based cluster mode with a sharding-based cluster for improved performance and scalability by @hackerwins in https://github.com/yorkie-team/yorkie/pull/504
+* Set the default values for MaxConnectionAge and MaxConnectionAgeGrace to infinity by @krapie in https://github.com/yorkie-team/yorkie/pull/514
+
 ## [0.3.3] - 2023-03-24
 
 ### Added
