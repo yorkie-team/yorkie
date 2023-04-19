@@ -1,2 +1,3 @@
 pages-index-path: helm-charts/index.yaml
 make-release-latest: false
+skip-existing: true
