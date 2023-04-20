@@ -714,6 +714,34 @@ func (d *DB) FindDocInfoByID(
 	return docInfo.DeepCopy(), nil
 }
 
+// UpdateDocInfoRemovedAt updates the removedAt field of the given docInfo.
+func (d *DB) UpdateDocInfoRemovedAt(
+	ctx context.Context,
+	projectID types.ID,
+	id types.ID,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblDocuments, "id", id.String())
+	if err != nil {
+		return fmt.Errorf("find document by id: %w", err)
+	}
+
+	if raw == nil {
+		return fmt.Errorf("finding doc info by ID(%s): %w", id, database.ErrDocumentNotFound)
+	}
+
+	docInfo := raw.(*database.DocInfo)
+	if docInfo.ProjectID != projectID {
+		return fmt.Errorf("finding doc info by ID(%s): %w", id, database.ErrDocumentNotFound)
+	}
+
+	docInfo.RemovedAt = gotime.Now()
+
+	return nil
+}
+
 // CreateChangeInfos stores the given changes and doc info. If the
 // removeDoc condition is true, mark IsRemoved to true in doc info.
 func (d *DB) CreateChangeInfos(

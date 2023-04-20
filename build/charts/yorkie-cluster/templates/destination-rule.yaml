@@ -26,4 +26,13 @@ spec:
           number: {{ .Values.yorkie.ports.adminPort }}
         # load balance yorkie admin traffic by simply send traffic to least requested server
         loadBalancer:
-          simple: LEAST_REQUEST
+          consistentHash:
+            {{ if .Values.ingresateway.consistentHash.maglev.enabled }}
+            maglev:
+              tableSize: {{ .Values.ingressGateway.consistentHash.maglev.tableSize }}
+            {{ end }}
+            {{ if .Values.ingressGateway.consistentHash.ringHash.enabled }}
+            ringHash:
+              minimumRingSize: {{ .Values.ingressGateway.consistentHash.ringHash.minimumRingSize }}
+            {{ end }}
+            httpHeaderName: {{ .Values.ingressGateway.consistentHash.hashParameter }}

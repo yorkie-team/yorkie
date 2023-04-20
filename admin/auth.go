@@ -28,13 +28,15 @@ import (
 
 // AuthInterceptor is an interceptor for authentication.
 type AuthInterceptor struct {
-	token string
+	apiKey string
+	token  string
 }
 
 // NewAuthInterceptor creates a new instance of AuthInterceptor.
-func NewAuthInterceptor(token string) *AuthInterceptor {
+func NewAuthInterceptor(apiKey, token string) *AuthInterceptor {
 	return &AuthInterceptor{
-		token: token,
+		apiKey: apiKey,
+		token:  token,
 	}
 }
 

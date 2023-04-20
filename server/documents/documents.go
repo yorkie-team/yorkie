@@ -210,3 +210,13 @@ func FindDocInfoByKeyAndOwner(
 		createDocIfNotExist,
 	)
 }
+
+// UpdateDocInfoRemovedAt updates the removedAt field of the given docInfo.
+func UpdateDocInfoRemovedAt(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docID types.ID,
+) error {
+	return be.DB.UpdateDocInfoRemovedAt(ctx, project.ID, docID)
+}

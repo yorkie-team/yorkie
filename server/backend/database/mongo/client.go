@@ -813,6 +813,47 @@ func (c *Client) FindDocInfoByID(
 	return &docInfo, nil
 }
 
+// UpdateDocInfoRemovedAt updates the removedAt field of the given docInfo.
+func (c *Client) UpdateDocInfoRemovedAt(
+	ctx context.Context,
+	projectID types.ID,
+	id types.ID,
+) error {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return err
+	}
+
+	encodedDocID, err := encodeID(id)
+	if err != nil {
+		return err
+	}
+
+	result := c.collection(colDocuments).FindOneAndUpdate(ctx, bson.M{
+		"_id":        encodedDocID,
+		"project_id": encodedProjectID,
+	}, bson.M{
+		"$set": bson.M{
+			"removed_at": gotime.Now(),
+		},
+	})
+	if result.Err() == mongo.ErrNoDocuments {
+		logging.From(ctx).Error(result.Err())
+		return fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
+	}
+	if result.Err() != nil {
+		logging.From(ctx).Error(result.Err())
+		return fmt.Errorf("find document: %w", result.Err())
+	}
+
+	docInfo := database.DocInfo{}
+	if err := result.Decode(&docInfo); err != nil {
+		return fmt.Errorf("decode document: %w", err)
+	}
+
+	return nil
+}
+
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
@@ -1154,6 +1195,9 @@ func (c *Client) FindDocInfosByPaging(
 	filter := bson.M{
 		"project_id": bson.M{
 			"$eq": encodedProjectID,
+		},
+		"removed_at": bson.M{
+			"$exists": false,
 		},
 	}
 	if paging.Offset != "" {

@@ -36,6 +36,7 @@ service AdminService {
 
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
   rpc GetDocument (GetDocumentRequest) returns (GetDocumentResponse) {}
+  rpc RemoveDocumentByDocKey (RemoveDocumentByDocKeyRequest) returns (RemoveDocumentByDocKeyResponse) {}
   rpc GetSnapshotMeta (GetSnapshotMetaRequest) returns (GetSnapshotMetaResponse) {}
   rpc SearchDocuments (SearchDocumentsRequest) returns (SearchDocumentsResponse) {}
 
@@ -109,6 +110,15 @@ message GetDocumentRequest {
 
 message GetDocumentResponse {
   DocumentSummary document = 1;
+}
+
+message RemoveDocumentByDocKeyRequest {
+  string project_name = 1;
+  string document_key = 2;
+}
+
+message RemoveDocumentByDocKeyResponse {
+  bool success = 1;
 }
 
 message GetSnapshotMetaRequest {

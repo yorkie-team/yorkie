@@ -326,6 +326,45 @@ func (s *Server) GetDocument(
 	}, nil
 }
 
+// RemoveDocumentByDocKey removes the given document key.
+func (s *Server) RemoveDocumentByDocKey(
+	ctx context.Context,
+	req *api.RemoveDocumentByDocKeyRequest,
+) (*api.RemoveDocumentByDocKeyResponse, error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.DocumentKey))
+	if err != nil {
+		return nil, err
+	}
+
+	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, docInfo.Key))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
+
+	if err := documents.UpdateDocInfoRemovedAt(ctx, s.backend, project, docInfo.ID); err != nil {
+		return nil, err
+	}
+
+	return &api.RemoveDocumentByDocKeyResponse{
+		Success: true,
+	}, nil
+}
+
 // GetSnapshotMeta gets the snapshot metadata that corresponds to the server sequence.
 func (s *Server) GetSnapshotMeta(
 	ctx context.Context,

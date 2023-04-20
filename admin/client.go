@@ -20,6 +20,9 @@ package admin
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"google.golang.org/grpc/metadata"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -52,6 +55,9 @@ type Options struct {
 
 	// Logger is the Logger of the client.
 	Logger *zap.Logger
+
+	// APIKey is the API key of the client.
+	APIKey string
 }
 
 // Client is a client for admin service.
@@ -60,8 +66,8 @@ type Client struct {
 	client          api.AdminServiceClient
 	dialOptions     []grpc.DialOption
 	authInterceptor *AuthInterceptor
-
-	logger *zap.Logger
+	options         Options
+	logger          *zap.Logger
 }
 
 // New creates an instance of Client.
@@ -74,7 +80,7 @@ func New(opts ...Option) (*Client, error) {
 	credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 	dialOptions := []grpc.DialOption{credentials}
 
-	authInterceptor := NewAuthInterceptor(options.Token)
+	authInterceptor := NewAuthInterceptor(options.APIKey, options.Token)
 	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
 	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
 
@@ -253,6 +259,26 @@ func (c *Client) ListDocuments(
 	return converter.FromDocumentSummaries(response.Documents)
 }
 
+// RemoveDocumentByDocKey remove a document by document key.
+func (c *Client) RemoveDocumentByDocKey(
+	ctx context.Context,
+	projectName string,
+	documentKey string,
+) (bool, error) {
+	response, err := c.client.RemoveDocumentByDocKey(
+		withShardKey(ctx, c.options.APIKey, documentKey),
+		&api.RemoveDocumentByDocKeyRequest{
+			ProjectName: projectName,
+			DocumentKey: documentKey,
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+
+	return response.Success, nil
+}
+
 // ListChangeSummaries returns the change summaries of the given document.
 func (c *Client) ListChangeSummaries(
 	ctx context.Context,
@@ -320,4 +346,15 @@ func (c *Client) ListChangeSummaries(
 	}
 
 	return summaries, nil
+}
+
+/**
+ * withShardKey returns a context with the given shard key in metadata.
+ */
+func withShardKey(ctx context.Context, keys ...string) context.Context {
+	return metadata.AppendToOutgoingContext(
+		ctx,
+		types.ShardKey,
+		strings.Join(keys, "/"),
+	)
 }
