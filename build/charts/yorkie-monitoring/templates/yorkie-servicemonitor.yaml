@@ -15,10 +15,10 @@ metadata:
 spec:
   endpoints:
   - path: /metrics
-    port: {{ .Values.yorkie.name }}-profiling
+    port: {{ .Values.monitoring.yorkieName }}-profiling
   namespaceSelector:
     matchNames:
-    - {{ .Values.yorkie.namespace }}
+    - {{ .Values.monitoring.yorkieNamespace }}
   selector:
     matchLabels:
-      app.kubernetes.io/name: {{ .Values.yorkie.name }}
+      app.kubernetes.io/name: {{ .Values.monitoring.yorkieName }}

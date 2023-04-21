@@ -34,8 +34,10 @@ import (
 
 // Below are the values of the default values of Yorkie config.
 const (
-	DefaultRPCPort             = 11101
-	DefaultRPCMaxRequestsBytes = 4 * 1024 * 1024 // 4MiB
+	DefaultRPCPort                  = 11101
+	DefaultRPCMaxRequestsBytes      = 4 * 1024 * 1024 // 4MiB
+	DefaultRPCMaxConnectionAge      = 0 * time.Second
+	DefaultRPCMaxConnectionAgeGrace = 0 * time.Second
 
 	DefaultProfilingPort = 11102
 
@@ -150,6 +152,14 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.RPC.MaxRequestBytes == 0 {
 		c.RPC.MaxRequestBytes = DefaultRPCMaxRequestsBytes
+	}
+
+	if c.RPC.MaxConnectionAge == "" {
+		c.RPC.MaxConnectionAge = DefaultRPCMaxConnectionAge.String()
+	}
+
+	if c.RPC.MaxConnectionAgeGrace == "" {
+		c.RPC.MaxConnectionAgeGrace = DefaultRPCMaxConnectionAgeGrace.String()
 	}
 
 	if c.Profiling.Port == 0 {

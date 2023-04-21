@@ -1,9 +1,3 @@
-# Configuration for name of yorkie app
-yorkie:
-  name: yorkie
-  namespace: yorkie
-  profilingPort: 11102
-
 # Configuration for argocd CD
 argocd:
   enabled: true
@@ -13,18 +7,27 @@ argocd:
   project: default
 
   source:
-    repoURL: https://github.com/yorkie-team/yorkie.git
-    targetRevision: main
+    # Set helm chart repository url
+    helmChartRepoURL: https://yorkie-team.github.io/yorkie/helm-charts
+    helmChartTargetRevision: 0.3.3
 
-    yorkieAppPath: build/charts/yorkie-cluster
-    monitoringPath: build/charts/yorkie-monitoring
+    # Set to GitOps repostiroy to reference helm chart custom values 
+    gitOpsRepoURL: https://github.com/yorkie-team/devops.git
+    gitOpsRepoTargetRevision: manifest-update
+    
+    # Set to path of each helm chart custom values from GitOps repository
+    clusterValuesPath: k8s/cluster/values.yaml
+    monitoringValuesPath: k8s/monitoring/values.yaml
 
-    # Set usename & password for private repository
-    username: yorkie
-    password: ghp_123412341234
+    # Set usename & password if GitOps repository is private
+    gitOpsRepoIsPrivate: true
+    gitOpsRepoUsername: yorkie
+    gitOpsRepoPassword: ghp_123412341234
+
   destination:
     server: https://kubernetes.default.svc
-    namespace: default
+    yorkieNamespace: istio-system
+    monitoringNamespace: monitoring
 
 # Configuration for external gateway (eg: AWS ALB)
 externalGateway:

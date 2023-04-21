@@ -22,9 +22,13 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 # Install yorkie monitoring helm chart
 helm install [RELEASE_NAME] yorkie-team/yorkie-monitoring -n monitoring --create-namespace
 
-# import yorkie grafana dashboard and go process dashboard
-curl https://grafana.com/grafana/dashboards/18451
-curl https://grafana.com/grafana/dashboards/18452
+# Configure Loki datasource in Grafana
+# Set Loki datasource url to http://yorkie-monitoring-loki:3100
+curl https://{YOUR_API_DOMAIN_NAME}/grafana/datasources
+
+# Import yorkie grafana dashboard and Loki grafana dashboard
+curl https://grafana.com/grafana/dashboards/18451-yorkie-dashboard/
+curl https://grafana.com/grafana/dashboards/13186-loki-dashboard/
 ```
 
 _See [configuration](#configuration) below for custom installation_
@@ -44,12 +48,12 @@ If you are using AWS EKS and want to expose Grafana Dashboard using AWS ALB, fol
 # Change externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
 helm upgrade [RELEASE_NAME] yorkie-team/yorkie-monitoring -n monitoring \
   --set externalGateway.ingressClassName=alb \
-  --set externalGateway.apiHost={YOUR_DOMAIN_NAME} \
+  --set externalGateway.apiHost={YOUR_API_DOMAIN_NAME} \
   --set externalGateway.alb.enabled=true \
   --set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
 
 # Open Grafana Dashboard
-curl https://{YOUR_DOMAIN_NAME}/grafana
+curl https://{YOUR_API_DOMAIN_NAME}/grafana
 ```
 
 Or, set configuration values in `values.yaml` file before installing the chart.
@@ -79,14 +83,7 @@ _See [`helm uninstall`](https://helm.sh/docs/helm/helm_uninstall/) for command d
 CRDs created by this chart are not removed by default and should be manually cleaned up:
 
 ```bash
-kubectl delete crd alertmanagerconfigs.monitoring.coreos.com
-kubectl delete crd alertmanagers.monitoring.coreos.com
-kubectl delete crd podmonitors.monitoring.coreos.com
-kubectl delete crd probes.monitoring.coreos.com
-kubectl delete crd prometheuses.monitoring.coreos.com
-kubectl delete crd prometheusrules.monitoring.coreos.com
-kubectl delete crd servicemonitors.monitoring.coreos.com
-kubectl delete crd thanosrulers.monitoring.coreos.com
+kubectl get crd -oname | grep --color=never 'monitoring.coreos.com' | xargs kubectl delete
 ```
 
 ## Upgrading Chart

@@ -1,12 +1,10 @@
-# Configuration for name of yorkie app
-yorkie:
-  name: yorkie
-  namespace: yorkie
-  profilingPort: 11102
-
 # Configuration for monitoring system
 monitoring:
   name: &monitoringName yorkie-monitoring
+
+  # Name of yorkie used for yorkie cluster
+  yorkieName: yorkie
+  yorkieNamespace: yorkie
 
   enableEnhancements: &monitoringEnhancementsEnable false
 
@@ -27,7 +25,7 @@ externalGateway:
 
 # Configuration for manual prometheus monitoring stack
 kube-prometheus-stack:
-  nameOverride: *monitoringName
+  fullnameOverride: *monitoringName
   namespaceOverride: monitoring
 
   # Configuration for alertmanager
@@ -44,6 +42,9 @@ kube-prometheus-stack:
     defaultDashboardsEnabled: false
     adminPassword: yorkie
 
+    service:
+      type: NodePort
+      
     # For grafana data persistence
     persistence:
       enabled: true
@@ -134,3 +135,20 @@ kube-prometheus-stack:
             requests:
               storage: 1Gi
         selector: {}
+
+# Configuration for loki monitoring stack
+loki-stack:
+  loki:
+    # Use 
+    fullnameOverride: yorkie-monitoring-loki
+
+    persistence:
+      enabled: true
+      size: 1Gi
+
+  promtail:
+    fullnameOverride: yorkie-monitoring-promtail
+    
+    config:
+      clients:
+        - url: http://yorkie-monitoring-loki:3100/loki/api/v1/push

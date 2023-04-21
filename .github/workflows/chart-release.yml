@@ -1,8 +1,9 @@
 name: Release Charts
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - main
 
 jobs:
   release:
@@ -11,7 +12,6 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-
       - name: Checkout
         uses: actions/checkout@v3
         with:
@@ -29,16 +29,12 @@ jobs:
 
       - name: Add dependency chart repos
         run: |
-          helm repo add base https://istio-release.storage.googleapis.com/charts
-          helm repo add istiod https://istio-release.storage.googleapis.com/charts
-          helm repo add gateway https://istio-release.storage.googleapis.com/charts
-          helm repo add kube-prometheus-stack https://prometheus-community.github.io/helm-charts
-
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.5.0
         with:
           charts_dir: build/charts
-          mark_as_latest: false
           config: ${{ github.workspace }}/.cr.yaml
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
