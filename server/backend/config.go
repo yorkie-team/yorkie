@@ -18,6 +18,7 @@ package backend
 
 import (
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -114,7 +115,8 @@ func (c *Config) Validate() error {
 func (c *Config) ParseAdminTokenDuration() time.Duration {
 	result, err := time.ParseDuration(c.AdminTokenDuration)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "parse admin token duration: %w", err)
+		os.Exit(1)
 	}
 
 	return result
@@ -124,7 +126,8 @@ func (c *Config) ParseAdminTokenDuration() time.Duration {
 func (c *Config) ParseAuthWebhookMaxWaitInterval() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookMaxWaitInterval)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "parse auth webhook max wait interval: %w", err)
+		os.Exit(1)
 	}
 
 	return result
@@ -134,7 +137,8 @@ func (c *Config) ParseAuthWebhookMaxWaitInterval() time.Duration {
 func (c *Config) ParseAuthWebhookCacheAuthTTL() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookCacheAuthTTL)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "parse auth webhook cache auth ttl: %w", err)
+		os.Exit(1)
 	}
 
 	return result
@@ -144,7 +148,8 @@ func (c *Config) ParseAuthWebhookCacheAuthTTL() time.Duration {
 func (c *Config) ParseAuthWebhookCacheUnauthTTL() time.Duration {
 	result, err := time.ParseDuration(c.AuthWebhookCacheUnauthTTL)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "parse auth webhook cache unauth ttl: %w", err)
+		os.Exit(1)
 	}
 
 	return result
