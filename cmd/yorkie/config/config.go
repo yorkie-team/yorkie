@@ -22,23 +22,28 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 )
 
 // AdminAddr is the address of the admin server.
 var AdminAddr string
 
 // ensureYorkieDir ensures that the directory of Yorkie exists.
-func ensureYorkieDir() string {
+func ensureYorkieDir() (string, error) {
 	yorkieDir := path.Join(os.Getenv("HOME"), ".yorkie")
 	if err := os.MkdirAll(yorkieDir, 0700); err != nil {
-		panic(err)
+		return "", fmt.Errorf("mkdir: %w", err)
 	}
-	return yorkieDir
+	return yorkieDir, nil
 }
 
 // configPath returns the path of CLI.
-func configPath() string {
-	return path.Join(ensureYorkieDir(), "config.json")
+func configPath() (string, error) {
+	yorkieDir, err := ensureYorkieDir()
+	if err != nil {
+		return "", fmt.Errorf("ensure yorkie dir: %w", err)
+	}
+	return path.Join(yorkieDir, "config.json"), nil
 }
 
 // Config is the configuration of CLI.
@@ -58,15 +63,20 @@ func New() *Config {
 func LoadToken(addr string) (string, error) {
 	config, err := Load()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("load token: %w", err)
 	}
-
 	return config.Auths[addr], nil
 }
 
 // Load loads the configuration from the given path.
 func Load() (*Config, error) {
-	file, err := os.Open(configPath())
+	configPathValue, err := configPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "get config path: %w", err)
+		os.Exit(1)
+	}
+
+	file, err := os.Open(filepath.Clean(configPathValue))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return New(), nil
@@ -88,7 +98,13 @@ func Load() (*Config, error) {
 
 // Save saves the configuration to the given path.
 func Save(config *Config) error {
-	file, err := os.Create(configPath())
+	configPathValue, err := configPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "get config path: %w", err)
+		os.Exit(1)
+	}
+
+	file, err := os.Create(filepath.Clean(configPathValue))
 	if err != nil {
 		return fmt.Errorf("create config file: %w", err)
 	}

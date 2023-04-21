@@ -67,13 +67,13 @@ func TestValidation(t *testing.T) {
 
 	t.Run("custom rule test", func(t *testing.T) {
 		// register custom rule tag and validation function
-		RegisterValidation("custom", func(v FieldLevel) bool {
+		_ = RegisterValidation("custom", func(v FieldLevel) bool {
 			return v.Field().String() == "custom"
 		})
 
 		// custom error message for custom rule
 		myError := errors.New("custom error")
-		RegisterTranslation("custom", myError.Error())
+		_ = RegisterTranslation("custom", myError.Error())
 
 		// validate value
 		err := ValidateValue("custom-invalid-value", "required,custom")
