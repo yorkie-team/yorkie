@@ -25,6 +25,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/yorkie-team/yorkie/server/backend/election"
+	"github.com/yorkie-team/yorkie/server/backend/election/kubernetes"
+
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -48,6 +51,7 @@ type Backend struct {
 
 	DB           database.Database
 	Coordinator  sync.Coordinator
+	Election     election.Election
 	Metrics      *prometheus.Metrics
 	Background   *background.Background
 	Housekeeping *housekeeping.Housekeeping
@@ -103,14 +107,25 @@ func New(
 		return nil, err
 	}
 
-	keeping, err := housekeeping.Start(
-		housekeepingConf,
-		db,
-		coordinator,
-	)
+	elect, err := kubernetes.NewClient("leader", "yorkie")
 	if err != nil {
 		return nil, err
 	}
+
+	var keeping *housekeeping.Housekeeping
+	bg.AttachGoroutine(func(ctx context.Context) {
+		elect.StartElection(func(ctx context.Context) {
+			fmt.Println("[Leader Election] start housekeeping")
+			keeping, err = housekeeping.Start(
+				housekeepingConf,
+				db,
+				coordinator,
+			)
+			if err != nil {
+				return
+			}
+		})
+	})
 
 	dbInfo := "memory"
 	if mongoConf != nil {

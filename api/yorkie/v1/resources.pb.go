@@ -5,11 +5,12 @@ package v1
 
 import (
 	fmt "fmt"
-	types "github.com/gogo/protobuf/types"
-	proto "github.com/golang/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
+
+	types "github.com/gogo/protobuf/types"
+	proto "github.com/golang/protobuf/proto"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
