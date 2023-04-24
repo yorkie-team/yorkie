@@ -32,6 +32,8 @@ spec:
         prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
         prometheus.io/path: "/metrics"
     spec:
+      automountServiceAccountToken: true
+      serviceAccountName: leader-election
       containers:
       - name: yorkie
         image: "{{ .Values.yorkie.image.repository }}:{{ .Values.yorkie.image.tag | default .Chart.AppVersion }}"
@@ -41,6 +43,10 @@ spec:
           "--mongo-connection-uri",
           "mongodb://{{ .Values.yorkie.args.dbUrl }}:{{ .Values.yorkie.args.dbPort }}/yorkie-meta",
           "--enable-pprof",
+          "namespace",
+          "{{ .Values.yorkie.namespace }}",
+          "--leader-election",
+          "true",
         ]
         ports:
           - containerPort: {{ .Values.yorkie.ports.sdkPort }}
@@ -52,3 +58,9 @@ spec:
           initialDelaySeconds: 10
         resources:
           {{ toYaml .Values.yorkie.resources | nindent 12 }}
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name

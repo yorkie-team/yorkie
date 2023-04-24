@@ -2,7 +2,7 @@
 
 # Stage 1: build binary
 # Start from the latest golang base image
-FROM golang:1.18-buster AS builder
+FROM golang:1.19-buster AS builder
 
 # Add Maintainer Info
 LABEL maintainer="hackerwins <susukang98@gmail.com>"
