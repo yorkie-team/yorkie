@@ -33,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/election"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	memsync "github.com/yorkie-team/yorkie/server/backend/sync/memory"
@@ -48,6 +49,7 @@ type Backend struct {
 
 	DB           database.Database
 	Coordinator  sync.Coordinator
+	Elector      *election.Client
 	Metrics      *prometheus.Metrics
 	Background   *background.Background
 	Housekeeping *housekeeping.Housekeeping
@@ -64,11 +66,12 @@ func New(
 ) (*Backend, error) {
 	hostname := conf.Hostname
 	if hostname == "" {
-		hostname, err := os.Hostname()
+		osHostname, err := os.Hostname()
 		if err != nil {
 			return nil, fmt.Errorf("os.Hostname: %w", err)
 		}
-		conf.Hostname = hostname
+		conf.Hostname = osHostname
+		hostname = osHostname
 	}
 
 	serverInfo := &sync.ServerInfo{
@@ -98,6 +101,14 @@ func New(
 	//  will need to distribute workloads of a document.
 	coordinator := memsync.NewCoordinator(serverInfo)
 
+	var elector *election.Client
+	if conf.LeaderElection {
+		elector, err = election.NewClient(hostname, conf.Namespace)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	authWebhookCache, err := cache.NewLRUExpireCache[string, *types.AuthWebhookResponse](conf.AuthWebhookCacheSize)
 	if err != nil {
 		return nil, err
@@ -107,6 +118,7 @@ func New(
 		housekeepingConf,
 		db,
 		coordinator,
+		elector,
 	)
 	if err != nil {
 		return nil, err
@@ -120,6 +132,7 @@ func New(
 	logging.DefaultLogger().Infof(
 		"backend created: id: %s, rpc: %s: db: %s",
 		serverInfo.ID,
+		serverInfo.Hostname,
 		dbInfo,
 	)
 
@@ -141,6 +154,7 @@ func New(
 		Metrics:      metrics,
 		DB:           db,
 		Coordinator:  coordinator,
+		Elector:      elector,
 		Housekeeping: keeping,
 
 		AuthWebhookCache: authWebhookCache,
@@ -153,6 +167,12 @@ func (b *Backend) Shutdown() error {
 
 	if err := b.Housekeeping.Stop(); err != nil {
 		return err
+	}
+
+	if b.Config.LeaderElection {
+		if err := b.Elector.StopElection(); err != nil {
+			return err
+		}
 	}
 
 	if err := b.Coordinator.Close(); err != nil {

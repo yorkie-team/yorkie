@@ -41,6 +41,9 @@ Housekeeping:
   # CandidatesLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
   CandidatesLimitPerProject: 100
 
+  # LeaseDuration is the duration of the lease for the housekeeping (default: 1m).
+  LeaseDuration: 1m
+
 # Backend is the configuration for the backend of Yorkie.
 Backend:
   # UseDefaultProject is whether to use the default project (default: true).
@@ -48,7 +51,7 @@ Backend:
   # used. If we are using server as single-tenant mode, this should be set to true.
   UseDefaultProject: true
   
-  # ClientDeactivateThreshold is deactivate threshold of clients in specific project for housekeeping.
+  # ClientDeactivateThreshold is deactivation threshold of clients in specific project for housekeeping.
   ClientDeactivateThreshold: "24h"
 
   # SnapshotThreshold is the threshold that determines if changes should be
@@ -82,6 +85,14 @@ Backend:
   # Hostname is the hostname of the server. If not provided, the hostname will be
   # determined automatically by the OS (Optional, default: os.Hostname()).
   Hostname: ""
+
+  # Namespace is the namespace of the yorkie server. namespace is used by Kubernetes client.
+  # Server should be deployed in Kubernetes platform to enable this flag.
+  Namespace: "yorkie"
+
+  # LeaderElection is the flag to enable leader election for performing housekeeping only on leader node.
+  # Server should be deployed in Kubernetes platform to enable this flag.
+  LeaderElection: false
 
 # Mongo is the MongoDB configuration (Optional).
 Mongo:

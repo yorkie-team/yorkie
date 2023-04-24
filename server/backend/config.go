@@ -42,7 +42,7 @@ type Config struct {
 	// we are using server as single-tenant mode, this should be set to true.
 	UseDefaultProject bool `yaml:"UseDefaultProject"`
 
-	// ClientDeactivateThreshold is deactivate threshold of clients in specific project for housekeeping.
+	// ClientDeactivateThreshold is deactivation threshold of clients in specific project for housekeeping.
 	ClientDeactivateThreshold string `yaml:"ClientDeactivateThreshold"`
 
 	// SnapshotThreshold is the threshold that determines if changes should be
@@ -72,6 +72,14 @@ type Config struct {
 
 	// Hostname is yorkie server hostname. hostname is used by metrics.
 	Hostname string `yaml:"Hostname"`
+
+	// Namespace is the namespace of the yorkie server. namespace is used by Kubernetes client.
+	// Server should be deployed in Kubernetes platform to enable this flag.
+	Namespace string `yaml:"Namespace"`
+
+	// LeaderElection is the flag to enable leader election for performing housekeeping only on leader node.
+	// Server should be deployed in Kubernetes platform to enable this flag.
+	LeaderElection bool `yaml:"LeaderElection"`
 }
 
 // Validate validates this config.
