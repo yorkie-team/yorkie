@@ -19,6 +19,7 @@ package document
 import (
 	"context"
 	"errors"
+
 	"github.com/spf13/cobra"
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
