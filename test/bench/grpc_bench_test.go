@@ -91,7 +91,7 @@ func benchmarkUpdateAndSync(
 	for i := 0; i < cnt; i++ {
 		err := d.Update(func(root *json.Object) error {
 			text := root.GetText(key)
-			text.Edit(0, 0, "c")
+			_, _ = text.Edit(0, 0, "c")
 			return nil
 		})
 		assert.NoError(b, err)
@@ -272,13 +272,13 @@ func BenchmarkRPC(b *testing.B) {
 
 				err := doc1.Update(func(root *json.Object) error {
 					text := root.SetNewText("k1")
-					text.Edit(0, 0, builder.String())
+					_, _ = text.Edit(0, 0, builder.String())
 					return nil
 				})
 				assert.NoError(b, err)
 				err = doc2.Update(func(root *json.Object) error {
 					text := root.SetNewText("k1")
-					text.Edit(0, 0, builder.String())
+					_, _ = text.Edit(0, 0, builder.String())
 					return nil
 				})
 				assert.NoError(b, err)

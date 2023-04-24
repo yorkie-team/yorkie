@@ -168,7 +168,7 @@ func TestRetention(t *testing.T) {
 		// Create 6 changes
 		for _, edit := range edits {
 			err = d1.Update(func(root *json.Object) error {
-				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
+				_, _ = root.GetText("k1").Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
 			assert.NoError(t, err)
@@ -227,7 +227,7 @@ func TestRetention(t *testing.T) {
 		// Create 6 changes
 		for _, edit := range edits {
 			err = d2.Update(func(root *json.Object) error {
-				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
+				_, _ = root.GetText("k1").Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
 			assert.NoError(t, err)

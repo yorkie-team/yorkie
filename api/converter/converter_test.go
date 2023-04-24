@@ -41,14 +41,14 @@ func TestConverter(t *testing.T) {
 		doc := document.New("d1")
 
 		err = doc.Update(func(root *json.Object) error {
-			root.SetNewText("k1").Edit(0, 0, "A")
+			_, _ = root.SetNewText("k1").Edit(0, 0, "A")
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[{"val":"A"}]}`, doc.Marshal())
 
 		err = doc.Update(func(root *json.Object) error {
-			root.SetNewText("k1").Edit(0, 0, "B")
+			_, _ = root.SetNewText("k1").Edit(0, 0, "B")
 			return nil
 		})
 		assert.NoError(t, err)
@@ -91,21 +91,21 @@ func TestConverter(t *testing.T) {
 				Delete(4)
 
 			// plain text
-			root.SetNewText("k3").
-				Edit(0, 0, "ㅎ").
-				Edit(0, 1, "하").
-				Edit(0, 1, "한").
-				Edit(0, 1, "하").
-				Edit(1, 1, "느").
-				Edit(1, 2, "늘").
-				Edit(2, 2, "구름").
-				Edit(2, 3, "뭉게구")
+			plainText := root.SetNewText("k3")
+			_, _ = plainText.Edit(0, 0, "ㅎ")
+			_, _ = plainText.Edit(0, 1, "하")
+			_, _ = plainText.Edit(0, 1, "한")
+			_, _ = plainText.Edit(0, 1, "하")
+			_, _ = plainText.Edit(1, 1, "느")
+			_, _ = plainText.Edit(1, 2, "늘")
+			_, _ = plainText.Edit(2, 2, "구름")
+			_, _ = plainText.Edit(2, 3, "뭉게구")
 
 			// rich text
-			root.SetNewText("k4").
-				Edit(0, 0, "Hello world", nil).
-				Edit(6, 11, "sky", nil).
-				Style(0, 5, map[string]string{"b": "1"})
+			richText := root.SetNewText("k4")
+			_, _ = richText.Edit(0, 0, "Hello world", nil)
+			_, _ = richText.Edit(6, 11, "sky", nil)
+			_, _ = richText.Style(0, 5, map[string]string{"b": "1"})
 
 			// a counter
 			root.SetNewCounter("k5", crdt.LongCnt, 0).
@@ -155,19 +155,19 @@ func TestConverter(t *testing.T) {
 			root.GetArray("k2").MoveBefore(nextCreatedAt, targetCreatedAt)
 
 			// plain text
-			root.SetNewText("k3").
-				Edit(0, 0, "ㅎ").
-				Edit(0, 1, "하").
-				Edit(0, 1, "한").
-				Edit(0, 1, "하").
-				Edit(1, 1, "느").
-				Edit(1, 2, "늘").
-				Select(1, 2)
+			plainText := root.SetNewText("k3")
+			_, _ = plainText.Edit(0, 0, "ㅎ")
+			_, _ = plainText.Edit(0, 1, "하")
+			_, _ = plainText.Edit(0, 1, "한")
+			_, _ = plainText.Edit(0, 1, "하")
+			_, _ = plainText.Edit(1, 1, "느")
+			_, _ = plainText.Edit(1, 2, "늘")
+			_, _ = plainText.Select(1, 2)
 
 			// rich text
-			root.SetNewText("k3").
-				Edit(0, 0, "Hello World", nil).
-				Style(0, 5, map[string]string{"b": "1"})
+			richText := root.SetNewText("k3")
+			_, _ = richText.Edit(0, 0, "Hello World", nil)
+			_, _ = richText.Style(0, 5, map[string]string{"b": "1"})
 
 			// counter
 			root.SetNewCounter("k4", crdt.IntegerCnt, 0).Increase(5)

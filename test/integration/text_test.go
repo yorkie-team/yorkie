@@ -53,13 +53,13 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 0, "ABCD")
+			_, _ = root.GetText("k1").Edit(0, 0, "ABCD")
 			return nil
 		}, "edit 0,0 ABCD by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 0, "1234")
+			_, _ = root.GetText("k1").Edit(0, 0, "1234")
 			return nil
 		}, "edit 0,0 1234 by c2")
 		assert.NoError(t, err)
@@ -67,13 +67,13 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(2, 3, "XX")
+			_, _ = root.GetText("k1").Edit(2, 3, "XX")
 			return nil
 		}, "edit 2,3 XX by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(2, 3, "YY")
+			_, _ = root.GetText("k1").Edit(2, 3, "YY")
 			return nil
 		}, "edit 2,3 YY by c2")
 		assert.NoError(t, err)
@@ -81,13 +81,13 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(4, 5, "ZZ")
+			_, _ = root.GetText("k1").Edit(4, 5, "ZZ")
 			return nil
 		}, "edit 4,5 ZZ by c1")
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(2, 3, "TT")
+			_, _ = root.GetText("k1").Edit(2, 3, "TT")
 			return nil
 		}, "edit 2,3 TT by c2")
 		assert.NoError(t, err)
@@ -102,7 +102,7 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.SetNewText("k1").Edit(0, 0, "Hello world", nil)
+			_, _ = root.SetNewText("k1").Edit(0, 0, "Hello world", nil)
 			return nil
 		}, `set a new text with "Hello world" by c1`)
 		assert.NoError(t, err)
@@ -115,14 +115,14 @@ func TestText(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object) error {
 			text := root.GetText("k1")
-			text.Style(0, 1, map[string]string{"b": "1"})
+			_, _ = text.Style(0, 1, map[string]string{"b": "1"})
 			return nil
 		}, `set style b to "H" by c1`)
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
 			text := root.GetText("k1")
-			text.Style(0, 5, map[string]string{"i": "1"})
+			_, _ = text.Style(0, 5, map[string]string{"i": "1"})
 			return nil
 		}, `set style i to "Hello" by c2`)
 		assert.NoError(t, err)
@@ -149,9 +149,9 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 0, "123")
-			root.GetText("k1").Edit(3, 3, "456")
-			root.GetText("k1").Edit(6, 6, "789")
+			_, _ = root.GetText("k1").Edit(0, 0, "123")
+			_, _ = root.GetText("k1").Edit(3, 3, "456")
+			_, _ = root.GetText("k1").Edit(6, 6, "789")
 			return nil
 		}, "set new text by c1")
 		assert.NoError(t, err)
@@ -160,14 +160,14 @@ func TestText(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"val":"123"},{"val":"456"},{"val":"789"}]}`, d2.Marshal())
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(1, 7, "")
+			_, _ = root.GetText("k1").Edit(1, 7, "")
 			return nil
 		}, "delete block by c1")
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[{"val":"1"},{"val":"89"}]}`, d1.Marshal())
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(2, 5, "")
+			_, _ = root.GetText("k1").Edit(2, 5, "")
 			return nil
 		}, "delete block by c2")
 		assert.NoError(t, err)
@@ -195,9 +195,9 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 0, "0")
-			root.GetText("k1").Edit(1, 1, "0")
-			root.GetText("k1").Edit(2, 2, "0")
+			_, _ = root.GetText("k1").Edit(0, 0, "0")
+			_, _ = root.GetText("k1").Edit(1, 1, "0")
+			_, _ = root.GetText("k1").Edit(2, 2, "0")
 			return nil
 		}, "set new text by c1")
 		assert.NoError(t, err)
@@ -206,16 +206,16 @@ func TestText(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"},{"val":"0"}]}`, d2.Marshal())
 
 		err = d1.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(1, 2, "1")
-			root.GetText("k1").Edit(1, 2, "1")
-			root.GetText("k1").Edit(1, 2, "")
+			_, _ = root.GetText("k1").Edit(1, 2, "1")
+			_, _ = root.GetText("k1").Edit(1, 2, "1")
+			_, _ = root.GetText("k1").Edit(1, 2, "")
 			return nil
 		}, "newly create then delete by c1")
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[{"val":"0"},{"val":"0"}]}`, d1.Marshal())
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetText("k1").Edit(0, 3, "")
+			_, _ = root.GetText("k1").Edit(0, 3, "")
 			return nil
 		}, "delete the range includes above new nodes")
 		assert.NoError(t, err)

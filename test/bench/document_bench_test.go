@@ -181,9 +181,9 @@ func BenchmarkDocument(b *testing.B) {
 			//           |                |          |
 			// [init] - [A] - [12] - [BC deleted] - [D]
 			err := doc.Update(func(root *json.Object) error {
-				root.SetNewText("k1").
-					Edit(0, 0, "ABCD").
-					Edit(1, 3, "12")
+				text := root.SetNewText("k1")
+				_, _ = text.Edit(0, 0, "ABCD")
+				_, _ = text.Edit(1, 3, "12")
 				assert.Equal(b, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, root.Marshal())
 				return nil
 			})
@@ -222,13 +222,13 @@ func BenchmarkDocument(b *testing.B) {
 			doc := document.New("d1")
 
 			err := doc.Update(func(root *json.Object) error {
-				root.SetNewText("k1").
-					Edit(0, 0, "ㅎ").
-					Edit(0, 1, "하").
-					Edit(0, 1, "한").
-					Edit(0, 1, "하").
-					Edit(1, 1, "느").
-					Edit(1, 2, "늘")
+				text := root.SetNewText("k1")
+				_, _ = text.Edit(0, 0, "ㅎ")
+				_, _ = text.Edit(0, 1, "하")
+				_, _ = text.Edit(0, 1, "한")
+				_, _ = text.Edit(0, 1, "하")
+				_, _ = text.Edit(1, 1, "느")
+				_, _ = text.Edit(1, 2, "늘")
 				assert.Equal(b, `{"k1":[{"val":"하"},{"val":"늘"}]}`, root.Marshal())
 				return nil
 			})
@@ -243,7 +243,7 @@ func BenchmarkDocument(b *testing.B) {
 
 			err := doc.Update(func(root *json.Object) error {
 				text := root.SetNewText("k1")
-				text.Edit(0, 0, "Hello world", nil)
+				_, _ = text.Edit(0, 0, "Hello world", nil)
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {} "Hello world"]`,
@@ -256,7 +256,7 @@ func BenchmarkDocument(b *testing.B) {
 
 			err = doc.Update(func(root *json.Object) error {
 				text := root.GetText("k1")
-				text.Style(0, 5, map[string]string{"b": "1"})
+				_, _ = text.Style(0, 5, map[string]string{"b": "1"})
 				assert.Equal(b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
 					text.StructureAsString(),
@@ -272,14 +272,14 @@ func BenchmarkDocument(b *testing.B) {
 
 			err = doc.Update(func(root *json.Object) error {
 				text := root.GetText("k1")
-				text.Style(0, 5, map[string]string{"b": "1"})
+				_, _ = text.Style(0, 5, map[string]string{"b": "1"})
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
 					text.StructureAsString(),
 				)
 
-				text.Style(3, 5, map[string]string{"i": "1"})
+				_, _ = text.Style(3, 5, map[string]string{"i": "1"})
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][1:2:00:5 {} " world"]`,
@@ -296,7 +296,7 @@ func BenchmarkDocument(b *testing.B) {
 
 			err = doc.Update(func(root *json.Object) error {
 				text := root.GetText("k1")
-				text.Edit(5, 11, " Yorkie", nil)
+				_, _ = text.Edit(5, 11, " Yorkie", nil)
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"]`+
@@ -314,7 +314,7 @@ func BenchmarkDocument(b *testing.B) {
 
 			err = doc.Update(func(root *json.Object) error {
 				text := root.GetText("k1")
-				text.Edit(5, 5, "\n", map[string]string{"list": "true"})
+				_, _ = text.Edit(5, 5, "\n", map[string]string{"list": "true"})
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][5:1:00:0 {"list":"true"} "\n"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
@@ -478,7 +478,7 @@ func benchmarkText(cnt int, b *testing.B) {
 		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k1")
 			for c := 0; c < cnt; c++ {
-				text.Edit(c, c, "a")
+				_, _ = text.Edit(c, c, "a")
 			}
 			return nil
 		})
@@ -494,7 +494,7 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k1")
 			for c := 0; c < cnt; c++ {
-				text.Edit(c, c, "a")
+				_, _ = text.Edit(c, c, "a")
 			}
 			return nil
 		}, "Create cnt-length text to test")
@@ -503,7 +503,7 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 		b.StartTimer()
 		err = doc.Update(func(root *json.Object) error {
 			text := root.GetText("k1")
-			text.Edit(0, cnt, "")
+			_, _ = text.Edit(0, cnt, "")
 			return nil
 		}, "Delete all at a time")
 		assert.NoError(b, err)
@@ -521,7 +521,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k1")
 			for i := 0; i < cnt; i++ {
-				text.Edit(i, i, "a")
+				_, _ = text.Edit(i, i, "a")
 			}
 			return nil
 		}, "creates a text then appends a")
@@ -530,7 +530,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 		err = doc.Update(func(root *json.Object) error {
 			text := root.GetText("k1")
 			for i := 0; i < cnt; i++ {
-				text.Edit(i, i+1, "b")
+				_, _ = text.Edit(i, i+1, "b")
 			}
 			return nil
 		}, "replace contents with b")
@@ -551,7 +551,7 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 		}
 		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k2")
-			text.Edit(0, 0, builder.String())
+			_, _ = text.Edit(0, 0, builder.String())
 			return nil
 		}, "initial")
 		assert.NoError(b, err)
@@ -560,7 +560,7 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 			text := root.GetText("k2")
 			for i := 0; i < cnt; i++ {
 				if i != cnt {
-					text.Edit(i, i+1, "b")
+					_, _ = text.Edit(i, i+1, "b")
 				}
 			}
 			return nil

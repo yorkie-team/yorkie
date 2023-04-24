@@ -17,6 +17,7 @@
 package json
 
 import (
+	"fmt"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -38,9 +39,9 @@ func NewText(ctx *change.Context, text *crdt.Text) *Text {
 }
 
 // Edit edits the given range with the given content and attributes.
-func (p *Text) Edit(from, to int, content string, attributes ...map[string]string) *Text {
+func (p *Text) Edit(from, to int, content string, attributes ...map[string]string) (*Text, error) {
 	if from > to {
-		panic("from should be less than or equal to to")
+		return nil, fmt.Errorf("json text edit: from should be less than or equal to to(from: %d, to: %d)", from, to)
 	}
 	fromPos, toPos := p.Text.CreateRange(from, to)
 
@@ -74,13 +75,13 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 		p.context.RegisterTextElementWithGarbage(p)
 	}
 
-	return p
+	return p, nil
 }
 
 // Style applies the style of the given range.
-func (p *Text) Style(from, to int, attributes map[string]string) *Text {
+func (p *Text) Style(from, to int, attributes map[string]string) (*Text, error) {
 	if from > to {
-		panic("from should be less than or equal to to")
+		return nil, fmt.Errorf("json text style: from should be less than or equal to to(from: %d, to: %d)", from, to)
 	}
 	fromPos, toPos := p.Text.CreateRange(from, to)
 
@@ -100,13 +101,13 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 		ticket,
 	))
 
-	return p
+	return p, nil
 }
 
 // Select stores that the given range has been selected.
-func (p *Text) Select(from, to int) *Text {
+func (p *Text) Select(from, to int) (*Text, error) {
 	if from > to {
-		panic("from should be less than or equal to to")
+		return nil, fmt.Errorf("json text select: from should be less than or equal to to(from: %d, to: %d)", from, to)
 	}
 	fromPos, toPos := p.Text.CreateRange(from, to)
 
@@ -123,5 +124,5 @@ func (p *Text) Select(from, to int) *Text {
 		toPos,
 		ticket,
 	))
-	return p
+	return p, nil
 }

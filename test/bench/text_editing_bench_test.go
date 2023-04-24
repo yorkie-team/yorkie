@@ -54,10 +54,10 @@ func BenchmarkTextEditing(b *testing.B) {
 			text := root.GetText("text")
 			if mode == 0 {
 				value := edit[2].(string)
-				text.Edit(cursor, cursor, value)
+				_, _ = text.Edit(cursor, cursor, value)
 			} else if mode == 1 {
 				// deletion
-				text.Edit(cursor, cursor+1, "")
+				_, _ = text.Edit(cursor, cursor+1, "")
 			}
 			return nil
 		})
