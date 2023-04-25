@@ -1,6 +1,7 @@
 # Configuration for monitoring system
 monitoring:
   name: &monitoringName yorkie-monitoring
+  namespace: &monitoringNamespace monitoring
 
   # Name of yorkie used for yorkie cluster
   yorkieName: yorkie
@@ -8,15 +9,17 @@ monitoring:
 
   enableEnhancements: &monitoringEnhancementsEnable false
 
-# Configuration for external gateway (eg: AWS ALB)
-externalGateway:
+# Configuration for ingress (eg: AWS ALB)
+ingress:
   ingressClassName: nginx
   ## Set to alb if you are using AWS ALB
   # ingressClassName: alb
 
   # Use same host for yorkie cluster
-  apiHost: &apiHost api.yorkie.dev
-  grafanaPath: /grafana
+  hosts:
+    enabled: false
+    apiHost: &apiHost api.yorkie.dev
+    grafanaPath: /grafana
 
   alb:
     enabled: false
@@ -26,7 +29,7 @@ externalGateway:
 # Configuration for manual prometheus monitoring stack
 kube-prometheus-stack:
   fullnameOverride: *monitoringName
-  namespaceOverride: monitoring
+  namespaceOverride: *monitoringNamespace
 
   # Configuration for alertmanager
   # ref: https://prometheus.io/docs/alerting/alertmanager/
@@ -139,7 +142,7 @@ kube-prometheus-stack:
 # Configuration for loki monitoring stack
 loki-stack:
   loki:
-    # Use 
+    isDefault: false
     fullnameOverride: yorkie-monitoring-loki
 
     persistence:

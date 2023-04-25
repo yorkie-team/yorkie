@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: yorkie-cluster
-  namespace: argocd
+  namespace: {{ .Values.argocd.namespace }}
 spec:
   project: {{ .Values.argocd.project }}
   sources:
@@ -23,7 +23,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: yorkie-monitoring
-  namespace: argocd
+  namespace: {{ .Values.argocd.namespace }}
 spec:
   project: {{ .Values.argocd.project }}
   sources:

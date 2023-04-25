@@ -444,7 +444,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: argocd-application-controller
-  namespace: argocd
+  namespace: {{ .Values.argocd.namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -461,7 +461,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: argocd-server
-  namespace: argocd
+  namespace: {{ .Values.argocd.namespace }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -676,11 +676,7 @@ metadata:
     app.kubernetes.io/part-of: argocd
   name: argocd-server
 spec:
-  {{ if .Values.externalGateway.alb.enabled }}
   type: NodePort
-  {{ else }}
-  type: LoadBalancer
-  {{ end }}
   ports:
   - name: http
     port: 80
@@ -1360,9 +1356,9 @@ spec:
         - /usr/local/bin/argocd-server
         - --insecure
         - --basehref
-        - {{ .Values.externalGateway.argoCDPath }}
+        - {{ .Values.ingress.hosts.argoCDPath }}
         - --rootpath
-        - {{ .Values.externalGateway.argoCDPath }}
+        - {{ .Values.ingress.hosts.argoCDPath }}
         env:
         - name: ARGOCD_SERVER_INSECURE
           valueFrom:

@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     prometheus: monitoring
   name: {{ .Values.monitoring.name }}
-  namespace: monitoring
+  namespace: {{ .Values.monitoring.namespace }}
 spec:
   endpoints:
   - path: /metrics

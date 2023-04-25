@@ -10,7 +10,7 @@ Installs the yorkie-argocd, which provides GitOps based continuous delivery for 
 ## Get Helm Repository Info
 
 ```bash
-helm repo add yorkie https://yorkie-team.github.io/yorkie/helm-charts
+helm repo add yorkie-team https://yorkie-team.github.io/yorkie/helm-charts
 helm repo update
 ```
 
@@ -37,31 +37,6 @@ kubectl -n argocd get pod --no-headers=true | awk '/argocd-server/{print $1}'| x
 _See [configuration](#configuration) below for custom installation_
 
 _See [`helm install`](https://helm.sh/docs/helm/helm_install/) for command documentation._
-
-## Expose Yorkie ArgoCD
-
-By default, ArgoCD Web UI is exposed via ingress with nginx ingress controller and domain `api.yorkie.dev`.
-For other environments like AWS, follow the steps below:
-
-### Expose Yorkie ArgoCD using AWS ALB
-
-If you are using AWS EKS and want to expose ArgoCD Web UI using AWS ALB, follow the steps below:
-
-```bash
-# Change externalGateway.alb.enabled to true, and certArn to your AWS certificate ARN issued in AWS Certificate Manager
-helm upgrade [RELEASE_NAME] yorkie-team/yorkie-argocd -n argocd \
-  --set externalGateway.ingressClassName=alb \
-  --set externalGateway.apiHost={YOUR_API_DOMAIN_NAME} \
-  --set externalGateway.alb.enabled=true \
-  --set externalGateway.alb.certArn={YOUR_CERTIFICATE_ARN}
-
-# Open ArgoCD Web UI
-curl https://{YOUR_API_DOMAIN_NAME}/argocd
-```
-
-Or, set configuration values in `values.yaml` file before installing the chart.
-
-_See [configuration](#configuration) below._
 
 ## Uninstall Helm Chart
 
