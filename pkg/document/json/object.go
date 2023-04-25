@@ -62,9 +62,13 @@ func (p *Object) SetNewArray(k string) *Array {
 // SetNewText sets a new Text for the given key.
 func (p *Object) SetNewText(k string) *Text {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		rgaTreeSplit, err := crdt.NewRGATreeSplit(crdt.InitialTextNode())
+		if err != nil {
+			panic(fmt.Sprintf("json object SetNewText err: %s", err))
+		}
 		return NewText(
 			p.context,
-			crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket),
+			crdt.NewText(rgaTreeSplit, ticket),
 		)
 	})
 

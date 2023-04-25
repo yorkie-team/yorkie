@@ -167,14 +167,23 @@ func (t *Text) Marshal() string {
 
 // DeepCopy copies itself deeply.
 func (t *Text) DeepCopy() (Element, error) {
-	rgaTreeSplit := NewRGATreeSplit(InitialTextNode())
+	rgaTreeSplit, err := NewRGATreeSplit(InitialTextNode())
+	if err != nil {
+		return nil, fmt.Errorf("crdt text DeepCopy: %s", err)
+	}
 
 	current := rgaTreeSplit.InitialHead()
 	for _, node := range t.Nodes() {
-		current = rgaTreeSplit.InsertAfter(current, node.DeepCopy())
+		current, err := rgaTreeSplit.InsertAfter(current, node.DeepCopy())
+		if err != nil {
+			return nil, fmt.Errorf("crdt text DeepCopy: %s", err)
+		}
 		insPrevID := node.InsPrevID()
 		if insPrevID != nil {
-			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
+			insPrevNode, err := rgaTreeSplit.FindNode(insPrevID)
+			if err != nil {
+				return nil, fmt.Errorf("crdt text DeepCopy: %s", err)
+			}
 			if insPrevNode == nil {
 				return nil, fmt.Errorf("crdt text DeepCopy: insPrevNode should be presence")
 			}
@@ -233,21 +242,24 @@ func (t *Text) Edit(
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
+) (*RGATreeSplitNodePos, map[string]*time.Ticket, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
 		val.attrs.Set(key, value, executedAt)
 	}
 
-	cursorPos, latestCreatedAtMapByActor := t.rgaTreeSplit.edit(
+	cursorPos, latestCreatedAtMapByActor, err := t.rgaTreeSplit.edit(
 		from,
 		to,
 		latestCreatedAtMapByActor,
 		val,
 		executedAt,
 	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("crdt text Edit: %s", err)
+	}
 
-	return cursorPos, latestCreatedAtMapByActor
+	return cursorPos, latestCreatedAtMapByActor, nil
 }
 
 // Style applies the given attributes of the given range.
@@ -256,10 +268,16 @@ func (t *Text) Style(
 	to *RGATreeSplitNodePos,
 	attributes map[string]string,
 	executedAt *time.Ticket,
-) {
+) error {
 	// 01. Split nodes with from and to
-	_, toRight := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
-	_, fromRight := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
+	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
+	if err != nil {
+		return fmt.Errorf("crdt text Style: %s", err)
+	}
+	_, fromRight, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
+	if err != nil {
+		return fmt.Errorf("crdt text Style: %s", err)
+	}
 
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
@@ -269,6 +287,7 @@ func (t *Text) Style(
 			val.attrs.Set(key, value, executedAt)
 		}
 	}
+	return nil
 }
 
 // Select stores that the given range has been selected.
@@ -305,6 +324,6 @@ func (t *Text) removedNodesLen() int {
 }
 
 // purgeTextNodesWithGarbage physically purges nodes that have been removed.
-func (t *Text) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
+func (t *Text) purgeTextNodesWithGarbage(ticket *time.Ticket) (int, error) {
 	return t.rgaTreeSplit.purgeTextNodesWithGarbage(ticket)
 }

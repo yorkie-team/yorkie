@@ -18,6 +18,7 @@
 package llrb
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -27,7 +28,7 @@ type Key interface {
 	// a.Compare(b) = 1 => a > b
 	// a.Compare(b) = 0 => a == b
 	// a.Compare(b) = -1 => a < b
-	Compare(k Key) int
+	Compare(k Key) (int, error)
 }
 
 // Value represents the data stored in the nodes of Tree.
@@ -72,10 +73,15 @@ func NewTree[K Key, V Value]() *Tree[K, V] {
 }
 
 // Put puts the value of the given key.
-func (t *Tree[K, V]) Put(k K, v V) V {
-	t.root = t.put(t.root, k, v)
+func (t *Tree[K, V]) Put(k K, v V) (V, error) {
+	var zeroV V
+	var err error
+	t.root, err = t.put(t.root, k, v)
+	if err != nil {
+		return zeroV, fmt.Errorf("llrb Put: %w", err)
+	}
 	t.root.isRed = false
-	return v
+	return v, nil
 }
 
 func (t *Tree[K, V]) String() string {
@@ -87,31 +93,42 @@ func (t *Tree[K, V]) String() string {
 }
 
 // Remove removes the value of the given key.
-func (t *Tree[K, V]) Remove(key K) {
+func (t *Tree[K, V]) Remove(key K) error {
 	if !isRed(t.root.left) && !isRed(t.root.right) {
 		t.root.isRed = true
 	}
 
-	t.root = t.remove(t.root, key)
+	var err error
+	t.root, err = t.remove(t.root, key)
+	if err != nil {
+		return fmt.Errorf("llrb Remove: %w", err)
+	}
 	if t.root != nil {
 		t.root.isRed = false
 	}
+
+	return nil
 }
 
 // Floor returns the greatest key less than or equal to the given key.
-func (t *Tree[K, V]) Floor(key K) (K, V) {
+func (t *Tree[K, V]) Floor(key K) (K, V, error) {
+	var zeroK K
+	var zeroV V
 	node := t.root
 
 	for node != nil {
-		compare := key.Compare(node.key)
-		if compare > 0 {
+		keyCompare, err := key.Compare(node.key)
+		if err != nil {
+			return zeroK, zeroV, fmt.Errorf("llrb Floor: %w", err)
+		}
+		if keyCompare > 0 {
 			if node.right != nil {
 				node.right.parent = node
 				node = node.right
 			} else {
-				return node.key, node.value
+				return node.key, node.value, nil
 			}
-		} else if compare < 0 {
+		} else if keyCompare < 0 {
 			if node.left != nil {
 				node.left.parent = node
 				node = node.left
@@ -124,29 +141,36 @@ func (t *Tree[K, V]) Floor(key K) (K, V) {
 				}
 
 				// TODO(hackerwins): check below warning
-				return parent.key, parent.value
+				return parent.key, parent.value, nil
 			}
 		} else {
-			return node.key, node.value
+			return node.key, node.value, nil
 		}
 	}
 
-	var zeroK K
-	var zeroV V
-	return zeroK, zeroV
+	return zeroK, zeroV, nil
 }
 
-func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) *Node[K, V] {
+func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) (*Node[K, V], error) {
 	if node == nil {
 		t.size++
-		return NewNode(key, value, true)
+		return NewNode(key, value, true), nil
 	}
 
-	compare := key.Compare(node.key)
-	if compare < 0 {
-		node.left = t.put(node.left, key, value)
-	} else if compare > 0 {
-		node.right = t.put(node.right, key, value)
+	keyCompare, err := key.Compare(node.key)
+	if err != nil {
+		return nil, fmt.Errorf("llrb put: %w", err)
+	}
+	if keyCompare < 0 {
+		node.left, err = t.put(node.left, key, value)
+		if err != nil {
+			return nil, fmt.Errorf("llrb put: %w", err)
+		}
+	} else if keyCompare > 0 {
+		node.right, err = t.put(node.right, key, value)
+		if err != nil {
+			return nil, fmt.Errorf("llrb put: %w", err)
+		}
 	} else {
 		node.value = value
 	}
@@ -163,41 +187,59 @@ func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) *Node[K, V] {
 		flipColors(node)
 	}
 
-	return node
+	return node, nil
 }
 
-func (t *Tree[K, V]) remove(node *Node[K, V], key K) *Node[K, V] {
-	if key.Compare(node.key) < 0 {
+func (t *Tree[K, V]) remove(node *Node[K, V], key K) (*Node[K, V], error) {
+	keyCompare, err := key.Compare(node.key)
+	if err != nil {
+		return nil, fmt.Errorf("llrb remove: %w", err)
+	}
+	if keyCompare < 0 {
 		if !isRed(node.left) && !isRed(node.left.left) {
 			node = moveRedLeft(node)
 		}
-		node.left = t.remove(node.left, key)
+		node.left, err = t.remove(node.left, key)
+		if err != nil {
+			return nil, fmt.Errorf("llrb remove: %w", err)
+		}
 	} else {
 		if isRed(node.left) {
 			node = rotateRight(node)
 		}
 
-		if key.Compare(node.key) == 0 && node.right == nil {
+		keyCompare, err := key.Compare(node.key)
+		if err != nil {
+			return nil, fmt.Errorf("llrb remove: %w", err)
+		}
+		if keyCompare == 0 && node.right == nil {
 			t.size--
-			return nil
+			return nil, nil
 		}
 
 		if !isRed(node.right) && !isRed(node.right.left) {
 			node = moveRedRight(node)
 		}
 
-		if key.Compare(node.key) == 0 {
+		keyCompare, err = key.Compare(node.key)
+		if err != nil {
+			return nil, fmt.Errorf("llrb remove: %w", err)
+		}
+		if keyCompare == 0 {
 			t.size--
 			smallest := min(node.right)
 			node.value = smallest.value
 			node.key = smallest.key
 			node.right = removeMin(node.right)
 		} else {
-			node.right = t.remove(node.right, key)
+			node.right, err = t.remove(node.right, key)
+			if err != nil {
+				return nil, fmt.Errorf("llrb remove: %w", err)
+			}
 		}
 	}
 
-	return fixUp(node)
+	return fixUp(node), nil
 }
 
 func rotateLeft[K Key, V Value](node *Node[K, V]) *Node[K, V] {

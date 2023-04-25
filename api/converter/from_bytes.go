@@ -163,34 +163,43 @@ func fromJSONText(
 ) (*crdt.Text, error) {
 	createdAt, err := fromTimeTicket(pbText.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from bytes fromJsonText: %w", err)
 	}
 	movedAt, err := fromTimeTicket(pbText.MovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from bytes fromJsonText: %w", err)
 	}
 	removedAt, err := fromTimeTicket(pbText.RemovedAt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("from bytes fromJsonText: %w", err)
 	}
 
-	rgaTreeSplit := crdt.NewRGATreeSplit(crdt.InitialTextNode())
+	rgaTreeSplit, err := crdt.NewRGATreeSplit(crdt.InitialTextNode())
+	if err != nil {
+		return nil, fmt.Errorf("from bytes fromJsonText: %w", err)
+	}
 
 	current := rgaTreeSplit.InitialHead()
 	for _, pbNode := range pbText.Nodes {
 		textNode, err := fromTextNode(pbNode)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from bytes fromJsonText: %w", err)
 		}
-		current = rgaTreeSplit.InsertAfter(current, textNode)
+		current, err = rgaTreeSplit.InsertAfter(current, textNode)
+		if err != nil {
+			return nil, fmt.Errorf("from bytes fromJsonText: %w", err)
+		}
 		insPrevID, err := fromTextNodeID(pbNode.InsPrevId)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("from bytes fromJsonText: %w", err)
 		}
 		if insPrevID != nil {
-			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
+			insPrevNode, err := rgaTreeSplit.FindNode(insPrevID)
+			if err != nil {
+				return nil, fmt.Errorf("from bytes fromJsonText: %w", err)
+			}
 			if insPrevNode == nil {
-				panic("insPrevNode should be presence")
+				return nil, fmt.Errorf("from bytes fromJsonText: insPrevNode should be presence")
 			}
 			current.SetInsPrev(insPrevNode)
 		}
