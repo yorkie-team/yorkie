@@ -17,6 +17,8 @@
 package crdt
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -95,16 +97,20 @@ func (a *Array) StructureAsString() string {
 }
 
 // DeepCopy copies itself deeply.
-func (a *Array) DeepCopy() Element {
+func (a *Array) DeepCopy() (Element, error) {
 	elements := NewRGATreeList()
 
 	for _, node := range a.elements.Nodes() {
-		elements.Add(node.elem.DeepCopy())
+		copiedNode, err := node.elem.DeepCopy()
+		if err != nil {
+			return nil, fmt.Errorf("crdt array DeepCopy: %w", err)
+		}
+		elements.Add(copiedNode)
 	}
 
 	array := NewArray(elements, a.createdAt)
 	array.removedAt = a.removedAt
-	return array
+	return array, nil
 }
 
 // CreatedAt returns the creation time of this array.

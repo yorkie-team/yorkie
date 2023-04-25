@@ -215,7 +215,11 @@ func (d *Document) GarbageLen() int {
 
 func (d *Document) ensureClone() {
 	if d.clone == nil {
-		d.clone = d.doc.root.DeepCopy()
+		copiedDoc, err := d.doc.root.DeepCopy()
+		if err != nil {
+			panic("document ensureClone: " + err.Error())
+		}
+		d.clone = copiedDoc
 	}
 }
 

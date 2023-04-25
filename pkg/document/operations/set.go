@@ -17,6 +17,8 @@
 package operations
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -61,7 +63,10 @@ func (o *Set) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	value := o.value.DeepCopy()
+	value, err := o.value.DeepCopy()
+	if err != nil {
+		return fmt.Errorf("set operations: %w", err)
+	}
 	removed := obj.Set(o.key, value)
 	root.RegisterElement(value)
 	if removed != nil {

@@ -166,7 +166,7 @@ func (t *Text) Marshal() string {
 }
 
 // DeepCopy copies itself deeply.
-func (t *Text) DeepCopy() Element {
+func (t *Text) DeepCopy() (Element, error) {
 	rgaTreeSplit := NewRGATreeSplit(InitialTextNode())
 
 	current := rgaTreeSplit.InitialHead()
@@ -176,13 +176,13 @@ func (t *Text) DeepCopy() Element {
 		if insPrevID != nil {
 			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
 			if insPrevNode == nil {
-				panic("insPrevNode should be presence")
+				return nil, fmt.Errorf("crdt text DeepCopy: insPrevNode should be presence")
 			}
 			current.SetInsPrev(insPrevNode)
 		}
 	}
 
-	return NewText(rgaTreeSplit, t.createdAt)
+	return NewText(rgaTreeSplit, t.createdAt), nil
 }
 
 // CreatedAt returns the creation time of this Text.

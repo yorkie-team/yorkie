@@ -17,6 +17,7 @@
 package json
 
 import (
+	"fmt"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -257,10 +258,14 @@ func (p *Object) setInternal(
 	elem := creator(ticket)
 	value := toOriginal(elem)
 
+	copiedValue, err := value.DeepCopy()
+	if err != nil {
+		panic(fmt.Sprintf("json object setInternal: %s", err.Error()))
+	}
 	p.context.Push(operations.NewSet(
 		p.CreatedAt(),
 		k,
-		value.DeepCopy(),
+		copiedValue,
 		ticket,
 	))
 
