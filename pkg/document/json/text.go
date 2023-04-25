@@ -17,6 +17,7 @@
 package json
 
 import (
+	"fmt"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -42,7 +43,10 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
-	fromPos, toPos := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	if err != nil {
+		panic(fmt.Sprintf("json text Edit: %s", err.Error()))
+	}
 
 	// TODO(hackerwins): We need to consider the case where the length of
 	//  attributes is greater than 1.
@@ -82,7 +86,10 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
-	fromPos, toPos := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	if err != nil {
+		panic(fmt.Sprintf("json text Style: %s", err.Error()))
+	}
 
 	ticket := p.context.IssueTimeTicket()
 	p.Text.Style(
@@ -108,7 +115,10 @@ func (p *Text) Select(from, to int) *Text {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
-	fromPos, toPos := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	if err != nil {
+		panic(fmt.Sprintf("json text Select: %s", err.Error()))
+	}
 
 	ticket := p.context.IssueTimeTicket()
 	p.Text.Select(

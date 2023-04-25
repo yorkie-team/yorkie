@@ -50,7 +50,7 @@ func TestSplayTree(t *testing.T) {
 	t.Run("insert and splay test", func(t *testing.T) {
 		tree := splay.NewTree[*stringValue](nil)
 
-		node, idx := tree.Find(0)
+		node, idx, _ := tree.Find(0)
 		assert.Nil(t, node)
 		assert.Equal(t, 0, idx)
 
@@ -71,15 +71,15 @@ func TestSplayTree(t *testing.T) {
 		assert.Equal(t, 5, tree.IndexOf(nodeC))
 		assert.Equal(t, 9, tree.IndexOf(nodeD))
 
-		node, offset := tree.Find(1)
+		node, offset, _ := tree.Find(1)
 		assert.Equal(t, nodeA, node)
 		assert.Equal(t, 1, offset)
 
-		node, offset = tree.Find(7)
+		node, offset, _ = tree.Find(7)
 		assert.Equal(t, nodeC, node)
 		assert.Equal(t, 2, offset)
 
-		node, offset = tree.Find(11)
+		node, offset, _ = tree.Find(11)
 		assert.Equal(t, nodeD, node)
 		assert.Equal(t, 2, offset)
 	})

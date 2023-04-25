@@ -221,7 +221,7 @@ func (t *Text) Remove(removedAt *time.Ticket) bool {
 }
 
 // CreateRange returns a pair of RGATreeSplitNodePos of the given integer offsets.
-func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
+func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos, error) {
 	return t.rgaTreeSplit.createRange(from, to)
 }
 

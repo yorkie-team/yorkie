@@ -31,11 +31,11 @@ func TestText(t *testing.T) {
 		ctx := helper.TextChangeContext(root)
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
-		fromPos, toPos := text.CreateRange(0, 0)
+		fromPos, toPos, _ := text.CreateRange(0, 0)
 		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 
-		fromPos, toPos = text.CreateRange(6, 11)
+		fromPos, toPos, _ = text.CreateRange(6, 11)
 		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 	})
@@ -68,15 +68,15 @@ func TestText(t *testing.T) {
 
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
-		fromPos, toPos := text.CreateRange(0, 0)
+		fromPos, toPos, _ := text.CreateRange(0, 0)
 		text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 
-		fromPos, toPos = text.CreateRange(6, 11)
+		fromPos, toPos, _ = text.CreateRange(6, 11)
 		text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 
-		fromPos, toPos = text.CreateRange(0, 1)
+		fromPos, toPos, _ = text.CreateRange(0, 1)
 		text.Style(fromPos, toPos, map[string]string{"b": "1"}, ctx.IssueTimeTicket())
 		assert.Equal(
 			t,

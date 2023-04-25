@@ -309,22 +309,33 @@ func NewRGATreeSplit[V RGATreeSplitValue](initialHead *RGATreeSplitNode[V]) *RGA
 	}
 }
 
-func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
-	fromPos := s.findNodePos(from)
+func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos, error) {
+	fromPos, err := s.findNodePos(from)
+	if err != nil {
+		return nil, nil, fmt.Errorf("rga tree split createRange: %w", err)
+	}
 	if from == to {
-		return fromPos, fromPos
+		return fromPos, fromPos, nil
 	}
 
-	return fromPos, s.findNodePos(to)
+	toPos, err := s.findNodePos(to)
+	if err != nil {
+		return nil, nil, fmt.Errorf("rga tree split createRange: %w", err)
+	}
+
+	return fromPos, toPos, nil
 }
 
-func (s *RGATreeSplit[V]) findNodePos(index int) *RGATreeSplitNodePos {
-	splayNode, offset := s.treeByIndex.Find(index)
+func (s *RGATreeSplit[V]) findNodePos(index int) (*RGATreeSplitNodePos, error) {
+	splayNode, offset, err := s.treeByIndex.Find(index)
+	if err != nil {
+		return nil, fmt.Errorf("rga tree split findNodePos: %w", err)
+	}
 	node := splayNode.Value()
 	return &RGATreeSplitNodePos{
 		id:             node.ID(),
 		relativeOffset: offset,
-	}
+	}, nil
 }
 
 func (s *RGATreeSplit[V]) findNodeWithSplit(
