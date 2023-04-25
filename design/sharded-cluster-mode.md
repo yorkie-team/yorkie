@@ -137,7 +137,7 @@ For hash function parameter in load balancing, `httpHeaderName` is used. This ro
 
 ### Risks and Mitigation
 
-There are some risks when using hash-based load balanicng to shard workloads to servers.
+There are some risks and considerstions in sharded cluster mode.
 
 **WatchDocument's Split Brain Issue on Hash-based LB**
 
@@ -155,3 +155,14 @@ For now, we can mitigate this issue with following solutions.
 - envoy `Stream Idle Timeout`: envoy provides `stream_idle_timeout` option to close long-lived connection. We can use this option to explicitly close long-lived connection when connection is idle, and ensure that connection is re-routed to new server. This is because connections will be idle when split-brained.
 
 Above solutions are forceful way to close long-lived connection, so it is not a perfect solution. We will introduce graceful way to close long-lived connection using `GOAWAY` frame of HTTP 2.0 in further updates.
+
+**Housekeeping in Sharded Cluster Mode**
+
+When we use server cluster, we are performing housekeeping on every server in the cluster. But this is not a efficient way to perform housekeeping, because all the servers are performing redundant housekeeping on same data that is already housekeeped by other servers.
+
+There are two options to solve this problem:
+
+1. Only the master server executes housekeeping in the cluster
+2. Split housekeeping tasks per project and execute them on servers mapped by project
+
+For now, we are using option 1(only the master server executes housekeeping in the cluster), with leader election for electing master server for simplicity. However, we will use option 2 in further updates.
