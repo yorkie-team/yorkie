@@ -21,11 +21,6 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 ```bash
 # Install yorkie monitoring helm chart
 helm install [RELEASE_NAME] yorkie-team/yorkie-monitoring -n monitoring --create-namespace
-
-# Import yorkie grafana dashboard and Loki grafana dashboard
-# For Loki dashboard, set namespace and workload to "yorkie"
-curl https://grafana.com/grafana/dashboards/18560-yorkie-dashboard/
-curl https://grafana.com/grafana/dashboards/13186-loki-dashboard/
 ```
 
 _See [configuration](#configuration) below for custom installation_

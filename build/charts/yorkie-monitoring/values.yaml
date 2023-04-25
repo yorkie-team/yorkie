@@ -67,6 +67,38 @@ kube-prometheus-stack:
       
       service:
         type: NodePort
+    
+    # For grafana dashboards
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+        - name: 'yorkie'
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/yorkie
+
+    # For grafana dashboards
+    dashboards:
+      yorkie:
+        yorkie-dashboard:
+          gnetId: 18560
+          revision: 2
+          datasource:
+          - name: DS_PROMETHEUS
+            value: Prometheus
+        loki-dashboard:
+          gnetId: 13186
+          revision: 1
+          datasource:
+          - name: DS_PROMETHEUS
+            value: Prometheus
+          - name: DS_LOKI
+            value: Loki
 
   # Component scraping the kube api server
   kubeApiServer:
