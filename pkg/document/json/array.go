@@ -17,7 +17,6 @@
 package json
 
 import (
-	"fmt"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -189,7 +188,7 @@ func (p *Array) insertAfterInternal(
 
 	copiedValue, err := value.DeepCopy()
 	if err != nil {
-		panic(fmt.Sprintf("json array insertAfterInternal: %s", err.Error()))
+		panic(err)
 	}
 	p.context.Push(operations.NewAdd(
 		p.Array.CreatedAt(),

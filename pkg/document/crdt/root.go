@@ -20,8 +20,6 @@
 package crdt
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -106,7 +104,7 @@ func (r *Root) RegisterTextElementWithGarbage(textType TextElement) {
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
 	if err != nil {
-		return nil, fmt.Errorf("crdt root DeepCopy: %w", err)
+		return nil, err
 	}
 	return NewRoot(copiedObject.(*Object)), nil
 }
@@ -125,7 +123,7 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	for _, text := range r.textElementWithGarbageMapByCreatedAt {
 		purgedTextNodes, err := text.purgeTextNodesWithGarbage(ticket)
 		if err != nil {
-			return 0, fmt.Errorf("crdt root GarbageCollect: %w", err)
+			return 0, err
 		}
 		if purgedTextNodes > 0 {
 			delete(r.textElementWithGarbageMapByCreatedAt, text.CreatedAt().Key())

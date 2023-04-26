@@ -73,17 +73,21 @@ func TestTree(t *testing.T) {
 		for _, array := range arrays {
 			tree := llrb.NewTree[*intKey, *intValue]()
 			for _, value := range array {
-				_, _ = tree.Put(newIntKey(value), newIntValue(value))
+				_, err := tree.Put(newIntKey(value), newIntValue(value))
+				assert.NoError(t, err)
 			}
 			assert.Equal(t, "0,1,2,3,4,5,6,7,8,9", tree.String())
 
-			_ = tree.Remove(newIntKey(8))
+			err := tree.Remove(newIntKey(8))
+			assert.NoError(t, err)
 			assert.Equal(t, "0,1,2,3,4,5,6,7,9", tree.String())
 
-			_ = tree.Remove(newIntKey(2))
+			err = tree.Remove(newIntKey(2))
+			assert.NoError(t, err)
 			assert.Equal(t, "0,1,3,4,5,6,7,9", tree.String())
 
-			_ = tree.Remove(newIntKey(5))
+			err = tree.Remove(newIntKey(5))
+			assert.NoError(t, err)
 			assert.Equal(t, "0,1,3,4,6,7,9", tree.String())
 		}
 	})

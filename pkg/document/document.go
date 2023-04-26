@@ -59,7 +59,9 @@ func (d *Document) Update(
 		return ErrDocumentRemoved
 	}
 
-	d.ensureClone()
+	if err := d.ensureClone(); err != nil {
+		return err
+	}
 
 	ctx := change.NewContext(
 		d.doc.changeID.Next(),
@@ -95,7 +97,9 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 			return err
 		}
 	} else {
-		d.ensureClone()
+		if err := d.ensureClone(); err != nil {
+			return err
+		}
 
 		for _, c := range pack.Changes {
 			if err := c.Execute(d.clone); err != nil {
@@ -121,7 +125,9 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	_, _ = d.GarbageCollect(pack.MinSyncedTicket)
+	if _, err := d.GarbageCollect(pack.MinSyncedTicket); err != nil {
+		return err
+	}
 
 	// 05. Update the status.
 	if pack.IsRemoved {
@@ -194,7 +200,9 @@ func (d *Document) RootObject() *crdt.Object {
 
 // Root returns the root object of this document.
 func (d *Document) Root() *json.Object {
-	d.ensureClone()
+	if err := d.ensureClone(); err != nil {
+		panic(err)
+	}
 
 	ctx := change.NewContext(d.doc.changeID.Next(), "", d.clone)
 	return json.NewObject(ctx, d.clone.Object())
@@ -205,13 +213,13 @@ func (d *Document) GarbageCollect(ticket *time.Ticket) (int, error) {
 	if d.clone != nil {
 		_, err := d.clone.GarbageCollect(ticket)
 		if err != nil {
-			return 0, fmt.Errorf("document GarbageCollect: %w", err)
+			return 0, err
 		}
 	}
 
 	gc, err := d.doc.GarbageCollect(ticket)
 	if err != nil {
-		return 0, fmt.Errorf("document GarbageCollect: %w", err)
+		return 0, err
 	}
 	return gc, nil
 }
@@ -221,14 +229,15 @@ func (d *Document) GarbageLen() int {
 	return d.doc.GarbageLen()
 }
 
-func (d *Document) ensureClone() {
+func (d *Document) ensureClone() error {
 	if d.clone == nil {
 		copiedDoc, err := d.doc.root.DeepCopy()
 		if err != nil {
-			panic("document ensureClone: " + err.Error())
+			return err
 		}
 		d.clone = copiedDoc
 	}
+	return nil
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

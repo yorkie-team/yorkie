@@ -536,7 +536,8 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 		}, "replace contents with b")
 		assert.NoError(b, err)
 		assert.Equal(b, cnt, doc.GarbageLen())
-		gc, _ := doc.GarbageCollect(time.MaxTicket)
+		gc, err := doc.GarbageCollect(time.MaxTicket)
+		assert.NoError(b, err)
 		assert.Equal(b, cnt, gc)
 	}
 }
@@ -569,7 +570,8 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 		assert.NoError(b, err)
 
 		assert.Equal(b, cnt, doc.GarbageLen())
-		gc, _ := doc.GarbageCollect(time.MaxTicket)
+		gc, err := doc.GarbageCollect(time.MaxTicket)
+		assert.NoError(b, err)
 		assert.Equal(b, cnt, gc)
 	}
 }
@@ -608,7 +610,8 @@ func benchmarkArrayGC(cnt int, b *testing.B) {
 		}, "deletes the array")
 		assert.NoError(b, err)
 
-		gc, _ := doc.GarbageCollect(time.MaxTicket)
+		gc, err := doc.GarbageCollect(time.MaxTicket)
+		assert.NoError(b, err)
 		assert.Equal(b, cnt+1, gc)
 		assert.NoError(b, err)
 	}

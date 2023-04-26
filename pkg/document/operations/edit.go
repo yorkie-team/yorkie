@@ -17,8 +17,6 @@
 package operations
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -80,13 +78,13 @@ func (e *Edit) Execute(root *crdt.Root) error {
 		_, _, _ = obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
 		result, err := e.from.Equal(e.to)
 		if err != nil {
-			return fmt.Errorf("edit operations %w", err)
+			return err
 		}
 		if !result {
 			root.RegisterTextElementWithGarbage(obj)
 		}
 	default:
-		return fmt.Errorf("edit operations %w", ErrNotApplicableDataType)
+		return ErrNotApplicableDataType
 	}
 
 	return nil

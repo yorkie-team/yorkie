@@ -17,8 +17,6 @@
 package json
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -42,7 +40,7 @@ func NewText(ctx *change.Context, text *crdt.Text) *Text {
 // Edit edits the given range with the given content and attributes.
 func (p *Text) Edit(from, to int, content string, attributes ...map[string]string) *Text {
 	if from > to {
-		panic("json test Edit: from should be less than or equal to to")
+		panic("from should be less than or equal to to")
 	}
 	fromPos, toPos := p.Text.CreateRange(from, to)
 
@@ -63,7 +61,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 		ticket,
 	)
 	if err != nil {
-		panic(fmt.Sprintf("json text Edit: %s", err.Error()))
+		panic(err)
 	}
 
 	p.context.Push(operations.NewEdit(
@@ -77,7 +75,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 	))
 	result, err := fromPos.Equal(toPos)
 	if err != nil {
-		panic(fmt.Sprintf("json text Edit: %s", err.Error()))
+		panic(err)
 	}
 	if !result {
 		p.context.RegisterTextElementWithGarbage(p)
@@ -89,7 +87,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 // Style applies the style of the given range.
 func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	if from > to {
-		panic("json test Style: from should be less than or equal to to")
+		panic("from should be less than or equal to to")
 	}
 	fromPos, toPos := p.Text.CreateRange(from, to)
 
@@ -115,7 +113,7 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 // Select stores that the given range has been selected.
 func (p *Text) Select(from, to int) *Text {
 	if from > to {
-		panic("json text Select: from should be less than or equal to to")
+		panic("from should be less than or equal to to")
 	}
 	fromPos, toPos := p.Text.CreateRange(from, to)
 

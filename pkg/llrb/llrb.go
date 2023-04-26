@@ -18,7 +18,6 @@
 package llrb
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -78,7 +77,7 @@ func (t *Tree[K, V]) Put(k K, v V) (V, error) {
 	var err error
 	t.root, err = t.put(t.root, k, v)
 	if err != nil {
-		return zeroV, fmt.Errorf("llrb Put: %w", err)
+		return zeroV, err
 	}
 	t.root.isRed = false
 	return v, nil
@@ -101,7 +100,7 @@ func (t *Tree[K, V]) Remove(key K) error {
 	var err error
 	t.root, err = t.remove(t.root, key)
 	if err != nil {
-		return fmt.Errorf("llrb Remove: %w", err)
+		return err
 	}
 	if t.root != nil {
 		t.root.isRed = false
@@ -119,7 +118,7 @@ func (t *Tree[K, V]) Floor(key K) (K, V, error) {
 	for node != nil {
 		keyCompare, err := key.Compare(node.key)
 		if err != nil {
-			return zeroK, zeroV, fmt.Errorf("llrb Floor: %w", err)
+			return zeroK, zeroV, err
 		}
 		if keyCompare > 0 {
 			if node.right != nil {
@@ -159,17 +158,17 @@ func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) (*Node[K, V], error) 
 
 	keyCompare, err := key.Compare(node.key)
 	if err != nil {
-		return nil, fmt.Errorf("llrb put: %w", err)
+		return nil, err
 	}
 	if keyCompare < 0 {
 		node.left, err = t.put(node.left, key, value)
 		if err != nil {
-			return nil, fmt.Errorf("llrb put: %w", err)
+			return nil, err
 		}
 	} else if keyCompare > 0 {
 		node.right, err = t.put(node.right, key, value)
 		if err != nil {
-			return nil, fmt.Errorf("llrb put: %w", err)
+			return nil, err
 		}
 	} else {
 		node.value = value
@@ -193,7 +192,7 @@ func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) (*Node[K, V], error) 
 func (t *Tree[K, V]) remove(node *Node[K, V], key K) (*Node[K, V], error) {
 	keyCompare, err := key.Compare(node.key)
 	if err != nil {
-		return nil, fmt.Errorf("llrb remove: %w", err)
+		return nil, err
 	}
 	if keyCompare < 0 {
 		if !isRed(node.left) && !isRed(node.left.left) {
@@ -201,7 +200,7 @@ func (t *Tree[K, V]) remove(node *Node[K, V], key K) (*Node[K, V], error) {
 		}
 		node.left, err = t.remove(node.left, key)
 		if err != nil {
-			return nil, fmt.Errorf("llrb remove: %w", err)
+			return nil, err
 		}
 	} else {
 		if isRed(node.left) {
@@ -210,7 +209,7 @@ func (t *Tree[K, V]) remove(node *Node[K, V], key K) (*Node[K, V], error) {
 
 		keyCompare, err := key.Compare(node.key)
 		if err != nil {
-			return nil, fmt.Errorf("llrb remove: %w", err)
+			return nil, err
 		}
 		if keyCompare == 0 && node.right == nil {
 			t.size--
@@ -223,7 +222,7 @@ func (t *Tree[K, V]) remove(node *Node[K, V], key K) (*Node[K, V], error) {
 
 		keyCompare, err = key.Compare(node.key)
 		if err != nil {
-			return nil, fmt.Errorf("llrb remove: %w", err)
+			return nil, err
 		}
 		if keyCompare == 0 {
 			t.size--
@@ -234,7 +233,7 @@ func (t *Tree[K, V]) remove(node *Node[K, V], key K) (*Node[K, V], error) {
 		} else {
 			node.right, err = t.remove(node.right, key)
 			if err != nil {
-				return nil, fmt.Errorf("llrb remove: %w", err)
+				return nil, err
 			}
 		}
 	}

@@ -17,8 +17,6 @@
 package crdt
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -103,7 +101,7 @@ func (a *Array) DeepCopy() (Element, error) {
 	for _, node := range a.elements.Nodes() {
 		copiedNode, err := node.elem.DeepCopy()
 		if err != nil {
-			return nil, fmt.Errorf("crdt array DeepCopy: %w", err)
+			return nil, err
 		}
 		elements.Add(copiedNode)
 	}

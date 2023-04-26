@@ -64,7 +64,9 @@ func (e *Style) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	_ = obj.Style(e.from, e.to, e.attributes, e.executedAt)
+	if err := obj.Style(e.from, e.to, e.attributes, e.executedAt); err != nil {
+		return err
+	}
 	return nil
 }
 

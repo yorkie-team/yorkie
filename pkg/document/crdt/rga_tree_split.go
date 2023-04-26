@@ -45,7 +45,7 @@ func NewRGATreeSplitNodeID(createdAt *time.Ticket, offset int) *RGATreeSplitNode
 // id==other, -1 if id < other, and +1 if id > other.
 func (id *RGATreeSplitNodeID) Compare(other llrb.Key) (int, error) {
 	if id == nil || other == nil {
-		return 0, fmt.Errorf("rga tree split Compare: RGATreeSplitNodeID cannot be null")
+		return 0, fmt.Errorf("RGATreeSplitNodeID cannot be null")
 	}
 
 	o := other.(*RGATreeSplitNodeID)
@@ -67,7 +67,7 @@ func (id *RGATreeSplitNodeID) Compare(other llrb.Key) (int, error) {
 func (id *RGATreeSplitNodeID) Equal(other llrb.Key) (bool, error) {
 	keyCompare, err := id.Compare(other)
 	if err != nil {
-		return false, fmt.Errorf("rga tree split Equal: %w", err)
+		return false, err
 	}
 	return keyCompare == 0, nil
 }
@@ -142,7 +142,7 @@ func (pos *RGATreeSplitNodePos) RelativeOffset() int {
 func (pos *RGATreeSplitNodePos) Equal(other *RGATreeSplitNodePos) (bool, error) {
 	result, err := pos.id.Equal(other.id)
 	if err != nil {
-		return false, fmt.Errorf("rga tree split Equal: %w", err)
+		return false, err
 	}
 	if !result {
 		return false, nil
@@ -308,7 +308,7 @@ func NewRGATreeSplit[V RGATreeSplitValue](initialHead *RGATreeSplitNode[V]) (*RG
 	treeByID := llrb.NewTree[*RGATreeSplitNodeID, *RGATreeSplitNode[V]]()
 	_, err := treeByID.Put(initialHead.ID(), initialHead)
 	if err != nil {
-		return nil, fmt.Errorf("rga tree split NewRGATreeSplit: %w", err)
+		return nil, err
 	}
 
 	return &RGATreeSplit[V]{
@@ -344,14 +344,14 @@ func (s *RGATreeSplit[V]) findNodeWithSplit(
 	absoluteID := pos.getAbsoluteID()
 	node, err := s.findFloorNodePreferToLeft(absoluteID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("findNodeWithSplit: %w", err)
+		return nil, nil, err
 	}
 
 	relativeOffset := absoluteID.offset - node.id.offset
 
 	_, err = s.splitNode(node, relativeOffset)
 	if err != nil {
-		return nil, nil, fmt.Errorf("findNodeWithSplit: %w", err)
+		return nil, nil, err
 	}
 
 	for node.next != nil && node.next.createdAt().After(updatedAt) {
@@ -364,11 +364,11 @@ func (s *RGATreeSplit[V]) findNodeWithSplit(
 func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
 	node, err := s.findFloorNode(id)
 	if err != nil {
-		return nil, fmt.Errorf("findFloorNodePreferToLeft: %w", err)
+		return nil, err
 	}
 	if node == nil {
 		return nil,
-			fmt.Errorf("findFloorNodePreferToLeft: the node of the given id should be found: " + s.StructureAsString())
+			fmt.Errorf("the node of the given id should be found: " + s.StructureAsString())
 	}
 
 	if id.offset > 0 && node.id.offset == id.offset {
@@ -384,7 +384,7 @@ func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RG
 
 func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) (*RGATreeSplitNode[V], error) {
 	if offset > node.contentLen() {
-		return nil, fmt.Errorf("splitNode: offset should be less than or equal to length: " + s.StructureAsString())
+		return nil, fmt.Errorf("offset should be less than or equal to length: " + s.StructureAsString())
 	}
 
 	if offset == 0 {
@@ -397,7 +397,7 @@ func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) (*RGA
 	s.treeByIndex.UpdateWeight(splitNode.indexNode)
 	_, err := s.InsertAfter(node, splitNode)
 	if err != nil {
-		return nil, fmt.Errorf("splitNode: %w", err)
+		return nil, err
 	}
 
 	insNext := node.insNext
@@ -419,7 +419,7 @@ func (s *RGATreeSplit[V]) InsertAfter(prev, node *RGATreeSplitNode[V]) (*RGATree
 
 	_, err := s.treeByID.Put(node.id, node)
 	if err != nil {
-		return nil, fmt.Errorf("rga tree split InsertAfter: %w", err)
+		return nil, err
 	}
 	s.treeByIndex.InsertAfter(prev.indexNode, node.indexNode)
 
@@ -439,7 +439,7 @@ func (s *RGATreeSplit[V]) FindNode(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V]
 
 	node, err := s.findFloorNode(id)
 	if err != nil {
-		return nil, fmt.Errorf("rga tree split FindNode: %w", err)
+		return nil, err
 	}
 
 	return node, nil
@@ -454,7 +454,7 @@ func (s *RGATreeSplit[V]) CheckWeight() bool {
 func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
 	key, value, err := s.treeByID.Floor(id)
 	if err != nil {
-		return nil, fmt.Errorf("rga tree split findFloorNode: %w", err)
+		return nil, err
 	}
 	if key == nil {
 		return nil, nil
@@ -462,7 +462,7 @@ func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) (*RGATreeSplitNo
 
 	result, err := key.Equal(id)
 	if err != nil {
-		return nil, fmt.Errorf("rga tree split findFloorNode: %w", err)
+		return nil, err
 	}
 	if !result && !key.hasSameCreatedAt(id) {
 		return nil, nil

@@ -17,7 +17,6 @@
 package json
 
 import (
-	"fmt"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -64,7 +63,7 @@ func (p *Object) SetNewText(k string) *Text {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		rgaTreeSplit, err := crdt.NewRGATreeSplit(crdt.InitialTextNode())
 		if err != nil {
-			panic(fmt.Sprintf("json object SetNewText err: %s", err))
+			panic(err)
 		}
 		return NewText(
 			p.context,
@@ -264,7 +263,7 @@ func (p *Object) setInternal(
 
 	copiedValue, err := value.DeepCopy()
 	if err != nil {
-		panic(fmt.Sprintf("json object setInternal: %s", err.Error()))
+		panic(err)
 	}
 	p.context.Push(operations.NewSet(
 		p.CreatedAt(),

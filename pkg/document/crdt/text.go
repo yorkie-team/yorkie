@@ -169,23 +169,23 @@ func (t *Text) Marshal() string {
 func (t *Text) DeepCopy() (Element, error) {
 	rgaTreeSplit, err := NewRGATreeSplit(InitialTextNode())
 	if err != nil {
-		return nil, fmt.Errorf("crdt text DeepCopy: %s", err)
+		return nil, err
 	}
 
 	current := rgaTreeSplit.InitialHead()
 	for _, node := range t.Nodes() {
 		current, err := rgaTreeSplit.InsertAfter(current, node.DeepCopy())
 		if err != nil {
-			return nil, fmt.Errorf("crdt text DeepCopy: %s", err)
+			return nil, err
 		}
 		insPrevID := node.InsPrevID()
 		if insPrevID != nil {
 			insPrevNode, err := rgaTreeSplit.FindNode(insPrevID)
 			if err != nil {
-				return nil, fmt.Errorf("crdt text DeepCopy: %s", err)
+				return nil, err
 			}
 			if insPrevNode == nil {
-				return nil, fmt.Errorf("crdt text DeepCopy: insPrevNode should be presence")
+				return nil, fmt.Errorf("insPrevNode should be presence")
 			}
 			current.SetInsPrev(insPrevNode)
 		}
@@ -256,7 +256,7 @@ func (t *Text) Edit(
 		executedAt,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("crdt text Edit: %s", err)
+		return nil, nil, err
 	}
 
 	return cursorPos, latestCreatedAtMapByActor, nil
@@ -272,11 +272,11 @@ func (t *Text) Style(
 	// 01. Split nodes with from and to
 	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return fmt.Errorf("crdt text Style: %s", err)
+		return err
 	}
 	_, fromRight, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
-		return fmt.Errorf("crdt text Style: %s", err)
+		return err
 	}
 
 	// 02. style nodes between from and to

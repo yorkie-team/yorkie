@@ -17,8 +17,6 @@
 package operations
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -64,7 +62,7 @@ func (o *Add) Execute(root *crdt.Root) error {
 
 	value, err := o.value.DeepCopy()
 	if err != nil {
-		return fmt.Errorf("add operations: %w", err)
+		return err
 	}
 	obj.InsertAfter(o.prevCreatedAt, value)
 
