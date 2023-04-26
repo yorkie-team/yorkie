@@ -75,12 +75,11 @@ func (e *Edit) Execute(root *crdt.Root) error {
 
 	switch obj := parent.(type) {
 	case *crdt.Text:
-		_, _, _ = obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
-		result, err := e.from.Equal(e.to)
+		_, _, err := obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
 		if err != nil {
 			return err
 		}
-		if !result {
+		if !e.from.Equal(e.to) {
 			root.RegisterTextElementWithGarbage(obj)
 		}
 	default:

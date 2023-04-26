@@ -73,11 +73,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 		attrs,
 		ticket,
 	))
-	result, err := fromPos.Equal(toPos)
-	if err != nil {
-		panic(err)
-	}
-	if !result {
+	if !fromPos.Equal(toPos) {
 		p.context.RegisterTextElementWithGarbage(p)
 	}
 
@@ -92,12 +88,14 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	fromPos, toPos := p.Text.CreateRange(from, to)
 
 	ticket := p.context.IssueTimeTicket()
-	_ = p.Text.Style(
+	if err := p.Text.Style(
 		fromPos,
 		toPos,
 		attributes,
 		ticket,
-	)
+	); err != nil {
+		panic(err)
+	}
 
 	p.context.Push(operations.NewStyle(
 		p.CreatedAt(),

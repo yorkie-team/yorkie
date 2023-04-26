@@ -174,30 +174,20 @@ func fromJSONText(
 		return nil, err
 	}
 
-	rgaTreeSplit, err := crdt.NewRGATreeSplit(crdt.InitialTextNode())
-	if err != nil {
-		return nil, err
-	}
-
+	rgaTreeSplit := crdt.NewRGATreeSplit(crdt.InitialTextNode())
 	current := rgaTreeSplit.InitialHead()
 	for _, pbNode := range pbText.Nodes {
 		textNode, err := fromTextNode(pbNode)
 		if err != nil {
 			return nil, err
 		}
-		current, err = rgaTreeSplit.InsertAfter(current, textNode)
-		if err != nil {
-			return nil, err
-		}
+		current = rgaTreeSplit.InsertAfter(current, textNode)
 		insPrevID, err := fromTextNodeID(pbNode.InsPrevId)
 		if err != nil {
 			return nil, err
 		}
 		if insPrevID != nil {
-			insPrevNode, err := rgaTreeSplit.FindNode(insPrevID)
-			if err != nil {
-				return nil, err
-			}
+			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
 			if insPrevNode == nil {
 				return nil, fmt.Errorf("insPrevNode should be presence")
 			}

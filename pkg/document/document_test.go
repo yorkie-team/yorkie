@@ -486,8 +486,7 @@ func TestDocument(t *testing.T) {
 		)
 
 		assert.Equal(t, 1, doc.GarbageLen())
-		_, err = doc.GarbageCollect(time.MaxTicket)
-		assert.NoError(t, err)
+		doc.GarbageCollect(time.MaxTicket)
 		assert.Equal(t, 0, doc.GarbageLen())
 		assert.Equal(
 			t,
@@ -520,8 +519,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 2, doc.GarbageLen())
 
-		_, err = doc.GarbageCollect(time.MaxTicket)
-		assert.NoError(t, err)
+		doc.GarbageCollect(time.MaxTicket)
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 	})

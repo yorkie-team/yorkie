@@ -167,23 +167,14 @@ func (t *Text) Marshal() string {
 
 // DeepCopy copies itself deeply.
 func (t *Text) DeepCopy() (Element, error) {
-	rgaTreeSplit, err := NewRGATreeSplit(InitialTextNode())
-	if err != nil {
-		return nil, err
-	}
-
+	rgaTreeSplit := NewRGATreeSplit(InitialTextNode())
 	current := rgaTreeSplit.InitialHead()
+
 	for _, node := range t.Nodes() {
-		current, err := rgaTreeSplit.InsertAfter(current, node.DeepCopy())
-		if err != nil {
-			return nil, err
-		}
+		current = rgaTreeSplit.InsertAfter(current, node.DeepCopy())
 		insPrevID := node.InsPrevID()
 		if insPrevID != nil {
-			insPrevNode, err := rgaTreeSplit.FindNode(insPrevID)
-			if err != nil {
-				return nil, err
-			}
+			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
 			if insPrevNode == nil {
 				return nil, fmt.Errorf("insPrevNode should be presence")
 			}
@@ -248,18 +239,13 @@ func (t *Text) Edit(
 		val.attrs.Set(key, value, executedAt)
 	}
 
-	cursorPos, latestCreatedAtMapByActor, err := t.rgaTreeSplit.edit(
+	return t.rgaTreeSplit.edit(
 		from,
 		to,
 		latestCreatedAtMapByActor,
 		val,
 		executedAt,
 	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return cursorPos, latestCreatedAtMapByActor, nil
 }
 
 // Style applies the given attributes of the given range.
@@ -324,6 +310,6 @@ func (t *Text) removedNodesLen() int {
 }
 
 // purgeTextNodesWithGarbage physically purges nodes that have been removed.
-func (t *Text) purgeTextNodesWithGarbage(ticket *time.Ticket) (int, error) {
+func (t *Text) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
 	return t.rgaTreeSplit.purgeTextNodesWithGarbage(ticket)
 }

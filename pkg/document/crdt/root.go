@@ -110,7 +110,7 @@ func (r *Root) DeepCopy() (*Root, error) {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
+func (r *Root) GarbageCollect(ticket *time.Ticket) int {
 	count := 0
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
@@ -121,17 +121,14 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	}
 
 	for _, text := range r.textElementWithGarbageMapByCreatedAt {
-		purgedTextNodes, err := text.purgeTextNodesWithGarbage(ticket)
-		if err != nil {
-			return 0, err
-		}
+		purgedTextNodes := text.purgeTextNodesWithGarbage(ticket)
 		if purgedTextNodes > 0 {
 			delete(r.textElementWithGarbageMapByCreatedAt, text.CreatedAt().Key())
 		}
 		count += purgedTextNodes
 	}
 
-	return count, nil
+	return count
 }
 
 // ElementMapLen returns the size of element map.

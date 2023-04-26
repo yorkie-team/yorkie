@@ -35,14 +35,14 @@ func newIntKey(key int) *intKey {
 	}
 }
 
-func (k *intKey) Compare(other llrb.Key) (int, error) {
+func (k *intKey) Compare(other llrb.Key) int {
 	o := other.(*intKey)
 	if k.key > o.key {
-		return 1, nil
+		return 1
 	} else if k.key < o.key {
-		return -1, nil
+		return -1
 	} else {
-		return 0, nil
+		return 0
 	}
 }
 
@@ -73,21 +73,17 @@ func TestTree(t *testing.T) {
 		for _, array := range arrays {
 			tree := llrb.NewTree[*intKey, *intValue]()
 			for _, value := range array {
-				_, err := tree.Put(newIntKey(value), newIntValue(value))
-				assert.NoError(t, err)
+				tree.Put(newIntKey(value), newIntValue(value))
 			}
 			assert.Equal(t, "0,1,2,3,4,5,6,7,8,9", tree.String())
 
-			err := tree.Remove(newIntKey(8))
-			assert.NoError(t, err)
+			tree.Remove(newIntKey(8))
 			assert.Equal(t, "0,1,2,3,4,5,6,7,9", tree.String())
 
-			err = tree.Remove(newIntKey(2))
-			assert.NoError(t, err)
+			tree.Remove(newIntKey(2))
 			assert.Equal(t, "0,1,3,4,5,6,7,9", tree.String())
 
-			err = tree.Remove(newIntKey(5))
-			assert.NoError(t, err)
+			tree.Remove(newIntKey(5))
 			assert.Equal(t, "0,1,3,4,6,7,9", tree.String())
 		}
 	})

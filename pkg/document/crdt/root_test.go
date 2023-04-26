@@ -27,8 +27,7 @@ import (
 )
 
 func registerTextElementWithGarbage(fromPos, toPos *crdt.RGATreeSplitNodePos, root *crdt.Root, text crdt.TextElement) {
-	result, _ := fromPos.Equal(toPos)
-	if !result {
+	if !fromPos.Equal(toPos) {
 		root.RegisterTextElementWithGarbage(text)
 	}
 }
@@ -50,17 +49,14 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, "[0,2]", array.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		gc, err := root.GarbageCollect(time.MaxTicket)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, gc)
+		assert.Equal(t, 1, root.GarbageCollect(time.MaxTicket))
 		assert.Equal(t, 0, root.GarbageLen())
 	})
 
 	t.Run("garbage collection for text test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		rgaTreeSplit, _ := crdt.NewRGATreeSplit(crdt.InitialTextNode())
-		text := crdt.NewText(rgaTreeSplit, ctx.IssueTimeTicket())
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)
 		_, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
@@ -95,9 +91,7 @@ func TestRoot(t *testing.T) {
 		nodeLen := len(text.Nodes())
 		assert.Equal(t, 4, nodeLen)
 
-		gc, err := root.GarbageCollect(time.MaxTicket)
-		assert.NoError(t, err)
-		assert.Equal(t, 3, gc)
+		assert.Equal(t, 3, root.GarbageCollect(time.MaxTicket))
 		assert.Equal(t, 0, root.GarbageLen())
 		nodeLen = len(text.Nodes())
 		assert.Equal(t, 1, nodeLen)
@@ -114,9 +108,7 @@ func TestRoot(t *testing.T) {
 
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		rgaTreeSplit, err := crdt.NewRGATreeSplit(crdt.InitialTextNode())
-		assert.NoError(t, err)
-		text := crdt.NewText(rgaTreeSplit, ctx.IssueTimeTicket())
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		tests := []test{
 			{from: 0, to: 0, content: "Yorkie", want: "Yorkie", garbage: 0},
@@ -127,28 +119,24 @@ func TestRoot(t *testing.T) {
 
 		for _, tc := range tests {
 			fromPos, toPos := text.CreateRange(tc.from, tc.to)
-			_, _, err = text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
+			_, _, err := text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
 			assert.NoError(t, err)
 			registerTextElementWithGarbage(fromPos, toPos, root, text)
 			assert.Equal(t, tc.want, text.String())
 			assert.Equal(t, tc.garbage, root.GarbageLen())
 		}
 
-		gc, err := root.GarbageCollect(time.MaxTicket)
-		assert.NoError(t, err)
-		assert.Equal(t, 3, gc)
+		assert.Equal(t, 3, root.GarbageCollect(time.MaxTicket))
 		assert.Equal(t, 0, root.GarbageLen())
 	})
 
 	t.Run("garbage collection for rich text test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		rgaTreeSplit, err := crdt.NewRGATreeSplit(crdt.InitialTextNode())
-		assert.NoError(t, err)
-		text := crdt.NewText(rgaTreeSplit, ctx.IssueTimeTicket())
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
 		fromPos, toPos := text.CreateRange(0, 0)
-		_, _, err = text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		_, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
 		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
@@ -173,9 +161,7 @@ func TestRoot(t *testing.T) {
 		nodeLen := len(text.Nodes())
 		assert.Equal(t, 3, nodeLen)
 
-		gc, err := root.GarbageCollect(time.MaxTicket)
-		assert.NoError(t, err)
-		assert.Equal(t, 2, gc)
+		assert.Equal(t, 2, root.GarbageCollect(time.MaxTicket))
 		assert.Equal(t, 0, root.GarbageLen())
 
 		nodeLen = len(text.Nodes())
@@ -201,9 +187,7 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, `{"1":1,"3":3}`, obj.Marshal())
 		assert.Equal(t, 4, root.GarbageLen())
 
-		gc, err := root.GarbageCollect(time.MaxTicket)
-		assert.NoError(t, err)
-		assert.Equal(t, 4, gc)
+		assert.Equal(t, 4, root.GarbageCollect(time.MaxTicket))
 		assert.Equal(t, 0, root.GarbageLen())
 
 		deleted = obj.Delete("3", ctx.IssueTimeTicket())
@@ -211,9 +195,7 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, `{"1":1}`, obj.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		gc, err = root.GarbageCollect(time.MaxTicket)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, gc)
+		assert.Equal(t, 1, root.GarbageCollect(time.MaxTicket))
 		assert.Equal(t, 0, root.GarbageLen())
 	})
 }

@@ -611,11 +611,10 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		rgaTreeSplit, err := crdt.NewRGATreeSplit(crdt.InitialTextNode())
-		if err != nil {
-			return nil, err
-		}
-		return crdt.NewText(rgaTreeSplit, createdAt), nil
+		return crdt.NewText(
+			crdt.NewRGATreeSplit(crdt.InitialTextNode()),
+			createdAt,
+		), nil
 	case api.ValueType_VALUE_TYPE_INTEGER_CNT:
 		fallthrough
 	case api.ValueType_VALUE_TYPE_LONG_CNT:
