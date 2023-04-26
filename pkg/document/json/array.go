@@ -186,10 +186,14 @@ func (p *Array) insertAfterInternal(
 	elem := creator(ticket)
 	value := toOriginal(elem)
 
+	copiedValue, err := value.DeepCopy()
+	if err != nil {
+		panic(err)
+	}
 	p.context.Push(operations.NewAdd(
 		p.Array.CreatedAt(),
 		prevCreatedAt,
-		value.DeepCopy(),
+		copiedValue,
 		ticket,
 	))
 

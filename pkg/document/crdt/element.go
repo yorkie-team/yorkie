@@ -47,7 +47,7 @@ type Element interface {
 	Marshal() string
 
 	// DeepCopy copies itself deeply.
-	DeepCopy() Element
+	DeepCopy() (Element, error)
 
 	// CreatedAt returns the creation time of this element.
 	CreatedAt() *time.Ticket

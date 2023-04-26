@@ -219,9 +219,9 @@ func (p *Primitive) Marshal() string {
 }
 
 // DeepCopy copies itself deeply.
-func (p *Primitive) DeepCopy() Element {
+func (p *Primitive) DeepCopy() (Element, error) {
 	primitive := *p
-	return &primitive
+	return &primitive, nil
 }
 
 // CreatedAt returns the creation time.

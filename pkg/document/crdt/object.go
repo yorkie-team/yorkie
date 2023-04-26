@@ -94,16 +94,20 @@ func (o *Object) Marshal() string {
 }
 
 // DeepCopy copies itself deeply.
-func (o *Object) DeepCopy() Element {
+func (o *Object) DeepCopy() (Element, error) {
 	members := NewElementRHT()
 
 	for _, node := range o.memberNodes.Nodes() {
-		members.Set(node.key, node.elem.DeepCopy())
+		copiedNode, err := node.elem.DeepCopy()
+		if err != nil {
+			return nil, err
+		}
+		members.Set(node.key, copiedNode)
 	}
 
 	obj := NewObject(members, o.createdAt)
 	obj.removedAt = o.removedAt
-	return obj
+	return obj, nil
 }
 
 // CreatedAt returns the creation time of this object.
