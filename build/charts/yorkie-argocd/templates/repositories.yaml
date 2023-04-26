@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: gitops-repo
-  namespace: argocd
+  namespace: {{ .Values.argocd.namespace }}
   labels:
     argocd.argoproj.io/secret-type: repository
 stringData:
