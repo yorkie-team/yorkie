@@ -2,23 +2,25 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ .Values.argocd.name }}
-  namespace: argocd
-  {{ if .Values.externalGateway.alb.enabled }}
+  namespace: {{ .Values.argocd.namespace }}
+  {{ if .Values.ingress.alb.enabled }}
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     # Set alb.ingress.kubernetes.io/certificate-arn annotation to TLS certificate's ARN issued in AWS ACM 
-    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.externalGateway.alb.certArn }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.alb.certArn }}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
-    alb.ingress.kubernetes.io/group.name: {{ .Values.externalGateway.apiHost }}
+    alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.hosts.apiHost }}
     alb.ingress.kubernetes.io/group.order: '2'
     {{ end }}
 spec:
-  ingressClassName: {{ .Values.externalGateway.ingressClassName }}
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
   rules:
-    - host: {{ .Values.externalGateway.apiHost }}
-      http:
+    - http:
+      {{ if .Values.ingress.hosts.enabled }}
+      host: {{ .Values.ingress.hosts.apiHost }}
+      {{ end }}
         paths:
-          - path: {{ .Values.externalGateway.argoCDPath }}/
+          - path: {{ .Values.ingress.hosts.argoCDPath }}/
             pathType: Prefix
             backend:
               service:
