@@ -418,12 +418,7 @@ func (s *RGATreeSplit[V]) FindNode(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] 
 		return nil
 	}
 
-	node, err := s.findFloorNode(id)
-	if err != nil {
-		return nil, err
-	}
-
-	return node, nil
+	return s.findFloorNode(id)
 }
 
 // CheckWeight returns false when there is an incorrect weight node.
@@ -632,9 +627,7 @@ func (s *RGATreeSplit[V]) purgeTextNodesWithGarbage(ticket *time.Ticket) int {
 		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {
 			s.treeByIndex.Delete(node.indexNode)
 			s.purge(node)
-			if err := s.treeByID.Remove(node.id); err != nil {
-				return 0, fmt.Errorf("rga tree split purgeTextNodesWithGarbage: %w", err)
-			}
+			s.treeByID.Remove(node.id)
 			delete(s.removedNodeMap, node.id.key())
 			count++
 		}

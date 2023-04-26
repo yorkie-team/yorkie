@@ -72,13 +72,8 @@ func NewTree[K Key, V Value]() *Tree[K, V] {
 }
 
 // Put puts the value of the given key.
-func (t *Tree[K, V]) Put(k K, v V) (V, error) {
-	var zeroV V
-	var err error
-	t.root, err = t.put(t.root, k, v)
-	if err != nil {
-		return zeroV, err
-	}
+func (t *Tree[K, V]) Put(k K, v V) V {
+	t.root = t.put(t.root, k, v)
 	t.root.isRed = false
 	return v
 }
