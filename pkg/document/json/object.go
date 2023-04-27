@@ -257,10 +257,14 @@ func (p *Object) setInternal(
 	elem := creator(ticket)
 	value := toOriginal(elem)
 
+	copiedValue, err := value.DeepCopy()
+	if err != nil {
+		panic(err)
+	}
 	p.context.Push(operations.NewSet(
 		p.CreatedAt(),
 		k,
-		value.DeepCopy(),
+		copiedValue,
 		ticket,
 	))
 

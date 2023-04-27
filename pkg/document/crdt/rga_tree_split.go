@@ -43,7 +43,8 @@ func NewRGATreeSplitNodeID(createdAt *time.Ticket, offset int) *RGATreeSplitNode
 
 // Compare returns an integer comparing two ID. The result will be 0 if
 // id==other, -1 if id < other, and +1 if id > other. If the receiver or
-// argument is nil, it would panic at runtime.
+// argument is nil, it would panic at runtime. This method is following
+// golang standard interface.
 func (id *RGATreeSplitNodeID) Compare(other llrb.Key) int {
 	if id == nil || other == nil {
 		panic("RGATreeSplitNodeID cannot be null")
@@ -330,47 +331,53 @@ func (s *RGATreeSplit[V]) findNodePos(index int) *RGATreeSplitNodePos {
 func (s *RGATreeSplit[V]) findNodeWithSplit(
 	pos *RGATreeSplitNodePos,
 	updatedAt *time.Ticket,
-) (*RGATreeSplitNode[V], *RGATreeSplitNode[V]) {
+) (*RGATreeSplitNode[V], *RGATreeSplitNode[V], error) {
 	absoluteID := pos.getAbsoluteID()
-	node := s.findFloorNodePreferToLeft(absoluteID)
+	node, err := s.findFloorNodePreferToLeft(absoluteID)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	relativeOffset := absoluteID.offset - node.id.offset
 
-	s.splitNode(node, relativeOffset)
+	_, err = s.splitNode(node, relativeOffset)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	for node.next != nil && node.next.createdAt().After(updatedAt) {
 		node = node.next
 	}
 
-	return node, node.next
+	return node, node.next, nil
 }
 
-func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] {
+func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
 	node := s.findFloorNode(id)
 	if node == nil {
-		panic("the node of the given id should be found: " + s.StructureAsString())
+		return nil, fmt.Errorf("the node of the given id should be found: " + s.StructureAsString())
 	}
 
 	if id.offset > 0 && node.id.offset == id.offset {
 		// NOTE: InsPrev may not be present due to GC.
 		if node.insPrev == nil {
-			return node
+			return node, nil
 		}
 		node = node.insPrev
 	}
 
-	return node
+	return node, nil
 }
 
-func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) *RGATreeSplitNode[V] {
+func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) (*RGATreeSplitNode[V], error) {
 	if offset > node.contentLen() {
-		panic("offset should be less than or equal to length: " + s.StructureAsString())
+		return nil, fmt.Errorf("offset should be less than or equal to length: " + s.StructureAsString())
 	}
 
 	if offset == 0 {
-		return node
+		return node, nil
 	} else if offset == node.contentLen() {
-		return node.next
+		return node.next, nil
 	}
 
 	splitNode := node.split(offset)
@@ -383,7 +390,7 @@ func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) *RGAT
 	}
 	splitNode.SetInsPrev(node)
 
-	return splitNode
+	return splitNode, nil
 }
 
 // InsertAfter inserts the given node after the given previous node.
@@ -439,10 +446,16 @@ func (s *RGATreeSplit[V]) edit(
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	content V,
 	editedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
+) (*RGATreeSplitNodePos, map[string]*time.Ticket, error) {
 	// 01. Split nodes with from and to
-	toLeft, toRight := s.findNodeWithSplit(to, editedAt)
-	fromLeft, fromRight := s.findNodeWithSplit(from, editedAt)
+	toLeft, toRight, err := s.findNodeWithSplit(to, editedAt)
+	if err != nil {
+		return nil, nil, err
+	}
+	fromLeft, fromRight, err := s.findNodeWithSplit(from, editedAt)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
@@ -467,7 +480,7 @@ func (s *RGATreeSplit[V]) edit(
 		s.removedNodeMap[key] = removedNode
 	}
 
-	return caretPos, latestCreatedAtMap
+	return caretPos, latestCreatedAtMap, nil
 }
 
 func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeSplitNode[V] {

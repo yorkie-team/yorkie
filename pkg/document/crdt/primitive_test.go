@@ -53,7 +53,8 @@ func TestPrimitive(t *testing.T) {
 			assert.Equal(t, prim.Value(), crdt.ValueFromBytes(prim.ValueType(), prim.Bytes()))
 			assert.Equal(t, prim.Marshal(), test.marshal)
 
-			copied := prim.DeepCopy()
+			copied, err := prim.DeepCopy()
+			assert.NoError(t, err)
 			assert.Equal(t, prim.CreatedAt(), copied.CreatedAt())
 			assert.Equal(t, prim.MovedAt(), copied.MovedAt())
 			assert.Equal(t, prim.Marshal(), copied.Marshal())
