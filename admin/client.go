@@ -279,6 +279,27 @@ func (c *Client) RemoveDocumentByDocKey(
 	return response.Success, nil
 }
 
+// RemoveDocumentWithApiKey remove a document by document key.
+func (c *Client) RemoveDocumentWithApiKey(
+	ctx context.Context,
+	projectName string,
+	documentKey string,
+	apiKey string,
+) (bool, error) {
+	response, err := c.client.RemoveDocumentByDocKey(
+		withShardKey(ctx, apiKey, documentKey),
+		&api.RemoveDocumentByDocKeyRequest{
+			ProjectName: projectName,
+			DocumentKey: documentKey,
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+
+	return response.Success, nil
+}
+
 // ListChangeSummaries returns the change summaries of the given document.
 func (c *Client) ListChangeSummaries(
 	ctx context.Context,

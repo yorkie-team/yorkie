@@ -28,14 +28,15 @@ import (
 
 func newRemoveCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove [project name] [document key]",
+		Use:   "remove [project name] [document key] [api key]",
 		Short: "Remove documents in the project",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
-				return errors.New("project name & document key is required")
+				return errors.New("project name & document key & apiKey is required")
 			}
 			projectName := args[0]
 			documentKey := args[1]
+			apiKey := args[2]
 
 			token, err := config.LoadToken(config.AdminAddr)
 			if err != nil {
@@ -50,7 +51,8 @@ func newRemoveCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			_, err = cli.RemoveDocumentByDocKey(ctx, projectName, documentKey)
+			//_, err = cli.RemoveDocumentByDocKey(ctx, projectName, documentKey)
+			_, err = cli.RemoveDocumentWithApiKey(ctx, projectName, documentKey, apiKey)
 			if err != nil {
 				return err
 			}
