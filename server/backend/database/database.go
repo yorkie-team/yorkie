@@ -20,6 +20,7 @@ package database
 import (
 	"context"
 	"errors"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -253,4 +254,26 @@ type Database interface {
 		docID types.ID,
 		excludeClientID types.ID,
 	) (bool, error)
+
+	// CreateTTLIndex creates a TTL index.
+	CreateTTLIndex(
+		ctx context.Context,
+		leaseDuration gotime.Duration,
+	) error
+
+	// TryToAcquireLeaderLease tries to acquire the leader lease.
+	TryToAcquireLeaderLease(
+		ctx context.Context,
+		hostname string,
+		leaseLockName string,
+		leaseDuration gotime.Duration,
+	) (bool, error)
+
+	// RenewLeaderLease renews the leader lease.
+	RenewLeaderLease(
+		ctx context.Context,
+		hostname string,
+		leaseLockName string,
+		leaseDuration gotime.Duration,
+	) error
 }

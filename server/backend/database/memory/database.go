@@ -1308,6 +1308,37 @@ func (d *DB) findTicketByServerSeq(
 	), nil
 }
 
+// CreateTTLIndex creates a TTL index.
+func (d *DB) CreateTTLIndex(
+	ctx context.Context,
+	leaseDuration gotime.Duration,
+) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+// TryToAcquireLeaderLease tries to acquire the leader lease.
+func (d *DB) TryToAcquireLeaderLease(
+	ctx context.Context,
+	hostname string,
+	leaseLockName string,
+	leaseDuration gotime.Duration,
+) (bool, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+// RenewLeaderLease renews the leader lease.
+func (d *DB) RenewLeaderLease(
+	ctx context.Context,
+	hostname string,
+	leaseLockName string,
+	leaseDuration gotime.Duration,
+) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func newID() types.ID {
 	return types.ID(primitive.NewObjectID().Hex())
 }

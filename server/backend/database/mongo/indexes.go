@@ -33,6 +33,7 @@ const (
 	colChanges    = "changes"
 	colSnapshots  = "snapshots"
 	colSyncedSeqs = "syncedseqs"
+	colElections  = "elections"
 )
 
 type collectionInfo struct {
@@ -129,6 +130,20 @@ var collectionInfos = []collectionInfo{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "lamport", Value: bsonx.Int32(1)},
 				{Key: "actor_id", Value: bsonx.Int32(1)},
+			},
+		}},
+	}, {
+		name: colElections,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "election_id", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}, {
+			Keys: bsonx.Doc{
+				{Key: "election_id", Value: bsonx.Int32(1)},
+				{Key: "leader_id", Value: bsonx.Int32(1)},
+				{Key: "lease_expire_at", Value: bsonx.Int32(1)},
 			},
 		}},
 	},

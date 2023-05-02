@@ -59,6 +59,7 @@ var (
 	AdminPassword                         = server.DefaultAdminPassword
 	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
+	HousekeepingLeaseDuration             = 10 * gotime.Second
 
 	AdminTokenDuration         = "10s"
 	ClientDeactivateThreshold  = "10s"
@@ -222,6 +223,7 @@ func TestConfig() *server.Config {
 		Housekeeping: &housekeeping.Config{
 			Interval:                  HousekeepingInterval.String(),
 			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
+			LeaseDuration:             HousekeepingLeaseDuration.String(),
 		},
 		Backend: &backend.Config{
 			AdminUser:                  server.DefaultAdminUser,

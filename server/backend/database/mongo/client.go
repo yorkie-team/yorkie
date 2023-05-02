@@ -1397,6 +1397,73 @@ func (c *Client) findTicketByServerSeq(
 	), nil
 }
 
+// CreateTTLIndex creates a TTL index.
+func (c *Client) CreateTTLIndex(
+	ctx context.Context,
+	leaseDuration gotime.Duration,
+) error {
+	ttlIndexModel := mongo.IndexModel{
+		Keys:    bson.M{"lease_expire_at": 1},
+		Options: options.Index().SetExpireAfterSeconds(int32(leaseDuration.Seconds())),
+	}
+	_, err := c.collection(colElections).Indexes().CreateOne(ctx, ttlIndexModel)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// TryToAcquireLeaderLease tries to acquire the leader lease.
+func (c *Client) TryToAcquireLeaderLease(
+	ctx context.Context,
+	hostname string,
+	leaseLockName string,
+	leaseDuration gotime.Duration,
+) (bool, error) {
+	updated := false
+	result, err := c.collection(colElections).UpdateOne(ctx, bson.M{
+		"election_id":     leaseLockName,
+		"lease_expire_at": bson.M{"$lt": gotime.Now()},
+	}, bson.M{
+		"$set": bson.M{
+			"leader_id":       hostname,
+			"lease_expire_at": gotime.Now().Add(leaseDuration),
+		}},
+		options.Update().SetUpsert(true),
+	)
+	if err != nil {
+		return false, err
+	}
+
+	if result.ModifiedCount == 1 || result.UpsertedCount == 1 {
+		updated = true
+	}
+	return updated, nil
+}
+
+// RenewLeaderLease renews the leader lease.
+func (c *Client) RenewLeaderLease(
+	ctx context.Context,
+	hostname string,
+	leaseLockName string,
+	leaseDuration gotime.Duration,
+) error {
+	_, err := c.collection(colElections).UpdateOne(ctx, bson.M{
+		"election_id": leaseLockName,
+		"leader_id":   hostname,
+	}, bson.M{
+		"$set": bson.M{
+			"lease_expire_at": gotime.Now().Add(leaseDuration),
+		}},
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *Client) collection(
 	name string,
 	opts ...*options.CollectionOptions,

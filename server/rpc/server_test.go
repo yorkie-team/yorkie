@@ -85,6 +85,7 @@ func TestMain(m *testing.M) {
 	}, &housekeeping.Config{
 		Interval:                  helper.HousekeepingInterval.String(),
 		CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
+		LeaseDuration:             helper.HousekeepingLeaseDuration.String(),
 	}, met)
 	if err != nil {
 		log.Fatal(err)
