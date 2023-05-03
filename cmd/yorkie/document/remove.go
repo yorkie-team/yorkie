@@ -31,7 +31,7 @@ func newRemoveCommand() *cobra.Command {
 		Use:   "remove [project name] [document key] [api key]",
 		Short: "Remove documents in the project",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 2 {
+			if len(args) != 3 {
 				return errors.New("project name & document key & apiKey is required")
 			}
 			projectName := args[0]

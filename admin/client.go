@@ -375,7 +375,7 @@ func (c *Client) ListChangeSummaries(
 func withShardKey(ctx context.Context, keys ...string) context.Context {
 	return metadata.AppendToOutgoingContext(
 		ctx,
-		types.ShardKey,
-		strings.Join(keys, "/"),
+		types.APIKeyKey, keys[0],
+		types.ShardKey, strings.Join(keys, "/"),
 	)
 }
