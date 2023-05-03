@@ -21,103 +21,19 @@ package election
 import (
 	"context"
 	"time"
-
-	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-// Elector is responsible for leader election between server cluster.
-type Elector struct {
-	database database.Database
-	hostname string
+// Elector provides leader election between server cluster. It is used to
+// elect leader among server cluster and run tasks only on the leader.
+type Elector interface {
+	// StartElection starts leader election.
+	StartElection(
+		leaseLockName string,
+		leaseDuration time.Duration,
+		onStartLeading func(ctx context.Context),
+		onStoppedLeading func(),
+	) error
 
-	ctx        context.Context
-	cancelFunc context.CancelFunc
-}
-
-// New creates a new elector instance.
-func New(
-	hostname string,
-	database database.Database,
-) (*Elector, error) {
-	ctx, cancelFunc := context.WithCancel(context.Background())
-
-	return &Elector{
-		database: database,
-		hostname: hostname,
-
-		ctx:        ctx,
-		cancelFunc: cancelFunc,
-	}, nil
-}
-
-// Start starts leader election.
-func (e *Elector) Start(
-	leaseLockName string,
-	leaseDuration time.Duration,
-	onStartLeading func(ctx context.Context),
-	onStoppedLeading func(),
-) error {
-	if err := e.database.CreateTTLIndex(context.Background(), leaseDuration); err != nil {
-		return err
-	}
-
-	go e.Run(leaseLockName, leaseDuration, onStartLeading, onStoppedLeading)
-	return nil
-}
-
-// Stop stops leader election.
-func (e *Elector) Stop() error {
-	e.cancelFunc()
-
-	return nil
-}
-
-// Run starts leader election loop.
-// Run will not return before leader election loop is stopped by ctx,
-// or it has stopped holding the leader lease
-func (e *Elector) Run(
-	leaseLockName string,
-	leaseDuration time.Duration,
-	onStartLeading func(ctx context.Context),
-	onStoppedLeading func(),
-) {
-	for {
-		ctx := context.Background()
-		acquired, err := e.database.TryToAcquireLeaderLease(ctx, e.hostname, leaseLockName, leaseDuration)
-		if err != nil {
-			continue
-		}
-
-		if acquired {
-			go onStartLeading(ctx)
-			logging.From(ctx).Infof(
-				"leader elected: %s", e.hostname,
-			)
-
-			for {
-				err = e.database.RenewLeaderLease(ctx, e.hostname, leaseLockName, leaseDuration)
-				if err != nil {
-					break
-				}
-
-				select {
-				case <-time.After(leaseDuration / 2):
-				case <-e.ctx.Done():
-					return
-				}
-			}
-		} else {
-			onStoppedLeading()
-			logging.From(ctx).Infof(
-				"leader lost: %s", e.hostname,
-			)
-		}
-
-		select {
-		case <-time.After(leaseDuration):
-		case <-e.ctx.Done():
-			return
-		}
-	}
+	// Stop stops all leader elections.
+	Stop() error
 }

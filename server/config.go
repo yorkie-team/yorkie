@@ -42,6 +42,7 @@ const (
 
 	DefaultHousekeepingInterval                  = 30 * time.Second
 	DefaultHousekeepingCandidatesLimitPerProject = 500
+	DefaultHousekeepingLeaderElection            = false
 	DefaultHousekeepingLeaseDuration             = 60 * time.Second
 
 	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
@@ -65,8 +66,7 @@ const (
 	DefaultAuthWebhookCacheAuthTTL    = 10 * time.Second
 	DefaultAuthWebhookCacheUnauthTTL  = 10 * time.Second
 
-	DefaultHostname       = ""
-	DefaultLeaderElection = false
+	DefaultHostname = ""
 )
 
 // Config is the configuration for creating a Yorkie instance.
@@ -233,6 +233,7 @@ func newConfig(port int, profilingPort int) *Config {
 		Housekeeping: &housekeeping.Config{
 			Interval:                  DefaultHousekeepingInterval.String(),
 			CandidatesLimitPerProject: DefaultHousekeepingCandidatesLimitPerProject,
+			LeaderElection:            DefaultHousekeepingLeaderElection,
 			LeaseDuration:             DefaultHousekeepingLeaseDuration.String(),
 		},
 		Backend: &backend.Config{

@@ -229,6 +229,12 @@ func init() {
 		server.DefaultHousekeepingCandidatesLimitPerProject,
 		"candidates limit per project for a single housekeeping run",
 	)
+	cmd.Flags().BoolVar(
+		&conf.Housekeeping.LeaderElection,
+		"housekeeping-leader-election",
+		server.DefaultHousekeepingLeaderElection,
+		"Enable leader election to run housekeeping only on the leader.",
+	)
 	cmd.Flags().DurationVar(
 		&housekeepingLeaseDuration,
 		"housekeeping-lease-duration",
@@ -350,12 +356,6 @@ func init() {
 		"hostname",
 		server.DefaultHostname,
 		"Yorkie Server Hostname",
-	)
-	cmd.Flags().BoolVar(
-		&conf.Backend.LeaderElection,
-		"leader-election",
-		server.DefaultLeaderElection,
-		"Enable leader election to run tasks only on the leader.",
 	)
 
 	rootCmd.AddCommand(cmd)

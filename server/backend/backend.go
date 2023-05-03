@@ -34,6 +34,7 @@ import (
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/election"
+	dbelection "github.com/yorkie-team/yorkie/server/backend/election/database"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	memsync "github.com/yorkie-team/yorkie/server/backend/sync/memory"
@@ -49,7 +50,7 @@ type Backend struct {
 
 	DB           database.Database
 	Coordinator  sync.Coordinator
-	Elector      *election.Elector
+	Elector      election.Elector
 	Metrics      *prometheus.Metrics
 	Background   *background.Background
 	Housekeeping *housekeeping.Housekeeping
@@ -101,18 +102,12 @@ func New(
 	//  will need to distribute workloads of a document.
 	coordinator := memsync.NewCoordinator(serverInfo)
 
-	var elector *election.Elector
-	if conf.LeaderElection {
-		elector, err = election.New(hostname, db)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	authWebhookCache, err := cache.NewLRUExpireCache[string, *types.AuthWebhookResponse](conf.AuthWebhookCacheSize)
 	if err != nil {
 		return nil, err
 	}
+
+	elector := dbelection.NewElector(hostname, db)
 
 	keeping, err := housekeeping.Start(
 		housekeepingConf,
@@ -169,10 +164,8 @@ func (b *Backend) Shutdown() error {
 		return err
 	}
 
-	if b.Config.LeaderElection {
-		if err := b.Elector.Stop(); err != nil {
-			return err
-		}
+	if err := b.Elector.Stop(); err != nil {
+		return err
 	}
 
 	if err := b.Coordinator.Close(); err != nil {

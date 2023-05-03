@@ -1313,8 +1313,7 @@ func (d *DB) CreateTTLIndex(
 	ctx context.Context,
 	leaseDuration gotime.Duration,
 ) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
 // TryToAcquireLeaderLease tries to acquire the leader lease.
@@ -1324,8 +1323,8 @@ func (d *DB) TryToAcquireLeaderLease(
 	leaseLockName string,
 	leaseDuration gotime.Duration,
 ) (bool, error) {
-	//TODO implement me
-	panic("implement me")
+	// In memory database, leader is always myself.
+	return true, nil
 }
 
 // RenewLeaderLease renews the leader lease.
@@ -1335,8 +1334,7 @@ func (d *DB) RenewLeaderLease(
 	leaseLockName string,
 	leaseDuration gotime.Duration,
 ) error {
-	//TODO implement me
-	panic("implement me")
+	return nil
 }
 
 func newID() types.ID {

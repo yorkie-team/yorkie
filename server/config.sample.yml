@@ -36,6 +36,12 @@ Housekeeping:
   # CandidatesLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
   CandidatesLimitPerProject: 100
 
+  # LeaderElection is the flag to enable leader election for performing housekeeping only on leader node.
+  LeaderElection: false
+
+  # LeaseDuration is the duration that non-leader candidates will wait to force acquire leadership.
+  LeaseDuration: "15s"
+
 # Backend is the configuration for the backend of Yorkie.
 Backend:
   # UseDefaultProject is whether to use the default project (default: true).
@@ -77,10 +83,6 @@ Backend:
   # Hostname is the hostname of the server. If not provided, the hostname will be
   # determined automatically by the OS (Optional, default: os.Hostname()).
   Hostname: ""
-
-  # LeaderElection is the flag to enable leader election for performing housekeeping only on leader node.
-  # Server should be deployed in Kubernetes platform to enable this flag.
-  LeaderElection: false
 
 # Mongo is the MongoDB configuration (Optional).
 Mongo:

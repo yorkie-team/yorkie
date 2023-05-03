@@ -72,10 +72,6 @@ type Config struct {
 
 	// Hostname is yorkie server hostname. hostname is used by metrics.
 	Hostname string `yaml:"Hostname"`
-
-	// LeaderElection is the flag to enable leader election for performing housekeeping only on leader node.
-	// Server should be deployed in Kubernetes platform to enable this flag.
-	LeaderElection bool `yaml:"LeaderElection"`
 }
 
 // Validate validates this config.

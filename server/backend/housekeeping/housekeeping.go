@@ -44,6 +44,9 @@ type Config struct {
 	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
 	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
 
+	// LeaderElection is the flag to enable leader election for performing housekeeping only on leader node.
+	LeaderElection bool `yaml:"LeaderElection"`
+
 	// LeaseDuration is the duration that non-leader candidates will wait to force acquire leadership.
 	LeaseDuration string `yaml:"LeaseDuration"`
 }
@@ -75,10 +78,11 @@ func (c *Config) Validate() error {
 type Housekeeping struct {
 	database    database.Database
 	coordinator sync.Coordinator
-	elector     *election.Elector
+	elector     election.Elector
 
 	interval                  time.Duration
 	candidatesLimitPerProject int
+	leaderElection            bool
 	leaseDuration             time.Duration
 
 	ctx        context.Context
@@ -90,7 +94,7 @@ func Start(
 	conf *Config,
 	database database.Database,
 	coordinator sync.Coordinator,
-	elector *election.Elector,
+	elector election.Elector,
 ) (*Housekeeping, error) {
 	h, err := New(conf, database, coordinator, elector)
 	if err != nil {
@@ -108,7 +112,7 @@ func New(
 	conf *Config,
 	database database.Database,
 	coordinator sync.Coordinator,
-	elector *election.Elector,
+	elector election.Elector,
 ) (*Housekeeping, error) {
 	interval, err := time.ParseDuration(conf.Interval)
 	if err != nil {
@@ -128,6 +132,7 @@ func New(
 
 		interval:                  interval,
 		candidatesLimitPerProject: conf.CandidatesLimitPerProject,
+		leaderElection:            conf.LeaderElection,
 		leaseDuration:             leaseDuration,
 
 		ctx:        ctx,
@@ -137,8 +142,8 @@ func New(
 
 // Start starts the housekeeping service.
 func (h *Housekeeping) Start() error {
-	if h.elector != nil {
-		err := h.elector.Start(
+	if h.leaderElection {
+		err := h.elector.StartElection(
 			lockLeaseName,
 			h.leaseDuration,
 			func(ctx context.Context) { h.run() },
