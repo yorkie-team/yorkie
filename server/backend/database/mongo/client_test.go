@@ -100,4 +100,35 @@ func TestClient(t *testing.T) {
 	t.Run("IsDocumentAttached test", func(t *testing.T) {
 		testcases.RunIsDocumentAttachedTest(t, cli, dummyProjectID)
 	})
+
+	t.Run("leader lease acquisition test", func(t *testing.T) {
+		ctx := context.Background()
+		leaseDuration := 5 * time.Second
+		node1 := "node1"
+		node2 := "node2"
+
+		err := cli.CreateTTLIndex(ctx, leaseDuration)
+		assert.NoError(t, err)
+
+		// node 1 try to acquire leader lease
+		acquired, err := cli.TryToAcquireLeaderLease(ctx, node1, t.Name(), leaseDuration)
+		assert.NoError(t, err)
+		assert.True(t, acquired)
+
+		// node 2 try to acquire leader lease, but it will fail
+		acquired, err = cli.TryToAcquireLeaderLease(ctx, node2, t.Name(), leaseDuration)
+		assert.Error(t, err)
+		assert.False(t, acquired)
+
+		// after lease duration, node 2 can acquire leader lease
+		time.Sleep(leaseDuration)
+
+		acquired, err = cli.TryToAcquireLeaderLease(ctx, node2, t.Name(), leaseDuration)
+		assert.NoError(t, err)
+		assert.True(t, acquired)
+
+		// node 2 renew leader lease
+		err = cli.RenewLeaderLease(ctx, node2, t.Name(), leaseDuration)
+		assert.NoError(t, err)
+	})
 }
