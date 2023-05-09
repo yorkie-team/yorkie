@@ -31,12 +31,11 @@ func newRemoveCommand() *cobra.Command {
 		Use:   "remove [project name] [document key] [api key]",
 		Short: "Remove documents in the project",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 3 {
+			if len(args) != 2 {
 				return errors.New("project name & document key & apiKey is required")
 			}
 			projectName := args[0]
 			documentKey := args[1]
-			apiKey := args[2]
 
 			token, err := config.LoadToken(config.AdminAddr)
 			if err != nil {
@@ -51,14 +50,22 @@ func newRemoveCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
+			project, err := cli.GetProject(ctx, projectName)
+			if err != nil {
+				return err
+			}
+			apiKey := project.PublicKey
 			//_, err = cli.RemoveDocumentByDocKey(ctx, projectName, documentKey)
-			_, err = cli.RemoveDocumentWithApiKey(ctx, projectName, documentKey, apiKey)
+			success, err := cli.RemoveDocumentWithApiKey(ctx, projectName, documentKey, apiKey)
 			if err != nil {
 				return err
 			}
 
-			cmd.Printf("Success remove document\n")
+			if !success {
+				return errors.New("failed to remove document")
+			}
 
+			cmd.Printf("Success remove document\n")
 			return nil
 		},
 	}
