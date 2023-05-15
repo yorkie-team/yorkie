@@ -3,7 +3,7 @@ monitoring:
   name: &monitoringName yorkie-monitoring
   namespace: &monitoringNamespace monitoring
 
-  # Name of yorkie used for yorkie cluster
+  # Configured name used for yorkie cluster
   yorkieName: yorkie
   yorkieNamespace: yorkie
 
@@ -28,7 +28,9 @@ ingress:
 
 # Configuration for manual prometheus monitoring stack
 kube-prometheus-stack:
-  fullnameOverride: *monitoringName
+  # fullnameOverride should be {{monitoring.name}} + "prometheus-stack"
+  # TODO(krapie) refactor these values to helper.tpl file
+  fullnameOverride: yorkie-monitoring-prometheus-stack
   namespaceOverride: *monitoringNamespace
 
   # Configuration for alertmanager
@@ -40,6 +42,10 @@ kube-prometheus-stack:
   # ref: https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
   grafana:
     enabled: true
+
+    # fullnameOverride should be {{monitoring.name}} + "grafana"
+    # TODO(krapie) refactor these values to helper.tpl file
+    fullnameOverride: yorkie-monitoring-grafana
 
     defaultDashboardsTimezone: utc
     defaultDashboardsEnabled: false
@@ -170,11 +176,23 @@ kube-prometheus-stack:
             requests:
               storage: 1Gi
         selector: {}
+  
+  prometheus-node-exporter:
+    # fullnameOverride should be {{monitoring.name}} + "prometheus-node-exporter"
+    # TODO(krapie) refactor these values to helper.tpl file
+    fullnameOverride: yorkie-monitoring-prometheus-node-exporter
+
+  kube-state-metrics:
+    # fullnameOverride should be {{monitoring.name}} + "prometheus-state-metrics"
+    # TODO(krapie) refactor these values to helper.tpl file
+    fullnameOverride: yorkie-monitoring-state-metrics
 
 # Configuration for loki monitoring stack
 loki-stack:
   loki:
     isDefault: false
+    # fullnameOverride should be {{monitoring.name}} + "loki"
+    # TODO(krapie) refactor these values to helper.tpl file    
     fullnameOverride: yorkie-monitoring-loki
 
     persistence:
@@ -182,6 +200,8 @@ loki-stack:
       size: 1Gi
 
   promtail:
+    # fullnameOverride should be {{monitoring.name}} + "promtail"
+    # TODO(krapie) refactor these values to helper.tpl file  
     fullnameOverride: yorkie-monitoring-promtail
     
     config:

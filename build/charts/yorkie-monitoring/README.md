@@ -32,8 +32,7 @@ _See [`helm install`](https://helm.sh/docs/helm/helm_install/) for command docum
 By default this chart installs additional, dependent charts:
 
 - [kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack)
-
-To disable dependencies during installation, see [multiple releases](#multiple-releases) below.
+- [loki-stack](https://github.com/grafana/helm-charts/tree/main/charts/loki-stack)
 
 _See [`helm dependency`](https://helm.sh/docs/helm/helm_dependency/) for command documentation._
 
@@ -51,6 +50,12 @@ CRDs created by this chart are not removed by default and should be manually cle
 
 ```bash
 kubectl get crd -oname | grep --color=never 'monitoring.coreos.com' | xargs kubectl delete
+```
+
+Also, ServiceAccounts are not removed by default and shold be manually cleaned up:
+
+```bash
+kubectl delete serviceaccounts --all -n monitoring
 ```
 
 ## Upgrading Chart
