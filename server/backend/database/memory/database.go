@@ -500,7 +500,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
-	clientDocInfo := clientInfo.Documents[docInfo.ID]
+	clientDocInfo := clientInfo.FindDocumentInfo(docInfo.ID)
 	attached, err := clientInfo.IsAttached(docInfo.ID)
 	if err != nil {
 		return err
@@ -519,26 +519,29 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 
 	loaded := raw.(*database.ClientInfo).DeepCopy()
 
+	documentInfo := loaded.FindDocumentInfo(docInfo.ID)
 	if !attached {
-		loaded.Documents[docInfo.ID] = &database.ClientDocInfo{
+		documentInfo = &database.ClientDocInfo{
+			DocID:  docInfo.ID,
 			Status: clientDocInfo.Status,
 		}
 		loaded.UpdatedAt = gotime.Now()
 	} else {
-		if _, ok := loaded.Documents[docInfo.ID]; !ok {
-			loaded.Documents[docInfo.ID] = &database.ClientDocInfo{}
+		if documentInfo == nil {
+			documentInfo = &database.ClientDocInfo{}
 		}
 
-		loadedClientDocInfo := loaded.Documents[docInfo.ID]
-		serverSeq := loadedClientDocInfo.ServerSeq
-		if clientDocInfo.ServerSeq > loadedClientDocInfo.ServerSeq {
+		serverSeq := documentInfo.ServerSeq
+		if clientDocInfo.ServerSeq > documentInfo.ServerSeq {
 			serverSeq = clientDocInfo.ServerSeq
 		}
-		clientSeq := loadedClientDocInfo.ClientSeq
-		if clientDocInfo.ClientSeq > loadedClientDocInfo.ClientSeq {
+		clientSeq := documentInfo.ClientSeq
+		if clientDocInfo.ClientSeq > documentInfo.ClientSeq {
 			clientSeq = clientDocInfo.ClientSeq
 		}
-		loaded.Documents[docInfo.ID] = &database.ClientDocInfo{
+
+		documentInfo = &database.ClientDocInfo{
+			DocID:     clientDocInfo.DocID,
 			ServerSeq: serverSeq,
 			ClientSeq: clientSeq,
 			Status:    clientDocInfo.Status,
@@ -740,6 +743,107 @@ func (d *DB) UpdateDocInfoRemovedAt(
 	docInfo.RemovedAt = gotime.Now()
 
 	return nil
+}
+
+// FindClientInfoByDocInfo finds a client of the given docInfo.
+func (d *DB) FindClientInfoByDocInfo(
+	ctx context.Context,
+	projectID types.ID,
+	docID types.ID,
+) ([]*database.ClientInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	it, err := txn.Get(tblClients, "project_id_documents.doc_id", projectID.String(), docID.String())
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+	if it == nil {
+		return []*database.ClientInfo{}, nil
+	}
+
+	var clientInfos []*database.ClientInfo
+	for raw := it.Next(); raw != nil; raw = it.Next() {
+		clientInfos = append(clientInfos, raw.(*database.ClientInfo).DeepCopy())
+	}
+
+	return clientInfos, nil
+}
+
+// UpdateClientDocInfoStatus updates the status of the given docInfo.
+func (d *DB) UpdateClientDocInfoStatus(
+	ctx context.Context,
+	clientInfoKey string,
+	docID types.ID,
+	status string,
+) error {
+
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	it, err := txn.Get(tblClients, "key", clientInfoKey)
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
+	if it == nil {
+		return database.ErrDocumentNotFound
+	}
+
+	for raw := it.Next(); raw != nil; raw = it.Next() {
+		clientInfo := raw.(*database.ClientInfo)
+		switch status {
+		case "attached":
+			err = clientInfo.AttachDocument(docID)
+			if err != nil {
+				return err
+			}
+		case "detached":
+			err = clientInfo.DetachDocument(docID)
+			if err != nil {
+				return err
+			}
+		case "removed":
+			err = clientInfo.RemoveDocument(docID)
+			if err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("invalid status: %s", status)
+		}
+	}
+
+	return nil
+}
+
+// IsAttachedDocument returns true if the document is attached to any other client.
+func (d *DB) IsAttachedDocument(
+	ctx context.Context,
+	projectID types.ID,
+	docID types.ID,
+) (bool, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	it, err := txn.Get(tblClients, "project_id", projectID.String())
+	if err != nil {
+		return false, fmt.Errorf("%w", err)
+	}
+	if it == nil {
+		return false, database.ErrClientNotFound
+	}
+
+	for raw := it.Next(); raw != nil; raw = it.Next() {
+		clientInfo := raw.(*database.ClientInfo)
+		isAttached, err := clientInfo.IsAttached(docID)
+		if err != nil {
+			return false, err
+		}
+		if isAttached {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // CreateChangeInfos stores the given changes and doc info. If the

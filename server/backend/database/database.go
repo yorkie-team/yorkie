@@ -169,6 +169,28 @@ type Database interface {
 		docID types.ID,
 	) error
 
+	// FindClientInfoByDocInfo finds a client of the given docInfo.
+	FindClientInfoByDocInfo(
+		ctx context.Context,
+		projectID types.ID,
+		docID types.ID,
+	) ([]*ClientInfo, error)
+
+	// UpdateClientDocInfoStatus updates the status of the given docInfo.
+	UpdateClientDocInfoStatus(
+		ctx context.Context,
+		clientInfoKey string,
+		docID types.ID,
+		status string,
+	) error
+
+	// IsAttachedDocument returns true if the document is attached to any other client.
+	IsAttachedDocument(
+		ctx context.Context,
+		projectID types.ID,
+		docID types.ID,
+	) (bool, error)
+
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,

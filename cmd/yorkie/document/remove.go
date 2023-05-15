@@ -55,7 +55,7 @@ func newRemoveCommand() *cobra.Command {
 				return err
 			}
 			apiKey := project.PublicKey
-			success, err := cli.RemoveDocumentWithApiKey(ctx, projectName, documentKey, apiKey)
+			success, err := cli.RemoveDocumentWithAPIKey(ctx, projectName, documentKey, apiKey)
 			if err != nil {
 				return err
 			}

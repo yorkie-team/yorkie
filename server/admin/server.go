@@ -356,9 +356,14 @@ func (s *Server) RemoveDocumentByDocKey(
 		}
 	}()
 
-	if err := documents.UpdateDocInfoRemovedAt(ctx, s.backend, project, docInfo.ID); err != nil {
+	// TODO: Add check if document is attached option using IsAttachedDocument()
+	if err := documents.RemoveDocument(ctx, s.backend, project, docInfo.ID); err != nil {
 		return nil, err
 	}
+
+	logging.DefaultLogger().Info(
+		fmt.Sprintf("document remove success(projectID: %s, docKey: %s)", project.ID, req.DocumentKey),
+	)
 
 	return &api.RemoveDocumentByDocKeyResponse{
 		Success: true,

@@ -266,7 +266,7 @@ func (c *Client) RemoveDocumentByDocKey(
 	documentKey string,
 ) (bool, error) {
 	response, err := c.client.RemoveDocumentByDocKey(
-		withShardKey(ctx, c.options.APIKey, documentKey),
+		ctx,
 		&api.RemoveDocumentByDocKeyRequest{
 			ProjectName: projectName,
 			DocumentKey: documentKey,
@@ -279,15 +279,15 @@ func (c *Client) RemoveDocumentByDocKey(
 	return response.Success, nil
 }
 
-// RemoveDocumentWithApiKey remove a document by document key.
-func (c *Client) RemoveDocumentWithApiKey(
+// RemoveDocumentWithAPIKey remove a document by document key.
+func (c *Client) RemoveDocumentWithAPIKey(
 	ctx context.Context,
 	projectName string,
 	documentKey string,
 	apiKey string,
 ) (bool, error) {
 	response, err := c.client.RemoveDocumentByDocKey(
-		withShardKey(ctx, apiKey, documentKey),
+		ctx,
 		&api.RemoveDocumentByDocKeyRequest{
 			ProjectName: projectName,
 			DocumentKey: documentKey,

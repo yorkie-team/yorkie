@@ -211,12 +211,37 @@ func FindDocInfoByKeyAndOwner(
 	)
 }
 
-// UpdateDocInfoRemovedAt updates the removedAt field of the given docInfo.
-func UpdateDocInfoRemovedAt(
+// RemoveDocument updates the removedAt field of the given docInfo.
+func RemoveDocument(
 	ctx context.Context,
 	be *backend.Backend,
 	project *types.Project,
 	docID types.ID,
 ) error {
-	return be.DB.UpdateDocInfoRemovedAt(ctx, project.ID, docID)
+	clientInfos, err := be.DB.FindClientInfoByDocInfo(ctx, project.ID, docID)
+	if err != nil {
+		return err
+	}
+
+	for _, clientInfo := range clientInfos {
+		if err := be.DB.UpdateClientDocInfoStatus(ctx, clientInfo.Key, docID, database.DocumentRemoved); err != nil {
+			return err
+		}
+	}
+
+	if err := be.DB.UpdateDocInfoRemovedAt(ctx, project.ID, docID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// IsAttachedDocument returns true if the document is attached to any other client.
+func IsAttachedDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docID types.ID,
+) (bool, error) {
+	return be.DB.IsAttachedDocument(ctx, project.ID, docID)
 }
