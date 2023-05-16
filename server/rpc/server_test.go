@@ -508,8 +508,7 @@ func TestRPCServerBackend(t *testing.T) {
 				ChangePack: packWithNoChanges,
 			},
 		)
-		assert.Equal(t, codes.OK, status.Convert(err).Code())
-		//assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 	})
 
 	t.Run("remove document test", func(t *testing.T) {

@@ -26,7 +26,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -316,9 +315,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	err = clientInfo.EnsureDocumentAttached(docInfo.ID)
-	//if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
-	if err != nil && clientInfo.FindDocumentInfo(docInfo.ID).Status != database.DocumentRemoved {
+	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
 		return nil, err
 	}
 

@@ -745,8 +745,8 @@ func (d *DB) UpdateDocInfoRemovedAt(
 	return nil
 }
 
-// FindClientInfoByDocInfo finds a client of the given docInfo.
-func (d *DB) FindClientInfoByDocInfo(
+// FindClientInfosByDocInfo finds a client of the given docInfo.
+func (d *DB) FindClientInfosByDocInfo(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,

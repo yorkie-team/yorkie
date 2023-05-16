@@ -361,6 +361,8 @@ func (s *Server) RemoveDocumentByDocKey(
 		return nil, err
 	}
 
+	// TODO: Publish event to all clients that are subscribed to this document.
+
 	logging.DefaultLogger().Info(
 		fmt.Sprintf("document remove success(projectID: %s, docKey: %s)", project.ID, req.DocumentKey),
 	)

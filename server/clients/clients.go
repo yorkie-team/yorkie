@@ -99,3 +99,13 @@ func FindClientInfo(
 		types.IDFromActorID(clientID),
 	)
 }
+
+// FindClientInfosByDocInfo finds a client of the given docInfo.
+func FindClientInfosByDocInfo(
+	ctx context.Context,
+	db database.Database,
+	projectID types.ID,
+	docID types.ID,
+) ([]*database.ClientInfo, error) {
+	return db.FindClientInfosByDocInfo(ctx, projectID, docID)
+}

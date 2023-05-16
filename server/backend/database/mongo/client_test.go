@@ -300,7 +300,7 @@ func TestClient(t *testing.T) {
 		}
 	})
 
-	t.Run("FindClientInfoByDocInfo test", func(t *testing.T) {
+	t.Run("FindClientsInfoByDocInfo test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
@@ -310,7 +310,7 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// Check clientInfo is found
-		foundClientInfos, err := cli.FindClientInfoByDocInfo(ctx, dummyProjectID, docInfo.ID)
+		foundClientInfos, err := cli.FindClientInfosByDocInfo(ctx, dummyProjectID, docInfo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, clientInfo.ID, foundClientInfos[0].ID)
 		assert.Equal(t, clientInfo.ProjectID, foundClientInfos[0].ProjectID)

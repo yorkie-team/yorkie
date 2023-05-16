@@ -218,22 +218,7 @@ func RemoveDocument(
 	project *types.Project,
 	docID types.ID,
 ) error {
-	clientInfos, err := be.DB.FindClientInfoByDocInfo(ctx, project.ID, docID)
-	if err != nil {
-		return err
-	}
-
-	for _, clientInfo := range clientInfos {
-		if err := be.DB.UpdateClientDocInfoStatus(ctx, clientInfo.Key, docID, database.DocumentRemoved); err != nil {
-			return err
-		}
-	}
-
-	if err := be.DB.UpdateDocInfoRemovedAt(ctx, project.ID, docID); err != nil {
-		return err
-	}
-
-	return nil
+	return be.DB.UpdateDocInfoRemovedAt(ctx, project.ID, docID)
 }
 
 // IsAttachedDocument returns true if the document is attached to any other client.

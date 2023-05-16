@@ -169,8 +169,8 @@ type Database interface {
 		docID types.ID,
 	) error
 
-	// FindClientInfoByDocInfo finds a client of the given docInfo.
-	FindClientInfoByDocInfo(
+	// FindClientInfosByDocInfo finds a client of the given docInfo.
+	FindClientInfosByDocInfo(
 		ctx context.Context,
 		projectID types.ID,
 		docID types.ID,

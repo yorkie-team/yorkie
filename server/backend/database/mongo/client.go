@@ -884,8 +884,8 @@ func (c *Client) UpdateDocInfoRemovedAt(
 	return nil
 }
 
-// FindClientInfoByDocInfo finds a client of the given docInfo.
-func (c *Client) FindClientInfoByDocInfo(
+// FindClientInfosByDocInfo finds a client of the given docInfo.
+func (c *Client) FindClientInfosByDocInfo(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,
