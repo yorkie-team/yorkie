@@ -44,5 +44,5 @@ func init() {
 	rootCmd.AddCommand(document.SubCmd)
 	// TODO(chacha912): set rpcAddr from env using viper.
 	// https://github.com/spf13/cobra/blob/main/user_guide.md#bind-flags-with-config
-	rootCmd.PersistentFlags().StringVar(&config.RPCAddr, "admin-addr", "localhost:11103", "Address of the admin server")
+	rootCmd.PersistentFlags().StringVar(&config.RPCAddr, "rpc-addr", "localhost:11101", "Address of the rpc server")
 }

@@ -62,16 +62,18 @@ func (i *ContextInterceptor) Unary() grpc.UnaryServerInterceptor {
 
 		resp, err = handler(ctx, req)
 
-		data, ok := grpcmetadata.FromIncomingContext(ctx)
-		if ok {
-			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-			i.backend.Metrics.AddUserAgent(
-				i.backend.Config.Hostname,
-				projects.From(ctx),
-				sdkType,
-				sdkVersion,
-				info.FullMethod,
-			)
+		if isYorkieService(info.FullMethod) {
+			data, ok := grpcmetadata.FromIncomingContext(ctx)
+			if ok {
+				sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+				i.backend.Metrics.AddUserAgent(
+					i.backend.Config.Hostname,
+					projects.From(ctx),
+					sdkType,
+					sdkVersion,
+					info.FullMethod,
+				)
+			}
 		}
 
 		return resp, err
@@ -99,16 +101,18 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 
 		err = handler(srv, wrapped)
 
-		data, ok := grpcmetadata.FromIncomingContext(ctx)
-		if ok {
-			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-			i.backend.Metrics.AddUserAgent(
-				i.backend.Config.Hostname,
-				projects.From(ctx),
-				sdkType,
-				sdkVersion,
-				info.FullMethod,
-			)
+		if isYorkieService(info.FullMethod) {
+			data, ok := grpcmetadata.FromIncomingContext(ctx)
+			if ok {
+				sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+				i.backend.Metrics.AddUserAgent(
+					i.backend.Config.Hostname,
+					projects.From(ctx),
+					sdkType,
+					sdkVersion,
+					info.FullMethod,
+				)
+			}
 		}
 
 		return err

@@ -69,6 +69,7 @@ func TestMain(m *testing.M) {
 		ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
 		SnapshotThreshold:         helper.SnapshotThreshold,
 		AuthWebhookCacheSize:      helper.AuthWebhookSize,
+		AdminTokenDuration:        helper.AdminTokenDuration,
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    helper.TestDBName(),

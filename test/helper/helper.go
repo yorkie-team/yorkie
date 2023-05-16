@@ -33,7 +33,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server"
-	"github.com/yorkie-team/yorkie/server/admin"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
@@ -52,13 +51,12 @@ var (
 
 	ProfilingPort = 21102
 
-	AdminPort = 21103
-
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword
 	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 
+	AdminTokenDuration         = "10s"
 	ClientDeactivateThreshold  = "10s"
 	SnapshotThreshold          = int64(10)
 	SnapshotWithPurgingChanges = false
@@ -84,8 +82,8 @@ func TestDBName() string {
 }
 
 // CreateAdminCli returns a new instance of admin cli for testing.
-func CreateAdminCli(t assert.TestingT, adminAddr string) *adminClient.Client {
-	adminCli, err := adminClient.Dial(adminAddr)
+func CreateAdminCli(t assert.TestingT, rpcAddr string) *adminClient.Client {
+	adminCli, err := adminClient.Dial(rpcAddr)
 	assert.NoError(t, err)
 
 	_, err = adminCli.LogIn(context.Background(), server.DefaultAdminUser, server.DefaultAdminPassword)
@@ -122,9 +120,6 @@ func TestConfig() *server.Config {
 		},
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,
-		},
-		Admin: &admin.Config{
-			Port: AdminPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
 			Interval:                  HousekeepingInterval.String(),
