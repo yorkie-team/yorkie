@@ -53,9 +53,11 @@ func (i *ContextInterceptor) Unary() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
-		ctx, err = i.buildContext(ctx)
-		if err != nil {
-			return nil, err
+		if isYorkieService(info.FullMethod) {
+			ctx, err = i.buildContext(ctx)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		resp, err = handler(ctx, req)
@@ -83,12 +85,15 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 		ss grpc.ServerStream,
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
-	) error {
+	) (err error) {
 		ctx := ss.Context()
-		ctx, err := i.buildContext(ctx)
-		if err != nil {
-			return err
+		if isYorkieService(info.FullMethod) {
+			ctx, err = i.buildContext(ctx)
+			if err != nil {
+				return err
+			}
 		}
+
 		wrapped := grpcmiddleware.WrapServerStream(ss)
 		wrapped.WrappedContext = ctx
 
@@ -108,6 +113,10 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 
 		return err
 	}
+}
+
+func isYorkieService(method string) bool {
+	return method[:len("/yorkie.v1.YorkieService")] == "/yorkie.v1.YorkieService"
 }
 
 // buildContext builds a context data for RPC. It includes the metadata of the

@@ -26,9 +26,8 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/server/admin/auth"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/grpchelper"
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
@@ -54,7 +53,7 @@ func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
-		if isRequiredAuth(info.FullMethod) {
+		if isAdminService(info.FullMethod) && isRequiredAuth(info.FullMethod) {
 			user, err := i.authenticate(ctx, info.FullMethod)
 			if err != nil {
 				return nil, err
@@ -63,18 +62,6 @@ func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 		}
 
 		resp, err = handler(ctx, req)
-
-		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
-		data, ok := grpcmetadata.FromIncomingContext(ctx)
-		if ok {
-			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-			i.backend.Metrics.AddUserAgentWithEmptyProject(
-				i.backend.Config.Hostname,
-				sdkType,
-				sdkVersion,
-				info.FullMethod,
-			)
-		}
 
 		return resp, err
 	}
@@ -89,7 +76,7 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 		handler grpc.StreamHandler,
 	) (err error) {
 		ctx := stream.Context()
-		if isRequiredAuth(info.FullMethod) {
+		if isAdminService(info.FullMethod) && isRequiredAuth(info.FullMethod) {
 			user, err := i.authenticate(ctx, info.FullMethod)
 			if err != nil {
 				return err
@@ -102,20 +89,12 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 
 		err = handler(srv, stream)
 
-		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
-		data, ok := grpcmetadata.FromIncomingContext(ctx)
-		if ok {
-			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-			i.backend.Metrics.AddUserAgentWithEmptyProject(
-				i.backend.Config.Hostname,
-				sdkType,
-				sdkVersion,
-				info.FullMethod,
-			)
-		}
-
 		return err
 	}
+}
+
+func isAdminService(method string) bool {
+	return method[:len("/yorkie.v1.AdminService")] == "/yorkie.v1.AdminService"
 }
 
 func isRequiredAuth(method string) bool {
