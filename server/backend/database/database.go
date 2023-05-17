@@ -162,6 +162,20 @@ type Database interface {
 		id types.ID,
 	) (*DocInfo, error)
 
+	// UpdateDocInfoRemovedAt updates the removedAt field of the given docInfo.
+	UpdateDocInfoRemovedAt(
+		ctx context.Context,
+		projectID types.ID,
+		docID types.ID,
+	) error
+
+	// IsAttachedDocument returns true if the document is attached to any other client.
+	IsAttachedDocument(
+		ctx context.Context,
+		projectID types.ID,
+		docID types.ID,
+	) (bool, error)
+
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,

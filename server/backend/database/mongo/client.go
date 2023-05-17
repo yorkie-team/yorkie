@@ -571,17 +571,29 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
-	clientDocInfoKey := "documents." + docInfo.ID.String() + "."
-	clientDocInfo := clientInfo.Documents[docInfo.ID]
+	clientDocInfo := clientInfo.FindDocumentInfo(docInfo.ID)
 
+	// find clientInfo
+	result := c.collection(colClients).FindOne(ctx, bson.M{
+		"key": clientInfo.Key,
+	})
+	if result.Err() != nil {
+		if result.Err() == mongo.ErrNoDocuments {
+			return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
+		}
+		logging.From(ctx).Error(result.Err())
+		return fmt.Errorf("update client info: %w", result.Err())
+	}
+
+	// update clientDocInfo
 	updater := bson.M{
 		"$max": bson.M{
-			clientDocInfoKey + "server_seq": clientDocInfo.ServerSeq,
-			clientDocInfoKey + "client_seq": clientDocInfo.ClientSeq,
+			"documents.$.server_seq": clientDocInfo.ServerSeq,
+			"documents.$.client_seq": clientDocInfo.ClientSeq,
 		},
 		"$set": bson.M{
-			clientDocInfoKey + "status": clientDocInfo.Status,
-			"updated_at":                clientInfo.UpdatedAt,
+			"documents.$.status": clientDocInfo.Status,
+			"updated_at":         clientInfo.UpdatedAt,
 		},
 	}
 
@@ -593,24 +605,42 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	if !attached {
 		updater = bson.M{
 			"$set": bson.M{
-				clientDocInfoKey + "server_seq": 0,
-				clientDocInfoKey + "client_seq": 0,
-				clientDocInfoKey + "status":     clientDocInfo.Status,
-				"updated_at":                    clientInfo.UpdatedAt,
+				"documents.$.server_seq": 0,
+				"documents.$.client_seq": 0,
+				"documents.$.status":     clientDocInfo.Status,
+				"updated_at":             clientInfo.UpdatedAt,
 			},
 		}
 	}
 
-	result := c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
-		"key": clientInfo.Key,
-	}, updater)
-
-	if result.Err() != nil {
-		if result.Err() == mongo.ErrNoDocuments {
-			return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
-		}
-		logging.From(ctx).Error(result.Err())
-		return fmt.Errorf("update client info: %w", result.Err())
+	result = c.collection(colClients).FindOne(ctx, bson.M{
+		"key":              clientInfo.Key,
+		"documents.doc_id": docInfo.ID,
+	})
+	if result.Err() != nil && result.Err() == mongo.ErrNoDocuments {
+		_, err = c.collection(colClients).UpdateOne(ctx, bson.M{
+			"key": clientInfo.Key,
+		}, bson.M{
+			"$push": bson.M{
+				"documents": bson.M{
+					"doc_id":     docInfo.ID,
+					"server_seq": 0,
+					"client_seq": 0,
+					"status":     clientDocInfo.Status,
+				},
+			},
+			"$set": bson.M{
+				"updated_at": clientInfo.UpdatedAt,
+			},
+		})
+	} else {
+		_, err = c.collection(colClients).UpdateOne(ctx, bson.M{
+			"key":              clientInfo.Key,
+			"documents.doc_id": docInfo.ID,
+		}, updater)
+	}
+	if err != nil {
+		return fmt.Errorf("update client info: %w", err)
 	}
 
 	return nil
@@ -811,6 +841,87 @@ func (c *Client) FindDocInfoByID(
 	}
 
 	return &docInfo, nil
+}
+
+// UpdateDocInfoRemovedAt updates the removedAt field of the given docInfo.
+func (c *Client) UpdateDocInfoRemovedAt(
+	ctx context.Context,
+	projectID types.ID,
+	id types.ID,
+) error {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return err
+	}
+
+	encodedDocID, err := encodeID(id)
+	if err != nil {
+		return err
+	}
+
+	result := c.collection(colDocuments).FindOneAndUpdate(ctx, bson.M{
+		"_id":        encodedDocID,
+		"project_id": encodedProjectID,
+	}, bson.M{
+		"$set": bson.M{
+			"removed_at": gotime.Now(),
+		},
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+	if result.Err() == mongo.ErrNoDocuments {
+		logging.From(ctx).Error(result.Err())
+		return fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
+	}
+	if result.Err() != nil {
+		logging.From(ctx).Error(result.Err())
+		return fmt.Errorf("find document: %w", result.Err())
+	}
+
+	docInfo := database.DocInfo{}
+	if err := result.Decode(&docInfo); err != nil {
+		return fmt.Errorf("decode document: %w", err)
+	}
+
+	return nil
+}
+
+// IsAttachedDocument returns true if the document is attached to any other client.
+func (c *Client) IsAttachedDocument(
+	ctx context.Context,
+	projectID types.ID,
+	docID types.ID,
+) (bool, error) {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return false, err
+	}
+
+	cursor, err := c.collection(colClients).Find(ctx, bson.M{
+		"project_id":       encodedProjectID,
+		"documents.doc_id": docID,
+	})
+	if err != nil {
+		return false, err
+	}
+
+	var clientInfos []*database.ClientInfo
+	if err := cursor.All(ctx, &clientInfos); err != nil {
+		return false, err
+	}
+
+	if len(clientInfos) == 0 {
+		return false, nil
+	}
+
+	for i, info := range clientInfos {
+		for j, doc := range info.Documents {
+			if doc.Status == database.DocumentAttached {
+				logging.From(ctx).Info(fmt.Sprintf("clientInfos(%d).Documents(%d).Status: %s", i, j, doc.Status))
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // CreateChangeInfos stores the given changes and doc info.
@@ -1154,6 +1265,9 @@ func (c *Client) FindDocInfosByPaging(
 	filter := bson.M{
 		"project_id": bson.M{
 			"$eq": encodedProjectID,
+		},
+		"removed_at": bson.M{
+			"$exists": false,
 		},
 	}
 	if paging.Offset != "" {
