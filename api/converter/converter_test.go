@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -201,8 +202,8 @@ func TestConverter(t *testing.T) {
 	t.Run("client test", func(t *testing.T) {
 		cli := types.Client{
 			ID: time.InitialActorID,
-			PresenceInfo: types.PresenceInfo{
-				Presence: types.Presence{"Name": "ClientName"},
+			PresenceInfo: presence.PresenceInfo{
+				Presence: presence.Presence{"Name": "ClientName"},
 			},
 		}
 

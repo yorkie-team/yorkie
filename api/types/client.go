@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Client represents the Client that communicates with the Server.
 type Client struct {
 	ID           *time.ActorID
-	PresenceInfo PresenceInfo
+	PresenceInfo presence.PresenceInfo
 }
 
 // NewClient creates a new Client from the given JSON.
@@ -31,23 +32,4 @@ func (c *Client) Marshal() (string, error) {
 	}
 
 	return string(encoded), nil
-}
-
-// Presence represents custom presence that can be defined in the client.
-type Presence map[string]string
-
-// PresenceInfo is a presence information with logical clock.
-type PresenceInfo struct {
-	Clock    int32
-	Presence Presence
-}
-
-// Update updates the given presence information with the given clock.
-func (i *PresenceInfo) Update(info PresenceInfo) bool {
-	if info.Clock > i.Clock {
-		i.Clock = info.Clock
-		i.Presence = info.Presence
-		return true
-	}
-	return false
 }

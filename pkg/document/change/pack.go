@@ -18,6 +18,7 @@ package change
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -41,6 +42,13 @@ type Pack struct {
 
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
+
+	PeerPresence []Peer
+}
+
+type Peer struct {
+	ID           *time.ActorID
+	PresenceInfo presence.PresenceInfo
 }
 
 // NewPack creates a new instance of Pack.
@@ -75,4 +83,9 @@ func (p *Pack) OperationsLen() int {
 		operations += len(c.operations)
 	}
 	return operations
+}
+
+// HasPeerPresence returns the whether pack has changes or not.
+func (p *Pack) HasPeerPresence() bool {
+	return len(p.PeerPresence) > 0
 }

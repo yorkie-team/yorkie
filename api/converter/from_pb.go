@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 )
@@ -133,8 +134,8 @@ func FromClient(pbClient *api.Client) (*types.Client, error) {
 }
 
 // FromPresenceInfo converts the given Protobuf formats to model format.
-func FromPresenceInfo(pbPresence *api.Presence) types.PresenceInfo {
-	return types.PresenceInfo{
+func FromPresenceInfo(pbPresence *api.PresenceInfo) presence.PresenceInfo {
+	return presence.PresenceInfo{
 		Clock:    pbPresence.Clock,
 		Presence: pbPresence.Data,
 	}
@@ -159,6 +160,19 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		return nil, err
 	}
 
+	peerPresence := []change.Peer{}
+	for _, pbPeer := range pbPack.Peers {
+		id, err := time.ActorIDFromBytes(pbPeer.Id)
+		if err != nil {
+			return nil, err
+		}
+
+		peerPresence = append(peerPresence, change.Peer{
+			ID:           id,
+			PresenceInfo: FromPresenceInfo(pbPeer.Presence),
+		})
+	}
+
 	return &change.Pack{
 		DocumentKey:     key.Key(pbPack.DocumentKey),
 		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
@@ -166,6 +180,7 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		Snapshot:        pbPack.Snapshot,
 		MinSyncedTicket: minSyncedTicket,
 		IsRemoved:       pbPack.IsRemoved,
+		PeerPresence:    peerPresence,
 	}, nil
 }
 

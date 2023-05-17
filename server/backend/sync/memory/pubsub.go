@@ -24,6 +24,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -65,17 +66,17 @@ func (s *subscriptions) Len() int {
 
 // PubSub is the memory implementation of PubSub, used for single server.
 type PubSub struct {
-	subscriptionsMapMu          *gosync.RWMutex
-	subscriptionMapBySubscriber map[string]*sync.Subscription
-	subscriptionsMapByDocID     map[types.ID]*subscriptions
+	subscriptionsMapMu      *gosync.RWMutex
+	peerMapByDocID          map[types.ID]sync.PeerSyncMap
+	subscriptionsMapByDocID map[types.ID]*subscriptions
 }
 
 // NewPubSub creates an instance of PubSub.
 func NewPubSub() *PubSub {
 	return &PubSub{
-		subscriptionsMapMu:          &gosync.RWMutex{},
-		subscriptionMapBySubscriber: make(map[string]*sync.Subscription),
-		subscriptionsMapByDocID:     make(map[types.ID]*subscriptions),
+		subscriptionsMapMu:      &gosync.RWMutex{},
+		peerMapByDocID:          make(map[types.ID]sync.PeerSyncMap),
+		subscriptionsMapByDocID: make(map[types.ID]*subscriptions),
 	}
 }
 
@@ -97,7 +98,13 @@ func (m *PubSub) Subscribe(
 	defer m.subscriptionsMapMu.Unlock()
 
 	sub := sync.NewSubscription(subscriber)
-	m.subscriptionMapBySubscriber[sub.SubscriberID()] = sub
+	if _, ok := m.peerMapByDocID[documentID]; !ok {
+		m.peerMapByDocID[documentID] = make(sync.PeerSyncMap)
+	}
+	m.peerMapByDocID[documentID][subscriber.ID.String()] = sync.PeerSyncData{
+		PresenceInfo:       subscriber.PresenceInfo,
+		PendingUpdatePeers: sync.NewPeerSet(),
+	}
 
 	if _, ok := m.subscriptionsMapByDocID[documentID]; !ok {
 		m.subscriptionsMapByDocID[documentID] = newSubscriptions()
@@ -133,7 +140,12 @@ func (m *PubSub) Unsubscribe(
 
 	sub.Close()
 
-	delete(m.subscriptionMapBySubscriber, sub.SubscriberID())
+	if peers, ok := m.peerMapByDocID[documentID]; ok {
+		delete(peers, sub.Subscriber().ID.String())
+		if len(peers) == 0 {
+			delete(m.peerMapByDocID, documentID)
+		}
+	}
 
 	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
 		subs.Delete(sub.ID())
@@ -205,15 +217,44 @@ func (m *PubSub) Publish(
 func (m *PubSub) UpdatePresence(
 	publisher *types.Client,
 	documentID types.ID,
-) *sync.Subscription {
+) {
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	sub, ok := m.subscriptionMapBySubscriber[publisher.ID.String()]
-	if !ok {
-		return nil
-	}
+	peerMap := m.peerMapByDocID[documentID]
+	// 01. Update the presence in peerMapByDocID.
+	peerMap.UpdatePresence(publisher)
 
-	sub.UpdatePresence(publisher.PresenceInfo)
-	return sub
+	// 02. Add to pendingUpdatePeers to notify other peers subscribed to the document.
+	for _, sub := range m.subscriptionsMapByDocID[documentID].Map() {
+		if sub.Subscriber().ID.Compare(publisher.ID) == 0 {
+			continue
+		}
+		peerMap.AddPendingUpdatePeer(sub.Subscriber().ID.String(), publisher.ID.String())
+	}
+}
+
+// PullPeerPresence returns updates for peer presence.
+func (m *PubSub) PullPeerPresence(
+	clientID *time.ActorID,
+	documentID types.ID,
+) ([]change.Peer, error) {
+	m.subscriptionsMapMu.Lock()
+	defer m.subscriptionsMapMu.Unlock()
+
+	peerMap := m.peerMapByDocID[documentID]
+	pendingUpdatePeers := peerMap[clientID.String()].PendingUpdatePeers
+	peerList := []change.Peer{}
+	for peerID := range pendingUpdatePeers {
+		actorID, err := time.ActorIDFromHex(peerID)
+		if err != nil {
+			return nil, err
+		}
+		peerList = append(peerList, change.Peer{
+			ID:           actorID,
+			PresenceInfo: peerMap[peerID].PresenceInfo,
+		})
+		pendingUpdatePeers.Remove(peerID)
+	}
+	return peerList, nil
 }

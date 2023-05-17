@@ -38,6 +38,7 @@ message ChangePack {
   repeated Change changes = 4;
   TimeTicket min_synced_ticket = 5;
   bool is_removed = 6;
+  repeated Client peers = 7;
 }
 
 message Change {
@@ -242,14 +243,14 @@ message DocumentSummary {
   google.protobuf.Timestamp updated_at = 6;
 }
 
-message Presence {
+message PresenceInfo {
   int32 clock = 1;
   map<string, string> data = 2;
 }
 
 message Client {
   bytes id = 1;
-  Presence presence = 2;
+  PresenceInfo presence = 2;
 }
 
 message Checkpoint {

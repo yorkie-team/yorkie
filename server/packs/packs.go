@@ -58,7 +58,8 @@ func PushPull(
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
 	mode types.SyncMode,
-) (*ServerPack, error) {
+) (*ServerPack, bool, error) {
+	isDocumentChanged := false
 	start := gotime.Now()
 	defer func() {
 		be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
@@ -70,24 +71,27 @@ func PushPull(
 
 	// 01. push changes: filter out the changes that are already saved in the database.
 	cpAfterPush, pushedChanges := pushChanges(ctx, clientInfo, docInfo, reqPack, initialServerSeq)
+	if len(pushedChanges) > 0 || reqPack.IsRemoved {
+		isDocumentChanged = true
+	}
 	be.Metrics.AddPushPullReceivedChanges(reqPack.ChangesLen())
 	be.Metrics.AddPushPullReceivedOperations(reqPack.OperationsLen())
 
 	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
 	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, mode)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	be.Metrics.AddPushPullSentChanges(respPack.ChangesLen())
 	be.Metrics.AddPushPullSentOperations(respPack.OperationsLen())
 	be.Metrics.AddPushPullSnapshotBytes(respPack.SnapshotLen())
 
 	if err := clientInfo.UpdateCheckpoint(docInfo.ID, respPack.Checkpoint); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// 03. store pushed changes, docInfo and checkpoint of the client to DB.
-	if len(pushedChanges) > 0 || reqPack.IsRemoved {
+	if isDocumentChanged {
 		if err := be.DB.CreateChangeInfos(
 			ctx,
 			project.ID,
@@ -96,12 +100,12 @@ func PushPull(
 			pushedChanges,
 			reqPack.IsRemoved,
 		); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 
 	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// 04. update and find min synced ticket for garbage collection.
@@ -114,30 +118,14 @@ func PushPull(
 		reqPack.Checkpoint.ServerSeq,
 	)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	respPack.MinSyncedTicket = minSyncedTicket
 	respPack.ApplyDocInfo(docInfo)
 
-	// 05. publish document change event then store snapshot asynchronously.
-	if len(pushedChanges) > 0 || reqPack.IsRemoved {
+	// 05. store snapshot asynchronously.
+	if isDocumentChanged {
 		be.Background.AttachGoroutine(func(ctx context.Context) {
-			publisherID, err := clientInfo.ID.ToActorID()
-			if err != nil {
-				logging.From(ctx).Error(err)
-				return
-			}
-
-			be.Coordinator.Publish(
-				ctx,
-				publisherID,
-				sync.DocEvent{
-					Type:       types.DocumentsChangedEvent,
-					Publisher:  types.Client{ID: publisherID},
-					DocumentID: docInfo.ID,
-				},
-			)
-
 			locker, err := be.Coordinator.NewLocker(ctx, SnapshotKey(project.ID, reqPack.DocumentKey))
 			if err != nil {
 				logging.From(ctx).Error(err)
@@ -171,7 +159,7 @@ func PushPull(
 		})
 	}
 
-	return respPack, nil
+	return respPack, isDocumentChanged, nil
 }
 
 // BuildDocumentForServerSeq returns a new document for the given serverSeq.

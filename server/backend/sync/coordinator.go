@@ -22,6 +22,7 @@ import (
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -63,6 +64,13 @@ type Coordinator interface {
 		publisher *types.Client,
 		documentID types.ID,
 	) error
+
+	// PullPeerPresence returns updates for peer presence.
+	PullPeerPresence(
+		ctx context.Context,
+		clientID *time.ActorID,
+		documentID types.ID,
+	) ([]change.Peer, error)
 
 	// Members returns the members of this cluster.
 	Members() map[string]*ServerInfo

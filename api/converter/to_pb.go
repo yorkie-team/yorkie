@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 )
@@ -130,8 +131,8 @@ func ToClient(client types.Client) *api.Client {
 }
 
 // ToPresenceInfo converts the given model to Protobuf format.
-func ToPresenceInfo(info types.PresenceInfo) *api.Presence {
-	return &api.Presence{
+func ToPresenceInfo(info presence.PresenceInfo) *api.PresenceInfo {
+	return &api.PresenceInfo{
 		Clock: info.Clock,
 		Data:  info.Presence,
 	}

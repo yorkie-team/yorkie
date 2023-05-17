@@ -37,6 +37,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -84,7 +85,7 @@ func (o SyncOption) WithPushOnly() SyncOption {
 type Attachment struct {
 	doc   *document.Document
 	docID types.ID
-	peers map[string]types.PresenceInfo
+	peers map[string]presence.PresenceInfo
 }
 
 // Client is a normal client that can communicate with the server.
@@ -99,7 +100,7 @@ type Client struct {
 
 	id           *time.ActorID
 	key          string
-	presenceInfo types.PresenceInfo
+	presenceInfo presence.PresenceInfo
 	status       status
 	attachments  map[key.Key]*Attachment
 }
@@ -117,7 +118,7 @@ const (
 type WatchResponse struct {
 	Type          WatchResponseType
 	Key           key.Key
-	PeersMapByDoc map[key.Key]map[string]types.Presence
+	PeersMapByDoc map[key.Key]map[string]presence.Presence
 	Err           error
 }
 
@@ -133,7 +134,7 @@ func New(opts ...Option) (*Client, error) {
 		k = xid.New().String()
 	}
 
-	presence := types.Presence{}
+	presence := presence.Presence{}
 	if options.Presence != nil {
 		presence = options.Presence
 	}
@@ -173,7 +174,7 @@ func New(opts ...Option) (*Client, error) {
 		logger:      logger,
 
 		key:          k,
-		presenceInfo: types.PresenceInfo{Presence: presence},
+		presenceInfo: presence.PresenceInfo{Presence: presence},
 		status:       deactivated,
 		attachments:  make(map[key.Key]*Attachment),
 	}, nil
@@ -316,7 +317,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	c.attachments[doc.Key()] = &Attachment{
 		doc:   doc,
 		docID: types.ID(res.DocumentId),
-		peers: make(map[string]types.PresenceInfo),
+		peers: make(map[string]presence.PresenceInfo),
 	}
 
 	return nil

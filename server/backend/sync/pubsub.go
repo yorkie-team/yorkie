@@ -20,6 +20,7 @@ import (
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 )
 
 // Subscription represents a subscription of a subscriber to documents.
@@ -44,6 +45,51 @@ func (s *Subscription) ID() string {
 	return s.id
 }
 
+// PeerSyncMap is a map that represents PeerSyncData for each peer.
+type PeerSyncMap map[string]PeerSyncData
+
+// PeerSyncData represents the data needed to synchronize peer presence.
+type PeerSyncData struct {
+	PresenceInfo       presence.PresenceInfo
+	PendingUpdatePeers PeerSet
+}
+
+// UpdatePresence updates the presence of the client.
+func (p PeerSyncMap) UpdatePresence(client *types.Client) {
+	if cli, ok := p[client.ID.String()]; ok {
+		cli.PresenceInfo.Update(client.PresenceInfo)
+		p[client.ID.String()] = cli
+	}
+}
+
+// AddPendingUpdatePeer adds the target peer to the PendingUpdatePeers of the client.
+func (p PeerSyncMap) AddPendingUpdatePeer(clientID string, targetID string) {
+	pendingUpdatePeers := p[clientID].PendingUpdatePeers
+	if !pendingUpdatePeers.Contains(targetID) {
+		pendingUpdatePeers.Add(targetID)
+	}
+}
+
+// PeerSet represents a set of peers.
+type PeerSet map[string]bool
+
+func NewPeerSet() PeerSet {
+	return make(map[string]bool)
+}
+
+func (s PeerSet) Add(key string) {
+	s[key] = true
+}
+
+func (s PeerSet) Remove(key string) {
+	delete(s, key)
+}
+
+func (s PeerSet) Contains(key string) bool {
+	_, exists := s[key]
+	return exists
+}
+
 // DocEvent represents events that occur related to the document.
 type DocEvent struct {
 	Type       types.DocEventType
@@ -64,11 +110,6 @@ func (s *Subscription) Subscriber() types.Client {
 // SubscriberID returns string representation of the subscriber.
 func (s *Subscription) SubscriberID() string {
 	return s.subscriber.ID.String()
-}
-
-// UpdatePresence updates the presence of the subscriber.
-func (s *Subscription) UpdatePresence(info types.PresenceInfo) {
-	s.subscriber.PresenceInfo.Update(info)
 }
 
 // Close closes all resources of this Subscription.
