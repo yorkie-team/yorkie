@@ -19,7 +19,6 @@ package memory_test
 import (
 	"context"
 	"fmt"
-	"github.com/yorkie-team/yorkie/server/logging"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -406,20 +405,11 @@ func TestDB(t *testing.T) {
 
 		err = db.UpdateDocInfoRemovedAt(ctx, projectID, docInfo1.ID)
 		assert.NoError(t, err)
-
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
 
 		docInfo2, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
-
-		logging.DefaultLogger().Warn(docInfo1)
-		logging.DefaultLogger().Warn(docInfo1)
-		logging.DefaultLogger().Warn(docInfo1)
-
-		logging.DefaultLogger().Warn(docInfo2)
-		logging.DefaultLogger().Warn(docInfo2)
-		logging.DefaultLogger().Warn(docInfo2)
 
 		assert.NoError(t, err)
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
@@ -447,10 +437,6 @@ func TestDB(t *testing.T) {
 		// Check document is detached
 		assert.NoError(t, clientInfo1.DetachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
-		logging.DefaultLogger().Info(clientInfo1.Documents[0])
-		logging.DefaultLogger().Info(clientInfo1.Documents[0])
-		logging.DefaultLogger().Info(clientInfo1.Documents[0])
-		logging.DefaultLogger().Info(clientInfo1.Documents[0])
 		isAttached, err = db.IsAttachedDocument(ctx, projectID, docInfo.ID)
 		assert.False(t, isAttached)
 		assert.NoError(t, err)

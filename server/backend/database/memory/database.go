@@ -20,7 +20,6 @@ package memory
 import (
 	"context"
 	"fmt"
-	"github.com/yorkie-team/yorkie/server/logging"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -791,20 +790,8 @@ func (d *DB) IsAttachedDocument(
 		return false, database.ErrClientNotFound
 	}
 
-	logging.DefaultLogger().Warn(it)
-	logging.DefaultLogger().Warn(it)
-	logging.DefaultLogger().Warn(it)
-	logging.DefaultLogger().Warn(it)
-	logging.DefaultLogger().Warn(it)
-	logging.DefaultLogger().Warn(it)
-	logging.DefaultLogger().Warn("dddddddddd")
-
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		clientInfo := raw.(*database.ClientInfo)
-		logging.DefaultLogger().Warn(clientInfo.ID)
-		logging.DefaultLogger().Warn(clientInfo.Key)
-		logging.DefaultLogger().Warn(clientInfo.Documents[0])
-
 		isAttached, err := clientInfo.IsAttached(docID)
 		if err != nil {
 			return false, err
