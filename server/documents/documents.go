@@ -210,3 +210,23 @@ func FindDocInfoByKeyAndOwner(
 		createDocIfNotExist,
 	)
 }
+
+// RemoveDocument updates the removedAt field of the given docInfo.
+func RemoveDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docID types.ID,
+) error {
+	return be.DB.UpdateDocInfoRemovedAt(ctx, project.ID, docID)
+}
+
+// IsAttachedDocument returns true if the document is attached to any other client.
+func IsAttachedDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docID types.ID,
+) (bool, error) {
+	return be.DB.IsAttachedDocument(ctx, project.ID, docID)
+}
