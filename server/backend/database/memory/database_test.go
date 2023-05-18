@@ -416,6 +416,10 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, docInfo1.Key, docInfo2.Key)
 		assert.Equal(t, docInfo1.ProjectID, docInfo2.ProjectID)
 		assert.True(t, docInfo2.RemovedAt.IsZero())
+
+		notPresentDocID := types.ID("000000000000000000000011")
+		err = db.UpdateDocInfoRemovedAt(ctx, projectID, notPresentDocID)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 
 	t.Run("IsAttachedDocument test", func(t *testing.T) {
