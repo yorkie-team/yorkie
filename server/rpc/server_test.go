@@ -75,8 +75,9 @@ func TestMain(m *testing.M) {
 		ConnectionTimeout: helper.MongoConnectionTimeout,
 		PingTimeout:       helper.MongoPingTimeout,
 	}, &housekeeping.Config{
-		Interval:                  helper.HousekeepingInterval.String(),
-		CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
+		Interval:                   helper.HousekeepingInterval.String(),
+		CandidatesLimitPerProject:  helper.HousekeepingCandidatesLimitPerProject,
+		CandidatesLimitPerDocument: helper.HousekeepingCandidatesLimitPerDocument,
 	}, met)
 	if err != nil {
 		log.Fatal(err)

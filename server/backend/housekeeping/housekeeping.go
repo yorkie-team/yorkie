@@ -31,7 +31,8 @@ import (
 )
 
 const (
-	deactivateCandidatesKey = "housekeeping/deactivateCandidates"
+	deactivateCandidatesKey     = "housekeeping/deactivateCandidates"
+	removeDocumentCandidatesKey = "housekeeping/removeDocumentCandidates"
 )
 
 // Config is the configuration for the housekeeping service.
@@ -41,6 +42,9 @@ type Config struct {
 
 	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
 	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
+
+	// CandidatesLimitPerDocument is the maximum number of candidates to be returned per document.
+	CandidatesLimitPerDocument int `yaml:"CandidatesLimitPerDocument"`
 }
 
 // Validate validates the configuration.
@@ -63,8 +67,9 @@ type Housekeeping struct {
 	database    database.Database
 	coordinator sync.Coordinator
 
-	interval                  time.Duration
-	candidatesLimitPerProject int
+	interval                   time.Duration
+	candidatesLimitPerProject  int
+	candidatesLimitPerDocument int
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
@@ -104,8 +109,9 @@ func New(
 		database:    database,
 		coordinator: coordinator,
 
-		interval:                  interval,
-		candidatesLimitPerProject: conf.CandidatesLimitPerProject,
+		interval:                   interval,
+		candidatesLimitPerProject:  conf.CandidatesLimitPerProject,
+		candidatesLimitPerDocument: conf.CandidatesLimitPerDocument,
 
 		ctx:        ctx,
 		cancelFunc: cancelFunc,

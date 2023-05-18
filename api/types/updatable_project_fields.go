@@ -41,11 +41,18 @@ type UpdatableProjectFields struct {
 
 	// ClientDeactivateThreshold is the time after which clients in specific project are considered deactivate.
 	ClientDeactivateThreshold *string `bson:"client_deactivate_threshold,omitempty" validate:"omitempty,min=2,duration"`
+
+	// DocumentRemoveThreshold is the time after which documents in specific project are considered removed.
+	DocumentRemoveThreshold *string `bson:"document_remove_threshold,omitempty" validate:"omitempty,min=2,duration"`
 }
 
 // Validate validates the UpdatableProjectFields.
 func (i *UpdatableProjectFields) Validate() error {
-	if i.Name == nil && i.AuthWebhookURL == nil && i.AuthWebhookMethods == nil && i.ClientDeactivateThreshold == nil {
+	if i.Name == nil &&
+		i.AuthWebhookURL == nil &&
+		i.AuthWebhookMethods == nil &&
+		i.ClientDeactivateThreshold == nil &&
+		i.DocumentRemoveThreshold == nil {
 		return ErrEmptyProjectFields
 	}
 

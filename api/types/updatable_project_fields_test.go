@@ -35,11 +35,13 @@ func TestUpdatableProjectFields(t *testing.T) {
 			string(types.WatchDocuments),
 		}
 		newClientDeactivateThreshold := "1h"
+		newDocumentRemoveThreshold := "1h"
 		fields := &types.UpdatableProjectFields{
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
+			DocumentRemoveThreshold:   &newDocumentRemoveThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -55,6 +57,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			Name:                      &newName,
 			AuthWebhookURL:            &newAuthWebhookURL,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
+			DocumentRemoveThreshold:   &newDocumentRemoveThreshold,
 		}
 		assert.NoError(t, fields.Validate())
 
@@ -67,6 +70,7 @@ func TestUpdatableProjectFields(t *testing.T) {
 			AuthWebhookURL:            &newAuthWebhookURL,
 			AuthWebhookMethods:        &newAuthWebhookMethods,
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
+			DocumentRemoveThreshold:   &newDocumentRemoveThreshold,
 		}
 		assert.ErrorAs(t, fields.Validate(), &structError)
 	})

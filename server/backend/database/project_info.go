@@ -61,6 +61,10 @@ type ProjectInfo struct {
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
+	// DocumentRemoveThreshold is the time after which documents in
+	// specific project are considered remove for housekeeping.
+	DocumentRemoveThreshold string `bson:"document_remove_threshold"`
+
 	// CreatedAt is the time when the project was created.
 	CreatedAt time.Time `bson:"created_at"`
 
@@ -69,11 +73,17 @@ type ProjectInfo struct {
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
-func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold string) *ProjectInfo {
+func NewProjectInfo(
+	name string,
+	owner types.ID,
+	clientDeactivateThreshold,
+	documentRemoveThreshold string,
+) *ProjectInfo {
 	return &ProjectInfo{
 		Name:                      name,
 		Owner:                     owner,
 		ClientDeactivateThreshold: clientDeactivateThreshold,
+		DocumentRemoveThreshold:   documentRemoveThreshold,
 		// TODO(hackerwins): Use random generated Key.
 		PublicKey: xid.New().String(),
 		SecretKey: xid.New().String(),
@@ -92,6 +102,7 @@ func ToProjectInfo(project *types.Project) *ProjectInfo {
 		AuthWebhookURL:            project.AuthWebhookURL,
 		AuthWebhookMethods:        project.AuthWebhookMethods,
 		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
+		DocumentRemoveThreshold:   project.DocumentRemoveThreshold,
 		CreatedAt:                 project.CreatedAt,
 		UpdatedAt:                 project.UpdatedAt,
 	}
@@ -112,6 +123,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		AuthWebhookURL:            i.AuthWebhookURL,
 		AuthWebhookMethods:        i.AuthWebhookMethods,
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
+		DocumentRemoveThreshold:   i.DocumentRemoveThreshold,
 		CreatedAt:                 i.CreatedAt,
 		UpdatedAt:                 i.UpdatedAt,
 	}
@@ -131,6 +143,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.ClientDeactivateThreshold != nil {
 		i.ClientDeactivateThreshold = *fields.ClientDeactivateThreshold
 	}
+	if fields.DocumentRemoveThreshold != nil {
+		i.DocumentRemoveThreshold = *fields.DocumentRemoveThreshold
+	}
 }
 
 // ToProject converts the ProjectInfo to the Project.
@@ -142,6 +157,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		AuthWebhookURL:            i.AuthWebhookURL,
 		AuthWebhookMethods:        i.AuthWebhookMethods,
 		ClientDeactivateThreshold: i.ClientDeactivateThreshold,
+		DocumentRemoveThreshold:   i.DocumentRemoveThreshold,
 		PublicKey:                 i.PublicKey,
 		SecretKey:                 i.SecretKey,
 		CreatedAt:                 i.CreatedAt,
@@ -157,4 +173,14 @@ func (i *ProjectInfo) ClientDeactivateThresholdAsTimeDuration() (time.Duration, 
 	}
 
 	return clientDeactivateThreshold, nil
+}
+
+// DocumentRemoveThresholdAsTimeDuration converts DocumentRemoveThreshold string to time.Duration.
+func (i *ProjectInfo) DocumentRemoveThresholdAsTimeDuration() (time.Duration, error) {
+	documentRemoveThreshold, err := time.ParseDuration(i.DocumentRemoveThreshold)
+	if err != nil {
+		return 0, ErrInvalidTimeDurationString
+	}
+
+	return documentRemoveThreshold, nil
 }

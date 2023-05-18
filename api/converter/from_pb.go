@@ -685,6 +685,9 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	if pbProjectFields.ClientDeactivateThreshold != nil {
 		updatableProjectFields.ClientDeactivateThreshold = &pbProjectFields.ClientDeactivateThreshold.Value
 	}
+	if pbProjectFields.DocumentRemoveThreshold != nil {
+		updatableProjectFields.DocumentRemoveThreshold = &pbProjectFields.DocumentRemoveThreshold.Value
+	}
 
 	return updatableProjectFields, nil
 }

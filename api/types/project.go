@@ -40,6 +40,10 @@ type Project struct {
 	// specific project are considered deactivate for housekeeping.
 	ClientDeactivateThreshold string `bson:"client_deactivate_threshold"`
 
+	// DocumentRemoveThreshold is the time after which documents in
+	// specific project are considered removed for housekeeping.
+	DocumentRemoveThreshold string `bson:"document_remove_threshold"`
+
 	// PublicKey is the API key of this project.
 	PublicKey string `json:"public_key"`
 

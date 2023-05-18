@@ -35,6 +35,7 @@ var (
 	flagAuthWebhookURL            string
 	flagName                      string
 	flagClientDeactivateThreshold string
+	flagDocumentRemoveThreshold   string
 )
 
 func newUpdateCommand() *cobra.Command {
@@ -84,10 +85,16 @@ func newUpdateCommand() *cobra.Command {
 				newClientDeactivateThreshold = flagClientDeactivateThreshold
 			}
 
+			newDocumentRemoveThreshold := project.DocumentRemoveThreshold
+			if flagDocumentRemoveThreshold != "" {
+				newDocumentRemoveThreshold = flagDocumentRemoveThreshold
+			}
+
 			updatableProjectFields := &types.UpdatableProjectFields{
 				Name:                      &newName,
 				AuthWebhookURL:            &newAuthWebhookURL,
 				ClientDeactivateThreshold: &newClientDeactivateThreshold,
+				DocumentRemoveThreshold:   &newDocumentRemoveThreshold,
 			}
 
 			updated, err := cli.UpdateProject(ctx, id, updatableProjectFields)

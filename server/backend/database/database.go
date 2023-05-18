@@ -82,8 +82,9 @@ type Database interface {
 	EnsureDefaultUserAndProject(
 		ctx context.Context,
 		username,
-		password string,
-		clientDeactivateThreshold string,
+		password,
+		clientDeactivateThreshold,
+		documentRemoveThreshold string,
 	) (*UserInfo, *ProjectInfo, error)
 
 	// CreateProjectInfo creates a new project.
@@ -91,7 +92,8 @@ type Database interface {
 		ctx context.Context,
 		name string,
 		owner types.ID,
-		clientDeactivateThreshold string,
+		clientDeactivateThreshold,
+		documentRemoveThreshold string,
 	) (*ProjectInfo, error)
 
 	// ListProjectInfos returns all project infos owned by owner.

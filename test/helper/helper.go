@@ -54,10 +54,11 @@ var (
 
 	AdminPort = 21103
 
-	AdminUser                             = server.DefaultAdminUser
-	AdminPassword                         = server.DefaultAdminPassword
-	HousekeepingInterval                  = 10 * gotime.Second
-	HousekeepingCandidatesLimitPerProject = 10
+	AdminUser                              = server.DefaultAdminUser
+	AdminPassword                          = server.DefaultAdminPassword
+	HousekeepingInterval                   = 10 * gotime.Second
+	HousekeepingCandidatesLimitPerProject  = 10
+	HousekeepingCandidatesLimitPerDocument = 10
 
 	ClientDeactivateThreshold  = "10s"
 	SnapshotThreshold          = int64(10)
@@ -127,8 +128,9 @@ func TestConfig() *server.Config {
 			Port: AdminPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:                  HousekeepingInterval.String(),
-			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
+			Interval:                   HousekeepingInterval.String(),
+			CandidatesLimitPerProject:  HousekeepingCandidatesLimitPerProject,
+			CandidatesLimitPerDocument: HousekeepingCandidatesLimitPerDocument,
 		},
 		Backend: &backend.Config{
 			AdminUser:                  server.DefaultAdminUser,

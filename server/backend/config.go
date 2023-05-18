@@ -45,6 +45,9 @@ type Config struct {
 	// ClientDeactivateThreshold is deactivate threshold of clients in specific project for housekeeping.
 	ClientDeactivateThreshold string `yaml:"ClientDeactivateThreshold"`
 
+	// DocumentRemoveThreshold is remove threshold of documents in specific project for housekeeping.
+	DocumentRemoveThreshold string `yaml:"DocumentRemoveThreshold"`
+
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold int64 `yaml:"SnapshotThreshold"`

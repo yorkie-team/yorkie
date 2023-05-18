@@ -128,6 +128,7 @@ func New(
 		conf.AdminUser,
 		conf.AdminPassword,
 		conf.ClientDeactivateThreshold,
+		conf.DocumentRemoveThreshold,
 	)
 	if err != nil {
 		return nil, err

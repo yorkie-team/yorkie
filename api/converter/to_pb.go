@@ -502,5 +502,10 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 			Value: *fields.ClientDeactivateThreshold,
 		}
 	}
+	if fields.DocumentRemoveThreshold != nil {
+		pbUpdatableProjectFields.DocumentRemoveThreshold = &protoTypes.StringValue{
+			Value: *fields.DocumentRemoveThreshold,
+		}
+	}
 	return pbUpdatableProjectFields, nil
 }

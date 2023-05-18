@@ -109,6 +109,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 			authWebhookMethods = append(authWebhookMethods, string(m))
 		}
 		clientDeactivateThreshold := "1h"
+		documentRemoveThreshold := "1h"
 
 		_, err := adminCli.UpdateProject(
 			ctx,
@@ -118,6 +119,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 				AuthWebhookURL:            &authWebhookURL,
 				AuthWebhookMethods:        &authWebhookMethods,
 				ClientDeactivateThreshold: &clientDeactivateThreshold,
+				DocumentRemoveThreshold:   &documentRemoveThreshold,
 			},
 		)
 		assert.NoError(b, err)

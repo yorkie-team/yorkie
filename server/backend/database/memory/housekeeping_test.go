@@ -39,7 +39,14 @@ func TestHousekeeping(t *testing.T) {
 		ctx := context.Background()
 
 		clientDeactivateThreshold := "23h"
-		_, project, err := memdb.EnsureDefaultUserAndProject(ctx, "test", "test", clientDeactivateThreshold)
+		documentRemoveThreshold := "23h"
+		_, project, err := memdb.EnsureDefaultUserAndProject(
+			ctx,
+			"test",
+			"test",
+			clientDeactivateThreshold,
+			documentRemoveThreshold,
+		)
 		assert.NoError(t, err)
 
 		yesterday := gotime.Now().Add(-24 * gotime.Hour)

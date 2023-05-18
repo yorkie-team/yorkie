@@ -41,6 +41,9 @@ Housekeeping:
   # CandidatesLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
   CandidatesLimitPerProject: 100
 
+  # CandidatesLimitPerDocument is the maximum number of candidates to be returned per document (default: 100).
+  CandidatesLimitPerDocument: 100
+
 # Backend is the configuration for the backend of Yorkie.
 Backend:
   # UseDefaultProject is whether to use the default project (default: true).

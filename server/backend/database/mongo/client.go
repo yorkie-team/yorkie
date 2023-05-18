@@ -94,15 +94,21 @@ func (c *Client) Close() error {
 func (c *Client) EnsureDefaultUserAndProject(
 	ctx context.Context,
 	username,
-	password string,
-	clientDeactivateThreshold string,
+	password,
+	clientDeactivateThreshold,
+	documentRemoveThreshold string,
 ) (*database.UserInfo, *database.ProjectInfo, error) {
 	userInfo, err := c.ensureDefaultUserInfo(ctx, username, password)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID, clientDeactivateThreshold)
+	projectInfo, err := c.ensureDefaultProjectInfo(
+		ctx,
+		userInfo.ID,
+		clientDeactivateThreshold,
+		documentRemoveThreshold,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -158,9 +164,15 @@ func (c *Client) ensureDefaultUserInfo(
 func (c *Client) ensureDefaultProjectInfo(
 	ctx context.Context,
 	defaultUserID types.ID,
-	defaultClientDeactivateThreshold string,
+	defaultClientDeactivateThreshold,
+	defaultDocumentRemoveThreshold string,
 ) (*database.ProjectInfo, error) {
-	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
+	candidate := database.NewProjectInfo(
+		database.DefaultProjectName,
+		defaultUserID,
+		defaultClientDeactivateThreshold,
+		defaultDocumentRemoveThreshold,
+	)
 	candidate.ID = database.DefaultProjectID
 	encodedID, err := encodeID(candidate.ID)
 	if err != nil {
@@ -178,6 +190,7 @@ func (c *Client) ensureDefaultProjectInfo(
 			"name":                        candidate.Name,
 			"owner":                       encodedDefaultUserID,
 			"client_deactivate_threshold": candidate.ClientDeactivateThreshold,
+			"document_remove_threshold":   candidate.DocumentRemoveThreshold,
 			"public_key":                  candidate.PublicKey,
 			"secret_key":                  candidate.SecretKey,
 			"created_at":                  candidate.CreatedAt,
@@ -207,18 +220,20 @@ func (c *Client) CreateProjectInfo(
 	ctx context.Context,
 	name string,
 	owner types.ID,
-	clientDeactivateThreshold string,
+	clientDeactivateThreshold,
+	documentRemoveThreshold string,
 ) (*database.ProjectInfo, error) {
 	encodedOwner, err := encodeID(owner)
 	if err != nil {
 		return nil, err
 	}
 
-	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
+	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold, documentRemoveThreshold)
 	result, err := c.collection(colProjects).InsertOne(ctx, bson.M{
 		"name":                        info.Name,
 		"owner":                       encodedOwner,
 		"client_deactivate_threshold": info.ClientDeactivateThreshold,
+		"document_remove_threshold":   info.DocumentRemoveThreshold,
 		"public_key":                  info.PublicKey,
 		"secret_key":                  info.SecretKey,
 		"created_at":                  info.CreatedAt,

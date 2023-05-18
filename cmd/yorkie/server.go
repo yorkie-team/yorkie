@@ -233,6 +233,12 @@ func init() {
 		server.DefaultHousekeepingCandidatesLimitPerProject,
 		"candidates limit per project for a single housekeeping run",
 	)
+	cmd.Flags().IntVar(
+		&conf.Housekeeping.CandidatesLimitPerDocument,
+		"housekeeping-candidates-limit-per-document",
+		server.DefaultHousekeepingCandidatesLimitPerDocument,
+		"candidates limit per document for a single housekeeping run",
+	)
 	cmd.Flags().StringVar(
 		&mongoConnectionURI,
 		"mongo-connection-uri",
