@@ -51,6 +51,13 @@ func TestClientInfo(t *testing.T) {
 		isAttached, err = clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
 		assert.False(t, isAttached)
+
+		err = clientInfo.AttachDocument(dummyDocID)
+		assert.NoError(t, err)
+		isAttached, err = clientInfo.IsAttached(dummyDocID)
+		assert.NoError(t, err)
+		assert.True(t, isAttached)
+
 	})
 
 	t.Run("check if in project test", func(t *testing.T) {
@@ -140,5 +147,65 @@ func TestClientInfo(t *testing.T) {
 
 		err = clientInfo.AttachDocument(dummyDocID)
 		assert.ErrorIs(t, err, database.ErrDocumentAlreadyAttached)
+	})
+
+	t.Run("document remove attahced document test", func(t *testing.T) {
+		clientInfo := database.ClientInfo{
+			Status: database.ClientActivated,
+		}
+
+		err := clientInfo.AttachDocument(dummyDocID)
+		assert.NoError(t, err)
+		isAttached, err := clientInfo.IsAttached(dummyDocID)
+		assert.NoError(t, err)
+		assert.True(t, isAttached)
+
+		err = clientInfo.RemoveDocument(dummyDocID)
+		assert.NoError(t, err)
+		isAttached, err = clientInfo.IsAttached(dummyDocID)
+		assert.NoError(t, err)
+		assert.False(t, isAttached)
+
+	})
+
+	t.Run("document remove detached document test", func(t *testing.T) {
+		clientInfo := database.ClientInfo{
+			Status: database.ClientActivated,
+		}
+
+		err := clientInfo.AttachDocument(dummyDocID)
+		assert.NoError(t, err)
+		isAttached, err := clientInfo.IsAttached(dummyDocID)
+		assert.NoError(t, err)
+		assert.True(t, isAttached)
+
+		err = clientInfo.DetachDocument(dummyDocID)
+		assert.NoError(t, err)
+		isAttached, err = clientInfo.IsAttached(dummyDocID)
+		assert.NoError(t, err)
+		assert.False(t, isAttached)
+
+		err = clientInfo.RemoveDocument(dummyDocID)
+		assert.Error(t, err)
+	})
+
+	t.Run("find document info test", func(t *testing.T) {
+		dummyDocIDNotAttached := types.ID("000000000000000000000001")
+
+		clientInfo := database.ClientInfo{
+			Status: database.ClientActivated,
+		}
+
+		assert.Nil(t, clientInfo.FindDocumentInfo(dummyDocID))
+
+		err := clientInfo.AttachDocument(dummyDocID)
+		assert.NoError(t, err)
+		isAttached, err := clientInfo.IsAttached(dummyDocID)
+		assert.NoError(t, err)
+		assert.True(t, isAttached)
+
+		assert.Equal(t, clientInfo.FindDocumentInfo(dummyDocID).DocID, dummyDocID)
+
+		assert.Nil(t, clientInfo.FindDocumentInfo(dummyDocIDNotAttached))
 	})
 }

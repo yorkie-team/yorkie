@@ -322,6 +322,10 @@ func TestClient(t *testing.T) {
 		assert.Equal(t, docInfo1.Key, docInfo2.Key)
 		assert.Equal(t, docInfo1.ProjectID, docInfo2.ProjectID)
 		assert.True(t, docInfo2.RemovedAt.IsZero())
+
+		notPresentDocID := types.ID("000000000000000000000011")
+		err = cli.UpdateDocInfoRemovedAt(ctx, dummyProjectID, notPresentDocID)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 
 	t.Run("IsAttachedDocument test", func(t *testing.T) {
@@ -332,11 +336,17 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, err)
 		docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo1.ID, docKey1, true)
 		assert.NoError(t, err)
+
+		// Check any document is not attached
+		isAttached, err := cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		assert.False(t, isAttached)
+		assert.NoError(t, err)
+
 		assert.NoError(t, clientInfo1.AttachDocument(docInfo.ID))
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
 
 		// Check document is attached
-		isAttached, err := cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
 		assert.True(t, isAttached)
 		assert.NoError(t, err)
 
