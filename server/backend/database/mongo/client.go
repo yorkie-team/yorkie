@@ -939,6 +939,100 @@ func (c *Client) IsAttachedDocument(
 	return false, nil
 }
 
+// FindRemoveDocumentCandidates finds documents that are candidates for removal.
+func (c *Client) FindRemoveDocumentCandidates(
+	ctx context.Context,
+	candidatesDocumentLimit int,
+) ([]database.DocInfo, error) {
+	documents, err := c.findDocInfoExistRemovedAt(ctx, candidatesDocumentLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	var docInfos []database.DocInfo
+	for _, doc := range documents {
+		project, err := c.FindProjectInfoByID(ctx, doc.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		if project == nil {
+			continue
+		}
+
+		documentRemoveThreshold, err := project.ClientDeactivateThresholdAsTimeDuration()
+		if err != nil {
+			return nil, err
+		}
+		if doc.RemovedAt.Add(documentRemoveThreshold).After(gotime.Now()) {
+			continue
+		}
+
+		docInfos = append(docInfos, doc)
+	}
+
+	return docInfos, nil
+}
+
+// findDocInfoExistRemovedAt finds a docInfo of the given removedAt.
+func (c *Client) findDocInfoExistRemovedAt(
+	ctx context.Context,
+	candidatesDocumentLimit int,
+) ([]database.DocInfo, error) {
+	result, err := c.collection(colDocuments).Find(ctx, bson.M{
+		"removed_at": bson.M{
+			"$exists": true,
+		},
+	}, options.Find().SetLimit(int64(candidatesDocumentLimit)))
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, fmt.Errorf("find document: %w", err)
+	}
+	if result.Err() == mongo.ErrNoDocuments {
+		return []database.DocInfo{}, nil
+	}
+	if result.Err() != nil {
+		logging.From(ctx).Error(result.Err())
+		return nil, fmt.Errorf("find document: %w", result.Err())
+	}
+
+	var docInfos []database.DocInfo
+	if err := result.Decode(&docInfos); err != nil {
+		return nil, fmt.Errorf("decode document: %w", err)
+	}
+
+	return docInfos, nil
+}
+
+// findClientInfosByDocInfo finds a client of the given docInfo.
+func (c *Client) findClientInfosByDocInfo(
+	ctx context.Context,
+	projectID types.ID,
+	docID types.ID,
+) ([]*database.ClientInfo, error) {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	// find client info
+	cursor, err := c.collection(colClients).Find(ctx, bson.M{
+		"project_id":       encodedProjectID,
+		"documents.doc_id": docID,
+	})
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return nil, err
+	}
+
+	// update document status
+	var clientInfos []*database.ClientInfo
+	if err := cursor.All(ctx, &clientInfos); err != nil {
+		return nil, fmt.Errorf("find docuement: %w", err)
+	}
+
+	return clientInfos, nil
+}
+
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,

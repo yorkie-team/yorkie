@@ -178,6 +178,12 @@ type Database interface {
 		docID types.ID,
 	) (bool, error)
 
+	// FindRemoveDocumentCandidates finds documents that are candidates for removal.
+	FindRemoveDocumentCandidates(
+		ctx context.Context,
+		candidatesDocumentLimit int,
+	) ([]DocInfo, error)
+
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,

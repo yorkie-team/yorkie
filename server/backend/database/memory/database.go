@@ -812,6 +812,57 @@ func (d *DB) IsAttachedDocument(
 	return false, nil
 }
 
+// FindRemoveDocumentCandidates finds documents that are candidates for removal.
+func (d *DB) FindRemoveDocumentCandidates(
+	ctx context.Context,
+	candidatesDocumentLimit int,
+) ([]database.DocInfo, error) {
+	documents, err := d.findDocInfoExistRemovedAt(ctx, candidatesDocumentLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	var docInfos []database.DocInfo
+	for _, doc := range documents {
+		project, err := d.FindProjectInfoByID(ctx, doc.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		if project == nil {
+			continue
+		}
+
+		documentRemoveThreshold, err := project.ClientDeactivateThresholdAsTimeDuration()
+		if err != nil {
+			return nil, err
+		}
+		if doc.RemovedAt.Add(documentRemoveThreshold).After(gotime.Now()) {
+			continue
+		}
+
+		docInfos = append(docInfos, doc)
+	}
+
+	return docInfos, nil
+}
+
+// findDocInfoExistRemovedAt finds a docInfo of the given removedAt.
+func (d *DB) findDocInfoExistRemovedAt(
+	ctx context.Context,
+	candidatesDocumentLimit int,
+) ([]database.DocInfo, error) {
+	return nil, nil
+}
+
+// findClientInfosByDocInfo finds a client of the given docInfo.
+func (d *DB) findClientInfosByDocInfo(
+	ctx context.Context,
+	projectID types.ID,
+	docID types.ID,
+) ([]*database.ClientInfo, error) {
+	return nil, nil
+}
+
 // CreateChangeInfos stores the given changes and doc info. If the
 // removeDoc condition is true, mark IsRemoved to true in doc info.
 func (d *DB) CreateChangeInfos(

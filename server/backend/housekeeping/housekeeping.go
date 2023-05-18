@@ -198,3 +198,37 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 
 	return nil
 }
+
+// removeDocumentCandidates deletes document candidates.
+func (h *Housekeeping) removeDocumentCandidates(ctx context.Context) error {
+	//start := time.Now()
+	locker, err := h.coordinator.NewLocker(ctx, removeDocumentCandidatesKey)
+	if err != nil {
+		return err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.From(ctx).Error(err)
+		}
+	}()
+
+	// Find document candidates
+	_, err = h.database.FindRemoveDocumentCandidates(
+		ctx,
+		h.candidatesLimitPerDocument,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Remove clientDocInfo
+
+	// Remove docInfo
+
+	return nil
+}
