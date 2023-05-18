@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/internal/validation"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -182,6 +183,38 @@ func TestDocKey(t testing.TB) key.Key {
 	}
 
 	return key.Key(sb.String())
+}
+
+// TestSlugName returns a new instance of slug name for testing.
+func TestSlugName(t testing.TB) string {
+	name := t.Name()
+	if err := validation.Validate(name, []any{
+		"required",
+		"min=4",
+		"max=30",
+		"slug",
+	}); err == nil {
+		return name
+	}
+
+	if len(name) > 35 {
+		name = name[len(name)-30:]
+	}
+
+	sb := strings.Builder{}
+	for _, c := range name {
+		if c >= 'A' && c <= 'Z' {
+			sb.WriteRune(c + ('a' - 'A'))
+		} else if c >= 'a' && c <= 'z' {
+			sb.WriteRune(c)
+		} else if c >= '0' && c <= '9' {
+			sb.WriteRune(c)
+		} else {
+			sb.WriteRune('-')
+		}
+	}
+
+	return sb.String()
 }
 
 // NewRangeSlice returns a slice of integers from start to end.

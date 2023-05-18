@@ -19,6 +19,7 @@ package interceptors
 
 import (
 	"context"
+	"strings"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -120,7 +121,7 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 }
 
 func isYorkieService(method string) bool {
-	return method[:len("/yorkie.v1.YorkieService")] == "/yorkie.v1.YorkieService"
+	return strings.HasPrefix(method, "/yorkie.v1.YorkieService/")
 }
 
 // buildContext builds a context data for RPC. It includes the metadata of the

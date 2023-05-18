@@ -18,6 +18,7 @@ package interceptors
 
 import (
 	"context"
+	"strings"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -123,7 +124,7 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 }
 
 func isAdminService(method string) bool {
-	return method[:len("/yorkie.v1.AdminService")] == "/yorkie.v1.AdminService"
+	return strings.HasPrefix(method, "/yorkie.v1.AdminService")
 }
 
 func isRequiredAuth(method string) bool {
