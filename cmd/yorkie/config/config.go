@@ -25,8 +25,8 @@ import (
 	"path/filepath"
 )
 
-// AdminAddr is the address of the admin server.
-var AdminAddr string
+// RPCAddr is the address of the rpc server.
+var RPCAddr string
 
 // ensureYorkieDir ensures that the directory of Yorkie exists.
 func ensureYorkieDir() (string, error) {

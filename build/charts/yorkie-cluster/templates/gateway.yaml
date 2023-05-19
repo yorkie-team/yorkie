@@ -10,7 +10,7 @@ spec:
   servers:
     - port:
         number: 80
-        name: yorkie-sdk-http
+        name: yorkie-rpc-http
         # can simply add envoy.grpc_web filter by using grpc-web appProtocol
         # https://github.com/istio/istio/pull/20537
         protocol: grpc-web
