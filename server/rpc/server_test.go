@@ -25,12 +25,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
+	"github.com/yorkie-team/yorkie/admin"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -43,13 +45,18 @@ import (
 )
 
 var (
+	defaultProjectName = "default"
+	invalidSlugName    = "@#$%^&*()_+"
+
 	nilClientID, _     = hex.DecodeString("000000000000000000000000")
 	emptyClientID, _   = hex.DecodeString("")
 	invalidClientID, _ = hex.DecodeString("invalid")
 
-	testRPCServer *rpc.Server
-	testRPCAddr   = fmt.Sprintf("localhost:%d", helper.RPCPort)
-	testClient    api.YorkieServiceClient
+	testRPCServer            *rpc.Server
+	testRPCAddr              = fmt.Sprintf("localhost:%d", helper.RPCPort)
+	testClient               api.YorkieServiceClient
+	testAdminAuthInterceptor *admin.AuthInterceptor
+	testAdminClient          api.AdminServiceClient
 
 	invalidChangePack = &api.ChangePack{
 		DocumentKey: "invalid",
@@ -69,6 +76,7 @@ func TestMain(m *testing.M) {
 		ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
 		SnapshotThreshold:         helper.SnapshotThreshold,
 		AuthWebhookCacheSize:      helper.AuthWebhookSize,
+		AdminTokenDuration:        helper.AdminTokenDuration,
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    helper.TestDBName(),
@@ -116,6 +124,19 @@ func TestMain(m *testing.M) {
 	}
 	testClient = api.NewYorkieServiceClient(conn)
 
+	credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
+	dialOptions = []grpc.DialOption{credentials}
+
+	testAdminAuthInterceptor = admin.NewAuthInterceptor("")
+	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(testAdminAuthInterceptor.Unary()))
+	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(testAdminAuthInterceptor.Stream()))
+
+	adminConn, err := grpc.Dial(testRPCAddr, dialOptions...)
+	if err != nil {
+		log.Fatal(err)
+	}
+	testAdminClient = api.NewAdminServiceClient(adminConn)
+
 	code := m.Run()
 
 	if err := be.Shutdown(); err != nil {
@@ -125,7 +146,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestRPCServerBackend(t *testing.T) {
+func TestSDKRPCServerBackend(t *testing.T) {
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
@@ -668,6 +689,336 @@ func TestRPCServerBackend(t *testing.T) {
 		_, err = watchResp.Recv()
 		assert.Equal(t, codes.Unavailable, status.Code(err))
 		assert.Contains(t, err.Error(), "EOF")
+	})
+}
+
+func TestAdminRPCServerBackend(t *testing.T) {
+	t.Run("admin signup test", func(t *testing.T) {
+		adminUser := helper.TestSlugName(t)
+		adminPassword := helper.AdminPassword + "123!"
+
+		_, err := testAdminClient.SignUp(
+			context.Background(),
+			&api.SignUpRequest{
+				Username: adminUser,
+				Password: adminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to sign up with existing username
+		_, err = testAdminClient.SignUp(
+			context.Background(),
+			&api.SignUpRequest{
+				Username: adminUser,
+				Password: adminPassword,
+			},
+		)
+		assert.Equal(t, codes.Unknown, status.Convert(err).Code())
+	})
+
+	t.Run("admin login test", func(t *testing.T) {
+		_, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to log in with invalid password
+		_, err = testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: invalidSlugName,
+			},
+		)
+		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+	})
+
+	t.Run("admin create project test", func(t *testing.T) {
+		projectName := helper.TestSlugName(t)
+
+		resp, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		testAdminAuthInterceptor.SetToken(resp.Token)
+
+		_, err = testAdminClient.CreateProject(
+			context.Background(),
+			&api.CreateProjectRequest{
+				Name: projectName,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to create project with existing name
+		_, err = testAdminClient.CreateProject(
+			context.Background(),
+			&api.CreateProjectRequest{
+				Name: projectName,
+			},
+		)
+		assert.Equal(t, codes.AlreadyExists, status.Convert(err).Code())
+	})
+
+	t.Run("admin list projects test", func(t *testing.T) {
+		resp, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		testAdminAuthInterceptor.SetToken(resp.Token)
+
+		_, err = testAdminClient.CreateProject(
+			context.Background(),
+			&api.CreateProjectRequest{
+				Name: helper.TestSlugName(t),
+			},
+		)
+		assert.NoError(t, err)
+
+		_, err = testAdminClient.ListProjects(
+			context.Background(),
+			&api.ListProjectsRequest{},
+		)
+		assert.NoError(t, err)
+	})
+
+	t.Run("admin get project test", func(t *testing.T) {
+		projectName := helper.TestSlugName(t)
+
+		resp, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		testAdminAuthInterceptor.SetToken(resp.Token)
+
+		_, err = testAdminClient.CreateProject(
+			context.Background(),
+			&api.CreateProjectRequest{
+				Name: projectName,
+			},
+		)
+		assert.NoError(t, err)
+
+		_, err = testAdminClient.GetProject(
+			context.Background(),
+			&api.GetProjectRequest{
+				Name: projectName,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to get project with non-existing name
+		_, err = testAdminClient.GetProject(
+			context.Background(),
+			&api.GetProjectRequest{
+				Name: invalidSlugName,
+			},
+		)
+		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+	})
+
+	t.Run("admin update project test", func(t *testing.T) {
+		projectName := helper.TestSlugName(t)
+
+		resp, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		testAdminAuthInterceptor.SetToken(resp.Token)
+
+		createResp, err := testAdminClient.CreateProject(
+			context.Background(),
+			&api.CreateProjectRequest{
+				Name: projectName,
+			},
+		)
+		assert.NoError(t, err)
+
+		_, err = testAdminClient.UpdateProject(
+			context.Background(),
+			&api.UpdateProjectRequest{
+				Id: createResp.Project.Id,
+				Fields: &api.UpdatableProjectFields{
+					Name: &types.StringValue{Value: "updated"},
+				},
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to update project with invalid field
+		_, err = testAdminClient.UpdateProject(
+			context.Background(),
+			&api.UpdateProjectRequest{
+				Id: projectName,
+				Fields: &api.UpdatableProjectFields{
+					Name: &types.StringValue{Value: invalidSlugName},
+				},
+			},
+		)
+		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+	})
+
+	t.Run("admin list documents test", func(t *testing.T) {
+		resp, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		testAdminAuthInterceptor.SetToken(resp.Token)
+
+		_, err = testAdminClient.ListDocuments(
+			context.Background(),
+			&api.ListDocumentsRequest{
+				ProjectName: defaultProjectName,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to list documents with non-existing project name
+		_, err = testAdminClient.ListDocuments(
+			context.Background(),
+			&api.ListDocumentsRequest{
+				ProjectName: invalidSlugName,
+			},
+		)
+		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+	})
+
+	t.Run("admin get document test", func(t *testing.T) {
+		testDocumentKey := helper.TestDocKey(t).String()
+
+		resp, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		testAdminAuthInterceptor.SetToken(resp.Token)
+
+		activateResp, err := testClient.ActivateClient(
+			context.Background(),
+			&api.ActivateClientRequest{ClientKey: t.Name()},
+		)
+		assert.NoError(t, err)
+
+		packWithNoChanges := &api.ChangePack{
+			DocumentKey: testDocumentKey,
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+		}
+
+		_, err = testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		_, err = testAdminClient.GetDocument(
+			context.Background(),
+			&api.GetDocumentRequest{
+				ProjectName: defaultProjectName,
+				DocumentKey: testDocumentKey,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to get document with non-existing document name
+		_, err = testAdminClient.GetDocument(
+			context.Background(),
+			&api.GetDocumentRequest{
+				ProjectName: defaultProjectName,
+				DocumentKey: invalidChangePack.DocumentKey,
+			},
+		)
+		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+	})
+
+	t.Run("admin list changes test", func(t *testing.T) {
+		testDocumentKey := helper.TestDocKey(t).String()
+
+		resp, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		testAdminAuthInterceptor.SetToken(resp.Token)
+
+		activateResp, err := testClient.ActivateClient(
+			context.Background(),
+			&api.ActivateClientRequest{ClientKey: t.Name()},
+		)
+		assert.NoError(t, err)
+
+		packWithNoChanges := &api.ChangePack{
+			DocumentKey: testDocumentKey,
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+		}
+
+		_, err = testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		_, err = testAdminClient.ListChanges(
+			context.Background(),
+			&api.ListChangesRequest{
+				ProjectName: defaultProjectName,
+				DocumentKey: testDocumentKey,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to list changes with non-existing document name
+		_, err = testAdminClient.ListChanges(
+			context.Background(),
+			&api.ListChangesRequest{
+				ProjectName: defaultProjectName,
+				DocumentKey: invalidChangePack.DocumentKey,
+			},
+		)
+		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 	})
 }
 

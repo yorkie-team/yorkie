@@ -25,18 +25,19 @@ import (
 	"net"
 	"time"
 
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/grpchelper"
+	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
+
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
-
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
-	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/grpchelper"
-	"github.com/yorkie-team/yorkie/server/logging"
-	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
 )
 
 // Server is a normal server that processes the logic requested by the client.
@@ -44,11 +45,18 @@ type Server struct {
 	conf                *Config
 	grpcServer          *grpc.Server
 	yorkieServiceCancel context.CancelFunc
+	tokenManager        *auth.TokenManager
 }
 
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
+	tokenManager := auth.NewTokenManager(
+		be.Config.SecretKey,
+		be.Config.ParseAdminTokenDuration(),
+	)
+
 	loggingInterceptor := grpchelper.NewLoggingInterceptor()
+	authInterceptor := interceptors.NewAuthInterceptor(be, tokenManager)
 	contextInterceptor := interceptors.NewContextInterceptor(be)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
@@ -56,12 +64,14 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			loggingInterceptor.Unary(),
 			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
+			authInterceptor.Unary(),
 			contextInterceptor.Unary(),
 			defaultInterceptor.Unary(),
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			loggingInterceptor.Stream(),
 			be.Metrics.ServerMetrics().StreamServerInterceptor(),
+			authInterceptor.Stream(),
 			contextInterceptor.Stream(),
 			defaultInterceptor.Stream(),
 		)),
@@ -98,6 +108,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	grpcServer := grpc.NewServer(opts...)
 	healthpb.RegisterHealthServer(grpcServer, health.NewServer())
 	api.RegisterYorkieServiceServer(grpcServer, newYorkieServer(yorkieServiceCtx, be))
+	api.RegisterAdminServiceServer(grpcServer, newAdminServer(be, tokenManager))
 	be.Metrics.RegisterGRPCServer(grpcServer)
 
 	return &Server{

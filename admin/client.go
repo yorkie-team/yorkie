@@ -100,13 +100,13 @@ func New(opts ...Option) (*Client, error) {
 }
 
 // Dial creates an instance of Client and dials to the admin service.
-func Dial(adminAddr string, opts ...Option) (*Client, error) {
+func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 	cli, err := New(opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := cli.Dial(adminAddr); err != nil {
+	if err := cli.Dial(rpcAddr); err != nil {
 		return nil, err
 	}
 
@@ -114,10 +114,10 @@ func Dial(adminAddr string, opts ...Option) (*Client, error) {
 }
 
 // Dial dials to the admin service.
-func (c *Client) Dial(adminAddr string) error {
-	conn, err := grpc.Dial(adminAddr, c.dialOptions...)
+func (c *Client) Dial(rpcAddr string) error {
+	conn, err := grpc.Dial(rpcAddr, c.dialOptions...)
 	if err != nil {
-		return fmt.Errorf("dial to %s: %w", adminAddr, err)
+		return fmt.Errorf("dial to %s: %w", rpcAddr, err)
 	}
 
 	c.conn = conn

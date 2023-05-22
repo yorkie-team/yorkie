@@ -215,12 +215,6 @@ func init() {
 		false,
 		"Enable runtime profiling data via HTTP server.",
 	)
-	cmd.Flags().IntVar(
-		&conf.Admin.Port,
-		"admin-port",
-		server.DefaultAdminPort,
-		"Admin port",
-	)
 	cmd.Flags().DurationVar(
 		&housekeepingInterval,
 		"housekeeping-interval",

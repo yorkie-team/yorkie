@@ -14,136 +14,38 @@
  * limitations under the License.
  */
 
-// Package admin provides the admin server.
-package admin
+package rpc
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"net"
-
-	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/server/admin/auth"
-	"github.com/yorkie-team/yorkie/server/admin/interceptors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/documents"
-	"github.com/yorkie-team/yorkie/server/grpchelper"
-	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
-// ErrInvalidAdminPort occurs when the port in the config is invalid.
-var ErrInvalidAdminPort = errors.New("invalid port number for Admin server")
-
-// Config is the configuration for creating a Server.
-type Config struct {
-	Port int `yaml:"Port"`
-}
-
-// Validate validates the port number.
-func (c *Config) Validate() error {
-	if c.Port < 1 || 65535 < c.Port {
-		return fmt.Errorf("must be between 1 and 65535, given %d: %w", c.Port, ErrInvalidAdminPort)
-	}
-
-	return nil
-}
-
-// Server is the gRPC server for admin service.
-type Server struct {
-	conf         *Config
-	grpcServer   *grpc.Server
+type adminServer struct {
 	backend      *backend.Backend
 	tokenManager *auth.TokenManager
 }
 
-// NewServer creates a new Server.
-func NewServer(conf *Config, be *backend.Backend) *Server {
-	tokenManager := auth.NewTokenManager(
-		be.Config.SecretKey,
-		be.Config.ParseAdminTokenDuration(),
-	)
-
-	loggingInterceptor := grpchelper.NewLoggingInterceptor()
-	authInterceptor := interceptors.NewAuthInterceptor(be, tokenManager)
-	defaultInterceptor := interceptors.NewDefaultInterceptor()
-
-	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
-			loggingInterceptor.Unary(),
-			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
-			authInterceptor.Unary(),
-			defaultInterceptor.Unary(),
-		)),
-		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
-			loggingInterceptor.Stream(),
-			be.Metrics.ServerMetrics().StreamServerInterceptor(),
-			authInterceptor.Stream(),
-			defaultInterceptor.Stream(),
-		)),
-	}
-
-	grpcServer := grpc.NewServer(opts...)
-	server := &Server{
-		conf:         conf,
-		grpcServer:   grpcServer,
+// newAdminServer creates a new instance of adminServer.
+func newAdminServer(be *backend.Backend, tokenManager *auth.TokenManager) *adminServer {
+	return &adminServer{
 		backend:      be,
 		tokenManager: tokenManager,
 	}
-	api.RegisterAdminServiceServer(grpcServer, server)
-
-	return server
-}
-
-// Start starts this server by opening the rpc port.
-func (s *Server) Start() error {
-	return s.listenAndServeGRPC()
-}
-
-// Shutdown shuts down this server.
-func (s *Server) Shutdown(graceful bool) {
-	if graceful {
-		s.grpcServer.GracefulStop()
-	} else {
-		s.grpcServer.Stop()
-	}
-}
-
-// GRPCServer returns the gRPC server.
-func (s *Server) GRPCServer() *grpc.Server {
-	return s.grpcServer
-}
-
-func (s *Server) listenAndServeGRPC() error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
-	if err != nil {
-		return fmt.Errorf("listen port %d: %w", s.conf.Port, err)
-	}
-
-	go func() {
-		logging.DefaultLogger().Infof("serving admin on %d", s.conf.Port)
-
-		if err := s.grpcServer.Serve(lis); err != nil {
-			if err != grpc.ErrServerStopped {
-				logging.DefaultLogger().Error(err)
-			}
-		}
-	}()
-
-	return nil
 }
 
 // SignUp signs up a user.
-func (s *Server) SignUp(
+func (s *adminServer) SignUp(
 	ctx context.Context,
 	req *api.SignUpRequest,
 ) (*api.SignUpResponse, error) {
@@ -168,7 +70,7 @@ func (s *Server) SignUp(
 }
 
 // LogIn logs in a user.
-func (s *Server) LogIn(
+func (s *adminServer) LogIn(
 	ctx context.Context,
 	req *api.LogInRequest,
 ) (*api.LogInResponse, error) {
@@ -193,7 +95,7 @@ func (s *Server) LogIn(
 }
 
 // CreateProject creates a new project.
-func (s *Server) CreateProject(
+func (s *adminServer) CreateProject(
 	ctx context.Context,
 	req *api.CreateProjectRequest,
 ) (*api.CreateProjectResponse, error) {
@@ -219,7 +121,7 @@ func (s *Server) CreateProject(
 }
 
 // ListProjects lists all projects.
-func (s *Server) ListProjects(
+func (s *adminServer) ListProjects(
 	ctx context.Context,
 	_ *api.ListProjectsRequest,
 ) (*api.ListProjectsResponse, error) {
@@ -240,7 +142,7 @@ func (s *Server) ListProjects(
 }
 
 // GetProject gets a project.
-func (s *Server) GetProject(
+func (s *adminServer) GetProject(
 	ctx context.Context,
 	req *api.GetProjectRequest,
 ) (*api.GetProjectResponse, error) {
@@ -261,7 +163,7 @@ func (s *Server) GetProject(
 }
 
 // UpdateProject updates the project.
-func (s *Server) UpdateProject(
+func (s *adminServer) UpdateProject(
 	ctx context.Context,
 	req *api.UpdateProjectRequest,
 ) (*api.UpdateProjectResponse, error) {
@@ -296,7 +198,7 @@ func (s *Server) UpdateProject(
 }
 
 // GetDocument gets the document.
-func (s *Server) GetDocument(
+func (s *adminServer) GetDocument(
 	ctx context.Context,
 	req *api.GetDocumentRequest,
 ) (*api.GetDocumentResponse, error) {
@@ -327,7 +229,7 @@ func (s *Server) GetDocument(
 }
 
 // GetSnapshotMeta gets the snapshot metadata that corresponds to the server sequence.
-func (s *Server) GetSnapshotMeta(
+func (s *adminServer) GetSnapshotMeta(
 	ctx context.Context,
 	req *api.GetSnapshotMetaRequest,
 ) (*api.GetSnapshotMetaResponse, error) {
@@ -360,7 +262,7 @@ func (s *Server) GetSnapshotMeta(
 }
 
 // ListDocuments lists documents.
-func (s *Server) ListDocuments(
+func (s *adminServer) ListDocuments(
 	ctx context.Context,
 	req *api.ListDocumentsRequest,
 ) (*api.ListDocumentsResponse, error) {
@@ -395,7 +297,7 @@ func (s *Server) ListDocuments(
 }
 
 // SearchDocuments searches documents for a specified string.
-func (s *Server) SearchDocuments(
+func (s *adminServer) SearchDocuments(
 	ctx context.Context,
 	req *api.SearchDocumentsRequest,
 ) (*api.SearchDocumentsResponse, error) {
@@ -474,7 +376,7 @@ func (s *Server) RemoveDocumentAdmin(
 }
 
 // ListChanges lists of changes for the given document.
-func (s *Server) ListChanges(
+func (s *adminServer) ListChanges(
 	ctx context.Context,
 	req *api.ListChangesRequest,
 ) (*api.ListChangesResponse, error) {

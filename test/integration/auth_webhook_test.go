@@ -83,7 +83,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 	assert.NoError(t, svr.Start())
 	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-	adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
+	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 	defer func() { assert.NoError(t, adminCli.Close()) }()
 
 	project, err := adminCli.CreateProject(context.Background(), "auth-webhook-test")
@@ -196,7 +196,7 @@ func TestAuthWebhook(t *testing.T) {
 		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
+		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), "success-webhook-after-retries")
 		assert.NoError(t, err)
@@ -238,7 +238,7 @@ func TestAuthWebhook(t *testing.T) {
 		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
+		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), "fail-webhook-after-retries")
 		assert.NoError(t, err)
@@ -291,7 +291,7 @@ func TestAuthWebhook(t *testing.T) {
 		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
+		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), "auth-request-cache")
 		assert.NoError(t, err)
@@ -367,7 +367,7 @@ func TestAuthWebhook(t *testing.T) {
 		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
-		adminCli := helper.CreateAdminCli(t, svr.AdminAddr())
+		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 		project, err := adminCli.CreateProject(context.Background(), "unauth-request-cache")
 		assert.NoError(t, err)
