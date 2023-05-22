@@ -19,6 +19,7 @@ package interceptors
 
 import (
 	"context"
+	"strings"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -53,23 +54,27 @@ func (i *ContextInterceptor) Unary() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
-		ctx, err = i.buildContext(ctx)
-		if err != nil {
-			return nil, err
+		if isYorkieService(info.FullMethod) {
+			ctx, err = i.buildContext(ctx)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		resp, err = handler(ctx, req)
 
-		data, ok := grpcmetadata.FromIncomingContext(ctx)
-		if ok {
-			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-			i.backend.Metrics.AddUserAgent(
-				i.backend.Config.Hostname,
-				projects.From(ctx),
-				sdkType,
-				sdkVersion,
-				info.FullMethod,
-			)
+		if isYorkieService(info.FullMethod) {
+			data, ok := grpcmetadata.FromIncomingContext(ctx)
+			if ok {
+				sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+				i.backend.Metrics.AddUserAgent(
+					i.backend.Config.Hostname,
+					projects.From(ctx),
+					sdkType,
+					sdkVersion,
+					info.FullMethod,
+				)
+			}
 		}
 
 		return resp, err
@@ -83,31 +88,40 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 		ss grpc.ServerStream,
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
-	) error {
+	) (err error) {
 		ctx := ss.Context()
-		ctx, err := i.buildContext(ctx)
-		if err != nil {
-			return err
+		if isYorkieService(info.FullMethod) {
+			ctx, err = i.buildContext(ctx)
+			if err != nil {
+				return err
+			}
 		}
+
 		wrapped := grpcmiddleware.WrapServerStream(ss)
 		wrapped.WrappedContext = ctx
 
 		err = handler(srv, wrapped)
 
-		data, ok := grpcmetadata.FromIncomingContext(ctx)
-		if ok {
-			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-			i.backend.Metrics.AddUserAgent(
-				i.backend.Config.Hostname,
-				projects.From(ctx),
-				sdkType,
-				sdkVersion,
-				info.FullMethod,
-			)
+		if isYorkieService(info.FullMethod) {
+			data, ok := grpcmetadata.FromIncomingContext(ctx)
+			if ok {
+				sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+				i.backend.Metrics.AddUserAgent(
+					i.backend.Config.Hostname,
+					projects.From(ctx),
+					sdkType,
+					sdkVersion,
+					info.FullMethod,
+				)
+			}
 		}
 
 		return err
 	}
+}
+
+func isYorkieService(method string) bool {
+	return strings.HasPrefix(method, "/yorkie.v1.YorkieService/")
 }
 
 // buildContext builds a context data for RPC. It includes the metadata of the

@@ -35,7 +35,7 @@ func newLoginCmd() *cobra.Command {
 		Use:   "login",
 		Short: "Log in to the Yorkie server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cli, err := admin.Dial(config.AdminAddr)
+			cli, err := admin.Dial(config.RPCAddr)
 			if err != nil {
 				return err
 			}
@@ -54,7 +54,7 @@ func newLoginCmd() *cobra.Command {
 				return nil
 			}
 
-			conf.Auths[config.AdminAddr] = token
+			conf.Auths[config.RPCAddr] = token
 			if err := config.Save(conf); err != nil {
 				return err
 			}

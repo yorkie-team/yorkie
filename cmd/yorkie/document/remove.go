@@ -37,11 +37,11 @@ func newRemoveCommand() *cobra.Command {
 			projectName := args[0]
 			documentKey := args[1]
 
-			token, err := config.LoadToken(config.AdminAddr)
+			token, err := config.LoadToken(config.RPCAddr)
 			if err != nil {
 				return err
 			}
-			cli, err := admin.Dial(config.AdminAddr, admin.WithToken(token))
+			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token))
 			if err != nil {
 				return err
 			}

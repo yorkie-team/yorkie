@@ -28,11 +28,6 @@ Profiling:
   # EnablePprof is whether to enable the pprof `/debug/pprof` endpoint.
   EnablePprof: false
 
-# Admin is the configuration for the admin server.
-Admin:
-  # Port is the port to listen on for serving admin interface (default: 11103).
-  Port: 11103
-
 # Housekeeping is the configuration for the housekeeping.
 Housekeeping:
   # Interval is the time between housekeeping runs (default: 1m).

@@ -33,12 +33,12 @@ func newListCommand() *cobra.Command {
 		Use:   "ls",
 		Short: "List all projects",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			token, err := config.LoadToken(config.AdminAddr)
+			token, err := config.LoadToken(config.RPCAddr)
 			if err != nil {
 				return err
 			}
 
-			cli, err := admin.Dial(config.AdminAddr, admin.WithToken(token))
+			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token))
 			if err != nil {
 				return err
 			}

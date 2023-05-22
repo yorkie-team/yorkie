@@ -24,7 +24,6 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/yorkie-team/yorkie/server/admin"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
@@ -40,8 +39,6 @@ const (
 	DefaultRPCMaxConnectionAgeGrace = 0 * time.Second
 
 	DefaultProfilingPort = 11102
-
-	DefaultAdminPort = 11103
 
 	DefaultHousekeepingInterval                   = 30 * time.Second
 	DefaultHousekeepingCandidatesLimitPerProject  = 500
@@ -75,7 +72,6 @@ const (
 type Config struct {
 	RPC          *rpc.Config          `yaml:"RPC"`
 	Profiling    *profiling.Config    `yaml:"Profiling"`
-	Admin        *admin.Config        `yaml:"Admin"`
 	Housekeeping *housekeeping.Config `yaml:"Housekeeping"`
 	Backend      *backend.Config      `yaml:"Backend"`
 	Mongo        *mongo.Config        `yaml:"Mongo"`
@@ -108,11 +104,6 @@ func (c *Config) RPCAddr() string {
 	return fmt.Sprintf("localhost:%d", c.RPC.Port)
 }
 
-// AdminAddr returns the Admin address.
-func (c *Config) AdminAddr() string {
-	return fmt.Sprintf("localhost:%d", c.Admin.Port)
-}
-
 // Validate returns an error if the provided Config is invalidated.
 func (c *Config) Validate() error {
 	if err := c.RPC.Validate(); err != nil {
@@ -120,10 +111,6 @@ func (c *Config) Validate() error {
 	}
 
 	if err := c.Profiling.Validate(); err != nil {
-		return err
-	}
-
-	if err := c.Admin.Validate(); err != nil {
 		return err
 	}
 
@@ -165,10 +152,6 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Profiling.Port == 0 {
 		c.Profiling.Port = DefaultProfilingPort
-	}
-
-	if c.Admin.Port == 0 {
-		c.Admin.Port = DefaultAdminPort
 	}
 
 	if c.Backend.AdminUser == "" {
@@ -245,9 +228,6 @@ func newConfig(port int, profilingPort int) *Config {
 		},
 		Profiling: &profiling.Config{
 			Port: profilingPort,
-		},
-		Admin: &admin.Config{
-			Port: DefaultAdminPort,
 		},
 		Housekeeping: &housekeeping.Config{
 			Interval:                   DefaultHousekeepingInterval.String(),

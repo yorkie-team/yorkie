@@ -9,18 +9,18 @@ spec:
   gateways:
     - {{ .Values.yorkie.name }}-gateway
   http:
-    # route to yorkie sdk service on "/yorkie.v1.YorkieService" uri prefix
-    - name: {{ .Values.yorkie.name }}-service
+    # route to yorkie rpc service on "/yorkie.v1" uri prefix
+    - name: {{ .Values.yorkie.name }}-rpc-service
       match:
         - uri:
-            prefix: "/yorkie.v1.YorkieService"
+            prefix: "/yorkie.v1"
       route:
         - destination:
             host: {{ .Values.yorkie.name }}
             port:
-              number: {{ .Values.yorkie.ports.sdkPort }}
+              number: {{ .Values.yorkie.ports.rpcPort }}
       # set cors policy for grpc-web protocols
-      corsPolicy: &apiCorsPolicy
+      corsPolicy:
         allowOrigin:
           - "*"
         allowMethods:
@@ -53,15 +53,3 @@ spec:
           - grpc-message
           - grpc-status-details-bin
         allowCredentials: true
-    # route to yorkie admin service on "/yorkie.v1.AdminService" uri prefix
-    - name: {{ .Values.yorkie.name }}-admin-service
-      match:
-        - uri:
-            prefix: "/yorkie.v1.AdminService"
-      route:
-        - destination:
-            host: {{ .Values.yorkie.name }}
-            port:
-              number: {{ .Values.yorkie.ports.adminPort }}
-      # refer to apiCorsPolicy anchor above
-      corsPolicy: *apiCorsPolicy

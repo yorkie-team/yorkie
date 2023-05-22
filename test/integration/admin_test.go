@@ -35,7 +35,7 @@ import (
 func TestAdmin(t *testing.T) {
 	ctx := context.Background()
 
-	adminAddr := "localhost" + ":21203"
+	adminAddr := "localhost" + ":21201"
 	token, err := config.LoadToken(adminAddr)
 	assert.NoError(t, err)
 
@@ -65,7 +65,7 @@ func TestAdmin(t *testing.T) {
 		// 01. client is not activated.
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrClientNotActivated)
 
-		success, err := adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		success, err := adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.False(t, success)
 		assert.Error(t, err)
 
@@ -73,13 +73,13 @@ func TestAdmin(t *testing.T) {
 		assert.NoError(t, cli.Activate(ctx))
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
 
-		success, err = adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		success, err = adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.False(t, success)
 		assert.Error(t, err)
 
 		// 03. sdk document is attached. but DB's clientDocInfo is already removed.
 		assert.NoError(t, cli.Attach(ctx, d1))
-		success, err = adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		success, err = adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.True(t, success)
 		assert.NoError(t, err)
 		assert.Equal(t, document.StatusAttached, d1.Status())
@@ -117,7 +117,7 @@ func TestAdmin(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, c1.Attach(ctx, d1))
 
-		success, err := adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		success, err := adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.True(t, success)
 		assert.NoError(t, err)
 
@@ -156,7 +156,7 @@ func TestAdmin(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		success, err := adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		success, err := adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.True(t, success)
 		assert.NoError(t, err)
 
@@ -184,7 +184,7 @@ func TestAdmin(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		// 02. cli1 removes d1 and cli2 detaches d2.
-		success, err := adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		success, err := adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.True(t, success)
 		assert.NoError(t, err)
 
@@ -212,10 +212,10 @@ func TestAdmin(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		// 02. cli1 removes d1 and cli2 removes d2.
-		success, err := adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		success, err := adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.True(t, success)
 		assert.NoError(t, err)
-		success, err = adminCli.RemoveDocument(ctx, "default", d2.Key().String())
+		success, err = adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.False(t, success)
 		assert.Error(t, err)
 
@@ -253,10 +253,10 @@ func TestAdmin(t *testing.T) {
 		assert.ErrorIs(t, cli.Attach(ctx, d1), client.ErrDocumentNotDetached)
 
 		// 03. abnormal behavior on removed state
-		success, err := adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		success, err := adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.True(t, success)
 		assert.NoError(t, err)
-		success, err = adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		success, err = adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.False(t, success)
 		assert.Error(t, err)
 
@@ -281,7 +281,7 @@ func TestAdmin(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 03. c1 removes d1 and watches it.
-		success, err := adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		success, err := adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.True(t, success)
 		assert.NoError(t, err)
 		assert.NoError(t, c1.Sync(ctx))
