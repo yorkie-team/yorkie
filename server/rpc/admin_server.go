@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -25,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/documents"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
@@ -330,7 +332,7 @@ func (s *adminServer) SearchDocuments(
 }
 
 // RemoveDocumentAdmin removes the given document key.
-func (s *Server) RemoveDocumentAdmin(
+func (s *adminServer) RemoveDocumentAdmin(
 	ctx context.Context,
 	req *api.RemoveDocumentAdminRequest,
 ) (*api.RemoveDocumentAdminResponse, error) {

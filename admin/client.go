@@ -258,27 +258,6 @@ func (c *Client) ListDocuments(
 	return converter.FromDocumentSummaries(response.Documents)
 }
 
-// RemoveDocument remove a document by document key.
-func (c *Client) RemoveDocument(
-	ctx context.Context,
-	projectName,
-	documentKey string,
-) (bool, error) {
-	// TODO: Change ctx to withShardKey(ctx, apiKey, documentKey) when shard key is supported.
-	response, err := c.client.RemoveDocumentAdmin(
-		ctx,
-		&api.RemoveDocumentAdminRequest{
-			ProjectName: projectName,
-			DocumentKey: documentKey,
-		},
-	)
-	if err != nil {
-		return false, err
-	}
-
-	return response.Success, nil
-}
-
 // RemoveDocumentWithAPIKey remove a document by document key with API key.
 func (c *Client) RemoveDocumentWithAPIKey(
 	ctx context.Context,
@@ -286,9 +265,8 @@ func (c *Client) RemoveDocumentWithAPIKey(
 	documentKey,
 	apiKey string,
 ) (bool, error) {
-	// TODO: Change ctx to withShardKey(ctx, apiKey, documentKey) when shard key is supported.
 	response, err := c.client.RemoveDocumentAdmin(
-		ctx,
+		withShardKey(ctx, apiKey, documentKey),
 		&api.RemoveDocumentAdminRequest{
 			ProjectName: projectName,
 			DocumentKey: documentKey,
