@@ -714,8 +714,8 @@ func (d *DB) FindDocInfoByID(
 	return docInfo.DeepCopy(), nil
 }
 
-// UpdateDocInfoRemovedAt updates the removedAt field of the given docInfo.
-func (d *DB) UpdateDocInfoRemovedAt(
+// UpdateDocInfoStatusToRemoved updates the status of the document to removed.
+func (d *DB) UpdateDocInfoStatusToRemoved(
 	ctx context.Context,
 	projectID types.ID,
 	id types.ID,

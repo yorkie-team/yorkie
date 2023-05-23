@@ -218,5 +218,5 @@ func RemoveDocument(
 	project *types.Project,
 	docID types.ID,
 ) error {
-	return be.DB.UpdateDocInfoRemovedAt(ctx, project.ID, docID)
+	return be.DB.UpdateDocInfoStatusToRemoved(ctx, project.ID, docID)
 }
