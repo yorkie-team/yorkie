@@ -54,9 +54,6 @@ type Options struct {
 
 	// Logger is the Logger of the client.
 	Logger *zap.Logger
-
-	// APIKey is the API key of the client.
-	APIKey string
 }
 
 // Client is a client for admin service.
@@ -65,7 +62,6 @@ type Client struct {
 	client          api.AdminServiceClient
 	dialOptions     []grpc.DialOption
 	authInterceptor *AuthInterceptor
-	options         Options
 	logger          *zap.Logger
 }
 
