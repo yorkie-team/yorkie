@@ -258,14 +258,19 @@ func (c *Client) ListDocuments(
 	return converter.FromDocumentSummaries(response.Documents)
 }
 
-// RemoveDocumentWithAPIKey remove a document by document key with API key.
-func (c *Client) RemoveDocumentWithAPIKey(
+// RemoveDocument removes a document of the given key.
+func (c *Client) RemoveDocument(
 	ctx context.Context,
-	projectName,
-	documentKey,
-	apiKey string,
+	projectName string,
+	documentKey string,
 ) error {
-	_, err := c.client.RemoveDocumentByAdmin(
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return err
+	}
+	apiKey := project.PublicKey
+
+	_, err = c.client.RemoveDocumentByAdmin(
 		withShardKey(ctx, apiKey, documentKey),
 		&api.RemoveDocumentByAdminRequest{
 			ProjectName: projectName,
