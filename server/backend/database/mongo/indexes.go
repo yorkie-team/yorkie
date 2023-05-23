@@ -79,11 +79,6 @@ var collectionInfos = []collectionInfo{
 				{Key: "status", Value: bsonx.Int32(1)},
 				{Key: "updated_at", Value: bsonx.Int32(1)},
 			},
-		}, {
-			Keys: bsonx.Doc{
-				{Key: "key", Value: bsonx.Int32(1)},
-				{Key: "document.doc_id", Value: bsonx.Int32(1)},
-			},
 		}},
 	},
 	{

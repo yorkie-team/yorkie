@@ -264,19 +264,15 @@ func (c *Client) RemoveDocumentWithAPIKey(
 	projectName,
 	documentKey,
 	apiKey string,
-) (bool, error) {
-	response, err := c.client.RemoveDocumentAdmin(
+) error {
+	_, err := c.client.RemoveDocumentByAdmin(
 		withShardKey(ctx, apiKey, documentKey),
-		&api.RemoveDocumentAdminRequest{
+		&api.RemoveDocumentByAdminRequest{
 			ProjectName: projectName,
 			DocumentKey: documentKey,
 		},
 	)
-	if err != nil {
-		return false, err
-	}
-
-	return response.Success, nil
+	return err
 }
 
 // ListChangeSummaries returns the change summaries of the given document.

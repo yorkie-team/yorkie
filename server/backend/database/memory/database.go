@@ -23,7 +23,6 @@ import (
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
-
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -501,7 +500,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
-	clientDocInfo := clientInfo.FindDocumentInfo(docInfo.ID)
+	clientDocInfo := clientInfo.Documents[docInfo.ID]
 	attached, err := clientInfo.IsAttached(docInfo.ID)
 	if err != nil {
 		return err
@@ -520,40 +519,31 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 
 	loaded := raw.(*database.ClientInfo).DeepCopy()
 
-	documentInfo := loaded.FindDocumentInfo(docInfo.ID)
 	if !attached {
-		documentInfo = &database.ClientDocInfo{
-			DocID:  docInfo.ID,
+		loaded.Documents[docInfo.ID] = &database.ClientDocInfo{
 			Status: clientDocInfo.Status,
 		}
 		loaded.UpdatedAt = gotime.Now()
 	} else {
-		if documentInfo == nil {
-			documentInfo = &database.ClientDocInfo{}
+		if _, ok := loaded.Documents[docInfo.ID]; !ok {
+			loaded.Documents[docInfo.ID] = &database.ClientDocInfo{}
 		}
 
-		serverSeq := documentInfo.ServerSeq
-		if clientDocInfo.ServerSeq > documentInfo.ServerSeq {
+		loadedClientDocInfo := loaded.Documents[docInfo.ID]
+		serverSeq := loadedClientDocInfo.ServerSeq
+		if clientDocInfo.ServerSeq > loadedClientDocInfo.ServerSeq {
 			serverSeq = clientDocInfo.ServerSeq
 		}
-		clientSeq := documentInfo.ClientSeq
-		if clientDocInfo.ClientSeq > documentInfo.ClientSeq {
+		clientSeq := loadedClientDocInfo.ClientSeq
+		if clientDocInfo.ClientSeq > loadedClientDocInfo.ClientSeq {
 			clientSeq = clientDocInfo.ClientSeq
 		}
-
-		documentInfo = &database.ClientDocInfo{
-			DocID:     clientDocInfo.DocID,
+		loaded.Documents[docInfo.ID] = &database.ClientDocInfo{
 			ServerSeq: serverSeq,
 			ClientSeq: clientSeq,
 			Status:    clientDocInfo.Status,
 		}
 		loaded.UpdatedAt = gotime.Now()
-	}
-	for i, v := range loaded.Documents {
-		if v.DocID == docInfo.ID {
-			loaded.Documents[i] = documentInfo
-			break
-		}
 	}
 
 	if err := txn.Insert(tblClients, loaded); err != nil {
@@ -657,35 +647,23 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 
 	now := gotime.Now()
 	var docInfo *database.DocInfo
-	newDocInfo := &database.DocInfo{
-		ID:         newID(),
-		ProjectID:  projectID,
-		Key:        key,
-		Owner:      clientID,
-		ServerSeq:  0,
-		CreatedAt:  now,
-		AccessedAt: now,
-	}
-
 	if raw == nil {
-		docInfo = newDocInfo
+		docInfo = &database.DocInfo{
+			ID:         newID(),
+			ProjectID:  projectID,
+			Key:        key,
+			Owner:      clientID,
+			ServerSeq:  0,
+			CreatedAt:  now,
+			AccessedAt: now,
+		}
 		if err := txn.Insert(tblDocuments, docInfo); err != nil {
 			return nil, fmt.Errorf("create document: %w", err)
 		}
+		txn.Commit()
 	} else {
 		docInfo = raw.(*database.DocInfo)
-		if !docInfo.RemovedAt.IsZero() {
-			if err := txn.Delete(tblDocuments, docInfo); err != nil {
-				return nil, fmt.Errorf("delete document: %w", err)
-			}
-			if err := txn.Insert(tblDocuments, newDocInfo); err != nil {
-				return nil, fmt.Errorf("create document: %w", err)
-			}
-			docInfo = newDocInfo
-		}
 	}
-
-	txn.Commit()
 
 	return docInfo.DeepCopy(), nil
 }
@@ -771,37 +749,6 @@ func (d *DB) UpdateDocInfoRemovedAt(
 	txn.Commit()
 
 	return nil
-}
-
-// IsAttachedDocument returns true if the document is attached to any other client.
-func (d *DB) IsAttachedDocument(
-	ctx context.Context,
-	projectID types.ID,
-	docID types.ID,
-) (bool, error) {
-	txn := d.db.Txn(false)
-	defer txn.Abort()
-
-	it, err := txn.Get(tblClients, "project_id", projectID.String())
-	if err != nil {
-		return false, fmt.Errorf("%w", err)
-	}
-	if it == nil {
-		return false, database.ErrClientNotFound
-	}
-
-	for raw := it.Next(); raw != nil; raw = it.Next() {
-		clientInfo := raw.(*database.ClientInfo)
-		isAttached, err := clientInfo.IsAttached(docID)
-		if err != nil {
-			return false, err
-		}
-		if isAttached {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }
 
 // CreateChangeInfos stores the given changes and doc info. If the
