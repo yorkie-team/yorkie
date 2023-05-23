@@ -79,7 +79,7 @@ func New(opts ...Option) (*Client, error) {
 	credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 	dialOptions := []grpc.DialOption{credentials}
 
-	authInterceptor := NewAuthInterceptor(options.APIKey, options.Token)
+	authInterceptor := NewAuthInterceptor(options.Token)
 	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
 	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
 
