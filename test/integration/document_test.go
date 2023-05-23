@@ -113,7 +113,11 @@ func TestDocument(t *testing.T) {
 	t.Run("watch document changed event test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+
+		_, err := c1.Watch(ctx, d1)
+		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
+
+		err = c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))

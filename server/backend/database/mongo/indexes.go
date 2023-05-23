@@ -80,7 +80,8 @@ var collectionInfos = []collectionInfo{
 				{Key: "updated_at", Value: bsonx.Int32(1)},
 			},
 		}},
-	}, {
+	},
+	{
 		name: colDocuments,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
