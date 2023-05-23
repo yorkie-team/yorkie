@@ -49,10 +49,9 @@ const (
 // ClientDocInfo is a structure representing information of the document
 // attached to the client.
 type ClientDocInfo struct {
-	DocID     types.ID `bson:"doc_id"`
-	Status    string   `bson:"status"`
-	ServerSeq int64    `bson:"server_seq"`
-	ClientSeq uint32   `bson:"client_seq"`
+	Status    string `bson:"status"`
+	ServerSeq int64  `bson:"server_seq"`
+	ClientSeq uint32 `bson:"client_seq"`
 }
 
 // ClientInfo is a structure representing information of a client.
@@ -70,7 +69,7 @@ type ClientInfo struct {
 	Status string `bson:"status"`
 
 	// Documents is a map of document which is attached to the client.
-	Documents []*ClientDocInfo `bson:"documents"`
+	Documents map[types.ID]*ClientDocInfo `bson:"documents"`
 
 	// CreatedAt is the time when the client was created.
 	CreatedAt time.Time `bson:"created_at"`
@@ -108,23 +107,17 @@ func (i *ClientInfo) AttachDocument(docID types.ID) error {
 	}
 
 	if i.Documents == nil {
-		i.Documents = []*ClientDocInfo{}
+		i.Documents = make(map[types.ID]*ClientDocInfo)
 	}
 
-	documentInfo := i.FindDocumentInfo(docID)
-	if documentInfo != nil && documentInfo.Status == DocumentAttached {
+	if i.hasDocument(docID) && i.Documents[docID].Status == DocumentAttached {
 		return fmt.Errorf("client(%s) attaches document(%s): %w", i.ID.String(), docID.String(), ErrDocumentAlreadyAttached)
 	}
 
-	if documentInfo == nil {
-		i.Documents = append(i.Documents, &ClientDocInfo{
-			DocID:     docID,
-			Status:    DocumentAttached,
-			ServerSeq: 0,
-			ClientSeq: 0,
-		})
-	} else {
-		documentInfo.Status = DocumentAttached
+	i.Documents[docID] = &ClientDocInfo{
+		Status:    DocumentAttached,
+		ServerSeq: 0,
+		ClientSeq: 0,
 	}
 	i.UpdatedAt = time.Now()
 
@@ -134,13 +127,12 @@ func (i *ClientInfo) AttachDocument(docID types.ID) error {
 // DetachDocument detaches the given document from this client.
 func (i *ClientInfo) DetachDocument(docID types.ID) error {
 	if err := i.EnsureDocumentAttached(docID); err != nil {
-		return fmt.Errorf("client(%s) detaches document(%s): %w", i.ID.String(), docID.String(), err)
+		return err
 	}
 
-	documentInfo := i.FindDocumentInfo(docID)
-	documentInfo.Status = DocumentDetached
-	documentInfo.ClientSeq = 0
-	documentInfo.ServerSeq = 0
+	i.Documents[docID].Status = DocumentDetached
+	i.Documents[docID].ClientSeq = 0
+	i.Documents[docID].ServerSeq = 0
 	i.UpdatedAt = time.Now()
 
 	return nil
@@ -149,13 +141,12 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 // RemoveDocument removes the given document from this client.
 func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 	if err := i.EnsureDocumentAttached(docID); err != nil {
-		return fmt.Errorf("client(%s) removes document(%s): %w", i.ID.String(), docID.String(), err)
+		return err
 	}
 
-	documentInfo := i.FindDocumentInfo(docID)
-	documentInfo.Status = DocumentRemoved
-	documentInfo.ClientSeq = 0
-	documentInfo.ServerSeq = 0
+	i.Documents[docID].Status = DocumentRemoved
+	i.Documents[docID].ClientSeq = 0
+	i.Documents[docID].ServerSeq = 0
 	i.UpdatedAt = time.Now()
 
 	return nil
@@ -163,22 +154,21 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 
 // IsAttached returns whether the given document is attached to this client.
 func (i *ClientInfo) IsAttached(docID types.ID) (bool, error) {
-	documentInfo := i.FindDocumentInfo(docID)
-	if documentInfo == nil {
+	if !i.hasDocument(docID) {
 		return false, fmt.Errorf("check document(%s) is attached: %w", docID.String(), ErrDocumentNeverAttached)
 	}
 
-	return documentInfo.Status == DocumentAttached, nil
+	return i.Documents[docID].Status == DocumentAttached, nil
 }
 
 // Checkpoint returns the checkpoint of the given document.
 func (i *ClientInfo) Checkpoint(docID types.ID) change.Checkpoint {
-	documentInfo := i.FindDocumentInfo(docID)
-	if documentInfo == nil {
+	clientDocInfo := i.Documents[docID]
+	if clientDocInfo == nil {
 		return change.InitialCheckpoint
 	}
 
-	return change.NewCheckpoint(documentInfo.ServerSeq, documentInfo.ClientSeq)
+	return change.NewCheckpoint(clientDocInfo.ServerSeq, clientDocInfo.ClientSeq)
 }
 
 // UpdateCheckpoint updates the checkpoint of the given document.
@@ -186,13 +176,12 @@ func (i *ClientInfo) UpdateCheckpoint(
 	docID types.ID,
 	cp change.Checkpoint,
 ) error {
-	documentInfo := i.FindDocumentInfo(docID)
-	if documentInfo == nil {
+	if !i.hasDocument(docID) {
 		return fmt.Errorf("update checkpoint in document(%s): %w", docID.String(), ErrDocumentNeverAttached)
 	}
 
-	documentInfo.ServerSeq = cp.ServerSeq
-	documentInfo.ClientSeq = cp.ClientSeq
+	i.Documents[docID].ServerSeq = cp.ServerSeq
+	i.Documents[docID].ClientSeq = cp.ClientSeq
 	i.UpdatedAt = time.Now()
 
 	return nil
@@ -208,8 +197,7 @@ func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 		)
 	}
 
-	documentInfo := i.FindDocumentInfo(docID)
-	if documentInfo == nil || documentInfo.Status != DocumentAttached {
+	if !i.hasDocument(docID) || i.Documents[docID].Status != DocumentAttached {
 		return fmt.Errorf("ensure attached document(%s) in client(%s): %w",
 			docID.String(),
 			i.ID.String(),
@@ -226,14 +214,13 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 		return nil
 	}
 
-	var documents []*ClientDocInfo
-	for _, v := range i.Documents {
-		documents = append(documents, &ClientDocInfo{
-			DocID:     v.DocID,
+	documents := make(map[types.ID]*ClientDocInfo, len(i.Documents))
+	for k, v := range i.Documents {
+		documents[k] = &ClientDocInfo{
 			Status:    v.Status,
 			ServerSeq: v.ServerSeq,
 			ClientSeq: v.ClientSeq,
-		})
+		}
 	}
 
 	return &ClientInfo{
@@ -247,17 +234,6 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 	}
 }
 
-// FindDocumentInfo finds the document info by the given docID.
-func (i *ClientInfo) FindDocumentInfo(docID types.ID) *ClientDocInfo {
-	if i.Documents == nil || len(i.Documents) == 0 {
-		return nil
-	}
-
-	for _, docInfo := range i.Documents {
-		if docInfo.DocID == docID {
-			return docInfo
-		}
-	}
-
-	return nil
+func (i *ClientInfo) hasDocument(docID types.ID) bool {
+	return i.Documents != nil && i.Documents[docID] != nil
 }

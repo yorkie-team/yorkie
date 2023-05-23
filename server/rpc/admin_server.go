@@ -19,12 +19,13 @@ package rpc
 import (
 	"context"
 	"fmt"
-
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -361,12 +362,22 @@ func (s *adminServer) RemoveDocumentAdmin(
 		}
 	}()
 
-	// TODO: Add check if document is attached option using IsAttachedDocument()
+	// TODO(emplam27): Add an option to remove the document if there are no clients attached to it.
 	if err := documents.RemoveDocument(ctx, s.backend, project, docInfo.ID); err != nil {
 		return nil, err
 	}
 
-	// TODO: Publish event to all clients that are subscribed to this document.
+	// TODO(emplam27): Change the publisherID to the actual user ID. This is a temporary solution.
+	publisherID := time.InitialActorID
+	s.backend.Coordinator.Publish(
+		ctx,
+		publisherID,
+		sync.DocEvent{
+			Type:       types.DocumentsChangedEvent,
+			Publisher:  types.Client{ID: publisherID},
+			DocumentID: docInfo.ID,
+		},
+	)
 
 	logging.DefaultLogger().Info(
 		fmt.Sprintf("document remove success(projectID: %s, docKey: %s)", project.ID, req.DocumentKey),

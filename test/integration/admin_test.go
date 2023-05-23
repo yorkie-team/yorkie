@@ -20,6 +20,8 @@ package integration
 
 import (
 	"context"
+	"io"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -270,24 +272,39 @@ func TestAdmin(t *testing.T) {
 		watchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		// 01. c1 creates d1 without attaching.
+		// 01. c1 attaches and watches d1.
 		d1 := document.New(helper.TestDocKey(t))
-		_, err := c1.Watch(watchCtx, d1)
-		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
-
-		// 02. c1 attaches d1 and watches it.
 		assert.NoError(t, c1.Attach(ctx, d1))
-		_, err = c1.Watch(watchCtx, d1)
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		rch, err := c1.Watch(watchCtx, d1)
 		assert.NoError(t, err)
+		go func() {
+			defer wg.Done()
 
-		// 03. c1 removes d1 and watches it.
+			for {
+				resp := <-rch
+				if resp.Err == io.EOF {
+					assert.Fail(t, resp.Err.Error())
+					return
+				}
+				assert.NoError(t, resp.Err)
+
+				if resp.Type == client.DocumentsChanged {
+					err := c1.Sync(ctx, client.WithDocKey(resp.Key))
+					assert.NoError(t, err)
+					return
+				}
+			}
+		}()
+
+		// 02. adminCli removes d1.
 		success, err := adminCli.RemoveDocumentWithAPIKey(ctx, "default", d1.Key().String(), "")
 		assert.True(t, success)
 		assert.NoError(t, err)
-		assert.NoError(t, c1.Sync(ctx))
 
+		// 03. wait for watching document changed event.
+		wg.Wait()
 		assert.Equal(t, d1.Status(), document.StatusRemoved)
-		_, err = c1.Watch(watchCtx, d1)
-		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
 	})
 }
