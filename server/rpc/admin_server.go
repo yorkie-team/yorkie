@@ -19,7 +19,6 @@ package rpc
 import (
 	"context"
 	"fmt"
-
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -363,7 +362,15 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		}
 	}()
 
-	// TODO(emplam27): Add an option to remove the document if there are no clients attached to it.
+	isAttached, err := documents.IsAttachedDocument(ctx, s.backend, project, docInfo.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if isAttached && !req.ForceRemoveIfAttached {
+		return nil, fmt.Errorf("remove document: document is attached")
+	}
+
 	if err := documents.RemoveDocument(ctx, s.backend, project, docInfo.ID); err != nil {
 		return nil, err
 	}

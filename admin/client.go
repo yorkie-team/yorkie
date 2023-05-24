@@ -259,6 +259,7 @@ func (c *Client) RemoveDocument(
 	ctx context.Context,
 	projectName string,
 	documentKey string,
+	forceRemoveIfAttached bool,
 ) error {
 	project, err := c.GetProject(ctx, projectName)
 	if err != nil {
@@ -269,8 +270,9 @@ func (c *Client) RemoveDocument(
 	_, err = c.client.RemoveDocumentByAdmin(
 		withShardKey(ctx, apiKey, documentKey),
 		&api.RemoveDocumentByAdminRequest{
-			ProjectName: projectName,
-			DocumentKey: documentKey,
+			ProjectName:           projectName,
+			DocumentKey:           documentKey,
+			ForceRemoveIfAttached: forceRemoveIfAttached,
 		},
 	)
 	return err
