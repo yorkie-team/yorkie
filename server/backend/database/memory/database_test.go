@@ -391,7 +391,7 @@ func TestDB(t *testing.T) {
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 
-	t.Run("UpdateDocInfoRemovedAt test", func(t *testing.T) {
+	t.Run("UpdateDocInfoStatusToRemoved test", func(t *testing.T) {
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
@@ -403,7 +403,7 @@ func TestDB(t *testing.T) {
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
 
-		err = db.UpdateDocInfoRemovedAt(ctx, projectID, docInfo1.ID)
+		err = db.UpdateDocInfoStatusToRemoved(ctx, projectID, docInfo1.ID)
 		assert.NoError(t, err)
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
 
@@ -418,7 +418,7 @@ func TestDB(t *testing.T) {
 		assert.True(t, docInfo2.RemovedAt.IsZero())
 
 		notPresentDocID := types.ID("000000000000000000000011")
-		err = db.UpdateDocInfoRemovedAt(ctx, projectID, notPresentDocID)
+		err = db.UpdateDocInfoStatusToRemoved(ctx, projectID, notPresentDocID)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 

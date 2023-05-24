@@ -299,7 +299,7 @@ func TestClient(t *testing.T) {
 		}
 	})
 
-	t.Run("UpdateDocInfoRemovedAt test", func(t *testing.T) {
+	t.Run("UpdateDocInfoStatusToRemoved test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
@@ -312,7 +312,7 @@ func TestClient(t *testing.T) {
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
 
-		err = cli.UpdateDocInfoRemovedAt(ctx, dummyProjectID, docInfo1.ID)
+		err = cli.UpdateDocInfoStatusToRemoved(ctx, dummyProjectID, docInfo1.ID)
 		assert.NoError(t, err)
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
@@ -324,7 +324,7 @@ func TestClient(t *testing.T) {
 		assert.True(t, docInfo2.RemovedAt.IsZero())
 
 		notPresentDocID := types.ID("000000000000000000000011")
-		err = cli.UpdateDocInfoRemovedAt(ctx, dummyProjectID, notPresentDocID)
+		err = cli.UpdateDocInfoStatusToRemoved(ctx, dummyProjectID, notPresentDocID)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 
