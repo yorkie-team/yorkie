@@ -2,24 +2,29 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ .Values.monitoring.name }}
-  namespace: monitoring
-  {{ if .Values.externalGateway.alb.enabled }}
+  namespace: {{ .Values.monitoring.namespace }}
+  {{ if .Values.ingress.alb.enabled }}
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     # Set alb.ingress.kubernetes.io/certificate-arn annotation to TLS certificate's ARN issued in AWS ACM
-    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.externalGateway.alb.certArn }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.alb.certArn }}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/backend-protocol: HTTP
-    alb.ingress.kubernetes.io/group.name: {{ .Values.externalGateway.apiHost }}
+    alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.hosts.apiHost }}
     alb.ingress.kubernetes.io/group.order: '1'
     {{ end }}
 spec:
-  ingressClassName: {{ .Values.externalGateway.ingressClassName }}
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
   rules:
-    - host: {{ .Values.externalGateway.apiHost }}
+    {{ if .Values.ingress.hosts.enabled }}
+    - host: {{ .Values.ingress.hosts.apiHost }}
       http:
+    {{ end }}
+    {{ if not .Values.ingress.hosts.enabled }}
+    - http:
+    {{ end }}
         paths:
-          - path: {{ .Values.externalGateway.grafanaPath }}/
+          - path: {{ .Values.ingress.hosts.grafanaPath }}/
             pathType: Prefix
             backend:
               service:

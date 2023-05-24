@@ -20,10 +20,12 @@ package admin
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -60,8 +62,7 @@ type Client struct {
 	client          api.AdminServiceClient
 	dialOptions     []grpc.DialOption
 	authInterceptor *AuthInterceptor
-
-	logger *zap.Logger
+	logger          *zap.Logger
 }
 
 // New creates an instance of Client.
@@ -95,13 +96,13 @@ func New(opts ...Option) (*Client, error) {
 }
 
 // Dial creates an instance of Client and dials to the admin service.
-func Dial(adminAddr string, opts ...Option) (*Client, error) {
+func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 	cli, err := New(opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := cli.Dial(adminAddr); err != nil {
+	if err := cli.Dial(rpcAddr); err != nil {
 		return nil, err
 	}
 
@@ -109,10 +110,10 @@ func Dial(adminAddr string, opts ...Option) (*Client, error) {
 }
 
 // Dial dials to the admin service.
-func (c *Client) Dial(adminAddr string) error {
-	conn, err := grpc.Dial(adminAddr, c.dialOptions...)
+func (c *Client) Dial(rpcAddr string) error {
+	conn, err := grpc.Dial(rpcAddr, c.dialOptions...)
 	if err != nil {
-		return fmt.Errorf("dial to %s: %w", adminAddr, err)
+		return fmt.Errorf("dial to %s: %w", rpcAddr, err)
 	}
 
 	c.conn = conn
@@ -253,6 +254,28 @@ func (c *Client) ListDocuments(
 	return converter.FromDocumentSummaries(response.Documents)
 }
 
+// RemoveDocument removes a document of the given key.
+func (c *Client) RemoveDocument(
+	ctx context.Context,
+	projectName string,
+	documentKey string,
+) error {
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return err
+	}
+	apiKey := project.PublicKey
+
+	_, err = c.client.RemoveDocumentByAdmin(
+		withShardKey(ctx, apiKey, documentKey),
+		&api.RemoveDocumentByAdminRequest{
+			ProjectName: projectName,
+			DocumentKey: documentKey,
+		},
+	)
+	return err
+}
+
 // ListChangeSummaries returns the change summaries of the given document.
 func (c *Client) ListChangeSummaries(
 	ctx context.Context,
@@ -320,4 +343,15 @@ func (c *Client) ListChangeSummaries(
 	}
 
 	return summaries, nil
+}
+
+/**
+ * withShardKey returns a context with the given shard key in metadata.
+ */
+func withShardKey(ctx context.Context, keys ...string) context.Context {
+	return metadata.AppendToOutgoingContext(
+		ctx,
+		types.APIKeyKey, keys[0],
+		types.ShardKey, strings.Join(keys, "/"),
+	)
 }

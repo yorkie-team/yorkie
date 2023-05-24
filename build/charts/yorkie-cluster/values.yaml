@@ -17,9 +17,8 @@ yorkie:
     dbPort: &mongoPort 27017
 
   ports:
-    sdkPort: 11101
+    rpcPort: 11101
     profilingPort: 11102
-    adminPort: 11103
 
   resources: {}
 
@@ -55,14 +54,15 @@ ingressGateway:
 
   resources: {}
 
-# Configuration for external gateway (eg: AWS ALB)
-externalGateway:
+# Configuration for ingress (eg: AWS ALB)
+ingress:
   ingressClassName: nginx
   ## Set to alb if you are using AWS ALB
   # ingressClassName: alb
 
-  apiHost: api.yorkie.dev
-  adminHost: admin.yorkie.dev
+  hosts:
+    enabled: false
+    apiHost: api.yorkie.dev
     
   alb:
     enabled: false

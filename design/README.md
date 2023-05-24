@@ -12,6 +12,7 @@
 - [Housekeeping](housekeeping.md): Deactivating outdated clients for efficient garbage collection
 - [Retention](retention.md): Clearing unnecessary changes with `--backend-snapshot-with-purging-changes` flag
 - [Document Removal](document-removal.md): Soft deletion of document
+- [Sharded Cluster Mode](sharded-cluster-mode.md): Shard-based server cluster mode with consistent hashing
 
 ## Maintaining the Document
 

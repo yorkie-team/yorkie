@@ -1,22 +1,25 @@
 # Configuration for monitoring system
 monitoring:
   name: &monitoringName yorkie-monitoring
+  namespace: &monitoringNamespace monitoring
 
-  # Name of yorkie used for yorkie cluster
+  # Configured name used for yorkie cluster
   yorkieName: yorkie
   yorkieNamespace: yorkie
 
   enableEnhancements: &monitoringEnhancementsEnable false
 
-# Configuration for external gateway (eg: AWS ALB)
-externalGateway:
+# Configuration for ingress (eg: AWS ALB)
+ingress:
   ingressClassName: nginx
   ## Set to alb if you are using AWS ALB
   # ingressClassName: alb
 
   # Use same host for yorkie cluster
-  apiHost: &apiHost api.yorkie.dev
-  grafanaPath: /grafana
+  hosts:
+    enabled: false
+    apiHost: &apiHost api.yorkie.dev
+    grafanaPath: /grafana
 
   alb:
     enabled: false
@@ -25,8 +28,10 @@ externalGateway:
 
 # Configuration for manual prometheus monitoring stack
 kube-prometheus-stack:
-  fullnameOverride: *monitoringName
-  namespaceOverride: monitoring
+  # fullnameOverride should be {{monitoring.name}} + "prometheus-stack"
+  # TODO(krapie) refactor these values to helper.tpl file
+  fullnameOverride: yorkie-monitoring-prometheus-stack
+  namespaceOverride: *monitoringNamespace
 
   # Configuration for alertmanager
   # ref: https://prometheus.io/docs/alerting/alertmanager/
@@ -37,6 +42,10 @@ kube-prometheus-stack:
   # ref: https://github.com/grafana/helm-charts/blob/main/charts/grafana/values.yaml
   grafana:
     enabled: true
+
+    # fullnameOverride should be {{monitoring.name}} + "grafana"
+    # TODO(krapie) refactor these values to helper.tpl file
+    fullnameOverride: yorkie-monitoring-grafana
 
     defaultDashboardsTimezone: utc
     defaultDashboardsEnabled: false
@@ -64,6 +73,38 @@ kube-prometheus-stack:
       
       service:
         type: NodePort
+    
+    # For grafana dashboards
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+        - name: 'yorkie'
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/yorkie
+
+    # For grafana dashboards
+    dashboards:
+      yorkie:
+        yorkie-dashboard:
+          gnetId: 18560
+          revision: 2
+          datasource:
+          - name: DS_PROMETHEUS
+            value: Prometheus
+        loki-dashboard:
+          gnetId: 13186
+          revision: 1
+          datasource:
+          - name: DS_PROMETHEUS
+            value: Prometheus
+          - name: DS_LOKI
+            value: Loki
 
   # Component scraping the kube api server
   kubeApiServer:
@@ -135,11 +176,23 @@ kube-prometheus-stack:
             requests:
               storage: 1Gi
         selector: {}
+  
+  prometheus-node-exporter:
+    # fullnameOverride should be {{monitoring.name}} + "prometheus-node-exporter"
+    # TODO(krapie) refactor these values to helper.tpl file
+    fullnameOverride: yorkie-monitoring-prometheus-node-exporter
+
+  kube-state-metrics:
+    # fullnameOverride should be {{monitoring.name}} + "prometheus-state-metrics"
+    # TODO(krapie) refactor these values to helper.tpl file
+    fullnameOverride: yorkie-monitoring-state-metrics
 
 # Configuration for loki monitoring stack
 loki-stack:
   loki:
-    # Use 
+    isDefault: false
+    # fullnameOverride should be {{monitoring.name}} + "loki"
+    # TODO(krapie) refactor these values to helper.tpl file    
     fullnameOverride: yorkie-monitoring-loki
 
     persistence:
@@ -147,6 +200,8 @@ loki-stack:
       size: 1Gi
 
   promtail:
+    # fullnameOverride should be {{monitoring.name}} + "promtail"
+    # TODO(krapie) refactor these values to helper.tpl file  
     fullnameOverride: yorkie-monitoring-promtail
     
     config:

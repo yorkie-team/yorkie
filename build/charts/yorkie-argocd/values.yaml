@@ -3,17 +3,18 @@ argocd:
   enabled: true
 
   name: yorkie-argocd
+  namespace: argocd
 
   project: default
 
   source:
     # Set helm chart repository url
     helmChartRepoURL: https://yorkie-team.github.io/yorkie/helm-charts
-    helmChartTargetRevision: 0.3.3
+    helmChartTargetRevision: 0.3.4
 
     # Set to GitOps repostiroy to reference helm chart custom values 
     gitOpsRepoURL: https://github.com/yorkie-team/devops.git
-    gitOpsRepoTargetRevision: manifest-update
+    gitOpsRepoTargetRevision: main
     
     # Set to path of each helm chart custom values from GitOps repository
     clusterValuesPath: k8s/cluster/values.yaml
@@ -29,15 +30,17 @@ argocd:
     yorkieNamespace: istio-system
     monitoringNamespace: monitoring
 
-# Configuration for external gateway (eg: AWS ALB)
-externalGateway:
+# Configuration for ingress (eg: AWS ALB)
+ingress:
   ingressClassName: nginx
   ## Set to alb if you are using AWS ALB
   # ingressClassName: alb
 
   # Use same host for yorkie cluster
-  apiHost: api.yorkie.dev
-  argoCDPath: /argocd
+  hosts:
+    enabled: false
+    apiHost: api.yorkie.dev
+    argoCDPath: /argocd
 
   alb:
     enabled: false

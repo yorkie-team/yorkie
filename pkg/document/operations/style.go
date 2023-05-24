@@ -64,8 +64,7 @@ func (e *Style) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	obj.Style(e.from, e.to, e.attributes, e.executedAt)
-	return nil
+	return obj.Style(e.from, e.to, e.attributes, e.executedAt)
 }
 
 // From returns the start point of the editing range.

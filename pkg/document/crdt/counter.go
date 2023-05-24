@@ -96,9 +96,9 @@ func (p *Counter) Marshal() string {
 }
 
 // DeepCopy copies itself deeply.
-func (p *Counter) DeepCopy() Element {
+func (p *Counter) DeepCopy() (Element, error) {
 	counter := *p
-	return &counter
+	return &counter, nil
 }
 
 // CreatedAt returns the creation time.

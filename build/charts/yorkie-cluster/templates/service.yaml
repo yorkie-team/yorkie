@@ -18,17 +18,13 @@ spec:
   # even when the port name is grpc-web,
   # envoy.grpc_web filter will only be applied in envoy sidecar
   # So we need to explictly set grpc-web filter using EnvoyFilter in ingress gateway
-  - name: {{ .Values.yorkie.name }}-sdk
-    port: {{ .Values.yorkie.ports.sdkPort }}
-    targetPort: {{ .Values.yorkie.ports.sdkPort }}
+  - name: {{ .Values.yorkie.name }}-rpc
+    port: {{ .Values.yorkie.ports.rpcPort }}
+    targetPort: {{ .Values.yorkie.ports.rpcPort }}
     appProtocol: grpc-web
   - name: {{ .Values.yorkie.name }}-profiling
     port: {{ .Values.yorkie.ports.profilingPort }}
     targetPort: {{ .Values.yorkie.ports.profilingPort }}
     appProtocol: http
-  - name: {{ .Values.yorkie.name }}-admin
-    port: {{ .Values.yorkie.ports.adminPort }}
-    targetPort: {{ .Values.yorkie.ports.adminPort }}
-    appProtocol: grpc-web
   selector:
     app.kubernetes.io/instance: {{ .Values.yorkie.name }}

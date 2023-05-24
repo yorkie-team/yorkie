@@ -301,7 +301,7 @@ func BenchmarkRPC(b *testing.B) {
 	})
 
 	b.Run("adminCli to server", func(b *testing.B) {
-		adminCli := helper.CreateAdminCli(b, defaultServer.AdminAddr())
+		adminCli := helper.CreateAdminCli(b, defaultServer.RPCAddr())
 		defer func() { assert.NoError(b, adminCli.Close()) }()
 
 		ctx := context.Background()

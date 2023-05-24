@@ -7,6 +7,21 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.3.5] - 2023-05-22
+
+### Added
+* Add Sharded Cluster Mode Design Document by @krapie in https://github.com/yorkie-team/yorkie/pull/523
+
+### Changed
+* Remove panic and wrapping informational error from server by @emplam27 in https://github.com/yorkie-team/yorkie/pull/519
+* Remove panic method in crdt text by @emplam27 in https://github.com/yorkie-team/yorkie/pull/522
+* Integrate SDK RPC Server and Admin RPC Server to Single RPC Server by @krapie in https://github.com/yorkie-team/yorkie/pull/532
+
+### Fixed
+* Update Helm Chart Releaser Action by @krapie in https://github.com/yorkie-team/yorkie/pull/516
+* Revise Helm charts & README.md by @krapie in https://github.com/yorkie-team/yorkie/pull/525
+* Resolve Helm Chart Installation Fail on Custom Release Name by @krapie in https://github.com/yorkie-team/yorkie/pull/531
+
 ## [0.3.4] - 2023-04-18
 
 ### Added

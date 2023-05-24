@@ -101,8 +101,12 @@ func (r *Root) RegisterTextElementWithGarbage(textType TextElement) {
 }
 
 // DeepCopy copies itself deeply.
-func (r *Root) DeepCopy() *Root {
-	return NewRoot(r.object.DeepCopy().(*Object))
+func (r *Root) DeepCopy() (*Root, error) {
+	copiedObject, err := r.object.DeepCopy()
+	if err != nil {
+		return nil, err
+	}
+	return NewRoot(copiedObject.(*Object)), nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
