@@ -127,7 +127,7 @@ func TestMain(m *testing.M) {
 	credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 	dialOptions = []grpc.DialOption{credentials}
 
-	testAdminAuthInterceptor = admin.NewAuthInterceptor("")
+	testAdminAuthInterceptor = admin.NewAuthInterceptor("", "")
 	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(testAdminAuthInterceptor.Unary()))
 	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(testAdminAuthInterceptor.Stream()))
 
