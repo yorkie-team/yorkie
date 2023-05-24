@@ -843,8 +843,8 @@ func (c *Client) FindDocInfoByID(
 	return &docInfo, nil
 }
 
-// UpdateDocInfoRemovedAt updates the removedAt field of the given docInfo.
-func (c *Client) UpdateDocInfoRemovedAt(
+// UpdateDocInfoStatusToRemoved updates the document status to removed.
+func (c *Client) UpdateDocInfoStatusToRemoved(
 	ctx context.Context,
 	projectID types.ID,
 	id types.ID,
@@ -874,12 +874,7 @@ func (c *Client) UpdateDocInfoRemovedAt(
 	}
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
-		return fmt.Errorf("find document: %w", result.Err())
-	}
-
-	docInfo := database.DocInfo{}
-	if err := result.Decode(&docInfo); err != nil {
-		return fmt.Errorf("decode document: %w", err)
+		return fmt.Errorf("update document info status to removed: %w", result.Err())
 	}
 
 	return nil

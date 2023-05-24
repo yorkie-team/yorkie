@@ -54,9 +54,6 @@ type Options struct {
 
 	// Logger is the Logger of the client.
 	Logger *zap.Logger
-
-	// APIKey is the API key of the client.
-	APIKey string
 }
 
 // Client is a client for admin service.
@@ -65,7 +62,6 @@ type Client struct {
 	client          api.AdminServiceClient
 	dialOptions     []grpc.DialOption
 	authInterceptor *AuthInterceptor
-	options         Options
 	logger          *zap.Logger
 }
 
@@ -79,7 +75,7 @@ func New(opts ...Option) (*Client, error) {
 	credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 	dialOptions := []grpc.DialOption{credentials}
 
-	authInterceptor := NewAuthInterceptor(options.APIKey, options.Token)
+	authInterceptor := NewAuthInterceptor(options.Token)
 	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
 	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
 
@@ -258,47 +254,26 @@ func (c *Client) ListDocuments(
 	return converter.FromDocumentSummaries(response.Documents)
 }
 
-// RemoveDocument remove a document by document key.
+// RemoveDocument removes a document of the given key.
 func (c *Client) RemoveDocument(
 	ctx context.Context,
-	projectName,
+	projectName string,
 	documentKey string,
-) (bool, error) {
-	// TODO: Change ctx to withShardKey(ctx, apiKey, documentKey) when shard key is supported.
-	response, err := c.client.RemoveDocumentAdmin(
-		ctx,
-		&api.RemoveDocumentAdminRequest{
+) error {
+	project, err := c.GetProject(ctx, projectName)
+	if err != nil {
+		return err
+	}
+	apiKey := project.PublicKey
+
+	_, err = c.client.RemoveDocumentByAdmin(
+		withShardKey(ctx, apiKey, documentKey),
+		&api.RemoveDocumentByAdminRequest{
 			ProjectName: projectName,
 			DocumentKey: documentKey,
 		},
 	)
-	if err != nil {
-		return false, err
-	}
-
-	return response.Success, nil
-}
-
-// RemoveDocumentWithAPIKey remove a document by document key with API key.
-func (c *Client) RemoveDocumentWithAPIKey(
-	ctx context.Context,
-	projectName,
-	documentKey,
-	apiKey string,
-) (bool, error) {
-	// TODO: Change ctx to withShardKey(ctx, apiKey, documentKey) when shard key is supported.
-	response, err := c.client.RemoveDocumentAdmin(
-		ctx,
-		&api.RemoveDocumentAdminRequest{
-			ProjectName: projectName,
-			DocumentKey: documentKey,
-		},
-	)
-	if err != nil {
-		return false, err
-	}
-
-	return response.Success, nil
+	return err
 }
 
 // ListChangeSummaries returns the change summaries of the given document.

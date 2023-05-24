@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Yorkie Authors. All rights reserved.
+ * Copyright 2023 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,11 +37,11 @@ func newRemoveCommand() *cobra.Command {
 			projectName := args[0]
 			documentKey := args[1]
 
-			token, err := config.LoadToken(config.AdminAddr)
+			token, err := config.LoadToken(config.RPCAddr)
 			if err != nil {
 				return err
 			}
-			cli, err := admin.Dial(config.AdminAddr, admin.WithToken(token))
+			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token))
 			if err != nil {
 				return err
 			}
@@ -50,22 +50,8 @@ func newRemoveCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			project, err := cli.GetProject(ctx, projectName)
-			if err != nil {
-				return err
-			}
-			apiKey := project.PublicKey
-			success, err := cli.RemoveDocumentWithAPIKey(ctx, projectName, documentKey, apiKey)
-			if err != nil {
-				return err
-			}
 
-			if !success {
-				cmd.Printf("Fail remove document\n")
-			}
-
-			cmd.Printf("Success remove document\n")
-			return nil
+			return cli.RemoveDocument(ctx, projectName, documentKey)
 		},
 	}
 }

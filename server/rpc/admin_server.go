@@ -18,13 +18,17 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/documents"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
@@ -329,11 +333,11 @@ func (s *adminServer) SearchDocuments(
 	}, nil
 }
 
-// RemoveDocumentAdmin removes the given document key.
-func (s *Server) RemoveDocumentAdmin(
+// RemoveDocumentByAdmin removes the document of the given key.
+func (s *adminServer) RemoveDocumentByAdmin(
 	ctx context.Context,
-	req *api.RemoveDocumentAdminRequest,
-) (*api.RemoveDocumentAdminResponse, error) {
+	req *api.RemoveDocumentByAdminRequest,
+) (*api.RemoveDocumentByAdminResponse, error) {
 	user := users.From(ctx)
 	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
 	if err != nil {
@@ -359,20 +363,28 @@ func (s *Server) RemoveDocumentAdmin(
 		}
 	}()
 
-	// TODO: Add check if document is attached option using IsAttachedDocument()
+	// TODO(emplam27): Add an option to remove the document if there are no clients attached to it.
 	if err := documents.RemoveDocument(ctx, s.backend, project, docInfo.ID); err != nil {
 		return nil, err
 	}
 
-	// TODO: Publish event to all clients that are subscribed to this document.
+	// TODO(emplam27): Change the publisherID to the actual user ID. This is a temporary solution.
+	publisherID := time.InitialActorID
+	s.backend.Coordinator.Publish(
+		ctx,
+		publisherID,
+		sync.DocEvent{
+			Type:       types.DocumentsChangedEvent,
+			Publisher:  types.Client{ID: publisherID},
+			DocumentID: docInfo.ID,
+		},
+	)
 
 	logging.DefaultLogger().Info(
 		fmt.Sprintf("document remove success(projectID: %s, docKey: %s)", project.ID, req.DocumentKey),
 	)
 
-	return &api.RemoveDocumentAdminResponse{
-		Success: true,
-	}, nil
+	return &api.RemoveDocumentByAdminResponse{}, nil
 }
 
 // ListChanges lists of changes for the given document.
