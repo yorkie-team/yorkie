@@ -17,7 +17,6 @@
 package crdt
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -183,7 +182,7 @@ func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element) {
 func (a *RGATreeList) Get(idx int) (*RGATreeListNode, error) {
 	splayNode, offset, err := a.nodeMapByIndex.Find(idx)
 	if err != nil {
-		return nil, fmt.Errorf("rga tree list Get: %w", err)
+		return nil, err
 	}
 	node := splayNode.Value()
 
@@ -235,7 +234,7 @@ func (a *RGATreeList) StructureAsString() string {
 func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) (*RGATreeListNode, error) {
 	target, err := a.Get(idx)
 	if err != nil {
-		return nil, fmt.Errorf("rga tree list Delete: %w", err)
+		return nil, err
 	}
 	return a.DeleteByCreatedAt(target.CreatedAt(), deletedAt), nil
 }

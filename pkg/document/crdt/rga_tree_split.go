@@ -290,7 +290,6 @@ type RGATreeSplit[V RGATreeSplitValue] struct {
 	treeByIndex *splay.Tree[*RGATreeSplitNode[V]]
 	treeByID    *llrb.Tree[*RGATreeSplitNodeID, *RGATreeSplitNode[V]]
 
-	// removedNodeMap is a map that holds tombstone nodes
 	// when the edit operation is executed.
 	removedNodeMap map[string]*RGATreeSplitNode[V]
 }
@@ -312,7 +311,7 @@ func NewRGATreeSplit[V RGATreeSplitValue](initialHead *RGATreeSplitNode[V]) *RGA
 func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos, error) {
 	fromPos, err := s.findNodePos(from)
 	if err != nil {
-		return nil, nil, fmt.Errorf("rga tree split createRange: %w", err)
+		return nil, nil, err
 	}
 	if from == to {
 		return fromPos, fromPos, nil
@@ -320,7 +319,7 @@ func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGAT
 
 	toPos, err := s.findNodePos(to)
 	if err != nil {
-		return nil, nil, fmt.Errorf("rga tree split createRange: %w", err)
+		return nil, nil, err
 	}
 
 	return fromPos, toPos, nil
@@ -329,7 +328,7 @@ func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGAT
 func (s *RGATreeSplit[V]) findNodePos(index int) (*RGATreeSplitNodePos, error) {
 	splayNode, offset, err := s.treeByIndex.Find(index)
 	if err != nil {
-		return nil, fmt.Errorf("rga tree split findNodePos: %w", err)
+		return nil, err
 	}
 	node := splayNode.Value()
 	return &RGATreeSplitNodePos{

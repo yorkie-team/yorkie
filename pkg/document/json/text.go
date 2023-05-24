@@ -17,7 +17,6 @@
 package json
 
 import (
-	"fmt"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -45,7 +44,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 	}
 	fromPos, toPos, err := p.Text.CreateRange(from, to)
 	if err != nil {
-		panic(fmt.Sprintf("json text Edit: %s", err.Error()))
+		panic(err)
 	}
 
 	// TODO(hackerwins): We need to consider the case where the length of
@@ -88,7 +87,7 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	}
 	fromPos, toPos, err := p.Text.CreateRange(from, to)
 	if err != nil {
-		panic(fmt.Sprintf("json text Style: %s", err.Error()))
+		panic(err)
 	}
 
 	ticket := p.context.IssueTimeTicket()
@@ -117,7 +116,7 @@ func (p *Text) Select(from, to int) *Text {
 	}
 	fromPos, toPos, err := p.Text.CreateRange(from, to)
 	if err != nil {
-		panic(fmt.Sprintf("json text Select: %s", err.Error()))
+		panic(err)
 	}
 
 	ticket := p.context.IssueTimeTicket()

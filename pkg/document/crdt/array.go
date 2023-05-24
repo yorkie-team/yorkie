@@ -17,8 +17,6 @@
 package crdt
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -54,7 +52,7 @@ func (a *Array) Add(elem Element) *Array {
 func (a *Array) Get(idx int) (Element, error) {
 	node, err := a.elements.Get(idx)
 	if err != nil {
-		return nil, fmt.Errorf("crdt array Get(index: %d): %w", idx, err)
+		return nil, err
 	}
 	return node.elem, nil
 }
@@ -69,7 +67,7 @@ func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 func (a *Array) Delete(idx int, deletedAt *time.Ticket) (Element, error) {
 	node, err := a.elements.Delete(idx, deletedAt)
 	if err != nil {
-		return nil, fmt.Errorf("crdt array Delete(index: %d): %w", idx, err)
+		return nil, err
 	}
 	return node.elem, nil
 }

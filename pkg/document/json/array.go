@@ -17,7 +17,6 @@
 package json
 
 import (
-	"fmt"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -159,7 +158,7 @@ func (p *Array) Get(idx int) crdt.Element {
 
 	element, err := p.Array.Get(idx)
 	if err != nil {
-		panic(fmt.Sprintf("json array Get: %s", err.Error()))
+		panic(err)
 	}
 
 	return element
@@ -174,7 +173,7 @@ func (p *Array) Delete(idx int) crdt.Element {
 	ticket := p.context.IssueTimeTicket()
 	deleted, err := p.Array.Delete(idx, ticket)
 	if err != nil {
-		panic(fmt.Sprintf("json array Delete: %s", err.Error()))
+		panic(err)
 	}
 	p.context.Push(operations.NewRemove(
 		p.CreatedAt(),
