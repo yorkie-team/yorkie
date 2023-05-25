@@ -80,7 +80,6 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, 2, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(6, 7)
-		text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		registerTextElementWithGarbage(fromPos, toPos, root, text)
