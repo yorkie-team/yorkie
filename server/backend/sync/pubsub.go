@@ -45,29 +45,14 @@ func (s *Subscription) ID() string {
 	return s.id
 }
 
-// PeerSyncMap is a map that represents PeerSyncData for each peer.
-type PeerSyncMap map[string]PeerSyncData
-
-// PeerSyncData represents the data needed to synchronize peer presence.
-type PeerSyncData struct {
-	PresenceInfo       presence.PresenceInfo
-	PendingUpdatePeers PeerSet
-}
+// PeerPresenceMap is a map that represents presence for each peer.
+type PeerPresenceMap map[string]presence.PresenceInfo
 
 // UpdatePresence updates the presence of the client.
-func (p PeerSyncMap) UpdatePresence(client *types.Client) {
-	if cli, ok := p[client.ID.String()]; ok {
-		cli.PresenceInfo.Update(client.PresenceInfo)
-		p[client.ID.String()] = cli
-	}
-}
-
-// AddPendingUpdatePeer adds the target peer to the PendingUpdatePeers of the client.
-func (p PeerSyncMap) AddPendingUpdatePeer(clientID string, targetID string) {
-	pendingUpdatePeers := p[clientID].PendingUpdatePeers
-	if !pendingUpdatePeers.Contains(targetID) {
-		pendingUpdatePeers.Add(targetID)
-	}
+func (p PeerPresenceMap) UpdatePresence(client *types.Client) {
+	presence := p[client.ID.String()]
+	presence.Update(client.PresenceInfo)
+	p[client.ID.String()] = presence
 }
 
 // PeerSet represents a set of peers.

@@ -129,15 +129,18 @@ func FromClient(pbClient *api.Client) (*types.Client, error) {
 
 	return &types.Client{
 		ID:           id,
-		PresenceInfo: FromPresenceInfo(pbClient.Presence),
+		PresenceInfo: *FromPresenceInfo(pbClient.Presence),
 	}, nil
 }
 
 // FromPresenceInfo converts the given Protobuf formats to model format.
-func FromPresenceInfo(pbPresence *api.PresenceInfo) presence.PresenceInfo {
-	return presence.PresenceInfo{
-		Clock:    pbPresence.Clock,
-		Presence: pbPresence.Data,
+func FromPresenceInfo(pbPresence *api.PresenceInfo) *presence.PresenceInfo {
+	if pbPresence == nil {
+		return nil
+	}
+	return &presence.PresenceInfo{
+		Clock:    pbPresence.GetClock(),
+		Presence: pbPresence.GetData(),
 	}
 }
 
@@ -160,19 +163,6 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		return nil, err
 	}
 
-	peerPresence := []change.Peer{}
-	for _, pbPeer := range pbPack.Peers {
-		id, err := time.ActorIDFromBytes(pbPeer.Id)
-		if err != nil {
-			return nil, err
-		}
-
-		peerPresence = append(peerPresence, change.Peer{
-			ID:           id,
-			PresenceInfo: FromPresenceInfo(pbPeer.Presence),
-		})
-	}
-
 	return &change.Pack{
 		DocumentKey:     key.Key(pbPack.DocumentKey),
 		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
@@ -180,7 +170,6 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		Snapshot:        pbPack.Snapshot,
 		MinSyncedTicket: minSyncedTicket,
 		IsRemoved:       pbPack.IsRemoved,
-		PeerPresence:    peerPresence,
 	}, nil
 }
 
@@ -207,6 +196,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 			changeID,
 			pbChange.Message,
 			ops,
+			FromPresenceInfo(pbChange.Presence),
 		))
 	}
 

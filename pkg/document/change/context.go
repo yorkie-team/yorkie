@@ -19,6 +19,7 @@ package change
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -26,11 +27,12 @@ import (
 // Each time we add an operation, a new time ticket is issued.
 // Finally, returns a Change after the modification has been completed.
 type Context struct {
-	id         ID
-	message    string
-	operations []operations.Operation
-	delimiter  uint32
-	root       *crdt.Root
+	id           ID
+	message      string
+	operations   []operations.Operation
+	presenceInfo *presence.PresenceInfo
+	delimiter    uint32
+	root         *crdt.Root
 }
 
 // NewContext creates a new instance of Context.
@@ -49,7 +51,7 @@ func (c *Context) ID() ID {
 
 // ToChange creates a new change of this context.
 func (c *Context) ToChange() *Change {
-	return New(c.id, c.message, c.operations)
+	return New(c.id, c.message, c.operations, c.presenceInfo)
 }
 
 // HasOperations returns whether this change has operations or not.

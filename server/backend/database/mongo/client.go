@@ -833,16 +833,21 @@ func (c *Client) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
+		encodedPresenceInfo, err := database.EncodePresenceInfo(cn.PresenceInfo())
+		if err != nil {
+			return err
+		}
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"doc_id":     encodedDocID,
 			"server_seq": cn.ServerSeq(),
 		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor_id":   encodeActorID(cn.ID().ActorID()),
-			"client_seq": cn.ID().ClientSeq(),
-			"lamport":    cn.ID().Lamport(),
-			"message":    cn.Message(),
-			"operations": encodedOperations,
+			"actor_id":      encodeActorID(cn.ID().ActorID()),
+			"client_seq":    cn.ID().ClientSeq(),
+			"lamport":       cn.ID().Lamport(),
+			"message":       cn.Message(),
+			"operations":    encodedOperations,
+			"presence_info": encodedPresenceInfo,
 		}}).SetUpsert(true))
 	}
 

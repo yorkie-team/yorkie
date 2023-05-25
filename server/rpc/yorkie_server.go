@@ -343,16 +343,6 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	for _, peer := range pack.PeerPresence {
-		client := &types.Client{
-			ID:           peer.ID,
-			PresenceInfo: peer.PresenceInfo,
-		}
-		if err = s.backend.Coordinator.UpdatePresence(ctx, client, docID); err != nil {
-			return nil, err
-		}
-	}
-
 	pulled, isDocumentChanged, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, syncMode)
 	if err != nil {
 		return nil, err
@@ -362,19 +352,8 @@ func (s *yorkieServer) PushPullChanges(
 	if err != nil {
 		return nil, err
 	}
-	pullPeerList, err := s.backend.Coordinator.PullPeerPresence(ctx, actorID, docID)
-	if err != nil {
-		return nil, err
-	}
-	peers := []types.Client{}
-	for _, peer := range pullPeerList {
-		peers = append(peers, types.Client{
-			ID:           peer.ID,
-			PresenceInfo: peer.PresenceInfo,
-		})
-	}
-	pbChangePack.Peers = converter.ToClients(peers)
-	if isDocumentChanged || len(pack.PeerPresence) > 0 {
+
+	if isDocumentChanged {
 		s.backend.Coordinator.Publish(
 			ctx,
 			actorID,

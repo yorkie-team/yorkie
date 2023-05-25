@@ -21,7 +21,6 @@ import (
 	"context"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/locker"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -109,15 +108,6 @@ func (c *Coordinator) UpdatePresence(
 ) error {
 	c.pubSub.UpdatePresence(publisher, documentID)
 	return nil
-}
-
-// PullPeerPresence returns updates for peer presence.
-func (c *Coordinator) PullPeerPresence(
-	_ context.Context,
-	clientID *time.ActorID,
-	documentID types.ID,
-) ([]change.Peer, error) {
-	return c.pubSub.PullPeerPresence(clientID, documentID)
 }
 
 // Members returns the members of this cluster.

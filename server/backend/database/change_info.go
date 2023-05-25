@@ -17,6 +17,7 @@
 package database
 
 import (
+	"encoding/json"
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -24,6 +25,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -32,14 +34,15 @@ var ErrEncodeOperationFailed = errors.New("encode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	ID         types.ID `bson:"_id"`
-	DocID      types.ID `bson:"doc_id"`
-	ServerSeq  int64    `bson:"server_seq"`
-	ClientSeq  uint32   `bson:"client_seq"`
-	Lamport    int64    `bson:"lamport"`
-	ActorID    types.ID `bson:"actor_id"`
-	Message    string   `bson:"message"`
-	Operations [][]byte `bson:"operations"`
+	ID           types.ID `bson:"_id"`
+	DocID        types.ID `bson:"doc_id"`
+	ServerSeq    int64    `bson:"server_seq"`
+	ClientSeq    uint32   `bson:"client_seq"`
+	Lamport      int64    `bson:"lamport"`
+	ActorID      types.ID `bson:"actor_id"`
+	Message      string   `bson:"message"`
+	Operations   [][]byte `bson:"operations"`
+	PresenceInfo string   `bson:"presence_info"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -60,6 +63,17 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	}
 
 	return encodedOps, nil
+}
+
+func EncodePresenceInfo(presenceInfo *presence.PresenceInfo) (string, error) {
+	if presenceInfo == nil {
+		return "", nil
+	}
+	jsonBytes, err := json.Marshal(presenceInfo)
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
 }
 
 // ToChange creates Change model from this ChangeInfo.
@@ -85,7 +99,16 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	c := change.New(changeID, i.Message, ops)
+	var presenceInfo *presence.PresenceInfo
+	if i.PresenceInfo == "" {
+		presenceInfo = nil
+	} else {
+		if err := json.Unmarshal([]byte(i.PresenceInfo), &presenceInfo); err != nil {
+			return nil, err
+		}
+	}
+
+	c := change.New(changeID, i.Message, ops, presenceInfo)
 	c.SetServerSeq(i.ServerSeq)
 
 	return c, nil

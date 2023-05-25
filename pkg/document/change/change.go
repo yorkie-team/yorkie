@@ -21,6 +21,7 @@ package change
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -34,14 +35,18 @@ type Change struct {
 
 	// operations represent a series of user edits.
 	operations []operations.Operation
+
+	// presenceInfo represent the updated presence info of the change.
+	presenceInfo *presence.PresenceInfo
 }
 
 // New creates a new instance of Change.
-func New(id ID, message string, operations []operations.Operation) *Change {
+func New(id ID, message string, operations []operations.Operation, presenceInfo *presence.PresenceInfo) *Change {
 	return &Change{
-		id:         id,
-		message:    message,
-		operations: operations,
+		id:           id,
+		message:      message,
+		operations:   operations,
+		presenceInfo: presenceInfo,
 	}
 }
 
@@ -68,6 +73,11 @@ func (c *Change) Message() string {
 // Operations returns the operations of this change.
 func (c *Change) Operations() []operations.Operation {
 	return c.operations
+}
+
+// PresenceInfo returns the updated presence info of this change.
+func (c *Change) PresenceInfo() *presence.PresenceInfo {
+	return c.presenceInfo
 }
 
 // ServerSeq returns the serverSeq of this change.

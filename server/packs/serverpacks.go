@@ -17,10 +17,13 @@
 package packs
 
 import (
+	"encoding/json"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
@@ -101,10 +104,18 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			pbOps = append(pbOps, &pbOp)
 		}
 
+		var presenceInfo *presence.PresenceInfo
+		if info.PresenceInfo != "" {
+			if err := json.Unmarshal([]byte(info.PresenceInfo), &presenceInfo); err != nil {
+				return nil, err
+			}
+		}
+
 		pbChanges = append(pbChanges, &api.Change{
 			Id:         converter.ToChangeID(changeID),
 			Message:    info.Message,
 			Operations: pbOps,
+			Presence:   converter.ToPresenceInfo(presenceInfo),
 		})
 	}
 

@@ -126,12 +126,15 @@ func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, er
 func ToClient(client types.Client) *api.Client {
 	return &api.Client{
 		Id:       client.ID.Bytes(),
-		Presence: ToPresenceInfo(client.PresenceInfo),
+		Presence: ToPresenceInfo(&client.PresenceInfo),
 	}
 }
 
 // ToPresenceInfo converts the given model to Protobuf format.
-func ToPresenceInfo(info presence.PresenceInfo) *api.PresenceInfo {
+func ToPresenceInfo(info *presence.PresenceInfo) *api.PresenceInfo {
+	if info == nil {
+		return nil
+	}
 	return &api.PresenceInfo{
 		Clock: info.Clock,
 		Data:  info.Presence,

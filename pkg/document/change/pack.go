@@ -42,8 +42,6 @@ type Pack struct {
 
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
-
-	PeerPresence []Peer
 }
 
 type Peer struct {
@@ -83,9 +81,4 @@ func (p *Pack) OperationsLen() int {
 		operations += len(c.operations)
 	}
 	return operations
-}
-
-// HasPeerPresence returns the whether pack has changes or not.
-func (p *Pack) HasPeerPresence() bool {
-	return len(p.PeerPresence) > 0
 }

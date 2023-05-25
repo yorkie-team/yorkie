@@ -38,13 +38,13 @@ message ChangePack {
   repeated Change changes = 4;
   TimeTicket min_synced_ticket = 5;
   bool is_removed = 6;
-  repeated Client peers = 7;
 }
 
 message Change {
   ChangeID id = 1;
   string message = 2;
   repeated Operation operations = 3;
+  PresenceInfo presence = 4;
 }
 
 message ChangeID {
