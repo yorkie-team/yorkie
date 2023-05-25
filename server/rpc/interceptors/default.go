@@ -22,8 +22,8 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
 )
 
 // DefaultInterceptor is a interceptor for default.
