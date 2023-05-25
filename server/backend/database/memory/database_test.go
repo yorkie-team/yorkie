@@ -403,7 +403,7 @@ func TestDB(t *testing.T) {
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
 
-		err = db.UpdateDocInfoStatusToRemoved(ctx, projectID, docInfo1.ID)
+		err = db.UpdateDocInfoStatusToRemoved(ctx, docInfo1.ID)
 		assert.NoError(t, err)
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
 
@@ -418,7 +418,7 @@ func TestDB(t *testing.T) {
 		assert.True(t, docInfo2.RemovedAt.IsZero())
 
 		notPresentDocID := types.ID("000000000000000000000011")
-		err = db.UpdateDocInfoStatusToRemoved(ctx, projectID, notPresentDocID)
+		err = db.UpdateDocInfoStatusToRemoved(ctx, notPresentDocID)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 

@@ -312,7 +312,7 @@ func TestClient(t *testing.T) {
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
 
-		err = cli.UpdateDocInfoStatusToRemoved(ctx, dummyProjectID, docInfo1.ID)
+		err = cli.UpdateDocInfoStatusToRemoved(ctx, docInfo1.ID)
 		assert.NoError(t, err)
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
@@ -324,7 +324,7 @@ func TestClient(t *testing.T) {
 		assert.True(t, docInfo2.RemovedAt.IsZero())
 
 		notPresentDocID := types.ID("000000000000000000000011")
-		err = cli.UpdateDocInfoStatusToRemoved(ctx, dummyProjectID, notPresentDocID)
+		err = cli.UpdateDocInfoStatusToRemoved(ctx, notPresentDocID)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 

@@ -52,14 +52,6 @@ func TestAdmin(t *testing.T) {
 
 	t.Run("admin and client document deletion sync test", func(t *testing.T) {
 		ctx := context.Background()
-
-		cli, err := client.Dial(defaultServer.RPCAddr())
-		assert.NoError(t, err)
-		assert.NoError(t, cli.Activate(ctx))
-		defer func() {
-			assert.NoError(t, cli.Close())
-		}()
-
 		d1 := document.New(helper.TestDocKey(t))
 
 		// 01. admin tries to remove document that does not exist.
@@ -67,7 +59,7 @@ func TestAdmin(t *testing.T) {
 		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 
 		// 02. client creates a document then admin removes the document.
-		assert.NoError(t, cli.Attach(ctx, d1))
+		assert.NoError(t, c1.Attach(ctx, d1))
 		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String(), true)
 		assert.NoError(t, err)
 		assert.Equal(t, document.StatusAttached, d1.Status())
@@ -77,8 +69,11 @@ func TestAdmin(t *testing.T) {
 			root.SetString("k1", "v1")
 			return nil
 		}))
-		assert.NoError(t, cli.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
 		assert.Equal(t, document.StatusRemoved, d1.Status())
+
+		// 04. client tries to attach the document that has been removed.
+		assert.Error(t, c1.Attach(ctx, d1))
 	})
 
 	t.Run("document event propagation on removal test", func(t *testing.T) {

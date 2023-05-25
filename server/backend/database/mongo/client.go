@@ -614,8 +614,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	}
 
 	result = c.collection(colClients).FindOne(ctx, bson.M{
-		"key":              clientInfo.Key,
 		"documents.doc_id": docInfo.ID,
+		"key":              clientInfo.Key,
 	})
 	if result.Err() != nil && result.Err() == mongo.ErrNoDocuments {
 		_, err = c.collection(colClients).UpdateOne(ctx, bson.M{
@@ -635,8 +635,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		})
 	} else {
 		_, err = c.collection(colClients).UpdateOne(ctx, bson.M{
-			"key":              clientInfo.Key,
 			"documents.doc_id": docInfo.ID,
+			"key":              clientInfo.Key,
 		}, updater)
 	}
 	if err != nil {
@@ -846,22 +846,15 @@ func (c *Client) FindDocInfoByID(
 // UpdateDocInfoStatusToRemoved updates the document status to removed.
 func (c *Client) UpdateDocInfoStatusToRemoved(
 	ctx context.Context,
-	projectID types.ID,
 	id types.ID,
 ) error {
-	encodedProjectID, err := encodeID(projectID)
-	if err != nil {
-		return err
-	}
-
 	encodedDocID, err := encodeID(id)
 	if err != nil {
 		return err
 	}
 
 	result := c.collection(colDocuments).FindOneAndUpdate(ctx, bson.M{
-		"_id":        encodedDocID,
-		"project_id": encodedProjectID,
+		"_id": encodedDocID,
 	}, bson.M{
 		"$set": bson.M{
 			"removed_at": gotime.Now(),
@@ -883,16 +876,10 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 // IsAttachedDocument returns true if the document is attached to any other client.
 func (c *Client) IsAttachedDocument(
 	ctx context.Context,
-	projectID types.ID,
+	_ types.ID,
 	docID types.ID,
 ) (bool, error) {
-	encodedProjectID, err := encodeID(projectID)
-	if err != nil {
-		return false, err
-	}
-
 	cursor, err := c.collection(colClients).Find(ctx, bson.M{
-		"project_id":       encodedProjectID,
 		"documents.doc_id": docID,
 	})
 	if err != nil {

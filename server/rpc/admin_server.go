@@ -19,6 +19,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -371,7 +372,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		return nil, fmt.Errorf("remove document: document is attached")
 	}
 
-	if err := documents.RemoveDocument(ctx, s.backend, project, docInfo.ID); err != nil {
+	if err := documents.RemoveDocument(ctx, s.backend, docInfo.ID); err != nil {
 		return nil, err
 	}
 

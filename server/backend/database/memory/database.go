@@ -739,7 +739,6 @@ func (d *DB) FindDocInfoByID(
 // UpdateDocInfoStatusToRemoved updates the removedAt field of the given docInfo.
 func (d *DB) UpdateDocInfoStatusToRemoved(
 	ctx context.Context,
-	projectID types.ID,
 	id types.ID,
 ) error {
 	txn := d.db.Txn(true)
@@ -755,10 +754,6 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 	}
 
 	docInfo := raw.(*database.DocInfo)
-	if docInfo.ProjectID != projectID {
-		return fmt.Errorf("finding doc info by ID(%s): %w", id, database.ErrDocumentNotFound)
-	}
-
 	docInfo.RemovedAt = gotime.Now()
 
 	if err := txn.Delete(tblDocuments, docInfo); err != nil {
