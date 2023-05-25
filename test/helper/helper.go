@@ -107,6 +107,46 @@ func TextChangeContext(root *crdt.Root) *change.Context {
 	)
 }
 
+// IssuePos is a helper function that issues a new CRDTTreePos.
+func IssuePos(change *change.Context, offset ...int) *crdt.TreePos {
+	pos := &crdt.TreePos{
+		CreatedAt: change.IssueTimeTicket(),
+		Offset:    0,
+	}
+
+	if len(offset) > 0 {
+		pos.Offset = offset[0]
+	}
+
+	return pos
+}
+
+// IssueTime is a helper function that issues a new TimeTicket
+func IssueTime(change *change.Context) *time.Ticket {
+	return change.IssueTimeTicket()
+}
+
+// ListEqual is a helper function that checks the nodes in the RGA in Tree.
+func ListEqual(t assert.TestingT, tree *crdt.Tree, expected []string) bool {
+	var nodes []*crdt.TreeNode
+	for _, node := range tree.Nodes() {
+		nodes = append(nodes, node)
+	}
+
+	actual := make([]string, 0)
+	for _, node := range nodes {
+		if node.IsInline() {
+			actual = append(actual, fmt.Sprintf("%s.%s", node.Type(), node.Value))
+		} else {
+			actual = append(actual, node.Type())
+		}
+	}
+
+	assert.Equal(t, expected, actual)
+
+	return true
+}
+
 var portOffset = 0
 
 // TestConfig returns config for creating Yorkie instance.
