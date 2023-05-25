@@ -27,9 +27,9 @@ import (
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -56,7 +56,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	)
 
 	loggingInterceptor := grpchelper.NewLoggingInterceptor()
-	authInterceptor := interceptors.NewAuthInterceptor(be, tokenManager)
+	adminAuthInterceptor := interceptors.NewAdminAuthInterceptor(be, tokenManager)
 	contextInterceptor := interceptors.NewContextInterceptor(be)
 	defaultInterceptor := interceptors.NewDefaultInterceptor()
 
@@ -64,14 +64,14 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
 			loggingInterceptor.Unary(),
 			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
-			authInterceptor.Unary(),
+			adminAuthInterceptor.Unary(),
 			contextInterceptor.Unary(),
 			defaultInterceptor.Unary(),
 		)),
 		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
 			loggingInterceptor.Stream(),
 			be.Metrics.ServerMetrics().StreamServerInterceptor(),
-			authInterceptor.Stream(),
+			adminAuthInterceptor.Stream(),
 			contextInterceptor.Stream(),
 			defaultInterceptor.Stream(),
 		)),
