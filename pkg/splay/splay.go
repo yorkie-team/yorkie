@@ -23,6 +23,9 @@ import (
 	"strings"
 )
 
+// ErrOutOfIndex is returned when the given index is out of index.
+var ErrOutOfIndex = fmt.Errorf("out of index")
+
 // Value represents the data stored in the nodes of Tree.
 type Value interface {
 	Len() int
@@ -183,9 +186,9 @@ func (t *Tree[V]) IndexOf(node *Node[V]) int {
 }
 
 // Find returns the Node and offset of the given index.
-func (t *Tree[V]) Find(index int) (*Node[V], int) {
+func (t *Tree[V]) Find(index int) (*Node[V], int, error) {
 	if t.root == nil {
-		return nil, 0
+		return nil, 0, nil
 	}
 
 	node := t.root
@@ -203,14 +206,10 @@ func (t *Tree[V]) Find(index int) (*Node[V], int) {
 	}
 
 	if offset > node.value.Len() {
-		panic(fmt.Sprintf(
-			"out of bound of text index: node.length %d, pos %d",
-			node.value.Len(),
-			offset,
-		))
+		return nil, 0, fmt.Errorf("node length %d, index %d: %w", node.value.Len(), offset, ErrOutOfIndex)
 	}
 
-	return node, offset
+	return node, offset, nil
 }
 
 // String returns a string containing node values.

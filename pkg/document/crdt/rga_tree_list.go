@@ -179,8 +179,11 @@ func (a *RGATreeList) InsertAfter(prevCreatedAt *time.Ticket, elem Element) {
 }
 
 // Get returns the element of the given index.
-func (a *RGATreeList) Get(idx int) *RGATreeListNode {
-	splayNode, offset := a.nodeMapByIndex.Find(idx)
+func (a *RGATreeList) Get(idx int) (*RGATreeListNode, error) {
+	splayNode, offset, err := a.nodeMapByIndex.Find(idx)
+	if err != nil {
+		return nil, err
+	}
 	node := splayNode.Value()
 
 	if idx == 0 && splayNode == a.dummyHead.indexNode {
@@ -199,7 +202,7 @@ func (a *RGATreeList) Get(idx int) *RGATreeListNode {
 		}
 	}
 
-	return node
+	return node, nil
 }
 
 // DeleteByCreatedAt deletes the given element.
@@ -228,9 +231,12 @@ func (a *RGATreeList) StructureAsString() string {
 }
 
 // Delete deletes the node of the given index.
-func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) *RGATreeListNode {
-	target := a.Get(idx)
-	return a.DeleteByCreatedAt(target.CreatedAt(), deletedAt)
+func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) (*RGATreeListNode, error) {
+	target, err := a.Get(idx)
+	if err != nil {
+		return nil, err
+	}
+	return a.DeleteByCreatedAt(target.CreatedAt(), deletedAt), nil
 }
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
