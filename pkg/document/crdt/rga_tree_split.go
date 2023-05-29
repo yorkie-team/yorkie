@@ -291,7 +291,8 @@ type RGATreeSplit[V RGATreeSplitValue] struct {
 	treeByIndex *splay.Tree[*RGATreeSplitNode[V]]
 	treeByID    *llrb.Tree[*RGATreeSplitNodeID, *RGATreeSplitNode[V]]
 
-	// when the edit operation is executed.
+	// removedNodeMap is a map to store removed nodes. It is used to
+	// delete the node physically when the garbage collection is executed.
 	removedNodeMap map[string]*RGATreeSplitNode[V]
 }
 
