@@ -25,7 +25,7 @@ import (
 
 // Subscription represents a subscription of a subscriber to documents.
 type Subscription struct {
-	id         string
+	subID      string
 	subscriber types.Client
 	closed     bool
 	events     chan DocEvent
@@ -34,7 +34,7 @@ type Subscription struct {
 // NewSubscription creates a new instance of Subscription.
 func NewSubscription(subscriber types.Client) *Subscription {
 	return &Subscription{
-		id:         xid.New().String(),
+		subID:      xid.New().String(),
 		subscriber: subscriber,
 		events:     make(chan DocEvent, 1),
 	}
@@ -42,37 +42,7 @@ func NewSubscription(subscriber types.Client) *Subscription {
 
 // ID returns the id of this subscription.
 func (s *Subscription) ID() string {
-	return s.id
-}
-
-// PeerPresenceMap is a map that represents presence for each peer.
-type PeerPresenceMap map[string]presence.PresenceInfo
-
-// UpdatePresence updates the presence of the client.
-func (p PeerPresenceMap) UpdatePresence(client *types.Client) {
-	presence := p[client.ID.String()]
-	presence.Update(client.PresenceInfo)
-	p[client.ID.String()] = presence
-}
-
-// PeerSet represents a set of peers.
-type PeerSet map[string]bool
-
-func NewPeerSet() PeerSet {
-	return make(map[string]bool)
-}
-
-func (s PeerSet) Add(key string) {
-	s[key] = true
-}
-
-func (s PeerSet) Remove(key string) {
-	delete(s, key)
-}
-
-func (s PeerSet) Contains(key string) bool {
-	_, exists := s[key]
-	return exists
+	return s.subID
 }
 
 // DocEvent represents events that occur related to the document.
@@ -95,6 +65,11 @@ func (s *Subscription) Subscriber() types.Client {
 // SubscriberID returns string representation of the subscriber.
 func (s *Subscription) SubscriberID() string {
 	return s.subscriber.ID.String()
+}
+
+// UpdatePresence updates the presence of the subscriber.
+func (s *Subscription) UpdatePresence(info presence.PresenceInfo) {
+	s.subscriber.PresenceInfo.Update(info)
 }
 
 // Close closes all resources of this Subscription.

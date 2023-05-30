@@ -29,7 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-// subscriptions is a map of subscriptions.
+// subscriptions is a map of subscriptions based on clientID.
 type subscriptions struct {
 	internalMap map[string]*sync.Subscription
 }
@@ -41,8 +41,8 @@ func newSubscriptions() *subscriptions {
 }
 
 // Add adds the given subscription.
-func (s *subscriptions) Add(sub *sync.Subscription) {
-	s.internalMap[sub.ID()] = sub
+func (s *subscriptions) Add(clientID string, sub *sync.Subscription) {
+	s.internalMap[clientID] = sub
 }
 
 // Map returns the internal map of these subscriptions.
@@ -66,7 +66,6 @@ func (s *subscriptions) Len() int {
 // PubSub is the memory implementation of PubSub, used for single server.
 type PubSub struct {
 	subscriptionsMapMu      *gosync.RWMutex
-	peerMapByDocID          map[types.ID]sync.PeerPresenceMap
 	subscriptionsMapByDocID map[types.ID]*subscriptions
 }
 
@@ -74,9 +73,12 @@ type PubSub struct {
 func NewPubSub() *PubSub {
 	return &PubSub{
 		subscriptionsMapMu:      &gosync.RWMutex{},
-		peerMapByDocID:          make(map[types.ID]sync.PeerPresenceMap),
 		subscriptionsMapByDocID: make(map[types.ID]*subscriptions),
 	}
+}
+
+func (m *PubSub) Subscription(documentID types.ID, clientID string) *sync.Subscription {
+	return m.subscriptionsMapByDocID[documentID].internalMap[clientID]
 }
 
 // Subscribe subscribes to the given document keys.
@@ -97,15 +99,10 @@ func (m *PubSub) Subscribe(
 	defer m.subscriptionsMapMu.Unlock()
 
 	sub := sync.NewSubscription(subscriber)
-	if _, ok := m.peerMapByDocID[documentID]; !ok {
-		m.peerMapByDocID[documentID] = make(sync.PeerPresenceMap)
-	}
-	m.peerMapByDocID[documentID][subscriber.ID.String()] = subscriber.PresenceInfo
-
 	if _, ok := m.subscriptionsMapByDocID[documentID]; !ok {
 		m.subscriptionsMapByDocID[documentID] = newSubscriptions()
 	}
-	m.subscriptionsMapByDocID[documentID].Add(sub)
+	m.subscriptionsMapByDocID[documentID].Add(subscriber.ID.String(), sub)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
@@ -136,15 +133,8 @@ func (m *PubSub) Unsubscribe(
 
 	sub.Close()
 
-	if peers, ok := m.peerMapByDocID[documentID]; ok {
-		delete(peers, sub.Subscriber().ID.String())
-		if len(peers) == 0 {
-			delete(m.peerMapByDocID, documentID)
-		}
-	}
-
 	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
-		subs.Delete(sub.ID())
+		subs.Delete(sub.SubscriberID())
 
 		if subs.Len() == 0 {
 			delete(m.subscriptionsMapByDocID, documentID)
@@ -217,7 +207,6 @@ func (m *PubSub) UpdatePresence(
 	m.subscriptionsMapMu.Lock()
 	defer m.subscriptionsMapMu.Unlock()
 
-	peerMap := m.peerMapByDocID[documentID]
-	// 01. Update the presence in peerMapByDocID.
-	peerMap.UpdatePresence(publisher)
+	sub := m.Subscription(documentID, publisher.ID.String())
+	sub.UpdatePresence(publisher.PresenceInfo)
 }

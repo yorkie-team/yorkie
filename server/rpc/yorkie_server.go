@@ -167,7 +167,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	pulled, isDocumentChanged, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
 	if err != nil {
 		return nil, err
 	}
@@ -175,18 +175,6 @@ func (s *yorkieServer) AttachDocument(
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
-	}
-
-	if isDocumentChanged {
-		s.backend.Coordinator.Publish(
-			ctx,
-			actorID,
-			sync.DocEvent{
-				Type:       types.DocumentsChangedEvent,
-				Publisher:  types.Client{ID: actorID},
-				DocumentID: docInfo.ID,
-			},
-		)
 	}
 
 	return &api.AttachDocumentResponse{
@@ -251,7 +239,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	pulled, isDocumentChanged, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
 	if err != nil {
 		return nil, err
 	}
@@ -259,18 +247,6 @@ func (s *yorkieServer) DetachDocument(
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
-	}
-
-	if isDocumentChanged {
-		s.backend.Coordinator.Publish(
-			ctx,
-			actorID,
-			sync.DocEvent{
-				Type:       types.DocumentsChangedEvent,
-				Publisher:  types.Client{ID: actorID},
-				DocumentID: docInfo.ID,
-			},
-		)
 	}
 
 	return &api.DetachDocumentResponse{
@@ -343,7 +319,7 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	pulled, isDocumentChanged, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, syncMode)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, syncMode)
 	if err != nil {
 		return nil, err
 	}
@@ -351,18 +327,6 @@ func (s *yorkieServer) PushPullChanges(
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
-	}
-
-	if isDocumentChanged {
-		s.backend.Coordinator.Publish(
-			ctx,
-			actorID,
-			sync.DocEvent{
-				Type:       types.DocumentsChangedEvent,
-				Publisher:  types.Client{ID: actorID},
-				DocumentID: docInfo.ID,
-			},
-		)
 	}
 
 	return &api.PushPullChangesResponse{
@@ -525,7 +489,7 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	pulled, isDocumentChanged, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
 	if err != nil {
 		return nil, err
 	}
@@ -533,18 +497,6 @@ func (s *yorkieServer) RemoveDocument(
 	pbChangePack, err := pulled.ToPBChangePack()
 	if err != nil {
 		return nil, err
-	}
-
-	if isDocumentChanged {
-		s.backend.Coordinator.Publish(
-			ctx,
-			actorID,
-			sync.DocEvent{
-				Type:       types.DocumentsChangedEvent,
-				Publisher:  types.Client{ID: actorID},
-				DocumentID: docInfo.ID,
-			},
-		)
 	}
 
 	return &api.RemoveDocumentResponse{

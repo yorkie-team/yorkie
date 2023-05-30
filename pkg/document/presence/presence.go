@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-// Package presence provides the key implementation of the document.
 package presence
 
-// Presence represents custom presence that can be defined in the client.
+// Presence represents custom presence that can be defined by the client.
+// If the client is watching a document, the presence is shared with
+// all other clients watching the same document.
 type Presence map[string]string
 
 // PresenceInfo is a presence information with logical clock.

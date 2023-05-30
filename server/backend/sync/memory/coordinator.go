@@ -67,6 +67,7 @@ func (c *Coordinator) Subscribe(
 
 	var peers []types.Client
 	for _, sub := range c.pubSub.subscriptionsMapByDocID[documentID].Map() {
+
 		peers = append(peers, sub.Subscriber())
 	}
 	return sub, peers, nil
