@@ -81,11 +81,10 @@ func (o SyncOption) WithPushOnly() SyncOption {
 	}
 }
 
-// Attachment represents the document attached and peers.
+// Attachment represents the document attached.
 type Attachment struct {
 	doc   *document.Document
 	docID types.ID
-	peers map[string]presence.PresenceInfo
 }
 
 // Client is a normal client that can communicate with the server.
@@ -98,11 +97,10 @@ type Client struct {
 	dialOptions []grpc.DialOption
 	logger      *zap.Logger
 
-	id           *time.ActorID
-	key          string
-	presenceInfo presence.PresenceInfo
-	status       status
-	attachments  map[key.Key]*Attachment
+	id          *time.ActorID
+	key         string
+	status      status
+	attachments map[key.Key]*Attachment
 }
 
 // WatchResponseType is type of watch response.
@@ -118,7 +116,7 @@ const (
 type WatchResponse struct {
 	Type          WatchResponseType
 	Key           key.Key
-	PeersMapByDoc map[key.Key]map[string]presence.Presence
+	PeersMapByDoc map[string]presence.Presence
 	Err           error
 }
 
@@ -132,11 +130,6 @@ func New(opts ...Option) (*Client, error) {
 	k := options.Key
 	if k == "" {
 		k = xid.New().String()
-	}
-
-	presence := presence.Presence{}
-	if options.Presence != nil {
-		presence = options.Presence
 	}
 
 	var dialOptions []grpc.DialOption
@@ -173,10 +166,9 @@ func New(opts ...Option) (*Client, error) {
 		options:     options,
 		logger:      logger,
 
-		key:          k,
-		presenceInfo: presence.PresenceInfo{Presence: presence},
-		status:       deactivated,
-		attachments:  make(map[key.Key]*Attachment),
+		key:         k,
+		status:      deactivated,
+		attachments: make(map[key.Key]*Attachment),
 	}, nil
 }
 
@@ -264,22 +256,23 @@ func (c *Client) Deactivate(ctx context.Context) error {
 	return nil
 }
 
-// Attach attaches the given document to this client. It tells the server that
-// this client will synchronize the given document.
-func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
+// Connect creates a new document with the given docKey and notifies the server
+// that this client will synchronize the document.
+func (c *Client) Connect(
+	ctx context.Context,
+	docKey key.Key,
+	initialPresence map[string]string,
+) (*document.Document, error) {
 	if c.status != activated {
-		return ErrClientNotActivated
+		return nil, ErrClientNotActivated
 	}
 
-	if doc.Status() != document.StatusDetached {
-		return ErrDocumentNotDetached
-	}
-
+	doc := document.New(docKey, c.id.String(), initialPresence)
 	doc.SetActor(c.id)
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	res, err := c.client.AttachDocument(
@@ -290,16 +283,16 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		},
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	pack, err := converter.FromChangePack(res.ChangePack)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
-		return err
+		return nil, err
 	}
 	if c.logger.Core().Enabled(zap.DebugLevel) {
 		c.logger.Debug(fmt.Sprintf(
@@ -310,17 +303,16 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	}
 
 	if doc.Status() == document.StatusRemoved {
-		return nil
+		return doc, nil
 	}
 
 	doc.SetStatus(document.StatusAttached)
 	c.attachments[doc.Key()] = &Attachment{
 		doc:   doc,
 		docID: types.ID(res.DocumentId),
-		peers: make(map[string]presence.PresenceInfo),
 	}
 
-	return nil
+	return doc, nil
 }
 
 // Detach detaches the given document from this client. It tells the
@@ -419,7 +411,7 @@ func (c *Client) Watch(
 		&api.WatchDocumentRequest{
 			Client: converter.ToClient(types.Client{
 				ID:           c.id,
-				PresenceInfo: c.presenceInfo,
+				PresenceInfo: doc.PresenceInfo(c.id.String()),
 			}),
 			DocumentId: attachment.docID.String(),
 		},
@@ -436,9 +428,8 @@ func (c *Client) Watch(
 				return nil, err
 			}
 
-			attachment := c.attachments[doc.Key()]
 			for _, cli := range clients {
-				attachment.peers[cli.ID.String()] = cli.PresenceInfo
+				doc.SetPresenceInfo(cli.ID.String(), cli.PresenceInfo)
 			}
 
 			return nil, nil
@@ -465,20 +456,17 @@ func (c *Client) Watch(
 					return nil, err
 				}
 
-				attachment := c.attachments[docKey]
 				if eventType == types.DocumentsWatchedEvent ||
 					eventType == types.PresenceChangedEvent {
-					if info, ok := attachment.peers[cli.ID.String()]; ok {
-						cli.PresenceInfo.Update(info)
-					}
-					attachment.peers[cli.ID.String()] = cli.PresenceInfo
+					doc.SetPresenceInfo(cli.ID.String(), cli.PresenceInfo)
 				} else {
-					delete(attachment.peers, cli.ID.String())
+					doc.RemovePresenceInfo(cli.ID.String())
 				}
 
 				return &WatchResponse{
 					Type:          PeersChanged,
-					PeersMapByDoc: c.PeersMapByDoc(),
+					Key:           docKey,
+					PeersMapByDoc: doc.PeersMap(),
 				}, nil
 			}
 		}
@@ -524,41 +512,6 @@ func (c *Client) findDocKey(docID string) (key.Key, error) {
 	return "", ErrDocumentNotAttached
 }
 
-// UpdatePresence updates the presence of this client.
-func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
-	if c.status != activated {
-		return ErrClientNotActivated
-	}
-
-	c.presenceInfo.Presence[k] = v
-	c.presenceInfo.Clock++
-
-	if len(c.attachments) == 0 {
-		return nil
-	}
-
-	// TODO(hackerwins): We temporarily use Unary Call to update presence,
-	// because grpc-web can't handle Bi-Directional streaming for now.
-	// After grpc-web supports bi-directional streaming, we can remove the
-	// following.
-	// TODO(hackerwins): We will move Presence from client-level to document-level.
-	for _, attachment := range c.attachments {
-		if _, err := c.client.UpdatePresence(
-			withShardKey(ctx, c.options.APIKey, attachment.doc.Key().String()),
-			&api.UpdatePresenceRequest{
-				Client: converter.ToClient(types.Client{
-					ID:           c.id,
-					PresenceInfo: c.presenceInfo,
-				}),
-				DocumentId: attachment.docID.String(),
-			}); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // ID returns the ID of this client.
 func (c *Client) ID() *time.ActorID {
 	return c.id
@@ -567,29 +520,6 @@ func (c *Client) ID() *time.ActorID {
 // Key returns the key of this client.
 func (c *Client) Key() string {
 	return c.key
-}
-
-// Presence returns the presence data of this client.
-func (c *Client) Presence() types.Presence {
-	presence := make(types.Presence)
-	for k, v := range c.presenceInfo.Presence {
-		presence[k] = v
-	}
-
-	return presence
-}
-
-// PeersMapByDoc returns the peersMap.
-func (c *Client) PeersMapByDoc() map[key.Key]map[string]types.Presence {
-	peersMapByDoc := make(map[key.Key]map[string]types.Presence)
-	for docKey, attachment := range c.attachments {
-		peers := make(map[string]types.Presence)
-		for id, info := range attachment.peers {
-			peers[id] = info.Presence
-		}
-		peersMapByDoc[docKey] = peers
-	}
-	return peersMapByDoc
 }
 
 // IsActive returns whether this client is active or not.

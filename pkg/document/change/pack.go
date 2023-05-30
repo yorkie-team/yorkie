@@ -18,7 +18,6 @@ package change
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -42,11 +41,6 @@ type Pack struct {
 
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
-}
-
-type Peer struct {
-	ID           *time.ActorID
-	PresenceInfo presence.PresenceInfo
 }
 
 // NewPack creates a new instance of Pack.

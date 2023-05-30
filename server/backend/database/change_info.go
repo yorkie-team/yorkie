@@ -19,6 +19,7 @@ package database
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -65,13 +66,14 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	return encodedOps, nil
 }
 
+// EncodePresenceInfo encodes the given presenceInfo into string.
 func EncodePresenceInfo(presenceInfo *presence.PresenceInfo) (string, error) {
 	if presenceInfo == nil {
 		return "", nil
 	}
 	jsonBytes, err := json.Marshal(presenceInfo)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("marshal presence to bytes: %w", err)
 	}
 	return string(jsonBytes), nil
 }
@@ -104,7 +106,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		presenceInfo = nil
 	} else {
 		if err := json.Unmarshal([]byte(i.PresenceInfo), &presenceInfo); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("unmarshal presence: %w", err)
 		}
 	}
 

@@ -18,6 +18,7 @@ package packs
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -107,7 +108,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		var presenceInfo *presence.PresenceInfo
 		if info.PresenceInfo != "" {
 			if err := json.Unmarshal([]byte(info.PresenceInfo), &presenceInfo); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("unmarshal presence: %w", err)
 			}
 		}
 

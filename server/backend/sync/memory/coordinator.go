@@ -106,9 +106,8 @@ func (c *Coordinator) UpdatePresence(
 	_ context.Context,
 	publisher *types.Client,
 	documentID types.ID,
-) error {
+) {
 	c.pubSub.UpdatePresence(publisher, documentID)
-	return nil
 }
 
 // Members returns the members of this cluster.

@@ -524,10 +524,7 @@ func (s *yorkieServer) UpdatePresence(
 		return nil, err
 	}
 
-	if err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID); err != nil {
-		return nil, err
-	}
-
+	s.backend.Coordinator.UpdatePresence(ctx, cli, documentID)
 	s.backend.Coordinator.Publish(ctx, cli.ID, sync.DocEvent{
 		Type:       types.PresenceChangedEvent,
 		Publisher:  *cli,

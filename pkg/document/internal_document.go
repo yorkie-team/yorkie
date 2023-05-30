@@ -23,6 +23,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -50,24 +51,33 @@ var (
 
 // InternalDocument represents a document in MongoDB and contains logical clocks.
 type InternalDocument struct {
-	key          key.Key
-	status       StatusType
-	root         *crdt.Root
-	checkpoint   change.Checkpoint
-	changeID     change.ID
-	localChanges []*change.Change
+	key             key.Key
+	status          StatusType
+	root            *crdt.Root
+	checkpoint      change.Checkpoint
+	changeID        change.ID
+	localChanges    []*change.Change
+	myClientID      string
+	peerPresenceMap map[string]presence.PresenceInfo
+	changeContext   *change.Context
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
-func NewInternalDocument(k key.Key) *InternalDocument {
+func NewInternalDocument(docKey key.Key, clientID string, initialPresence map[string]string) *InternalDocument {
 	root := crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket)
-
+	actorID, _ := time.ActorIDFromHex(clientID)
 	return &InternalDocument{
-		key:        k,
+		key:        docKey,
 		status:     StatusDetached,
 		root:       crdt.NewRoot(root),
 		checkpoint: change.InitialCheckpoint,
-		changeID:   change.InitialID,
+		changeID:   change.InitialIDWithActor(actorID),
+		myClientID: clientID,
+		peerPresenceMap: map[string]presence.PresenceInfo{
+			clientID: {
+				Presence: initialPresence,
+			},
+		},
 	}
 }
 
@@ -189,6 +199,43 @@ func (d *InternalDocument) SetStatus(status StatusType) {
 // IsAttached returns the whether this document is attached or not.
 func (d *InternalDocument) IsAttached() bool {
 	return d.status == StatusAttached
+}
+
+// SetPresenceInfo sets the presence information of the given client.
+func (d *InternalDocument) SetPresenceInfo(clientID string, info presence.PresenceInfo) {
+	presenceInfo := d.peerPresenceMap[clientID]
+	ok := presenceInfo.Update(info)
+	if ok {
+		d.peerPresenceMap[clientID] = presenceInfo
+	}
+}
+
+// PresenceInfo returns the presence information of the given client.
+func (d *InternalDocument) PresenceInfo(clientID string) presence.PresenceInfo {
+	return d.peerPresenceMap[clientID]
+}
+
+// RemovePresenceInfo removes the presence information of the given client.
+func (d *InternalDocument) RemovePresenceInfo(clientID string) {
+	delete(d.peerPresenceMap, clientID)
+}
+
+// Presence returns the presence of the client who created this document.
+func (d *InternalDocument) Presence() presence.Presence {
+	presence := make(presence.Presence)
+	for k, v := range d.peerPresenceMap[d.myClientID].Presence {
+		presence[k] = v
+	}
+	return presence
+}
+
+// PeersMap returns the list of peers, including the client who created this document.
+func (d *InternalDocument) PeersMap() map[string]presence.Presence {
+	peers := make(map[string]presence.Presence)
+	for k, v := range d.peerPresenceMap {
+		peers[k] = v.Presence
+	}
+	return peers
 }
 
 // Root returns the root of this document.

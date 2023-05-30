@@ -62,7 +62,7 @@ type Coordinator interface {
 		ctx context.Context,
 		publisher *types.Client,
 		documentID types.ID,
-	) error
+	)
 
 	// Members returns the members of this cluster.
 	Members() map[string]*ServerInfo

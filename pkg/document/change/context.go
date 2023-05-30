@@ -84,3 +84,8 @@ func (c *Context) RegisterRemovedElementPair(parent crdt.Container, deleted crdt
 func (c *Context) RegisterTextElementWithGarbage(textType crdt.TextElement) {
 	c.root.RegisterTextElementWithGarbage(textType)
 }
+
+// SetPresenceInfo registers the updated presenceInfo to this context.
+func (c *Context) SetPresenceInfo(presenceInfo *presence.PresenceInfo) {
+	c.presenceInfo = presenceInfo
+}

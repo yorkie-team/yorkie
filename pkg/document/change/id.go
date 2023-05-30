@@ -65,6 +65,11 @@ func NewID(
 	}
 }
 
+// InitialIDWithActor creates a new instance of ID with the given actorID.
+func InitialIDWithActor(actorID *time.ActorID) ID {
+	return NewID(InitialClientSeq, InitialServerSeq, InitialLamport, actorID)
+}
+
 // Next creates a next ID of this ID.
 func (id ID) Next() ID {
 	return ID{

@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -44,9 +45,9 @@ type Document struct {
 }
 
 // New creates a new instance of Document.
-func New(key key.Key) *Document {
+func New(docKey key.Key, clientID string, initialPresence map[string]string) *Document {
 	return &Document{
-		doc: NewInternalDocument(key),
+		doc: NewInternalDocument(docKey, clientID, initialPresence),
 	}
 }
 
@@ -84,6 +85,18 @@ func (d *Document) Update(
 	}
 
 	return nil
+}
+
+// UpdatePresence updates the presence of the client who created this document.
+func (d *Document) UpdatePresence(k, v string) {
+	presenceInfo := d.doc.PresenceInfo(d.doc.myClientID)
+	presenceInfo.Clock++
+	presenceInfo.Presence[k] = v
+
+	if d.doc.changeContext != nil {
+		d.doc.changeContext.SetPresenceInfo(presenceInfo.DeepCopy())
+	}
+	// TODO(chacha912): handle when updatePresence is called without a changeContext
 }
 
 // ApplyChangePack applies the given change pack into this document.
@@ -185,6 +198,31 @@ func (d *Document) Status() StatusType {
 // IsAttached returns the whether this document is attached or not.
 func (d *Document) IsAttached() bool {
 	return d.doc.IsAttached()
+}
+
+// SetPresenceInfo sets the presence information of the given client.
+func (d *Document) SetPresenceInfo(clientID string, info presence.PresenceInfo) {
+	d.doc.SetPresenceInfo(clientID, info)
+}
+
+// PresenceInfo returns the presence information of the given client.
+func (d *Document) PresenceInfo(clientID string) presence.PresenceInfo {
+	return d.doc.PresenceInfo(clientID)
+}
+
+// RemovePresenceInfo removes the presence information of the given client.
+func (d *Document) RemovePresenceInfo(clientID string) {
+	d.doc.RemovePresenceInfo(clientID)
+}
+
+// Presence returns the presence of the client who created this document.
+func (d *Document) Presence() map[string]string {
+	return d.doc.Presence()
+}
+
+// PeersMap returns the list of peers, including the client who created this document.
+func (d *Document) PeersMap() map[string]presence.Presence {
+	return d.doc.PeersMap()
 }
 
 // RootObject returns the internal root object of this document.

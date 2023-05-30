@@ -18,8 +18,6 @@ package client
 
 import (
 	"go.uber.org/zap"
-
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 )
 
 // Option configures Options.
@@ -29,9 +27,6 @@ type Option func(*Options)
 type Options struct {
 	// Key is the key of the client. It is used to identify the client.
 	Key string
-
-	// Presence is the presence of the client.
-	Presence presence.Presence
 
 	// APIKey is the API key of the client.
 	APIKey string
@@ -55,11 +50,6 @@ type Options struct {
 // WithKey configures the key of the client.
 func WithKey(key string) Option {
 	return func(o *Options) { o.Key = key }
-}
-
-// WithPresence configures the presence of the client.
-func WithPresence(presence presence.Presence) Option {
-	return func(o *Options) { o.Presence = presence }
 }
 
 // WithAPIKey configures the API key of the client.

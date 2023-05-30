@@ -77,6 +77,7 @@ func NewPubSub() *PubSub {
 	}
 }
 
+// Subscription returns the subscription of the given documentID and clientID.
 func (m *PubSub) Subscription(documentID types.ID, clientID string) *sync.Subscription {
 	return m.subscriptionsMapByDocID[documentID].internalMap[clientID]
 }

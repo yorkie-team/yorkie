@@ -36,3 +36,15 @@ func (i *PresenceInfo) Update(info PresenceInfo) bool {
 	}
 	return false
 }
+
+// DeepCopy copies itself deeply.
+func (i *PresenceInfo) DeepCopy() *PresenceInfo {
+	presence := Presence{}
+	for k, v := range i.Presence {
+		presence[k] = v
+	}
+	return &PresenceInfo{
+		Clock:    i.Clock,
+		Presence: presence,
+	}
+}
