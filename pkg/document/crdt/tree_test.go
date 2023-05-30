@@ -46,7 +46,7 @@ func TestTreeNode(t *testing.T) {
 
 	t.Run("block node test", func(t *testing.T) {
 		para := crdt.NewTreeNode(initialTreePos, "p")
-		assert.NoError(t, para.Append(crdt.NewTreeNode(initialTreePos, "text", "helloyorkie")))
+		para.Append(crdt.NewTreeNode(initialTreePos, "text", "helloyorkie"))
 		assert.Equal(t, "<p>helloyorkie</p>", crdt.ToXML(para))
 		assert.Equal(t, 11, para.Len())
 		assert.Equal(t, false, para.IsInline())
@@ -64,7 +64,7 @@ func TestTreeNode(t *testing.T) {
 }
 
 func TestTree(t *testing.T) {
-	t.Run("insert nodes with edit test", func(t *testing.T) {
+	t.Run("insert nodes with Edit test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
 		//       0
@@ -146,7 +146,7 @@ func TestTree(t *testing.T) {
 		helper.ListEqual(t, tree, []string{"text.hello", "text.~", "text.!", "p", "text.world", "p", "r"})
 	})
 
-	t.Run("delete inline nodes with edit test", func(t *testing.T) {
+	t.Run("delete inline nodes with Edit test", func(t *testing.T) {
 		// 01. Create a tree with 2 paragraphs.
 		//       0   1 2 3    4   5 6 7    8
 		// <root> <p> a b </p> <p> c d </p> </root>
@@ -208,5 +208,83 @@ func TestTree(t *testing.T) {
 		// 03. insert a new text node at the start of the first paragraph.
 		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "@"), helper.IssueTime(ctx))
 		assert.Equal(t, "<root><p>@ad</p></root>", tree.ToXML())
+	})
+
+	t.Run("merge different levels with Edit", func(t *testing.T) {
+		// 01. Edit between two block nodes in the same hierarchy.
+		//       0   1   2   3 4 5    6    7    8
+		// <root> <p> <b> <i> a b </i> </b> </p> </root>
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
+		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
+		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
+		tree.EditByIndex(2, 2, crdt.NewTreeNode(helper.IssuePos(ctx), "i"), helper.IssueTime(ctx))
+		tree.EditByIndex(3, 3, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "ab"), helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
+		tree.EditByIndex(5, 6, nil, helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p><b>ab</b></p></root>", tree.ToXML())
+
+		// 02. Edit between two block nodes in same hierarchy.
+		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
+		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
+		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
+		tree.EditByIndex(2, 2, crdt.NewTreeNode(helper.IssuePos(ctx), "i"), helper.IssueTime(ctx))
+		tree.EditByIndex(3, 3, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "ab"), helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
+		tree.EditByIndex(6, 7, nil, helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p><i>ab</i></p></root>", tree.ToXML())
+
+		// 03. Edit between inline and block node in same hierarchy.
+		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
+		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
+		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
+		tree.EditByIndex(2, 2, crdt.NewTreeNode(helper.IssuePos(ctx), "i"), helper.IssueTime(ctx))
+		tree.EditByIndex(3, 3, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "ab"), helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
+		tree.EditByIndex(4, 6, nil, helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p><b>a</b></p></root>", tree.ToXML())
+
+		// 04. Edit between inline and block node in same hierarchy.
+		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
+		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
+		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
+		tree.EditByIndex(2, 2, crdt.NewTreeNode(helper.IssuePos(ctx), "i"), helper.IssueTime(ctx))
+		tree.EditByIndex(3, 3, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "ab"), helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
+		tree.EditByIndex(5, 7, nil, helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p>ab</p></root>", tree.ToXML())
+
+		// 05. Edit between inline and block node in same hierarchy.
+		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
+		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
+		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
+		tree.EditByIndex(2, 2, crdt.NewTreeNode(helper.IssuePos(ctx), "i"), helper.IssueTime(ctx))
+		tree.EditByIndex(3, 3, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "ab"), helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
+		tree.EditByIndex(4, 7, nil, helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p>a</p></root>", tree.ToXML())
+
+		// 06. Edit between inline and block node in same hierarchy.
+		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
+		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
+		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
+		tree.EditByIndex(2, 2, crdt.NewTreeNode(helper.IssuePos(ctx), "i"), helper.IssueTime(ctx))
+		tree.EditByIndex(3, 3, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "ab"), helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
+		tree.EditByIndex(3, 7, nil, helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p></p></root>", tree.ToXML())
+
+		// 07. Edit between inline and block node in same hierarchy.
+		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
+		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
+		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "ab"), helper.IssueTime(ctx))
+		tree.EditByIndex(4, 4, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
+		tree.EditByIndex(5, 5, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
+		tree.EditByIndex(6, 6, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "cd"), helper.IssueTime(ctx))
+		tree.EditByIndex(10, 10, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
+		tree.EditByIndex(11, 11, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "ef"), helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p>ab</p><p><b>cd</b></p><p>ef</p></root>", tree.ToXML())
+		tree.EditByIndex(9, 10, nil, helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p>ab</p><b>cd</b><p>ef</p></root>", tree.ToXML())
 	})
 }

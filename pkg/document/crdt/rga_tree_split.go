@@ -284,7 +284,7 @@ func (s *RGATreeSplitNode[V]) Value() V {
 
 // RGATreeSplit is a block-based list with improved index-based lookup in RGA.
 // The difference from RGATreeList is that it has data on a block basis to
-// reduce the size of CRDT metadata. When an edit occurs on a block,
+// reduce the size of CRDT metadata. When an Edit occurs on a block,
 // the block is split.
 type RGATreeSplit[V RGATreeSplitValue] struct {
 	initialHead *RGATreeSplitNode[V]

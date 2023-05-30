@@ -29,6 +29,8 @@ func toOriginal(elem crdt.Element) crdt.Element {
 		return elem.Text
 	case *Counter:
 		return elem.Counter
+	case *Tree:
+		return elem.Tree
 	case *crdt.Primitive:
 		return elem
 	}

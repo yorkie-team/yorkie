@@ -19,6 +19,7 @@ package crdt
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
@@ -82,6 +83,14 @@ type TreePos struct {
 	Offset    int
 }
 
+// NewTreePos creates a new instance of TreePos.
+func NewTreePos(createdAt *time.Ticket, offset int) *TreePos {
+	return &TreePos{
+		CreatedAt: createdAt,
+		Offset:    offset,
+	}
+}
+
 // Compare compares the given two CRDTTreePos.
 func (t *TreePos) Compare(other llrb.Key) int {
 	compare := t.CreatedAt.Compare(other.(*TreePos).CreatedAt)
@@ -142,13 +151,13 @@ func (n *TreeNode) String() string {
 }
 
 // Append appends the given node to the end of the children.
-func (n *TreeNode) Append(newNodes ...*TreeNode) error {
+func (n *TreeNode) Append(newNodes ...*TreeNode) {
 	indexNodes := make([]*index.Node[*TreeNode], len(newNodes))
 	for i, newNode := range newNodes {
 		indexNodes[i] = newNode.IndexTreeNode
 	}
 
-	return n.IndexTreeNode.Append(indexNodes...)
+	n.IndexTreeNode.Append(indexNodes...)
 }
 
 // Child returns the child of the given offset.
@@ -210,12 +219,13 @@ func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) {
 // Tree is a tree implementation of CRDT.
 type Tree struct {
 	OnChangesHandler func([]*TreeChange)
+	DummyHead        *TreeNode
+	IndexTree        *index.Tree[*TreeNode]
+	NodeMapByPos     *llrb.Tree[*TreePos, *TreeNode]
 
-	DummyHead    *TreeNode
-	IndexTree    *index.Tree[*TreeNode]
-	NodeMapByPos *llrb.Tree[*TreePos, *TreeNode]
-
-	CreatedAt *time.Ticket
+	createdAt *time.Ticket
+	movedAt   *time.Ticket
+	removedAt *time.Ticket
 }
 
 // NewTree creates a new instance of Tree.
@@ -224,7 +234,7 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 		DummyHead:    NewTreeNode(InitialCRDTTreePos, DummyHeadType),
 		IndexTree:    index.NewTree[*TreeNode](root.IndexTreeNode),
 		NodeMapByPos: llrb.NewTree[*TreePos, *TreeNode](),
-		CreatedAt:    createdAt,
+		createdAt:    createdAt,
 	}
 
 	previous := tree.DummyHead
@@ -234,6 +244,72 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	})
 
 	return tree
+}
+
+// Marshal returns the JSON encoding of this Tree.
+func (t *Tree) Marshal() string {
+	return marshal(t.Root())
+}
+
+// marshal returns the JSON encoding of this Tree.
+func marshal(node *TreeNode) string {
+	builder := strings.Builder{}
+
+	if node.IsInline() {
+		builder.WriteString(fmt.Sprintf(`{"type":"%s","value":"%s"}`, node.Type(), node.Value))
+	} else {
+		builder.WriteString(fmt.Sprintf(`{"type":"%s","children":[`, node.Type()))
+		for idx, child := range node.IndexTreeNode.Children() {
+			if idx != 0 {
+				builder.WriteString(",")
+			}
+			builder.WriteString(marshal(child.Value))
+		}
+		builder.WriteString(`]}`)
+	}
+
+	return builder.String()
+}
+
+// DeepCopy copies itself deeply.
+func (t *Tree) DeepCopy() (Element, error) {
+	// TODO(krapie): Implement DeepCopy for Root Node (t.Root())
+	return NewTree(t.Root(), t.createdAt), nil
+}
+
+// CreatedAt returns the creation time of this Tree.
+func (t *Tree) CreatedAt() *time.Ticket {
+	return t.createdAt
+}
+
+// RemovedAt returns the removal time of this Tree.
+func (t *Tree) RemovedAt() *time.Ticket {
+	return t.removedAt
+}
+
+// MovedAt returns the move time of this Tree.
+func (t *Tree) MovedAt() *time.Ticket {
+	return t.movedAt
+}
+
+// SetMovedAt sets the move time of this Text.
+func (t *Tree) SetMovedAt(movedAt *time.Ticket) {
+	t.movedAt = movedAt
+}
+
+// SetRemovedAt sets the removal time of this array.
+func (t *Tree) SetRemovedAt(removedAt *time.Ticket) {
+	t.removedAt = removedAt
+}
+
+// Remove removes this Text.
+func (t *Tree) Remove(removedAt *time.Ticket) bool {
+	if (removedAt != nil && removedAt.After(t.createdAt)) &&
+		(t.removedAt == nil || removedAt.After(t.removedAt)) {
+		t.removedAt = removedAt
+		return true
+	}
+	return false
 }
 
 // InsertAfter inserts the given node after the given previous node.
@@ -273,13 +349,14 @@ func (t *Tree) ToXML() string {
 // EditByIndex edits the given range with the given value.
 // This method uses indexes instead of a pair of TreePos for testing.
 func (t *Tree) EditByIndex(start, end int, content *TreeNode, editedAt *time.Ticket) {
-	fromPos := t.findPos(start)
-	toPos := t.findPos(end)
+	fromPos := t.FindPos(start)
+	toPos := t.FindPos(end)
 
-	t.edit(fromPos, toPos, content, editedAt)
+	t.Edit(fromPos, toPos, content, editedAt)
 }
 
-func (t *Tree) findPos(offset int) *TreePos {
+// FindPos finds the position of the given index in the tree.
+func (t *Tree) FindPos(offset int) *TreePos {
 	treePos := t.IndexTree.FindTreePos(offset)
 
 	return &TreePos{
@@ -290,7 +367,7 @@ func (t *Tree) findPos(offset int) *TreePos {
 
 // Edit edits the tree with the given range and content.
 // If the content is undefined, the range will be removed.
-func (t *Tree) edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket) []*TreeChange {
+func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket) []*TreeChange {
 	// 01. split inline nodes at the given range if needed.
 	toPos, toRight := t.findTreePosWithSplitInline(to, editedAt)
 	fromPos, fromRight := t.findTreePosWithSplitInline(from, editedAt)

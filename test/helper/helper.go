@@ -20,6 +20,7 @@ package helper
 import (
 	"context"
 	"fmt"
+
 	"log"
 	"strings"
 	"testing"
@@ -29,10 +30,13 @@ import (
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/internal/validation"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -133,18 +137,56 @@ func ListEqual(t assert.TestingT, tree *crdt.Tree, expected []string) bool {
 		nodes = append(nodes, node)
 	}
 
-	actual := make([]string, 0)
+	var actual []string
 	for _, node := range nodes {
-		if node.IsInline() {
-			actual = append(actual, fmt.Sprintf("%s.%s", node.Type(), node.Value))
-		} else {
-			actual = append(actual, node.Type())
-		}
+		actual = append(actual, ToDiagnostic(node))
 	}
 
 	assert.Equal(t, expected, actual)
 
 	return true
+}
+
+// NodesBetweenEqual is a helper function that checks the nodes between the given
+// indexes.
+func NodesBetweenEqual(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {
+	var nodes []*crdt.TreeNode
+	tree.NodesBetween(from, to, func(node *crdt.TreeNode) {
+		nodes = append(nodes, node)
+	})
+
+	var actual []string
+	for _, node := range nodes {
+		actual = append(actual, ToDiagnostic(node))
+	}
+	assert.Equal(t, expected, actual)
+
+	return true
+}
+
+// ToDiagnostic is a helper function that converts the given node to a
+// diagnostic string.
+func ToDiagnostic(node *crdt.TreeNode) string {
+	if node.IsInline() {
+		return fmt.Sprintf("%s.%s", node.Type(), node.Value)
+	}
+
+	return node.Type()
+}
+
+// BuildIndexTree builds an index tree from the given block node.
+func BuildIndexTree(node *crdt.JSONTreeNode) *index.Tree[*crdt.TreeNode] {
+	doc := document.New("test")
+	err := doc.Update(func(root *json.Object) error {
+		root.SetNewTree("test", node)
+
+		return nil
+	})
+	if err != nil {
+		return nil
+	}
+
+	return doc.Root().GetTree("test").IndexTree
 }
 
 var portOffset = 0

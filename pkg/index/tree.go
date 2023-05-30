@@ -21,6 +21,7 @@ package index
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -120,7 +121,7 @@ func (n *Node[V]) IsInline() bool {
 }
 
 // Append appends the given node to the end of the children.
-func (n *Node[V]) Append(newNodes ...*Node[V]) error {
+func (n *Node[V]) Append(newNodes ...*Node[V]) {
 	if n.IsInline() {
 		panic(errors.New("inline node cannot have children"))
 	}
@@ -130,8 +131,6 @@ func (n *Node[V]) Append(newNodes ...*Node[V]) error {
 		newNode.Parent = n
 		newNode.UpdateAncestorsSize()
 	}
-
-	return nil
 }
 
 // Children returns the children of the given node.
@@ -267,10 +266,10 @@ func (n *Node[V]) FindBranchOffset(node *Node[V]) int {
 	}
 
 	current := node
-	for node != nil {
+	for current != nil {
 		// TODO(hackerwins): Extract this code to indexOf method.
 		offset := -1
-		for i, child := range node.children {
+		for i, child := range n.children {
 			if child == current {
 				offset = i
 				break
@@ -387,6 +386,57 @@ func postOrderTraversal[V Value](node *Node[V], callback func(node *Node[V])) {
 	callback(node)
 }
 
+// NodesBetween returns the nodes between the given range.
+func (t *Tree[V]) NodesBetween(from int, to int, callback func(node V)) {
+	nodesBetween(t.root, from, to, callback)
+}
+
+// nodesBetween iterates the nodes between the given range.
+// If the given range is collapsed, the callback is not called.
+// It traverses the tree with postorder traversal.
+func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) {
+	if from > to {
+		panic(fmt.Sprintf("from cannot be greater than to %d > %d", from, to))
+	}
+
+	if from > root.Length {
+		panic(fmt.Sprintf("from is out of range %d > %d", from, root.Length))
+	}
+
+	if to > root.Length {
+		panic(fmt.Sprintf("to is out of range %d > %d", to, root.Length))
+	}
+
+	if from == to {
+		return
+	}
+
+	pos := 0
+	for _, child := range root.Children() {
+		if from-child.PaddedLength() < pos && pos < to {
+			fromChild := from - pos - 1
+			if child.IsInline() {
+				fromChild = from - pos
+			}
+			toChild := to - pos - 1
+			if child.IsInline() {
+				toChild = to - pos
+			}
+			nodesBetween(
+				child,
+				int(math.Max(0, float64(fromChild))),
+				int(math.Min(float64(toChild), float64(child.Length))),
+				callback,
+			)
+
+			if fromChild < 0 || toChild > child.Length || child.IsInline() {
+				callback(child.Value)
+			}
+		}
+		pos += child.PaddedLength()
+	}
+}
+
 // TreePos is the position of a node in the tree.
 type TreePos[V Value] struct {
 	Node   *Node[V]
@@ -411,8 +461,13 @@ func (t *Tree[V]) Root() *Node[V] {
 }
 
 // FindTreePos finds the position of the given index in the tree.
-func (t *Tree[V]) FindTreePos(index int) *TreePos[V] {
-	return t.findTreePos(t.root, index, true)
+func (t *Tree[V]) FindTreePos(index int, preperInlines ...bool) *TreePos[V] {
+	preperInline := true
+	if len(preperInlines) > 0 {
+		preperInline = preperInlines[0]
+	}
+
+	return t.findTreePos(t.root, index, preperInline)
 }
 
 func (t *Tree[V]) findTreePos(node *Node[V], index int, preperInline bool) *TreePos[V] {
@@ -472,6 +527,66 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preperInline bool) *Tree
 	}
 }
 
+// TreePosToPath returns path from given treePos
+func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) []int {
+	var path []int
+
+	if treePos.Node.IsInline() || treePos.Node.Parent == nil {
+		path = append(path, treePos.Offset)
+	}
+
+	node := treePos.Node
+
+	for node.Parent != nil {
+		var pathInfo int
+		for i, child := range node.Parent.Children() {
+			if child == node {
+				pathInfo = i
+				break
+			}
+		}
+
+		if ^pathInfo == 0 {
+			panic("invalid treePos")
+		}
+
+		path = append(path, pathInfo)
+
+		node = node.Parent
+	}
+
+	// return path array to reverse order
+	reversePath := make([]int, len(path))
+	for i, pathInfo := range path {
+		reversePath[len(path)-i-1] = pathInfo
+	}
+
+	return reversePath
+}
+
+// PathToTreePos returns treePos from given path
+func (t *Tree[V]) PathToTreePos(path []int) *TreePos[V] {
+	if len(path) == 0 {
+		panic("unacceptable path")
+	}
+
+	node := t.root
+
+	for i := 0; i < len(path)-1; i++ {
+		pathInfo := path[i]
+
+		node = node.children[pathInfo]
+
+		if node == nil {
+			panic("unacceptable path")
+		}
+	}
+
+	preperInline := node.IsInline()
+
+	return t.findTreePos(node, path[len(path)-1], preperInline)
+}
+
 // FindPostorderRight finds right node of the given tree position with postorder traversal.
 func (t *Tree[V]) FindPostorderRight(pos *TreePos[V]) V {
 	node := pos.Node
@@ -494,6 +609,41 @@ func (t *Tree[V]) FindPostorderRight(pos *TreePos[V]) V {
 	}
 
 	return t.FindLeftmost(node.Children()[offset])
+}
+
+// GetAncestors returns the ancestors of the given node.
+func (t *Tree[V]) GetAncestors(node *Node[V]) []*Node[V] {
+	var ancestors []*Node[V]
+	parent := node.Parent
+	for parent != nil {
+		ancestors = append([]*Node[V]{parent}, ancestors...)
+		parent = parent.Parent
+	}
+	return ancestors
+}
+
+// FindCommonAncestor finds the lowest common ancestor of the given nodes.
+func (t *Tree[V]) FindCommonAncestor(nodeA, nodeB *Node[V]) V {
+	if nodeA == nodeB {
+		return nodeA.Value
+	}
+
+	ancestorsOfA := t.GetAncestors(nodeA)
+	ancestorsOfB := t.GetAncestors(nodeB)
+
+	var commonAncestor V
+	for i := 0; i < len(ancestorsOfA); i++ {
+		ancestorOfA := ancestorsOfA[i]
+		ancestorOfB := ancestorsOfB[i]
+
+		if ancestorOfA != ancestorOfB {
+			break
+		}
+
+		commonAncestor = ancestorOfA.Value
+	}
+
+	return commonAncestor
 }
 
 // FindLeftmost finds the leftmost node of the given tree.
