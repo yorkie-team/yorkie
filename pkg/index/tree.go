@@ -91,18 +91,18 @@ type Node[V Value] struct {
 	Type NodeType
 
 	Parent   *Node[V]
-	Children []*Node[V]
+	children []*Node[V]
 
 	Value  V
 	Length int
 }
 
 // NewNode creates a new instance of Node.
-func NewNode[V Value](nodeType string, value V) *Node[V] {
+func NewNode[V Value](nodeType string, value V, children ...*Node[V]) *Node[V] {
 	return &Node[V]{
 		Type: NodeType(nodeType),
 
-		Children: []*Node[V]{},
+		children: children,
 
 		Length: value.Length(),
 		Value:  value,
@@ -125,13 +125,28 @@ func (n *Node[V]) Append(newNodes ...*Node[V]) error {
 		panic(errors.New("inline node cannot have children"))
 	}
 
-	n.Children = append(n.Children, newNodes...)
+	n.children = append(n.children, newNodes...)
 	for _, newNode := range newNodes {
 		newNode.Parent = n
 		newNode.UpdateAncestorsSize()
 	}
 
 	return nil
+}
+
+// Children returns the children of the given node.
+func (n *Node[V]) Children() []*Node[V] {
+	// Tombstone nodes remain awhile in the tree during editing.
+	// They will be removed after the editing is done.
+	// So, we need to filter out the tombstone nodes to get the real children.
+	children := make([]*Node[V], 0, len(n.children))
+	for _, child := range n.children {
+		if !child.Value.IsRemoved() {
+			children = append(children, child)
+		}
+	}
+
+	return children
 }
 
 // UpdateAncestorsSize updates the size of ancestors.
@@ -165,39 +180,39 @@ func (n *Node[V]) Child(index int) *Node[V] {
 		panic(errors.New("inline node cannot have children"))
 	}
 
-	return n.Children[index]
+	return n.Children()[index]
 }
 
 // InsertAfterInternal inserts the given node after the given child.
 // This method does not update the size of the ancestors.
 func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) {
 	if n.IsInline() {
-		panic(errors.New("Inline node cannot have children"))
+		panic(errors.New("inline node cannot have children"))
 	}
 
 	offset := 0
-	for i, child := range n.Children {
+	for i, child := range n.children {
 		if child == prevNode {
 			offset = i
 			break
 		}
 	}
 	// TODO(hackerwins, krapie): Needs to inspect this code later
-	n.Children = append(n.Children[:offset+1], n.Children[offset:]...)
-	n.Children[offset+1] = newNode
+	n.children = append(n.children[:offset+1], n.children[offset:]...)
+	n.children[offset+1] = newNode
+	newNode.Parent = n
 }
 
 // nextSibling returns the next sibling of the node.
 func (n *Node[V]) nextSibling() *Node[V] {
 	offset := n.Parent.findOffset(n)
 
+	// TODO(hackerwins): Needs to inspect the code below later.
 	// if the node is the last child, there is no next sibling.
-	if len(n.Parent.Children) <= offset+1 {
+	if len(n.Parent.Children()) <= offset+1 {
 		return nil
 	}
-
-	sibling := n.Parent.Children[offset+1]
-
+	sibling := n.Parent.Children()[offset+1]
 	if sibling != nil {
 		return sibling
 	}
@@ -208,11 +223,11 @@ func (n *Node[V]) nextSibling() *Node[V] {
 // findOffset returns the offset of the given node in the children.
 func (n *Node[V]) findOffset(node *Node[V]) int {
 	if n.IsInline() {
-		panic(errors.New("Inline node cannot have children"))
+		panic(errors.New("inline node cannot have children"))
 	}
 
 	index := 0
-	for i, child := range n.Children {
+	for i, child := range n.Children() {
 		if child == node {
 			index = i
 			break
@@ -253,8 +268,9 @@ func (n *Node[V]) FindBranchOffset(node *Node[V]) int {
 
 	current := node
 	for node != nil {
+		// TODO(hackerwins): Extract this code to indexOf method.
 		offset := -1
-		for i, child := range node.Children {
+		for i, child := range node.children {
 			if child == current {
 				offset = i
 				break
@@ -290,10 +306,10 @@ func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) {
 
 	// splice the new node into the children
 	// if children array is empty or offset is out or range, append the new node
-	if offset > len(n.Children) || len(n.Children) == 0 {
-		n.Children = append(n.Children, newNode)
+	if offset > len(n.children) || len(n.children) == 0 {
+		n.children = append(n.children, newNode)
 	} else {
-		n.Children = append(n.Children[:offset], append([]*Node[V]{newNode}, n.Children[offset:]...)...)
+		n.children = append(n.children[:offset], append([]*Node[V]{newNode}, n.children[offset:]...)...)
 	}
 	newNode.Parent = n
 }
@@ -304,7 +320,7 @@ func (n *Node[V]) Prepend(children ...*Node[V]) {
 		panic(errors.New("inline node cannot have children"))
 	}
 
-	n.Children = append(children, n.Children...)
+	n.children = append(children, n.children...)
 	for _, node := range children {
 		node.Parent = n
 		node.UpdateAncestorsSize()
@@ -318,7 +334,7 @@ func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) {
 	}
 
 	offset := -1
-	for i, child := range n.Children {
+	for i, child := range n.children {
 		if child == referenceNode {
 			offset = i
 			break
@@ -340,7 +356,7 @@ func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) {
 	}
 
 	offset := -1
-	for i, child := range n.Children {
+	for i, child := range n.children {
 		if child == referenceNode {
 			offset = i
 			break
@@ -365,7 +381,7 @@ func postOrderTraversal[V Value](node *Node[V], callback func(node *Node[V])) {
 		return
 	}
 
-	for _, child := range node.Children {
+	for _, child := range node.Children() {
 		postOrderTraversal(child, callback)
 	}
 	callback(node)
@@ -373,31 +389,30 @@ func postOrderTraversal[V Value](node *Node[V], callback func(node *Node[V])) {
 
 // TreePos is the position of a node in the tree.
 type TreePos[V Value] struct {
-	Value  V
 	Node   *Node[V]
 	Offset int
 }
 
 // Tree is a tree implementation to represent a document of text-based editors.
 type Tree[V Value] struct {
-	Root *Node[V]
+	root *Node[V]
 }
 
 // NewTree creates a new instance of Tree.
 func NewTree[V Value](root *Node[V]) *Tree[V] {
 	return &Tree[V]{
-		Root: root,
+		root: root,
 	}
 }
 
-// GetRoot returns the root node of the tree.
-func (t *Tree[V]) GetRoot() *Node[V] {
-	return t.Root
+// Root returns the root node of the tree.
+func (t *Tree[V]) Root() *Node[V] {
+	return t.root
 }
 
 // FindTreePos finds the position of the given index in the tree.
 func (t *Tree[V]) FindTreePos(index int) *TreePos[V] {
-	return t.findTreePos(t.Root, index, true)
+	return t.findTreePos(t.root, index, true)
 }
 
 func (t *Tree[V]) findTreePos(node *Node[V], index int, preperInline bool) *TreePos[V] {
@@ -416,7 +431,7 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preperInline bool) *Tree
 	// pos is the window of the index in the given node.
 	offset := 0
 	pos := 0
-	for _, child := range node.Children {
+	for _, child := range node.Children() {
 		// The pos is in both sides of the inline node, we should traverse
 		// inside the inline node if preperInline is true.
 		if preperInline && child.IsInline() && child.Length >= index-pos {
@@ -464,8 +479,7 @@ func (t *Tree[V]) FindPostorderRight(pos *TreePos[V]) V {
 
 	if node.IsInline() {
 		if node.Len() == offset {
-			nextSibling := node.nextSibling()
-			if nextSibling != nil {
+			if nextSibling := node.nextSibling(); nextSibling != nil {
 				return nextSibling.Value
 			}
 
@@ -475,20 +489,20 @@ func (t *Tree[V]) FindPostorderRight(pos *TreePos[V]) V {
 		return node.Value
 	}
 
-	if len(node.Children) <= offset {
+	if len(node.Children()) == offset {
 		return node.Value
 	}
 
-	return t.FindLeftmost(node.Children[offset])
+	return t.FindLeftmost(node.Children()[offset])
 }
 
 // FindLeftmost finds the leftmost node of the given tree.
 func (t *Tree[V]) FindLeftmost(node *Node[V]) V {
-	if node.IsInline() || len(node.Children) == 0 {
+	if node.IsInline() || len(node.Children()) == 0 {
 		return node.Value
 	}
 
-	return t.FindLeftmost(node.Children[0])
+	return t.FindLeftmost(node.Children()[0])
 }
 
 // IndexOf returns the index of the given node.
@@ -496,21 +510,21 @@ func (t *Tree[V]) IndexOf(node *Node[V]) int {
 	index := 0
 	current := node
 
-	for current != t.Root {
+	for current != t.root {
 		parent := current.Parent
 		if parent == nil {
 			panic(errors.New("parent is not found"))
 		}
 
 		offset := parent.findOffset(current)
-		childrenSlice := parent.Children[:offset]
+		childrenSlice := parent.Children()[:offset]
 		for _, previous := range childrenSlice {
 			index += previous.PaddedLength()
 		}
 
 		// If this step escape from block node, we should add 1 to the index,
 		// because the block node has open tag.
-		if current != t.Root && current != node && !current.IsInline() {
+		if current != t.root && current != node && !current.IsInline() {
 			index++
 		}
 
@@ -528,7 +542,7 @@ func ToXML[V Value](node *Node[V]) string {
 
 	xml := strings.Builder{}
 	xml.WriteString("<" + string(node.Type) + ">")
-	for _, child := range node.Children {
+	for _, child := range node.Children() {
 		xml.WriteString(ToXML(child))
 	}
 	xml.WriteString("</" + string(node.Type) + ">")
@@ -538,5 +552,5 @@ func ToXML[V Value](node *Node[V]) string {
 
 // Traverse traverses the tree with postorder traversal.
 func Traverse[V Value](tree *Tree[V], callback func(node *Node[V])) {
-	postOrderTraversal(tree.Root, callback)
+	postOrderTraversal(tree.root, callback)
 }

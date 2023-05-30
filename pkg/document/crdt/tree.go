@@ -38,12 +38,28 @@ const (
 	DummyHeadType = "dummy"
 )
 
+// JSONTreeNode is a node of Tree for JSON.
+type JSONTreeNode struct {
+	Type     string
+	Children []JSONTreeNode
+	Value    string
+}
+
+// TreeNodeForTest is a TreeNode for test.
+type TreeNodeForTest struct {
+	Type      string
+	Children  []TreeNodeForTest
+	Value     string
+	Size      int
+	IsRemoved bool
+}
+
 // TreeChange represents the change in the tree.
 type TreeChange struct {
 	Type  string
 	From  int
 	To    int
-	Value *TreeNode
+	Value JSONTreeNode
 }
 
 // TreeNode is a node of Tree.
@@ -159,6 +175,7 @@ func (n *TreeNode) SplitInline(offset int) *TreeNode {
 	rightValue := n.Value[offset:]
 
 	n.Value = leftValue
+	n.IndexTreeNode.Length = len(leftValue)
 
 	rightNode := NewTreeNode(&TreePos{
 		CreatedAt: n.Pos.CreatedAt,
@@ -235,7 +252,7 @@ func (t *Tree) InsertAfter(prevNode *TreeNode, newNode *TreeNode) {
 
 // Nodes traverses the tree and returns the list of nodes.
 func (t *Tree) Nodes() []*TreeNode {
-	nodes := make([]*TreeNode, 0)
+	var nodes []*TreeNode
 	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode]) {
 		nodes = append(nodes, node.Value)
 	})
@@ -243,19 +260,19 @@ func (t *Tree) Nodes() []*TreeNode {
 	return nodes
 }
 
-// GetRoot returns the root node of the tree.
-func (t *Tree) GetRoot() *TreeNode {
-	return t.IndexTree.GetRoot().Value
+// Root returns the root node of the tree.
+func (t *Tree) Root() *TreeNode {
+	return t.IndexTree.Root().Value
 }
 
 // ToXML returns the XML encoding of this tree.
 func (t *Tree) ToXML() string {
-	return ToXML(t.GetRoot())
+	return ToXML(t.Root())
 }
 
-// EditByOffset edits the given range with the given value.
+// EditByIndex edits the given range with the given value.
 // This method uses indexes instead of a pair of TreePos for testing.
-func (t *Tree) EditByOffset(start, end int, content *TreeNode, editedAt *time.Ticket) {
+func (t *Tree) EditByIndex(start, end int, content *TreeNode, editedAt *time.Ticket) {
 	fromPos := t.findPos(start)
 	toPos := t.findPos(end)
 
@@ -282,12 +299,11 @@ func (t *Tree) edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 	// range(from, to) into multiple ranges.
 	changes := make([]*TreeChange, 0)
 	change := &TreeChange{
-		Type:  "content",
-		From:  t.toIndex(from),
-		To:    t.toIndex(to),
-		Value: content,
+		Type: "content",
+		From: t.toIndex(from),
+		To:   t.toIndex(to),
 	}
-	if change.Value != nil {
+	if content != nil {
 		change.Value = ToJSON(content)
 	}
 	changes = append(changes, change)
@@ -296,7 +312,7 @@ func (t *Tree) edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 	// 02. remove the nodes and update linked list and index tree.
 	if fromRight != toRight {
 		t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
-			if node.IsRemoved() {
+			if !node.IsRemoved() {
 				toBeRemoveds = append(toBeRemoveds, node)
 			}
 		})
@@ -320,14 +336,14 @@ func (t *Tree) edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 			if removedBlockNode != nil {
 				blockNode := toPos.Node
 				offset := blockNode.FindBranchOffset(removedBlockNode.IndexTreeNode)
-				for i := len(removedBlockNode.IndexTreeNode.Children) - 1; i >= 0; i-- {
-					node := removedBlockNode.IndexTreeNode.Children[i]
+				for i := len(removedBlockNode.IndexTreeNode.Children()) - 1; i >= 0; i-- {
+					node := removedBlockNode.IndexTreeNode.Children()[i]
 					blockNode.InsertAt(node, offset)
 				}
 			}
 		} else {
 			if fromPos.Node.Parent.Value.IsRemoved() {
-				toPos.Node.Parent.Prepend(fromPos.Node.Parent.Children...)
+				toPos.Node.Parent.Prepend(fromPos.Node.Parent.Children()...)
 			}
 		}
 	}
@@ -434,32 +450,58 @@ func (t *Tree) nodesBetween(left *TreeNode, right *TreeNode, callback func(*Tree
 	}
 }
 
+// Structure returns the structure of this tree.
+func (t *Tree) Structure() TreeNodeForTest {
+	return ToStructure(t.Root())
+}
+
+// ToStructure returns the JSON of this tree for debugging.
+func ToStructure(node *TreeNode) TreeNodeForTest {
+	if node.IsInline() {
+		currentNode := node
+		return TreeNodeForTest{
+			Type:      currentNode.Type(),
+			Value:     currentNode.Value,
+			Size:      currentNode.Len(),
+			IsRemoved: currentNode.IsRemoved(),
+		}
+	}
+
+	var children []TreeNodeForTest
+	for _, child := range node.IndexTreeNode.Children() {
+		children = append(children, ToStructure(child.Value))
+	}
+
+	return TreeNodeForTest{
+		Type:      node.Type(),
+		Children:  children,
+		Size:      node.Len(),
+		IsRemoved: node.IsRemoved(),
+	}
+}
+
 // ToXML returns the XML representation of this tree.
 func ToXML(node *TreeNode) string {
 	return index.ToXML(node.IndexTreeNode)
 }
 
 // ToJSON converts the given CRDTNode to JSON.
-func ToJSON(node *TreeNode) *TreeNode {
+func ToJSON(node *TreeNode) JSONTreeNode {
 	if node.IsInline() {
 		currentNode := node
-		return &TreeNode{
-			IndexTreeNode: &index.Node[*TreeNode]{
-				Type: index.NodeType(currentNode.Type()),
-			},
+		return JSONTreeNode{
+			Type:  currentNode.Type(),
 			Value: currentNode.Value,
 		}
 	}
 
-	children := make([]*index.Node[*TreeNode], 0)
-	for _, child := range node.IndexTreeNode.Children {
-		children = append(children, ToJSON(child.Value).IndexTreeNode)
+	var children []JSONTreeNode
+	for _, child := range node.IndexTreeNode.Children() {
+		children = append(children, ToJSON(child.Value))
 	}
 
-	return &TreeNode{
-		IndexTreeNode: &index.Node[*TreeNode]{
-			Type:     index.NodeType(node.Type()),
-			Children: children,
-		},
+	return JSONTreeNode{
+		Type:     node.Type(),
+		Children: children,
 	}
 }
