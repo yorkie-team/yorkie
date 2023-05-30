@@ -344,7 +344,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		return nil, err
 	}
 
-	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.DocumentKey))
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project.ID, key.Key(req.DocumentKey))
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +363,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		}
 	}()
 
-	isAttached, err := documents.IsAttachedDocument(ctx, s.backend, project, docInfo.ID)
+	isAttached, err := documents.IsAttachedDocument(ctx, s.backend, project.ID, docInfo.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -406,12 +406,7 @@ func (s *adminServer) ListChanges(
 		return nil, err
 	}
 
-	docInfo, err := documents.FindDocInfoByKey(
-		ctx,
-		s.backend,
-		project,
-		key.Key(req.DocumentKey),
-	)
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project.ID, key.Key(req.DocumentKey))
 	if err != nil {
 		return nil, err
 	}

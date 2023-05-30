@@ -172,12 +172,12 @@ func SearchDocumentSummaries(
 func FindDocInfoByKey(
 	ctx context.Context,
 	be *backend.Backend,
-	project *types.Project,
+	projectID types.ID,
 	docKey key.Key,
 ) (*database.DocInfo, error) {
 	return be.DB.FindDocInfoByKey(
 		ctx,
-		project.ID,
+		projectID,
 		docKey,
 	)
 }
@@ -224,8 +224,8 @@ func RemoveDocument(
 func IsAttachedDocument(
 	ctx context.Context,
 	be *backend.Backend,
-	project *types.Project,
+	projectID types.ID,
 	docID types.ID,
 ) (bool, error) {
-	return be.DB.IsAttachedDocument(ctx, project.ID, docID)
+	return be.DB.IsAttachedDocument(ctx, projectID, docID)
 }
