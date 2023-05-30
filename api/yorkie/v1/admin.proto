@@ -115,6 +115,7 @@ message GetDocumentResponse {
 message RemoveDocumentByAdminRequest {
   string project_name = 1;
   string document_key = 2;
+  bool force_remove_if_attached = 3;
 }
 
 message RemoveDocumentByAdminResponse {}

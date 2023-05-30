@@ -60,8 +60,8 @@ func Deactivate(
 		return nil, err
 	}
 
-	for id, clientDocInfo := range clientInfo.Documents {
-		isAttached, err := clientInfo.IsAttached(id)
+	for _, clientDocInfo := range clientInfo.Documents {
+		isAttached, err := clientInfo.IsAttached(clientDocInfo.DocID)
 		if err != nil {
 			return nil, err
 		}
@@ -69,14 +69,14 @@ func Deactivate(
 			continue
 		}
 
-		if err := clientInfo.DetachDocument(id); err != nil {
+		if err := clientInfo.DetachDocument(clientDocInfo.DocID); err != nil {
 			return nil, err
 		}
 
 		if err := db.UpdateSyncedSeq(
 			ctx,
 			clientInfo,
-			id,
+			clientDocInfo.DocID,
 			clientDocInfo.ServerSeq,
 		); err != nil {
 			return nil, err

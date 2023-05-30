@@ -344,7 +344,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		return nil, err
 	}
 
-	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project, key.Key(req.DocumentKey))
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project.ID, key.Key(req.DocumentKey))
 	if err != nil {
 		return nil, err
 	}
@@ -363,8 +363,16 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		}
 	}()
 
-	// TODO(emplam27): Add an option to remove the document if there are no clients attached to it.
-	if err := documents.RemoveDocument(ctx, s.backend, project, docInfo.ID); err != nil {
+	isAttached, err := documents.IsAttachedDocument(ctx, s.backend, project.ID, docInfo.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if isAttached && !req.ForceRemoveIfAttached {
+		return nil, fmt.Errorf("remove document: document is attached")
+	}
+
+	if err := documents.RemoveDocument(ctx, s.backend, docInfo.ID); err != nil {
 		return nil, err
 	}
 
@@ -398,12 +406,7 @@ func (s *adminServer) ListChanges(
 		return nil, err
 	}
 
-	docInfo, err := documents.FindDocInfoByKey(
-		ctx,
-		s.backend,
-		project,
-		key.Key(req.DocumentKey),
-	)
+	docInfo, err := documents.FindDocInfoByKey(ctx, s.backend, project.ID, key.Key(req.DocumentKey))
 	if err != nil {
 		return nil, err
 	}

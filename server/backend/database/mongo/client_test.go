@@ -164,7 +164,7 @@ func TestClient(t *testing.T) {
 		// Check whether DocumentRemoved status is set in clientInfo
 		clientInfo, err = cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
 		assert.NoError(t, err)
-		assert.NotEqual(t, database.DocumentRemoved, clientInfo.Documents[docInfo.ID].Status)
+		assert.NotEqual(t, database.DocumentRemoved, clientInfo.FindDocumentInfo(docInfo.ID).Status)
 	})
 
 	t.Run("reuse same key to create docInfo test ", func(t *testing.T) {
@@ -297,5 +297,74 @@ func TestClient(t *testing.T) {
 				}
 			})
 		}
+	})
+
+	t.Run("UpdateDocInfoStatusToRemoved test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, err := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+		assert.NoError(t, err)
+		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+		assert.NoError(t, err)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo1.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
+
+		assert.True(t, docInfo1.RemovedAt.IsZero())
+
+		err = cli.UpdateDocInfoStatusToRemoved(ctx, docInfo1.ID)
+		assert.NoError(t, err)
+
+		assert.True(t, docInfo1.RemovedAt.IsZero())
+
+		docInfo2, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
+		assert.Equal(t, docInfo1.Key, docInfo2.Key)
+		assert.Equal(t, docInfo1.ProjectID, docInfo2.ProjectID)
+		assert.True(t, docInfo2.RemovedAt.IsZero())
+
+		notPresentDocID := types.ID("000000000000000000000011")
+		err = cli.UpdateDocInfoStatusToRemoved(ctx, notPresentDocID)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+	})
+
+	t.Run("IsAttachedDocument test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey1 := key.Key(fmt.Sprintf("tests$%s", t.Name()+"1"))
+
+		clientInfo1, err := cli.ActivateClient(ctx, dummyProjectID, t.Name()+"1")
+		assert.NoError(t, err)
+		docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo1.ID, docKey1, true)
+		assert.NoError(t, err)
+
+		// Check any document is not attached
+		isAttached, err := cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		assert.False(t, isAttached)
+		assert.NoError(t, err)
+
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
+
+		// Check document is attached
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		assert.True(t, isAttached)
+		assert.NoError(t, err)
+
+		// Check document is detached
+		assert.NoError(t, clientInfo1.DetachDocument(docInfo.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		assert.False(t, isAttached)
+		assert.NoError(t, err)
+
+		// Check whether document is attached in any other client
+		clientInfo2, err := cli.ActivateClient(ctx, dummyProjectID, t.Name()+"2")
+		assert.NoError(t, err)
+		assert.NoError(t, clientInfo2.AttachDocument(docInfo.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
+
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		assert.True(t, isAttached)
+		assert.NoError(t, err)
 	})
 }

@@ -22,29 +22,39 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
+	monkey "github.com/undefinedlabs/go-mpatch"
+	"golang.org/x/net/nettest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/admin"
+	yorkieTypes "github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/documents"
+	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/server/rpc"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 var (
+	defaultProjectID = yorkieTypes.ID("000000000000000000000000")
+
 	defaultProjectName = "default"
 	invalidSlugName    = "@#$%^&*()_+"
 
@@ -62,7 +72,50 @@ var (
 		DocumentKey: "invalid",
 		Checkpoint:  nil,
 	}
+
+	be *backend.Backend
 )
+
+type testAdminServer struct {
+	grpcServer  *grpc.Server
+	adminServer *api.UnimplementedAdminServiceServer
+}
+
+// dialTestYorkieServer creates a new instance of testYorkieServer and
+// dials it with LocalListener.
+func dialTestAdminServer(t *testing.T) (*testAdminServer, string) {
+	adminServer := &api.UnimplementedAdminServiceServer{}
+	grpcServer := grpc.NewServer()
+	api.RegisterAdminServiceServer(grpcServer, adminServer)
+
+	testAdminServer := &testAdminServer{
+		grpcServer:  grpcServer,
+		adminServer: adminServer,
+	}
+
+	return testAdminServer, testAdminServer.listenAndServe(t)
+}
+
+func (s *testAdminServer) listenAndServe(t *testing.T) string {
+	lis, err := nettest.NewLocalListener("tcp")
+	if err != nil {
+		t.Fatalf("failed to listen: %v", err)
+	}
+
+	go func() {
+		if err := s.grpcServer.Serve(lis); err != nil {
+			if err != grpc.ErrServerStopped {
+				t.Error(err)
+			}
+		}
+	}()
+
+	return lis.Addr().String()
+}
+
+func (s *testAdminServer) Stop() {
+	s.grpcServer.Stop()
+}
 
 func TestMain(m *testing.M) {
 	met, err := prometheus.NewMetrics()
@@ -70,7 +123,7 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
-	be, err := backend.New(&backend.Config{
+	be, err = backend.New(&backend.Config{
 		AdminUser:                 helper.AdminUser,
 		AdminPassword:             helper.AdminPassword,
 		ClientDeactivateThreshold: helper.ClientDeactivateThreshold,
@@ -1019,6 +1072,287 @@ func TestAdminRPCServerBackend(t *testing.T) {
 			},
 		)
 		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+	})
+
+	t.Run("admin remove document test", func(t *testing.T) {
+		testDocumentKey := helper.TestDocKey(t).String()
+
+		resp, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		testAdminAuthInterceptor.SetToken(resp.Token)
+
+		activateResp, err := testClient.ActivateClient(
+			context.Background(),
+			&api.ActivateClientRequest{ClientKey: t.Name()},
+		)
+		assert.NoError(t, err)
+
+		packWithNoChanges := &api.ChangePack{
+			DocumentKey: testDocumentKey,
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+		}
+
+		// try to remove non-existing document
+		_, err = testAdminClient.RemoveDocumentByAdmin(
+			context.Background(),
+			&api.RemoveDocumentByAdminRequest{
+				ProjectName:           defaultProjectName,
+				DocumentKey:           testDocumentKey,
+				ForceRemoveIfAttached: false,
+			},
+		)
+		assert.Error(t, err)
+
+		_, err = testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to remove document already attached to client
+		_, err = testAdminClient.RemoveDocumentByAdmin(
+			context.Background(),
+			&api.RemoveDocumentByAdminRequest{
+				ProjectName:           defaultProjectName,
+				DocumentKey:           testDocumentKey,
+				ForceRemoveIfAttached: false,
+			},
+		)
+		assert.Error(t, err)
+
+		// try to remove document already attached to client with force flag
+		_, err = testAdminClient.RemoveDocumentByAdmin(
+			context.Background(),
+			&api.RemoveDocumentByAdminRequest{
+				ProjectName:           defaultProjectName,
+				DocumentKey:           testDocumentKey,
+				ForceRemoveIfAttached: true,
+			},
+		)
+		assert.NoError(t, err)
+	})
+
+	t.Run("admin remove document force flag test", func(t *testing.T) {
+		testDocumentKey := helper.TestDocKey(t).String()
+
+		resp, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		testAdminAuthInterceptor.SetToken(resp.Token)
+
+		activateResp, err := testClient.ActivateClient(
+			context.Background(),
+			&api.ActivateClientRequest{ClientKey: t.Name()},
+		)
+		assert.NoError(t, err)
+
+		packWithNoChanges := &api.ChangePack{
+			DocumentKey: testDocumentKey,
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+		}
+
+		_, err = testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to remove document already attached to client
+		_, err = testAdminClient.RemoveDocumentByAdmin(
+			context.Background(),
+			&api.RemoveDocumentByAdminRequest{
+				ProjectName:           defaultProjectName,
+				DocumentKey:           testDocumentKey,
+				ForceRemoveIfAttached: false,
+			},
+		)
+		assert.Error(t, err)
+
+		// try to remove document already attached to client with force flag
+		_, err = testAdminClient.RemoveDocumentByAdmin(
+			context.Background(),
+			&api.RemoveDocumentByAdminRequest{
+				ProjectName:           defaultProjectName,
+				DocumentKey:           testDocumentKey,
+				ForceRemoveIfAttached: true,
+			},
+		)
+		assert.NoError(t, err)
+	})
+
+	t.Run("admin remove document consistence test", func(t *testing.T) {
+
+		testServer, addr := dialTestAdminServer(t)
+		defer testServer.Stop()
+
+		testRemoveDocumentAdminClient, err := admin.Dial(addr)
+		assert.NoError(t, err)
+
+		// patch RemoveDocumentByAdmin method
+		var patch *monkey.Patch
+		patch, err = monkey.PatchInstanceMethodByName(
+			reflect.TypeOf(testServer.adminServer),
+			"RemoveDocumentByAdmin",
+			func(
+				m *api.UnimplementedAdminServiceServer,
+				ctx context.Context,
+				req *api.RemoveDocumentByAdminRequest,
+			) (*api.RemoveDocumentByAdminResponse, error) {
+				assert.NoError(t, patch.Unpatch())
+				defer func() {
+					assert.NoError(t, patch.Patch())
+				}()
+
+				docInfo, err := documents.FindDocInfoByKey(ctx, be, defaultProjectID, key.Key(req.DocumentKey))
+				if err != nil {
+					return nil, err
+				}
+
+				locker, err := be.Coordinator.NewLocker(ctx, packs.PushPullKey(defaultProjectID, docInfo.Key))
+				if err != nil {
+					return nil, err
+				}
+
+				if err := locker.Lock(ctx); err != nil {
+					return nil, err
+				}
+				defer func() {
+					if err := locker.Unlock(ctx); err != nil {
+						logging.DefaultLogger().Error(err)
+					}
+				}()
+
+				isAttached, err := documents.IsAttachedDocument(ctx, be, defaultProjectID, docInfo.ID)
+				if err != nil {
+					return nil, err
+				}
+
+				if isAttached && !req.ForceRemoveIfAttached {
+					return nil, fmt.Errorf("remove document: document is attached")
+				}
+
+				// Wait for other client attach document test.
+				time.Sleep(1 * time.Second)
+
+				if err := documents.RemoveDocument(ctx, be, docInfo.ID); err != nil {
+					return nil, err
+				}
+
+				// skip logic for test
+
+				return &api.RemoveDocumentByAdminResponse{}, nil
+			},
+		)
+		assert.NoError(t, err)
+
+		// patch GetProject method
+		patch, err = monkey.PatchInstanceMethodByName(
+			reflect.TypeOf(testServer.adminServer),
+			"GetProject",
+			func(
+				m *api.UnimplementedAdminServiceServer,
+				ctx context.Context,
+				req *api.GetProjectRequest,
+			) (*api.GetProjectResponse, error) {
+				assert.NoError(t, patch.Unpatch())
+				defer func() {
+					assert.NoError(t, patch.Patch())
+				}()
+
+				testProject := &api.Project{
+					Id:                        "",
+					Name:                      defaultProjectName,
+					AuthWebhookUrl:            "",
+					AuthWebhookMethods:        nil,
+					ClientDeactivateThreshold: "",
+					PublicKey:                 "",
+					SecretKey:                 "",
+					CreatedAt:                 types.TimestampNow(),
+					UpdatedAt:                 types.TimestampNow(),
+				}
+				return &api.GetProjectResponse{
+					Project: testProject,
+				}, nil
+			},
+		)
+		assert.NoError(t, err)
+
+		// setup test client and document
+		testDocumentKey := helper.TestDocKey(t).String()
+
+		resp, err := testAdminClient.LogIn(
+			context.Background(),
+			&api.LogInRequest{
+				Username: helper.AdminUser,
+				Password: helper.AdminPassword,
+			},
+		)
+		assert.NoError(t, err)
+
+		testAdminAuthInterceptor.SetToken(resp.Token)
+
+		activateResp, err := testClient.ActivateClient(
+			context.Background(),
+			&api.ActivateClientRequest{ClientKey: t.Name()},
+		)
+		assert.NoError(t, err)
+
+		packWithNoChanges := &api.ChangePack{
+			DocumentKey: testDocumentKey,
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+		}
+
+		attachResp1, err := testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to remove document already attached to client
+		err = testRemoveDocumentAdminClient.RemoveDocument(
+			context.Background(),
+			defaultProjectName,
+			testDocumentKey,
+			true,
+		)
+		assert.NoError(t, err)
+
+		// during the mockRemoveDocumentByAdmin running, the document is attached to the client
+		// removeDocumentByAdmin should have a lock to prevent the document from being attached to the client
+		attachResp2, err := testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		// check AttachDocument is called after RemoveDocument for locker
+		assert.Equal(t, attachResp1.ClientId, attachResp2.ClientId)
+		assert.NotEqual(t, attachResp1.DocumentId, attachResp2.DocumentId)
 	})
 }
 
