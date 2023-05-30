@@ -732,16 +732,21 @@ func (d *DB) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
+		encodedPresenceInfo, err := database.EncodePresenceInfo(cn.PresenceInfo())
+		if err != nil {
+			return err
+		}
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
-			ID:         newID(),
-			DocID:      docInfo.ID,
-			ServerSeq:  cn.ServerSeq(),
-			ActorID:    types.ID(cn.ID().ActorID().String()),
-			ClientSeq:  cn.ClientSeq(),
-			Lamport:    cn.ID().Lamport(),
-			Message:    cn.Message(),
-			Operations: encodedOperations,
+			ID:           newID(),
+			DocID:        docInfo.ID,
+			ServerSeq:    cn.ServerSeq(),
+			ActorID:      types.ID(cn.ID().ActorID().String()),
+			ClientSeq:    cn.ClientSeq(),
+			Lamport:      cn.ID().Lamport(),
+			Message:      cn.Message(),
+			Operations:   encodedOperations,
+			PresenceInfo: encodedPresenceInfo,
 		}); err != nil {
 			return fmt.Errorf("create change: %w", err)
 		}
