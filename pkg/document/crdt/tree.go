@@ -160,6 +160,16 @@ func (n *TreeNode) Append(newNodes ...*TreeNode) {
 	n.IndexTreeNode.Append(indexNodes...)
 }
 
+// Prepend prepends the given node to the beginning of the children.
+func (n *TreeNode) Prepend(newNodes ...*TreeNode) {
+	indexNodes := make([]*index.Node[*TreeNode], len(newNodes))
+	for i, newNode := range newNodes {
+		indexNodes[i] = newNode.IndexTreeNode
+	}
+
+	n.IndexTreeNode.Prepend(indexNodes...)
+}
+
 // Child returns the child of the given offset.
 func (n *TreeNode) Child(offset int) *TreeNode {
 	return n.IndexTreeNode.Child(offset).Value

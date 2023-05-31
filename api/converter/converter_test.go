@@ -222,7 +222,7 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("tree node test", func(t *testing.T) {
-		t.Skip()
+
 		root := helper.BuildTreeNode(&crdt.JSONTreeNode{
 			Type: "r",
 			Children: []crdt.JSONTreeNode{
@@ -234,6 +234,11 @@ func TestConverter(t *testing.T) {
 		pbNodes := converter.ToTreeNodes(root)
 		clone, err := converter.FromTreeNodes(pbNodes)
 		assert.NoError(t, err)
-		assert.Equal(t, root, clone)
+		// because there are difference between root and clone by existence of cachedString in time.Ticket,
+		// we can't use assert.Equal
+		// assert.Equal(t, root, clone)
+		assert.Equal(t, crdt.ToStructure(root), crdt.ToStructure(clone))
+		assert.Equal(t, crdt.ToXML(root), crdt.ToXML(clone))
+		assert.Equal(t, crdt.ToJSON(root), crdt.ToJSON(clone))
 	})
 }

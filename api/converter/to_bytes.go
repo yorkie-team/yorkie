@@ -229,6 +229,7 @@ func ToTreeNodes(treeNode *crdt.TreeNode) []*api.TreeNode {
 func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 	pbNode := &api.TreeNode{
 		Pos:       toTreePos(treeNode.Pos),
+		Type:      treeNode.Type(),
 		Value:     treeNode.Value,
 		RemovedAt: ToTimeTicket(treeNode.RemovedAt),
 		Depth:     int32(depth),

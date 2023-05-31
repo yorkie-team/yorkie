@@ -582,26 +582,37 @@ func fromTextNodePos(
 
 // FromTreeNodes converts protobuf tree nodes to crdt tree nodes.
 func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
-	var node *crdt.TreeNode
+	root, err := fromTreeNode(pbNodes[len(pbNodes)-1])
+	if err != nil {
+		return nil, err
+	}
 
-	// parent, err := fromTreeNode(pbNodes[0])
-	// if err != ni;
-	// }
-	//
-	// for i := len(pbNodes) - 1; i >= 0; i-- {
-	// 	currentNode, err := fromTreeNode(pbNodes[i])
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
+	prevNode := root
+	for i := len(pbNodes) - 2; i >= 0; i-- {
+		currentPbNode := pbNodes[i]
+		prevPbNode := pbNodes[i+1]
 
-	// 	if node == nil {
-	// 		node = currentNode
-	// 	}
-	//
-	//
-	// }
+		currentNode, err := fromTreeNode(currentPbNode)
+		if err != nil {
+			return nil, err
+		}
 
-	return node, nil
+		if currentPbNode.Depth == prevPbNode.Depth { // "i" is sibling of "i+1"
+			prevNode.IndexTreeNode.Parent.Value.Prepend(currentNode)
+		} else { // "i" is child of "i+1", so find the parent of "i"
+			for j := i + 1; currentPbNode.Depth-1 != pbNodes[j].Depth; j++ {
+				prevNode = prevNode.IndexTreeNode.Parent.Value
+			}
+			prevNode.Prepend(currentNode)
+		}
+
+		prevNode = currentNode
+	}
+
+	// build to tree to complete the tree structure
+	tree := crdt.NewTree(root, nil)
+
+	return tree.Root(), nil
 }
 
 func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
