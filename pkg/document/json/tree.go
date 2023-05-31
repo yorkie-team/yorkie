@@ -19,6 +19,12 @@ package json
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/operations"
+)
+
+const (
+	// InlineNodeType is the type of text inline node.
+	InlineNodeType = "text"
 )
 
 // Tree is a CRDT-based tree structure that is used to represent the document
@@ -44,15 +50,27 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *crdt.JSONTreeNode) bool {
 
 	ticket := t.context.IssueTimeTicket()
 	var crdtNode *crdt.TreeNode
-	if content != nil && content.Type == "text" {
-		crdtNode = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), "text", content.Value)
+	if content != nil && content.Type == InlineNodeType {
+		crdtNode = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), InlineNodeType, content.Value)
 	} else if content != nil {
 		crdtNode = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type)
 	}
 
 	fromPos := t.Tree.FindPos(fromIdx)
 	toPos := t.Tree.FindPos(toIdx)
-	t.Tree.Edit(fromPos, toPos, crdtNode, ticket)
+	var clone *crdt.TreeNode
+	if crdtNode != nil {
+		clone = crdtNode.DeepCopy()
+	}
+	t.Tree.Edit(fromPos, toPos, clone, ticket)
+
+	t.context.Push(operations.NewTreeEdit(
+		t.CreatedAt(),
+		fromPos,
+		toPos,
+		crdtNode,
+		ticket,
+	))
 
 	return true
 }
@@ -66,8 +84,8 @@ func (t *Tree) Len() int {
 func (t *Tree) EditByPath(fromPath []int, toPath []int, content *crdt.JSONTreeNode) bool {
 	ticket := t.context.IssueTimeTicket()
 	var node *crdt.TreeNode
-	if content != nil && content.Type == "text" {
-		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), "text", content.Value)
+	if content != nil && content.Type == InlineNodeType {
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), InlineNodeType, content.Value)
 	} else if content != nil {
 		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type)
 	}
@@ -95,7 +113,7 @@ func BuildRoot(ctx *change.Context, node *crdt.JSONTreeNode) *crdt.TreeNode {
 }
 
 func traverse(ctx *change.Context, n crdt.JSONTreeNode, parent *crdt.TreeNode) {
-	if n.Type == "text" {
+	if n.Type == InlineNodeType {
 		treeNode := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), n.Type, n.Value)
 		parent.Append(treeNode)
 		return

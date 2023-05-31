@@ -216,6 +216,23 @@ func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) {
 	n.IndexTreeNode.InsertAt(newNode.IndexTreeNode, offset)
 }
 
+// DeepCopy copies itself deeply.
+func (n *TreeNode) DeepCopy() *TreeNode {
+	clone := NewTreeNode(n.Pos, n.Type(), n.Value)
+	clone.RemovedAt = n.RemovedAt
+
+	if !clone.IsInline() {
+		var children []*index.Node[*TreeNode]
+		for _, child := range n.IndexTreeNode.Children(true) {
+			node := child.Value.DeepCopy()
+			children = append(children, node.IndexTreeNode)
+		}
+		clone.IndexTreeNode.SetChildren(children)
+	}
+
+	return clone
+}
+
 // Tree is a tree implementation of CRDT.
 type Tree struct {
 	OnChangesHandler func([]*TreeChange)
@@ -273,8 +290,7 @@ func marshal(node *TreeNode) string {
 
 // DeepCopy copies itself deeply.
 func (t *Tree) DeepCopy() (Element, error) {
-	// TODO(krapie): Implement DeepCopy for Root Node (t.Root())
-	return NewTree(t.Root(), t.createdAt), nil
+	return NewTree(t.Root().DeepCopy(), t.createdAt), nil
 }
 
 // CreatedAt returns the creation time of this Tree.

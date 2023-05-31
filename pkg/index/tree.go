@@ -134,7 +134,11 @@ func (n *Node[V]) Append(newNodes ...*Node[V]) {
 }
 
 // Children returns the children of the given node.
-func (n *Node[V]) Children() []*Node[V] {
+func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
+	if len(includeRemovedNode) > 0 && includeRemovedNode[0] {
+		return n.children
+	}
+
 	// Tombstone nodes remain awhile in the tree during editing.
 	// They will be removed after the editing is done.
 	// So, we need to filter out the tombstone nodes to get the real children.
@@ -146,6 +150,19 @@ func (n *Node[V]) Children() []*Node[V] {
 	}
 
 	return children
+}
+
+// SetChildren sets the children of the given node.
+func (n *Node[V]) SetChildren(children []*Node[V]) {
+	if n.IsInline() {
+		panic(errors.New("inline node cannot have children"))
+	}
+
+	n.children = children
+	for _, child := range children {
+		child.Parent = n
+		child.UpdateAncestorsSize()
+	}
 }
 
 // UpdateAncestorsSize updates the size of ancestors.
