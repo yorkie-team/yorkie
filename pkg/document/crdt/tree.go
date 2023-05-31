@@ -255,7 +255,7 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	}
 
 	previous := tree.DummyHead
-	index.Traverse(tree.IndexTree, func(node *index.Node[*TreeNode]) {
+	index.Traverse(tree.IndexTree, func(node *index.Node[*TreeNode], depth int) {
 		tree.InsertAfter(previous, node.Value)
 		previous = node.Value
 	})
@@ -345,7 +345,7 @@ func (t *Tree) InsertAfter(prevNode *TreeNode, newNode *TreeNode) {
 // Nodes traverses the tree and returns the list of nodes.
 func (t *Tree) Nodes() []*TreeNode {
 	var nodes []*TreeNode
-	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode]) {
+	index.Traverse(t.IndexTree, func(node *index.Node[*TreeNode], depth int) {
 		nodes = append(nodes, node.Value)
 	})
 
@@ -445,7 +445,7 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 	if content != nil {
 		// 03-1. insert the content nodes to the list.
 		previous := fromRight.Prev
-		index.TraverseNode(content.IndexTreeNode, func(node *index.Node[*TreeNode]) {
+		index.TraverseNode(content.IndexTreeNode, func(node *index.Node[*TreeNode], depth int) {
 			t.InsertAfter(previous, node.Value)
 			previous = node.Value
 		})

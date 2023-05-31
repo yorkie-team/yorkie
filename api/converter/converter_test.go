@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestConverter(t *testing.T) {
@@ -218,5 +219,21 @@ func TestConverter(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, cli.ID.Bytes(), decodedCli.ID.Bytes())
 		assert.Equal(t, cli.PresenceInfo, decodedCli.PresenceInfo)
+	})
+
+	t.Run("tree node test", func(t *testing.T) {
+		t.Skip()
+		root := helper.BuildTreeNode(&crdt.JSONTreeNode{
+			Type: "r",
+			Children: []crdt.JSONTreeNode{
+				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "hello"}}},
+				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "world"}}},
+			},
+		})
+
+		pbNodes := converter.ToTreeNodes(root)
+		clone, err := converter.FromTreeNodes(pbNodes)
+		assert.NoError(t, err)
+		assert.Equal(t, root, clone)
 	})
 }

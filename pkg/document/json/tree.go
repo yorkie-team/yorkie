@@ -20,6 +20,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 const (
@@ -98,12 +99,12 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *crdt.JSONTreeNo
 }
 
 // BuildRoot returns the root node of this tree.
-func BuildRoot(ctx *change.Context, node *crdt.JSONTreeNode) *crdt.TreeNode {
+func BuildRoot(ctx *change.Context, node *crdt.JSONTreeNode, createdAt *time.Ticket) *crdt.TreeNode {
 	if node == nil {
-		return crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), "root")
+		return crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), "root")
 	}
 
-	root := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), node.Type)
+	root := crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), node.Type)
 
 	for _, child := range node.Children {
 		traverse(ctx, child, root)

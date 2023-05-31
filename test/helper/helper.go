@@ -189,6 +189,21 @@ func BuildIndexTree(node *crdt.JSONTreeNode) *index.Tree[*crdt.TreeNode] {
 	return doc.Root().GetTree("test").IndexTree
 }
 
+// BuildTreeNode builds a crdt.TreeNode from the given tree node.
+func BuildTreeNode(node *crdt.JSONTreeNode) *crdt.TreeNode {
+	doc := document.New("test")
+	err := doc.Update(func(root *json.Object) error {
+		root.SetNewTree("test", node)
+
+		return nil
+	})
+	if err != nil {
+		return nil
+	}
+
+	return doc.Root().GetTree("test").Root()
+}
+
 var portOffset = 0
 
 // TestConfig returns config for creating Yorkie instance.

@@ -1,4 +1,4 @@
-// //go:build integration
+//go:build integration
 
 /*
  * Copyright 2020 The Yorkie Authors. All rights reserved.
@@ -19,6 +19,7 @@
 package integration
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,10 @@ import (
 )
 
 func TestTree(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1 := clients[0]
+	defer deactivateAndCloseClients(t, clients)
+
 	t.Run("tree", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object) error {
@@ -220,6 +225,19 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("insert inline content to the same position(left) concurrently test", func(t *testing.T) {
-		// TODO(krapie): add this test after implementing API
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &crdt.JSONTreeNode{
+				Type:     "doc",
+				Children: []crdt.JSONTreeNode{},
+			})
+			assert.Equal(t, "<doc></doc>", root.GetTree("t").ToXML())
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
 	})
 }

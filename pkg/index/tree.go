@@ -386,19 +386,19 @@ func (n *Node[V]) OffsetOfChild(node *Node[V]) int {
 }
 
 // TraverseNode traverses the tree with the given callback.
-func TraverseNode[V Value](node *Node[V], callback func(node *Node[V])) {
-	postOrderTraversal(node, callback)
+func TraverseNode[V Value](node *Node[V], callback func(node *Node[V], depth int)) {
+	postOrderTraversal(node, callback, 0)
 }
 
-func postOrderTraversal[V Value](node *Node[V], callback func(node *Node[V])) {
+func postOrderTraversal[V Value](node *Node[V], callback func(node *Node[V], depth int), depth int) {
 	if node == nil {
 		return
 	}
 
 	for _, child := range node.Children() {
-		postOrderTraversal(child, callback)
+		postOrderTraversal(child, callback, depth+1)
 	}
-	callback(node)
+	callback(node, depth)
 }
 
 // NodesBetween returns the nodes between the given range.
@@ -755,6 +755,6 @@ func ToXML[V Value](node *Node[V]) string {
 }
 
 // Traverse traverses the tree with postorder traversal.
-func Traverse[V Value](tree *Tree[V], callback func(node *Node[V])) {
-	postOrderTraversal(tree.root, callback)
+func Traverse[V Value](tree *Tree[V], callback func(node *Node[V], depth int)) {
+	postOrderTraversal(tree.root, callback, 0)
 }

@@ -307,6 +307,8 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 			op, err = fromStyle(decoded.Style)
 		case *api.Operation_Increase_:
 			op, err = fromIncrease(decoded.Increase)
+		case *api.Operation_TreeEdit_:
+			op, err = fromTreeEdit(decoded.TreeEdit)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -516,6 +518,41 @@ func fromIncrease(pbInc *api.Operation_Increase) (*operations.Increase, error) {
 	), nil
 }
 
+func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, error) {
+	parentCreatedAt, err := fromTimeTicket(pbTreeEdit.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	executedAt, err := fromTimeTicket(pbTreeEdit.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	from, err := fromTreePos(pbTreeEdit.From)
+	if err != nil {
+		return nil, err
+	}
+
+	to, err := fromTreePos(pbTreeEdit.To)
+	if err != nil {
+		return nil, err
+	}
+
+	node, err := FromTreeNodes(pbTreeEdit.Content)
+	if err != nil {
+		return nil, err
+	}
+
+	return operations.NewTreeEdit(
+		parentCreatedAt,
+		from,
+		to,
+		node,
+		executedAt,
+	), nil
+}
+
 func fromCreatedAtMapByActor(
 	pbCreatedAtMapByActor map[string]*api.TimeTicket,
 ) (map[string]*time.Ticket, error) {
@@ -540,6 +577,55 @@ func fromTextNodePos(
 	return crdt.NewRGATreeSplitNodePos(
 		crdt.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),
+	), nil
+}
+
+// FromTreeNodes converts protobuf tree nodes to crdt tree nodes.
+func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
+	var node *crdt.TreeNode
+
+	// parent, err := fromTreeNode(pbNodes[0])
+	// if err != ni;
+	// }
+	//
+	// for i := len(pbNodes) - 1; i >= 0; i-- {
+	// 	currentNode, err := fromTreeNode(pbNodes[i])
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+
+	// 	if node == nil {
+	// 		node = currentNode
+	// 	}
+	//
+	//
+	// }
+
+	return node, nil
+}
+
+func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
+	pos, err := fromTreePos(pbNode.Pos)
+	if err != nil {
+		return nil, err
+	}
+
+	return crdt.NewTreeNode(
+		pos,
+		pbNode.Type,
+		pbNode.Value,
+	), nil
+}
+
+func fromTreePos(pbPos *api.TreePos) (*crdt.TreePos, error) {
+	createdAt, err := fromTimeTicket(pbPos.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return crdt.NewTreePos(
+		createdAt,
+		int(pbPos.Offset),
 	), nil
 }
 
@@ -629,6 +715,18 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		return crdt.NewCounter(
 			counterType,
 			crdt.CounterValueFromBytes(counterType, pbElement.Value),
+			createdAt,
+		), nil
+	case api.ValueType_VALUE_TYPE_TREE:
+		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(hackerwins): Build tree from pbElement.Value(bytes).
+		root := crdt.NewTreeNode(crdt.InitialCRDTTreePos, "root")
+
+		return crdt.NewTree(
+			root,
 			createdAt,
 		), nil
 	}

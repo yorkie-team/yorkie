@@ -57,6 +57,8 @@ func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
 		return fromJSONText(decoded.Text)
 	case *api.JSONElement_Counter_:
 		return fromJSONCounter(decoded.Counter)
+	case *api.JSONElement_Tree_:
+		return fromJSONTree(decoded.Tree)
 	default:
 		return nil, fmt.Errorf("%s: %w", decoded, ErrUnsupportedElement)
 	}
@@ -281,4 +283,35 @@ func fromTextNodeID(
 		createdAt,
 		int(pbTextNodeID.Offset),
 	), nil
+}
+
+func fromJSONTree(
+	pbTree *api.JSONElement_Tree,
+) (*crdt.Tree, error) {
+	createdAt, err := fromTimeTicket(pbTree.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	movedAt, err := fromTimeTicket(pbTree.MovedAt)
+	if err != nil {
+		return nil, err
+	}
+	removedAt, err := fromTimeTicket(pbTree.RemovedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(hackerwins): Build root node(tree) from pbTree.Nodes.
+	root := crdt.NewTreeNode(crdt.InitialCRDTTreePos, "root", "")
+	// for _, pbNode := range pbTree.Nodes {
+	// }
+
+	tree := crdt.NewTree(
+		root,
+		createdAt,
+	)
+	tree.SetMovedAt(movedAt)
+	tree.SetRemovedAt(removedAt)
+
+	return tree, nil
 }

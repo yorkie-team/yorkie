@@ -102,7 +102,7 @@ func (p *Object) SetNewTree(k string, initialRoot ...*crdt.JSONTreeNode) *Tree {
 
 		return NewTree(
 			p.context,
-			crdt.NewTree(BuildRoot(p.context, root), ticket),
+			crdt.NewTree(BuildRoot(p.context, root, ticket), ticket),
 		)
 	})
 
