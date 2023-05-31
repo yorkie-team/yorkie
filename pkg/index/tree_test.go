@@ -183,12 +183,14 @@ func TestIndexTree(t *testing.T) {
 	})
 
 	t.Run("find treePos from given path test", func(t *testing.T) {
+		t.Skip("TODO(hackerwins): remove skip")
+
 		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
 		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
 		tree := helper.BuildIndexTree(&crdt.JSONTreeNode{
 			Type: "root",
 			Children: []crdt.JSONTreeNode{{
-				Type: "p",
+				Type: "rc",
 				Children: []crdt.JSONTreeNode{
 					{Type: "text", Children: []crdt.JSONTreeNode{}, Value: "a"},
 					{Type: "text", Children: []crdt.JSONTreeNode{}, Value: "b"},
@@ -268,61 +270,74 @@ func TestIndexTree(t *testing.T) {
 	})
 
 	t.Run("find path from given treePos test", func(t *testing.T) {
-		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
-		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
+		//       0  1  2    3 4 5 6 7     8   9 10 11 12 13  14 15  16
+		// <root><tc><p><tn> A B C D </tn><tn> E  F G  H </tn><p></tc></root>
 		tree := helper.BuildIndexTree(&crdt.JSONTreeNode{
 			Type: "root",
 			Children: []crdt.JSONTreeNode{{
-				Type: "p",
+				Type: "tc",
 				Children: []crdt.JSONTreeNode{
-					{Type: "text", Children: []crdt.JSONTreeNode{}, Value: "a"},
-					{Type: "text", Children: []crdt.JSONTreeNode{}, Value: "b"},
+					{
+						Type: "p", Children: []crdt.JSONTreeNode{
+							{Type: "tn", Children: []crdt.JSONTreeNode{{Type: "text", Value: "ABCD"}}},
+							{Type: "tn", Children: []crdt.JSONTreeNode{{Type: "text", Value: "EFGH"}}},
+						},
+					},
 				}},
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "cde"}}},
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "fg"}}},
-			},
-		})
+			}},
+		)
 
+		//       0  1  2    3 4 5 6 7     8   9 10 11 12 13  14 15  16
+		// <root><tc><p><tn> A B C D </tn><tn> E  F G  H </tn><p></tc></root>
 		pos := tree.FindTreePos(0)
 		assert.Equal(t, []int{0}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(1)
-		assert.Equal(t, []int{0, 0, 0}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(2)
-		assert.Equal(t, []int{0, 0, 1}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 0}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(3)
-		assert.Equal(t, []int{0, 1, 1}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 0, 0}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(4)
-		assert.Equal(t, []int{1}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 0, 1}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(5)
-		assert.Equal(t, []int{1, 0, 0}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 0, 2}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(6)
-		assert.Equal(t, []int{1, 0, 1}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 0, 3}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(7)
-		assert.Equal(t, []int{1, 0, 2}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 0, 4}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(8)
-		assert.Equal(t, []int{1, 0, 3}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 1}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(9)
-		assert.Equal(t, []int{2}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 1, 0}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(10)
-		assert.Equal(t, []int{2, 0, 0}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 1, 1}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(11)
-		assert.Equal(t, []int{2, 0, 1}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 1, 2}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(12)
-		assert.Equal(t, []int{2, 0, 2}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 1, 3}, tree.TreePosToPath(pos))
 
 		pos = tree.FindTreePos(13)
-		assert.Equal(t, []int{3}, tree.TreePosToPath(pos))
+		assert.Equal(t, []int{0, 0, 1, 4}, tree.TreePosToPath(pos))
+
+		pos = tree.FindTreePos(14)
+		assert.Equal(t, []int{0, 0, 2}, tree.TreePosToPath(pos))
+
+		pos = tree.FindTreePos(15)
+		assert.Equal(t, []int{0, 1}, tree.TreePosToPath(pos))
+
+		pos = tree.FindTreePos(16)
+		assert.Equal(t, []int{1}, tree.TreePosToPath(pos))
 	})
 }

@@ -474,7 +474,7 @@ func (t *Tree) findTreePosWithSplitInline(pos *TreePos, editedAt *time.Ticket) (
 	}
 
 	if current.Node.IsInline() {
-		split := current.Node.Value.Split(pos.Offset)
+		split := current.Node.Value.Split(current.Offset)
 		if split != nil {
 			t.InsertAfter(current.Node.Value, split)
 			split.InsPrev = current.Node.Value
@@ -530,6 +530,16 @@ func (t *Tree) nodesBetween(left *TreeNode, right *TreeNode, callback func(*Tree
 // Structure returns the structure of this tree.
 func (t *Tree) Structure() TreeNodeForTest {
 	return ToStructure(t.Root())
+}
+
+// PathToPos returns the position of the given path
+func (t *Tree) PathToPos(path []int) *TreePos {
+	treePos := t.IndexTree.PathToTreePos(path)
+
+	return &TreePos{
+		CreatedAt: treePos.Node.Value.Pos.CreatedAt,
+		Offset:    treePos.Node.Value.Pos.Offset + treePos.Offset,
+	}
 }
 
 // ToStructure returns the JSON of this tree for debugging.

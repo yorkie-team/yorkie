@@ -30,10 +30,9 @@ import (
 )
 
 func TestTree(t *testing.T) {
-
 	t.Run("tree", func(t *testing.T) {
-		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object) error {
 			// 01. Create a tree and insert a paragraph.
 			root.SetNewTree("t").Edit(0, 0, &crdt.JSONTreeNode{
 				Type:     "p",
@@ -88,8 +87,8 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("created from JSON test", func(t *testing.T) {
-		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object) error {
 			root.SetNewTree("t", &crdt.JSONTreeNode{
 				Type: "doc",
 				Children: []crdt.JSONTreeNode{{
@@ -115,8 +114,8 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("edit its content test", func(t *testing.T) {
-		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object) error {
 			root.SetNewTree("t", &crdt.JSONTreeNode{
 				Type: "doc",
 				Children: []crdt.JSONTreeNode{{
@@ -147,9 +146,9 @@ func TestTree(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, "<doc><p>ab</p></doc>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<doc><p>ab</p></doc>", doc.Root().GetTree("t").ToXML())
 
-		err = d1.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object) error {
 			root.SetNewTree("t", &crdt.JSONTreeNode{
 				Type: "doc",
 				Children: []crdt.JSONTreeNode{{
@@ -178,6 +177,46 @@ func TestTree(t *testing.T) {
 
 	t.Run("subscribed by handler test", func(t *testing.T) {
 		// TODO(krapie): add this test case later
+	})
+
+	t.Run("edit its content with path", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &crdt.JSONTreeNode{
+				Type: "doc",
+				Children: []crdt.JSONTreeNode{{
+					Type: "tc",
+					Children: []crdt.JSONTreeNode{{
+						Type: "p", Children: []crdt.JSONTreeNode{{
+							Type: "tn", Children: []crdt.JSONTreeNode{{
+								Type: "text", Value: "ab",
+							}},
+						}},
+					}},
+				}},
+			})
+			assert.Equal(t, "<doc><tc><p><tn>ab</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 0, 0, 1}, []int{0, 0, 0, 1}, &crdt.JSONTreeNode{
+				Type:  "text",
+				Value: "X",
+			})
+			assert.Equal(t, "<doc><tc><p><tn>aXb</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 0, 0, 3}, []int{0, 0, 0, 3}, &crdt.JSONTreeNode{
+				Type:  "text",
+				Value: "!",
+			})
+			assert.Equal(t, "<doc><tc><p><tn>aXb!</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 0, 1}, []int{0, 0, 1}, &crdt.JSONTreeNode{
+				Type:     "tn",
+				Children: []crdt.JSONTreeNode{},
+			})
+			assert.Equal(t, "<doc><tc><p><tn>aXb!</tn><tn></tn></p></tc></doc>", root.GetTree("t").ToXML())
+			return nil
+		})
+		assert.NoError(t, err)
 	})
 
 	t.Run("insert inline content to the same position(left) concurrently test", func(t *testing.T) {

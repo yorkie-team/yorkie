@@ -62,6 +62,23 @@ func (t *Tree) Len() int {
 	return t.IndexTree.Root().Len()
 }
 
+// EditByPath edits this tree with the given node.
+func (t *Tree) EditByPath(fromPath []int, toPath []int, content *crdt.JSONTreeNode) bool {
+	ticket := t.context.IssueTimeTicket()
+	var node *crdt.TreeNode
+	if content != nil && content.Type == "text" {
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), "text", content.Value)
+	} else if content != nil {
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type)
+	}
+
+	fromPos := t.Tree.PathToPos(fromPath)
+	toPos := t.Tree.PathToPos(toPath)
+	t.Tree.Edit(fromPos, toPos, node, ticket)
+
+	return true
+}
+
 // BuildRoot returns the root node of this tree.
 func BuildRoot(ctx *change.Context, node *crdt.JSONTreeNode) *crdt.TreeNode {
 	if node == nil {

@@ -189,13 +189,11 @@ func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) {
 		panic(errors.New("inline node cannot have children"))
 	}
 
-	offset := 0
-	for i, child := range n.children {
-		if child == prevNode {
-			offset = i
-			break
-		}
+	offset := n.OffsetOfChild(prevNode)
+	if offset == -1 {
+		panic(errors.New("prevNode is not a child of the node"))
 	}
+
 	// TODO(hackerwins, krapie): Needs to inspect this code later
 	n.children = append(n.children[:offset+1], n.children[offset:]...)
 	n.children[offset+1] = newNode
@@ -267,15 +265,7 @@ func (n *Node[V]) FindBranchOffset(node *Node[V]) int {
 
 	current := node
 	for current != nil {
-		// TODO(hackerwins): Extract this code to indexOf method.
-		offset := -1
-		for i, child := range n.children {
-			if child == current {
-				offset = i
-				break
-			}
-		}
-
+		offset := n.OffsetOfChild(current)
 		if offset != -1 {
 			return offset
 		}
@@ -332,14 +322,7 @@ func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) {
 		panic(errors.New("inline node cannot have children"))
 	}
 
-	offset := -1
-	for i, child := range n.children {
-		if child == referenceNode {
-			offset = i
-			break
-		}
-	}
-
+	offset := n.OffsetOfChild(referenceNode)
 	if offset == -1 {
 		panic(errors.New("child not found"))
 	}
@@ -354,20 +337,35 @@ func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) {
 		panic(errors.New("inline node cannot have children"))
 	}
 
-	offset := -1
-	for i, child := range n.children {
-		if child == referenceNode {
-			offset = i
-			break
-		}
-	}
-
+	offset := n.OffsetOfChild(referenceNode)
 	if offset == -1 {
 		panic(errors.New("child not found"))
 	}
 
 	n.insertAtInternal(newNode, offset+1)
 	newNode.UpdateAncestorsSize()
+}
+
+// hasInlineChild returns true if the node has an inline child.
+func (n *Node[V]) hasInlineChild() bool {
+	for _, child := range n.Children() {
+		if child.IsInline() {
+			return true
+		}
+	}
+
+	return false
+}
+
+// OffsetOfChild returns offset of children of the given node.
+func (n *Node[V]) OffsetOfChild(node *Node[V]) int {
+	for i, child := range n.children {
+		if child == node {
+			return i
+		}
+	}
+
+	return -1
 }
 
 // TraverseNode traverses the tree with the given callback.
@@ -530,12 +528,24 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preperInline bool) *Tree
 // TreePosToPath returns path from given treePos
 func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) []int {
 	var path []int
+	node := treePos.Node
 
-	if treePos.Node.IsInline() || treePos.Node.Parent == nil {
+	if node.IsInline() {
+		offset := node.Parent.OffsetOfChild(node)
+		if offset == -1 {
+			panic("invalid treePos")
+		}
+
+		leftSiblingsSize := 0
+		for _, child := range node.Parent.Children()[:offset] {
+			leftSiblingsSize += child.Length
+		}
+
+		node = node.Parent
+		path = append(path, leftSiblingsSize+treePos.Offset)
+	} else {
 		path = append(path, treePos.Offset)
 	}
-
-	node := treePos.Node
 
 	for node.Parent != nil {
 		var pathInfo int
@@ -571,20 +581,47 @@ func (t *Tree[V]) PathToTreePos(path []int) *TreePos[V] {
 	}
 
 	node := t.root
-
 	for i := 0; i < len(path)-1; i++ {
-		pathInfo := path[i]
-
-		node = node.children[pathInfo]
+		pathElement := path[i]
+		node = node.Children()[pathElement]
 
 		if node == nil {
 			panic("unacceptable path")
 		}
 	}
 
-	preperInline := node.IsInline()
+	if node.hasInlineChild() {
+		return findInlinePos(node, path[len(path)-1])
+	}
+	if len(node.Children()) < path[len(path)-1] {
+		panic("unacceptable path")
+	}
 
-	return t.findTreePos(node, path[len(path)-1], preperInline)
+	return &TreePos[V]{
+		Node: node,
+	}
+}
+
+// findInlinePos returns the tree position of the given path element.
+func findInlinePos[V Value](node *Node[V], pathElement int) *TreePos[V] {
+	if node.Length < pathElement {
+		panic("unacceptable path")
+	}
+
+	for _, childNode := range node.Children() {
+		if childNode.Length < pathElement {
+			pathElement -= childNode.Length
+		} else {
+			node = childNode
+
+			break
+		}
+	}
+
+	return &TreePos[V]{
+		Node:   node,
+		Offset: pathElement,
+	}
 }
 
 // FindPostorderRight finds right node of the given tree position with postorder traversal.
