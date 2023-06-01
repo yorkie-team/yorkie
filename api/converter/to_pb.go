@@ -278,6 +278,7 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 			Id:         ToChangeID(c.ID()),
 			Message:    c.Message(),
 			Operations: pbOperations,
+			Presence:   ToPresenceInfo(c.PresenceInfo()),
 		})
 	}
 

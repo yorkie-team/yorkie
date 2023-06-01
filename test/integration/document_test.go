@@ -366,7 +366,6 @@ func TestDocumentWithProjects(t *testing.T) {
 	project2, err := adminCli.CreateProject(ctx, "project2")
 	assert.NoError(t, err)
 
-	t.Skip()
 	t.Run("watch document with different projects test", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -435,8 +434,8 @@ func TestDocumentWithProjects(t *testing.T) {
 		expected = append(expected, watchResponsePair{
 			Type: client.PeersChanged,
 			Peers: map[string]presence.Presence{
-				c1.ID().String(): nil,
-				c2.ID().String(): nil,
+				c1.ID().String(): map[string]string{},
+				c2.ID().String(): map[string]string{},
 			},
 		})
 		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})

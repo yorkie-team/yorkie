@@ -37,13 +37,13 @@ func TestPeerAwareness(t *testing.T) {
 	c1, c2 := clients[0], clients[1]
 	defer deactivateAndCloseClients(t, clients)
 
-	t.Skip()
 	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {
 		ctx := context.Background()
-		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		docKey := helper.TestDocKey(t)
+		d1, err := c1.Connect(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d2, err := c2.Connect(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
@@ -104,13 +104,12 @@ func TestPeerAwareness(t *testing.T) {
 			d2.UpdatePresence("updated", "true")
 			return nil
 		}, "update presence"))
-		expected = append(expected, watchResponsePair{
-			Type: client.PeersChanged,
-			Peers: map[string]presence.Presence{
-				c1.ID().String(): d1.Presence(),
-				c2.ID().String(): d2.Presence(),
-			},
-		})
+		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(docKey)))
+		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(docKey)))
+		assert.Equal(t, map[string]presence.Presence{
+			c1.ID().String(): d1.Presence(),
+			c2.ID().String(): d2.Presence(),
+		}, d1.PeersMap())
 
 		// 03. PeersChanged is triggered when another client closes the watch
 		expected = append(expected, watchResponsePair{
@@ -124,11 +123,6 @@ func TestPeerAwareness(t *testing.T) {
 		wgEvents.Wait()
 
 		assert.Equal(t, expected, responsePairs)
-
-		// TODO: []integration.watchResponsePair
-		// {integration.watchResponsePair{Type: "peers-changed", Peers: map[string]presence.Presence{"6477f713e558a4ad03c1ade2": presence.Presence{}, "6477f713e558a4ad03c1ade6": presence.Presence{}}},
-		// integration.watchResponsePair{Type: "peers-changed", Peers: map[string]presence.Presence{"6477f713e558a4ad03c1ade2": presence.Presence{}, "6477f713e558a4ad03c1ade6": presence.Presence{"updated": "true"}}},
-		// integration.watchResponsePair{Type: "peers-changed", Peers: map[string]presence.Presence{"6477f713e558a4ad03c1ade2": presence.Presence{}}}}
 	})
 
 	t.Run("Watch multiple documents test", func(t *testing.T) {

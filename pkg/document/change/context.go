@@ -54,9 +54,19 @@ func (c *Context) ToChange() *Change {
 	return New(c.id, c.message, c.operations, c.presenceInfo)
 }
 
+// HasChange returns whether this context has change or not.
+func (c *Context) HasChange() bool {
+	return c.HasOperations() || c.HasPresence()
+}
+
 // HasOperations returns whether this change has operations or not.
 func (c *Context) HasOperations() bool {
 	return len(c.operations) > 0
+}
+
+// HasPresence returns whether this change has presenceInfo or not.
+func (c *Context) HasPresence() bool {
+	return c.presenceInfo != nil
 }
 
 // IssueTimeTicket creates a time ticket to be used to create a new operation.

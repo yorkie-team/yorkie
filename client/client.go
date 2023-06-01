@@ -452,6 +452,7 @@ func (c *Client) Watch(
 				}, nil
 			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent, types.PresenceChangedEvent:
 				cli, err := converter.FromClient(resp.Event.Publisher)
+
 				if err != nil {
 					return nil, err
 				}

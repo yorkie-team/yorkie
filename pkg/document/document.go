@@ -62,26 +62,26 @@ func (d *Document) Update(
 
 	d.ensureClone()
 
-	ctx := change.NewContext(
+	d.doc.changeContext = change.NewContext(
 		d.doc.changeID.Next(),
 		messageFromMsgAndArgs(msgAndArgs...),
 		d.clone,
 	)
 
-	if err := updater(json.NewObject(ctx, d.clone.Object())); err != nil {
+	if err := updater(json.NewObject(d.doc.changeContext, d.clone.Object())); err != nil {
 		// drop clone because it is contaminated.
 		d.clone = nil
 		return err
 	}
 
-	if ctx.HasOperations() {
-		c := ctx.ToChange()
+	if d.doc.changeContext.HasChange() {
+		c := d.doc.changeContext.ToChange()
 		if err := c.Execute(d.doc.root); err != nil {
 			return err
 		}
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
-		d.doc.changeID = ctx.ID()
+		d.doc.changeID = d.doc.changeContext.ID()
 	}
 
 	return nil

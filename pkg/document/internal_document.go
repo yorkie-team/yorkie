@@ -203,10 +203,14 @@ func (d *InternalDocument) IsAttached() bool {
 
 // SetPresenceInfo sets the presence information of the given client.
 func (d *InternalDocument) SetPresenceInfo(clientID string, info presence.PresenceInfo) {
-	presenceInfo := d.peerPresenceMap[clientID]
-	ok := presenceInfo.Update(info)
-	if ok {
-		d.peerPresenceMap[clientID] = presenceInfo
+	if _, ok := d.peerPresenceMap[clientID]; !ok {
+		d.peerPresenceMap[clientID] = info
+	} else {
+		presenceInfo := d.peerPresenceMap[clientID]
+		ok := presenceInfo.Update(info)
+		if ok {
+			d.peerPresenceMap[clientID] = presenceInfo
+		}
 	}
 }
 
@@ -231,9 +235,13 @@ func (d *InternalDocument) Presence() presence.Presence {
 
 // PeersMap returns the list of peers, including the client who created this document.
 func (d *InternalDocument) PeersMap() map[string]presence.Presence {
-	peers := make(map[string]presence.Presence)
-	for k, v := range d.peerPresenceMap {
-		peers[k] = v.Presence
+	peers := map[string]presence.Presence{}
+
+	for c, p := range d.peerPresenceMap {
+		peers[c] = map[string]string{}
+		for k, v := range p.Presence {
+			peers[c][k] = v
+		}
 	}
 	return peers
 }
@@ -266,6 +274,10 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 		if err := c.Execute(d.root); err != nil {
 			return err
 		}
+		if c.PresenceInfo() != nil && d.peerPresenceMap != nil {
+			d.SetPresenceInfo(c.ID().ActorID().String(), *c.PresenceInfo())
+		}
+
 		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
 	}
 
