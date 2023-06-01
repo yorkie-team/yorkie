@@ -134,11 +134,11 @@ func FromClient(pbClient *api.Client) (*types.Client, error) {
 }
 
 // FromPresenceInfo converts the given Protobuf formats to model format.
-func FromPresenceInfo(pbPresence *api.PresenceInfo) *presence.PresenceInfo {
+func FromPresenceInfo(pbPresence *api.PresenceInfo) *presence.Info {
 	if pbPresence == nil {
 		return nil
 	}
-	return &presence.PresenceInfo{
+	return &presence.Info{
 		Clock:    pbPresence.GetClock(),
 		Presence: pbPresence.GetData(),
 	}

@@ -21,14 +21,14 @@ package presence
 // all other clients watching the same document.
 type Presence map[string]string
 
-// PresenceInfo is a presence information with logical clock.
-type PresenceInfo struct {
+// Info is a presence information with logical clock.
+type Info struct {
 	Clock    int32
 	Presence Presence
 }
 
 // Update updates the given presence information with the given clock.
-func (i *PresenceInfo) Update(info PresenceInfo) bool {
+func (i *Info) Update(info Info) bool {
 	if info.Clock > i.Clock {
 		i.Clock = info.Clock
 		i.Presence = info.Presence
@@ -38,12 +38,12 @@ func (i *PresenceInfo) Update(info PresenceInfo) bool {
 }
 
 // DeepCopy copies itself deeply.
-func (i *PresenceInfo) DeepCopy() *PresenceInfo {
+func (i *Info) DeepCopy() *Info {
 	presence := Presence{}
 	for k, v := range i.Presence {
 		presence[k] = v
 	}
-	return &PresenceInfo{
+	return &Info{
 		Clock:    i.Clock,
 		Presence: presence,
 	}

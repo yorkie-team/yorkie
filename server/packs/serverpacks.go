@@ -105,7 +105,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			pbOps = append(pbOps, &pbOp)
 		}
 
-		var presenceInfo *presence.PresenceInfo
+		var presenceInfo *presence.Info
 		if info.PresenceInfo != "" {
 			if err := json.Unmarshal([]byte(info.PresenceInfo), &presenceInfo); err != nil {
 				return nil, fmt.Errorf("unmarshal presence: %w", err)

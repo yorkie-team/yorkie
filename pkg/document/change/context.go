@@ -30,7 +30,7 @@ type Context struct {
 	id           ID
 	message      string
 	operations   []operations.Operation
-	presenceInfo *presence.PresenceInfo
+	presenceInfo *presence.Info
 	delimiter    uint32
 	root         *crdt.Root
 }
@@ -96,6 +96,6 @@ func (c *Context) RegisterTextElementWithGarbage(textType crdt.TextElement) {
 }
 
 // SetPresenceInfo registers the updated presenceInfo to this context.
-func (c *Context) SetPresenceInfo(presenceInfo *presence.PresenceInfo) {
+func (c *Context) SetPresenceInfo(presenceInfo *presence.Info) {
 	c.presenceInfo = presenceInfo
 }

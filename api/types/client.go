@@ -11,7 +11,7 @@ import (
 // Client represents the Client that communicates with the Server.
 type Client struct {
 	ID           *time.ActorID
-	PresenceInfo presence.PresenceInfo
+	PresenceInfo presence.Info
 }
 
 // NewClient creates a new Client from the given JSON.

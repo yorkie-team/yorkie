@@ -131,7 +131,7 @@ func ToClient(client types.Client) *api.Client {
 }
 
 // ToPresenceInfo converts the given model to Protobuf format.
-func ToPresenceInfo(info *presence.PresenceInfo) *api.PresenceInfo {
+func ToPresenceInfo(info *presence.Info) *api.PresenceInfo {
 	if info == nil {
 		return nil
 	}

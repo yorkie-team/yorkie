@@ -68,7 +68,7 @@ func (s *Subscription) SubscriberID() string {
 }
 
 // UpdatePresence updates the presence of the subscriber.
-func (s *Subscription) UpdatePresence(info presence.PresenceInfo) {
+func (s *Subscription) UpdatePresence(info presence.Info) {
 	s.subscriber.PresenceInfo.Update(info)
 }
 

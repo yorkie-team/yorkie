@@ -58,7 +58,7 @@ type InternalDocument struct {
 	changeID        change.ID
 	localChanges    []*change.Change
 	myClientID      string
-	peerPresenceMap map[string]presence.PresenceInfo
+	peerPresenceMap map[string]presence.Info
 	changeContext   *change.Context
 }
 
@@ -73,7 +73,7 @@ func NewInternalDocument(docKey key.Key, clientID string, initialPresence map[st
 		checkpoint: change.InitialCheckpoint,
 		changeID:   change.InitialIDWithActor(actorID),
 		myClientID: clientID,
-		peerPresenceMap: map[string]presence.PresenceInfo{
+		peerPresenceMap: map[string]presence.Info{
 			clientID: {
 				Presence: initialPresence,
 			},
@@ -202,7 +202,7 @@ func (d *InternalDocument) IsAttached() bool {
 }
 
 // SetPresenceInfo sets the presence information of the given client.
-func (d *InternalDocument) SetPresenceInfo(clientID string, info presence.PresenceInfo) {
+func (d *InternalDocument) SetPresenceInfo(clientID string, info presence.Info) {
 	if _, ok := d.peerPresenceMap[clientID]; !ok {
 		d.peerPresenceMap[clientID] = info
 	} else {
@@ -215,7 +215,7 @@ func (d *InternalDocument) SetPresenceInfo(clientID string, info presence.Presen
 }
 
 // PresenceInfo returns the presence information of the given client.
-func (d *InternalDocument) PresenceInfo(clientID string) presence.PresenceInfo {
+func (d *InternalDocument) PresenceInfo(clientID string) presence.Info {
 	return d.peerPresenceMap[clientID]
 }
 

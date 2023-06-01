@@ -202,7 +202,7 @@ func TestConverter(t *testing.T) {
 	t.Run("client test", func(t *testing.T) {
 		cli := types.Client{
 			ID: time.InitialActorID,
-			PresenceInfo: presence.PresenceInfo{
+			PresenceInfo: presence.Info{
 				Presence: presence.Presence{"Name": "ClientName"},
 			},
 		}

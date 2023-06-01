@@ -201,12 +201,12 @@ func (d *Document) IsAttached() bool {
 }
 
 // SetPresenceInfo sets the presence information of the given client.
-func (d *Document) SetPresenceInfo(clientID string, info presence.PresenceInfo) {
+func (d *Document) SetPresenceInfo(clientID string, info presence.Info) {
 	d.doc.SetPresenceInfo(clientID, info)
 }
 
 // PresenceInfo returns the presence information of the given client.
-func (d *Document) PresenceInfo(clientID string) presence.PresenceInfo {
+func (d *Document) PresenceInfo(clientID string) presence.Info {
 	return d.doc.PresenceInfo(clientID)
 }
 

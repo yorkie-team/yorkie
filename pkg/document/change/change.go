@@ -37,11 +37,11 @@ type Change struct {
 	operations []operations.Operation
 
 	// presenceInfo represent the updated presence info of the change.
-	presenceInfo *presence.PresenceInfo
+	presenceInfo *presence.Info
 }
 
 // New creates a new instance of Change.
-func New(id ID, message string, operations []operations.Operation, presenceInfo *presence.PresenceInfo) *Change {
+func New(id ID, message string, operations []operations.Operation, presenceInfo *presence.Info) *Change {
 	return &Change{
 		id:           id,
 		message:      message,
@@ -76,7 +76,7 @@ func (c *Change) Operations() []operations.Operation {
 }
 
 // PresenceInfo returns the updated presence info of this change.
-func (c *Change) PresenceInfo() *presence.PresenceInfo {
+func (c *Change) PresenceInfo() *presence.Info {
 	return c.presenceInfo
 }
 

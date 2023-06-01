@@ -67,7 +67,7 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 }
 
 // EncodePresenceInfo encodes the given presenceInfo into string.
-func EncodePresenceInfo(presenceInfo *presence.PresenceInfo) (string, error) {
+func EncodePresenceInfo(presenceInfo *presence.Info) (string, error) {
 	if presenceInfo == nil {
 		return "", nil
 	}
@@ -101,7 +101,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	var presenceInfo *presence.PresenceInfo
+	var presenceInfo *presence.Info
 	if i.PresenceInfo == "" {
 		presenceInfo = nil
 	} else {
