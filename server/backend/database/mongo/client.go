@@ -895,10 +895,14 @@ func (c *Client) IsAttachedDocument(
 		return false, nil
 	}
 
-	for i, info := range clientInfos {
-		for j, doc := range info.Documents {
-			if doc.Status == database.DocumentAttached {
-				logging.From(ctx).Info(fmt.Sprintf("clientInfos(%d).Documents(%d).Status: %s", i, j, doc.Status))
+	for _, info := range clientInfos {
+		for _, doc := range info.Documents {
+			if doc.DocID == docID && doc.Status == database.DocumentAttached {
+				logging.From(ctx).Info(fmt.Sprintf(
+					"document(%s) is attached in client(%s)",
+					info.Key,
+					doc.DocID,
+				))
 				return true, nil
 			}
 		}
