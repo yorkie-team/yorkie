@@ -78,7 +78,7 @@ func (s *testYorkieServer) Stop() {
 
 func TestClient(t *testing.T) {
 	t.Run("create instance test", func(t *testing.T) {
-		cli, err := client.New(
+		_, err := client.New(
 			client.WithToken(xid.New().String()),
 		)
 		assert.NoError(t, err)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Yorkie Authors. All rights reserved.
+ * Copyright 2023 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
+// Package presence provides the implementation of Presence.
+// If the client is watching a document, the presence is shared with
+// all other clients watching the same document.
 package presence
 
 // Presence represents custom presence that can be defined by the client.
-// If the client is watching a document, the presence is shared with
-// all other clients watching the same document.
 type Presence map[string]string
 
 // Info is a presence information with logical clock.
