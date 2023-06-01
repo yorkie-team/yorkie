@@ -38,7 +38,7 @@ func TestHistory(t *testing.T) {
 
 	t.Run("history test", func(t *testing.T) {
 		ctx := context.Background()
-		d1, err := cli.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d1, err := cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 

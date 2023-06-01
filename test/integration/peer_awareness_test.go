@@ -40,10 +40,10 @@ func TestPeerAwareness(t *testing.T) {
 	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
-		d1, err := c1.Connect(ctx, docKey, map[string]string{})
+		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2, err := c2.Connect(ctx, docKey, map[string]string{})
+		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
@@ -128,7 +128,7 @@ func TestPeerAwareness(t *testing.T) {
 	t.Run("Watch multiple documents test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 
@@ -180,10 +180,10 @@ func TestPeerAwareness(t *testing.T) {
 				c2.ID().String(): map[string]string{},
 			},
 		})
-		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
-		d3, err := c2.Connect(ctx, helper.TestDocKey(t)+"2", map[string]string{})
+		d3, err := c2.Attach(ctx, helper.TestDocKey(t)+"2", map[string]string{})
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c2.Detach(ctx, d3)) }()
 

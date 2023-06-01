@@ -256,9 +256,9 @@ func (c *Client) Deactivate(ctx context.Context) error {
 	return nil
 }
 
-// Connect creates a new document with the given docKey and notifies the server
+// Attach creates a new document with the given docKey and notifies the server
 // that this client will synchronize the document.
-func (c *Client) Connect(
+func (c *Client) Attach(
 	ctx context.Context,
 	docKey key.Key,
 	initialPresence map[string]string,

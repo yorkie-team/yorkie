@@ -35,7 +35,7 @@ func TestText(t *testing.T) {
 
 	t.Run("text test", func(t *testing.T) {
 		ctx := context.Background()
-		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -46,7 +46,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -94,7 +94,7 @@ func TestText(t *testing.T) {
 
 	t.Run("rich text test", func(t *testing.T) {
 		ctx := context.Background()
-		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -105,7 +105,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -127,7 +127,7 @@ func TestText(t *testing.T) {
 
 	t.Run("concurrent block deletions test", func(t *testing.T) {
 		ctx := context.Background()
-		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -138,7 +138,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -171,7 +171,7 @@ func TestText(t *testing.T) {
 
 	t.Run("new creation then concurrent deletion test", func(t *testing.T) {
 		ctx := context.Background()
-		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -182,7 +182,7 @@ func TestText(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {

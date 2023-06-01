@@ -114,7 +114,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		assert.NoError(t, cli.Activate(ctx))
 		defer func() { assert.NoError(t, cli.Deactivate(ctx)) }()
 
-		_, err = cli.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		_, err = cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		// client without token
@@ -170,7 +170,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc, err := cli.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		doc, err := cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
 		assert.True(t, doc == nil)
 	})
@@ -217,7 +217,7 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		_, err = cli.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		_, err = cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 	})
 
@@ -311,7 +311,7 @@ func TestAuthWebhook(t *testing.T) {
 		err = cli.Activate(ctx)
 		assert.NoError(t, err)
 
-		doc, err := cli.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		doc, err := cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		// 01. multiple requests to update the document.

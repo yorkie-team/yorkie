@@ -80,11 +80,11 @@ func TestClient(t *testing.T) {
 
 		// 01. c1, c2, c3 attach to the same document.
 		docKey := helper.TestDocKey(t)
-		d1, err := c1.Connect(ctx, docKey, map[string]string{})
+		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		d2, err := c2.Connect(ctx, docKey, map[string]string{})
+		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		d3, err := c3.Connect(ctx, docKey, map[string]string{})
+		d3, err := c3.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		// 02. c1, c2 sync with push-pull mode.
@@ -134,7 +134,7 @@ func TestClient(t *testing.T) {
 
 		// 01. cli attach to the same document having counter.
 		ctx := context.Background()
-		doc, err := cli.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		doc, err := cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		// 02. cli update the document with creating a counter

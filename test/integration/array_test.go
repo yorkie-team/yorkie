@@ -36,7 +36,7 @@ func TestArray(t *testing.T) {
 	t.Run("causal nested array test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
-		d1, err := c1.Connect(ctx, docKey, map[string]string{})
+		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -47,7 +47,7 @@ func TestArray(t *testing.T) {
 		}, "nested update by c1")
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, docKey, map[string]string{})
+		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
@@ -56,7 +56,7 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array add/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
-		d1, err := c1.Connect(ctx, docKey, map[string]string{})
+		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -68,7 +68,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, docKey, map[string]string{})
+		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -89,7 +89,7 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array add/delete test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
-		d1, err := c1.Connect(ctx, docKey, map[string]string{})
+		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -100,7 +100,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, docKey, map[string]string{})
+		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -122,7 +122,7 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array delete test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
-		d1, err := c1.Connect(ctx, docKey, map[string]string{})
+		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -133,7 +133,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, docKey, map[string]string{})
+		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -160,7 +160,7 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array move test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
-		d1, err := c1.Connect(ctx, docKey, map[string]string{})
+		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -172,7 +172,7 @@ func TestArray(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, docKey, map[string]string{})
+		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -199,7 +199,7 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array move with the same position test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
-		d1, err := c1.Connect(ctx, docKey, map[string]string{})
+		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddInteger(0, 1, 2)
@@ -207,7 +207,7 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx))
-		d2, err := c2.Connect(ctx, docKey, map[string]string{})
+		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 
 		assert.NoError(t, d1.Update(func(root *json.Object) error {

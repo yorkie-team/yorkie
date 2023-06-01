@@ -35,10 +35,10 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for container type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -100,10 +100,10 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for text type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -170,10 +170,10 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
 		ctx := context.Background()
-		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
-		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
