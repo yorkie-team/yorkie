@@ -369,6 +369,76 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
 	})
 
+	t.Run("detach document RemoveIfNotAttached option test", func(t *testing.T) {
+		activateResp, err := testClient.ActivateClient(
+			context.Background(),
+			&api.ActivateClientRequest{ClientKey: t.Name()},
+		)
+		assert.NoError(t, err)
+
+		packWithNoChanges := &api.ChangePack{
+			DocumentKey: helper.TestDocKey(t).String(),
+			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
+		}
+
+		resPackDoc1, err := testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		// try to detach with RemoveIfNotAttached option false
+		_, err = testClient.DetachDocument(
+			context.Background(),
+			&api.DetachDocumentRequest{
+				ClientId:            activateResp.ClientId,
+				DocumentId:          resPackDoc1.DocumentId,
+				ChangePack:          packWithNoChanges,
+				RemoveIfNotAttached: false,
+			},
+		)
+		assert.NoError(t, err)
+
+		resPackDoc2, err := testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		// check document is same
+		assert.Equal(t, resPackDoc1.DocumentId, resPackDoc2.DocumentId)
+
+		// try to detach with RemoveIfNotAttached option true
+		_, err = testClient.DetachDocument(
+			context.Background(),
+			&api.DetachDocumentRequest{
+				ClientId:            activateResp.ClientId,
+				DocumentId:          resPackDoc2.DocumentId,
+				ChangePack:          packWithNoChanges,
+				RemoveIfNotAttached: true,
+			},
+		)
+		assert.NoError(t, err)
+
+		resPackDoc3, err := testClient.AttachDocument(
+			context.Background(),
+			&api.AttachDocumentRequest{
+				ClientId:   activateResp.ClientId,
+				ChangePack: packWithNoChanges,
+			},
+		)
+		assert.NoError(t, err)
+
+		// check document is not same
+		assert.NotEqual(t, resPackDoc1.DocumentId, resPackDoc3.DocumentId)
+	})
+
 	t.Run("attach/detach on removed document test", func(t *testing.T) {
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
@@ -1258,7 +1328,7 @@ func TestAdminRPCServerBackend(t *testing.T) {
 					}
 				}()
 
-				isAttached, err := documents.IsAttachedDocument(ctx, be, defaultProjectID, docInfo.ID)
+				isAttached, err := documents.IsAttachedDocument(ctx, be, defaultProjectID, docInfo.ID, "")
 				if err != nil {
 					return nil, err
 				}

@@ -338,7 +338,7 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Check any document is not attached
-		isAttached, err := cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		isAttached, err := cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID, "")
 		assert.False(t, isAttached)
 		assert.NoError(t, err)
 
@@ -346,14 +346,14 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
 
 		// Check document is attached
-		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID, "")
 		assert.True(t, isAttached)
 		assert.NoError(t, err)
 
 		// Check document is detached
 		assert.NoError(t, clientInfo1.DetachDocument(docInfo.ID))
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
-		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID, "")
 		assert.False(t, isAttached)
 		assert.NoError(t, err)
 
@@ -363,8 +363,17 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, clientInfo2.AttachDocument(docInfo.ID))
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
 
-		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID, "")
 		assert.True(t, isAttached)
+		assert.NoError(t, err)
+
+		// Check excludeClientInfoID option
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID, clientInfo1.ID)
+		assert.True(t, isAttached)
+		assert.NoError(t, err)
+
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID, clientInfo2.ID)
+		assert.False(t, isAttached)
 		assert.NoError(t, err)
 	})
 }

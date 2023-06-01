@@ -434,14 +434,14 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
 
 		// Check document is attached
-		isAttached, err := db.IsAttachedDocument(ctx, projectID, docInfo.ID)
+		isAttached, err := db.IsAttachedDocument(ctx, projectID, docInfo.ID, "")
 		assert.True(t, isAttached)
 		assert.NoError(t, err)
 
 		// Check document is detached
 		assert.NoError(t, clientInfo1.DetachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
-		isAttached, err = db.IsAttachedDocument(ctx, projectID, docInfo.ID)
+		isAttached, err = db.IsAttachedDocument(ctx, projectID, docInfo.ID, "")
 		assert.False(t, isAttached)
 		assert.NoError(t, err)
 
@@ -451,8 +451,17 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, clientInfo2.AttachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
 
-		isAttached, err = db.IsAttachedDocument(ctx, projectID, docInfo.ID)
+		isAttached, err = db.IsAttachedDocument(ctx, projectID, docInfo.ID, "")
 		assert.True(t, isAttached)
+		assert.NoError(t, err)
+
+		// Check excludeClientInfoID option
+		isAttached, err = db.IsAttachedDocument(ctx, projectID, docInfo.ID, clientInfo1.ID)
+		assert.True(t, isAttached)
+		assert.NoError(t, err)
+
+		isAttached, err = db.IsAttachedDocument(ctx, projectID, docInfo.ID, clientInfo2.ID)
+		assert.False(t, isAttached)
 		assert.NoError(t, err)
 	})
 

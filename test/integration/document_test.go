@@ -72,6 +72,36 @@ func TestDocument(t *testing.T) {
 		assert.Error(t, err)
 	})
 
+	t.Run("detach removeIfNotAttached option test", func(t *testing.T) {
+		ctx := context.Background()
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object) error {
+			root.SetString("k1", "v1")
+			return nil
+		}, "update k1 with v1")
+		assert.NoError(t, err)
+
+		err = c1.Attach(ctx, doc)
+		assert.NoError(t, err)
+		assert.True(t, doc.IsAttached())
+
+		// detach with removeIfNotAttached option false
+		err = c1.Detach(ctx, doc, false)
+		assert.NoError(t, err)
+		assert.False(t, doc.IsAttached())
+		assert.Equal(t, doc.Status(), document.StatusDetached)
+
+		err = c1.Attach(ctx, doc)
+		assert.NoError(t, err)
+		assert.True(t, doc.IsAttached())
+
+		// detach with removeIfNotAttached option true
+		err = c1.Detach(ctx, doc, true)
+		assert.NoError(t, err)
+		assert.False(t, doc.IsAttached())
+		assert.Equal(t, doc.Status(), document.StatusRemoved)
+	})
+
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
