@@ -80,6 +80,90 @@ const (
 	blockNodePaddingLength = 2
 )
 
+// TraverseNode traverses the tree with the given callback.
+func TraverseNode[V Value](node *Node[V], callback func(node *Node[V], depth int)) {
+	postOrderTraversal(node, callback, 0)
+}
+
+// postOrderTraversal traverses the tree with postorder traversal.
+func postOrderTraversal[V Value](node *Node[V], callback func(node *Node[V], depth int), depth int) {
+	if node == nil {
+		return
+	}
+
+	for _, child := range node.Children() {
+		postOrderTraversal(child, callback, depth+1)
+	}
+	callback(node, depth)
+}
+
+// nodesBetween iterates the nodes between the given range.
+// If the given range is collapsed, the callback is not called.
+// It traverses the tree with postorder traversal.
+func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) {
+	if from > to {
+		panic(fmt.Sprintf("from cannot be greater than to %d > %d", from, to))
+	}
+
+	if from > root.Length {
+		panic(fmt.Sprintf("from is out of range %d > %d", from, root.Length))
+	}
+
+	if to > root.Length {
+		panic(fmt.Sprintf("to is out of range %d > %d", to, root.Length))
+	}
+
+	if from == to {
+		return
+	}
+
+	pos := 0
+	for _, child := range root.Children() {
+		if from-child.PaddedLength() < pos && pos < to {
+			fromChild := from - pos - 1
+			if child.IsInline() {
+				fromChild = from - pos
+			}
+			toChild := to - pos - 1
+			if child.IsInline() {
+				toChild = to - pos
+			}
+			nodesBetween(
+				child,
+				int(math.Max(0, float64(fromChild))),
+				int(math.Min(float64(toChild), float64(child.Length))),
+				callback,
+			)
+
+			if fromChild < 0 || toChild > child.Length || child.IsInline() {
+				callback(child.Value)
+			}
+		}
+		pos += child.PaddedLength()
+	}
+}
+
+// ToXML returns the XML representation of this tree.
+func ToXML[V Value](node *Node[V]) string {
+	if node.IsInline() {
+		return node.Value.String()
+	}
+
+	builder := strings.Builder{}
+	builder.WriteString("<" + string(node.Type) + ">")
+	for _, child := range node.Children() {
+		builder.WriteString(ToXML(child))
+	}
+	builder.WriteString("</" + string(node.Type) + ">")
+
+	return builder.String()
+}
+
+// Traverse traverses the tree with postorder traversal.
+func Traverse[V Value](tree *Tree[V], callback func(node *Node[V], depth int)) {
+	postOrderTraversal(tree.root, callback, 0)
+}
+
 // Value represents the data stored in the nodes of Tree.
 type Value interface {
 	IsRemoved() bool
@@ -240,15 +324,13 @@ func (n *Node[V]) findOffset(node *Node[V]) int {
 		panic(errors.New("inline node cannot have children"))
 	}
 
-	index := 0
 	for i, child := range n.Children() {
 		if child == node {
-			index = i
-			break
+			return i
 		}
 	}
 
-	return index
+	return -1
 }
 
 // IsAncestorOf returns true if the node is an ancestor of the given node.
@@ -385,71 +467,9 @@ func (n *Node[V]) OffsetOfChild(node *Node[V]) int {
 	return -1
 }
 
-// TraverseNode traverses the tree with the given callback.
-func TraverseNode[V Value](node *Node[V], callback func(node *Node[V], depth int)) {
-	postOrderTraversal(node, callback, 0)
-}
-
-func postOrderTraversal[V Value](node *Node[V], callback func(node *Node[V], depth int), depth int) {
-	if node == nil {
-		return
-	}
-
-	for _, child := range node.Children() {
-		postOrderTraversal(child, callback, depth+1)
-	}
-	callback(node, depth)
-}
-
 // NodesBetween returns the nodes between the given range.
 func (t *Tree[V]) NodesBetween(from int, to int, callback func(node V)) {
 	nodesBetween(t.root, from, to, callback)
-}
-
-// nodesBetween iterates the nodes between the given range.
-// If the given range is collapsed, the callback is not called.
-// It traverses the tree with postorder traversal.
-func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) {
-	if from > to {
-		panic(fmt.Sprintf("from cannot be greater than to %d > %d", from, to))
-	}
-
-	if from > root.Length {
-		panic(fmt.Sprintf("from is out of range %d > %d", from, root.Length))
-	}
-
-	if to > root.Length {
-		panic(fmt.Sprintf("to is out of range %d > %d", to, root.Length))
-	}
-
-	if from == to {
-		return
-	}
-
-	pos := 0
-	for _, child := range root.Children() {
-		if from-child.PaddedLength() < pos && pos < to {
-			fromChild := from - pos - 1
-			if child.IsInline() {
-				fromChild = from - pos
-			}
-			toChild := to - pos - 1
-			if child.IsInline() {
-				toChild = to - pos
-			}
-			nodesBetween(
-				child,
-				int(math.Max(0, float64(fromChild))),
-				int(math.Min(float64(toChild), float64(child.Length))),
-				callback,
-			)
-
-			if fromChild < 0 || toChild > child.Length || child.IsInline() {
-				callback(child.Value)
-			}
-		}
-		pos += child.PaddedLength()
-	}
 }
 
 // TreePos is the position of a node in the tree.
@@ -485,7 +505,7 @@ func (t *Tree[V]) FindTreePos(index int, preperInlines ...bool) *TreePos[V] {
 	return t.findTreePos(t.root, index, preperInline)
 }
 
-func (t *Tree[V]) findTreePos(node *Node[V], index int, preperInline bool) *TreePos[V] {
+func (t *Tree[V]) findTreePos(node *Node[V], index int, preferInline bool) *TreePos[V] {
 	if index > node.Length {
 		panic(fmt.Errorf("index is out of range: %d > %d", index, node.Length))
 	}
@@ -503,9 +523,9 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preperInline bool) *Tree
 	pos := 0
 	for _, child := range node.Children() {
 		// The pos is in both sides of the inline node, we should traverse
-		// inside the inline node if preperInline is true.
-		if preperInline && child.IsInline() && child.Length >= index-pos {
-			return t.findTreePos(child, index-pos, preperInline)
+		// inside the inline node if preferInline is true.
+		if preferInline && child.IsInline() && child.Length >= index-pos {
+			return t.findTreePos(child, index-pos, preferInline)
 		}
 
 		// The position is in left side of the block node.
@@ -516,8 +536,8 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preperInline bool) *Tree
 			}
 		}
 
-		// The position is in right side of the block node and preperInline is false.
-		if !preperInline && child.PaddedLength() == index-pos {
+		// The position is in right side of the block node and preferInline is false.
+		if !preferInline && child.PaddedLength() == index-pos {
 			return &TreePos[V]{
 				Node:   node,
 				Offset: offset + 1,
@@ -528,7 +548,7 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preperInline bool) *Tree
 		if child.PaddedLength() > index-pos {
 			// If we traverse inside the block node, we should skip the open.
 			skipOpenSize := 1
-			return t.findTreePos(child, index-pos-skipOpenSize, preperInline)
+			return t.findTreePos(child, index-pos-skipOpenSize, preferInline)
 		}
 
 		pos += child.PaddedLength()
@@ -736,25 +756,4 @@ func (t *Tree[V]) IndexOf(node *Node[V]) int {
 	}
 
 	return index
-}
-
-// ToXML returns the XML representation of this tree.
-func ToXML[V Value](node *Node[V]) string {
-	if node.IsInline() {
-		return node.Value.String()
-	}
-
-	xml := strings.Builder{}
-	xml.WriteString("<" + string(node.Type) + ">")
-	for _, child := range node.Children() {
-		xml.WriteString(ToXML(child))
-	}
-	xml.WriteString("</" + string(node.Type) + ">")
-
-	return xml.String()
-}
-
-// Traverse traverses the tree with postorder traversal.
-func Traverse[V Value](tree *Tree[V], callback func(node *Node[V], depth int)) {
-	postOrderTraversal(tree.root, callback, 0)
 }

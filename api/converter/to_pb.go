@@ -440,10 +440,14 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 			Value:     elem.Bytes(),
 		}, nil
 	case *crdt.Tree:
-		// TODO(hackerwins): Set initial value of tree.
+		bytes, err := TreeToBytes(elem)
+		if err != nil {
+			return nil, err
+		}
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_TREE,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			Value:     bytes,
 		}, nil
 	}
 

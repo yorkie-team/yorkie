@@ -17,6 +17,7 @@
 package converter
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
@@ -43,6 +44,25 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 	}
 
 	return obj, nil
+}
+
+// BytesToTree creates a Tree from the given byte array.
+func BytesToTree(snapshot []byte) (*crdt.Tree, error) {
+	if snapshot == nil {
+		return nil, errors.New("snapshot should not be nil")
+	}
+
+	pbTree := &api.JSONElement_Tree{}
+	if err := proto.Unmarshal(snapshot, pbTree); err != nil {
+		return nil, fmt.Errorf("unmarshal tree: %w", err)
+	}
+
+	tree, err := fromJSONTree(pbTree)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree, nil
 }
 
 func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
@@ -300,11 +320,10 @@ func fromJSONTree(
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO(hackerwins): Build root node(tree) from pbTree.Nodes.
-	root := crdt.NewTreeNode(crdt.InitialCRDTTreePos, "root", "")
-	// for _, pbNode := range pbTree.Nodes {
-	// }
+	root, err := FromTreeNodes(pbTree.Nodes)
+	if err != nil {
+		return nil, err
+	}
 
 	tree := crdt.NewTree(
 		root,

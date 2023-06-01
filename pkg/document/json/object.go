@@ -93,9 +93,9 @@ func (p *Object) SetNewCounter(k string, t crdt.CounterType, n interface{}) *Cou
 }
 
 // SetNewTree sets a new Tree for the given key.
-func (p *Object) SetNewTree(k string, initialRoot ...*crdt.JSONTreeNode) *Tree {
+func (p *Object) SetNewTree(k string, initialRoot ...*TreeNode) *Tree {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		var root *crdt.JSONTreeNode
+		var root *TreeNode
 		if len(initialRoot) > 0 {
 			root = initialRoot[0]
 		}

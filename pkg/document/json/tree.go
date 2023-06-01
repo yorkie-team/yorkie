@@ -28,6 +28,13 @@ const (
 	InlineNodeType = "text"
 )
 
+// TreeNode is a node of Tree for JSON.
+type TreeNode struct {
+	Type     string
+	Children []TreeNode
+	Value    string
+}
+
 // Tree is a CRDT-based tree structure that is used to represent the document
 // tree of text-based editor such as ProseMirror.
 type Tree struct {
@@ -44,24 +51,24 @@ func NewTree(ctx *change.Context, tree *crdt.Tree) *Tree {
 }
 
 // Edit edits this tree with the given node.
-func (t *Tree) Edit(fromIdx, toIdx int, content *crdt.JSONTreeNode) bool {
+func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 	if fromIdx > toIdx {
 		panic("from should be less than or equal to to")
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	var crdtNode *crdt.TreeNode
+	var node *crdt.TreeNode
 	if content != nil && content.Type == InlineNodeType {
-		crdtNode = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), InlineNodeType, content.Value)
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), InlineNodeType, content.Value)
 	} else if content != nil {
-		crdtNode = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type)
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type)
 	}
 
 	fromPos := t.Tree.FindPos(fromIdx)
 	toPos := t.Tree.FindPos(toIdx)
 	var clone *crdt.TreeNode
-	if crdtNode != nil {
-		clone = crdtNode.DeepCopy()
+	if node != nil {
+		clone = node.DeepCopy()
 	}
 	t.Tree.Edit(fromPos, toPos, clone, ticket)
 
@@ -69,7 +76,7 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *crdt.JSONTreeNode) bool {
 		t.CreatedAt(),
 		fromPos,
 		toPos,
-		crdtNode,
+		node,
 		ticket,
 	))
 
@@ -82,13 +89,11 @@ func (t *Tree) Len() int {
 }
 
 // EditByPath edits this tree with the given node.
-func (t *Tree) EditByPath(fromPath []int, toPath []int, content *crdt.JSONTreeNode) bool {
+func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool {
 	ticket := t.context.IssueTimeTicket()
 	var node *crdt.TreeNode
-	if content != nil && content.Type == InlineNodeType {
-		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), InlineNodeType, content.Value)
-	} else if content != nil {
-		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type)
+	if content != nil {
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, content.Value)
 	}
 
 	fromPos := t.Tree.PathToPos(fromPath)
@@ -99,13 +104,12 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *crdt.JSONTreeNo
 }
 
 // BuildRoot returns the root node of this tree.
-func BuildRoot(ctx *change.Context, node *crdt.JSONTreeNode, createdAt *time.Ticket) *crdt.TreeNode {
+func BuildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crdt.TreeNode {
 	if node == nil {
 		return crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), "root")
 	}
 
 	root := crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), node.Type)
-
 	for _, child := range node.Children {
 		traverse(ctx, child, root)
 	}
@@ -113,7 +117,7 @@ func BuildRoot(ctx *change.Context, node *crdt.JSONTreeNode, createdAt *time.Tic
 	return root
 }
 
-func traverse(ctx *change.Context, n crdt.JSONTreeNode, parent *crdt.TreeNode) {
+func traverse(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) {
 	if n.Type == InlineNodeType {
 		treeNode := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), n.Type, n.Value)
 		parent.Append(treeNode)

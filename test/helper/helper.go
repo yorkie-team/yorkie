@@ -175,7 +175,7 @@ func ToDiagnostic(node *crdt.TreeNode) string {
 }
 
 // BuildIndexTree builds an index tree from the given block node.
-func BuildIndexTree(node *crdt.JSONTreeNode) *index.Tree[*crdt.TreeNode] {
+func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
 	doc := document.New("test")
 	err := doc.Update(func(root *json.Object) error {
 		root.SetNewTree("test", node)
@@ -190,7 +190,7 @@ func BuildIndexTree(node *crdt.JSONTreeNode) *index.Tree[*crdt.TreeNode] {
 }
 
 // BuildTreeNode builds a crdt.TreeNode from the given tree node.
-func BuildTreeNode(node *crdt.JSONTreeNode) *crdt.TreeNode {
+func BuildTreeNode(node *json.TreeNode) *crdt.TreeNode {
 	doc := document.New("test")
 	err := doc.Update(func(root *json.Object) error {
 		root.SetNewTree("test", node)

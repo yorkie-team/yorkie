@@ -41,6 +41,16 @@ func ObjectToBytes(obj *crdt.Object) ([]byte, error) {
 	return bytes, nil
 }
 
+// TreeToBytes converts the given tree to byte array.
+func TreeToBytes(tree *crdt.Tree) ([]byte, error) {
+	pbTree := toTree(tree)
+	bytes, err := proto.Marshal(pbTree)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Tree to bytes: %w", err)
+	}
+	return bytes, nil
+}
+
 func toJSONElement(elem crdt.Element) (*api.JSONElement, error) {
 	switch elem := elem.(type) {
 	case *crdt.Object:

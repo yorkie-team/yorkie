@@ -21,7 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -30,11 +30,11 @@ func TestIndexTree(t *testing.T) {
 	t.Run("find position from the given offset", func(t *testing.T) {
 		//    0   1 2 3 4 5 6    7   8 9  10 11 12 13    14
 		// <r> <p> h e l l o </p> <p> w  o  r  l  d  </p>  </r>
-		tree := helper.BuildIndexTree(&crdt.JSONTreeNode{
+		tree := helper.BuildIndexTree(&json.TreeNode{
 			Type: "r",
-			Children: []crdt.JSONTreeNode{
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "hello"}}},
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "world"}}},
+			Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "hello"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "world"}}},
 			},
 		})
 
@@ -67,11 +67,11 @@ func TestIndexTree(t *testing.T) {
 	t.Run("find right node from the given offset in postorder traversal test", func(t *testing.T) {
 		//       0   1 2 3    4   6 7     8
 		// <root> <p> a b </p> <p> c d</p> </root>
-		tree := helper.BuildIndexTree(&crdt.JSONTreeNode{
+		tree := helper.BuildIndexTree(&json.TreeNode{
 			Type: "root",
-			Children: []crdt.JSONTreeNode{
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "ab"}}},
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "cd"}}},
+			Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
 			},
 		})
 
@@ -86,13 +86,13 @@ func TestIndexTree(t *testing.T) {
 	})
 
 	t.Run("find common ancestor of two given nodes test", func(t *testing.T) {
-		tree := helper.BuildIndexTree(&crdt.JSONTreeNode{
+		tree := helper.BuildIndexTree(&json.TreeNode{
 			Type: "root",
-			Children: []crdt.JSONTreeNode{{
+			Children: []json.TreeNode{{
 				Type: "p",
-				Children: []crdt.JSONTreeNode{
-					{Type: "b", Children: []crdt.JSONTreeNode{{Type: "text", Value: "ab"}}},
-					{Type: "b", Children: []crdt.JSONTreeNode{{Type: "text", Value: "cd"}}},
+				Children: []json.TreeNode{
+					{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "b", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
 				}},
 			},
 		})
@@ -108,16 +108,16 @@ func TestIndexTree(t *testing.T) {
 	t.Run("traverse nodes between two given positions test", func(t *testing.T) {
 		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
 		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
-		tree := helper.BuildIndexTree(&crdt.JSONTreeNode{
+		tree := helper.BuildIndexTree(&json.TreeNode{
 			Type: "root",
-			Children: []crdt.JSONTreeNode{{
+			Children: []json.TreeNode{{
 				Type: "p",
-				Children: []crdt.JSONTreeNode{
-					{Type: "text", Children: []crdt.JSONTreeNode{}, Value: "a"},
-					{Type: "text", Children: []crdt.JSONTreeNode{}, Value: "b"},
+				Children: []json.TreeNode{
+					{Type: "text", Children: []json.TreeNode{}, Value: "a"},
+					{Type: "text", Children: []json.TreeNode{}, Value: "b"},
 				}},
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "cde"}}},
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "fg"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cde"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "fg"}}},
 			},
 		})
 
@@ -131,16 +131,16 @@ func TestIndexTree(t *testing.T) {
 	t.Run("find index of the given node test", func(t *testing.T) {
 		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
 		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
-		tree := helper.BuildIndexTree(&crdt.JSONTreeNode{
+		tree := helper.BuildIndexTree(&json.TreeNode{
 			Type: "root",
-			Children: []crdt.JSONTreeNode{{
+			Children: []json.TreeNode{{
 				Type: "p",
-				Children: []crdt.JSONTreeNode{
-					{Type: "text", Children: []crdt.JSONTreeNode{}, Value: "a"},
-					{Type: "text", Children: []crdt.JSONTreeNode{}, Value: "b"},
+				Children: []json.TreeNode{
+					{Type: "text", Children: []json.TreeNode{}, Value: "a"},
+					{Type: "text", Children: []json.TreeNode{}, Value: "b"},
 				}},
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "cde"}}},
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "fg"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cde"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "fg"}}},
 			},
 		})
 
@@ -187,16 +187,16 @@ func TestIndexTree(t *testing.T) {
 
 		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
 		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
-		tree := helper.BuildIndexTree(&crdt.JSONTreeNode{
+		tree := helper.BuildIndexTree(&json.TreeNode{
 			Type: "root",
-			Children: []crdt.JSONTreeNode{{
+			Children: []json.TreeNode{{
 				Type: "rc",
-				Children: []crdt.JSONTreeNode{
-					{Type: "text", Children: []crdt.JSONTreeNode{}, Value: "a"},
-					{Type: "text", Children: []crdt.JSONTreeNode{}, Value: "b"},
+				Children: []json.TreeNode{
+					{Type: "text", Children: []json.TreeNode{}, Value: "a"},
+					{Type: "text", Children: []json.TreeNode{}, Value: "b"},
 				}},
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "cde"}}},
-				{Type: "p", Children: []crdt.JSONTreeNode{{Type: "text", Value: "fg"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cde"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "fg"}}},
 			},
 		})
 
@@ -272,15 +272,15 @@ func TestIndexTree(t *testing.T) {
 	t.Run("find path from given treePos test", func(t *testing.T) {
 		//       0  1  2    3 4 5 6 7     8   9 10 11 12 13  14 15  16
 		// <root><tc><p><tn> A B C D </tn><tn> E  F G  H </tn><p></tc></root>
-		tree := helper.BuildIndexTree(&crdt.JSONTreeNode{
+		tree := helper.BuildIndexTree(&json.TreeNode{
 			Type: "root",
-			Children: []crdt.JSONTreeNode{{
+			Children: []json.TreeNode{{
 				Type: "tc",
-				Children: []crdt.JSONTreeNode{
+				Children: []json.TreeNode{
 					{
-						Type: "p", Children: []crdt.JSONTreeNode{
-							{Type: "tn", Children: []crdt.JSONTreeNode{{Type: "text", Value: "ABCD"}}},
-							{Type: "tn", Children: []crdt.JSONTreeNode{{Type: "text", Value: "EFGH"}}},
+						Type: "p", Children: []json.TreeNode{
+							{Type: "tn", Children: []json.TreeNode{{Type: "text", Value: "ABCD"}}},
+							{Type: "tn", Children: []json.TreeNode{{Type: "text", Value: "EFGH"}}},
 						},
 					},
 				}},

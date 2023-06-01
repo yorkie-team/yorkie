@@ -26,17 +26,10 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-var (
-	initialTreePos = &crdt.TreePos{
-		CreatedAt: time.InitialTicket,
-		Offset:    0,
-	}
-)
-
 func TestTreeNode(t *testing.T) {
 	t.Run("inline node test", func(t *testing.T) {
-		node := crdt.NewTreeNode(initialTreePos, "text", "hello")
-		assert.Equal(t, initialTreePos, node.Pos)
+		node := crdt.NewTreeNode(crdt.DummyTreePos, "text", "hello")
+		assert.Equal(t, crdt.DummyTreePos, node.Pos)
 		assert.Equal(t, "text", node.Type())
 		assert.Equal(t, "hello", node.Value)
 		assert.Equal(t, 5, node.Len())
@@ -45,8 +38,8 @@ func TestTreeNode(t *testing.T) {
 	})
 
 	t.Run("block node test", func(t *testing.T) {
-		para := crdt.NewTreeNode(initialTreePos, "p")
-		para.Append(crdt.NewTreeNode(initialTreePos, "text", "helloyorkie"))
+		para := crdt.NewTreeNode(crdt.DummyTreePos, "p")
+		para.Append(crdt.NewTreeNode(crdt.DummyTreePos, "text", "helloyorkie"))
 		assert.Equal(t, "<p>helloyorkie</p>", crdt.ToXML(para))
 		assert.Equal(t, 11, para.Len())
 		assert.Equal(t, false, para.IsInline())

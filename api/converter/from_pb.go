@@ -729,17 +729,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 			createdAt,
 		), nil
 	case api.ValueType_VALUE_TYPE_TREE:
-		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
-		if err != nil {
-			return nil, err
-		}
-		// TODO(hackerwins): Build tree from pbElement.Value(bytes).
-		root := crdt.NewTreeNode(crdt.InitialCRDTTreePos, "root")
-
-		return crdt.NewTree(
-			root,
-			createdAt,
-		), nil
+		return BytesToTree(pbElement.Value)
 	}
 
 	return nil, fmt.Errorf("%d, %w", pbElement.Type, ErrUnsupportedElement)

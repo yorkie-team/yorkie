@@ -27,24 +27,17 @@ import (
 )
 
 var (
-	// InitialCRDTTreePos is the initial position of the tree.
-	InitialCRDTTreePos = &TreePos{
+	// DummyTreePos is a dummy position of Tree. It is used to represent the head node of RGASplit.
+	DummyTreePos = &TreePos{
 		CreatedAt: time.InitialTicket,
 		Offset:    0,
 	}
 )
 
 const (
-	// DummyHeadType is a type of dummy head. It is used to represent the head node of RGA.
+	// DummyHeadType is a type of dummy head. It is used to represent the head node of RGASplit.
 	DummyHeadType = "dummy"
 )
-
-// JSONTreeNode is a node of Tree for JSON.
-type JSONTreeNode struct {
-	Type     string
-	Children []JSONTreeNode
-	Value    string
-}
 
 // TreeNodeForTest is a TreeNode for test.
 type TreeNodeForTest struct {
@@ -53,14 +46,6 @@ type TreeNodeForTest struct {
 	Value     string
 	Size      int
 	IsRemoved bool
-}
-
-// TreeChange represents the change in the tree.
-type TreeChange struct {
-	Type  string
-	From  int
-	To    int
-	Value JSONTreeNode
 }
 
 // TreeNode is a node of Tree.
@@ -245,10 +230,9 @@ func (n *TreeNode) DeepCopy() *TreeNode {
 
 // Tree is a tree implementation of CRDT.
 type Tree struct {
-	OnChangesHandler func([]*TreeChange)
-	DummyHead        *TreeNode
-	IndexTree        *index.Tree[*TreeNode]
-	NodeMapByPos     *llrb.Tree[*TreePos, *TreeNode]
+	DummyHead    *TreeNode
+	IndexTree    *index.Tree[*TreeNode]
+	NodeMapByPos *llrb.Tree[*TreePos, *TreeNode]
 
 	createdAt *time.Ticket
 	movedAt   *time.Ticket
@@ -258,7 +242,7 @@ type Tree struct {
 // NewTree creates a new instance of Tree.
 func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	tree := &Tree{
-		DummyHead:    NewTreeNode(InitialCRDTTreePos, DummyHeadType),
+		DummyHead:    NewTreeNode(DummyTreePos, DummyHeadType),
 		IndexTree:    index.NewTree[*TreeNode](root.IndexTreeNode),
 		NodeMapByPos: llrb.NewTree[*TreePos, *TreeNode](),
 		createdAt:    createdAt,
@@ -393,23 +377,10 @@ func (t *Tree) FindPos(offset int) *TreePos {
 
 // Edit edits the tree with the given range and content.
 // If the content is undefined, the range will be removed.
-func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket) []*TreeChange {
+func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket) {
 	// 01. split inline nodes at the given range if needed.
 	toPos, toRight := t.findTreePosWithSplitInline(to, editedAt)
 	fromPos, fromRight := t.findTreePosWithSplitInline(from, editedAt)
-
-	// TODO(hackerwins): If concurrent deletion happens, we need to separate the
-	// range(from, to) into multiple ranges.
-	changes := make([]*TreeChange, 0)
-	change := &TreeChange{
-		Type: "content",
-		From: t.toIndex(from),
-		To:   t.toIndex(to),
-	}
-	if content != nil {
-		change.Value = ToJSON(content)
-	}
-	changes = append(changes, change)
 
 	toBeRemoveds := make([]*TreeNode, 0)
 	// 02. remove the nodes and update linked list and index tree.
@@ -472,12 +443,6 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 			target.InsertAt(content.IndexTreeNode, fromPos.Offset+1)
 		}
 	}
-
-	if t.OnChangesHandler != nil {
-		t.OnChangesHandler(changes)
-	}
-
-	return changes
 }
 
 // findTreePosWithSplitInline finds the right node of the given index in postorder.
@@ -514,7 +479,7 @@ func (t *Tree) findTreePosWithSplitInline(pos *TreePos, editedAt *time.Ticket) (
 // toTreePos converts the given crdt.TreePos to index.TreePos<CRDTTreeNode>.
 func (t *Tree) toTreePos(pos *TreePos) *index.TreePos[*TreeNode] {
 	key, node := t.NodeMapByPos.Floor(pos)
-	if node == nil || key.CreatedAt != pos.CreatedAt {
+	if node == nil || key.CreatedAt.Compare(pos.CreatedAt) != 0 {
 		return nil
 	}
 
@@ -596,25 +561,4 @@ func ToStructure(node *TreeNode) TreeNodeForTest {
 // ToXML returns the XML representation of this tree.
 func ToXML(node *TreeNode) string {
 	return index.ToXML(node.IndexTreeNode)
-}
-
-// ToJSON converts the given CRDTNode to JSON.
-func ToJSON(node *TreeNode) JSONTreeNode {
-	if node.IsInline() {
-		currentNode := node
-		return JSONTreeNode{
-			Type:  currentNode.Type(),
-			Value: currentNode.Value,
-		}
-	}
-
-	var children []JSONTreeNode
-	for _, child := range node.IndexTreeNode.Children() {
-		children = append(children, ToJSON(child.Value))
-	}
-
-	return JSONTreeNode{
-		Type:     node.Type(),
-		Children: children,
-	}
 }
