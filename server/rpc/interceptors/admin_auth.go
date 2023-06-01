@@ -18,6 +18,7 @@ package interceptors
 
 import (
 	"context"
+	"strings"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -26,34 +27,38 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/server/admin/auth"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/grpchelper"
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
-// AuthInterceptor is an interceptor for authentication.
-type AuthInterceptor struct {
+// AdminAuthInterceptor is an interceptor for authentication.
+type AdminAuthInterceptor struct {
 	backend      *backend.Backend
 	tokenManager *auth.TokenManager
 }
 
-// NewAuthInterceptor creates a new instance of AuthInterceptor.
-func NewAuthInterceptor(be *backend.Backend, tokenManager *auth.TokenManager) *AuthInterceptor {
-	return &AuthInterceptor{
+// NewAdminAuthInterceptor creates a new instance of AdminAuthInterceptor.
+func NewAdminAuthInterceptor(be *backend.Backend, tokenManager *auth.TokenManager) *AdminAuthInterceptor {
+	return &AdminAuthInterceptor{
 		backend:      be,
 		tokenManager: tokenManager,
 	}
 }
 
 // Unary creates a unary server interceptor for authentication.
-func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
+func (i *AdminAuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req interface{},
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
+		if !isAdminService(info.FullMethod) {
+			return handler(ctx, req)
+		}
+
 		if isRequiredAuth(info.FullMethod) {
 			user, err := i.authenticate(ctx, info.FullMethod)
 			if err != nil {
@@ -81,13 +86,17 @@ func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 }
 
 // Stream creates a stream server interceptor for authentication.
-func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
+func (i *AdminAuthInterceptor) Stream() grpc.StreamServerInterceptor {
 	return func(
 		srv interface{},
 		stream grpc.ServerStream,
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) (err error) {
+		if !isAdminService(info.FullMethod) {
+			return handler(srv, stream)
+		}
+
 		ctx := stream.Context()
 		if isRequiredAuth(info.FullMethod) {
 			user, err := i.authenticate(ctx, info.FullMethod)
@@ -118,20 +127,20 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 	}
 }
 
+func isAdminService(method string) bool {
+	return strings.HasPrefix(method, "/yorkie.v1.AdminService")
+}
+
 func isRequiredAuth(method string) bool {
 	return method != "/yorkie.v1.AdminService/LogIn" &&
 		method != "/yorkie.v1.AdminService/SignUp"
 }
 
 // authenticate does authenticate the request.
-func (i *AuthInterceptor) authenticate(
+func (i *AdminAuthInterceptor) authenticate(
 	ctx context.Context,
 	method string,
 ) (*types.User, error) {
-	if !isRequiredAuth(method) {
-		return nil, nil
-	}
-
 	data, ok := grpcmetadata.FromIncomingContext(ctx)
 	if !ok {
 		return nil, grpcstatus.Errorf(codes.Unauthenticated, "metadata is not provided")

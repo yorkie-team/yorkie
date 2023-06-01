@@ -28,13 +28,13 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/internal/validation"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server"
-	"github.com/yorkie-team/yorkie/server/admin"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
@@ -53,13 +53,12 @@ var (
 
 	ProfilingPort = 21102
 
-	AdminPort = 21103
-
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword
 	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 
+	AdminTokenDuration         = "10s"
 	ClientDeactivateThreshold  = "10s"
 	SnapshotThreshold          = int64(10)
 	SnapshotWithPurgingChanges = false
@@ -85,8 +84,8 @@ func TestDBName() string {
 }
 
 // CreateAdminCli returns a new instance of admin cli for testing.
-func CreateAdminCli(t assert.TestingT, adminAddr string) *adminClient.Client {
-	adminCli, err := adminClient.Dial(adminAddr)
+func CreateAdminCli(t assert.TestingT, rpcAddr string) *adminClient.Client {
+	adminCli, err := adminClient.Dial(rpcAddr)
 	assert.NoError(t, err)
 
 	_, err = adminCli.LogIn(context.Background(), server.DefaultAdminUser, server.DefaultAdminPassword)
@@ -123,9 +122,6 @@ func TestConfig() *server.Config {
 		},
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,
-		},
-		Admin: &admin.Config{
-			Port: AdminPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
 			Interval:                  HousekeepingInterval.String(),
@@ -193,6 +189,38 @@ func TestDocKey(t testing.TB) key.Key {
 // TestDoc returns a new instance of document for testing.
 func TestDoc(k key.Key) *document.Document {
 	return document.New(k, time.InitialActorID.String(), map[string]string{})
+}
+
+// TestSlugName returns a new instance of slug name for testing.
+func TestSlugName(t testing.TB) string {
+	name := t.Name()
+	if err := validation.Validate(name, []any{
+		"required",
+		"min=4",
+		"max=30",
+		"slug",
+	}); err == nil {
+		return name
+	}
+
+	if len(name) > 35 {
+		name = name[len(name)-30:]
+	}
+
+	sb := strings.Builder{}
+	for _, c := range name {
+		if c >= 'A' && c <= 'Z' {
+			sb.WriteRune(c + ('a' - 'A'))
+		} else if c >= 'a' && c <= 'z' {
+			sb.WriteRune(c)
+		} else if c >= '0' && c <= '9' {
+			sb.WriteRune(c)
+		} else {
+			sb.WriteRune('-')
+		}
+	}
+
+	return sb.String()
 }
 
 // NewRangeSlice returns a slice of integers from start to end.

@@ -16,10 +16,13 @@ metadata:
 spec:
   ingressClassName: {{ .Values.ingress.ingressClassName }}
   rules:
+    {{ if .Values.ingress.hosts.enabled }}
+    - host: {{ .Values.ingress.hosts.apiHost }}
+      http:
+    {{ end }}
+    {{ if not .Values.ingress.hosts.enabled }}
     - http:
-      {{ if .Values.ingress.hosts.enabled }}
-      host: {{ .Values.ingress.hosts.apiHost }}
-      {{ end }}
+    {{ end }}
         paths:
           - path: {{ .Values.ingress.hosts.grafanaPath }}/
             pathType: Prefix

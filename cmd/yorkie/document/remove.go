@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Yorkie Authors. All rights reserved.
+ * Copyright 2023 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-package main
+package document
 
 import (
 	"context"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -25,17 +26,22 @@ import (
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
-var (
-	username string
-	password string
-)
-
-func newLoginCmd() *cobra.Command {
+func newRemoveCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "login",
-		Short: "Log in to the Yorkie server",
+		Use:   "remove [project name] [document key]",
+		Short: "Remove documents in the project",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cli, err := admin.Dial(config.RPCAddr)
+			if len(args) != 2 {
+				return errors.New("project name & document key")
+			}
+			projectName := args[0]
+			documentKey := args[1]
+
+			token, err := config.LoadToken(config.RPCAddr)
+			if err != nil {
+				return err
+			}
+			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token))
 			if err != nil {
 				return err
 			}
@@ -44,42 +50,12 @@ func newLoginCmd() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			token, err := cli.LogIn(ctx, username, password)
-			if err != nil {
-				return err
-			}
 
-			conf, err := config.Load()
-			if err != nil {
-				return nil
-			}
-
-			conf.Auths[config.RPCAddr] = token
-			if err := config.Save(conf); err != nil {
-				return err
-			}
-
-			return nil
+			return cli.RemoveDocument(ctx, projectName, documentKey)
 		},
 	}
 }
 
 func init() {
-	cmd := newLoginCmd()
-	cmd.Flags().StringVarP(
-		&username,
-		"username",
-		"u",
-		"",
-		"Username (required if password is set)",
-	)
-	cmd.Flags().StringVarP(
-		&password,
-		"password",
-		"p",
-		"",
-		"Password (required if username is set)",
-	)
-	cmd.MarkFlagsRequiredTogether("username", "password")
-	rootCmd.AddCommand(cmd)
+	SubCmd.AddCommand(newRemoveCommand())
 }

@@ -19,6 +19,7 @@ package interceptors
 
 import (
 	"context"
+	"strings"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -28,8 +29,8 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
@@ -53,6 +54,10 @@ func (i *ContextInterceptor) Unary() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
+		if !isYorkieService(info.FullMethod) {
+			return handler(ctx, req)
+		}
+
 		ctx, err = i.buildContext(ctx)
 		if err != nil {
 			return nil, err
@@ -83,12 +88,16 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 		ss grpc.ServerStream,
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
-	) error {
-		ctx := ss.Context()
-		ctx, err := i.buildContext(ctx)
+	) (err error) {
+		if !isYorkieService(info.FullMethod) {
+			return handler(srv, ss)
+		}
+
+		ctx, err := i.buildContext(ss.Context())
 		if err != nil {
 			return err
 		}
+
 		wrapped := grpcmiddleware.WrapServerStream(ss)
 		wrapped.WrappedContext = ctx
 
@@ -108,6 +117,10 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 
 		return err
 	}
+}
+
+func isYorkieService(method string) bool {
+	return strings.HasPrefix(method, "/yorkie.v1.YorkieService/")
 }
 
 // buildContext builds a context data for RPC. It includes the metadata of the

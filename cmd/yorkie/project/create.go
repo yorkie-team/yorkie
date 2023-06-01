@@ -41,11 +41,11 @@ func newCreateCommand() *cobra.Command {
 			}
 			name := args[0]
 
-			token, err := config.LoadToken(config.AdminAddr)
+			token, err := config.LoadToken(config.RPCAddr)
 			if err != nil {
 				return err
 			}
-			cli, err := admin.Dial(config.AdminAddr, admin.WithToken(token))
+			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token))
 			if err != nil {
 				return err
 			}

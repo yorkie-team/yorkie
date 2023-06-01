@@ -813,6 +813,43 @@ func (c *Client) FindDocInfoByID(
 	return &docInfo, nil
 }
 
+// UpdateDocInfoStatusToRemoved updates the document status to removed.
+func (c *Client) UpdateDocInfoStatusToRemoved(
+	ctx context.Context,
+	projectID types.ID,
+	id types.ID,
+) error {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return err
+	}
+
+	encodedDocID, err := encodeID(id)
+	if err != nil {
+		return err
+	}
+
+	result := c.collection(colDocuments).FindOneAndUpdate(ctx, bson.M{
+		"_id":        encodedDocID,
+		"project_id": encodedProjectID,
+	}, bson.M{
+		"$set": bson.M{
+			"removed_at": gotime.Now(),
+		},
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+	if result.Err() == mongo.ErrNoDocuments {
+		logging.From(ctx).Error(result.Err())
+		return fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
+	}
+	if result.Err() != nil {
+		logging.From(ctx).Error(result.Err())
+		return fmt.Errorf("update document info status to removed: %w", result.Err())
+	}
+
+	return nil
+}
+
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,

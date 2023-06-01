@@ -33,7 +33,7 @@ func TestHistory(t *testing.T) {
 	cli := clients[0]
 	defer deactivateAndCloseClients(t, clients)
 
-	adminCli := helper.CreateAdminCli(t, defaultServer.AdminAddr())
+	adminCli := helper.CreateAdminCli(t, defaultServer.RPCAddr())
 	defer func() { assert.NoError(t, adminCli.Close()) }()
 
 	t.Run("history test", func(t *testing.T) {

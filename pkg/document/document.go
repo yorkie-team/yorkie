@@ -60,7 +60,9 @@ func (d *Document) Update(
 		return ErrDocumentRemoved
 	}
 
-	d.ensureClone()
+	if err := d.ensureClone(); err != nil {
+		return err
+	}
 
 	d.doc.changeContext = change.NewContext(
 		d.doc.changeID.Next(),
@@ -108,7 +110,9 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 			return err
 		}
 	} else {
-		d.ensureClone()
+		if err := d.ensureClone(); err != nil {
+			return err
+		}
 
 		for _, c := range pack.Changes {
 			if err := c.Execute(d.clone); err != nil {
@@ -232,7 +236,9 @@ func (d *Document) RootObject() *crdt.Object {
 
 // Root returns the root object of this document.
 func (d *Document) Root() *json.Object {
-	d.ensureClone()
+	if err := d.ensureClone(); err != nil {
+		panic(err)
+	}
 
 	ctx := change.NewContext(d.doc.changeID.Next(), "", d.clone)
 	return json.NewObject(ctx, d.clone.Object())
@@ -251,10 +257,15 @@ func (d *Document) GarbageLen() int {
 	return d.doc.GarbageLen()
 }
 
-func (d *Document) ensureClone() {
+func (d *Document) ensureClone() error {
 	if d.clone == nil {
-		d.clone = d.doc.root.DeepCopy()
+		copiedDoc, err := d.doc.root.DeepCopy()
+		if err != nil {
+			return err
+		}
+		d.clone = copiedDoc
 	}
+	return nil
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

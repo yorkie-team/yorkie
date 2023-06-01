@@ -200,6 +200,18 @@ func (m *PubSub) Publish(
 	}
 }
 
+// GetPeers returns the peers of the given document.
+func (m *PubSub) GetPeers(documentID types.ID) []types.Client {
+	m.subscriptionsMapMu.RLock()
+	defer m.subscriptionsMapMu.RUnlock()
+
+	var peers []types.Client
+	for _, sub := range m.subscriptionsMapByDocID[documentID].Map() {
+		peers = append(peers, sub.Subscriber())
+	}
+	return peers
+}
+
 // UpdatePresence updates the presence of the given client.
 func (m *PubSub) UpdatePresence(
 	publisher *types.Client,

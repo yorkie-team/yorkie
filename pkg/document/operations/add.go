@@ -60,7 +60,10 @@ func (o *Add) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	value := o.value.DeepCopy()
+	value, err := o.value.DeepCopy()
+	if err != nil {
+		return err
+	}
 	obj.InsertAfter(o.prevCreatedAt, value)
 
 	root.RegisterElement(value)

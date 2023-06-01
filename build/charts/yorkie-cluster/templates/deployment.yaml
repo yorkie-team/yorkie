@@ -43,12 +43,11 @@ spec:
           "--enable-pprof",
         ]
         ports:
-          - containerPort: {{ .Values.yorkie.ports.sdkPort }}
+          - containerPort: {{ .Values.yorkie.ports.rpcPort }}
           - containerPort: {{ .Values.yorkie.ports.profilingPort }}
-          - containerPort: {{ .Values.yorkie.ports.adminPort }}
         livenessProbe:
           grpc:
-            port: {{ .Values.yorkie.ports.sdkPort }}
+            port: {{ .Values.yorkie.ports.rpcPort }}
           initialDelaySeconds: 10
         resources:
           {{ toYaml .Values.yorkie.resources | nindent 12 }}

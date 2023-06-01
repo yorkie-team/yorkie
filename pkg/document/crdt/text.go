@@ -166,23 +166,23 @@ func (t *Text) Marshal() string {
 }
 
 // DeepCopy copies itself deeply.
-func (t *Text) DeepCopy() Element {
+func (t *Text) DeepCopy() (Element, error) {
 	rgaTreeSplit := NewRGATreeSplit(InitialTextNode())
-
 	current := rgaTreeSplit.InitialHead()
+
 	for _, node := range t.Nodes() {
 		current = rgaTreeSplit.InsertAfter(current, node.DeepCopy())
 		insPrevID := node.InsPrevID()
 		if insPrevID != nil {
 			insPrevNode := rgaTreeSplit.FindNode(insPrevID)
 			if insPrevNode == nil {
-				panic("insPrevNode should be presence")
+				return nil, fmt.Errorf("insPrevNode should be presence")
 			}
 			current.SetInsPrev(insPrevNode)
 		}
 	}
 
-	return NewText(rgaTreeSplit, t.createdAt)
+	return NewText(rgaTreeSplit, t.createdAt), nil
 }
 
 // CreatedAt returns the creation time of this Text.
@@ -221,7 +221,7 @@ func (t *Text) Remove(removedAt *time.Ticket) bool {
 }
 
 // CreateRange returns a pair of RGATreeSplitNodePos of the given integer offsets.
-func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
+func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos, error) {
 	return t.rgaTreeSplit.createRange(from, to)
 }
 
@@ -233,21 +233,19 @@ func (t *Text) Edit(
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket) {
+) (*RGATreeSplitNodePos, map[string]*time.Ticket, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
 		val.attrs.Set(key, value, executedAt)
 	}
 
-	cursorPos, latestCreatedAtMapByActor := t.rgaTreeSplit.edit(
+	return t.rgaTreeSplit.edit(
 		from,
 		to,
 		latestCreatedAtMapByActor,
 		val,
 		executedAt,
 	)
-
-	return cursorPos, latestCreatedAtMapByActor
 }
 
 // Style applies the given attributes of the given range.
@@ -256,10 +254,16 @@ func (t *Text) Style(
 	to *RGATreeSplitNodePos,
 	attributes map[string]string,
 	executedAt *time.Ticket,
-) {
+) error {
 	// 01. Split nodes with from and to
-	_, toRight := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
-	_, fromRight := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
+	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
+	if err != nil {
+		return err
+	}
+	_, fromRight, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
+	if err != nil {
+		return err
+	}
 
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
@@ -269,6 +273,7 @@ func (t *Text) Style(
 			val.attrs.Set(key, value, executedAt)
 		}
 	}
+	return nil
 }
 
 // Select stores that the given range has been selected.

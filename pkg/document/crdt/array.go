@@ -49,8 +49,12 @@ func (a *Array) Add(elem Element) *Array {
 }
 
 // Get returns the element of the given index.
-func (a *Array) Get(idx int) Element {
-	return a.elements.Get(idx).elem
+func (a *Array) Get(idx int) (Element, error) {
+	node, err := a.elements.Get(idx)
+	if err != nil {
+		return nil, err
+	}
+	return node.elem, nil
 }
 
 // FindPrevCreatedAt returns the creation time of the previous element of the
@@ -60,8 +64,12 @@ func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 }
 
 // Delete deletes the element of the given index.
-func (a *Array) Delete(idx int, deletedAt *time.Ticket) Element {
-	return a.elements.Delete(idx, deletedAt).elem
+func (a *Array) Delete(idx int, deletedAt *time.Ticket) (Element, error) {
+	node, err := a.elements.Delete(idx, deletedAt)
+	if err != nil {
+		return nil, err
+	}
+	return node.elem, nil
 }
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
@@ -95,16 +103,20 @@ func (a *Array) StructureAsString() string {
 }
 
 // DeepCopy copies itself deeply.
-func (a *Array) DeepCopy() Element {
+func (a *Array) DeepCopy() (Element, error) {
 	elements := NewRGATreeList()
 
 	for _, node := range a.elements.Nodes() {
-		elements.Add(node.elem.DeepCopy())
+		copiedNode, err := node.elem.DeepCopy()
+		if err != nil {
+			return nil, err
+		}
+		elements.Add(copiedNode)
 	}
 
 	array := NewArray(elements, a.createdAt)
 	array.removedAt = a.removedAt
-	return array
+	return array, nil
 }
 
 // CreatedAt returns the creation time of this array.
