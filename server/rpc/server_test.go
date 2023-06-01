@@ -298,9 +298,10 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
-				ChangePack: packWithNoChanges,
+				ClientId:            activateResp.ClientId,
+				DocumentId:          resPack.DocumentId,
+				ChangePack:          packWithNoChanges,
+				RemoveIfNotAttached: false,
 			},
 		)
 		assert.NoError(t, err)
@@ -309,9 +310,10 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
-				ChangePack: packWithNoChanges,
+				ClientId:            activateResp.ClientId,
+				DocumentId:          resPack.DocumentId,
+				ChangePack:          packWithNoChanges,
+				RemoveIfNotAttached: false,
 			},
 		)
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
@@ -319,7 +321,18 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
+				ClientId:            activateResp.ClientId,
+				ChangePack:          invalidChangePack,
+				RemoveIfNotAttached: false,
+			},
+		)
+		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+
+		_, err = testClient.DetachDocument(
+			context.Background(),
+			&api.DetachDocumentRequest{
 				ClientId:   activateResp.ClientId,
+				DocumentId: resPack.DocumentId,
 				ChangePack: invalidChangePack,
 			},
 		)
@@ -334,6 +347,7 @@ func TestSDKRPCServerBackend(t *testing.T) {
 				ChangePack: &api.ChangePack{
 					Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 				},
+				RemoveIfNotAttached: false,
 			},
 		)
 		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
@@ -397,9 +411,10 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
-				ChangePack: packWithNoChanges,
+				ClientId:            activateResp.ClientId,
+				DocumentId:          resPack.DocumentId,
+				ChangePack:          packWithNoChanges,
+				RemoveIfNotAttached: false,
 			},
 		)
 		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
@@ -492,6 +507,7 @@ func TestSDKRPCServerBackend(t *testing.T) {
 						},
 					}},
 				},
+				RemoveIfNotAttached: false,
 			},
 		)
 		assert.NoError(t, err)
@@ -664,9 +680,10 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		_, err = testClient.DetachDocument(
 			context.Background(),
 			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
-				ChangePack: packWithNoChanges,
+				ClientId:            activateResp.ClientId,
+				DocumentId:          resPack.DocumentId,
+				ChangePack:          packWithNoChanges,
+				RemoveIfNotAttached: false,
 			},
 		)
 		assert.NoError(t, err)

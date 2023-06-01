@@ -139,7 +139,7 @@ func TestAdmin(t *testing.T) {
 		assert.Equal(t, document.StatusAttached, d1.Status())
 
 		// 03. client detach the document and admin removes the documents.
-		assert.NoError(t, cli.Detach(ctx, d1))
+		assert.NoError(t, cli.Detach(ctx, d1, false))
 		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String(), false)
 		assert.NoError(t, err)
 		assert.Equal(t, document.StatusDetached, d1.Status())

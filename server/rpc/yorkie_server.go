@@ -247,6 +247,17 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
+	isAttached, err := documents.IsAttachedDocument(ctx, s.backend, project.ID, docInfo.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !isAttached && req.RemoveIfNotAttached {
+		if err := documents.RemoveDocument(ctx, s.backend, docInfo.ID); err != nil {
+			return nil, err
+		}
+	}
+
 	return &api.DetachDocumentResponse{
 		ChangePack: pbChangePack,
 	}, nil

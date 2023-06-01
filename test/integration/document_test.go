@@ -52,7 +52,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, doc.IsAttached())
 
-		err = c1.Detach(ctx, doc)
+		err = c1.Detach(ctx, doc, false)
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 
@@ -301,7 +301,7 @@ func TestDocument(t *testing.T) {
 
 		// 02. cli1 removes d1 and cli2 detaches d2.
 		assert.NoError(t, c1.Remove(ctx, d1))
-		assert.NoError(t, c2.Detach(ctx, d2))
+		assert.NoError(t, c2.Detach(ctx, d2, false))
 		assert.Equal(t, d1.Status(), document.StatusRemoved)
 		assert.Equal(t, d2.Status(), document.StatusRemoved)
 	})
@@ -346,7 +346,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. abnormal behavior on detached state
 		d1 := document.New(helper.TestDocKey(t))
-		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Detach(ctx, d1, false), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
 
@@ -358,7 +358,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, cli.Remove(ctx, d1))
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrDocumentNotAttached)
-		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Detach(ctx, d1, false), client.ErrDocumentNotAttached)
 	})
 
 	t.Run("removed document removal with watching test", func(t *testing.T) {
