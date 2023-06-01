@@ -173,6 +173,7 @@ type Database interface {
 		ctx context.Context,
 		projectID types.ID,
 		docID types.ID,
+		excludeClientInfoID types.ID,
 	) (bool, error)
 
 	// CreateChangeInfos stores the given changes then updates the given docInfo.

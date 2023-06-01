@@ -363,7 +363,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		}
 	}()
 
-	isAttached, err := documents.IsAttachedDocument(ctx, s.backend, project.ID, docInfo.ID)
+	isAttached, err := documents.IsAttachedDocument(ctx, s.backend, project.ID, docInfo.ID, "")
 	if err != nil {
 		return nil, err
 	}
