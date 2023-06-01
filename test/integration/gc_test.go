@@ -24,7 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -36,12 +35,10 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for container type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -103,12 +100,10 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for text type test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -175,12 +170,10 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {

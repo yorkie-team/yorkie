@@ -24,13 +24,12 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestDB(t *testing.T) {
@@ -179,14 +178,13 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("set RemovedAt in docInfo test", func(t *testing.T) {
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
-
+		docKey := helper.TestDocKey(t)
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		doc := document.New(key.Key(t.Name()))
+		doc := helper.TestDoc(docKey)
 		pack := doc.CreateChangePack()
 
 		// Set RemovedAt in docInfo and store changes
@@ -200,14 +198,14 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("reuse same key to create docInfo test ", func(t *testing.T) {
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docKey := helper.TestDocKey(t)
 
 		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name())
 		docInfo1, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo1.ID, docKey, true)
 		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
 
-		doc := document.New(key.Key(t.Name()))
+		doc := helper.TestDoc(docKey)
 		pack := doc.CreateChangePack()
 
 		// Set RemovedAt in docInfo and store changes
@@ -229,7 +227,7 @@ func TestDB(t *testing.T) {
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docKey := helper.TestDocKey(t)
 		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, err)
 
@@ -240,17 +238,14 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("insert and find changes test", func(t *testing.T) {
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docKey := helper.TestDocKey(t)
 
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		bytesID, _ := clientInfo.ID.Bytes()
-		actorID, _ := time.ActorIDFromBytes(bytesID)
-		doc := document.New(key.Key(t.Name()))
-		doc.SetActor(actorID)
+		doc := helper.TestDoc(docKey)
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			root.SetNewArray("array")
 			return nil
@@ -286,12 +281,8 @@ func TestDB(t *testing.T) {
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
-		bytesID, _ := clientInfo.ID.Bytes()
-		actorID, _ := time.ActorIDFromBytes(bytesID)
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
-
-		doc := document.New(key.Key(t.Name()))
-		doc.SetActor(actorID)
+		doc := helper.TestDoc(docKey)
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			root.SetNewArray("array")

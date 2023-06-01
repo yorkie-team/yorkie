@@ -651,7 +651,7 @@ func TestRPCServerBackend(t *testing.T) {
 		watchResp, err := testClient.WatchDocument(
 			context.Background(),
 			&api.WatchDocumentRequest{
-				Client:     &api.Client{Id: activateResp.ClientId, Presence: &api.Presence{}},
+				Client:     &api.Client{Id: activateResp.ClientId, Presence: &api.PresenceInfo{}},
 				DocumentId: resPack.DocumentId,
 			},
 		)

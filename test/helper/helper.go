@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -187,6 +188,11 @@ func TestDocKey(t testing.TB) key.Key {
 	}
 
 	return key.Key(sb.String())
+}
+
+// TestDoc returns a new instance of document for testing.
+func TestDoc(k key.Key) *document.Document {
+	return document.New(k, time.InitialActorID.String(), map[string]string{})
 }
 
 // NewRangeSlice returns a slice of integers from start to end.

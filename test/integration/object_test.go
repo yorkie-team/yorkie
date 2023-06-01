@@ -24,7 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -37,12 +36,10 @@ func TestObject(t *testing.T) {
 	t.Run("causal object.set/delete test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -70,8 +67,7 @@ func TestObject(t *testing.T) {
 
 	t.Run("concurrent object set/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -83,8 +79,7 @@ func TestObject(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -107,12 +102,10 @@ func TestObject(t *testing.T) {
 
 	t.Run("concurrent object.set test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := c1.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		d2, err := c2.Connect(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		// 01. concurrent set on same key

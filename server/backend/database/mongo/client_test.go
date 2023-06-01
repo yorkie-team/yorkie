@@ -18,7 +18,6 @@ package mongo_test
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -26,7 +25,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -141,14 +139,14 @@ func TestClient(t *testing.T) {
 
 	t.Run("set removed_at in docInfo test", func(t *testing.T) {
 		ctx := context.Background()
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docKey := helper.TestDocKey(t)
 
 		clientInfo, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
 		docInfo, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		doc := document.New(key.Key(t.Name()))
+		doc := helper.TestDoc(docKey)
 		pack := doc.CreateChangePack()
 
 		// Set removed_at in docInfo and store changes
@@ -169,14 +167,14 @@ func TestClient(t *testing.T) {
 
 	t.Run("reuse same key to create docInfo test ", func(t *testing.T) {
 		ctx := context.Background()
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docKey := helper.TestDocKey(t)
 
 		clientInfo1, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
 		docInfo1, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo1.ID, docKey, true)
 		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID))
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
 
-		doc := document.New(key.Key(t.Name()))
+		doc := helper.TestDoc(docKey)
 		pack := doc.CreateChangePack()
 
 		// Set removed_at in docInfo and store changes

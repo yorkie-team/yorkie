@@ -66,10 +66,7 @@ func TestRetention(t *testing.T) {
 			logging.DefaultLogger().Fatal(err)
 		}
 
-		cli, err := client.Dial(
-			testServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 0)}),
-		)
+		cli, err := client.Dial(testServer.RPCAddr())
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(context.Background()))
 		defer func() {
@@ -131,10 +128,7 @@ func TestRetention(t *testing.T) {
 			logging.DefaultLogger().Fatal(err)
 		}
 
-		cli1, err := client.Dial(
-			testServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 0)}),
-		)
+		cli1, err := client.Dial(testServer.RPCAddr())
 		assert.NoError(t, err)
 
 		err = cli1.Activate(context.Background())
@@ -207,10 +201,7 @@ func TestRetention(t *testing.T) {
 		// one is most recent ServerSeq and one is one older from the most recent ServerSeq
 		assert.Len(t, changes, 2)
 
-		cli2, err := client.Dial(
-			testServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 1)}),
-		)
+		cli2, err := client.Dial(testServer.RPCAddr())
 		assert.NoError(t, err)
 
 		err = cli2.Activate(context.Background())

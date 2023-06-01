@@ -24,7 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -39,8 +38,8 @@ func TestHistory(t *testing.T) {
 
 	t.Run("history test", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli.Attach(ctx, d1))
+		d1, err := cli.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 
 		assert.NoError(t, d1.Update(func(root *json.Object) error {

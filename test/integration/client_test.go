@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/client"
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -80,12 +79,13 @@ func TestClient(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. c1, c2, c3 attach to the same document.
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
-		d3 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c3.Attach(ctx, d3))
+		docKey := helper.TestDocKey(t)
+		d1, err := c1.Connect(ctx, docKey, map[string]string{})
+		assert.NoError(t, err)
+		d2, err := c2.Connect(ctx, docKey, map[string]string{})
+		assert.NoError(t, err)
+		d3, err := c3.Connect(ctx, docKey, map[string]string{})
+		assert.NoError(t, err)
 
 		// 02. c1, c2 sync with push-pull mode.
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
@@ -134,8 +134,8 @@ func TestClient(t *testing.T) {
 
 		// 01. cli attach to the same document having counter.
 		ctx := context.Background()
-		doc := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli.Attach(ctx, doc))
+		doc, err := cli.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		assert.NoError(t, err)
 
 		// 02. cli update the document with creating a counter
 		//     and sync with push-pull mode: CP(0, 0) -> CP(1, 1)

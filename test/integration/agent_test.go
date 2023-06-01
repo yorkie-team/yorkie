@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/client"
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -43,8 +42,8 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(ctx))
 
-		doc := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli.Attach(ctx, doc))
+		doc, err := cli.Connect(ctx, helper.TestDocKey(t), map[string]string{})
+		assert.NoError(t, err)
 
 		wg := sync.WaitGroup{}
 		wrch, err := cli.Watch(ctx, doc)
@@ -58,7 +57,7 @@ func TestServer(t *testing.T) {
 					return
 				case wr := <-wrch:
 					if wr.Err == io.EOF || status.Code(wr.Err) == codes.Canceled {
-						peers := wr.PeersMapByDoc[doc.Key()]
+						peers := wr.PeersMapByDoc
 						assert.Len(t, peers, 0)
 						wg.Done()
 						return

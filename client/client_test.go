@@ -78,13 +78,10 @@ func (s *testYorkieServer) Stop() {
 
 func TestClient(t *testing.T) {
 	t.Run("create instance test", func(t *testing.T) {
-		presence := types.Presence{"Name": "ClientName"}
 		cli, err := client.New(
 			client.WithToken(xid.New().String()),
-			client.WithPresence(presence),
 		)
 		assert.NoError(t, err)
-		assert.Equal(t, presence, cli.Presence())
 	})
 
 	t.Run("x-shard-key test", func(t *testing.T) {

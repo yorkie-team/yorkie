@@ -26,11 +26,11 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestConverter(t *testing.T) {
@@ -39,7 +39,7 @@ func TestConverter(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "{}", obj.Marshal())
 
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err = doc.Update(func(root *json.Object) error {
 			root.SetNewText("k1").Edit(0, 0, "A")
@@ -64,7 +64,7 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("snapshot test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			// an object and primitive types
@@ -126,7 +126,7 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("change pack test", func(t *testing.T) {
-		d1 := document.New("d1")
+		d1 := helper.TestDoc("d1")
 
 		err := d1.Update(func(root *json.Object) error {
 			// an object and primitive types
@@ -184,7 +184,7 @@ func TestConverter(t *testing.T) {
 		assert.NoError(t, err)
 		pack.MinSyncedTicket = time.MaxTicket
 
-		d2 := document.New("d1")
+		d2 := helper.TestDoc("d1")
 		err = d2.ApplyChangePack(pack)
 		assert.NoError(t, err)
 

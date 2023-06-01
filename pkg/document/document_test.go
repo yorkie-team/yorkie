@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 var (
@@ -36,23 +37,23 @@ var (
 
 func TestDocument(t *testing.T) {
 	t.Run("constructor test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 		assert.Equal(t, doc.Checkpoint(), change.InitialCheckpoint)
 		assert.False(t, doc.HasLocalChanges())
 		assert.False(t, doc.IsAttached())
 	})
 
 	t.Run("status test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 		assert.False(t, doc.IsAttached())
 		doc.SetStatus(document.StatusAttached)
 		assert.True(t, doc.IsAttached())
 	})
 
 	t.Run("equals test", func(t *testing.T) {
-		doc1 := document.New("d1")
-		doc2 := document.New("d2")
-		doc3 := document.New("d3")
+		doc1 := helper.TestDoc("d1")
+		doc2 := helper.TestDoc("d2")
+		doc3 := helper.TestDoc("d3")
 
 		err := doc1.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
@@ -67,7 +68,7 @@ func TestDocument(t *testing.T) {
 	t.Run("nested update test", func(t *testing.T) {
 		expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
 
@@ -85,7 +86,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("delete test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
 		expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
@@ -110,7 +111,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("object test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 		err := doc.Update(func(root *json.Object) error {
 			root.SetString("k1", "v1")
 			assert.Equal(t, `{"k1":"v1"}`, root.Marshal())
@@ -123,7 +124,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("array test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
@@ -161,7 +162,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("delete elements of array test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 		err := doc.Update(func(root *json.Object) error {
 			root.SetNewArray("data").AddInteger(0).AddInteger(1).AddInteger(2)
 			return nil
@@ -196,7 +197,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("text test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		//           ---------- ins links --------
 		//           |                |          |
@@ -238,7 +239,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("text composition test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			root.SetNewText("k1").
@@ -256,7 +257,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("rich text test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k1")
@@ -350,7 +351,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("counter test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 		var integer = 10
 		var long int64 = 5
 		var uinteger uint = 100
@@ -425,7 +426,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("rollback test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			root.SetNewArray("k1").AddInteger(1, 2, 3)
@@ -450,7 +451,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("rollback test, primitive deepcopy", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			root.SetNewObject("k1").
@@ -470,7 +471,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("text garbage collection test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			root.SetNewText("text")
@@ -507,7 +508,7 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("previously inserted elements in heap when running GC test", func(t *testing.T) {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			root.SetInteger("a", 1)
