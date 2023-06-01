@@ -388,7 +388,6 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 }
 
 func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
-	// TODO(hackerwins): Encode entire tree from e.Content.
 	return &api.Operation_TreeEdit_{
 		TreeEdit: &api.Operation_TreeEdit{
 			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),

@@ -24,8 +24,11 @@ import (
 )
 
 const (
-	// InlineNodeType is the type of text inline node.
-	InlineNodeType = "text"
+	// DefaultTextNodeType is the default type of text node.
+	DefaultTextNodeType = "text"
+
+	// DefaultRootNodeType is the default type of root node.
+	DefaultRootNodeType = "root"
 )
 
 // TreeNode is a node of Tree for JSON.
@@ -58,13 +61,12 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 
 	ticket := t.context.IssueTimeTicket()
 	var node *crdt.TreeNode
-	if content != nil && content.Type == InlineNodeType {
-		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), InlineNodeType, content.Value)
+	if content != nil && content.Type == DefaultTextNodeType {
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), DefaultTextNodeType, content.Value)
 	} else if content != nil {
 		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type)
-		// TODO(krapie): handle cases when content have children
 		for _, child := range content.Children {
-			traverse(t.context, child, node)
+			buildDescendants(t.context, child, node)
 		}
 	}
 
@@ -110,19 +112,19 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 // BuildRoot returns the root node of this tree.
 func BuildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crdt.TreeNode {
 	if node == nil {
-		return crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), "root")
+		return crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), DefaultRootNodeType)
 	}
 
 	root := crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), node.Type)
 	for _, child := range node.Children {
-		traverse(ctx, child, root)
+		buildDescendants(ctx, child, root)
 	}
 
 	return root
 }
 
-func traverse(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) {
-	if n.Type == InlineNodeType {
+func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) {
+	if n.Type == DefaultTextNodeType {
 		treeNode := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), n.Type, n.Value)
 		parent.Append(treeNode)
 		return
@@ -132,6 +134,6 @@ func traverse(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) {
 	parent.Append(treeNode)
 
 	for _, child := range n.Children {
-		traverse(ctx, child, treeNode)
+		buildDescendants(ctx, child, treeNode)
 	}
 }

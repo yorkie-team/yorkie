@@ -227,7 +227,7 @@ func toTextNodeID(id *crdt.RGATreeSplitNodeID) *api.TextNodeID {
 	}
 }
 
-// ToTreeNodes converts a TreeNode to a slice of TreeNode.
+// ToTreeNodes converts a TreeNode to a slice of TreeNodes in post-order traversal.
 func ToTreeNodes(treeNode *crdt.TreeNode) []*api.TreeNode {
 	var pbTreeNodes []*api.TreeNode
 	index.TraverseNode(treeNode.IndexTreeNode, func(node *index.Node[*crdt.TreeNode], depth int) {

@@ -179,10 +179,6 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("subscribed by handler test", func(t *testing.T) {
-		// TODO(krapie): add this test case later
-	})
-
 	t.Run("edit its content with path", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object) error {

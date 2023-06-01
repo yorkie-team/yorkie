@@ -192,16 +192,12 @@ func (n *TreeNode) SplitInline(offset int) *TreeNode {
 
 // remove marks the node as removed.
 func (n *TreeNode) remove(removedAt *time.Ticket) {
-	alived := true
-	if n.RemovedAt != nil {
-		alived = false
-	}
-
+	justRemoved := n.RemovedAt == nil
 	if n.RemovedAt == nil || n.RemovedAt.Compare(removedAt) > 0 {
 		n.RemovedAt = removedAt
 	}
 
-	if alived {
+	if justRemoved {
 		n.IndexTreeNode.UpdateAncestorsSize()
 	}
 }
@@ -228,7 +224,8 @@ func (n *TreeNode) DeepCopy() *TreeNode {
 	return clone
 }
 
-// Tree is a tree implementation of CRDT.
+// Tree represents the tree of CRDT. It has doubly linked list structure and
+// index tree structure.
 type Tree struct {
 	DummyHead    *TreeNode
 	IndexTree    *index.Tree[*TreeNode]
@@ -259,27 +256,26 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 
 // Marshal returns the JSON encoding of this Tree.
 func (t *Tree) Marshal() string {
-	return marshal(t.Root())
+	builder := &strings.Builder{}
+	marshal(builder, t.Root())
+	return builder.String()
 }
 
 // marshal returns the JSON encoding of this Tree.
-func marshal(node *TreeNode) string {
-	builder := strings.Builder{}
-
+func marshal(builder *strings.Builder, node *TreeNode) {
 	if node.IsInline() {
 		builder.WriteString(fmt.Sprintf(`{"type":"%s","value":"%s"}`, node.Type(), node.Value))
-	} else {
-		builder.WriteString(fmt.Sprintf(`{"type":"%s","children":[`, node.Type()))
-		for idx, child := range node.IndexTreeNode.Children() {
-			if idx != 0 {
-				builder.WriteString(",")
-			}
-			builder.WriteString(marshal(child.Value))
-		}
-		builder.WriteString(`]}`)
+		return
 	}
 
-	return builder.String()
+	builder.WriteString(fmt.Sprintf(`{"type":"%s","children":[`, node.Type()))
+	for idx, child := range node.IndexTreeNode.Children() {
+		if idx != 0 {
+			builder.WriteString(",")
+		}
+		marshal(builder, child.Value)
+	}
+	builder.WriteString(`]}`)
 }
 
 // DeepCopy copies itself deeply.

@@ -580,8 +580,13 @@ func fromTextNodePos(
 	), nil
 }
 
-// FromTreeNodes converts protobuf tree nodes to crdt tree nodes.
+// FromTreeNodes converts protobuf tree nodes to crdt.TreeNode. The last node
+// in the slice is the root node, because the slice is in post-order.
 func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
+	if len(pbNodes) == 0 {
+		return nil, nil
+	}
+
 	root, err := fromTreeNode(pbNodes[len(pbNodes)-1])
 	if err != nil {
 		return nil, err
@@ -589,18 +594,20 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 
 	prevNode := root
 	for i := len(pbNodes) - 2; i >= 0; i-- {
-		currentPbNode := pbNodes[i]
-		prevPbNode := pbNodes[i+1]
+		currentPBNode := pbNodes[i]
+		prevPBNode := pbNodes[i+1]
 
-		currentNode, err := fromTreeNode(currentPbNode)
+		currentNode, err := fromTreeNode(currentPBNode)
 		if err != nil {
 			return nil, err
 		}
 
-		if currentPbNode.Depth == prevPbNode.Depth { // "i" is sibling of "i+1"
+		if currentPBNode.Depth == prevPBNode.Depth {
+			// current is sibling of previous
 			prevNode.IndexTreeNode.Parent.Value.Prepend(currentNode)
-		} else { // "i" is child of "i+1", so find the parent of "i"
-			for j := i + 1; currentPbNode.Depth-1 != pbNodes[j].Depth; j++ {
+		} else {
+			// current is child of previous, so find the parent of current
+			for j := i + 1; currentPBNode.Depth-1 != pbNodes[j].Depth; j++ {
 				prevNode = prevNode.IndexTreeNode.Parent.Value
 			}
 			prevNode.Prepend(currentNode)
@@ -609,10 +616,8 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 		prevNode = currentNode
 	}
 
-	// build to tree to complete the tree structure
-	tree := crdt.NewTree(root, nil)
-
-	return tree.Root(), nil
+	// build crdt.Tree from root to construct the links between nodes.
+	return crdt.NewTree(root, nil).Root(), nil
 }
 
 func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
