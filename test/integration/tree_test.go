@@ -276,7 +276,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>A12</p></root>", d1.Root().GetTree("t").ToXML())
 		assert.Equal(t, "<root><p>B12</p></root>", d2.Root().GetTree("t").ToXML())
 
-		t.Skip("TODO(krapie): find pos bug on concurrent insert")
+		t.Skip("TODO(krapie): find bug on concurrent insert inline content to the same position(left)")
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
@@ -312,7 +312,6 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>1A2</p></root>", d1.Root().GetTree("t").ToXML())
 		assert.Equal(t, "<root><p>1B2</p></root>", d2.Root().GetTree("t").ToXML())
 
-		t.Skip("TODO(krapie): find pos bug on concurrent insert")
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
@@ -348,7 +347,6 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>12A</p></root>", d1.Root().GetTree("t").ToXML())
 		assert.Equal(t, "<root><p>12B</p></root>", d2.Root().GetTree("t").ToXML())
 
-		t.Skip("TODO(krapie): find pos bug on concurrent insert")
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 }
