@@ -52,12 +52,12 @@ func BytesToTree(snapshot []byte) (*crdt.Tree, error) {
 		return nil, errors.New("snapshot should not be nil")
 	}
 
-	pbTree := &api.JSONElement_Tree{}
+	pbTree := &api.JSONElement{}
 	if err := proto.Unmarshal(snapshot, pbTree); err != nil {
 		return nil, fmt.Errorf("unmarshal tree: %w", err)
 	}
 
-	tree, err := fromJSONTree(pbTree)
+	tree, err := fromJSONTree(pbTree.GetTree())
 	if err != nil {
 		return nil, err
 	}

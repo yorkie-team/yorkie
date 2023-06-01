@@ -62,6 +62,10 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), InlineNodeType, content.Value)
 	} else if content != nil {
 		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type)
+		// TODO(krapie): handle cases when content have children
+		for _, child := range content.Children {
+			traverse(t.context, child, node)
+		}
 	}
 
 	fromPos := t.Tree.FindPos(fromIdx)

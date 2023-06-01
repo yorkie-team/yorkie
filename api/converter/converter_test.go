@@ -238,7 +238,6 @@ func TestConverter(t *testing.T) {
 	})
 
 	t.Run("tree converting to bytes test", func(t *testing.T) {
-		t.Skipf("TODO(hackerwins): fix this test")
 		root := helper.BuildTreeNode(&json.TreeNode{
 			Type: "r",
 			Children: []json.TreeNode{

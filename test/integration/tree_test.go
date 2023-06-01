@@ -224,29 +224,135 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("sync with other clients test", func(t *testing.T) {
-		t.Skipf("TODO(hackerwins): fix this test case")
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
-			root.SetNewTree("t")
-			assert.Equal(t, "<root></root>", root.GetTree("t").ToXML())
-			root.GetTree("t").Edit(0, 0, &json.TreeNode{Type: "p", Children: []json.TreeNode{
-				{Type: "text", Value: "Hello"},
-			}})
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "Hello"}},
+				}},
+			})
+			assert.Equal(t, "<root><p>Hello</p></root>", root.GetTree("t").ToXML())
+			return nil
+		}))
+
+		assert.NoError(t, c1.Sync(ctx))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.Equal(t, "<root><p>Hello</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>Hello</p></root>", d2.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("insert inline content to the same position(left) concurrently test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "12"}},
+				}},
+			})
 			return nil
 		}))
 		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
-		assert.Equal(t, "<doc><p>t</p></doc>", d1.Root().GetTree("t").ToXML())
-		assert.Equal(t, "<doc><p>t</p></doc>", d2.Root().GetTree("t").ToXML())
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
+			root.GetTree("t").Edit(1, 1, &json.TreeNode{Type: "text", Value: "A"})
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object) error {
+			root.GetTree("t").Edit(1, 1, &json.TreeNode{Type: "text", Value: "B"})
+			return nil
+		}))
+		assert.Equal(t, "<root><p>A12</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>B12</p></root>", d2.Root().GetTree("t").ToXML())
+
+		t.Skip("TODO(krapie): find pos bug on concurrent insert")
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("insert inline content to the same position(left) concurrently test", func(t *testing.T) {
-		// TODO(hackerwins): add this test case later
+	t.Run("insert inline content to the same position(middle) concurrently", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "12"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
+
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
+			root.GetTree("t").Edit(2, 2, &json.TreeNode{Type: "text", Value: "A"})
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object) error {
+			root.GetTree("t").Edit(2, 2, &json.TreeNode{Type: "text", Value: "B"})
+			return nil
+		}))
+		assert.Equal(t, "<root><p>1A2</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>1B2</p></root>", d2.Root().GetTree("t").ToXML())
+
+		t.Skip("TODO(krapie): find pos bug on concurrent insert")
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("insert inline content to the same position(right) concurrently", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "12"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
+
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
+			root.GetTree("t").Edit(3, 3, &json.TreeNode{Type: "text", Value: "A"})
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object) error {
+			root.GetTree("t").Edit(3, 3, &json.TreeNode{Type: "text", Value: "B"})
+			return nil
+		}))
+		assert.Equal(t, "<root><p>12A</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>12B</p></root>", d2.Root().GetTree("t").ToXML())
+
+		t.Skip("TODO(krapie): find pos bug on concurrent insert")
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 }

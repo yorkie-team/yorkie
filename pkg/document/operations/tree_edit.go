@@ -63,7 +63,11 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 
 	switch obj := parent.(type) {
 	case *crdt.Tree:
-		obj.Edit(e.from, e.to, e.content, e.executedAt)
+		var content *crdt.TreeNode
+		if e.Content() != nil {
+			content = e.Content().DeepCopy()
+		}
+		obj.Edit(e.from, e.to, content, e.executedAt)
 	default:
 		return ErrNotApplicableDataType
 	}
