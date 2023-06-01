@@ -170,10 +170,20 @@ func TestClient(t *testing.T) {
 
 	t.Run("set removed_at in docInfo test", func(t *testing.T) {
 		ctx := context.Background()
+
+		testProjectInfo, err := cli.CreateProjectInfo(
+			ctx,
+			t.Name()+"project",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			documentRemoveThreshold,
+		)
+		assert.NoError(t, err)
+
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
-		docInfo, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+		clientInfo, _ := cli.ActivateClient(ctx, testProjectInfo.ID, t.Name())
+		docInfo, _ := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo.ID, docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
@@ -182,26 +192,36 @@ func TestClient(t *testing.T) {
 
 		// Set removed_at in docInfo and store changes
 		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
-		err := cli.CreateChangeInfos(ctx, dummyProjectID, docInfo, 0, pack.Changes, true)
+		err = cli.CreateChangeInfos(ctx, testProjectInfo.ID, docInfo, 0, pack.Changes, true)
 		assert.NoError(t, err)
 
 		// Check whether removed_at is set in docInfo
-		docInfo, err = cli.FindDocInfoByID(ctx, dummyProjectID, docInfo.ID)
+		docInfo, err = cli.FindDocInfoByID(ctx, testProjectInfo.ID, docInfo.ID)
 		assert.NoError(t, err)
 		assert.NotEqual(t, time.Time{}, docInfo.RemovedAt)
 
 		// Check whether DocumentRemoved status is set in clientInfo
-		clientInfo, err = cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
+		clientInfo, err = cli.FindClientInfoByID(ctx, testProjectInfo.ID, clientInfo.ID)
 		assert.NoError(t, err)
 		assert.NotEqual(t, database.DocumentRemoved, clientInfo.FindDocumentInfo(docInfo.ID).Status)
 	})
 
 	t.Run("reuse same key to create docInfo test ", func(t *testing.T) {
 		ctx := context.Background()
+
+		testProjectInfo, err := cli.CreateProjectInfo(
+			ctx,
+			t.Name()+"project",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			documentRemoveThreshold,
+		)
+		assert.NoError(t, err)
+
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo1, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
-		docInfo1, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo1.ID, docKey, true)
+		clientInfo1, _ := cli.ActivateClient(ctx, testProjectInfo.ID, t.Name())
+		docInfo1, _ := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo1.ID, docKey, true)
 		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID))
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
 
@@ -209,12 +229,12 @@ func TestClient(t *testing.T) {
 		pack := doc.CreateChangePack()
 
 		// Set removed_at in docInfo and store changes
-		err := cli.CreateChangeInfos(ctx, dummyProjectID, docInfo1, 0, pack.Changes, true)
+		err = cli.CreateChangeInfos(ctx, testProjectInfo.ID, docInfo1, 0, pack.Changes, true)
 		assert.NoError(t, err)
 
 		// Use same key to create docInfo
-		clientInfo2, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
-		docInfo2, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo2.ID, docKey, true)
+		clientInfo2, _ := cli.ActivateClient(ctx, testProjectInfo.ID, t.Name())
+		docInfo2, _ := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo2.ID, docKey, true)
 		assert.NoError(t, clientInfo2.AttachDocument(docInfo2.ID))
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo2))
 
@@ -336,30 +356,40 @@ func TestClient(t *testing.T) {
 
 	t.Run("UpdateDocInfoRemovedAt test", func(t *testing.T) {
 		ctx := context.Background()
+
+		testProjectInfo, err := cli.CreateProjectInfo(
+			ctx,
+			t.Name()+"project",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			documentRemoveThreshold,
+		)
+		assert.NoError(t, err)
+
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, err := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+		clientInfo, err := cli.ActivateClient(ctx, testProjectInfo.ID, t.Name())
 		assert.NoError(t, err)
-		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo.ID, docKey, true)
 		assert.NoError(t, err)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo1.ID))
 		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
 
-		err = cli.UpdateDocInfoRemovedAt(ctx, dummyProjectID, docInfo1.ID)
+		err = cli.UpdateDocInfoRemovedAt(ctx, testProjectInfo.ID, docInfo1.ID)
 		assert.NoError(t, err)
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
 
-		docInfo2, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+		docInfo2, _ := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo.ID, docKey, true)
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
 		assert.Equal(t, docInfo1.Key, docInfo2.Key)
 		assert.Equal(t, docInfo1.ProjectID, docInfo2.ProjectID)
 		assert.True(t, docInfo2.RemovedAt.IsZero())
 
 		notPresentDocID := types.ID("000000000000000000000011")
-		err = cli.UpdateDocInfoRemovedAt(ctx, dummyProjectID, notPresentDocID)
+		err = cli.UpdateDocInfoRemovedAt(ctx, testProjectInfo.ID, notPresentDocID)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 
@@ -401,5 +431,73 @@ func TestClient(t *testing.T) {
 		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
 		assert.True(t, isAttached)
 		assert.NoError(t, err)
+	})
+
+	t.Run("FindRemoveDocumentCandidates test", func(t *testing.T) {
+		ctx := context.Background()
+
+		testProjectInfo1Sec, err := cli.CreateProjectInfo(
+			ctx,
+			t.Name()+"project_1_sec",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			"100ms",
+		)
+		assert.NoError(t, err)
+
+		testProjectInfo1Hour, err := cli.CreateProjectInfo(
+			ctx,
+			t.Name()+"project_1h",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			"1h",
+		)
+		assert.NoError(t, err)
+
+		clientInfo, err := cli.ActivateClient(ctx, testProjectInfo1Sec.ID, t.Name()+"1")
+		assert.NoError(t, err)
+
+		// Create document in remove threshold 1sec project
+		docKey1 := key.Key(fmt.Sprintf("tests$%s", t.Name()+"1"))
+		docInfo1Sec, err := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo1Sec.ID, clientInfo.ID, docKey1, true)
+		assert.NoError(t, err)
+		err = cli.UpdateDocInfoRemovedAt(ctx, testProjectInfo1Sec.ID, docInfo1Sec.ID)
+		assert.NoError(t, err)
+
+		// Create document in remove threshold 1hour project
+		docKey2 := key.Key(fmt.Sprintf("tests$%s", t.Name()+"2"))
+		docInfo1Hour, err := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo1Hour.ID, clientInfo.ID, docKey2, true)
+		assert.NoError(t, err)
+		err = cli.UpdateDocInfoRemovedAt(ctx, testProjectInfo1Hour.ID, docInfo1Hour.ID)
+		assert.NoError(t, err)
+
+		// Check there are no candidates
+		candidates, err := cli.FindRemoveDocumentCandidates(ctx, 5)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(candidates))
+
+		time.Sleep(500 * time.Millisecond)
+
+		// Check candidates
+		candidates, err = cli.FindRemoveDocumentCandidates(ctx, 5)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(candidates))
+		assert.Equal(t, candidates[0].ID, docInfo1Sec.ID)
+
+		// Create document in remove threshold 1sec projects
+		for i := 0; i < 10; i++ {
+			docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()+strconv.Itoa(i)))
+			docInfo1Sec, err := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo1Sec.ID, clientInfo.ID, docKey, true)
+			assert.NoError(t, err)
+			err = cli.UpdateDocInfoRemovedAt(ctx, testProjectInfo1Sec.ID, docInfo1Sec.ID)
+			assert.NoError(t, err)
+		}
+
+		time.Sleep(500 * time.Millisecond)
+
+		// Check candidates
+		candidates, err = cli.FindRemoveDocumentCandidates(ctx, 10)
+		assert.NoError(t, err)
+		assert.True(t, 10 < len(candidates))
 	})
 }
