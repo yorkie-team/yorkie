@@ -951,6 +951,7 @@ func (c *Client) FindRemoveDocumentCandidates(
 
 	var docInfos []database.DocInfo
 	for _, doc := range documents {
+		logging.DefaultLogger().Warn(doc)
 		project, err := c.FindProjectInfoByID(ctx, doc.ProjectID)
 		if err != nil {
 			return nil, err
@@ -959,7 +960,7 @@ func (c *Client) FindRemoveDocumentCandidates(
 			continue
 		}
 
-		documentRemoveThreshold, err := project.ClientDeactivateThresholdAsTimeDuration()
+		documentRemoveThreshold, err := project.DocumentRemoveThresholdAsTimeDuration()
 		if err != nil {
 			return nil, err
 		}
@@ -987,6 +988,7 @@ func (c *Client) findDocInfoExistRemovedAt(
 		logging.From(ctx).Error(err)
 		return nil, fmt.Errorf("find document: %w", err)
 	}
+
 	if result.Err() == mongo.ErrNoDocuments {
 		return []database.DocInfo{}, nil
 	}
@@ -996,7 +998,7 @@ func (c *Client) findDocInfoExistRemovedAt(
 	}
 
 	var docInfos []database.DocInfo
-	if err := result.Decode(&docInfos); err != nil {
+	if err := result.All(ctx, &docInfos); err != nil {
 		return nil, fmt.Errorf("decode document: %w", err)
 	}
 
