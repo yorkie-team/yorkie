@@ -66,18 +66,22 @@ type InternalDocument struct {
 func NewInternalDocument(docKey key.Key, clientID string, initialPresence map[string]string) *InternalDocument {
 	root := crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket)
 	actorID, _ := time.ActorIDFromHex(clientID)
+	peerPresenceMap := map[string]presence.Info{}
+	copiedPresence := map[string]string{}
+	for k, v := range initialPresence {
+		copiedPresence[k] = v
+	}
+	peerPresenceMap[clientID] = presence.Info{
+		Presence: copiedPresence,
+	}
 	return &InternalDocument{
-		key:        docKey,
-		status:     StatusDetached,
-		root:       crdt.NewRoot(root),
-		checkpoint: change.InitialCheckpoint,
-		changeID:   change.InitialIDWithActor(actorID),
-		myClientID: clientID,
-		peerPresenceMap: map[string]presence.Info{
-			clientID: {
-				Presence: initialPresence,
-			},
-		},
+		key:             docKey,
+		status:          StatusDetached,
+		root:            crdt.NewRoot(root),
+		checkpoint:      change.InitialCheckpoint,
+		changeID:        change.InitialIDWithActor(actorID),
+		myClientID:      clientID,
+		peerPresenceMap: peerPresenceMap,
 	}
 }
 
