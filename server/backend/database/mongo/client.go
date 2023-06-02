@@ -1247,9 +1247,6 @@ func (c *Client) CreateSnapshotInfo(
 		return err
 	}
 
-	logging.DefaultLogger().Warn(docID)
-	logging.DefaultLogger().Warn(doc.Checkpoint().ServerSeq)
-
 	if _, err := c.collection(colSnapshots).InsertOne(ctx, bson.M{
 		"doc_id":     encodedDocID,
 		"server_seq": doc.Checkpoint().ServerSeq,
@@ -1298,6 +1295,26 @@ func (c *Client) FindClosestSnapshotInfo(
 	}
 
 	return snapshotInfo, nil
+}
+
+// RemoveSnapshotInfo removes the snapshot info.
+func (c *Client) RemoveSnapshotInfo(
+	ctx context.Context,
+	docID types.ID,
+) error {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return err
+	}
+
+	if _, err := c.collection(colSnapshots).DeleteMany(ctx, bson.M{
+		"doc_id": encodedDocID,
+	}); err != nil {
+		logging.From(ctx).Error(err)
+		return fmt.Errorf("delete snapshots: %w", err)
+	}
+
+	return nil
 }
 
 // FindMinSyncedSeqInfo finds the minimum synced sequence info.

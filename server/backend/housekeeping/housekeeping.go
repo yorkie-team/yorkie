@@ -226,9 +226,12 @@ func (h *Housekeeping) removeDocumentCandidates(ctx context.Context) error {
 		return err
 	}
 
-	// Remove clientDocInfo
-
-	// Remove docInfo
+	//for _, candidate := range candidates {
+	//
+	//	// Remove clientDocInfo
+	//
+	//	// Remove docInfo
+	//}
 
 	return nil
 }

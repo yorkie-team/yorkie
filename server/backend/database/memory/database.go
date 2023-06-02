@@ -20,7 +20,6 @@ package memory
 import (
 	"context"
 	"fmt"
-	"github.com/yorkie-team/yorkie/server/logging"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -1123,9 +1122,6 @@ func (d *DB) CreateSnapshotInfo(
 		return fmt.Errorf("snapshot already exists")
 	}
 
-	logging.DefaultLogger().Warn(docID)
-	logging.DefaultLogger().Warn(doc.Checkpoint().ServerSeq)
-
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
 		ID:        newID(),
 		DocID:     docID,
@@ -1173,6 +1169,23 @@ func (d *DB) FindClosestSnapshotInfo(
 	}
 
 	return snapshotInfo, nil
+}
+
+// RemoveSnapshotInfo removes the snapshot info.
+func (d *DB) RemoveSnapshotInfo(
+	ctx context.Context,
+	docID types.ID,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	_, err := txn.DeleteAll(tblSnapshots, "doc_id", docID.String())
+	if err != nil {
+		return fmt.Errorf("remove snapshots: %w", err)
+	}
+
+	txn.Commit()
+	return nil
 }
 
 // FindMinSyncedSeqInfo finds the minimum synced sequence info.

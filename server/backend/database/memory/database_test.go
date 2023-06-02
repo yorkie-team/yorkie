@@ -397,6 +397,50 @@ func TestDB(t *testing.T) {
 		assert.Equal(t, int64(1), snapshot.ServerSeq)
 	})
 
+	t.Run("store and remove snapshots test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
+
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+
+		assert.NoError(t, doc.Update(func(root *json.Object) error {
+			root.SetNewArray("array")
+			return nil
+		}))
+
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err := db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), snapshot.ServerSeq)
+
+		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
+		assert.NoError(t, doc.ApplyChangePack(pack))
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), snapshot.ServerSeq)
+
+		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
+		assert.NoError(t, doc.ApplyChangePack(pack))
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), snapshot.ServerSeq)
+
+		err = db.RemoveSnapshotInfo(ctx, docInfo.ID)
+		assert.NoError(t, err)
+
+		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, 1)
+		assert.Equal(t, snapshot, &database.SnapshotInfo{})
+		assert.NoError(t, err)
+	})
+
 	t.Run("docInfo pagination test", func(t *testing.T) {
 		localDB, err := memory.New()
 		assert.NoError(t, err)

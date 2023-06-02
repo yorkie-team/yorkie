@@ -185,6 +185,10 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
+				"doc_id": {
+					Name:    "doc_id",
+					Indexer: &memdb.StringFieldIndex{Field: "DocID"},
+				},
 				"doc_id_server_seq": {
 					Name:   "doc_id_server_seq",
 					Unique: true,
