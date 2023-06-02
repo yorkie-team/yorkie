@@ -51,7 +51,7 @@ import (
  *  <p> A B C </p>                          p.size = 3,   text.size = 3
  *
  * So the size of a node is the sum of the size and type of its children:
- *  `size = children(block type).length * 2 + children.reduce((child, acc) => child.size + acc, 0)`
+ *  `size = children(element type).length * 2 + children.reduce((child, acc) => child.size + acc, 0)`
  *
  * `TreePos` is also used to represent the position in the tree. It contains node and offset.
  * `TreePos` can be converted to `index` and vice versa.
@@ -64,20 +64,16 @@ import (
  * Index 1 can be converted to TreePos(i, 0).
  */
 
-// NodeType is the type of Node.
-type NodeType string
+const (
+	// DefaultTextType is the type of default text node.
+	// TODO(hackerwins): Allow users to define the type of text node.
+	DefaultTextType = "text"
+)
 
 const (
-	// InlineNode is an inline node. It cannot have children.
-	// For example, text, bold, italic, underline, strikethrough, link, etc.
-	InlineNode NodeType = "InlineNode"
-
-	// BlockNode is a block node. It can have children.
-	// For example, paragraph, list, heading, etc.
-	BlockNode NodeType = "BlockNode"
-
-	// blockNodePaddingLength is the padding length of BlockNode.
-	blockNodePaddingLength = 2
+	// elementPaddingLength is the length of padding for element node. The element
+	// has open tag and close tag, so the length is 2.
+	elementPaddingLength = 2
 )
 
 // TraverseNode traverses the tree with the given callback.
@@ -121,11 +117,11 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) {
 	for _, child := range root.Children() {
 		if from-child.PaddedLength() < pos && pos < to {
 			fromChild := from - pos - 1
-			if child.IsInline() {
+			if child.IsText() {
 				fromChild = from - pos
 			}
 			toChild := to - pos - 1
-			if child.IsInline() {
+			if child.IsText() {
 				toChild = to - pos
 			}
 			nodesBetween(
@@ -135,7 +131,7 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) {
 				callback,
 			)
 
-			if fromChild < 0 || toChild > child.Length || child.IsInline() {
+			if fromChild < 0 || toChild > child.Length || child.IsText() {
 				callback(child.Value)
 			}
 		}
@@ -145,7 +141,7 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) {
 
 // ToXML returns the XML representation of this tree.
 func ToXML[V Value](node *Node[V]) string {
-	if node.IsInline() {
+	if node.IsText() {
 		return node.Value.String()
 	}
 
@@ -173,7 +169,7 @@ type Value interface {
 
 // Node is a node of Tree.
 type Node[V Value] struct {
-	Type NodeType
+	Type string
 
 	Parent   *Node[V]
 	children []*Node[V]
@@ -185,7 +181,7 @@ type Node[V Value] struct {
 // NewNode creates a new instance of Node.
 func NewNode[V Value](nodeType string, value V, children ...*Node[V]) *Node[V] {
 	return &Node[V]{
-		Type: NodeType(nodeType),
+		Type: nodeType,
 
 		children: children,
 
@@ -199,15 +195,15 @@ func (n *Node[V]) Len() int {
 	return n.Length
 }
 
-// IsInline returns whether the Node is inline or not.
-func (n *Node[V]) IsInline() bool {
-	return n.Type == "text"
+// IsText returns whether the Node is text or not.
+func (n *Node[V]) IsText() bool {
+	return n.Type == DefaultTextType
 }
 
 // Append appends the given node to the end of the children.
 func (n *Node[V]) Append(newNodes ...*Node[V]) {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	n.children = append(n.children, newNodes...)
@@ -238,8 +234,8 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 
 // SetChildren sets the children of the given node.
 func (n *Node[V]) SetChildren(children []*Node[V]) {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	n.children = children
@@ -267,8 +263,8 @@ func (n *Node[V]) UpdateAncestorsSize() {
 // PaddedLength returns the length of the node with padding.
 func (n *Node[V]) PaddedLength() int {
 	length := n.Length
-	if !n.IsInline() {
-		length += blockNodePaddingLength
+	if !n.IsText() {
+		length += elementPaddingLength
 	}
 
 	return length
@@ -276,8 +272,8 @@ func (n *Node[V]) PaddedLength() int {
 
 // Child returns the child of the given index.
 func (n *Node[V]) Child(index int) *Node[V] {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	return n.Children()[index]
@@ -286,8 +282,8 @@ func (n *Node[V]) Child(index int) *Node[V] {
 // InsertAfterInternal inserts the given node after the given child.
 // This method does not update the size of the ancestors.
 func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	offset := n.OffsetOfChild(prevNode)
@@ -320,8 +316,8 @@ func (n *Node[V]) nextSibling() *Node[V] {
 
 // findOffset returns the offset of the given node in the children.
 func (n *Node[V]) findOffset(node *Node[V]) int {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	for i, child := range n.Children() {
@@ -358,8 +354,8 @@ func (n *Node[V]) ancestorOf(ancestor, node *Node[V]) bool {
 // FindBranchOffset returns offset of the given descendant node in this node.
 // If the given node is not a descendant of this node, it returns -1.
 func (n *Node[V]) FindBranchOffset(node *Node[V]) int {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	current := node
@@ -377,8 +373,8 @@ func (n *Node[V]) FindBranchOffset(node *Node[V]) int {
 
 // InsertAt inserts the given node at the given offset.
 func (n *Node[V]) InsertAt(newNode *Node[V], offset int) {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	n.insertAtInternal(newNode, offset)
@@ -388,8 +384,8 @@ func (n *Node[V]) InsertAt(newNode *Node[V], offset int) {
 // insertAtInternal inserts the given node at the given index.
 // This method does not update the size of the ancestors.
 func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	// splice the new node into the children
@@ -404,8 +400,8 @@ func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) {
 
 // Prepend prepends the given nodes to the children.
 func (n *Node[V]) Prepend(children ...*Node[V]) {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	n.children = append(children, n.children...)
@@ -417,8 +413,8 @@ func (n *Node[V]) Prepend(children ...*Node[V]) {
 
 // InsertBefore inserts the given node before the given child.
 func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	offset := n.OffsetOfChild(referenceNode)
@@ -432,8 +428,8 @@ func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) {
 
 // InsertAfter inserts the given node after the given child.
 func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) {
-	if n.IsInline() {
-		panic(errors.New("inline node cannot have children"))
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
 	}
 
 	offset := n.OffsetOfChild(referenceNode)
@@ -445,10 +441,10 @@ func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) {
 	newNode.UpdateAncestorsSize()
 }
 
-// hasInlineChild returns true if the node has an inline child.
-func (n *Node[V]) hasInlineChild() bool {
+// hasTextChild returns true if the node has a text child.
+func (n *Node[V]) hasTextChild() bool {
 	for _, child := range n.Children() {
-		if child.IsInline() {
+		if child.IsText() {
 			return true
 		}
 	}
@@ -496,21 +492,21 @@ func (t *Tree[V]) Root() *Node[V] {
 }
 
 // FindTreePos finds the position of the given index in the tree.
-func (t *Tree[V]) FindTreePos(index int, preperInlines ...bool) *TreePos[V] {
-	preperInline := true
-	if len(preperInlines) > 0 {
-		preperInline = preperInlines[0]
+func (t *Tree[V]) FindTreePos(index int, preferTexts ...bool) *TreePos[V] {
+	preferText := true
+	if len(preferTexts) > 0 {
+		preferText = preferTexts[0]
 	}
 
-	return t.findTreePos(t.root, index, preperInline)
+	return t.findTreePos(t.root, index, preferText)
 }
 
-func (t *Tree[V]) findTreePos(node *Node[V], index int, preferInline bool) *TreePos[V] {
+func (t *Tree[V]) findTreePos(node *Node[V], index int, preferText bool) *TreePos[V] {
 	if index > node.Length {
 		panic(fmt.Errorf("index is out of range: %d > %d", index, node.Length))
 	}
 
-	if node.IsInline() {
+	if node.IsText() {
 		return &TreePos[V]{
 			Node:   node,
 			Offset: index,
@@ -522,13 +518,13 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preferInline bool) *Tree
 	offset := 0
 	pos := 0
 	for _, child := range node.Children() {
-		// The pos is in both sides of the inline node, we should traverse
-		// inside the inline node if preferInline is true.
-		if preferInline && child.IsInline() && child.Length >= index-pos {
-			return t.findTreePos(child, index-pos, preferInline)
+		// The pos is in both sides of the text node, we should traverse
+		// inside the text node if preferText is true.
+		if preferText && child.IsText() && child.Length >= index-pos {
+			return t.findTreePos(child, index-pos, preferText)
 		}
 
-		// The position is in left side of the block node.
+		// The position is in left side of the element node.
 		if index == pos {
 			return &TreePos[V]{
 				Node:   node,
@@ -536,26 +532,26 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preferInline bool) *Tree
 			}
 		}
 
-		// The position is in right side of the block node and preferInline is false.
-		if !preferInline && child.PaddedLength() == index-pos {
+		// The position is in right side of the element node and preferText is false.
+		if !preferText && child.PaddedLength() == index-pos {
 			return &TreePos[V]{
 				Node:   node,
 				Offset: offset + 1,
 			}
 		}
 
-		// The position is in middle the block node.
+		// The position is in middle the element node.
 		if child.PaddedLength() > index-pos {
-			// If we traverse inside the block node, we should skip the open.
+			// If we traverse inside the element node, we should skip the open.
 			skipOpenSize := 1
-			return t.findTreePos(child, index-pos-skipOpenSize, preferInline)
+			return t.findTreePos(child, index-pos-skipOpenSize, preferText)
 		}
 
 		pos += child.PaddedLength()
 		offset++
 	}
 
-	// The position is in the end of the block node.
+	// The position is in the end of the element node.
 	return &TreePos[V]{
 		Node:   node,
 		Offset: offset,
@@ -567,7 +563,7 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) []int {
 	var path []int
 	node := treePos.Node
 
-	if node.IsInline() {
+	if node.IsText() {
 		offset := node.Parent.OffsetOfChild(node)
 		if offset == -1 {
 			panic("invalid treePos")
@@ -627,8 +623,8 @@ func (t *Tree[V]) PathToTreePos(path []int) *TreePos[V] {
 		}
 	}
 
-	if node.hasInlineChild() {
-		return findInlinePos(node, path[len(path)-1])
+	if node.hasTextChild() {
+		return findTextPos(node, path[len(path)-1])
 	}
 	if len(node.Children()) < path[len(path)-1] {
 		panic("unacceptable path")
@@ -639,8 +635,8 @@ func (t *Tree[V]) PathToTreePos(path []int) *TreePos[V] {
 	}
 }
 
-// findInlinePos returns the tree position of the given path element.
-func findInlinePos[V Value](node *Node[V], pathElement int) *TreePos[V] {
+// findTextPos returns the tree position of the given path element.
+func findTextPos[V Value](node *Node[V], pathElement int) *TreePos[V] {
 	if node.Length < pathElement {
 		panic("unacceptable path")
 	}
@@ -666,7 +662,7 @@ func (t *Tree[V]) FindPostorderRight(pos *TreePos[V]) V {
 	node := pos.Node
 	offset := pos.Offset
 
-	if node.IsInline() {
+	if node.IsText() {
 		if node.Len() == offset {
 			if nextSibling := node.nextSibling(); nextSibling != nil {
 				return nextSibling.Value
@@ -722,7 +718,7 @@ func (t *Tree[V]) FindCommonAncestor(nodeA, nodeB *Node[V]) V {
 
 // FindLeftmost finds the leftmost node of the given tree.
 func (t *Tree[V]) FindLeftmost(node *Node[V]) V {
-	if node.IsInline() || len(node.Children()) == 0 {
+	if node.IsText() || len(node.Children()) == 0 {
 		return node.Value
 	}
 
@@ -746,9 +742,9 @@ func (t *Tree[V]) IndexOf(node *Node[V]) int {
 			index += previous.PaddedLength()
 		}
 
-		// If this step escape from block node, we should add 1 to the index,
-		// because the block node has open tag.
-		if current != t.root && current != node && !current.IsInline() {
+		// If this step escape from element node, we should add 1 to the index,
+		// because the element node has open tag.
+		if current != t.root && current != node && !current.IsText() {
 			index++
 		}
 

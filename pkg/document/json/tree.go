@@ -21,21 +21,27 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
 const (
-	// DefaultTextNodeType is the default type of text node.
-	DefaultTextNodeType = "text"
-
 	// DefaultRootNodeType is the default type of root node.
 	DefaultRootNodeType = "root"
 )
 
-// TreeNode is a node of Tree for JSON.
+// TreeNode is a node of Tree.
 type TreeNode struct {
-	Type     string
+	// Type is the type of this node. It is used to distinguish between text
+	// nodes and element nodes.
+	Type string
+
+	// Children is the children of this node. It is used to represent the
+	// descendants of this node. If this node is a text node, it is nil.
 	Children []TreeNode
-	Value    string
+
+	// Value is the value of text node. If this node is an element node, it is
+	// empty string.
+	Value string
 }
 
 // Tree is a CRDT-based tree structure that is used to represent the document
@@ -61,10 +67,8 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 
 	ticket := t.context.IssueTimeTicket()
 	var node *crdt.TreeNode
-	if content != nil && content.Type == DefaultTextNodeType {
-		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), DefaultTextNodeType, content.Value)
-	} else if content != nil {
-		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type)
+	if content != nil {
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, content.Value)
 		for _, child := range content.Children {
 			buildDescendants(t.context, child, node)
 		}
@@ -94,7 +98,7 @@ func (t *Tree) Len() int {
 	return t.IndexTree.Root().Len()
 }
 
-// EditByPath edits this tree with the given node.
+// EditByPath edits this tree with the given path and node.
 func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool {
 	ticket := t.context.IssueTimeTicket()
 	var node *crdt.TreeNode
@@ -109,8 +113,9 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 	return true
 }
 
-// BuildRoot returns the root node of this tree.
-func BuildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crdt.TreeNode {
+// buildRoot converts the given node to a CRDT-based tree node. If the given
+// node is nil, it creates a default root node.
+func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crdt.TreeNode {
 	if node == nil {
 		return crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), DefaultRootNodeType)
 	}
@@ -123,8 +128,9 @@ func BuildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crd
 	return root
 }
 
+// buildDescendants converts the given node to a CRDT-based tree node.
 func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) {
-	if n.Type == DefaultTextNodeType {
+	if n.Type == index.DefaultTextType {
 		treeNode := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), n.Type, n.Value)
 		parent.Append(treeNode)
 		return

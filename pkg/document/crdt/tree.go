@@ -115,9 +115,9 @@ func (n *TreeNode) Len() int {
 	return n.IndexTreeNode.Len()
 }
 
-// IsInline returns whether the Node is inline or not.
-func (n *TreeNode) IsInline() bool {
-	return n.IndexTreeNode.IsInline()
+// IsText returns whether the Node is text or not.
+func (n *TreeNode) IsText() bool {
+	return n.IndexTreeNode.IsText()
 }
 
 // IsRemoved returns whether the Node is removed or not.
@@ -162,15 +162,15 @@ func (n *TreeNode) Child(offset int) *TreeNode {
 
 // Split splits the node at the given offset.
 func (n *TreeNode) Split(offset int) *TreeNode {
-	if n.IsInline() {
-		return n.SplitInline(offset)
+	if n.IsText() {
+		return n.SplitText(offset)
 	}
 
 	return nil
 }
 
-// SplitInline splits the inline node at the given offset.
-func (n *TreeNode) SplitInline(offset int) *TreeNode {
+// SplitText splits the text node at the given offset.
+func (n *TreeNode) SplitText(offset int) *TreeNode {
 	if offset == 0 || offset == n.Len() {
 		return nil
 	}
@@ -212,15 +212,16 @@ func (n *TreeNode) DeepCopy() *TreeNode {
 	clone := NewTreeNode(n.Pos, n.Type(), n.Value)
 	clone.RemovedAt = n.RemovedAt
 
-	if !clone.IsInline() {
-		var children []*index.Node[*TreeNode]
-		for _, child := range n.IndexTreeNode.Children(true) {
-			node := child.Value.DeepCopy()
-			children = append(children, node.IndexTreeNode)
-		}
-		clone.IndexTreeNode.SetChildren(children)
+	if n.IsText() {
+		return clone
 	}
 
+	var children []*index.Node[*TreeNode]
+	for _, child := range n.IndexTreeNode.Children(true) {
+		node := child.Value.DeepCopy()
+		children = append(children, node.IndexTreeNode)
+	}
+	clone.IndexTreeNode.SetChildren(children)
 	return clone
 }
 
@@ -263,7 +264,7 @@ func (t *Tree) Marshal() string {
 
 // marshal returns the JSON encoding of this Tree.
 func marshal(builder *strings.Builder, node *TreeNode) {
-	if node.IsInline() {
+	if node.IsText() {
 		builder.WriteString(fmt.Sprintf(`{"type":"%s","value":"%s"}`, node.Type(), node.Value))
 		return
 	}
@@ -374,9 +375,9 @@ func (t *Tree) FindPos(offset int) *TreePos {
 // Edit edits the tree with the given range and content.
 // If the content is undefined, the range will be removed.
 func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket) {
-	// 01. split inline nodes at the given range if needed.
-	toPos, toRight := t.findTreePosWithSplitInline(to, editedAt)
-	fromPos, fromRight := t.findTreePosWithSplitInline(from, editedAt)
+	// 01. split text nodes at the given range if needed.
+	toPos, toRight := t.findTreePosWithSplitText(to, editedAt)
+	fromPos, fromRight := t.findTreePosWithSplitText(from, editedAt)
 
 	toBeRemoveds := make([]*TreeNode, 0)
 	// 02. remove the nodes and update linked list and index tree.
@@ -397,7 +398,7 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 			var removedBlockNode *TreeNode
 			if fromPos.Node.Parent.Value.IsRemoved() {
 				removedBlockNode = fromPos.Node.Parent.Value
-			} else if !fromPos.Node.IsInline() && fromPos.Node.Value.IsRemoved() {
+			} else if !fromPos.Node.IsText() && fromPos.Node.Value.IsRemoved() {
 				removedBlockNode = fromPos.Node.Value
 			}
 
@@ -428,7 +429,7 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 		})
 
 		// 03-2. insert the content nodes to the tree.
-		if fromPos.Node.IsInline() {
+		if fromPos.Node.IsText() {
 			if fromPos.Offset == 0 {
 				fromPos.Node.Parent.InsertBefore(content.IndexTreeNode, fromPos.Node)
 			} else {
@@ -441,8 +442,8 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 	}
 }
 
-// findTreePosWithSplitInline finds the right node of the given index in postorder.
-func (t *Tree) findTreePosWithSplitInline(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode) {
+// findTreePosWithSplitText finds the right node of the given index in postorder.
+func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode) {
 	treePos := t.toTreePos(pos)
 	if treePos == nil {
 		panic(fmt.Errorf("cannot find node at %p", pos))
@@ -460,7 +461,7 @@ func (t *Tree) findTreePosWithSplitInline(pos *TreePos, editedAt *time.Ticket) (
 		}
 	}
 
-	if current.Node.IsInline() {
+	if current.Node.IsText() {
 		split := current.Node.Value.Split(current.Offset)
 		if split != nil {
 			t.InsertAfter(current.Node.Value, split)
@@ -531,7 +532,7 @@ func (t *Tree) PathToPos(path []int) *TreePos {
 
 // ToStructure returns the JSON of this tree for debugging.
 func ToStructure(node *TreeNode) TreeNodeForTest {
-	if node.IsInline() {
+	if node.IsText() {
 		currentNode := node
 		return TreeNodeForTest{
 			Type:      currentNode.Type(),

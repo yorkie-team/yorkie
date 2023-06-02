@@ -102,7 +102,7 @@ func (p *Object) SetNewTree(k string, initialRoot ...*TreeNode) *Tree {
 
 		return NewTree(
 			p.context,
-			crdt.NewTree(BuildRoot(p.context, root, ticket), ticket),
+			crdt.NewTree(buildRoot(p.context, root, ticket), ticket),
 		)
 	})
 

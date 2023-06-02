@@ -27,22 +27,22 @@ import (
 )
 
 func TestTreeNode(t *testing.T) {
-	t.Run("inline node test", func(t *testing.T) {
+	t.Run("text node test", func(t *testing.T) {
 		node := crdt.NewTreeNode(crdt.DummyTreePos, "text", "hello")
 		assert.Equal(t, crdt.DummyTreePos, node.Pos)
 		assert.Equal(t, "text", node.Type())
 		assert.Equal(t, "hello", node.Value)
 		assert.Equal(t, 5, node.Len())
-		assert.Equal(t, true, node.IsInline())
+		assert.Equal(t, true, node.IsText())
 		assert.Equal(t, false, node.IsRemoved())
 	})
 
-	t.Run("block node test", func(t *testing.T) {
+	t.Run("element node test", func(t *testing.T) {
 		para := crdt.NewTreeNode(crdt.DummyTreePos, "p")
 		para.Append(crdt.NewTreeNode(crdt.DummyTreePos, "text", "helloyorkie"))
 		assert.Equal(t, "<p>helloyorkie</p>", crdt.ToXML(para))
 		assert.Equal(t, 11, para.Len())
-		assert.Equal(t, false, para.IsInline())
+		assert.Equal(t, false, para.IsText())
 
 		left := para.Child(0)
 		right := left.Split(5)
@@ -139,7 +139,7 @@ func TestTree(t *testing.T) {
 		helper.ListEqual(t, tree, []string{"text.hello", "text.~", "text.!", "p", "text.world", "p", "r"})
 	})
 
-	t.Run("delete inline nodes with Edit test", func(t *testing.T) {
+	t.Run("delete text nodes with Edit test", func(t *testing.T) {
 		// 01. Create a tree with 2 paragraphs.
 		//       0   1 2 3    4   5 6 7    8
 		// <root> <p> a b </p> <p> c d </p> </root>
@@ -171,7 +171,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, 1, structure.Children[0].Children[0].Size)
 	})
 
-	t.Run("delete nodes between block nodes test", func(t *testing.T) {
+	t.Run("delete nodes between element nodes test", func(t *testing.T) {
 		// 01. Create a tree with 2 paragraphs.
 		//       0   1 2 3    4   5 6 7    8
 		// <root> <p> a b </p> <p> c d </p> </root>
@@ -204,7 +204,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("merge different levels with Edit", func(t *testing.T) {
-		// 01. Edit between two block nodes in the same hierarchy.
+		// 01. Edit between two element nodes in the same hierarchy.
 		//       0   1   2   3 4 5    6    7    8
 		// <root> <p> <b> <i> a b </i> </b> </p> </root>
 		ctx := helper.TextChangeContext(helper.TestRoot())
@@ -217,7 +217,7 @@ func TestTree(t *testing.T) {
 		tree.EditByIndex(5, 6, nil, helper.IssueTime(ctx))
 		assert.Equal(t, "<root><p><b>ab</b></p></root>", tree.ToXML())
 
-		// 02. Edit between two block nodes in same hierarchy.
+		// 02. Edit between two element nodes in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
 		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
 		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
@@ -227,7 +227,7 @@ func TestTree(t *testing.T) {
 		tree.EditByIndex(6, 7, nil, helper.IssueTime(ctx))
 		assert.Equal(t, "<root><p><i>ab</i></p></root>", tree.ToXML())
 
-		// 03. Edit between inline and block node in same hierarchy.
+		// 03. Edit between text and element node in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
 		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
 		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
@@ -237,7 +237,7 @@ func TestTree(t *testing.T) {
 		tree.EditByIndex(4, 6, nil, helper.IssueTime(ctx))
 		assert.Equal(t, "<root><p><b>a</b></p></root>", tree.ToXML())
 
-		// 04. Edit between inline and block node in same hierarchy.
+		// 04. Edit between text and element node in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
 		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
 		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
@@ -247,7 +247,7 @@ func TestTree(t *testing.T) {
 		tree.EditByIndex(5, 7, nil, helper.IssueTime(ctx))
 		assert.Equal(t, "<root><p>ab</p></root>", tree.ToXML())
 
-		// 05. Edit between inline and block node in same hierarchy.
+		// 05. Edit between text and element node in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
 		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
 		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
@@ -257,7 +257,7 @@ func TestTree(t *testing.T) {
 		tree.EditByIndex(4, 7, nil, helper.IssueTime(ctx))
 		assert.Equal(t, "<root><p>a</p></root>", tree.ToXML())
 
-		// 06. Edit between inline and block node in same hierarchy.
+		// 06. Edit between text and element node in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
 		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
 		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "b"), helper.IssueTime(ctx))
@@ -267,7 +267,7 @@ func TestTree(t *testing.T) {
 		tree.EditByIndex(3, 7, nil, helper.IssueTime(ctx))
 		assert.Equal(t, "<root><p></p></root>", tree.ToXML())
 
-		// 07. Edit between inline and block node in same hierarchy.
+		// 07. Edit between text and element node in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root"), helper.IssueTime(ctx))
 		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p"), helper.IssueTime(ctx))
 		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "text", "ab"), helper.IssueTime(ctx))

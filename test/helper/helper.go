@@ -20,7 +20,6 @@ package helper
 import (
 	"context"
 	"fmt"
-
 	"log"
 	"strings"
 	"testing"
@@ -167,7 +166,7 @@ func NodesBetweenEqual(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from
 // ToDiagnostic is a helper function that converts the given node to a
 // diagnostic string.
 func ToDiagnostic(node *crdt.TreeNode) string {
-	if node.IsInline() {
+	if node.IsText() {
 		return fmt.Sprintf("%s.%s", node.Type(), node.Value)
 	}
 
