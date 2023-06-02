@@ -162,6 +162,13 @@ type Database interface {
 		id types.ID,
 	) (*DocInfo, error)
 
+	// UpdateDocInfoStatusToRemoved updates the document status to removed.
+	UpdateDocInfoStatusToRemoved(
+		ctx context.Context,
+		projectID types.ID,
+		docID types.ID,
+	) error
+
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,

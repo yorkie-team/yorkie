@@ -29,8 +29,8 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/projects"
+	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
@@ -54,27 +54,27 @@ func (i *ContextInterceptor) Unary() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
-		if isYorkieService(info.FullMethod) {
-			ctx, err = i.buildContext(ctx)
-			if err != nil {
-				return nil, err
-			}
+		if !isYorkieService(info.FullMethod) {
+			return handler(ctx, req)
+		}
+
+		ctx, err = i.buildContext(ctx)
+		if err != nil {
+			return nil, err
 		}
 
 		resp, err = handler(ctx, req)
 
-		if isYorkieService(info.FullMethod) {
-			data, ok := grpcmetadata.FromIncomingContext(ctx)
-			if ok {
-				sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-				i.backend.Metrics.AddUserAgent(
-					i.backend.Config.Hostname,
-					projects.From(ctx),
-					sdkType,
-					sdkVersion,
-					info.FullMethod,
-				)
-			}
+		data, ok := grpcmetadata.FromIncomingContext(ctx)
+		if ok {
+			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+			i.backend.Metrics.AddUserAgent(
+				i.backend.Config.Hostname,
+				projects.From(ctx),
+				sdkType,
+				sdkVersion,
+				info.FullMethod,
+			)
 		}
 
 		return resp, err
@@ -89,12 +89,13 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) (err error) {
-		ctx := ss.Context()
-		if isYorkieService(info.FullMethod) {
-			ctx, err = i.buildContext(ctx)
-			if err != nil {
-				return err
-			}
+		if !isYorkieService(info.FullMethod) {
+			return handler(srv, ss)
+		}
+
+		ctx, err := i.buildContext(ss.Context())
+		if err != nil {
+			return err
 		}
 
 		wrapped := grpcmiddleware.WrapServerStream(ss)
@@ -102,18 +103,16 @@ func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
 
 		err = handler(srv, wrapped)
 
-		if isYorkieService(info.FullMethod) {
-			data, ok := grpcmetadata.FromIncomingContext(ctx)
-			if ok {
-				sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-				i.backend.Metrics.AddUserAgent(
-					i.backend.Config.Hostname,
-					projects.From(ctx),
-					sdkType,
-					sdkVersion,
-					info.FullMethod,
-				)
-			}
+		data, ok := grpcmetadata.FromIncomingContext(ctx)
+		if ok {
+			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+			i.backend.Metrics.AddUserAgent(
+				i.backend.Config.Hostname,
+				projects.From(ctx),
+				sdkType,
+				sdkVersion,
+				info.FullMethod,
+			)
 		}
 
 		return err

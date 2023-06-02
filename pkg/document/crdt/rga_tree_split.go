@@ -291,8 +291,8 @@ type RGATreeSplit[V RGATreeSplitValue] struct {
 	treeByIndex *splay.Tree[*RGATreeSplitNode[V]]
 	treeByID    *llrb.Tree[*RGATreeSplitNodeID, *RGATreeSplitNode[V]]
 
-	// removedNodeMap is a map that holds tombstone nodes
-	// when the edit operation is executed.
+	// removedNodeMap is a map to store removed nodes. It is used to
+	// delete the node physically when the garbage collection is executed.
 	removedNodeMap map[string]*RGATreeSplitNode[V]
 }
 
@@ -310,22 +310,33 @@ func NewRGATreeSplit[V RGATreeSplitValue](initialHead *RGATreeSplitNode[V]) *RGA
 	}
 }
 
-func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos) {
-	fromPos := s.findNodePos(from)
+func (s *RGATreeSplit[V]) createRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos, error) {
+	fromPos, err := s.findNodePos(from)
+	if err != nil {
+		return nil, nil, err
+	}
 	if from == to {
-		return fromPos, fromPos
+		return fromPos, fromPos, nil
 	}
 
-	return fromPos, s.findNodePos(to)
+	toPos, err := s.findNodePos(to)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return fromPos, toPos, nil
 }
 
-func (s *RGATreeSplit[V]) findNodePos(index int) *RGATreeSplitNodePos {
-	splayNode, offset := s.treeByIndex.Find(index)
+func (s *RGATreeSplit[V]) findNodePos(index int) (*RGATreeSplitNodePos, error) {
+	splayNode, offset, err := s.treeByIndex.Find(index)
+	if err != nil {
+		return nil, err
+	}
 	node := splayNode.Value()
 	return &RGATreeSplitNodePos{
 		id:             node.ID(),
 		relativeOffset: offset,
-	}
+	}, nil
 }
 
 func (s *RGATreeSplit[V]) findNodeWithSplit(

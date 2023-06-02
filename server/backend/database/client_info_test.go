@@ -51,6 +51,13 @@ func TestClientInfo(t *testing.T) {
 		isAttached, err = clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
 		assert.False(t, isAttached)
+
+		err = clientInfo.AttachDocument(dummyDocID)
+		assert.NoError(t, err)
+		isAttached, err = clientInfo.IsAttached(dummyDocID)
+		assert.NoError(t, err)
+		assert.True(t, isAttached)
+
 	})
 
 	t.Run("check if in project test", func(t *testing.T) {

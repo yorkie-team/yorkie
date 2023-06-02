@@ -210,3 +210,13 @@ func FindDocInfoByKeyAndOwner(
 		createDocIfNotExist,
 	)
 }
+
+// RemoveDocument updates the removedAt field of the given docInfo.
+func RemoveDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docID types.ID,
+) error {
+	return be.DB.UpdateDocInfoStatusToRemoved(ctx, project.ID, docID)
+}
