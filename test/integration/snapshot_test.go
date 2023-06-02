@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
 
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -55,12 +54,10 @@ func TestSnapshot(t *testing.T) {
 	t.Run("snapshot test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		// 01. Update changes over snapshot threshold.
@@ -91,8 +88,7 @@ func TestSnapshot(t *testing.T) {
 	t.Run("text snapshot test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -125,8 +121,7 @@ func TestSnapshot(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"},{"val":"구"},{"val":"름"}]}`, d1.Marshal())
@@ -136,8 +131,7 @@ func TestSnapshot(t *testing.T) {
 	t.Run("text snapshot with concurrent local change test", func(t *testing.T) {
 		ctx := context.Background()
 
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object) error {
@@ -148,8 +142,7 @@ func TestSnapshot(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 
 		for i := 0; i <= int(helper.SnapshotThreshold); i++ {

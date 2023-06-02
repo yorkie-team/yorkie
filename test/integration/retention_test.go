@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"reflect"
 	"testing"
@@ -28,9 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/server"
@@ -80,8 +77,7 @@ func TestRetention(t *testing.T) {
 
 		ctx := context.Background()
 
-		doc := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli.Attach(ctx, doc))
+		doc, err := cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		defer func() { assert.NoError(t, cli.Detach(ctx, doc)) }()
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
@@ -139,8 +135,8 @@ func TestRetention(t *testing.T) {
 		}()
 
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli1.Attach(ctx, d1))
+		d1, err := cli1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
+		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli1.Detach(ctx, d1)) }()
 
 		err = d1.Update(func(root *json.Object) error {
@@ -211,8 +207,8 @@ func TestRetention(t *testing.T) {
 			assert.NoError(t, cli2.Close())
 		}()
 
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli2.Attach(ctx, d2))
+		d2, err := cli2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
+		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli2.Detach(ctx, d2)) }()
 
 		// Create 6 changes

@@ -178,8 +178,7 @@ func BenchmarkRPC(b *testing.B) {
 		err = cli.Activate(ctx)
 		assert.NoError(b, err)
 
-		d1 := document.New("doc1")
-		err = cli.Attach(ctx, d1)
+		d1, err := cli.Attach(ctx, key.Key(helper.TestDocKey(b)), map[string]string{})
 		assert.NoError(b, err)
 
 		for i := 0; i < b.N; i++ {
@@ -201,8 +200,7 @@ func BenchmarkRPC(b *testing.B) {
 
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(helper.TestDocKey(b)))
-		err := c1.Attach(ctx, d1)
+		d1, err := c1.Attach(ctx, key.Key(helper.TestDocKey(b)), map[string]string{})
 		assert.NoError(b, err)
 		testKey1 := "testKey1"
 		err = d1.Update(func(root *json.Object) error {
@@ -211,8 +209,7 @@ func BenchmarkRPC(b *testing.B) {
 		})
 		assert.NoError(b, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(b)))
-		err = c2.Attach(ctx, d2)
+		d2, err := c2.Attach(ctx, key.Key(helper.TestDocKey(b)), map[string]string{})
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
 		err = d2.Update(func(root *json.Object) error {
@@ -260,6 +257,15 @@ func BenchmarkRPC(b *testing.B) {
 		for c := 0; c < 10485000; c++ {
 			builder.WriteString("a")
 		}
+		docKey := key.Key(helper.TestDocKey(b))
+		doc := helper.TestDoc(docKey)
+		err := doc.Update(func(root *json.Object) error {
+			text := root.SetNewText("k1")
+			text.Edit(0, 0, builder.String())
+			return nil
+		})
+		assert.NoError(b, err)
+
 		for i := 0; i < b.N; i++ {
 			func() {
 				clients := activeClients(b, 2)
@@ -267,32 +273,16 @@ func BenchmarkRPC(b *testing.B) {
 				defer cleanupClients(b, clients)
 
 				ctx := context.Background()
-				doc1 := document.New(key.Key(helper.TestDocKey(b)))
-				doc2 := document.New(key.Key(helper.TestDocKey(b)))
-
-				err := doc1.Update(func(root *json.Object) error {
-					text := root.SetNewText("k1")
-					text.Edit(0, 0, builder.String())
-					return nil
-				})
-				assert.NoError(b, err)
-				err = doc2.Update(func(root *json.Object) error {
-					text := root.SetNewText("k1")
-					text.Edit(0, 0, builder.String())
-					return nil
-				})
-				assert.NoError(b, err)
-
 				wg := sync.WaitGroup{}
 				wg.Add(2)
 				go func() {
 					defer wg.Done()
-					err := c1.Attach(ctx, doc1)
+					_, err := c1.Attach(ctx, docKey, map[string]string{})
 					assert.NoError(b, err)
 				}()
 				go func() {
 					defer wg.Done()
-					err := c2.Attach(ctx, doc2)
+					_, err := c2.Attach(ctx, docKey, map[string]string{})
 					assert.NoError(b, err)
 				}()
 				wg.Wait()

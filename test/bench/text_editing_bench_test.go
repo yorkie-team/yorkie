@@ -26,8 +26,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func BenchmarkTextEditing(b *testing.B) {
@@ -40,11 +40,12 @@ func BenchmarkTextEditing(b *testing.B) {
 
 	b.StartTimer()
 
-	doc := document.New("d1")
+	doc := helper.TestDoc("d1")
 	err = doc.Update(func(root *json.Object) error {
 		root.SetNewText("text")
 		return nil
 	})
+	assert.NoError(b, err)
 
 	for _, edit := range editingTrace.Edits {
 		cursor := int(edit[0].(float64))

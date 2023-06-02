@@ -30,12 +30,13 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func BenchmarkDocument(b *testing.B) {
 	b.Run("constructor test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("d1")
+			doc := helper.TestDoc("d1")
 			assert.Equal(b, doc.Checkpoint(), change.InitialCheckpoint)
 			assert.False(b, doc.HasLocalChanges())
 			assert.False(b, doc.IsAttached())
@@ -44,7 +45,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("status test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("d1")
+			doc := helper.TestDoc("d1")
 			assert.False(b, doc.IsAttached())
 			doc.SetStatus(document.StatusAttached)
 			assert.True(b, doc.IsAttached())
@@ -53,9 +54,9 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("equals test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc1 := document.New("d1")
-			doc2 := document.New("d2")
-			doc3 := document.New("d3")
+			doc1 := helper.TestDoc("d1")
+			doc2 := helper.TestDoc("d2")
+			doc3 := helper.TestDoc("d3")
 
 			err := doc1.Update(func(root *json.Object) error {
 				root.SetString("k1", "v1")
@@ -72,7 +73,7 @@ func BenchmarkDocument(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
 
-			doc := document.New("d1")
+			doc := helper.TestDoc("d1")
 			assert.Equal(b, "{}", doc.Marshal())
 			assert.False(b, doc.HasLocalChanges())
 
@@ -92,7 +93,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("delete test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("d1")
+			doc := helper.TestDoc("d1")
 			assert.Equal(b, "{}", doc.Marshal())
 			assert.False(b, doc.HasLocalChanges())
 
@@ -120,7 +121,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("object test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("d1")
+			doc := helper.TestDoc("d1")
 			err := doc.Update(func(root *json.Object) error {
 				root.SetString("k1", "v1")
 				assert.Equal(b, `{"k1":"v1"}`, root.Marshal())
@@ -135,7 +136,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("array test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("d1")
+			doc := helper.TestDoc("d1")
 
 			err := doc.Update(func(root *json.Object) error {
 				root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
@@ -175,7 +176,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("text test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("d1")
+			doc := helper.TestDoc("d1")
 
 			//           ---------- ins links --------
 			//           |                |          |
@@ -219,7 +220,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("text composition test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("d1")
+			doc := helper.TestDoc("d1")
 
 			err := doc.Update(func(root *json.Object) error {
 				root.SetNewText("k1").
@@ -239,7 +240,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("rich text test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("d1")
+			doc := helper.TestDoc("d1")
 
 			err := doc.Update(func(root *json.Object) error {
 				text := root.SetNewText("k1")
@@ -333,7 +334,7 @@ func BenchmarkDocument(b *testing.B) {
 
 	b.Run("counter test", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			doc := document.New("d1")
+			doc := helper.TestDoc("d1")
 			var integer = 10
 			var long int64 = 5
 			var uinteger uint = 100
@@ -473,7 +474,7 @@ func BenchmarkDocument(b *testing.B) {
 
 func benchmarkText(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k1")
@@ -489,7 +490,7 @@ func benchmarkText(cnt int, b *testing.B) {
 func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			text := root.SetNewText("k1")
@@ -514,7 +515,7 @@ func benchmarkTextDeleteAll(cnt int, b *testing.B) {
 
 func benchmarkTextEditGC(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
 
@@ -542,7 +543,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 
 func benchmarkTextSplitGC(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 		assert.Equal(b, "{}", doc.Marshal())
 		assert.False(b, doc.HasLocalChanges())
 		var builder strings.Builder
@@ -574,7 +575,7 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 
 func benchmarkArray(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			array := root.SetNewArray("k1")
@@ -589,7 +590,7 @@ func benchmarkArray(cnt int, b *testing.B) {
 
 func benchmarkArrayGC(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 		err := doc.Update(func(root *json.Object) error {
 			root.SetNewArray("1")
 			for i := 0; i < cnt; i++ {
@@ -613,7 +614,7 @@ func benchmarkArrayGC(cnt int, b *testing.B) {
 
 func benchmarkCounter(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			counter := root.SetNewCounter("k1", crdt.IntegerCnt, 0)
@@ -628,7 +629,7 @@ func benchmarkCounter(cnt int, b *testing.B) {
 
 func benchmarkObject(cnt int, b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		doc := document.New("d1")
+		doc := helper.TestDoc("d1")
 
 		err := doc.Update(func(root *json.Object) error {
 			for c := 0; c < cnt; c++ {
