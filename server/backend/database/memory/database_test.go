@@ -307,6 +307,54 @@ func TestDB(t *testing.T) {
 		assert.Len(t, loadedChanges, 5)
 	})
 
+	t.Run("insert and remove changes test", func(t *testing.T) {
+
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+		assert.NoError(t, doc.Update(func(root *json.Object) error {
+			root.SetNewArray("array")
+			return nil
+		}))
+		for idx := 0; idx < 10; idx++ {
+			assert.NoError(t, doc.Update(func(root *json.Object) error {
+				root.GetArray("array").AddInteger(idx)
+				return nil
+			}))
+		}
+		pack := doc.CreateChangePack()
+		for idx, c := range pack.Changes {
+			c.SetServerSeq(int64(idx))
+		}
+
+		// Store changes
+		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, false)
+		assert.NoError(t, err)
+
+		// Remove Changes
+		err = db.RemoveChangeInfos(ctx, docInfo.ID)
+		assert.NoError(t, err)
+
+		// Find changes
+		loadedChanges, err := db.FindChangesBetweenServerSeqs(
+			ctx,
+			docInfo.ID,
+			6,
+			10,
+		)
+		assert.NoError(t, err)
+		assert.Len(t, loadedChanges, 0)
+	})
+
 	t.Run("store and find snapshots test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
@@ -343,7 +391,7 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, int64(2), snapshot.ServerSeq)
 
-		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		assert.Error(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, 1)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), snapshot.ServerSeq)

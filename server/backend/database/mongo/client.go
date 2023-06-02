@@ -1212,6 +1212,26 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	return infos, nil
 }
 
+// RemoveChangeInfos removes the changeInfos.
+func (c *Client) RemoveChangeInfos(
+	ctx context.Context,
+	docID types.ID,
+) error {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return err
+	}
+
+	if _, err := c.collection(colChanges).DeleteMany(ctx, bson.M{
+		"doc_id": encodedDocID,
+	}); err != nil {
+		logging.From(ctx).Error(err)
+		return fmt.Errorf("delete changes: %w", err)
+	}
+
+	return nil
+}
+
 // CreateSnapshotInfo stores the snapshot of the given document.
 func (c *Client) CreateSnapshotInfo(
 	ctx context.Context,
@@ -1226,6 +1246,9 @@ func (c *Client) CreateSnapshotInfo(
 	if err != nil {
 		return err
 	}
+
+	logging.DefaultLogger().Warn(docID)
+	logging.DefaultLogger().Warn(doc.Checkpoint().ServerSeq)
 
 	if _, err := c.collection(colSnapshots).InsertOne(ctx, bson.M{
 		"doc_id":     encodedDocID,

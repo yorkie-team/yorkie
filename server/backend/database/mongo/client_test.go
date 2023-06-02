@@ -19,15 +19,18 @@ package mongo_test
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"strconv"
 	"testing"
-	"time"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -198,7 +201,7 @@ func TestClient(t *testing.T) {
 		// Check whether removed_at is set in docInfo
 		docInfo, err = cli.FindDocInfoByID(ctx, testProjectInfo.ID, docInfo.ID)
 		assert.NoError(t, err)
-		assert.NotEqual(t, time.Time{}, docInfo.RemovedAt)
+		assert.NotEqual(t, gotime.Time{}, docInfo.RemovedAt)
 
 		// Check whether DocumentRemoved status is set in clientInfo
 		clientInfo, err = cli.FindClientInfoByID(ctx, testProjectInfo.ID, clientInfo.ID)
@@ -476,7 +479,7 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(candidates))
 
-		time.Sleep(500 * time.Millisecond)
+		gotime.Sleep(500 * gotime.Millisecond)
 
 		// Check candidates
 		candidates, err = cli.FindRemoveDocumentCandidates(ctx, 5)
@@ -493,11 +496,154 @@ func TestClient(t *testing.T) {
 			assert.NoError(t, err)
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		gotime.Sleep(500 * gotime.Millisecond)
 
 		// Check candidates
 		candidates, err = cli.FindRemoveDocumentCandidates(ctx, 10)
 		assert.NoError(t, err)
 		assert.True(t, 10 >= len(candidates))
+	})
+
+	t.Run("insert and find changes test", func(t *testing.T) {
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+		docInfo, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+		assert.NoError(t, doc.Update(func(root *json.Object) error {
+			root.SetNewArray("array")
+			return nil
+		}))
+		for idx := 0; idx < 10; idx++ {
+			assert.NoError(t, doc.Update(func(root *json.Object) error {
+				root.GetArray("array").AddInteger(idx)
+				return nil
+			}))
+		}
+		pack := doc.CreateChangePack()
+		for idx, c := range pack.Changes {
+			c.SetServerSeq(int64(idx))
+		}
+
+		// Store changes
+		err := cli.CreateChangeInfos(ctx, dummyProjectID, docInfo, 0, pack.Changes, false)
+		assert.NoError(t, err)
+
+		// Find changes
+		loadedChanges, err := cli.FindChangesBetweenServerSeqs(
+			ctx,
+			docInfo.ID,
+			6,
+			10,
+		)
+		assert.NoError(t, err)
+		assert.Len(t, loadedChanges, 5)
+	})
+
+	t.Run("insert and remove changes test", func(t *testing.T) {
+
+		ctx := context.Background()
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+		docInfo, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+		assert.NoError(t, doc.Update(func(root *json.Object) error {
+			root.SetNewArray("array")
+			return nil
+		}))
+		for idx := 0; idx < 10; idx++ {
+			assert.NoError(t, doc.Update(func(root *json.Object) error {
+				root.GetArray("array").AddInteger(idx)
+				return nil
+			}))
+		}
+		pack := doc.CreateChangePack()
+		for idx, c := range pack.Changes {
+			c.SetServerSeq(int64(idx))
+		}
+
+		// Store changes
+		err := cli.CreateChangeInfos(ctx, dummyProjectID, docInfo, 0, pack.Changes, false)
+		assert.NoError(t, err)
+
+		// Remove Changes
+		err = cli.RemoveChangeInfos(ctx, docInfo.ID)
+		assert.NoError(t, err)
+
+		//Find changes
+		loadedChanges, err := cli.FindChangesBetweenServerSeqs(
+			ctx,
+			docInfo.ID,
+			6,
+			10,
+		)
+		assert.NoError(t, err)
+		assert.Len(t, loadedChanges, 0)
+	})
+
+	t.Run("store and find snapshots test", func(t *testing.T) {
+		ctx := context.Background()
+
+		testProjectInfo, err := cli.CreateProjectInfo(
+			ctx,
+			t.Name()+"project",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			documentRemoveThreshold,
+		)
+		assert.NoError(t, err)
+
+		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+
+		clientInfo, _ := cli.ActivateClient(ctx, testProjectInfo.ID, t.Name())
+		bytesID, _ := clientInfo.ID.Bytes()
+		actorID, _ := time.ActorIDFromBytes(bytesID)
+		docInfo, _ := cli.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo.ID, docKey, true)
+
+		doc := document.New(key.Key(t.Name()))
+		doc.SetActor(actorID)
+
+		assert.NoError(t, doc.Update(func(root *json.Object) error {
+			root.SetNewArray("array")
+			return nil
+		}))
+
+		assert.NoError(t, cli.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err := cli.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(0), snapshot.ServerSeq)
+
+		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
+		assert.NoError(t, doc.ApplyChangePack(pack))
+		assert.NoError(t, cli.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = cli.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), snapshot.ServerSeq)
+
+		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
+		assert.NoError(t, doc.ApplyChangePack(pack))
+		assert.NoError(t, cli.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = cli.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), snapshot.ServerSeq)
+
+		assert.Error(t, cli.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
+		snapshot, err = cli.FindClosestSnapshotInfo(ctx, docInfo.ID, 1)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), snapshot.ServerSeq)
 	})
 }
