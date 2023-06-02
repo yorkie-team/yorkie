@@ -147,6 +147,10 @@ var schema = &memdb.DBSchema{
 						},
 					},
 				},
+				"removed_at": {
+					Name:    "removed_at",
+					Indexer: &memdb.TimeFieldIndex{Field: "RemovedAt"},
+				},
 			},
 		},
 		tblChanges: {

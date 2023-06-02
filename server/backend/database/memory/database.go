@@ -816,13 +816,13 @@ func (d *DB) IsAttachedDocument(
 func (d *DB) FindRemoveDocumentCandidates(
 	ctx context.Context,
 	candidatesDocumentLimit int,
-) ([]database.DocInfo, error) {
+) ([]*database.DocInfo, error) {
 	documents, err := d.findDocInfoExistRemovedAt(ctx, candidatesDocumentLimit)
 	if err != nil {
 		return nil, err
 	}
 
-	var docInfos []database.DocInfo
+	var docInfos []*database.DocInfo
 	for _, doc := range documents {
 		project, err := d.FindProjectInfoByID(ctx, doc.ProjectID)
 		if err != nil {
@@ -832,7 +832,7 @@ func (d *DB) FindRemoveDocumentCandidates(
 			continue
 		}
 
-		documentRemoveThreshold, err := project.ClientDeactivateThresholdAsTimeDuration()
+		documentRemoveThreshold, err := project.DocumentRemoveThresholdAsTimeDuration()
 		if err != nil {
 			return nil, err
 		}
@@ -850,8 +850,28 @@ func (d *DB) FindRemoveDocumentCandidates(
 func (d *DB) findDocInfoExistRemovedAt(
 	ctx context.Context,
 	candidatesDocumentLimit int,
-) ([]database.DocInfo, error) {
-	return nil, nil
+) ([]*database.DocInfo, error) {
+
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	offset := gotime.Now()
+	iteration, err := txn.ReverseLowerBound(tblDocuments, "removed_at", offset)
+	if err != nil {
+		return nil, err
+	}
+
+	var docInfos []*database.DocInfo
+	for raw := iteration.Next(); raw != nil; raw = iteration.Next() {
+		docInfo := raw.(*database.DocInfo)
+
+		docInfos = append(docInfos, docInfo)
+		if len(docInfos) >= candidatesDocumentLimit {
+			break
+		}
+	}
+
+	return docInfos, nil
 }
 
 // findClientInfosByDocInfo finds a client of the given docInfo.
@@ -860,7 +880,26 @@ func (d *DB) findClientInfosByDocInfo(
 	projectID types.ID,
 	docID types.ID,
 ) ([]*database.ClientInfo, error) {
-	return nil, nil
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	it, err := txn.Get(tblClients, "project_id", projectID.String())
+	if err != nil {
+		return nil, err
+	}
+
+	var clientInfos []*database.ClientInfo
+	for raw := it.Next(); raw != nil; raw = it.Next() {
+		clientInfo := raw.(*database.ClientInfo)
+
+		for _, doc := range clientInfo.Documents {
+			if doc.DocID == docID {
+				clientInfos = append(clientInfos, clientInfo)
+				break
+			}
+		}
+	}
+	return clientInfos, nil
 }
 
 // CreateChangeInfos stores the given changes and doc info. If the

@@ -943,15 +943,14 @@ func (c *Client) IsAttachedDocument(
 func (c *Client) FindRemoveDocumentCandidates(
 	ctx context.Context,
 	candidatesDocumentLimit int,
-) ([]database.DocInfo, error) {
+) ([]*database.DocInfo, error) {
 	documents, err := c.findDocInfoExistRemovedAt(ctx, candidatesDocumentLimit)
 	if err != nil {
 		return nil, err
 	}
 
-	var docInfos []database.DocInfo
+	var docInfos []*database.DocInfo
 	for _, doc := range documents {
-		logging.DefaultLogger().Warn(doc)
 		project, err := c.FindProjectInfoByID(ctx, doc.ProjectID)
 		if err != nil {
 			return nil, err
@@ -978,7 +977,7 @@ func (c *Client) FindRemoveDocumentCandidates(
 func (c *Client) findDocInfoExistRemovedAt(
 	ctx context.Context,
 	candidatesDocumentLimit int,
-) ([]database.DocInfo, error) {
+) ([]*database.DocInfo, error) {
 	result, err := c.collection(colDocuments).Find(ctx, bson.M{
 		"removed_at": bson.M{
 			"$exists": true,
@@ -990,14 +989,14 @@ func (c *Client) findDocInfoExistRemovedAt(
 	}
 
 	if result.Err() == mongo.ErrNoDocuments {
-		return []database.DocInfo{}, nil
+		return []*database.DocInfo{}, nil
 	}
 	if result.Err() != nil {
 		logging.From(ctx).Error(result.Err())
 		return nil, fmt.Errorf("find document: %w", result.Err())
 	}
 
-	var docInfos []database.DocInfo
+	var docInfos []*database.DocInfo
 	if err := result.All(ctx, &docInfos); err != nil {
 		return nil, fmt.Errorf("decode document: %w", err)
 	}

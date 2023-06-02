@@ -19,9 +19,10 @@ package memory_test
 import (
 	"context"
 	"fmt"
-	"testing"
-
 	"github.com/stretchr/testify/assert"
+	"strconv"
+	"testing"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -186,10 +187,19 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("set RemovedAt in docInfo test", func(t *testing.T) {
+		testProjectInfo, err := db.CreateProjectInfo(
+			ctx,
+			t.Name()+"project",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			documentRemoveThreshold,
+		)
+		assert.NoError(t, err)
+
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
-		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
+		clientInfo, _ := db.ActivateClient(ctx, testProjectInfo.ID, t.Name())
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo.ID, docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
@@ -197,20 +207,29 @@ func TestDB(t *testing.T) {
 		pack := doc.CreateChangePack()
 
 		// Set RemovedAt in docInfo and store changes
-		err = db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, true)
+		err = db.CreateChangeInfos(ctx, testProjectInfo.ID, docInfo, 0, pack.Changes, true)
 		assert.NoError(t, err)
 
 		// Check whether RemovedAt is set in docInfo
-		docInfo, err = db.FindDocInfoByID(ctx, projectID, docInfo.ID)
+		docInfo, err = db.FindDocInfoByID(ctx, testProjectInfo.ID, docInfo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, false, docInfo.RemovedAt.IsZero())
 	})
 
 	t.Run("reuse same key to create docInfo test ", func(t *testing.T) {
+		testProjectInfo, err := db.CreateProjectInfo(
+			ctx,
+			t.Name()+"project",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			documentRemoveThreshold,
+		)
+		assert.NoError(t, err)
+
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name())
-		docInfo1, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo1.ID, docKey, true)
+		clientInfo1, _ := db.ActivateClient(ctx, testProjectInfo.ID, t.Name())
+		docInfo1, _ := db.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo1.ID, docKey, true)
 		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
 
@@ -218,12 +237,12 @@ func TestDB(t *testing.T) {
 		pack := doc.CreateChangePack()
 
 		// Set RemovedAt in docInfo and store changes
-		err = db.CreateChangeInfos(ctx, projectID, docInfo1, 0, pack.Changes, true)
+		err = db.CreateChangeInfos(ctx, testProjectInfo.ID, docInfo1, 0, pack.Changes, true)
 		assert.NoError(t, err)
 
 		// Use same key to create docInfo
-		clientInfo2, _ := db.ActivateClient(ctx, projectID, t.Name())
-		docInfo2, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo2.ID, docKey, true)
+		clientInfo2, _ := db.ActivateClient(ctx, testProjectInfo.ID, t.Name())
+		docInfo2, _ := db.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo2.ID, docKey, true)
 		assert.NoError(t, clientInfo2.AttachDocument(docInfo2.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo2))
 
@@ -399,24 +418,34 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("UpdateDocInfoRemovedAt test", func(t *testing.T) {
+
+		testProjectInfo, err := db.CreateProjectInfo(
+			ctx,
+			t.Name()+"project",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			documentRemoveThreshold,
+		)
+		assert.NoError(t, err)
+
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
 
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		clientInfo, err := db.ActivateClient(ctx, testProjectInfo.ID, t.Name())
 		assert.NoError(t, err)
-		docInfo1, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
+		docInfo1, err := db.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo.ID, docKey, true)
 		assert.NoError(t, err)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo1.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
 
-		err = db.UpdateDocInfoRemovedAt(ctx, projectID, docInfo1.ID)
+		err = db.UpdateDocInfoRemovedAt(ctx, testProjectInfo.ID, docInfo1.ID)
 		assert.NoError(t, err)
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
 
 		assert.True(t, docInfo1.RemovedAt.IsZero())
 
-		docInfo2, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
+		docInfo2, err := db.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo.ID, docKey, true)
 
 		assert.NoError(t, err)
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
@@ -425,40 +454,50 @@ func TestDB(t *testing.T) {
 		assert.True(t, docInfo2.RemovedAt.IsZero())
 
 		notPresentDocID := types.ID("000000000000000000000011")
-		err = db.UpdateDocInfoRemovedAt(ctx, projectID, notPresentDocID)
+		err = db.UpdateDocInfoRemovedAt(ctx, testProjectInfo.ID, notPresentDocID)
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 	})
 
 	t.Run("IsAttachedDocument test", func(t *testing.T) {
 		ctx := context.Background()
+
+		testProjectInfo, err := db.CreateProjectInfo(
+			ctx,
+			t.Name()+"project",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			documentRemoveThreshold,
+		)
+		assert.NoError(t, err)
+
 		docKey1 := key.Key(fmt.Sprintf("tests$%s", t.Name()+"1"))
 
-		clientInfo1, err := db.ActivateClient(ctx, projectID, t.Name()+"1")
+		clientInfo1, err := db.ActivateClient(ctx, testProjectInfo.ID, t.Name()+"1")
 		assert.NoError(t, err)
-		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo1.ID, docKey1, true)
+		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, testProjectInfo.ID, clientInfo1.ID, docKey1, true)
 		assert.NoError(t, err)
 		assert.NoError(t, clientInfo1.AttachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
 
 		// Check document is attached
-		isAttached, err := db.IsAttachedDocument(ctx, projectID, docInfo.ID)
+		isAttached, err := db.IsAttachedDocument(ctx, testProjectInfo.ID, docInfo.ID)
 		assert.True(t, isAttached)
 		assert.NoError(t, err)
 
 		// Check document is detached
 		assert.NoError(t, clientInfo1.DetachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
-		isAttached, err = db.IsAttachedDocument(ctx, projectID, docInfo.ID)
+		isAttached, err = db.IsAttachedDocument(ctx, testProjectInfo.ID, docInfo.ID)
 		assert.False(t, isAttached)
 		assert.NoError(t, err)
 
 		// Check whether document is attached in any other client
-		clientInfo2, err := db.ActivateClient(ctx, projectID, t.Name()+"2")
+		clientInfo2, err := db.ActivateClient(ctx, testProjectInfo.ID, t.Name()+"2")
 		assert.NoError(t, err)
 		assert.NoError(t, clientInfo2.AttachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
 
-		isAttached, err = db.IsAttachedDocument(ctx, projectID, docInfo.ID)
+		isAttached, err = db.IsAttachedDocument(ctx, testProjectInfo.ID, docInfo.ID)
 		assert.True(t, isAttached)
 		assert.NoError(t, err)
 	})
@@ -601,5 +640,73 @@ func TestDB(t *testing.T) {
 		fields = &types.UpdatableProjectFields{Name: &existName}
 		_, err = db.UpdateProjectInfo(ctx, otherOwnerID, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNotFound)
+	})
+
+	t.Run("FindRemoveDocumentCandidates test", func(t *testing.T) {
+		ctx := context.Background()
+
+		testProjectInfo1Sec, err := db.CreateProjectInfo(
+			ctx,
+			t.Name()+"project_1_sec",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			"100ms",
+		)
+		assert.NoError(t, err)
+
+		testProjectInfo1Hour, err := db.CreateProjectInfo(
+			ctx,
+			t.Name()+"project_1h",
+			dummyOwnerID,
+			clientDeactivateThreshold,
+			"1h",
+		)
+		assert.NoError(t, err)
+
+		clientInfo, err := db.ActivateClient(ctx, testProjectInfo1Sec.ID, t.Name()+"1")
+		assert.NoError(t, err)
+
+		// Create document in remove threshold 1sec project
+		docKey1 := key.Key(fmt.Sprintf("tests$%s", t.Name()+"1"))
+		docInfo1Sec, err := db.FindDocInfoByKeyAndOwner(ctx, testProjectInfo1Sec.ID, clientInfo.ID, docKey1, true)
+		assert.NoError(t, err)
+		err = db.UpdateDocInfoRemovedAt(ctx, testProjectInfo1Sec.ID, docInfo1Sec.ID)
+		assert.NoError(t, err)
+
+		// Create document in remove threshold 1hour project
+		docKey2 := key.Key(fmt.Sprintf("tests$%s", t.Name()+"2"))
+		docInfo1Hour, err := db.FindDocInfoByKeyAndOwner(ctx, testProjectInfo1Hour.ID, clientInfo.ID, docKey2, true)
+		assert.NoError(t, err)
+		err = db.UpdateDocInfoRemovedAt(ctx, testProjectInfo1Hour.ID, docInfo1Hour.ID)
+		assert.NoError(t, err)
+
+		// Check there are no candidates
+		candidates, err := db.FindRemoveDocumentCandidates(ctx, 5)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(candidates))
+
+		gotime.Sleep(500 * gotime.Millisecond)
+
+		// Check candidates
+		candidates, err = db.FindRemoveDocumentCandidates(ctx, 5)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(candidates))
+		assert.Equal(t, candidates[0].ID, docInfo1Sec.ID)
+
+		// Create document in remove threshold 1sec projects
+		for i := 0; i < 10; i++ {
+			docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()+strconv.Itoa(i)))
+			docInfo1Sec, err := db.FindDocInfoByKeyAndOwner(ctx, testProjectInfo1Sec.ID, clientInfo.ID, docKey, true)
+			assert.NoError(t, err)
+			err = db.UpdateDocInfoRemovedAt(ctx, testProjectInfo1Sec.ID, docInfo1Sec.ID)
+			assert.NoError(t, err)
+		}
+
+		gotime.Sleep(500 * gotime.Millisecond)
+
+		// Check candidates
+		candidates, err = db.FindRemoveDocumentCandidates(ctx, 10)
+		assert.NoError(t, err)
+		assert.True(t, 10 >= len(candidates))
 	})
 }

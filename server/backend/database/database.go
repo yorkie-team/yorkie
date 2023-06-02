@@ -182,7 +182,7 @@ type Database interface {
 	FindRemoveDocumentCandidates(
 		ctx context.Context,
 		candidatesDocumentLimit int,
-	) ([]DocInfo, error)
+	) ([]*DocInfo, error)
 
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(

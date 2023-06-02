@@ -498,6 +498,6 @@ func TestClient(t *testing.T) {
 		// Check candidates
 		candidates, err = cli.FindRemoveDocumentCandidates(ctx, 10)
 		assert.NoError(t, err)
-		assert.True(t, 10 < len(candidates))
+		assert.True(t, 10 >= len(candidates))
 	})
 }
