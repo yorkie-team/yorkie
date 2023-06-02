@@ -82,3 +82,8 @@ func (c *Context) RegisterRemovedElementPair(parent crdt.Container, deleted crdt
 func (c *Context) RegisterTextElementWithGarbage(textType crdt.TextElement) {
 	c.root.RegisterTextElementWithGarbage(textType)
 }
+
+// LastTimeTicket returns the last time ticket issued by this context.
+func (c *Context) LastTimeTicket() *time.Ticket {
+	return c.id.NewTimeTicket(c.delimiter)
+}
