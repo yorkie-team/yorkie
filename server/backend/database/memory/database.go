@@ -1341,6 +1341,22 @@ func (d *DB) UpdateSyncedSeq(
 	return nil
 }
 
+// RemoveSyncedSeq removes the syncedSeq of the given client.
+func (d *DB) RemoveSyncedSeq(
+	ctx context.Context,
+	docID types.ID,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	if _, err := txn.DeleteAll(tblSyncedSeqs, "doc_id", docID.String()); err != nil {
+		return fmt.Errorf("delete syncedseqs of %s: %w", docID.String(), err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
 // FindDocInfosByPaging returns the documentInfos of the given paging.
 func (d *DB) FindDocInfosByPaging(
 	ctx context.Context,

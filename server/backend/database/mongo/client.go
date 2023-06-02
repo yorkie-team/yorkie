@@ -1607,6 +1607,26 @@ func (c *Client) findTicketByServerSeq(
 	), nil
 }
 
+// RemoveSyncedSeq removes the syncedSeq of the given client.
+func (c *Client) RemoveSyncedSeq(
+	ctx context.Context,
+	docID types.ID,
+) error {
+	encodedDocID, err := encodeID(docID)
+	if err != nil {
+		return err
+	}
+
+	if _, err = c.collection(colSyncedSeqs).DeleteOne(ctx, bson.M{
+		"doc_id": encodedDocID,
+	}, options.Delete()); err != nil {
+		logging.From(ctx).Error(err)
+		return fmt.Errorf("delete synced seq: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Client) collection(
 	name string,
 	opts ...*options.CollectionOptions,
