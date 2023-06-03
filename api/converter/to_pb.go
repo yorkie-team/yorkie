@@ -235,6 +235,8 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toStyle(op)
 		case *operations.Increase:
 			pbOperation.Body, err = toIncrease(op)
+		case *operations.TreeEdit:
+			pbOperation.Body, err = toTreeEdit(op)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -385,6 +387,18 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 	}, nil
 }
 
+func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
+	return &api.Operation_TreeEdit_{
+		TreeEdit: &api.Operation_TreeEdit{
+			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
+			From:            toTreePos(e.FromPos()),
+			To:              toTreePos(e.ToPos()),
+			Content:         ToTreeNodes(e.Content()),
+			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
+		},
+	}, nil
+}
+
 func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 	switch elem := elem.(type) {
 	case *crdt.Object:
@@ -423,6 +437,16 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 			Type:      pbCounterType,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 			Value:     elem.Bytes(),
+		}, nil
+	case *crdt.Tree:
+		bytes, err := TreeToBytes(elem)
+		if err != nil {
+			return nil, err
+		}
+		return &api.JSONElementSimple{
+			Type:      api.ValueType_VALUE_TYPE_TREE,
+			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			Value:     bytes,
 		}, nil
 	}
 
