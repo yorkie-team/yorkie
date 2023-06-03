@@ -587,33 +587,26 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 		return nil, nil
 	}
 
-	root, err := fromTreeNode(pbNodes[len(pbNodes)-1])
-	if err != nil {
-		return nil, err
-	}
-
-	prevNode := root
-	for i := len(pbNodes) - 2; i >= 0; i-- {
-		currentPBNode := pbNodes[i]
-		prevPBNode := pbNodes[i+1]
-
-		currentNode, err := fromTreeNode(currentPBNode)
+	nodes := make([]*crdt.TreeNode, len(pbNodes))
+	for i, pbNode := range pbNodes {
+		node, err := fromTreeNode(pbNode)
 		if err != nil {
 			return nil, err
 		}
+		nodes[i] = node
+	}
 
-		if currentPBNode.Depth == prevPBNode.Depth {
-			// current is sibling of previous
-			prevNode.IndexTreeNode.Parent.Value.Prepend(currentNode)
-		} else {
-			// current is child of previous, so find the parent of current
-			for j := i + 1; currentPBNode.Depth-1 != pbNodes[j].Depth; j++ {
-				prevNode = prevNode.IndexTreeNode.Parent.Value
+	root := nodes[len(nodes)-1]
+	for i := len(nodes) - 2; i >= 0; i-- {
+		var parent *crdt.TreeNode
+		for j := i + 1; j < len(nodes); j++ {
+			if pbNodes[i].Depth-1 == pbNodes[j].Depth {
+				parent = nodes[j]
+				break
 			}
-			prevNode.Prepend(currentNode)
 		}
 
-		prevNode = currentNode
+		parent.Prepend(nodes[i])
 	}
 
 	// build crdt.Tree from root to construct the links between nodes.
