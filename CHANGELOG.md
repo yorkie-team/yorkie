@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.0] - 2023-06-05
+
+### Added
+* Implement yorkie.Tree for text editors using tree model by @hackerwins in https://github.com/yorkie-team/yorkie/pull/535
+* Add remove document command to CLI by @emplam27 in https://github.com/yorkie-team/yorkie/pull/540
+
+### Fixed
+* Remove panic method in crdt array by @emplam27 in https://github.com/yorkie-team/yorkie/pull/524
+* Revise Helm Charts for Production Installations by @krapie in https://github.com/yorkie-team/yorkie/pull/537
+* Resolve concurrent map issue by @chacha912 in https://github.com/yorkie-team/yorkie/pull/538
+
 ## [0.3.5] - 2023-05-22
 
 ### Added
