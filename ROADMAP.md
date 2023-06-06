@@ -13,12 +13,11 @@ Yorkie v1.0 focuses on improving the stability of the server and client to make 
 
 ### 2023
 
+- Tree for text editors using tree model [yorkie-js-sdk#257](https://github.com/yorkie-team/yorkie-js-sdk/issues/257)
+- Support batch API for document and presence [#442](https://github.com/yorkie-team/yorkie/issues/442)
+- Sharding-based cluster mode [#472](https://github.com/yorkie-team/yorkie/issues/472)
 - History API [#52](https://github.com/yorkie-team/yorkie/issues/52)
 - Undo/Redo [#49](https://github.com/yorkie-team/yorkie/issues/49)
-- Limits [#158](https://github.com/yorkie-team/yorkie/issues/158)
-- Retention [retention.md](https://github.com/yorkie-team/yorkie/blob/main/design/retention.md)
-- QoS [#270](https://github.com/yorkie-team/yorkie/issues/270)
-- P2P using WebRTC, LocalStorage [yorkie-js-sdk#271](https://github.com/yorkie-team/yorkie-js-sdk/issues/271)
 
 ## Yorkie v0.3
 
