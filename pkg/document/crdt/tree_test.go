@@ -54,6 +54,28 @@ func TestTreeNode(t *testing.T) {
 		assert.Equal(t, &crdt.TreePos{CreatedAt: time.InitialTicket, Offset: 0}, left.Pos)
 		assert.Equal(t, &crdt.TreePos{CreatedAt: time.InitialTicket, Offset: 5}, right.Pos)
 	})
+
+	t.Run("UTF-16 code unit test", func(t *testing.T) {
+		tests := []struct {
+			length int
+			value  string
+		}{
+			{4, "abcd"},
+			{6, "우리나라한글"},
+			{8, "अनुच्छेद"},
+			{10, "Ĺo͂řȩm̅"},
+			{12, "🌷🎁💩😜👍🏳"},
+		}
+		for _, test := range tests {
+			para := crdt.NewTreeNode(crdt.DummyTreePos, "p")
+			para.Append(crdt.NewTreeNode(crdt.DummyTreePos, "text", test.value))
+
+			left := para.Child(0)
+			assert.Equal(t, test.length, left.Len())
+			right := left.Split(2)
+			assert.Equal(t, test.length-2, right.Len())
+		}
+	})
 }
 
 func TestTree(t *testing.T) {

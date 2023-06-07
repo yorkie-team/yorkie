@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
@@ -127,7 +128,8 @@ func (n *TreeNode) IsRemoved() bool {
 
 // Length returns the length of this node.
 func (n *TreeNode) Length() int {
-	return len(n.Value)
+	encoded := utf16.Encode([]rune(n.Value))
+	return len(encoded)
 }
 
 // String returns the string representation of this node.
@@ -175,16 +177,17 @@ func (n *TreeNode) SplitText(offset int) *TreeNode {
 		return nil
 	}
 
-	leftValue := n.Value[:offset]
-	rightValue := n.Value[offset:]
+	encoded := utf16.Encode([]rune(n.Value))
+	leftRune := utf16.Decode(encoded[0:offset])
+	rightRune := utf16.Decode(encoded[offset:])
 
-	n.Value = leftValue
-	n.IndexTreeNode.Length = len(leftValue)
+	n.Value = string(leftRune)
+	n.IndexTreeNode.Length = len(leftRune)
 
 	rightNode := NewTreeNode(&TreePos{
 		CreatedAt: n.Pos.CreatedAt,
 		Offset:    offset,
-	}, n.Type(), rightValue)
+	}, n.Type(), string(rightRune))
 	n.IndexTreeNode.Parent.InsertAfterInternal(rightNode.IndexTreeNode, n.IndexTreeNode)
 
 	return rightNode
