@@ -331,39 +331,52 @@ func TestClient(t *testing.T) {
 	t.Run("IsAttachedDocument test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey1 := key.Key(fmt.Sprintf("tests$%s", t.Name()+"1"))
+		docKey2 := key.Key(fmt.Sprintf("tests$%s", t.Name()+"2"))
 
 		clientInfo1, err := cli.ActivateClient(ctx, dummyProjectID, t.Name()+"1")
 		assert.NoError(t, err)
-		docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo1.ID, docKey1, true)
+		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo1.ID, docKey1, true)
+		assert.NoError(t, err)
+		docInfo2, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo1.ID, docKey2, true)
 		assert.NoError(t, err)
 
 		// Check any document is not attached
-		isAttached, err := cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		isAttached, err := cli.IsAttachedDocument(ctx, dummyProjectID, docInfo1.ID)
 		assert.False(t, isAttached)
 		assert.NoError(t, err)
 
-		assert.NoError(t, clientInfo1.AttachDocument(docInfo.ID))
-		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID))
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo2.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo2))
 
 		// Check document is attached
-		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo1.ID)
+		assert.True(t, isAttached)
+		assert.NoError(t, err)
+
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo2.ID)
 		assert.True(t, isAttached)
 		assert.NoError(t, err)
 
 		// Check document is detached
-		assert.NoError(t, clientInfo1.DetachDocument(docInfo.ID))
-		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo))
-		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		assert.NoError(t, clientInfo1.DetachDocument(docInfo1.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo1.ID)
 		assert.False(t, isAttached)
+		assert.NoError(t, err)
+
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo2.ID)
+		assert.True(t, isAttached)
 		assert.NoError(t, err)
 
 		// Check whether document is attached in any other client
 		clientInfo2, err := cli.ActivateClient(ctx, dummyProjectID, t.Name()+"2")
 		assert.NoError(t, err)
-		assert.NoError(t, clientInfo2.AttachDocument(docInfo.ID))
-		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo))
+		assert.NoError(t, clientInfo2.AttachDocument(docInfo1.ID))
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo1))
 
-		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo.ID)
+		isAttached, err = cli.IsAttachedDocument(ctx, dummyProjectID, docInfo1.ID)
 		assert.True(t, isAttached)
 		assert.NoError(t, err)
 	})

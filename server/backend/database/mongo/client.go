@@ -585,24 +585,24 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		return fmt.Errorf("update client info: %w", result.Err())
 	}
 
-	// update clientDocInfo
-	updater := bson.M{
-		"$max": bson.M{
-			"documents.$.server_seq": clientDocInfo.ServerSeq,
-			"documents.$.client_seq": clientDocInfo.ClientSeq,
-		},
-		"$set": bson.M{
-			"documents.$.status": clientDocInfo.Status,
-			"updated_at":         clientInfo.UpdatedAt,
-		},
-	}
-
 	attached, err := clientInfo.IsAttached(docInfo.ID)
 	if err != nil {
 		return err
 	}
 
-	if !attached {
+	var updater bson.M
+	if attached {
+		updater = bson.M{
+			"$max": bson.M{
+				"documents.$.server_seq": clientDocInfo.ServerSeq,
+				"documents.$.client_seq": clientDocInfo.ClientSeq,
+			},
+			"$set": bson.M{
+				"documents.$.status": clientDocInfo.Status,
+				"updated_at":         clientInfo.UpdatedAt,
+			},
+		}
+	} else {
 		updater = bson.M{
 			"$set": bson.M{
 				"documents.$.server_seq": 0,
