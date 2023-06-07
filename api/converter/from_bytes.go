@@ -17,6 +17,7 @@
 package converter
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
@@ -45,6 +46,25 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 	return obj, nil
 }
 
+// BytesToTree creates a Tree from the given byte array.
+func BytesToTree(snapshot []byte) (*crdt.Tree, error) {
+	if snapshot == nil {
+		return nil, errors.New("snapshot should not be nil")
+	}
+
+	pbTree := &api.JSONElement{}
+	if err := proto.Unmarshal(snapshot, pbTree); err != nil {
+		return nil, fmt.Errorf("unmarshal tree: %w", err)
+	}
+
+	tree, err := fromJSONTree(pbTree.GetTree())
+	if err != nil {
+		return nil, err
+	}
+
+	return tree, nil
+}
+
 func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
 	switch decoded := pbElem.Body.(type) {
 	case *api.JSONElement_JsonObject:
@@ -57,6 +77,8 @@ func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
 		return fromJSONText(decoded.Text)
 	case *api.JSONElement_Counter_:
 		return fromJSONCounter(decoded.Counter)
+	case *api.JSONElement_Tree_:
+		return fromJSONTree(decoded.Tree)
 	default:
 		return nil, fmt.Errorf("%s: %w", decoded, ErrUnsupportedElement)
 	}
@@ -281,4 +303,34 @@ func fromTextNodeID(
 		createdAt,
 		int(pbTextNodeID.Offset),
 	), nil
+}
+
+func fromJSONTree(
+	pbTree *api.JSONElement_Tree,
+) (*crdt.Tree, error) {
+	createdAt, err := fromTimeTicket(pbTree.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	movedAt, err := fromTimeTicket(pbTree.MovedAt)
+	if err != nil {
+		return nil, err
+	}
+	removedAt, err := fromTimeTicket(pbTree.RemovedAt)
+	if err != nil {
+		return nil, err
+	}
+	root, err := FromTreeNodes(pbTree.Nodes)
+	if err != nil {
+		return nil, err
+	}
+
+	tree := crdt.NewTree(
+		root,
+		createdAt,
+	)
+	tree.SetMovedAt(movedAt)
+	tree.SetRemovedAt(removedAt)
+
+	return tree, nil
 }

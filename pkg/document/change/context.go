@@ -99,3 +99,8 @@ func (c *Context) RegisterTextElementWithGarbage(textType crdt.TextElement) {
 func (c *Context) SetPresenceInfo(presenceInfo *presence.Info) {
 	c.presenceInfo = presenceInfo
 }
+
+// LastTimeTicket returns the last time ticket issued by this context.
+func (c *Context) LastTimeTicket() *time.Ticket {
+	return c.id.NewTimeTicket(c.delimiter)
+}

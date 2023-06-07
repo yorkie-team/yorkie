@@ -220,4 +220,38 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, cli.ID.Bytes(), decodedCli.ID.Bytes())
 		assert.Equal(t, cli.PresenceInfo, decodedCli.PresenceInfo)
 	})
+
+	t.Run("tree converting test", func(t *testing.T) {
+		root := helper.BuildTreeNode(&json.TreeNode{
+			Type: "r",
+			Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "hello"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "world"}}},
+			},
+		})
+
+		pbNodes := converter.ToTreeNodes(root)
+		clone, err := converter.FromTreeNodes(pbNodes)
+		assert.NoError(t, err)
+		assert.Equal(t, crdt.ToStructure(root), crdt.ToStructure(clone))
+		assert.Equal(t, crdt.ToXML(root), crdt.ToXML(clone))
+	})
+
+	t.Run("tree converting to bytes test", func(t *testing.T) {
+		root := helper.BuildTreeNode(&json.TreeNode{
+			Type: "r",
+			Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "hello"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "world"}}},
+			},
+		})
+
+		tree := crdt.NewTree(root, time.InitialTicket)
+		bytes, err := converter.TreeToBytes(tree)
+		assert.NoError(t, err)
+		clone, err := converter.BytesToTree(bytes)
+		assert.NoError(t, err)
+
+		assert.Equal(t, tree.ToXML(), clone.ToXML())
+	})
 }

@@ -92,6 +92,23 @@ func (p *Object) SetNewCounter(k string, t crdt.CounterType, n interface{}) *Cou
 	return v.(*Counter)
 }
 
+// SetNewTree sets a new Tree for the given key.
+func (p *Object) SetNewTree(k string, initialRoot ...*TreeNode) *Tree {
+	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		var root *TreeNode
+		if len(initialRoot) > 0 {
+			root = initialRoot[0]
+		}
+
+		return NewTree(
+			p.context,
+			crdt.NewTree(buildRoot(p.context, root, ticket), ticket),
+		)
+	})
+
+	return v.(*Tree)
+}
+
 // SetNull sets the null for the given key.
 func (p *Object) SetNull(k string) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
@@ -243,6 +260,23 @@ func (p *Object) GetCounter(k string) *Counter {
 	case *crdt.Counter:
 		return NewCounter(p.context, elem)
 	case *Counter:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+// GetTree returns Tree of the given key.
+func (p *Object) GetTree(k string) *Tree {
+	elem := p.Object.Get(k)
+	if elem == nil {
+		return nil
+	}
+
+	switch elem := p.Object.Get(k).(type) {
+	case *crdt.Tree:
+		return NewTree(p.context, elem)
+	case *Tree:
 		return elem
 	default:
 		panic("unsupported type")
