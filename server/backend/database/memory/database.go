@@ -787,11 +787,11 @@ func (d *DB) IsAttachedDocument(
 
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		clientInfo := raw.(*database.ClientInfo)
-		isAttached, err := clientInfo.IsAttached(docID)
-		if err != nil {
-			return false, err
+		documentInfo := clientInfo.FindDocumentInfo(docID)
+		if documentInfo == nil {
+			continue
 		}
-		if isAttached {
+		if documentInfo.Status == database.DocumentAttached {
 			return true, nil
 		}
 	}
