@@ -880,7 +880,12 @@ func (c *Client) IsAttachedDocument(
 	docID types.ID,
 ) (bool, error) {
 	cursor, err := c.collection(colClients).Find(ctx, bson.M{
-		"documents.doc_id": docID,
+		"documents": bson.M{
+			"$elemMatch": bson.M{
+				"doc_id": docID,
+				"status": database.DocumentAttached,
+			},
+		},
 	})
 	if err != nil {
 		return false, err
@@ -895,19 +900,7 @@ func (c *Client) IsAttachedDocument(
 		return false, nil
 	}
 
-	for _, info := range clientInfos {
-		for _, doc := range info.Documents {
-			if doc.DocID == docID && doc.Status == database.DocumentAttached {
-				logging.From(ctx).Info(fmt.Sprintf(
-					"document(%s) is attached in client(%s)",
-					info.Key,
-					doc.DocID,
-				))
-				return true, nil
-			}
-		}
-	}
-	return false, nil
+	return true, nil
 }
 
 // CreateChangeInfos stores the given changes and doc info.
