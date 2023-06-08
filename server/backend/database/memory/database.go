@@ -20,6 +20,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/server/logging"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -503,6 +504,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 ) error {
 	clientDocInfo := clientInfo.FindDocumentInfo(docInfo.ID)
 	attached, err := clientInfo.IsAttached(docInfo.ID)
+	logging.DefaultLogger().Warn(attached)
 	if err != nil {
 		return err
 	}
@@ -520,40 +522,36 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 
 	loaded := raw.(*database.ClientInfo).DeepCopy()
 
-	documentInfo := loaded.FindDocumentInfo(docInfo.ID)
 	if !attached {
-		documentInfo = &database.ClientDocInfo{
+		loaded.SetDocumentInfo(&database.ClientDocInfo{
 			DocID:  docInfo.ID,
 			Status: clientDocInfo.Status,
-		}
+		})
 		loaded.UpdatedAt = gotime.Now()
 	} else {
-		if documentInfo == nil {
-			documentInfo = &database.ClientDocInfo{}
+		if loaded.FindDocumentInfo(docInfo.ID) == nil {
+			loaded.SetDocumentInfo(&database.ClientDocInfo{
+				DocID: docInfo.ID,
+			})
 		}
 
-		serverSeq := documentInfo.ServerSeq
-		if clientDocInfo.ServerSeq > documentInfo.ServerSeq {
+		loadedClientDocInfo := loaded.FindDocumentInfo(docInfo.ID)
+		serverSeq := loadedClientDocInfo.ServerSeq
+		if clientDocInfo.ServerSeq > loadedClientDocInfo.ServerSeq {
 			serverSeq = clientDocInfo.ServerSeq
 		}
-		clientSeq := documentInfo.ClientSeq
-		if clientDocInfo.ClientSeq > documentInfo.ClientSeq {
+		clientSeq := loadedClientDocInfo.ClientSeq
+		if clientDocInfo.ClientSeq > loadedClientDocInfo.ClientSeq {
 			clientSeq = clientDocInfo.ClientSeq
 		}
 
-		documentInfo = &database.ClientDocInfo{
-			DocID:     clientDocInfo.DocID,
+		loaded.SetDocumentInfo(&database.ClientDocInfo{
+			DocID:     docInfo.ID,
 			ServerSeq: serverSeq,
 			ClientSeq: clientSeq,
 			Status:    clientDocInfo.Status,
-		}
+		})
 		loaded.UpdatedAt = gotime.Now()
-	}
-	for i, v := range loaded.Documents {
-		if v.DocID == docInfo.ID {
-			loaded.Documents[i] = documentInfo
-			break
-		}
 	}
 
 	if err := txn.Insert(tblClients, loaded); err != nil {

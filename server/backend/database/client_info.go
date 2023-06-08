@@ -19,6 +19,7 @@ package database
 import (
 	"errors"
 	"fmt"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -117,7 +118,7 @@ func (i *ClientInfo) AttachDocument(docID types.ID) error {
 	}
 
 	if documentInfo == nil {
-		i.Documents = append(i.Documents, &ClientDocInfo{
+		i.SetDocumentInfo(&ClientDocInfo{
 			DocID:     docID,
 			Status:    DocumentAttached,
 			ServerSeq: 0,
@@ -137,10 +138,12 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 		return fmt.Errorf("client(%s) detaches document(%s): %w", i.ID.String(), docID.String(), err)
 	}
 
-	documentInfo := i.FindDocumentInfo(docID)
-	documentInfo.Status = DocumentDetached
-	documentInfo.ClientSeq = 0
-	documentInfo.ServerSeq = 0
+	i.SetDocumentInfo(&ClientDocInfo{
+		DocID:     docID,
+		Status:    DocumentDetached,
+		ServerSeq: 0,
+		ClientSeq: 0,
+	})
 	i.UpdatedAt = time.Now()
 
 	return nil
@@ -152,10 +155,12 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 		return fmt.Errorf("client(%s) removes document(%s): %w", i.ID.String(), docID.String(), err)
 	}
 
-	documentInfo := i.FindDocumentInfo(docID)
-	documentInfo.Status = DocumentRemoved
-	documentInfo.ClientSeq = 0
-	documentInfo.ServerSeq = 0
+	i.SetDocumentInfo(&ClientDocInfo{
+		DocID:     docID,
+		Status:    DocumentRemoved,
+		ServerSeq: 0,
+		ClientSeq: 0,
+	})
 	i.UpdatedAt = time.Now()
 
 	return nil
@@ -168,6 +173,7 @@ func (i *ClientInfo) IsAttached(docID types.ID) (bool, error) {
 		return false, fmt.Errorf("check document(%s) is attached: %w", docID.String(), ErrDocumentNeverAttached)
 	}
 
+	logging.DefaultLogger().Warn("IsAttached", documentInfo)
 	return documentInfo.Status == DocumentAttached, nil
 }
 
@@ -249,7 +255,7 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 
 // FindDocumentInfo finds the document info by the given docID.
 func (i *ClientInfo) FindDocumentInfo(docID types.ID) *ClientDocInfo {
-	if i.Documents == nil || len(i.Documents) == 0 {
+	if len(i.Documents) == 0 {
 		return nil
 	}
 
@@ -260,4 +266,16 @@ func (i *ClientInfo) FindDocumentInfo(docID types.ID) *ClientDocInfo {
 	}
 
 	return nil
+}
+
+// SetDocumentInfo sets the document info by the given docID.
+func (i *ClientInfo) SetDocumentInfo(docInfo *ClientDocInfo) {
+	for idx, v := range i.Documents {
+		if v.DocID == docInfo.DocID {
+			i.Documents[idx] = docInfo
+			return
+		}
+	}
+
+	i.Documents = append(i.Documents, docInfo)
 }
