@@ -113,6 +113,16 @@ func TestConverter(t *testing.T) {
 				Increase(10).
 				Increase(math.MaxInt64)
 
+			// tree
+			root.SetNewTree("k5").
+				Edit(0, 0, &json.TreeNode{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:  "text",
+						Value: "Hello world",
+					}},
+				})
+
 			return nil
 		})
 		assert.NoError(t, err)
