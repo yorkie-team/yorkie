@@ -149,7 +149,7 @@ func TestClientInfo(t *testing.T) {
 		assert.ErrorIs(t, err, database.ErrDocumentAlreadyAttached)
 	})
 
-	t.Run("document remove attahced document test", func(t *testing.T) {
+	t.Run("document remove attached document test", func(t *testing.T) {
 		clientInfo := database.ClientInfo{
 			Status: database.ClientActivated,
 		}

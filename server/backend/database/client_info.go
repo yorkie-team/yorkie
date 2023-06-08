@@ -69,7 +69,7 @@ type ClientInfo struct {
 	// Status is the status of the client.
 	Status string `bson:"status"`
 
-	// Documents is a map of document which is attached to the client.
+	// Documents is array of document which is attached to the client.
 	Documents []*ClientDocInfo `bson:"documents"`
 
 	// CreatedAt is the time when the client was created.
