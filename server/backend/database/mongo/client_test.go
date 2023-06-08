@@ -314,8 +314,15 @@ func TestClient(t *testing.T) {
 
 		err = cli.UpdateDocInfoStatusToRemoved(ctx, docInfo1.ID)
 		assert.NoError(t, err)
+		assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo1))
 
+		// UpdateDocInfoStatusToRemoved is not update client's document information.
+		// So this document's removedAt time will not change.
 		assert.True(t, docInfo1.RemovedAt.IsZero())
+
+		docInfoNil, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, false)
+		assert.Nil(t, docInfoNil)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
 		docInfo2, _ := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)

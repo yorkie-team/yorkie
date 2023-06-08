@@ -641,6 +641,7 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 	if err != nil {
 		return nil, fmt.Errorf("find document by key: %w", err)
 	}
+
 	if !createDocIfNotExist && raw == nil {
 		raw, err = txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
 		if err != nil {
@@ -663,26 +664,33 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 		AccessedAt: now,
 	}
 
+	// If createDocIfNotExist option is true and the document does not exist, create it.
 	if raw == nil {
-		docInfo = newDocInfo
-		if err := txn.Insert(tblDocuments, docInfo); err != nil {
+		if err := txn.Insert(tblDocuments, newDocInfo); err != nil {
 			return nil, fmt.Errorf("create document: %w", err)
 		}
-	} else {
-		docInfo = raw.(*database.DocInfo)
-		if !docInfo.RemovedAt.IsZero() {
-			if err := txn.Delete(tblDocuments, docInfo); err != nil {
-				return nil, fmt.Errorf("delete document: %w", err)
-			}
+		txn.Commit()
+		return newDocInfo.DeepCopy(), nil
+	}
+
+	// Check the document is removed.
+	docInfo = raw.(*database.DocInfo)
+	if !docInfo.RemovedAt.IsZero() {
+
+		// If createDocIfNotExist option is true and the document is removed, create it.
+		if createDocIfNotExist {
 			if err := txn.Insert(tblDocuments, newDocInfo); err != nil {
 				return nil, fmt.Errorf("create document: %w", err)
 			}
-			docInfo = newDocInfo
+			txn.Commit()
+			return newDocInfo.DeepCopy(), nil
 		}
+
+		// If createDocIfNotExist option is false and the document is removed, return error.
+		return nil, fmt.Errorf("%s: %w", key, database.ErrDocumentNotFound)
 	}
 
-	txn.Commit()
-
+	// If the document exists and not removed, return it.
 	return docInfo.DeepCopy(), nil
 }
 
