@@ -20,7 +20,6 @@ package memory
 import (
 	"context"
 	"fmt"
-	"github.com/yorkie-team/yorkie/server/logging"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -504,7 +503,6 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 ) error {
 	clientDocInfo := clientInfo.FindDocumentInfo(docInfo.ID)
 	attached, err := clientInfo.IsAttached(docInfo.ID)
-	logging.DefaultLogger().Warn(attached)
 	if err != nil {
 		return err
 	}

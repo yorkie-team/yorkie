@@ -19,7 +19,6 @@ package database
 import (
 	"errors"
 	"fmt"
-	"github.com/yorkie-team/yorkie/server/logging"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
@@ -173,7 +172,6 @@ func (i *ClientInfo) IsAttached(docID types.ID) (bool, error) {
 		return false, fmt.Errorf("check document(%s) is attached: %w", docID.String(), ErrDocumentNeverAttached)
 	}
 
-	logging.DefaultLogger().Warn("IsAttached", documentInfo)
 	return documentInfo.Status == DocumentAttached, nil
 }
 
