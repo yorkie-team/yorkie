@@ -572,19 +572,6 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	docInfo *database.DocInfo,
 ) error {
 	clientDocInfo := clientInfo.FindDocumentInfo(docInfo.ID)
-
-	// find clientInfo
-	result := c.collection(colClients).FindOne(ctx, bson.M{
-		"key": clientInfo.Key,
-	})
-	if result.Err() != nil {
-		if result.Err() == mongo.ErrNoDocuments {
-			return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
-		}
-		logging.From(ctx).Error(result.Err())
-		return fmt.Errorf("update client info: %w", result.Err())
-	}
-
 	attached, err := clientInfo.IsAttached(docInfo.ID)
 	if err != nil {
 		return err
@@ -613,11 +600,25 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		}
 	}
 
-	result = c.collection(colClients).FindOne(ctx, bson.M{
-		"documents.doc_id": docInfo.ID,
-		"key":              clientInfo.Key,
+	// find clientInfo
+	result := c.collection(colClients).FindOne(ctx, bson.M{
+		"key": clientInfo.Key,
 	})
-	if result.Err() != nil && result.Err() == mongo.ErrNoDocuments {
+	if result.Err() != nil {
+		if result.Err() == mongo.ErrNoDocuments {
+			return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
+		}
+		logging.From(ctx).Error(result.Err())
+		return fmt.Errorf("update client info: %w", result.Err())
+	}
+
+	// update clientInfo
+	targetClientInfo := database.ClientInfo{}
+	if err := result.Decode(&targetClientInfo); err != nil {
+		return fmt.Errorf("decode client info: %w", err)
+	}
+	if targetClientInfo.FindDocumentInfo(docInfo.ID) == nil {
+		// if the clientInfo does not have the document, insert it
 		_, err = c.collection(colClients).UpdateOne(ctx, bson.M{
 			"key": clientInfo.Key,
 		}, bson.M{
@@ -634,6 +635,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			},
 		})
 	} else {
+		// if the clientInfo has the document, update it
 		_, err = c.collection(colClients).UpdateOne(ctx, bson.M{
 			"documents.doc_id": docInfo.ID,
 			"key":              clientInfo.Key,
