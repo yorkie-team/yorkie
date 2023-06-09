@@ -39,3 +39,6 @@ spec:
   destination:
     server: {{ .Values.argocd.destination.server }}
     namespace: {{ .Values.argocd.destination.monitoringNamespace }}
+  syncPolicy:
+    syncOptions:
+    - ServerSideApply=true
