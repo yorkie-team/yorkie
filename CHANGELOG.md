@@ -7,6 +7,11 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.1] - 2023-06-09
+
+### Fixed
+* Support UTF16 Code Units in yorkie.Tree by @krapie in https://github.com/yorkie-team/yorkie/pull/545
+
 ## [0.4.0] - 2023-06-05
 
 ### Added
