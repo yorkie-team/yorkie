@@ -20,21 +20,21 @@ import (
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Subscription represents a subscription of a subscriber to documents.
 type Subscription struct {
-	subID      string
-	subscriber types.Client
+	id         string
+	subscriber *time.ActorID
 	closed     bool
 	events     chan DocEvent
 }
 
 // NewSubscription creates a new instance of Subscription.
-func NewSubscription(subscriber types.Client) *Subscription {
+func NewSubscription(subscriber *time.ActorID) *Subscription {
 	return &Subscription{
-		subID:      xid.New().String(),
+		id:         xid.New().String(),
 		subscriber: subscriber,
 		events:     make(chan DocEvent, 1),
 	}
@@ -42,13 +42,13 @@ func NewSubscription(subscriber types.Client) *Subscription {
 
 // ID returns the id of this subscription.
 func (s *Subscription) ID() string {
-	return s.subID
+	return s.id
 }
 
 // DocEvent represents events that occur related to the document.
 type DocEvent struct {
 	Type       types.DocEventType
-	Publisher  types.Client
+	Publisher  *time.ActorID
 	DocumentID types.ID
 }
 
@@ -58,18 +58,8 @@ func (s *Subscription) Events() chan DocEvent {
 }
 
 // Subscriber returns the subscriber of this subscription.
-func (s *Subscription) Subscriber() types.Client {
+func (s *Subscription) Subscriber() *time.ActorID {
 	return s.subscriber
-}
-
-// SubscriberID returns string representation of the subscriber.
-func (s *Subscription) SubscriberID() string {
-	return s.subscriber.ID.String()
-}
-
-// UpdatePresence updates the presence of the subscriber.
-func (s *Subscription) UpdatePresence(info presence.Info) {
-	s.subscriber.PresenceInfo.Update(info)
 }
 
 // Close closes all resources of this Subscription.

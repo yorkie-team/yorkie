@@ -40,9 +40,9 @@ type Coordinator interface {
 	// Subscribe subscribes to the given documents.
 	Subscribe(
 		ctx context.Context,
-		subscriber types.Client,
+		subscriber *time.ActorID,
 		documentID types.ID,
-	) (*Subscription, []types.Client, error)
+	) (*Subscription, []*time.ActorID, error)
 
 	// Unsubscribe unsubscribes from the given documents.
 	Unsubscribe(
@@ -56,13 +56,6 @@ type Coordinator interface {
 
 	// PublishToLocal publishes the given event.
 	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
-
-	// UpdatePresence updates the presence of the given client.
-	UpdatePresence(
-		ctx context.Context,
-		publisher *types.Client,
-		documentID types.ID,
-	)
 
 	// Members returns the members of this cluster.
 	Members() map[string]*ServerInfo

@@ -409,10 +409,7 @@ func (c *Client) Watch(
 	stream, err := c.client.WatchDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.WatchDocumentRequest{
-			Client: converter.ToClient(types.Client{
-				ID:           c.id,
-				PresenceInfo: doc.PresenceInfo(c.id.String()),
-			}),
+			ClientId:   c.id.Bytes(),
 			DocumentId: attachment.docID.String(),
 		},
 	)
@@ -423,23 +420,9 @@ func (c *Client) Watch(
 	handleResponse := func(pbResp *api.WatchDocumentResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentResponse_Initialization_:
-			clients, err := converter.FromClients(resp.Initialization.Peers)
-			if err != nil {
-				return nil, err
-			}
-
-			for _, cli := range clients {
-				doc.SetPresenceInfo(cli.ID.String(), cli.PresenceInfo)
-			}
-
 			return nil, nil
 		case *api.WatchDocumentResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
-			if err != nil {
-				return nil, err
-			}
-
-			docKey, err := c.findDocKey(resp.Event.DocumentId)
 			if err != nil {
 				return nil, err
 			}
@@ -448,26 +431,16 @@ func (c *Client) Watch(
 			case types.DocumentsChangedEvent:
 				return &WatchResponse{
 					Type: DocumentsChanged,
-					Key:  docKey,
+					Key:  doc.Key(),
 				}, nil
-			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent, types.PresenceChangedEvent:
-				cli, err := converter.FromClient(resp.Event.Publisher)
-
+			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent:
+				// clientID, err := time.ActorIDFromBytes(resp.Event.Publisher)
 				if err != nil {
 					return nil, err
 				}
-
-				if eventType == types.DocumentsWatchedEvent ||
-					eventType == types.PresenceChangedEvent {
-					doc.SetPresenceInfo(cli.ID.String(), cli.PresenceInfo)
-				} else {
-					doc.RemovePresenceInfo(cli.ID.String())
-				}
-
 				return &WatchResponse{
-					Type:          PeersChanged,
-					Key:           docKey,
-					PeersMapByDoc: doc.PeersMap(),
+					Type: PeersChanged,
+					Key:  doc.Key(),
 				}, nil
 			}
 		}

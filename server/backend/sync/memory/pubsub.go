@@ -85,14 +85,14 @@ func (m *PubSub) Subscription(documentID types.ID, clientID string) *sync.Subscr
 // Subscribe subscribes to the given document keys.
 func (m *PubSub) Subscribe(
 	ctx context.Context,
-	subscriber types.Client,
+	subscriber *time.ActorID,
 	documentID types.ID,
 ) (*sync.Subscription, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
 			documentID.String(),
-			subscriber.ID.String(),
+			subscriber.String(),
 		)
 	}
 
@@ -103,13 +103,13 @@ func (m *PubSub) Subscribe(
 	if _, ok := m.subscriptionsMapByDocID[documentID]; !ok {
 		m.subscriptionsMapByDocID[documentID] = newSubscriptions()
 	}
-	m.subscriptionsMapByDocID[documentID].Add(subscriber.ID.String(), sub)
+	m.subscriptionsMapByDocID[documentID].Add(sub.ID(), sub)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
 			documentID.String(),
-			subscriber.ID.String(),
+			subscriber.String(),
 		)
 	}
 	return sub, nil
@@ -128,14 +128,14 @@ func (m *PubSub) Unsubscribe(
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
 			documentID,
-			sub.SubscriberID(),
+			sub.Subscriber().String(),
 		)
 	}
 
 	sub.Close()
 
 	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
-		subs.Delete(sub.SubscriberID())
+		subs.Delete(sub.ID())
 
 		if subs.Len() == 0 {
 			delete(m.subscriptionsMapByDocID, documentID)
@@ -146,7 +146,7 @@ func (m *PubSub) Unsubscribe(
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
 			documentID,
-			sub.SubscriberID(),
+			sub.Subscriber().String(),
 		)
 	}
 }
@@ -167,7 +167,7 @@ func (m *PubSub) Publish(
 
 	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
 		for _, sub := range subs.Map() {
-			if sub.Subscriber().ID.Compare(publisherID) == 0 {
+			if sub.Subscriber().Compare(publisherID) == 0 {
 				continue
 			}
 
@@ -177,7 +177,7 @@ func (m *PubSub) Publish(
 					event.Type,
 					documentID.String(),
 					publisherID.String(),
-					sub.SubscriberID(),
+					sub.Subscriber().String(),
 				)
 			}
 
@@ -190,7 +190,7 @@ func (m *PubSub) Publish(
 					`Publish(%s,%s) to %s timeout`,
 					documentID.String(),
 					publisherID.String(),
-					sub.SubscriberID(),
+					sub.Subscriber().String(),
 				)
 			}
 		}
@@ -201,25 +201,13 @@ func (m *PubSub) Publish(
 }
 
 // GetPeers returns the peers of the given document.
-func (m *PubSub) GetPeers(documentID types.ID) []types.Client {
+func (m *PubSub) GetPeers(documentID types.ID) []*time.ActorID {
 	m.subscriptionsMapMu.RLock()
 	defer m.subscriptionsMapMu.RUnlock()
 
-	var peers []types.Client
+	var peers []*time.ActorID
 	for _, sub := range m.subscriptionsMapByDocID[documentID].Map() {
 		peers = append(peers, sub.Subscriber())
 	}
 	return peers
-}
-
-// UpdatePresence updates the presence of the given client.
-func (m *PubSub) UpdatePresence(
-	publisher *types.Client,
-	documentID types.ID,
-) {
-	m.subscriptionsMapMu.Lock()
-	defer m.subscriptionsMapMu.Unlock()
-
-	sub := m.Subscription(documentID, publisher.ID.String())
-	sub.UpdatePresence(publisher.PresenceInfo)
 }

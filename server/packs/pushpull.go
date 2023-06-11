@@ -24,7 +24,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -55,13 +54,6 @@ func pushChanges(
 			cp = cp.NextServerSeq(serverSeq)
 			cn.SetServerSeq(serverSeq)
 			pushedChanges = append(pushedChanges, cn)
-			if cn.PresenceInfo() != nil {
-				actorID, _ := time.ActorIDFromHex(clientInfo.ID.String())
-				coordinator.UpdatePresence(ctx, &types.Client{
-					ID:           actorID,
-					PresenceInfo: *cn.PresenceInfo(),
-				}, docInfo.ID)
-			}
 		} else {
 			logging.From(ctx).Warnf(
 				"change already pushed, clientSeq: %d, cp: %d",

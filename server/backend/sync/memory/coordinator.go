@@ -57,9 +57,9 @@ func (c *Coordinator) NewLocker(
 // Subscribe subscribes to the given documents.
 func (c *Coordinator) Subscribe(
 	ctx context.Context,
-	subscriber types.Client,
+	subscriber *time.ActorID,
 	documentID types.ID,
-) (*sync.Subscription, []types.Client, error) {
+) (*sync.Subscription, []*time.ActorID, error) {
 	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentID)
 	if err != nil {
 		return nil, nil, err
@@ -95,15 +95,6 @@ func (c *Coordinator) PublishToLocal(
 	event sync.DocEvent,
 ) {
 	c.pubSub.Publish(ctx, publisherID, event)
-}
-
-// UpdatePresence updates the presence of the given client.
-func (c *Coordinator) UpdatePresence(
-	_ context.Context,
-	publisher *types.Client,
-	documentID types.ID,
-) {
-	c.pubSub.UpdatePresence(publisher, documentID)
 }
 
 // Members returns the members of this cluster.

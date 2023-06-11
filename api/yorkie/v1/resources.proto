@@ -277,11 +277,6 @@ message PresenceInfo {
   map<string, string> data = 2;
 }
 
-message Client {
-  bytes id = 1;
-  PresenceInfo presence = 2;
-}
-
 message Checkpoint {
   int64 server_seq = 1 [jstype = JS_STRING];
   uint32 client_seq = 2;
@@ -320,11 +315,9 @@ enum DocEventType {
   DOC_EVENT_TYPE_DOCUMENTS_CHANGED = 0;
   DOC_EVENT_TYPE_DOCUMENTS_WATCHED = 1;
   DOC_EVENT_TYPE_DOCUMENTS_UNWATCHED = 2;
-  DOC_EVENT_TYPE_PRESENCE_CHANGED = 3;
 }
 
 message DocEvent {
   DocEventType type = 1;
-  Client publisher = 2;
-  string document_id = 3;
+  bytes publisher = 2;
 }

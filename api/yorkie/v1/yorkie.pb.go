@@ -459,7 +459,7 @@ func (m *DetachDocumentResponse) GetChangePack() *ChangePack {
 }
 
 type WatchDocumentRequest struct {
-	Client               *Client  `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
+	ClientId             []byte   `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	DocumentId           string   `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -499,9 +499,9 @@ func (m *WatchDocumentRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_WatchDocumentRequest proto.InternalMessageInfo
 
-func (m *WatchDocumentRequest) GetClient() *Client {
+func (m *WatchDocumentRequest) GetClientId() []byte {
 	if m != nil {
-		return m.Client
+		return m.ClientId
 	}
 	return nil
 }
@@ -602,10 +602,10 @@ func (*WatchDocumentResponse) XXX_OneofWrappers() []interface{} {
 }
 
 type WatchDocumentResponse_Initialization struct {
-	Peers                []*Client `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}  `json:"-"`
-	XXX_unrecognized     []byte    `json:"-"`
-	XXX_sizecache        int32     `json:"-"`
+	Peers                [][]byte `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *WatchDocumentResponse_Initialization) Reset()         { *m = WatchDocumentResponse_Initialization{} }
@@ -641,7 +641,7 @@ func (m *WatchDocumentResponse_Initialization) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_WatchDocumentResponse_Initialization proto.InternalMessageInfo
 
-func (m *WatchDocumentResponse_Initialization) GetPeers() []*Client {
+func (m *WatchDocumentResponse_Initialization) GetPeers() [][]byte {
 	if m != nil {
 		return m.Peers
 	}
@@ -892,100 +892,6 @@ func (m *PushPullChangesResponse) GetChangePack() *ChangePack {
 	return nil
 }
 
-type UpdatePresenceRequest struct {
-	Client               *Client  `protobuf:"bytes,1,opt,name=client,proto3" json:"client,omitempty"`
-	DocumentId           string   `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *UpdatePresenceRequest) Reset()         { *m = UpdatePresenceRequest{} }
-func (m *UpdatePresenceRequest) String() string { return proto.CompactTextString(m) }
-func (*UpdatePresenceRequest) ProtoMessage()    {}
-func (*UpdatePresenceRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{14}
-}
-func (m *UpdatePresenceRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *UpdatePresenceRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_UpdatePresenceRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *UpdatePresenceRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_UpdatePresenceRequest.Merge(m, src)
-}
-func (m *UpdatePresenceRequest) XXX_Size() int {
-	return m.Size()
-}
-func (m *UpdatePresenceRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_UpdatePresenceRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_UpdatePresenceRequest proto.InternalMessageInfo
-
-func (m *UpdatePresenceRequest) GetClient() *Client {
-	if m != nil {
-		return m.Client
-	}
-	return nil
-}
-
-func (m *UpdatePresenceRequest) GetDocumentId() string {
-	if m != nil {
-		return m.DocumentId
-	}
-	return ""
-}
-
-type UpdatePresenceResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *UpdatePresenceResponse) Reset()         { *m = UpdatePresenceResponse{} }
-func (m *UpdatePresenceResponse) String() string { return proto.CompactTextString(m) }
-func (*UpdatePresenceResponse) ProtoMessage()    {}
-func (*UpdatePresenceResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{15}
-}
-func (m *UpdatePresenceResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *UpdatePresenceResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_UpdatePresenceResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *UpdatePresenceResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_UpdatePresenceResponse.Merge(m, src)
-}
-func (m *UpdatePresenceResponse) XXX_Size() int {
-	return m.Size()
-}
-func (m *UpdatePresenceResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_UpdatePresenceResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_UpdatePresenceResponse proto.InternalMessageInfo
-
 func init() {
 	proto.RegisterType((*ActivateClientRequest)(nil), "yorkie.v1.ActivateClientRequest")
 	proto.RegisterType((*ActivateClientResponse)(nil), "yorkie.v1.ActivateClientResponse")
@@ -1002,57 +908,52 @@ func init() {
 	proto.RegisterType((*RemoveDocumentResponse)(nil), "yorkie.v1.RemoveDocumentResponse")
 	proto.RegisterType((*PushPullChangesRequest)(nil), "yorkie.v1.PushPullChangesRequest")
 	proto.RegisterType((*PushPullChangesResponse)(nil), "yorkie.v1.PushPullChangesResponse")
-	proto.RegisterType((*UpdatePresenceRequest)(nil), "yorkie.v1.UpdatePresenceRequest")
-	proto.RegisterType((*UpdatePresenceResponse)(nil), "yorkie.v1.UpdatePresenceResponse")
 }
 
 func init() { proto.RegisterFile("yorkie/v1/yorkie.proto", fileDescriptor_40070c858814ab24) }
 
 var fileDescriptor_40070c858814ab24 = []byte{
-	// 674 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0xdb, 0x6e, 0xd3, 0x40,
-	0x10, 0xcd, 0xd2, 0x8b, 0x9a, 0x09, 0x0d, 0x74, 0x21, 0x69, 0x08, 0x22, 0x0d, 0xe6, 0x81, 0xa2,
-	0x4a, 0x29, 0x29, 0x52, 0x11, 0xe2, 0xa9, 0x6d, 0x90, 0x5a, 0xf1, 0x40, 0x64, 0x2e, 0x55, 0x2b,
-	0xa1, 0xc8, 0x5d, 0x8f, 0x88, 0x15, 0xd7, 0x6b, 0x7c, 0x93, 0xcc, 0x3f, 0xc0, 0x33, 0xff, 0xc0,
-	0x8f, 0xf0, 0xc8, 0x1f, 0x80, 0xc2, 0x8f, 0xa0, 0x78, 0xdd, 0xe0, 0x75, 0x96, 0x34, 0x54, 0xaa,
-	0xe0, 0xcd, 0x5e, 0xcf, 0x39, 0x73, 0x66, 0xb2, 0x33, 0x27, 0x50, 0x8d, 0xb9, 0x37, 0xb0, 0x70,
-	0x33, 0x6a, 0x6f, 0x8a, 0xa7, 0x96, 0xeb, 0xf1, 0x80, 0xd3, 0x62, 0xfa, 0x16, 0xb5, 0xeb, 0xb7,
-	0x7e, 0x87, 0x78, 0xe8, 0xf3, 0xd0, 0x63, 0xe8, 0x8b, 0x28, 0x6d, 0x1b, 0x2a, 0x3b, 0x2c, 0xb0,
-	0x22, 0x23, 0xc0, 0x3d, 0xdb, 0x42, 0x27, 0xd0, 0xf1, 0x7d, 0x88, 0x7e, 0x40, 0xef, 0x00, 0xb0,
-	0xe4, 0xa0, 0x37, 0xc0, 0xb8, 0x46, 0x9a, 0x64, 0xbd, 0xa8, 0x17, 0xc5, 0xc9, 0x73, 0x8c, 0xb5,
-	0x57, 0x50, 0xcd, 0xe3, 0x7c, 0x97, 0x3b, 0x3e, 0x9e, 0x03, 0xa4, 0xb7, 0x21, 0x7d, 0xe9, 0x59,
-	0x66, 0xed, 0x4a, 0x93, 0xac, 0x5f, 0xd5, 0x97, 0xc4, 0xc1, 0x81, 0xa9, 0x6d, 0xc3, 0x6a, 0x07,
-	0x0d, 0xa5, 0x1e, 0x09, 0x47, 0x72, 0xb8, 0xc7, 0x50, 0x9b, 0xc4, 0xa5, 0x7a, 0xa6, 0x02, 0x6d,
-	0xa8, 0xec, 0x04, 0x81, 0xc1, 0xfa, 0x1d, 0xce, 0xc2, 0xd3, 0x19, 0xd3, 0xd1, 0x6d, 0x28, 0xb1,
-	0xbe, 0xe1, 0xbc, 0xc3, 0x9e, 0x6b, 0xb0, 0x41, 0x52, 0x45, 0x69, 0xab, 0xd2, 0x1a, 0x37, 0xbc,
-	0xb5, 0x97, 0x7c, 0xed, 0x1a, 0x6c, 0xa0, 0x03, 0x1b, 0x3f, 0x6b, 0x9f, 0x08, 0x54, 0xf3, 0xe9,
-	0x66, 0x50, 0x49, 0xd7, 0xa0, 0x64, 0xa6, 0x80, 0xb3, 0xae, 0x15, 0x75, 0x38, 0x3b, 0x9a, 0x14,
-	0x34, 0x37, 0xab, 0xa0, 0x8f, 0x04, 0x2a, 0x1d, 0xfc, 0xeb, 0xfa, 0x2f, 0x4d, 0x0f, 0x87, 0x6a,
-	0x5e, 0xce, 0x6c, 0xb7, 0xea, 0xa2, 0xbf, 0xc8, 0x09, 0xdc, 0x3c, 0x34, 0x82, 0xc9, 0xf2, 0x1f,
-	0xc0, 0xa2, 0x20, 0x4f, 0x52, 0x95, 0xb6, 0x56, 0xb2, 0x54, 0xe2, 0x7e, 0xa5, 0x01, 0xe7, 0x36,
-	0x43, 0x1b, 0x12, 0xa8, 0xe4, 0x92, 0xa4, 0x45, 0x1d, 0x41, 0xd9, 0x72, 0xac, 0xc0, 0x32, 0x6c,
-	0xeb, 0x83, 0x11, 0x58, 0xdc, 0x49, 0xb3, 0x6d, 0x66, 0xb2, 0x29, 0x91, 0xad, 0x03, 0x09, 0xb6,
-	0x5f, 0xd0, 0x73, 0x44, 0x74, 0x03, 0x16, 0x30, 0x1a, 0xe9, 0x17, 0xad, 0xb8, 0x91, 0x61, 0xec,
-	0x70, 0xf6, 0x6c, 0xf4, 0x69, 0xbf, 0xa0, 0x8b, 0x98, 0xfa, 0x13, 0x28, 0xcb, 0x84, 0xf4, 0x3e,
-	0x2c, 0xb8, 0x88, 0x9e, 0x5f, 0x23, 0xcd, 0x39, 0x75, 0xf9, 0xe2, 0xfb, 0xee, 0x22, 0xcc, 0x9f,
-	0x70, 0x33, 0x4e, 0x6e, 0x92, 0x8e, 0xa7, 0x3c, 0xc2, 0xff, 0xe6, 0x26, 0xe5, 0xe5, 0x5c, 0xee,
-	0x4d, 0xfa, 0x42, 0xa0, 0xda, 0x0d, 0xfd, 0x7e, 0x37, 0xb4, 0x6d, 0x11, 0xe2, 0xff, 0xd3, 0x0e,
-	0x8c, 0xb2, 0xba, 0xa1, 0xdf, 0xef, 0x71, 0xc7, 0x8e, 0x6b, 0xf3, 0x4d, 0xb2, 0xbe, 0xa4, 0x2f,
-	0x8d, 0x0e, 0x5e, 0x38, 0x76, 0xac, 0x39, 0xb0, 0x3a, 0x21, 0x76, 0x96, 0x4d, 0x74, 0xd1, 0xee,
-	0x30, 0xa8, 0xbc, 0x76, 0x4d, 0x23, 0xc0, 0xae, 0x87, 0x3e, 0x3a, 0x0c, 0x2f, 0x63, 0xd0, 0x6a,
-	0x50, 0xcd, 0x27, 0x11, 0x35, 0x6d, 0x7d, 0x5f, 0x80, 0xe5, 0xa3, 0x84, 0xf7, 0x25, 0x7a, 0x91,
-	0xc5, 0x90, 0x1e, 0x42, 0x59, 0xf6, 0x2f, 0xda, 0xcc, 0x64, 0x56, 0x5a, 0x62, 0xfd, 0xee, 0x94,
-	0x08, 0x91, 0x48, 0x2b, 0xd0, 0xb7, 0x70, 0x3d, 0x6f, 0x45, 0x54, 0xcb, 0x4e, 0x9f, 0xda, 0xdf,
-	0xea, 0xf7, 0xa6, 0xc6, 0x8c, 0xe9, 0x0f, 0xa1, 0x2c, 0xd7, 0x28, 0xe9, 0x56, 0xf6, 0x58, 0xd2,
-	0xad, 0x6e, 0x90, 0x20, 0x96, 0xad, 0x49, 0x6e, 0x88, 0xca, 0x24, 0xe5, 0x86, 0x28, 0x7d, 0x4d,
-	0x10, 0xcb, 0x3b, 0x5d, 0x22, 0x56, 0xba, 0x8f, 0x44, 0xac, 0x36, 0x04, 0x41, 0x2c, 0x8f, 0xb8,
-	0x44, 0xac, 0x5c, 0x46, 0x12, 0xb1, 0x7a, 0x3f, 0x68, 0x05, 0x7a, 0x0c, 0xd7, 0x72, 0xc3, 0x41,
-	0xb3, 0x38, 0xf5, 0x94, 0xd7, 0xb5, 0x69, 0x21, 0x63, 0xee, 0x37, 0xb0, 0x2c, 0x6d, 0x74, 0xba,
-	0xf6, 0xe7, 0x5d, 0x2f, 0x78, 0x9b, 0xe7, 0x99, 0x81, 0x56, 0x78, 0x48, 0x76, 0x37, 0xbe, 0x0e,
-	0x1b, 0xe4, 0xdb, 0xb0, 0x41, 0x7e, 0x0c, 0x1b, 0xe4, 0xf3, 0xcf, 0x46, 0x01, 0x56, 0x4c, 0x8c,
-	0xce, 0xa0, 0x86, 0x6b, 0xb5, 0xa2, 0x76, 0x97, 0x1c, 0xcf, 0xb7, 0x9e, 0x46, 0xed, 0x93, 0xc5,
-	0xe4, 0xbf, 0xdf, 0xa3, 0x5f, 0x01, 0x00, 0x00, 0xff, 0xff, 0xbb, 0x8f, 0x9a, 0xd9, 0x3b, 0x0a,
-	0x00, 0x00,
+	// 627 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0xcd, 0x6e, 0xd3, 0x4c,
+	0x14, 0xf5, 0x7c, 0xfd, 0x51, 0x72, 0xd3, 0xe6, 0x83, 0xa1, 0x49, 0x43, 0x10, 0xa9, 0x31, 0x12,
+	0x8a, 0x54, 0xc9, 0x21, 0x41, 0x0a, 0x0b, 0x56, 0x6d, 0x83, 0xd4, 0x8a, 0x05, 0x91, 0xa9, 0xa8,
+	0x5a, 0x09, 0x45, 0xae, 0x73, 0x45, 0xac, 0xb8, 0x1e, 0xe3, 0x3f, 0xc9, 0x3c, 0x00, 0x3b, 0x58,
+	0xf3, 0x0e, 0xbc, 0x08, 0x3b, 0x78, 0x04, 0x14, 0x5e, 0x04, 0xc5, 0x76, 0x42, 0xc6, 0x19, 0xd2,
+	0x50, 0x51, 0xc1, 0xce, 0x73, 0xe7, 0x9e, 0x33, 0xe7, 0x4e, 0xee, 0x9c, 0x1b, 0x28, 0x47, 0xcc,
+	0x1d, 0x9a, 0xd8, 0x08, 0x9b, 0x8d, 0xe4, 0x4b, 0x75, 0x5c, 0xe6, 0x33, 0x9a, 0x4f, 0x57, 0x61,
+	0xb3, 0x7a, 0xfb, 0x67, 0x8a, 0x8b, 0x1e, 0x0b, 0x5c, 0x03, 0xbd, 0x24, 0x4b, 0x69, 0x43, 0x69,
+	0xcf, 0xf0, 0xcd, 0x50, 0xf7, 0xf1, 0xc0, 0x32, 0xd1, 0xf6, 0x35, 0x7c, 0x13, 0xa0, 0xe7, 0xd3,
+	0xbb, 0x00, 0x46, 0x1c, 0xe8, 0x0d, 0x31, 0xaa, 0x10, 0x99, 0xd4, 0xf3, 0x5a, 0x3e, 0x89, 0x3c,
+	0xc3, 0x48, 0x39, 0x86, 0x72, 0x16, 0xe7, 0x39, 0xcc, 0xf6, 0xf0, 0x12, 0x20, 0xbd, 0x03, 0xe9,
+	0xa2, 0x67, 0xf6, 0x2b, 0xff, 0xc9, 0xa4, 0xbe, 0xa1, 0xe5, 0x92, 0xc0, 0x51, 0x5f, 0x69, 0xc3,
+	0x76, 0x07, 0x75, 0xa1, 0x1e, 0x0e, 0x47, 0x32, 0xb8, 0xc7, 0x50, 0x99, 0xc7, 0xa5, 0x7a, 0x16,
+	0x02, 0x2d, 0x28, 0xed, 0xf9, 0xbe, 0x6e, 0x0c, 0x3a, 0xcc, 0x08, 0x2e, 0x96, 0x3c, 0x8e, 0xb6,
+	0xa1, 0x60, 0x0c, 0x74, 0xfb, 0x35, 0xf6, 0x1c, 0xdd, 0x18, 0xc6, 0x55, 0x14, 0x5a, 0x25, 0x75,
+	0x7a, 0xe1, 0xea, 0x41, 0xbc, 0xdb, 0xd5, 0x8d, 0xa1, 0x06, 0xc6, 0xf4, 0x5b, 0xf9, 0x40, 0xa0,
+	0x9c, 0x3d, 0x6e, 0x09, 0x95, 0x74, 0x07, 0x0a, 0xfd, 0x14, 0x30, 0xb9, 0xb5, 0xbc, 0x06, 0x93,
+	0xd0, 0xbc, 0xa0, 0x95, 0x65, 0x05, 0xbd, 0x27, 0x50, 0xea, 0xe0, 0x6f, 0xd7, 0x7f, 0x6d, 0x7a,
+	0x18, 0x94, 0xb3, 0x72, 0x96, 0xeb, 0xaa, 0xab, 0xfe, 0x22, 0xc7, 0xb0, 0x75, 0xa2, 0xfb, 0x7f,
+	0xb8, 0x7c, 0xe5, 0x0b, 0x81, 0x52, 0x86, 0x36, 0x2d, 0xe3, 0x14, 0x8a, 0xa6, 0x6d, 0xfa, 0xa6,
+	0x6e, 0x99, 0x6f, 0x75, 0xdf, 0x64, 0x76, 0x4c, 0x5e, 0x68, 0x35, 0x66, 0xa4, 0x0a, 0x91, 0xea,
+	0x11, 0x07, 0x3b, 0x94, 0xb4, 0x0c, 0x11, 0xdd, 0x85, 0x35, 0x0c, 0xd1, 0xf6, 0xd3, 0xe2, 0x6f,
+	0xcd, 0x30, 0x76, 0x98, 0xf1, 0x74, 0xbc, 0x75, 0x28, 0x69, 0x49, 0x4e, 0xf5, 0x01, 0x14, 0x79,
+	0x42, 0xba, 0x05, 0x6b, 0x0e, 0xa2, 0xeb, 0x55, 0x88, 0xbc, 0x52, 0xdf, 0xd0, 0x92, 0xc5, 0xfe,
+	0x3a, 0xac, 0x9e, 0xb3, 0x7e, 0x14, 0x37, 0x8a, 0x86, 0x17, 0x2c, 0xc4, 0x7f, 0xa6, 0x51, 0xb2,
+	0x72, 0xae, 0xb7, 0x51, 0x3e, 0x11, 0x28, 0x77, 0x03, 0x6f, 0xd0, 0x0d, 0x2c, 0x2b, 0x49, 0xf1,
+	0xfe, 0xea, 0x0d, 0x8c, 0x4f, 0x75, 0x02, 0x6f, 0xd0, 0x63, 0xb6, 0x15, 0x55, 0x56, 0x65, 0x52,
+	0xcf, 0x69, 0xb9, 0x71, 0xe0, 0xb9, 0x6d, 0x45, 0x8a, 0x0d, 0xdb, 0x73, 0x62, 0x97, 0x31, 0x9a,
+	0x2b, 0xde, 0x4e, 0xeb, 0xdd, 0x1a, 0x6c, 0x9e, 0xc6, 0x49, 0x2f, 0xd0, 0x0d, 0x4d, 0x03, 0xe9,
+	0x09, 0x14, 0xf9, 0xf9, 0x40, 0xe5, 0x19, 0x1a, 0xe1, 0xc8, 0xa9, 0xde, 0x5b, 0x90, 0x91, 0xa8,
+	0x57, 0x24, 0xfa, 0x0a, 0x6e, 0x64, 0xad, 0x9e, 0x2a, 0xb3, 0xbd, 0x2e, 0x9e, 0x1f, 0xd5, 0xfb,
+	0x0b, 0x73, 0xa6, 0xf4, 0x63, 0xdd, 0x9c, 0x43, 0xf3, 0xba, 0x45, 0xb3, 0x82, 0xd7, 0x2d, 0xb4,
+	0xf7, 0x84, 0x98, 0xb7, 0x36, 0x8e, 0x58, 0x68, 0xc2, 0x1c, 0xb1, 0xd8, 0x17, 0x13, 0x62, 0xfe,
+	0x29, 0x70, 0xc4, 0xc2, 0x47, 0xcb, 0x11, 0x8b, 0xdf, 0x91, 0x22, 0xd1, 0x33, 0xf8, 0x3f, 0xd3,
+	0x44, 0x74, 0x16, 0x27, 0x7e, 0x0d, 0x55, 0x65, 0x51, 0xca, 0x94, 0xfb, 0x25, 0x6c, 0x72, 0x36,
+	0x47, 0x77, 0x7e, 0x6d, 0x80, 0x09, 0xaf, 0x7c, 0x99, 0x43, 0x2a, 0xd2, 0x43, 0xb2, 0xbf, 0xfb,
+	0x79, 0x54, 0x23, 0x5f, 0x47, 0x35, 0xf2, 0x6d, 0x54, 0x23, 0x1f, 0xbf, 0xd7, 0x24, 0xb8, 0xd9,
+	0xc7, 0x70, 0x02, 0xd5, 0x1d, 0x53, 0x0d, 0x9b, 0x5d, 0x72, 0xb6, 0xaa, 0x3e, 0x09, 0x9b, 0xe7,
+	0xeb, 0xf1, 0x5f, 0xa0, 0x47, 0x3f, 0x02, 0x00, 0x00, 0xff, 0xff, 0xfd, 0x1d, 0xdb, 0x0a, 0x42,
+	0x09, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1069,7 +970,6 @@ const _ = grpc.SupportPackageIsVersion4
 type YorkieServiceClient interface {
 	ActivateClient(ctx context.Context, in *ActivateClientRequest, opts ...grpc.CallOption) (*ActivateClientResponse, error)
 	DeactivateClient(ctx context.Context, in *DeactivateClientRequest, opts ...grpc.CallOption) (*DeactivateClientResponse, error)
-	UpdatePresence(ctx context.Context, in *UpdatePresenceRequest, opts ...grpc.CallOption) (*UpdatePresenceResponse, error)
 	AttachDocument(ctx context.Context, in *AttachDocumentRequest, opts ...grpc.CallOption) (*AttachDocumentResponse, error)
 	DetachDocument(ctx context.Context, in *DetachDocumentRequest, opts ...grpc.CallOption) (*DetachDocumentResponse, error)
 	RemoveDocument(ctx context.Context, in *RemoveDocumentRequest, opts ...grpc.CallOption) (*RemoveDocumentResponse, error)
@@ -1097,15 +997,6 @@ func (c *yorkieServiceClient) ActivateClient(ctx context.Context, in *ActivateCl
 func (c *yorkieServiceClient) DeactivateClient(ctx context.Context, in *DeactivateClientRequest, opts ...grpc.CallOption) (*DeactivateClientResponse, error) {
 	out := new(DeactivateClientResponse)
 	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/DeactivateClient", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *yorkieServiceClient) UpdatePresence(ctx context.Context, in *UpdatePresenceRequest, opts ...grpc.CallOption) (*UpdatePresenceResponse, error) {
-	out := new(UpdatePresenceResponse)
-	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/UpdatePresence", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1184,7 +1075,6 @@ func (x *yorkieServiceWatchDocumentClient) Recv() (*WatchDocumentResponse, error
 type YorkieServiceServer interface {
 	ActivateClient(context.Context, *ActivateClientRequest) (*ActivateClientResponse, error)
 	DeactivateClient(context.Context, *DeactivateClientRequest) (*DeactivateClientResponse, error)
-	UpdatePresence(context.Context, *UpdatePresenceRequest) (*UpdatePresenceResponse, error)
 	AttachDocument(context.Context, *AttachDocumentRequest) (*AttachDocumentResponse, error)
 	DetachDocument(context.Context, *DetachDocumentRequest) (*DetachDocumentResponse, error)
 	RemoveDocument(context.Context, *RemoveDocumentRequest) (*RemoveDocumentResponse, error)
@@ -1201,9 +1091,6 @@ func (*UnimplementedYorkieServiceServer) ActivateClient(ctx context.Context, req
 }
 func (*UnimplementedYorkieServiceServer) DeactivateClient(ctx context.Context, req *DeactivateClientRequest) (*DeactivateClientResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeactivateClient not implemented")
-}
-func (*UnimplementedYorkieServiceServer) UpdatePresence(ctx context.Context, req *UpdatePresenceRequest) (*UpdatePresenceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdatePresence not implemented")
 }
 func (*UnimplementedYorkieServiceServer) AttachDocument(ctx context.Context, req *AttachDocumentRequest) (*AttachDocumentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AttachDocument not implemented")
@@ -1257,24 +1144,6 @@ func _YorkieService_DeactivateClient_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(YorkieServiceServer).DeactivateClient(ctx, req.(*DeactivateClientRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _YorkieService_UpdatePresence_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdatePresenceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(YorkieServiceServer).UpdatePresence(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/yorkie.v1.YorkieService/UpdatePresence",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(YorkieServiceServer).UpdatePresence(ctx, req.(*UpdatePresenceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1383,10 +1252,6 @@ var _YorkieService_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeactivateClient",
 			Handler:    _YorkieService_DeactivateClient_Handler,
-		},
-		{
-			MethodName: "UpdatePresence",
-			Handler:    _YorkieService_UpdatePresence_Handler,
 		},
 		{
 			MethodName: "AttachDocument",
@@ -1787,15 +1652,10 @@ func (m *WatchDocumentRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x12
 	}
-	if m.Client != nil {
-		{
-			size, err := m.Client.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintYorkie(dAtA, i, uint64(size))
-		}
+	if len(m.ClientId) > 0 {
+		i -= len(m.ClientId)
+		copy(dAtA[i:], m.ClientId)
+		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientId)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1906,14 +1766,9 @@ func (m *WatchDocumentResponse_Initialization) MarshalToSizedBuffer(dAtA []byte)
 	}
 	if len(m.Peers) > 0 {
 		for iNdEx := len(m.Peers) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.Peers[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintYorkie(dAtA, i, uint64(size))
-			}
+			i -= len(m.Peers[iNdEx])
+			copy(dAtA[i:], m.Peers[iNdEx])
+			i = encodeVarintYorkie(dAtA, i, uint64(len(m.Peers[iNdEx])))
 			i--
 			dAtA[i] = 0xa
 		}
@@ -2129,79 +1984,6 @@ func (m *PushPullChangesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	return len(dAtA) - i, nil
 }
 
-func (m *UpdatePresenceRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *UpdatePresenceRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *UpdatePresenceRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if len(m.DocumentId) > 0 {
-		i -= len(m.DocumentId)
-		copy(dAtA[i:], m.DocumentId)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentId)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if m.Client != nil {
-		{
-			size, err := m.Client.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintYorkie(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *UpdatePresenceResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *UpdatePresenceResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *UpdatePresenceResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	return len(dAtA) - i, nil
-}
-
 func encodeVarintYorkie(dAtA []byte, offset int, v uint64) int {
 	offset -= sovYorkie(v)
 	base := offset
@@ -2375,8 +2157,8 @@ func (m *WatchDocumentRequest) Size() (n int) {
 	}
 	var l int
 	_ = l
-	if m.Client != nil {
-		l = m.Client.Size()
+	l = len(m.ClientId)
+	if l > 0 {
 		n += 1 + l + sovYorkie(uint64(l))
 	}
 	l = len(m.DocumentId)
@@ -2435,8 +2217,8 @@ func (m *WatchDocumentResponse_Initialization) Size() (n int) {
 	var l int
 	_ = l
 	if len(m.Peers) > 0 {
-		for _, e := range m.Peers {
-			l = e.Size()
+		for _, b := range m.Peers {
+			l = len(b)
 			n += 1 + l + sovYorkie(uint64(l))
 		}
 	}
@@ -2531,38 +2313,6 @@ func (m *PushPullChangesResponse) Size() (n int) {
 		l = m.ChangePack.Size()
 		n += 1 + l + sovYorkie(uint64(l))
 	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *UpdatePresenceRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.Client != nil {
-		l = m.Client.Size()
-		n += 1 + l + sovYorkie(uint64(l))
-	}
-	l = len(m.DocumentId)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *UpdatePresenceResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -3522,9 +3272,9 @@ func (m *WatchDocumentRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Client", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
 			}
-			var msglen int
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowYorkie
@@ -3534,26 +3284,24 @@ func (m *WatchDocumentRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= int(b&0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if msglen < 0 {
+			if byteLen < 0 {
 				return ErrInvalidLengthYorkie
 			}
-			postIndex := iNdEx + msglen
+			postIndex := iNdEx + byteLen
 			if postIndex < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Client == nil {
-				m.Client = &Client{}
-			}
-			if err := m.Client.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
+			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
+			if m.ClientId == nil {
+				m.ClientId = []byte{}
 			}
 			iNdEx = postIndex
 		case 2:
@@ -3764,7 +3512,7 @@ func (m *WatchDocumentResponse_Initialization) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Peers", wireType)
 			}
-			var msglen int
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowYorkie
@@ -3774,25 +3522,23 @@ func (m *WatchDocumentResponse_Initialization) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= int(b&0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if msglen < 0 {
+			if byteLen < 0 {
 				return ErrInvalidLengthYorkie
 			}
-			postIndex := iNdEx + msglen
+			postIndex := iNdEx + byteLen
 			if postIndex < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Peers = append(m.Peers, &Client{})
-			if err := m.Peers[len(m.Peers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
+			m.Peers = append(m.Peers, make([]byte, postIndex-iNdEx))
+			copy(m.Peers[len(m.Peers)-1], dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4360,176 +4106,6 @@ func (m *PushPullChangesResponse) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipYorkie(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *UpdatePresenceRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowYorkie
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: UpdatePresenceRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: UpdatePresenceRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Client", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Client == nil {
-				m.Client = &Client{}
-			}
-			if err := m.Client.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DocumentId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.DocumentId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipYorkie(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *UpdatePresenceResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowYorkie
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: UpdatePresenceResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: UpdatePresenceResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
 		default:
 			iNdEx = preIndex
 			skippy, err := skipYorkie(dAtA[iNdEx:])
