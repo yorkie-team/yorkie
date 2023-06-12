@@ -61,6 +61,7 @@ type TreeNode struct {
 	InsPrev *TreeNode
 
 	Value string
+	Attrs *RHT
 }
 
 // TreePos represents the position of Tree.
@@ -93,13 +94,19 @@ func (t *TreePos) Compare(other llrb.Key) int {
 }
 
 // NewTreeNode creates a new instance of TreeNode.
-func NewTreeNode(pos *TreePos, nodeType string, value ...string) *TreeNode {
+func NewTreeNode(pos *TreePos, nodeType string, attributes map[string]string, value ...string) *TreeNode {
 	node := &TreeNode{
 		Pos: pos,
 	}
 
 	if len(value) > 0 {
 		node.Value = value[0]
+	}
+	if attributes != nil {
+		node.Attrs = NewRHT()
+		for key, val := range attributes {
+			node.Attrs.Set(key, val, pos.CreatedAt)
+		}
 	}
 	node.IndexTreeNode = index.NewNode(nodeType, node)
 
@@ -132,9 +139,18 @@ func (n *TreeNode) Length() int {
 	return len(encoded)
 }
 
-// String returns the string representation of this node.
+// String returns the string representation of this node's value.
 func (n *TreeNode) String() string {
 	return n.Value
+}
+
+// Attributes returns the string representation of this node's attributes.
+func (n *TreeNode) Attributes() string {
+	if n.Attrs == nil {
+		return ""
+	}
+
+	return " " + n.Attrs.ToXML()
 }
 
 // Append appends the given node to the end of the children.
@@ -187,7 +203,7 @@ func (n *TreeNode) SplitText(offset int) *TreeNode {
 	rightNode := NewTreeNode(&TreePos{
 		CreatedAt: n.Pos.CreatedAt,
 		Offset:    offset,
-	}, n.Type(), string(rightRune))
+	}, n.Type(), nil, string(rightRune))
 	n.IndexTreeNode.Parent.InsertAfterInternal(rightNode.IndexTreeNode, n.IndexTreeNode)
 
 	return rightNode
@@ -212,7 +228,12 @@ func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) {
 
 // DeepCopy copies itself deeply.
 func (n *TreeNode) DeepCopy() *TreeNode {
-	clone := NewTreeNode(n.Pos, n.Type(), n.Value)
+	var clone *TreeNode
+	if n.Attrs != nil {
+		clone = NewTreeNode(n.Pos, n.Type(), n.Attrs.DeepCopy().Elements(), n.Value)
+	} else {
+		clone = NewTreeNode(n.Pos, n.Type(), nil, n.Value)
+	}
 	clone.RemovedAt = n.RemovedAt
 
 	if n.IsText() {
@@ -243,7 +264,7 @@ type Tree struct {
 // NewTree creates a new instance of Tree.
 func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	tree := &Tree{
-		DummyHead:    NewTreeNode(DummyTreePos, DummyHeadType),
+		DummyHead:    NewTreeNode(DummyTreePos, DummyHeadType, nil),
 		IndexTree:    index.NewTree[*TreeNode](root.IndexTreeNode),
 		NodeMapByPos: llrb.NewTree[*TreePos, *TreeNode](),
 		createdAt:    createdAt,

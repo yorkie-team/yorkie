@@ -622,6 +622,7 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 	return crdt.NewTreeNode(
 		pos,
 		pbNode.Type,
+		nil,
 		pbNode.Value,
 	), nil
 }

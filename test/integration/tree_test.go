@@ -117,6 +117,26 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("created from JSON with attributes test", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:       "span",
+						Attributes: map[string]string{"bold": "true"},
+						Children:   []json.TreeNode{{Type: "text", Value: "hello"}},
+					}},
+				}},
+			})
+			assert.Equal(t, "<doc><p><span bold=\"true\">hello</span></p></doc>", root.GetTree("t").ToXML())
+			return nil
+		})
+		assert.NoError(t, err)
+	})
+
 	t.Run("edit its content test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object) error {
