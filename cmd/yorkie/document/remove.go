@@ -41,7 +41,7 @@ func newRemoveCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token))
+			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token), admin.WithInsecure(config.IsInsecure))
 			if err != nil {
 				return err
 			}

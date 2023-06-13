@@ -87,7 +87,7 @@ func TestDBName() string {
 
 // CreateAdminCli returns a new instance of admin cli for testing.
 func CreateAdminCli(t assert.TestingT, rpcAddr string) *adminClient.Client {
-	adminCli, err := adminClient.Dial(rpcAddr)
+	adminCli, err := adminClient.Dial(rpcAddr, adminClient.WithInsecure(true))
 	assert.NoError(t, err)
 
 	_, err = adminCli.LogIn(context.Background(), server.DefaultAdminUser, server.DefaultAdminPassword)

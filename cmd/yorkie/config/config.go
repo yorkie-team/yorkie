@@ -25,8 +25,12 @@ import (
 	"path/filepath"
 )
 
-// RPCAddr is the address of the rpc server.
-var RPCAddr string
+var (
+	// RPCAddr is the address of the rpc server.
+	RPCAddr string
+	// IsInsecure is whether to disable the TLS connection of the client.
+	IsInsecure bool
+)
 
 // ensureYorkieDir ensures that the directory of Yorkie exists.
 func ensureYorkieDir() (string, error) {
