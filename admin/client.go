@@ -22,8 +22,11 @@ import (
 	"fmt"
 	"strings"
 
+	"crypto/tls"
+
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
@@ -47,6 +50,11 @@ func WithLogger(logger *zap.Logger) Option {
 	return func(o *Options) { o.Logger = logger }
 }
 
+// WithInsecure configures insecure option of the client.
+func WithInsecure(isInsecure bool) Option {
+	return func(o *Options) { o.IsInsecure = isInsecure }
+}
+
 // Options configures how we set up the client.
 type Options struct {
 	// Token is the token of the user.
@@ -54,6 +62,9 @@ type Options struct {
 
 	// Logger is the Logger of the client.
 	Logger *zap.Logger
+
+	// IsInsecure is whether to disable the TLS connection of the client.
+	IsInsecure bool
 }
 
 // Client is a client for admin service.
@@ -72,8 +83,12 @@ func New(opts ...Option) (*Client, error) {
 		opt(&options)
 	}
 
-	credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-	dialOptions := []grpc.DialOption{credentials}
+	tlsConfig := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
+	credentialOptions := grpc.WithTransportCredentials(tlsConfig)
+	if options.IsInsecure {
+		credentialOptions = grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+	dialOptions := []grpc.DialOption{credentialOptions}
 
 	authInterceptor := NewAuthInterceptor(options.Token)
 	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))

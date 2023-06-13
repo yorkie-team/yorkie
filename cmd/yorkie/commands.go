@@ -45,4 +45,5 @@ func init() {
 	// TODO(chacha912): set rpcAddr from env using viper.
 	// https://github.com/spf13/cobra/blob/main/user_guide.md#bind-flags-with-config
 	rootCmd.PersistentFlags().StringVar(&config.RPCAddr, "rpc-addr", "localhost:11101", "Address of the rpc server")
+	rootCmd.PersistentFlags().BoolVar(&config.IsInsecure, "insecure", false, "Skip the TLS connection of the client")
 }
