@@ -64,6 +64,16 @@ func (d *Document) Update(
 		return err
 	}
 
+	if d.doc.changeContext != nil {
+		if err := updater(json.NewObject(d.doc.changeContext, d.clone.Object())); err != nil {
+			// drop clone because it is contaminated.
+			d.clone = nil
+			d.doc.changeContext = nil
+			return err
+		}
+		return nil
+	}
+
 	d.doc.changeContext = change.NewContext(
 		d.doc.changeID.Next(),
 		messageFromMsgAndArgs(msgAndArgs...),
@@ -73,19 +83,26 @@ func (d *Document) Update(
 	if err := updater(json.NewObject(d.doc.changeContext, d.clone.Object())); err != nil {
 		// drop clone because it is contaminated.
 		d.clone = nil
+		d.doc.changeContext = nil
 		return err
 	}
 
-	if d.doc.changeContext.HasChange() {
-		c := d.doc.changeContext.ToChange()
-		if err := c.Execute(d.doc.root); err != nil {
-			return err
-		}
-
-		d.doc.localChanges = append(d.doc.localChanges, c)
-		d.doc.changeID = d.doc.changeContext.ID()
+	if d.doc.changeContext == nil {
+		return nil
+	}
+	if !d.doc.changeContext.HasChange() {
+		d.doc.changeContext = nil
+		return nil
 	}
 
+	c := d.doc.changeContext.ToChange()
+	if err := c.Execute(d.doc.root); err != nil {
+		return err
+	}
+
+	d.doc.localChanges = append(d.doc.localChanges, c)
+	d.doc.changeID = d.doc.changeContext.ID()
+	d.doc.changeContext = nil
 	return nil
 }
 
@@ -97,8 +114,23 @@ func (d *Document) UpdatePresence(k, v string) {
 
 	if d.doc.changeContext != nil {
 		d.doc.changeContext.SetPresenceInfo(presenceInfo.DeepCopy())
+		return
 	}
-	// TODO(chacha912): handle when updatePresence is called without a changeContext
+
+	d.doc.changeContext = change.NewContext(
+		d.doc.changeID.Next(),
+		"",
+		d.clone,
+	)
+	d.doc.changeContext.SetPresenceInfo(presenceInfo.DeepCopy())
+	c := d.doc.changeContext.ToChange()
+	d.doc.localChanges = append(d.doc.localChanges, c)
+	d.doc.changeID = d.doc.changeContext.ID()
+}
+
+// Watch subscribes to PeerChangedEvent on this document.
+func (d *Document) Watch() chan PeerChangedEvent {
+	return d.doc.events
 }
 
 // ApplyChangePack applies the given change pack into this document.
@@ -222,6 +254,11 @@ func (d *Document) RemovePresenceInfo(clientID string) {
 // Presence returns the presence of the client who created this document.
 func (d *Document) Presence() map[string]string {
 	return d.doc.Presence()
+}
+
+// PeerPresence returns the presence of the given client.
+func (d *Document) PeerPresence(clientID string) map[string]string {
+	return d.doc.PeerPresence(clientID)
 }
 
 // PeersMap returns the list of peers, including the client who created this document.

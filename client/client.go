@@ -109,15 +109,13 @@ type WatchResponseType string
 // The values below are types of WatchResponseType.
 const (
 	DocumentsChanged WatchResponseType = "documents-changed"
-	PeersChanged     WatchResponseType = "peers-changed"
 )
 
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
-	Type          WatchResponseType
-	Key           key.Key
-	PeersMapByDoc map[string]presence.Presence
-	Err           error
+	Type WatchResponseType
+	Key  key.Key
+	Err  error
 }
 
 // New creates an instance of Client.
@@ -434,14 +432,21 @@ func (c *Client) Watch(
 					Key:  doc.Key(),
 				}, nil
 			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent:
-				// clientID, err := time.ActorIDFromBytes(resp.Event.Publisher)
+				clientID, err := time.ActorIDFromBytes(resp.Event.Publisher)
 				if err != nil {
 					return nil, err
 				}
-				return &WatchResponse{
-					Type: PeersChanged,
-					Key:  doc.Key(),
-				}, nil
+				peerEventType := document.WatchedEvent
+				if eventType == types.DocumentsUnwatchedEvent {
+					peerEventType = document.UnwatchedEvent
+				}
+				doc.Watch() <- document.PeerChangedEvent{
+					Type: document.PeerChangedEventType(peerEventType),
+					Publisher: map[string]presence.Presence{
+						clientID.String(): doc.PeerPresence(clientID.String()),
+					},
+				}
+				return nil, nil
 			}
 		}
 		return nil, ErrUnsupportedWatchResponseType
@@ -459,17 +464,19 @@ func (c *Client) Watch(
 		for {
 			pbResp, err := stream.Recv()
 			if err != nil {
-				rch <- WatchResponse{Err: err}
+				rch <- WatchResponse{Err: err, Key: doc.Key()}
 				close(rch)
 				return
 			}
 			resp, err := handleResponse(pbResp)
 			if err != nil {
-				rch <- WatchResponse{Err: err}
+				rch <- WatchResponse{Err: err, Key: doc.Key()}
 				close(rch)
 				return
 			}
-			rch <- *resp
+			if resp != nil {
+				rch <- *resp
+			}
 		}
 	}()
 

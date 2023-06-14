@@ -49,6 +49,27 @@ var (
 	ErrDocumentRemoved = errors.New("document is removed")
 )
 
+// PeerChangedEvent represents events that occur when the states of another peers
+// of the watched documents changes.
+type PeerChangedEvent struct {
+	Type      PeerChangedEventType
+	Publisher map[string]presence.Presence
+}
+
+// PeerChangedEventType represents the type of PeerChangedEvent.
+type PeerChangedEventType string
+
+const (
+	// WatchedEvent is an event that occurs when documents are watched by other clients.
+	WatchedEvent PeerChangedEventType = "watched"
+
+	// UnwatchedEvent is an event that occurs when documents are unwatched by other clients.
+	UnwatchedEvent PeerChangedEventType = "unwatched"
+
+	// PresenceChangedEvent is an event indicating that presence is changed.
+	PresenceChangedEvent PeerChangedEventType = "presence-changed"
+)
+
 // InternalDocument represents a document in MongoDB and contains logical clocks.
 type InternalDocument struct {
 	key             key.Key
@@ -60,6 +81,7 @@ type InternalDocument struct {
 	myClientID      string
 	peerPresenceMap map[string]presence.Info
 	changeContext   *change.Context
+	events          chan PeerChangedEvent
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
@@ -82,6 +104,7 @@ func NewInternalDocument(docKey key.Key, clientID string, initialPresence map[st
 		changeID:        change.InitialIDWithActor(actorID),
 		myClientID:      clientID,
 		peerPresenceMap: peerPresenceMap,
+		events:          make(chan PeerChangedEvent, 1),
 	}
 }
 
@@ -237,6 +260,15 @@ func (d *InternalDocument) Presence() presence.Presence {
 	return presence
 }
 
+// PeerPresence returns the presence of the given client.
+func (d *InternalDocument) PeerPresence(clientID string) presence.Presence {
+	presence := make(presence.Presence)
+	for k, v := range d.peerPresenceMap[clientID].Presence {
+		presence[k] = v
+	}
+	return presence
+}
+
 // PeersMap returns the list of peers, including the client who created this document.
 func (d *InternalDocument) PeersMap() map[string]presence.Presence {
 	peers := map[string]presence.Presence{}
@@ -280,10 +312,23 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 		}
 		if c.PresenceInfo() != nil && d.peerPresenceMap != nil {
 			d.SetPresenceInfo(c.ID().ActorID().String(), *c.PresenceInfo())
+			if c.ID().ActorID().String() != d.myClientID {
+				d.events <- PeerChangedEvent{
+					Type: PresenceChangedEvent,
+					Publisher: map[string]presence.Presence{
+						c.ID().ActorID().String(): d.PeerPresence(c.ID().ActorID().String()),
+					},
+				}
+			}
 		}
 
 		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
 	}
 
 	return nil
+}
+
+// Events returns the PeerChangedEvent channel of this document.
+func (d *InternalDocument) Events() chan PeerChangedEvent {
+	return d.events
 }

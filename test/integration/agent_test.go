@@ -57,8 +57,7 @@ func TestServer(t *testing.T) {
 					return
 				case wr := <-wrch:
 					if wr.Err == io.EOF || status.Code(wr.Err) == codes.Canceled {
-						peers := wr.PeersMapByDoc
-						assert.Len(t, peers, 0)
+						assert.Equal(t, wr.Key, doc.Key())
 						wg.Done()
 						return
 					}

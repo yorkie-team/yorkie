@@ -30,7 +30,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -420,24 +419,9 @@ func TestDocumentWithProjects(t *testing.T) {
 					})
 					return
 				}
-
-				if resp.Type == client.PeersChanged {
-					responsePairs = append(responsePairs, watchResponsePair{
-						Type:  resp.Type,
-						Peers: resp.PeersMapByDoc,
-					})
-				}
 			}
 		}()
 
-		// c2 watches the same document, so c1 receives a peers changed event.
-		expected = append(expected, watchResponsePair{
-			Type: client.PeersChanged,
-			Peers: map[string]presence.Presence{
-				c1.ID().String(): map[string]string{},
-				c2.ID().String(): map[string]string{},
-			},
-		})
 		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 		watch2Ctx, cancel2 := context.WithCancel(ctx)

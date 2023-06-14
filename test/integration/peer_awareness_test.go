@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/client"
-	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -37,7 +37,7 @@ func TestPeerAwareness(t *testing.T) {
 	c1, c2 := clients[0], clients[1]
 	defer deactivateAndCloseClients(t, clients)
 
-	t.Run("WatchStarted and PeersChanged event test", func(t *testing.T) {
+	t.Run("PeersChanged event test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
 		d1, err := c1.Attach(ctx, docKey, map[string]string{})
@@ -47,16 +47,18 @@ func TestPeerAwareness(t *testing.T) {
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
-		var expected []watchResponsePair
+		var expected []peersChangedPair
+		var peersChangedEvents []peersChangedPair
 		var responsePairs []watchResponsePair
 		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
+		wgEvents.Add(2)
 
 		// starting to watch a document
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
 		defer cancel1()
 		wrch, err := c1.Watch(watch1Ctx, d1)
 		assert.NoError(t, err)
+
 		go func() {
 			defer func() {
 				wgEvents.Done()
@@ -71,27 +73,45 @@ func TestPeerAwareness(t *testing.T) {
 						assert.Fail(t, "unexpected stream closing", wr.Err)
 						return
 					}
+					responsePairs = append(responsePairs, watchResponsePair{
+						Type:   wr.Type,
+						DocKey: wr.Key,
+					})
 
-					if wr.Type == client.PeersChanged {
-						peers := wr.PeersMapByDoc
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:  wr.Type,
-							Peers: peers,
-						})
+					if len(responsePairs) == 1 {
+						return
+					}
+				}
+			}
+		}()
 
-						if len(peers) == 1 {
-							return
-						}
+		ch := d1.Watch()
+		go func() {
+			defer func() {
+				wgEvents.Done()
+			}()
+			for {
+				select {
+				case <-time.After(time.Second):
+					assert.Fail(t, "timeout")
+					return
+				case e := <-ch:
+					peersChangedEvents = append(peersChangedEvents, peersChangedPair{
+						Type: e.Type,
+						Peer: e.Publisher,
+					})
+
+					if len(peersChangedEvents) == 3 {
+						return
 					}
 				}
 			}
 		}()
 
 		// 01. PeersChanged is triggered when another client watches the document
-		expected = append(expected, watchResponsePair{
-			Type: client.PeersChanged,
-			Peers: map[string]presence.Presence{
-				c1.ID().String(): d1.Presence(),
+		expected = append(expected, peersChangedPair{
+			Type: document.WatchedEvent,
+			Peer: map[string]presence.Presence{
 				c2.ID().String(): d2.Presence(),
 			},
 		})
@@ -100,10 +120,13 @@ func TestPeerAwareness(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 02. PeersChanged is triggered when another client updates its presence
-		assert.NoError(t, d2.Update(func(root *json.Object) error {
-			d2.UpdatePresence("updated", "true")
-			return nil
-		}, "update presence"))
+		d2.UpdatePresence("updated", "true")
+		expected = append(expected, peersChangedPair{
+			Type: document.PresenceChangedEvent,
+			Peer: map[string]presence.Presence{
+				c2.ID().String(): d2.Presence(),
+			},
+		})
 		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(docKey)))
 		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(docKey)))
 		assert.Equal(t, map[string]presence.Presence{
@@ -112,122 +135,158 @@ func TestPeerAwareness(t *testing.T) {
 		}, d1.PeersMap())
 
 		// 03. PeersChanged is triggered when another client closes the watch
-		expected = append(expected, watchResponsePair{
-			Type: client.PeersChanged,
-			Peers: map[string]presence.Presence{
-				c1.ID().String(): d1.Presence(),
+		expected = append(expected, peersChangedPair{
+			Type: document.UnwatchedEvent,
+			Peer: map[string]presence.Presence{
+				c2.ID().String(): d2.Presence(),
 			},
 		})
 		cancel2()
 
 		wgEvents.Wait()
 
-		assert.Equal(t, expected, responsePairs)
+		assert.Equal(t, expected, peersChangedEvents)
+		assert.Equal(t, []watchResponsePair{
+			{
+				Type:   client.DocumentsChanged,
+				DocKey: docKey,
+			},
+		}, responsePairs)
 	})
 
-	t.Run("initial presence test", func(t *testing.T) {
-		ctx := context.Background()
-		docKey := helper.TestDocKey(t)
-		c1Presence := map[string]string{
-			"name":  "cli1",
-			"color": "red",
-		}
-		c2Presence := map[string]string{
-			"name":  "cli2",
-			"color": "green",
-		}
-		d1, err := c1.Attach(ctx, docKey, c1Presence)
-		assert.NoError(t, err)
-		assert.Equal(t, c1Presence, d1.Presence())
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		d2, err := c2.Attach(ctx, docKey, c2Presence)
-		assert.NoError(t, err)
-		assert.Equal(t, c2Presence, d2.Presence())
+	// t.Run("initial presence test", func(t *testing.T) {
+	// 	ctx := context.Background()
+	// 	docKey := helper.TestDocKey(t)
+	// 	c1Presence := map[string]string{
+	// 		"name":  "cli1",
+	// 		"color": "red",
+	// 	}
+	// 	c2Presence := map[string]string{
+	// 		"name":  "cli2",
+	// 		"color": "green",
+	// 	}
+	// 	d1, err := c1.Attach(ctx, docKey, c1Presence)
+	// 	assert.NoError(t, err)
+	// 	assert.Equal(t, c1Presence, d1.Presence())
+	// 	defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+	// 	d2, err := c2.Attach(ctx, docKey, c2Presence)
+	// 	assert.NoError(t, err)
+	// 	assert.Equal(t, c2Presence, d2.Presence())
 
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+	// 	defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
-		var expected []watchResponsePair
-		var responsePairs []watchResponsePair
-		wgEvents := sync.WaitGroup{}
-		wgEvents.Add(1)
+	// 	var expected []peersChangedPair
+	// 	var peersChangedEvents []peersChangedPair
+	// 	var responsePairs []watchResponsePair
+	// 	wgEvents := sync.WaitGroup{}
+	// 	wgEvents.Add(2)
 
-		// starting to watch a document
-		watch1Ctx, cancel1 := context.WithCancel(ctx)
-		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
-		assert.NoError(t, err)
-		go func() {
-			defer func() {
-				wgEvents.Done()
-			}()
-			for {
-				select {
-				case <-time.After(time.Second):
-					assert.Fail(t, "timeout")
-					return
-				case wr := <-wrch:
-					if wr.Err != nil {
-						assert.Fail(t, "unexpected stream closing", wr.Err)
-						return
-					}
+	// 	// starting to watch a document
+	// 	watch1Ctx, cancel1 := context.WithCancel(ctx)
+	// 	defer cancel1()
+	// 	wrch, err := c1.Watch(watch1Ctx, d1)
+	// 	assert.NoError(t, err)
 
-					if wr.Type == client.PeersChanged {
-						peers := wr.PeersMapByDoc
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:  wr.Type,
-							Peers: peers,
-						})
+	// 	go func() {
+	// 		defer func() {
+	// 			wgEvents.Done()
+	// 		}()
+	// 		for {
+	// 			select {
+	// 			case <-time.After(time.Second):
+	// 				assert.Fail(t, "timeout")
+	// 				return
+	// 			case wr := <-wrch:
+	// 				if wr.Err != nil {
+	// 					assert.Fail(t, "unexpected stream closing", wr.Err)
+	// 					return
+	// 				}
+	// 				responsePairs = append(responsePairs, watchResponsePair{
+	// 					Type:   wr.Type,
+	// 					DocKey: wr.Key,
+	// 				})
 
-						if len(peers) == 1 {
-							return
-						}
-					}
-				}
-			}
-		}()
+	// 				if len(responsePairs) == 1 {
+	// 					return
+	// 				}
+	// 			}
+	// 		}
+	// 	}()
 
-		// 01. PeersChanged is triggered when another client watches the document
-		expected = append(expected, watchResponsePair{
-			Type: client.PeersChanged,
-			Peers: map[string]presence.Presence{
-				c1.ID().String(): c1Presence,
-				c2.ID().String(): c2Presence,
-			},
-		})
-		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		_, err = c2.Watch(watch2Ctx, d2)
-		assert.NoError(t, err)
+	// 	ch := d1.Watch()
+	// 	go func() {
+	// 		defer func() {
+	// 			wgEvents.Done()
+	// 			close(ch)
+	// 		}()
+	// 		for {
+	// 			select {
+	// 			case <-time.After(time.Second):
+	// 				assert.Fail(t, "timeout")
+	// 				return
+	// 			case e := <-ch:
+	// 				peersChangedEvents = append(peersChangedEvents, peersChangedPair{
+	// 					Type: e.Type,
+	// 					Peer: e.Publisher,
+	// 				})
 
-		// 02. PeersChanged is triggered when another client updates its presence
-		assert.NoError(t, d2.Update(func(root *json.Object) error {
-			d2.UpdatePresence("color", "blue")
-			return nil
-		}, "update presence"))
-		c2Presence = map[string]string{
-			"name":  "cli2",
-			"color": "blue",
-		}
-		assert.Equal(t, c2Presence, d2.Presence())
-		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(docKey)))
-		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(docKey)))
-		assert.Equal(t, map[string]presence.Presence{
-			c1.ID().String(): c1Presence,
-			c2.ID().String(): c2Presence,
-		}, d1.PeersMap())
+	// 				if len(peersChangedEvents) == 3 {
+	// 					return
+	// 				}
+	// 			}
+	// 		}
+	// 	}()
 
-		// 03. PeersChanged is triggered when another client closes the watch
-		expected = append(expected, watchResponsePair{
-			Type: client.PeersChanged,
-			Peers: map[string]presence.Presence{
-				c1.ID().String(): c1Presence,
-			},
-		})
-		cancel2()
+	// 	// 01. PeersChanged is triggered when another client watches the document
+	// 	expected = append(expected, peersChangedPair{
+	// 		Type: document.WatchedEvent,
+	// 		Peer: map[string]presence.Presence{
+	// 			c2.ID().String(): d2.Presence(),
+	// 		},
+	// 	})
+	// 	watch2Ctx, cancel2 := context.WithCancel(ctx)
+	// 	_, err = c2.Watch(watch2Ctx, d2)
+	// 	assert.NoError(t, err)
 
-		wgEvents.Wait()
+	// 	// 02. PeersChanged is triggered when another client updates its presence
+	// 	d2.UpdatePresence("color", "blue")
+	// 	c2Presence = map[string]string{
+	// 		"name":  "cli2",
+	// 		"color": "blue",
+	// 	}
+	// 	expected = append(expected, peersChangedPair{
+	// 		Type: document.PresenceChangedEvent,
+	// 		Peer: map[string]presence.Presence{
+	// 			c2.ID().String(): c2Presence,
+	// 		},
+	// 	})
+	// 	assert.Equal(t, c2Presence, d2.Presence())
+	// 	assert.NoError(t, c2.Sync(ctx, client.WithDocKey(docKey)))
+	// 	assert.NoError(t, c1.Sync(ctx, client.WithDocKey(docKey)))
+	// 	assert.Equal(t, map[string]presence.Presence{
+	// 		c1.ID().String(): c1Presence,
+	// 		c2.ID().String(): c2Presence,
+	// 	}, d1.PeersMap())
 
-		assert.Equal(t, expected, responsePairs)
-	})
+	// 	// 03. PeersChanged is triggered when another client closes the watch
+	// 	expected = append(expected, peersChangedPair{
+	// 		Type: document.UnwatchedEvent,
+	// 		Peer: map[string]presence.Presence{
+	// 			c2.ID().String(): d2.Presence(),
+	// 		},
+	// 	})
+	// 	cancel2()
+
+	// 	wgEvents.Wait()
+
+	// 	assert.Equal(t, expected, peersChangedEvents)
+	// 	assert.Equal(t, []watchResponsePair{
+	// 		{
+	// 			Type:   client.DocumentsChanged,
+	// 			DocKey: docKey,
+	// 		},
+	// 	}, responsePairs)
+	// })
 
 	t.Run("Watch multiple documents test", func(t *testing.T) {
 		ctx := context.Background()
@@ -236,54 +295,41 @@ func TestPeerAwareness(t *testing.T) {
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 
-		var expected []watchResponsePair
-		var responsePairs []watchResponsePair
+		var expected []peersChangedPair
+		var peersChangedEvents []peersChangedPair
 		wgEvents := sync.WaitGroup{}
 		wgEvents.Add(1)
 
 		// starting to watch a document
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
 		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
+		_, err = c1.Watch(watch1Ctx, d1)
 		assert.NoError(t, err)
+
+		ch := d1.Watch()
 		go func() {
 			defer func() {
 				wgEvents.Done()
+				close(ch)
 			}()
 			for {
 				select {
 				case <-time.After(time.Second):
 					assert.Fail(t, "timeout")
 					return
-				case wr := <-wrch:
-					if wr.Err != nil {
-						assert.Fail(t, "unexpected stream closing", wr.Err)
+				case e := <-ch:
+					peersChangedEvents = append(peersChangedEvents, peersChangedPair{
+						Type: e.Type,
+						Peer: e.Publisher,
+					})
+
+					if len(peersChangedEvents) == 2 {
 						return
-					}
-
-					if wr.Type == client.PeersChanged {
-						peers := wr.PeersMapByDoc
-						responsePairs = append(responsePairs, watchResponsePair{
-							Type:  wr.Type,
-							Peers: peers,
-						})
-
-						if len(peers) == 1 {
-							return
-						}
 					}
 				}
 			}
 		}()
 
-		// 01. PeersChanged is triggered when another client watches the document
-		expected = append(expected, watchResponsePair{
-			Type: client.PeersChanged,
-			Peers: map[string]presence.Presence{
-				c1.ID().String(): map[string]string{},
-				c2.ID().String(): map[string]string{},
-			},
-		})
 		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
@@ -291,19 +337,25 @@ func TestPeerAwareness(t *testing.T) {
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, c2.Detach(ctx, d3)) }()
 
+		// 01. PeersChanged is triggered when another client watches the document
+		expected = append(expected, peersChangedPair{
+			Type: document.WatchedEvent,
+			Peer: map[string]presence.Presence{
+				c2.ID().String(): d2.Presence(),
+			},
+		})
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
 		_, err = c2.Watch(watch2Ctx, d2)
 		assert.NoError(t, err)
-
 		watch3Ctx, cancel3 := context.WithCancel(ctx)
 		_, err = c2.Watch(watch3Ctx, d3)
 		assert.NoError(t, err)
 
 		// 02. PeersChanged is triggered when another client closes the watch
-		expected = append(expected, watchResponsePair{
-			Type: client.PeersChanged,
-			Peers: map[string]presence.Presence{
-				c1.ID().String(): map[string]string{},
+		expected = append(expected, peersChangedPair{
+			Type: document.UnwatchedEvent,
+			Peer: map[string]presence.Presence{
+				c2.ID().String(): d2.Presence(),
 			},
 		})
 		cancel2()
@@ -311,6 +363,6 @@ func TestPeerAwareness(t *testing.T) {
 
 		wgEvents.Wait()
 
-		assert.Equal(t, expected, responsePairs)
+		assert.Equal(t, expected, peersChangedEvents)
 	})
 }

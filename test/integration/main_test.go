@@ -30,6 +30,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -42,8 +43,14 @@ type clientAndDocPair struct {
 }
 
 type watchResponsePair struct {
-	Type  client.WatchResponseType
-	Peers map[string]presence.Presence
+	Type   client.WatchResponseType
+	DocKey key.Key
+	Peers  map[string]presence.Presence
+}
+
+type peersChangedPair struct {
+	Type document.PeerChangedEventType
+	Peer map[string]presence.Presence
 }
 
 var defaultServer *server.Yorkie
