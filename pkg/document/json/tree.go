@@ -67,10 +67,18 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 	if fromIdx > toIdx {
 		panic("from should be less than or equal to to")
 	}
+	ticket := t.context.IssueTimeTicket()
 
 	var node *crdt.TreeNode
 	if content != nil {
-		node = crdt.NewTreeNode(crdt.NewTreePos(t.context.IssueTimeTicket(), 0), content.Type, nil, content.Value)
+		var attributes *crdt.RHT
+		if content.Attributes != nil {
+			attributes = crdt.NewRHT()
+			for key, val := range content.Attributes {
+				attributes.Set(key, val, ticket)
+			}
+		}
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
 		for _, child := range content.Children {
 			buildDescendants(t.context, child, node)
 		}
@@ -83,7 +91,7 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		clone = node.DeepCopy()
 	}
 
-	ticket := t.context.LastTimeTicket()
+	ticket = t.context.LastTimeTicket()
 	t.Tree.Edit(fromPos, toPos, clone, ticket)
 
 	t.context.Push(operations.NewTreeEdit(
@@ -104,9 +112,18 @@ func (t *Tree) Len() int {
 
 // EditByPath edits this tree with the given path and node.
 func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool {
+	ticket := t.context.IssueTimeTicket()
+
 	var node *crdt.TreeNode
 	if content != nil {
-		node = crdt.NewTreeNode(crdt.NewTreePos(t.context.IssueTimeTicket(), 0), content.Type, nil, content.Value)
+		var attributes *crdt.RHT
+		if content.Attributes != nil {
+			attributes = crdt.NewRHT()
+			for key, val := range content.Attributes {
+				attributes.Set(key, val, ticket)
+			}
+		}
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
 		for _, child := range content.Children {
 			buildDescendants(t.context, child, node)
 		}
@@ -119,7 +136,7 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 		clone = node.DeepCopy()
 	}
 
-	ticket := t.context.LastTimeTicket()
+	ticket = t.context.LastTimeTicket()
 	t.Tree.Edit(fromPos, toPos, clone, ticket)
 
 	t.context.Push(operations.NewTreeEdit(
