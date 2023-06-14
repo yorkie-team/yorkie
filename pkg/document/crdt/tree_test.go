@@ -56,9 +56,9 @@ func TestTreeNode(t *testing.T) {
 	})
 
 	t.Run("element node with attributes test", func(t *testing.T) {
-		para := crdt.NewTreeNode(crdt.DummyTreePos, "p", map[string]string{"bold": "true"})
-		para.Append(crdt.NewTreeNode(crdt.DummyTreePos, "text", nil, "helloyorkie"))
-		assert.Equal(t, "<p bold=\"true\">helloyorkie</p>", crdt.ToXML(para))
+		node := crdt.NewTreeNode(crdt.DummyTreePos, "span", map[string]string{"font-weight": "bold"})
+		node.Append(crdt.NewTreeNode(crdt.DummyTreePos, "text", nil, "helloyorkie"))
+		assert.Equal(t, "<span font-weight=\"bold\">helloyorkie</span>", crdt.ToXML(node))
 	})
 
 	t.Run("UTF-16 code unit test", func(t *testing.T) {
@@ -307,5 +307,21 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>ab</p><p><b>cd</b></p><p>ef</p></root>", tree.ToXML())
 		tree.EditByIndex(9, 10, nil, helper.IssueTime(ctx))
 		assert.Equal(t, "<root><p>ab</p><b>cd</b><p>ef</p></root>", tree.ToXML())
+	})
+
+	t.Run("style node with attributes test", func(t *testing.T) {
+		// 01. style attributes to existing node.
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
+		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil), helper.IssueTime(ctx))
+		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "abcd"), helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p>abcd</p></root>", tree.ToXML())
+
+		tree.StyleByIndex(1, 5, map[string]string{"font-weight": "bold"}, helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p font-weight=\"bold\">abcd</p></root>", tree.ToXML())
+
+		// 02. style attributes partially to existing node.
+		tree.StyleByIndex(2, 4, map[string]string{"font-style": "italic"}, helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p font-weight=\"bold\">a</p><p font-weight=\"bold\" font-style=\"italic\">bc</p><p font-weight=\"bold\">d</p></root>", tree.ToXML())
 	})
 }

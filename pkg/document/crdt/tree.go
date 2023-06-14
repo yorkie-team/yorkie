@@ -466,6 +466,29 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 	}
 }
 
+// StyleByIndex applies the given attributes of the given range.
+// This method uses indexes instead of a pair of TreePos for testing.
+func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, editedAt *time.Ticket) {
+	fromPos := t.FindPos(start)
+	toPos := t.FindPos(end)
+
+	t.Style(fromPos, toPos, attributes, editedAt)
+}
+
+// Style applies the given attributes of the given range.
+func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *time.Ticket) {
+	// 01. split text nodes at the given range if needed.
+	_, toRight := t.findTreePosWithSplitText(to, editedAt)
+	_, fromRight := t.findTreePosWithSplitText(from, editedAt)
+
+	// 02. style the nodes.
+	t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
+		for key, value := range attributes {
+			node.Attrs.Set(key, value, editedAt)
+		}
+	})
+}
+
 // findTreePosWithSplitText finds the right node of the given index in postorder.
 func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode) {
 	treePos := t.toTreePos(pos)
