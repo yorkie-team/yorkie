@@ -94,7 +94,7 @@ func (t *TreePos) Compare(other llrb.Key) int {
 }
 
 // NewTreeNode creates a new instance of TreeNode.
-func NewTreeNode(pos *TreePos, nodeType string, attributes map[string]string, value ...string) *TreeNode {
+func NewTreeNode(pos *TreePos, nodeType string, attributes *RHT, value ...string) *TreeNode {
 	node := &TreeNode{
 		Pos: pos,
 	}
@@ -102,12 +102,8 @@ func NewTreeNode(pos *TreePos, nodeType string, attributes map[string]string, va
 	if len(value) > 0 {
 		node.Value = value[0]
 	}
-	if attributes != nil {
-		node.Attrs = NewRHT()
-		for key, val := range attributes {
-			node.Attrs.Set(key, val, pos.CreatedAt)
-		}
-	}
+	node.Attrs = attributes
+
 	node.IndexTreeNode = index.NewNode(nodeType, node)
 
 	return node
@@ -146,7 +142,7 @@ func (n *TreeNode) String() string {
 
 // Attributes returns the string representation of this node's attributes.
 func (n *TreeNode) Attributes() string {
-	if n.Attrs == nil {
+	if n.Attrs == nil || n.Attrs.Len() == 0 {
 		return ""
 	}
 
@@ -230,7 +226,7 @@ func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) {
 func (n *TreeNode) DeepCopy() *TreeNode {
 	var clone *TreeNode
 	if n.Attrs != nil {
-		clone = NewTreeNode(n.Pos, n.Type(), n.Attrs.DeepCopy().Elements(), n.Value)
+		clone = NewTreeNode(n.Pos, n.Type(), n.Attrs.DeepCopy(), n.Value)
 	} else {
 		clone = NewTreeNode(n.Pos, n.Type(), nil, n.Value)
 	}
@@ -477,16 +473,46 @@ func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, edited
 
 // Style applies the given attributes of the given range.
 func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *time.Ticket) {
-	// 01. split text nodes at the given range if needed.
-	_, toRight := t.findTreePosWithSplitText(to, editedAt)
-	_, fromRight := t.findTreePosWithSplitText(from, editedAt)
+	_, toRight := t.findTreePos(to, editedAt)
+	_, fromRight := t.findTreePos(from, editedAt)
 
 	// 02. style the nodes.
 	t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
+		if node.IsText() {
+			return
+		}
+
 		for key, value := range attributes {
+			if node.Attrs == nil {
+				node.Attrs = NewRHT()
+			}
 			node.Attrs.Set(key, value, editedAt)
 		}
 	})
+}
+
+// findTreePos returns TreePos and the right node of the given index in postorder.
+func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode) {
+	treePos := t.toTreePos(pos)
+	if treePos == nil {
+		panic(fmt.Errorf("cannot find node at %p", pos))
+	}
+
+	// Find the appropriate position. This logic is similar to the logical to
+	// handle the same position insertion of RGA.
+	current := treePos
+	for current.Node.Value.Next != nil && current.Node.Value.Next.Pos.CreatedAt.After(editedAt) &&
+		current.Node.Value.IndexTreeNode.Parent == current.Node.Value.Next.IndexTreeNode.Parent {
+
+		current = &index.TreePos[*TreeNode]{
+			Node:   current.Node.Value.Next.IndexTreeNode,
+			Offset: current.Node.Value.Next.Len(),
+		}
+	}
+
+	// TODO(hackerwins): Consider to use current instead of treePos.
+	right := t.IndexTree.FindPostorderRight(treePos)
+	return current, right
 }
 
 // findTreePosWithSplitText finds the right node of the given index in postorder.

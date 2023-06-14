@@ -56,9 +56,11 @@ func TestTreeNode(t *testing.T) {
 	})
 
 	t.Run("element node with attributes test", func(t *testing.T) {
-		node := crdt.NewTreeNode(crdt.DummyTreePos, "span", map[string]string{"font-weight": "bold"})
+		attrs := crdt.NewRHT()
+		attrs.Set("font-weight", "bold", time.InitialTicket)
+		node := crdt.NewTreeNode(crdt.DummyTreePos, "span", attrs)
 		node.Append(crdt.NewTreeNode(crdt.DummyTreePos, "text", nil, "helloyorkie"))
-		assert.Equal(t, "<span font-weight=\"bold\">helloyorkie</span>", crdt.ToXML(node))
+		assert.Equal(t, `<span font-weight="bold">helloyorkie</span>`, crdt.ToXML(node))
 	})
 
 	t.Run("UTF-16 code unit test", func(t *testing.T) {
@@ -310,18 +312,24 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("style node with attributes test", func(t *testing.T) {
-		// 01. style attributes to existing node.
+		// 01. style attributes to an element node.
 		ctx := helper.TextChangeContext(helper.TestRoot())
 		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
 		tree.EditByIndex(0, 0, crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil), helper.IssueTime(ctx))
-		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "abcd"), helper.IssueTime(ctx))
-		assert.Equal(t, "<root><p>abcd</p></root>", tree.ToXML())
+		tree.EditByIndex(1, 1, crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab"), helper.IssueTime(ctx))
+		tree.EditByIndex(4, 4, crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil), helper.IssueTime(ctx))
+		tree.EditByIndex(5, 5, crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "cd"), helper.IssueTime(ctx))
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
 
-		tree.StyleByIndex(1, 5, map[string]string{"font-weight": "bold"}, helper.IssueTime(ctx))
-		assert.Equal(t, "<root><p font-weight=\"bold\">abcd</p></root>", tree.ToXML())
+		tree.StyleByIndex(3, 4, map[string]string{"weight": "bold"}, helper.IssueTime(ctx))
+		assert.Equal(t, `<root><p weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
 
-		// 02. style attributes partially to existing node.
-		tree.StyleByIndex(2, 4, map[string]string{"font-style": "italic"}, helper.IssueTime(ctx))
-		assert.Equal(t, "<root><p font-weight=\"bold\">a</p><p font-weight=\"bold\" font-style=\"italic\">bc</p><p font-weight=\"bold\">d</p></root>", tree.ToXML())
+		// 02. style attributes to elements.
+		tree.StyleByIndex(3, 8, map[string]string{"style": "italic"}, helper.IssueTime(ctx))
+		assert.Equal(t, `<root><p style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
+
+		// 03. style attributes to text nodes.
+		tree.StyleByIndex(1, 3, map[string]string{"style": "italic"}, helper.IssueTime(ctx))
+		assert.Equal(t, `<root><p style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
 	})
 }

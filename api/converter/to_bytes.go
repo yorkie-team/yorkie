@@ -196,9 +196,9 @@ func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.Tex
 	for _, textNode := range textNodes {
 		value := textNode.Value()
 
-		attrs := make(map[string]*api.TextNodeAttr)
+		attrs := make(map[string]*api.NodeAttr)
 		for _, node := range value.Attrs().Nodes() {
-			attrs[node.Key()] = &api.TextNodeAttr{
+			attrs[node.Key()] = &api.NodeAttr{
 				Value:     node.Value(),
 				UpdatedAt: ToTimeTicket(node.UpdatedAt()),
 			}
@@ -241,12 +241,24 @@ func ToTreeNodes(treeNode *crdt.TreeNode) []*api.TreeNode {
 }
 
 func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
+	var attrs map[string]*api.NodeAttr
+	if treeNode.Attrs != nil {
+		attrs = make(map[string]*api.NodeAttr)
+		for _, node := range treeNode.Attrs.Nodes() {
+			attrs[node.Key()] = &api.NodeAttr{
+				Value:     node.Value(),
+				UpdatedAt: ToTimeTicket(node.UpdatedAt()),
+			}
+		}
+	}
+
 	pbNode := &api.TreeNode{
-		Pos:       toTreePos(treeNode.Pos),
-		Type:      treeNode.Type(),
-		Value:     treeNode.Value,
-		RemovedAt: ToTimeTicket(treeNode.RemovedAt),
-		Depth:     int32(depth),
+		Pos:        toTreePos(treeNode.Pos),
+		Type:       treeNode.Type(),
+		Value:      treeNode.Value,
+		RemovedAt:  ToTimeTicket(treeNode.RemovedAt),
+		Depth:      int32(depth),
+		Attributes: attrs,
 	}
 
 	if treeNode.InsPrev != nil {

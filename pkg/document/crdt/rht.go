@@ -147,6 +147,11 @@ func (rht *RHT) Nodes() []*RHTNode {
 	return nodes
 }
 
+// Len returns the number of elements.
+func (rht *RHT) Len() int {
+	return len(rht.nodeMapByKey)
+}
+
 // DeepCopy copies itself deeply.
 func (rht *RHT) DeepCopy() *RHT {
 	instance := NewRHT()
