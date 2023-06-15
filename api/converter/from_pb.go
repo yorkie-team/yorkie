@@ -280,6 +280,8 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 			op, err = fromIncrease(decoded.Increase)
 		case *api.Operation_TreeEdit_:
 			op, err = fromTreeEdit(decoded.TreeEdit)
+		case *api.Operation_TreeStyle_:
+			op, err = fromTreeStyle(decoded.TreeStyle)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -524,6 +526,36 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 	), nil
 }
 
+func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle, error) {
+	parentCreatedAt, err := fromTimeTicket(pbTreeStyle.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	executedAt, err := fromTimeTicket(pbTreeStyle.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	from, err := fromTreePos(pbTreeStyle.From)
+	if err != nil {
+		return nil, err
+	}
+
+	to, err := fromTreePos(pbTreeStyle.To)
+	if err != nil {
+		return nil, err
+	}
+
+	return operations.NewTreeStyle(
+		parentCreatedAt,
+		from,
+		to,
+		pbTreeStyle.Attributes,
+		executedAt,
+	), nil
+}
+
 func fromCreatedAtMapByActor(
 	pbCreatedAtMapByActor map[string]*api.TimeTicket,
 ) (map[string]*time.Ticket, error) {
@@ -590,9 +622,19 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 		return nil, err
 	}
 
+	attrs := crdt.NewRHT()
+	for k, pbAttr := range pbNode.Attributes {
+		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		attrs.Set(k, pbAttr.Value, updatedAt)
+	}
+
 	return crdt.NewTreeNode(
 		pos,
 		pbNode.Type,
+		attrs,
 		pbNode.Value,
 	), nil
 }

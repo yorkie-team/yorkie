@@ -42,6 +42,9 @@ type TreeNode struct {
 	// Value is the value of text node. If this node is an element node, it is
 	// empty string.
 	Value string
+
+	// Attributes is the attributes of this node.
+	Attributes map[string]string
 }
 
 // Tree is a CRDT-based tree structure that is used to represent the document
@@ -64,10 +67,18 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 	if fromIdx > toIdx {
 		panic("from should be less than or equal to to")
 	}
+	ticket := t.context.IssueTimeTicket()
 
 	var node *crdt.TreeNode
 	if content != nil {
-		node = crdt.NewTreeNode(crdt.NewTreePos(t.context.IssueTimeTicket(), 0), content.Type, content.Value)
+		var attributes *crdt.RHT
+		if content.Attributes != nil {
+			attributes = crdt.NewRHT()
+			for key, val := range content.Attributes {
+				attributes.Set(key, val, ticket)
+			}
+		}
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
 		for _, child := range content.Children {
 			buildDescendants(t.context, child, node)
 		}
@@ -80,7 +91,7 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		clone = node.DeepCopy()
 	}
 
-	ticket := t.context.LastTimeTicket()
+	ticket = t.context.LastTimeTicket()
 	t.Tree.Edit(fromPos, toPos, clone, ticket)
 
 	t.context.Push(operations.NewTreeEdit(
@@ -101,9 +112,18 @@ func (t *Tree) Len() int {
 
 // EditByPath edits this tree with the given path and node.
 func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool {
+	ticket := t.context.IssueTimeTicket()
+
 	var node *crdt.TreeNode
 	if content != nil {
-		node = crdt.NewTreeNode(crdt.NewTreePos(t.context.IssueTimeTicket(), 0), content.Type, content.Value)
+		var attributes *crdt.RHT
+		if content.Attributes != nil {
+			attributes = crdt.NewRHT()
+			for key, val := range content.Attributes {
+				attributes.Set(key, val, ticket)
+			}
+		}
+		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
 		for _, child := range content.Children {
 			buildDescendants(t.context, child, node)
 		}
@@ -116,7 +136,7 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 		clone = node.DeepCopy()
 	}
 
-	ticket := t.context.LastTimeTicket()
+	ticket = t.context.LastTimeTicket()
 	t.Tree.Edit(fromPos, toPos, clone, ticket)
 
 	t.context.Push(operations.NewTreeEdit(
@@ -130,14 +150,37 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 	return true
 }
 
+// Style sets the attributes to the elements of the given range.
+func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
+	if fromIdx > toIdx {
+		panic("from should be less than or equal to to")
+	}
+
+	fromPos := t.Tree.FindPos(fromIdx)
+	toPos := t.Tree.FindPos(toIdx)
+
+	ticket := t.context.IssueTimeTicket()
+	t.Tree.Style(fromPos, toPos, attributes, ticket)
+
+	t.context.Push(operations.NewTreeStyle(
+		t.CreatedAt(),
+		fromPos,
+		toPos,
+		attributes,
+		ticket,
+	))
+
+	return true
+}
+
 // buildRoot converts the given node to a CRDT-based tree node. If the given
 // node is nil, it creates a default root node.
 func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crdt.TreeNode {
 	if node == nil {
-		return crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), DefaultRootNodeType)
+		return crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), DefaultRootNodeType, nil)
 	}
 
-	root := crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), node.Type)
+	root := crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), node.Type, nil)
 	for _, child := range node.Children {
 		buildDescendants(ctx, child, root)
 	}
@@ -148,12 +191,22 @@ func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crd
 // buildDescendants converts the given node to a CRDT-based tree node.
 func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) {
 	if n.Type == index.DefaultTextType {
-		treeNode := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), n.Type, n.Value)
+		treeNode := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), n.Type, nil, n.Value)
 		parent.Append(treeNode)
 		return
 	}
 
-	treeNode := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), n.Type)
+	ticket := ctx.IssueTimeTicket()
+
+	var attributes *crdt.RHT
+	if n.Attributes != nil {
+		attributes = crdt.NewRHT()
+		for key, val := range n.Attributes {
+			attributes.Set(key, val, ticket)
+		}
+	}
+
+	treeNode := crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), n.Type, attributes)
 	parent.Append(treeNode)
 
 	for _, child := range n.Children {

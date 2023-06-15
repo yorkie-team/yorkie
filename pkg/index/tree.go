@@ -146,7 +146,7 @@ func ToXML[V Value](node *Node[V]) string {
 	}
 
 	builder := strings.Builder{}
-	builder.WriteString("<" + string(node.Type) + ">")
+	builder.WriteString("<" + string(node.Type) + node.Value.Attributes() + ">")
 	for _, child := range node.Children() {
 		builder.WriteString(ToXML(child))
 	}
@@ -165,6 +165,7 @@ type Value interface {
 	IsRemoved() bool
 	Length() int
 	String() string
+	Attributes() string
 }
 
 // Node is a node of Tree.

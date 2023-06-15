@@ -222,6 +222,8 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toIncrease(op)
 		case *operations.TreeEdit:
 			pbOperation.Body, err = toTreeEdit(op)
+		case *operations.TreeStyle:
+			pbOperation.Body, err = toTreeStyle(op)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -381,6 +383,18 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 			To:              toTreePos(e.ToPos()),
 			Content:         ToTreeNodes(e.Content()),
 			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toTreeStyle(style *operations.TreeStyle) (*api.Operation_TreeStyle_, error) {
+	return &api.Operation_TreeStyle_{
+		TreeStyle: &api.Operation_TreeStyle{
+			ParentCreatedAt: ToTimeTicket(style.ParentCreatedAt()),
+			From:            toTreePos(style.FromPos()),
+			To:              toTreePos(style.ToPos()),
+			Attributes:      style.Attributes(),
+			ExecutedAt:      ToTimeTicket(style.ExecutedAt()),
 		},
 	}, nil
 }

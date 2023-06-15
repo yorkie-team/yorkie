@@ -61,6 +61,7 @@ type TreeNode struct {
 	InsPrev *TreeNode
 
 	Value string
+	Attrs *RHT
 }
 
 // TreePos represents the position of Tree.
@@ -93,7 +94,7 @@ func (t *TreePos) Compare(other llrb.Key) int {
 }
 
 // NewTreeNode creates a new instance of TreeNode.
-func NewTreeNode(pos *TreePos, nodeType string, value ...string) *TreeNode {
+func NewTreeNode(pos *TreePos, nodeType string, attributes *RHT, value ...string) *TreeNode {
 	node := &TreeNode{
 		Pos: pos,
 	}
@@ -101,6 +102,8 @@ func NewTreeNode(pos *TreePos, nodeType string, value ...string) *TreeNode {
 	if len(value) > 0 {
 		node.Value = value[0]
 	}
+	node.Attrs = attributes
+
 	node.IndexTreeNode = index.NewNode(nodeType, node)
 
 	return node
@@ -132,9 +135,18 @@ func (n *TreeNode) Length() int {
 	return len(encoded)
 }
 
-// String returns the string representation of this node.
+// String returns the string representation of this node's value.
 func (n *TreeNode) String() string {
 	return n.Value
+}
+
+// Attributes returns the string representation of this node's attributes.
+func (n *TreeNode) Attributes() string {
+	if n.Attrs == nil || n.Attrs.Len() == 0 {
+		return ""
+	}
+
+	return " " + n.Attrs.ToXML()
 }
 
 // Append appends the given node to the end of the children.
@@ -187,7 +199,7 @@ func (n *TreeNode) SplitText(offset int) *TreeNode {
 	rightNode := NewTreeNode(&TreePos{
 		CreatedAt: n.Pos.CreatedAt,
 		Offset:    offset,
-	}, n.Type(), string(rightRune))
+	}, n.Type(), nil, string(rightRune))
 	n.IndexTreeNode.Parent.InsertAfterInternal(rightNode.IndexTreeNode, n.IndexTreeNode)
 
 	return rightNode
@@ -212,7 +224,12 @@ func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) {
 
 // DeepCopy copies itself deeply.
 func (n *TreeNode) DeepCopy() *TreeNode {
-	clone := NewTreeNode(n.Pos, n.Type(), n.Value)
+	var clone *TreeNode
+	if n.Attrs != nil {
+		clone = NewTreeNode(n.Pos, n.Type(), n.Attrs.DeepCopy(), n.Value)
+	} else {
+		clone = NewTreeNode(n.Pos, n.Type(), nil, n.Value)
+	}
 	clone.RemovedAt = n.RemovedAt
 
 	if n.IsText() {
@@ -243,7 +260,7 @@ type Tree struct {
 // NewTree creates a new instance of Tree.
 func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	tree := &Tree{
-		DummyHead:    NewTreeNode(DummyTreePos, DummyHeadType),
+		DummyHead:    NewTreeNode(DummyTreePos, DummyHeadType, nil),
 		IndexTree:    index.NewTree[*TreeNode](root.IndexTreeNode),
 		NodeMapByPos: llrb.NewTree[*TreePos, *TreeNode](),
 		createdAt:    createdAt,
@@ -443,6 +460,59 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 			target.InsertAt(content.IndexTreeNode, fromPos.Offset+1)
 		}
 	}
+}
+
+// StyleByIndex applies the given attributes of the given range.
+// This method uses indexes instead of a pair of TreePos for testing.
+func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, editedAt *time.Ticket) {
+	fromPos := t.FindPos(start)
+	toPos := t.FindPos(end)
+
+	t.Style(fromPos, toPos, attributes, editedAt)
+}
+
+// Style applies the given attributes of the given range.
+func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *time.Ticket) {
+	_, toRight := t.findTreePos(to, editedAt)
+	_, fromRight := t.findTreePos(from, editedAt)
+
+	// 02. style the nodes.
+	t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
+		if node.IsText() {
+			return
+		}
+
+		for key, value := range attributes {
+			if node.Attrs == nil {
+				node.Attrs = NewRHT()
+			}
+			node.Attrs.Set(key, value, editedAt)
+		}
+	})
+}
+
+// findTreePos returns TreePos and the right node of the given index in postorder.
+func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode) {
+	treePos := t.toTreePos(pos)
+	if treePos == nil {
+		panic(fmt.Errorf("cannot find node at %p", pos))
+	}
+
+	// Find the appropriate position. This logic is similar to the logical to
+	// handle the same position insertion of RGA.
+	current := treePos
+	for current.Node.Value.Next != nil && current.Node.Value.Next.Pos.CreatedAt.After(editedAt) &&
+		current.Node.Value.IndexTreeNode.Parent == current.Node.Value.Next.IndexTreeNode.Parent {
+
+		current = &index.TreePos[*TreeNode]{
+			Node:   current.Node.Value.Next.IndexTreeNode,
+			Offset: current.Node.Value.Next.Len(),
+		}
+	}
+
+	// TODO(hackerwins): Consider to use current instead of treePos.
+	right := t.IndexTree.FindPostorderRight(treePos)
+	return current, right
 }
 
 // findTreePosWithSplitText finds the right node of the given index in postorder.
