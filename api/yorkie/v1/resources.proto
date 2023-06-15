@@ -111,6 +111,13 @@ message Operation {
     repeated TreeNode content = 4;
     TimeTicket executed_at = 5;
   }
+  message TreeStyle {
+    TimeTicket parent_created_at = 1;
+    TreePos from = 2;
+    TreePos to = 3;
+    map<string, string> attributes = 4;
+    TimeTicket executed_at = 5;
+  }
 
   oneof body {
     Set set = 1;
@@ -122,6 +129,7 @@ message Operation {
     Style style = 7;
     Increase increase = 8;
     TreeEdit tree_edit = 9;
+    TreeStyle tree_style = 10;
   }
 }
 
@@ -197,7 +205,7 @@ message RGANode {
   JSONElement element = 2;
 }
 
-message TextNodeAttr {
+message NodeAttr {
   string value = 1;
   TimeTicket updated_at = 2;
 }
@@ -207,7 +215,7 @@ message TextNode {
   string value = 2;
   TimeTicket removed_at = 3;
   TextNodeID ins_prev_id = 4;
-  map<string, TextNodeAttr> attributes = 5;
+  map<string, NodeAttr> attributes = 5;
 }
 
 message TextNodeID {
@@ -222,6 +230,7 @@ message TreeNode {
   TimeTicket removed_at = 4;
   TreePos ins_prev_pos = 5;
   int32 depth = 6;
+  map<string, NodeAttr> attributes = 7;
 }
 
 message TreePos {

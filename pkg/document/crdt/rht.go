@@ -147,6 +147,11 @@ func (rht *RHT) Nodes() []*RHTNode {
 	return nodes
 }
 
+// Len returns the number of elements.
+func (rht *RHT) Len() int {
+	return len(rht.nodeMapByKey)
+}
+
 // DeepCopy copies itself deeply.
 func (rht *RHT) DeepCopy() *RHT {
 	instance := NewRHT()
@@ -180,6 +185,31 @@ func (rht *RHT) Marshal() string {
 		sb.WriteString(fmt.Sprintf(`"%s":"%s"`, EscapeString(k), EscapeString(value)))
 	}
 	sb.WriteString("}")
+
+	return sb.String()
+}
+
+// ToXML returns the XML representation of this hashtable.
+func (rht *RHT) ToXML() string {
+	members := rht.Elements()
+
+	size := len(members)
+
+	// Extract and sort the keys
+	keys := make([]string, 0, size)
+	for k := range members {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	sb := strings.Builder{}
+	for idx, k := range keys {
+		if idx > 0 {
+			sb.WriteString(" ")
+		}
+		value := members[k]
+		sb.WriteString(fmt.Sprintf(`%s="%s"`, k, EscapeString(value)))
+	}
 
 	return sb.String()
 }

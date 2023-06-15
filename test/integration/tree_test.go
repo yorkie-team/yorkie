@@ -117,6 +117,26 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("created from JSON with attributes test", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:       "span",
+						Attributes: map[string]string{"bold": "true"},
+						Children:   []json.TreeNode{{Type: "text", Value: "hello"}},
+					}},
+				}},
+			})
+			assert.Equal(t, `<doc><p><span bold="true">hello</span></p></doc>`, root.GetTree("t").ToXML())
+			return nil
+		})
+		assert.NoError(t, err)
+	})
+
 	t.Run("edit its content test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object) error {
@@ -219,6 +239,35 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("edit its content with attributes test", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &json.TreeNode{Type: "doc"})
+			assert.Equal(t, "<doc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(0, 0, &json.TreeNode{
+				Type:       "p",
+				Attributes: map[string]string{"bold": "true"},
+				Children:   []json.TreeNode{{Type: "text", Value: "ab"}},
+			})
+			assert.Equal(t, `<doc><p bold="true">ab</p></doc>`, root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(4, 4, &json.TreeNode{
+				Type:       "p",
+				Attributes: map[string]string{"italic": "true"},
+				Children:   []json.TreeNode{{Type: "text", Value: "cd"}},
+			})
+			assert.Equal(t, `<doc><p bold="true">ab</p><p italic="true">cd</p></doc>`, root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(2, 6, nil)
+			assert.Equal(t, `<doc><p italic="true">ad</p></doc>`, root.GetTree("t").ToXML())
+
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<doc><p italic="true">ad</p></doc>`, doc.Root().GetTree("t").ToXML())
+	})
+
 	t.Run("sync with other clients test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -242,6 +291,37 @@ func TestTree(t *testing.T) {
 
 		assert.Equal(t, "<root><p>Hello</p></root>", d1.Root().GetTree("t").ToXML())
 		assert.Equal(t, "<root><p>Hello</p></root>", d2.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("set attributes test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, d1.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
+			root.GetTree("t").Style(3, 4, map[string]string{"bold": "true"})
+			return nil
+		}))
+
+		assert.NoError(t, c1.Sync(ctx))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.Equal(t, `<root><p bold="true">ab</p><p italic="true">cd</p></root>`, d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, `<root><p bold="true">ab</p><p italic="true">cd</p></root>`, d2.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("insert inline content to the same position(left) concurrently test", func(t *testing.T) {
