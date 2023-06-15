@@ -283,7 +283,7 @@ func TestDocKey(t testing.TB) key.Key {
 
 // TestDoc returns a new instance of document for testing.
 func TestDoc(k key.Key) *document.Document {
-	return document.New(k, time.InitialActorID.String(), map[string]string{})
+	return document.New(k, time.InitialActorID.String())
 }
 
 // TestSlugName returns a new instance of slug name for testing.

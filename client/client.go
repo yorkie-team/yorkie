@@ -265,8 +265,8 @@ func (c *Client) Attach(
 		return nil, ErrClientNotActivated
 	}
 
-	doc := document.New(docKey, c.id.String(), initialPresence)
-	doc.SetActor(c.id)
+	doc := document.New(docKey, c.id.String())
+	doc.InitPresence(initialPresence)
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
@@ -418,9 +418,22 @@ func (c *Client) Watch(
 	handleResponse := func(pbResp *api.WatchDocumentResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentResponse_Initialization_:
+			watchedPeerMap := map[string]bool{}
+			for _, peer := range resp.Initialization.Peers {
+				clientID, err := time.ActorIDFromBytes(peer)
+				if err != nil {
+					return nil, err
+				}
+				watchedPeerMap[clientID.String()] = true
+			}
+			doc.SetWatchedPeerMap(watchedPeerMap)
 			return nil, nil
 		case *api.WatchDocumentResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
+			if err != nil {
+				return nil, err
+			}
+			clientID, err := time.ActorIDFromBytes(resp.Event.Publisher)
 			if err != nil {
 				return nil, err
 			}
@@ -431,17 +444,25 @@ func (c *Client) Watch(
 					Type: DocumentsChanged,
 					Key:  doc.Key(),
 				}, nil
-			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent:
-				clientID, err := time.ActorIDFromBytes(resp.Event.Publisher)
-				if err != nil {
-					return nil, err
+			case types.DocumentsWatchedEvent:
+				presenceInfo, _ := doc.PresenceInfo(clientID.String())
+				if presenceInfo != nil {
+					attachment.doc.AddWatchedPeerMap(clientID.String(), true)
+					doc.Watch() <- document.PeerChangedEvent{
+						Type: document.WatchedEvent,
+						Publisher: map[string]presence.Presence{
+							clientID.String(): doc.PeerPresence(clientID.String()),
+						},
+					}
+				} else {
+					doc.AddWatchedPeerMap(clientID.String(), false)
+
 				}
-				peerEventType := document.WatchedEvent
-				if eventType == types.DocumentsUnwatchedEvent {
-					peerEventType = document.UnwatchedEvent
-				}
+				return nil, nil
+			case types.DocumentsUnwatchedEvent:
+				doc.RemoveWatchedPeerMap(clientID.String())
 				doc.Watch() <- document.PeerChangedEvent{
-					Type: document.PeerChangedEventType(peerEventType),
+					Type: document.UnwatchedEvent,
 					Publisher: map[string]presence.Presence{
 						clientID.String(): doc.PeerPresence(clientID.String()),
 					},

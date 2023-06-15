@@ -63,7 +63,8 @@ func TestHistory(t *testing.T) {
 
 		changes, err := adminCli.ListChangeSummaries(ctx, "default", d1.Key(), 0, 0, true)
 		assert.NoError(t, err)
-		assert.Len(t, changes, 3)
+		// NOTE(chacha912): When attaching, an change is made to set the initial presence.
+		assert.Len(t, changes, 4)
 
 		assert.Equal(t, "create todos", changes[2].Message)
 		assert.Equal(t, "buy coffee", changes[1].Message)

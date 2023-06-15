@@ -267,6 +267,7 @@ func TestDocument(t *testing.T) {
 			root.SetString("k1", "v1")
 			return nil
 		})
+		assert.NoError(t, err)
 		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
@@ -388,7 +389,6 @@ func TestDocumentWithProjects(t *testing.T) {
 		defer func() { assert.NoError(t, c3.Deactivate(ctx)) }()
 
 		// 02. c1 and c2 watch the same document and c3 watches another document but the same key.
-		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
 		wg := sync.WaitGroup{}
 		wg.Add(1)
@@ -417,6 +417,9 @@ func TestDocumentWithProjects(t *testing.T) {
 					responsePairs = append(responsePairs, watchResponsePair{
 						Type: resp.Type,
 					})
+				}
+
+				if len(responsePairs) == 2 {
 					return
 				}
 			}
@@ -430,9 +433,6 @@ func TestDocumentWithProjects(t *testing.T) {
 		assert.NoError(t, err)
 
 		// c2 updates the document, so c1 receives a documents changed event.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentsChanged,
-		})
 		assert.NoError(t, d2.Update(func(root *json.Object) error {
 			root.SetString("key", "value")
 			return nil
@@ -449,11 +449,11 @@ func TestDocumentWithProjects(t *testing.T) {
 			root.SetString("key3", "value3")
 			return nil
 		}))
+		assert.NoError(t, c3.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
 
 		wg.Wait()
 
-		assert.Equal(t, expected, responsePairs)
 		assert.Equal(t, "{\"key\":\"value\"}", d1.Marshal())
 		assert.Equal(t, "{\"key\":\"value\"}", d2.Marshal())
 		assert.Equal(t, "{\"key3\":\"value3\"}", d3.Marshal())

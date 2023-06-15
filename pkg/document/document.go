@@ -45,10 +45,15 @@ type Document struct {
 }
 
 // New creates a new instance of Document.
-func New(docKey key.Key, clientID string, initialPresence map[string]string) *Document {
+func New(docKey key.Key, clientID string) *Document {
 	return &Document{
-		doc: NewInternalDocument(docKey, clientID, initialPresence),
+		doc: NewInternalDocument(docKey, clientID),
 	}
+}
+
+// InitPresence initializes the presence of the client who created this document.
+func (d *Document) InitPresence(initialPresence presence.Presence) {
+	d.doc.InitPresence(initialPresence)
 }
 
 // Update executes the given updater to update this document.
@@ -107,14 +112,17 @@ func (d *Document) Update(
 }
 
 // UpdatePresence updates the presence of the client who created this document.
-func (d *Document) UpdatePresence(k, v string) {
-	presenceInfo := d.doc.PresenceInfo(d.doc.myClientID)
+func (d *Document) UpdatePresence(k, v string) error {
+	presenceInfo, err := d.doc.PresenceInfo(d.doc.myClientID)
+	if err != nil {
+		return err
+	}
 	presenceInfo.Clock++
 	presenceInfo.Presence[k] = v
 
 	if d.doc.changeContext != nil {
 		d.doc.changeContext.SetPresenceInfo(presenceInfo.DeepCopy())
-		return
+		return nil
 	}
 
 	d.doc.changeContext = change.NewContext(
@@ -126,6 +134,8 @@ func (d *Document) UpdatePresence(k, v string) {
 	c := d.doc.changeContext.ToChange()
 	d.doc.localChanges = append(d.doc.localChanges, c)
 	d.doc.changeID = d.doc.changeContext.ID()
+	d.doc.changeContext = nil
+	return nil
 }
 
 // Watch subscribes to PeerChangedEvent on this document.
@@ -242,13 +252,28 @@ func (d *Document) SetPresenceInfo(clientID string, info presence.Info) {
 }
 
 // PresenceInfo returns the presence information of the given client.
-func (d *Document) PresenceInfo(clientID string) presence.Info {
+func (d *Document) PresenceInfo(clientID string) (*presence.Info, error) {
 	return d.doc.PresenceInfo(clientID)
 }
 
 // RemovePresenceInfo removes the presence information of the given client.
 func (d *Document) RemovePresenceInfo(clientID string) {
 	d.doc.RemovePresenceInfo(clientID)
+}
+
+// SetWatchedPeerMap sets the watched peer map.
+func (d *Document) SetWatchedPeerMap(peerMap map[string]bool) {
+	d.doc.SetWatchedPeerMap(peerMap)
+}
+
+// AddWatchedPeerMap adds the peer to the watched peer map.
+func (d *Document) AddWatchedPeerMap(clientID string, hasPresence bool) {
+	d.doc.AddWatchedPeerMap(clientID, hasPresence)
+}
+
+// RemoveWatchedPeerMap removes the peer from the watched peer map.
+func (d *Document) RemoveWatchedPeerMap(clientID string) {
+	d.doc.RemoveWatchedPeerMap(clientID)
 }
 
 // Presence returns the presence of the client who created this document.
