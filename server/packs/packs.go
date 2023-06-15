@@ -191,6 +191,7 @@ func BuildDocumentForServerSeq(
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
 		snapshotInfo.Snapshot,
+		snapshotInfo.PresenceMap,
 	)
 	if err != nil {
 		return nil, err
@@ -214,6 +215,7 @@ func BuildDocumentForServerSeq(
 		change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changes,
 		nil,
+		"",
 	)); err != nil {
 		return nil, err
 	}

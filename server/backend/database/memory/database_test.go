@@ -294,14 +294,14 @@ func TestDB(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, int64(0), snapshot.ServerSeq)
 
-		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
+		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil, "")
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), snapshot.ServerSeq)
 
-		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
+		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil, "")
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)

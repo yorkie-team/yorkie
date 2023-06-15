@@ -337,6 +337,7 @@ func (c *Client) ListChangeSummaries(
 		seq,
 		snapshotMeta.Lamport,
 		snapshotMeta.Snapshot,
+		"",
 	)
 
 	if err != nil {

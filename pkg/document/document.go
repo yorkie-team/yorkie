@@ -151,6 +151,9 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		if err := d.doc.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
 			return err
 		}
+		if err := d.doc.applySnapshotPresence(pack.SnapshotPresence); err != nil {
+			return err
+		}
 	} else {
 		if err := d.ensureClone(); err != nil {
 			return err

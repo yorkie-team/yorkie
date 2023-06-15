@@ -35,6 +35,10 @@ type Pack struct {
 	// Snapshot is a byte array that encode the document.
 	Snapshot []byte
 
+	// SnapshotPresence a string that encodes the presenceMap,
+	// representing the presence information of peers.
+	SnapshotPresence string
+
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
 	MinSyncedTicket *time.Ticket
@@ -49,12 +53,14 @@ func NewPack(
 	cp Checkpoint,
 	changes []*Change,
 	snapshot []byte,
+	snapshotPresence string,
 ) *Pack {
 	return &Pack{
-		DocumentKey: key,
-		Checkpoint:  cp,
-		Changes:     changes,
-		Snapshot:    snapshot,
+		DocumentKey:      key,
+		Checkpoint:       cp,
+		Changes:          changes,
+		Snapshot:         snapshot,
+		SnapshotPresence: snapshotPresence,
 	}
 }
 

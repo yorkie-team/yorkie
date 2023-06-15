@@ -938,17 +938,22 @@ func (d *DB) CreateSnapshotInfo(
 	if err != nil {
 		return err
 	}
+	encodedPresenceMap, err := database.EncodePresenceMap(doc.PresenceInfoMap())
+	if err != nil {
+		return err
+	}
 
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
-		ID:        newID(),
-		DocID:     docID,
-		ServerSeq: doc.Checkpoint().ServerSeq,
-		Lamport:   doc.Lamport(),
-		Snapshot:  snapshot,
-		CreatedAt: gotime.Now(),
+		ID:          newID(),
+		DocID:       docID,
+		ServerSeq:   doc.Checkpoint().ServerSeq,
+		Lamport:     doc.Lamport(),
+		Snapshot:    snapshot,
+		PresenceMap: encodedPresenceMap,
+		CreatedAt:   gotime.Now(),
 	}); err != nil {
 		return fmt.Errorf("create snapshot: %w", err)
 	}

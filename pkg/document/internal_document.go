@@ -17,7 +17,9 @@
 package document
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -109,18 +111,34 @@ func NewInternalDocumentFromSnapshot(
 	serverSeq int64,
 	lamport int64,
 	snapshot []byte,
+	snapshotPresence string,
 ) (*InternalDocument, error) {
 	obj, err := converter.BytesToObject(snapshot)
 	if err != nil {
 		return nil, err
 	}
 
+	var presenceMap map[string]presence.Info
+	if snapshotPresence == "" {
+		presenceMap = map[string]presence.Info{}
+	} else {
+		if err := json.Unmarshal([]byte(snapshotPresence), &presenceMap); err != nil {
+			return nil, fmt.Errorf("unmarshal presence map: %w", err)
+		}
+	}
+	var presenceSyncMap = &gosync.Map{}
+	for k, v := range presenceMap {
+		presenceSyncMap.Store(k, v)
+	}
+
 	return &InternalDocument{
-		key:        k,
-		status:     StatusDetached,
-		root:       crdt.NewRoot(obj),
-		checkpoint: change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:   change.InitialID.SyncLamport(lamport),
+		key:             k,
+		status:          StatusDetached,
+		root:            crdt.NewRoot(obj),
+		checkpoint:      change.InitialCheckpoint.NextServerSeq(serverSeq),
+		changeID:        change.InitialID.SyncLamport(lamport),
+		peerPresenceMap: presenceSyncMap,
+		watchedPeerMap:  &gosync.Map{},
 	}, nil
 }
 
@@ -170,6 +188,9 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
 			return err
 		}
+		if err := d.applySnapshotPresence(pack.SnapshotPresence); err != nil {
+			return err
+		}
 	} else {
 		if err := d.ApplyChanges(pack.Changes...); err != nil {
 			return err
@@ -215,7 +236,7 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 	changes := d.localChanges
 
 	cp := d.checkpoint.IncreaseClientSeq(uint32(len(changes)))
-	return change.NewPack(d.key, cp, changes, nil)
+	return change.NewPack(d.key, cp, changes, nil, "")
 }
 
 // SetActor sets actor into this document. This is also applied in the local
@@ -278,8 +299,38 @@ func (d *InternalDocument) RemovePresenceInfo(clientID string) {
 	d.peerPresenceMap.Delete(clientID)
 }
 
+// PresenceInfoMap converts the peerPresenceMap from gosync.Map to a map format.
+func (d *InternalDocument) PresenceInfoMap() map[string]presence.Info {
+	presenceMap := map[string]presence.Info{}
+	d.peerPresenceMap.Range(func(key, value interface{}) bool {
+		clientID := key.(string)
+		if presenceInfo, ok := value.(presence.Info); ok {
+			presenceMap[clientID] = presenceInfo
+		}
+		return true
+	})
+	return presenceMap
+}
+
+// SetPresenceInfoMap sets the peerPresenceMap.
+func (d *InternalDocument) SetPresenceInfoMap(peerMap map[string]presence.Info) {
+	if d.peerPresenceMap == nil {
+		d.peerPresenceMap = &gosync.Map{}
+	}
+	d.peerPresenceMap.Range(func(key, value interface{}) bool {
+		d.peerPresenceMap.Delete(key)
+		return true
+	})
+	for peer := range peerMap {
+		d.peerPresenceMap.Store(peer, true)
+	}
+}
+
 // SetWatchedPeerMap sets the watched peer map.
 func (d *InternalDocument) SetWatchedPeerMap(peerMap map[string]bool) {
+	if d.watchedPeerMap == nil {
+		d.watchedPeerMap = &gosync.Map{}
+	}
 	d.watchedPeerMap.Range(func(key, value interface{}) bool {
 		d.watchedPeerMap.Delete(key)
 		return true
@@ -352,6 +403,22 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 	return d.root.Object()
 }
 
+// ApplySnapshotPresence applies the snapshot presence to the document.
+func (d *InternalDocument) applySnapshotPresence(snapshotPresence string) error {
+	if snapshotPresence == "" {
+		d.SetPresenceInfoMap(map[string]presence.Info{})
+		return nil
+	}
+
+	var presenceInfoMap map[string]presence.Info
+	if err := json.Unmarshal([]byte(snapshotPresence), &presenceInfoMap); err != nil {
+		return fmt.Errorf("unmarshal presence map: %w", err)
+	}
+	d.SetPresenceInfoMap(presenceInfoMap)
+	return nil
+}
+
+// ApplySnapshot applies the snapshot to the document.
 func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error {
 	rootObj, err := converter.BytesToObject(snapshot)
 	if err != nil {
@@ -370,9 +437,10 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 		if err := c.Execute(d.root); err != nil {
 			return err
 		}
-		if c.PresenceInfo() != nil && d.watchedPeerMap != nil {
+		if c.PresenceInfo() != nil {
 			clientID := c.ID().ActorID().String()
 
+			// TODO(chacha912): Verify where to send the PeerChangedEvent
 			peer, ok := d.watchedPeerMap.Load(clientID)
 			if !ok {
 				d.SetPresenceInfo(clientID, *c.PresenceInfo())

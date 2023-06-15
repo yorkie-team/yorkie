@@ -63,6 +63,7 @@ func storeSnapshot(
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
 		snapshotInfo.Snapshot,
+		snapshotInfo.PresenceMap,
 	)
 	if err != nil {
 		return err
@@ -73,6 +74,7 @@ func storeSnapshot(
 		change.InitialCheckpoint.NextServerSeq(docInfo.ServerSeq),
 		changes,
 		nil,
+		"",
 	)
 	pack.MinSyncedTicket = minSyncedTicket
 

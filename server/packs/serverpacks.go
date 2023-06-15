@@ -44,6 +44,10 @@ type ServerPack struct {
 	// Snapshot is a byte array that encode the document.
 	Snapshot []byte
 
+	// SnapshotPresence a string that encodes the presenceMap,
+	// representing the presence information of peers.
+	SnapshotPresence string
+
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
 	MinSyncedTicket *time.Ticket
@@ -58,12 +62,14 @@ func NewServerPack(
 	cp change.Checkpoint,
 	changeInfos []*database.ChangeInfo,
 	snapshot []byte,
+	snapshotPresence string,
 ) *ServerPack {
 	return &ServerPack{
-		DocumentKey: key,
-		Checkpoint:  cp,
-		ChangeInfos: changeInfos,
-		Snapshot:    snapshot,
+		DocumentKey:      key,
+		Checkpoint:       cp,
+		ChangeInfos:      changeInfos,
+		Snapshot:         snapshot,
+		SnapshotPresence: snapshotPresence,
 	}
 }
 
@@ -121,12 +127,13 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	}
 
 	return &api.ChangePack{
-		DocumentKey:     p.DocumentKey.String(),
-		Checkpoint:      converter.ToCheckpoint(p.Checkpoint),
-		Changes:         pbChanges,
-		Snapshot:        p.Snapshot,
-		MinSyncedTicket: converter.ToTimeTicket(p.MinSyncedTicket),
-		IsRemoved:       p.IsRemoved,
+		DocumentKey:      p.DocumentKey.String(),
+		Checkpoint:       converter.ToCheckpoint(p.Checkpoint),
+		Changes:          pbChanges,
+		Snapshot:         p.Snapshot,
+		SnapshotPresence: p.SnapshotPresence,
+		MinSyncedTicket:  converter.ToTimeTicket(p.MinSyncedTicket),
+		IsRemoved:        p.IsRemoved,
 	}, nil
 }
 

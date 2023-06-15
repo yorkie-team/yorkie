@@ -17,9 +17,12 @@
 package database
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 )
 
 // SnapshotInfo is a structure representing information of the snapshot.
@@ -39,6 +42,18 @@ type SnapshotInfo struct {
 	// Snapshot is the snapshot data.
 	Snapshot []byte `bson:"snapshot"`
 
+	// PresenceMap is the presence data.
+	PresenceMap string `bson:"presence_map"`
+
 	// CreatedAt is the time when the snapshot is created.
 	CreatedAt time.Time `bson:"created_at"`
+}
+
+// EncodePresenceMap encodes the given presenceMap into string.
+func EncodePresenceMap(presenceMap map[string]presence.Info) (string, error) {
+	jsonBytes, err := json.Marshal(presenceMap)
+	if err != nil {
+		return "", fmt.Errorf("marshal presence map to bytes: %w", err)
+	}
+	return string(jsonBytes), nil
 }

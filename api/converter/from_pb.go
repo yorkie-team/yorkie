@@ -151,12 +151,13 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 	}
 
 	return &change.Pack{
-		DocumentKey:     key.Key(pbPack.DocumentKey),
-		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
-		Changes:         changes,
-		Snapshot:        pbPack.Snapshot,
-		MinSyncedTicket: minSyncedTicket,
-		IsRemoved:       pbPack.IsRemoved,
+		DocumentKey:      key.Key(pbPack.DocumentKey),
+		Checkpoint:       fromCheckpoint(pbPack.Checkpoint),
+		Changes:          changes,
+		Snapshot:         pbPack.Snapshot,
+		SnapshotPresence: pbPack.SnapshotPresence,
+		MinSyncedTicket:  minSyncedTicket,
+		IsRemoved:        pbPack.IsRemoved,
 	}, nil
 }
 

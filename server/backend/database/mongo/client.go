@@ -1047,13 +1047,18 @@ func (c *Client) CreateSnapshotInfo(
 	if err != nil {
 		return err
 	}
+	encodedPresenceMap, err := database.EncodePresenceMap(doc.PresenceInfoMap())
+	if err != nil {
+		return err
+	}
 
 	if _, err := c.collection(colSnapshots).InsertOne(ctx, bson.M{
-		"doc_id":     encodedDocID,
-		"server_seq": doc.Checkpoint().ServerSeq,
-		"lamport":    doc.Lamport(),
-		"snapshot":   snapshot,
-		"created_at": gotime.Now(),
+		"doc_id":       encodedDocID,
+		"server_seq":   doc.Checkpoint().ServerSeq,
+		"lamport":      doc.Lamport(),
+		"snapshot":     snapshot,
+		"presence_map": encodedPresenceMap,
+		"created_at":   gotime.Now(),
 	}); err != nil {
 		logging.From(ctx).Error(err)
 		return fmt.Errorf("insert snapshot: %w", err)

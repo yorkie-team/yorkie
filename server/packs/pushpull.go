@@ -97,7 +97,7 @@ func pullPack(
 		return NewServerPack(docInfo.Key, change.Checkpoint{
 			ServerSeq: reqPack.Checkpoint.ServerSeq,
 			ClientSeq: cpAfterPush.ClientSeq,
-		}, nil, nil), nil
+		}, nil, nil, ""), nil
 	}
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
@@ -124,7 +124,7 @@ func pullPack(
 			return nil, err
 		}
 
-		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil), nil
+		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil, ""), nil
 	}
 
 	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
@@ -153,6 +153,7 @@ func pullSnapshot(
 			doc.Checkpoint().NextServerSeq(docInfo.ServerSeq),
 			reqPack.Changes,
 			nil,
+			"",
 		)); err != nil {
 			return nil, err
 		}
@@ -163,6 +164,7 @@ func pullSnapshot(
 	if err != nil {
 		return nil, err
 	}
+	snapshotPresence, err := database.EncodePresenceMap(doc.PresenceInfoMap())
 
 	logging.From(ctx).Infof(
 		"PULL: '%s' build snapshot with changes(%d~%d) from '%s', cp: %s",
@@ -173,7 +175,7 @@ func pullSnapshot(
 		cpAfterPull.String(),
 	)
 
-	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot), err
+	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot, snapshotPresence), err
 }
 
 func pullChangeInfos(
