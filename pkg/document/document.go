@@ -280,16 +280,16 @@ func (d *Document) RemoveWatchedPeerMap(clientID string) {
 }
 
 // Presence returns the presence of the client who created this document.
-func (d *Document) Presence() map[string]string {
+func (d *Document) Presence() presence.Presence {
 	return d.doc.Presence()
 }
 
 // PeerPresence returns the presence of the given client.
-func (d *Document) PeerPresence(clientID string) map[string]string {
+func (d *Document) PeerPresence(clientID string) presence.Presence {
 	return d.doc.PeerPresence(clientID)
 }
 
-// PeersMap returns the list of peers, including the client who created this document.
+// PeersMap returns the peer presence map, including the client who created this document.
 func (d *Document) PeersMap() map[string]presence.Presence {
 	return d.doc.PeersMap()
 }

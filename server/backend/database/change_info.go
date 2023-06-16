@@ -102,9 +102,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	}
 
 	var presenceInfo *presence.Info
-	if i.PresenceInfo == "" {
-		presenceInfo = nil
-	} else {
+	if i.PresenceInfo != "" {
 		if err := json.Unmarshal([]byte(i.PresenceInfo), &presenceInfo); err != nil {
 			return nil, fmt.Errorf("unmarshal presence: %w", err)
 		}

@@ -157,11 +157,11 @@ func TestPeerAwareness(t *testing.T) {
 	t.Run("initial presence test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
-		c1Presence := map[string]string{
+		c1Presence := presence.Presence{
 			"name":  "cli1",
 			"color": "red",
 		}
-		c2Presence := map[string]string{
+		c2Presence := presence.Presence{
 			"name":  "cli2",
 			"color": "green",
 		}
@@ -249,7 +249,7 @@ func TestPeerAwareness(t *testing.T) {
 
 		// 02. PeersChanged is triggered when another client updates its presence
 		d2.UpdatePresence("color", "blue")
-		c2Presence = map[string]string{
+		c2Presence = presence.Presence{
 			"name":  "cli2",
 			"color": "blue",
 		}

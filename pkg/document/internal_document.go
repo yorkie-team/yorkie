@@ -63,10 +63,10 @@ type PeerChangedEvent struct {
 type PeerChangedEventType string
 
 const (
-	// WatchedEvent is an event that occurs when documents are watched by other clients.
+	// WatchedEvent is an event that occurs when document is watched by other clients.
 	WatchedEvent PeerChangedEventType = "watched"
 
-	// UnwatchedEvent is an event that occurs when documents are unwatched by other clients.
+	// UnwatchedEvent is an event that occurs when document is unwatched by other clients.
 	UnwatchedEvent PeerChangedEventType = "unwatched"
 
 	// PresenceChangedEvent is an event indicating that presence is changed.
@@ -118,15 +118,13 @@ func NewInternalDocumentFromSnapshot(
 		return nil, err
 	}
 
-	var presenceMap map[string]presence.Info
-	if snapshotPresence == "" {
-		presenceMap = map[string]presence.Info{}
-	} else {
+	presenceMap := map[string]presence.Info{}
+	if snapshotPresence != "" {
 		if err := json.Unmarshal([]byte(snapshotPresence), &presenceMap); err != nil {
 			return nil, fmt.Errorf("unmarshal presence map: %w", err)
 		}
 	}
-	var presenceSyncMap = &gosync.Map{}
+	presenceSyncMap := &gosync.Map{}
 	for k, v := range presenceMap {
 		presenceSyncMap.Store(k, v)
 	}
@@ -376,7 +374,7 @@ func (d *InternalDocument) PeerPresence(clientID string) presence.Presence {
 	return peerPresence
 }
 
-// PeersMap returns the list of peers, including the client who created this document.
+// PeersMap returns the peer presence map, including the client who created this document.
 func (d *InternalDocument) PeersMap() map[string]presence.Presence {
 	peers := map[string]presence.Presence{}
 	d.peerPresenceMap.Range(func(key, value interface{}) bool {

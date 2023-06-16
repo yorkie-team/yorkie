@@ -29,7 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-// subscriptions is a map of subscriptions based on clientID.
+// subscriptions is a map of subscriptions.
 type subscriptions struct {
 	internalMap map[string]*sync.Subscription
 }
@@ -41,8 +41,8 @@ func newSubscriptions() *subscriptions {
 }
 
 // Add adds the given subscription.
-func (s *subscriptions) Add(clientID string, sub *sync.Subscription) {
-	s.internalMap[clientID] = sub
+func (s *subscriptions) Add(sub *sync.Subscription) {
+	s.internalMap[sub.ID()] = sub
 }
 
 // Map returns the internal map of these subscriptions.
@@ -103,7 +103,7 @@ func (m *PubSub) Subscribe(
 	if _, ok := m.subscriptionsMapByDocID[documentID]; !ok {
 		m.subscriptionsMapByDocID[documentID] = newSubscriptions()
 	}
-	m.subscriptionsMapByDocID[documentID].Add(sub.ID(), sub)
+	m.subscriptionsMapByDocID[documentID].Add(sub)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
