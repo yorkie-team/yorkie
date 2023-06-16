@@ -63,13 +63,14 @@ type PeerChangedEvent struct {
 type PeerChangedEventType string
 
 const (
-	// WatchedEvent is an event that occurs when document is watched by other clients.
+	// WatchedEvent means that the peer has established a connection with the server,
+	// enabling real-time synchronization.
 	WatchedEvent PeerChangedEventType = "watched"
 
-	// UnwatchedEvent is an event that occurs when document is unwatched by other clients.
+	// UnwatchedEvent means that the peer connection has been disconnected.
 	UnwatchedEvent PeerChangedEventType = "unwatched"
 
-	// PresenceChangedEvent is an event indicating that presence is changed.
+	// PresenceChangedEvent means that the presences of the peer has updated.
 	PresenceChangedEvent PeerChangedEventType = "presence-changed"
 )
 

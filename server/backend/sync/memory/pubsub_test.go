@@ -39,7 +39,7 @@ func TestPubSub(t *testing.T) {
 		pubSub := memory.NewPubSub()
 		id := types.ID(t.Name() + "id")
 		docEvent := sync.DocEvent{
-			Type:       types.DocumentsWatchedEvent,
+			Type:       types.DocumentWatchedEvent,
 			Publisher:  idB,
 			DocumentID: id,
 		}

@@ -108,7 +108,7 @@ type WatchResponseType string
 
 // The values below are types of WatchResponseType.
 const (
-	DocumentsChanged WatchResponseType = "documents-changed"
+	DocumentChanged WatchResponseType = "document-changed"
 )
 
 // WatchResponse is a structure representing response of Watch.
@@ -439,12 +439,12 @@ func (c *Client) Watch(
 			}
 
 			switch eventType {
-			case types.DocumentsChangedEvent:
+			case types.DocumentChangedEvent:
 				return &WatchResponse{
-					Type: DocumentsChanged,
+					Type: DocumentChanged,
 					Key:  doc.Key(),
 				}, nil
-			case types.DocumentsWatchedEvent:
+			case types.DocumentWatchedEvent:
 				presenceInfo, _ := doc.PresenceInfo(clientID.String())
 				if presenceInfo != nil {
 					attachment.doc.AddWatchedPeerMap(clientID.String(), true)
@@ -459,7 +459,7 @@ func (c *Client) Watch(
 
 				}
 				return nil, nil
-			case types.DocumentsUnwatchedEvent:
+			case types.DocumentUnwatchedEvent:
 				doc.RemoveWatchedPeerMap(clientID.String())
 				doc.Watch() <- document.PeerChangedEvent{
 					Type: document.UnwatchedEvent,

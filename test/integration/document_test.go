@@ -122,7 +122,7 @@ func TestDocument(t *testing.T) {
 				}
 				assert.NoError(t, resp.Err)
 
-				if resp.Type == client.DocumentsChanged {
+				if resp.Type == client.DocumentChanged {
 					err := c1.Sync(ctx, client.WithDocKey(resp.Key))
 					assert.NoError(t, err)
 					return
@@ -411,7 +411,7 @@ func TestDocumentWithProjects(t *testing.T) {
 				}
 				assert.NoError(t, resp.Err)
 
-				if resp.Type == client.DocumentsChanged {
+				if resp.Type == client.DocumentChanged {
 					err := c1.Sync(ctx, client.WithDocKey(resp.Key))
 					assert.NoError(t, err)
 					responsePairs = append(responsePairs, watchResponsePair{

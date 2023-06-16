@@ -148,7 +148,7 @@ func TestPeerAwareness(t *testing.T) {
 		assert.Equal(t, expected, peersChangedEvents)
 		assert.Equal(t, []watchResponsePair{
 			{
-				Type:   client.DocumentsChanged,
+				Type:   client.DocumentChanged,
 				DocKey: docKey,
 			},
 		}, responsePairs)
@@ -281,7 +281,7 @@ func TestPeerAwareness(t *testing.T) {
 		assert.Equal(t, expected, peersChangedEvents)
 		assert.Equal(t, []watchResponsePair{
 			{
-				Type:   client.DocumentsChanged,
+				Type:   client.DocumentChanged,
 				DocKey: docKey,
 			},
 		}, responsePairs)
@@ -325,7 +325,7 @@ func TestPeerAwareness(t *testing.T) {
 						DocKey: wr.Key,
 					})
 
-					if wr.Type == client.DocumentsChanged {
+					if wr.Type == client.DocumentChanged {
 						err := c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t)))
 						assert.NoError(t, err)
 					}
