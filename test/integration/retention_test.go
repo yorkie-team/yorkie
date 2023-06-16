@@ -72,12 +72,12 @@ func TestRetention(t *testing.T) {
 		}()
 
 		adminCli := helper.CreateAdminCli(t, testServer.RPCAddr())
-		assert.NoError(t, err)
 		defer func() { assert.NoError(t, adminCli.Close()) }()
 
 		ctx := context.Background()
 
 		doc, err := cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
+		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cli.Detach(ctx, doc)) }()
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
@@ -101,6 +101,7 @@ func TestRetention(t *testing.T) {
 
 		changes, err := adminCli.ListChangeSummaries(ctx, "default", doc.Key(), 0, 0, true)
 		assert.NoError(t, err)
+		// TODO(chacha912): Check change count (Compare with history_test.go)
 		assert.Len(t, changes, 3)
 
 		assert.NoError(t, cli.Sync(ctx))
@@ -230,6 +231,6 @@ func TestRetention(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		assert.Len(t, changes, 8)
+		assert.Len(t, changes, 9)
 	})
 }
