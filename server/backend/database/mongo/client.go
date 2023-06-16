@@ -569,16 +569,16 @@ func (c *Client) FindClientInfoByID(ctx context.Context, projectID, clientID typ
 func (c *Client) UpdateClientInfoAfterPushPull(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
-	docInfo *database.DocInfo,
+	docID types.ID,
 ) error {
-	clientDocInfo := clientInfo.FindDocumentInfo(docInfo.ID)
-	attached, err := clientInfo.IsAttached(docInfo.ID)
+	clientDocInfo := clientInfo.FindClientDocInfo(docID)
+	isAttached, err := clientInfo.IsAttached(docID)
 	if err != nil {
 		return err
 	}
 
 	var updater bson.M
-	if attached {
+	if isAttached {
 		updater = bson.M{
 			"$max": bson.M{
 				"documents.$.server_seq": clientDocInfo.ServerSeq,
@@ -617,14 +617,15 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	if err := result.Decode(&targetClientInfo); err != nil {
 		return fmt.Errorf("decode client info: %w", err)
 	}
-	if targetClientInfo.FindDocumentInfo(docInfo.ID) == nil {
+	targetClientDocInfo := targetClientInfo.FindClientDocInfo(docID)
+	if targetClientDocInfo == nil {
 		// if the clientInfo does not have the document, insert it
 		_, err = c.collection(colClients).UpdateOne(ctx, bson.M{
 			"key": clientInfo.Key,
 		}, bson.M{
 			"$push": bson.M{
 				"documents": bson.M{
-					"doc_id":     docInfo.ID,
+					"doc_id":     docID,
 					"server_seq": 0,
 					"client_seq": 0,
 					"status":     clientDocInfo.Status,
@@ -637,8 +638,13 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	} else {
 		// if the clientInfo has the document, update it
 		_, err = c.collection(colClients).UpdateOne(ctx, bson.M{
-			"documents.doc_id": docInfo.ID,
-			"key":              clientInfo.Key,
+			"key": clientInfo.Key,
+			//"documents.doc_id": docInfo.ID,
+			"documents": bson.M{
+				"$elemMatch": bson.M{
+					"doc_id": docID,
+				},
+			},
 		}, updater)
 	}
 	if err != nil {

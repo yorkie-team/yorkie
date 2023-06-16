@@ -196,7 +196,7 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		assert.Nil(t, clientInfo.FindDocumentInfo(dummyDocID))
+		assert.Nil(t, clientInfo.FindClientDocInfo(dummyDocID))
 
 		err := clientInfo.AttachDocument(dummyDocID)
 		assert.NoError(t, err)
@@ -204,8 +204,8 @@ func TestClientInfo(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, isAttached)
 
-		assert.Equal(t, clientInfo.FindDocumentInfo(dummyDocID).DocID, dummyDocID)
+		assert.Equal(t, clientInfo.FindClientDocInfo(dummyDocID).DocID, dummyDocID)
 
-		assert.Nil(t, clientInfo.FindDocumentInfo(dummyDocIDNotAttached))
+		assert.Nil(t, clientInfo.FindClientDocInfo(dummyDocIDNotAttached))
 	})
 }

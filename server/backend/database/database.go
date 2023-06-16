@@ -129,7 +129,7 @@ type Database interface {
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.
-	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
+	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docID types.ID) error
 
 	// FindDeactivateCandidates finds the housekeeping candidates.
 	FindDeactivateCandidates(

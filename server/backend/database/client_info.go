@@ -111,20 +111,20 @@ func (i *ClientInfo) AttachDocument(docID types.ID) error {
 		i.Documents = []*ClientDocInfo{}
 	}
 
-	documentInfo := i.FindDocumentInfo(docID)
-	if documentInfo != nil && documentInfo.Status == DocumentAttached {
+	clientDocInfo := i.FindClientDocInfo(docID)
+	if clientDocInfo != nil && clientDocInfo.Status == DocumentAttached {
 		return fmt.Errorf("client(%s) attaches document(%s): %w", i.ID.String(), docID.String(), ErrDocumentAlreadyAttached)
 	}
 
-	if documentInfo == nil {
-		i.SetDocumentInfo(&ClientDocInfo{
+	if clientDocInfo == nil {
+		i.SetClientDocInfo(&ClientDocInfo{
 			DocID:     docID,
 			Status:    DocumentAttached,
 			ServerSeq: 0,
 			ClientSeq: 0,
 		})
 	} else {
-		documentInfo.Status = DocumentAttached
+		clientDocInfo.Status = DocumentAttached
 	}
 	i.UpdatedAt = time.Now()
 
@@ -137,7 +137,7 @@ func (i *ClientInfo) DetachDocument(docID types.ID) error {
 		return fmt.Errorf("client(%s) detaches document(%s): %w", i.ID.String(), docID.String(), err)
 	}
 
-	i.SetDocumentInfo(&ClientDocInfo{
+	i.SetClientDocInfo(&ClientDocInfo{
 		DocID:     docID,
 		Status:    DocumentDetached,
 		ServerSeq: 0,
@@ -154,7 +154,7 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 		return fmt.Errorf("client(%s) removes document(%s): %w", i.ID.String(), docID.String(), err)
 	}
 
-	i.SetDocumentInfo(&ClientDocInfo{
+	i.SetClientDocInfo(&ClientDocInfo{
 		DocID:     docID,
 		Status:    DocumentRemoved,
 		ServerSeq: 0,
@@ -167,22 +167,22 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 
 // IsAttached returns whether the given document is attached to this client.
 func (i *ClientInfo) IsAttached(docID types.ID) (bool, error) {
-	documentInfo := i.FindDocumentInfo(docID)
-	if documentInfo == nil {
+	clientDocInfo := i.FindClientDocInfo(docID)
+	if clientDocInfo == nil {
 		return false, fmt.Errorf("check document(%s) is attached: %w", docID.String(), ErrDocumentNeverAttached)
 	}
 
-	return documentInfo.Status == DocumentAttached, nil
+	return clientDocInfo.Status == DocumentAttached, nil
 }
 
 // Checkpoint returns the checkpoint of the given document.
 func (i *ClientInfo) Checkpoint(docID types.ID) change.Checkpoint {
-	documentInfo := i.FindDocumentInfo(docID)
-	if documentInfo == nil {
+	clientDocInfo := i.FindClientDocInfo(docID)
+	if clientDocInfo == nil {
 		return change.InitialCheckpoint
 	}
 
-	return change.NewCheckpoint(documentInfo.ServerSeq, documentInfo.ClientSeq)
+	return change.NewCheckpoint(clientDocInfo.ServerSeq, clientDocInfo.ClientSeq)
 }
 
 // UpdateCheckpoint updates the checkpoint of the given document.
@@ -190,13 +190,13 @@ func (i *ClientInfo) UpdateCheckpoint(
 	docID types.ID,
 	cp change.Checkpoint,
 ) error {
-	documentInfo := i.FindDocumentInfo(docID)
-	if documentInfo == nil {
+	clientDocInfo := i.FindClientDocInfo(docID)
+	if clientDocInfo == nil {
 		return fmt.Errorf("update checkpoint in document(%s): %w", docID.String(), ErrDocumentNeverAttached)
 	}
 
-	documentInfo.ServerSeq = cp.ServerSeq
-	documentInfo.ClientSeq = cp.ClientSeq
+	clientDocInfo.ServerSeq = cp.ServerSeq
+	clientDocInfo.ClientSeq = cp.ClientSeq
 	i.UpdatedAt = time.Now()
 
 	return nil
@@ -212,8 +212,8 @@ func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 		)
 	}
 
-	documentInfo := i.FindDocumentInfo(docID)
-	if documentInfo == nil || documentInfo.Status != DocumentAttached {
+	clientDocInfo := i.FindClientDocInfo(docID)
+	if clientDocInfo == nil || clientDocInfo.Status != DocumentAttached {
 		return fmt.Errorf("ensure attached document(%s) in client(%s): %w",
 			docID.String(),
 			i.ID.String(),
@@ -230,9 +230,9 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 		return nil
 	}
 
-	var documents []*ClientDocInfo
+	var clientDocInfos []*ClientDocInfo
 	for _, v := range i.Documents {
-		documents = append(documents, &ClientDocInfo{
+		clientDocInfos = append(clientDocInfos, &ClientDocInfo{
 			DocID:     v.DocID,
 			Status:    v.Status,
 			ServerSeq: v.ServerSeq,
@@ -245,14 +245,14 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 		ProjectID: i.ProjectID,
 		Key:       i.Key,
 		Status:    i.Status,
-		Documents: documents,
+		Documents: clientDocInfos,
 		CreatedAt: i.CreatedAt,
 		UpdatedAt: i.UpdatedAt,
 	}
 }
 
-// FindDocumentInfo finds the document info by the given docID.
-func (i *ClientInfo) FindDocumentInfo(docID types.ID) *ClientDocInfo {
+// FindClientDocInfo finds the document info by the given docID.
+func (i *ClientInfo) FindClientDocInfo(docID types.ID) *ClientDocInfo {
 	if len(i.Documents) == 0 {
 		return nil
 	}
@@ -266,8 +266,8 @@ func (i *ClientInfo) FindDocumentInfo(docID types.ID) *ClientDocInfo {
 	return nil
 }
 
-// SetDocumentInfo sets the document info by the given docID.
-func (i *ClientInfo) SetDocumentInfo(docInfo *ClientDocInfo) {
+// SetClientDocInfo sets the document info by the given docID.
+func (i *ClientInfo) SetClientDocInfo(docInfo *ClientDocInfo) {
 	for idx, v := range i.Documents {
 		if v.DocID == docInfo.DocID {
 			i.Documents[idx] = docInfo

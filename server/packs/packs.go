@@ -100,7 +100,7 @@ func PushPull(
 		}
 	}
 
-	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
+	if err := be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID); err != nil {
 		return nil, err
 	}
 

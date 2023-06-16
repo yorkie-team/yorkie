@@ -499,10 +499,10 @@ func (d *DB) FindClientInfoByID(ctx context.Context, projectID, clientID types.I
 func (d *DB) UpdateClientInfoAfterPushPull(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
-	docInfo *database.DocInfo,
+	docID types.ID,
 ) error {
-	clientDocInfo := clientInfo.FindDocumentInfo(docInfo.ID)
-	attached, err := clientInfo.IsAttached(docInfo.ID)
+	clientDocInfo := clientInfo.FindClientDocInfo(docID)
+	isAttached, err := clientInfo.IsAttached(docID)
 	if err != nil {
 		return err
 	}
@@ -519,38 +519,44 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	}
 
 	loaded := raw.(*database.ClientInfo).DeepCopy()
+	targetClientDocInfo := loaded.FindClientDocInfo(docID)
 
-	if !attached {
-		loaded.SetDocumentInfo(&database.ClientDocInfo{
-			DocID:  docInfo.ID,
-			Status: clientDocInfo.Status,
-		})
-		loaded.UpdatedAt = gotime.Now()
-	} else {
-		if loaded.FindDocumentInfo(docInfo.ID) == nil {
-			loaded.SetDocumentInfo(&database.ClientDocInfo{
-				DocID: docInfo.ID,
-			})
-		}
-
-		loadedClientDocInfo := loaded.FindDocumentInfo(docInfo.ID)
-		serverSeq := loadedClientDocInfo.ServerSeq
-		if clientDocInfo.ServerSeq > loadedClientDocInfo.ServerSeq {
-			serverSeq = clientDocInfo.ServerSeq
-		}
-		clientSeq := loadedClientDocInfo.ClientSeq
-		if clientDocInfo.ClientSeq > loadedClientDocInfo.ClientSeq {
-			clientSeq = clientDocInfo.ClientSeq
-		}
-
-		loaded.SetDocumentInfo(&database.ClientDocInfo{
-			DocID:     docInfo.ID,
-			ServerSeq: serverSeq,
-			ClientSeq: clientSeq,
+	if targetClientDocInfo == nil {
+		// if the clientInfo does not have the document, insert it
+		loaded.SetClientDocInfo(&database.ClientDocInfo{
+			DocID:     docID,
+			ServerSeq: 0,
+			ClientSeq: 0,
 			Status:    clientDocInfo.Status,
 		})
-		loaded.UpdatedAt = gotime.Now()
+	} else {
+		// if the clientInfo has the document, update it
+		if isAttached {
+			serverSeq := targetClientDocInfo.ServerSeq
+			if clientDocInfo.ServerSeq > targetClientDocInfo.ServerSeq {
+				serverSeq = clientDocInfo.ServerSeq
+			}
+			clientSeq := targetClientDocInfo.ClientSeq
+			if clientDocInfo.ClientSeq > targetClientDocInfo.ClientSeq {
+				clientSeq = clientDocInfo.ClientSeq
+			}
+
+			loaded.SetClientDocInfo(&database.ClientDocInfo{
+				DocID:     docID,
+				ServerSeq: serverSeq,
+				ClientSeq: clientSeq,
+				Status:    clientDocInfo.Status,
+			})
+		} else {
+			loaded.SetClientDocInfo(&database.ClientDocInfo{
+				DocID:     docID,
+				ServerSeq: 0,
+				ClientSeq: 0,
+				Status:    clientDocInfo.Status,
+			})
+		}
 	}
+	loaded.UpdatedAt = gotime.Now()
 
 	if err := txn.Insert(tblClients, loaded); err != nil {
 		return fmt.Errorf("update client: %w", err)
@@ -791,7 +797,7 @@ func (d *DB) IsAttachedDocument(
 
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		clientInfo := raw.(*database.ClientInfo)
-		documentInfo := clientInfo.FindDocumentInfo(docID)
+		documentInfo := clientInfo.FindClientDocInfo(docID)
 		if documentInfo == nil {
 			continue
 		}
