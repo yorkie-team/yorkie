@@ -1,0 +1,41 @@
+name: Base Docker Publish
+on:
+  workflow_call:
+    inputs:
+      command:
+        description: make command to run
+        required: true
+        default: docker # or docker-latest
+        type: string
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Go 1.19.2
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.19.2
+
+      - name: Use docker buildx
+        run: docker buildx create --use
+
+      - name: Get tools dependencies
+        run: make tools
+
+      - name: Build
+        run: make build
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Image
+        env:
+          COMMAND: ${{ inputs.command }}
+        run: make $COMMAND
