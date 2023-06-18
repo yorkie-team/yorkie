@@ -6,7 +6,6 @@ on:
 jobs:
   call-base-docker-publish:
     uses: ./.github/workflows/base-docker-publish.yml
+    secrets: inherit
     with:
       command: docker-latest
-      username: ${{ secrets.DOCKER_USERNAME }}
-      password: ${{ secrets.DOCKER_PASSWORD }}
