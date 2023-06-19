@@ -571,6 +571,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	clientInfo *database.ClientInfo,
 	docID types.ID,
 ) error {
+	encodedClientID, err := encodeID(clientInfo.ID)
 	clientDocInfo := clientInfo.FindClientDocInfo(docID)
 	isAttached, err := clientInfo.IsAttached(docID)
 	if err != nil {
@@ -600,58 +601,38 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		}
 	}
 
-	// find clientInfo
-	result := c.collection(colClients).FindOne(ctx, bson.M{
-		"key": clientInfo.Key,
-	})
-	if result.Err() != nil {
-		if result.Err() == mongo.ErrNoDocuments {
-			return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
-		}
-		logging.From(ctx).Error(result.Err())
-		return fmt.Errorf("update client info: %w", result.Err())
+	// if the clientInfo has the document, update it
+	var result *mongo.SingleResult
+	if result = c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
+		"_id":              encodedClientID,
+		"documents.doc_id": docID,
+	}, updater); result.Err() == nil {
+		return nil // success update client doc info
 	}
 
-	// update clientInfo
-	targetClientInfo := database.ClientInfo{}
-	if err := result.Decode(&targetClientInfo); err != nil {
-		return fmt.Errorf("decode client info: %w", err)
-	}
-	targetClientDocInfo := targetClientInfo.FindClientDocInfo(docID)
-	if targetClientDocInfo == nil {
-		// if the clientInfo does not have the document, insert it
-		_, err = c.collection(colClients).UpdateOne(ctx, bson.M{
-			"key": clientInfo.Key,
+	// if the clientInfo does not have the document, insert it
+	if result.Err() != nil && result.Err() == mongo.ErrNoDocuments {
+		if result = c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
+			"_id": encodedClientID,
 		}, bson.M{
 			"$push": bson.M{
 				"documents": bson.M{
 					"doc_id":     docID,
-					"server_seq": 0,
-					"client_seq": 0,
+					"server_seq": clientDocInfo.ServerSeq,
+					"client_seq": clientDocInfo.ClientSeq,
 					"status":     clientDocInfo.Status,
 				},
 			},
 			"$set": bson.M{
 				"updated_at": clientInfo.UpdatedAt,
 			},
-		})
-	} else {
-		// if the clientInfo has the document, update it
-		_, err = c.collection(colClients).UpdateOne(ctx, bson.M{
-			"key": clientInfo.Key,
-			//"documents.doc_id": docInfo.ID,
-			"documents": bson.M{
-				"$elemMatch": bson.M{
-					"doc_id": docID,
-				},
-			},
-		}, updater)
-	}
-	if err != nil {
-		return fmt.Errorf("update client info: %w", err)
+		}); result.Err() == nil {
+			return nil // success update client doc info
+		}
 	}
 
-	return nil
+	logging.From(ctx).Error(result.Err())
+	return fmt.Errorf("update client info: %w", result.Err())
 }
 
 // findDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
