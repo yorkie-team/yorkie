@@ -19,10 +19,11 @@ package mongo_test
 import (
 	"context"
 	"fmt"
-	"go.mongodb.org/mongo-driver/mongo"
 	"strconv"
 	"testing"
 	"time"
+
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/yorkie-team/yorkie/api/types"
