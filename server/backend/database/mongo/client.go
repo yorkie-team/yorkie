@@ -572,6 +572,10 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	docID types.ID,
 ) error {
 	encodedClientID, err := encodeID(clientInfo.ID)
+	if err != nil {
+		return err
+	}
+
 	clientDocInfo := clientInfo.FindClientDocInfo(docID)
 	isAttached, err := clientInfo.IsAttached(docID)
 	if err != nil {

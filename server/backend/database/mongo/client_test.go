@@ -19,13 +19,12 @@ package mongo_test
 import (
 	"context"
 	"fmt"
+	"go.mongodb.org/mongo-driver/mongo"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/mongo"
-
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -343,7 +342,10 @@ func TestClient(t *testing.T) {
 			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
 
 			clientInfo.ID = "invalid clientInfo id"
-			assert.ErrorIs(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID), mongo.ErrNoDocuments)
+			assert.Error(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+
+			clientInfo.ID = dummyClientID
+			assert.Error(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID), mongo.ErrNoDocuments)
 		})
 	})
 
