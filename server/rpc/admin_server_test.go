@@ -31,7 +31,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/yorkie-team/yorkie/admin"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -496,15 +495,12 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 	t.Run("admin remove document consistence test", func(t *testing.T) {
 
-		testServer, addr := dialTestAdminServer(t)
+		testServer := dialTestAdminServer(t)
 		defer testServer.Stop()
-
-		testRemoveDocumentAdminClient, err := admin.Dial(addr)
-		assert.NoError(t, err)
 
 		// patch RemoveDocumentByAdmin method
 		var patch *monkey.Patch
-		patch, err = monkey.PatchInstanceMethodByName(
+		patch, err := monkey.PatchInstanceMethodByName(
 			reflect.TypeOf(testServer.adminServer),
 			"RemoveDocumentByAdmin",
 			func(
@@ -626,11 +622,13 @@ func TestAdminRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		// try to remove document already attached to client
-		err = testRemoveDocumentAdminClient.RemoveDocument(
+		_, err = testAdminClient.RemoveDocumentByAdmin(
 			context.Background(),
-			defaultProjectName,
-			testDocumentKey,
-			true,
+			&api.RemoveDocumentByAdminRequest{
+				ProjectName:           defaultProjectName,
+				DocumentKey:           testDocumentKey,
+				ForceRemoveIfAttached: true,
+			},
 		)
 		assert.NoError(t, err)
 

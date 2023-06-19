@@ -72,7 +72,7 @@ type testAdminServer struct {
 
 // dialTestYorkieServer creates a new instance of testYorkieServer and
 // dials it with LocalListener.
-func dialTestAdminServer(t *testing.T) (*testAdminServer, string) {
+func dialTestAdminServer(t *testing.T) *testAdminServer {
 	adminServer := &api.UnimplementedAdminServiceServer{}
 	grpcServer := grpc.NewServer()
 	api.RegisterAdminServiceServer(grpcServer, adminServer)
@@ -82,7 +82,7 @@ func dialTestAdminServer(t *testing.T) (*testAdminServer, string) {
 		adminServer: adminServer,
 	}
 
-	return testAdminServer, testAdminServer.listenAndServe(t)
+	return testAdminServer
 }
 
 func (s *testAdminServer) listenAndServe(t *testing.T) string {
