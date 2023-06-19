@@ -24,12 +24,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	yorkieMongo "github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -41,8 +42,8 @@ const (
 	clientDeactivateThreshold = "1h"
 )
 
-func setupTestWithDummyData(t *testing.T) *mongo.Client {
-	config := &mongo.Config{
+func setupTestWithDummyData(t *testing.T) *yorkieMongo.Client {
+	config := &yorkieMongo.Config{
 		ConnectionTimeout: "5s",
 		ConnectionURI:     "mongodb://localhost:27017",
 		YorkieDatabase:    helper.TestDBName(),
@@ -50,7 +51,7 @@ func setupTestWithDummyData(t *testing.T) *mongo.Client {
 	}
 	assert.NoError(t, config.Validate())
 
-	cli, err := mongo.Dial(config)
+	cli, err := yorkieMongo.Dial(config)
 	assert.NoError(t, err)
 
 	return cli
@@ -192,6 +193,158 @@ func TestClient(t *testing.T) {
 		// Check they have same key but different id
 		assert.Equal(t, docInfo1.Key, docInfo2.Key)
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
+	})
+
+	t.Run("UpdateClientInfoAfterPushPull test", func(t *testing.T) {
+		ctx := context.Background()
+
+		t.Run("document is not attached in clientInfo test", func(t *testing.T) {
+			clientInfo, err := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+			assert.NoError(t, err)
+
+			docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+			assert.NoError(t, err)
+
+			err = cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID)
+			assert.ErrorIs(t, err, database.ErrDocumentNeverAttached)
+			assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+		})
+
+		t.Run("document attach test", func(t *testing.T) {
+			clientInfo, err := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+			assert.NoError(t, err)
+
+			docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+			assert.NoError(t, err)
+
+			assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+
+			result, err := cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
+			assert.Equal(t, result.Documents[0].Status, database.DocumentAttached)
+			assert.Equal(t, result.Documents[0].ServerSeq, int64(0))
+			assert.Equal(t, result.Documents[0].ClientSeq, uint32(0))
+			assert.NoError(t, err)
+		})
+
+		t.Run("update server_seq and client_seq in clientInfo test", func(t *testing.T) {
+			clientInfo, err := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+			assert.NoError(t, err)
+
+			docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+			assert.NoError(t, err)
+
+			assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+			clientInfo.Documents[0].ServerSeq = 1
+			clientInfo.Documents[0].ClientSeq = 1
+			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+
+			result, err := cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
+			assert.Equal(t, result.Documents[0].Status, database.DocumentAttached)
+			assert.Equal(t, result.Documents[0].ServerSeq, int64(1))
+			assert.Equal(t, result.Documents[0].ClientSeq, uint32(1))
+			assert.NoError(t, err)
+
+			// update with larger seq
+			clientInfo.Documents[0].ServerSeq = 3
+			clientInfo.Documents[0].ClientSeq = 5
+			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+
+			result, err = cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
+			assert.Equal(t, result.Documents[0].Status, database.DocumentAttached)
+			assert.Equal(t, result.Documents[0].ServerSeq, int64(3))
+			assert.Equal(t, result.Documents[0].ClientSeq, uint32(5))
+			assert.NoError(t, err)
+
+			// update with smaller seq(should be ignored)
+			clientInfo.Documents[0].ServerSeq = 2
+			clientInfo.Documents[0].ClientSeq = 3
+			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+
+			result, err = cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
+			assert.Equal(t, result.Documents[0].Status, database.DocumentAttached)
+			assert.Equal(t, result.Documents[0].ServerSeq, int64(3))
+			assert.Equal(t, result.Documents[0].ClientSeq, uint32(5))
+			assert.NoError(t, err)
+
+		})
+
+		t.Run("detach document test", func(t *testing.T) {
+			clientInfo, err := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+			assert.NoError(t, err)
+
+			docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+			assert.NoError(t, err)
+
+			assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+			clientInfo.Documents[0].ServerSeq = 1
+			clientInfo.Documents[0].ClientSeq = 1
+			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+
+			result, err := cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
+			assert.Equal(t, result.Documents[0].Status, database.DocumentAttached)
+			assert.Equal(t, result.Documents[0].ServerSeq, int64(1))
+			assert.Equal(t, result.Documents[0].ClientSeq, uint32(1))
+			assert.NoError(t, err)
+
+			assert.NoError(t, clientInfo.DetachDocument(docInfo.ID))
+			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+
+			result, err = cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
+			assert.Equal(t, result.Documents[0].Status, database.DocumentDetached)
+			assert.Equal(t, result.Documents[0].ServerSeq, int64(0))
+			assert.Equal(t, result.Documents[0].ClientSeq, uint32(0))
+			assert.NoError(t, err)
+		})
+
+		t.Run("remove document test", func(t *testing.T) {
+			clientInfo, err := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+			assert.NoError(t, err)
+
+			docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+			assert.NoError(t, err)
+
+			assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+			clientInfo.Documents[0].ServerSeq = 1
+			clientInfo.Documents[0].ClientSeq = 1
+			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+
+			result, err := cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
+			assert.Equal(t, result.Documents[0].Status, database.DocumentAttached)
+			assert.Equal(t, result.Documents[0].ServerSeq, int64(1))
+			assert.Equal(t, result.Documents[0].ClientSeq, uint32(1))
+			assert.NoError(t, err)
+
+			assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
+			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+
+			result, err = cli.FindClientInfoByID(ctx, dummyProjectID, clientInfo.ID)
+			assert.Equal(t, result.Documents[0].Status, database.DocumentRemoved)
+			assert.Equal(t, result.Documents[0].ServerSeq, int64(0))
+			assert.Equal(t, result.Documents[0].ClientSeq, uint32(0))
+			assert.NoError(t, err)
+		})
+
+		t.Run("invalid clientInfo test", func(t *testing.T) {
+			clientInfo, err := cli.ActivateClient(ctx, dummyProjectID, t.Name())
+			assert.NoError(t, err)
+
+			docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, clientInfo.ID, docKey, true)
+			assert.NoError(t, err)
+
+			assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+			assert.NoError(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID))
+
+			clientInfo.ID = "invalid clientInfo id"
+			assert.ErrorIs(t, cli.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo.ID), mongo.ErrNoDocuments)
+		})
 	})
 
 	t.Run("FindDocInfosByPaging test", func(t *testing.T) {

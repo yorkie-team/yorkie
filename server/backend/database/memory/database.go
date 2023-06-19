@@ -521,15 +521,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	loaded := raw.(*database.ClientInfo).DeepCopy()
 	targetClientDocInfo := loaded.FindClientDocInfo(docID)
 
-	if targetClientDocInfo == nil {
-		// if the clientInfo does not have the document, insert it
-		loaded.SetClientDocInfo(&database.ClientDocInfo{
-			DocID:     docID,
-			ServerSeq: 0,
-			ClientSeq: 0,
-			Status:    clientDocInfo.Status,
-		})
-	} else {
+	if targetClientDocInfo != nil {
 		// if the clientInfo has the document, update it
 		if isAttached {
 			serverSeq := targetClientDocInfo.ServerSeq
@@ -550,11 +542,19 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 		} else {
 			loaded.SetClientDocInfo(&database.ClientDocInfo{
 				DocID:     docID,
-				ServerSeq: 0,
-				ClientSeq: 0,
+				ServerSeq: clientDocInfo.ServerSeq,
+				ClientSeq: clientDocInfo.ClientSeq,
 				Status:    clientDocInfo.Status,
 			})
 		}
+	} else {
+		// if the clientInfo does not have the document, insert it
+		loaded.SetClientDocInfo(&database.ClientDocInfo{
+			DocID:     docID,
+			ServerSeq: clientDocInfo.ServerSeq,
+			ClientSeq: clientDocInfo.ClientSeq,
+			Status:    clientDocInfo.Status,
+		})
 	}
 	loaded.UpdatedAt = gotime.Now()
 
