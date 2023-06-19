@@ -458,21 +458,19 @@ func (s *yorkieServer) RemoveDocument(
 	}
 
 	project := projects.From(ctx)
-	if pack.HasChanges() {
-		locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
-		if err != nil {
-			return nil, err
-		}
-
-		if err := locker.Lock(ctx); err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := locker.Unlock(ctx); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
+	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
+	if err != nil {
+		return nil, err
 	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
 
 	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, project, actorID)
 	if err != nil {
