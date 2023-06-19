@@ -14,7 +14,6 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 * Implement Tree.Style for setting attributes to nodes by @hackerwins in https://github.com/yorkie-team/yorkie/pull/549
 
 ### Changed
-* Add missing Secrets configuration by @jongwooo in https://github.com/yorkie-team/yorkie/pull/553 
 * Abstract the workflow to base-docker-publish.yml by @jongwooo in https://github.com/yorkie-team/yorkie/pull/552
 
 ## [0.4.1] - 2023-06-09
