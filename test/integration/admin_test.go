@@ -38,7 +38,7 @@ import (
 func TestAdmin(t *testing.T) {
 	ctx := context.Background()
 
-	adminCli, err := admin.Dial(defaultServer.RPCAddr())
+	adminCli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
 	assert.NoError(t, err)
 	_, err = adminCli.LogIn(ctx, "admin", "admin")
 	assert.NoError(t, err)

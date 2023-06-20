@@ -29,10 +29,13 @@ import (
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/internal/validation"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -47,8 +50,8 @@ var testStartedAt int64
 var (
 	RPCPort                  = 21101
 	RPCMaxRequestBytes       = uint64(4 * 1024 * 1024)
-	RPCMaxConnectionAge      = 4 * gotime.Second
-	RPCMaxConnectionAgeGrace = 1 * gotime.Second
+	RPCMaxConnectionAge      = 8 * gotime.Second
+	RPCMaxConnectionAgeGrace = 2 * gotime.Second
 
 	ProfilingPort = 21102
 
@@ -84,7 +87,7 @@ func TestDBName() string {
 
 // CreateAdminCli returns a new instance of admin cli for testing.
 func CreateAdminCli(t assert.TestingT, rpcAddr string) *adminClient.Client {
-	adminCli, err := adminClient.Dial(rpcAddr)
+	adminCli, err := adminClient.Dial(rpcAddr, adminClient.WithInsecure(true))
 	assert.NoError(t, err)
 
 	_, err = adminCli.LogIn(context.Background(), server.DefaultAdminUser, server.DefaultAdminPassword)
@@ -105,6 +108,99 @@ func TextChangeContext(root *crdt.Root) *change.Context {
 		"",
 		root,
 	)
+}
+
+// IssuePos is a helper function that issues a new CRDTTreePos.
+func IssuePos(change *change.Context, offset ...int) *crdt.TreePos {
+	pos := &crdt.TreePos{
+		CreatedAt: change.IssueTimeTicket(),
+		Offset:    0,
+	}
+
+	if len(offset) > 0 {
+		pos.Offset = offset[0]
+	}
+
+	return pos
+}
+
+// IssueTime is a helper function that issues a new TimeTicket
+func IssueTime(change *change.Context) *time.Ticket {
+	return change.IssueTimeTicket()
+}
+
+// ListEqual is a helper function that checks the nodes in the RGA in Tree.
+func ListEqual(t assert.TestingT, tree *crdt.Tree, expected []string) bool {
+	var nodes []*crdt.TreeNode
+	for _, node := range tree.Nodes() {
+		nodes = append(nodes, node)
+	}
+
+	var actual []string
+	for _, node := range nodes {
+		actual = append(actual, ToDiagnostic(node))
+	}
+
+	assert.Equal(t, expected, actual)
+
+	return true
+}
+
+// NodesBetweenEqual is a helper function that checks the nodes between the given
+// indexes.
+func NodesBetweenEqual(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {
+	var nodes []*crdt.TreeNode
+	tree.NodesBetween(from, to, func(node *crdt.TreeNode) {
+		nodes = append(nodes, node)
+	})
+
+	var actual []string
+	for _, node := range nodes {
+		actual = append(actual, ToDiagnostic(node))
+	}
+	assert.Equal(t, expected, actual)
+
+	return true
+}
+
+// ToDiagnostic is a helper function that converts the given node to a
+// diagnostic string.
+func ToDiagnostic(node *crdt.TreeNode) string {
+	if node.IsText() {
+		return fmt.Sprintf("%s.%s", node.Type(), node.Value)
+	}
+
+	return node.Type()
+}
+
+// BuildIndexTree builds an index tree from the given block node.
+func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
+	doc := document.New("test")
+	err := doc.Update(func(root *json.Object) error {
+		root.SetNewTree("test", node)
+
+		return nil
+	})
+	if err != nil {
+		return nil
+	}
+
+	return doc.Root().GetTree("test").IndexTree
+}
+
+// BuildTreeNode builds a crdt.TreeNode from the given tree node.
+func BuildTreeNode(node *json.TreeNode) *crdt.TreeNode {
+	doc := document.New("test")
+	err := doc.Update(func(root *json.Object) error {
+		root.SetNewTree("test", node)
+
+		return nil
+	})
+	if err != nil {
+		return nil
+	}
+
+	return doc.Root().GetTree("test").Root()
 }
 
 var portOffset = 0

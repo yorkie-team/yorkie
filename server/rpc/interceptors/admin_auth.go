@@ -28,34 +28,38 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/grpchelper"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
-// AuthInterceptor is an interceptor for authentication.
-type AuthInterceptor struct {
+// AdminAuthInterceptor is an interceptor for authentication.
+type AdminAuthInterceptor struct {
 	backend      *backend.Backend
 	tokenManager *auth.TokenManager
 }
 
-// NewAuthInterceptor creates a new instance of AuthInterceptor.
-func NewAuthInterceptor(be *backend.Backend, tokenManager *auth.TokenManager) *AuthInterceptor {
-	return &AuthInterceptor{
+// NewAdminAuthInterceptor creates a new instance of AdminAuthInterceptor.
+func NewAdminAuthInterceptor(be *backend.Backend, tokenManager *auth.TokenManager) *AdminAuthInterceptor {
+	return &AdminAuthInterceptor{
 		backend:      be,
 		tokenManager: tokenManager,
 	}
 }
 
 // Unary creates a unary server interceptor for authentication.
-func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
+func (i *AdminAuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req interface{},
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (resp interface{}, err error) {
-		if isAdminService(info.FullMethod) && isRequiredAuth(info.FullMethod) {
+		if !isAdminService(info.FullMethod) {
+			return handler(ctx, req)
+		}
+
+		if isRequiredAuth(info.FullMethod) {
 			user, err := i.authenticate(ctx, info.FullMethod)
 			if err != nil {
 				return nil, err
@@ -65,18 +69,16 @@ func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 
 		resp, err = handler(ctx, req)
 
-		if isAdminService(info.FullMethod) {
-			// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
-			data, ok := grpcmetadata.FromIncomingContext(ctx)
-			if ok {
-				sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-				i.backend.Metrics.AddUserAgentWithEmptyProject(
-					i.backend.Config.Hostname,
-					sdkType,
-					sdkVersion,
-					info.FullMethod,
-				)
-			}
+		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
+		data, ok := grpcmetadata.FromIncomingContext(ctx)
+		if ok {
+			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+			i.backend.Metrics.AddUserAgentWithEmptyProject(
+				i.backend.Config.Hostname,
+				sdkType,
+				sdkVersion,
+				info.FullMethod,
+			)
 		}
 
 		return resp, err
@@ -84,15 +86,19 @@ func (i *AuthInterceptor) Unary() grpc.UnaryServerInterceptor {
 }
 
 // Stream creates a stream server interceptor for authentication.
-func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
+func (i *AdminAuthInterceptor) Stream() grpc.StreamServerInterceptor {
 	return func(
 		srv interface{},
 		stream grpc.ServerStream,
 		info *grpc.StreamServerInfo,
 		handler grpc.StreamHandler,
 	) (err error) {
+		if !isAdminService(info.FullMethod) {
+			return handler(srv, stream)
+		}
+
 		ctx := stream.Context()
-		if isAdminService(info.FullMethod) && isRequiredAuth(info.FullMethod) {
+		if isRequiredAuth(info.FullMethod) {
 			user, err := i.authenticate(ctx, info.FullMethod)
 			if err != nil {
 				return err
@@ -105,18 +111,16 @@ func (i *AuthInterceptor) Stream() grpc.StreamServerInterceptor {
 
 		err = handler(srv, stream)
 
-		if isAdminService(info.FullMethod) {
-			// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
-			data, ok := grpcmetadata.FromIncomingContext(ctx)
-			if ok {
-				sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-				i.backend.Metrics.AddUserAgentWithEmptyProject(
-					i.backend.Config.Hostname,
-					sdkType,
-					sdkVersion,
-					info.FullMethod,
-				)
-			}
+		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
+		data, ok := grpcmetadata.FromIncomingContext(ctx)
+		if ok {
+			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+			i.backend.Metrics.AddUserAgentWithEmptyProject(
+				i.backend.Config.Hostname,
+				sdkType,
+				sdkVersion,
+				info.FullMethod,
+			)
 		}
 
 		return err
@@ -133,14 +137,10 @@ func isRequiredAuth(method string) bool {
 }
 
 // authenticate does authenticate the request.
-func (i *AuthInterceptor) authenticate(
+func (i *AdminAuthInterceptor) authenticate(
 	ctx context.Context,
 	method string,
 ) (*types.User, error) {
-	if !isRequiredAuth(method) {
-		return nil, nil
-	}
-
 	data, ok := grpcmetadata.FromIncomingContext(ctx)
 	if !ok {
 		return nil, grpcstatus.Errorf(codes.Unauthenticated, "metadata is not provided")

@@ -150,6 +150,20 @@ func (p *Array) InsertIntegerAfter(index int, v int) *Array {
 	return p
 }
 
+// Get element of the given index.
+func (p *Array) Get(idx int) crdt.Element {
+	if p.Len() <= idx {
+		return nil
+	}
+
+	element, err := p.Array.Get(idx)
+	if err != nil {
+		panic(err)
+	}
+
+	return element
+}
+
 // Delete deletes the element of the given index.
 func (p *Array) Delete(idx int) crdt.Element {
 	if p.Len() <= idx {
@@ -157,7 +171,10 @@ func (p *Array) Delete(idx int) crdt.Element {
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	deleted := p.Array.Delete(idx, ticket)
+	deleted, err := p.Array.Delete(idx, ticket)
+	if err != nil {
+		panic(err)
+	}
 	p.context.Push(operations.NewRemove(
 		p.CreatedAt(),
 		deleted.CreatedAt(),

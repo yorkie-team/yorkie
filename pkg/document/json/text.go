@@ -37,12 +37,24 @@ func NewText(ctx *change.Context, text *crdt.Text) *Text {
 	}
 }
 
+// CreateRange creates a range from the given positions.
+func (p *Text) CreateRange(from, to int) (*crdt.RGATreeSplitNodePos, *crdt.RGATreeSplitNodePos) {
+	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	if err != nil {
+		panic(err)
+	}
+	return fromPos, toPos
+}
+
 // Edit edits the given range with the given content and attributes.
 func (p *Text) Edit(from, to int, content string, attributes ...map[string]string) *Text {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
-	fromPos, toPos := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	if err != nil {
+		panic(err)
+	}
 
 	// TODO(hackerwins): We need to consider the case where the length of
 	//  attributes is greater than 1.
@@ -85,7 +97,10 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
-	fromPos, toPos := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	if err != nil {
+		panic(err)
+	}
 
 	ticket := p.context.IssueTimeTicket()
 	if err := p.Text.Style(
@@ -113,7 +128,10 @@ func (p *Text) Select(from, to int) *Text {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
-	fromPos, toPos := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	if err != nil {
+		panic(err)
+	}
 
 	ticket := p.context.IssueTimeTicket()
 	p.Text.Select(

@@ -48,7 +48,7 @@ func newHistoryCmd() *cobra.Command {
 				return err
 			}
 
-			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token))
+			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token), admin.WithInsecure(config.IsInsecure))
 			if err != nil {
 				return err
 			}

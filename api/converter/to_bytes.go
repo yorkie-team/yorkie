@@ -24,6 +24,7 @@ import (
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
 // ObjectToBytes converts the given object to byte array.
@@ -40,6 +41,16 @@ func ObjectToBytes(obj *crdt.Object) ([]byte, error) {
 	return bytes, nil
 }
 
+// TreeToBytes converts the given tree to byte array.
+func TreeToBytes(tree *crdt.Tree) ([]byte, error) {
+	pbTree := toTree(tree)
+	bytes, err := proto.Marshal(pbTree)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Tree to bytes: %w", err)
+	}
+	return bytes, nil
+}
+
 func toJSONElement(elem crdt.Element) (*api.JSONElement, error) {
 	switch elem := elem.(type) {
 	case *crdt.Object:
@@ -52,6 +63,8 @@ func toJSONElement(elem crdt.Element) (*api.JSONElement, error) {
 		return toText(elem), nil
 	case *crdt.Counter:
 		return toCounter(elem)
+	case *crdt.Tree:
+		return toTree(elem), nil
 	default:
 		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 	}
@@ -136,6 +149,17 @@ func toCounter(counter *crdt.Counter) (*api.JSONElement, error) {
 	}, nil
 }
 
+func toTree(tree *crdt.Tree) *api.JSONElement {
+	return &api.JSONElement{
+		Body: &api.JSONElement_Tree_{Tree: &api.JSONElement_Tree{
+			Nodes:     ToTreeNodes(tree.Root()),
+			CreatedAt: ToTimeTicket(tree.CreatedAt()),
+			MovedAt:   ToTimeTicket(tree.MovedAt()),
+			RemovedAt: ToTimeTicket(tree.RemovedAt()),
+		}},
+	}
+}
+
 func toRHTNodes(rhtNodes []*crdt.ElementRHTNode) ([]*api.RHTNode, error) {
 	var pbRHTNodes []*api.RHTNode
 	for _, rhtNode := range rhtNodes {
@@ -172,9 +196,9 @@ func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.Tex
 	for _, textNode := range textNodes {
 		value := textNode.Value()
 
-		attrs := make(map[string]*api.TextNodeAttr)
+		attrs := make(map[string]*api.NodeAttr)
 		for _, node := range value.Attrs().Nodes() {
-			attrs[node.Key()] = &api.TextNodeAttr{
+			attrs[node.Key()] = &api.NodeAttr{
 				Value:     node.Value(),
 				UpdatedAt: ToTimeTicket(node.UpdatedAt()),
 			}
@@ -200,5 +224,53 @@ func toTextNodeID(id *crdt.RGATreeSplitNodeID) *api.TextNodeID {
 	return &api.TextNodeID{
 		CreatedAt: ToTimeTicket(id.CreatedAt()),
 		Offset:    int32(id.Offset()),
+	}
+}
+
+// ToTreeNodes converts a TreeNode to a slice of TreeNodes in post-order traversal.
+func ToTreeNodes(treeNode *crdt.TreeNode) []*api.TreeNode {
+	var pbTreeNodes []*api.TreeNode
+	if treeNode == nil {
+		return pbTreeNodes
+	}
+
+	index.TraverseNode(treeNode.IndexTreeNode, func(node *index.Node[*crdt.TreeNode], depth int) {
+		pbTreeNodes = append(pbTreeNodes, toTreeNode(node.Value, depth))
+	})
+	return pbTreeNodes
+}
+
+func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
+	var attrs map[string]*api.NodeAttr
+	if treeNode.Attrs != nil {
+		attrs = make(map[string]*api.NodeAttr)
+		for _, node := range treeNode.Attrs.Nodes() {
+			attrs[node.Key()] = &api.NodeAttr{
+				Value:     node.Value(),
+				UpdatedAt: ToTimeTicket(node.UpdatedAt()),
+			}
+		}
+	}
+
+	pbNode := &api.TreeNode{
+		Pos:        toTreePos(treeNode.Pos),
+		Type:       treeNode.Type(),
+		Value:      treeNode.Value,
+		RemovedAt:  ToTimeTicket(treeNode.RemovedAt),
+		Depth:      int32(depth),
+		Attributes: attrs,
+	}
+
+	if treeNode.InsPrev != nil {
+		pbNode.InsPrevPos = toTreePos(treeNode.InsPrev.Pos)
+	}
+
+	return pbNode
+}
+
+func toTreePos(pos *crdt.TreePos) *api.TreePos {
+	return &api.TreePos{
+		CreatedAt: ToTimeTicket(pos.CreatedAt),
+		Offset:    int32(pos.Offset),
 	}
 }
