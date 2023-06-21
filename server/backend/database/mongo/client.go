@@ -571,8 +571,16 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
+	encodedClientID, err := encodeID(clientInfo.ID)
+	if err != nil {
+		return err
+	}
+
 	clientDocInfoKey := "documents." + docInfo.ID.String() + "."
-	clientDocInfo := clientInfo.Documents[docInfo.ID]
+	clientDocInfo, has := clientInfo.Documents[docInfo.ID]
+	if !has {
+		return fmt.Errorf("client doc info: %w", database.ErrDocumentNeverAttached)
+	}
 
 	updater := bson.M{
 		"$max": bson.M{
@@ -602,7 +610,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	}
 
 	result := c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
-		"key": clientInfo.Key,
+		"_id": encodedClientID,
 	}, updater)
 
 	if result.Err() != nil {
