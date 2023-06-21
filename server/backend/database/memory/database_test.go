@@ -506,6 +506,7 @@ func TestDB(t *testing.T) {
 		c2, err := db.ActivateClient(ctx, projectID, t.Name()+"2")
 		assert.NoError(t, err)
 		d1, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, c1.ID, helper.TestDocKey(t), true)
+		assert.NoError(t, err)
 
 		// 01. Check if document is attached without attaching
 		attached, err := db.IsDocumentAttached(ctx, projectID, d1.ID)
@@ -557,7 +558,9 @@ func TestDB(t *testing.T) {
 		c1, err := db.ActivateClient(ctx, projectID, t.Name()+"1")
 		assert.NoError(t, err)
 		d1, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, c1.ID, helper.TestDocKey(t)+"1", true)
+		assert.NoError(t, err)
 		d2, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, c1.ID, helper.TestDocKey(t)+"2", true)
+		assert.NoError(t, err)
 
 		// 01. Check if documents are attached after attaching
 		assert.NoError(t, c1.AttachDocument(d1.ID))

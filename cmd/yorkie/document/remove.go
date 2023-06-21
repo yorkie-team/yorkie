@@ -26,13 +26,18 @@ import (
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
+var (
+	flagForce bool
+)
+
 func newRemoveCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove [project name] [document key]",
-		Short: "Remove documents in the project",
+		Use:     "remove [project name] [document key]",
+		Short:   "Remove documents in the project",
+		Example: "yorkie document remove sample-project sample-document [options]",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
-				return errors.New("project name & document key")
+				return errors.New("project name and document key are required")
 			}
 			projectName := args[0]
 			documentKey := args[1]
@@ -51,11 +56,18 @@ func newRemoveCommand() *cobra.Command {
 
 			ctx := context.Background()
 
-			return cli.RemoveDocument(ctx, projectName, documentKey)
+			return cli.RemoveDocument(ctx, projectName, documentKey, flagForce)
 		},
 	}
 }
 
 func init() {
-	SubCmd.AddCommand(newRemoveCommand())
+	cmd := newRemoveCommand()
+	cmd.Flags().BoolVar(
+		&flagForce,
+		"force",
+		false,
+		"force remove document even if it is attached to clients",
+	)
+	SubCmd.AddCommand(cmd)
 }

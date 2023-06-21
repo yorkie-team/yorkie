@@ -349,6 +349,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		return nil, err
 	}
 
+	// TODO(hackerwins): Rename PushPullKey to something else like DocWriteLockKey?.
 	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, docInfo.Key))
 	if err != nil {
 		return nil, err
@@ -363,8 +364,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		}
 	}()
 
-	// TODO(emplam27): Add an option to remove the document if there are no clients attached to it.
-	if err := documents.RemoveDocument(ctx, s.backend, project, docInfo.ID); err != nil {
+	if err := documents.RemoveDocument(ctx, s.backend, project, docInfo.ID, req.Force); err != nil {
 		return nil, err
 	}
 
