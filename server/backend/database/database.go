@@ -165,6 +165,7 @@ type Database interface {
 	// UpdateDocInfoStatusToRemoved updates the document status to removed.
 	UpdateDocInfoStatusToRemoved(
 		ctx context.Context,
+		projectID types.ID,
 		docID types.ID,
 	) error
 

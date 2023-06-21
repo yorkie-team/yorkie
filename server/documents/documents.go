@@ -215,9 +215,10 @@ func FindDocInfoByKeyAndOwner(
 func RemoveDocument(
 	ctx context.Context,
 	be *backend.Backend,
+	projectID types.ID,
 	docID types.ID,
 ) error {
-	return be.DB.UpdateDocInfoStatusToRemoved(ctx, docID)
+	return be.DB.UpdateDocInfoStatusToRemoved(ctx, projectID, docID)
 }
 
 // IsAttachedDocument returns true if the document is attached to any other client.

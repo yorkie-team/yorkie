@@ -544,7 +544,7 @@ func TestAdminRPCServerBackend(t *testing.T) {
 				// Wait for other client attach document test.
 				time.Sleep(1 * time.Second)
 
-				if err := documents.RemoveDocument(ctx, be, docInfo.ID); err != nil {
+				if err := documents.RemoveDocument(ctx, be, defaultProjectID, docInfo.ID); err != nil {
 					return nil, err
 				}
 

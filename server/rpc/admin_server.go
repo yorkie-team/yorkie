@@ -372,7 +372,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		return nil, fmt.Errorf("remove document: document is attached")
 	}
 
-	if err := documents.RemoveDocument(ctx, s.backend, docInfo.ID); err != nil {
+	if err := documents.RemoveDocument(ctx, s.backend, project.ID, docInfo.ID); err != nil {
 		return nil, err
 	}
 
