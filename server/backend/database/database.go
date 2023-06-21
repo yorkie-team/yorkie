@@ -242,4 +242,7 @@ type Database interface {
 		query string,
 		pageSize int,
 	) (*types.SearchResult[*DocInfo], error)
+
+	// IsDocumentAttached returns true if the document is attached to clients.
+	IsDocumentAttached(ctx context.Context, projectID types.ID, docID types.ID) (bool, error)
 }

@@ -1332,6 +1332,30 @@ func (c *Client) UpdateSyncedSeq(
 	return nil
 }
 
+// IsDocumentAttached returns whether the given document is attached to clients.
+func (c *Client) IsDocumentAttached(
+	ctx context.Context,
+	projectID types.ID,
+	docID types.ID,
+) (bool, error) {
+	encodedProjectID, err := encodeID(projectID)
+	if err != nil {
+		return false, err
+	}
+
+	clientDocInfoKey := "documents." + docID.String() + "."
+
+	result := c.collection(colClients).FindOne(ctx, bson.M{
+		"project_id":                encodedProjectID,
+		clientDocInfoKey + "status": database.DocumentAttached,
+	})
+	if result.Err() == mongo.ErrNoDocuments {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 func (c *Client) findTicketByServerSeq(
 	ctx context.Context,
 	docID types.ID,

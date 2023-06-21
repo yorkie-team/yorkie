@@ -1220,6 +1220,37 @@ func (d *DB) FindDocInfosByQuery(
 	}, nil
 }
 
+// IsDocumentAttached returns whether the document is attached to clients.
+func (d *DB) IsDocumentAttached(
+	ctx context.Context,
+	projectID types.ID,
+	docID types.ID,
+) (bool, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	it, err := txn.Get(tblClients, "project_id", projectID.String())
+	if err != nil {
+		return false, fmt.Errorf("%w", err)
+	}
+	if it == nil {
+		return false, database.ErrClientNotFound
+	}
+
+	for raw := it.Next(); raw != nil; raw = it.Next() {
+		clientInfo := raw.(*database.ClientInfo)
+		clientDocInfo := clientInfo.Documents[docID]
+		if clientDocInfo == nil {
+			continue
+		}
+		if clientDocInfo.Status == database.DocumentAttached {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (d *DB) findTicketByServerSeq(
 	txn *memdb.Txn,
 	docID types.ID,
