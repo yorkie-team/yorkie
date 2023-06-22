@@ -460,11 +460,12 @@ func (c *Client) Watch(
 				}
 				return nil, nil
 			case types.DocumentUnwatchedEvent:
+				prevPresence := doc.PeerPresence(clientID.String())
 				doc.RemoveWatchedPeerMap(clientID.String())
 				doc.Watch() <- document.PeerChangedEvent{
 					Type: document.UnwatchedEvent,
 					Publisher: map[string]presence.Presence{
-						clientID.String(): doc.PeerPresence(clientID.String()),
+						clientID.String(): prevPresence,
 					},
 				}
 				return nil, nil
@@ -583,6 +584,7 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	if !ok {
 		return ErrDocumentNotAttached
 	}
+	doc.SetActor(c.id)
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {

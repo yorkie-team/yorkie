@@ -113,12 +113,14 @@ func (d *Document) Update(
 
 // UpdatePresence updates the presence of the client who created this document.
 func (d *Document) UpdatePresence(k, v string) error {
+	err := d.doc.UpdatePresence(k, v)
+	if err != nil {
+		return err
+	}
 	presenceInfo, err := d.doc.PresenceInfo(d.doc.myClientID)
 	if err != nil {
 		return err
 	}
-	presenceInfo.Clock++
-	presenceInfo.Presence[k] = v
 
 	if d.doc.changeContext != nil {
 		d.doc.changeContext.SetPresenceInfo(presenceInfo.DeepCopy())

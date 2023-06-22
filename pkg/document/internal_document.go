@@ -267,6 +267,22 @@ func (d *InternalDocument) IsAttached() bool {
 	return d.status == StatusAttached
 }
 
+// UpdatePresence updates the presence of the client who created this document.
+func (d *InternalDocument) UpdatePresence(k, v string) error {
+	presenceInfo, ok := d.peerPresenceMap.Load(d.myClientID)
+	if !ok {
+		return errors.New("presence info not found")
+	}
+	updatedInfo, ok := presenceInfo.(presence.Info)
+	if !ok {
+		return errors.New("invalid presence info")
+	}
+	updatedInfo.Clock++
+	updatedInfo.Presence[k] = v
+	d.peerPresenceMap.Store(d.myClientID, updatedInfo)
+	return nil
+}
+
 // SetPresenceInfo sets the presence information of the given client.
 func (d *InternalDocument) SetPresenceInfo(clientID string, info presence.Info) bool {
 	presenceInfo, ok := d.peerPresenceMap.Load(clientID)
@@ -320,8 +336,8 @@ func (d *InternalDocument) SetPresenceInfoMap(peerMap map[string]presence.Info) 
 		d.peerPresenceMap.Delete(key)
 		return true
 	})
-	for peer := range peerMap {
-		d.peerPresenceMap.Store(peer, true)
+	for peer, presenceInfo := range peerMap {
+		d.peerPresenceMap.Store(peer, presenceInfo)
 	}
 }
 
@@ -334,8 +350,8 @@ func (d *InternalDocument) SetWatchedPeerMap(peerMap map[string]bool) {
 		d.watchedPeerMap.Delete(key)
 		return true
 	})
-	for peer := range peerMap {
-		d.watchedPeerMap.Store(peer, true)
+	for peer, hasPresence := range peerMap {
+		d.watchedPeerMap.Store(peer, hasPresence)
 	}
 }
 
@@ -364,6 +380,11 @@ func (d *InternalDocument) Presence() presence.Presence {
 
 // PeerPresence returns the presence of the given client.
 func (d *InternalDocument) PeerPresence(clientID string) presence.Presence {
+	hasPresence, ok := d.watchedPeerMap.Load(clientID)
+	if !ok || !hasPresence.(bool) {
+		return nil
+	}
+
 	peerPresence := make(presence.Presence)
 	if presenceInfo, ok := d.peerPresenceMap.Load(clientID); ok {
 		if info, ok := presenceInfo.(presence.Info); ok {
@@ -380,6 +401,12 @@ func (d *InternalDocument) PeersMap() map[string]presence.Presence {
 	peers := map[string]presence.Presence{}
 	d.peerPresenceMap.Range(func(key, value interface{}) bool {
 		clientID := key.(string)
+
+		hasPresence, ok := d.watchedPeerMap.Load(clientID)
+		if !ok || !hasPresence.(bool) {
+			return true
+		}
+
 		presenceInfo, ok := value.(presence.Info)
 		if ok {
 			peers[clientID] = presence.Presence{}
