@@ -577,8 +577,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	}
 
 	clientDocInfoKey := "documents." + docInfo.ID.String() + "."
-	clientDocInfo, has := clientInfo.Documents[docInfo.ID]
-	if !has {
+	clientDocInfo, ok := clientInfo.Documents[docInfo.ID]
+	if !ok {
 		return fmt.Errorf("client doc info: %w", database.ErrDocumentNeverAttached)
 	}
 
