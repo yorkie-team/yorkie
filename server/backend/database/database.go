@@ -47,6 +47,9 @@ var (
 	// ErrDocumentNotFound is returned when the document could not be found.
 	ErrDocumentNotFound = errors.New("document not found")
 
+	// ErrClientDocNotFound is returned when mapping between client and document could not be found.
+	ErrClientDocNotFound = errors.New("client document not found")
+
 	// ErrConflictOnUpdate is returned when a conflict occurs during update.
 	ErrConflictOnUpdate = errors.New("conflict on update")
 

@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/database/testcases"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -194,6 +195,10 @@ func TestClient(t *testing.T) {
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
 	})
 
+	t.Run("UpdateClientInfoAfterPushPull test", func(t *testing.T) {
+		testcases.RunUpdateClientInfoAfterPushPullTest(t, cli, dummyProjectID)
+	})
+
 	t.Run("FindDocInfosByPaging test", func(t *testing.T) {
 		const testDocCnt = 25
 
@@ -308,6 +313,7 @@ func TestClient(t *testing.T) {
 		c2, err := cli.ActivateClient(ctx, dummyProjectID, t.Name()+"2")
 		assert.NoError(t, err)
 		d1, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, c1.ID, helper.TestDocKey(t), true)
+		assert.NoError(t, err)
 
 		// 01. Check if document is attached without attaching
 		attached, err := cli.IsDocumentAttached(ctx, dummyProjectID, d1.ID)
@@ -359,7 +365,9 @@ func TestClient(t *testing.T) {
 		c1, err := cli.ActivateClient(ctx, dummyProjectID, t.Name()+"1")
 		assert.NoError(t, err)
 		d1, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, c1.ID, helper.TestDocKey(t)+"1", true)
+		assert.NoError(t, err)
 		d2, err := cli.FindDocInfoByKeyAndOwner(ctx, dummyProjectID, c1.ID, helper.TestDocKey(t)+"2", true)
+		assert.NoError(t, err)
 
 		// 01. Check if documents are attached after attaching
 		assert.NoError(t, c1.AttachDocument(d1.ID))
