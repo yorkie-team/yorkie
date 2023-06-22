@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 // RunUpdateClientInfoAfterPushPullTest executes the testcases for the given database.
@@ -184,5 +185,103 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 
 		clientInfo.ID = dummyClientID
 		assert.Error(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo), mongodb.ErrNoDocuments)
+	})
+}
+
+func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("single document IsDocumentAttached test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 00. Create two clients and a document
+		c1, err := db.ActivateClient(ctx, projectID, t.Name()+"1")
+		assert.NoError(t, err)
+		c2, err := db.ActivateClient(ctx, projectID, t.Name()+"2")
+		assert.NoError(t, err)
+		d1, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, c1.ID, helper.TestDocKey(t), true)
+		assert.NoError(t, err)
+
+		// 01. Check if document is attached without attaching
+		attached, err := db.IsDocumentAttached(ctx, projectID, d1.ID)
+		assert.NoError(t, err)
+		assert.False(t, attached)
+
+		// 02. Check if document is attached after attaching
+		assert.NoError(t, c1.AttachDocument(d1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
+		attached, err = db.IsDocumentAttached(ctx, projectID, d1.ID)
+		assert.NoError(t, err)
+		assert.True(t, attached)
+
+		// 03. Check if document is attached after detaching
+		assert.NoError(t, c1.DetachDocument(d1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
+		attached, err = db.IsDocumentAttached(ctx, projectID, d1.ID)
+		assert.NoError(t, err)
+		assert.False(t, attached)
+
+		// 04. Check if document is attached after two clients attaching
+		assert.NoError(t, c1.AttachDocument(d1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
+		assert.NoError(t, c2.AttachDocument(d1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c2, d1))
+		attached, err = db.IsDocumentAttached(ctx, projectID, d1.ID)
+		assert.NoError(t, err)
+		assert.True(t, attached)
+
+		// 05. Check if document is attached after a client detaching
+		assert.NoError(t, c1.DetachDocument(d1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
+		attached, err = db.IsDocumentAttached(ctx, projectID, d1.ID)
+		assert.NoError(t, err)
+		assert.True(t, attached)
+
+		// 06. Check if document is attached after another client detaching
+		assert.NoError(t, c2.DetachDocument(d1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c2, d1))
+		attached, err = db.IsDocumentAttached(ctx, projectID, d1.ID)
+		assert.NoError(t, err)
+		assert.False(t, attached)
+	})
+
+	t.Run("two documents IsDocumentAttached test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 00. Create a client and two documents
+		c1, err := db.ActivateClient(ctx, projectID, t.Name()+"1")
+		assert.NoError(t, err)
+		d1, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, c1.ID, helper.TestDocKey(t)+"1", true)
+		assert.NoError(t, err)
+		d2, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, c1.ID, helper.TestDocKey(t)+"2", true)
+		assert.NoError(t, err)
+
+		// 01. Check if documents are attached after attaching
+		assert.NoError(t, c1.AttachDocument(d1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
+		attached, err := db.IsDocumentAttached(ctx, projectID, d1.ID)
+		assert.NoError(t, err)
+		assert.True(t, attached)
+
+		assert.NoError(t, c1.AttachDocument(d2.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d2))
+		attached, err = db.IsDocumentAttached(ctx, projectID, d2.ID)
+		assert.NoError(t, err)
+		assert.True(t, attached)
+
+		// 02. Check if a document is attached after detaching another document
+		assert.NoError(t, c1.DetachDocument(d2.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d2))
+		attached, err = db.IsDocumentAttached(ctx, projectID, d2.ID)
+		assert.NoError(t, err)
+		assert.False(t, attached)
+		attached, err = db.IsDocumentAttached(ctx, projectID, d1.ID)
+		assert.NoError(t, err)
+		assert.True(t, attached)
+
+		// 03. Check if a document is attached after detaching remaining document
+		assert.NoError(t, c1.DetachDocument(d1.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, c1, d1))
+		attached, err = db.IsDocumentAttached(ctx, projectID, d1.ID)
+		assert.NoError(t, err)
+		assert.False(t, attached)
 	})
 }
