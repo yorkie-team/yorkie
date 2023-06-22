@@ -19,10 +19,10 @@ package memory_test
 import (
 	"context"
 	"fmt"
-	mongodb "go.mongodb.org/mongo-driver/mongo"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	mongodb "go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -301,7 +301,6 @@ func TestDB(t *testing.T) {
 			assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(3))
 			assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(5))
 			assert.NoError(t, err)
-
 		})
 
 		t.Run("detach document test", func(t *testing.T) {
