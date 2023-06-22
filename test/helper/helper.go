@@ -50,8 +50,8 @@ var testStartedAt int64
 var (
 	RPCPort                  = 21101
 	RPCMaxRequestBytes       = uint64(4 * 1024 * 1024)
-	RPCMaxConnectionAge      = 4 * gotime.Second
-	RPCMaxConnectionAgeGrace = 1 * gotime.Second
+	RPCMaxConnectionAge      = 8 * gotime.Second
+	RPCMaxConnectionAgeGrace = 2 * gotime.Second
 
 	ProfilingPort = 21102
 

@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/database/testcases"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -190,6 +191,10 @@ func TestClient(t *testing.T) {
 		// Check they have same key but different id
 		assert.Equal(t, docInfo1.Key, docInfo2.Key)
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
+	})
+
+	t.Run("UpdateClientInfoAfterPushPull test", func(t *testing.T) {
+		testcases.RunUpdateClientInfoAfterPushPullTest(t, cli, dummyProjectID)
 	})
 
 	t.Run("FindDocInfosByPaging test", func(t *testing.T) {
