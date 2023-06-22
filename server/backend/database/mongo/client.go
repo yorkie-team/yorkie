@@ -521,7 +521,7 @@ func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types
 			"status":     database.ClientDeactivated,
 			"updated_at": gotime.Now(),
 		},
-	})
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	clientInfo := database.ClientInfo{}
 	if err := res.Decode(&clientInfo); err != nil {
