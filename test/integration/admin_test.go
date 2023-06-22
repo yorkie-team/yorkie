@@ -63,12 +63,12 @@ func TestAdmin(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 
 		// 01. admin tries to remove document that does not exist.
-		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String(), true)
 		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
 
 		// 02. client creates a document then admin removes the document.
 		assert.NoError(t, cli.Attach(ctx, d1))
-		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String(), true)
 		assert.NoError(t, err)
 		assert.Equal(t, document.StatusAttached, d1.Status())
 
@@ -113,11 +113,39 @@ func TestAdmin(t *testing.T) {
 		}()
 
 		// 02. adminCli removes d1.
-		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String())
+		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String(), true)
 		assert.NoError(t, err)
 
 		// 03. wait for watching document changed event.
 		wg.Wait()
 		assert.Equal(t, d1.Status(), document.StatusRemoved)
+	})
+
+	t.Run("document removal without force test", func(t *testing.T) {
+		ctx := context.Background()
+
+		cli, err := client.Dial(defaultServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(ctx))
+		defer func() {
+			assert.NoError(t, cli.Close())
+		}()
+		doc := document.New(helper.TestDocKey(t))
+
+		// 01. try to remove document that does not exist.
+		err = adminCli.RemoveDocument(ctx, "default", doc.Key().String(), false)
+		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+
+		// 02. try to remove document that is attached by the client.
+		assert.NoError(t, cli.Attach(ctx, doc))
+		err = adminCli.RemoveDocument(ctx, "default", doc.Key().String(), false)
+		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+		assert.Equal(t, document.StatusAttached, doc.Status())
+
+		// 03. remove document that is detached by the client.
+		assert.NoError(t, cli.Detach(ctx, doc))
+		err = adminCli.RemoveDocument(ctx, "default", doc.Key().String(), false)
+		assert.NoError(t, err)
+		assert.Equal(t, document.StatusDetached, doc.Status())
 	})
 }

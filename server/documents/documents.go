@@ -19,6 +19,7 @@ package documents
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -35,6 +36,12 @@ const SnapshotMaxLen = 50
 
 // pageSizeLimit is the limit of the pagination size of documents.
 const pageSizeLimit = 101
+
+var (
+	// ErrDocumentAttached is returned when the document is attached when
+	// deleting the document.
+	ErrDocumentAttached = fmt.Errorf("document is attached")
+)
 
 // ListDocumentSummaries returns a list of document summaries.
 func ListDocumentSummaries(
@@ -211,12 +218,26 @@ func FindDocInfoByKeyAndOwner(
 	)
 }
 
-// RemoveDocument updates the removedAt field of the given docInfo.
+// RemoveDocument removes the given document. If force is false, it only removes
+// the document if it is not attached to any client.
 func RemoveDocument(
 	ctx context.Context,
 	be *backend.Backend,
 	project *types.Project,
 	docID types.ID,
+	force bool,
 ) error {
+	if force {
+		return be.DB.UpdateDocInfoStatusToRemoved(ctx, project.ID, docID)
+	}
+
+	isAttached, err := be.DB.IsDocumentAttached(ctx, project.ID, docID)
+	if err != nil {
+		return err
+	}
+	if isAttached {
+		return ErrDocumentAttached
+	}
+
 	return be.DB.UpdateDocInfoStatusToRemoved(ctx, project.ID, docID)
 }

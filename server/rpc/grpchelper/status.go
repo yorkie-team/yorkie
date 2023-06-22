@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
+	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
@@ -64,6 +65,7 @@ var errorToCode = map[error]codes.Code{
 	database.ErrClientNotActivated:      codes.FailedPrecondition,
 	database.ErrDocumentNotAttached:     codes.FailedPrecondition,
 	database.ErrDocumentAlreadyAttached: codes.FailedPrecondition,
+	documents.ErrDocumentAttached:       codes.FailedPrecondition,
 	packs.ErrInvalidServerSeq:           codes.FailedPrecondition,
 	database.ErrConflictOnUpdate:        codes.FailedPrecondition,
 
