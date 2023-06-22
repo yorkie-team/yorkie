@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
+	"github.com/yorkie-team/yorkie/server/backend/database/testcases"
 )
 
 func TestDB(t *testing.T) {
@@ -225,18 +226,8 @@ func TestDB(t *testing.T) {
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
 	})
 
-	t.Run("update clientInfo after PushPull test", func(t *testing.T) {
-		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
-		assert.NoError(t, err)
-
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
-		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
-		assert.NoError(t, err)
-
-		err = db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
-		assert.ErrorIs(t, err, database.ErrDocumentNeverAttached)
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
-		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+	t.Run("UpdateClientInfoAfterPushPull test", func(t *testing.T) {
+		testcases.RunUpdateClientInfoAfterPushPullTest(t, db, projectID)
 	})
 
 	t.Run("insert and find changes test", func(t *testing.T) {
