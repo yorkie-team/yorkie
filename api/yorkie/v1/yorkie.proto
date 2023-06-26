@@ -70,6 +70,7 @@ message DetachDocumentRequest {
   bytes client_id = 1;
   string document_id = 2;
   ChangePack change_pack = 3;
+  bool remove_if_not_attached = 4;
 }
 
 message DetachDocumentResponse {

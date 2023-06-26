@@ -1345,6 +1345,7 @@ func (c *Client) IsDocumentAttached(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,
+	excludeClientInfoID types.ID,
 ) (bool, error) {
 	encodedProjectID, err := encodeID(projectID)
 	if err != nil {
@@ -1353,15 +1354,36 @@ func (c *Client) IsDocumentAttached(
 
 	clientDocInfoKey := "documents." + docID.String() + "."
 
-	result := c.collection(colClients).FindOne(ctx, bson.M{
+	cursor, err := c.collection(colClients).Find(ctx, bson.M{
 		"project_id":                encodedProjectID,
 		clientDocInfoKey + "status": database.DocumentAttached,
 	})
-	if result.Err() == mongo.ErrNoDocuments {
+	if err != nil {
+		logging.From(ctx).Error(err)
+		return false, fmt.Errorf("find client infos: %w", err)
+	}
+	if cursor.Err() == mongo.ErrNoDocuments {
 		return false, nil
 	}
 
-	return true, nil
+	var clientInfos []*database.ClientInfo
+	if err := cursor.All(ctx, &clientInfos); err != nil {
+		return false, fmt.Errorf("fetch all project infos: %w", err)
+	}
+
+	for _, clientInfo := range clientInfos {
+		if clientInfo.ID == excludeClientInfoID {
+			continue
+		}
+		clientDocInfo := clientInfo.Documents[docID]
+		if clientDocInfo == nil {
+			continue
+		}
+		if clientDocInfo.Status == database.DocumentAttached {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (c *Client) findTicketByServerSeq(
