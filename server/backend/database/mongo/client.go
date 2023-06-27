@@ -1200,6 +1200,9 @@ func (c *Client) FindDocInfosByPaging(
 		"project_id": bson.M{
 			"$eq": encodedProjectID,
 		},
+		"removed_at": bson.M{
+			"$exists": false,
+		},
 	}
 	if paging.Offset != "" {
 		encodedOffset, err := encodeID(paging.Offset)
