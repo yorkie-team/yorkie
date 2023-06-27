@@ -76,17 +76,23 @@ const (
 
 // InternalDocument represents a document in MongoDB and contains logical clocks.
 type InternalDocument struct {
-	key             key.Key
-	status          StatusType
-	root            *crdt.Root
-	checkpoint      change.Checkpoint
-	changeID        change.ID
-	localChanges    []*change.Change
-	myClientID      string
-	peerPresenceMap *gosync.Map // map[string]presence.Presence
+	key    key.Key
+	status StatusType
+
+	root         *crdt.Root
+	checkpoint   change.Checkpoint
+	changeID     change.ID
+	localChanges []*change.Change
+
+	events chan PeerChangedEvent
+
+	// `watchedPeerMap` is a map of the peers that watch the document. It is used
+	// to determine whether the peer is online or offline. If the value is true
+	// if the presence of the peer is stored in `peerPresenceMap`.
 	watchedPeerMap  *gosync.Map // map[string]bool
-	changeContext   *change.Context
-	events          chan PeerChangedEvent
+	peerPresenceMap *gosync.Map // map[string]presence.Presence
+
+	changeContext *change.Context
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
@@ -98,8 +104,7 @@ func NewInternalDocument(docKey key.Key, clientID string) *InternalDocument {
 		status:          StatusDetached,
 		root:            crdt.NewRoot(root),
 		checkpoint:      change.InitialCheckpoint,
-		changeID:        change.InitialIDWithActor(actorID),
-		myClientID:      clientID,
+		changeID:        change.InitialChangeIDOf(actorID),
 		peerPresenceMap: &gosync.Map{},
 		watchedPeerMap:  &gosync.Map{},
 		events:          make(chan PeerChangedEvent, 1),
@@ -151,25 +156,29 @@ func (d *InternalDocument) Checkpoint() change.Checkpoint {
 	return d.checkpoint
 }
 
+// myClientID returns the actor ID of the client that attaches this document.
+func (d *InternalDocument) myClientID() string {
+	return d.changeID.ActorID().String()
+}
+
 // InitPresence initializes the presence of the client who created this document.
 func (d *InternalDocument) InitPresence(initialPresence presence.Presence) {
 	copiedPresence := presence.Presence{}
 	for k, v := range initialPresence {
 		copiedPresence[k] = v
 	}
-	d.peerPresenceMap.Store(d.myClientID, copiedPresence)
-	d.watchedPeerMap.Store(d.myClientID, true)
+	d.peerPresenceMap.Store(d.myClientID(), copiedPresence)
+	d.watchedPeerMap.Store(d.myClientID(), true)
 
-	d.changeContext = change.NewContext(
+	context := change.NewContext(
 		d.changeID.Next(),
 		"",
 		nil,
 	)
-	d.changeContext.SetPresence(&copiedPresence)
-	c := d.changeContext.ToChange()
+	context.SetPresence(&copiedPresence)
+	c := context.ToChange()
 	d.localChanges = append(d.localChanges, c)
-	d.changeID = d.changeContext.ID()
-	d.changeContext = nil
+	d.changeID = context.ID()
 }
 
 // HasLocalChanges returns whether this document has local changes or not.
@@ -257,7 +266,7 @@ func (d *InternalDocument) IsAttached() bool {
 
 // UpdatePresence updates the presence of the client who created this document.
 func (d *InternalDocument) UpdatePresence(k, v string) error {
-	p, ok := d.peerPresenceMap.Load(d.myClientID)
+	p, ok := d.peerPresenceMap.Load(d.myClientID())
 	if !ok {
 		return errors.New("presence not found")
 	}
@@ -266,7 +275,7 @@ func (d *InternalDocument) UpdatePresence(k, v string) error {
 		return errors.New("invalid presence type")
 	}
 	updatedPresence[k] = v
-	d.peerPresenceMap.Store(d.myClientID, updatedPresence)
+	d.peerPresenceMap.Store(d.myClientID(), updatedPresence)
 	return nil
 }
 
@@ -339,7 +348,7 @@ func (d *InternalDocument) RemoveWatchedPeerMap(clientID string) {
 
 // Presence returns the presence of the client who created this document.
 func (d *InternalDocument) Presence() presence.Presence {
-	return d.PeerPresence(d.myClientID)
+	return d.PeerPresence(d.myClientID())
 }
 
 // PeerPresence returns the presence of the given client.

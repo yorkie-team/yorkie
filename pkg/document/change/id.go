@@ -65,8 +65,8 @@ func NewID(
 	}
 }
 
-// InitialIDWithActor creates a new instance of ID with the given actorID.
-func InitialIDWithActor(actorID *time.ActorID) ID {
+// InitialChangeIDOf creates a new instance of ID with the given actorID.
+func InitialChangeIDOf(actorID *time.ActorID) ID {
 	return NewID(InitialClientSeq, InitialServerSeq, InitialLamport, actorID)
 }
 
