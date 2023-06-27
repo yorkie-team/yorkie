@@ -27,12 +27,12 @@ import (
 // Each time we add an operation, a new time ticket is issued.
 // Finally, returns a Change after the modification has been completed.
 type Context struct {
-	id           ID
-	message      string
-	operations   []operations.Operation
-	presenceInfo *presence.Info
-	delimiter    uint32
-	root         *crdt.Root
+	id         ID
+	message    string
+	operations []operations.Operation
+	presence   *presence.Presence
+	delimiter  uint32
+	root       *crdt.Root
 }
 
 // NewContext creates a new instance of Context.
@@ -51,7 +51,7 @@ func (c *Context) ID() ID {
 
 // ToChange creates a new change of this context.
 func (c *Context) ToChange() *Change {
-	return New(c.id, c.message, c.operations, c.presenceInfo)
+	return New(c.id, c.message, c.operations, c.presence)
 }
 
 // HasChange returns whether this context has change or not.
@@ -64,9 +64,9 @@ func (c *Context) HasOperations() bool {
 	return len(c.operations) > 0
 }
 
-// HasPresence returns whether this change has presenceInfo or not.
+// HasPresence returns whether this change has presence or not.
 func (c *Context) HasPresence() bool {
-	return c.presenceInfo != nil
+	return c.presence != nil
 }
 
 // IssueTimeTicket creates a time ticket to be used to create a new operation.
@@ -95,9 +95,9 @@ func (c *Context) RegisterTextElementWithGarbage(textType crdt.TextElement) {
 	c.root.RegisterTextElementWithGarbage(textType)
 }
 
-// SetPresenceInfo registers the updated presenceInfo to this context.
-func (c *Context) SetPresenceInfo(presenceInfo *presence.Info) {
-	c.presenceInfo = presenceInfo
+// SetPresence registers the updated presence to this context.
+func (c *Context) SetPresence(presence *presence.Presence) {
+	c.presence = presence
 }
 
 // LastTimeTicket returns the last time ticket issued by this context.

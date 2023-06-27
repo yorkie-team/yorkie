@@ -21,31 +21,3 @@ package presence
 
 // Presence represents custom presence that can be defined by the client.
 type Presence map[string]string
-
-// Info is a presence information with logical clock.
-type Info struct {
-	Clock    int32
-	Presence Presence
-}
-
-// Update updates the given presence information with the given clock.
-func (i *Info) Update(info Info) bool {
-	if info.Clock > i.Clock {
-		i.Clock = info.Clock
-		i.Presence = info.Presence
-		return true
-	}
-	return false
-}
-
-// DeepCopy copies itself deeply.
-func (i *Info) DeepCopy() *Info {
-	presence := Presence{}
-	for k, v := range i.Presence {
-		presence[k] = v
-	}
-	return &Info{
-		Clock:    i.Clock,
-		Presence: presence,
-	}
-}

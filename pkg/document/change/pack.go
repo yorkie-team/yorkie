@@ -36,7 +36,7 @@ type Pack struct {
 	Snapshot []byte
 
 	// SnapshotPresence a string that encodes the presenceMap,
-	// representing the presence information of peers.
+	// representing the presence of peers.
 	SnapshotPresence string
 
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.

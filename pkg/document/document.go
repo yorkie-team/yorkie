@@ -117,13 +117,9 @@ func (d *Document) UpdatePresence(k, v string) error {
 	if err != nil {
 		return err
 	}
-	presenceInfo, err := d.doc.PresenceInfo(d.doc.myClientID)
-	if err != nil {
-		return err
-	}
-
+	updatedPresence := d.doc.Presence()
 	if d.doc.changeContext != nil {
-		d.doc.changeContext.SetPresenceInfo(presenceInfo.DeepCopy())
+		d.doc.changeContext.SetPresence(&updatedPresence)
 		return nil
 	}
 
@@ -132,7 +128,7 @@ func (d *Document) UpdatePresence(k, v string) error {
 		"",
 		d.clone,
 	)
-	d.doc.changeContext.SetPresenceInfo(presenceInfo.DeepCopy())
+	d.doc.changeContext.SetPresence(&updatedPresence)
 	c := d.doc.changeContext.ToChange()
 	d.doc.localChanges = append(d.doc.localChanges, c)
 	d.doc.changeID = d.doc.changeContext.ID()
@@ -251,19 +247,15 @@ func (d *Document) IsAttached() bool {
 	return d.doc.IsAttached()
 }
 
-// SetPresenceInfo sets the presence information of the given client.
-func (d *Document) SetPresenceInfo(clientID string, info presence.Info) {
-	d.doc.SetPresenceInfo(clientID, info)
+// SetPresence sets the presence of the given client.
+func (d *Document) SetPresence(clientID string, info presence.Presence) {
+	d.doc.SetPresence(clientID, info)
 }
 
-// PresenceInfo returns the presence information of the given client.
-func (d *Document) PresenceInfo(clientID string) (*presence.Info, error) {
-	return d.doc.PresenceInfo(clientID)
-}
-
-// RemovePresenceInfo removes the presence information of the given client.
-func (d *Document) RemovePresenceInfo(clientID string) {
-	d.doc.RemovePresenceInfo(clientID)
+// HasPresencePriv returns whether the peer presence exists regardless of
+// whether the client is watching the document or not.
+func (d *Document) HasPresencePriv(clientID string) bool {
+	return d.doc.HasPresencePriv(clientID)
 }
 
 // SetWatchedPeerMap sets the watched peer map.

@@ -120,15 +120,16 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary
 	}, nil
 }
 
-// FromPresenceInfo converts the given Protobuf formats to model format.
-func FromPresenceInfo(pbPresence *api.PresenceInfo) *presence.Info {
+// FromPresence converts the given Protobuf formats to model format.
+func FromPresence(pbPresence *api.PresenceInfo) *presence.Presence {
 	if pbPresence == nil {
 		return nil
 	}
-	return &presence.Info{
-		Clock:    pbPresence.GetClock(),
-		Presence: pbPresence.GetData(),
+	p := presence.Presence{}
+	for k, v := range pbPresence.GetData() {
+		p[k] = v
 	}
+	return &p
 }
 
 // FromChangePack converts the given Protobuf formats to model format.
@@ -184,7 +185,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 			changeID,
 			pbChange.Message,
 			ops,
-			FromPresenceInfo(pbChange.Presence),
+			FromPresence(pbChange.Presence),
 		))
 	}
 

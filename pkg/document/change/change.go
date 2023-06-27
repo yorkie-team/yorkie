@@ -36,17 +36,17 @@ type Change struct {
 	// operations represent a series of user edits.
 	operations []operations.Operation
 
-	// presenceInfo represent the updated presence info of the change.
-	presenceInfo *presence.Info
+	// presence represent the updated presence of the change.
+	presence *presence.Presence
 }
 
 // New creates a new instance of Change.
-func New(id ID, message string, operations []operations.Operation, presenceInfo *presence.Info) *Change {
+func New(id ID, message string, operations []operations.Operation, presence *presence.Presence) *Change {
 	return &Change{
-		id:           id,
-		message:      message,
-		operations:   operations,
-		presenceInfo: presenceInfo,
+		id:         id,
+		message:    message,
+		operations: operations,
+		presence:   presence,
 	}
 }
 
@@ -75,9 +75,9 @@ func (c *Change) Operations() []operations.Operation {
 	return c.operations
 }
 
-// PresenceInfo returns the updated presence info of this change.
-func (c *Change) PresenceInfo() *presence.Info {
-	return c.presenceInfo
+// Presence returns the updated presence of this change.
+func (c *Change) Presence() *presence.Presence {
+	return c.presence
 }
 
 // ServerSeq returns the serverSeq of this change.

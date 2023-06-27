@@ -878,7 +878,7 @@ func (c *Client) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
-		encodedPresenceInfo, err := database.EncodePresenceInfo(cn.PresenceInfo())
+		encodedPresence, err := database.EncodePresence(cn.Presence())
 		if err != nil {
 			return err
 		}
@@ -887,12 +887,12 @@ func (c *Client) CreateChangeInfos(
 			"doc_id":     encodedDocID,
 			"server_seq": cn.ServerSeq(),
 		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor_id":      encodeActorID(cn.ID().ActorID()),
-			"client_seq":    cn.ID().ClientSeq(),
-			"lamport":       cn.ID().Lamport(),
-			"message":       cn.Message(),
-			"operations":    encodedOperations,
-			"presence_info": encodedPresenceInfo,
+			"actor_id":   encodeActorID(cn.ID().ActorID()),
+			"client_seq": cn.ID().ClientSeq(),
+			"lamport":    cn.ID().Lamport(),
+			"message":    cn.Message(),
+			"operations": encodedOperations,
+			"presence":   encodedPresence,
 		}}).SetUpsert(true))
 	}
 
@@ -1055,7 +1055,7 @@ func (c *Client) CreateSnapshotInfo(
 	if err != nil {
 		return err
 	}
-	encodedPresenceMap, err := database.EncodePresenceMap(doc.PresenceInfoMap())
+	encodedPresenceMap, err := database.EncodePresenceMap(doc.PresenceMap())
 	if err != nil {
 		return err
 	}

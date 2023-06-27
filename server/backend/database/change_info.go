@@ -35,15 +35,15 @@ var ErrEncodeOperationFailed = errors.New("encode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	ID           types.ID `bson:"_id"`
-	DocID        types.ID `bson:"doc_id"`
-	ServerSeq    int64    `bson:"server_seq"`
-	ClientSeq    uint32   `bson:"client_seq"`
-	Lamport      int64    `bson:"lamport"`
-	ActorID      types.ID `bson:"actor_id"`
-	Message      string   `bson:"message"`
-	Operations   [][]byte `bson:"operations"`
-	PresenceInfo string   `bson:"presence_info"`
+	ID         types.ID `bson:"_id"`
+	DocID      types.ID `bson:"doc_id"`
+	ServerSeq  int64    `bson:"server_seq"`
+	ClientSeq  uint32   `bson:"client_seq"`
+	Lamport    int64    `bson:"lamport"`
+	ActorID    types.ID `bson:"actor_id"`
+	Message    string   `bson:"message"`
+	Operations [][]byte `bson:"operations"`
+	Presence   string   `bson:"presence"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -66,12 +66,12 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	return encodedOps, nil
 }
 
-// EncodePresenceInfo encodes the given presenceInfo into string.
-func EncodePresenceInfo(presenceInfo *presence.Info) (string, error) {
-	if presenceInfo == nil {
+// EncodePresence encodes the given presence into string.
+func EncodePresence(p *presence.Presence) (string, error) {
+	if p == nil {
 		return "", nil
 	}
-	jsonBytes, err := json.Marshal(presenceInfo)
+	jsonBytes, err := json.Marshal(p)
 	if err != nil {
 		return "", fmt.Errorf("marshal presence to bytes: %w", err)
 	}
@@ -101,14 +101,14 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	var presenceInfo *presence.Info
-	if i.PresenceInfo != "" {
-		if err := json.Unmarshal([]byte(i.PresenceInfo), &presenceInfo); err != nil {
+	var p *presence.Presence
+	if i.Presence != "" {
+		if err := json.Unmarshal([]byte(i.Presence), &p); err != nil {
 			return nil, fmt.Errorf("unmarshal presence: %w", err)
 		}
 	}
 
-	c := change.New(changeID, i.Message, ops, presenceInfo)
+	c := change.New(changeID, i.Message, ops, p)
 	c.SetServerSeq(i.ServerSeq)
 
 	return c, nil

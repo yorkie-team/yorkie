@@ -45,7 +45,7 @@ type ServerPack struct {
 	Snapshot []byte
 
 	// SnapshotPresence a string that encodes the presenceMap,
-	// representing the presence information of peers.
+	// representing the presence of peers.
 	SnapshotPresence string
 
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
@@ -111,9 +111,9 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			pbOps = append(pbOps, &pbOp)
 		}
 
-		var presenceInfo *presence.Info
-		if info.PresenceInfo != "" {
-			if err := json.Unmarshal([]byte(info.PresenceInfo), &presenceInfo); err != nil {
+		var p *presence.Presence
+		if info.Presence != "" {
+			if err := json.Unmarshal([]byte(info.Presence), &p); err != nil {
 				return nil, fmt.Errorf("unmarshal presence: %w", err)
 			}
 		}
@@ -122,7 +122,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			Id:         converter.ToChangeID(changeID),
 			Message:    info.Message,
 			Operations: pbOps,
-			Presence:   converter.ToPresenceInfo(presenceInfo),
+			Presence:   converter.ToPresence(p),
 		})
 	}
 

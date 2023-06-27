@@ -283,8 +283,7 @@ message DocumentSummary {
 }
 
 message PresenceInfo {
-  int32 clock = 1;
-  map<string, string> data = 2;
+  map<string, string> data = 1;
 }
 
 message Checkpoint {

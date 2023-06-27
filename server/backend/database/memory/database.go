@@ -769,21 +769,21 @@ func (d *DB) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
-		encodedPresenceInfo, err := database.EncodePresenceInfo(cn.PresenceInfo())
+		encodedPresence, err := database.EncodePresence(cn.Presence())
 		if err != nil {
 			return err
 		}
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
-			ID:           newID(),
-			DocID:        docInfo.ID,
-			ServerSeq:    cn.ServerSeq(),
-			ActorID:      types.ID(cn.ID().ActorID().String()),
-			ClientSeq:    cn.ClientSeq(),
-			Lamport:      cn.ID().Lamport(),
-			Message:      cn.Message(),
-			Operations:   encodedOperations,
-			PresenceInfo: encodedPresenceInfo,
+			ID:         newID(),
+			DocID:      docInfo.ID,
+			ServerSeq:  cn.ServerSeq(),
+			ActorID:    types.ID(cn.ID().ActorID().String()),
+			ClientSeq:  cn.ClientSeq(),
+			Lamport:    cn.ID().Lamport(),
+			Message:    cn.Message(),
+			Operations: encodedOperations,
+			Presence:   encodedPresence,
 		}); err != nil {
 			return fmt.Errorf("create change: %w", err)
 		}
@@ -938,7 +938,7 @@ func (d *DB) CreateSnapshotInfo(
 	if err != nil {
 		return err
 	}
-	encodedPresenceMap, err := database.EncodePresenceMap(doc.PresenceInfoMap())
+	encodedPresenceMap, err := database.EncodePresenceMap(doc.PresenceMap())
 	if err != nil {
 		return err
 	}

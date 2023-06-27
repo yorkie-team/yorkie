@@ -122,14 +122,13 @@ func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, er
 	}, nil
 }
 
-// ToPresenceInfo converts the given model to Protobuf format.
-func ToPresenceInfo(info *presence.Info) *api.PresenceInfo {
+// ToPresence converts the given model to Protobuf format.
+func ToPresence(info *presence.Presence) *api.PresenceInfo {
 	if info == nil {
 		return nil
 	}
 	return &api.PresenceInfo{
-		Clock: info.Clock,
-		Data:  info.Presence,
+		Data: *info,
 	}
 }
 
@@ -263,7 +262,7 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 			Id:         ToChangeID(c.ID()),
 			Message:    c.Message(),
 			Operations: pbOperations,
-			Presence:   ToPresenceInfo(c.PresenceInfo()),
+			Presence:   ToPresence(c.Presence()),
 		})
 	}
 

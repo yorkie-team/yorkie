@@ -50,7 +50,7 @@ type SnapshotInfo struct {
 }
 
 // EncodePresenceMap encodes the given presenceMap into string.
-func EncodePresenceMap(presenceMap map[string]presence.Info) (string, error) {
+func EncodePresenceMap(presenceMap map[string]presence.Presence) (string, error) {
 	jsonBytes, err := json.Marshal(presenceMap)
 	if err != nil {
 		return "", fmt.Errorf("marshal presence map to bytes: %w", err)

@@ -445,8 +445,7 @@ func (c *Client) Watch(
 					Key:  doc.Key(),
 				}, nil
 			case types.DocumentWatchedEvent:
-				presenceInfo, _ := doc.PresenceInfo(clientID.String())
-				if presenceInfo != nil {
+				if doc.HasPresencePriv(clientID.String()) {
 					attachment.doc.AddWatchedPeerMap(clientID.String(), true)
 					doc.Watch() <- document.PeerChangedEvent{
 						Type: document.WatchedEvent,

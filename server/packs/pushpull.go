@@ -164,7 +164,7 @@ func pullSnapshot(
 	if err != nil {
 		return nil, err
 	}
-	snapshotPresence, err := database.EncodePresenceMap(doc.PresenceInfoMap())
+	snapshotPresence, err := database.EncodePresenceMap(doc.PresenceMap())
 
 	logging.From(ctx).Infof(
 		"PULL: '%s' build snapshot with changes(%d~%d) from '%s', cp: %s",
