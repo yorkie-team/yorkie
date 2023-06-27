@@ -22,7 +22,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Change represents a unit of modification in the document.
@@ -93,12 +92,4 @@ func (c *Change) ClientSeq() uint32 {
 // SetServerSeq sets the given serverSeq.
 func (c *Change) SetServerSeq(serverSeq int64) {
 	c.id = c.id.SetServerSeq(serverSeq)
-}
-
-// SetActor sets the given actorID.
-func (c *Change) SetActor(actor *time.ActorID) {
-	c.id = c.id.SetActor(actor)
-	for _, op := range c.operations {
-		op.SetActor(actor)
-	}
 }

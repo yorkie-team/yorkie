@@ -73,11 +73,6 @@ func (o *Remove) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
-// SetActor sets the given actor to this operation.
-func (o *Remove) SetActor(actorID *time.ActorID) {
-	o.executedAt = o.executedAt.SetActorID(actorID)
-}
-
 // CreatedAt returns the creation time of the target element.
 func (o *Remove) CreatedAt() *time.Ticket {
 	return o.createdAt

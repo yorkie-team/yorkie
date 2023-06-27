@@ -221,12 +221,6 @@ func (d *Document) CreateChangePack() *change.Pack {
 	return d.doc.CreateChangePack()
 }
 
-// SetActor sets actor into this document. This is also applied in the local
-// changes the document has.
-func (d *Document) SetActor(actor *time.ActorID) {
-	d.doc.SetActor(actor)
-}
-
 // ActorID returns ID of the actor currently editing the document.
 func (d *Document) ActorID() *time.ActorID {
 	return d.doc.ActorID()

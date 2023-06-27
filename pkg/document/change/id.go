@@ -98,11 +98,6 @@ func (id ID) SyncLamport(otherLamport int64) ID {
 	return NewID(id.clientSeq, InitialServerSeq, id.lamport+1, id.actorID)
 }
 
-// SetActor sets actorID.
-func (id ID) SetActor(actor *time.ActorID) ID {
-	return NewID(id.clientSeq, InitialServerSeq, id.lamport, actor)
-}
-
 // SetServerSeq sets server sequence of this ID.
 func (id ID) SetServerSeq(serverSeq int64) ID {
 	return NewID(id.clientSeq, serverSeq, id.lamport, id.actorID)

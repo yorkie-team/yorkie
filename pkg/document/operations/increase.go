@@ -70,8 +70,3 @@ func (o *Increase) ParentCreatedAt() *time.Ticket {
 func (o *Increase) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
-
-// SetActor sets the given actor to this operation.
-func (o *Increase) SetActor(actorID *time.ActorID) {
-	o.executedAt = o.executedAt.SetActorID(actorID)
-}

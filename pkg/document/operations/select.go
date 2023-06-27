@@ -80,11 +80,6 @@ func (s *Select) ExecutedAt() *time.Ticket {
 	return s.executedAt
 }
 
-// SetActor sets the given actor to this operation.
-func (s *Select) SetActor(actorID *time.ActorID) {
-	s.executedAt = s.executedAt.SetActorID(actorID)
-}
-
 // ParentCreatedAt returns the creation time of the Text.
 func (s *Select) ParentCreatedAt() *time.Ticket {
 	return s.parentCreatedAt

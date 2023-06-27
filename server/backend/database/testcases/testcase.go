@@ -29,6 +29,7 @@ import (
 	mongodb "go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
@@ -174,8 +175,7 @@ func RunFindChangesBetweenServerSeqsTest(
 
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
-		doc := helper.TestDoc(helper.TestDocKey(t))
-		doc.SetActor(actorID)
+		doc := document.New(helper.TestDocKey(t), actorID.String())
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			root.SetNewArray("array")
 			return nil
@@ -217,10 +217,7 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 		bytesID, _ := clientInfo.ID.Bytes()
 		actorID, _ := time.ActorIDFromBytes(bytesID)
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
-
-		doc := helper.TestDoc(helper.TestDocKey(t))
-		doc.SetActor(actorID)
-
+		doc := document.New(helper.TestDocKey(t), actorID.String())
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			root.SetNewArray("array")
 			return nil

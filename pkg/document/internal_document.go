@@ -235,15 +235,6 @@ func (d *InternalDocument) CreateChangePack() *change.Pack {
 	return change.NewPack(d.key, cp, changes, nil, "")
 }
 
-// SetActor sets actor into this document. This is also applied in the local
-// changes the document has.
-func (d *InternalDocument) SetActor(actor *time.ActorID) {
-	for _, c := range d.localChanges {
-		c.SetActor(actor)
-	}
-	d.changeID = d.changeID.SetActor(actor)
-}
-
 // Lamport returns the Lamport clock of this document.
 func (d *InternalDocument) Lamport() int64 {
 	return d.changeID.Lamport()

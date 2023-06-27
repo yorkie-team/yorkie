@@ -104,11 +104,6 @@ func (e *Edit) ExecutedAt() *time.Ticket {
 	return e.executedAt
 }
 
-// SetActor sets the given actor to this operation.
-func (e *Edit) SetActor(actorID *time.ActorID) {
-	e.executedAt = e.executedAt.SetActorID(actorID)
-}
-
 // ParentCreatedAt returns the creation time of the Text.
 func (e *Edit) ParentCreatedAt() *time.Ticket {
 	return e.parentCreatedAt

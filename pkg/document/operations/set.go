@@ -83,11 +83,6 @@ func (o *Set) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
-// SetActor sets the given actor to this operation.
-func (o *Set) SetActor(actorID *time.ActorID) {
-	o.executedAt = o.executedAt.SetActorID(actorID)
-}
-
 // Key returns the key of this operation.
 func (o *Set) Key() string {
 	return o.key

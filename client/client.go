@@ -583,7 +583,6 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	if !ok {
 		return ErrDocumentNotAttached
 	}
-	doc.SetActor(c.id)
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {

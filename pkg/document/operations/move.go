@@ -80,11 +80,6 @@ func (o *Move) ExecutedAt() *time.Ticket {
 	return o.executedAt
 }
 
-// SetActor sets the given actor to this operation.
-func (o *Move) SetActor(actorID *time.ActorID) {
-	o.executedAt = o.executedAt.SetActorID(actorID)
-}
-
 // PrevCreatedAt returns the creation time of previous element.
 func (o *Move) PrevCreatedAt() *time.Ticket {
 	return o.prevCreatedAt
