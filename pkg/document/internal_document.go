@@ -55,8 +55,8 @@ var (
 // PeerChangedEvent represents events that occur when the states of another peers
 // of the watched documents changes.
 type PeerChangedEvent struct {
-	Type      PeerChangedEventType
-	Publisher map[string]presence.Presence
+	Type PeerChangedEventType
+	Peer map[string]presence.Presence
 }
 
 // PeerChangedEventType represents the type of PeerChangedEvent.
@@ -66,9 +66,6 @@ const (
 	// WatchedEvent means that the peer has established a connection with the server,
 	// enabling real-time synchronization.
 	WatchedEvent PeerChangedEventType = "watched"
-
-	// UnwatchedEvent means that the peer connection has been disconnected.
-	UnwatchedEvent PeerChangedEventType = "unwatched"
 
 	// PresenceChangedEvent means that the presences of the peer has updated.
 	PresenceChangedEvent PeerChangedEventType = "presence-changed"
@@ -284,9 +281,9 @@ func (d *InternalDocument) SetPresence(clientID string, info presence.Presence) 
 	d.peerPresenceMap.Store(clientID, info)
 }
 
-// HasPresencePriv returns whether the peer presence exists regardless of
+// HasPresence returns whether the peer presence exists regardless of
 // whether the client is watching the document or not.
-func (d *InternalDocument) HasPresencePriv(clientID string) bool {
+func (d *InternalDocument) HasPresence(clientID string) bool {
 	if p, ok := d.peerPresenceMap.Load(clientID); ok {
 		if _, ok := p.(presence.Presence); ok {
 			return true
@@ -446,7 +443,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 				if peer.(bool) {
 					d.events <- PeerChangedEvent{
 						Type: PresenceChangedEvent,
-						Publisher: map[string]presence.Presence{
+						Peer: map[string]presence.Presence{
 							clientID: d.PeerPresence(clientID),
 						},
 					}
@@ -454,7 +451,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 					d.watchedPeerMap.Store(clientID, true)
 					d.events <- PeerChangedEvent{
 						Type: WatchedEvent,
-						Publisher: map[string]presence.Presence{
+						Peer: map[string]presence.Presence{
 							clientID: d.PeerPresence(clientID),
 						},
 					}
@@ -466,9 +463,4 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 	}
 
 	return nil
-}
-
-// Events returns the PeerChangedEvent channel of this document.
-func (d *InternalDocument) Events() chan PeerChangedEvent {
-	return d.events
 }

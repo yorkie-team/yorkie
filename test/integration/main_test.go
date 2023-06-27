@@ -45,12 +45,7 @@ type clientAndDocPair struct {
 type watchResponsePair struct {
 	Type   client.WatchResponseType
 	DocKey key.Key
-	Peers  map[string]presence.Presence
-}
-
-type peersChangedPair struct {
-	Type document.PeerChangedEventType
-	Peer map[string]presence.Presence
+	Peer   map[string]presence.Presence
 }
 
 var defaultServer *server.Yorkie

@@ -136,8 +136,8 @@ func (d *Document) UpdatePresence(k, v string) error {
 	return nil
 }
 
-// Watch subscribes to PeerChangedEvent on this document.
-func (d *Document) Watch() chan PeerChangedEvent {
+// Events subscribes to PeerChangedEvent on this document.
+func (d *Document) Events() chan PeerChangedEvent {
 	return d.doc.events
 }
 
@@ -246,10 +246,10 @@ func (d *Document) SetPresence(clientID string, info presence.Presence) {
 	d.doc.SetPresence(clientID, info)
 }
 
-// HasPresencePriv returns whether the peer presence exists regardless of
+// HasPresence returns whether the peer presence exists regardless of
 // whether the client is watching the document or not.
-func (d *Document) HasPresencePriv(clientID string) bool {
-	return d.doc.HasPresencePriv(clientID)
+func (d *Document) HasPresence(clientID string) bool {
+	return d.doc.HasPresence(clientID)
 }
 
 // SetWatchedPeerMap sets the watched peer map.

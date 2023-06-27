@@ -109,12 +109,23 @@ type WatchResponseType string
 // The values below are types of WatchResponseType.
 const (
 	DocumentChanged WatchResponseType = "document-changed"
+
+	// Watched means that the peer has established a connection with the server,
+	// enabling real-time synchronization.
+	Watched WatchResponseType = "watched"
+
+	// Unwatched means that the peer connection has been disconnected.
+	Unwatched WatchResponseType = "unwatched"
+
+	// PresenceChanged means that the presences of the peer has updated.
+	PresenceChanged WatchResponseType = "presence-changed"
 )
 
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
 	Type WatchResponseType
 	Key  key.Key
+	Peer map[string]presence.Presence
 	Err  error
 }
 
@@ -445,29 +456,26 @@ func (c *Client) Watch(
 					Key:  doc.Key(),
 				}, nil
 			case types.DocumentWatchedEvent:
-				if doc.HasPresencePriv(clientID.String()) {
+				if doc.HasPresence(clientID.String()) {
 					attachment.doc.AddWatchedPeerMap(clientID.String(), true)
-					doc.Watch() <- document.PeerChangedEvent{
-						Type: document.WatchedEvent,
-						Publisher: map[string]presence.Presence{
+					return &WatchResponse{
+						Type: Watched,
+						Peer: map[string]presence.Presence{
 							clientID.String(): doc.PeerPresence(clientID.String()),
 						},
-					}
-				} else {
-					doc.AddWatchedPeerMap(clientID.String(), false)
-
+					}, nil
 				}
+				doc.AddWatchedPeerMap(clientID.String(), false)
 				return nil, nil
 			case types.DocumentUnwatchedEvent:
 				prevPresence := doc.PeerPresence(clientID.String())
 				doc.RemoveWatchedPeerMap(clientID.String())
-				doc.Watch() <- document.PeerChangedEvent{
-					Type: document.UnwatchedEvent,
-					Publisher: map[string]presence.Presence{
+				return &WatchResponse{
+					Type: Unwatched,
+					Peer: map[string]presence.Presence{
 						clientID.String(): prevPresence,
 					},
-				}
-				return nil, nil
+				}, nil
 			}
 		}
 		return nil, ErrUnsupportedWatchResponseType
@@ -498,6 +506,17 @@ func (c *Client) Watch(
 			if resp != nil {
 				rch <- *resp
 			}
+		}
+	}()
+
+	ch := doc.Events()
+	go func() {
+		for e := range ch {
+			t := PresenceChanged
+			if e.Type == document.WatchedEvent {
+				t = Watched
+			}
+			rch <- WatchResponse{Type: t, Peer: e.Peer}
 		}
 	}()
 
