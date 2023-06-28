@@ -93,6 +93,18 @@ func postOrderTraversal[V Value](node *Node[V], callback func(node *Node[V], dep
 	callback(node, depth)
 }
 
+// postOrderTraversalAll traverses the whole tree (include tombstones) with postorder traversal.
+func postOrderTraversalAll[V Value](node *Node[V], callback func(node *Node[V], depth int), depth int) {
+	if node == nil {
+		return
+	}
+
+	for _, child := range node.children {
+		postOrderTraversal(child, callback, depth+1)
+	}
+	callback(node, depth)
+}
+
 // nodesBetween iterates the nodes between the given range.
 // If the given range is collapsed, the callback is not called.
 // It traverses the tree with postorder traversal.
@@ -158,6 +170,11 @@ func ToXML[V Value](node *Node[V]) string {
 // Traverse traverses the tree with postorder traversal.
 func Traverse[V Value](tree *Tree[V], callback func(node *Node[V], depth int)) {
 	postOrderTraversal(tree.root, callback, 0)
+}
+
+// TraverseAll traverses the whole tree (include tombstones) with postorder traversal.
+func TraverseAll[V Value](tree *Tree[V], callback func(node *Node[V], depth int)) {
+	postOrderTraversalAll(tree.root, callback, 0)
 }
 
 // Value represents the data stored in the nodes of Tree.
@@ -410,6 +427,28 @@ func (n *Node[V]) Prepend(children ...*Node[V]) {
 		node.Parent = n
 		node.UpdateAncestorsSize()
 	}
+}
+
+// RemoveChild removes the given child.
+func (n *Node[V]) RemoveChild(child *Node[V]) {
+	if n.IsText() {
+		panic(errors.New("text node cannot have children"))
+	}
+	offset := -1
+
+	for i, c := range n.children {
+		if c == child {
+			offset = i
+			break
+		}
+	}
+
+	if offset == -1 {
+		panic(errors.New("child not found"))
+	}
+
+	n.children = append(n.children[:offset], n.children[offset+1:]...)
+	child.Parent = nil
 }
 
 // InsertBefore inserts the given node before the given child.

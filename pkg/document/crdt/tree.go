@@ -19,6 +19,7 @@ package crdt
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 
@@ -248,9 +249,10 @@ func (n *TreeNode) DeepCopy() *TreeNode {
 // Tree represents the tree of CRDT. It has doubly linked list structure and
 // index tree structure.
 type Tree struct {
-	DummyHead    *TreeNode
-	IndexTree    *index.Tree[*TreeNode]
-	NodeMapByPos *llrb.Tree[*TreePos, *TreeNode]
+	DummyHead      *TreeNode
+	IndexTree      *index.Tree[*TreeNode]
+	NodeMapByPos   *llrb.Tree[*TreePos, *TreeNode]
+	removedNodeMap map[string]*TreeNode
 
 	createdAt *time.Ticket
 	movedAt   *time.Ticket
@@ -260,10 +262,11 @@ type Tree struct {
 // NewTree creates a new instance of Tree.
 func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	tree := &Tree{
-		DummyHead:    NewTreeNode(DummyTreePos, DummyHeadType, nil),
-		IndexTree:    index.NewTree[*TreeNode](root.IndexTreeNode),
-		NodeMapByPos: llrb.NewTree[*TreePos, *TreeNode](),
-		createdAt:    createdAt,
+		DummyHead:      NewTreeNode(DummyTreePos, DummyHeadType, nil),
+		IndexTree:      index.NewTree[*TreeNode](root.IndexTreeNode),
+		NodeMapByPos:   llrb.NewTree[*TreePos, *TreeNode](),
+		removedNodeMap: make(map[string]*TreeNode),
+		createdAt:      createdAt,
 	}
 
 	previous := tree.DummyHead
@@ -280,6 +283,64 @@ func (t *Tree) Marshal() string {
 	builder := &strings.Builder{}
 	marshal(builder, t.Root())
 	return builder.String()
+}
+
+// returns the length of removed nodes
+func (t *Tree) removedNodesLen() int {
+	return len(t.removedNodeMap)
+}
+
+// purgeRemovedNodesBefore physically purges nodes that have been removed.
+func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) int {
+	count := 0
+	nodesToBeRemoved := make(map[*TreeNode]bool)
+
+	for _, node := range t.removedNodeMap {
+		if node.RemovedAt != nil && ticket.Compare(node.RemovedAt) >= 0 {
+			count++
+			nodesToBeRemoved[node] = true
+		}
+	}
+
+	index.TraverseAll(t.IndexTree, func(node *index.Node[*TreeNode], depth int) {
+		_, ok := nodesToBeRemoved[node.Value]
+
+		if ok {
+			parent := node.Parent
+
+			if parent == nil {
+				count--
+				delete(nodesToBeRemoved, node.Value)
+
+				return
+			}
+
+			parent.RemoveChild(node)
+		}
+	})
+
+	for node := range nodesToBeRemoved {
+		t.NodeMapByPos.Remove(node.Pos)
+		t.Purge(node)
+		delete(t.removedNodeMap, node.Pos.CreatedAt.StructureAsString()+":"+strconv.Itoa(node.Pos.Offset))
+	}
+
+	return count
+}
+
+// Purge physically purges the given node.
+func (t *Tree) Purge(node *TreeNode) {
+	if node.Prev != nil {
+		node.Prev.Next = node.Next
+	}
+
+	if node.Next != nil {
+		node.Next.Prev = node.Prev
+	}
+
+	node.Prev = nil
+	node.Next = nil
+	node.InsPrev = nil
 }
 
 // marshal returns the JSON encoding of this Tree.
@@ -411,6 +472,10 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 		isRangeOnSameBranch := toPos.Node.IsAncestorOf(fromPos.Node)
 		for _, node := range toBeRemoveds {
 			node.remove(editedAt)
+
+			if node.IsRemoved() {
+				t.removedNodeMap[node.Pos.CreatedAt.StructureAsString()+":"+strconv.Itoa(node.Pos.Offset)] = node
+			}
 		}
 
 		// move the alive children of the removed block node
