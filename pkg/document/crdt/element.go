@@ -34,11 +34,11 @@ type Container interface {
 	DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element
 }
 
-// TextElement represents Text.
-type TextElement interface {
+// GCElement represents Element which has GC.
+type GCElement interface {
 	Element
 	removedNodesLen() int
-	purgeTextNodesWithGarbage(ticket *time.Ticket) int
+	purgeRemovedNodesBefore(ticket *time.Ticket) int
 }
 
 // Element represents JSON element.

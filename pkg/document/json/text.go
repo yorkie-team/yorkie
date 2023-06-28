@@ -86,7 +86,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 		ticket,
 	))
 	if !fromPos.Equal(toPos) {
-		p.context.RegisterTextElementWithGarbage(p)
+		p.context.RegisterElementHasRemovedNodes(p)
 	}
 
 	return p
