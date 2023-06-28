@@ -123,11 +123,11 @@ func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, er
 }
 
 // ToPresence converts the given model to Protobuf format.
-func ToPresence(info *presence.Presence) *api.PresenceInfo {
+func ToPresence(info *presence.Presence) *api.Presence {
 	if info == nil {
 		return nil
 	}
-	return &api.PresenceInfo{
+	return &api.Presence{
 		Data: *info,
 	}
 }

@@ -45,7 +45,7 @@ message Change {
   ChangeID id = 1;
   string message = 2;
   repeated Operation operations = 3;
-  PresenceInfo presence = 4;
+  Presence presence = 4;
 }
 
 message ChangeID {
@@ -282,7 +282,7 @@ message DocumentSummary {
   google.protobuf.Timestamp updated_at = 6;
 }
 
-message PresenceInfo {
+message Presence {
   map<string, string> data = 1;
 }
 

@@ -121,7 +121,7 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary
 }
 
 // FromPresence converts the given Protobuf formats to model format.
-func FromPresence(pbPresence *api.PresenceInfo) *presence.Presence {
+func FromPresence(pbPresence *api.Presence) *presence.Presence {
 	if pbPresence == nil {
 		return nil
 	}
