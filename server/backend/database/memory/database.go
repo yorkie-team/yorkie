@@ -1181,7 +1181,7 @@ func (d *DB) FindDocInfosByPaging(
 			break
 		}
 
-		if info.ID != paging.Offset {
+		if info.ID != paging.Offset && info.RemovedAt.IsZero() {
 			docInfos = append(docInfos, info)
 		}
 	}
