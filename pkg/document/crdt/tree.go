@@ -498,7 +498,7 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 				}
 			}
 		} else {
-			if fromPos.Node.Parent.Value.IsRemoved() {
+			if fromPos.Node.Parent != nil && fromPos.Node.Parent.Value.IsRemoved() {
 				toPos.Node.Parent.Prepend(fromPos.Node.Parent.Children()...)
 			}
 		}
