@@ -100,7 +100,7 @@ func postOrderTraversalAll[V Value](node *Node[V], callback func(node *Node[V], 
 	}
 
 	for _, child := range node.children {
-		postOrderTraversal(child, callback, depth+1)
+		postOrderTraversalAll(child, callback, depth+1)
 	}
 	callback(node, depth)
 }
