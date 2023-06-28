@@ -584,6 +584,43 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			})
 		}
 	})
+
+	t.Run("FindDocInfosByPaging with docInfoRemovedAt test", func(t *testing.T) {
+		const testDocCnt = 3
+		ctx := context.Background()
+
+		// 01. Initialize a project and create documents.
+		projectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		var docInfos []*database.DocInfo
+		for i := 0; i < testDocCnt; i++ {
+			testDocKey := key.Key("key" + strconv.Itoa(i))
+			docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, dummyClientID, testDocKey, true)
+			assert.NoError(t, err)
+			docInfos = append(docInfos, docInfo)
+		}
+
+		// 02. List the documents.
+		result, err := db.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[types.ID]{
+			PageSize:  10,
+			IsForward: false,
+		})
+		assert.NoError(t, err)
+		assert.Len(t, result, len(docInfos))
+
+		// 03. Remove a document.
+		err = db.CreateChangeInfos(ctx, projectInfo.ID, docInfos[0], 0, []*change.Change{}, true)
+		assert.NoError(t, err)
+
+		// 04. List the documents again and check the filtered result.
+		result, err = db.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[types.ID]{
+			PageSize:  10,
+			IsForward: false,
+		})
+		assert.NoError(t, err)
+		assert.Len(t, result, len(docInfos)-1)
+	})
 }
 
 // RunCreateChangeInfosTest runs the CreateChangeInfos tests for the given db.
