@@ -118,7 +118,7 @@ func New(
 	}
 
 	logging.DefaultLogger().Infof(
-		"backend created: id: %s, rpc: %s: db: %s",
+		"backend created: id: %s, rpc: %s",
 		serverInfo.ID,
 		dbInfo,
 	)

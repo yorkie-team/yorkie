@@ -631,7 +631,20 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
+	// TODO(hackerwins): Removed documents should be filtered out by the query, but
+	// somehow it does not work. This is a workaround.
+	// val, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
+	iter, err := txn.Get(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
+	if err != nil {
+		return nil, fmt.Errorf("find document by key: %w", err)
+	}
+	var raw interface{}
+	for val := iter.Next(); val != nil; val = iter.Next() {
+		if val != nil && val.(*database.DocInfo).RemovedAt.IsZero() {
+			raw = val
+		}
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("find document by key: %w", err)
 	}
