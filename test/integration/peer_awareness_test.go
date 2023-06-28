@@ -75,9 +75,8 @@ func TestPeerAwareness(t *testing.T) {
 					}
 					if wr.Type != client.DocumentChanged {
 						responsePairs = append(responsePairs, watchResponsePair{
-							Type:   wr.Type,
-							DocKey: wr.Key,
-							Peer:   wr.Peer,
+							Type: wr.Type,
+							Peer: wr.Peer,
 						})
 					}
 					if len(responsePairs) == 3 {
@@ -175,9 +174,8 @@ func TestPeerAwareness(t *testing.T) {
 					}
 					if wr.Type != client.DocumentChanged {
 						responsePairs = append(responsePairs, watchResponsePair{
-							Type:   wr.Type,
-							DocKey: wr.Key,
-							Peer:   wr.Peer,
+							Type: wr.Type,
+							Peer: wr.Peer,
 						})
 					}
 					if len(responsePairs) == 3 {
@@ -269,9 +267,8 @@ func TestPeerAwareness(t *testing.T) {
 						assert.NoError(t, err)
 					} else {
 						responsePairs = append(responsePairs, watchResponsePair{
-							Type:   wr.Type,
-							DocKey: wr.Key,
-							Peer:   wr.Peer,
+							Type: wr.Type,
+							Peer: wr.Peer,
 						})
 					}
 					if len(responsePairs) == 2 {
@@ -354,9 +351,8 @@ func TestPeerAwareness(t *testing.T) {
 					}
 					if wr.Type != client.DocumentChanged {
 						responsePairs = append(responsePairs, watchResponsePair{
-							Type:   wr.Type,
-							DocKey: wr.Key,
-							Peer:   wr.Peer,
+							Type: wr.Type,
+							Peer: wr.Peer,
 						})
 					}
 					if len(responsePairs) == 3 {
@@ -448,9 +444,8 @@ func TestPeerAwareness(t *testing.T) {
 					}
 					if wr.Type != client.DocumentChanged {
 						responsePairs = append(responsePairs, watchResponsePair{
-							Type:   wr.Type,
-							DocKey: wr.Key,
-							Peer:   wr.Peer,
+							Type: wr.Type,
+							Peer: wr.Peer,
 						})
 					}
 					if len(responsePairs) == 3 {
@@ -590,9 +585,8 @@ func TestPeerAwareness(t *testing.T) {
 					}
 					if wr.Type != client.DocumentChanged {
 						responsePairs = append(responsePairs, watchResponsePair{
-							Type:   wr.Type,
-							DocKey: wr.Key,
-							Peer:   wr.Peer,
+							Type: wr.Type,
+							Peer: wr.Peer,
 						})
 					}
 					if len(responsePairs) == 1 { // watched

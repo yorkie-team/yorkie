@@ -124,7 +124,6 @@ const (
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
 	Type WatchResponseType
-	Key  key.Key
 	Peer map[string]presence.Presence
 	Err  error
 }
@@ -453,7 +452,6 @@ func (c *Client) Watch(
 			case types.DocumentChangedEvent:
 				return &WatchResponse{
 					Type: DocumentChanged,
-					Key:  doc.Key(),
 				}, nil
 			case types.DocumentWatchedEvent:
 				if doc.HasPresence(clientID.String()) {
@@ -493,13 +491,13 @@ func (c *Client) Watch(
 		for {
 			pbResp, err := stream.Recv()
 			if err != nil {
-				rch <- WatchResponse{Err: err, Key: doc.Key()}
+				rch <- WatchResponse{Err: err}
 				close(rch)
 				return
 			}
 			resp, err := handleResponse(pbResp)
 			if err != nil {
-				rch <- WatchResponse{Err: err, Key: doc.Key()}
+				rch <- WatchResponse{Err: err}
 				close(rch)
 				return
 			}

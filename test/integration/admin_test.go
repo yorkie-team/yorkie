@@ -105,7 +105,7 @@ func TestAdmin(t *testing.T) {
 				assert.NoError(t, resp.Err)
 
 				if resp.Type == client.DocumentChanged {
-					err := c1.Sync(ctx, client.WithDocKey(resp.Key))
+					err := c1.Sync(ctx, client.WithDocKey(d1.Key()))
 					assert.NoError(t, err)
 					return
 				}
