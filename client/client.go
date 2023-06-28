@@ -428,15 +428,15 @@ func (c *Client) Watch(
 	handleResponse := func(pbResp *api.WatchDocumentResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentResponse_Initialization_:
-			watchedPeerMap := map[string]bool{}
+			watchedPeerSet := map[string]bool{}
 			for _, peer := range resp.Initialization.Peers {
 				clientID, err := time.ActorIDFromBytes(peer)
 				if err != nil {
 					return nil, err
 				}
-				watchedPeerMap[clientID.String()] = true
+				watchedPeerSet[clientID.String()] = true
 			}
-			doc.SetWatchedPeerMap(watchedPeerMap)
+			doc.SetWatchedPeerSet(watchedPeerSet)
 			return nil, nil
 		case *api.WatchDocumentResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
@@ -454,8 +454,8 @@ func (c *Client) Watch(
 					Type: DocumentChanged,
 				}, nil
 			case types.DocumentWatchedEvent:
+				attachment.doc.AddWatchedPeerSet(clientID.String())
 				if doc.HasPresence(clientID.String()) {
-					attachment.doc.AddWatchedPeerMap(clientID.String(), true)
 					return &WatchResponse{
 						Type: Watched,
 						Peer: map[string]presence.Presence{
@@ -463,11 +463,10 @@ func (c *Client) Watch(
 						},
 					}, nil
 				}
-				doc.AddWatchedPeerMap(clientID.String(), false)
 				return nil, nil
 			case types.DocumentUnwatchedEvent:
 				prevPresence := doc.PeerPresence(clientID.String())
-				doc.RemoveWatchedPeerMap(clientID.String())
+				doc.RemoveWatchedPeerSet(clientID.String())
 				return &WatchResponse{
 					Type: Unwatched,
 					Peer: map[string]presence.Presence{

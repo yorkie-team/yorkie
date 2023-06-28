@@ -252,19 +252,19 @@ func (d *Document) HasPresence(clientID string) bool {
 	return d.doc.HasPresence(clientID)
 }
 
-// SetWatchedPeerMap sets the watched peer map.
-func (d *Document) SetWatchedPeerMap(peerMap map[string]bool) {
-	d.doc.SetWatchedPeerMap(peerMap)
+// SetWatchedPeerSet sets the watched peer set.
+func (d *Document) SetWatchedPeerSet(peerSet map[string]bool) {
+	d.doc.SetWatchedPeerSet(peerSet)
 }
 
-// AddWatchedPeerMap adds the peer to the watched peer map.
-func (d *Document) AddWatchedPeerMap(clientID string, hasPresence bool) {
-	d.doc.AddWatchedPeerMap(clientID, hasPresence)
+// AddWatchedPeerSet adds the peer to the watched peer set.
+func (d *Document) AddWatchedPeerSet(clientID string) {
+	d.doc.AddWatchedPeerSet(clientID)
 }
 
-// RemoveWatchedPeerMap removes the peer from the watched peer map.
-func (d *Document) RemoveWatchedPeerMap(clientID string) {
-	d.doc.RemoveWatchedPeerMap(clientID)
+// RemoveWatchedPeerSet removes the peer from the watched peer set.
+func (d *Document) RemoveWatchedPeerSet(clientID string) {
+	d.doc.RemoveWatchedPeerSet(clientID)
 }
 
 // Presence returns the presence of the client who created this document.

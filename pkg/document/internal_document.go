@@ -83,10 +83,10 @@ type InternalDocument struct {
 
 	events chan PeerChangedEvent
 
-	// `watchedPeerMap` is a map of the peers that watch the document. It is used
-	// to determine whether the peer is online or offline. If the value is true
-	// if the presence of the peer is stored in `peerPresenceMap`.
-	watchedPeerMap  *gosync.Map // map[string]bool
+	// `watchedPeerSet` is a set of the peers that watch the document.
+	// It is used to determine whether the peer is online or offline.
+	// It uses a map as a set-like data, so the value is not meaningful.
+	watchedPeerSet  *gosync.Map // map[string]bool
 	peerPresenceMap *gosync.Map // map[string]presence.Presence
 
 	changeContext *change.Context
@@ -103,7 +103,7 @@ func NewInternalDocument(docKey key.Key, clientID string) *InternalDocument {
 		checkpoint:      change.InitialCheckpoint,
 		changeID:        change.InitialChangeIDOf(actorID),
 		peerPresenceMap: &gosync.Map{},
-		watchedPeerMap:  &gosync.Map{},
+		watchedPeerSet:  &gosync.Map{},
 		events:          make(chan PeerChangedEvent, 1),
 	}
 }
@@ -139,7 +139,7 @@ func NewInternalDocumentFromSnapshot(
 		checkpoint:      change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changeID:        change.InitialID.SyncLamport(lamport),
 		peerPresenceMap: presenceSyncMap,
-		watchedPeerMap:  &gosync.Map{},
+		watchedPeerSet:  &gosync.Map{},
 	}, nil
 }
 
@@ -165,7 +165,7 @@ func (d *InternalDocument) InitPresence(initialPresence presence.Presence) {
 		copiedPresence[k] = v
 	}
 	d.peerPresenceMap.Store(d.myClientID(), copiedPresence)
-	d.watchedPeerMap.Store(d.myClientID(), true)
+	d.AddWatchedPeerSet(d.myClientID())
 
 	context := change.NewContext(
 		d.changeID.Next(),
@@ -319,28 +319,28 @@ func (d *InternalDocument) SetPresenceMap(peerMap map[string]presence.Presence) 
 	}
 }
 
-// SetWatchedPeerMap sets the watched peer map.
-func (d *InternalDocument) SetWatchedPeerMap(peerMap map[string]bool) {
-	if d.watchedPeerMap == nil {
-		d.watchedPeerMap = &gosync.Map{}
+// SetWatchedPeerSet sets the watched peer set.
+func (d *InternalDocument) SetWatchedPeerSet(peerSet map[string]bool) {
+	if d.watchedPeerSet == nil {
+		d.watchedPeerSet = &gosync.Map{}
 	}
-	d.watchedPeerMap.Range(func(key, value interface{}) bool {
-		d.watchedPeerMap.Delete(key)
+	d.watchedPeerSet.Range(func(key, value interface{}) bool {
+		d.watchedPeerSet.Delete(key)
 		return true
 	})
-	for peer, hasPresence := range peerMap {
-		d.watchedPeerMap.Store(peer, hasPresence)
+	for peer := range peerSet {
+		d.AddWatchedPeerSet(peer)
 	}
 }
 
-// AddWatchedPeerMap adds the peer to the watched peer map.
-func (d *InternalDocument) AddWatchedPeerMap(clientID string, hasPresence bool) {
-	d.watchedPeerMap.Store(clientID, hasPresence)
+// AddWatchedPeerSet adds the peer to the watched peer set.
+func (d *InternalDocument) AddWatchedPeerSet(clientID string) {
+	d.watchedPeerSet.Store(clientID, true)
 }
 
-// RemoveWatchedPeerMap removes the peer from the watched peer map.
-func (d *InternalDocument) RemoveWatchedPeerMap(clientID string) {
-	d.watchedPeerMap.Delete(clientID)
+// RemoveWatchedPeerSet removes the peer from the watched peer set.
+func (d *InternalDocument) RemoveWatchedPeerSet(clientID string) {
+	d.watchedPeerSet.Delete(clientID)
 }
 
 // Presence returns the presence of the client who created this document.
@@ -350,15 +350,14 @@ func (d *InternalDocument) Presence() presence.Presence {
 
 // PeerPresence returns the presence of the given client.
 func (d *InternalDocument) PeerPresence(clientID string) presence.Presence {
-	hasPresence, ok := d.watchedPeerMap.Load(clientID)
-	if !ok || !hasPresence.(bool) {
+	if _, ok := d.watchedPeerSet.Load(clientID); !ok {
 		return nil
 	}
 
 	peerPresence := make(presence.Presence)
-	if p, ok := d.peerPresenceMap.Load(clientID); ok {
-		if info, ok := p.(presence.Presence); ok {
-			for k, v := range info {
+	if val, ok := d.peerPresenceMap.Load(clientID); ok {
+		if p, ok := val.(presence.Presence); ok {
+			for k, v := range p {
 				peerPresence[k] = v
 			}
 		}
@@ -369,19 +368,14 @@ func (d *InternalDocument) PeerPresence(clientID string) presence.Presence {
 // PeersMap returns the peer presence map, including the client who created this document.
 func (d *InternalDocument) PeersMap() map[string]presence.Presence {
 	peers := map[string]presence.Presence{}
-	d.peerPresenceMap.Range(func(key, value interface{}) bool {
+	d.watchedPeerSet.Range(func(key, value interface{}) bool {
 		clientID := key.(string)
-
-		hasPresence, ok := d.watchedPeerMap.Load(clientID)
-		if !ok || !hasPresence.(bool) {
-			return true
-		}
-
-		p, ok := value.(presence.Presence)
-		if ok {
-			peers[clientID] = presence.Presence{}
-			for k, v := range p {
-				peers[clientID][k] = v
+		if val, ok := d.peerPresenceMap.Load(clientID); ok {
+			if p, ok := val.(presence.Presence); ok {
+				peers[clientID] = presence.Presence{}
+				for k, v := range p {
+					peers[clientID][k] = v
+				}
 			}
 		}
 		return true
@@ -434,29 +428,29 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 			return err
 		}
 		if c.Presence() != nil {
+			newPresence := *c.Presence()
 			clientID := c.ID().ActorID().String()
-			peer, ok := d.watchedPeerMap.Load(clientID)
-
-			d.SetPresence(clientID, *c.Presence())
-
+			_, ok := d.watchedPeerSet.Load(clientID)
 			if ok {
-				if peer.(bool) {
+				if d.HasPresence(clientID) {
 					d.events <- PeerChangedEvent{
 						Type: PresenceChangedEvent,
 						Peer: map[string]presence.Presence{
-							clientID: d.PeerPresence(clientID),
+							clientID: newPresence,
 						},
 					}
 				} else {
-					d.watchedPeerMap.Store(clientID, true)
+					d.AddWatchedPeerSet(clientID)
 					d.events <- PeerChangedEvent{
 						Type: WatchedEvent,
 						Peer: map[string]presence.Presence{
-							clientID: d.PeerPresence(clientID),
+							clientID: newPresence,
 						},
 					}
 				}
 			}
+
+			d.SetPresence(clientID, newPresence)
 		}
 
 		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
