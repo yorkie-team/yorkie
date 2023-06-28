@@ -671,7 +671,8 @@ func (t *Tree[V]) PathToTreePos(path []int) *TreePos[V] {
 	}
 
 	return &TreePos[V]{
-		Node: node,
+		Node:   node,
+		Offset: path[len(path)-1],
 	}
 }
 
