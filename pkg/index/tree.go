@@ -94,7 +94,7 @@ func postOrderTraversal[V Value](node *Node[V], callback func(node *Node[V], dep
 }
 
 // postOrderTraversalAll traverses the whole tree (include tombstones) with postorder traversal.
-func postOrderTraversalAll[V Value](node *Node[V], callback func(node *Node[V], depth int), depth int) {
+func postorderTraversalAll[V Value](node *Node[V], callback func(node *Node[V], depth int), depth int) {
 	if node == nil {
 		return
 	}
