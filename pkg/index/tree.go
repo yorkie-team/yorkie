@@ -78,29 +78,29 @@ const (
 
 // TraverseNode traverses the tree with the given callback.
 func TraverseNode[V Value](node *Node[V], callback func(node *Node[V], depth int)) {
-	postOrderTraversal(node, callback, 0)
+	postorderTraversal(node, callback, 0)
 }
 
-// postOrderTraversal traverses the tree with postorder traversal.
-func postOrderTraversal[V Value](node *Node[V], callback func(node *Node[V], depth int), depth int) {
+// postorderTraversal traverses the tree with postorder traversal.
+func postorderTraversal[V Value](node *Node[V], callback func(node *Node[V], depth int), depth int) {
 	if node == nil {
 		return
 	}
 
 	for _, child := range node.Children() {
-		postOrderTraversal(child, callback, depth+1)
+		postorderTraversal(child, callback, depth+1)
 	}
 	callback(node, depth)
 }
 
-// postOrderTraversalAll traverses the whole tree (include tombstones) with postorder traversal.
+// postorderTraversalAll traverses the whole tree (include tombstones) with postorder traversal.
 func postorderTraversalAll[V Value](node *Node[V], callback func(node *Node[V], depth int), depth int) {
 	if node == nil {
 		return
 	}
 
 	for _, child := range node.children {
-		postOrderTraversalAll(child, callback, depth+1)
+		postorderTraversalAll(child, callback, depth+1)
 	}
 	callback(node, depth)
 }
@@ -169,12 +169,12 @@ func ToXML[V Value](node *Node[V]) string {
 
 // Traverse traverses the tree with postorder traversal.
 func Traverse[V Value](tree *Tree[V], callback func(node *Node[V], depth int)) {
-	postOrderTraversal(tree.root, callback, 0)
+	postorderTraversal(tree.root, callback, 0)
 }
 
 // TraverseAll traverses the whole tree (include tombstones) with postorder traversal.
 func TraverseAll[V Value](tree *Tree[V], callback func(node *Node[V], depth int)) {
-	postOrderTraversalAll(tree.root, callback, 0)
+	postorderTraversalAll(tree.root, callback, 0)
 }
 
 // Value represents the data stored in the nodes of Tree.
