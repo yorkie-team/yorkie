@@ -20,13 +20,13 @@ package integration
 
 import (
 	"context"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
