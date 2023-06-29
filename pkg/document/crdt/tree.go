@@ -285,7 +285,7 @@ func (t *Tree) Marshal() string {
 	return builder.String()
 }
 
-// returns the length of removed nodes
+// removedNodesLen returns the length of removed nodes.
 func (t *Tree) removedNodesLen() int {
 	return len(t.removedNodeMap)
 }
