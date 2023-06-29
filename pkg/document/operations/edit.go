@@ -80,7 +80,7 @@ func (e *Edit) Execute(root *crdt.Root) error {
 			return err
 		}
 		if !e.from.Equal(e.to) {
-			root.RegisterTextElementWithGarbage(obj)
+			root.RegisterElementHasRemovedNodes(obj)
 		}
 	default:
 		return ErrNotApplicableDataType

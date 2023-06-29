@@ -102,6 +102,10 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		ticket,
 	))
 
+	if fromPos.CreatedAt.Compare(toPos.CreatedAt) != 0 || fromPos.Offset != toPos.Offset {
+		t.context.RegisterElementHasRemovedNodes(t.Tree)
+	}
+
 	return true
 }
 
@@ -146,6 +150,10 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 		node,
 		ticket,
 	))
+
+	if fromPos.CreatedAt.Compare(toPos.CreatedAt) != 0 || fromPos.Offset != toPos.Offset {
+		t.context.RegisterElementHasRemovedNodes(t.Tree)
+	}
 
 	return true
 }

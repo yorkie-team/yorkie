@@ -68,6 +68,10 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 			content = e.Content().DeepCopy()
 		}
 		obj.Edit(e.from, e.to, content, e.executedAt)
+
+		if e.from.CreatedAt.Compare(e.to.CreatedAt) != 0 || e.from.Offset != e.to.Offset {
+			root.RegisterElementHasRemovedNodes(obj)
+		}
 	default:
 		return ErrNotApplicableDataType
 	}

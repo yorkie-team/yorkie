@@ -26,9 +26,9 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func registerTextElementWithGarbage(fromPos, toPos *crdt.RGATreeSplitNodePos, root *crdt.Root, text crdt.TextElement) {
+func registerElementHasRemovedNodes(fromPos, toPos *crdt.RGATreeSplitNodePos, root *crdt.Root, text crdt.GCElement) {
 	if !fromPos.Equal(toPos) {
-		root.RegisterTextElementWithGarbage(text)
+		root.RegisterElementHasRemovedNodes(text)
 	}
 }
 
@@ -61,28 +61,28 @@ func TestRoot(t *testing.T) {
 		fromPos, toPos, _ := text.CreateRange(0, 0)
 		_, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		registerTextElementWithGarbage(fromPos, toPos, root, text)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, "Hello World", text.String())
 		assert.Equal(t, 0, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(5, 10)
 		_, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		registerTextElementWithGarbage(fromPos, toPos, root, text)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, "HelloYorkied", text.String())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(0, 5)
 		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		registerTextElementWithGarbage(fromPos, toPos, root, text)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, "Yorkied", text.String())
 		assert.Equal(t, 2, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(6, 7)
 		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		registerTextElementWithGarbage(fromPos, toPos, root, text)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, "Yorkie", text.String())
 		assert.Equal(t, 3, root.GarbageLen())
 
@@ -121,7 +121,7 @@ func TestRoot(t *testing.T) {
 			fromPos, toPos, _ := text.CreateRange(tc.from, tc.to)
 			_, _, err := text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
 			assert.NoError(t, err)
-			registerTextElementWithGarbage(fromPos, toPos, root, text)
+			registerElementHasRemovedNodes(fromPos, toPos, root, text)
 			assert.Equal(t, tc.want, text.String())
 			assert.Equal(t, tc.garbage, root.GarbageLen())
 		}
@@ -138,21 +138,21 @@ func TestRoot(t *testing.T) {
 		fromPos, toPos, _ := text.CreateRange(0, 0)
 		_, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		registerTextElementWithGarbage(fromPos, toPos, root, text)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 		assert.Equal(t, 0, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(6, 11)
 		_, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		registerTextElementWithGarbage(fromPos, toPos, root, text)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		fromPos, toPos, _ = text.CreateRange(0, 6)
 		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		registerTextElementWithGarbage(fromPos, toPos, root, text)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, `[{"val":"Yorkie"}]`, text.Marshal())
 		assert.Equal(t, 2, root.GarbageLen())
 
