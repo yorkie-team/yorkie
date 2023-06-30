@@ -25,7 +25,7 @@ type Container interface {
 	Element
 
 	// Purge physically purges the given child element.
-	Purge(child Element)
+	Purge(child Element) error
 
 	// Descendants returns all descendants of this container.
 	Descendants(callback func(elem Element, parent Container) bool)
