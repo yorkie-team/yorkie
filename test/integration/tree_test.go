@@ -322,6 +322,9 @@ func TestTree(t *testing.T) {
 
 		assert.Equal(t, `<root><p bold="true">ab</p><p italic="true">cd</p></root>`, d1.Root().GetTree("t").ToXML())
 		assert.Equal(t, `<root><p bold="true">ab</p><p italic="true">cd</p></root>`, d2.Root().GetTree("t").ToXML())
+
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{"bold":"true"}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{"italic":"true"}}]}`, d1.Root().GetTree("t").Marshal())
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{"bold":"true"}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{"italic":"true"}}]}`, d2.Root().GetTree("t").Marshal())
 	})
 
 	t.Run("insert inline content to the same position(left) concurrently test", func(t *testing.T) {

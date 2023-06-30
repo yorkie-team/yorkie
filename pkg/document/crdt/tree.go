@@ -357,7 +357,14 @@ func marshal(builder *strings.Builder, node *TreeNode) {
 		}
 		marshal(builder, child.Value)
 	}
-	builder.WriteString(`]}`)
+	builder.WriteString(`]`)
+
+	if node.Attrs != nil && node.Attrs.Len() > 0 {
+		builder.WriteString(fmt.Sprintf(`,"attributes":`))
+		builder.WriteString(node.Attrs.Marshal())
+	}
+
+	builder.WriteString(`}`)
 }
 
 // DeepCopy copies itself deeply.
