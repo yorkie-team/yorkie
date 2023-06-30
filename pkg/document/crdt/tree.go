@@ -462,19 +462,29 @@ func (t *Tree) FindPos(offset int) *TreePos {
 
 // Edit edits the tree with the given range and content.
 // If the content is undefined, the range will be removed.
-func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket) {
+func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket) error {
 	// 01. split text nodes at the given range if needed.
-	toPos, toRight := t.findTreePosWithSplitText(to, editedAt)
-	fromPos, fromRight := t.findTreePosWithSplitText(from, editedAt)
+	toPos, toRight, toErr := t.findTreePosWithSplitText(to, editedAt)
+	fromPos, fromRight, fromErr := t.findTreePosWithSplitText(from, editedAt)
+
+	if toErr != nil {
+		return toErr
+	} else if fromErr != nil {
+		return fromErr
+	}
 
 	toBeRemoveds := make([]*TreeNode, 0)
 	// 02. remove the nodes and update linked list and index tree.
 	if fromRight != toRight {
-		t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
+		err := t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
 			if !node.IsRemoved() {
 				toBeRemoveds = append(toBeRemoveds, node)
 			}
 		})
+
+		if err != nil {
+			return err
+		}
 
 		isRangeOnSameBranch := toPos.Node.IsAncestorOf(fromPos.Node)
 		for _, node := range toBeRemoveds {
@@ -532,6 +542,8 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 			target.InsertAt(content.IndexTreeNode, fromPos.Offset+1)
 		}
 	}
+
+	return nil
 }
 
 // StyleByIndex applies the given attributes of the given range.
@@ -544,12 +556,18 @@ func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, edited
 }
 
 // Style applies the given attributes of the given range.
-func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *time.Ticket) {
-	_, toRight := t.findTreePos(to, editedAt)
-	_, fromRight := t.findTreePos(from, editedAt)
+func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *time.Ticket) error {
+	_, toRight, toErr := t.findTreePos(to, editedAt)
+	_, fromRight, fromErr := t.findTreePos(from, editedAt)
+
+	if toErr != nil {
+		return toErr
+	} else if fromErr != nil {
+		return fromErr
+	}
 
 	// 02. style the nodes.
-	t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
+	err := t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
 		if node.IsText() {
 			return
 		}
@@ -561,13 +579,19 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 			node.Attrs.Set(key, value, editedAt)
 		}
 	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // findTreePos returns TreePos and the right node of the given index in postorder.
-func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode) {
+func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode, error) {
 	treePos := t.toTreePos(pos)
 	if treePos == nil {
-		panic(fmt.Errorf("cannot find node at %p", pos))
+		return nil, nil, fmt.Errorf("cannot find node at %p", pos)
 	}
 
 	// Find the appropriate position. This logic is similar to the logical to
@@ -584,14 +608,14 @@ func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[
 
 	// TODO(hackerwins): Consider to use current instead of treePos.
 	right := t.IndexTree.FindPostorderRight(treePos)
-	return current, right
+	return current, right, nil
 }
 
 // findTreePosWithSplitText finds the right node of the given index in postorder.
-func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode) {
+func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode, error) {
 	treePos := t.toTreePos(pos)
 	if treePos == nil {
-		panic(fmt.Errorf("cannot find node at %p", pos))
+		return nil, nil, fmt.Errorf("cannot find node at %p", pos)
 	}
 
 	// Find the appropriate position. This logic is similar to the logical to
@@ -615,7 +639,7 @@ func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (*i
 	}
 
 	right := t.IndexTree.FindPostorderRight(treePos)
-	return current, right
+	return current, right, nil
 }
 
 // toTreePos converts the given crdt.TreePos to index.TreePos<CRDTTreeNode>.
@@ -648,16 +672,18 @@ func (t *Tree) toIndex(pos *TreePos) int {
 
 // nodesBetween returns the nodes between the given range.
 // This method includes the given left node but excludes the given right node.
-func (t *Tree) nodesBetween(left *TreeNode, right *TreeNode, callback func(*TreeNode)) {
+func (t *Tree) nodesBetween(left *TreeNode, right *TreeNode, callback func(*TreeNode)) error {
 	current := left
 	for current != right {
 		if current == nil {
-			panic(errors.New("left and right are not in the same list"))
+			return errors.New("left and right are not in the same list")
 		}
 
 		callback(current)
 		current = current.Next
 	}
+
+	return nil
 }
 
 // Structure returns the structure of this tree.

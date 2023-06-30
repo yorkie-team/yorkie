@@ -92,7 +92,11 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 	}
 
 	ticket = t.context.LastTimeTicket()
-	t.Tree.Edit(fromPos, toPos, clone, ticket)
+	err := t.Tree.Edit(fromPos, toPos, clone, ticket)
+
+	if err != nil {
+		panic(err)
+	}
 
 	t.context.Push(operations.NewTreeEdit(
 		t.CreatedAt(),
@@ -141,7 +145,11 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 	}
 
 	ticket = t.context.LastTimeTicket()
-	t.Tree.Edit(fromPos, toPos, clone, ticket)
+	err := t.Tree.Edit(fromPos, toPos, clone, ticket)
+
+	if err != nil {
+		panic(err)
+	}
 
 	t.context.Push(operations.NewTreeEdit(
 		t.CreatedAt(),
@@ -168,7 +176,11 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	toPos := t.Tree.FindPos(toIdx)
 
 	ticket := t.context.IssueTimeTicket()
-	t.Tree.Style(fromPos, toPos, attributes, ticket)
+	err := t.Tree.Style(fromPos, toPos, attributes, ticket)
+
+	if err != nil {
+		panic(err)
+	}
 
 	t.context.Push(operations.NewTreeStyle(
 		t.CreatedAt(),
