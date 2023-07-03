@@ -213,7 +213,13 @@ func (d *Document) GarbageCollect(ticket *time.Ticket) int {
 			panic(err)
 		}
 	}
-	return d.doc.GarbageCollect(ticket)
+
+	n, err := d.doc.GarbageCollect(ticket)
+	if err != nil {
+		panic(err)
+	}
+
+	return n
 }
 
 // GarbageLen returns the count of removed elements.
