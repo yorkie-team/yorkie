@@ -80,7 +80,11 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		}
 		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
 		for _, child := range content.Children {
-			buildDescendants(t.context, child, node)
+			err := buildDescendants(t.context, child, node)
+
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 
@@ -94,12 +98,16 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 	}
 
 	var clone *crdt.TreeNode
+	var err error
 	if node != nil {
-		clone = node.DeepCopy()
+		clone, err = node.DeepCopy()
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	ticket = t.context.LastTimeTicket()
-	err := t.Tree.Edit(fromPos, toPos, clone, ticket)
+	err = t.Tree.Edit(fromPos, toPos, clone, ticket)
 
 	if err != nil {
 		panic(err)
@@ -140,7 +148,11 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 		}
 		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
 		for _, child := range content.Children {
-			buildDescendants(t.context, child, node)
+			err := buildDescendants(t.context, child, node)
+
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 
@@ -154,12 +166,17 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 	}
 
 	var clone *crdt.TreeNode
+	var err error
 	if node != nil {
-		clone = node.DeepCopy()
+		clone, err = node.DeepCopy()
+
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	ticket = t.context.LastTimeTicket()
-	err := t.Tree.Edit(fromPos, toPos, clone, ticket)
+	err = t.Tree.Edit(fromPos, toPos, clone, ticket)
 
 	if err != nil {
 		panic(err)
@@ -222,18 +239,26 @@ func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crd
 
 	root := crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), node.Type, nil)
 	for _, child := range node.Children {
-		buildDescendants(ctx, child, root)
+		err := buildDescendants(ctx, child, root)
+
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return root
 }
 
 // buildDescendants converts the given node to a CRDT-based tree node.
-func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) {
+func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) error {
 	if n.Type == index.DefaultTextType {
 		treeNode := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), n.Type, nil, n.Value)
-		parent.Append(treeNode)
-		return
+		err := parent.Append(treeNode)
+
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 
 	ticket := ctx.IssueTimeTicket()
@@ -247,9 +272,19 @@ func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) {
 	}
 
 	treeNode := crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), n.Type, attributes)
-	parent.Append(treeNode)
+	err := parent.Append(treeNode)
+
+	if err != nil {
+		panic(err)
+	}
 
 	for _, child := range n.Children {
-		buildDescendants(ctx, child, treeNode)
+		err := buildDescendants(ctx, child, treeNode)
+
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }

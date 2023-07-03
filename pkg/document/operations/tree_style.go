@@ -64,7 +64,12 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	obj.Style(e.from, e.to, e.attributes, e.executedAt)
+	err := obj.Style(e.from, e.to, e.attributes, e.executedAt)
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

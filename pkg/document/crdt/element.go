@@ -38,7 +38,7 @@ type Container interface {
 type GCElement interface {
 	Element
 	removedNodesLen() int
-	purgeRemovedNodesBefore(ticket *time.Ticket) int
+	purgeRemovedNodesBefore(ticket *time.Ticket) (int, error)
 }
 
 // Element represents JSON element.

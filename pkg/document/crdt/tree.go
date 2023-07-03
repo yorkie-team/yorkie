@@ -151,23 +151,35 @@ func (n *TreeNode) Attributes() string {
 }
 
 // Append appends the given node to the end of the children.
-func (n *TreeNode) Append(newNodes ...*TreeNode) {
+func (n *TreeNode) Append(newNodes ...*TreeNode) error {
 	indexNodes := make([]*index.Node[*TreeNode], len(newNodes))
 	for i, newNode := range newNodes {
 		indexNodes[i] = newNode.IndexTreeNode
 	}
 
-	n.IndexTreeNode.Append(indexNodes...)
+	err := n.IndexTreeNode.Append(indexNodes...)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Prepend prepends the given node to the beginning of the children.
-func (n *TreeNode) Prepend(newNodes ...*TreeNode) {
+func (n *TreeNode) Prepend(newNodes ...*TreeNode) error {
 	indexNodes := make([]*index.Node[*TreeNode], len(newNodes))
 	for i, newNode := range newNodes {
 		indexNodes[i] = newNode.IndexTreeNode
 	}
 
-	n.IndexTreeNode.Prepend(indexNodes...)
+	err := n.IndexTreeNode.Prepend(indexNodes...)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Child returns the child of the given offset.
@@ -182,18 +194,18 @@ func (n *TreeNode) Child(offset int) (*TreeNode, error) {
 }
 
 // Split splits the node at the given offset.
-func (n *TreeNode) Split(offset int) *TreeNode {
+func (n *TreeNode) Split(offset int) (*TreeNode, error) {
 	if n.IsText() {
 		return n.SplitText(offset)
 	}
 
-	return nil
+	return nil, nil
 }
 
 // SplitText splits the text node at the given offset.
-func (n *TreeNode) SplitText(offset int) *TreeNode {
+func (n *TreeNode) SplitText(offset int) (*TreeNode, error) {
 	if offset == 0 || offset == n.Len() {
-		return nil
+		return nil, nil
 	}
 
 	encoded := utf16.Encode([]rune(n.Value))
@@ -207,9 +219,13 @@ func (n *TreeNode) SplitText(offset int) *TreeNode {
 		CreatedAt: n.Pos.CreatedAt,
 		Offset:    offset,
 	}, n.Type(), nil, string(rightRune))
-	n.IndexTreeNode.Parent.InsertAfterInternal(rightNode.IndexTreeNode, n.IndexTreeNode)
+	err := n.IndexTreeNode.Parent.InsertAfterInternal(rightNode.IndexTreeNode, n.IndexTreeNode)
 
-	return rightNode
+	if err != nil {
+		return nil, err
+	}
+
+	return rightNode, nil
 }
 
 // remove marks the node as removed.
@@ -225,12 +241,18 @@ func (n *TreeNode) remove(removedAt *time.Ticket) {
 }
 
 // InsertAt inserts the given node at the given offset.
-func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) {
-	n.IndexTreeNode.InsertAt(newNode.IndexTreeNode, offset)
+func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) error {
+	err := n.IndexTreeNode.InsertAt(newNode.IndexTreeNode, offset)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // DeepCopy copies itself deeply.
-func (n *TreeNode) DeepCopy() *TreeNode {
+func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	var clone *TreeNode
 	if n.Attrs != nil {
 		clone = NewTreeNode(n.Pos, n.Type(), n.Attrs.DeepCopy(), n.Value)
@@ -240,16 +262,25 @@ func (n *TreeNode) DeepCopy() *TreeNode {
 	clone.RemovedAt = n.RemovedAt
 
 	if n.IsText() {
-		return clone
+		return clone, nil
 	}
 
 	var children []*index.Node[*TreeNode]
 	for _, child := range n.IndexTreeNode.Children(true) {
-		node := child.Value.DeepCopy()
+		node, err := child.Value.DeepCopy()
+
+		if err != nil {
+			return nil, err
+		}
+
 		children = append(children, node.IndexTreeNode)
 	}
-	clone.IndexTreeNode.SetChildren(children)
-	return clone
+	err := clone.IndexTreeNode.SetChildren(children)
+
+	if err != nil {
+		return nil, err
+	}
+	return clone, nil
 }
 
 // Tree represents the tree of CRDT. It has doubly linked list structure and
@@ -297,7 +328,7 @@ func (t *Tree) removedNodesLen() int {
 }
 
 // purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) int {
+func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 	count := 0
 	nodesToBeRemoved := make(map[*TreeNode]bool)
 
@@ -308,7 +339,7 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) int {
 		}
 	}
 
-	index.TraverseAll(t.IndexTree, func(node *index.Node[*TreeNode], depth int) {
+	err := index.TraverseAll(t.IndexTree, func(node *index.Node[*TreeNode], depth int) error {
 		_, ok := nodesToBeRemoved[node.Value]
 
 		if ok {
@@ -318,12 +349,22 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) int {
 				count--
 				delete(nodesToBeRemoved, node.Value)
 
-				return
+				return nil
 			}
 
-			parent.RemoveChild(node)
+			err := parent.RemoveChild(node)
+
+			if err != nil {
+				return err
+			}
 		}
+
+		return nil
 	})
+
+	if err != nil {
+		return 0, err
+	}
 
 	for node := range nodesToBeRemoved {
 		t.NodeMapByPos.Remove(node.Pos)
@@ -331,7 +372,7 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) int {
 		delete(t.removedNodeMap, node.Pos.CreatedAt.StructureAsString()+":"+strconv.Itoa(node.Pos.Offset))
 	}
 
-	return count
+	return count, nil
 }
 
 // Purge physically purges the given node.
@@ -375,7 +416,13 @@ func marshal(builder *strings.Builder, node *TreeNode) {
 
 // DeepCopy copies itself deeply.
 func (t *Tree) DeepCopy() (Element, error) {
-	return NewTree(t.Root().DeepCopy(), t.createdAt), nil
+	deepCopy, err := t.Root().DeepCopy()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return NewTree(deepCopy, t.createdAt), nil
 }
 
 // CreatedAt returns the creation time of this Tree.
@@ -459,7 +506,11 @@ func (t *Tree) EditByIndex(start, end int, content *TreeNode, editedAt *time.Tic
 		return toErr
 	}
 
-	t.Edit(fromPos, toPos, content, editedAt)
+	err := t.Edit(fromPos, toPos, content, editedAt)
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -534,12 +585,20 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 
 				for i := len(removedBlockNode.IndexTreeNode.Children()) - 1; i >= 0; i-- {
 					node := removedBlockNode.IndexTreeNode.Children()[i]
-					blockNode.InsertAt(node, offset)
+					err := blockNode.InsertAt(node, offset)
+
+					if err != nil {
+						return err
+					}
 				}
 			}
 		} else {
 			if fromPos.Node.Parent != nil && fromPos.Node.Parent.Value.IsRemoved() {
-				toPos.Node.Parent.Prepend(fromPos.Node.Parent.Children()...)
+				err := toPos.Node.Parent.Prepend(fromPos.Node.Parent.Children()...)
+
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -556,13 +615,25 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 		// 03-2. insert the content nodes to the tree.
 		if fromPos.Node.IsText() {
 			if fromPos.Offset == 0 {
-				fromPos.Node.Parent.InsertBefore(content.IndexTreeNode, fromPos.Node)
+				err := fromPos.Node.Parent.InsertBefore(content.IndexTreeNode, fromPos.Node)
+
+				if err != nil {
+					return err
+				}
 			} else {
-				fromPos.Node.Parent.InsertAfter(content.IndexTreeNode, fromPos.Node)
+				err := fromPos.Node.Parent.InsertAfter(content.IndexTreeNode, fromPos.Node)
+
+				if err != nil {
+
+				}
 			}
 		} else {
 			target := fromPos.Node
-			target.InsertAt(content.IndexTreeNode, fromPos.Offset+1)
+			err := target.InsertAt(content.IndexTreeNode, fromPos.Offset+1)
+
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -581,7 +652,11 @@ func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, edited
 		return toErr
 	}
 
-	t.Style(fromPos, toPos, attributes, editedAt)
+	err := t.Style(fromPos, toPos, attributes, editedAt)
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -667,7 +742,12 @@ func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (*i
 	}
 
 	if current.Node.IsText() {
-		split := current.Node.Value.Split(current.Offset)
+		split, err := current.Node.Value.Split(current.Offset)
+
+		if err != nil {
+			return nil, nil, err
+		}
+
 		if split != nil {
 			t.InsertAfter(current.Node.Value, split)
 			split.InsPrev = current.Node.Value

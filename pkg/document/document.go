@@ -125,7 +125,11 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	d.GarbageCollect(pack.MinSyncedTicket)
+	_, err := d.GarbageCollect(pack.MinSyncedTicket)
+
+	if err != nil {
+		return err
+	}
 
 	// 05. Update the status.
 	if pack.IsRemoved {
@@ -207,9 +211,13 @@ func (d *Document) Root() *json.Object {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *Document) GarbageCollect(ticket *time.Ticket) int {
+func (d *Document) GarbageCollect(ticket *time.Ticket) (int, error) {
 	if d.clone != nil {
-		d.clone.GarbageCollect(ticket)
+		_, err := d.clone.GarbageCollect(ticket)
+
+		if err != nil {
+			return 0, err
+		}
 	}
 	return d.doc.GarbageCollect(ticket)
 }
