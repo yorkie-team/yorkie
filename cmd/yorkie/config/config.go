@@ -123,6 +123,7 @@ func Save(config *Config) error {
 	return nil
 }
 
+// Delete deletes the configuration file.
 func Delete() error {
 	configPathValue, err := configPath()
 	if err != nil {
