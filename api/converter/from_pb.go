@@ -638,9 +638,7 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 			}
 		}
 
-		err := parent.Prepend(nodes[i])
-
-		if err != nil {
+		if err := parent.Prepend(nodes[i]); err != nil {
 			return nil, err
 		}
 	}

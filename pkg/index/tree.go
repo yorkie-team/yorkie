@@ -100,19 +100,12 @@ func postorderTraversalAll[V Value](node *Node[V], callback func(node *Node[V], 
 	}
 
 	for _, child := range node.children {
-		err := postorderTraversalAll(child, callback, depth+1)
-
-		if err != nil {
+		if err := postorderTraversalAll(child, callback, depth+1); err != nil {
 			return err
 		}
 	}
-	err := callback(node, depth)
 
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return callback(node, depth)
 }
 
 // nodesBetween iterates the nodes between the given range.

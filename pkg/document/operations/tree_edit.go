@@ -67,14 +67,11 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 		var err error
 		if e.Content() != nil {
 			content, err = e.Content().DeepCopy()
-
 			if err != nil {
 				return err
 			}
 		}
-		err = obj.Edit(e.from, e.to, content, e.executedAt)
-
-		if err != nil {
+		if err = obj.Edit(e.from, e.to, content, e.executedAt); err != nil {
 			return err
 		}
 

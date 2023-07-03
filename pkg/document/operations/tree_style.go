@@ -64,13 +64,7 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	err := obj.Style(e.from, e.to, e.attributes, e.executedAt)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return obj.Style(e.from, e.to, e.attributes, e.executedAt)
 }
 
 // FromPos returns the start point of the editing range.

@@ -157,13 +157,7 @@ func (n *TreeNode) Append(newNodes ...*TreeNode) error {
 		indexNodes[i] = newNode.IndexTreeNode
 	}
 
-	err := n.IndexTreeNode.Append(indexNodes...)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return n.IndexTreeNode.Append(indexNodes...)
 }
 
 // Prepend prepends the given node to the beginning of the children.
@@ -173,13 +167,7 @@ func (n *TreeNode) Prepend(newNodes ...*TreeNode) error {
 		indexNodes[i] = newNode.IndexTreeNode
 	}
 
-	err := n.IndexTreeNode.Prepend(indexNodes...)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return n.IndexTreeNode.Prepend(indexNodes...)
 }
 
 // Child returns the child of the given offset.
@@ -218,9 +206,10 @@ func (n *TreeNode) SplitText(offset int) (*TreeNode, error) {
 		CreatedAt: n.Pos.CreatedAt,
 		Offset:    offset,
 	}, n.Type(), nil, string(rightRune))
-	err := n.IndexTreeNode.Parent.InsertAfterInternal(rightNode.IndexTreeNode, n.IndexTreeNode)
-
-	if err != nil {
+	if err := n.IndexTreeNode.Parent.InsertAfterInternal(
+		rightNode.IndexTreeNode,
+		n.IndexTreeNode,
+	); err != nil {
 		return nil, err
 	}
 
@@ -241,13 +230,7 @@ func (n *TreeNode) remove(removedAt *time.Ticket) {
 
 // InsertAt inserts the given node at the given offset.
 func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) error {
-	err := n.IndexTreeNode.InsertAt(newNode.IndexTreeNode, offset)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return n.IndexTreeNode.InsertAt(newNode.IndexTreeNode, offset)
 }
 
 // DeepCopy copies itself deeply.
@@ -267,18 +250,16 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	var children []*index.Node[*TreeNode]
 	for _, child := range n.IndexTreeNode.Children(true) {
 		node, err := child.Value.DeepCopy()
-
 		if err != nil {
 			return nil, err
 		}
 
 		children = append(children, node.IndexTreeNode)
 	}
-	err := clone.IndexTreeNode.SetChildren(children)
-
-	if err != nil {
+	if err := clone.IndexTreeNode.SetChildren(children); err != nil {
 		return nil, err
 	}
+
 	return clone, nil
 }
 
@@ -338,10 +319,8 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 		}
 	}
 
-	err := index.TraverseAll(t.IndexTree, func(node *index.Node[*TreeNode], depth int) error {
-		_, ok := nodesToBeRemoved[node.Value]
-
-		if ok {
+	if err := index.TraverseAll(t.IndexTree, func(node *index.Node[*TreeNode], depth int) error {
+		if _, ok := nodesToBeRemoved[node.Value]; ok {
 			parent := node.Parent
 
 			if parent == nil {
@@ -359,9 +338,7 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 		}
 
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
 		return 0, err
 	}
 
@@ -415,13 +392,12 @@ func marshal(builder *strings.Builder, node *TreeNode) {
 
 // DeepCopy copies itself deeply.
 func (t *Tree) DeepCopy() (Element, error) {
-	deepCopy, err := t.Root().DeepCopy()
-
+	node, err := t.Root().DeepCopy()
 	if err != nil {
 		return nil, err
 	}
 
-	return NewTree(deepCopy, t.createdAt), nil
+	return NewTree(node, t.createdAt), nil
 }
 
 // CreatedAt returns the creation time of this Tree.
@@ -532,25 +508,23 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 // If the content is undefined, the range will be removed.
 func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket) error {
 	// 01. split text nodes at the given range if needed.
-	toPos, toRight, toErr := t.findTreePosWithSplitText(to, editedAt)
-	fromPos, fromRight, fromErr := t.findTreePosWithSplitText(from, editedAt)
-
-	if toErr != nil {
-		return toErr
-	} else if fromErr != nil {
-		return fromErr
+	toPos, toRight, err := t.findTreePosWithSplitText(to, editedAt)
+	if err != nil {
+		return err
+	}
+	fromPos, fromRight, err := t.findTreePosWithSplitText(from, editedAt)
+	if err != nil {
+		return err
 	}
 
 	toBeRemoveds := make([]*TreeNode, 0)
 	// 02. remove the nodes and update linked list and index tree.
 	if fromRight != toRight {
-		err := t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
+		if err := t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
 			if !node.IsRemoved() {
 				toBeRemoveds = append(toBeRemoveds, node)
 			}
-		})
-
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 
@@ -584,18 +558,14 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 
 				for i := len(removedBlockNode.IndexTreeNode.Children()) - 1; i >= 0; i-- {
 					node := removedBlockNode.IndexTreeNode.Children()[i]
-					err := blockNode.InsertAt(node, offset)
-
-					if err != nil {
+					if err := blockNode.InsertAt(node, offset); err != nil {
 						return err
 					}
 				}
 			}
 		} else {
 			if fromPos.Node.Parent != nil && fromPos.Node.Parent.Value.IsRemoved() {
-				err := toPos.Node.Parent.Prepend(fromPos.Node.Parent.Children()...)
-
-				if err != nil {
+				if err := toPos.Node.Parent.Prepend(fromPos.Node.Parent.Children()...); err != nil {
 					return err
 				}
 			}
@@ -614,23 +584,17 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 		// 03-2. insert the content nodes to the tree.
 		if fromPos.Node.IsText() {
 			if fromPos.Offset == 0 {
-				err := fromPos.Node.Parent.InsertBefore(content.IndexTreeNode, fromPos.Node)
-
-				if err != nil {
+				if err := fromPos.Node.Parent.InsertBefore(content.IndexTreeNode, fromPos.Node); err != nil {
 					return err
 				}
 			} else {
-				err := fromPos.Node.Parent.InsertAfter(content.IndexTreeNode, fromPos.Node)
-
-				if err != nil {
-
+				if err := fromPos.Node.Parent.InsertAfter(content.IndexTreeNode, fromPos.Node); err != nil {
+					return err
 				}
 			}
 		} else {
 			target := fromPos.Node
-			err := target.InsertAt(content.IndexTreeNode, fromPos.Offset+1)
-
-			if err != nil {
+			if err := target.InsertAt(content.IndexTreeNode, fromPos.Offset+1); err != nil {
 				return err
 			}
 		}
@@ -642,22 +606,16 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 // StyleByIndex applies the given attributes of the given range.
 // This method uses indexes instead of a pair of TreePos for testing.
 func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, editedAt *time.Ticket) error {
-	fromPos, fromErr := t.FindPos(start)
-	toPos, toErr := t.FindPos(end)
-
-	if fromErr != nil {
-		return fromErr
-	} else if toErr != nil {
-		return toErr
+	fromPos, err := t.FindPos(start)
+	if err != nil {
+		return err
 	}
-
-	err := t.Style(fromPos, toPos, attributes, editedAt)
-
+	toPos, err := t.FindPos(end)
 	if err != nil {
 		return err
 	}
 
-	return nil
+	return t.Style(fromPos, toPos, attributes, editedAt)
 }
 
 // Style applies the given attributes of the given range.

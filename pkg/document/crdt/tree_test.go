@@ -46,9 +46,9 @@ func TestTreeNode(t *testing.T) {
 		assert.Equal(t, false, para.IsText())
 
 		left, err := para.Child(0)
-		right, splitErr := left.Split(5)
 		assert.NoError(t, err)
-		assert.NoError(t, splitErr)
+		right, err := left.Split(5)
+		assert.NoError(t, err)
 		assert.Equal(t, "<p>helloyorkie</p>", crdt.ToXML(para))
 		assert.Equal(t, 11, para.Len())
 
@@ -80,13 +80,13 @@ func TestTreeNode(t *testing.T) {
 		}
 		for _, test := range tests {
 			para := crdt.NewTreeNode(crdt.DummyTreePos, "p", nil)
-			appendErr := para.Append(crdt.NewTreeNode(crdt.DummyTreePos, "text", nil, test.value))
-			assert.NoError(t, appendErr)
+			err := para.Append(crdt.NewTreeNode(crdt.DummyTreePos, "text", nil, test.value))
+			assert.NoError(t, err)
 			left, err := para.Child(0)
 			assert.NoError(t, err)
 			assert.Equal(t, test.length, left.Len())
-			right, splitErr := left.Split(2)
-			assert.NoError(t, splitErr)
+			right, err := left.Split(2)
+			assert.NoError(t, err)
 			assert.Equal(t, test.length-2, right.Len())
 		}
 	})

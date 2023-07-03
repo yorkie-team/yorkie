@@ -209,9 +209,7 @@ func (d *Document) Root() *json.Object {
 // GarbageCollect purge elements that were removed before the given time.
 func (d *Document) GarbageCollect(ticket *time.Ticket) int {
 	if d.clone != nil {
-		_, err := d.clone.GarbageCollect(ticket)
-
-		if err != nil {
+		if _, err := d.clone.GarbageCollect(ticket); err != nil {
 			panic(err)
 		}
 	}

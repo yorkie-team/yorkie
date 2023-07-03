@@ -125,7 +125,6 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 
 	for _, node := range r.elementHasRemovedNodesSetByCreatedAt {
 		purgedNodes, err := node.purgeRemovedNodesBefore(ticket)
-
 		if err != nil {
 			return 0, err
 		}
