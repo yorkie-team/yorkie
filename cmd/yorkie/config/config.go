@@ -122,3 +122,18 @@ func Save(config *Config) error {
 
 	return nil
 }
+
+// Delete deletes the configuration file.
+func Delete() error {
+	configPathValue, err := configPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "get config path: %w", err)
+		os.Exit(1)
+	}
+
+	if err := os.Remove(filepath.Clean(configPathValue)); err != nil {
+		return fmt.Errorf("remove config file: %w", err)
+	}
+
+	return nil
+}
