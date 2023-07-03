@@ -209,7 +209,9 @@ func TestGarbageCollection(t *testing.T) {
 		// [text(a), text(b)]
 		assert.NoError(t, err)
 		assert.Equal(t, doc.GarbageLen(), 2)
-		assert.Equal(t, doc.GarbageCollect(time.MaxTicket), 2)
+		garbageLen, err := doc.GarbageCollect(time.MaxTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, garbageLen, 2)
 		assert.Equal(t, doc.GarbageLen(), 0)
 
 		err = doc.Update(func(root *json.Object) error {
@@ -221,7 +223,8 @@ func TestGarbageCollection(t *testing.T) {
 		// [text(gh)]
 		assert.NoError(t, err)
 		assert.Equal(t, doc.GarbageLen(), 1)
-		assert.Equal(t, doc.GarbageCollect(time.MaxTicket), 1)
+		garbageLen, err = doc.GarbageCollect(time.MaxTicket)
+		assert.Equal(t, garbageLen, 1)
 		assert.Equal(t, doc.GarbageLen(), 0)
 
 		err = doc.Update(func(root *json.Object) error {
@@ -238,7 +241,9 @@ func TestGarbageCollection(t *testing.T) {
 		// [p, tn, tn, text(cv), text(cd)]
 		assert.NoError(t, err)
 		assert.Equal(t, doc.GarbageLen(), 5)
-		assert.Equal(t, doc.GarbageCollect(time.MaxTicket), 5)
+		garbageLen, err = doc.GarbageCollect(time.MaxTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, garbageLen, 5)
 		assert.Equal(t, doc.GarbageLen(), 0)
 	})
 
