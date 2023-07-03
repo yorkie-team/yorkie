@@ -1345,7 +1345,7 @@ func (c *Client) IsDocumentAttached(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,
-	excludeClientInfoID types.ID,
+	excludeClientID types.ID,
 ) (bool, error) {
 	encodedProjectID, err := encodeID(projectID)
 	if err != nil {
@@ -1353,37 +1353,26 @@ func (c *Client) IsDocumentAttached(
 	}
 
 	clientDocInfoKey := "documents." + docID.String() + "."
-
-	cursor, err := c.collection(colClients).Find(ctx, bson.M{
+	filter := bson.M{
 		"project_id":                encodedProjectID,
 		clientDocInfoKey + "status": database.DocumentAttached,
-	})
-	if err != nil {
-		logging.From(ctx).Error(err)
-		return false, fmt.Errorf("find client infos: %w", err)
 	}
-	if cursor.Err() == mongo.ErrNoDocuments {
+
+	if excludeClientID != "" {
+		encodedExcludeClientID, err := encodeID(excludeClientID)
+		if err != nil {
+			return false, err
+		}
+
+		filter["_id"] = bson.M{"$ne": encodedExcludeClientID}
+	}
+
+	result := c.collection(colClients).FindOne(ctx, filter)
+	if result.Err() == mongo.ErrNoDocuments {
 		return false, nil
 	}
 
-	var clientInfos []*database.ClientInfo
-	if err := cursor.All(ctx, &clientInfos); err != nil {
-		return false, fmt.Errorf("fetch all project infos: %w", err)
-	}
-
-	for _, clientInfo := range clientInfos {
-		if clientInfo.ID == excludeClientInfoID {
-			continue
-		}
-		clientDocInfo := clientInfo.Documents[docID]
-		if clientDocInfo == nil {
-			continue
-		}
-		if clientDocInfo.Status == database.DocumentAttached {
-			return true, nil
-		}
-	}
-	return false, nil
+	return true, nil
 }
 
 func (c *Client) findTicketByServerSeq(
