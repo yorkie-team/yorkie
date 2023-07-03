@@ -72,7 +72,8 @@ func TestDocument(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("detach removeIfNotAttached option test", func(t *testing.T) {
+	t.Run("detach removeIfNotAttached flag test", func(t *testing.T) {
+		// 01. create a document and attach it to c1
 		ctx := context.Background()
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object) error {
@@ -85,17 +86,18 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, doc.IsAttached())
 
-		// detach with removeIfNotAttached option false
+		// 02. detach with removeIfNotAttached option false
 		err = c1.Detach(ctx, doc, false)
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 		assert.Equal(t, doc.Status(), document.StatusDetached)
 
+		// 03. attach again to c1 and check if it is attached normally
 		err = c1.Attach(ctx, doc)
 		assert.NoError(t, err)
 		assert.True(t, doc.IsAttached())
 
-		// detach with removeIfNotAttached option true
+		// 04. detach with removeIfNotAttached option true
 		err = c1.Detach(ctx, doc, true)
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
