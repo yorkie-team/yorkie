@@ -17,8 +17,13 @@
 package crdt
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
+
+// ErrChildNotFound is returned when the child is not found in the container.
+var ErrChildNotFound = fmt.Errorf("child not found")
 
 // Container represents Array or Object.
 type Container interface {

@@ -20,8 +20,6 @@
 package crdt
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -117,13 +115,11 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
 		if pair.elem.RemovedAt() != nil && ticket.Compare(pair.elem.RemovedAt()) >= 0 {
-			err := pair.parent.Purge(pair.elem)
-
-			if err != nil {
-				fmt.Println(err)
-			} else {
-				count += r.garbageCollect(pair.elem)
+			if err := pair.parent.Purge(pair.elem); err != nil {
+				return 0, err
 			}
+
+			count += r.garbageCollect(pair.elem)
 		}
 	}
 

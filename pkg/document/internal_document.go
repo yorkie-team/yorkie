@@ -133,19 +133,20 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
 	if pack.MinSyncedTicket != nil {
-		_, err := d.GarbageCollect(pack.MinSyncedTicket)
-
-		if err != nil {
-			return err
-		}
+		d.GarbageCollect(pack.MinSyncedTicket)
 	}
 
 	return nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *InternalDocument) GarbageCollect(ticket *time.Ticket) (int, error) {
-	return d.root.GarbageCollect(ticket)
+func (d *InternalDocument) GarbageCollect(ticket *time.Ticket) int {
+	n, err := d.root.GarbageCollect(ticket)
+	if err != nil {
+		panic(err)
+	}
+
+	return n
 }
 
 // GarbageLen returns the count of removed elements.

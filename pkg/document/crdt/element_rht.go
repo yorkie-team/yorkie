@@ -170,7 +170,7 @@ func (rht *ElementRHT) Nodes() []*ElementRHTNode {
 func (rht *ElementRHT) purge(elem Element) error {
 	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
-		return fmt.Errorf("fail to find: " + elem.CreatedAt().Key())
+		return fmt.Errorf("purge %s: %w", elem.CreatedAt().Key(), ErrChildNotFound)
 	}
 	delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
 

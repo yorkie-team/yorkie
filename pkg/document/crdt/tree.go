@@ -185,7 +185,6 @@ func (n *TreeNode) Prepend(newNodes ...*TreeNode) error {
 // Child returns the child of the given offset.
 func (n *TreeNode) Child(offset int) (*TreeNode, error) {
 	child, err := n.IndexTreeNode.Child(offset)
-
 	if err != nil {
 		return nil, err
 	}
