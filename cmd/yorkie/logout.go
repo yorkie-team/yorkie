@@ -3,7 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+
 	"github.com/spf13/cobra"
+
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
