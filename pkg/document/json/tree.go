@@ -84,8 +84,15 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		}
 	}
 
-	fromPos := t.Tree.FindPos(fromIdx)
-	toPos := t.Tree.FindPos(toIdx)
+	fromPos, fromErr := t.Tree.FindPos(fromIdx)
+	toPos, toErr := t.Tree.FindPos(toIdx)
+
+	if fromErr != nil {
+		panic(fromErr)
+	} else if toErr != nil {
+		panic(toErr)
+	}
+
 	var clone *crdt.TreeNode
 	if node != nil {
 		clone = node.DeepCopy()
@@ -137,8 +144,15 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 		}
 	}
 
-	fromPos := t.Tree.PathToPos(fromPath)
-	toPos := t.Tree.PathToPos(toPath)
+	fromPos, fromErr := t.Tree.PathToPos(fromPath)
+	toPos, toErr := t.Tree.PathToPos(toPath)
+
+	if fromErr != nil {
+		panic(fromErr)
+	} else if toErr != nil {
+		panic(toErr)
+	}
+
 	var clone *crdt.TreeNode
 	if node != nil {
 		clone = node.DeepCopy()
@@ -172,8 +186,14 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 		panic("from should be less than or equal to to")
 	}
 
-	fromPos := t.Tree.FindPos(fromIdx)
-	toPos := t.Tree.FindPos(toIdx)
+	fromPos, fromErr := t.Tree.FindPos(fromIdx)
+	toPos, toErr := t.Tree.FindPos(toIdx)
+
+	if fromErr != nil {
+		panic(fromErr)
+	} else if toErr != nil {
+		panic(toErr)
+	}
 
 	ticket := t.context.IssueTimeTicket()
 	err := t.Tree.Style(fromPos, toPos, attributes, ticket)
