@@ -722,7 +722,9 @@ func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[
 }
 
 // findTreePosWithSplitText finds the right node of the given index in postorder.
-func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode, error) {
+func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (
+	*index.TreePos[*TreeNode], *TreeNode, error,
+) {
 	treePos := t.toTreePos(pos)
 	if treePos == nil {
 		return nil, nil, fmt.Errorf("cannot find node at %p", pos)
