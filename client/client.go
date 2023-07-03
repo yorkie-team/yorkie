@@ -328,7 +328,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 // To collect garbage things like CRDT tombstones left on the document, all the
 // changes should be applied to other replicas before GC time. For this, if the
 // document is no longer used by this client, it should be detached.
-func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
+func (c *Client) Detach(ctx context.Context, doc *document.Document, removeIfNotAttached bool) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}
@@ -346,9 +346,10 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document) error {
 	res, err := c.client.DetachDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.DetachDocumentRequest{
-			ClientId:   c.id.Bytes(),
-			DocumentId: attachment.docID.String(),
-			ChangePack: pbChangePack,
+			ClientId:            c.id.Bytes(),
+			DocumentId:          attachment.docID.String(),
+			ChangePack:          pbChangePack,
+			RemoveIfNotAttached: removeIfNotAttached,
 		},
 	)
 	if err != nil {

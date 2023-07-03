@@ -247,5 +247,10 @@ type Database interface {
 	) (*types.SearchResult[*DocInfo], error)
 
 	// IsDocumentAttached returns true if the document is attached to clients.
-	IsDocumentAttached(ctx context.Context, projectID types.ID, docID types.ID) (bool, error)
+	IsDocumentAttached(
+		ctx context.Context,
+		projectID types.ID,
+		docID types.ID,
+		excludeClientID types.ID,
+	) (bool, error)
 }

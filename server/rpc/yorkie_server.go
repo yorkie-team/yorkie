@@ -208,21 +208,19 @@ func (s *yorkieServer) DetachDocument(
 	}
 
 	project := projects.From(ctx)
-	if pack.HasChanges() {
-		locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
-		if err != nil {
-			return nil, err
-		}
-
-		if err := locker.Lock(ctx); err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := locker.Unlock(ctx); err != nil {
-				logging.DefaultLogger().Error(err)
-			}
-		}()
+	locker, err := s.backend.Coordinator.NewLocker(ctx, packs.PushPullKey(project.ID, pack.DocumentKey))
+	if err != nil {
+		return nil, err
 	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.DefaultLogger().Error(err)
+		}
+	}()
 
 	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, project, actorID)
 	if err != nil {
@@ -233,8 +231,16 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
+	isAttached, err := documents.IsDocumentAttached(ctx, s.backend, project, docInfo.ID, clientInfo.ID)
+	if err != nil {
 		return nil, err
+	}
+
+	if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
+		return nil, err
+	}
+	if req.RemoveIfNotAttached && !isAttached {
+		pack.IsRemoved = true
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)

@@ -1348,6 +1348,7 @@ func (c *Client) IsDocumentAttached(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,
+	excludeClientID types.ID,
 ) (bool, error) {
 	encodedProjectID, err := encodeID(projectID)
 	if err != nil {
@@ -1355,11 +1356,21 @@ func (c *Client) IsDocumentAttached(
 	}
 
 	clientDocInfoKey := "documents." + docID.String() + "."
-
-	result := c.collection(colClients).FindOne(ctx, bson.M{
+	filter := bson.M{
 		"project_id":                encodedProjectID,
 		clientDocInfoKey + "status": database.DocumentAttached,
-	})
+	}
+
+	if excludeClientID != "" {
+		encodedExcludeClientID, err := encodeID(excludeClientID)
+		if err != nil {
+			return false, err
+		}
+
+		filter["_id"] = bson.M{"$ne": encodedExcludeClientID}
+	}
+
+	result := c.collection(colClients).FindOne(ctx, filter)
 	if result.Err() == mongo.ErrNoDocuments {
 		return false, nil
 	}

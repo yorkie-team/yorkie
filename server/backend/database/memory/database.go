@@ -1238,6 +1238,7 @@ func (d *DB) IsDocumentAttached(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,
+	excludeClientID types.ID,
 ) (bool, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -1252,6 +1253,9 @@ func (d *DB) IsDocumentAttached(
 
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		clientInfo := raw.(*database.ClientInfo)
+		if clientInfo.ID == excludeClientID {
+			continue
+		}
 		clientDocInfo := clientInfo.Documents[docID]
 		if clientDocInfo == nil {
 			continue

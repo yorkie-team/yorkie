@@ -43,9 +43,9 @@ func TestPeerAwareness(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1, false)) }()
 		assert.NoError(t, c2.Attach(ctx, d2))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2, false)) }()
 
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
@@ -130,7 +130,7 @@ func TestPeerAwareness(t *testing.T) {
 		d2 := document.New(helper.TestDocKey(t))
 		d3 := document.New(key.Key(helper.TestDocKey(t) + "2"))
 		assert.NoError(t, c1.Attach(ctx, d1))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1, false)) }()
 
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
@@ -181,9 +181,9 @@ func TestPeerAwareness(t *testing.T) {
 			},
 		})
 		assert.NoError(t, c2.Attach(ctx, d2))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2, false)) }()
 		assert.NoError(t, c2.Attach(ctx, d3))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d3)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d3, false)) }()
 
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
 		_, err = c2.Watch(watch2Ctx, d2)
