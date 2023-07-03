@@ -310,6 +310,6 @@ func (t *Text) removedNodesLen() int {
 }
 
 // purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (t *Text) purgeRemovedNodesBefore(ticket *time.Ticket) int {
+func (t *Text) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 	return t.rgaTreeSplit.purgeRemovedNodesBefore(ticket)
 }

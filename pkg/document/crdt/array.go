@@ -38,8 +38,8 @@ func NewArray(elements *RGATreeList, createdAt *time.Ticket) *Array {
 }
 
 // Purge physically purge child element.
-func (a *Array) Purge(elem Element) {
-	a.elements.purge(elem)
+func (a *Array) Purge(elem Element) error {
+	return a.elements.purge(elem)
 }
 
 // Add adds the given element at the last.

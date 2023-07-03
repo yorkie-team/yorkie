@@ -64,6 +64,20 @@ import (
  * Index 1 can be converted to TreePos(i, 0).
  */
 
+var (
+	// ErrInvalidMethodCallForTextNode is returned when a invalid method is called for text node.
+	ErrInvalidMethodCallForTextNode = errors.New("text node cannot have children")
+
+	// ErrChildNotFound is returned when a child is not found.
+	ErrChildNotFound = errors.New("child not found")
+
+	// ErrUnreachablePath is returned when a path is unreachable.
+	ErrUnreachablePath = errors.New("unreachable path")
+
+	// ErrInvalidTreePos is returned when a TreePos is invalid.
+	ErrInvalidTreePos = errors.New("invalid tree pos")
+)
+
 const (
 	// DefaultTextType is the type of default text node.
 	// TODO(hackerwins): Allow users to define the type of text node.
@@ -94,35 +108,38 @@ func postorderTraversal[V Value](node *Node[V], callback func(node *Node[V], dep
 }
 
 // postorderTraversalAll traverses the whole tree (include tombstones) with postorder traversal.
-func postorderTraversalAll[V Value](node *Node[V], callback func(node *Node[V], depth int), depth int) {
+func postorderTraversalAll[V Value](node *Node[V], callback func(node *Node[V], depth int) error, depth int) error {
 	if node == nil {
-		return
+		return nil
 	}
 
 	for _, child := range node.children {
-		postorderTraversalAll(child, callback, depth+1)
+		if err := postorderTraversalAll(child, callback, depth+1); err != nil {
+			return err
+		}
 	}
-	callback(node, depth)
+
+	return callback(node, depth)
 }
 
 // nodesBetween iterates the nodes between the given range.
 // If the given range is collapsed, the callback is not called.
 // It traverses the tree with postorder traversal.
-func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) {
+func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) error {
 	if from > to {
-		panic(fmt.Sprintf("from cannot be greater than to %d > %d", from, to))
+		return fmt.Errorf("from cannot be greater than to %d > %d", from, to)
 	}
 
 	if from > root.Length {
-		panic(fmt.Sprintf("from is out of range %d > %d", from, root.Length))
+		return fmt.Errorf("from is out of range %d > %d", from, root.Length)
 	}
 
 	if to > root.Length {
-		panic(fmt.Sprintf("to is out of range %d > %d", to, root.Length))
+		return fmt.Errorf("to is out of range %d > %d", to, root.Length)
 	}
 
 	if from == to {
-		return
+		return nil
 	}
 
 	pos := 0
@@ -136,12 +153,14 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) {
 			if child.IsText() {
 				toChild = to - pos
 			}
-			nodesBetween(
+			if err := nodesBetween(
 				child,
 				int(math.Max(0, float64(fromChild))),
 				int(math.Min(float64(toChild), float64(child.Length))),
 				callback,
-			)
+			); err != nil {
+				return err
+			}
 
 			if fromChild < 0 || toChild > child.Length || child.IsText() {
 				callback(child.Value)
@@ -149,6 +168,8 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) {
 		}
 		pos += child.PaddedLength()
 	}
+
+	return nil
 }
 
 // ToXML returns the XML representation of this tree.
@@ -173,8 +194,8 @@ func Traverse[V Value](tree *Tree[V], callback func(node *Node[V], depth int)) {
 }
 
 // TraverseAll traverses the whole tree (include tombstones) with postorder traversal.
-func TraverseAll[V Value](tree *Tree[V], callback func(node *Node[V], depth int)) {
-	postorderTraversalAll(tree.root, callback, 0)
+func TraverseAll[V Value](tree *Tree[V], callback func(node *Node[V], depth int) error) error {
+	return postorderTraversalAll(tree.root, callback, 0)
 }
 
 // Value represents the data stored in the nodes of Tree.
@@ -219,9 +240,9 @@ func (n *Node[V]) IsText() bool {
 }
 
 // Append appends the given node to the end of the children.
-func (n *Node[V]) Append(newNodes ...*Node[V]) {
+func (n *Node[V]) Append(newNodes ...*Node[V]) error {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	n.children = append(n.children, newNodes...)
@@ -229,6 +250,8 @@ func (n *Node[V]) Append(newNodes ...*Node[V]) {
 		newNode.Parent = n
 		newNode.UpdateAncestorsSize()
 	}
+
+	return nil
 }
 
 // Children returns the children of the given node.
@@ -251,9 +274,9 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 }
 
 // SetChildren sets the children of the given node.
-func (n *Node[V]) SetChildren(children []*Node[V]) {
+func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	n.children = children
@@ -261,6 +284,8 @@ func (n *Node[V]) SetChildren(children []*Node[V]) {
 		child.Parent = n
 		child.UpdateAncestorsSize()
 	}
+
+	return nil
 }
 
 // UpdateAncestorsSize updates the size of ancestors.
@@ -289,62 +314,67 @@ func (n *Node[V]) PaddedLength() int {
 }
 
 // Child returns the child of the given index.
-func (n *Node[V]) Child(index int) *Node[V] {
+func (n *Node[V]) Child(index int) (*Node[V], error) {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return nil, ErrInvalidMethodCallForTextNode
 	}
 
-	return n.Children()[index]
+	return n.Children()[index], nil
 }
 
 // InsertAfterInternal inserts the given node after the given child.
 // This method does not update the size of the ancestors.
-func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) {
+func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) error {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	offset := n.OffsetOfChild(prevNode)
 	if offset == -1 {
-		panic(errors.New("prevNode is not a child of the node"))
+		return errors.New("prevNode is not a child of the node")
 	}
 
 	// TODO(hackerwins, krapie): Needs to inspect this code later
 	n.children = append(n.children[:offset+1], n.children[offset:]...)
 	n.children[offset+1] = newNode
 	newNode.Parent = n
-}
-
-// nextSibling returns the next sibling of the node.
-func (n *Node[V]) nextSibling() *Node[V] {
-	offset := n.Parent.findOffset(n)
-
-	// TODO(hackerwins): Needs to inspect the code below later.
-	// if the node is the last child, there is no next sibling.
-	if len(n.Parent.Children()) <= offset+1 {
-		return nil
-	}
-	sibling := n.Parent.Children()[offset+1]
-	if sibling != nil {
-		return sibling
-	}
 
 	return nil
 }
 
+// nextSibling returns the next sibling of the node.
+func (n *Node[V]) nextSibling() (*Node[V], error) {
+	offset, err := n.Parent.findOffset(n)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(hackerwins): Needs to inspect the code below later.
+	// if the node is the last child, there is no next sibling.
+	if len(n.Parent.Children()) <= offset+1 {
+		return nil, nil
+	}
+	sibling := n.Parent.Children()[offset+1]
+	if sibling != nil {
+		return sibling, nil
+	}
+
+	return nil, nil
+}
+
 // findOffset returns the offset of the given node in the children.
-func (n *Node[V]) findOffset(node *Node[V]) int {
+func (n *Node[V]) findOffset(node *Node[V]) (int, error) {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return 0, ErrInvalidMethodCallForTextNode
 	}
 
 	for i, child := range n.Children() {
 		if child == node {
-			return i
+			return i, nil
 		}
 	}
 
-	return -1
+	return -1, nil
 }
 
 // IsAncestorOf returns true if the node is an ancestor of the given node.
@@ -371,39 +401,44 @@ func (n *Node[V]) ancestorOf(ancestor, node *Node[V]) bool {
 
 // FindBranchOffset returns offset of the given descendant node in this node.
 // If the given node is not a descendant of this node, it returns -1.
-func (n *Node[V]) FindBranchOffset(node *Node[V]) int {
+func (n *Node[V]) FindBranchOffset(node *Node[V]) (int, error) {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return 0, ErrInvalidMethodCallForTextNode
 	}
 
 	current := node
 	for current != nil {
 		offset := n.OffsetOfChild(current)
 		if offset != -1 {
-			return offset
+			return offset, nil
 		}
 
 		current = current.Parent
 	}
 
-	return -1
+	return -1, nil
 }
 
 // InsertAt inserts the given node at the given offset.
-func (n *Node[V]) InsertAt(newNode *Node[V], offset int) {
+func (n *Node[V]) InsertAt(newNode *Node[V], offset int) error {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return ErrInvalidMethodCallForTextNode
 	}
 
-	n.insertAtInternal(newNode, offset)
+	if err := n.insertAtInternal(newNode, offset); err != nil {
+		return err
+	}
+
 	newNode.UpdateAncestorsSize()
+
+	return nil
 }
 
 // insertAtInternal inserts the given node at the given index.
 // This method does not update the size of the ancestors.
-func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) {
+func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) error {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	// splice the new node into the children
@@ -414,12 +449,14 @@ func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) {
 		n.children = append(n.children[:offset], append([]*Node[V]{newNode}, n.children[offset:]...)...)
 	}
 	newNode.Parent = n
+
+	return nil
 }
 
 // Prepend prepends the given nodes to the children.
-func (n *Node[V]) Prepend(children ...*Node[V]) {
+func (n *Node[V]) Prepend(children ...*Node[V]) error {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	n.children = append(children, n.children...)
@@ -427,12 +464,14 @@ func (n *Node[V]) Prepend(children ...*Node[V]) {
 		node.Parent = n
 		node.UpdateAncestorsSize()
 	}
+
+	return nil
 }
 
 // RemoveChild removes the given child.
-func (n *Node[V]) RemoveChild(child *Node[V]) {
+func (n *Node[V]) RemoveChild(child *Node[V]) error {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return ErrInvalidMethodCallForTextNode
 	}
 	offset := -1
 
@@ -444,41 +483,53 @@ func (n *Node[V]) RemoveChild(child *Node[V]) {
 	}
 
 	if offset == -1 {
-		panic(errors.New("child not found"))
+		return ErrChildNotFound
 	}
 
 	n.children = append(n.children[:offset], n.children[offset+1:]...)
 	child.Parent = nil
+
+	return nil
 }
 
 // InsertBefore inserts the given node before the given child.
-func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) {
+func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	offset := n.OffsetOfChild(referenceNode)
 	if offset == -1 {
-		panic(errors.New("child not found"))
+		return ErrChildNotFound
 	}
 
-	n.insertAtInternal(newNode, offset)
+	if err := n.insertAtInternal(newNode, offset); err != nil {
+		return err
+	}
+
 	newNode.UpdateAncestorsSize()
+
+	return nil
 }
 
 // InsertAfter inserts the given node after the given child.
-func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) {
+func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
 	if n.IsText() {
-		panic(errors.New("text node cannot have children"))
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	offset := n.OffsetOfChild(referenceNode)
 	if offset == -1 {
-		panic(errors.New("child not found"))
+		return ErrChildNotFound
 	}
 
-	n.insertAtInternal(newNode, offset+1)
+	if err := n.insertAtInternal(newNode, offset+1); err != nil {
+		return err
+	}
+
 	newNode.UpdateAncestorsSize()
+
+	return nil
 }
 
 // hasTextChild returns true if the node has a text child.
@@ -504,8 +555,8 @@ func (n *Node[V]) OffsetOfChild(node *Node[V]) int {
 }
 
 // NodesBetween returns the nodes between the given range.
-func (t *Tree[V]) NodesBetween(from int, to int, callback func(node V)) {
-	nodesBetween(t.root, from, to, callback)
+func (t *Tree[V]) NodesBetween(from int, to int, callback func(node V)) error {
+	return nodesBetween(t.root, from, to, callback)
 }
 
 // TreePos is the position of a node in the tree.
@@ -532,7 +583,7 @@ func (t *Tree[V]) Root() *Node[V] {
 }
 
 // FindTreePos finds the position of the given index in the tree.
-func (t *Tree[V]) FindTreePos(index int, preferTexts ...bool) *TreePos[V] {
+func (t *Tree[V]) FindTreePos(index int, preferTexts ...bool) (*TreePos[V], error) {
 	preferText := true
 	if len(preferTexts) > 0 {
 		preferText = preferTexts[0]
@@ -541,16 +592,16 @@ func (t *Tree[V]) FindTreePos(index int, preferTexts ...bool) *TreePos[V] {
 	return t.findTreePos(t.root, index, preferText)
 }
 
-func (t *Tree[V]) findTreePos(node *Node[V], index int, preferText bool) *TreePos[V] {
+func (t *Tree[V]) findTreePos(node *Node[V], index int, preferText bool) (*TreePos[V], error) {
 	if index > node.Length {
-		panic(fmt.Errorf("index is out of range: %d > %d", index, node.Length))
+		return nil, fmt.Errorf("index is out of range: %d > %d", index, node.Length)
 	}
 
 	if node.IsText() {
 		return &TreePos[V]{
 			Node:   node,
 			Offset: index,
-		}
+		}, nil
 	}
 
 	// offset is the index of the child node.
@@ -569,7 +620,7 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preferText bool) *TreePo
 			return &TreePos[V]{
 				Node:   node,
 				Offset: offset,
-			}
+			}, nil
 		}
 
 		// The position is in right side of the element node and preferText is false.
@@ -577,7 +628,7 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preferText bool) *TreePo
 			return &TreePos[V]{
 				Node:   node,
 				Offset: offset + 1,
-			}
+			}, nil
 		}
 
 		// The position is in middle the element node.
@@ -595,18 +646,18 @@ func (t *Tree[V]) findTreePos(node *Node[V], index int, preferText bool) *TreePo
 	return &TreePos[V]{
 		Node:   node,
 		Offset: offset,
-	}
+	}, nil
 }
 
 // TreePosToPath returns path from given treePos
-func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) []int {
+func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 	var path []int
 	node := treePos.Node
 
 	if node.IsText() {
 		offset := node.Parent.OffsetOfChild(node)
 		if offset == -1 {
-			panic("invalid treePos")
+			return nil, ErrInvalidTreePos
 		}
 
 		leftSiblingsSize := 0
@@ -630,7 +681,7 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) []int {
 		}
 
 		if ^pathInfo == 0 {
-			panic("invalid treePos")
+			return nil, ErrInvalidTreePos
 		}
 
 		path = append(path, pathInfo)
@@ -644,13 +695,13 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) []int {
 		reversePath[len(path)-i-1] = pathInfo
 	}
 
-	return reversePath
+	return reversePath, nil
 }
 
 // PathToTreePos returns treePos from given path
-func (t *Tree[V]) PathToTreePos(path []int) *TreePos[V] {
+func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 	if len(path) == 0 {
-		panic("unacceptable path")
+		return nil, ErrUnreachablePath
 	}
 
 	node := t.root
@@ -659,7 +710,7 @@ func (t *Tree[V]) PathToTreePos(path []int) *TreePos[V] {
 		node = node.Children()[pathElement]
 
 		if node == nil {
-			panic("unacceptable path")
+			return nil, ErrUnreachablePath
 		}
 	}
 
@@ -667,19 +718,19 @@ func (t *Tree[V]) PathToTreePos(path []int) *TreePos[V] {
 		return findTextPos(node, path[len(path)-1])
 	}
 	if len(node.Children()) < path[len(path)-1] {
-		panic("unacceptable path")
+		return nil, ErrUnreachablePath
 	}
 
 	return &TreePos[V]{
 		Node:   node,
 		Offset: path[len(path)-1],
-	}
+	}, nil
 }
 
 // findTextPos returns the tree position of the given path element.
-func findTextPos[V Value](node *Node[V], pathElement int) *TreePos[V] {
+func findTextPos[V Value](node *Node[V], pathElement int) (*TreePos[V], error) {
 	if node.Length < pathElement {
-		panic("unacceptable path")
+		return nil, ErrUnreachablePath
 	}
 
 	for _, childNode := range node.Children() {
@@ -695,31 +746,36 @@ func findTextPos[V Value](node *Node[V], pathElement int) *TreePos[V] {
 	return &TreePos[V]{
 		Node:   node,
 		Offset: pathElement,
-	}
+	}, nil
 }
 
 // FindPostorderRight finds right node of the given tree position with postorder traversal.
-func (t *Tree[V]) FindPostorderRight(pos *TreePos[V]) V {
+func (t *Tree[V]) FindPostorderRight(pos *TreePos[V]) (V, error) {
 	node := pos.Node
 	offset := pos.Offset
 
 	if node.IsText() {
 		if node.Len() == offset {
-			if nextSibling := node.nextSibling(); nextSibling != nil {
-				return nextSibling.Value
+			nextSibling, err := node.nextSibling()
+			if err != nil {
+				return nextSibling.Value, err
 			}
 
-			return node.Parent.Value
+			if nextSibling != nil {
+				return nextSibling.Value, nil
+			}
+
+			return node.Parent.Value, nil
 		}
 
-		return node.Value
+		return node.Value, nil
 	}
 
 	if len(node.Children()) == offset {
-		return node.Value
+		return node.Value, nil
 	}
 
-	return t.FindLeftmost(node.Children()[offset])
+	return t.FindLeftmost(node.Children()[offset]), nil
 }
 
 // GetAncestors returns the ancestors of the given node.
@@ -767,17 +823,21 @@ func (t *Tree[V]) FindLeftmost(node *Node[V]) V {
 }
 
 // IndexOf returns the index of the given node.
-func (t *Tree[V]) IndexOf(node *Node[V]) int {
+func (t *Tree[V]) IndexOf(node *Node[V]) (int, error) {
 	index := 0
 	current := node
 
 	for current != t.root {
 		parent := current.Parent
 		if parent == nil {
-			panic(errors.New("parent is not found"))
+			return 0, errors.New("parent is not found")
 		}
 
-		offset := parent.findOffset(current)
+		offset, err := parent.findOffset(current)
+		if err != nil {
+			return 0, err
+		}
+
 		childrenSlice := parent.Children()[:offset]
 		for _, previous := range childrenSlice {
 			index += previous.PaddedLength()
@@ -792,5 +852,5 @@ func (t *Tree[V]) IndexOf(node *Node[V]) int {
 		current = parent
 	}
 
-	return index
+	return index, nil
 }

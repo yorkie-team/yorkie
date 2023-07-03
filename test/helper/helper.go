@@ -150,9 +150,10 @@ func ListEqual(t assert.TestingT, tree *crdt.Tree, expected []string) bool {
 // indexes.
 func NodesBetweenEqual(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {
 	var nodes []*crdt.TreeNode
-	tree.NodesBetween(from, to, func(node *crdt.TreeNode) {
+	err := tree.NodesBetween(from, to, func(node *crdt.TreeNode) {
 		nodes = append(nodes, node)
 	})
+	assert.NoError(t, err)
 
 	var actual []string
 	for _, node := range nodes {

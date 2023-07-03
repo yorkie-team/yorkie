@@ -632,7 +632,7 @@ func (s *RGATreeSplit[V]) removedNodesLen() int {
 }
 
 // purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (s *RGATreeSplit[V]) purgeRemovedNodesBefore(ticket *time.Ticket) int {
+func (s *RGATreeSplit[V]) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 	count := 0
 	for _, node := range s.removedNodeMap {
 		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {
@@ -644,7 +644,7 @@ func (s *RGATreeSplit[V]) purgeRemovedNodesBefore(ticket *time.Ticket) int {
 		}
 	}
 
-	return count
+	return count, nil
 }
 
 // purge physically purge the given node from RGATreeSplit.

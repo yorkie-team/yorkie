@@ -64,10 +64,16 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 	switch obj := parent.(type) {
 	case *crdt.Tree:
 		var content *crdt.TreeNode
+		var err error
 		if e.Content() != nil {
-			content = e.Content().DeepCopy()
+			content, err = e.Content().DeepCopy()
+			if err != nil {
+				return err
+			}
 		}
-		obj.Edit(e.from, e.to, content, e.executedAt)
+		if err = obj.Edit(e.from, e.to, content, e.executedAt); err != nil {
+			return err
+		}
 
 		if e.from.CreatedAt.Compare(e.to.CreatedAt) != 0 || e.from.Offset != e.to.Offset {
 			root.RegisterElementHasRemovedNodes(obj)

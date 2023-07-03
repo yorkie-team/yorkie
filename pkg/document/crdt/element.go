@@ -17,15 +17,20 @@
 package crdt
 
 import (
+	"errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
+
+// ErrChildNotFound is returned when the child is not found in the container.
+var ErrChildNotFound = errors.New("child not found")
 
 // Container represents Array or Object.
 type Container interface {
 	Element
 
 	// Purge physically purges the given child element.
-	Purge(child Element)
+	Purge(child Element) error
 
 	// Descendants returns all descendants of this container.
 	Descendants(callback func(elem Element, parent Container) bool)
@@ -38,7 +43,7 @@ type Container interface {
 type GCElement interface {
 	Element
 	removedNodesLen() int
-	purgeRemovedNodesBefore(ticket *time.Ticket) int
+	purgeRemovedNodesBefore(ticket *time.Ticket) (int, error)
 }
 
 // Element represents JSON element.

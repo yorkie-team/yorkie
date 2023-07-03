@@ -49,7 +49,9 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, "[0,2]", array.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		assert.Equal(t, 1, root.GarbageCollect(time.MaxTicket))
+		n, err := root.GarbageCollect(time.MaxTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, n)
 		assert.Equal(t, 0, root.GarbageLen())
 	})
 
@@ -91,7 +93,9 @@ func TestRoot(t *testing.T) {
 		nodeLen := len(text.Nodes())
 		assert.Equal(t, 4, nodeLen)
 
-		assert.Equal(t, 3, root.GarbageCollect(time.MaxTicket))
+		n, err := root.GarbageCollect(time.MaxTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, n)
 		assert.Equal(t, 0, root.GarbageLen())
 		nodeLen = len(text.Nodes())
 		assert.Equal(t, 1, nodeLen)
@@ -126,7 +130,9 @@ func TestRoot(t *testing.T) {
 			assert.Equal(t, tc.garbage, root.GarbageLen())
 		}
 
-		assert.Equal(t, 3, root.GarbageCollect(time.MaxTicket))
+		n, err := root.GarbageCollect(time.MaxTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, n)
 		assert.Equal(t, 0, root.GarbageLen())
 	})
 
@@ -161,7 +167,9 @@ func TestRoot(t *testing.T) {
 		nodeLen := len(text.Nodes())
 		assert.Equal(t, 3, nodeLen)
 
-		assert.Equal(t, 2, root.GarbageCollect(time.MaxTicket))
+		garbageLen, err := root.GarbageCollect(time.MaxTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, garbageLen)
 		assert.Equal(t, 0, root.GarbageLen())
 
 		nodeLen = len(text.Nodes())
@@ -187,7 +195,9 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, `{"1":1,"3":3}`, obj.Marshal())
 		assert.Equal(t, 4, root.GarbageLen())
 
-		assert.Equal(t, 4, root.GarbageCollect(time.MaxTicket))
+		n, err := root.GarbageCollect(time.MaxTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, 4, n)
 		assert.Equal(t, 0, root.GarbageLen())
 
 		deleted = obj.Delete("3", ctx.IssueTimeTicket())
@@ -195,7 +205,9 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, `{"1":1}`, obj.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		assert.Equal(t, 1, root.GarbageCollect(time.MaxTicket))
+		n, err = root.GarbageCollect(time.MaxTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, n)
 		assert.Equal(t, 0, root.GarbageLen())
 	})
 }
