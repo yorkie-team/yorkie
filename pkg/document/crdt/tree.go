@@ -171,8 +171,14 @@ func (n *TreeNode) Prepend(newNodes ...*TreeNode) {
 }
 
 // Child returns the child of the given offset.
-func (n *TreeNode) Child(offset int) *TreeNode {
-	return n.IndexTreeNode.Child(offset).Value
+func (n *TreeNode) Child(offset int) (*TreeNode, error) {
+	child, err := n.IndexTreeNode.Child(offset)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return child.Value, nil
 }
 
 // Split splits the node at the given offset.
@@ -443,21 +449,33 @@ func (t *Tree) ToXML() string {
 
 // EditByIndex edits the given range with the given value.
 // This method uses indexes instead of a pair of TreePos for testing.
-func (t *Tree) EditByIndex(start, end int, content *TreeNode, editedAt *time.Ticket) {
-	fromPos := t.FindPos(start)
-	toPos := t.FindPos(end)
+func (t *Tree) EditByIndex(start, end int, content *TreeNode, editedAt *time.Ticket) error {
+	fromPos, fromErr := t.FindPos(start)
+	toPos, toErr := t.FindPos(end)
+
+	if fromErr != nil {
+		return fromErr
+	} else if toErr != nil {
+		return toErr
+	}
 
 	t.Edit(fromPos, toPos, content, editedAt)
+
+	return nil
 }
 
 // FindPos finds the position of the given index in the tree.
-func (t *Tree) FindPos(offset int) *TreePos {
-	treePos := t.IndexTree.FindTreePos(offset)
+func (t *Tree) FindPos(offset int) (*TreePos, error) {
+	treePos, err := t.IndexTree.FindTreePos(offset)
+
+	if err != nil {
+		return nil, err
+	}
 
 	return &TreePos{
 		CreatedAt: treePos.Node.Value.Pos.CreatedAt,
 		Offset:    treePos.Node.Value.Pos.Offset + treePos.Offset,
-	}
+	}, nil
 }
 
 // Edit edits the tree with the given range and content.
@@ -508,7 +526,12 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 			// insert the alive children of the removed block node to the toNode.
 			if removedBlockNode != nil {
 				blockNode := toPos.Node
-				offset := blockNode.FindBranchOffset(removedBlockNode.IndexTreeNode)
+				offset, err := blockNode.FindBranchOffset(removedBlockNode.IndexTreeNode)
+
+				if err != nil {
+					return err
+				}
+
 				for i := len(removedBlockNode.IndexTreeNode.Children()) - 1; i >= 0; i-- {
 					node := removedBlockNode.IndexTreeNode.Children()[i]
 					blockNode.InsertAt(node, offset)
@@ -548,11 +571,19 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 
 // StyleByIndex applies the given attributes of the given range.
 // This method uses indexes instead of a pair of TreePos for testing.
-func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, editedAt *time.Ticket) {
-	fromPos := t.FindPos(start)
-	toPos := t.FindPos(end)
+func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, editedAt *time.Ticket) error {
+	fromPos, fromErr := t.FindPos(start)
+	toPos, toErr := t.FindPos(end)
+
+	if fromErr != nil {
+		return fromErr
+	} else if toErr != nil {
+		return toErr
+	}
 
 	t.Style(fromPos, toPos, attributes, editedAt)
+
+	return nil
 }
 
 // Style applies the given attributes of the given range.
@@ -607,7 +638,12 @@ func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[
 	}
 
 	// TODO(hackerwins): Consider to use current instead of treePos.
-	right := t.IndexTree.FindPostorderRight(treePos)
+	right, err := t.IndexTree.FindPostorderRight(treePos)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
 	return current, right, nil
 }
 
@@ -638,7 +674,12 @@ func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (*i
 		}
 	}
 
-	right := t.IndexTree.FindPostorderRight(treePos)
+	right, err := t.IndexTree.FindPostorderRight(treePos)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
 	return current, right, nil
 }
 
@@ -661,13 +702,19 @@ func (t *Tree) toTreePos(pos *TreePos) *index.TreePos[*TreeNode] {
 }
 
 // toIndex converts the given CRDTTreePos to the index of the tree.
-func (t *Tree) toIndex(pos *TreePos) int {
+func (t *Tree) toIndex(pos *TreePos) (int, error) {
 	treePos := t.toTreePos(pos)
 	if treePos == nil {
-		return -1
+		return -1, nil
 	}
 
-	return t.IndexTree.IndexOf(treePos.Node) + treePos.Offset
+	index, err := t.IndexTree.IndexOf(treePos.Node)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return index + treePos.Offset, nil
 }
 
 // nodesBetween returns the nodes between the given range.
@@ -692,13 +739,17 @@ func (t *Tree) Structure() TreeNodeForTest {
 }
 
 // PathToPos returns the position of the given path
-func (t *Tree) PathToPos(path []int) *TreePos {
-	treePos := t.IndexTree.PathToTreePos(path)
+func (t *Tree) PathToPos(path []int) (*TreePos, error) {
+	treePos, err := t.IndexTree.PathToTreePos(path)
+
+	if err != nil {
+		return nil, err
+	}
 
 	return &TreePos{
 		CreatedAt: treePos.Node.Value.Pos.CreatedAt,
 		Offset:    treePos.Node.Value.Pos.Offset + treePos.Offset,
-	}
+	}, nil
 }
 
 // ToStructure returns the JSON of this tree for debugging.
