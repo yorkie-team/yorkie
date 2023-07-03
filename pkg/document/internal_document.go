@@ -52,25 +52,6 @@ var (
 	ErrDocumentRemoved = errors.New("document is removed")
 )
 
-// PeerChangedEvent represents events that occur when the states of another peers
-// of the watched documents changes.
-type PeerChangedEvent struct {
-	Type PeerChangedEventType
-	Peer map[string]presence.Presence
-}
-
-// PeerChangedEventType represents the type of PeerChangedEvent.
-type PeerChangedEventType string
-
-const (
-	// WatchedEvent means that the peer has established a connection with the server,
-	// enabling real-time synchronization.
-	WatchedEvent PeerChangedEventType = "watched"
-
-	// PresenceChangedEvent means that the presences of the peer has updated.
-	PresenceChangedEvent PeerChangedEventType = "presence-changed"
-)
-
 // InternalDocument represents a document in MongoDB and contains logical clocks.
 type InternalDocument struct {
 	key    key.Key
@@ -80,8 +61,6 @@ type InternalDocument struct {
 	checkpoint   change.Checkpoint
 	changeID     change.ID
 	localChanges []*change.Change
-
-	events chan PeerChangedEvent
 
 	// `watchedPeerSet` is a set of the peers that watch the document.
 	// It is used to determine whether the peer is online or offline.
@@ -104,7 +83,6 @@ func NewInternalDocument(docKey key.Key, clientID string) *InternalDocument {
 		changeID:        change.InitialChangeIDOf(actorID),
 		peerPresenceMap: &gosync.Map{},
 		watchedPeerSet:  &gosync.Map{},
-		events:          make(chan PeerChangedEvent, 1),
 	}
 }
 
@@ -194,7 +172,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 			return err
 		}
 	} else {
-		if err := d.ApplyChanges(pack.Changes...); err != nil {
+		if _, err := d.ApplyChanges(pack.Changes...); err != nil {
 			return err
 		}
 	}
@@ -422,10 +400,11 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error
 }
 
 // ApplyChanges applies remote changes to the document.
-func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
+func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]PeerChangedEvent, error) {
+	events := []PeerChangedEvent{}
 	for _, c := range changes {
 		if err := c.Execute(d.root); err != nil {
-			return err
+			return nil, err
 		}
 		if c.Presence() != nil {
 			newPresence := *c.Presence()
@@ -433,20 +412,20 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 			_, ok := d.watchedPeerSet.Load(clientID)
 			if ok {
 				if d.HasPresence(clientID) {
-					d.events <- PeerChangedEvent{
+					events = append(events, PeerChangedEvent{
 						Type: PresenceChangedEvent,
 						Peer: map[string]presence.Presence{
 							clientID: newPresence,
 						},
-					}
+					})
 				} else {
 					d.AddWatchedPeerSet(clientID)
-					d.events <- PeerChangedEvent{
+					events = append(events, PeerChangedEvent{
 						Type: WatchedEvent,
 						Peer: map[string]presence.Presence{
 							clientID: newPresence,
 						},
-					}
+					})
 				}
 			}
 
@@ -456,5 +435,5 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
 	}
 
-	return nil
+	return events, nil
 }

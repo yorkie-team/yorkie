@@ -28,6 +28,25 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// PeerChangedEvent represents events that occur when the states of another peers
+// of the watched documents changes.
+type PeerChangedEvent struct {
+	Type PeerChangedEventType
+	Peer map[string]presence.Presence
+}
+
+// PeerChangedEventType represents the type of PeerChangedEvent.
+type PeerChangedEventType string
+
+const (
+	// WatchedEvent means that the peer has established a connection with the server,
+	// enabling real-time synchronization.
+	WatchedEvent PeerChangedEventType = "watched"
+
+	// PresenceChangedEvent means that the presences of the peer has updated.
+	PresenceChangedEvent PeerChangedEventType = "presence-changed"
+)
+
 // Document represents a document accessible to the user.
 //
 // How document works:
@@ -42,12 +61,15 @@ type Document struct {
 	// clone is a copy of `doc` to be exposed to the user and is used to
 	// protect `doc`.
 	clone *crdt.Root
+
+	events chan PeerChangedEvent
 }
 
 // New creates a new instance of Document.
 func New(docKey key.Key, clientID string) *Document {
 	return &Document{
-		doc: NewInternalDocument(docKey, clientID),
+		doc:    NewInternalDocument(docKey, clientID),
+		events: make(chan PeerChangedEvent, 1),
 	}
 }
 
@@ -138,7 +160,7 @@ func (d *Document) UpdatePresence(k, v string) error {
 
 // Events subscribes to PeerChangedEvent on this document.
 func (d *Document) Events() chan PeerChangedEvent {
-	return d.doc.events
+	return d.events
 }
 
 // ApplyChangePack applies the given change pack into this document.
@@ -163,8 +185,14 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 			}
 		}
 
-		if err := d.doc.ApplyChanges(pack.Changes...); err != nil {
+		events, err := d.doc.ApplyChanges(pack.Changes...)
+		if err != nil {
 			return err
+		}
+		if len(events) > 0 {
+			for _, e := range events {
+				d.events <- e
+			}
 		}
 	}
 
