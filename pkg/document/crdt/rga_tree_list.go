@@ -282,7 +282,7 @@ func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 func (a *RGATreeList) purge(elem Element) error {
 	node, ok := a.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
-		return fmt.Errorf("fail to find the given createdAt: " + elem.CreatedAt().Key())
+		return fmt.Errorf("purge %s: %w", elem.CreatedAt().Key(), ErrChildNotFound)
 	}
 
 	a.release(node)

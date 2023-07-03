@@ -20,8 +20,6 @@
 package crdt
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -112,18 +110,16 @@ func (r *Root) DeepCopy() (*Root, error) {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (r *Root) GarbageCollect(ticket *time.Ticket) int {
+func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	count := 0
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
 		if pair.elem.RemovedAt() != nil && ticket.Compare(pair.elem.RemovedAt()) >= 0 {
-			err := pair.parent.Purge(pair.elem)
-
-			if err != nil {
-				fmt.Println(err)
-			} else {
-				count += r.garbageCollect(pair.elem)
+			if err := pair.parent.Purge(pair.elem); err != nil {
+				return 0, err
 			}
+
+			count += r.garbageCollect(pair.elem)
 		}
 	}
 
@@ -135,7 +131,7 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) int {
 		count += purgedNodes
 	}
 
-	return count
+	return count, nil
 }
 
 // ElementMapLen returns the size of element map.

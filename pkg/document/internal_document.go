@@ -141,7 +141,12 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 
 // GarbageCollect purge elements that were removed before the given time.
 func (d *InternalDocument) GarbageCollect(ticket *time.Ticket) int {
-	return d.root.GarbageCollect(ticket)
+	n, err := d.root.GarbageCollect(ticket)
+	if err != nil {
+		panic(err)
+	}
+
+	return n
 }
 
 // GarbageLen returns the count of removed elements.
