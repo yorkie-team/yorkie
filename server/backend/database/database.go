@@ -251,6 +251,6 @@ type Database interface {
 		ctx context.Context,
 		projectID types.ID,
 		docID types.ID,
-		excludeClientInfoID types.ID,
+		excludeClientID types.ID,
 	) (bool, error)
 }

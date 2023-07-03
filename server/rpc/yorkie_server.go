@@ -236,15 +236,11 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
+	if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
+		return nil, err
+	}
 	if req.RemoveIfNotAttached && !isAttached {
-		if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
-			return nil, err
-		}
 		pack.IsRemoved = true
-	} else {
-		if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
-			return nil, err
-		}
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)

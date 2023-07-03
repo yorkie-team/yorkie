@@ -248,7 +248,7 @@ func IsDocumentAttached(
 	be *backend.Backend,
 	project *types.Project,
 	docID types.ID,
-	excludeClientInfoID types.ID,
+	excludeClientID types.ID,
 ) (bool, error) {
-	return be.DB.IsDocumentAttached(ctx, project.ID, docID, excludeClientInfoID)
+	return be.DB.IsDocumentAttached(ctx, project.ID, docID, excludeClientID)
 }
