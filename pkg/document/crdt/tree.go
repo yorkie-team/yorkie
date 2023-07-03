@@ -29,6 +29,11 @@ import (
 )
 
 var (
+	// ErrNodeNotFound is returned when the node is not found.
+	ErrNodeNotFound = errors.New("node not found")
+)
+
+var (
 	// DummyTreePos is a dummy position of Tree. It is used to represent the head node of RGASplit.
 	DummyTreePos = &TreePos{
 		CreatedAt: time.InitialTicket,
@@ -326,13 +331,10 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 			if parent == nil {
 				count--
 				delete(nodesToBeRemoved, node.Value)
-
 				return nil
 			}
 
-			err := parent.RemoveChild(node)
-
-			if err != nil {
+			if err := parent.RemoveChild(node); err != nil {
 				return err
 			}
 		}
@@ -472,28 +474,21 @@ func (t *Tree) ToXML() string {
 // EditByIndex edits the given range with the given value.
 // This method uses indexes instead of a pair of TreePos for testing.
 func (t *Tree) EditByIndex(start, end int, content *TreeNode, editedAt *time.Ticket) error {
-	fromPos, fromErr := t.FindPos(start)
-	toPos, toErr := t.FindPos(end)
-
-	if fromErr != nil {
-		return fromErr
-	} else if toErr != nil {
-		return toErr
+	fromPos, err := t.FindPos(start)
+	if err != nil {
+		return err
 	}
-
-	err := t.Edit(fromPos, toPos, content, editedAt)
-
+	toPos, err := t.FindPos(end)
 	if err != nil {
 		return err
 	}
 
-	return nil
+	return t.Edit(fromPos, toPos, content, editedAt)
 }
 
 // FindPos finds the position of the given index in the tree.
 func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	treePos, err := t.IndexTree.FindTreePos(offset)
-
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +546,6 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 			if removedBlockNode != nil {
 				blockNode := toPos.Node
 				offset, err := blockNode.FindBranchOffset(removedBlockNode.IndexTreeNode)
-
 				if err != nil {
 					return err
 				}
@@ -620,17 +614,17 @@ func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, edited
 
 // Style applies the given attributes of the given range.
 func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *time.Ticket) error {
-	_, toRight, toErr := t.findTreePos(to, editedAt)
-	_, fromRight, fromErr := t.findTreePos(from, editedAt)
-
-	if toErr != nil {
-		return toErr
-	} else if fromErr != nil {
-		return fromErr
+	_, toRight, err := t.findTreePos(to, editedAt)
+	if err != nil {
+		return err
+	}
+	_, fromRight, err := t.findTreePos(from, editedAt)
+	if err != nil {
+		return err
 	}
 
 	// 02. style the nodes.
-	err := t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
+	return t.nodesBetween(fromRight, toRight, func(node *TreeNode) {
 		if node.IsText() {
 			return
 		}
@@ -642,19 +636,13 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 			node.Attrs.Set(key, value, editedAt)
 		}
 	})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // findTreePos returns TreePos and the right node of the given index in postorder.
 func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode, error) {
 	treePos := t.toTreePos(pos)
 	if treePos == nil {
-		return nil, nil, fmt.Errorf("cannot find node at %p", pos)
+		return nil, nil, fmt.Errorf("%p: %w", pos, ErrNodeNotFound)
 	}
 
 	// Find the appropriate position. This logic is similar to the logical to
@@ -671,7 +659,6 @@ func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[
 
 	// TODO(hackerwins): Consider to use current instead of treePos.
 	right, err := t.IndexTree.FindPostorderRight(treePos)
-
 	if err != nil {
 		return nil, nil, err
 	}
@@ -685,7 +672,7 @@ func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 ) {
 	treePos := t.toTreePos(pos)
 	if treePos == nil {
-		return nil, nil, fmt.Errorf("cannot find node at %p", pos)
+		return nil, nil, fmt.Errorf("%p: %w", pos, ErrNodeNotFound)
 	}
 
 	// Find the appropriate position. This logic is similar to the logical to
@@ -702,7 +689,6 @@ func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 
 	if current.Node.IsText() {
 		split, err := current.Node.Value.Split(current.Offset)
-
 		if err != nil {
 			return nil, nil, err
 		}
@@ -714,7 +700,6 @@ func (t *Tree) findTreePosWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	}
 
 	right, err := t.IndexTree.FindPostorderRight(treePos)
-
 	if err != nil {
 		return nil, nil, err
 	}
@@ -747,13 +732,12 @@ func (t *Tree) toIndex(pos *TreePos) (int, error) {
 		return -1, nil
 	}
 
-	index, err := t.IndexTree.IndexOf(treePos.Node)
-
+	idx, err := t.IndexTree.IndexOf(treePos.Node)
 	if err != nil {
 		return 0, err
 	}
 
-	return index + treePos.Offset, nil
+	return idx + treePos.Offset, nil
 }
 
 // nodesBetween returns the nodes between the given range.
@@ -780,7 +764,6 @@ func (t *Tree) Structure() TreeNodeForTest {
 // PathToPos returns the position of the given path
 func (t *Tree) PathToPos(path []int) (*TreePos, error) {
 	treePos, err := t.IndexTree.PathToTreePos(path)
-
 	if err != nil {
 		return nil, err
 	}

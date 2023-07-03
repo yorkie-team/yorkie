@@ -86,17 +86,16 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		}
 	}
 
-	fromPos, fromErr := t.Tree.FindPos(fromIdx)
-	toPos, toErr := t.Tree.FindPos(toIdx)
-
-	if fromErr != nil {
-		panic(fromErr)
-	} else if toErr != nil {
-		panic(toErr)
+	fromPos, err := t.Tree.FindPos(fromIdx)
+	if err != nil {
+		panic(err)
+	}
+	toPos, err := t.Tree.FindPos(toIdx)
+	if err != nil {
+		panic(err)
 	}
 
 	var clone *crdt.TreeNode
-	var err error
 	if node != nil {
 		clone, err = node.DeepCopy()
 		if err != nil {

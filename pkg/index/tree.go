@@ -64,6 +64,20 @@ import (
  * Index 1 can be converted to TreePos(i, 0).
  */
 
+var (
+	// ErrInvalidMethodCallForTextNode is returned when a invalid method is called for text node.
+	ErrInvalidMethodCallForTextNode = errors.New("text node cannot have children")
+
+	// ErrChildNotFound is returned when a child is not found.
+	ErrChildNotFound = errors.New("child not found")
+
+	// ErrUnreachablePath is returned when a path is unreachable.
+	ErrUnreachablePath = errors.New("unreachable path")
+
+	// ErrInvalidTreePos is returned when a TreePos is invalid.
+	ErrInvalidTreePos = errors.New("invalid tree pos")
+)
+
 const (
 	// DefaultTextType is the type of default text node.
 	// TODO(hackerwins): Allow users to define the type of text node.
@@ -139,14 +153,12 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) e
 			if child.IsText() {
 				toChild = to - pos
 			}
-			err := nodesBetween(
+			if err := nodesBetween(
 				child,
 				int(math.Max(0, float64(fromChild))),
 				int(math.Min(float64(toChild), float64(child.Length))),
 				callback,
-			)
-
-			if err != nil {
+			); err != nil {
 				return err
 			}
 
@@ -230,7 +242,7 @@ func (n *Node[V]) IsText() bool {
 // Append appends the given node to the end of the children.
 func (n *Node[V]) Append(newNodes ...*Node[V]) error {
 	if n.IsText() {
-		return errors.New("text node cannot have children")
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	n.children = append(n.children, newNodes...)
@@ -264,7 +276,7 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 // SetChildren sets the children of the given node.
 func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	if n.IsText() {
-		return errors.New("text node cannot have children")
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	n.children = children
@@ -304,7 +316,7 @@ func (n *Node[V]) PaddedLength() int {
 // Child returns the child of the given index.
 func (n *Node[V]) Child(index int) (*Node[V], error) {
 	if n.IsText() {
-		return nil, errors.New("text node cannot have children")
+		return nil, ErrInvalidMethodCallForTextNode
 	}
 
 	return n.Children()[index], nil
@@ -314,7 +326,7 @@ func (n *Node[V]) Child(index int) (*Node[V], error) {
 // This method does not update the size of the ancestors.
 func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) error {
 	if n.IsText() {
-		return errors.New("text node cannot have children")
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	offset := n.OffsetOfChild(prevNode)
@@ -333,7 +345,6 @@ func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) error {
 // nextSibling returns the next sibling of the node.
 func (n *Node[V]) nextSibling() (*Node[V], error) {
 	offset, err := n.Parent.findOffset(n)
-
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +365,7 @@ func (n *Node[V]) nextSibling() (*Node[V], error) {
 // findOffset returns the offset of the given node in the children.
 func (n *Node[V]) findOffset(node *Node[V]) (int, error) {
 	if n.IsText() {
-		return 0, errors.New("text node cannot have children")
+		return 0, ErrInvalidMethodCallForTextNode
 	}
 
 	for i, child := range n.Children() {
@@ -392,7 +403,7 @@ func (n *Node[V]) ancestorOf(ancestor, node *Node[V]) bool {
 // If the given node is not a descendant of this node, it returns -1.
 func (n *Node[V]) FindBranchOffset(node *Node[V]) (int, error) {
 	if n.IsText() {
-		return 0, errors.New("text node cannot have children")
+		return 0, ErrInvalidMethodCallForTextNode
 	}
 
 	current := node
@@ -411,14 +422,13 @@ func (n *Node[V]) FindBranchOffset(node *Node[V]) (int, error) {
 // InsertAt inserts the given node at the given offset.
 func (n *Node[V]) InsertAt(newNode *Node[V], offset int) error {
 	if n.IsText() {
-		return errors.New("text node cannot have children")
+		return ErrInvalidMethodCallForTextNode
 	}
 
-	err := n.insertAtInternal(newNode, offset)
-
-	if err != nil {
+	if err := n.insertAtInternal(newNode, offset); err != nil {
 		return err
 	}
+
 	newNode.UpdateAncestorsSize()
 
 	return nil
@@ -428,7 +438,7 @@ func (n *Node[V]) InsertAt(newNode *Node[V], offset int) error {
 // This method does not update the size of the ancestors.
 func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) error {
 	if n.IsText() {
-		return errors.New("text node cannot have children")
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	// splice the new node into the children
@@ -446,7 +456,7 @@ func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) error {
 // Prepend prepends the given nodes to the children.
 func (n *Node[V]) Prepend(children ...*Node[V]) error {
 	if n.IsText() {
-		return errors.New("text node cannot have children")
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	n.children = append(children, n.children...)
@@ -461,7 +471,7 @@ func (n *Node[V]) Prepend(children ...*Node[V]) error {
 // RemoveChild removes the given child.
 func (n *Node[V]) RemoveChild(child *Node[V]) error {
 	if n.IsText() {
-		return errors.New("text node cannot have children")
+		return ErrInvalidMethodCallForTextNode
 	}
 	offset := -1
 
@@ -473,7 +483,7 @@ func (n *Node[V]) RemoveChild(child *Node[V]) error {
 	}
 
 	if offset == -1 {
-		return errors.New("child not found")
+		return ErrChildNotFound
 	}
 
 	n.children = append(n.children[:offset], n.children[offset+1:]...)
@@ -485,19 +495,18 @@ func (n *Node[V]) RemoveChild(child *Node[V]) error {
 // InsertBefore inserts the given node before the given child.
 func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
 	if n.IsText() {
-		return errors.New("text node cannot have children")
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	offset := n.OffsetOfChild(referenceNode)
 	if offset == -1 {
-		return errors.New("child not found")
+		return ErrChildNotFound
 	}
 
-	err := n.insertAtInternal(newNode, offset)
-
-	if err != nil {
+	if err := n.insertAtInternal(newNode, offset); err != nil {
 		return err
 	}
+
 	newNode.UpdateAncestorsSize()
 
 	return nil
@@ -506,17 +515,15 @@ func (n *Node[V]) InsertBefore(newNode, referenceNode *Node[V]) error {
 // InsertAfter inserts the given node after the given child.
 func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
 	if n.IsText() {
-		return errors.New("text node cannot have children")
+		return ErrInvalidMethodCallForTextNode
 	}
 
 	offset := n.OffsetOfChild(referenceNode)
 	if offset == -1 {
-		return errors.New("child not found")
+		return ErrChildNotFound
 	}
 
-	err := n.insertAtInternal(newNode, offset+1)
-
-	if err != nil {
+	if err := n.insertAtInternal(newNode, offset+1); err != nil {
 		return err
 	}
 
@@ -650,7 +657,7 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 	if node.IsText() {
 		offset := node.Parent.OffsetOfChild(node)
 		if offset == -1 {
-			return nil, errors.New("invalid treePos")
+			return nil, ErrInvalidTreePos
 		}
 
 		leftSiblingsSize := 0
@@ -674,7 +681,7 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 		}
 
 		if ^pathInfo == 0 {
-			return nil, errors.New("invalid treePos")
+			return nil, ErrInvalidTreePos
 		}
 
 		path = append(path, pathInfo)
@@ -694,7 +701,7 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 // PathToTreePos returns treePos from given path
 func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 	if len(path) == 0 {
-		return nil, errors.New("unacceptable path")
+		return nil, ErrUnreachablePath
 	}
 
 	node := t.root
@@ -703,7 +710,7 @@ func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 		node = node.Children()[pathElement]
 
 		if node == nil {
-			return nil, errors.New("unacceptable path")
+			return nil, ErrUnreachablePath
 		}
 	}
 
@@ -711,7 +718,7 @@ func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 		return findTextPos(node, path[len(path)-1])
 	}
 	if len(node.Children()) < path[len(path)-1] {
-		return nil, errors.New("unacceptable path")
+		return nil, ErrUnreachablePath
 	}
 
 	return &TreePos[V]{
@@ -723,7 +730,7 @@ func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 // findTextPos returns the tree position of the given path element.
 func findTextPos[V Value](node *Node[V], pathElement int) (*TreePos[V], error) {
 	if node.Length < pathElement {
-		return nil, errors.New("unacceptable path")
+		return nil, ErrUnreachablePath
 	}
 
 	for _, childNode := range node.Children() {
@@ -750,7 +757,6 @@ func (t *Tree[V]) FindPostorderRight(pos *TreePos[V]) (V, error) {
 	if node.IsText() {
 		if node.Len() == offset {
 			nextSibling, err := node.nextSibling()
-
 			if err != nil {
 				return nextSibling.Value, err
 			}
@@ -828,10 +834,10 @@ func (t *Tree[V]) IndexOf(node *Node[V]) (int, error) {
 		}
 
 		offset, err := parent.findOffset(current)
-
 		if err != nil {
 			return 0, err
 		}
+
 		childrenSlice := parent.Children()[:offset]
 		for _, previous := range childrenSlice {
 			index += previous.PaddedLength()
