@@ -148,8 +148,6 @@ func RunFindDocInfosByQueryTest(
 			keys = append(keys, info.Key.String())
 		}
 
-		// sort.Strings(keys)
-
 		assert.EqualValues(t, []string{
 			"test", "test abc", "test$0", "test$3", "test-search",
 			"test0", "test1", "test10", "test11", "test2"}, keys)
@@ -584,27 +582,60 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			})
 		}
 	})
+
+	t.Run("FindDocInfosByPaging with docInfoRemovedAt test", func(t *testing.T) {
+		const testDocCnt = 3
+		ctx := context.Background()
+
+		// 01. Initialize a project and create documents.
+		projectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		var docInfos []*database.DocInfo
+		for i := 0; i < testDocCnt; i++ {
+			testDocKey := key.Key("key" + strconv.Itoa(i))
+			docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, dummyClientID, testDocKey, true)
+			assert.NoError(t, err)
+			docInfos = append(docInfos, docInfo)
+		}
+
+		// 02. List the documents.
+		result, err := db.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[types.ID]{
+			PageSize:  10,
+			IsForward: false,
+		})
+		assert.NoError(t, err)
+		assert.Len(t, result, len(docInfos))
+
+		// 03. Remove a document.
+		err = db.CreateChangeInfos(ctx, projectInfo.ID, docInfos[0], 0, []*change.Change{}, true)
+		assert.NoError(t, err)
+
+		// 04. List the documents again and check the filtered result.
+		result, err = db.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[types.ID]{
+			PageSize:  10,
+			IsForward: false,
+		})
+		assert.NoError(t, err)
+		assert.Len(t, result, len(docInfos)-1)
+	})
 }
 
 // RunCreateChangeInfosTest runs the CreateChangeInfos tests for the given db.
 func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("set RemovedAt in docInfo test", func(t *testing.T) {
 		ctx := context.Background()
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docKey := helper.TestDocKey(t)
 
+		// 01. Create a client and a document then attach the document to the client.
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		doc := document.New(key.Key(t.Name()))
-		pack := doc.CreateChangePack()
-
-		// Set RemovedAt in docInfo and store changes
-		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, true)
+		// 02. Remove the document and check the document is removed.
+		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, []*change.Change{}, true)
 		assert.NoError(t, err)
-
-		// Check whether RemovedAt is set in docInfo
 		docInfo, err = db.FindDocInfoByID(ctx, projectID, docInfo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, false, docInfo.RemovedAt.IsZero())
@@ -612,27 +643,23 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 	t.Run("reuse same key to create docInfo test ", func(t *testing.T) {
 		ctx := context.Background()
-		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
+		docKey := helper.TestDocKey(t)
 
+		// 01. Create a client and a document then attach the document to the client.
 		clientInfo1, _ := db.ActivateClient(ctx, projectID, t.Name())
 		docInfo1, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo1.ID, docKey, true)
 		assert.NoError(t, clientInfo1.AttachDocument(docInfo1.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo1))
 
-		doc := document.New(key.Key(t.Name()))
-		pack := doc.CreateChangePack()
-
-		// Set RemovedAt in docInfo and store changes
-		err := db.CreateChangeInfos(ctx, projectID, docInfo1, 0, pack.Changes, true)
+		// 02. Remove the document.
+		assert.NoError(t, clientInfo1.RemoveDocument(docInfo1.ID))
+		err := db.CreateChangeInfos(ctx, projectID, docInfo1, 0, []*change.Change{}, true)
 		assert.NoError(t, err)
 
-		// Use same key to create docInfo
-		clientInfo2, _ := db.ActivateClient(ctx, projectID, t.Name())
-		docInfo2, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo2.ID, docKey, true)
-		assert.NoError(t, clientInfo2.AttachDocument(docInfo2.ID))
-		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo2, docInfo2))
-
-		// Check they have same key but different id
+		// 03. Create a document with same key and check they have same key but different id.
+		docInfo2, _ := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo1.ID, docKey, true)
+		assert.NoError(t, clientInfo1.AttachDocument(docInfo2.ID))
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo1, docInfo2))
 		assert.Equal(t, docInfo1.Key, docInfo2.Key)
 		assert.NotEqual(t, docInfo1.ID, docInfo2.ID)
 	})

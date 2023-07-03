@@ -17,6 +17,7 @@
 package crdt
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -278,13 +279,15 @@ func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
 }
 
 // purge physically purge child element.
-func (a *RGATreeList) purge(elem Element) {
+func (a *RGATreeList) purge(elem Element) error {
 	node, ok := a.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
-		panic("fail to find the given createdAt: " + elem.CreatedAt().Key())
+		return fmt.Errorf("purge %s: %w", elem.CreatedAt().Key(), ErrChildNotFound)
 	}
 
 	a.release(node)
+
+	return nil
 }
 
 func (a *RGATreeList) findNextBeforeExecutedAt(

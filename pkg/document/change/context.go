@@ -78,9 +78,9 @@ func (c *Context) RegisterRemovedElementPair(parent crdt.Container, deleted crdt
 	c.root.RegisterRemovedElementPair(parent, deleted)
 }
 
-// RegisterTextElementWithGarbage register the given text element with garbage to hash table.
-func (c *Context) RegisterTextElementWithGarbage(textType crdt.TextElement) {
-	c.root.RegisterTextElementWithGarbage(textType)
+// RegisterElementHasRemovedNodes register the given text element with garbage to hash table.
+func (c *Context) RegisterElementHasRemovedNodes(element crdt.GCElement) {
+	c.root.RegisterElementHasRemovedNodes(element)
 }
 
 // LastTimeTicket returns the last time ticket issued by this context.

@@ -38,8 +38,8 @@ func NewObject(memberNodes *ElementRHT, createdAt *time.Ticket) *Object {
 }
 
 // Purge physically purge child element.
-func (o *Object) Purge(elem Element) {
-	o.memberNodes.purge(elem)
+func (o *Object) Purge(elem Element) error {
+	return o.memberNodes.purge(elem)
 }
 
 // Set sets the given element of the given key.

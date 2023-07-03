@@ -26,6 +26,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -171,6 +172,152 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
+	})
+
+	t.Run("garbage collection for tree type test", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+
+		err := doc.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p", Children: []json.TreeNode{{
+						Type: "tn", Children: []json.TreeNode{{
+							Type: "text", Value: "a",
+						}, {
+							Type: "text", Value: "b",
+						}},
+					}, {
+						Type: "tn", Children: []json.TreeNode{{
+							Type: "text", Value: "cd",
+						}},
+					}},
+				}},
+			})
+			assert.Equal(t, `<doc><p><tn>ab</tn><tn>cd</tn></p></doc>`, root.GetTree("t").ToXML())
+
+			return nil
+		})
+		assert.NoError(t, err)
+
+		err = doc.Update(func(root *json.Object) error {
+			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "gh"})
+			assert.Equal(t, `<doc><p><tn>gh</tn><tn>cd</tn></p></doc>`, root.GetTree("t").ToXML())
+			return nil
+		})
+
+		// [text(a), text(b)]
+		assert.NoError(t, err)
+		assert.Equal(t, doc.GarbageLen(), 2)
+		assert.Equal(t, doc.GarbageCollect(time.MaxTicket), 2)
+		assert.Equal(t, doc.GarbageLen(), 0)
+
+		err = doc.Update(func(root *json.Object) error {
+			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "cv"})
+			assert.Equal(t, `<doc><p><tn>cv</tn><tn>cd</tn></p></doc>`, root.GetTree("t").ToXML())
+			return nil
+		})
+
+		// [text(gh)]
+		assert.NoError(t, err)
+		assert.Equal(t, doc.GarbageLen(), 1)
+		assert.Equal(t, doc.GarbageCollect(time.MaxTicket), 1)
+		assert.Equal(t, doc.GarbageLen(), 0)
+
+		err = doc.Update(func(root *json.Object) error {
+			root.GetTree("t").EditByPath([]int{0}, []int{1}, &json.TreeNode{
+				Type: "p", Children: []json.TreeNode{{
+					Type: "tn", Children: []json.TreeNode{{
+						Type: "text", Value: "ab",
+					}},
+				}}})
+			assert.Equal(t, `<doc><p><tn>ab</tn></p></doc>`, root.GetTree("t").ToXML())
+			return nil
+		})
+
+		// [p, tn, tn, text(cv), text(cd)]
+		assert.NoError(t, err)
+		assert.Equal(t, doc.GarbageLen(), 5)
+		assert.Equal(t, doc.GarbageCollect(time.MaxTicket), 5)
+		assert.Equal(t, doc.GarbageLen(), 0)
+	})
+
+	t.Run("garbage collection for tree type test (multi clients)", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:     "tn",
+						Children: []json.TreeNode{{Type: "text", Value: "a"}, {Type: "text", Value: "b"}},
+					}, {
+						Type:     "tn",
+						Children: []json.TreeNode{{Type: "text", Value: "cd"}},
+					}},
+				}},
+			})
+			assert.Equal(t, `<doc><p><tn>ab</tn><tn>cd</tn></p></doc>`, root.GetTree("t").ToXML())
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		// (0, 0) -> (1, 0): syncedseqs:(0, 0)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		// (1, 0) -> (1, 1): syncedseqs:(0, 0)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *json.Object) error {
+			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "gh"})
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, d1.GarbageLen(), 0)
+		assert.Equal(t, d2.GarbageLen(), 2)
+
+		// (1, 1) -> (1, 2): syncedseqs:(0, 1)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, d1.GarbageLen(), 0)
+		assert.Equal(t, d2.GarbageLen(), 2)
+
+		// (1, 2) -> (2, 2): syncedseqs:(1, 1)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, d1.GarbageLen(), 2)
+		assert.Equal(t, d2.GarbageLen(), 2)
+
+		// (2, 2) -> (2, 2): syncedseqs:(1, 2)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, d1.GarbageLen(), 2)
+		assert.Equal(t, d2.GarbageLen(), 2)
+
+		// (2, 2) -> (2, 2): syncedseqs:(2, 2): meet GC condition
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, d1.GarbageLen(), 0)
+		assert.Equal(t, d2.GarbageLen(), 2)
+
+		// (2, 2) -> (2, 2): syncedseqs:(2, 2): meet GC condition
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, d1.GarbageLen(), 0)
+		assert.Equal(t, d2.GarbageLen(), 0)
 	})
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {

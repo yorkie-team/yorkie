@@ -39,7 +39,7 @@ type Root struct {
 	object                               *Object
 	elementMapByCreatedAt                map[string]Element
 	removedElementPairMapByCreatedAt     map[string]ElementPair
-	textElementWithGarbageMapByCreatedAt map[string]TextElement
+	elementHasRemovedNodesSetByCreatedAt map[string]GCElement
 }
 
 // NewRoot creates a new instance of Root.
@@ -47,7 +47,7 @@ func NewRoot(root *Object) *Root {
 	r := &Root{
 		elementMapByCreatedAt:                make(map[string]Element),
 		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
-		textElementWithGarbageMapByCreatedAt: make(map[string]TextElement),
+		elementHasRemovedNodesSetByCreatedAt: make(map[string]GCElement),
 	}
 
 	r.object = root
@@ -95,9 +95,9 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	}
 }
 
-// RegisterTextElementWithGarbage register the given text element with garbage to hash table.
-func (r *Root) RegisterTextElementWithGarbage(textType TextElement) {
-	r.textElementWithGarbageMapByCreatedAt[textType.CreatedAt().Key()] = textType
+// RegisterElementHasRemovedNodes register the given element with garbage to hash table.
+func (r *Root) RegisterElementHasRemovedNodes(element GCElement) {
+	r.elementHasRemovedNodesSetByCreatedAt[element.CreatedAt().Key()] = element
 }
 
 // DeepCopy copies itself deeply.
@@ -110,25 +110,32 @@ func (r *Root) DeepCopy() (*Root, error) {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (r *Root) GarbageCollect(ticket *time.Ticket) int {
+func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	count := 0
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
 		if pair.elem.RemovedAt() != nil && ticket.Compare(pair.elem.RemovedAt()) >= 0 {
-			pair.parent.Purge(pair.elem)
+			if err := pair.parent.Purge(pair.elem); err != nil {
+				return 0, err
+			}
+
 			count += r.garbageCollect(pair.elem)
 		}
 	}
 
-	for _, text := range r.textElementWithGarbageMapByCreatedAt {
-		purgedTextNodes := text.purgeTextNodesWithGarbage(ticket)
-		if purgedTextNodes > 0 {
-			delete(r.textElementWithGarbageMapByCreatedAt, text.CreatedAt().Key())
+	for _, node := range r.elementHasRemovedNodesSetByCreatedAt {
+		purgedNodes, err := node.purgeRemovedNodesBefore(ticket)
+		if err != nil {
+			return 0, err
 		}
-		count += purgedTextNodes
+
+		if purgedNodes > 0 {
+			delete(r.elementHasRemovedNodesSetByCreatedAt, node.CreatedAt().Key())
+		}
+		count += purgedNodes
 	}
 
-	return count
+	return count, nil
 }
 
 // ElementMapLen returns the size of element map.
@@ -157,8 +164,8 @@ func (r *Root) GarbageLen() int {
 		}
 	}
 
-	for _, text := range r.textElementWithGarbageMapByCreatedAt {
-		count += text.removedNodesLen()
+	for _, element := range r.elementHasRemovedNodesSetByCreatedAt {
+		count += element.removedNodesLen()
 	}
 
 	return count

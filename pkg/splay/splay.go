@@ -241,7 +241,7 @@ func (t *Tree[V]) StructureAsString() string {
 // for debugging purpose.
 func (t *Tree[V]) CheckWeight() bool {
 	var nodes []*Node[V]
-	traversePostOrder(t.root, func(node *Node[V]) {
+	traversePostorder(t.root, func(node *Node[V]) {
 		nodes = append(nodes, node)
 	})
 	for _, node := range nodes {
@@ -325,7 +325,7 @@ func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
 }
 
 func (t *Tree[V]) cutOffRight(root *Node[V]) {
-	traversePostOrder(root.right, func(node *Node[V]) { node.InitWeight() })
+	traversePostorder(root.right, func(node *Node[V]) { node.InitWeight() })
 	t.updateTreeWeight(root)
 }
 
@@ -407,13 +407,13 @@ func traverseInOrder[V Value](node *Node[V], callback func(node *Node[V])) {
 	traverseInOrder(node.right, callback)
 }
 
-func traversePostOrder[V Value](node *Node[V], callback func(node *Node[V])) {
+func traversePostorder[V Value](node *Node[V], callback func(node *Node[V])) {
 	if node == nil {
 		return
 	}
 
-	traversePostOrder(node.left, callback)
-	traversePostOrder(node.right, callback)
+	traversePostorder(node.left, callback)
+	traversePostorder(node.right, callback)
 	callback(node)
 }
 
