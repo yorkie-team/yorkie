@@ -101,7 +101,6 @@ func TestRetention(t *testing.T) {
 
 		changes, err := adminCli.ListChangeSummaries(ctx, "default", doc.Key(), 0, 0, true)
 		assert.NoError(t, err)
-		// TODO(chacha912): Check change count (Compare with history_test.go)
 		assert.Len(t, changes, 3)
 
 		assert.NoError(t, cli.Sync(ctx))
