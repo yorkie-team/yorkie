@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.4] - 2023-07-04
+
+### Added
+* Add logout command to CLI by @blurfx in https://github.com/yorkie-team/yorkie/pull/571
+* Add RemoveIfNotAttached flag to Detach by @emplam27 in https://github.com/yorkie-team/yorkie/pull/560
+
+### Fixed
+* Make attributes display properly in dashboard by @YoonKiJin in https://github.com/yorkie-team/yorkie/pull/564
+* Remove panic from crdt.Tree and index.Tree by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/570
+
 ## [0.4.3] - 2023-06-29
 
 ### Added
