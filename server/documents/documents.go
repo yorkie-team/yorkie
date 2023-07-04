@@ -231,7 +231,7 @@ func RemoveDocument(
 		return be.DB.UpdateDocInfoStatusToRemoved(ctx, project.ID, docID)
 	}
 
-	isAttached, err := be.DB.IsDocumentAttached(ctx, project.ID, docID)
+	isAttached, err := be.DB.IsDocumentAttached(ctx, project.ID, docID, "")
 	if err != nil {
 		return err
 	}
@@ -240,4 +240,15 @@ func RemoveDocument(
 	}
 
 	return be.DB.UpdateDocInfoStatusToRemoved(ctx, project.ID, docID)
+}
+
+// IsDocumentAttached returns true if the given document is attached to any client.
+func IsDocumentAttached(
+	ctx context.Context,
+	be *backend.Backend,
+	project *types.Project,
+	docID types.ID,
+	excludeClientID types.ID,
+) (bool, error) {
+	return be.DB.IsDocumentAttached(ctx, project.ID, docID, excludeClientID)
 }

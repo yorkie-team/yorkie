@@ -631,7 +631,20 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
+	// TODO(hackerwins): Removed documents should be filtered out by the query, but
+	// somehow it does not work. This is a workaround.
+	// val, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
+	iter, err := txn.Get(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
+	if err != nil {
+		return nil, fmt.Errorf("find document by key: %w", err)
+	}
+	var raw interface{}
+	for val := iter.Next(); val != nil; val = iter.Next() {
+		if val != nil && val.(*database.DocInfo).RemovedAt.IsZero() {
+			raw = val
+		}
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("find document by key: %w", err)
 	}
@@ -1191,7 +1204,7 @@ func (d *DB) FindDocInfosByPaging(
 			break
 		}
 
-		if info.ID != paging.Offset {
+		if info.ID != paging.Offset && info.RemovedAt.IsZero() {
 			docInfos = append(docInfos, info)
 		}
 	}
@@ -1235,6 +1248,7 @@ func (d *DB) IsDocumentAttached(
 	ctx context.Context,
 	projectID types.ID,
 	docID types.ID,
+	excludeClientID types.ID,
 ) (bool, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -1249,6 +1263,9 @@ func (d *DB) IsDocumentAttached(
 
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		clientInfo := raw.(*database.ClientInfo)
+		if clientInfo.ID == excludeClientID {
+			continue
+		}
 		clientDocInfo := clientInfo.Documents[docID]
 		if clientDocInfo == nil {
 			continue

@@ -46,7 +46,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, doc.IsAttached())
 
-		err = c1.Detach(ctx, doc)
+		err = c1.Detach(ctx, doc, false)
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 
@@ -56,6 +56,38 @@ func TestDocument(t *testing.T) {
 
 		_, err = c1.Attach(ctx, key.Key("invalid$key"), map[string]string{})
 		assert.Error(t, err)
+	})
+
+	t.Run("detach removeIfNotAttached flag test", func(t *testing.T) {
+		// 01. create a document and attach it to c1
+		ctx := context.Background()
+		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object) error {
+			root.SetString("k1", "v1")
+			return nil
+		}, "update k1 with v1")
+		assert.NoError(t, err)
+
+		assert.True(t, d1.IsAttached())
+
+		// 02. detach with removeIfNotAttached option false
+		err = c1.Detach(ctx, d1, false)
+		assert.NoError(t, err)
+		assert.False(t, d1.IsAttached())
+		assert.Equal(t, d1.Status(), document.StatusDetached)
+
+		// 03. attach again to c1 and check if it is attached normally
+		d2, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
+		assert.NoError(t, err)
+		assert.True(t, d2.IsAttached())
+
+		// 04. detach with removeIfNotAttached option true
+		err = c1.Detach(ctx, d2, true)
+		assert.NoError(t, err)
+		assert.False(t, d2.IsAttached())
+		assert.Equal(t, d2.Status(), document.StatusRemoved)
 	})
 
 	t.Run("concurrent complex test", func(t *testing.T) {
@@ -274,7 +306,7 @@ func TestDocument(t *testing.T) {
 
 		// 02. cli1 removes d1 and cli2 detaches d2.
 		assert.NoError(t, c1.Remove(ctx, d1))
-		assert.NoError(t, c2.Detach(ctx, d2))
+		assert.NoError(t, c2.Detach(ctx, d2, false))
 		assert.Equal(t, d1.Status(), document.StatusRemoved)
 		assert.Equal(t, d2.Status(), document.StatusRemoved)
 	})
@@ -324,12 +356,12 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, cli.Remove(ctx, d1))
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrDocumentNotAttached)
-		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Detach(ctx, d1, false), client.ErrDocumentNotAttached)
 
 		// 02. abnormal behavior on detached state
 		d2, err := cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
-		assert.NoError(t, cli.Detach(ctx, d2))
+		assert.NoError(t, cli.Detach(ctx, d2, false))
 		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d2.Key())), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Remove(ctx, d2), client.ErrDocumentNotAttached)
 	})

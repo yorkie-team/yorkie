@@ -43,10 +43,10 @@ func TestPeerAwareness(t *testing.T) {
 		docKey := helper.TestDocKey(t)
 		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1, false)) }()
 		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2, false)) }()
 
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
@@ -140,12 +140,12 @@ func TestPeerAwareness(t *testing.T) {
 		d1, err := c1.Attach(ctx, docKey, c1Presence)
 		assert.NoError(t, err)
 		assert.Equal(t, c1Presence, d1.Presence())
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1, false)) }()
 		d2, err := c2.Attach(ctx, docKey, c2Presence)
 		assert.NoError(t, err)
 		assert.Equal(t, c2Presence, d2.Presence())
 
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2, false)) }()
 
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
@@ -235,7 +235,7 @@ func TestPeerAwareness(t *testing.T) {
 
 		d1, err := c1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1, false)) }()
 
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
@@ -280,10 +280,10 @@ func TestPeerAwareness(t *testing.T) {
 
 		d2, err := c2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2, false)) }()
 		d3, err := c2.Attach(ctx, helper.TestDocKey(t)+"2", map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c2.Detach(ctx, d3)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d3, false)) }()
 
 		// 01. PeersChanged is triggered when another client watches the document
 		expected = append(expected, watchResponsePair{
@@ -319,10 +319,10 @@ func TestPeerAwareness(t *testing.T) {
 		docKey := helper.TestDocKey(t)
 		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1, false)) }()
 		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2, false)) }()
 
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
@@ -412,10 +412,10 @@ func TestPeerAwareness(t *testing.T) {
 		docKey := helper.TestDocKey(t)
 		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1, false)) }()
 		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2, false)) }()
 
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
@@ -515,7 +515,7 @@ func TestPeerAwareness(t *testing.T) {
 		docKey := helper.TestDocKey(t)
 		d1, err := c1.Attach(ctx, docKey, map[string]string{"presence1": "value1", "presence2": "value2"})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1, false)) }()
 
 		// starting to watch a document
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
@@ -536,7 +536,7 @@ func TestPeerAwareness(t *testing.T) {
 		//     c2 doesn't know the presence from c1 because it's not watched yet.
 		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2, false)) }()
 
 		assert.Equal(t, map[string]presence.Presence{c2.ID().String(): d2.Presence()}, d2.PeersMap())
 
@@ -554,10 +554,10 @@ func TestPeerAwareness(t *testing.T) {
 		docKey := helper.TestDocKey(t)
 		d1, err := c1.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1, false)) }()
 		d2, err := c2.Attach(ctx, docKey, map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2, false)) }()
 
 		var responsePairs []watchResponsePair
 		wgEvents := sync.WaitGroup{}

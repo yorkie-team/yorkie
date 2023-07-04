@@ -40,7 +40,7 @@ func TestHistory(t *testing.T) {
 		ctx := context.Background()
 		d1, err := cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, cli.Detach(ctx, d1, false)) }()
 
 		assert.NoError(t, d1.Update(func(root *json.Object) error {
 			root.SetNewArray("todos")

@@ -78,7 +78,7 @@ func TestRetention(t *testing.T) {
 
 		doc, err := cli.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, cli.Detach(ctx, doc)) }()
+		defer func() { assert.NoError(t, cli.Detach(ctx, doc, false)) }()
 
 		assert.NoError(t, doc.Update(func(root *json.Object) error {
 			root.SetNewArray("todos")
@@ -137,7 +137,7 @@ func TestRetention(t *testing.T) {
 		ctx := context.Background()
 		d1, err := cli1.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, cli1.Detach(ctx, d1)) }()
+		defer func() { assert.NoError(t, cli1.Detach(ctx, d1, false)) }()
 
 		err = d1.Update(func(root *json.Object) error {
 			root.SetNewText("k1")
@@ -209,7 +209,7 @@ func TestRetention(t *testing.T) {
 
 		d2, err := cli2.Attach(ctx, helper.TestDocKey(t), map[string]string{})
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, cli2.Detach(ctx, d2)) }()
+		defer func() { assert.NoError(t, cli2.Detach(ctx, d2, false)) }()
 
 		// Create 6 changes
 		for _, edit := range edits {

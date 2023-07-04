@@ -167,10 +167,10 @@ func (rht *ElementRHT) Nodes() []*ElementRHTNode {
 }
 
 // purge physically purge child element.
-func (rht *ElementRHT) purge(elem Element) {
+func (rht *ElementRHT) purge(elem Element) error {
 	node, ok := rht.nodeMapByCreatedAt[elem.CreatedAt().Key()]
 	if !ok {
-		panic("fail to find: " + elem.CreatedAt().Key())
+		return fmt.Errorf("purge %s: %w", elem.CreatedAt().Key(), ErrChildNotFound)
 	}
 	delete(rht.nodeMapByCreatedAt, node.elem.CreatedAt().Key())
 
@@ -178,6 +178,8 @@ func (rht *ElementRHT) purge(elem Element) {
 	if ok && node == nodeByKey {
 		delete(rht.nodeMapByKey, nodeByKey.key)
 	}
+
+	return nil
 }
 
 // Marshal returns the JSON encoding of this map.

@@ -7,6 +7,28 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.4] - 2023-07-04
+
+### Added
+* Add logout command to CLI by @blurfx in https://github.com/yorkie-team/yorkie/pull/571
+* Add RemoveIfNotAttached flag to Detach by @emplam27 in https://github.com/yorkie-team/yorkie/pull/560
+
+### Fixed
+* Make attributes display properly in dashboard by @YoonKiJin in https://github.com/yorkie-team/yorkie/pull/564
+* Remove panic from crdt.Tree and index.Tree by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/570
+
+## [0.4.3] - 2023-06-29
+
+### Added
+* Add force flag to RemoveDocument command by @emplam27 in https://github.com/yorkie-team/yorkie/pull/558
+* Apply garbage collection for tree by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/566
+
+### Fixed
+* Resolve CI failure with longer MaxConnectionAge by @krapie in https://github.com/yorkie-team/yorkie/pull/556
+* Update ClientInfo with ID and extract `testcases` package  by @emplam27 in https://github.com/yorkie-team/yorkie/pull/557
+* Filter out removed documents from ListDocuments API by @hackerwins in https://github.com/yorkie-team/yorkie/pull/563
+* Add a workaround to prevent retrieving removed documents from MemDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/565
+
 ## [0.4.2] - 2023-06-19
 
 ### Added
