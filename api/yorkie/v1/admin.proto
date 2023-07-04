@@ -97,6 +97,7 @@ message ListDocumentsRequest {
   string previous_id = 2;
   int32 page_size = 3;
   bool is_forward = 4;
+  bool include_snapshot = 5;
 }
 
 message ListDocumentsResponse {
