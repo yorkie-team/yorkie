@@ -74,7 +74,7 @@ func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
 			return grpchelper.ToStatusError(err)
 		}
 
-		reqLogger.Infof("RPC : stream %q %s", info.FullMethod, gotime.Since(start))
+		reqLogger.Debugf("RPC : stream %q %s", info.FullMethod, gotime.Since(start))
 		return nil
 	}
 }

@@ -66,7 +66,7 @@ func pushChanges(
 	if len(reqPack.Changes) > 0 {
 		logging.From(ctx).Infof(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
-			clientInfo.ID,
+			clientInfo.Key,
 			len(pushedChanges),
 			docInfo.Key,
 			len(reqPack.Changes)-len(pushedChanges),
@@ -164,7 +164,7 @@ func pullSnapshot(
 
 	logging.From(ctx).Infof(
 		"PULL: '%s' build snapshot with changes(%d~%d) from '%s', cp: %s",
-		clientInfo.ID,
+		clientInfo.Key,
 		reqPack.Checkpoint.ServerSeq+1,
 		initialServerSeq,
 		docInfo.Key,
@@ -213,7 +213,7 @@ func pullChangeInfos(
 	if len(pulledChanges) > 0 {
 		logging.From(ctx).Infof(
 			"PULL: '%s' pulls %d changes(%d~%d) from '%s', cp: %s, filtered changes: %d",
-			clientInfo.ID,
+			clientInfo.Key,
 			len(pulledChanges),
 			pulledChanges[0].ServerSeq,
 			pulledChanges[len(pulledChanges)-1].ServerSeq,
