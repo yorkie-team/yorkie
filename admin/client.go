@@ -251,6 +251,7 @@ func (c *Client) ListDocuments(
 	previousID string,
 	pageSize int32,
 	isForward bool,
+	includeSnapshot bool,
 ) ([]*types.DocumentSummary, error) {
 	response, err := c.client.ListDocuments(
 		ctx,
@@ -259,6 +260,7 @@ func (c *Client) ListDocuments(
 			PreviousId:  previousID,
 			PageSize:    pageSize,
 			IsForward:   isForward,
+			IncludeSnapshot: includeSnapshot,
 		},
 	)
 	if err != nil {

@@ -542,7 +542,28 @@ func TestDocumentWithProjects(t *testing.T) {
 		assert.Equal(t, "{\"key3\":\"value3\"}", d3.Marshal())
 	})
 
-	t.Run("", func(t *testing.T) {
+	clients := activeClients(t, 1)
+	cli := clients[0]
+	defer deactivateAndCloseClients(t, clients)
 
+	t.Run("includeSnapshot test", func(t *testing.T) {
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, cli.Attach(ctx, d1))
+		defer func() { assert.NoError(t, cli.Detach(ctx, d1, false)) }()
+
+		assert.NoError(t, d1.Update(func(root *json.Object) error {
+			root.SetNewArray("testArray")
+			return nil
+		}, "add test array"))
+
+		assert.NoError(t, cli.Sync(ctx))
+
+		docs, err := adminCli.ListDocuments(ctx, "default", "000000000000000000000000", 0, true, false)
+		assert.NoError(t, err)
+		assert.Equal(t, "", docs[0].Snapshot)
+
+		docs, err = adminCli.ListDocuments(ctx, "default", "000000000000000000000000", 0, true, true)
+		assert.NoError(t, err)
+		assert.NotEqual(t, 0, len(docs[0].Snapshot))
 	})
 }
