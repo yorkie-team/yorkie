@@ -33,6 +33,7 @@ var (
 	previousID string
 	pageSize   int32
 	isForward  bool
+	includeSnapshot bool
 )
 
 func newListCommand() *cobra.Command {
@@ -58,7 +59,7 @@ func newListCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			documents, err := cli.ListDocuments(ctx, projectName, previousID, pageSize, isForward)
+			documents, err := cli.ListDocuments(ctx, projectName, previousID, pageSize, isForward, includeSnapshot)
 			if err != nil {
 				return err
 			}
