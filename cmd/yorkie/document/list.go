@@ -30,9 +30,9 @@ import (
 )
 
 var (
-	previousID string
-	pageSize   int32
-	isForward  bool
+	previousID      string
+	pageSize        int32
+	isForward       bool
 	includeSnapshot bool
 )
 

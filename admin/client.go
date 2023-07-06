@@ -256,10 +256,10 @@ func (c *Client) ListDocuments(
 	response, err := c.client.ListDocuments(
 		ctx,
 		&api.ListDocumentsRequest{
-			ProjectName: projectName,
-			PreviousId:  previousID,
-			PageSize:    pageSize,
-			IsForward:   isForward,
+			ProjectName:     projectName,
+			PreviousId:      previousID,
+			PageSize:        pageSize,
+			IsForward:       isForward,
 			IncludeSnapshot: includeSnapshot,
 		},
 	)
