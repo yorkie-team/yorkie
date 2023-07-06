@@ -49,6 +49,7 @@ func ListDocumentSummaries(
 	be *backend.Backend,
 	project *types.Project,
 	paging types.Paging[types.ID],
+	includeSnapshot bool,
 ) ([]*types.DocumentSummary, error) {
 	if paging.PageSize > pageSizeLimit {
 		paging.PageSize = pageSizeLimit
@@ -61,24 +62,29 @@ func ListDocumentSummaries(
 
 	var summaries []*types.DocumentSummary
 	for _, docInfo := range docInfo {
-		doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
-		if err != nil {
-			return nil, err
-		}
-
-		snapshot := doc.Marshal()
-		if len(snapshot) > SnapshotMaxLen {
-			snapshot = snapshot[:SnapshotMaxLen] + "..."
-		}
-
-		summaries = append(summaries, &types.DocumentSummary{
+		summary := &types.DocumentSummary{
 			ID:         docInfo.ID,
 			Key:        docInfo.Key,
 			CreatedAt:  docInfo.CreatedAt,
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
-			Snapshot:   snapshot,
-		})
+		}
+
+		if includeSnapshot {
+			doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+			if err != nil {
+				return nil, err
+			}
+
+			snapshot := doc.Marshal()
+			if len(snapshot) > SnapshotMaxLen {
+				snapshot = snapshot[:SnapshotMaxLen] + "..."
+			}
+
+			summary.Snapshot = snapshot
+		}
+
+		summaries = append(summaries, summary)
 	}
 
 	return summaries, nil

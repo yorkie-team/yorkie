@@ -285,6 +285,7 @@ func (s *adminServer) ListDocuments(
 			PageSize:  int(req.PageSize),
 			IsForward: req.IsForward,
 		},
+		req.IncludeSnapshot,
 	)
 	if err != nil {
 		return nil, err
