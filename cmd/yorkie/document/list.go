@@ -58,7 +58,7 @@ func newListCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			documents, err := cli.ListDocuments(ctx, projectName, previousID, pageSize, isForward)
+			documents, err := cli.ListDocuments(ctx, projectName, previousID, pageSize, isForward, true)
 			if err != nil {
 				return err
 			}
@@ -104,7 +104,7 @@ func init() {
 	cmd.Flags().Int32Var(
 		&pageSize,
 		"size",
-		0,
+		10,
 		"The number of document to output per page",
 	)
 	cmd.Flags().BoolVar(
