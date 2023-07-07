@@ -18,6 +18,7 @@ package converter
 
 import (
 	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 
 	protoTypes "github.com/gogo/protobuf/types"
 
@@ -135,7 +136,6 @@ func FromClient(pbClient *api.Client) (*types.Client, error) {
 // FromPresenceInfo converts the given Protobuf formats to model format.
 func FromPresenceInfo(pbPresence *api.Presence) types.PresenceInfo {
 	return types.PresenceInfo{
-		Clock:    pbPresence.Clock,
 		Presence: pbPresence.Data,
 	}
 }
@@ -192,6 +192,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 			changeID,
 			pbChange.Message,
 			ops,
+			FromPresence(pbChange.Presence),
 		))
 	}
 
@@ -321,6 +322,15 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	}
 
 	return ops, nil
+}
+
+func FromPresence(pbPresence *api.Presence) *presence.InternalPresence {
+	if pbPresence == nil {
+		return nil
+	}
+
+	p := presence.InternalPresence(pbPresence.GetData())
+	return &p
 }
 
 func fromSet(pbSet *api.Operation_Set) (*operations.Set, error) {

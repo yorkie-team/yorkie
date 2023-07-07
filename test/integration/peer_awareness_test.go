@@ -20,6 +20,10 @@ package integration
 
 import (
 	"context"
+	gojson "encoding/json"
+	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"sync"
 	"testing"
 	"time"
@@ -206,5 +210,33 @@ func TestPeerAwareness(t *testing.T) {
 		wgEvents.Wait()
 
 		assert.Equal(t, expected, responsePairs)
+	})
+
+	t.Run("allows updatePresence to be called within update", func(t *testing.T) {
+		// 01. Create a document and attach it to the clients
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1, false)) }()
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2, false)) }()
+
+		// 02. Update the root of the document and presence
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+			root.SetString("key", "value")
+			p.Set("updated", "true")
+			return nil
+		}))
+		encoded, err := gojson.Marshal(d1.PresenceMap())
+		assert.NoError(t, err)
+		assert.Equal(t, fmt.Sprintf(`{"%s":{"updated":"true"}}`, c1.ID()), string(encoded))
+
+		// 03 Sync documents and check that the presence is updated on the other client
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		encoded, err = gojson.Marshal(d2.PresenceMap())
+		assert.NoError(t, err)
+		assert.Equal(t, fmt.Sprintf(`{"%s":{"updated":"true"}}`, c1.ID()), string(encoded))
 	})
 }

@@ -18,11 +18,11 @@ package document
 
 import (
 	"errors"
-
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -56,18 +56,21 @@ type InternalDocument struct {
 	checkpoint   change.Checkpoint
 	changeID     change.ID
 	localChanges []*change.Change
+	presenceMap  *presence.Map
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
 func NewInternalDocument(k key.Key) *InternalDocument {
 	root := crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket)
 
+	// TODO(hackerwins): We need to initialize the presence of the actor who edited the document.
 	return &InternalDocument{
-		key:        k,
-		status:     StatusDetached,
-		root:       crdt.NewRoot(root),
-		checkpoint: change.InitialCheckpoint,
-		changeID:   change.InitialID,
+		key:         k,
+		status:      StatusDetached,
+		root:        crdt.NewRoot(root),
+		checkpoint:  change.InitialCheckpoint,
+		changeID:    change.InitialID,
+		presenceMap: presence.NewMap(),
 	}
 }
 
@@ -84,11 +87,12 @@ func NewInternalDocumentFromSnapshot(
 	}
 
 	return &InternalDocument{
-		key:        k,
-		status:     StatusDetached,
-		root:       crdt.NewRoot(obj),
-		checkpoint: change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:   change.InitialID.SyncLamport(lamport),
+		key:         k,
+		status:      StatusDetached,
+		root:        crdt.NewRoot(obj),
+		presenceMap: presence.NewMap(),
+		checkpoint:  change.InitialCheckpoint.NextServerSeq(serverSeq),
+		changeID:    change.InitialID.SyncLamport(lamport),
 	}, nil
 }
 
@@ -188,7 +192,7 @@ func (d *InternalDocument) SetStatus(status StatusType) {
 	d.status = status
 }
 
-// IsAttached returns the whether this document is attached or not.
+// IsAttached returns whether this document is attached or not.
 func (d *InternalDocument) IsAttached() bool {
 	return d.status == StatusAttached
 }
@@ -218,11 +222,28 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error
 // ApplyChanges applies remote changes to the document.
 func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 	for _, c := range changes {
-		if err := c.Execute(d.root); err != nil {
+		if err := c.Execute(d.root, d.presenceMap); err != nil {
 			return err
 		}
 		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
 	}
 
 	return nil
+}
+
+// Presence returns the presence of the actor currently editing the document.
+func (d *InternalDocument) Presence() *presence.InternalPresence {
+	value, _ := d.presenceMap.LoadOrStore(d.changeID.ActorID().String(), presence.NewInternalPresence())
+	return value.(*presence.InternalPresence)
+}
+
+// PresenceMap returns the map of presences of the actors currently editing the document.
+func (d *InternalDocument) PresenceMap() map[string]presence.InternalPresence {
+	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
+	presenceMap := make(map[string]presence.InternalPresence)
+	d.presenceMap.Range(func(key, value interface{}) bool {
+		presenceMap[key.(string)] = *value.(*presence.InternalPresence)
+		return true
+	})
+	return presenceMap
 }

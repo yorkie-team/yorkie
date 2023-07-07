@@ -21,6 +21,7 @@ package testcases
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"strconv"
 	"testing"
 	gotime "time"
@@ -175,12 +176,12 @@ func RunFindChangesBetweenServerSeqsTest(
 		actorID, _ := time.ActorIDFromBytes(bytesID)
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewArray("array")
 			return nil
 		}))
 		for idx := 0; idx < 10; idx++ {
-			assert.NoError(t, doc.Update(func(root *json.Object) error {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 				root.GetArray("array").AddInteger(idx)
 				return nil
 			}))
@@ -220,7 +221,7 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
 
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewArray("array")
 			return nil
 		}))

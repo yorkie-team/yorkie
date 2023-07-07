@@ -17,6 +17,7 @@
 package converter_test
 
 import (
+	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"math"
 	"testing"
 	gotime "time"
@@ -41,14 +42,14 @@ func TestConverter(t *testing.T) {
 
 		doc := document.New("d1")
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewText("k1").Edit(0, 0, "A")
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[{"val":"A"}]}`, doc.Marshal())
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewText("k1").Edit(0, 0, "B")
 			return nil
 		})
@@ -66,7 +67,7 @@ func TestConverter(t *testing.T) {
 	t.Run("snapshot test", func(t *testing.T) {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			// an object and primitive types
 			root.SetNewObject("k1").
 				SetNull("k1.0").
@@ -138,7 +139,7 @@ func TestConverter(t *testing.T) {
 	t.Run("change pack test", func(t *testing.T) {
 		d1 := document.New("d1")
 
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			// an object and primitive types
 			root.SetNewObject("k1").
 				SetBool("k1.1", true).

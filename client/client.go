@@ -24,13 +24,12 @@ import (
 	"fmt"
 	"strings"
 
-	"google.golang.org/grpc/metadata"
-
 	"github.com/rs/xid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"

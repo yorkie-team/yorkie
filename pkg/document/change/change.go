@@ -21,6 +21,7 @@ package change
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -34,24 +35,34 @@ type Change struct {
 
 	// operations represent a series of user edits.
 	operations []operations.Operation
+
+	// presence represents the presence of the user who made the change.
+	// TODO(hackerwins): Consider using changes instead of entire presence.
+	presence *presence.InternalPresence
 }
 
 // New creates a new instance of Change.
-func New(id ID, message string, operations []operations.Operation) *Change {
+func New(id ID, message string, operations []operations.Operation, p *presence.InternalPresence) *Change {
 	return &Change{
 		id:         id,
 		message:    message,
 		operations: operations,
+		presence:   p,
 	}
 }
 
 // Execute applies this change to the given JSON root.
-func (c *Change) Execute(root *crdt.Root) error {
+func (c *Change) Execute(root *crdt.Root, presenceMap *presence.Map) error {
 	for _, op := range c.operations {
 		if err := op.Execute(root); err != nil {
 			return err
 		}
 	}
+
+	if c.presence != nil {
+		presenceMap.Store(c.id.actorID.String(), c.presence)
+	}
+
 	return nil
 }
 
@@ -91,4 +102,9 @@ func (c *Change) SetActor(actor *time.ActorID) {
 	for _, op := range c.operations {
 		op.SetActor(actor)
 	}
+}
+
+// Presence returns the presence of this change.
+func (c *Change) Presence() *presence.InternalPresence {
+	return c.presence
 }

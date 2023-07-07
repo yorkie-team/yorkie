@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -322,7 +323,7 @@ func TestAuthWebhook(t *testing.T) {
 
 		// 01. multiple requests to update the document.
 		for i := 0; i < 3; i++ {
-			assert.NoError(t, doc.Update(func(root *json.Object) error {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 				root.SetNewObject("k1")
 				return nil
 			}))
@@ -332,7 +333,7 @@ func TestAuthWebhook(t *testing.T) {
 		// 02. multiple requests to update the document after eviction by ttl.
 		time.Sleep(authorizedTTL)
 		for i := 0; i < 3; i++ {
-			assert.NoError(t, doc.Update(func(root *json.Object) error {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 				root.SetNewObject("k1")
 				return nil
 			}))

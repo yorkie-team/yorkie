@@ -18,6 +18,7 @@ package converter
 
 import (
 	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"reflect"
 
 	protoTypes "github.com/gogo/protobuf/types"
@@ -129,11 +130,21 @@ func ToClient(client types.Client) *api.Client {
 	}
 }
 
+// ToPresence converts the given model to Protobuf format.
+func ToPresence(p *presence.InternalPresence) *api.Presence {
+	if p == nil {
+		return nil
+	}
+
+	return &api.Presence{
+		Data: *p,
+	}
+}
+
 // ToPresenceInfo converts the given model to Protobuf format.
 func ToPresenceInfo(info types.PresenceInfo) *api.Presence {
 	return &api.Presence{
-		Clock: info.Clock,
-		Data:  info.Presence,
+		Data: info.Presence,
 	}
 }
 
@@ -278,6 +289,7 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 			Id:         ToChangeID(c.ID()),
 			Message:    c.Message(),
 			Operations: pbOperations,
+			Presence:   ToPresence(c.Presence()),
 		})
 	}
 

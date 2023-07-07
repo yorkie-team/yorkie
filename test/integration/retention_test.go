@@ -87,19 +87,19 @@ func TestRetention(t *testing.T) {
 		assert.NoError(t, cli.Attach(ctx, doc))
 		defer func() { assert.NoError(t, cli.Detach(ctx, doc, false)) }()
 
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewArray("todos")
 			return nil
 		}, "create todos"))
 		assert.Equal(t, `{"todos":[]}`, doc.Marshal())
 
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.GetArray("todos").AddString("buy coffee")
 			return nil
 		}, "buy coffee"))
 		assert.Equal(t, `{"todos":["buy coffee"]}`, doc.Marshal())
 
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.GetArray("todos").AddString("buy bread")
 			return nil
 		}, "buy bread"))
@@ -149,7 +149,7 @@ func TestRetention(t *testing.T) {
 		assert.NoError(t, cli1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, cli1.Detach(ctx, d1, false)) }()
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewText("k1")
 			return nil
 		})
@@ -167,7 +167,7 @@ func TestRetention(t *testing.T) {
 
 		// Create 6 changes
 		for _, edit := range edits {
-			err = d1.Update(func(root *json.Object) error {
+			err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
@@ -226,7 +226,7 @@ func TestRetention(t *testing.T) {
 
 		// Create 6 changes
 		for _, edit := range edits {
-			err = d2.Update(func(root *json.Object) error {
+			err = d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
 				return nil
 			})

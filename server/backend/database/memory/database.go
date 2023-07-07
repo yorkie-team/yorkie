@@ -782,6 +782,10 @@ func (d *DB) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
+		encodedPresence, err := database.EncodePresence(cn.Presence())
+		if err != nil {
+			return err
+		}
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
 			ID:         newID(),
@@ -792,6 +796,7 @@ func (d *DB) CreateChangeInfos(
 			Lamport:    cn.ID().Lamport(),
 			Message:    cn.Message(),
 			Operations: encodedOperations,
+			Presence:   encodedPresence,
 		}); err != nil {
 			return fmt.Errorf("create change: %w", err)
 		}

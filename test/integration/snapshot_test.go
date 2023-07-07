@@ -65,7 +65,7 @@ func TestSnapshot(t *testing.T) {
 
 		// 01. Update changes over snapshot threshold.
 		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
-			err := d1.Update(func(root *json.Object) error {
+			err := d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 				root.SetInteger(fmt.Sprintf("%d", i), i)
 				return nil
 			})
@@ -75,7 +75,7 @@ func TestSnapshot(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 02. Makes local changes then pull a snapshot from the server.
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("key", "value")
 			return nil
 		})
@@ -95,7 +95,7 @@ func TestSnapshot(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewText("k1")
 			return nil
 		})
@@ -116,7 +116,7 @@ func TestSnapshot(t *testing.T) {
 		}
 
 		for _, edit := range edits {
-			err = d1.Update(func(root *json.Object) error {
+			err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
@@ -140,7 +140,7 @@ func TestSnapshot(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewText("k1")
 			return nil
 		})
@@ -153,14 +153,14 @@ func TestSnapshot(t *testing.T) {
 		assert.NoError(t, err)
 
 		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
-			err = d1.Update(func(root *json.Object) error {
+			err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 				root.GetText("k1").Edit(i, i, "x")
 				return nil
 			})
 			assert.NoError(t, err)
 		}
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.GetText("k1").Edit(0, 0, "o")
 			return nil
 		})

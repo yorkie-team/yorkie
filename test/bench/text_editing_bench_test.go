@@ -20,6 +20,7 @@ package bench
 
 import (
 	gojson "encoding/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"io"
 	"os"
 	"testing"
@@ -41,7 +42,7 @@ func BenchmarkTextEditing(b *testing.B) {
 	b.StartTimer()
 
 	doc := document.New("d1")
-	err = doc.Update(func(root *json.Object) error {
+	err = doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 		root.SetNewText("text")
 		return nil
 	})
@@ -50,7 +51,7 @@ func BenchmarkTextEditing(b *testing.B) {
 		cursor := int(edit[0].(float64))
 		mode := int(edit[1].(float64))
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			text := root.GetText("text")
 			if mode == 0 {
 				value := edit[2].(string)

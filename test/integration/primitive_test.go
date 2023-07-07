@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ func TestPrimitive(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewObject("k1").
 				SetBool("k1.1", true).
 				SetInteger("k1.2", 2147483647).

@@ -17,7 +17,10 @@
 package database
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -40,6 +43,7 @@ type ChangeInfo struct {
 	ActorID    types.ID `bson:"actor_id"`
 	Message    string   `bson:"message"`
 	Operations [][]byte `bson:"operations"`
+	Presence   string   `bson:"presence"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -60,6 +64,20 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	}
 
 	return encodedOps, nil
+}
+
+// EncodePresence encodes the given presence into string.
+func EncodePresence(p *presence.InternalPresence) (string, error) {
+	if p == nil {
+		return "", nil
+	}
+
+	bytes, err := json.Marshal(p)
+	if err != nil {
+		return "", fmt.Errorf("marshal presence to bytes: %w", err)
+	}
+
+	return string(bytes), nil
 }
 
 // ToChange creates Change model from this ChangeInfo.
@@ -85,7 +103,12 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	c := change.New(changeID, i.Message, ops)
+	p, err := presence.NewFromJSON(i.Presence)
+	if err != nil {
+		return nil, err
+	}
+
+	c := change.New(changeID, i.Message, ops, p)
 	c.SetServerSeq(i.ServerSeq)
 
 	return c, nil

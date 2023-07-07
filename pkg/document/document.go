@@ -19,6 +19,8 @@ package document
 
 import (
 	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -52,7 +54,7 @@ func New(key key.Key) *Document {
 
 // Update executes the given updater to update this document.
 func (d *Document) Update(
-	updater func(root *json.Object) error,
+	updater func(root *json.Object, p *presenceproxy.Presence) error,
 	msgAndArgs ...interface{},
 ) error {
 	if d.doc.status == StatusRemoved {
@@ -69,15 +71,20 @@ func (d *Document) Update(
 		d.clone,
 	)
 
-	if err := updater(json.NewObject(ctx, d.clone.Object())); err != nil {
+	// TODO(hackerwins): We should use the presence of the client that cloned
+	// from the document.
+	if err := updater(
+		json.NewObject(ctx, d.clone.Object()),
+		presenceproxy.New(ctx, d.doc.Presence()),
+	); err != nil {
 		// drop clone because it is contaminated.
 		d.clone = nil
 		return err
 	}
 
-	if ctx.HasOperations() {
+	if ctx.HasChange() {
 		c := ctx.ToChange()
-		if err := c.Execute(d.doc.root); err != nil {
+		if err := c.Execute(d.doc.root, d.doc.presenceMap); err != nil {
 			return err
 		}
 
@@ -102,7 +109,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		}
 
 		for _, c := range pack.Changes {
-			if err := c.Execute(d.clone); err != nil {
+			if err := c.Execute(d.clone, d.doc.presenceMap); err != nil {
 				return err
 			}
 		}
@@ -186,7 +193,7 @@ func (d *Document) Status() StatusType {
 	return d.doc.status
 }
 
-// IsAttached returns the whether this document is attached or not.
+// IsAttached returns whether this document is attached or not.
 func (d *Document) IsAttached() bool {
 	return d.doc.IsAttached()
 }
@@ -236,6 +243,11 @@ func (d *Document) ensureClone() error {
 		d.clone = copiedDoc
 	}
 	return nil
+}
+
+// PresenceMap returns the presence map of this document.
+func (d *Document) PresenceMap() map[string]presence.InternalPresence {
+	return d.doc.PresenceMap()
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

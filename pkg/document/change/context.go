@@ -19,6 +19,7 @@ package change
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -31,6 +32,7 @@ type Context struct {
 	operations []operations.Operation
 	delimiter  uint32
 	root       *crdt.Root
+	presence   *presence.InternalPresence
 }
 
 // NewContext creates a new instance of Context.
@@ -49,12 +51,12 @@ func (c *Context) ID() ID {
 
 // ToChange creates a new change of this context.
 func (c *Context) ToChange() *Change {
-	return New(c.id, c.message, c.operations)
+	return New(c.id, c.message, c.operations, c.presence)
 }
 
-// HasOperations returns whether this change has operations or not.
-func (c *Context) HasOperations() bool {
-	return len(c.operations) > 0
+// HasChange returns whether this context has changes.
+func (c *Context) HasChange() bool {
+	return len(c.operations) > 0 || c.presence != nil
 }
 
 // IssueTimeTicket creates a time ticket to be used to create a new operation.
@@ -86,4 +88,9 @@ func (c *Context) RegisterElementHasRemovedNodes(element crdt.GCElement) {
 // LastTimeTicket returns the last time ticket issued by this context.
 func (c *Context) LastTimeTicket() *time.Ticket {
 	return c.id.NewTimeTicket(c.delimiter)
+}
+
+// SetPresence sets the presence of the user who made the change.
+func (c *Context) SetPresence(presence presence.InternalPresence) {
+	c.presence = &presence
 }

@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -88,11 +89,11 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, c3.Attach(ctx, d3))
 
 		// 02. c1, c2 sync with push-pull mode.
-		assert.NoError(t, d1.Update(func(root *json.Object) error {
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetInteger("c1", 0)
 			return nil
 		}))
-		assert.NoError(t, d1.Update(func(root *json.Object) error {
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetInteger("c2", 0)
 			return nil
 		}))
@@ -104,11 +105,11 @@ func TestClient(t *testing.T) {
 		// 03. c1 and c2 sync with push-only mode. So, the changes of c1 and c2
 		// are not reflected to each other.
 		// But, c3 can get the changes of c1 and c2, because c3 sync with pull-pull mode.
-		assert.NoError(t, d1.Update(func(root *json.Object) error {
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetInteger("c1", 1)
 			return nil
 		}))
-		assert.NoError(t, d2.Update(func(root *json.Object) error {
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetInteger("c2", 1)
 			return nil
 		}))
@@ -139,7 +140,7 @@ func TestClient(t *testing.T) {
 
 		// 02. cli update the document with creating a counter
 		//     and sync with push-pull mode: CP(0, 0) -> CP(1, 1)
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewCounter("counter", crdt.IntegerCnt, 0)
 			return nil
 		}))
@@ -149,7 +150,7 @@ func TestClient(t *testing.T) {
 
 		// 03. cli update the document with increasing the counter(0 -> 1)
 		//     and sync with push-only mode: CP(1, 1) -> CP(2, 1)
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
@@ -159,7 +160,7 @@ func TestClient(t *testing.T) {
 
 		// 04. cli update the document with increasing the counter(1 -> 2)
 		//     and sync with push-pull mode. CP(2, 1) -> CP(3, 3)
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
 		}))

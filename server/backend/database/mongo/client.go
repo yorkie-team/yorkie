@@ -864,6 +864,10 @@ func (c *Client) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
+		encodedPresence, err := database.EncodePresence(cn.Presence())
+		if err != nil {
+			return err
+		}
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"doc_id":     encodedDocID,
@@ -874,6 +878,7 @@ func (c *Client) CreateChangeInfos(
 			"lamport":    cn.ID().Lamport(),
 			"message":    cn.Message(),
 			"operations": encodedOperations,
+			"presence":   encodedPresence,
 		}}).SetUpsert(true))
 	}
 

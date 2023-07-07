@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"io"
 	"sync"
 	"testing"
@@ -42,7 +43,7 @@ func TestDocument(t *testing.T) {
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
 		doc := document.New(helper.TestDocKey(t))
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}, "update k1 with v1")
@@ -57,7 +58,7 @@ func TestDocument(t *testing.T) {
 		assert.False(t, doc.IsAttached())
 
 		doc2 := document.New(helper.TestDocKey(t))
-		err = doc2.Update(func(root *json.Object) error {
+		err = doc2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("k1", "v2")
 			return nil
 		}, "update k1 with v2")
@@ -76,7 +77,7 @@ func TestDocument(t *testing.T) {
 		// 01. create a document and attach it to c1
 		ctx := context.Background()
 		doc := document.New(helper.TestDocKey(t))
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}, "update k1 with v1")
@@ -114,26 +115,26 @@ func TestDocument(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewObject("k1").SetNewArray("k1.1").AddString("1", "2")
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewArray("k2").AddString("1", "2", "3")
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewArray("k1").AddString("4", "5")
 			root.SetNewArray("k2").AddString("6", "7")
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.Delete("k2")
 			return nil
 		})
@@ -182,7 +183,7 @@ func TestDocument(t *testing.T) {
 		}()
 
 		// 02. cli2 updates doc2.
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("key", "value")
 			return nil
 		})
@@ -200,7 +201,7 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewArray("k1").AddInteger(1, 2)
 			return nil
 		})
@@ -215,7 +216,7 @@ func TestDocument(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.GetArray("k1").AddInteger(3)
 			return nil
 		})
@@ -224,7 +225,7 @@ func TestDocument(t *testing.T) {
 		prevArray := d1.Root().Get("k1")
 		assert.Nil(t, prevArray.RemovedAt())
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetNewArray("k1")
 			return nil
 		})
@@ -257,7 +258,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, document.StatusRemoved, d1.Status())
 
 		// 04. try to update a removed document.
-		assert.ErrorIs(t, d1.Update(func(root *json.Object) error {
+		assert.ErrorIs(t, d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}), document.ErrDocumentRemoved)
@@ -271,7 +272,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. cli1 creates d1 and removes it.
 		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
@@ -294,7 +295,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. cli1 creates d1 and cli2 syncs.
 		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
@@ -306,7 +307,7 @@ func TestDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		// 02. cli1 updates d1 and removes it.
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("k1", "v2")
 			return nil
 		})
@@ -325,7 +326,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. cli1 creates d1 and cli2 syncs.
 		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
@@ -347,7 +348,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. cli1 creates d1 and cli2 syncs.
 		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
@@ -516,7 +517,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentsChanged,
 		})
-		assert.NoError(t, d2.Update(func(root *json.Object) error {
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("key", "value")
 			return nil
 		}))
@@ -528,7 +529,7 @@ func TestDocumentWithProjects(t *testing.T) {
 		defer cancel3()
 		_, err = c3.Watch(watch3Ctx, d3)
 		assert.NoError(t, err)
-		assert.NoError(t, d3.Update(func(root *json.Object) error {
+		assert.NoError(t, d3.Update(func(root *json.Object, p *presenceproxy.Presence) error {
 			root.SetString("key3", "value3")
 			return nil
 		}))
