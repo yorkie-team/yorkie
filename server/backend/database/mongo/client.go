@@ -1464,6 +1464,32 @@ func (c *Client) RenewLeaderLease(
 	return nil
 }
 
+// FindLeader returns the leader hostname for the given leaseLockName.
+func (c *Client) FindLeader(ctx context.Context, leaseLockName string) (*string, error) {
+	electionInfo := &struct {
+		ElectionId    string      `bson:"election_id"`
+		LeaderID      string      `bson:"leader_id"`
+		LeaseExpireAt gotime.Time `bson:"lease_expire_at"`
+	}{}
+
+	result := c.collection(colElections).FindOne(ctx, bson.M{
+		"election_id": leaseLockName,
+	})
+	if result.Err() == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	if result.Err() != nil {
+		logging.From(ctx).Error(result.Err())
+		return nil, fmt.Errorf("find leader: %w", result.Err())
+	}
+
+	if err := result.Decode(&electionInfo); err != nil {
+		return nil, fmt.Errorf("decode leader: %w", err)
+	}
+
+	return &electionInfo.LeaderID, nil
+}
+
 func (c *Client) collection(
 	name string,
 	opts ...*options.CollectionOptions,

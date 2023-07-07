@@ -74,6 +74,8 @@ var (
 	MongoConnectionURI     = "mongodb://localhost:27017"
 	MongoConnectionTimeout = "5s"
 	MongoPingTimeout       = "5s"
+
+	LeaseDuration = 2 * gotime.Second
 )
 
 func init() {

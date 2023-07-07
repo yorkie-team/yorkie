@@ -34,7 +34,7 @@ import (
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/election"
-	dbelection "github.com/yorkie-team/yorkie/server/backend/election/database"
+	mongoelection "github.com/yorkie-team/yorkie/server/backend/election/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	memsync "github.com/yorkie-team/yorkie/server/backend/sync/memory"
@@ -107,7 +107,7 @@ func New(
 		return nil, err
 	}
 
-	elector := dbelection.NewElector(hostname, db)
+	elector := mongoelection.NewElector(hostname, db)
 
 	keeping, err := housekeeping.Start(
 		housekeepingConf,

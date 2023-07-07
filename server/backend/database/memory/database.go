@@ -1337,6 +1337,11 @@ func (d *DB) RenewLeaderLease(
 	return nil
 }
 
+// FindLeader returns the leader hostname for the given leaseLockName.
+func (d *DB) FindLeader(ctx context.Context, leaseLockName string) (*string, error) {
+	return nil, nil
+}
+
 func newID() types.ID {
 	return types.ID(primitive.NewObjectID().Hex())
 }

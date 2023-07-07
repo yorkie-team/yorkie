@@ -276,4 +276,10 @@ type Database interface {
 		leaseLockName string,
 		leaseDuration gotime.Duration,
 	) error
+
+	// FindLeader returns the leader hostname for the given leaseLockName.
+	FindLeader(
+		ctx context.Context,
+		leaseLockName string,
+	) (*string, error)
 }

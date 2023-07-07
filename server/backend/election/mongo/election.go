@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-// Package database is a database implementation of election package.
-package database
+// Package mongo is a mongo based implementation of election package.
+package mongo
 
 import (
 	"context"
@@ -84,7 +84,7 @@ func (e *Elector) run(
 	onStoppedLeading func(),
 ) {
 	for {
-		ctx := context.Background()
+		ctx, cancelFunc := context.WithCancel(e.ctx)
 		acquired, err := e.database.TryToAcquireLeaderLease(ctx, e.hostname, leaseLockName, leaseDuration)
 		if err != nil {
 			continue
@@ -105,6 +105,7 @@ func (e *Elector) run(
 				select {
 				case <-time.After(leaseDuration / 2):
 				case <-e.ctx.Done():
+					cancelFunc()
 					return
 				}
 			}
@@ -118,6 +119,7 @@ func (e *Elector) run(
 		select {
 		case <-time.After(leaseDuration):
 		case <-e.ctx.Done():
+			cancelFunc()
 			return
 		}
 	}
