@@ -254,7 +254,7 @@ func (s *adminServer) GetSnapshotMeta(
 		return nil, err
 	}
 
-	snapshot, err := converter.ObjectToBytes(doc.RootObject())
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.PresenceMap())
 	if err != nil {
 		return nil, err
 	}

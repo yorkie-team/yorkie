@@ -24,8 +24,29 @@ import (
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
+
+// BytesToSnapshot creates a Snapshot from the given byte array.
+func BytesToSnapshot(snapshot []byte) (*crdt.Object, *innerpresence.Map, error) {
+	if snapshot == nil {
+		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), innerpresence.NewMap(), nil
+	}
+
+	pbSnapshot := &api.Snapshot{}
+	if err := proto.Unmarshal(snapshot, pbSnapshot); err != nil {
+		return nil, nil, fmt.Errorf("unmarshal snapshot: %w", err)
+	}
+
+	obj, err := fromJSONElement(pbSnapshot.GetRoot())
+	if err != nil {
+		return nil, nil, err
+	}
+
+	presenceMap := fromPresenceMap(pbSnapshot.GetPresenceMap())
+	return obj.(*crdt.Object), presenceMap, nil
+}
 
 // BytesToObject creates an Object from the given byte array.
 func BytesToObject(snapshot []byte) (*crdt.Object, error) {

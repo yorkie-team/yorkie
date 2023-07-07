@@ -24,8 +24,29 @@ import (
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
+
+// SnapshotToBytes converts the given document to byte array.
+func SnapshotToBytes(obj *crdt.Object, presenceMap *innerpresence.Map) ([]byte, error) {
+	pbElem, err := toJSONElement(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	pbPresenceMap := ToPresenceMap(presenceMap)
+
+	bytes, err := proto.Marshal(&api.Snapshot{
+		Root:        pbElem,
+		PresenceMap: pbPresenceMap,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal Snapshot to bytes: %w", err)
+	}
+
+	return bytes, nil
+}
 
 // ObjectToBytes converts the given object to byte array.
 func ObjectToBytes(obj *crdt.Object) ([]byte, error) {

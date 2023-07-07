@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -89,7 +90,7 @@ func benchmarkUpdateAndSync(
 	key string,
 ) {
 	for i := 0; i < cnt; i++ {
-		err := d.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+		err := d.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText(key)
 			text.Edit(0, 0, "c")
 			return nil
@@ -184,7 +185,7 @@ func BenchmarkRPC(b *testing.B) {
 
 		for i := 0; i < b.N; i++ {
 			testKey := "testKey"
-			err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewText(testKey)
 				return nil
 			})
@@ -205,7 +206,7 @@ func BenchmarkRPC(b *testing.B) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(b, err)
 		testKey1 := "testKey1"
-		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText(testKey1)
 			return nil
 		})
@@ -215,7 +216,7 @@ func BenchmarkRPC(b *testing.B) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
-		err = d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText(testKey2)
 			return nil
 		})
@@ -270,13 +271,13 @@ func BenchmarkRPC(b *testing.B) {
 				doc1 := document.New(key.Key(helper.TestDocKey(b)))
 				doc2 := document.New(key.Key(helper.TestDocKey(b)))
 
-				err := doc1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+				err := doc1.Update(func(root *json.Object, p *presence.Presence) error {
 					text := root.SetNewText("k1")
 					text.Edit(0, 0, builder.String())
 					return nil
 				})
 				assert.NoError(b, err)
-				err = doc2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+				err = doc2.Update(func(root *json.Object, p *presence.Presence) error {
 					text := root.SetNewText("k1")
 					text.Edit(0, 0, builder.String())
 					return nil

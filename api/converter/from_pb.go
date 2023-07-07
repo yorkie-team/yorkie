@@ -18,7 +18,6 @@ package converter
 
 import (
 	"fmt"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 
 	protoTypes "github.com/gogo/protobuf/types"
 
@@ -26,6 +25,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -192,7 +192,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 			changeID,
 			pbChange.Message,
 			ops,
-			FromPresence(pbChange.Presence),
+			fromPresence(pbChange.Presence),
 		))
 	}
 
@@ -324,12 +324,20 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	return ops, nil
 }
 
-func FromPresence(pbPresence *api.Presence) *presence.InternalPresence {
+func fromPresenceMap(pbPresenceMap map[string]*api.Presence) *innerpresence.Map {
+	presenceMap := innerpresence.NewMap()
+	for id, pbPresence := range pbPresenceMap {
+		presenceMap.Store(id, fromPresence(pbPresence))
+	}
+	return presenceMap
+}
+
+func fromPresence(pbPresence *api.Presence) *innerpresence.Presence {
 	if pbPresence == nil {
 		return nil
 	}
 
-	p := presence.InternalPresence(pbPresence.GetData())
+	p := innerpresence.Presence(pbPresence.GetData())
 	return &p
 }
 

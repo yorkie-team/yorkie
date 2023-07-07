@@ -14,51 +14,33 @@
  * limitations under the License.
  */
 
-// Package presence provides the implementation of InternalPresence.
-// If the client is watching a document, the presence is shared with
-// all other clients watching the same document.
+// Package presence provides the proxy for the innerpresence.Presence to be manipulated from the outside.
+// TODO(hackerwins): Consider to remove this package. It is used to solve the problem of cyclic dependency
+// between pkg/document/presence and pkg/document/change.
 package presence
 
 import (
-	"encoding/json"
-	"fmt"
-	"sync"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	presence2 "github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 )
 
-// Map is a map of presence by clientID.
-type Map = sync.Map // map[string]*presence.InternalPresence
-
-// NewMap creates a new instance of Map.
-func NewMap() *Map {
-	return &sync.Map{}
+// Presence represents a proxy for the Presence to be manipulated from the outside.
+type Presence struct {
+	presence *presence2.Presence
+	context  *change.Context
 }
 
-// InternalPresence represents custom presence that can be defined by the client.
-type InternalPresence map[string]string
-
-// NewFromJSON creates a new instance of InternalPresence from JSON.
-func NewFromJSON(encodedJSON string) (*InternalPresence, error) {
-	if encodedJSON == "" {
-		return nil, nil
+// New creates a new instance of Presence.
+func New(ctx *change.Context, presence *presence2.Presence) *Presence {
+	return &Presence{
+		presence: presence,
+		context:  ctx,
 	}
-
-	p := InternalPresence{}
-	if err := json.Unmarshal([]byte(encodedJSON), &p); err != nil {
-		return nil, fmt.Errorf("unmarshal presence: %w", err)
-	}
-
-	return &p, nil
-}
-
-// NewInternalPresence creates a new instance of InternalPresence.
-func NewInternalPresence() *InternalPresence {
-	data := make(map[string]string)
-	p := InternalPresence(data)
-	return &p
 }
 
 // Set sets the value of the given key.
-func (p *InternalPresence) Set(key string, value string) {
-	presence := *p
-	presence[key] = value
+func (p *Presence) Set(key string, value string) {
+	internalPresence := *p.presence
+	internalPresence.Set(key, value)
+	p.context.SetPresence(internalPresence)
 }

@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"io"
 	"sync"
 	"testing"
@@ -33,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -74,7 +74,7 @@ func TestAdmin(t *testing.T) {
 		assert.Equal(t, document.StatusAttached, d1.Status())
 
 		// 03. client updates the document and sync to the server.
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}))

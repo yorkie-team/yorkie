@@ -19,13 +19,13 @@ package document
 
 import (
 	"fmt"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -54,7 +54,7 @@ func New(key key.Key) *Document {
 
 // Update executes the given updater to update this document.
 func (d *Document) Update(
-	updater func(root *json.Object, p *presenceproxy.Presence) error,
+	updater func(root *json.Object, p *presence.Presence) error,
 	msgAndArgs ...interface{},
 ) error {
 	if d.doc.status == StatusRemoved {
@@ -75,7 +75,7 @@ func (d *Document) Update(
 	// from the document.
 	if err := updater(
 		json.NewObject(ctx, d.clone.Object()),
-		presenceproxy.New(ctx, d.doc.Presence()),
+		presence.New(ctx, d.doc.Presence()),
 	); err != nil {
 		// drop clone because it is contaminated.
 		d.clone = nil
@@ -246,8 +246,14 @@ func (d *Document) ensureClone() error {
 }
 
 // PresenceMap returns the presence map of this document.
-func (d *Document) PresenceMap() map[string]presence.InternalPresence {
-	return d.doc.PresenceMap()
+func (d *Document) PresenceMap() map[string]innerpresence.Presence {
+	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
+	presenceMap := make(map[string]innerpresence.Presence)
+	d.doc.presenceMap.Range(func(key, value interface{}) bool {
+		presenceMap[key.(string)] = *value.(*innerpresence.Presence)
+		return true
+	})
+	return presenceMap
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

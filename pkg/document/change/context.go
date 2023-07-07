@@ -18,8 +18,8 @@ package change
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -32,7 +32,7 @@ type Context struct {
 	operations []operations.Operation
 	delimiter  uint32
 	root       *crdt.Root
-	presence   *presence.InternalPresence
+	presence   *innerpresence.Presence
 }
 
 // NewContext creates a new instance of Context.
@@ -91,6 +91,6 @@ func (c *Context) LastTimeTicket() *time.Ticket {
 }
 
 // SetPresence sets the presence of the user who made the change.
-func (c *Context) SetPresence(presence presence.InternalPresence) {
+func (c *Context) SetPresence(presence innerpresence.Presence) {
 	c.presence = &presence
 }

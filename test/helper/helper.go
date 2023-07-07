@@ -20,7 +20,6 @@ package helper
 import (
 	"context"
 	"fmt"
-	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"log"
 	"strings"
 	"testing"
@@ -35,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/server"
@@ -178,7 +178,7 @@ func ToDiagnostic(node *crdt.TreeNode) string {
 // BuildIndexTree builds an index tree from the given block node.
 func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
 	doc := document.New("test")
-	err := doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 		root.SetNewTree("test", node)
 
 		return nil
@@ -193,7 +193,7 @@ func BuildIndexTree(node *json.TreeNode) *index.Tree[*crdt.TreeNode] {
 // BuildTreeNode builds a crdt.TreeNode from the given tree node.
 func BuildTreeNode(node *json.TreeNode) *crdt.TreeNode {
 	doc := document.New("test")
-	err := doc.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+	err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 		root.SetNewTree("test", node)
 
 		return nil

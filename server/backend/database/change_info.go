@@ -20,12 +20,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -67,7 +67,7 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 }
 
 // EncodePresence encodes the given presence into string.
-func EncodePresence(p *presence.InternalPresence) (string, error) {
+func EncodePresence(p *innerpresence.Presence) (string, error) {
 	if p == nil {
 		return "", nil
 	}
@@ -103,7 +103,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	p, err := presence.NewFromJSON(i.Presence)
+	p, err := innerpresence.NewFromJSON(i.Presence)
 	if err != nil {
 		return nil, err
 	}

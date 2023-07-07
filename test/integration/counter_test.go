@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"github.com/yorkie-team/yorkie/pkg/document/presenceproxy"
 	"math"
 	"testing"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -43,7 +43,7 @@ func TestCounter(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("age", crdt.LongCnt, 1).
 				Increase(2).
 				Increase(2.5).
@@ -67,7 +67,7 @@ func TestCounter(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("age", crdt.IntegerCnt, 0)
 			root.SetNewCounter("width", crdt.LongCnt, 0)
 			root.SetNewCounter("height", crdt.LongCnt, 0)
@@ -81,7 +81,7 @@ func TestCounter(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("age").
 				Increase(1).
 				Increase(2).
@@ -91,13 +91,13 @@ func TestCounter(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("width").Increase(math.MaxInt32 + 100).Increase(10)
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *json.Object, p *presenceproxy.Presence) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("age").Increase(20)
 			root.GetCounter("width").Increase(100).Increase(200)
 			root.GetCounter("height").Increase(50)

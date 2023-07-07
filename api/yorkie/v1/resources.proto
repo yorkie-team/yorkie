@@ -26,6 +26,14 @@ option java_multiple_files = true;
 option java_package = "dev.yorkie.api.v1";
 
 /////////////////////////////////////////
+// Messages for Snapshot               //
+/////////////////////////////////////////
+message Snapshot {
+  JSONElement root = 1;
+  map<string, Presence> presence_map = 2;
+}
+
+/////////////////////////////////////////
 // Messages for ChangePack             //
 /////////////////////////////////////////
 

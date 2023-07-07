@@ -18,11 +18,12 @@ package document
 
 import (
 	"errors"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -56,7 +57,7 @@ type InternalDocument struct {
 	checkpoint   change.Checkpoint
 	changeID     change.ID
 	localChanges []*change.Change
-	presenceMap  *presence.Map
+	presenceMap  *innerpresence.Map
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
@@ -70,7 +71,7 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 		root:        crdt.NewRoot(root),
 		checkpoint:  change.InitialCheckpoint,
 		changeID:    change.InitialID,
-		presenceMap: presence.NewMap(),
+		presenceMap: innerpresence.NewMap(),
 	}
 }
 
@@ -81,7 +82,7 @@ func NewInternalDocumentFromSnapshot(
 	lamport int64,
 	snapshot []byte,
 ) (*InternalDocument, error) {
-	obj, err := converter.BytesToObject(snapshot)
+	obj, presenceMap, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +91,7 @@ func NewInternalDocumentFromSnapshot(
 		key:         k,
 		status:      StatusDetached,
 		root:        crdt.NewRoot(obj),
-		presenceMap: presence.NewMap(),
+		presenceMap: presenceMap,
 		checkpoint:  change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changeID:    change.InitialID.SyncLamport(lamport),
 	}, nil
@@ -208,12 +209,13 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 }
 
 func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error {
-	rootObj, err := converter.BytesToObject(snapshot)
+	rootObj, presenceMap, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return err
 	}
 
 	d.root = crdt.NewRoot(rootObj)
+	d.presenceMap = presenceMap
 	d.changeID = d.changeID.SyncLamport(serverSeq)
 
 	return nil
@@ -232,18 +234,12 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 }
 
 // Presence returns the presence of the actor currently editing the document.
-func (d *InternalDocument) Presence() *presence.InternalPresence {
-	value, _ := d.presenceMap.LoadOrStore(d.changeID.ActorID().String(), presence.NewInternalPresence())
-	return value.(*presence.InternalPresence)
+func (d *InternalDocument) Presence() *innerpresence.Presence {
+	value, _ := d.presenceMap.LoadOrStore(d.changeID.ActorID().String(), innerpresence.NewPresence())
+	return value.(*innerpresence.Presence)
 }
 
 // PresenceMap returns the map of presences of the actors currently editing the document.
-func (d *InternalDocument) PresenceMap() map[string]presence.InternalPresence {
-	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
-	presenceMap := make(map[string]presence.InternalPresence)
-	d.presenceMap.Range(func(key, value interface{}) bool {
-		presenceMap[key.(string)] = *value.(*presence.InternalPresence)
-		return true
-	})
-	return presenceMap
+func (d *InternalDocument) PresenceMap() *innerpresence.Map {
+	return d.presenceMap
 }
