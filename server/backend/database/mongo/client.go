@@ -1467,7 +1467,7 @@ func (c *Client) RenewLeaderLease(
 // FindLeader returns the leader hostname for the given leaseLockName.
 func (c *Client) FindLeader(ctx context.Context, leaseLockName string) (*string, error) {
 	electionInfo := &struct {
-		ElectionId    string      `bson:"election_id"`
+		ElectionID    string      `bson:"election_id"`
 		LeaderID      string      `bson:"leader_id"`
 		LeaseExpireAt gotime.Time `bson:"lease_expire_at"`
 	}{}

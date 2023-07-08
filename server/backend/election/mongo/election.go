@@ -19,6 +19,7 @@ package mongo
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -33,6 +34,8 @@ type Elector struct {
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
+
+	wg sync.WaitGroup
 }
 
 // NewElector creates a new elector instance.
@@ -70,6 +73,7 @@ func (e *Elector) StartElection(
 // Stop stops all leader elections.
 func (e *Elector) Stop() error {
 	e.cancelFunc()
+	e.wg.Wait()
 
 	return nil
 }
@@ -91,7 +95,11 @@ func (e *Elector) run(
 		}
 
 		if acquired {
-			go onStartLeading(ctx)
+			go func() {
+				e.wg.Add(1)
+				onStartLeading(ctx)
+				e.wg.Done()
+			}()
 			logging.From(ctx).Infof(
 				"leader elected: %s", e.hostname,
 			)

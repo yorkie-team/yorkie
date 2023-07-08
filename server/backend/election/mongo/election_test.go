@@ -2,12 +2,14 @@ package mongo_test
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	mongoelection "github.com/yorkie-team/yorkie/server/backend/election/mongo"
 	"github.com/yorkie-team/yorkie/test/helper"
-	"testing"
-	"time"
 )
 
 var (
@@ -41,8 +43,11 @@ func TestElection(t *testing.T) {
 		electorC := mongoelection.NewElector("C", db)
 
 		assert.NoError(t, electorA.StartElection(leaseLockName, helper.LeaseDuration, normalTask, stopTask))
+		time.Sleep(helper.LeaseDuration)
+
 		assert.NoError(t, electorB.StartElection(leaseLockName, helper.LeaseDuration, normalTask, stopTask))
 		assert.NoError(t, electorC.StartElection(leaseLockName, helper.LeaseDuration, normalTask, stopTask))
+		time.Sleep(helper.LeaseDuration)
 
 		// elector A will be the leader because it is the first to start the election.
 		leader, err := db.FindLeader(context.Background(), leaseLockName)
@@ -71,7 +76,7 @@ func TestElection(t *testing.T) {
 	t.Run("lease renewal while handling a a long task test", func(t *testing.T) {
 		leaseLockName := t.Name()
 		longTask := func(ctx context.Context) {
-			time.Sleep(helper.LeaseDuration * 2)
+			time.Sleep(helper.LeaseDuration * 4)
 		}
 
 		electorA := mongoelection.NewElector("A", db)
@@ -79,10 +84,12 @@ func TestElection(t *testing.T) {
 		electorC := mongoelection.NewElector("C", db)
 
 		assert.NoError(t, electorA.StartElection(leaseLockName, helper.LeaseDuration, longTask, stopTask))
-		assert.NoError(t, electorB.StartElection(leaseLockName, helper.LeaseDuration, normalTask, stopTask))
-		assert.NoError(t, electorC.StartElection(leaseLockName, helper.LeaseDuration, normalTask, stopTask))
+		time.Sleep(helper.LeaseDuration)
 
-		// check if elector A is still the leader
+		assert.NoError(t, electorB.StartElection(leaseLockName, helper.LeaseDuration, longTask, stopTask))
+		assert.NoError(t, electorC.StartElection(leaseLockName, helper.LeaseDuration, longTask, stopTask))
+
+		// wait for lease expiration and check if elector A is still the leader while handling a long task
 		time.Sleep(helper.LeaseDuration)
 
 		leader, err := db.FindLeader(context.Background(), leaseLockName)
@@ -92,7 +99,26 @@ func TestElection(t *testing.T) {
 	})
 
 	t.Run("handle background routines when shutting down the server test", func(t *testing.T) {
-		// TODO(krapie): find the way to gradually close election routines
-		t.Skip()
+		shutdownCh := make(chan struct{})
+
+		isTaskDone := false
+		longTask := func(ctx context.Context) {
+			close(shutdownCh)
+			time.Sleep(helper.LeaseDuration)
+			isTaskDone = true
+		}
+
+		elector := mongoelection.NewElector("A", db)
+		assert.NoError(t, elector.StartElection(t.Name(), helper.LeaseDuration, longTask, stopTask))
+
+		// if receive shutdown signal, stop elector
+		select {
+		case <-shutdownCh:
+			assert.NoError(t, elector.Stop())
+		}
+
+		// check if the task is done
+		// this means that the background routine is handled properly after server(elector) is stopped
+		assert.Equal(t, true, isTaskDone)
 	})
 }
