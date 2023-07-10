@@ -33,22 +33,36 @@ func NewMap() *Map {
 	return &sync.Map{}
 }
 
-// Presence represents custom presence that can be defined by the client.
-type Presence map[string]string
+// PresenceChangeType represents the type of presence change.
+type PresenceChangeType string
 
-// NewFromJSON creates a new instance of Presence from JSON.
-func NewFromJSON(encodedJSON string) (*Presence, error) {
+const (
+	// Put represents the presence is put.
+	Put PresenceChangeType = "put"
+)
+
+// PresenceChange represents the change of presence.
+type PresenceChange struct {
+	ChangeType PresenceChangeType
+	Presence   Presence
+}
+
+// NewChangeFromJSON creates a new instance of PresenceChange from JSON.
+func NewChangeFromJSON(encodedJSON string) (*PresenceChange, error) {
 	if encodedJSON == "" {
 		return nil, nil
 	}
 
-	p := Presence{}
+	p := PresenceChange{}
 	if err := json.Unmarshal([]byte(encodedJSON), &p); err != nil {
-		return nil, fmt.Errorf("unmarshal presence: %w", err)
+		return nil, fmt.Errorf("unmarshal presence change: %w", err)
 	}
 
 	return &p, nil
 }
+
+// Presence represents custom presence that can be defined by the client.
+type Presence map[string]string
 
 // NewPresence creates a new instance of Presence.
 func NewPresence() *Presence {

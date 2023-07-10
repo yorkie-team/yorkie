@@ -35,15 +35,15 @@ var ErrEncodeOperationFailed = errors.New("encode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	ID         types.ID `bson:"_id"`
-	DocID      types.ID `bson:"doc_id"`
-	ServerSeq  int64    `bson:"server_seq"`
-	ClientSeq  uint32   `bson:"client_seq"`
-	Lamport    int64    `bson:"lamport"`
-	ActorID    types.ID `bson:"actor_id"`
-	Message    string   `bson:"message"`
-	Operations [][]byte `bson:"operations"`
-	Presence   string   `bson:"presence"`
+	ID             types.ID `bson:"_id"`
+	DocID          types.ID `bson:"doc_id"`
+	ServerSeq      int64    `bson:"server_seq"`
+	ClientSeq      uint32   `bson:"client_seq"`
+	Lamport        int64    `bson:"lamport"`
+	ActorID        types.ID `bson:"actor_id"`
+	Message        string   `bson:"message"`
+	Operations     [][]byte `bson:"operations"`
+	PresenceChange string   `bson:"presence_change"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -66,15 +66,15 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	return encodedOps, nil
 }
 
-// EncodePresence encodes the given presence into string.
-func EncodePresence(p *innerpresence.Presence) (string, error) {
+// EncodePresenceChange encodes the given presence change into string.
+func EncodePresenceChange(p *innerpresence.PresenceChange) (string, error) {
 	if p == nil {
 		return "", nil
 	}
 
 	bytes, err := json.Marshal(p)
 	if err != nil {
-		return "", fmt.Errorf("marshal presence to bytes: %w", err)
+		return "", fmt.Errorf("marshal presence change to bytes: %w", err)
 	}
 
 	return string(bytes), nil
@@ -103,7 +103,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	p, err := innerpresence.NewFromJSON(i.Presence)
+	p, err := innerpresence.NewChangeFromJSON(i.PresenceChange)
 	if err != nil {
 		return nil, err
 	}

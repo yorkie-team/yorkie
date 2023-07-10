@@ -102,16 +102,16 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			pbOps = append(pbOps, &pbOp)
 		}
 
-		p, err := innerpresence.NewFromJSON(info.Presence)
+		p, err := innerpresence.NewChangeFromJSON(info.PresenceChange)
 		if err != nil {
 			return nil, err
 		}
 
 		pbChanges = append(pbChanges, &api.Change{
-			Id:         converter.ToChangeID(changeID),
-			Message:    info.Message,
-			Operations: pbOps,
-			Presence:   converter.ToPresence(p),
+			Id:             converter.ToChangeID(changeID),
+			Message:        info.Message,
+			Operations:     pbOps,
+			PresenceChange: converter.ToPresenceChange(p),
 		})
 	}
 

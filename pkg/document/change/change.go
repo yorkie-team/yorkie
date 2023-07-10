@@ -36,18 +36,18 @@ type Change struct {
 	// operations represent a series of user edits.
 	operations []operations.Operation
 
-	// presence represents the presence of the user who made the change.
-	// TODO(hackerwins): Consider using changes instead of entire presence.
-	presence *innerpresence.Presence
+	// presenceChange represents the presenceChange of the user who made the change.
+	// TODO(hackerwins): Consider using changes instead of entire presenceChange.
+	presenceChange *innerpresence.PresenceChange
 }
 
 // New creates a new instance of Change.
-func New(id ID, message string, operations []operations.Operation, p *innerpresence.Presence) *Change {
+func New(id ID, message string, operations []operations.Operation, p *innerpresence.PresenceChange) *Change {
 	return &Change{
-		id:         id,
-		message:    message,
-		operations: operations,
-		presence:   p,
+		id:             id,
+		message:        message,
+		operations:     operations,
+		presenceChange: p,
 	}
 }
 
@@ -59,8 +59,10 @@ func (c *Change) Execute(root *crdt.Root, presenceMap *innerpresence.Map) error 
 		}
 	}
 
-	if c.presence != nil {
-		presenceMap.Store(c.id.actorID.String(), c.presence)
+	if c.presenceChange != nil {
+		// TODO(hackerwins): For now, we only support PUT operation. We need to
+		// support other operations such as DELETE, PATCH.
+		presenceMap.Store(c.id.actorID.String(), &c.presenceChange.Presence)
 	}
 
 	return nil
@@ -104,7 +106,7 @@ func (c *Change) SetActor(actor *time.ActorID) {
 	}
 }
 
-// Presence returns the presence of this change.
-func (c *Change) Presence() *innerpresence.Presence {
-	return c.presence
+// PresenceChange returns the presence change of this change.
+func (c *Change) PresenceChange() *innerpresence.PresenceChange {
+	return c.presenceChange
 }

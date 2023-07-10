@@ -52,7 +52,7 @@ message Change {
   ChangeID id = 1;
   string message = 2;
   repeated Operation operations = 3;
-  Presence presence = 4;
+  PresenceChange presence_change = 4;
 }
 
 message ChangeID {
@@ -287,6 +287,16 @@ message DocumentSummary {
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp accessed_at = 5;
   google.protobuf.Timestamp updated_at = 6;
+}
+
+message PresenceChange {
+  enum ChangeType {
+    CHANGE_TYPE_UNSPECIFIED = 0;
+    CHANGE_TYPE_PUT = 1;
+    CHANGE_TYPE_DELETE = 2;
+  }
+  ChangeType type = 1;
+  map<string, string> presence = 2;
 }
 
 message Presence {

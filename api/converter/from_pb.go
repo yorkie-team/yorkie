@@ -192,7 +192,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 			changeID,
 			pbChange.Message,
 			ops,
-			fromPresence(pbChange.Presence),
+			fromPresenceChange(pbChange.PresenceChange),
 		))
 	}
 
@@ -338,6 +338,23 @@ func fromPresence(pbPresence *api.Presence) *innerpresence.Presence {
 	}
 
 	p := innerpresence.Presence(pbPresence.GetData())
+	return &p
+}
+
+func fromPresenceChange(pbPresenceChange *api.PresenceChange) *innerpresence.PresenceChange {
+	if pbPresenceChange == nil {
+		return nil
+	}
+
+	var changeType innerpresence.PresenceChangeType
+	switch pbPresenceChange.Type {
+	case api.PresenceChange_CHANGE_TYPE_PUT:
+		changeType = innerpresence.Put
+	}
+	p := innerpresence.PresenceChange{
+		ChangeType: changeType,
+		Presence:   pbPresenceChange.Presence,
+	}
 	return &p
 }
 

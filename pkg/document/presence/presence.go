@@ -21,17 +21,17 @@ package presence
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	presence2 "github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 )
 
 // Presence represents a proxy for the Presence to be manipulated from the outside.
 type Presence struct {
-	presence *presence2.Presence
+	presence *innerpresence.Presence
 	context  *change.Context
 }
 
 // New creates a new instance of Presence.
-func New(ctx *change.Context, presence *presence2.Presence) *Presence {
+func New(ctx *change.Context, presence *innerpresence.Presence) *Presence {
 	return &Presence{
 		presence: presence,
 		context:  ctx,
@@ -42,5 +42,10 @@ func New(ctx *change.Context, presence *presence2.Presence) *Presence {
 func (p *Presence) Set(key string, value string) {
 	internalPresence := *p.presence
 	internalPresence.Set(key, value)
-	p.context.SetPresence(internalPresence)
+
+	// TODO(hackerwins): We should support partial update here.
+	p.context.SetPresenceChange(innerpresence.PresenceChange{
+		ChangeType: "put",
+		Presence:   internalPresence,
+	})
 }

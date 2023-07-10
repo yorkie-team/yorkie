@@ -151,6 +151,23 @@ func ToPresence(p *innerpresence.Presence) *api.Presence {
 	}
 }
 
+// ToPresenceChange converts the given model to Protobuf format.
+func ToPresenceChange(p *innerpresence.PresenceChange) *api.PresenceChange {
+	if p == nil {
+		return nil
+	}
+
+	changeType := api.PresenceChange_CHANGE_TYPE_UNSPECIFIED
+	switch p.ChangeType {
+	case innerpresence.Put:
+		changeType = api.PresenceChange_CHANGE_TYPE_PUT
+	}
+	return &api.PresenceChange{
+		Type:     changeType,
+		Presence: p.Presence,
+	}
+}
+
 // ToPresenceInfo converts the given model to Protobuf format.
 func ToPresenceInfo(info types.PresenceInfo) *api.Presence {
 	return &api.Presence{
@@ -296,10 +313,10 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 		}
 
 		pbChanges = append(pbChanges, &api.Change{
-			Id:         ToChangeID(c.ID()),
-			Message:    c.Message(),
-			Operations: pbOperations,
-			Presence:   ToPresence(c.Presence()),
+			Id:             ToChangeID(c.ID()),
+			Message:        c.Message(),
+			Operations:     pbOperations,
+			PresenceChange: ToPresenceChange(c.PresenceChange()),
 		})
 	}
 
