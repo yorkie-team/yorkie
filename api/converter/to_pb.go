@@ -122,14 +122,6 @@ func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, er
 	}, nil
 }
 
-// ToClient converts the given model to Protobuf format.
-func ToClient(client types.Client) *api.Client {
-	return &api.Client{
-		Id:       client.ID.Bytes(),
-		Presence: ToPresenceInfo(client.PresenceInfo),
-	}
-}
-
 // ToPresenceMap converts the given model to Protobuf format.
 func ToPresenceMap(presenceMap *innerpresence.Map) map[string]*api.Presence {
 	pbPresences := make(map[string]*api.Presence)
@@ -210,15 +202,6 @@ func ToChangeID(id change.ID) *api.ChangeID {
 	}
 }
 
-// ToClients converts the given model to Protobuf format.
-func ToClients(clients []types.Client) []*api.Client {
-	var pbClients []*api.Client
-	for _, client := range clients {
-		pbClients = append(pbClients, ToClient(client))
-	}
-	return pbClients
-}
-
 // ToDocEventType converts the given model format to Protobuf format.
 func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 	switch eventType {
@@ -228,8 +211,6 @@ func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_WATCHED, nil
 	case types.DocumentsUnwatchedEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_UNWATCHED, nil
-	case types.PresenceChangedEvent:
-		return api.DocEventType_DOC_EVENT_TYPE_PRESENCE_CHANGED, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}
@@ -243,9 +224,8 @@ func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
 	}
 
 	return &api.DocEvent{
-		Type:       eventType,
-		Publisher:  ToClient(docEvent.Publisher),
-		DocumentId: docEvent.DocumentID.String(),
+		Type:      eventType,
+		Publisher: docEvent.Publisher.Bytes(),
 	}, nil
 }
 

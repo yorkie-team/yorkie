@@ -106,7 +106,7 @@ func TestAdmin(t *testing.T) {
 				assert.NoError(t, resp.Err)
 
 				if resp.Type == client.DocumentsChanged {
-					err := c1.Sync(ctx, client.WithDocKey(resp.Key))
+					err := c1.Sync(ctx, client.WithDocKey(d1.Key()))
 					assert.NoError(t, err)
 					return
 				}
@@ -119,7 +119,7 @@ func TestAdmin(t *testing.T) {
 
 		// 03. wait for watching document changed event.
 		wg.Wait()
-		assert.Equal(t, d1.Status(), document.StatusRemoved)
+		assert.Equal(t, document.StatusRemoved, d1.Status())
 	})
 
 	t.Run("document removal without force test", func(t *testing.T) {

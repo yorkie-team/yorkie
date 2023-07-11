@@ -115,7 +115,6 @@ const (
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
 	Type          WatchResponseType
-	Key           key.Key
 	PeersMapByDoc map[key.Key]map[string]types.Presence
 	Err           error
 }
@@ -416,10 +415,7 @@ func (c *Client) Watch(
 	stream, err := c.client.WatchDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.WatchDocumentRequest{
-			Client: converter.ToClient(types.Client{
-				ID:           c.id,
-				PresenceInfo: c.presenceInfo,
-			}),
+			ClientId:   c.id.Bytes(),
 			DocumentId: attachment.docID.String(),
 		},
 	)
@@ -430,14 +426,9 @@ func (c *Client) Watch(
 	handleResponse := func(pbResp *api.WatchDocumentResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentResponse_Initialization_:
-			clients, err := converter.FromClients(resp.Initialization.Peers)
-			if err != nil {
-				return nil, err
-			}
-
-			attachment := c.attachments[doc.Key()]
-			for _, cli := range clients {
-				attachment.peers[cli.ID.String()] = cli.PresenceInfo
+			// TODO(hackerwins): We should pass the publisher to the document.
+			for _, peer := range resp.Initialization.Peers {
+				fmt.Printf("cli: %v\n", peer)
 			}
 
 			return nil, nil
@@ -447,33 +438,19 @@ func (c *Client) Watch(
 				return nil, err
 			}
 
-			docKey, err := c.findDocKey(resp.Event.DocumentId)
-			if err != nil {
-				return nil, err
-			}
-
 			switch eventType {
 			case types.DocumentsChangedEvent:
 				return &WatchResponse{
 					Type: DocumentsChanged,
-					Key:  docKey,
 				}, nil
-			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent, types.PresenceChangedEvent:
-				cli, err := converter.FromClient(resp.Event.Publisher)
+			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent:
+				cli, err := time.ActorIDFromBytes(resp.Event.Publisher)
 				if err != nil {
 					return nil, err
 				}
 
-				attachment := c.attachments[docKey]
-				if eventType == types.DocumentsWatchedEvent ||
-					eventType == types.PresenceChangedEvent {
-					if info, ok := attachment.peers[cli.ID.String()]; ok {
-						cli.PresenceInfo.Update(info)
-					}
-					attachment.peers[cli.ID.String()] = cli.PresenceInfo
-				} else {
-					delete(attachment.peers, cli.ID.String())
-				}
+				// TODO(hackerwins): We should pass the publisher to the document.
+				fmt.Printf("cli: %v\n", cli)
 
 				return &WatchResponse{
 					Type:          PeersChanged,
@@ -521,41 +498,6 @@ func (c *Client) findDocKey(docID string) (key.Key, error) {
 	}
 
 	return "", ErrDocumentNotAttached
-}
-
-// UpdatePresence updates the presence of this client.
-func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
-	if c.status != activated {
-		return ErrClientNotActivated
-	}
-
-	c.presenceInfo.Presence[k] = v
-	c.presenceInfo.Clock++
-
-	if len(c.attachments) == 0 {
-		return nil
-	}
-
-	// TODO(hackerwins): We temporarily use Unary Call to update presence,
-	// because grpc-web can't handle Bi-Directional streaming for now.
-	// After grpc-web supports bi-directional streaming, we can remove the
-	// following.
-	// TODO(hackerwins): We will move Presence from client-level to document-level.
-	for _, attachment := range c.attachments {
-		if _, err := c.client.UpdatePresence(
-			withShardKey(ctx, c.options.APIKey, attachment.doc.Key().String()),
-			&api.UpdatePresenceRequest{
-				Client: converter.ToClient(types.Client{
-					ID:           c.id,
-					PresenceInfo: c.presenceInfo,
-				}),
-				DocumentId: attachment.docID.String(),
-			}); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // ID returns the ID of this client.

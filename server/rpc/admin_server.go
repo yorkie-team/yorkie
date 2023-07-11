@@ -376,7 +376,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		publisherID,
 		sync.DocEvent{
 			Type:       types.DocumentsChangedEvent,
-			Publisher:  types.Client{ID: publisherID},
+			Publisher:  publisherID,
 			DocumentID: docInfo.ID,
 		},
 	)

@@ -65,31 +65,29 @@ func (s *subscriptions) Len() int {
 
 // PubSub is the memory implementation of PubSub, used for single server.
 type PubSub struct {
-	subscriptionsMapMu          *gosync.RWMutex
-	subscriptionMapBySubscriber map[string]*sync.Subscription
-	subscriptionsMapByDocID     map[types.ID]*subscriptions
+	subscriptionsMapMu      *gosync.RWMutex
+	subscriptionsMapByDocID map[types.ID]*subscriptions
 }
 
 // NewPubSub creates an instance of PubSub.
 func NewPubSub() *PubSub {
 	return &PubSub{
-		subscriptionsMapMu:          &gosync.RWMutex{},
-		subscriptionMapBySubscriber: make(map[string]*sync.Subscription),
-		subscriptionsMapByDocID:     make(map[types.ID]*subscriptions),
+		subscriptionsMapMu:      &gosync.RWMutex{},
+		subscriptionsMapByDocID: make(map[types.ID]*subscriptions),
 	}
 }
 
 // Subscribe subscribes to the given document keys.
 func (m *PubSub) Subscribe(
 	ctx context.Context,
-	subscriber types.Client,
+	subscriber *time.ActorID,
 	documentID types.ID,
 ) (*sync.Subscription, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) Start`,
 			documentID.String(),
-			subscriber.ID.String(),
+			subscriber.String(),
 		)
 	}
 
@@ -97,8 +95,6 @@ func (m *PubSub) Subscribe(
 	defer m.subscriptionsMapMu.Unlock()
 
 	sub := sync.NewSubscription(subscriber)
-	m.subscriptionMapBySubscriber[sub.SubscriberID()] = sub
-
 	if _, ok := m.subscriptionsMapByDocID[documentID]; !ok {
 		m.subscriptionsMapByDocID[documentID] = newSubscriptions()
 	}
@@ -108,7 +104,7 @@ func (m *PubSub) Subscribe(
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
 			documentID.String(),
-			subscriber.ID.String(),
+			subscriber.String(),
 		)
 	}
 	return sub, nil
@@ -127,13 +123,11 @@ func (m *PubSub) Unsubscribe(
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
 			documentID,
-			sub.SubscriberID(),
+			sub.Subscriber().String(),
 		)
 	}
 
 	sub.Close()
-
-	delete(m.subscriptionMapBySubscriber, sub.SubscriberID())
 
 	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
 		subs.Delete(sub.ID())
@@ -147,7 +141,7 @@ func (m *PubSub) Unsubscribe(
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
 			documentID,
-			sub.SubscriberID(),
+			sub.Subscriber().String(),
 		)
 	}
 }
@@ -168,7 +162,7 @@ func (m *PubSub) Publish(
 
 	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
 		for _, sub := range subs.Map() {
-			if sub.Subscriber().ID.Compare(publisherID) == 0 {
+			if sub.Subscriber().Compare(publisherID) == 0 {
 				continue
 			}
 
@@ -178,7 +172,7 @@ func (m *PubSub) Publish(
 					event.Type,
 					documentID.String(),
 					publisherID.String(),
-					sub.SubscriberID(),
+					sub.Subscriber().String(),
 				)
 			}
 
@@ -191,7 +185,7 @@ func (m *PubSub) Publish(
 					`Publish(%s,%s) to %s timeout`,
 					documentID.String(),
 					publisherID.String(),
-					sub.SubscriberID(),
+					sub.Subscriber().String(),
 				)
 			}
 		}
@@ -202,30 +196,13 @@ func (m *PubSub) Publish(
 }
 
 // GetPeers returns the peers of the given document.
-func (m *PubSub) GetPeers(documentID types.ID) []types.Client {
+func (m *PubSub) GetPeers(documentID types.ID) []*time.ActorID {
 	m.subscriptionsMapMu.RLock()
 	defer m.subscriptionsMapMu.RUnlock()
 
-	var peers []types.Client
+	var peers []*time.ActorID
 	for _, sub := range m.subscriptionsMapByDocID[documentID].Map() {
 		peers = append(peers, sub.Subscriber())
 	}
 	return peers
-}
-
-// UpdatePresence updates the presence of the given client.
-func (m *PubSub) UpdatePresence(
-	publisher *types.Client,
-	documentID types.ID,
-) *sync.Subscription {
-	m.subscriptionsMapMu.Lock()
-	defer m.subscriptionsMapMu.Unlock()
-
-	sub, ok := m.subscriptionMapBySubscriber[publisher.ID.String()]
-	if !ok {
-		return nil
-	}
-
-	sub.UpdatePresence(publisher.PresenceInfo)
-	return sub
 }

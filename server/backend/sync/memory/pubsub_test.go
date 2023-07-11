@@ -34,21 +34,19 @@ func TestPubSub(t *testing.T) {
 	assert.NoError(t, err)
 	idB, err := time.ActorIDFromBytes([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1})
 	assert.NoError(t, err)
-	actorA := types.Client{ID: idA}
-	actorB := types.Client{ID: idB}
 
 	t.Run("publish subscribe test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
 		id := types.ID(t.Name() + "id")
 		docEvent := sync.DocEvent{
 			Type:       types.DocumentsWatchedEvent,
-			Publisher:  actorB,
+			Publisher:  idB,
 			DocumentID: id,
 		}
 
 		ctx := context.Background()
 		// subscribe the documents by actorA
-		subA, err := pubSub.Subscribe(ctx, actorA, id)
+		subA, err := pubSub.Subscribe(ctx, idA, id)
 		assert.NoError(t, err)
 		defer func() {
 			pubSub.Unsubscribe(ctx, id, subA)
@@ -63,7 +61,7 @@ func TestPubSub(t *testing.T) {
 		}()
 
 		// publish the event to the documents by actorB
-		pubSub.Publish(ctx, actorB.ID, docEvent)
+		pubSub.Publish(ctx, idB, docEvent)
 		wg.Wait()
 	})
 }

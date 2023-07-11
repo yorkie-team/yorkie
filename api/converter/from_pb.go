@@ -120,19 +120,6 @@ func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary
 	}, nil
 }
 
-// FromClient converts the given Protobuf formats to model format.
-func FromClient(pbClient *api.Client) (*types.Client, error) {
-	id, err := time.ActorIDFromBytes(pbClient.Id)
-	if err != nil {
-		return nil, err
-	}
-
-	return &types.Client{
-		ID:           id,
-		PresenceInfo: FromPresenceInfo(pbClient.Presence),
-	}, nil
-}
-
 // FromPresenceInfo converts the given Protobuf formats to model format.
 func FromPresenceInfo(pbPresence *api.Presence) types.PresenceInfo {
 	return types.PresenceInfo{
@@ -241,15 +228,13 @@ func FromEventType(pbDocEventType api.DocEventType) (types.DocEventType, error) 
 		return types.DocumentsWatchedEvent, nil
 	case api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_UNWATCHED:
 		return types.DocumentsUnwatchedEvent, nil
-	case api.DocEventType_DOC_EVENT_TYPE_PRESENCE_CHANGED:
-		return types.PresenceChangedEvent, nil
 	}
 	return "", fmt.Errorf("%v: %w", pbDocEventType, ErrUnsupportedEventType)
 }
 
 // FromDocEvent converts the given Protobuf formats to model format.
 func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
-	client, err := FromClient(docEvent.Publisher)
+	client, err := time.ActorIDFromBytes(docEvent.Publisher)
 	if err != nil {
 		return nil, err
 	}
@@ -259,30 +244,10 @@ func FromDocEvent(docEvent *api.DocEvent) (*sync.DocEvent, error) {
 		return nil, err
 	}
 
-	documentID, err := FromDocumentID(docEvent.DocumentId)
-	if err != nil {
-		return nil, err
-	}
-
 	return &sync.DocEvent{
-		Type:       eventType,
-		Publisher:  *client,
-		DocumentID: documentID,
+		Type:      eventType,
+		Publisher: client,
 	}, nil
-}
-
-// FromClients converts the given Protobuf formats to model format.
-func FromClients(pbClients []*api.Client) ([]*types.Client, error) {
-	var clients []*types.Client
-	for _, pbClient := range pbClients {
-		client, err := FromClient(pbClient)
-		if err != nil {
-			return nil, err
-		}
-		clients = append(clients, client)
-	}
-
-	return clients, nil
 }
 
 // FromOperations converts the given Protobuf formats to model format.

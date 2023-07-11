@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -208,28 +207,6 @@ func TestConverter(t *testing.T) {
 
 		_, err = converter.FromChangePack(&api.ChangePack{})
 		assert.ErrorIs(t, err, converter.ErrCheckpointRequired)
-	})
-
-	t.Run("client test", func(t *testing.T) {
-		cli := types.Client{
-			ID: time.InitialActorID,
-			PresenceInfo: types.PresenceInfo{
-				Presence: types.Presence{"Name": "ClientName"},
-			},
-		}
-
-		pbCli := converter.ToClient(cli)
-		decodedCli, err := converter.FromClient(pbCli)
-		assert.NoError(t, err)
-		assert.Equal(t, cli.ID.Bytes(), decodedCli.ID.Bytes())
-		assert.Equal(t, cli.PresenceInfo, decodedCli.PresenceInfo)
-
-		pbClients := converter.ToClients([]types.Client{cli})
-
-		decodedCli, err = converter.FromClient(pbClients[0])
-		assert.NoError(t, err)
-		assert.Equal(t, cli.ID.Bytes(), decodedCli.ID.Bytes())
-		assert.Equal(t, cli.PresenceInfo, decodedCli.PresenceInfo)
 	})
 
 	t.Run("tree converting test", func(t *testing.T) {

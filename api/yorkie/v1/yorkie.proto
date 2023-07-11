@@ -28,7 +28,6 @@ option java_package = "dev.yorkie.api.v1";
 service YorkieService {
   rpc ActivateClient (ActivateClientRequest) returns (ActivateClientResponse) {}
   rpc DeactivateClient (DeactivateClientRequest) returns (DeactivateClientResponse) {}
-  rpc UpdatePresence (UpdatePresenceRequest) returns (UpdatePresenceResponse) {}
 
   rpc AttachDocument (AttachDocumentRequest) returns (AttachDocumentResponse) {}
   rpc DetachDocument (DetachDocumentRequest) returns (DetachDocumentResponse) {}
@@ -79,13 +78,13 @@ message DetachDocumentResponse {
 }
 
 message WatchDocumentRequest {
-  Client client = 1;
+  bytes client_id = 1;
   string document_id = 2;
 }
 
 message WatchDocumentResponse {
   message Initialization {
-    repeated Client peers = 1;
+    repeated bytes peers = 1;
   }
 
   oneof body {
@@ -116,10 +115,3 @@ message PushPullChangesResponse {
   bytes client_id = 1;
   ChangePack change_pack = 2;
 }
-
-message UpdatePresenceRequest {
-  Client client = 1;
-  string document_id = 2;
-}
-
-message UpdatePresenceResponse {}
