@@ -63,26 +63,34 @@ func NewTree(ctx *change.Context, tree *crdt.Tree) *Tree {
 }
 
 // Edit edits this tree with the given node.
-func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
+func (t *Tree) Edit(fromIdx, toIdx int, contents []*TreeNode) bool {
 	if fromIdx > toIdx {
 		panic("from should be less than or equal to to")
 	}
 	ticket := t.context.IssueTimeTicket()
 
-	var node *crdt.TreeNode
-	if content != nil {
-		var attributes *crdt.RHT
-		if content.Attributes != nil {
-			attributes = crdt.NewRHT()
-			for key, val := range content.Attributes {
-				attributes.Set(key, val, ticket)
+	var nodes []*crdt.TreeNode
+
+	if len(contents) != 0 {
+		for _, content := range contents {
+			var attributes *crdt.RHT
+			if content.Attributes != nil {
+				attributes = crdt.NewRHT()
+				for key, val := range content.Attributes {
+					attributes.Set(key, val, ticket)
+				}
 			}
-		}
-		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
-		for _, child := range content.Children {
-			if err := buildDescendants(t.context, child, node); err != nil {
-				panic(err)
+			var node *crdt.TreeNode
+
+			node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
+
+			for _, child := range content.Children {
+				if err := buildDescendants(t.context, child, node); err != nil {
+					panic(err)
+				}
 			}
+
+			nodes = append(nodes, node)
 		}
 	}
 
@@ -95,16 +103,22 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		panic(err)
 	}
 
-	var clone *crdt.TreeNode
-	if node != nil {
-		clone, err = node.DeepCopy()
-		if err != nil {
-			panic(err)
+	var clones []*crdt.TreeNode
+	if len(nodes) != 0 {
+		for _, node := range nodes {
+			var clone *crdt.TreeNode
+
+			clone, err = node.DeepCopy()
+			if err != nil {
+				panic(err)
+			}
+
+			clones = append(clones, clone)
 		}
 	}
 
 	ticket = t.context.LastTimeTicket()
-	if err = t.Tree.Edit(fromPos, toPos, clone, ticket); err != nil {
+	if err = t.Tree.Edit(fromPos, toPos, clones, ticket); err != nil {
 		panic(err)
 	}
 
@@ -112,7 +126,7 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		t.CreatedAt(),
 		fromPos,
 		toPos,
-		node,
+		nodes,
 		ticket,
 	))
 
@@ -129,23 +143,31 @@ func (t *Tree) Len() int {
 }
 
 // EditByPath edits this tree with the given path and node.
-func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool {
+func (t *Tree) EditByPath(fromPath []int, toPath []int, contents []*TreeNode) bool {
 	ticket := t.context.IssueTimeTicket()
 
-	var node *crdt.TreeNode
-	if content != nil {
-		var attributes *crdt.RHT
-		if content.Attributes != nil {
-			attributes = crdt.NewRHT()
-			for key, val := range content.Attributes {
-				attributes.Set(key, val, ticket)
+	var nodes []*crdt.TreeNode
+
+	if len(contents) != 0 {
+		for _, content := range contents {
+			var attributes *crdt.RHT
+			if content.Attributes != nil {
+				attributes = crdt.NewRHT()
+				for key, val := range content.Attributes {
+					attributes.Set(key, val, ticket)
+				}
 			}
-		}
-		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
-		for _, child := range content.Children {
-			if err := buildDescendants(t.context, child, node); err != nil {
-				panic(err)
+			var node *crdt.TreeNode
+
+			node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
+
+			for _, child := range content.Children {
+				if err := buildDescendants(t.context, child, node); err != nil {
+					panic(err)
+				}
 			}
+
+			nodes = append(nodes, node)
 		}
 	}
 
@@ -158,16 +180,22 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 		panic(err)
 	}
 
-	var clone *crdt.TreeNode
-	if node != nil {
-		clone, err = node.DeepCopy()
-		if err != nil {
-			panic(err)
+	var clones []*crdt.TreeNode
+	if len(nodes) != 0 {
+		for _, node := range nodes {
+			var clone *crdt.TreeNode
+
+			clone, err = node.DeepCopy()
+			if err != nil {
+				panic(err)
+			}
+
+			clones = append(clones, clone)
 		}
 	}
 
 	ticket = t.context.LastTimeTicket()
-	if err = t.Tree.Edit(fromPos, toPos, clone, ticket); err != nil {
+	if err = t.Tree.Edit(fromPos, toPos, clones, ticket); err != nil {
 		panic(err)
 	}
 
@@ -175,7 +203,7 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 		t.CreatedAt(),
 		fromPos,
 		toPos,
-		node,
+		nodes,
 		ticket,
 	))
 

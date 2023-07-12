@@ -33,8 +33,8 @@ type TreeEdit struct {
 	// toPos represents the end point of the editing range.
 	to *crdt.TreePos
 
-	// content is the content of tree added when editing.
-	content *crdt.TreeNode
+	// contents is the content of tree added when editing.
+	contents []*crdt.TreeNode
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
@@ -45,14 +45,14 @@ func NewTreeEdit(
 	parentCreatedAt *time.Ticket,
 	from *crdt.TreePos,
 	to *crdt.TreePos,
-	content *crdt.TreeNode,
+	contents []*crdt.TreeNode,
 	executedAt *time.Ticket,
 ) *TreeEdit {
 	return &TreeEdit{
 		parentCreatedAt: parentCreatedAt,
 		from:            from,
 		to:              to,
-		content:         content,
+		contents:        contents,
 		executedAt:      executedAt,
 	}
 }
@@ -63,15 +63,22 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 
 	switch obj := parent.(type) {
 	case *crdt.Tree:
-		var content *crdt.TreeNode
+		var contents []*crdt.TreeNode
 		var err error
-		if e.Content() != nil {
-			content, err = e.Content().DeepCopy()
-			if err != nil {
-				return err
+		if len(e.Contents()) != 0 {
+			for _, content := range e.Contents() {
+				var clone *crdt.TreeNode
+
+				clone, err = content.DeepCopy()
+				if err != nil {
+					return err
+				}
+
+				contents = append(contents, clone)
 			}
+
 		}
-		if err = obj.Edit(e.from, e.to, content, e.executedAt); err != nil {
+		if err = obj.Edit(e.from, e.to, contents, e.executedAt); err != nil {
 			return err
 		}
 
@@ -110,7 +117,7 @@ func (e *TreeEdit) ParentCreatedAt() *time.Ticket {
 	return e.parentCreatedAt
 }
 
-// Content returns the content of Edit.
-func (e *TreeEdit) Content() *crdt.TreeNode {
-	return e.content
+// Contents returns the content of Edit.
+func (e *TreeEdit) Contents() []*crdt.TreeNode {
+	return e.contents
 }
