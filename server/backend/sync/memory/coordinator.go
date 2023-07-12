@@ -65,8 +65,8 @@ func (c *Coordinator) Subscribe(
 		return nil, nil, err
 	}
 
-	peers := c.pubSub.GetPeers(documentID)
-	return sub, peers, nil
+	ids := c.pubSub.ClientIDs(documentID)
+	return sub, ids, nil
 }
 
 // Unsubscribe unsubscribes the given documents.

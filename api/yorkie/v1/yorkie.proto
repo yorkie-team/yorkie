@@ -84,7 +84,7 @@ message WatchDocumentRequest {
 
 message WatchDocumentResponse {
   message Initialization {
-    repeated bytes peers = 1;
+    repeated bytes client_ids = 1;
   }
 
   oneof body {

@@ -27,7 +27,7 @@ import (
 
 // Map is a map of Presence. It is wrapper of sync.Map to use type-safe.
 type Map struct {
-	presenceMap sync.Map // map[string]*innerpresence.Presence
+	presenceMap sync.Map
 }
 
 // NewMap creates a new instance of Map.
@@ -49,11 +49,27 @@ func (m *Map) Range(f func(clientID string, presence *Presence) bool) {
 	})
 }
 
+// Load returns the presence for the given clientID.
+func (m *Map) Load(clientID string) (*Presence, bool) {
+	presence, ok := m.presenceMap.Load(clientID)
+	if !ok {
+		return nil, false
+	}
+
+	return presence.(*Presence), true
+}
+
 // LoadOrStore returns the existing presence if exists.
 // Otherwise, it stores and returns the given presence.
 func (m *Map) LoadOrStore(clientID string, presence *Presence) *Presence {
 	actual, _ := m.presenceMap.LoadOrStore(clientID, presence)
 	return actual.(*Presence)
+}
+
+// Has returns whether the given clientID exists.
+func (m *Map) Has(clientID string) bool {
+	_, ok := m.presenceMap.Load(clientID)
+	return ok
 }
 
 // PresenceChangeType represents the type of presence change.

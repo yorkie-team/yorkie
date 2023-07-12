@@ -28,9 +28,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -42,8 +42,8 @@ type clientAndDocPair struct {
 }
 
 type watchResponsePair struct {
-	Type  client.WatchResponseType
-	Peers map[string]types.Presence
+	Type        client.WatchResponseType
+	PresenceMap map[string]innerpresence.Presence
 }
 
 var defaultServer *server.Yorkie
@@ -106,10 +106,7 @@ func clientConn() (*grpc.ClientConn, error) {
 // activeClients creates and activates the given number of clients.
 func activeClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
-		c, err := client.Dial(
-			defaultServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", i)}),
-		)
+		c, err := client.Dial(defaultServer.RPCAddr())
 		assert.NoError(t, err)
 		assert.NoError(t, c.Activate(context.Background()))
 

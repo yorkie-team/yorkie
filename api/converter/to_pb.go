@@ -156,14 +156,7 @@ func ToPresenceChange(p *innerpresence.PresenceChange) *api.PresenceChange {
 	}
 	return &api.PresenceChange{
 		Type:     changeType,
-		Presence: p.Presence,
-	}
-}
-
-// ToPresenceInfo converts the given model to Protobuf format.
-func ToPresenceInfo(info types.PresenceInfo) *api.Presence {
-	return &api.Presence{
-		Data: info.Presence,
+		Presence: &api.Presence{Data: p.Presence},
 	}
 }
 

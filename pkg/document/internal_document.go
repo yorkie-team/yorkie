@@ -18,6 +18,7 @@ package document
 
 import (
 	"errors"
+	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -77,6 +78,9 @@ type InternalDocument struct {
 	// of the actors who are editing the document.
 	presenceMap *innerpresence.Map
 
+	// watchingClientSet is the set of the client who is watching this document.
+	watchingClientSet *gosync.Map
+
 	// localChanges is the list of the changes that are not yet sent to the
 	// server.
 	localChanges []*change.Change
@@ -88,12 +92,13 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 
 	// TODO(hackerwins): We need to initialize the presence of the actor who edited the document.
 	return &InternalDocument{
-		key:         k,
-		status:      StatusDetached,
-		root:        crdt.NewRoot(root),
-		checkpoint:  change.InitialCheckpoint,
-		changeID:    change.InitialID,
-		presenceMap: innerpresence.NewMap(),
+		key:               k,
+		status:            StatusDetached,
+		root:              crdt.NewRoot(root),
+		checkpoint:        change.InitialCheckpoint,
+		changeID:          change.InitialID,
+		presenceMap:       innerpresence.NewMap(),
+		watchingClientSet: &gosync.Map{},
 	}
 }
 
@@ -110,12 +115,13 @@ func NewInternalDocumentFromSnapshot(
 	}
 
 	return &InternalDocument{
-		key:         k,
-		status:      StatusDetached,
-		root:        crdt.NewRoot(obj),
-		presenceMap: presenceMap,
-		checkpoint:  change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:    change.InitialID.SyncLamport(lamport),
+		key:               k,
+		status:            StatusDetached,
+		root:              crdt.NewRoot(obj),
+		presenceMap:       presenceMap,
+		watchingClientSet: &gosync.Map{},
+		checkpoint:        change.InitialCheckpoint.NextServerSeq(serverSeq),
+		changeID:          change.InitialID.SyncLamport(lamport),
 	}, nil
 }
 
@@ -142,7 +148,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 			return err
 		}
 	} else {
-		if err := d.ApplyChanges(pack.Changes...); err != nil {
+		if _, err := d.ApplyChanges(pack.Changes...); err != nil {
 			return err
 		}
 	}
@@ -244,23 +250,76 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error
 }
 
 // ApplyChanges applies remote changes to the document.
-func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
+func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, error) {
+	var events []DocEvent
 	for _, c := range changes {
-		if err := c.Execute(d.root, d.presenceMap); err != nil {
-			return err
+		if c.PresenceChange() != nil {
+			clientID := c.ID().ActorID().String()
+			if _, ok := d.watchingClientSet.Load(clientID); ok {
+				event := DocEvent{
+					Type: PresenceChangedEvent,
+					PresenceMap: map[string]innerpresence.Presence{
+						clientID: c.PresenceChange().Presence,
+					},
+				}
+
+				if !d.presenceMap.Has(clientID) {
+					event.Type = WatchedEvent
+					d.AddWatchingClient(clientID)
+				}
+				events = append(events, event)
+			}
 		}
+
+		if err := c.Execute(d.root, d.presenceMap); err != nil {
+			return nil, err
+		}
+
 		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
 	}
 
-	return nil
+	return events, nil
 }
 
-// Presence returns the presence of the actor currently editing the document.
-func (d *InternalDocument) Presence() *innerpresence.Presence {
+// MyPresence returns the presence of the actor currently editing the document.
+func (d *InternalDocument) MyPresence() *innerpresence.Presence {
 	return d.presenceMap.LoadOrStore(d.changeID.ActorID().String(), innerpresence.NewPresence())
 }
 
 // PresenceMap returns the map of presences of the actors currently editing the document.
 func (d *InternalDocument) PresenceMap() *innerpresence.Map {
 	return d.presenceMap
+}
+
+// Presence returns the presence of the given client. If the client is not
+// watching the document, it returns nil.
+func (d *InternalDocument) Presence(clientID string) *innerpresence.Presence {
+	if _, ok := d.watchingClientSet.Load(clientID); !ok {
+		return nil
+	}
+
+	presence, _ := d.presenceMap.Load(clientID)
+	return presence
+}
+
+// AddWatchingClient adds the given client to the watching client set.
+func (d *InternalDocument) AddWatchingClient(clientID string) {
+	d.watchingClientSet.Store(clientID, true)
+}
+
+// RemoveWatchingClient remove the given client from the watching client set.
+func (d *InternalDocument) RemoveWatchingClient(clientID string) {
+	d.watchingClientSet.Delete(clientID)
+}
+
+// SetWatchingClientSet sets the watching client set.
+func (d *InternalDocument) SetWatchingClientSet(ids ...string) {
+	d.watchingClientSet.Range(func(key, value interface{}) bool {
+		d.watchingClientSet.Delete(key)
+		return true
+	})
+
+	for _, id := range ids {
+		d.watchingClientSet.Store(id, true)
+	}
 }

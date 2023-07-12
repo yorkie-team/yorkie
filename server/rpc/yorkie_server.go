@@ -391,7 +391,7 @@ func (s *yorkieServer) WatchDocument(
 		}
 	}()
 
-	subscription, peers, err := s.watchDoc(stream.Context(), clientID, docID)
+	subscription, clientIDs, err := s.watchDoc(stream.Context(), clientID, docID)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
@@ -400,14 +400,14 @@ func (s *yorkieServer) WatchDocument(
 		s.unwatchDoc(subscription, docID)
 	}()
 
-	var peerBytes [][]byte
-	for _, peer := range peers {
-		peerBytes = append(peerBytes, peer.Bytes())
+	var pbClientIDs [][]byte
+	for _, id := range clientIDs {
+		pbClientIDs = append(pbClientIDs, id.Bytes())
 	}
 	if err := stream.Send(&api.WatchDocumentResponse{
 		Body: &api.WatchDocumentResponse_Initialization_{
 			Initialization: &api.WatchDocumentResponse_Initialization{
-				Peers: peerBytes,
+				ClientIds: pbClientIDs,
 			},
 		},
 	}); err != nil {
@@ -516,7 +516,7 @@ func (s *yorkieServer) watchDoc(
 	clientID *time.ActorID,
 	documentID types.ID,
 ) (*sync.Subscription, []*time.ActorID, error) {
-	subscription, peers, err := s.backend.Coordinator.Subscribe(ctx, clientID, documentID)
+	subscription, clientIDs, err := s.backend.Coordinator.Subscribe(ctx, clientID, documentID)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, nil, err
@@ -532,7 +532,7 @@ func (s *yorkieServer) watchDoc(
 		},
 	)
 
-	return subscription, peers, nil
+	return subscription, clientIDs, nil
 }
 
 func (s *yorkieServer) unwatchDoc(

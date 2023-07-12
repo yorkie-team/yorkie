@@ -296,7 +296,7 @@ message PresenceChange {
     CHANGE_TYPE_DELETE = 2;
   }
   ChangeType type = 1;
-  map<string, string> presence = 2;
+  Presence presence = 2;
 }
 
 message Presence {
@@ -341,7 +341,6 @@ enum DocEventType {
   DOC_EVENT_TYPE_DOCUMENTS_CHANGED = 0;
   DOC_EVENT_TYPE_DOCUMENTS_WATCHED = 1;
   DOC_EVENT_TYPE_DOCUMENTS_UNWATCHED = 2;
-  DOC_EVENT_TYPE_PRESENCE_CHANGED = 3;
 }
 
 message DocEvent {

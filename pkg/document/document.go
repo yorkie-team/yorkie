@@ -29,6 +29,25 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// DocEvent represents the event that occurred in the document.
+type DocEvent struct {
+	Type        DocEventType
+	PresenceMap map[string]innerpresence.Presence
+}
+
+// DocEventType represents the type of the event that occurred in the document.
+type DocEventType string
+
+const (
+	// WatchedEvent means that the client has established a connection with the server,
+	// enabling real-time synchronization.
+	WatchedEvent DocEventType = "watched"
+
+	// PresenceChangedEvent means that the presences of the clients who are editing
+	// the document have changed.
+	PresenceChangedEvent DocEventType = "presence-changed"
+)
+
 // Document represents a document accessible to the user.
 //
 // How document works:
@@ -43,12 +62,16 @@ type Document struct {
 	// clone is a copy of `doc` to be exposed to the user and is used to
 	// protect `doc`.
 	clone *crdt.Root
+
+	// events is the channel to send events that occurred in the document.
+	events chan DocEvent
 }
 
 // New creates a new instance of Document.
 func New(key key.Key) *Document {
 	return &Document{
-		doc: NewInternalDocument(key),
+		doc:    NewInternalDocument(key),
+		events: make(chan DocEvent, 1),
 	}
 }
 
@@ -75,7 +98,7 @@ func (d *Document) Update(
 	// from the document.
 	if err := updater(
 		json.NewObject(ctx, d.clone.Object()),
-		presence.New(ctx, d.doc.Presence()),
+		presence.New(ctx, d.doc.MyPresence()),
 	); err != nil {
 		// drop clone because it is contaminated.
 		d.clone = nil
@@ -114,8 +137,13 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 			}
 		}
 
-		if err := d.doc.ApplyChanges(pack.Changes...); err != nil {
+		events, err := d.doc.ApplyChanges(pack.Changes...)
+		if err != nil {
 			return err
+		}
+
+		for _, e := range events {
+			d.events <- e
 		}
 	}
 
@@ -254,6 +282,36 @@ func (d *Document) PresenceMap() map[string]innerpresence.Presence {
 		return true
 	})
 	return presenceMap
+}
+
+// SetWatchingClientSet sets the watching client set.
+func (d *Document) SetWatchingClientSet(clientIDs ...string) {
+	d.doc.SetWatchingClientSet(clientIDs...)
+}
+
+// AddWatchingClient adds the given client to the watching client set.
+func (d *Document) AddWatchingClient(clientID string) {
+	d.doc.AddWatchingClient(clientID)
+}
+
+// RemoveWatchingClient removes the given client from the watching client set.
+func (d *Document) RemoveWatchingClient(clientID string) {
+	d.doc.RemoveWatchingClient(clientID)
+}
+
+// Presence returns the presence of the given client.
+func (d *Document) Presence(clientID string) *innerpresence.Presence {
+	return d.doc.Presence(clientID)
+}
+
+// MyPresence returns the presence of the actor.
+func (d *Document) MyPresence() *innerpresence.Presence {
+	return d.doc.MyPresence()
+}
+
+// Events returns the events of this document.
+func (d *Document) Events() <-chan DocEvent {
+	return d.events
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

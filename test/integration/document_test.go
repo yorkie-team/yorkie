@@ -26,9 +26,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -174,7 +174,7 @@ func TestDocument(t *testing.T) {
 				}
 				assert.NoError(t, resp.Err)
 
-				if resp.Type == client.DocumentsChanged {
+				if resp.Type == client.DocumentChanged {
 					err := c1.Sync(ctx, client.WithDocKey(d1.Key()))
 					assert.NoError(t, err)
 					return
@@ -480,7 +480,7 @@ func TestDocumentWithProjects(t *testing.T) {
 				}
 				assert.NoError(t, resp.Err)
 
-				if resp.Type == client.DocumentsChanged {
+				if resp.Type == client.DocumentChanged {
 					err := c1.Sync(ctx, client.WithDocKey(d1.Key()))
 					assert.NoError(t, err)
 					responsePairs = append(responsePairs, watchResponsePair{
@@ -489,20 +489,19 @@ func TestDocumentWithProjects(t *testing.T) {
 					return
 				}
 
-				if resp.Type == client.PeersChanged {
-					peers := resp.PeersMapByDoc[d1.Key()]
+				if resp.Type != client.DocumentChanged {
 					responsePairs = append(responsePairs, watchResponsePair{
-						Type:  resp.Type,
-						Peers: peers,
+						Type:        resp.Type,
+						PresenceMap: resp.PresenceMap,
 					})
 				}
 			}
 		}()
 
-		// c2 watches the same document, so c1 receives a peers changed event.
+		// c2 watches the same document, so c1 receives a document watched event.
 		expected = append(expected, watchResponsePair{
-			Type: client.PeersChanged,
-			Peers: map[string]types.Presence{
+			Type: client.DocumentWatched,
+			PresenceMap: map[string]innerpresence.Presence{
 				c1.ID().String(): nil,
 				c2.ID().String(): nil,
 			},
@@ -516,7 +515,7 @@ func TestDocumentWithProjects(t *testing.T) {
 
 		// c2 updates the document, so c1 receives a documents changed event.
 		expected = append(expected, watchResponsePair{
-			Type: client.DocumentsChanged,
+			Type: client.DocumentChanged,
 		})
 		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("key", "value")

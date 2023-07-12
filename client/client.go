@@ -35,6 +35,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -79,11 +80,10 @@ func (o SyncOption) WithPushOnly() SyncOption {
 	}
 }
 
-// Attachment represents the document attached and peers.
+// Attachment represents the document attached.
 type Attachment struct {
 	doc   *document.Document
 	docID types.ID
-	peers map[string]types.PresenceInfo
 }
 
 // Client is a normal client that can communicate with the server.
@@ -96,11 +96,10 @@ type Client struct {
 	dialOptions []grpc.DialOption
 	logger      *zap.Logger
 
-	id           *time.ActorID
-	key          string
-	presenceInfo types.PresenceInfo
-	status       status
-	attachments  map[key.Key]*Attachment
+	id          *time.ActorID
+	key         string
+	status      status
+	attachments map[key.Key]*Attachment
 }
 
 // WatchResponseType is type of watch response.
@@ -108,15 +107,17 @@ type WatchResponseType string
 
 // The values below are types of WatchResponseType.
 const (
-	DocumentsChanged WatchResponseType = "documents-changed"
-	PeersChanged     WatchResponseType = "peers-changed"
+	DocumentChanged   WatchResponseType = "document-changed"
+	DocumentWatched   WatchResponseType = "document-watched"
+	DocumentUnwatched WatchResponseType = "document-unwatched"
+	PresenceChanged   WatchResponseType = "presence-changed"
 )
 
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
-	Type          WatchResponseType
-	PeersMapByDoc map[key.Key]map[string]types.Presence
-	Err           error
+	Type        WatchResponseType
+	PresenceMap map[string]innerpresence.Presence
+	Err         error
 }
 
 // New creates an instance of Client.
@@ -129,11 +130,6 @@ func New(opts ...Option) (*Client, error) {
 	k := options.Key
 	if k == "" {
 		k = xid.New().String()
-	}
-
-	presence := types.Presence{}
-	if options.Presence != nil {
-		presence = options.Presence
 	}
 
 	var dialOptions []grpc.DialOption
@@ -170,10 +166,9 @@ func New(opts ...Option) (*Client, error) {
 		options:     options,
 		logger:      logger,
 
-		key:          k,
-		presenceInfo: types.PresenceInfo{Presence: presence},
-		status:       deactivated,
-		attachments:  make(map[key.Key]*Attachment),
+		key:         k,
+		status:      deactivated,
+		attachments: make(map[key.Key]*Attachment),
 	}, nil
 }
 
@@ -314,7 +309,6 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	c.attachments[doc.Key()] = &Attachment{
 		doc:   doc,
 		docID: types.ID(res.DocumentId),
-		peers: make(map[string]types.PresenceInfo),
 	}
 
 	return nil
@@ -426,11 +420,16 @@ func (c *Client) Watch(
 	handleResponse := func(pbResp *api.WatchDocumentResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentResponse_Initialization_:
-			// TODO(hackerwins): We should pass the publisher to the document.
-			for _, peer := range resp.Initialization.Peers {
-				fmt.Printf("cli: %v\n", peer)
+			var clientIDs []string
+			for _, clientId := range resp.Initialization.ClientIds {
+				id, err := time.ActorIDFromBytes(clientId)
+				if err != nil {
+					return nil, err
+				}
+				clientIDs = append(clientIDs, id.String())
 			}
 
+			doc.SetWatchingClientSet(clientIDs...)
 			return nil, nil
 		case *api.WatchDocumentResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
@@ -438,23 +437,40 @@ func (c *Client) Watch(
 				return nil, err
 			}
 
+			cli, err := time.ActorIDFromBytes(resp.Event.Publisher)
+			if err != nil {
+				return nil, err
+			}
+
 			switch eventType {
 			case types.DocumentsChangedEvent:
-				return &WatchResponse{
-					Type: DocumentsChanged,
-				}, nil
-			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent:
-				cli, err := time.ActorIDFromBytes(resp.Event.Publisher)
-				if err != nil {
-					return nil, err
+				return &WatchResponse{Type: DocumentChanged}, nil
+			case types.DocumentsWatchedEvent:
+				doc.AddWatchingClient(cli.String())
+				if doc.Presence(cli.String()) == nil {
+					return nil, nil
 				}
 
-				// TODO(hackerwins): We should pass the publisher to the document.
-				fmt.Printf("cli: %v\n", cli)
+				return &WatchResponse{
+					Type: DocumentWatched,
+					PresenceMap: map[string]innerpresence.Presence{
+						cli.String(): *doc.Presence(cli.String()),
+					},
+				}, nil
+			case types.DocumentsUnwatchedEvent:
+				presence := doc.Presence(cli.String())
+				doc.RemoveWatchingClient(cli.String())
+
+				p := innerpresence.Presence{}
+				if presence != nil {
+					p = *presence
+				}
 
 				return &WatchResponse{
-					Type:          PeersChanged,
-					PeersMapByDoc: c.PeersMapByDoc(),
+					Type: DocumentUnwatched,
+					PresenceMap: map[string]innerpresence.Presence{
+						cli.String(): p,
+					},
 				}, nil
 			}
 		}
@@ -483,7 +499,35 @@ func (c *Client) Watch(
 				close(rch)
 				return
 			}
+			if resp == nil {
+				continue
+			}
+
 			rch <- *resp
+		}
+	}()
+
+	// TODO(hackerwins): We need to revise the implementation of the watch
+	// event handling. Currently, we are using the same channel for both
+	// document events and watch events. This is not ideal because the
+	// client cannot distinguish between document events and watch events.
+	// We'll expose only document events and watch events will be handled
+	// internally.
+
+	// TODO(hackerwins): We should ensure that the goroutine is closed when
+	// the stream is closed.
+	go func() {
+		for {
+			select {
+			case e := <-doc.Events():
+				t := PresenceChanged
+				if e.Type == document.WatchedEvent {
+					t = DocumentWatched
+				}
+				rch <- WatchResponse{Type: t, PresenceMap: e.PresenceMap}
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
@@ -508,29 +552,6 @@ func (c *Client) ID() *time.ActorID {
 // Key returns the key of this client.
 func (c *Client) Key() string {
 	return c.key
-}
-
-// Presence returns the presence data of this client.
-func (c *Client) Presence() types.Presence {
-	presence := make(types.Presence)
-	for k, v := range c.presenceInfo.Presence {
-		presence[k] = v
-	}
-
-	return presence
-}
-
-// PeersMapByDoc returns the peersMap.
-func (c *Client) PeersMapByDoc() map[key.Key]map[string]types.Presence {
-	peersMapByDoc := make(map[key.Key]map[string]types.Presence)
-	for docKey, attachment := range c.attachments {
-		peers := make(map[string]types.Presence)
-		for id, info := range attachment.peers {
-			peers[id] = info.Presence
-		}
-		peersMapByDoc[docKey] = peers
-	}
-	return peersMapByDoc
 }
 
 // IsActive returns whether this client is active or not.

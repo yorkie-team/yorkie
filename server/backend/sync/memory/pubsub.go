@@ -195,14 +195,14 @@ func (m *PubSub) Publish(
 	}
 }
 
-// GetPeers returns the peers of the given document.
-func (m *PubSub) GetPeers(documentID types.ID) []*time.ActorID {
+// ClientIDs returns the clients of the given document.
+func (m *PubSub) ClientIDs(documentID types.ID) []*time.ActorID {
 	m.subscriptionsMapMu.RLock()
 	defer m.subscriptionsMapMu.RUnlock()
 
-	var peers []*time.ActorID
+	var ids []*time.ActorID
 	for _, sub := range m.subscriptionsMapByDocID[documentID].Map() {
-		peers = append(peers, sub.Subscriber())
+		ids = append(ids, sub.Subscriber())
 	}
-	return peers
+	return ids
 }
