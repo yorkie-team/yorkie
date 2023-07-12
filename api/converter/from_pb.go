@@ -541,7 +541,7 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		return nil, err
 	}
 
-	node, err := FromTreeNodes(pbTreeEdit.Content)
+	nodes, err := FromTreeNodesWhenEdit(pbTreeEdit.Contents)
 	if err != nil {
 		return nil, err
 	}
@@ -550,7 +550,7 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		parentCreatedAt,
 		from,
 		to,
-		node,
+		nodes,
 		executedAt,
 	), nil
 }
@@ -645,6 +645,26 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 
 	// build crdt.Tree from root to construct the links between nodes.
 	return crdt.NewTree(root, nil).Root(), nil
+}
+
+func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
+	if len(pbNodes) == 0 {
+		return nil, nil
+	}
+
+	var treeNodes []*crdt.TreeNode
+
+	for _, pbNode := range pbNodes {
+		treeNode, err := FromTreeNodes(pbNode.Content)
+
+		if err != nil {
+			return nil, err
+		}
+
+		treeNodes = append(treeNodes, treeNode)
+	}
+
+	return treeNodes, nil
 }
 
 func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
