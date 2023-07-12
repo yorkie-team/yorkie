@@ -275,6 +275,12 @@ func TestTree(t *testing.T) {
 			}})
 			assert.Equal(t, "<doc><tc><p><tn>aXXb</tn></p><p><tn>test</tn></p><p><tn>text</tn></p></tc></doc>", root.GetTree("t").ToXML())
 
+			root.GetTree("t").EditByPath([]int{0, 3}, []int{0, 3}, []*json.TreeNode{{
+				Type:     "p",
+				Children: []json.TreeNode{{Type: "tn", Children: []json.TreeNode{{Type: "text", Value: "te"}, {Type: "text", Value: "st"}}}},
+			}, {Type: "tn", Children: []json.TreeNode{{Type: "text", Value: "te"}, {Type: "text", Value: "xt"}}}})
+			assert.Equal(t, "<doc><tc><p><tn>aXXb</tn></p><p><tn>test</tn></p><p><tn>text</tn></p><p><tn>test</tn></p><tn>text</tn></tc></doc>", root.GetTree("t").ToXML())
+
 			return nil
 		})
 		assert.NoError(t, err)
