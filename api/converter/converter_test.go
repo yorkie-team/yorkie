@@ -115,13 +115,13 @@ func TestConverter(t *testing.T) {
 
 			// tree
 			root.SetNewTree("k5").
-				Edit(0, 0, &json.TreeNode{
+				Edit(0, 0, []*json.TreeNode{{
 					Type: "p",
 					Children: []json.TreeNode{{
 						Type:  "text",
 						Value: "Hello world",
 					}},
-				})
+				}})
 
 			return nil
 		})
