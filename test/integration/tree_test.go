@@ -238,6 +238,43 @@ func TestTree(t *testing.T) {
 		})
 		assert.NoError(t, err)
 	})
+
+	t.Run("edit its content when multi tree nodes passed", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "tc",
+					Children: []json.TreeNode{{
+						Type: "p", Children: []json.TreeNode{{
+							Type: "tn", Children: []json.TreeNode{{
+								Type: "text", Value: "ab",
+							}},
+						}},
+					}},
+				}},
+			})
+			assert.Equal(t, "<doc><tc><p><tn>ab</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 0, 0, 1}, []int{0, 0, 0, 1}, []*json.TreeNode{{
+				Type:  "text",
+				Value: "X",
+			}, {
+				Type:  "text",
+				Value: "X",
+			}})
+			assert.Equal(t, "<doc><tc><p><tn>aXXb</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 1}, []int{0, 1}, []*json.TreeNode{{
+				Type:     "p",
+				Children: []json.TreeNode{{Type: "tn", Children: []json.TreeNode{{Type: "text", Value: "te"}, {Type: "text", Value: "st"}}}},
+			}, {
+				Type:     "p",
+				Children: []json.TreeNode{{Type: "tn", Children: []json.TreeNode{{Type: "text", Value: "te"}, {Type: "text", Value: "xt"}}}},
+			}})
+			assert.Equal(t, "<doc><tc><p><tn>aXXb</tn></p><p><tn>test</tn></p><p><tn>text</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
 			return nil
 		})
 		assert.NoError(t, err)
