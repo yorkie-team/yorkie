@@ -647,6 +647,8 @@ func FromTreeNodes(pbNodes []*api.TreeNode) (*crdt.TreeNode, error) {
 	return crdt.NewTree(root, nil).Root(), nil
 }
 
+// FromTreeNodesWhenEdit converts protobuf tree nodes to array of crdt.TreeNode.
+// in each element in array, the last node in slice is the root node, because the slice is in post-order.
 func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 	if len(pbNodes) == 0 {
 		return nil, nil

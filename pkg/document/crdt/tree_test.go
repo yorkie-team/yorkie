@@ -105,7 +105,8 @@ func TestTree(t *testing.T) {
 
 		//           1
 		// <root> <p> </p> </root>
-		err := tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err := tree.EditByIndex(0, 0,
+			[]*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<r><p></p></r>", tree.ToXML())
 		helper.ListEqual(t, tree, []string{"p", "r"})
@@ -187,14 +188,19 @@ func TestTree(t *testing.T) {
 		// <root> <p> a b </p> <p> c d </p> </root>
 
 		ctx := helper.TextChangeContext(helper.TestRoot())
-		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
-		err := tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx),
+			"root", nil), helper.IssueTime(ctx))
+		err := tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(5, 5, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "cd")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(5, 5, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "cd")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
 		helper.ListEqual(t, tree, []string{"text.ab", "p", "text.cd", "p", "root"})
@@ -225,13 +231,17 @@ func TestTree(t *testing.T) {
 
 		ctx := helper.TextChangeContext(helper.TestRoot())
 		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
-		err := tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err := tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(5, 5, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "cd")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(5, 5, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "cd")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
 		helper.ListEqual(t, tree, []string{"text.ab", "p", "text.cd", "p", "root"})
@@ -251,7 +261,8 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, 1, structure.Children[0].Children[1].Size)
 
 		// 03. insert a new text node at the start of the first paragraph.
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "@")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "@")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>@ad</p></root>", tree.ToXML())
 	})
@@ -262,13 +273,17 @@ func TestTree(t *testing.T) {
 		// <root> <p> <b> <i> a b </i> </b> </p> </root>
 		ctx := helper.TextChangeContext(helper.TestRoot())
 		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
-		err := tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err := tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "b", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"b", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "i", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"i", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
 		err = tree.EditByIndex(5, 6, nil, helper.IssueTime(ctx))
@@ -277,13 +292,17 @@ func TestTree(t *testing.T) {
 
 		// 02. Edit between two element nodes in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
-		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "b", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"b", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "i", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"i", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
 		err = tree.EditByIndex(6, 7, nil, helper.IssueTime(ctx))
@@ -292,13 +311,17 @@ func TestTree(t *testing.T) {
 
 		// 03. Edit between text and element node in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
-		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "b", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"b", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "i", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"i", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
 		err = tree.EditByIndex(4, 6, nil, helper.IssueTime(ctx))
@@ -307,13 +330,17 @@ func TestTree(t *testing.T) {
 
 		// 04. Edit between text and element node in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
-		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "b", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"b", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "i", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"i", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
 		err = tree.EditByIndex(5, 7, nil, helper.IssueTime(ctx))
@@ -322,13 +349,17 @@ func TestTree(t *testing.T) {
 
 		// 05. Edit between text and element node in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
-		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "b", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"b", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "i", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"i", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
 		err = tree.EditByIndex(4, 7, nil, helper.IssueTime(ctx))
@@ -337,13 +368,17 @@ func TestTree(t *testing.T) {
 
 		// 06. Edit between text and element node in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
-		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "b", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"b", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "i", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(2, 2, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"i", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(3, 3, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p><b><i>ab</i></b></p></root>", tree.ToXML())
 		err = tree.EditByIndex(3, 7, nil, helper.IssueTime(ctx))
@@ -352,19 +387,26 @@ func TestTree(t *testing.T) {
 
 		// 07. Edit between text and element node in same hierarchy.
 		tree = crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
-		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(5, 5, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "b", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(5, 5, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"b", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(6, 6, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "cd")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(6, 6, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "cd")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(10, 10, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(10, 10, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(11, 11, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ef")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(11, 11, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ef")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ab</p><p><b>cd</b></p><p>ef</p></root>", tree.ToXML())
 		err = tree.EditByIndex(9, 10, nil, helper.IssueTime(ctx))
@@ -376,13 +418,17 @@ func TestTree(t *testing.T) {
 		// 01. style attributes to an element node.
 		ctx := helper.TextChangeContext(helper.TestRoot())
 		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
-		err := tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err := tree.EditByIndex(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(1, 1, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(4, 4, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		err = tree.EditByIndex(5, 5, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "cd")}, helper.IssueTime(ctx))
+		err = tree.EditByIndex(5, 5, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "cd")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
 
