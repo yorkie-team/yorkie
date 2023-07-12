@@ -76,4 +76,4 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    %-20s %s\n", $$1, $$2}'
 	@echo
 
-.PHONY: tools proto build build-binaries fmt lint test bench docker docker-latest help
+.PHONY: tools proto build build-binaries fmt lint test bench docker docker-latest help1
