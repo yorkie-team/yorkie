@@ -49,15 +49,37 @@ var (
 	ErrDocumentRemoved = errors.New("document is removed")
 )
 
-// InternalDocument represents a document in MongoDB and contains logical clocks.
+// InternalDocument is a document that is used internally. It is not directly
+// exposed to the user.
 type InternalDocument struct {
-	key          key.Key
-	status       StatusType
-	root         *crdt.Root
-	checkpoint   change.Checkpoint
-	changeID     change.ID
+	// key is the key of the document. It is used as the key of the document in
+	// user's perspective.
+	key key.Key
+
+	// status is the status of the document. It is used to check whether the
+	// document is attached to the client or detached or removed.
+	status StatusType
+
+	// checkpoint is the checkpoint of the document. It is used to determine
+	// what changes should be sent and what changes should be received.
+	checkpoint change.Checkpoint
+
+	// changeID is the ID of the last change. It is used to create a new change.
+	// It contains logical clock information like the lamport timestamp, actorID
+	// and checkpoint information.
+	changeID change.ID
+
+	// root is the root of the document. It is used to store JSON-like data in
+	// CRDT manner.
+	root *crdt.Root
+
+	// presenceMap is the map of the presence. It is used to store the presence
+	// of the actors who are editing the document.
+	presenceMap *innerpresence.Map
+
+	// localChanges is the list of the changes that are not yet sent to the
+	// server.
 	localChanges []*change.Change
-	presenceMap  *innerpresence.Map
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
@@ -235,8 +257,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
 
 // Presence returns the presence of the actor currently editing the document.
 func (d *InternalDocument) Presence() *innerpresence.Presence {
-	value, _ := d.presenceMap.LoadOrStore(d.changeID.ActorID().String(), innerpresence.NewPresence())
-	return value.(*innerpresence.Presence)
+	return d.presenceMap.LoadOrStore(d.changeID.ActorID().String(), innerpresence.NewPresence())
 }
 
 // PresenceMap returns the map of presences of the actors currently editing the document.

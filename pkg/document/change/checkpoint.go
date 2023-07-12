@@ -115,7 +115,7 @@ func (cp Checkpoint) Forward(other Checkpoint) Checkpoint {
 }
 
 // Equals returns whether the given checkpoint is equal to this checkpoint or not.
-func (cp *Checkpoint) Equals(other Checkpoint) bool {
+func (cp Checkpoint) Equals(other Checkpoint) bool {
 	return cp.ServerSeq == other.ServerSeq &&
 		cp.ClientSeq == other.ClientSeq
 }

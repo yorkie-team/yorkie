@@ -25,12 +25,35 @@ import (
 	"sync"
 )
 
-// Map is a map of presence by clientID.
-type Map = sync.Map // map[string]*innerpresence.Presence
+// Map is a map of Presence. It is wrapper of sync.Map to use type-safe.
+type Map struct {
+	presenceMap sync.Map // map[string]*innerpresence.Presence
+}
 
 // NewMap creates a new instance of Map.
 func NewMap() *Map {
-	return &sync.Map{}
+	return &Map{presenceMap: sync.Map{}}
+}
+
+// Store stores the given presence to the map.
+func (m *Map) Store(clientID string, presence *Presence) {
+	m.presenceMap.Store(clientID, presence)
+}
+
+// Range calls f sequentially for each key and value present in the map.
+func (m *Map) Range(f func(clientID string, presence *Presence) bool) {
+	m.presenceMap.Range(func(key, value interface{}) bool {
+		clientID := key.(string)
+		presence := value.(*Presence)
+		return f(clientID, presence)
+	})
+}
+
+// LoadOrStore returns the existing presence if exists.
+// Otherwise, it stores and returns the given presence.
+func (m *Map) LoadOrStore(clientID string, presence *Presence) *Presence {
+	actual, _ := m.presenceMap.LoadOrStore(clientID, presence)
+	return actual.(*Presence)
 }
 
 // PresenceChangeType represents the type of presence change.
@@ -48,17 +71,17 @@ type PresenceChange struct {
 }
 
 // NewChangeFromJSON creates a new instance of PresenceChange from JSON.
-func NewChangeFromJSON(encodedJSON string) (*PresenceChange, error) {
-	if encodedJSON == "" {
+func NewChangeFromJSON(encodedChange string) (*PresenceChange, error) {
+	if encodedChange == "" {
 		return nil, nil
 	}
 
-	p := PresenceChange{}
-	if err := json.Unmarshal([]byte(encodedJSON), &p); err != nil {
+	p := &PresenceChange{}
+	if err := json.Unmarshal([]byte(encodedChange), p); err != nil {
 		return nil, fmt.Errorf("unmarshal presence change: %w", err)
 	}
 
-	return &p, nil
+	return p, nil
 }
 
 // Presence represents custom presence that can be defined by the client.

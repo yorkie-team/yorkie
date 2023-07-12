@@ -249,8 +249,8 @@ func (d *Document) ensureClone() error {
 func (d *Document) PresenceMap() map[string]innerpresence.Presence {
 	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
 	presenceMap := make(map[string]innerpresence.Presence)
-	d.doc.presenceMap.Range(func(key, value interface{}) bool {
-		presenceMap[key.(string)] = *value.(*innerpresence.Presence)
+	d.doc.presenceMap.Range(func(key string, value *innerpresence.Presence) bool {
+		presenceMap[key] = *value
 		return true
 	})
 	return presenceMap

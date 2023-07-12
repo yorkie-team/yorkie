@@ -125,8 +125,8 @@ func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, er
 // ToPresenceMap converts the given model to Protobuf format.
 func ToPresenceMap(presenceMap *innerpresence.Map) map[string]*api.Presence {
 	pbPresences := make(map[string]*api.Presence)
-	presenceMap.Range(func(k, v interface{}) bool {
-		pbPresences[k.(string)] = ToPresence(v.(*innerpresence.Presence))
+	presenceMap.Range(func(k string, v *innerpresence.Presence) bool {
+		pbPresences[k] = ToPresence(v)
 		return true
 	})
 	return pbPresences
