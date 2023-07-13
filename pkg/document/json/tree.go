@@ -113,7 +113,7 @@ func validateTreeNodes(treeNodes []*TreeNode) error {
 }
 
 // Edit edits this tree with the given nodes.
-func (t *Tree) Edit(fromIdx, toIdx int, contents []*TreeNode) bool {
+func (t *Tree) Edit(fromIdx, toIdx int, contents ...*TreeNode) bool {
 	if fromIdx > toIdx {
 		panic(ErrIndexBoundary)
 	}
@@ -141,7 +141,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
 
 	var nodes []*crdt.TreeNode
 
-	if len(contents) != 0 {
+	if len(contents) != 0 && contents[0] != nil {
 		if err := validateTreeNodes(contents); err != nil {
 			panic(err)
 		}
@@ -213,7 +213,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
 }
 
 // EditByPath edits this tree with the given path and nodes.
-func (t *Tree) EditByPath(fromPath []int, toPath []int, contents []*TreeNode) bool {
+func (t *Tree) EditByPath(fromPath []int, toPath []int, contents ...*TreeNode) bool {
 	if len(fromPath) != len(toPath) {
 		panic(ErrPathLenDiff)
 	}

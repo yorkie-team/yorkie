@@ -201,7 +201,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = doc.Update(func(root *json.Object) error {
-			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, []*json.TreeNode{{Type: "text", Value: "gh"}})
+			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "gh"})
 			assert.Equal(t, `<doc><p><tn>gh</tn><tn>cd</tn></p></doc>`, root.GetTree("t").ToXML())
 			return nil
 		})
@@ -213,7 +213,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, doc.GarbageLen(), 0)
 
 		err = doc.Update(func(root *json.Object) error {
-			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, []*json.TreeNode{{Type: "text", Value: "cv"}})
+			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "cv"})
 			assert.Equal(t, `<doc><p><tn>cv</tn><tn>cd</tn></p></doc>`, root.GetTree("t").ToXML())
 			return nil
 		})
@@ -225,12 +225,12 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, doc.GarbageLen(), 0)
 
 		err = doc.Update(func(root *json.Object) error {
-			root.GetTree("t").EditByPath([]int{0}, []int{1}, []*json.TreeNode{{
+			root.GetTree("t").EditByPath([]int{0}, []int{1}, &json.TreeNode{
 				Type: "p", Children: []json.TreeNode{{
 					Type: "tn", Children: []json.TreeNode{{
 						Type: "text", Value: "ab",
 					}},
-				}}}})
+				}}})
 			assert.Equal(t, `<doc><p><tn>ab</tn></p></doc>`, root.GetTree("t").ToXML())
 			return nil
 		})
@@ -282,7 +282,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d2.Update(func(root *json.Object) error {
-			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, []*json.TreeNode{{Type: "text", Value: "gh"}})
+			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "gh"})
 			return nil
 		})
 		assert.NoError(t, err)
