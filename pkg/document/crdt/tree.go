@@ -473,7 +473,7 @@ func (t *Tree) ToXML() string {
 
 // EditByIndex edits the given range with the given value.
 // This method uses indexes instead of a pair of TreePos for testing.
-func (t *Tree) EditByIndex(start, end int, content *TreeNode, editedAt *time.Ticket) error {
+func (t *Tree) EditByIndex(start, end int, contents []*TreeNode, editedAt *time.Ticket) error {
 	fromPos, err := t.FindPos(start)
 	if err != nil {
 		return err
@@ -483,7 +483,7 @@ func (t *Tree) EditByIndex(start, end int, content *TreeNode, editedAt *time.Tic
 		return err
 	}
 
-	return t.Edit(fromPos, toPos, content, editedAt)
+	return t.Edit(fromPos, toPos, contents, editedAt)
 }
 
 // FindPos finds the position of the given index in the tree.
@@ -501,7 +501,7 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 
 // Edit edits the tree with the given range and content.
 // If the content is undefined, the range will be removed.
-func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket) error {
+func (t *Tree) Edit(from, to *TreePos, contents []*TreeNode, editedAt *time.Ticket) error {
 	// 01. split text nodes at the given range if needed.
 	toPos, toRight, err := t.findTreePosWithSplitText(to, editedAt)
 	if err != nil {
@@ -567,29 +567,39 @@ func (t *Tree) Edit(from, to *TreePos, content *TreeNode, editedAt *time.Ticket)
 	}
 
 	// 03. insert the given node at the given position.
-	if content != nil {
-		// 03-1. insert the content nodes to the list.
-		previous := fromRight.Prev
-		index.TraverseNode(content.IndexTreeNode, func(node *index.Node[*TreeNode], depth int) {
-			t.InsertAfter(previous, node.Value)
-			previous = node.Value
-		})
+	if len(contents) != 0 {
 
-		// 03-2. insert the content nodes to the tree.
-		if fromPos.Node.IsText() {
-			if fromPos.Offset == 0 {
-				if err := fromPos.Node.Parent.InsertBefore(content.IndexTreeNode, fromPos.Node); err != nil {
-					return err
+		previous := fromRight.Prev
+		offset := fromPos.Offset
+		node := fromPos.Node
+
+		for _, content := range contents {
+			// 03-1. insert the content nodes to the list.
+			index.TraverseNode(content.IndexTreeNode, func(node *index.Node[*TreeNode], depth int) {
+				t.InsertAfter(previous, node.Value)
+				previous = node.Value
+			})
+
+			// 03-2. insert the content nodes to the tree.
+			if node.IsText() {
+				// if `contents` is consist of text nodes, then there'll be only one element in `contents`
+				// thus, there's no need to update fromPos
+				if fromPos.Offset == 0 {
+					if err := node.Parent.InsertBefore(content.IndexTreeNode, node); err != nil {
+						return err
+					}
+				} else {
+					if err := node.Parent.InsertAfter(content.IndexTreeNode, node); err != nil {
+						return err
+					}
 				}
 			} else {
-				if err := fromPos.Node.Parent.InsertAfter(content.IndexTreeNode, fromPos.Node); err != nil {
+				target := node
+				if err := target.InsertAt(content.IndexTreeNode, offset+1); err != nil {
 					return err
 				}
-			}
-		} else {
-			target := fromPos.Node
-			if err := target.InsertAt(content.IndexTreeNode, fromPos.Offset+1); err != nil {
-				return err
+
+				offset++
 			}
 		}
 	}

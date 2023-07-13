@@ -261,6 +261,26 @@ func ToTreeNodes(treeNode *crdt.TreeNode) []*api.TreeNode {
 	return pbTreeNodes
 }
 
+// ToTreeNodesWhenEdit converts a TreeNodes to a slice of two-dimensional array of TreeNodes in post-order traversal.
+func ToTreeNodesWhenEdit(treeNodes []*crdt.TreeNode) []*api.TreeNodes {
+	pbTreeNodes := make([]*api.TreeNodes, len(treeNodes))
+
+	if len(treeNodes) == 0 {
+		return pbTreeNodes
+	}
+
+	for i, treeNode := range treeNodes {
+		var pbTreeNode []*api.TreeNode
+
+		pbTreeNode = append(pbTreeNode, ToTreeNodes(treeNode)[:]...)
+
+		pbTreeNodes[i] = &api.TreeNodes{}
+		pbTreeNodes[i].Content = append(pbTreeNodes[i].Content, pbTreeNode[:]...)
+	}
+
+	return pbTreeNodes
+}
+
 func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 	var attrs map[string]*api.NodeAttr
 	if treeNode.Attrs != nil {
