@@ -36,7 +36,9 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -64,21 +66,6 @@ var (
 	// is not supported.
 	ErrUnsupportedWatchResponseType = errors.New("unsupported watch response type")
 )
-
-// SyncOption is an option for sync. It contains the key of the document to
-// sync and the sync mode.
-type SyncOption struct {
-	key  key.Key
-	mode types.SyncMode
-}
-
-// WithPushOnly returns a SyncOption with the sync mode set to PushOnly.
-func (o SyncOption) WithPushOnly() SyncOption {
-	return SyncOption{
-		key:  o.key,
-		mode: types.SyncModePushOnly,
-	}
-}
 
 // Attachment represents the document attached.
 type Attachment struct {
@@ -115,9 +102,9 @@ const (
 
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
-	Type        WatchResponseType
-	PresenceMap map[string]innerpresence.Presence
-	Err         error
+	Type      WatchResponseType
+	Presences map[string]innerpresence.Presence
+	Err       error
 }
 
 // New creates an instance of Client.
@@ -258,7 +245,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 
 // Attach attaches the given document to this client. It tells the server that
 // this client will synchronize the given document.
-func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
+func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...AttachOption) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}
@@ -267,7 +254,19 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		return ErrDocumentNotDetached
 	}
 
+	opts := &AttachOptions{}
+	for _, opt := range options {
+		opt(opts)
+	}
+
 	doc.SetActor(c.id)
+
+	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+		p.Initialize(opts.Presence)
+		return nil
+	}); err != nil {
+		return err
+	}
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
@@ -320,14 +319,26 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 // To collect garbage things like CRDT tombstones left on the document, all the
 // changes should be applied to other replicas before GC time. For this, if the
 // document is no longer used by this client, it should be detached.
-func (c *Client) Detach(ctx context.Context, doc *document.Document, removeIfNotAttached bool) error {
+func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...DetachOption) error {
 	if c.status != activated {
 		return ErrClientNotActivated
+	}
+
+	opts := &DetachOptions{}
+	for _, opt := range options {
+		opt(opts)
 	}
 
 	attachment, ok := c.attachments[doc.Key()]
 	if !ok {
 		return ErrDocumentNotAttached
+	}
+
+	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+		p.Clear()
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
@@ -341,7 +352,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, removeIfNot
 			ClientId:            c.id.Bytes(),
 			DocumentId:          attachment.docID.String(),
 			ChangePack:          pbChangePack,
-			RemoveIfNotAttached: removeIfNotAttached,
+			RemoveIfNotAttached: opts.removeIfNotAttached,
 		},
 	)
 	if err != nil {
@@ -364,18 +375,10 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, removeIfNot
 	return nil
 }
 
-// WithDocKey creates a SyncOption with the given document key.
-func WithDocKey(k key.Key) SyncOption {
-	return SyncOption{
-		key:  k,
-		mode: types.SyncModePushPull,
-	}
-}
-
 // Sync pushes local changes of the attached documents to the server and
 // receives changes of the remote replica from the server then apply them to
 // local documents.
-func (c *Client) Sync(ctx context.Context, options ...SyncOption) error {
+func (c *Client) Sync(ctx context.Context, options ...SyncOptions) error {
 	if len(options) == 0 {
 		for _, attachment := range c.attachments {
 			options = append(options, WithDocKey(attachment.doc.Key()))
@@ -421,15 +424,15 @@ func (c *Client) Watch(
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentResponse_Initialization_:
 			var clientIDs []string
-			for _, clientId := range resp.Initialization.ClientIds {
-				id, err := time.ActorIDFromBytes(clientId)
+			for _, clientID := range resp.Initialization.ClientIds {
+				id, err := time.ActorIDFromBytes(clientID)
 				if err != nil {
 					return nil, err
 				}
 				clientIDs = append(clientIDs, id.String())
 			}
 
-			doc.SetWatchingClientSet(clientIDs...)
+			doc.SetOnlineClientSet(clientIDs...)
 			return nil, nil
 		case *api.WatchDocumentResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
@@ -446,29 +449,29 @@ func (c *Client) Watch(
 			case types.DocumentsChangedEvent:
 				return &WatchResponse{Type: DocumentChanged}, nil
 			case types.DocumentsWatchedEvent:
-				doc.AddWatchingClient(cli.String())
-				if doc.Presence(cli.String()) == nil {
+				doc.AddOnlineClient(cli.String())
+				if doc.OnlinePresence(cli.String()) == nil {
 					return nil, nil
 				}
 
 				return &WatchResponse{
 					Type: DocumentWatched,
-					PresenceMap: map[string]innerpresence.Presence{
-						cli.String(): *doc.Presence(cli.String()),
+					Presences: map[string]innerpresence.Presence{
+						cli.String(): doc.OnlinePresence(cli.String()),
 					},
 				}, nil
 			case types.DocumentsUnwatchedEvent:
-				presence := doc.Presence(cli.String())
-				doc.RemoveWatchingClient(cli.String())
+				pre := doc.OnlinePresence(cli.String())
+				doc.RemoveOnlineClient(cli.String())
 
 				p := innerpresence.Presence{}
-				if presence != nil {
-					p = *presence
+				if pre != nil {
+					p = pre
 				}
 
 				return &WatchResponse{
 					Type: DocumentUnwatched,
-					PresenceMap: map[string]innerpresence.Presence{
+					Presences: map[string]innerpresence.Presence{
 						cli.String(): p,
 					},
 				}, nil
@@ -524,7 +527,7 @@ func (c *Client) Watch(
 				if e.Type == document.WatchedEvent {
 					t = DocumentWatched
 				}
-				rch <- WatchResponse{Type: t, PresenceMap: e.PresenceMap}
+				rch <- WatchResponse{Type: t, Presences: e.Presences}
 			case <-ctx.Done():
 				return
 			}
@@ -560,7 +563,7 @@ func (c *Client) IsActive() bool {
 }
 
 // pushPullChanges pushes the changes of the document to the server and pulls the changes from the server.
-func (c *Client) pushPullChanges(ctx context.Context, opt SyncOption) error {
+func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}

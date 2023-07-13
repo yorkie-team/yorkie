@@ -42,7 +42,7 @@ func TestHistory(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, d1))
-		defer func() { assert.NoError(t, cli.Detach(ctx, d1, false)) }()
+		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("todos")
@@ -65,7 +65,8 @@ func TestHistory(t *testing.T) {
 
 		changes, err := adminCli.ListChangeSummaries(ctx, "default", d1.Key(), 0, 0, true)
 		assert.NoError(t, err)
-		assert.Len(t, changes, 3)
+		// NOTE(chacha912): When attaching, a change is made to set the initial presence.
+		assert.Len(t, changes, 4)
 
 		assert.Equal(t, "create todos", changes[2].Message)
 		assert.Equal(t, "buy coffee", changes[1].Message)

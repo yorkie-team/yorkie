@@ -44,8 +44,8 @@ func BytesToSnapshot(snapshot []byte) (*crdt.Object, *innerpresence.Map, error) 
 		return nil, nil, err
 	}
 
-	presenceMap := fromPresenceMap(pbSnapshot.GetPresenceMap())
-	return obj.(*crdt.Object), presenceMap, nil
+	presences := fromPresences(pbSnapshot.GetPresences())
+	return obj.(*crdt.Object), presences, nil
 }
 
 // BytesToObject creates an Object from the given byte array.

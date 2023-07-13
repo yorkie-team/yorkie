@@ -27,49 +27,64 @@ import (
 
 // Map is a map of Presence. It is wrapper of sync.Map to use type-safe.
 type Map struct {
-	presenceMap sync.Map
+	presences sync.Map
 }
 
 // NewMap creates a new instance of Map.
 func NewMap() *Map {
-	return &Map{presenceMap: sync.Map{}}
+	return &Map{presences: sync.Map{}}
 }
 
 // Store stores the given presence to the map.
-func (m *Map) Store(clientID string, presence *Presence) {
-	m.presenceMap.Store(clientID, presence)
+func (m *Map) Store(clientID string, presence Presence) {
+	m.presences.Store(clientID, presence)
 }
 
 // Range calls f sequentially for each key and value present in the map.
-func (m *Map) Range(f func(clientID string, presence *Presence) bool) {
-	m.presenceMap.Range(func(key, value interface{}) bool {
+func (m *Map) Range(f func(clientID string, presence Presence) bool) {
+	m.presences.Range(func(key, value interface{}) bool {
 		clientID := key.(string)
-		presence := value.(*Presence)
+		presence := value.(Presence)
 		return f(clientID, presence)
 	})
 }
 
 // Load returns the presence for the given clientID.
-func (m *Map) Load(clientID string) (*Presence, bool) {
-	presence, ok := m.presenceMap.Load(clientID)
+func (m *Map) Load(clientID string) (Presence, bool) {
+	presence, ok := m.presences.Load(clientID)
 	if !ok {
 		return nil, false
 	}
 
-	return presence.(*Presence), true
+	return presence.(Presence), true
 }
 
 // LoadOrStore returns the existing presence if exists.
 // Otherwise, it stores and returns the given presence.
-func (m *Map) LoadOrStore(clientID string, presence *Presence) *Presence {
-	actual, _ := m.presenceMap.LoadOrStore(clientID, presence)
-	return actual.(*Presence)
+func (m *Map) LoadOrStore(clientID string, presence Presence) Presence {
+	actual, _ := m.presences.LoadOrStore(clientID, presence)
+	return actual.(Presence)
 }
 
 // Has returns whether the given clientID exists.
 func (m *Map) Has(clientID string) bool {
-	_, ok := m.presenceMap.Load(clientID)
+	_, ok := m.presences.Load(clientID)
 	return ok
+}
+
+// Delete deletes the presence for the given clientID.
+func (m *Map) Delete(clientID string) {
+	m.presences.Delete(clientID)
+}
+
+// DeepCopy copies itself deeply.
+func (m *Map) DeepCopy() *Map {
+	copied := NewMap()
+	m.Range(func(clientID string, presence Presence) bool {
+		copied.Store(clientID, presence.DeepCopy())
+		return true
+	})
+	return copied
 }
 
 // PresenceChangeType represents the type of presence change.
@@ -78,12 +93,15 @@ type PresenceChangeType string
 const (
 	// Put represents the presence is put.
 	Put PresenceChangeType = "put"
+
+	// Clear represents the presence is cleared.
+	Clear PresenceChangeType = "clear"
 )
 
 // PresenceChange represents the change of presence.
 type PresenceChange struct {
-	ChangeType PresenceChangeType
-	Presence   Presence
+	ChangeType PresenceChangeType `json:"changeType"`
+	Presence   Presence           `json:"presence"`
 }
 
 // NewChangeFromJSON creates a new instance of PresenceChange from JSON.
@@ -104,14 +122,27 @@ func NewChangeFromJSON(encodedChange string) (*PresenceChange, error) {
 type Presence map[string]string
 
 // NewPresence creates a new instance of Presence.
-func NewPresence() *Presence {
-	data := make(map[string]string)
-	p := Presence(data)
-	return &p
+func NewPresence() Presence {
+	return make(map[string]string)
 }
 
 // Set sets the value of the given key.
-func (p *Presence) Set(key string, value string) {
-	presence := *p
-	presence[key] = value
+func (p Presence) Set(key string, value string) {
+	p[key] = value
+}
+
+// Clear clears the presence.
+func (p Presence) Clear() {
+	for k := range p {
+		delete(p, k)
+	}
+}
+
+// DeepCopy copies itself deeply.
+func (p Presence) DeepCopy() Presence {
+	clone := make(map[string]string)
+	for k, v := range p {
+		clone[k] = v
+	}
+	return clone
 }

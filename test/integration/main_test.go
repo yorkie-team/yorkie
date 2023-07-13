@@ -42,8 +42,8 @@ type clientAndDocPair struct {
 }
 
 type watchResponsePair struct {
-	Type        client.WatchResponseType
-	PresenceMap map[string]innerpresence.Presence
+	Type      client.WatchResponseType
+	Presences map[string]innerpresence.Presence
 }
 
 var defaultServer *server.Yorkie

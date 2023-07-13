@@ -231,6 +231,7 @@ func TestConfig() *server.Config {
 			AdminTokenDuration:         server.DefaultAdminTokenDuration.String(),
 			UseDefaultProject:          true,
 			ClientDeactivateThreshold:  server.DefaultClientDeactivateThreshold,
+			SnapshotInterval:           10,
 			SnapshotThreshold:          SnapshotThreshold,
 			SnapshotWithPurgingChanges: SnapshotWithPurgingChanges,
 			AuthWebhookMaxWaitInterval: AuthWebhookMaxWaitInterval.String(),

@@ -27,6 +27,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -63,7 +64,7 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"val":"B"}]}`, obj.Marshal())
 	})
 
-	t.Run("snapshot test", func(t *testing.T) {
+	t.Run("root snapshot test", func(t *testing.T) {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -241,5 +242,14 @@ func TestConverter(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.Equal(t, tree.ToXML(), clone.ToXML())
+	})
+
+	t.Run("empty presence converting test", func(t *testing.T) {
+		change, err := innerpresence.NewChangeFromJSON(`{"ChangeType":"put","Presence":{}}`)
+		assert.NoError(t, err)
+
+		pbChange := converter.ToPresenceChange(change)
+		clone := converter.FromPresenceChange(pbChange)
+		assert.Equal(t, change, clone)
 	})
 }

@@ -122,10 +122,10 @@ func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, er
 	}, nil
 }
 
-// ToPresenceMap converts the given model to Protobuf format.
-func ToPresenceMap(presenceMap *innerpresence.Map) map[string]*api.Presence {
+// ToPresences converts the given model to Protobuf format.
+func ToPresences(presences *innerpresence.Map) map[string]*api.Presence {
 	pbPresences := make(map[string]*api.Presence)
-	presenceMap.Range(func(k string, v *innerpresence.Presence) bool {
+	presences.Range(func(k string, v innerpresence.Presence) bool {
 		pbPresences[k] = ToPresence(v)
 		return true
 	})
@@ -133,13 +133,13 @@ func ToPresenceMap(presenceMap *innerpresence.Map) map[string]*api.Presence {
 }
 
 // ToPresence converts the given model to Protobuf format.
-func ToPresence(p *innerpresence.Presence) *api.Presence {
+func ToPresence(p innerpresence.Presence) *api.Presence {
 	if p == nil {
 		return nil
 	}
 
 	return &api.Presence{
-		Data: *p,
+		Data: p,
 	}
 }
 
@@ -153,6 +153,8 @@ func ToPresenceChange(p *innerpresence.PresenceChange) *api.PresenceChange {
 	switch p.ChangeType {
 	case innerpresence.Put:
 		changeType = api.PresenceChange_CHANGE_TYPE_PUT
+	case innerpresence.Clear:
+		changeType = api.PresenceChange_CHANGE_TYPE_CLEAR
 	}
 	return &api.PresenceChange{
 		Type:     changeType,

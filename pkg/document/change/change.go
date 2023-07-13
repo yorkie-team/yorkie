@@ -52,7 +52,7 @@ func New(id ID, message string, operations []operations.Operation, p *innerprese
 }
 
 // Execute applies this change to the given JSON root.
-func (c *Change) Execute(root *crdt.Root, presenceMap *innerpresence.Map) error {
+func (c *Change) Execute(root *crdt.Root, presences *innerpresence.Map) error {
 	for _, op := range c.operations {
 		if err := op.Execute(root); err != nil {
 			return err
@@ -60,9 +60,11 @@ func (c *Change) Execute(root *crdt.Root, presenceMap *innerpresence.Map) error 
 	}
 
 	if c.presenceChange != nil {
-		// TODO(hackerwins): For now, we only support PUT operation. We need to
-		// support other operations such as DELETE, PATCH.
-		presenceMap.Store(c.id.actorID.String(), &c.presenceChange.Presence)
+		if c.presenceChange.ChangeType == innerpresence.Clear {
+			presences.Delete(c.id.actorID.String())
+		} else {
+			presences.Store(c.id.actorID.String(), c.presenceChange.Presence)
+		}
 	}
 
 	return nil

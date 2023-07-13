@@ -26,26 +26,48 @@ import (
 
 // Presence represents a proxy for the Presence to be manipulated from the outside.
 type Presence struct {
-	presence *innerpresence.Presence
+	presence innerpresence.Presence
 	context  *change.Context
 }
 
 // New creates a new instance of Presence.
-func New(ctx *change.Context, presence *innerpresence.Presence) *Presence {
+func New(ctx *change.Context, presence innerpresence.Presence) *Presence {
 	return &Presence{
 		presence: presence,
 		context:  ctx,
 	}
 }
 
-// Set sets the value of the given key.
-func (p *Presence) Set(key string, value string) {
-	internalPresence := *p.presence
-	internalPresence.Set(key, value)
+// Initialize initializes the presence.
+func (p *Presence) Initialize(presence innerpresence.Presence) {
+	p.presence = presence
+	if p.presence == nil {
+		p.presence = innerpresence.NewPresence()
+	}
 
-	// TODO(hackerwins): We should support partial update here.
 	p.context.SetPresenceChange(innerpresence.PresenceChange{
 		ChangeType: "put",
-		Presence:   internalPresence,
+		Presence:   p.presence,
+	})
+}
+
+// Set sets the value of the given key.
+func (p *Presence) Set(key string, value string) {
+	innerPresence := p.presence
+	innerPresence.Set(key, value)
+
+	p.context.SetPresenceChange(innerpresence.PresenceChange{
+		ChangeType: "put",
+		Presence:   innerPresence,
+	})
+}
+
+// Clear clears the value of the given key.
+func (p *Presence) Clear() {
+	innerPresence := p.presence
+	innerPresence.Clear()
+
+	p.context.SetPresenceChange(innerpresence.PresenceChange{
+		ChangeType: innerpresence.Clear,
 	})
 }

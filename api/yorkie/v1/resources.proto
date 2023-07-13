@@ -30,7 +30,7 @@ option java_package = "dev.yorkie.api.v1";
 /////////////////////////////////////////
 message Snapshot {
   JSONElement root = 1;
-  map<string, Presence> presence_map = 2;
+  map<string, Presence> presences = 2;
 }
 
 /////////////////////////////////////////
@@ -294,6 +294,7 @@ message PresenceChange {
     CHANGE_TYPE_UNSPECIFIED = 0;
     CHANGE_TYPE_PUT = 1;
     CHANGE_TYPE_DELETE = 2;
+    CHANGE_TYPE_CLEAR = 3;
   }
   ChangeType type = 1;
   Presence presence = 2;

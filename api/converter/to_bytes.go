@@ -29,17 +29,17 @@ import (
 )
 
 // SnapshotToBytes converts the given document to byte array.
-func SnapshotToBytes(obj *crdt.Object, presenceMap *innerpresence.Map) ([]byte, error) {
+func SnapshotToBytes(obj *crdt.Object, presences *innerpresence.Map) ([]byte, error) {
 	pbElem, err := toJSONElement(obj)
 	if err != nil {
 		return nil, err
 	}
 
-	pbPresenceMap := ToPresenceMap(presenceMap)
+	pbPresences := ToPresences(presences)
 
 	bytes, err := proto.Marshal(&api.Snapshot{
-		Root:        pbElem,
-		PresenceMap: pbPresenceMap,
+		Root:      pbElem,
+		Presences: pbPresences,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal Snapshot to bytes: %w", err)

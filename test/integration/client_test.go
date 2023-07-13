@@ -139,27 +139,27 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		// 02. cli update the document with creating a counter
-		//     and sync with push-pull mode: CP(0, 0) -> CP(1, 1)
+		//     and sync with push-pull mode: CP(1, 1) -> CP(2, 2)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("counter", crdt.IntegerCnt, 0)
 			return nil
 		}))
-		assert.Equal(t, change.Checkpoint{ClientSeq: 0, ServerSeq: 0}, doc.Checkpoint())
+		assert.Equal(t, change.Checkpoint{ClientSeq: 1, ServerSeq: 1}, doc.Checkpoint())
 		assert.NoError(t, cli.Sync(ctx, client.WithDocKey(doc.Key())))
-		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 1, ServerSeq: 1})
+		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 2, ServerSeq: 2})
 
 		// 03. cli update the document with increasing the counter(0 -> 1)
-		//     and sync with push-only mode: CP(1, 1) -> CP(2, 1)
+		//     and sync with push-only mode: CP(2, 2) -> CP(3, 2)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
 		}))
 		assert.Len(t, doc.CreateChangePack().Changes, 1)
 		assert.NoError(t, cli.Sync(ctx, client.WithDocKey(doc.Key()).WithPushOnly()))
-		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 2, ServerSeq: 1})
+		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 3, ServerSeq: 2})
 
 		// 04. cli update the document with increasing the counter(1 -> 2)
-		//     and sync with push-pull mode. CP(2, 1) -> CP(3, 3)
+		//     and sync with push-pull mode. CP(3, 2) -> CP(4, 4)
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("counter").Increase(1)
 			return nil
@@ -169,7 +169,7 @@ func TestClient(t *testing.T) {
 		// so the ChangePack of the request only has the increase(1 -> 2).
 		assert.Len(t, doc.CreateChangePack().Changes, 1)
 		assert.NoError(t, cli.Sync(ctx, client.WithDocKey(doc.Key())))
-		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 3, ServerSeq: 3})
+		assert.Equal(t, doc.Checkpoint(), change.Checkpoint{ClientSeq: 4, ServerSeq: 4})
 		assert.Equal(t, "2", doc.Root().GetCounter("counter").Marshal())
 	})
 }

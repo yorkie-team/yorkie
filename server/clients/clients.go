@@ -73,6 +73,11 @@ func Deactivate(
 			return nil, err
 		}
 
+		// TODO(hackerwins): We need to remove the presence of the client from the document.
+		// Be careful that housekeeping is executed by the leader. And documents are sharded
+		// by the servers in the cluster. So, we need to consider the case where the leader is
+		// not the same as the server that handles the document.
+
 		if err := db.UpdateSyncedSeq(
 			ctx,
 			clientInfo,

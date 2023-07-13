@@ -172,7 +172,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 			changeID,
 			pbChange.Message,
 			ops,
-			fromPresenceChange(pbChange.PresenceChange),
+			FromPresenceChange(pbChange.PresenceChange),
 		))
 	}
 
@@ -282,24 +282,29 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 	return ops, nil
 }
 
-func fromPresenceMap(pbPresenceMap map[string]*api.Presence) *innerpresence.Map {
-	presenceMap := innerpresence.NewMap()
-	for id, pbPresence := range pbPresenceMap {
-		presenceMap.Store(id, fromPresence(pbPresence))
+func fromPresences(pbPresences map[string]*api.Presence) *innerpresence.Map {
+	presences := innerpresence.NewMap()
+	for id, pbPresence := range pbPresences {
+		presences.Store(id, fromPresence(pbPresence))
 	}
-	return presenceMap
+	return presences
 }
 
-func fromPresence(pbPresence *api.Presence) *innerpresence.Presence {
+func fromPresence(pbPresence *api.Presence) innerpresence.Presence {
 	if pbPresence == nil {
 		return nil
 	}
 
-	p := innerpresence.Presence(pbPresence.GetData())
-	return &p
+	data := pbPresence.GetData()
+	if data == nil {
+		data = innerpresence.NewPresence()
+	}
+
+	return data
 }
 
-func fromPresenceChange(pbPresenceChange *api.PresenceChange) *innerpresence.PresenceChange {
+// FromPresenceChange converts the given Protobuf formats to model format.
+func FromPresenceChange(pbPresenceChange *api.PresenceChange) *innerpresence.PresenceChange {
 	if pbPresenceChange == nil {
 		return nil
 	}
@@ -308,11 +313,19 @@ func fromPresenceChange(pbPresenceChange *api.PresenceChange) *innerpresence.Pre
 	switch pbPresenceChange.Type {
 	case api.PresenceChange_CHANGE_TYPE_PUT:
 		changeType = innerpresence.Put
+	case api.PresenceChange_CHANGE_TYPE_CLEAR:
+		changeType = innerpresence.Clear
 	}
+
 	p := innerpresence.PresenceChange{
 		ChangeType: changeType,
 		Presence:   pbPresenceChange.Presence.Data,
 	}
+
+	if p.ChangeType == innerpresence.Put && p.Presence == nil {
+		p.Presence = innerpresence.NewPresence()
+	}
+
 	return &p
 }
 
