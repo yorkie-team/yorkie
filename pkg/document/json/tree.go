@@ -17,6 +17,8 @@
 package json
 
 import (
+	"errors"
+
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -27,6 +29,19 @@ import (
 const (
 	// DefaultRootNodeType is the default type of root node.
 	DefaultRootNodeType = "root"
+)
+
+var (
+	// ErrEmptyTextNode is returned when there's empty string value in text node
+	ErrEmptyTextNode = errors.New("text node cannot have empty value")
+	// ErrMixedNodeType is returned when there're element node and text node inside contents array
+	ErrMixedNodeType = errors.New("element node and text node cannot be passed together")
+	// ErrIndexBoundary is returned when from index is bigger than to index
+	ErrIndexBoundary = errors.New("from should be less than or equal to to")
+	// ErrPathLenDiff is returned when two paths have different length
+	ErrPathLenDiff = errors.New("both paths should have same length")
+	// ErrEmptyPath is returned when there's empty path
+	ErrEmptyPath = errors.New("path should not be empty")
 )
 
 // TreeNode is a node of Tree.
@@ -62,28 +77,45 @@ func NewTree(ctx *change.Context, tree *crdt.Tree) *Tree {
 	}
 }
 
-// Edit edits this tree with the given node.
-func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
-	if fromIdx > toIdx {
-		panic("from should be less than or equal to to")
+// validateTextNode make sure that text node have non-empty string value
+func validateTextNode(treeNode TreeNode) error {
+	if len(treeNode.Value) == 0 {
+		return ErrEmptyTextNode
 	}
-	ticket := t.context.IssueTimeTicket()
 
-	var node *crdt.TreeNode
-	if content != nil {
-		var attributes *crdt.RHT
-		if content.Attributes != nil {
-			attributes = crdt.NewRHT()
-			for key, val := range content.Attributes {
-				attributes.Set(key, val, ticket)
+	return nil
+}
+
+// validateTextNode make sure that treeNodes consist of only one of the two types (text or element)
+func validateTreeNodes(treeNodes []*TreeNode) error {
+	firstTreeNodeType := treeNodes[0].Type
+
+	if firstTreeNodeType == index.DefaultTextType {
+		for _, treeNode := range treeNodes {
+			if treeNode.Type != index.DefaultTextType {
+				return ErrMixedNodeType
+			}
+
+			if err := validateTextNode(*treeNode); err != nil {
+				return err
 			}
 		}
-		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
-		for _, child := range content.Children {
-			if err := buildDescendants(t.context, child, node); err != nil {
-				panic(err)
+
+	} else {
+		for _, treeNode := range treeNodes {
+			if treeNode.Type == index.DefaultTextType {
+				return ErrMixedNodeType
 			}
 		}
+	}
+
+	return nil
+}
+
+// Edit edits this tree with the given nodes.
+func (t *Tree) Edit(fromIdx, toIdx int, contents ...*TreeNode) bool {
+	if fromIdx > toIdx {
+		panic(ErrIndexBoundary)
 	}
 
 	fromPos, err := t.Tree.FindPos(fromIdx)
@@ -95,16 +127,73 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		panic(err)
 	}
 
-	var clone *crdt.TreeNode
-	if node != nil {
-		clone, err = node.DeepCopy()
-		if err != nil {
+	return t.edit(fromPos, toPos, contents)
+}
+
+// Len returns the length of this tree.
+func (t *Tree) Len() int {
+	return t.IndexTree.Root().Len()
+}
+
+// edit edits the tree with the given nodes
+func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
+	ticket := t.context.IssueTimeTicket()
+
+	var nodes []*crdt.TreeNode
+
+	if len(contents) != 0 && contents[0] != nil {
+		if err := validateTreeNodes(contents); err != nil {
 			panic(err)
+		}
+
+		if contents[0].Type == index.DefaultTextType {
+			value := ""
+
+			for _, content := range contents {
+				value += content.Value
+			}
+
+			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), index.DefaultTextType, nil, value))
+		} else {
+			for _, content := range contents {
+				var attributes *crdt.RHT
+				if content.Attributes != nil {
+					attributes = crdt.NewRHT()
+					for key, val := range content.Attributes {
+						attributes.Set(key, val, ticket)
+					}
+				}
+				var node *crdt.TreeNode
+
+				node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
+
+				for _, child := range content.Children {
+					if err := buildDescendants(t.context, child, node); err != nil {
+						panic(err)
+					}
+				}
+
+				nodes = append(nodes, node)
+			}
+		}
+	}
+
+	var clones []*crdt.TreeNode
+	if len(nodes) != 0 {
+		for _, node := range nodes {
+			var clone *crdt.TreeNode
+
+			clone, err := node.DeepCopy()
+			if err != nil {
+				panic(err)
+			}
+
+			clones = append(clones, clone)
 		}
 	}
 
 	ticket = t.context.LastTimeTicket()
-	if err = t.Tree.Edit(fromPos, toPos, clone, ticket); err != nil {
+	if err := t.Tree.Edit(fromPos, toPos, clones, ticket); err != nil {
 		panic(err)
 	}
 
@@ -112,7 +201,7 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 		t.CreatedAt(),
 		fromPos,
 		toPos,
-		node,
+		nodes,
 		ticket,
 	))
 
@@ -123,30 +212,14 @@ func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode) bool {
 	return true
 }
 
-// Len returns the length of this tree.
-func (t *Tree) Len() int {
-	return t.IndexTree.Root().Len()
-}
+// EditByPath edits this tree with the given path and nodes.
+func (t *Tree) EditByPath(fromPath []int, toPath []int, contents ...*TreeNode) bool {
+	if len(fromPath) != len(toPath) {
+		panic(ErrPathLenDiff)
+	}
 
-// EditByPath edits this tree with the given path and node.
-func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool {
-	ticket := t.context.IssueTimeTicket()
-
-	var node *crdt.TreeNode
-	if content != nil {
-		var attributes *crdt.RHT
-		if content.Attributes != nil {
-			attributes = crdt.NewRHT()
-			for key, val := range content.Attributes {
-				attributes.Set(key, val, ticket)
-			}
-		}
-		node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
-		for _, child := range content.Children {
-			if err := buildDescendants(t.context, child, node); err != nil {
-				panic(err)
-			}
-		}
+	if len(fromPath) == 0 || len(toPath) == 0 {
+		panic(ErrEmptyPath)
 	}
 
 	fromPos, err := t.Tree.PathToPos(fromPath)
@@ -158,32 +231,7 @@ func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode) bool 
 		panic(err)
 	}
 
-	var clone *crdt.TreeNode
-	if node != nil {
-		clone, err = node.DeepCopy()
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	ticket = t.context.LastTimeTicket()
-	if err = t.Tree.Edit(fromPos, toPos, clone, ticket); err != nil {
-		panic(err)
-	}
-
-	t.context.Push(operations.NewTreeEdit(
-		t.CreatedAt(),
-		fromPos,
-		toPos,
-		node,
-		ticket,
-	))
-
-	if fromPos.CreatedAt.Compare(toPos.CreatedAt) != 0 || fromPos.Offset != toPos.Offset {
-		t.context.RegisterElementHasRemovedNodes(t.Tree)
-	}
-
-	return true
+	return t.edit(fromPos, toPos, contents)
 }
 
 // Style sets the attributes to the elements of the given range.
@@ -237,6 +285,11 @@ func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crd
 // buildDescendants converts the given node to a CRDT-based tree node.
 func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) error {
 	if n.Type == index.DefaultTextType {
+
+		if err := validateTextNode(n); err != nil {
+			return err
+		}
+
 		treeNode := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), n.Type, nil, n.Value)
 		return parent.Append(treeNode)
 	}

@@ -108,7 +108,7 @@ message Operation {
     TimeTicket parent_created_at = 1;
     TreePos from = 2;
     TreePos to = 3;
-    repeated TreeNode content = 4;
+    repeated TreeNodes contents = 4;
     TimeTicket executed_at = 5;
   }
   message TreeStyle {
@@ -231,6 +231,10 @@ message TreeNode {
   TreePos ins_prev_pos = 5;
   int32 depth = 6;
   map<string, NodeAttr> attributes = 7;
+}
+
+message TreeNodes {
+  repeated TreeNode content = 1;
 }
 
 message TreePos {
