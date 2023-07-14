@@ -46,7 +46,7 @@ func (p *Presence) Initialize(presence innerpresence.Presence) {
 	}
 
 	p.context.SetPresenceChange(innerpresence.PresenceChange{
-		ChangeType: "put",
+		ChangeType: innerpresence.Put,
 		Presence:   p.presence,
 	})
 }
@@ -57,7 +57,7 @@ func (p *Presence) Set(key string, value string) {
 	innerPresence.Set(key, value)
 
 	p.context.SetPresenceChange(innerpresence.PresenceChange{
-		ChangeType: "put",
+		ChangeType: innerpresence.Put,
 		Presence:   innerPresence,
 	})
 }

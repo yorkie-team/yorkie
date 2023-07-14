@@ -283,7 +283,8 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 
 // MyPresence returns the presence of the actor currently editing the document.
 func (d *InternalDocument) MyPresence() innerpresence.Presence {
-	return d.presences.LoadOrStore(d.changeID.ActorID().String(), innerpresence.NewPresence())
+	p := d.presences.LoadOrStore(d.changeID.ActorID().String(), innerpresence.NewPresence())
+	return p.DeepCopy()
 }
 
 // Presences returns the map of presences of the actors currently editing the document.

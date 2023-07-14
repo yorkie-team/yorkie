@@ -209,6 +209,192 @@ func TestPresence(t *testing.T) {
 		assert.Equal(t, expected, responsePairs)
 	})
 
+	t.Run("unwatch after detach events test", func(t *testing.T) {
+		// 01. Create two clients and documents and attach them.
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		// 02. Watch the first client's document.
+		var expected []watchResponsePair
+		var responsePairs []watchResponsePair
+		wgEvents := sync.WaitGroup{}
+		wgEvents.Add(1)
+
+		watch1Ctx, cancel1 := context.WithCancel(ctx)
+		defer cancel1()
+		wrch, err := c1.Watch(watch1Ctx, d1)
+		assert.NoError(t, err)
+		go func() {
+			defer func() {
+				wgEvents.Done()
+			}()
+			for {
+				select {
+				case <-time.After(10 * time.Second):
+					assert.Fail(t, "timeout")
+					return
+				case wr := <-wrch:
+					if wr.Err != nil {
+						assert.Fail(t, "unexpected stream closing", wr.Err)
+						return
+					}
+					if wr.Type != client.DocumentChanged {
+						responsePairs = append(responsePairs, watchResponsePair{
+							Type:      wr.Type,
+							Presences: wr.Presences,
+						})
+					}
+
+					if len(responsePairs) == 4 {
+						return
+					}
+				}
+			}
+		}()
+
+		// 03. Watch the second client's document.
+		expected = append(expected, watchResponsePair{
+			Type: client.DocumentWatched,
+			Presences: map[string]innerpresence.Presence{
+				c2.ID().String(): {},
+			},
+		})
+		watch2Ctx, cancel2 := context.WithCancel(ctx)
+		defer cancel2()
+		_, err = c2.Watch(watch2Ctx, d2)
+		assert.NoError(t, err)
+
+		// 04. Update the second client's presence.
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("updated", "true")
+			return nil
+		})
+		assert.NoError(t, err)
+		expected = append(expected, watchResponsePair{
+			Type: client.PresenceChanged,
+			Presences: map[string]innerpresence.Presence{
+				c2.ID().String(): d2.MyPresence(),
+			},
+		})
+		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+
+		// 05. Unwatch the second client's document.
+		expected = append(expected, watchResponsePair{
+			Type: client.PresenceChanged,
+			Presences: map[string]innerpresence.Presence{
+				c2.ID().String(): nil,
+			},
+		})
+		assert.NoError(t, c2.Detach(ctx, d2))
+		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+
+		expected = append(expected, watchResponsePair{
+			Type: client.DocumentUnwatched,
+			Presences: map[string]innerpresence.Presence{
+				c2.ID().String(): nil,
+			},
+		})
+		cancel2()
+
+		wgEvents.Wait()
+		assert.Equal(t, expected, responsePairs)
+	})
+
+	t.Run("detach after unwatch events test", func(t *testing.T) {
+		// 01. Create two clients and documents and attach them.
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		// 02. Watch the first client's document.
+		var expected []watchResponsePair
+		var responsePairs []watchResponsePair
+		wgEvents := sync.WaitGroup{}
+		wgEvents.Add(1)
+
+		watch1Ctx, cancel1 := context.WithCancel(ctx)
+		defer cancel1()
+		wrch, err := c1.Watch(watch1Ctx, d1)
+		assert.NoError(t, err)
+		go func() {
+			defer func() {
+				wgEvents.Done()
+			}()
+			for {
+				select {
+				case <-time.After(10 * time.Second):
+					assert.Fail(t, "timeout")
+					return
+				case wr := <-wrch:
+					if wr.Err != nil {
+						assert.Fail(t, "unexpected stream closing", wr.Err)
+						return
+					}
+					if wr.Type != client.DocumentChanged {
+						responsePairs = append(responsePairs, watchResponsePair{
+							Type:      wr.Type,
+							Presences: wr.Presences,
+						})
+					}
+
+					if len(responsePairs) == 3 {
+						return
+					}
+				}
+			}
+		}()
+
+		// 03. Watch the second client's document.
+		expected = append(expected, watchResponsePair{
+			Type: client.DocumentWatched,
+			Presences: map[string]innerpresence.Presence{
+				c2.ID().String(): {},
+			},
+		})
+		watch2Ctx, cancel2 := context.WithCancel(ctx)
+		defer cancel2()
+		_, err = c2.Watch(watch2Ctx, d2)
+		assert.NoError(t, err)
+
+		// 04. Update the second client's presence.
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("updated", "true")
+			return nil
+		})
+		assert.NoError(t, err)
+		expected = append(expected, watchResponsePair{
+			Type: client.PresenceChanged,
+			Presences: map[string]innerpresence.Presence{
+				c2.ID().String(): d2.MyPresence(),
+			},
+		})
+		assert.NoError(t, c2.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+
+		// 05. Unwatch the second client's document.
+		expected = append(expected, watchResponsePair{
+			Type: client.DocumentUnwatched,
+			Presences: map[string]innerpresence.Presence{
+				c2.ID().String(): d2.MyPresence(),
+			},
+		})
+		cancel2()
+
+		assert.NoError(t, c2.Detach(ctx, d2))
+		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+
+		wgEvents.Wait()
+		assert.Equal(t, expected, responsePairs)
+	})
+
 	t.Run("watching multiple documents test", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -259,14 +445,14 @@ func TestPresence(t *testing.T) {
 			}
 		}()
 
-		// 01. The second client attaches a document with the same key as the first client's document
+		// 03. The second client attaches a document with the same key as the first client's document
 		// and another document with a different key.
 		assert.NoError(t, c2.Attach(ctx, d2))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 		assert.NoError(t, c2.Attach(ctx, d3))
 		defer func() { assert.NoError(t, c2.Detach(ctx, d3)) }()
 
-		// 02. The second client watches the documents attached by itself.
+		// 04. The second client watches the documents attached by itself.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
 			Presences: map[string]innerpresence.Presence{
@@ -282,7 +468,7 @@ func TestPresence(t *testing.T) {
 		_, err = c2.Watch(watch3Ctx, d3)
 		assert.NoError(t, err)
 
-		// 03. The second client unwatch the documents attached by itself.
+		// 05. The second client unwatch the documents attached by itself.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentUnwatched,
 			Presences: map[string]innerpresence.Presence{
