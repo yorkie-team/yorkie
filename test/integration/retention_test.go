@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"reflect"
 	"testing"
@@ -28,7 +27,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -58,6 +56,7 @@ func TestRetention(t *testing.T) {
 	t.Run("history test with purging changes", func(t *testing.T) {
 		conf := helper.TestConfig()
 		conf.Backend.SnapshotWithPurgingChanges = true
+		conf.Backend.SnapshotInterval = 0
 		testServer, err := server.New(conf)
 		if err != nil {
 			log.Fatal(err)
@@ -67,10 +66,7 @@ func TestRetention(t *testing.T) {
 			logging.DefaultLogger().Fatal(err)
 		}
 
-		cli, err := client.Dial(
-			testServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 0)}),
-		)
+		cli, err := client.Dial(testServer.RPCAddr())
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(context.Background()))
 		defer func() {
@@ -121,6 +117,7 @@ func TestRetention(t *testing.T) {
 	t.Run("snapshot with purging changes test", func(t *testing.T) {
 		serverConfig := helper.TestConfig()
 		// Default SnapshotInterval is 0, SnapshotThreshold must also be 0
+		serverConfig.Backend.SnapshotInterval = 0
 		serverConfig.Backend.SnapshotThreshold = 0
 		serverConfig.Backend.SnapshotWithPurgingChanges = true
 		testServer, err := server.New(serverConfig)
@@ -132,10 +129,7 @@ func TestRetention(t *testing.T) {
 			logging.DefaultLogger().Fatal(err)
 		}
 
-		cli1, err := client.Dial(
-			testServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 0)}),
-		)
+		cli1, err := client.Dial(testServer.RPCAddr())
 		assert.NoError(t, err)
 
 		err = cli1.Activate(context.Background())
@@ -208,10 +202,7 @@ func TestRetention(t *testing.T) {
 		// one is most recent ServerSeq and one is one older from the most recent ServerSeq
 		assert.Len(t, changes, 2)
 
-		cli2, err := client.Dial(
-			testServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 1)}),
-		)
+		cli2, err := client.Dial(testServer.RPCAddr())
 		assert.NoError(t, err)
 
 		err = cli2.Activate(context.Background())
@@ -244,6 +235,6 @@ func TestRetention(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		assert.Len(t, changes, 8)
+		assert.Len(t, changes, 9)
 	})
 }

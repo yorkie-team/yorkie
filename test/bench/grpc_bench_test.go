@@ -61,7 +61,7 @@ func activeClients(b *testing.B, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
 			defaultServer.RPCAddr(),
-			client.WithMaxRecvMsgSize(int(10*1024*1024)),
+			client.WithMaxRecvMsgSize(50*1024*1024),
 		)
 		assert.NoError(b, err)
 
@@ -130,6 +130,7 @@ func watchDoc(
 	ctx context.Context,
 	b *testing.B,
 	cli *client.Client,
+	d *document.Document,
 	rch <-chan client.WatchResponse,
 	done <-chan bool,
 ) {
@@ -142,7 +143,7 @@ func watchDoc(
 			assert.NoError(b, resp.Err)
 
 			if resp.Type == client.DocumentChanged {
-				err := cli.Sync(ctx, client.WithDocKey(resp.Key))
+				err := cli.Sync(ctx, client.WithDocKey(d.Key()))
 				assert.NoError(b, err)
 			}
 		case <-done:
@@ -231,16 +232,15 @@ func BenchmarkRPC(b *testing.B) {
 		done2 := make(chan bool)
 
 		for i := 0; i < b.N; i++ {
-
 			wg := sync.WaitGroup{}
 			wg.Add(2)
 			go func() {
 				defer wg.Done()
-				watchDoc(ctx, b, c1, rch1, done2)
+				watchDoc(ctx, b, c1, d1, rch1, done2)
 			}()
 			go func() {
 				defer wg.Done()
-				watchDoc(ctx, b, c2, rch2, done1)
+				watchDoc(ctx, b, c2, d2, rch2, done1)
 			}()
 
 			go func() {
