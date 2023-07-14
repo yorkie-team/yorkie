@@ -1031,7 +1031,7 @@ func (c *Client) CreateSnapshotInfo(
 	if err != nil {
 		return err
 	}
-	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.PresenceMap())
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.Presences())
 	if err != nil {
 		return err
 	}

@@ -367,7 +367,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 6, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		err = c2.Detach(ctx, d2, false)
+		err = c2.Detach(ctx, d2)
 		assert.NoError(t, err)
 
 		// (2, 1) -> (2, 2): syncedseqs:(1, x)

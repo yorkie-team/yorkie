@@ -37,9 +37,9 @@ func TestCoordinator(t *testing.T) {
 			id, err := time.ActorIDFromBytes([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i)})
 			assert.NoError(t, err)
 
-			_, peers, err := coordinator.Subscribe(ctx, types.Client{ID: id}, docID)
+			_, clientIDs, err := coordinator.Subscribe(ctx, id, docID)
 			assert.NoError(t, err)
-			assert.Len(t, peers, i+1)
+			assert.Len(t, clientIDs, i+1)
 		}
 	})
 }

@@ -672,7 +672,7 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		watchResp, err := testClient.WatchDocument(
 			context.Background(),
 			&api.WatchDocumentRequest{
-				Client:     &api.Client{Id: activateResp.ClientId, Presence: &api.Presence{}},
+				ClientId:   activateResp.ClientId,
 				DocumentId: resPack.DocumentId,
 			},
 		)

@@ -30,7 +30,7 @@ option java_package = "dev.yorkie.api.v1";
 /////////////////////////////////////////
 message Snapshot {
   JSONElement root = 1;
-  map<string, Presence> presence_map = 2;
+  map<string, Presence> presences = 2;
 }
 
 /////////////////////////////////////////
@@ -294,18 +294,14 @@ message PresenceChange {
     CHANGE_TYPE_UNSPECIFIED = 0;
     CHANGE_TYPE_PUT = 1;
     CHANGE_TYPE_DELETE = 2;
+    CHANGE_TYPE_CLEAR = 3;
   }
   ChangeType type = 1;
-  map<string, string> presence = 2;
+  Presence presence = 2;
 }
 
 message Presence {
   map<string, string> data = 1;
-}
-
-message Client {
-  bytes id = 1;
-  Presence presence = 2;
 }
 
 message Checkpoint {
@@ -346,11 +342,9 @@ enum DocEventType {
   DOC_EVENT_TYPE_DOCUMENTS_CHANGED = 0;
   DOC_EVENT_TYPE_DOCUMENTS_WATCHED = 1;
   DOC_EVENT_TYPE_DOCUMENTS_UNWATCHED = 2;
-  DOC_EVENT_TYPE_PRESENCE_CHANGED = 3;
 }
 
 message DocEvent {
   DocEventType type = 1;
-  Client publisher = 2;
-  string document_id = 3;
+  bytes publisher = 2;
 }

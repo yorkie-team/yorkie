@@ -35,7 +35,10 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -64,26 +67,10 @@ var (
 	ErrUnsupportedWatchResponseType = errors.New("unsupported watch response type")
 )
 
-// SyncOption is an option for sync. It contains the key of the document to
-// sync and the sync mode.
-type SyncOption struct {
-	key  key.Key
-	mode types.SyncMode
-}
-
-// WithPushOnly returns a SyncOption with the sync mode set to PushOnly.
-func (o SyncOption) WithPushOnly() SyncOption {
-	return SyncOption{
-		key:  o.key,
-		mode: types.SyncModePushOnly,
-	}
-}
-
-// Attachment represents the document attached and peers.
+// Attachment represents the document attached.
 type Attachment struct {
 	doc   *document.Document
 	docID types.ID
-	peers map[string]types.PresenceInfo
 }
 
 // Client is a normal client that can communicate with the server.
@@ -96,11 +83,10 @@ type Client struct {
 	dialOptions []grpc.DialOption
 	logger      *zap.Logger
 
-	id           *time.ActorID
-	key          string
-	presenceInfo types.PresenceInfo
-	status       status
-	attachments  map[key.Key]*Attachment
+	id          *time.ActorID
+	key         string
+	status      status
+	attachments map[key.Key]*Attachment
 }
 
 // WatchResponseType is type of watch response.
@@ -108,16 +94,17 @@ type WatchResponseType string
 
 // The values below are types of WatchResponseType.
 const (
-	DocumentsChanged WatchResponseType = "documents-changed"
-	PeersChanged     WatchResponseType = "peers-changed"
+	DocumentChanged   WatchResponseType = "document-changed"
+	DocumentWatched   WatchResponseType = "document-watched"
+	DocumentUnwatched WatchResponseType = "document-unwatched"
+	PresenceChanged   WatchResponseType = "presence-changed"
 )
 
 // WatchResponse is a structure representing response of Watch.
 type WatchResponse struct {
-	Type          WatchResponseType
-	Key           key.Key
-	PeersMapByDoc map[key.Key]map[string]types.Presence
-	Err           error
+	Type      WatchResponseType
+	Presences map[string]innerpresence.Presence
+	Err       error
 }
 
 // New creates an instance of Client.
@@ -130,11 +117,6 @@ func New(opts ...Option) (*Client, error) {
 	k := options.Key
 	if k == "" {
 		k = xid.New().String()
-	}
-
-	presence := types.Presence{}
-	if options.Presence != nil {
-		presence = options.Presence
 	}
 
 	var dialOptions []grpc.DialOption
@@ -171,10 +153,9 @@ func New(opts ...Option) (*Client, error) {
 		options:     options,
 		logger:      logger,
 
-		key:          k,
-		presenceInfo: types.PresenceInfo{Presence: presence},
-		status:       deactivated,
-		attachments:  make(map[key.Key]*Attachment),
+		key:         k,
+		status:      deactivated,
+		attachments: make(map[key.Key]*Attachment),
 	}, nil
 }
 
@@ -264,7 +245,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 
 // Attach attaches the given document to this client. It tells the server that
 // this client will synchronize the given document.
-func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
+func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...AttachOption) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}
@@ -273,7 +254,19 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 		return ErrDocumentNotDetached
 	}
 
+	opts := &AttachOptions{}
+	for _, opt := range options {
+		opt(opts)
+	}
+
 	doc.SetActor(c.id)
+
+	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+		p.Initialize(opts.Presence)
+		return nil
+	}); err != nil {
+		return err
+	}
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
@@ -315,7 +308,6 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 	c.attachments[doc.Key()] = &Attachment{
 		doc:   doc,
 		docID: types.ID(res.DocumentId),
-		peers: make(map[string]types.PresenceInfo),
 	}
 
 	return nil
@@ -327,14 +319,26 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document) error {
 // To collect garbage things like CRDT tombstones left on the document, all the
 // changes should be applied to other replicas before GC time. For this, if the
 // document is no longer used by this client, it should be detached.
-func (c *Client) Detach(ctx context.Context, doc *document.Document, removeIfNotAttached bool) error {
+func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...DetachOption) error {
 	if c.status != activated {
 		return ErrClientNotActivated
+	}
+
+	opts := &DetachOptions{}
+	for _, opt := range options {
+		opt(opts)
 	}
 
 	attachment, ok := c.attachments[doc.Key()]
 	if !ok {
 		return ErrDocumentNotAttached
+	}
+
+	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+		p.Clear()
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
@@ -348,7 +352,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, removeIfNot
 			ClientId:            c.id.Bytes(),
 			DocumentId:          attachment.docID.String(),
 			ChangePack:          pbChangePack,
-			RemoveIfNotAttached: removeIfNotAttached,
+			RemoveIfNotAttached: opts.removeIfNotAttached,
 		},
 	)
 	if err != nil {
@@ -371,18 +375,10 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, removeIfNot
 	return nil
 }
 
-// WithDocKey creates a SyncOption with the given document key.
-func WithDocKey(k key.Key) SyncOption {
-	return SyncOption{
-		key:  k,
-		mode: types.SyncModePushPull,
-	}
-}
-
 // Sync pushes local changes of the attached documents to the server and
 // receives changes of the remote replica from the server then apply them to
 // local documents.
-func (c *Client) Sync(ctx context.Context, options ...SyncOption) error {
+func (c *Client) Sync(ctx context.Context, options ...SyncOptions) error {
 	if len(options) == 0 {
 		for _, attachment := range c.attachments {
 			options = append(options, WithDocKey(attachment.doc.Key()))
@@ -416,10 +412,7 @@ func (c *Client) Watch(
 	stream, err := c.client.WatchDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.WatchDocumentRequest{
-			Client: converter.ToClient(types.Client{
-				ID:           c.id,
-				PresenceInfo: c.presenceInfo,
-			}),
+			ClientId:   c.id.Bytes(),
 			DocumentId: attachment.docID.String(),
 		},
 	)
@@ -430,16 +423,16 @@ func (c *Client) Watch(
 	handleResponse := func(pbResp *api.WatchDocumentResponse) (*WatchResponse, error) {
 		switch resp := pbResp.Body.(type) {
 		case *api.WatchDocumentResponse_Initialization_:
-			clients, err := converter.FromClients(resp.Initialization.Peers)
-			if err != nil {
-				return nil, err
+			var clientIDs []string
+			for _, clientID := range resp.Initialization.ClientIds {
+				id, err := time.ActorIDFromBytes(clientID)
+				if err != nil {
+					return nil, err
+				}
+				clientIDs = append(clientIDs, id.String())
 			}
 
-			attachment := c.attachments[doc.Key()]
-			for _, cli := range clients {
-				attachment.peers[cli.ID.String()] = cli.PresenceInfo
-			}
-
+			doc.SetOnlineClientSet(clientIDs...)
 			return nil, nil
 		case *api.WatchDocumentResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
@@ -447,37 +440,35 @@ func (c *Client) Watch(
 				return nil, err
 			}
 
-			docKey, err := c.findDocKey(resp.Event.DocumentId)
+			cli, err := time.ActorIDFromBytes(resp.Event.Publisher)
 			if err != nil {
 				return nil, err
 			}
 
 			switch eventType {
 			case types.DocumentsChangedEvent:
+				return &WatchResponse{Type: DocumentChanged}, nil
+			case types.DocumentsWatchedEvent:
+				doc.AddOnlineClient(cli.String())
+				if doc.OnlinePresence(cli.String()) == nil {
+					return nil, nil
+				}
+
 				return &WatchResponse{
-					Type: DocumentsChanged,
-					Key:  docKey,
+					Type: DocumentWatched,
+					Presences: map[string]innerpresence.Presence{
+						cli.String(): doc.OnlinePresence(cli.String()),
+					},
 				}, nil
-			case types.DocumentsWatchedEvent, types.DocumentsUnwatchedEvent, types.PresenceChangedEvent:
-				cli, err := converter.FromClient(resp.Event.Publisher)
-				if err != nil {
-					return nil, err
-				}
-
-				attachment := c.attachments[docKey]
-				if eventType == types.DocumentsWatchedEvent ||
-					eventType == types.PresenceChangedEvent {
-					if info, ok := attachment.peers[cli.ID.String()]; ok {
-						cli.PresenceInfo.Update(info)
-					}
-					attachment.peers[cli.ID.String()] = cli.PresenceInfo
-				} else {
-					delete(attachment.peers, cli.ID.String())
-				}
+			case types.DocumentsUnwatchedEvent:
+				p := doc.OnlinePresence(cli.String())
+				doc.RemoveOnlineClient(cli.String())
 
 				return &WatchResponse{
-					Type:          PeersChanged,
-					PeersMapByDoc: c.PeersMapByDoc(),
+					Type: DocumentUnwatched,
+					Presences: map[string]innerpresence.Presence{
+						cli.String(): p,
+					},
 				}, nil
 			}
 		}
@@ -506,7 +497,35 @@ func (c *Client) Watch(
 				close(rch)
 				return
 			}
+			if resp == nil {
+				continue
+			}
+
 			rch <- *resp
+		}
+	}()
+
+	// TODO(hackerwins): We need to revise the implementation of the watch
+	// event handling. Currently, we are using the same channel for both
+	// document events and watch events. This is not ideal because the
+	// client cannot distinguish between document events and watch events.
+	// We'll expose only document events and watch events will be handled
+	// internally.
+
+	// TODO(hackerwins): We should ensure that the goroutine is closed when
+	// the stream is closed.
+	go func() {
+		for {
+			select {
+			case e := <-doc.Events():
+				t := PresenceChanged
+				if e.Type == document.WatchedEvent {
+					t = DocumentWatched
+				}
+				rch <- WatchResponse{Type: t, Presences: e.Presences}
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
@@ -523,41 +542,6 @@ func (c *Client) findDocKey(docID string) (key.Key, error) {
 	return "", ErrDocumentNotAttached
 }
 
-// UpdatePresence updates the presence of this client.
-func (c *Client) UpdatePresence(ctx context.Context, k, v string) error {
-	if c.status != activated {
-		return ErrClientNotActivated
-	}
-
-	c.presenceInfo.Presence[k] = v
-	c.presenceInfo.Clock++
-
-	if len(c.attachments) == 0 {
-		return nil
-	}
-
-	// TODO(hackerwins): We temporarily use Unary Call to update presence,
-	// because grpc-web can't handle Bi-Directional streaming for now.
-	// After grpc-web supports bi-directional streaming, we can remove the
-	// following.
-	// TODO(hackerwins): We will move Presence from client-level to document-level.
-	for _, attachment := range c.attachments {
-		if _, err := c.client.UpdatePresence(
-			withShardKey(ctx, c.options.APIKey, attachment.doc.Key().String()),
-			&api.UpdatePresenceRequest{
-				Client: converter.ToClient(types.Client{
-					ID:           c.id,
-					PresenceInfo: c.presenceInfo,
-				}),
-				DocumentId: attachment.docID.String(),
-			}); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // ID returns the ID of this client.
 func (c *Client) ID() *time.ActorID {
 	return c.id
@@ -568,36 +552,13 @@ func (c *Client) Key() string {
 	return c.key
 }
 
-// Presence returns the presence data of this client.
-func (c *Client) Presence() types.Presence {
-	presence := make(types.Presence)
-	for k, v := range c.presenceInfo.Presence {
-		presence[k] = v
-	}
-
-	return presence
-}
-
-// PeersMapByDoc returns the peersMap.
-func (c *Client) PeersMapByDoc() map[key.Key]map[string]types.Presence {
-	peersMapByDoc := make(map[key.Key]map[string]types.Presence)
-	for docKey, attachment := range c.attachments {
-		peers := make(map[string]types.Presence)
-		for id, info := range attachment.peers {
-			peers[id] = info.Presence
-		}
-		peersMapByDoc[docKey] = peers
-	}
-	return peersMapByDoc
-}
-
 // IsActive returns whether this client is active or not.
 func (c *Client) IsActive() bool {
 	return c.status == activated
 }
 
 // pushPullChanges pushes the changes of the document to the server and pulls the changes from the server.
-func (c *Client) pushPullChanges(ctx context.Context, opt SyncOption) error {
+func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}

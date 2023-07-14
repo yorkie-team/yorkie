@@ -24,10 +24,10 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -64,7 +64,7 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, `{"k1":[{"val":"B"}]}`, obj.Marshal())
 	})
 
-	t.Run("snapshot test", func(t *testing.T) {
+	t.Run("root snapshot test", func(t *testing.T) {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -210,28 +210,6 @@ func TestConverter(t *testing.T) {
 		assert.ErrorIs(t, err, converter.ErrCheckpointRequired)
 	})
 
-	t.Run("client test", func(t *testing.T) {
-		cli := types.Client{
-			ID: time.InitialActorID,
-			PresenceInfo: types.PresenceInfo{
-				Presence: types.Presence{"Name": "ClientName"},
-			},
-		}
-
-		pbCli := converter.ToClient(cli)
-		decodedCli, err := converter.FromClient(pbCli)
-		assert.NoError(t, err)
-		assert.Equal(t, cli.ID.Bytes(), decodedCli.ID.Bytes())
-		assert.Equal(t, cli.PresenceInfo, decodedCli.PresenceInfo)
-
-		pbClients := converter.ToClients([]types.Client{cli})
-
-		decodedCli, err = converter.FromClient(pbClients[0])
-		assert.NoError(t, err)
-		assert.Equal(t, cli.ID.Bytes(), decodedCli.ID.Bytes())
-		assert.Equal(t, cli.PresenceInfo, decodedCli.PresenceInfo)
-	})
-
 	t.Run("tree converting test", func(t *testing.T) {
 		root := helper.BuildTreeNode(&json.TreeNode{
 			Type: "r",
@@ -264,5 +242,14 @@ func TestConverter(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.Equal(t, tree.ToXML(), clone.ToXML())
+	})
+
+	t.Run("empty presence converting test", func(t *testing.T) {
+		change, err := innerpresence.NewChangeFromJSON(`{"ChangeType":"put","Presence":{}}`)
+		assert.NoError(t, err)
+
+		pbChange := converter.ToPresenceChange(change)
+		clone := converter.FromPresenceChange(pbChange)
+		assert.Equal(t, change, clone)
 	})
 }

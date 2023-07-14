@@ -29,6 +29,25 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// DocEvent represents the event that occurred in the document.
+type DocEvent struct {
+	Type      DocEventType
+	Presences map[string]innerpresence.Presence
+}
+
+// DocEventType represents the type of the event that occurred in the document.
+type DocEventType string
+
+const (
+	// WatchedEvent means that the client has established a connection with the server,
+	// enabling real-time synchronization.
+	WatchedEvent DocEventType = "watched"
+
+	// PresenceChangedEvent means that the presences of the clients who are editing
+	// the document have changed.
+	PresenceChangedEvent DocEventType = "presence-changed"
+)
+
 // Document represents a document accessible to the user.
 //
 // How document works:
@@ -40,15 +59,23 @@ type Document struct {
 	// doc is the original data of the actual document.
 	doc *InternalDocument
 
-	// clone is a copy of `doc` to be exposed to the user and is used to
-	// protect `doc`.
-	clone *crdt.Root
+	// cloneRoot is a copy of `doc.root` to be exposed to the user and is used to
+	// protect `doc.root`.
+	cloneRoot *crdt.Root
+
+	// clonePresences is a copy of `doc.presences` to be exposed to the user and
+	// is used to protect `doc.presences`.
+	clonePresences *innerpresence.Map
+
+	// events is the channel to send events that occurred in the document.
+	events chan DocEvent
 }
 
 // New creates a new instance of Document.
 func New(key key.Key) *Document {
 	return &Document{
-		doc: NewInternalDocument(key),
+		doc:    NewInternalDocument(key),
+		events: make(chan DocEvent, 1),
 	}
 }
 
@@ -68,23 +95,22 @@ func (d *Document) Update(
 	ctx := change.NewContext(
 		d.doc.changeID.Next(),
 		messageFromMsgAndArgs(msgAndArgs...),
-		d.clone,
+		d.cloneRoot,
 	)
 
-	// TODO(hackerwins): We should use the presence of the client that cloned
-	// from the document.
 	if err := updater(
-		json.NewObject(ctx, d.clone.Object()),
-		presence.New(ctx, d.doc.Presence()),
+		json.NewObject(ctx, d.cloneRoot.Object()),
+		presence.New(ctx, d.clonePresences.LoadOrStore(d.ActorID().String(), innerpresence.NewPresence())),
 	); err != nil {
-		// drop clone because it is contaminated.
-		d.clone = nil
+		// drop cloneRoot because it is contaminated.
+		d.cloneRoot = nil
+		d.clonePresences = nil
 		return err
 	}
 
 	if ctx.HasChange() {
 		c := ctx.ToChange()
-		if err := c.Execute(d.doc.root, d.doc.presenceMap); err != nil {
+		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
 			return err
 		}
 
@@ -97,9 +123,10 @@ func (d *Document) Update(
 
 // ApplyChangePack applies the given change pack into this document.
 func (d *Document) ApplyChangePack(pack *change.Pack) error {
-	// 01. Apply remote changes to both the clone and the document.
+	// 01. Apply remote changes to both the cloneRoot and the document.
 	if len(pack.Snapshot) > 0 {
-		d.clone = nil
+		d.cloneRoot = nil
+		d.clonePresences = nil
 		if err := d.doc.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
 			return err
 		}
@@ -109,13 +136,18 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		}
 
 		for _, c := range pack.Changes {
-			if err := c.Execute(d.clone, d.doc.presenceMap); err != nil {
+			if err := c.Execute(d.cloneRoot, d.clonePresences); err != nil {
 				return err
 			}
 		}
 
-		if err := d.doc.ApplyChanges(pack.Changes...); err != nil {
+		events, err := d.doc.ApplyChanges(pack.Changes...)
+		if err != nil {
 			return err
+		}
+
+		for _, e := range events {
+			d.events <- e
 		}
 	}
 
@@ -209,14 +241,14 @@ func (d *Document) Root() *json.Object {
 		panic(err)
 	}
 
-	ctx := change.NewContext(d.doc.changeID.Next(), "", d.clone)
-	return json.NewObject(ctx, d.clone.Object())
+	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot)
+	return json.NewObject(ctx, d.cloneRoot.Object())
 }
 
 // GarbageCollect purge elements that were removed before the given time.
 func (d *Document) GarbageCollect(ticket *time.Ticket) int {
-	if d.clone != nil {
-		if _, err := d.clone.GarbageCollect(ticket); err != nil {
+	if d.cloneRoot != nil {
+		if _, err := d.cloneRoot.GarbageCollect(ticket); err != nil {
 			panic(err)
 		}
 	}
@@ -235,25 +267,66 @@ func (d *Document) GarbageLen() int {
 }
 
 func (d *Document) ensureClone() error {
-	if d.clone == nil {
+	if d.cloneRoot == nil {
 		copiedDoc, err := d.doc.root.DeepCopy()
 		if err != nil {
 			return err
 		}
-		d.clone = copiedDoc
+		d.cloneRoot = copiedDoc
 	}
+
+	if d.clonePresences == nil {
+		d.clonePresences = d.doc.presences.DeepCopy()
+	}
+
 	return nil
 }
 
-// PresenceMap returns the presence map of this document.
-func (d *Document) PresenceMap() map[string]innerpresence.Presence {
+// Presences returns the presence map of this document.
+func (d *Document) Presences() map[string]innerpresence.Presence {
 	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
-	presenceMap := make(map[string]innerpresence.Presence)
-	d.doc.presenceMap.Range(func(key, value interface{}) bool {
-		presenceMap[key.(string)] = *value.(*innerpresence.Presence)
+	presences := make(map[string]innerpresence.Presence)
+	d.doc.presences.Range(func(key string, value innerpresence.Presence) bool {
+		presences[key] = value
 		return true
 	})
-	return presenceMap
+	return presences
+}
+
+// Presence returns the presence of the given client.
+func (d *Document) Presence(clientID string) innerpresence.Presence {
+	return d.doc.Presence(clientID)
+}
+
+// MyPresence returns the presence of the actor.
+func (d *Document) MyPresence() innerpresence.Presence {
+	return d.doc.MyPresence()
+}
+
+// SetOnlineClientSet sets the online client set.
+func (d *Document) SetOnlineClientSet(clientIDs ...string) {
+	d.doc.SetOnlineClientSet(clientIDs...)
+}
+
+// AddOnlineClient adds the given client to the online client set.
+func (d *Document) AddOnlineClient(clientID string) {
+	d.doc.AddOnlineClient(clientID)
+}
+
+// RemoveOnlineClient removes the given client from the online client set.
+func (d *Document) RemoveOnlineClient(clientID string) {
+	d.doc.RemoveOnlineClient(clientID)
+}
+
+// OnlinePresence returns the presence of the given client. If the client is not
+// online, it returns nil.
+func (d *Document) OnlinePresence(clientID string) innerpresence.Presence {
+	return d.doc.OnlinePresence(clientID)
+}
+
+// Events returns the events of this document.
+func (d *Document) Events() <-chan DocEvent {
+	return d.events
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

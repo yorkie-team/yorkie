@@ -18,6 +18,7 @@ package document
 
 import (
 	"errors"
+	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -49,15 +50,41 @@ var (
 	ErrDocumentRemoved = errors.New("document is removed")
 )
 
-// InternalDocument represents a document in MongoDB and contains logical clocks.
+// InternalDocument is a document that is used internally. It is not directly
+// exposed to the user.
 type InternalDocument struct {
-	key          key.Key
-	status       StatusType
-	root         *crdt.Root
-	checkpoint   change.Checkpoint
-	changeID     change.ID
+	// key is the key of the document. It is used as the key of the document in
+	// user's perspective.
+	key key.Key
+
+	// status is the status of the document. It is used to check whether the
+	// document is attached to the client or detached or removed.
+	status StatusType
+
+	// checkpoint is the checkpoint of the document. It is used to determine
+	// what changes should be sent and what changes should be received.
+	checkpoint change.Checkpoint
+
+	// changeID is the ID of the last change. It is used to create a new change.
+	// It contains logical clock information like the lamport timestamp, actorID
+	// and checkpoint information.
+	changeID change.ID
+
+	// root is the root of the document. It is used to store JSON-like data in
+	// CRDT manner.
+	root *crdt.Root
+
+	// presences is the map of the presence. It is used to store the presence
+	// of the actors who are attaching this document.
+	presences *innerpresence.Map
+
+	// onlineClients is the set of the client who is editing this document in
+	// online.
+	onlineClients *gosync.Map
+
+	// localChanges is the list of the changes that are not yet sent to the
+	// server.
 	localChanges []*change.Change
-	presenceMap  *innerpresence.Map
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
@@ -66,12 +93,13 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 
 	// TODO(hackerwins): We need to initialize the presence of the actor who edited the document.
 	return &InternalDocument{
-		key:         k,
-		status:      StatusDetached,
-		root:        crdt.NewRoot(root),
-		checkpoint:  change.InitialCheckpoint,
-		changeID:    change.InitialID,
-		presenceMap: innerpresence.NewMap(),
+		key:           k,
+		status:        StatusDetached,
+		root:          crdt.NewRoot(root),
+		checkpoint:    change.InitialCheckpoint,
+		changeID:      change.InitialID,
+		presences:     innerpresence.NewMap(),
+		onlineClients: &gosync.Map{},
 	}
 }
 
@@ -82,18 +110,19 @@ func NewInternalDocumentFromSnapshot(
 	lamport int64,
 	snapshot []byte,
 ) (*InternalDocument, error) {
-	obj, presenceMap, err := converter.BytesToSnapshot(snapshot)
+	obj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return nil, err
 	}
 
 	return &InternalDocument{
-		key:         k,
-		status:      StatusDetached,
-		root:        crdt.NewRoot(obj),
-		presenceMap: presenceMap,
-		checkpoint:  change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:    change.InitialID.SyncLamport(lamport),
+		key:           k,
+		status:        StatusDetached,
+		root:          crdt.NewRoot(obj),
+		presences:     presences,
+		onlineClients: &gosync.Map{},
+		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
+		changeID:      change.InitialID.SyncLamport(lamport),
 	}, nil
 }
 
@@ -114,13 +143,13 @@ func (d *InternalDocument) HasLocalChanges() bool {
 
 // ApplyChangePack applies the given change pack into this document.
 func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
-	// 01. Apply remote changes to both the clone and the document.
+	// 01. Apply remote changes to both the cloneRoot and the document.
 	if len(pack.Snapshot) > 0 {
 		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
 			return err
 		}
 	} else {
-		if err := d.ApplyChanges(pack.Changes...); err != nil {
+		if _, err := d.ApplyChanges(pack.Changes...); err != nil {
 			return err
 		}
 	}
@@ -209,37 +238,95 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 }
 
 func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error {
-	rootObj, presenceMap, err := converter.BytesToSnapshot(snapshot)
+	rootObj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return err
 	}
 
 	d.root = crdt.NewRoot(rootObj)
-	d.presenceMap = presenceMap
+	d.presences = presences
 	d.changeID = d.changeID.SyncLamport(serverSeq)
 
 	return nil
 }
 
 // ApplyChanges applies remote changes to the document.
-func (d *InternalDocument) ApplyChanges(changes ...*change.Change) error {
+func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, error) {
+	var events []DocEvent
 	for _, c := range changes {
-		if err := c.Execute(d.root, d.presenceMap); err != nil {
-			return err
+		if c.PresenceChange() != nil {
+			clientID := c.ID().ActorID().String()
+			if _, ok := d.onlineClients.Load(clientID); ok {
+				event := DocEvent{
+					Type: PresenceChangedEvent,
+					Presences: map[string]innerpresence.Presence{
+						clientID: c.PresenceChange().Presence,
+					},
+				}
+
+				if !d.presences.Has(clientID) {
+					event.Type = WatchedEvent
+				}
+				events = append(events, event)
+			}
 		}
+
+		if err := c.Execute(d.root, d.presences); err != nil {
+			return nil, err
+		}
+
 		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
 	}
 
-	return nil
+	return events, nil
 }
 
-// Presence returns the presence of the actor currently editing the document.
-func (d *InternalDocument) Presence() *innerpresence.Presence {
-	value, _ := d.presenceMap.LoadOrStore(d.changeID.ActorID().String(), innerpresence.NewPresence())
-	return value.(*innerpresence.Presence)
+// MyPresence returns the presence of the actor currently editing the document.
+func (d *InternalDocument) MyPresence() innerpresence.Presence {
+	p := d.presences.LoadOrStore(d.changeID.ActorID().String(), innerpresence.NewPresence())
+	return p.DeepCopy()
 }
 
-// PresenceMap returns the map of presences of the actors currently editing the document.
-func (d *InternalDocument) PresenceMap() *innerpresence.Map {
-	return d.presenceMap
+// Presences returns the map of presences of the actors currently editing the document.
+func (d *InternalDocument) Presences() *innerpresence.Map {
+	return d.presences
+}
+
+// OnlinePresence returns the presence of the given client. If the client is not
+// online, it returns nil.
+func (d *InternalDocument) OnlinePresence(clientID string) innerpresence.Presence {
+	if _, ok := d.onlineClients.Load(clientID); !ok {
+		return nil
+	}
+
+	presence, _ := d.presences.Load(clientID)
+	return presence
+}
+
+// Presence returns the presence of the given client.
+func (d *InternalDocument) Presence(clientID string) innerpresence.Presence {
+	presence, _ := d.presences.Load(clientID)
+	return presence
+}
+
+// SetOnlineClientSet sets the online client set.
+func (d *InternalDocument) SetOnlineClientSet(ids ...string) {
+	d.onlineClients.Range(func(key, value interface{}) bool {
+		d.onlineClients.Delete(key)
+		return true
+	})
+
+	for _, id := range ids {
+		d.onlineClients.Store(id, true)
+	}
+}
+
+// AddOnlineClient adds the given client to the online client set.
+func (d *InternalDocument) AddOnlineClient(clientID string) {
+	d.onlineClients.Store(clientID, true)
+}
+
+// RemoveOnlineClient removes the given client from the online client set.
+func (d *InternalDocument) RemoveOnlineClient(clientID string) {
+	d.onlineClients.Delete(clientID)
 }

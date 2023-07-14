@@ -15,7 +15,4 @@ const (
 	// DocumentsUnwatchedEvent is an event that occurs when documents are
 	// unwatched by other clients.
 	DocumentsUnwatchedEvent DocEventType = "documents-unwatched"
-
-	// PresenceChangedEvent is an event indicating that presence is changed.
-	PresenceChangedEvent DocEventType = "presence-changed"
 )
