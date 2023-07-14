@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"reflect"
 	"testing"
@@ -28,11 +27,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -57,6 +56,7 @@ func TestRetention(t *testing.T) {
 	t.Run("history test with purging changes", func(t *testing.T) {
 		conf := helper.TestConfig()
 		conf.Backend.SnapshotWithPurgingChanges = true
+		conf.Backend.SnapshotInterval = 0
 		testServer, err := server.New(conf)
 		if err != nil {
 			log.Fatal(err)
@@ -66,10 +66,7 @@ func TestRetention(t *testing.T) {
 			logging.DefaultLogger().Fatal(err)
 		}
 
-		cli, err := client.Dial(
-			testServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 0)}),
-		)
+		cli, err := client.Dial(testServer.RPCAddr())
 		assert.NoError(t, err)
 		assert.NoError(t, cli.Activate(context.Background()))
 		defer func() {
@@ -85,21 +82,21 @@ func TestRetention(t *testing.T) {
 
 		doc := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, doc))
-		defer func() { assert.NoError(t, cli.Detach(ctx, doc, false)) }()
+		defer func() { assert.NoError(t, cli.Detach(ctx, doc)) }()
 
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("todos")
 			return nil
 		}, "create todos"))
 		assert.Equal(t, `{"todos":[]}`, doc.Marshal())
 
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("todos").AddString("buy coffee")
 			return nil
 		}, "buy coffee"))
 		assert.Equal(t, `{"todos":["buy coffee"]}`, doc.Marshal())
 
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("todos").AddString("buy bread")
 			return nil
 		}, "buy bread"))
@@ -120,6 +117,7 @@ func TestRetention(t *testing.T) {
 	t.Run("snapshot with purging changes test", func(t *testing.T) {
 		serverConfig := helper.TestConfig()
 		// Default SnapshotInterval is 0, SnapshotThreshold must also be 0
+		serverConfig.Backend.SnapshotInterval = 0
 		serverConfig.Backend.SnapshotThreshold = 0
 		serverConfig.Backend.SnapshotWithPurgingChanges = true
 		testServer, err := server.New(serverConfig)
@@ -131,10 +129,7 @@ func TestRetention(t *testing.T) {
 			logging.DefaultLogger().Fatal(err)
 		}
 
-		cli1, err := client.Dial(
-			testServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 0)}),
-		)
+		cli1, err := client.Dial(testServer.RPCAddr())
 		assert.NoError(t, err)
 
 		err = cli1.Activate(context.Background())
@@ -147,9 +142,9 @@ func TestRetention(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli1.Attach(ctx, d1))
-		defer func() { assert.NoError(t, cli1.Detach(ctx, d1, false)) }()
+		defer func() { assert.NoError(t, cli1.Detach(ctx, d1)) }()
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1")
 			return nil
 		})
@@ -167,7 +162,7 @@ func TestRetention(t *testing.T) {
 
 		// Create 6 changes
 		for _, edit := range edits {
-			err = d1.Update(func(root *json.Object) error {
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
@@ -207,10 +202,7 @@ func TestRetention(t *testing.T) {
 		// one is most recent ServerSeq and one is one older from the most recent ServerSeq
 		assert.Len(t, changes, 2)
 
-		cli2, err := client.Dial(
-			testServer.RPCAddr(),
-			client.WithPresence(types.Presence{"name": fmt.Sprintf("name-%d", 1)}),
-		)
+		cli2, err := client.Dial(testServer.RPCAddr())
 		assert.NoError(t, err)
 
 		err = cli2.Activate(context.Background())
@@ -222,11 +214,11 @@ func TestRetention(t *testing.T) {
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli2.Attach(ctx, d2))
-		defer func() { assert.NoError(t, cli2.Detach(ctx, d2, false)) }()
+		defer func() { assert.NoError(t, cli2.Detach(ctx, d2)) }()
 
 		// Create 6 changes
 		for _, edit := range edits {
-			err = d2.Update(func(root *json.Object) error {
+			err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetText("k1").Edit(edit.from, edit.to, edit.content)
 				return nil
 			})
@@ -243,6 +235,6 @@ func TestRetention(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		assert.Len(t, changes, 8)
+		assert.Len(t, changes, 9)
 	})
 }

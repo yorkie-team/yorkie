@@ -254,7 +254,7 @@ func (s *adminServer) GetSnapshotMeta(
 		return nil, err
 	}
 
-	snapshot, err := converter.ObjectToBytes(doc.RootObject())
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.Presences())
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +376,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		publisherID,
 		sync.DocEvent{
 			Type:       types.DocumentsChangedEvent,
-			Publisher:  types.Client{ID: publisherID},
+			Publisher:  publisherID,
 			DocumentID: docInfo.ID,
 		},
 	)

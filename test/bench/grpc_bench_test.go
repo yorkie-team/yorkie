@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -60,7 +61,7 @@ func activeClients(b *testing.B, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
 		c, err := client.Dial(
 			defaultServer.RPCAddr(),
-			client.WithMaxRecvMsgSize(int(10*1024*1024)),
+			client.WithMaxRecvMsgSize(50*1024*1024),
 		)
 		assert.NoError(b, err)
 
@@ -89,7 +90,7 @@ func benchmarkUpdateAndSync(
 	key string,
 ) {
 	for i := 0; i < cnt; i++ {
-		err := d.Update(func(root *json.Object) error {
+		err := d.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText(key)
 			text.Edit(0, 0, "c")
 			return nil
@@ -129,6 +130,7 @@ func watchDoc(
 	ctx context.Context,
 	b *testing.B,
 	cli *client.Client,
+	d *document.Document,
 	rch <-chan client.WatchResponse,
 	done <-chan bool,
 ) {
@@ -140,8 +142,8 @@ func watchDoc(
 			}
 			assert.NoError(b, resp.Err)
 
-			if resp.Type == client.DocumentsChanged {
-				err := cli.Sync(ctx, client.WithDocKey(resp.Key))
+			if resp.Type == client.DocumentChanged {
+				err := cli.Sync(ctx, client.WithDocKey(d.Key()))
 				assert.NoError(b, err)
 			}
 		case <-done:
@@ -184,7 +186,7 @@ func BenchmarkRPC(b *testing.B) {
 
 		for i := 0; i < b.N; i++ {
 			testKey := "testKey"
-			err = d1.Update(func(root *json.Object) error {
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.SetNewText(testKey)
 				return nil
 			})
@@ -205,7 +207,7 @@ func BenchmarkRPC(b *testing.B) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(b, err)
 		testKey1 := "testKey1"
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText(testKey1)
 			return nil
 		})
@@ -215,7 +217,7 @@ func BenchmarkRPC(b *testing.B) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText(testKey2)
 			return nil
 		})
@@ -230,16 +232,15 @@ func BenchmarkRPC(b *testing.B) {
 		done2 := make(chan bool)
 
 		for i := 0; i < b.N; i++ {
-
 			wg := sync.WaitGroup{}
 			wg.Add(2)
 			go func() {
 				defer wg.Done()
-				watchDoc(ctx, b, c1, rch1, done2)
+				watchDoc(ctx, b, c1, d1, rch1, done2)
 			}()
 			go func() {
 				defer wg.Done()
-				watchDoc(ctx, b, c2, rch2, done1)
+				watchDoc(ctx, b, c2, d2, rch2, done1)
 			}()
 
 			go func() {
@@ -270,13 +271,13 @@ func BenchmarkRPC(b *testing.B) {
 				doc1 := document.New(key.Key(helper.TestDocKey(b)))
 				doc2 := document.New(key.Key(helper.TestDocKey(b)))
 
-				err := doc1.Update(func(root *json.Object) error {
+				err := doc1.Update(func(root *json.Object, p *presence.Presence) error {
 					text := root.SetNewText("k1")
 					text.Edit(0, 0, builder.String())
 					return nil
 				})
 				assert.NoError(b, err)
-				err = doc2.Update(func(root *json.Object) error {
+				err = doc2.Update(func(root *json.Object, p *presence.Presence) error {
 					text := root.SetNewText("k1")
 					text.Edit(0, 0, builder.String())
 					return nil

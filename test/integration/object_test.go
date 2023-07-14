@@ -26,6 +26,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -45,7 +46,7 @@ func TestObject(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("k1").
 				SetString("k1.1", "v1").
 				SetString("k1.2", "v2").
@@ -59,7 +60,7 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, err)
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("k1")
 			root.GetObject("k2").Delete("k2.2")
 			return nil
@@ -74,7 +75,7 @@ func TestObject(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("k1")
 			return nil
 		}, "set v1 by c1")
@@ -87,7 +88,7 @@ func TestObject(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("k1")
 			root.SetString("k1", "v1")
 			return nil
@@ -95,7 +96,7 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":"v1"}`, d1.Marshal())
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("k1")
 			root.SetString("k1", "v2")
 			return nil
@@ -116,12 +117,12 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 01. concurrent set on same key
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}, "set k1 by c1")
 		assert.NoError(t, err)
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v2")
 			return nil
 		}, "set k1 by c2")
@@ -129,19 +130,19 @@ func TestObject(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		// 02. concurrent set between ancestor descendant
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("k2")
 			return nil
 		}, "set k2 by c1")
 		assert.NoError(t, err)
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k2", "v2")
 			return nil
 		}, "set k2 by c1")
 		assert.NoError(t, err)
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetObject("k2").SetNewObject("k2.1").SetString("k2.1.1", "v2")
 			return nil
 		}, "set k2.1.1 by c2")
@@ -149,12 +150,12 @@ func TestObject(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		// 03. concurrent set between independent keys
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k3", "v3")
 			return nil
 		}, "set k3 by c1")
 		assert.NoError(t, err)
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k4", "v4")
 			return nil
 		}, "set k4 by c2")

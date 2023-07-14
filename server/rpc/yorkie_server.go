@@ -236,11 +236,15 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
-		return nil, err
-	}
 	if req.RemoveIfNotAttached && !isAttached {
 		pack.IsRemoved = true
+		if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
+			return nil, err
+		}
 	}
 
 	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
@@ -344,7 +348,7 @@ func (s *yorkieServer) WatchDocument(
 	req *api.WatchDocumentRequest,
 	stream api.YorkieService_WatchDocumentServer,
 ) error {
-	cli, err := converter.FromClient(req.Client)
+	clientID, err := time.ActorIDFromBytes(req.ClientId)
 	if err != nil {
 		return err
 	}
@@ -371,13 +375,13 @@ func (s *yorkieServer) WatchDocument(
 	}
 
 	project := projects.From(stream.Context())
-	if _, err = clients.FindClientInfo(stream.Context(), s.backend.DB, project, cli.ID); err != nil {
+	if _, err = clients.FindClientInfo(stream.Context(), s.backend.DB, project, clientID); err != nil {
 		return err
 	}
 
 	locker, err := s.backend.Coordinator.NewLocker(
 		stream.Context(),
-		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", cli.ID.String(), docID)),
+		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID.String(), docID)),
 	)
 	if err != nil {
 		return err
@@ -391,7 +395,7 @@ func (s *yorkieServer) WatchDocument(
 		}
 	}()
 
-	subscription, peersMap, err := s.watchDoc(stream.Context(), *cli, docID)
+	subscription, clientIDs, err := s.watchDoc(stream.Context(), clientID, docID)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
@@ -400,10 +404,14 @@ func (s *yorkieServer) WatchDocument(
 		s.unwatchDoc(subscription, docID)
 	}()
 
+	var pbClientIDs [][]byte
+	for _, id := range clientIDs {
+		pbClientIDs = append(pbClientIDs, id.Bytes())
+	}
 	if err := stream.Send(&api.WatchDocumentResponse{
 		Body: &api.WatchDocumentResponse_Initialization_{
 			Initialization: &api.WatchDocumentResponse_Initialization{
-				Peers: converter.ToClients(peersMap),
+				ClientIds: pbClientIDs,
 			},
 		},
 	}); err != nil {
@@ -425,9 +433,8 @@ func (s *yorkieServer) WatchDocument(
 			if err := stream.Send(&api.WatchDocumentResponse{
 				Body: &api.WatchDocumentResponse_Event{
 					Event: &api.DocEvent{
-						Type:       eventType,
-						Publisher:  converter.ToClient(event.Publisher),
-						DocumentId: event.DocumentID.String(),
+						Type:      eventType,
+						Publisher: event.Publisher.Bytes(),
 					},
 				},
 			}); err != nil {
@@ -508,45 +515,12 @@ func (s *yorkieServer) RemoveDocument(
 	}, nil
 }
 
-// UpdatePresence updates the presence of the given client.
-func (s *yorkieServer) UpdatePresence(
-	ctx context.Context,
-	req *api.UpdatePresenceRequest,
-) (*api.UpdatePresenceResponse, error) {
-	cli, err := converter.FromClient(req.Client)
-	if err != nil {
-		return nil, err
-	}
-	documentID, err := converter.FromDocumentID(req.DocumentId)
-	if err != nil {
-		return nil, err
-	}
-
-	project := projects.From(ctx)
-	_, err = documents.FindDocInfo(ctx, s.backend, project, documentID)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = s.backend.Coordinator.UpdatePresence(ctx, cli, documentID); err != nil {
-		return nil, err
-	}
-
-	s.backend.Coordinator.Publish(ctx, cli.ID, sync.DocEvent{
-		Type:       types.PresenceChangedEvent,
-		Publisher:  *cli,
-		DocumentID: documentID,
-	})
-
-	return &api.UpdatePresenceResponse{}, nil
-}
-
 func (s *yorkieServer) watchDoc(
 	ctx context.Context,
-	client types.Client,
+	clientID *time.ActorID,
 	documentID types.ID,
-) (*sync.Subscription, []types.Client, error) {
-	subscription, peers, err := s.backend.Coordinator.Subscribe(ctx, client, documentID)
+) (*sync.Subscription, []*time.ActorID, error) {
+	subscription, clientIDs, err := s.backend.Coordinator.Subscribe(ctx, clientID, documentID)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, nil, err
@@ -554,7 +528,7 @@ func (s *yorkieServer) watchDoc(
 
 	s.backend.Coordinator.Publish(
 		ctx,
-		subscription.Subscriber().ID,
+		subscription.Subscriber(),
 		sync.DocEvent{
 			Type:       types.DocumentsWatchedEvent,
 			Publisher:  subscription.Subscriber(),
@@ -562,7 +536,7 @@ func (s *yorkieServer) watchDoc(
 		},
 	)
 
-	return subscription, peers, nil
+	return subscription, clientIDs, nil
 }
 
 func (s *yorkieServer) unwatchDoc(
@@ -573,7 +547,7 @@ func (s *yorkieServer) unwatchDoc(
 	_ = s.backend.Coordinator.Unsubscribe(ctx, documentID, subscription)
 	s.backend.Coordinator.Publish(
 		ctx,
-		subscription.Subscriber().ID,
+		subscription.Subscriber(),
 		sync.DocEvent{
 			Type:       types.DocumentsUnwatchedEvent,
 			Publisher:  subscription.Subscriber(),

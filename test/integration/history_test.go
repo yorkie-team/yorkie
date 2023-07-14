@@ -26,6 +26,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -41,21 +42,21 @@ func TestHistory(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, d1))
-		defer func() { assert.NoError(t, cli.Detach(ctx, d1, false)) }()
+		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 
-		assert.NoError(t, d1.Update(func(root *json.Object) error {
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("todos")
 			return nil
 		}, "create todos"))
 		assert.Equal(t, `{"todos":[]}`, d1.Marshal())
 
-		assert.NoError(t, d1.Update(func(root *json.Object) error {
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("todos").AddString("buy coffee")
 			return nil
 		}, "buy coffee"))
 		assert.Equal(t, `{"todos":["buy coffee"]}`, d1.Marshal())
 
-		assert.NoError(t, d1.Update(func(root *json.Object) error {
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("todos").AddString("buy bread")
 			return nil
 		}, "buy bread"))
@@ -64,7 +65,8 @@ func TestHistory(t *testing.T) {
 
 		changes, err := adminCli.ListChangeSummaries(ctx, "default", d1.Key(), 0, 0, true)
 		assert.NoError(t, err)
-		assert.Len(t, changes, 3)
+		// NOTE(chacha912): When attaching, a change is made to set the initial presence.
+		assert.Len(t, changes, 4)
 
 		assert.Equal(t, "create todos", changes[2].Message)
 		assert.Equal(t, "buy coffee", changes[1].Message)

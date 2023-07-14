@@ -26,11 +26,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -42,7 +43,7 @@ func TestDocument(t *testing.T) {
 	t.Run("attach/detach test", func(t *testing.T) {
 		ctx := context.Background()
 		doc := document.New(helper.TestDocKey(t))
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}, "update k1 with v1")
@@ -52,12 +53,12 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, doc.IsAttached())
 
-		err = c1.Detach(ctx, doc, false)
+		err = c1.Detach(ctx, doc)
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 
 		doc2 := document.New(helper.TestDocKey(t))
-		err = doc2.Update(func(root *json.Object) error {
+		err = doc2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v2")
 			return nil
 		}, "update k1 with v2")
@@ -76,7 +77,7 @@ func TestDocument(t *testing.T) {
 		// 01. create a document and attach it to c1
 		ctx := context.Background()
 		doc := document.New(helper.TestDocKey(t))
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}, "update k1 with v1")
@@ -87,7 +88,7 @@ func TestDocument(t *testing.T) {
 		assert.True(t, doc.IsAttached())
 
 		// 02. detach with removeIfNotAttached option false
-		err = c1.Detach(ctx, doc, false)
+		err = c1.Detach(ctx, doc)
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 		assert.Equal(t, doc.Status(), document.StatusDetached)
@@ -98,7 +99,7 @@ func TestDocument(t *testing.T) {
 		assert.True(t, doc.IsAttached())
 
 		// 04. detach with removeIfNotAttached option true
-		err = c1.Detach(ctx, doc, true)
+		err = c1.Detach(ctx, doc, client.WithRemoveIfNotAttached())
 		assert.NoError(t, err)
 		assert.False(t, doc.IsAttached())
 		assert.Equal(t, doc.Status(), document.StatusRemoved)
@@ -114,26 +115,26 @@ func TestDocument(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("k1").SetNewArray("k1.1").AddString("1", "2")
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k2").AddString("1", "2", "3")
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddString("4", "5")
 			root.SetNewArray("k2").AddString("6", "7")
 			return nil
 		})
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("k2")
 			return nil
 		})
@@ -173,8 +174,8 @@ func TestDocument(t *testing.T) {
 				}
 				assert.NoError(t, resp.Err)
 
-				if resp.Type == client.DocumentsChanged {
-					err := c1.Sync(ctx, client.WithDocKey(resp.Key))
+				if resp.Type == client.DocumentChanged {
+					err := c1.Sync(ctx, client.WithDocKey(d1.Key()))
 					assert.NoError(t, err)
 					return
 				}
@@ -182,7 +183,7 @@ func TestDocument(t *testing.T) {
 		}()
 
 		// 02. cli2 updates doc2.
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("key", "value")
 			return nil
 		})
@@ -200,7 +201,7 @@ func TestDocument(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddInteger(1, 2)
 			return nil
 		})
@@ -215,7 +216,7 @@ func TestDocument(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("k1").AddInteger(3)
 			return nil
 		})
@@ -224,7 +225,7 @@ func TestDocument(t *testing.T) {
 		prevArray := d1.Root().Get("k1")
 		assert.Nil(t, prevArray.RemovedAt())
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1")
 			return nil
 		})
@@ -257,7 +258,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, document.StatusRemoved, d1.Status())
 
 		// 04. try to update a removed document.
-		assert.ErrorIs(t, d1.Update(func(root *json.Object) error {
+		assert.ErrorIs(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}), document.ErrDocumentRemoved)
@@ -271,7 +272,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. cli1 creates d1 and removes it.
 		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
@@ -294,7 +295,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. cli1 creates d1 and cli2 syncs.
 		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
@@ -306,7 +307,7 @@ func TestDocument(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
 		// 02. cli1 updates d1 and removes it.
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v2")
 			return nil
 		})
@@ -325,7 +326,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. cli1 creates d1 and cli2 syncs.
 		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
@@ -337,7 +338,7 @@ func TestDocument(t *testing.T) {
 
 		// 02. cli1 removes d1 and cli2 detaches d2.
 		assert.NoError(t, c1.Remove(ctx, d1))
-		assert.NoError(t, c2.Detach(ctx, d2, false))
+		assert.NoError(t, c2.Detach(ctx, d2))
 		assert.Equal(t, d1.Status(), document.StatusRemoved)
 		assert.Equal(t, d2.Status(), document.StatusRemoved)
 	})
@@ -347,7 +348,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. cli1 creates d1 and cli2 syncs.
 		d1 := document.New(helper.TestDocKey(t))
-		err := d1.Update(func(root *json.Object) error {
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		})
@@ -382,7 +383,7 @@ func TestDocument(t *testing.T) {
 
 		// 01. abnormal behavior on detached state
 		d1 := document.New(helper.TestDocKey(t))
-		assert.ErrorIs(t, cli.Detach(ctx, d1, false), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
 
@@ -394,7 +395,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, cli.Remove(ctx, d1))
 		assert.ErrorIs(t, cli.Remove(ctx, d1), client.ErrDocumentNotAttached)
 		assert.ErrorIs(t, cli.Sync(ctx, client.WithDocKey(d1.Key())), client.ErrDocumentNotAttached)
-		assert.ErrorIs(t, cli.Detach(ctx, d1, false), client.ErrDocumentNotAttached)
+		assert.ErrorIs(t, cli.Detach(ctx, d1), client.ErrDocumentNotAttached)
 	})
 
 	t.Run("removed document removal with watching test", func(t *testing.T) {
@@ -469,7 +470,6 @@ func TestDocumentWithProjects(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-
 			for {
 				resp := <-rch
 				if resp.Err == io.EOF {
@@ -478,62 +478,62 @@ func TestDocumentWithProjects(t *testing.T) {
 				}
 				assert.NoError(t, resp.Err)
 
-				if resp.Type == client.DocumentsChanged {
-					err := c1.Sync(ctx, client.WithDocKey(resp.Key))
+				if resp.Type == client.DocumentChanged {
+					err := c1.Sync(ctx, client.WithDocKey(d1.Key()))
 					assert.NoError(t, err)
+				} else {
 					responsePairs = append(responsePairs, watchResponsePair{
-						Type: resp.Type,
+						Type:      resp.Type,
+						Presences: resp.Presences,
 					})
-					return
 				}
-
-				if resp.Type == client.PeersChanged {
-					peers := resp.PeersMapByDoc[d1.Key()]
-					responsePairs = append(responsePairs, watchResponsePair{
-						Type:  resp.Type,
-						Peers: peers,
-					})
+				if len(responsePairs) == 2 {
+					return
 				}
 			}
 		}()
 
-		// c2 watches the same document, so c1 receives a peers changed event.
+		// c2 watches the same document, so c1 receives a document watched event.
 		expected = append(expected, watchResponsePair{
-			Type: client.PeersChanged,
-			Peers: map[string]types.Presence{
-				c1.ID().String(): nil,
-				c2.ID().String(): nil,
+			Type: client.DocumentWatched,
+			Presences: map[string]innerpresence.Presence{
+				c2.ID().String(): {},
 			},
 		})
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		defer cancel2()
 		_, err = c2.Watch(watch2Ctx, d2)
 		assert.NoError(t, err)
 
 		// c2 updates the document, so c1 receives a documents changed event.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentsChanged,
-		})
-		assert.NoError(t, d2.Update(func(root *json.Object) error {
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("key", "value")
 			return nil
 		}))
+		assert.NoError(t, c2.Sync(ctx))
 
 		// d3 is in another project, so c1 and c2 should not receive events.
 		d3 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c3.Attach(ctx, d3))
 		watch3Ctx, cancel3 := context.WithCancel(ctx)
-		defer cancel3()
 		_, err = c3.Watch(watch3Ctx, d3)
 		assert.NoError(t, err)
-		assert.NoError(t, d3.Update(func(root *json.Object) error {
+		assert.NoError(t, d3.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("key3", "value3")
 			return nil
 		}))
-		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c3.Sync(ctx))
 
+		// c2 unwatch the document, so c1 receives a document unwatched event.
+		expected = append(expected, watchResponsePair{
+			Type: client.DocumentUnwatched,
+			Presences: map[string]innerpresence.Presence{
+				c2.ID().String(): {},
+			},
+		})
+		cancel3()
+		cancel2()
 		wg.Wait()
 
 		assert.Equal(t, expected, responsePairs)
@@ -549,9 +549,9 @@ func TestDocumentWithProjects(t *testing.T) {
 	t.Run("includeSnapshot test", func(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, cli.Attach(ctx, d1))
-		defer func() { assert.NoError(t, cli.Detach(ctx, d1, false)) }()
+		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 
-		assert.NoError(t, d1.Update(func(root *json.Object) error {
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("testArray")
 			return nil
 		}, "add test array"))

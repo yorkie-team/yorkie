@@ -20,6 +20,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -101,10 +102,16 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			pbOps = append(pbOps, &pbOp)
 		}
 
+		p, err := innerpresence.NewChangeFromJSON(info.PresenceChange)
+		if err != nil {
+			return nil, err
+		}
+
 		pbChanges = append(pbChanges, &api.Change{
-			Id:         converter.ToChangeID(changeID),
-			Message:    info.Message,
-			Operations: pbOps,
+			Id:             converter.ToChangeID(changeID),
+			Message:        info.Message,
+			Operations:     pbOps,
+			PresenceChange: converter.ToPresenceChange(p),
 		})
 	}
 

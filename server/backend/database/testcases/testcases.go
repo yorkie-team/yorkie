@@ -33,6 +33,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -175,12 +176,12 @@ func RunFindChangesBetweenServerSeqsTest(
 		actorID, _ := time.ActorIDFromBytes(bytesID)
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("array")
 			return nil
 		}))
 		for idx := 0; idx < 10; idx++ {
-			assert.NoError(t, doc.Update(func(root *json.Object) error {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetArray("array").AddInteger(idx)
 				return nil
 			}))
@@ -220,7 +221,7 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
 
-		assert.NoError(t, doc.Update(func(root *json.Object) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("array")
 			return nil
 		}))

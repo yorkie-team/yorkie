@@ -17,12 +17,15 @@
 package database
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -32,14 +35,15 @@ var ErrEncodeOperationFailed = errors.New("encode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	ID         types.ID `bson:"_id"`
-	DocID      types.ID `bson:"doc_id"`
-	ServerSeq  int64    `bson:"server_seq"`
-	ClientSeq  uint32   `bson:"client_seq"`
-	Lamport    int64    `bson:"lamport"`
-	ActorID    types.ID `bson:"actor_id"`
-	Message    string   `bson:"message"`
-	Operations [][]byte `bson:"operations"`
+	ID             types.ID `bson:"_id"`
+	DocID          types.ID `bson:"doc_id"`
+	ServerSeq      int64    `bson:"server_seq"`
+	ClientSeq      uint32   `bson:"client_seq"`
+	Lamport        int64    `bson:"lamport"`
+	ActorID        types.ID `bson:"actor_id"`
+	Message        string   `bson:"message"`
+	Operations     [][]byte `bson:"operations"`
+	PresenceChange string   `bson:"presence_change"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -60,6 +64,20 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	}
 
 	return encodedOps, nil
+}
+
+// EncodePresenceChange encodes the given presence change into string.
+func EncodePresenceChange(p *innerpresence.PresenceChange) (string, error) {
+	if p == nil {
+		return "", nil
+	}
+
+	bytes, err := json.Marshal(p)
+	if err != nil {
+		return "", fmt.Errorf("marshal presence change to bytes: %w", err)
+	}
+
+	return string(bytes), nil
 }
 
 // ToChange creates Change model from this ChangeInfo.
@@ -85,7 +103,12 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	c := change.New(changeID, i.Message, ops)
+	p, err := innerpresence.NewChangeFromJSON(i.PresenceChange)
+	if err != nil {
+		return nil, err
+	}
+
+	c := change.New(changeID, i.Message, ops, p)
 	c.SetServerSeq(i.ServerSeq)
 
 	return c, nil

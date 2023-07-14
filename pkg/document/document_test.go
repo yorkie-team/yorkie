@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -54,7 +55,7 @@ func TestDocument(t *testing.T) {
 		doc2 := document.New("d2")
 		doc3 := document.New("d3")
 
-		err := doc1.Update(func(root *json.Object) error {
+		err := doc1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}, "updates k1")
@@ -71,7 +72,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
 
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			root.SetNewObject("k2").SetString("k4", "v4")
 			root.SetNewArray("k3").AddString("v5", "v6")
@@ -89,7 +90,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.False(t, doc.HasLocalChanges())
 		expected := `{"k1":"v1","k2":{"k4":"v4"},"k3":["v5","v6"]}`
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			root.SetNewObject("k2").SetString("k4", "v4")
 			root.SetNewArray("k3").AddString("v5", "v6")
@@ -100,7 +101,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, expected, doc.Marshal())
 
 		expected = `{"k1":"v1","k3":["v5","v6"]}`
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("k2")
 			assert.Equal(t, expected, root.Marshal())
 			return nil
@@ -111,7 +112,7 @@ func TestDocument(t *testing.T) {
 
 	t.Run("object test", func(t *testing.T) {
 		doc := document.New("d1")
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			assert.Equal(t, `{"k1":"v1"}`, root.Marshal())
 			root.SetString("k1", "v2")
@@ -125,7 +126,7 @@ func TestDocument(t *testing.T) {
 	t.Run("array test", func(t *testing.T) {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
 			assert.Equal(t, 3, root.GetArray("k1").Len())
 			assert.Equal(t, `{"k1":[1,2,3]}`, root.Marshal())
@@ -162,7 +163,7 @@ func TestDocument(t *testing.T) {
 
 	t.Run("delete elements of array test", func(t *testing.T) {
 		doc := document.New("d1")
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("data").AddInteger(0).AddInteger(1).AddInteger(2)
 			return nil
 		})
@@ -170,7 +171,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"data":[0,1,2]}`, doc.Marshal())
 		assert.Equal(t, 3, doc.Root().GetArray("data").Len())
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("data").Delete(0)
 			return nil
 		})
@@ -178,7 +179,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"data":[1,2]}`, doc.Marshal())
 		assert.Equal(t, 2, doc.Root().GetArray("data").Len())
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("data").Delete(1)
 			return nil
 		})
@@ -186,7 +187,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"data":[1]}`, doc.Marshal())
 		assert.Equal(t, 1, doc.Root().GetArray("data").Len())
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("data").Delete(0)
 			return nil
 		})
@@ -201,7 +202,7 @@ func TestDocument(t *testing.T) {
 		//           ---------- ins links --------
 		//           |                |          |
 		// [init] - [A] - [12] - [BC deleted] - [D]
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1").
 				Edit(0, 0, "ABCD").
 				Edit(1, 3, "12")
@@ -211,7 +212,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[{"val":"A"},{"val":"12"},{"val":"D"}]}`, doc.Marshal())
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("k1")
 			assert.Equal(t,
 				`[0:0:00:0 {} ""][1:2:00:0 {} "A"][1:3:00:0 {} "12"]{1:2:00:1 {} "BC"}[1:2:00:3 {} "D"]`,
@@ -240,7 +241,7 @@ func TestDocument(t *testing.T) {
 	t.Run("text composition test", func(t *testing.T) {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1").
 				Edit(0, 0, "ㅎ").
 				Edit(0, 1, "하").
@@ -258,7 +259,7 @@ func TestDocument(t *testing.T) {
 	t.Run("rich text test", func(t *testing.T) {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.SetNewText("k1")
 			text.Edit(0, 0, "Hello world", nil)
 			assert.Equal(
@@ -271,7 +272,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[{"val":"Hello world"}]}`, doc.Marshal())
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("k1")
 			text.Style(0, 5, map[string]string{"b": "1"})
 			assert.Equal(t,
@@ -287,7 +288,7 @@ func TestDocument(t *testing.T) {
 			doc.Marshal(),
 		)
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("k1")
 			text.Style(0, 5, map[string]string{"b": "1"})
 			assert.Equal(
@@ -311,7 +312,7 @@ func TestDocument(t *testing.T) {
 			doc.Marshal(),
 		)
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("k1")
 			text.Edit(5, 11, " Yorkie", nil)
 			assert.Equal(
@@ -329,7 +330,7 @@ func TestDocument(t *testing.T) {
 			doc.Marshal(),
 		)
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("k1")
 			text.Edit(5, 5, "\n", map[string]string{"list": "true"})
 			assert.Equal(
@@ -358,7 +359,7 @@ func TestDocument(t *testing.T) {
 		var double = 5.66
 
 		// integer type test
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("age", crdt.IntegerCnt, 5)
 
 			age := root.GetCounter("age")
@@ -375,7 +376,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "128", doc.Root().GetCounter("age").Counter.Marshal())
 
 		// long type test
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("price", crdt.LongCnt, 9000000000000000000)
 			price := root.GetCounter("price")
 			println(price.ValueType())
@@ -391,7 +392,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, `{"age":128,"price":9000000000000000123}`, doc.Marshal())
 
 		// negative operator test
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			age := root.GetCounter("age")
 			age.Increase(-5)
 			age.Increase(-3.14)
@@ -407,7 +408,7 @@ func TestDocument(t *testing.T) {
 
 		// TODO: it should be modified to error check
 		// when 'Remove panic from server code (#50)' is completed.
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			defer func() {
 				r := recover()
 				assert.NotNil(t, r)
@@ -427,21 +428,21 @@ func TestDocument(t *testing.T) {
 	t.Run("rollback test", func(t *testing.T) {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddInteger(1, 2, 3)
 			return nil
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[1,2,3]}`, doc.Marshal())
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("k1").AddInteger(4, 5)
 			return errDummy
 		})
 		assert.Equal(t, err, errDummy, "should returns the dummy error")
 		assert.Equal(t, `{"k1":[1,2,3]}`, doc.Marshal())
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("k1").AddInteger(4, 5)
 			return nil
 		})
@@ -452,7 +453,7 @@ func TestDocument(t *testing.T) {
 	t.Run("rollback test, primitive deepcopy", func(t *testing.T) {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("k1").
 				SetInteger("k1.1", 1).
 				SetInteger("k1.2", 2)
@@ -461,7 +462,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":{"k1.1":1,"k1.2":2}}`, doc.Marshal())
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetObject("k1").Delete("k1.1")
 			return errDummy
 		})
@@ -472,7 +473,7 @@ func TestDocument(t *testing.T) {
 	t.Run("text garbage collection test", func(t *testing.T) {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text")
 			root.GetText("text").Edit(0, 0, "ABCD")
 			root.GetText("text").Edit(0, 2, "12")
@@ -494,7 +495,7 @@ func TestDocument(t *testing.T) {
 			doc.Root().GetText("text").StructureAsString(),
 		)
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").Edit(2, 4, "")
 			return nil
 		})
@@ -509,7 +510,7 @@ func TestDocument(t *testing.T) {
 	t.Run("previously inserted elements in heap when running GC test", func(t *testing.T) {
 		doc := document.New("d1")
 
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("a", 1)
 			root.SetInteger("a", 2)
 			root.Delete("a")

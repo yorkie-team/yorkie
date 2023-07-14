@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -73,7 +74,7 @@ func TestAdmin(t *testing.T) {
 		assert.Equal(t, document.StatusAttached, d1.Status())
 
 		// 03. client updates the document and sync to the server.
-		assert.NoError(t, d1.Update(func(root *json.Object) error {
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("k1", "v1")
 			return nil
 		}))
@@ -104,8 +105,8 @@ func TestAdmin(t *testing.T) {
 				}
 				assert.NoError(t, resp.Err)
 
-				if resp.Type == client.DocumentsChanged {
-					err := c1.Sync(ctx, client.WithDocKey(resp.Key))
+				if resp.Type == client.DocumentChanged {
+					err := c1.Sync(ctx, client.WithDocKey(d1.Key()))
 					assert.NoError(t, err)
 					return
 				}
@@ -118,7 +119,7 @@ func TestAdmin(t *testing.T) {
 
 		// 03. wait for watching document changed event.
 		wg.Wait()
-		assert.Equal(t, d1.Status(), document.StatusRemoved)
+		assert.Equal(t, document.StatusRemoved, d1.Status())
 	})
 
 	t.Run("document removal without force test", func(t *testing.T) {
@@ -143,7 +144,7 @@ func TestAdmin(t *testing.T) {
 		assert.Equal(t, document.StatusAttached, doc.Status())
 
 		// 03. remove document that is detached by the client.
-		assert.NoError(t, cli.Detach(ctx, doc, false))
+		assert.NoError(t, cli.Detach(ctx, doc))
 		err = adminCli.RemoveDocument(ctx, "default", doc.Key().String(), false)
 		assert.NoError(t, err)
 		assert.Equal(t, document.StatusDetached, doc.Status())

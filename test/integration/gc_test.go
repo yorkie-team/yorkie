@@ -26,6 +26,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -45,7 +46,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("1", 1)
 			root.SetNewArray("2").AddInteger(1, 2, 3)
 			root.SetInteger("3", 3)
@@ -63,7 +64,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("2")
 			return nil
 		}, "removes 2")
@@ -112,7 +113,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").
 				Edit(0, 0, "Hello world")
 			root.SetNewText("richText").
@@ -131,7 +132,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("text").
 				Edit(0, 1, "a").
 				Edit(1, 2, "b")
@@ -177,7 +178,7 @@ func TestGarbageCollection(t *testing.T) {
 	t.Run("garbage collection for tree type test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 
-		err := doc.Update(func(root *json.Object) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
@@ -200,7 +201,7 @@ func TestGarbageCollection(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "gh"})
 			assert.Equal(t, `<doc><p><tn>gh</tn><tn>cd</tn></p></doc>`, root.GetTree("t").ToXML())
 			return nil
@@ -212,7 +213,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, doc.GarbageCollect(time.MaxTicket), 2)
 		assert.Equal(t, doc.GarbageLen(), 0)
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "cv"})
 			assert.Equal(t, `<doc><p><tn>cv</tn><tn>cd</tn></p></doc>`, root.GetTree("t").ToXML())
 			return nil
@@ -224,7 +225,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, doc.GarbageCollect(time.MaxTicket), 1)
 		assert.Equal(t, doc.GarbageLen(), 0)
 
-		err = doc.Update(func(root *json.Object) error {
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0}, []int{1}, &json.TreeNode{
 				Type: "p", Children: []json.TreeNode{{
 					Type: "tn", Children: []json.TreeNode{{
@@ -252,7 +253,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{
 				Type: "doc",
 				Children: []json.TreeNode{{
@@ -281,7 +282,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		err = d2.Update(func(root *json.Object) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "gh"})
 			return nil
 		})
@@ -330,7 +331,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("1", 1)
 			root.SetNewArray("2").AddInteger(1, 2, 3)
 			root.SetInteger("3", 3)
@@ -350,7 +351,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object) error {
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("2")
 			root.GetText("4").Edit(0, 1, "h")
 			root.GetText("5").Edit(0, 1, "h", map[string]string{"b": "1"})
@@ -366,7 +367,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 6, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		err = c2.Detach(ctx, d2, false)
+		err = c2.Detach(ctx, d2)
 		assert.NoError(t, err)
 
 		// (2, 1) -> (2, 2): syncedseqs:(1, x)

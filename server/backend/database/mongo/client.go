@@ -864,16 +864,21 @@ func (c *Client) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
+		encodedPresence, err := database.EncodePresenceChange(cn.PresenceChange())
+		if err != nil {
+			return err
+		}
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"doc_id":     encodedDocID,
 			"server_seq": cn.ServerSeq(),
 		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor_id":   encodeActorID(cn.ID().ActorID()),
-			"client_seq": cn.ID().ClientSeq(),
-			"lamport":    cn.ID().Lamport(),
-			"message":    cn.Message(),
-			"operations": encodedOperations,
+			"actor_id":        encodeActorID(cn.ID().ActorID()),
+			"client_seq":      cn.ID().ClientSeq(),
+			"lamport":         cn.ID().Lamport(),
+			"message":         cn.Message(),
+			"operations":      encodedOperations,
+			"presence_change": encodedPresence,
 		}}).SetUpsert(true))
 	}
 
@@ -1026,7 +1031,7 @@ func (c *Client) CreateSnapshotInfo(
 	if err != nil {
 		return err
 	}
-	snapshot, err := converter.ObjectToBytes(doc.RootObject())
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.Presences())
 	if err != nil {
 		return err
 	}
