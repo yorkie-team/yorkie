@@ -324,27 +324,10 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 		}
 	}
 
-	if err := index.TraverseAll(t.IndexTree, func(node *index.Node[*TreeNode], depth int) error {
-		if _, ok := nodesToBeRemoved[node.Value]; ok {
-			parent := node.Parent
-
-			if parent == nil {
-				count--
-				delete(nodesToBeRemoved, node.Value)
-				return nil
-			}
-
-			if err := parent.RemoveChild(node); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	}); err != nil {
-		return 0, err
-	}
-
 	for node := range nodesToBeRemoved {
+		if err := node.IndexTreeNode.Parent.RemoveChild(node.IndexTreeNode); err != nil {
+			return 0, err
+		}
 		t.NodeMapByPos.Remove(node.Pos)
 		t.Purge(node)
 		delete(t.removedNodeMap, node.Pos.CreatedAt.StructureAsString()+":"+strconv.Itoa(node.Pos.Offset))
