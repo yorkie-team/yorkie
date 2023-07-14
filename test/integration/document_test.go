@@ -433,7 +433,6 @@ func TestDocumentWithProjects(t *testing.T) {
 	assert.NoError(t, err)
 
 	t.Run("watch document with different projects test", func(t *testing.T) {
-		t.Skip("TODO: fix this case")
 		ctx := context.Background()
 
 		// 01. c1 and c2 are in the same project and c3 is in another project.
@@ -471,7 +470,6 @@ func TestDocumentWithProjects(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-
 			for {
 				resp := <-rch
 				if resp.Err == io.EOF {
@@ -483,17 +481,14 @@ func TestDocumentWithProjects(t *testing.T) {
 				if resp.Type == client.DocumentChanged {
 					err := c1.Sync(ctx, client.WithDocKey(d1.Key()))
 					assert.NoError(t, err)
-					responsePairs = append(responsePairs, watchResponsePair{
-						Type: resp.Type,
-					})
-					return
-				}
-
-				if resp.Type != client.DocumentChanged {
+				} else {
 					responsePairs = append(responsePairs, watchResponsePair{
 						Type:      resp.Type,
 						Presences: resp.Presences,
 					})
+				}
+				if len(responsePairs) == 2 {
+					return
 				}
 			}
 		}()
@@ -502,39 +497,43 @@ func TestDocumentWithProjects(t *testing.T) {
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
 			Presences: map[string]innerpresence.Presence{
-				c1.ID().String(): nil,
-				c2.ID().String(): nil,
+				c2.ID().String(): {},
 			},
 		})
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		defer cancel2()
 		_, err = c2.Watch(watch2Ctx, d2)
 		assert.NoError(t, err)
 
 		// c2 updates the document, so c1 receives a documents changed event.
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentChanged,
-		})
 		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("key", "value")
 			return nil
 		}))
+		assert.NoError(t, c2.Sync(ctx))
 
 		// d3 is in another project, so c1 and c2 should not receive events.
 		d3 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c3.Attach(ctx, d3))
 		watch3Ctx, cancel3 := context.WithCancel(ctx)
-		defer cancel3()
 		_, err = c3.Watch(watch3Ctx, d3)
 		assert.NoError(t, err)
 		assert.NoError(t, d3.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetString("key3", "value3")
 			return nil
 		}))
-		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c3.Sync(ctx))
 
+		// c2 unwatch the document, so c1 receives a document unwatched event.
+		expected = append(expected, watchResponsePair{
+			Type: client.DocumentUnwatched,
+			Presences: map[string]innerpresence.Presence{
+				c2.ID().String(): {},
+			},
+		})
+		cancel3()
+		cancel2()
 		wg.Wait()
 
 		assert.Equal(t, expected, responsePairs)

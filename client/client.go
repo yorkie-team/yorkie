@@ -461,13 +461,8 @@ func (c *Client) Watch(
 					},
 				}, nil
 			case types.DocumentsUnwatchedEvent:
-				pre := doc.OnlinePresence(cli.String())
+				p := doc.OnlinePresence(cli.String())
 				doc.RemoveOnlineClient(cli.String())
-
-				p := innerpresence.Presence{}
-				if pre != nil {
-					p = pre
-				}
 
 				return &WatchResponse{
 					Type: DocumentUnwatched,
