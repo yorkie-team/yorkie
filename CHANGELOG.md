@@ -7,6 +7,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.5] - 2023-07-20
+
+### Added
+* Move Presence from Client to Document by @chacha912, @hackerwins in https://github.com/yorkie-team/yorkie/pull/582
+* Add include-snapshot flag to ListDocuments API by @YoonKiJin, @hackerwins in https://github.com/yorkie-team/yorkie/pull/575
+
+### Changed
+* Revise log messages by @hackerwins in https://github.com/yorkie-team/yorkie/pull/574
+* Bump google.golang.org/grpc from 1.50.0 to 1.53.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/576
+* Allow users to pass multi nodes when calling Tree.edit by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/579
+
+### Fixed
+* Remove unnecessary codes from gc by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/581
+
 ## [0.4.4] - 2023-07-04
 
 ### Added
@@ -25,7 +39,7 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 * Resolve CI failure with longer MaxConnectionAge by @krapie in https://github.com/yorkie-team/yorkie/pull/556
-* Update ClientInfo with ID and extract `testcases` package  by @emplam27 in https://github.com/yorkie-team/yorkie/pull/557
+* Update ClientInfo with ID and extract `testcases` package by @emplam27 in https://github.com/yorkie-team/yorkie/pull/557
 * Filter out removed documents from ListDocuments API by @hackerwins in https://github.com/yorkie-team/yorkie/pull/563
 * Add a workaround to prevent retrieving removed documents from MemDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/565
 
