@@ -19,7 +19,12 @@ package interceptors
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"time"
+
+	"github.com/yorkie-team/yorkie/pkg/cache"
+	"github.com/yorkie-team/yorkie/server/logging"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -34,15 +39,24 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
+const projectInfoCacheSize = 1
+const projectInfoCacheTTL = time.Hour
+
 // ContextInterceptor is an interceptor for building additional context.
 type ContextInterceptor struct {
-	backend *backend.Backend
+	backend          *backend.Backend
+	projectInfoCache *cache.LRUExpireCache[string, *types.Project]
 }
 
 // NewContextInterceptor creates a new instance of ContextInterceptor.
 func NewContextInterceptor(be *backend.Backend) *ContextInterceptor {
+	projectInfoCache, err := cache.NewLRUExpireCache[string, *types.Project](projectInfoCacheSize)
+	if err != nil {
+		logging.DefaultLogger().Fatal("Failed to create project info cache: %v", err)
+	}
 	return &ContextInterceptor{
-		backend: be,
+		backend:          be,
+		projectInfoCache: projectInfoCache,
 	}
 }
 
@@ -146,15 +160,19 @@ func (i *ContextInterceptor) buildContext(ctx context.Context) (context.Context,
 		md.Authorization = authorization[0]
 	}
 	ctx = metadata.With(ctx, md)
+	cacheKey := fmt.Sprintf("%s:%s", md.APIKey, md.Authorization)
 
 	// 02. building project
-	// TODO(hackerwins): Improve the performance of this function.
-	// Consider using a cache to store the info.
-	project, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
-	if err != nil {
-		return nil, grpchelper.ToStatusError(err)
+	if cachedProjectInfo, ok := i.projectInfoCache.Get(cacheKey); ok {
+		ctx = projects.With(ctx, cachedProjectInfo)
+	} else {
+		project, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
+		if err != nil {
+			return nil, grpchelper.ToStatusError(err)
+		}
+		i.projectInfoCache.Add(cacheKey, project, projectInfoCacheTTL)
+		ctx = projects.With(ctx, project)
 	}
-	ctx = projects.With(ctx, project)
 
 	return ctx, nil
 }
