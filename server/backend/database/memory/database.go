@@ -18,6 +18,7 @@
 package memory
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	gotime "time"
@@ -224,16 +225,15 @@ func (d *DB) CreateProjectInfo(
 	return info, nil
 }
 
-// ListAllProjectInfos returns all project infos.
-func (d *DB) listAllProjectInfos(
+// listProjectInfos returns all project infos rotationally.
+func (d *DB) listProjectInfos(
 	ctx context.Context,
+	pageSize int,
+	housekeepingLastProjectID *types.ID,
 ) ([]*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	// TODO(krapie): txn.Get() loads all projects in memory,
-	// which will cause performance issue as number of projects in DB grows.
-	// Therefore, pagination of projects is needed to avoid this issue.
 	iter, err := txn.Get(
 		tblProjects,
 		"id",
@@ -242,12 +242,35 @@ func (d *DB) listAllProjectInfos(
 		return nil, fmt.Errorf("fetch all projects: %w", err)
 	}
 
-	var infos []*database.ProjectInfo
-	for raw := iter.Next(); raw != nil; raw = iter.Next() {
-		info := raw.(*database.ProjectInfo).DeepCopy()
-		infos = append(infos, info)
+	lastIDBytes, err := housekeepingLastProjectID.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("decode last project id: %w", err)
 	}
 
+	var infos []*database.ProjectInfo
+	for i := 0; i < pageSize; {
+		raw := iter.Next()
+		if raw == nil {
+			*housekeepingLastProjectID = database.DefaultProjectID
+			break
+		}
+
+		info := raw.(*database.ProjectInfo).DeepCopy()
+
+		idBytes, err := info.ID.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("decode project id: %w", err)
+		}
+
+		if bytes.Compare(idBytes, lastIDBytes) > 0 {
+			infos = append(infos, info)
+			i++
+		}
+
+		if i == pageSize {
+			*housekeepingLastProjectID = infos[len(infos)-1].ID
+		}
+	}
 	return infos, nil
 }
 
@@ -599,8 +622,10 @@ func (d *DB) findDeactivateCandidatesPerProject(
 func (d *DB) FindDeactivateCandidates(
 	ctx context.Context,
 	candidatesLimitPerProject int,
+	projectFetchSize int,
+	housekeepingLastProjectID *types.ID,
 ) ([]*database.ClientInfo, error) {
-	projects, err := d.listAllProjectInfos(ctx)
+	projects, err := d.listProjectInfos(ctx, projectFetchSize, housekeepingLastProjectID)
 	if err != nil {
 		return nil, err
 	}

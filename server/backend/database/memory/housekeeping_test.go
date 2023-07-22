@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
 
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/memory"
 )
 
@@ -39,7 +40,10 @@ func TestHousekeeping(t *testing.T) {
 		ctx := context.Background()
 
 		clientDeactivateThreshold := "23h"
-		_, project, err := memdb.EnsureDefaultUserAndProject(ctx, "test", "test", clientDeactivateThreshold)
+
+		userInfo, err := memdb.CreateUserInfo(ctx, "test", "test")
+		assert.NoError(t, err)
+		project, err := memdb.CreateProjectInfo(ctx, database.DefaultProjectName, userInfo.ID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		yesterday := gotime.Now().Add(-24 * gotime.Hour)
@@ -59,9 +63,12 @@ func TestHousekeeping(t *testing.T) {
 		clientC, err := memdb.ActivateClient(ctx, project.ID, fmt.Sprintf("%s-C", t.Name()))
 		assert.NoError(t, err)
 
+		housekeepingLastProjectID := database.DefaultProjectID
 		candidates, err := memdb.FindDeactivateCandidates(
 			ctx,
 			10,
+			10,
+			&housekeepingLastProjectID,
 		)
 		assert.NoError(t, err)
 		assert.Len(t, candidates, 2)

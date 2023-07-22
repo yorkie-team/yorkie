@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
@@ -34,28 +35,6 @@ const (
 	deactivateCandidatesKey = "housekeeping/deactivateCandidates"
 )
 
-// Config is the configuration for the housekeeping service.
-type Config struct {
-	// Interval is the time between housekeeping runs.
-	Interval string `yaml:"Interval"`
-
-	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
-	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
-}
-
-// Validate validates the configuration.
-func (c *Config) Validate() error {
-	if _, err := time.ParseDuration(c.Interval); err != nil {
-		return fmt.Errorf(
-			`invalid argument %s for "--housekeeping-interval" flag: %w`,
-			c.Interval,
-			err,
-		)
-	}
-
-	return nil
-}
-
 // Housekeeping is the housekeeping service. It periodically runs housekeeping
 // tasks. It is responsible for deactivating clients that have not been active
 // for a long time.
@@ -65,6 +44,7 @@ type Housekeeping struct {
 
 	interval                  time.Duration
 	candidatesLimitPerProject int
+	projectFetchSize          int
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
@@ -106,6 +86,7 @@ func New(
 
 		interval:                  interval,
 		candidatesLimitPerProject: conf.CandidatesLimitPerProject,
+		projectFetchSize:          conf.HousekeepingProjectFetchSize,
 
 		ctx:        ctx,
 		cancelFunc: cancelFunc,
@@ -127,9 +108,11 @@ func (h *Housekeeping) Stop() error {
 
 // run is the housekeeping loop.
 func (h *Housekeeping) run() {
+	housekeepingLastProjectID := database.DefaultProjectID
+
 	for {
 		ctx := context.Background()
-		if err := h.deactivateCandidates(ctx); err != nil {
+		if err := h.deactivateCandidates(ctx, &housekeepingLastProjectID); err != nil {
 			continue
 		}
 
@@ -142,7 +125,7 @@ func (h *Housekeeping) run() {
 }
 
 // deactivateCandidates deactivates candidates.
-func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
+func (h *Housekeeping) deactivateCandidates(ctx context.Context, housekeepingLastProjectID *types.ID) error {
 	start := time.Now()
 	locker, err := h.coordinator.NewLocker(ctx, deactivateCandidatesKey)
 	if err != nil {
@@ -162,6 +145,8 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context) error {
 	candidates, err := h.database.FindDeactivateCandidates(
 		ctx,
 		h.candidatesLimitPerProject,
+		h.projectFetchSize,
+		housekeepingLastProjectID,
 	)
 	if err != nil {
 		return err

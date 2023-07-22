@@ -235,21 +235,38 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// ListAllProjectInfos returns all project infos.
-func (c *Client) listAllProjectInfos(
+// listProjectInfos returns all project infos rotationally.
+func (c *Client) listProjectInfos(
 	ctx context.Context,
+	pageSize int,
+	housekeepingLastProjectID *types.ID,
 ) ([]*database.ProjectInfo, error) {
-	// TODO(krapie): Find(ctx, bson.D{{}}) loads all projects in memory,
-	// which will cause performance issue as number of projects in DB grows.
-	// Therefore, pagination of projects is needed to avoid this issue.
-	cursor, err := c.collection(colProjects).Find(ctx, bson.D{{}})
+	encodedID, err := encodeID(*housekeepingLastProjectID)
 	if err != nil {
-		return nil, fmt.Errorf("fetch all project infos: %w", err)
+		return nil, err
+	}
+
+	opts := options.Find()
+	opts.SetLimit(int64(pageSize))
+
+	cursor, err := c.collection(colProjects).Find(ctx, bson.M{
+		"_id": bson.M{
+			"$gt": encodedID,
+		},
+	}, opts)
+	if err != nil {
+		return nil, fmt.Errorf("find project infos: %w", err)
 	}
 
 	var infos []*database.ProjectInfo
 	if err := cursor.All(ctx, &infos); err != nil {
-		return nil, fmt.Errorf("fetch all project infos: %w", err)
+		return nil, fmt.Errorf("fetch project infos: %w", err)
+	}
+
+	if len(infos) < pageSize {
+		*housekeepingLastProjectID = database.DefaultProjectID
+	} else if len(infos) > 0 {
+		*housekeepingLastProjectID = infos[len(infos)-1].ID
 	}
 
 	return infos, nil
@@ -657,8 +674,10 @@ func (c *Client) findDeactivateCandidatesPerProject(
 func (c *Client) FindDeactivateCandidates(
 	ctx context.Context,
 	candidatesLimitPerProject int,
+	projectFetchSize int,
+	housekeepingLastProjectID *types.ID,
 ) ([]*database.ClientInfo, error) {
-	projects, err := c.listAllProjectInfos(ctx)
+	projects, err := c.listProjectInfos(ctx, projectFetchSize, housekeepingLastProjectID)
 	if err != nil {
 		return nil, err
 	}
