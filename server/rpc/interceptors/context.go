@@ -39,7 +39,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
-const projectInfoCacheSize = 1
+const projectInfoCacheSize = 256
 const projectInfoCacheTTL = time.Hour
 
 // ContextInterceptor is an interceptor for building additional context.
