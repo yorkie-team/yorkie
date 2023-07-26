@@ -173,8 +173,7 @@ func TestConverter(t *testing.T) {
 				Edit(0, 1, "한").
 				Edit(0, 1, "하").
 				Edit(1, 1, "느").
-				Edit(1, 2, "늘").
-				Select(1, 2)
+				Edit(1, 2, "늘")
 
 			// rich text
 			root.SetNewText("k3").

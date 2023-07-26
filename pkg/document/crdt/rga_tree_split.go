@@ -144,21 +144,6 @@ func (pos *RGATreeSplitNodePos) Equal(other *RGATreeSplitNodePos) bool {
 	return pos.relativeOffset == other.relativeOffset
 }
 
-// Selection represents the selection of text range in the editor.
-type Selection struct {
-	from      *RGATreeSplitNodePos
-	to        *RGATreeSplitNodePos
-	updatedAt *time.Ticket
-}
-
-func newSelection(from, to *RGATreeSplitNodePos, updatedAt *time.Ticket) *Selection {
-	return &Selection{
-		from,
-		to,
-		updatedAt,
-	}
-}
-
 // RGATreeSplitNode is a node of RGATreeSplit.
 type RGATreeSplitNode[V RGATreeSplitValue] struct {
 	id        *RGATreeSplitNodeID

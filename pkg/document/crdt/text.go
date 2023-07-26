@@ -116,7 +116,6 @@ func InitialTextNode() *RGATreeSplitNode[*TextValue] {
 // Text is an extended data type for the contents of a text editor.
 type Text struct {
 	rgaTreeSplit *RGATreeSplit[*TextValue]
-	selectionMap map[string]*Selection
 	createdAt    *time.Ticket
 	movedAt      *time.Ticket
 	removedAt    *time.Ticket
@@ -126,7 +125,6 @@ type Text struct {
 func NewText(elements *RGATreeSplit[*TextValue], createdAt *time.Ticket) *Text {
 	return &Text{
 		rgaTreeSplit: elements,
-		selectionMap: make(map[string]*Selection),
 		createdAt:    createdAt,
 	}
 }
@@ -274,17 +272,6 @@ func (t *Text) Style(
 		}
 	}
 	return nil
-}
-
-// Select stores that the given range has been selected.
-func (t *Text) Select(
-	from *RGATreeSplitNodePos,
-	to *RGATreeSplitNodePos,
-	executedAt *time.Ticket,
-) {
-	if prev, ok := t.selectionMap[executedAt.ActorIDHex()]; !ok || executedAt.After(prev.updatedAt) {
-		t.selectionMap[executedAt.ActorIDHex()] = newSelection(from, to, executedAt)
-	}
 }
 
 // Nodes returns the internal nodes of this Text.

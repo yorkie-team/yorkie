@@ -122,29 +122,3 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 
 	return p
 }
-
-// Select stores that the given range has been selected.
-func (p *Text) Select(from, to int) *Text {
-	if from > to {
-		panic("from should be less than or equal to to")
-	}
-	fromPos, toPos, err := p.Text.CreateRange(from, to)
-	if err != nil {
-		panic(err)
-	}
-
-	ticket := p.context.IssueTimeTicket()
-	p.Text.Select(
-		fromPos,
-		toPos,
-		ticket,
-	)
-
-	p.context.Push(operations.NewSelect(
-		p.CreatedAt(),
-		fromPos,
-		toPos,
-		ticket,
-	))
-	return p
-}
