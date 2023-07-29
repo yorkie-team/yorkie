@@ -2,6 +2,7 @@
 title: delete-range-in-splay-tree
 target-version: 0.2.12
 ---
+
 ---
 
 # Range Deletion in Splay Tree
@@ -14,7 +15,7 @@ Using the feature of a splay tree that changes the root freely, `splay.DeleteRan
 
 ### Goals
 
-The function `DeleteRange` should separate all nodes exactly in the given range as a subtree. After executing the function, the entire tree from and weight of every node must be correct just as when the nodes were deleted one by one.
+The function `DeleteRange` should separate all nodes exactly in the given range as a subtree. After executing the function, the entire tree structure and weight of every node must be correct just as when the nodes were deleted one by one.
 
 ## Proposal Details
 
@@ -24,8 +25,7 @@ From the property of indexed BST, all nodes with a smaller index than the root a
 
 And also, Splay Tree can change the root freely to use `Splay`.
 
-Then using the properties, when we want to delete the range from index `L` to `R` we can make the shape of tree like the figure avobe to `Splay(L-1)` then `Splay(R+1)`.
-
+Then using the properties, when we want to delete the range from index `L` to `R` we can make the shape of tree like the figure above to `Splay(L-1)` then `Splay(R+1)`.
 
 ![delete-range-in-splay-tree-2](./media/range-deletion-in-splay-tree-2-separation.png)
 
@@ -39,10 +39,10 @@ func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
     t.cutOffRight(leftBoundary)
     return
   }
-  
+
   t.Splay(leftBoundary)
   t.Splay(rightBoundary)
-  
+
   // refer case 2 of second figure
   if rightBoundary.left != leftBoundary {
     t.rotateRight(leftBoundary)
@@ -51,9 +51,11 @@ func (t *Tree[V]) DeleteRange(leftBoundary, rightBoundary *Node[V]) {
 }
 
 ```
+
 Sometimes the tree shapes like case 2 after `Splay`s because of the zig-zig case of `Splay`. But it simply changes to the same shapes as case 1 in one rotation for `L-1`.
 
 Then now to cut off the right child(subtree) of `L-1`, we can separate all nodes in the given range to be deleted.
+
 ### Risks and Mitigation
 
 `DeleteRange` does not consider the occurrence of new nodes due to concurrent editing in the range to be deleted. They should be filtered before using `DeleteRange`, and `DeleteRange` should be executed continuously in the smaller ranges that do not include them.
