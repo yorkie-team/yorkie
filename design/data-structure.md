@@ -44,7 +44,7 @@ JSON-like data strucutres are used when editing JSON-like documents.
 
 - `Primitive`: represents primitive data like `string`, `number`, `boolean`, `null`, etc.
 - `Object`: represents [object type](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object) of JavaScript. Just like JavaScript, you can use `Object` as [hash table](https://en.wikipedia.org/wiki/Hash_table).
-- `Array`: represents [array type](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array) of JavaScript. You can also use `Array` as [list](<https://en.wikipedia.org/wiki/List_(abstract_data_type)>).
+- `Array`: represents [array type](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array) of JavaScript. You can also use `Array` as [list](https://en.wikipedia.org/wiki/List_(abstract_data_type)).
 - `Text`: represents text with style attributes in rich text editors such as [Quill](https://github.com/yorkie-team/yorkie-js-sdk/blob/main/examples/quill.html). Users can express styles such as bold, italic, and underline to text content. Of course, it can represent just a plain text in text-based editors such as [CodeMirror](https://github.com/yorkie-team/yorkie-js-sdk/blob/main/examples/index.html). It supports collaborative editing; multiple users can modify parts of the contents without conflict.
 
 JSON-like data structures can be edited through proxies. For example:
