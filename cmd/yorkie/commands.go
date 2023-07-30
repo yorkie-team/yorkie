@@ -19,10 +19,12 @@ package main
 
 import (
 	"os"
+	"path"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
-	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
+	"github.com/yorkie-team/yorkie/cmd/yorkie/context"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/document"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/project"
 )
@@ -46,8 +48,13 @@ func init() {
 	rootCmd.SetErr(os.Stderr)
 	rootCmd.AddCommand(project.SubCmd)
 	rootCmd.AddCommand(document.SubCmd)
-	// TODO(chacha912): set rpcAddr from env using viper.
-	// https://github.com/spf13/cobra/blob/main/user_guide.md#bind-flags-with-config
-	rootCmd.PersistentFlags().StringVar(&config.RPCAddr, "rpc-addr", "localhost:11101", "Address of the rpc server")
-	rootCmd.PersistentFlags().BoolVar(&config.IsInsecure, "insecure", false, "Skip the TLS connection of the client")
+	rootCmd.AddCommand(context.SubCmd)
+	viper.SetConfigName("config")
+	viper.SetConfigType("json")
+	viper.AddConfigPath(path.Join(os.Getenv("HOME"), ".yorkie"))
+
+	rootCmd.PersistentFlags().String("rpc-addr", "localhost:11101", "Address of the rpc server")
+	rootCmd.PersistentFlags().Bool("insecure", false, "Skip the TLS connection of the client")
+	viper.BindPFlag("rpcAddr", rootCmd.PersistentFlags().Lookup("rpc-addr"))
+	viper.BindPFlag("isInsecure", rootCmd.PersistentFlags().Lookup("insecure"))
 }

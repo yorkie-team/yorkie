@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -34,8 +35,14 @@ func newLoginCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "login",
 		Short: "Log in to the Yorkie server",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := viper.ReadInConfig(); err != nil {
+				return err
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cli, err := admin.Dial(config.RPCAddr, admin.WithInsecure(config.IsInsecure))
+			cli, err := admin.Dial(viper.GetString("rpcAddr"), admin.WithInsecure(viper.GetBool("isInsecure")))
 			if err != nil {
 				return err
 			}
@@ -48,13 +55,17 @@ func newLoginCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-
 			conf, err := config.Load()
 			if err != nil {
 				return nil
 			}
-
-			conf.Auths[config.RPCAddr] = token
+			if conf.Auths == nil {
+				conf.Auths = make(map[string]string)
+			}
+			rpcAddr := viper.GetString("rpcAddr")
+			conf.Auths[rpcAddr] = token
+			conf.RPCAddr = rpcAddr
+			conf.IsInsecure = viper.GetBool("isInsecure")
 			if err := config.Save(conf); err != nil {
 				return err
 			}

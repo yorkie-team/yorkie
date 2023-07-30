@@ -54,6 +54,10 @@ func configPath() (string, error) {
 type Config struct {
 	// Auths is the map of the address and the token.
 	Auths map[string]string `json:"auths"`
+	// RPCAddr is the address of the rpc server
+	RPCAddr string `json:"rpcAddr"`
+	// IsInsecure specifies whether to skip the TLS connection of the client
+	IsInsecure bool `json:"isInsecure"`
 }
 
 // New creates a new configuration.
