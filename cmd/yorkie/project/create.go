@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/status"
 
@@ -35,17 +36,24 @@ func newCreateCommand() *cobra.Command {
 		Use:     "create [name]",
 		Short:   "Create a new project",
 		Example: "yorkie project create sample-project",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := viper.ReadInConfig(); err != nil {
+				return err
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return errors.New("name is required")
 			}
 			name := args[0]
 
-			token, err := config.LoadToken(config.RPCAddr)
+			rpcAddr := viper.GetString("rpcAddr")
+			token, err := config.LoadToken(rpcAddr)
 			if err != nil {
 				return err
 			}
-			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token), admin.WithInsecure(config.IsInsecure))
+			cli, err := admin.Dial(rpcAddr, admin.WithToken(token), admin.WithInsecure(viper.GetBool("isInsecure")))
 			if err != nil {
 				return err
 			}

@@ -21,6 +21,7 @@ import (
 	"errors"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -35,6 +36,12 @@ func newRemoveCommand() *cobra.Command {
 		Use:     "remove [project name] [document key]",
 		Short:   "Remove documents in the project",
 		Example: "yorkie document remove sample-project sample-document [options]",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := viper.ReadInConfig(); err != nil {
+				return err
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return errors.New("project name and document key are required")
@@ -42,11 +49,12 @@ func newRemoveCommand() *cobra.Command {
 			projectName := args[0]
 			documentKey := args[1]
 
-			token, err := config.LoadToken(config.RPCAddr)
+			rpcAddr := viper.GetString("rpcAddr")
+			token, err := config.LoadToken(rpcAddr)
 			if err != nil {
 				return err
 			}
-			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token), admin.WithInsecure(config.IsInsecure))
+			cli, err := admin.Dial(rpcAddr, admin.WithToken(token), admin.WithInsecure(viper.GetBool("isInsecure")))
 			if err != nil {
 				return err
 			}

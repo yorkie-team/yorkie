@@ -22,6 +22,7 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -32,13 +33,20 @@ func newListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "ls",
 		Short: "List all projects",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := viper.ReadInConfig(); err != nil {
+				return err
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			token, err := config.LoadToken(config.RPCAddr)
+			rpcAddr := viper.GetString("rpcAddr")
+			token, err := config.LoadToken(rpcAddr)
 			if err != nil {
 				return err
 			}
 
-			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token), admin.WithInsecure(config.IsInsecure))
+			cli, err := admin.Dial(rpcAddr, admin.WithToken(token), admin.WithInsecure(viper.GetBool("isInsecure")))
 			if err != nil {
 				return err
 			}

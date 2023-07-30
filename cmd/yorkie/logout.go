@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
@@ -33,24 +34,34 @@ func newLogoutCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "logout",
 		Short: "Log out from the Yorkie server",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := viper.ReadInConfig(); err != nil {
+				return err
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf, err := config.Load()
 			if err != nil {
 				return err
 			}
+			rpcAddr := viper.GetString("rpcAddr")
 			if flagForce {
 				return config.Delete()
 			}
-			if config.RPCAddr == "" {
+			if rpcAddr == "" {
 				return errors.New("you must specify the server address to log out")
 			}
-			if _, ok := conf.Auths[config.RPCAddr]; !ok {
-				return fmt.Errorf("you are not logged in to %s", config.RPCAddr)
+			authToken, ok := conf.Auths[rpcAddr]
+			if !ok || authToken == "" {
+				return fmt.Errorf("you are not logged in to %s", rpcAddr)
 			}
 			if len(conf.Auths) <= 1 {
 				return config.Delete()
 			}
-			delete(conf.Auths, config.RPCAddr)
+			delete(conf.Auths, rpcAddr)
+			conf.IsInsecure = false
+			conf.RPCAddr = ""
 			return config.Save(conf)
 		},
 	}
