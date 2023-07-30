@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -37,7 +38,7 @@ func newLoginCmd() *cobra.Command {
 		Short: "Log in to the Yorkie server",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := viper.ReadInConfig(); err != nil {
-				return err
+				return fmt.Errorf("failed to read in config: %w", err)
 			}
 			return nil
 		},

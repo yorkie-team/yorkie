@@ -19,6 +19,7 @@ package document
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -38,7 +39,7 @@ func newRemoveCommand() *cobra.Command {
 		Example: "yorkie document remove sample-project sample-document [options]",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := viper.ReadInConfig(); err != nil {
-				return err
+				return fmt.Errorf("failed to read in config: %w", err)
 			}
 			return nil
 		},

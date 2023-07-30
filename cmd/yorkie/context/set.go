@@ -31,7 +31,7 @@ func newSetContextCmd() *cobra.Command {
 		Short: "Set the current global flags as the context",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := viper.ReadInConfig(); err != nil {
-				return err
+				return fmt.Errorf("failed to read in config: %w", err)
 			}
 			return nil
 		},

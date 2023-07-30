@@ -31,7 +31,7 @@ func newListCommand() *cobra.Command {
 		Short: "List all contexts from configuration",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := viper.ReadInConfig(); err != nil {
-				return err
+				return fmt.Errorf("failed to read in config: %w", err)
 			}
 			return nil
 		},

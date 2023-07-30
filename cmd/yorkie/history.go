@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
@@ -41,7 +42,7 @@ func newHistoryCmd() *cobra.Command {
 		Short: "Show the history of a document",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := viper.ReadInConfig(); err != nil {
-				return err
+				return fmt.Errorf("failed to read in config: %w", err)
 			}
 			return nil
 		},

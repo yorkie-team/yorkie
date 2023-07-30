@@ -45,7 +45,7 @@ func newUpdateCommand() *cobra.Command {
 		Example: "yorkie project update name [options]",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := viper.ReadInConfig(); err != nil {
-				return err
+				return fmt.Errorf("failed to read in config: %w", err)
 			}
 			return nil
 		},
