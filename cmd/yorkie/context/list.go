@@ -22,6 +22,7 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
