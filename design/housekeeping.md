@@ -7,10 +7,8 @@ target-version: 0.2.1
 
 ## Summary
 
-We provide Garbage Collection to purge tombstones and prevent the problem of
+We provide [Garbage Collection](garbage-collection.md) to purge tombstones and prevent the problem of
 documents growing.
-
-https://yorkie.dev/docs/garbage-collection
 
 However, when there are clients that has been editing old documents but have not
 been used for a long time, garbage collection becomes less efficient.
