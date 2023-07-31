@@ -21,10 +21,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
-
-	"github.com/yorkie-team/yorkie/pkg/cache"
-	"github.com/yorkie-team/yorkie/server/logging"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
@@ -33,14 +29,13 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/cache"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
-
-const projectInfoCacheSize = 256
-const projectInfoCacheTTL = time.Hour
 
 // ContextInterceptor is an interceptor for building additional context.
 type ContextInterceptor struct {
@@ -50,7 +45,7 @@ type ContextInterceptor struct {
 
 // NewContextInterceptor creates a new instance of ContextInterceptor.
 func NewContextInterceptor(be *backend.Backend) *ContextInterceptor {
-	projectInfoCache, err := cache.NewLRUExpireCache[string, *types.Project](projectInfoCacheSize)
+	projectInfoCache, err := cache.NewLRUExpireCache[string, *types.Project](be.Config.ProjectInfoCacheSize)
 	if err != nil {
 		logging.DefaultLogger().Fatal("Failed to create project info cache: %v", err)
 	}
@@ -170,7 +165,7 @@ func (i *ContextInterceptor) buildContext(ctx context.Context) (context.Context,
 		if err != nil {
 			return nil, grpchelper.ToStatusError(err)
 		}
-		i.projectInfoCache.Add(cacheKey, project, projectInfoCacheTTL)
+		i.projectInfoCache.Add(cacheKey, project, i.backend.Config.ParseProjectInfoCacheTTL())
 		ctx = projects.With(ctx, project)
 	}
 

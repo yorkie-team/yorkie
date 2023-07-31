@@ -161,6 +161,8 @@ func TestProjectAuthWebhook(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
+		projectInfoCacheTTL := 5 * time.Second
+		time.Sleep(projectInfoCacheTTL)
 		cli, err := client.Dial(
 			svr.RPCAddr(),
 			client.WithAPIKey(project.PublicKey),
