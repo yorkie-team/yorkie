@@ -29,7 +29,7 @@ import (
 )
 
 // SnapshotToBytes converts the given document to byte array.
-func SnapshotToBytes(obj *crdt.Object, presences *innerpresence.Map) ([]byte, error) {
+func SnapshotToBytes(obj *crdt.Object, presences map[string]innerpresence.Presence) ([]byte, error) {
 	pbElem, err := toJSONElement(obj)
 	if err != nil {
 		return nil, err

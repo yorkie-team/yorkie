@@ -432,7 +432,7 @@ func (c *Client) Watch(
 				clientIDs = append(clientIDs, id.String())
 			}
 
-			doc.SetOnlineClientSet(clientIDs...)
+			doc.SetOnlineClients(clientIDs...)
 			return nil, nil
 		case *api.WatchDocumentResponse_Event:
 			eventType, err := converter.FromEventType(resp.Event.Type)
@@ -450,18 +450,18 @@ func (c *Client) Watch(
 				return &WatchResponse{Type: DocumentChanged}, nil
 			case types.DocumentsWatchedEvent:
 				doc.AddOnlineClient(cli.String())
-				if doc.OnlinePresence(cli.String()) == nil {
+				if doc.Presence(cli.String()) == nil {
 					return nil, nil
 				}
 
 				return &WatchResponse{
 					Type: DocumentWatched,
 					Presences: map[string]innerpresence.Presence{
-						cli.String(): doc.OnlinePresence(cli.String()),
+						cli.String(): doc.Presence(cli.String()),
 					},
 				}, nil
 			case types.DocumentsUnwatchedEvent:
-				p := doc.OnlinePresence(cli.String())
+				p := doc.Presence(cli.String())
 				doc.RemoveOnlineClient(cli.String())
 
 				return &WatchResponse{
