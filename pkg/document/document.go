@@ -43,6 +43,10 @@ const (
 	// enabling real-time synchronization.
 	WatchedEvent DocEventType = "watched"
 
+	// UnwatchedEvent means that the client has disconnected from the server,
+	// disabling real-time synchronization.
+	UnwatchedEvent DocEventType = "unwatched"
+
 	// PresenceChangedEvent means that the presences of the clients who are editing
 	// the document have changed.
 	PresenceChangedEvent DocEventType = "presence-changed"

@@ -257,17 +257,29 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 		if c.PresenceChange() != nil {
 			clientID := c.ID().ActorID().String()
 			if _, ok := d.onlineClients.Load(clientID); ok {
-				event := DocEvent{
-					Type: PresenceChangedEvent,
-					Presences: map[string]innerpresence.Presence{
-						clientID: c.PresenceChange().Presence,
-					},
+				switch c.PresenceChange().ChangeType {
+				case innerpresence.Put:
+					eventType := PresenceChangedEvent
+					if !d.presences.Has(clientID) {
+						eventType = WatchedEvent
+					}
+					event := DocEvent{
+						Type: eventType,
+						Presences: map[string]innerpresence.Presence{
+							clientID: c.PresenceChange().Presence,
+						},
+					}
+					events = append(events, event)
+				case innerpresence.Clear:
+					event := DocEvent{
+						Type: UnwatchedEvent,
+						Presences: map[string]innerpresence.Presence{
+							clientID: d.Presence(clientID),
+						},
+					}
+					events = append(events, event)
+					d.RemoveOnlineClient(clientID)
 				}
-
-				if !d.presences.Has(clientID) {
-					event.Type = WatchedEvent
-				}
-				events = append(events, event)
 			}
 		}
 

@@ -463,6 +463,9 @@ func (c *Client) Watch(
 			case types.DocumentsUnwatchedEvent:
 				p := doc.Presence(cli.String())
 				doc.RemoveOnlineClient(cli.String())
+				if p == nil {
+					return nil, nil
+				}
 
 				return &WatchResponse{
 					Type: DocumentUnwatched,
@@ -521,6 +524,8 @@ func (c *Client) Watch(
 				t := PresenceChanged
 				if e.Type == document.WatchedEvent {
 					t = DocumentWatched
+				} else if e.Type == document.UnwatchedEvent {
+					t = DocumentUnwatched
 				}
 				rch <- WatchResponse{Type: t, Presences: e.Presences}
 			case <-ctx.Done():

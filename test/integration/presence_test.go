@@ -249,7 +249,7 @@ func TestPresence(t *testing.T) {
 						})
 					}
 
-					if len(responsePairs) == 4 {
+					if len(responsePairs) == 3 {
 						return
 					}
 				}
@@ -285,23 +285,16 @@ func TestPresence(t *testing.T) {
 
 		// 05. Unwatch the second client's document.
 		expected = append(expected, watchResponsePair{
-			Type: client.PresenceChanged,
+			Type: client.DocumentUnwatched,
 			Presences: map[string]innerpresence.Presence{
-				c2.ID().String(): nil,
+				c2.ID().String(): d2.MyPresence(),
 			},
 		})
 		assert.NoError(t, c2.Detach(ctx, d2))
 		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
-
-		expected = append(expected, watchResponsePair{
-			Type: client.DocumentUnwatched,
-			Presences: map[string]innerpresence.Presence{
-				c2.ID().String(): nil,
-			},
-		})
-		cancel2()
-
 		wgEvents.Wait()
+
+		cancel2()
 		assert.Equal(t, expected, responsePairs)
 	})
 
