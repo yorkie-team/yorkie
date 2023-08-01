@@ -38,7 +38,7 @@ func SignUp(
 		return nil, fmt.Errorf("cannot hash password: %w", err)
 	}
 
-	info, err := be.DB.CreateUserInfo(ctx, username, string(hashed))
+	info, err := be.DB.CreateUserInfo(ctx, username, hashed)
 	if err != nil {
 		return nil, err
 	}
