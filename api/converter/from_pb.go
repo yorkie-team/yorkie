@@ -260,8 +260,6 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 			op, err = fromRemove(decoded.Remove)
 		case *api.Operation_Edit_:
 			op, err = fromEdit(decoded.Edit)
-		case *api.Operation_Select_:
-			op, err = fromSelect(decoded.Select)
 		case *api.Operation_Style_:
 			op, err = fromStyle(decoded.Style)
 		case *api.Operation_Increase_:
@@ -417,31 +415,6 @@ func fromRemove(pbRemove *api.Operation_Remove) (*operations.Remove, error) {
 	return operations.NewRemove(
 		parentCreatedAt,
 		createdAt,
-		executedAt,
-	), nil
-}
-
-func fromSelect(pbSelect *api.Operation_Select) (*operations.Select, error) {
-	parentCreatedAt, err := fromTimeTicket(pbSelect.ParentCreatedAt)
-	if err != nil {
-		return nil, err
-	}
-	from, err := fromTextNodePos(pbSelect.From)
-	if err != nil {
-		return nil, err
-	}
-	to, err := fromTextNodePos(pbSelect.To)
-	if err != nil {
-		return nil, err
-	}
-	executedAt, err := fromTimeTicket(pbSelect.ExecutedAt)
-	if err != nil {
-		return nil, err
-	}
-	return operations.NewSelect(
-		parentCreatedAt,
-		from,
-		to,
 		executedAt,
 	), nil
 }

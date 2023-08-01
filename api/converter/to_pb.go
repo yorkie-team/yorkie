@@ -245,8 +245,6 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toRemove(op)
 		case *operations.Edit:
 			pbOperation.Body, err = toEdit(op)
-		case *operations.Select:
-			pbOperation.Body, err = toSelect(op)
 		case *operations.Style:
 			pbOperation.Body, err = toStyle(op)
 		case *operations.Increase:
@@ -364,17 +362,6 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 			Content:             e.Content(),
 			Attributes:          e.Attributes(),
 			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
-		},
-	}, nil
-}
-
-func toSelect(s *operations.Select) (*api.Operation_Select_, error) {
-	return &api.Operation_Select_{
-		Select: &api.Operation_Select{
-			ParentCreatedAt: ToTimeTicket(s.ParentCreatedAt()),
-			From:            toTextNodePos(s.From()),
-			To:              toTextNodePos(s.To()),
-			ExecutedAt:      ToTimeTicket(s.ExecutedAt()),
 		},
 	}, nil
 }
