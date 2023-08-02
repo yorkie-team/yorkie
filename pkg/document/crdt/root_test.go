@@ -36,15 +36,18 @@ func TestRoot(t *testing.T) {
 	t.Run("garbage collection for array test", func(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-		array := crdt.NewArray(crdt.NewRGATreeList(), ctx.IssueTimeTicket())
 
-		array.Add(crdt.NewPrimitive(0, ctx.IssueTimeTicket()))
-		array.Add(crdt.NewPrimitive(1, ctx.IssueTimeTicket()))
-		array.Add(crdt.NewPrimitive(2, ctx.IssueTimeTicket()))
+		array := crdt.NewArray(crdt.NewRGATreeList(), ctx.IssueTimeTicket())
+		var err error
+		for _, v := range []int{0, 1, 2} {
+			err = array.Add(crdt.NewPrimitive(v, ctx.IssueTimeTicket()))
+			assert.NoError(t, err)
+		}
 		assert.Equal(t, "[0,1,2]", array.Marshal())
 
 		targetElement, _ := array.Get(1)
-		array.DeleteByCreatedAt(targetElement.CreatedAt(), ctx.IssueTimeTicket())
+		_, err = array.DeleteByCreatedAt(targetElement.CreatedAt(), ctx.IssueTimeTicket())
+		assert.NoError(t, err)
 		root.RegisterRemovedElementPair(array, targetElement)
 		assert.Equal(t, "[0,2]", array.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
@@ -182,10 +185,14 @@ func TestRoot(t *testing.T) {
 
 		obj := root.Object()
 		obj.Set("1", crdt.NewPrimitive(1, ctx.IssueTimeTicket()))
-		arr := crdt.NewArray(crdt.NewRGATreeList(), ctx.IssueTimeTicket()).
-			Add(crdt.NewPrimitive(1, ctx.IssueTimeTicket())).
-			Add(crdt.NewPrimitive(2, ctx.IssueTimeTicket())).
-			Add(crdt.NewPrimitive(3, ctx.IssueTimeTicket()))
+
+		arr := crdt.NewArray(crdt.NewRGATreeList(), ctx.IssueTimeTicket())
+		var err error
+		for _, v := range []int{1, 2, 3} {
+			err = arr.Add(crdt.NewPrimitive(v, ctx.IssueTimeTicket()))
+			assert.NoError(t, err)
+		}
+
 		obj.Set("2", arr)
 		obj.Set("3", crdt.NewPrimitive(3, ctx.IssueTimeTicket()))
 		assert.Equal(t, `{"1":1,"2":[1,2,3],"3":3}`, root.Object().Marshal())

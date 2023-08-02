@@ -64,7 +64,10 @@ func (o *Add) Execute(root *crdt.Root) error {
 	if err != nil {
 		return err
 	}
-	obj.InsertAfter(o.prevCreatedAt, value)
+
+	if err = obj.InsertAfter(o.prevCreatedAt, value); err != nil {
+		return err
+	}
 
 	root.RegisterElement(value)
 	return nil
