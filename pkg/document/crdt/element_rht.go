@@ -132,7 +132,7 @@ func (rht *ElementRHT) Delete(k string, deletedAt *time.Ticket) Element {
 func (rht *ElementRHT) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (Element, error) {
 	node, ok := rht.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		return nil, fmt.Errorf("fail to find the given createdAt: %s", createdAt.Key())
+		return nil, fmt.Errorf("DeleteByCreatedAt %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
 	if !node.Remove(deletedAt) {

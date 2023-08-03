@@ -58,15 +58,15 @@ func TestRGATreeList(t *testing.T) {
 		assert.NoError(t, err)
 
 		_, err = elements.DeleteByCreatedAt(invalidCreatedAt, ctx.IssueTimeTicket())
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
 		err = elements.MoveAfter(validCreatedAt, invalidCreatedAt, ctx.IssueTimeTicket())
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
 		err = elements.MoveAfter(invalidCreatedAt, validCreatedAt, ctx.IssueTimeTicket())
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 
 		_, err = elements.FindPrevCreatedAt(invalidCreatedAt)
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, crdt.ErrChildNotFound)
 	})
 }
