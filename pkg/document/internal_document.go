@@ -257,17 +257,29 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 		if c.PresenceChange() != nil {
 			clientID := c.ID().ActorID().String()
 			if _, ok := d.onlineClients.Load(clientID); ok {
-				event := DocEvent{
-					Type: PresenceChangedEvent,
-					Presences: map[string]innerpresence.Presence{
-						clientID: c.PresenceChange().Presence,
-					},
+				switch c.PresenceChange().ChangeType {
+				case innerpresence.Put:
+					eventType := PresenceChangedEvent
+					if !d.presences.Has(clientID) {
+						eventType = WatchedEvent
+					}
+					event := DocEvent{
+						Type: eventType,
+						Presences: map[string]innerpresence.Presence{
+							clientID: c.PresenceChange().Presence,
+						},
+					}
+					events = append(events, event)
+				case innerpresence.Clear:
+					event := DocEvent{
+						Type: UnwatchedEvent,
+						Presences: map[string]innerpresence.Presence{
+							clientID: d.Presence(clientID),
+						},
+					}
+					events = append(events, event)
+					d.RemoveOnlineClient(clientID)
 				}
-
-				if !d.presences.Has(clientID) {
-					event.Type = WatchedEvent
-				}
-				events = append(events, event)
 			}
 		}
 
@@ -283,34 +295,56 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 
 // MyPresence returns the presence of the actor currently editing the document.
 func (d *InternalDocument) MyPresence() innerpresence.Presence {
-	p := d.presences.LoadOrStore(d.changeID.ActorID().String(), innerpresence.NewPresence())
+	if d.status != StatusAttached {
+		return innerpresence.NewPresence()
+	}
+	p := d.presences.Load(d.changeID.ActorID().String())
 	return p.DeepCopy()
 }
 
-// Presences returns the map of presences of the actors currently editing the document.
-func (d *InternalDocument) Presences() *innerpresence.Map {
-	return d.presences
-}
-
-// OnlinePresence returns the presence of the given client. If the client is not
-// online, it returns nil.
-func (d *InternalDocument) OnlinePresence(clientID string) innerpresence.Presence {
+// Presence returns the presence of the given client.
+// If the client is not online, it returns nil.
+func (d *InternalDocument) Presence(clientID string) innerpresence.Presence {
 	if _, ok := d.onlineClients.Load(clientID); !ok {
 		return nil
 	}
 
-	presence, _ := d.presences.Load(clientID)
-	return presence
+	return d.presences.Load(clientID).DeepCopy()
 }
 
-// Presence returns the presence of the given client.
-func (d *InternalDocument) Presence(clientID string) innerpresence.Presence {
-	presence, _ := d.presences.Load(clientID)
-	return presence
+// PresenceForTest returns the presence of the given client
+// regardless of whether the client is online or not.
+func (d *InternalDocument) PresenceForTest(clientID string) innerpresence.Presence {
+	return d.presences.Load(clientID).DeepCopy()
 }
 
-// SetOnlineClientSet sets the online client set.
-func (d *InternalDocument) SetOnlineClientSet(ids ...string) {
+// Presences returns the presence map of online clients.
+func (d *InternalDocument) Presences() map[string]innerpresence.Presence {
+	presences := make(map[string]innerpresence.Presence)
+	d.onlineClients.Range(func(key, value interface{}) bool {
+		p := d.presences.Load(key.(string))
+		if p == nil {
+			return true
+		}
+		presences[key.(string)] = p.DeepCopy()
+		return true
+	})
+	return presences
+}
+
+// AllPresences returns the presence map of all clients
+// regardless of whether the client is online or not.
+func (d *InternalDocument) AllPresences() map[string]innerpresence.Presence {
+	presences := make(map[string]innerpresence.Presence)
+	d.presences.Range(func(key string, value innerpresence.Presence) bool {
+		presences[key] = value.DeepCopy()
+		return true
+	})
+	return presences
+}
+
+// SetOnlineClients sets the online clients.
+func (d *InternalDocument) SetOnlineClients(ids ...string) {
 	d.onlineClients.Range(func(key, value interface{}) bool {
 		d.onlineClients.Delete(key)
 		return true
@@ -321,12 +355,12 @@ func (d *InternalDocument) SetOnlineClientSet(ids ...string) {
 	}
 }
 
-// AddOnlineClient adds the given client to the online client set.
+// AddOnlineClient adds the given client to the online clients.
 func (d *InternalDocument) AddOnlineClient(clientID string) {
 	d.onlineClients.Store(clientID, true)
 }
 
-// RemoveOnlineClient removes the given client from the online client set.
+// RemoveOnlineClient removes the given client from the online clients.
 func (d *InternalDocument) RemoveOnlineClient(clientID string) {
 	d.onlineClients.Delete(clientID)
 }

@@ -43,6 +43,10 @@ const (
 	// enabling real-time synchronization.
 	WatchedEvent DocEventType = "watched"
 
+	// UnwatchedEvent means that the client has disconnected from the server,
+	// disabling real-time synchronization.
+	UnwatchedEvent DocEventType = "unwatched"
+
 	// PresenceChangedEvent means that the presences of the clients who are editing
 	// the document have changed.
 	PresenceChangedEvent DocEventType = "presence-changed"
@@ -282,46 +286,48 @@ func (d *Document) ensureClone() error {
 	return nil
 }
 
-// Presences returns the presence map of this document.
-func (d *Document) Presences() map[string]innerpresence.Presence {
-	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
-	presences := make(map[string]innerpresence.Presence)
-	d.doc.presences.Range(func(key string, value innerpresence.Presence) bool {
-		presences[key] = value
-		return true
-	})
-	return presences
-}
-
-// Presence returns the presence of the given client.
-func (d *Document) Presence(clientID string) innerpresence.Presence {
-	return d.doc.Presence(clientID)
-}
-
 // MyPresence returns the presence of the actor.
 func (d *Document) MyPresence() innerpresence.Presence {
 	return d.doc.MyPresence()
 }
 
-// SetOnlineClientSet sets the online client set.
-func (d *Document) SetOnlineClientSet(clientIDs ...string) {
-	d.doc.SetOnlineClientSet(clientIDs...)
+// Presence returns the presence of the given client.
+// If the client is not online, it returns nil.
+func (d *Document) Presence(clientID string) innerpresence.Presence {
+	return d.doc.Presence(clientID)
 }
 
-// AddOnlineClient adds the given client to the online client set.
+// PresenceForTest returns the presence of the given client
+// regardless of whether the client is online or not.
+func (d *Document) PresenceForTest(clientID string) innerpresence.Presence {
+	return d.doc.PresenceForTest(clientID)
+}
+
+// Presences returns the presence map of online clients.
+func (d *Document) Presences() map[string]innerpresence.Presence {
+	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
+	return d.doc.Presences()
+}
+
+// AllPresences returns the presence map of all clients
+// regardless of whether the client is online or not.
+func (d *Document) AllPresences() map[string]innerpresence.Presence {
+	return d.doc.AllPresences()
+}
+
+// SetOnlineClients sets the online clients.
+func (d *Document) SetOnlineClients(clientIDs ...string) {
+	d.doc.SetOnlineClients(clientIDs...)
+}
+
+// AddOnlineClient adds the given client to the online clients.
 func (d *Document) AddOnlineClient(clientID string) {
 	d.doc.AddOnlineClient(clientID)
 }
 
-// RemoveOnlineClient removes the given client from the online client set.
+// RemoveOnlineClient removes the given client from the online clients.
 func (d *Document) RemoveOnlineClient(clientID string) {
 	d.doc.RemoveOnlineClient(clientID)
-}
-
-// OnlinePresence returns the presence of the given client. If the client is not
-// online, it returns nil.
-func (d *Document) OnlinePresence(clientID string) innerpresence.Presence {
-	return d.doc.OnlinePresence(clientID)
 }
 
 // Events returns the events of this document.
