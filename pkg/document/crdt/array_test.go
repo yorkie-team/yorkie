@@ -32,11 +32,14 @@ func TestArray(t *testing.T) {
 
 		a := crdt.NewArray(crdt.NewRGATreeList(), ctx.IssueTimeTicket())
 
-		a.Add(crdt.NewPrimitive("1", ctx.IssueTimeTicket()))
+		err := a.Add(crdt.NewPrimitive("1", ctx.IssueTimeTicket()))
+		assert.NoError(t, err)
 		assert.Equal(t, `["1"]`, a.Marshal())
-		a.Add(crdt.NewPrimitive("2", ctx.IssueTimeTicket()))
+		err = a.Add(crdt.NewPrimitive("2", ctx.IssueTimeTicket()))
+		assert.NoError(t, err)
 		assert.Equal(t, `["1","2"]`, a.Marshal())
-		a.Add(crdt.NewPrimitive("3", ctx.IssueTimeTicket()))
+		err = a.Add(crdt.NewPrimitive("3", ctx.IssueTimeTicket()))
+		assert.NoError(t, err)
 		assert.Equal(t, `["1","2","3"]`, a.Marshal())
 	})
 }

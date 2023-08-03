@@ -36,7 +36,7 @@ type Container interface {
 	Descendants(callback func(elem Element, parent Container) bool)
 
 	// DeleteByCreatedAt removes the given element from this container.
-	DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element
+	DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (Element, error)
 }
 
 // GCElement represents Element which has GC.

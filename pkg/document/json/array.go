@@ -214,7 +214,9 @@ func (p *Array) insertAfterInternal(
 		ticket,
 	))
 
-	p.InsertAfter(prevCreatedAt, value)
+	if err = p.InsertAfter(prevCreatedAt, value); err != nil {
+		panic(err)
+	}
 	p.context.RegisterElement(value)
 
 	return elem
@@ -223,7 +225,10 @@ func (p *Array) insertAfterInternal(
 func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 	ticket := p.context.IssueTimeTicket()
 
-	prevCreatedAt := p.FindPrevCreatedAt(nextCreatedAt)
+	prevCreatedAt, err := p.FindPrevCreatedAt(nextCreatedAt)
+	if err != nil {
+		panic(err)
+	}
 
 	p.context.Push(operations.NewMove(
 		p.Array.CreatedAt(),
@@ -232,5 +237,7 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 		ticket,
 	))
 
-	p.MoveAfter(prevCreatedAt, createdAt, ticket)
+	if err = p.MoveAfter(prevCreatedAt, createdAt, ticket); err != nil {
+		panic(err)
+	}
 }

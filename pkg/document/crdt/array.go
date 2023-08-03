@@ -43,9 +43,8 @@ func (a *Array) Purge(elem Element) error {
 }
 
 // Add adds the given element at the last.
-func (a *Array) Add(elem Element) *Array {
-	a.elements.Add(elem)
-	return a
+func (a *Array) Add(elem Element) error {
+	return a.elements.Add(elem)
 }
 
 // Get returns the element of the given index.
@@ -59,7 +58,7 @@ func (a *Array) Get(idx int) (Element, error) {
 
 // FindPrevCreatedAt returns the creation time of the previous element of the
 // given element.
-func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) *time.Ticket {
+func (a *Array) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, error) {
 	return a.elements.FindPrevCreatedAt(createdAt)
 }
 
@@ -74,8 +73,8 @@ func (a *Array) Delete(idx int, deletedAt *time.Ticket) (Element, error) {
 
 // MoveAfter moves the given `createdAt` element after the `prevCreatedAt`
 // element.
-func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) {
-	a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt)
+func (a *Array) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) error {
+	return a.elements.MoveAfter(prevCreatedAt, createdAt, executedAt)
 }
 
 // Elements returns an array of elements contained in this RGATreeList.
@@ -111,7 +110,9 @@ func (a *Array) DeepCopy() (Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		elements.Add(copiedNode)
+		if err = elements.Add(copiedNode); err != nil {
+			return nil, err
+		}
 	}
 
 	array := NewArray(elements, a.createdAt)
@@ -160,13 +161,17 @@ func (a *Array) LastCreatedAt() *time.Ticket {
 }
 
 // InsertAfter inserts the given element after the given previous element.
-func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) {
-	a.elements.InsertAfter(prevCreatedAt, element)
+func (a *Array) InsertAfter(prevCreatedAt *time.Ticket, element Element) error {
+	return a.elements.InsertAfter(prevCreatedAt, element)
 }
 
 // DeleteByCreatedAt deletes the given element.
-func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
-	return a.elements.DeleteByCreatedAt(createdAt, deletedAt).elem
+func (a *Array) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (Element, error) {
+	node, err := a.elements.DeleteByCreatedAt(createdAt, deletedAt)
+	if err != nil {
+		return nil, err
+	}
+	return node.elem, nil
 }
 
 // Len returns length of this Array.

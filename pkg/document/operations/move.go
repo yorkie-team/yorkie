@@ -60,9 +60,7 @@ func (o *Move) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
-
-	return nil
+	return obj.MoveAfter(o.prevCreatedAt, o.createdAt, o.executedAt)
 }
 
 // CreatedAt returns the creation time of the target element.
