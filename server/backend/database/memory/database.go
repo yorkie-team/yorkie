@@ -20,6 +20,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"reflect"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -969,11 +970,55 @@ func (d *DB) CreateSnapshotInfo(
 	return nil
 }
 
-// FindClosestSnapshotInfo finds the last snapshot of the given document.
-func (d *DB) FindClosestSnapshotInfo(
+// FindClosestSnapshotFullData finds the last snapshot of the given document.
+func (d *DB) FindClosestSnapshotFullData(
 	ctx context.Context,
 	docID types.ID,
 	serverSeq int64,
+) (*database.SnapshotInfo, error) {
+	projection := database.SnapshotProjection {
+		ID: true,
+		DocID: true,
+		ServerSeq: true,
+		Lamport: true,
+		Snapshot: true,
+		CreatedAt: true,
+	}
+	snapshotInfo, err := d.FindClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
+	if err != nil {
+		return nil, err
+	}
+	return snapshotInfo, nil
+}
+
+// FindClosestSnapshotFullData finds the last snapshot of the given document.
+func (d *DB) FindClosestSnapshotMetadata(
+	ctx context.Context,
+	docID types.ID,
+	serverSeq int64,
+) (*database.SnapshotMetadata, error) {
+	projection := database.SnapshotProjection {
+		ID: true,
+		DocID: true,
+		ServerSeq: true,
+		Lamport: true,
+		Snapshot: false,
+		CreatedAt: true,
+	}
+	snapshotInfo, err := d.FindClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
+	if err != nil {
+		return nil, err
+	}
+	snapshotMetadata := snapshotInfo.ToSnapshotMetadata()
+	return snapshotMetadata, nil
+}
+
+// FindClosestSnapshotFullData finds the last snapshot of the given document.
+func (d *DB) FindClosestSnapshotFullDataWithProjection(
+	ctx context.Context,
+	docID types.ID,
+	serverSeq int64,
+	projection database.SnapshotProjection,
 ) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -992,7 +1037,24 @@ func (d *DB) FindClosestSnapshotInfo(
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.SnapshotInfo)
 		if info.DocID == docID {
-			snapshotInfo = info
+			snapshotInfo = &database.SnapshotInfo{}
+			infoValue := reflect.ValueOf(info).Elem()
+			projectedValue := reflect.ValueOf(snapshotInfo).Elem()
+
+			projectionValue := reflect.ValueOf(projection)
+			projectionType := projectionValue.Type()
+
+			for i := 0; i < projectionValue.NumField(); i++ {
+				fieldName := projectionType.Field(i).Name
+				fieldValue := projectionValue.Field(i).Bool()
+
+				if fieldValue {
+					infoField := infoValue.FieldByName(fieldName)
+					projectedField := projectedValue.FieldByName(fieldName)
+
+					projectedField.Set(infoField)
+				}
+			}
 			break
 		}
 	}
