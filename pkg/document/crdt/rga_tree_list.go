@@ -210,7 +210,7 @@ func (a *RGATreeList) Get(idx int) (*RGATreeListNode, error) {
 func (a *RGATreeList) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (*RGATreeListNode, error) {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		return nil, fmt.Errorf("fail to find the given createdAt: %s", createdAt.Key())
+		return nil, fmt.Errorf("DeleteByCreatedAt %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
 	alreadyRemoved := node.isRemoved()
@@ -245,12 +245,12 @@ func (a *RGATreeList) Delete(idx int, deletedAt *time.Ticket) (*RGATreeListNode,
 func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticket) error {
 	prevNode, ok := a.nodeMapByCreatedAt[prevCreatedAt.Key()]
 	if !ok {
-		return fmt.Errorf("fail to find the given prevCreatedAt: %s", prevCreatedAt.Key())
+		return fmt.Errorf("MoveAfter %s: %w", prevCreatedAt.Key(), ErrChildNotFound)
 	}
 
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		return fmt.Errorf("fail to find the given createdAt: %s", createdAt.Key())
+		return fmt.Errorf("MoveAfter %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
 	if node.elem.MovedAt() == nil || executedAt.After(node.elem.MovedAt()) {
@@ -268,7 +268,7 @@ func (a *RGATreeList) MoveAfter(prevCreatedAt, createdAt, executedAt *time.Ticke
 func (a *RGATreeList) FindPrevCreatedAt(createdAt *time.Ticket) (*time.Ticket, error) {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		return nil, fmt.Errorf("fail to find the given prevCreatedAt: %s", createdAt.Key())
+		return nil, fmt.Errorf("FindPrevCreatedAt %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
 	for {
@@ -299,7 +299,7 @@ func (a *RGATreeList) findNextBeforeExecutedAt(
 ) (*RGATreeListNode, error) {
 	node, ok := a.nodeMapByCreatedAt[createdAt.Key()]
 	if !ok {
-		return nil, fmt.Errorf("fail to find the given createdAt: %s", createdAt.Key())
+		return nil, fmt.Errorf("findNextBeforeExecutedAt %s: %w", createdAt.Key(), ErrChildNotFound)
 	}
 
 	for node.next != nil && node.next.PositionedAt().After(executedAt) {
