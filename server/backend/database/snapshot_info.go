@@ -42,3 +42,46 @@ type SnapshotInfo struct {
 	// CreatedAt is the time when the snapshot is created.
 	CreatedAt time.Time `bson:"created_at"`
 }
+
+type SnapshotMetadata struct {
+	// ID is the unique ID of the snapshot.
+	ID types.ID `bson:"_id"`
+
+	// DocID is the ID of the document which the snapshot belongs to.
+	DocID types.ID `bson:"doc_id"`
+
+	// ServerSeq is the sequence number of the server which the snapshot belongs to.
+	ServerSeq int64 `bson:"server_seq"`
+
+	// Lamport is the Lamport timestamp of the snapshot.
+	Lamport int64 `bson:"lamport"`
+
+	// CreatedAt is the time when the snapshot is created.
+	CreatedAt time.Time `bson:"created_at"`
+}
+
+type SnapshotProjection struct {
+	// Set the value 'true' to include corresponding field during projection.
+	ID bool
+
+	DocID bool
+
+	ServerSeq bool
+
+	Lamport bool
+
+	Snapshot bool
+
+	CreatedAt bool
+}
+
+func (info *SnapshotInfo) ToSnapshotMetadata() *SnapshotMetadata {
+	snapshotMetadata := &SnapshotMetadata {
+		ID: info.ID,
+		DocID: info.DocID,
+		ServerSeq: info.ServerSeq,
+		Lamport: info.Lamport,
+		CreatedAt: info.CreatedAt,
+	}
+	return snapshotMetadata
+}
