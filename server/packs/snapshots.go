@@ -34,15 +34,14 @@ func storeSnapshot(
 	minSyncedTicket *time.Ticket,
 ) error {
 	// 01. get the closest snapshot of this docInfo
-	// TODO: For performance issue, we only need to read the snapshot's metadata.
-	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, docInfo.ServerSeq)
+	snapshotMetadata, err := be.DB.FindClosestSnapshotMetadata(ctx, docInfo.ID, docInfo.ServerSeq)
 	if err != nil {
 		return err
 	}
-	if snapshotInfo.ServerSeq == docInfo.ServerSeq {
+	if snapshotMetadata.ServerSeq == docInfo.ServerSeq {
 		return nil
 	}
-	if docInfo.ServerSeq-snapshotInfo.ServerSeq < be.Config.SnapshotInterval {
+	if docInfo.ServerSeq-snapshotMetadata.ServerSeq < be.Config.SnapshotInterval {
 		return nil
 	}
 
@@ -50,7 +49,7 @@ func storeSnapshot(
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
 		docInfo.ID,
-		snapshotInfo.ServerSeq+1,
+		snapshotMetadata.ServerSeq+1,
 		docInfo.ServerSeq,
 	)
 	if err != nil {
@@ -58,6 +57,11 @@ func storeSnapshot(
 	}
 
 	// 03. create document instance of the docInfo
+	// TODO: check policy to guarantee atomicity
+	snapshotInfo, err := be.DB.FindClosestSnapshotFullData(ctx, docInfo.ID, docInfo.ServerSeq)
+	if err != nil {
+		return err
+	}
 	doc, err := document.NewInternalDocumentFromSnapshot(
 		docInfo.Key,
 		snapshotInfo.ServerSeq,
