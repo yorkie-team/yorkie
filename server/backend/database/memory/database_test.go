@@ -48,8 +48,8 @@ func TestDB(t *testing.T) {
 		testcases.RunFindChangesBetweenServerSeqsTest(t, db, projectID)
 	})
 
-	t.Run("RunFindClosestSnapshotInfo test", func(t *testing.T) {
-		testcases.RunFindClosestSnapshotInfoTest(t, db, projectID)
+	t.Run("RunFindClosestSnapshotFullData test", func(t *testing.T) {
+		testcases.RunFindClosestSnapshotFullDataTest(t, db, projectID)
 	})
 
 	t.Run("ListUserInfos test", func(t *testing.T) {

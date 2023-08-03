@@ -38,7 +38,7 @@ func FindChanges(
 			return nil, err
 		}
 
-		snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
+		snapshotInfo, err := be.DB.FindClosestSnapshotFullData(
 			ctx, docInfo.ID,
 			minSyncedSeqInfo.ServerSeq+be.Config.SnapshotInterval,
 		)

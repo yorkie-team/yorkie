@@ -208,8 +208,11 @@ type Database interface {
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(ctx context.Context, docID types.ID, doc *document.InternalDocument) error
 
-	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
-	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq int64) (*SnapshotInfo, error)
+	// FindClosestSnapshotFullData finds the closest snapshot info in a given serverSeq.
+	FindClosestSnapshotFullData(ctx context.Context, docID types.ID, serverSeq int64) (*SnapshotInfo, error)
+
+	// FindClosestSnapshotMetadata finds the closest snapshot info in a given serverSeq.
+	FindClosestSnapshotMetadata(ctx context.Context, docID types.ID, serverSeq int64) (*SnapshotMetadata, error)
 
 	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
 	FindMinSyncedSeqInfo(ctx context.Context, docID types.ID) (*SyncedSeqInfo, error)
