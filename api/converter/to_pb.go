@@ -29,7 +29,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 )
 
 // ToUser converts the given model format to Protobuf format.
@@ -212,19 +211,6 @@ func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}
-}
-
-// ToDocEvent converts the given model to Protobuf format.
-func ToDocEvent(docEvent sync.DocEvent) (*api.DocEvent, error) {
-	eventType, err := ToDocEventType(docEvent.Type)
-	if err != nil {
-		return nil, err
-	}
-
-	return &api.DocEvent{
-		Type:      eventType,
-		Publisher: docEvent.Publisher.Bytes(),
-	}, nil
 }
 
 // ToOperations converts the given model format to Protobuf format.

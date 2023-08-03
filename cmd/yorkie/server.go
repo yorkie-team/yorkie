@@ -51,12 +51,6 @@ var (
 	authWebhookCacheAuthTTL    time.Duration
 	authWebhookCacheUnauthTTL  time.Duration
 
-	etcdEndpoints     []string
-	etcdDialTimeout   time.Duration
-	etcdUsername      string
-	etcdPassword      string
-	etcdLockLeaseTime time.Duration
-
 	conf = server.NewConfig()
 )
 

@@ -122,7 +122,7 @@ func TestChangeSummary(t *testing.T) {
 			PageSize:  3,
 			IsForward: true,
 		}, lastSeq)
-		assert.Equal(t, int64(lastSeq+1), from)
-		assert.Equal(t, int64(lastSeq+1), to)
+		assert.Equal(t, lastSeq+1, from)
+		assert.Equal(t, lastSeq+1, to)
 	})
 }

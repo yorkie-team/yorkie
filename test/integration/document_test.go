@@ -30,7 +30,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -68,7 +67,7 @@ func TestDocument(t *testing.T) {
 		assert.True(t, doc2.IsAttached())
 		assert.Equal(t, `{"k1":"v2"}`, doc2.Marshal())
 
-		doc3 := document.New(key.Key("invalid$key"))
+		doc3 := document.New("invalid$key")
 		err = c1.Attach(ctx, doc3)
 		assert.Error(t, err)
 	})
