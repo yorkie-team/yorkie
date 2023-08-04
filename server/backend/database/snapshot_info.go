@@ -43,6 +43,8 @@ type SnapshotInfo struct {
 	CreatedAt time.Time `bson:"created_at"`
 }
 
+// SnapshotMetadata is a structure representing metadata of the snapshot.
+// SnapshotMetadata is identical with SnapshotInfo without Snapshot data.
 type SnapshotMetadata struct {
 	// ID is the unique ID of the snapshot.
 	ID types.ID `bson:"_id"`
@@ -60,8 +62,20 @@ type SnapshotMetadata struct {
 	CreatedAt time.Time `bson:"created_at"`
 }
 
+// ToSnapshotMetadata converts SnapshotInfo to SnapshotMetadata.
+func (info *SnapshotInfo) ToSnapshotMetadata() *SnapshotMetadata {
+	snapshotMetadata := &SnapshotMetadata {
+		ID: info.ID,
+		DocID: info.DocID,
+		ServerSeq: info.ServerSeq,
+		Lamport: info.Lamport,
+		CreatedAt: info.CreatedAt,
+	}
+	return snapshotMetadata
+}
+
+// SnapshotProjection is a structure representing fields to be retrieved from the database.
 type SnapshotProjection struct {
-	// Set the value 'true' to include corresponding field during projection.
 	ID bool
 
 	DocID bool
@@ -73,15 +87,4 @@ type SnapshotProjection struct {
 	Snapshot bool
 
 	CreatedAt bool
-}
-
-func (info *SnapshotInfo) ToSnapshotMetadata() *SnapshotMetadata {
-	snapshotMetadata := &SnapshotMetadata {
-		ID: info.ID,
-		DocID: info.DocID,
-		ServerSeq: info.ServerSeq,
-		Lamport: info.Lamport,
-		CreatedAt: info.CreatedAt,
-	}
-	return snapshotMetadata
 }
