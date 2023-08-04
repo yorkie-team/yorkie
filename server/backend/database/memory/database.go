@@ -970,7 +970,7 @@ func (d *DB) CreateSnapshotInfo(
 	return nil
 }
 
-// FindClosestSnapshotFullData finds the last snapshot of the given document.
+// FindClosestSnapshotFullData finds the last snapshot's full data (with Snapshot) of the given document.
 func (d *DB) FindClosestSnapshotFullData(
 	ctx context.Context,
 	docID types.ID,
@@ -991,7 +991,7 @@ func (d *DB) FindClosestSnapshotFullData(
 	return snapshotInfo, nil
 }
 
-// FindClosestSnapshotFullData finds the last snapshot of the given document.
+// FindClosestSnapshotMetadata finds the last snapshot's metadata (without Snapshot) of the given document.
 func (d *DB) FindClosestSnapshotMetadata(
 	ctx context.Context,
 	docID types.ID,
