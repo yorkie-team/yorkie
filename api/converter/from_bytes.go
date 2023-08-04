@@ -267,12 +267,19 @@ func fromJSONCounter(pbCnt *api.JSONElement_Counter) (*crdt.Counter, error) {
 	if err != nil {
 		return nil, err
 	}
+	counterValue, err := crdt.CounterValueFromBytes(counterType, pbCnt.Value)
+	if err != nil {
+		return nil, err
+	}
 
-	counter := crdt.NewCounter(
+	counter, err := crdt.NewCounter(
 		counterType,
-		crdt.CounterValueFromBytes(counterType, pbCnt.Value),
+		counterValue,
 		createdAt,
 	)
+	if err != nil {
+		return nil, err
+	}
 	counter.SetMovedAt(movedAt)
 	counter.SetRemovedAt(removedAt)
 

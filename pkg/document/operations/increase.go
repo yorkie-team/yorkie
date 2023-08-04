@@ -51,7 +51,9 @@ func (o *Increase) Execute(root *crdt.Root) error {
 	}
 
 	value := o.value.(*crdt.Primitive)
-	cnt.Increase(value)
+	if _, err := cnt.Increase(value); err != nil {
+		return err
+	}
 
 	return nil
 }

@@ -33,16 +33,16 @@ const (
 )
 
 // CounterValueFromBytes parses the given bytes into value.
-func CounterValueFromBytes(counterType CounterType, value []byte) interface{} {
+func CounterValueFromBytes(counterType CounterType, value []byte) (interface{}, error) {
 	switch counterType {
 	case IntegerCnt:
 		val := int32(binary.LittleEndian.Uint32(value))
-		return int(val)
+		return int(val), nil
 	case LongCnt:
-		return int64(binary.LittleEndian.Uint64(value))
+		return int64(binary.LittleEndian.Uint64(value)), nil
+	default:
+		return nil, fmt.Errorf("unsupported type")
 	}
-
-	panic("unsupported type")
 }
 
 // Counter represents changeable number data type.
@@ -55,39 +55,47 @@ type Counter struct {
 }
 
 // NewCounter creates a new instance of Counter.
-func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket) *Counter {
+func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket) (*Counter, error) {
 	switch valueType {
 	case IntegerCnt:
+		intValue, err := castToInt(value)
+		if err != nil {
+			return nil, err
+		}
 		return &Counter{
 			valueType: IntegerCnt,
-			value:     castToInt(value),
+			value:     intValue,
 			createdAt: createdAt,
-		}
+		}, nil
 	case LongCnt:
+		longValue, err := castToLong(value)
+		if err != nil {
+			return nil, err
+		}
 		return &Counter{
 			valueType: LongCnt,
-			value:     castToLong(value),
+			value:     longValue,
 			createdAt: createdAt,
-		}
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported type")
 	}
-
-	panic("unsupported type")
 }
 
 // Bytes creates an array representing the value.
-func (p *Counter) Bytes() []byte {
+func (p *Counter) Bytes() ([]byte, error) {
 	switch val := p.value.(type) {
 	case int32:
 		bytes := [4]byte{}
 		binary.LittleEndian.PutUint32(bytes[:], uint32(val))
-		return bytes[:]
+		return bytes[:], nil
 	case int64:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], uint64(val))
-		return bytes[:]
+		return bytes[:], nil
+	default:
+		return nil, fmt.Errorf("unsupported type")
 	}
-
-	panic("unsupported type")
 }
 
 // Marshal returns the JSON encoding of the value.
@@ -146,20 +154,28 @@ func (p *Counter) ValueType() CounterType {
 // than MinInt32, Counter's value type can be changed Integer to Long.
 // Because in golang, int can be either int32 or int64.
 // So we need to assert int to int32.
-func (p *Counter) Increase(v *Primitive) *Counter {
+func (p *Counter) Increase(v *Primitive) (*Counter, error) {
 	if !p.IsNumericType() || !v.IsNumericType() {
-		panic("unsupported type")
+		return nil, fmt.Errorf("unsupported type")
 	}
 	switch p.valueType {
 	case IntegerCnt:
-		p.value = p.value.(int32) + castToInt(v.value)
+		intValue, err := castToInt(v.value)
+		if err != nil {
+			return nil, err
+		}
+		p.value = p.value.(int32) + intValue
 	case LongCnt:
-		p.value = p.value.(int64) + castToLong(v.value)
+		longValue, err := castToLong(v.value)
+		if err != nil {
+			return nil, err
+		}
+		p.value = p.value.(int64) + longValue
 	default:
-		panic("unsupported type")
+		return nil, fmt.Errorf("unsupported type")
 	}
 
-	return p
+	return p, nil
 }
 
 // IsNumericType checks for numeric types.
@@ -169,37 +185,37 @@ func (p *Counter) IsNumericType() bool {
 }
 
 // castToInt casts numeric type to int32.
-func castToInt(value interface{}) int32 {
+func castToInt(value interface{}) (int32, error) {
 	switch val := value.(type) {
 	case int32:
-		return val
+		return val, nil
 	case int64:
-		return int32(val)
+		return int32(val), nil
 	case int:
-		return int32(val)
+		return int32(val), nil
 	case float32:
-		return int32(val)
+		return int32(val), nil
 	case float64:
-		return int32(val)
+		return int32(val), nil
 	default:
-		panic("unsupported type")
+		return 0, fmt.Errorf("unsupported type")
 	}
 }
 
 // castToLong casts numeric type to int64.
-func castToLong(value interface{}) int64 {
+func castToLong(value interface{}) (int64, error) {
 	switch val := value.(type) {
 	case int64:
-		return val
+		return val, nil
 	case int32:
-		return int64(val)
+		return int64(val), nil
 	case int:
-		return int64(val)
+		return int64(val), nil
 	case float32:
-		return int64(val)
+		return int64(val), nil
 	case float64:
-		return int64(val)
+		return int64(val), nil
 	default:
-		panic("unsupported type")
+		return 0, fmt.Errorf("unsupported type")
 	}
 }

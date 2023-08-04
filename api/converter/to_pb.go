@@ -435,11 +435,15 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 		if err != nil {
 			return nil, err
 		}
+		counterValue, err := elem.Bytes()
+		if err != nil {
+			return nil, err
+		}
 
 		return &api.JSONElementSimple{
 			Type:      pbCounterType,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
-			Value:     elem.Bytes(),
+			Value:     counterValue,
 		}, nil
 	case *crdt.Tree:
 		bytes, err := TreeToBytes(elem)

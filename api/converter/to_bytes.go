@@ -158,11 +158,15 @@ func toCounter(counter *crdt.Counter) (*api.JSONElement, error) {
 	if err != nil {
 		return nil, err
 	}
+	counterValue, err := counter.Bytes()
+	if err != nil {
+		return nil, err
+	}
 
 	return &api.JSONElement{
 		Body: &api.JSONElement_Counter_{Counter: &api.JSONElement_Counter{
 			Type:      pbCounterType,
-			Value:     counter.Bytes(),
+			Value:     counterValue,
 			CreatedAt: ToTimeTicket(counter.CreatedAt()),
 			MovedAt:   ToTimeTicket(counter.MovedAt()),
 			RemovedAt: ToTimeTicket(counter.RemovedAt()),
