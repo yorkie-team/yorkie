@@ -64,11 +64,11 @@ type SnapshotMetadata struct {
 
 // ToSnapshotMetadata converts SnapshotInfo to SnapshotMetadata.
 func (info *SnapshotInfo) ToSnapshotMetadata() *SnapshotMetadata {
-	snapshotMetadata := &SnapshotMetadata {
-		ID: info.ID,
-		DocID: info.DocID,
+	snapshotMetadata := &SnapshotMetadata{
+		ID:        info.ID,
+		DocID:     info.DocID,
 		ServerSeq: info.ServerSeq,
-		Lamport: info.Lamport,
+		Lamport:   info.Lamport,
 		CreatedAt: info.CreatedAt,
 	}
 	return snapshotMetadata

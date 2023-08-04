@@ -976,12 +976,12 @@ func (d *DB) FindClosestSnapshotFullData(
 	docID types.ID,
 	serverSeq int64,
 ) (*database.SnapshotInfo, error) {
-	projection := database.SnapshotProjection {
-		ID: true,
-		DocID: true,
+	projection := database.SnapshotProjection{
+		ID:        true,
+		DocID:     true,
 		ServerSeq: true,
-		Lamport: true,
-		Snapshot: true,
+		Lamport:   true,
+		Snapshot:  true,
 		CreatedAt: true,
 	}
 	snapshotInfo, err := d.findClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
@@ -997,12 +997,12 @@ func (d *DB) FindClosestSnapshotMetadata(
 	docID types.ID,
 	serverSeq int64,
 ) (*database.SnapshotMetadata, error) {
-	projection := database.SnapshotProjection {
-		ID: true,
-		DocID: true,
+	projection := database.SnapshotProjection{
+		ID:        true,
+		DocID:     true,
 		ServerSeq: true,
-		Lamport: true,
-		Snapshot: false,
+		Lamport:   true,
+		Snapshot:  false,
 		CreatedAt: true,
 	}
 	snapshotInfo, err := d.findClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
