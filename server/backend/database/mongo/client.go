@@ -1055,7 +1055,7 @@ func (c *Client) FindClosestSnapshotFullData(
 	docID types.ID,
 	serverSeq int64,
 ) (*database.SnapshotInfo, error) {
-	snapshotInfo, err := c.FindClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, nil)
+	snapshotInfo, err := c.findClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1070,7 +1070,7 @@ func (c *Client) FindClosestSnapshotMetadata(
 	serverSeq int64,
 ) (*database.SnapshotMetadata, error) {
 	projection := bson.M{"Snapshot": 0}
-	snapshotInfo, err := c.FindClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
+	snapshotInfo, err := c.findClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
 	if err != nil {
 		return nil, err
 	}
