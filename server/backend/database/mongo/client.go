@@ -1078,7 +1078,7 @@ func (c *Client) FindClosestSnapshotMetadata(
 	return snapshotMetadata, nil
 }
 
-// FindClosestSnapshotFullData finds the last snapshot of the given document and return SnapshotInfo with custom projection.
+// findClosestSnapshotFullData finds the last snapshot of the given document and return SnapshotInfo with custom projection.
 func (c *Client) findClosestSnapshotFullDataWithProjection(
 	ctx context.Context,
 	docID types.ID,
