@@ -984,7 +984,7 @@ func (d *DB) FindClosestSnapshotFullData(
 		Snapshot: true,
 		CreatedAt: true,
 	}
-	snapshotInfo, err := d.FindClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
+	snapshotInfo, err := d.findClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
 	if err != nil {
 		return nil, err
 	}
@@ -1005,7 +1005,7 @@ func (d *DB) FindClosestSnapshotMetadata(
 		Snapshot: false,
 		CreatedAt: true,
 	}
-	snapshotInfo, err := d.FindClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
+	snapshotInfo, err := d.findClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
 	if err != nil {
 		return nil, err
 	}
@@ -1014,7 +1014,7 @@ func (d *DB) FindClosestSnapshotMetadata(
 }
 
 // FindClosestSnapshotFullData finds the last snapshot of the given document.
-func (d *DB) FindClosestSnapshotFullDataWithProjection(
+func (d *DB) findClosestSnapshotFullDataWithProjection(
 	ctx context.Context,
 	docID types.ID,
 	serverSeq int64,
