@@ -19,7 +19,6 @@ package interceptors
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -155,7 +154,7 @@ func (i *ContextInterceptor) buildContext(ctx context.Context) (context.Context,
 		md.Authorization = authorization[0]
 	}
 	ctx = metadata.With(ctx, md)
-	cacheKey := fmt.Sprintf("%s:%s", md.APIKey, md.Authorization)
+	cacheKey := md.APIKey
 
 	// 02. building project
 	if cachedProjectInfo, ok := i.projectInfoCache.Get(cacheKey); ok {
