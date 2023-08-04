@@ -31,6 +31,7 @@ func TestConfig(t *testing.T) {
 			AuthWebhookMaxWaitInterval: "0ms",
 			AuthWebhookCacheAuthTTL:    "10s",
 			AuthWebhookCacheUnauthTTL:  "10s",
+			ProjectInfoCacheTTL:        "10m",
 		}
 		assert.NoError(t, validConf.Validate())
 
@@ -49,5 +50,9 @@ func TestConfig(t *testing.T) {
 		conf4 := validConf
 		conf4.AuthWebhookCacheUnauthTTL = "s"
 		assert.Error(t, conf4.Validate())
+
+		conf5 := validConf
+		conf5.ProjectInfoCacheTTL = "10 minutes"
+		assert.Error(t, conf5.Validate())
 	})
 }
