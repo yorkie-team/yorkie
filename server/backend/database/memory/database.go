@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -242,36 +243,51 @@ func (d *DB) listProjectInfos(
 		return nil, fmt.Errorf("fetch all projects: %w", err)
 	}
 
-	lastIDBytes, err := housekeepingLastProjectID.Bytes()
-	if err != nil {
-		return nil, fmt.Errorf("decode last project id: %w", err)
+	var infos []*database.ProjectInfo
+
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		info := raw.(*database.ProjectInfo).DeepCopy()
+		infos = append(infos, info)
 	}
 
-	var infos []*database.ProjectInfo
-	for i := 0; i < pageSize; {
-		raw := iter.Next()
-		if raw == nil {
-			*housekeepingLastProjectID = database.DefaultProjectID
-			break
+	sort.SliceStable(infos, func(i, j int) bool {
+		firstIDBytes, err := infos[i].ID.Bytes()
+		if err != nil {
+			return true
+		}
+		secondIDBytes, err := infos[j].ID.Bytes()
+		if err != nil {
+			return true
 		}
 
-		info := raw.(*database.ProjectInfo).DeepCopy()
+		return bytes.Compare(firstIDBytes, secondIDBytes) < 0
+	})
 
-		idBytes, err := info.ID.Bytes()
+	beginIndex := 0
+	for i := 0; i < len(infos); i++ {
+		proejctIDBytes, err := infos[i].ID.Bytes()
 		if err != nil {
 			return nil, fmt.Errorf("decode project id: %w", err)
 		}
-
-		if bytes.Compare(idBytes, lastIDBytes) > 0 {
-			infos = append(infos, info)
-			i++
+		lastProjectIDBytes, err := housekeepingLastProjectID.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("decode last project id: %w", err)
 		}
-
-		if i == pageSize {
-			*housekeepingLastProjectID = infos[len(infos)-1].ID
+		if bytes.Compare(proejctIDBytes, lastProjectIDBytes) > 0 {
+			beginIndex = i
+			break
 		}
 	}
-	return infos, nil
+
+	lastIndex := beginIndex + pageSize - 1
+	if lastIndex >= len(infos) {
+		lastIndex = len(infos) - 1
+		*housekeepingLastProjectID = database.DefaultProjectID
+	} else {
+		*housekeepingLastProjectID = infos[lastIndex].ID
+	}
+
+	return infos[beginIndex : lastIndex+1], nil
 }
 
 // ListProjectInfos returns all project infos owned by owner.

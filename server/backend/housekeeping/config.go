@@ -29,8 +29,8 @@ type Config struct {
 	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
 	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
 
-	// HousekeepingProjectFetchSize is the maximum number of projects to be returned to deactivate candidates.
-	HousekeepingProjectFetchSize int `yaml:"HousekeepingProjectFetchSize"`
+	// ProjectFetchSize is the maximum number of projects to be returned to deactivate candidates.
+	ProjectFetchSize int `yaml:"HousekeepingProjectFetchSize"`
 }
 
 // Validate validates the configuration.
@@ -46,14 +46,14 @@ func (c *Config) Validate() error {
 	if c.CandidatesLimitPerProject <= 0 {
 		return fmt.Errorf(
 			`invalid argument %d for "--housekeeping-candidates-limit-per-project" flag`,
-			c.HousekeepingProjectFetchSize,
+			c.ProjectFetchSize,
 		)
 	}
 
-	if c.HousekeepingProjectFetchSize <= 0 {
+	if c.ProjectFetchSize <= 0 {
 		return fmt.Errorf(
 			`invalid argument %d for "--housekeeping-project-fetc-size" flag`,
-			c.HousekeepingProjectFetchSize,
+			c.ProjectFetchSize,
 		)
 	}
 

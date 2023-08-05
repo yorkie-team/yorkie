@@ -27,9 +27,9 @@ import (
 func TestConfig(t *testing.T) {
 	t.Run("validate test", func(t *testing.T) {
 		validConf := housekeeping.Config{
-			Interval:                     "1m",
-			CandidatesLimitPerProject:    100,
-			HousekeepingProjectFetchSize: 100,
+			Interval:                  "1m",
+			CandidatesLimitPerProject: 100,
+			ProjectFetchSize:          100,
 		}
 		assert.NoError(t, validConf.Validate())
 
@@ -42,7 +42,7 @@ func TestConfig(t *testing.T) {
 		assert.Error(t, conf2.Validate())
 
 		conf3 := validConf
-		conf3.HousekeepingProjectFetchSize = -1
+		conf3.ProjectFetchSize = -1
 		assert.Error(t, conf3.Validate())
 	})
 }

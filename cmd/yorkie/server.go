@@ -228,7 +228,7 @@ func init() {
 		"candidates limit per project for a single housekeeping run",
 	)
 	cmd.Flags().IntVar(
-		&conf.Housekeeping.HousekeepingProjectFetchSize,
+		&conf.Housekeeping.ProjectFetchSize,
 		"housekeeping-project-fetch-size",
 		server.DefaultHousekeepingProjectFetchSize,
 		"housekeeping project fetch size for a single housekeeping run",

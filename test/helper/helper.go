@@ -222,9 +222,9 @@ func TestConfig() *server.Config {
 			Port: ProfilingPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:                     HousekeepingInterval.String(),
-			CandidatesLimitPerProject:    HousekeepingCandidatesLimitPerProject,
-			HousekeepingProjectFetchSize: HousekeepingProjectFetchSize,
+			Interval:                  HousekeepingInterval.String(),
+			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
+			ProjectFetchSize:          HousekeepingProjectFetchSize,
 		},
 		Backend: &backend.Config{
 			AdminUser:                  server.DefaultAdminUser,

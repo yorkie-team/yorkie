@@ -230,9 +230,9 @@ func newConfig(port int, profilingPort int) *Config {
 			Port: profilingPort,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:                     DefaultHousekeepingInterval.String(),
-			CandidatesLimitPerProject:    DefaultHousekeepingCandidatesLimitPerProject,
-			HousekeepingProjectFetchSize: DefaultHousekeepingProjectFetchSize,
+			Interval:                  DefaultHousekeepingInterval.String(),
+			CandidatesLimitPerProject: DefaultHousekeepingCandidatesLimitPerProject,
+			ProjectFetchSize:          DefaultHousekeepingProjectFetchSize,
 		},
 		Backend: &backend.Config{
 			ClientDeactivateThreshold:  DefaultClientDeactivateThreshold,

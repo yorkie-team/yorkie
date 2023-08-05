@@ -86,7 +86,7 @@ func New(
 
 		interval:                  interval,
 		candidatesLimitPerProject: conf.CandidatesLimitPerProject,
-		projectFetchSize:          conf.HousekeepingProjectFetchSize,
+		projectFetchSize:          conf.ProjectFetchSize,
 
 		ctx:        ctx,
 		cancelFunc: cancelFunc,
