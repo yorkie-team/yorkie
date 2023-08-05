@@ -43,7 +43,7 @@ type SnapshotInfo struct {
 	CreatedAt time.Time `bson:"created_at"`
 }
 
-// DeepCopy returns a deep copy of the ProjectInfo.
+// DeepCopy returns a deep copy of the SnapshotInfo.
 func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 	if i == nil {
 		return nil
