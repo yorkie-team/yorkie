@@ -42,12 +42,14 @@ func TestObject(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("k1").
@@ -75,8 +77,9 @@ func TestObject(t *testing.T) {
 	t.Run("concurrent object set/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("k1")
@@ -88,8 +91,9 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("k1")
@@ -112,12 +116,14 @@ func TestObject(t *testing.T) {
 	t.Run("concurrent object.set test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		// 01. concurrent set on same key
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {

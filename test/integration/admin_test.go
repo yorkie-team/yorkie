@@ -67,7 +67,9 @@ func TestAdmin(t *testing.T) {
 		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 
 		// 02. client creates a document then admin removes the document.
-		assert.NoError(t, cli.Attach(ctx, d1))
+		rch, err := cli.Attach(ctx, d1)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String(), true)
 		assert.NoError(t, err)
 		assert.Equal(t, document.StatusAttached, d1.Status())
@@ -88,11 +90,11 @@ func TestAdmin(t *testing.T) {
 
 		// 01. c1 attaches and watches d1.
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		rch, err := c1.Attach(watchCtx, d1)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		rch, err := c1.Watch(watchCtx, d1)
-		assert.NoError(t, err)
 		go func() {
 			defer wg.Done()
 
@@ -137,7 +139,9 @@ func TestAdmin(t *testing.T) {
 		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 
 		// 02. try to remove document that is attached by the client.
-		assert.NoError(t, cli.Attach(ctx, doc))
+		rch, err := cli.Attach(ctx, doc)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 		err = adminCli.RemoveDocument(ctx, "default", doc.Key().String(), false)
 		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 		assert.Equal(t, document.StatusAttached, doc.Status())

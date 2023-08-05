@@ -41,7 +41,9 @@ func TestHistory(t *testing.T) {
 	t.Run("history test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli.Attach(ctx, d1))
+		rch, err := cli.Attach(ctx, d1)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 		defer func() { assert.NoError(t, cli.Detach(ctx, d1)) }()
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {

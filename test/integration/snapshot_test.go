@@ -57,12 +57,14 @@ func TestSnapshot(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		// 01. Update changes over snapshot threshold.
 		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
@@ -93,8 +95,9 @@ func TestSnapshot(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1")
@@ -127,8 +130,9 @@ func TestSnapshot(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		assert.Equal(t, `{"k1":[{"val":"하"},{"val":"늘"},{"val":"구"},{"val":"름"}]}`, d1.Marshal())
 		assert.Equal(t, d1.Marshal(), d2.Marshal())
@@ -138,8 +142,9 @@ func TestSnapshot(t *testing.T) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1")
@@ -150,8 +155,9 @@ func TestSnapshot(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		for i := 0; i <= int(helper.SnapshotThreshold); i++ {
 			err = d1.Update(func(root *json.Object, p *presence.Presence) error {

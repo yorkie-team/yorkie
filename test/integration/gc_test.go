@@ -39,12 +39,14 @@ func TestGarbageCollection(t *testing.T) {
 	t.Run("garbage collection for container type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("1", 1)
@@ -106,12 +108,14 @@ func TestGarbageCollection(t *testing.T) {
 	t.Run("garbage collection for text type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("text").
@@ -246,12 +250,14 @@ func TestGarbageCollection(t *testing.T) {
 	t.Run("garbage collection for tree type test (multi clients)", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{
@@ -324,12 +330,14 @@ func TestGarbageCollection(t *testing.T) {
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("1", 1)

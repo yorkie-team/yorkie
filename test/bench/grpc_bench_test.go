@@ -179,7 +179,7 @@ func BenchmarkRPC(b *testing.B) {
 		assert.NoError(b, err)
 
 		d1 := document.New("doc1")
-		err = cli.Attach(ctx, d1)
+		_, err = cli.Attach(ctx, d1)
 		assert.NoError(b, err)
 
 		for i := 0; i < b.N; i++ {
@@ -202,8 +202,9 @@ func BenchmarkRPC(b *testing.B) {
 		ctx := context.Background()
 
 		d1 := document.New(helper.TestDocKey(b))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(b, err)
+		assert.NotNil(b, rch1)
 		testKey1 := "testKey1"
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText(testKey1)
@@ -212,18 +213,14 @@ func BenchmarkRPC(b *testing.B) {
 		assert.NoError(b, err)
 
 		d2 := document.New(helper.TestDocKey(b))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
+		assert.NotNil(b, rch2)
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText(testKey2)
 			return nil
 		})
-		assert.NoError(b, err)
-
-		rch1, err := c1.Watch(ctx, d1)
-		assert.NoError(b, err)
-		rch2, err := c2.Watch(ctx, d2)
 		assert.NoError(b, err)
 
 		done1 := make(chan bool)
@@ -286,13 +283,15 @@ func BenchmarkRPC(b *testing.B) {
 				wg.Add(2)
 				go func() {
 					defer wg.Done()
-					err := c1.Attach(ctx, doc1)
+					rch1, err := c1.Attach(ctx, doc1)
 					assert.NoError(b, err)
+					assert.NotNil(b, rch1)
 				}()
 				go func() {
 					defer wg.Done()
-					err := c2.Attach(ctx, doc2)
+					rch2, err := c2.Attach(ctx, doc2)
 					assert.NoError(b, err)
+					assert.NotNil(b, rch2)
 				}()
 				wg.Wait()
 			}()

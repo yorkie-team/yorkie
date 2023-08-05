@@ -257,13 +257,19 @@ func (c *Client) Deactivate(ctx context.Context) error {
 
 // Attach attaches the given document to this client. It tells the server that
 // this client will synchronize the given document.
-func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...AttachOption) error {
+// If the context "ctx" is canceled or timed out, returned channel will be closed
+// and "WatchResponse" from this closed channel has zero events and nil "Err()".
+func (c *Client) Attach(
+	ctx context.Context,
+	doc *document.Document,
+	options ...AttachOption,
+) (<-chan WatchResponse, error) {
 	if c.status != activated {
-		return ErrClientNotActivated
+		return nil, ErrClientNotActivated
 	}
 
 	if doc.Status() != document.StatusDetached {
-		return ErrDocumentNotDetached
+		return nil, ErrDocumentNotDetached
 	}
 
 	opts := &AttachOptions{}
@@ -277,12 +283,12 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		p.Initialize(opts.Presence)
 		return nil
 	}); err != nil {
-		return err
+		return nil, err
 	}
 
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	res, err := c.client.AttachDocument(
@@ -293,16 +299,16 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		},
 		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	pack, err := converter.FromChangePack(res.Msg.ChangePack)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := doc.ApplyChangePack(pack); err != nil {
-		return err
+		return nil, err
 	}
 	if c.logger.Core().Enabled(zap.DebugLevel) {
 		c.logger.Debug(fmt.Sprintf(
@@ -313,7 +319,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	}
 
 	if doc.Status() == document.StatusRemoved {
-		return nil
+		return nil, nil
 	}
 
 	doc.SetStatus(document.StatusAttached)
@@ -322,7 +328,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		docID: types.ID(res.Msg.DocumentId),
 	}
 
-	return nil
+	return c.watch(ctx, doc)
 }
 
 // Detach detaches the given document from this client. It tells the
@@ -406,12 +412,12 @@ func (c *Client) Sync(ctx context.Context, options ...SyncOptions) error {
 	return nil
 }
 
-// Watch subscribes to events on a given documentIDs.
+// watch subscribes to events on a given documentIDs.
 // If an error occurs before stream initialization, the second response, error,
 // is returned. If the context "ctx" is canceled or timed out, returned channel
 // is closed, and "WatchResponse" from this closed channel has zero events and
 // nil "Err()".
-func (c *Client) Watch(
+func (c *Client) watch(
 	ctx context.Context,
 	doc *document.Document,
 ) (<-chan WatchResponse, error) {

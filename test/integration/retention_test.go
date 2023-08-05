@@ -81,7 +81,9 @@ func TestRetention(t *testing.T) {
 		ctx := context.Background()
 
 		doc := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli.Attach(ctx, doc))
+		rch, err := cli.Attach(ctx, doc)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 		defer func() { assert.NoError(t, cli.Detach(ctx, doc)) }()
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -141,7 +143,9 @@ func TestRetention(t *testing.T) {
 
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli1.Attach(ctx, d1))
+		rch, err := cli1.Attach(ctx, d1)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 		defer func() { assert.NoError(t, cli1.Detach(ctx, d1)) }()
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -214,7 +218,10 @@ func TestRetention(t *testing.T) {
 		}()
 
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli2.Attach(ctx, d2))
+		rch2, err := cli2.Attach(ctx, d2)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
+
 		defer func() { assert.NoError(t, cli2.Detach(ctx, d2)) }()
 
 		// Create 6 changes

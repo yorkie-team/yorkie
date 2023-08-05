@@ -46,10 +46,14 @@ func TestPresence(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		rch, err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+		rch, err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 02. Update the root of the document and presence
@@ -74,10 +78,14 @@ func TestPresence(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		rch1, err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+		rch2, err := c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 02. Update the root of the document and presence
@@ -104,9 +112,13 @@ func TestPresence(t *testing.T) {
 		// 01. Create a document and attach it to the clients
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1, client.WithPresence(innerpresence.Presence{"key": c1.Key()})))
+		rch1, err := c1.Attach(ctx, d1, client.WithPresence(innerpresence.Presence{"key": c1.Key()}))
+		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(innerpresence.Presence{"key": c2.Key()})))
+		rch2, err := c2.Attach(ctx, d2, client.WithPresence(innerpresence.Presence{"key": c2.Key()}))
+		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 02. Check that the presence is updated on the other client.
@@ -124,25 +136,23 @@ func TestPresence(t *testing.T) {
 	})
 
 	t.Run("presence-related events test", func(t *testing.T) {
-		// 01. Create two clients and documents and attach them.
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
-
-		// 02. Watch the first client's document.
+		// 01. Create two clients and documents.
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
 		wgEvents := sync.WaitGroup{}
 		wgEvents.Add(1)
 
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestDocKey(t))
+
+		// 02. Watch the first client's document.
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
 		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
+		rch1, err := c1.Attach(watch1Ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		go func() {
 			defer func() {
 				wgEvents.Done()
@@ -152,7 +162,7 @@ func TestPresence(t *testing.T) {
 				case <-time.After(time.Second):
 					assert.Fail(t, "timeout")
 					return
-				case wr := <-wrch:
+				case wr := <-rch1:
 					if wr.Err != nil {
 						assert.Fail(t, "unexpected stream closing", wr.Err)
 						return
@@ -178,8 +188,10 @@ func TestPresence(t *testing.T) {
 			},
 		})
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		_, err = c2.Watch(watch2Ctx, d2)
+		rch2, err := c2.Attach(watch2Ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		// 04. Update the second client's presence.
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
@@ -210,24 +222,23 @@ func TestPresence(t *testing.T) {
 	})
 
 	t.Run("unwatch after detach events test", func(t *testing.T) {
-		// 01. Create two clients and documents and attach them.
+		// 01. Create two clients and documents.
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
 
-		// 02. Watch the first client's document.
+		// 02. Attach the first client's document.
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
 		wgEvents := sync.WaitGroup{}
 		wgEvents.Add(1)
 
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
-		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
+		rch1, err := c1.Attach(watch1Ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
+		defer cancel1()
 		go func() {
 			defer func() {
 				wgEvents.Done()
@@ -237,7 +248,7 @@ func TestPresence(t *testing.T) {
 				case <-time.After(10 * time.Second):
 					assert.Fail(t, "timeout")
 					return
-				case wr := <-wrch:
+				case wr := <-rch1:
 					if wr.Err != nil {
 						assert.Fail(t, "unexpected stream closing", wr.Err)
 						return
@@ -265,8 +276,9 @@ func TestPresence(t *testing.T) {
 		})
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
 		defer cancel2()
-		_, err = c2.Watch(watch2Ctx, d2)
+		rch2, err := c2.Attach(watch2Ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		// 04. Update the second client's presence.
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
@@ -303,9 +315,7 @@ func TestPresence(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
 		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
-		assert.NoError(t, c2.Attach(ctx, d2))
 
 		// 02. Watch the first client's document.
 		var expected []watchResponsePair
@@ -315,8 +325,9 @@ func TestPresence(t *testing.T) {
 
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
 		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
+		rch1, err := c1.Attach(watch1Ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 		go func() {
 			defer func() {
 				wgEvents.Done()
@@ -326,7 +337,7 @@ func TestPresence(t *testing.T) {
 				case <-time.After(10 * time.Second):
 					assert.Fail(t, "timeout")
 					return
-				case wr := <-wrch:
+				case wr := <-rch1:
 					if wr.Err != nil {
 						assert.Fail(t, "unexpected stream closing", wr.Err)
 						return
@@ -354,8 +365,9 @@ func TestPresence(t *testing.T) {
 		})
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
 		defer cancel2()
-		_, err = c2.Watch(watch2Ctx, d2)
+		rch2, err := c2.Attach(watch2Ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		// 04. Update the second client's presence.
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
@@ -396,10 +408,8 @@ func TestPresence(t *testing.T) {
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
 		d3 := document.New(helper.TestDocKey(t) + "2")
-		assert.NoError(t, c1.Attach(ctx, d1))
-		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 
-		// 02. Watch the first client's document.
+		// 02. Attach the first client's document.
 		var expected []watchResponsePair
 		var responsePairs []watchResponsePair
 		wgEvents := sync.WaitGroup{}
@@ -407,8 +417,10 @@ func TestPresence(t *testing.T) {
 
 		watch1Ctx, cancel1 := context.WithCancel(ctx)
 		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
+		rch1, err := c1.Attach(watch1Ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
+		defer func() { assert.NoError(t, c1.Detach(ctx, d1)) }()
 		go func() {
 			defer func() {
 				wgEvents.Done()
@@ -418,7 +430,7 @@ func TestPresence(t *testing.T) {
 				case <-time.After(time.Second):
 					assert.Fail(t, "timeout")
 					return
-				case wr := <-wrch:
+				case wr := <-rch1:
 					if wr.Err != nil {
 						assert.Fail(t, "unexpected stream closing", wr.Err)
 						return
@@ -440,12 +452,6 @@ func TestPresence(t *testing.T) {
 
 		// 03. The second client attaches a document with the same key as the first client's document
 		// and another document with a different key.
-		assert.NoError(t, c2.Attach(ctx, d2))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
-		assert.NoError(t, c2.Attach(ctx, d3))
-		defer func() { assert.NoError(t, c2.Detach(ctx, d3)) }()
-
-		// 04. The second client watches the documents attached by itself.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentWatched,
 			Presences: map[string]innerpresence.Presence{
@@ -453,15 +459,20 @@ func TestPresence(t *testing.T) {
 			},
 		})
 		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		_, err = c2.Watch(watch2Ctx, d2)
+		rch2, err := c2.Attach(watch2Ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
+		defer func() { assert.NoError(t, c2.Detach(ctx, d2)) }()
 
 		watch3Ctx, cancel3 := context.WithCancel(ctx)
-		_, err = c2.Watch(watch3Ctx, d3)
+		rch3, err := c2.Attach(watch3Ctx, d3)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch3)
+		assert.NoError(t, err)
+		defer func() { assert.NoError(t, c2.Detach(ctx, d3)) }()
 
-		// 05. The second client unwatch the documents attached by itself.
+		// 04. The second client unwatch the documents attached by itself.
 		expected = append(expected, watchResponsePair{
 			Type: client.DocumentUnwatched,
 			Presences: map[string]innerpresence.Presence{

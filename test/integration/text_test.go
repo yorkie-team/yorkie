@@ -38,8 +38,9 @@ func TestText(t *testing.T) {
 	t.Run("text test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1")
@@ -50,8 +51,9 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("k1").Edit(0, 0, "ABCD")
@@ -136,8 +138,9 @@ func TestText(t *testing.T) {
 	t.Run("rich text test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1").Edit(0, 0, "Hello world", nil)
@@ -148,8 +151,9 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			text := root.GetText("k1")
@@ -171,8 +175,9 @@ func TestText(t *testing.T) {
 	t.Run("concurrent block deletions test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1")
@@ -183,8 +188,9 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("k1").Edit(0, 0, "123")
@@ -217,8 +223,9 @@ func TestText(t *testing.T) {
 	t.Run("new creation then concurrent deletion test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1")
@@ -229,8 +236,9 @@ func TestText(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetText("k1").Edit(0, 0, "0")

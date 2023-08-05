@@ -41,8 +41,9 @@ func TestArray(t *testing.T) {
 	t.Run("causal nested array test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").
@@ -53,8 +54,9 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
@@ -62,8 +64,9 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array add/delete simple test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddString("v1", "v2")
@@ -75,8 +78,9 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("k1").Delete(1)
@@ -96,8 +100,9 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array add/delete test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddString("v1")
@@ -108,8 +113,9 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("k1").AddString("v2", "v3")
@@ -130,8 +136,9 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array delete test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddString("v1", "v2", "v3")
@@ -142,8 +149,9 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetArray("k1").Delete(1)
@@ -169,8 +177,9 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array move test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddInteger(0, 1, 2)
@@ -182,8 +191,9 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			prev := root.GetArray("k1").Get(0)
@@ -209,7 +219,9 @@ func TestArray(t *testing.T) {
 	t.Run("concurrent array move with the same position test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		rch, err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddInteger(0, 1, 2)
 			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
@@ -217,7 +229,9 @@ func TestArray(t *testing.T) {
 		}))
 		assert.NoError(t, c1.Sync(ctx))
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+		rch, err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			next := root.GetArray("k1").Get(0)

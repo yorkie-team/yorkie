@@ -82,11 +82,14 @@ func TestClient(t *testing.T) {
 
 		// 01. c1, c2, c3 attach to the same document.
 		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		_, err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
 		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+		_, err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
 		d3 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c3.Attach(ctx, d3))
+		_, err = c3.Attach(ctx, d3)
+		assert.NoError(t, err)
 
 		// 02. c1, c2 sync with push-pull mode.
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -136,7 +139,9 @@ func TestClient(t *testing.T) {
 		// 01. cli attach to the same document having counter.
 		ctx := context.Background()
 		doc := document.New(helper.TestDocKey(t))
-		assert.NoError(t, cli.Attach(ctx, doc))
+		rch, err := cli.Attach(ctx, doc)
+		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		// 02. cli update the document with creating a counter
 		//     and sync with push-pull mode: CP(1, 1) -> CP(2, 2)

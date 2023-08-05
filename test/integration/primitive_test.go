@@ -39,8 +39,9 @@ func TestPrimitive(t *testing.T) {
 	t.Run("causal primitive data test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch1, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch1)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("k1").
@@ -66,8 +67,9 @@ func TestPrimitive(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch2, err := c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch2)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})

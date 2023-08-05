@@ -40,8 +40,9 @@ func TestCounter(t *testing.T) {
 	t.Run("causal counter.increase test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("age", crdt.LongCnt, 1).
@@ -55,8 +56,9 @@ func TestCounter(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
@@ -64,8 +66,9 @@ func TestCounter(t *testing.T) {
 	t.Run("concurrent counter increase test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		rch, err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("age", crdt.IntegerCnt, 0)
@@ -78,8 +81,9 @@ func TestCounter(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		rch, err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
+		assert.NotNil(t, rch)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("age").
