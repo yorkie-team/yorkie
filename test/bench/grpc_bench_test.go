@@ -33,7 +33,6 @@ import (
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -105,7 +104,7 @@ func benchmarkUpdateProject(ctx context.Context, b *testing.B, cnt int, adminCli
 	for i := 0; i < cnt; i++ {
 		name := fmt.Sprintf("name%d", i)
 		authWebhookURL := fmt.Sprintf("http://authWebhookURL%d", i)
-		authWebhookMethods := []string{}
+		var authWebhookMethods []string
 		for _, m := range types.AuthMethods() {
 			authWebhookMethods = append(authWebhookMethods, string(m))
 		}
@@ -203,7 +202,7 @@ func BenchmarkRPC(b *testing.B) {
 
 		ctx := context.Background()
 
-		d1 := document.New(key.Key(helper.TestDocKey(b)))
+		d1 := document.New(helper.TestDocKey(b))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(b, err)
 		testKey1 := "testKey1"
@@ -213,7 +212,7 @@ func BenchmarkRPC(b *testing.B) {
 		})
 		assert.NoError(b, err)
 
-		d2 := document.New(key.Key(helper.TestDocKey(b)))
+		d2 := document.New(helper.TestDocKey(b))
 		err = c2.Attach(ctx, d2)
 		assert.NoError(b, err)
 		testKey2 := "testKey2"
@@ -268,8 +267,8 @@ func BenchmarkRPC(b *testing.B) {
 				defer cleanupClients(b, clients)
 
 				ctx := context.Background()
-				doc1 := document.New(key.Key(helper.TestDocKey(b)))
-				doc2 := document.New(key.Key(helper.TestDocKey(b)))
+				doc1 := document.New(helper.TestDocKey(b))
+				doc2 := document.New(helper.TestDocKey(b))
 
 				err := doc1.Update(func(root *json.Object, p *presence.Presence) error {
 					text := root.SetNewText("k1")

@@ -52,7 +52,7 @@ func ValueFromBytes(valueType ValueType, value []byte) interface{} {
 		return false
 	case Integer:
 		val := int32(binary.LittleEndian.Uint32(value))
-		return int32(val)
+		return val
 	case Long:
 		return int64(binary.LittleEndian.Uint64(value))
 	case Double:

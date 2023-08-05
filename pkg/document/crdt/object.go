@@ -63,7 +63,7 @@ func (o *Object) Has(k string) bool {
 }
 
 // DeleteByCreatedAt deletes the element of the given creation time.
-func (o *Object) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) Element {
+func (o *Object) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (Element, error) {
 	return o.memberNodes.DeleteByCreatedAt(createdAt, deletedAt)
 }
 

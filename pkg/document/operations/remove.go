@@ -53,7 +53,10 @@ func (o *Remove) Execute(root *crdt.Root) error {
 
 	switch parent := parentElem.(type) {
 	case crdt.Container:
-		elem := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
+		elem, err := parent.DeleteByCreatedAt(o.createdAt, o.executedAt)
+		if err != nil {
+			return err
+		}
 		if elem != nil {
 			root.RegisterRemovedElementPair(parent, elem)
 		}
