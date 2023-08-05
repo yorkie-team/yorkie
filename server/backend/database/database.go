@@ -212,7 +212,12 @@ type Database interface {
 	FindSnapshotInfoByID(ctx context.Context, id types.ID) (*SnapshotInfo, error)
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
-	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq int64, includeSnapshot bool) (*SnapshotInfo, error)
+	FindClosestSnapshotInfo(
+		ctx context.Context,
+		docID types.ID,
+		serverSeq int64,
+		includeSnapshot bool,
+	) (*SnapshotInfo, error)
 
 	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
 	FindMinSyncedSeqInfo(ctx context.Context, docID types.ID) (*SyncedSeqInfo, error)

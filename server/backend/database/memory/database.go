@@ -1012,7 +1012,7 @@ func (d *DB) FindClosestSnapshotInfo(
 				ID:        info.ID,
 				DocID:     info.DocID,
 				ServerSeq: info.ServerSeq,
-				Lamport:	 info.Lamport,
+				Lamport:   info.Lamport,
 				CreatedAt: info.CreatedAt,
 			}
 			if includeSnapshot {

@@ -50,11 +50,11 @@ func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 	}
 
 	return &SnapshotInfo{
-		ID:                        i.ID,
-		DocID:                     i.DocID,
-		ServerSeq:                 i.ServerSeq,
-		Lamport:                   i.Lamport,
-		Snapshot:                  i.Snapshot,
-		CreatedAt:            		 i.CreatedAt,
+		ID:        i.ID,
+		DocID:     i.DocID,
+		ServerSeq: i.ServerSeq,
+		Lamport:   i.Lamport,
+		Snapshot:  i.Snapshot,
+		CreatedAt: i.CreatedAt,
 	}
 }
