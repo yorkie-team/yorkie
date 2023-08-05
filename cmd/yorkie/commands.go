@@ -18,6 +18,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -40,6 +42,8 @@ func Run() int {
 }
 
 func init() {
+	rootCmd.SetOut(os.Stdout)
+	rootCmd.SetErr(os.Stderr)
 	rootCmd.AddCommand(project.SubCmd)
 	rootCmd.AddCommand(document.SubCmd)
 	// TODO(chacha912): set rpcAddr from env using viper.
