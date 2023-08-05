@@ -50,13 +50,13 @@ func (m *Map) Range(f func(clientID string, presence Presence) bool) {
 }
 
 // Load returns the presence for the given clientID.
-func (m *Map) Load(clientID string) (Presence, bool) {
+func (m *Map) Load(clientID string) Presence {
 	presence, ok := m.presences.Load(clientID)
 	if !ok {
-		return nil, false
+		return nil
 	}
 
-	return presence.(Presence), true
+	return presence.(Presence)
 }
 
 // LoadOrStore returns the existing presence if exists.
@@ -140,6 +140,9 @@ func (p Presence) Clear() {
 
 // DeepCopy copies itself deeply.
 func (p Presence) DeepCopy() Presence {
+	if p == nil {
+		return nil
+	}
 	clone := make(map[string]string)
 	for k, v := range p {
 		clone[k] = v

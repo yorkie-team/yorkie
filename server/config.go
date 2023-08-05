@@ -63,6 +63,8 @@ const (
 	DefaultAuthWebhookCacheSize       = 5000
 	DefaultAuthWebhookCacheAuthTTL    = 10 * time.Second
 	DefaultAuthWebhookCacheUnauthTTL  = 10 * time.Second
+	DefaultProjectInfoCacheSize       = 256
+	DefaultProjectInfoCacheTTL        = 10 * time.Minute
 
 	DefaultHostname = ""
 )
@@ -199,6 +201,14 @@ func (c *Config) ensureDefaultValue() {
 
 	if c.Backend.AuthWebhookCacheUnauthTTL == "" {
 		c.Backend.AuthWebhookCacheUnauthTTL = DefaultAuthWebhookCacheUnauthTTL.String()
+	}
+
+	if c.Backend.ProjectInfoCacheSize == 0 {
+		c.Backend.ProjectInfoCacheSize = DefaultProjectInfoCacheSize
+	}
+
+	if c.Backend.ProjectInfoCacheTTL == "" {
+		c.Backend.ProjectInfoCacheTTL = DefaultProjectInfoCacheTTL.String()
 	}
 
 	if c.Mongo != nil {

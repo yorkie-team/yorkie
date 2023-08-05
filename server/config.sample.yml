@@ -74,6 +74,12 @@ Backend:
   # AuthWebhookCacheUnauthTTL is the TTL value to set when caching the unauthorized result.
   AuthWebhookCacheUnauthTTL: "10s"
 
+  # ProjectInfoCacheSize is the size of the project info cache.
+  ProjectInfoCacheSize: 256
+
+  # ProjectInfoCacheTTL is the TTL value to set when caching the project info.
+  ProjectInfoCacheTTL: "10m"
+
   # Hostname is the hostname of the server. If not provided, the hostname will be
   # determined automatically by the OS (Optional, default: os.Hostname()).
   Hostname: ""

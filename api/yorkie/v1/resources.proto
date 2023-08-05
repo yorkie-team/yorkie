@@ -95,6 +95,10 @@ message Operation {
     TimeTicket executed_at = 6;
     map<string, string> attributes = 7;
   }
+  // NOTE(hackerwins): Select Operation is not used in the current version.
+  // In the previous version, it was used to represent selection of Text.
+  // However, it has been replaced by Presence now. It is retained for backward
+  // compatibility purposes.
   message Select {
     TimeTicket parent_created_at = 1;
     TextNodePos from = 2;

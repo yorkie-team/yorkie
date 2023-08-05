@@ -77,5 +77,9 @@ func TestNewConfigFromFile(t *testing.T) {
 		authWebhookCacheUnauthTTL, err := time.ParseDuration(conf.Backend.AuthWebhookCacheUnauthTTL)
 		assert.NoError(t, err)
 		assert.Equal(t, authWebhookCacheUnauthTTL, server.DefaultAuthWebhookCacheUnauthTTL)
+
+		projectInfoCacheTTL, err := time.ParseDuration(conf.Backend.ProjectInfoCacheTTL)
+		assert.NoError(t, err)
+		assert.Equal(t, projectInfoCacheTTL, server.DefaultProjectInfoCacheTTL)
 	})
 }

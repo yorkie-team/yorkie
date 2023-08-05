@@ -147,7 +147,9 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 		if err != nil {
 			return nil, err
 		}
-		elements.Add(elem)
+		if err = elements.Add(elem); err != nil {
+			return nil, err
+		}
 	}
 
 	createdAt, err := fromTimeTicket(pbArr.CreatedAt)

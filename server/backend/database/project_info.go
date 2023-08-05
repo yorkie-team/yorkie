@@ -81,22 +81,6 @@ func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold strin
 	}
 }
 
-// ToProjectInfo converts the given types.Project to ProjectInfo.
-func ToProjectInfo(project *types.Project) *ProjectInfo {
-	return &ProjectInfo{
-		ID:                        project.ID,
-		Name:                      project.Name,
-		Owner:                     project.Owner,
-		PublicKey:                 project.PublicKey,
-		SecretKey:                 project.SecretKey,
-		AuthWebhookURL:            project.AuthWebhookURL,
-		AuthWebhookMethods:        project.AuthWebhookMethods,
-		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
-		CreatedAt:                 project.CreatedAt,
-		UpdatedAt:                 project.UpdatedAt,
-	}
-}
-
 // DeepCopy returns a deep copy of the ProjectInfo.
 func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 	if i == nil {

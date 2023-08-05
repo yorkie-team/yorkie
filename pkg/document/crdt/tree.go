@@ -117,7 +117,7 @@ func NewTreeNode(pos *TreePos, nodeType string, attributes *RHT, value ...string
 
 // Type returns the type of the Node.
 func (n *TreeNode) Type() string {
-	return string(n.IndexTreeNode.Type)
+	return n.IndexTreeNode.Type
 }
 
 // Len returns the length of the Node.

@@ -50,9 +50,6 @@ var (
 	// ErrSnapshotNotFound is returned when the snapshot could not be found.
 	ErrSnapshotNotFound = errors.New("snapshot not found")
 
-	// ErrClientDocNotFound is returned when mapping between client and document could not be found.
-	ErrClientDocNotFound = errors.New("client document not found")
-
 	// ErrConflictOnUpdate is returned when a conflict occurs during update.
 	ErrConflictOnUpdate = errors.New("conflict on update")
 
