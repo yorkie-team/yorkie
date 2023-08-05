@@ -43,48 +43,18 @@ type SnapshotInfo struct {
 	CreatedAt time.Time `bson:"created_at"`
 }
 
-// SnapshotMetadata is a structure representing metadata of the snapshot.
-// SnapshotMetadata is identical with SnapshotInfo without Snapshot data.
-type SnapshotMetadata struct {
-	// ID is the unique ID of the snapshot.
-	ID types.ID `bson:"_id"`
-
-	// DocID is the ID of the document which the snapshot belongs to.
-	DocID types.ID `bson:"doc_id"`
-
-	// ServerSeq is the sequence number of the server which the snapshot belongs to.
-	ServerSeq int64 `bson:"server_seq"`
-
-	// Lamport is the Lamport timestamp of the snapshot.
-	Lamport int64 `bson:"lamport"`
-
-	// CreatedAt is the time when the snapshot is created.
-	CreatedAt time.Time `bson:"created_at"`
-}
-
-// ToSnapshotMetadata converts SnapshotInfo to SnapshotMetadata.
-func (info *SnapshotInfo) ToSnapshotMetadata() *SnapshotMetadata {
-	snapshotMetadata := &SnapshotMetadata{
-		ID:        info.ID,
-		DocID:     info.DocID,
-		ServerSeq: info.ServerSeq,
-		Lamport:   info.Lamport,
-		CreatedAt: info.CreatedAt,
+// DeepCopy returns a deep copy of the ProjectInfo.
+func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
+	if i == nil {
+		return nil
 	}
-	return snapshotMetadata
-}
 
-// SnapshotProjection is a structure representing fields to be retrieved from the database.
-type SnapshotProjection struct {
-	ID bool
-
-	DocID bool
-
-	ServerSeq bool
-
-	Lamport bool
-
-	Snapshot bool
-
-	CreatedAt bool
+	return &SnapshotInfo{
+		ID:                        i.ID,
+		DocID:                     i.DocID,
+		ServerSeq:                 i.ServerSeq,
+		Lamport:                   i.Lamport,
+		Snapshot:                  i.Snapshot,
+		CreatedAt:            		 i.CreatedAt,
+	}
 }
