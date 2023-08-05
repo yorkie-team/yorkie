@@ -1049,42 +1049,41 @@ func (c *Client) CreateSnapshotInfo(
 	return nil
 }
 
-// FindClosestSnapshotFullData finds the last snapshot of the given document.
-func (c *Client) FindClosestSnapshotFullData(
+// FindSnapshotInfoByID returns the snapshot by the given id.
+func (c *Client) FindSnapshotInfoByID(
 	ctx context.Context,
-	docID types.ID,
-	serverSeq int64,
+	id types.ID,
 ) (*database.SnapshotInfo, error) {
-	snapshotInfo, err := c.findClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, nil)
+	encodedID, err := encodeID(id)
 	if err != nil {
 		return nil, err
 	}
+
+	result := c.collection(colSnapshots).FindOne(ctx, bson.M{
+		"_id": encodedID,
+	})
+
+	snapshotInfo := &database.SnapshotInfo{}
+	if result.Err() == mongo.ErrNoDocuments {
+		return snapshotInfo, nil
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("find snapshot: %w", result.Err())
+	}
+
+	if err := result.Decode(snapshotInfo); err != nil {
+		return nil, fmt.Errorf("decode snapshot: %w", err)
+	}
+
 	return snapshotInfo, nil
 }
 
-// FindClosestSnapshotMetadata finds the last snapshot of the given document and return snapshot's metadata.
-// (without Snapshotinfo.Snapshot)
-func (c *Client) FindClosestSnapshotMetadata(
+// FindClosestSnapshotInfo finds the last snapshot of the given document.
+func (c *Client) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID types.ID,
 	serverSeq int64,
-) (*database.SnapshotMetadata, error) {
-	projection := bson.M{"Snapshot": 0}
-	snapshotInfo, err := c.findClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
-	if err != nil {
-		return nil, err
-	}
-	snapshotMetadata := snapshotInfo.ToSnapshotMetadata()
-	return snapshotMetadata, nil
-}
-
-// findClosestSnapshotFullData finds the last snapshot of the given document
-// and return SnapshotInfo with custom projection.
-func (c *Client) findClosestSnapshotFullDataWithProjection(
-	ctx context.Context,
-	docID types.ID,
-	serverSeq int64,
-	projection interface{},
+	includeSnapshot bool,
 ) (*database.SnapshotInfo, error) {
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
@@ -1095,8 +1094,8 @@ func (c *Client) findClosestSnapshotFullDataWithProjection(
 		"server_seq": -1,
 	})
 
-	if projection != nil {
-		option.SetProjection(projection)
+	if !includeSnapshot {
+		option.SetProjection(bson.M{"Snapshot": 0})
 	}
 
 	result := c.collection(colSnapshots).FindOne(ctx, bson.M{

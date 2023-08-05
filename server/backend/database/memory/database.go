@@ -20,7 +20,6 @@ package memory
 import (
 	"context"
 	"fmt"
-	"reflect"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -970,56 +969,27 @@ func (d *DB) CreateSnapshotInfo(
 	return nil
 }
 
-// FindClosestSnapshotFullData finds the last snapshot of the given document.
-func (d *DB) FindClosestSnapshotFullData(
-	ctx context.Context,
-	docID types.ID,
-	serverSeq int64,
-) (*database.SnapshotInfo, error) {
-	projection := database.SnapshotProjection{
-		ID:        true,
-		DocID:     true,
-		ServerSeq: true,
-		Lamport:   true,
-		Snapshot:  true,
-		CreatedAt: true,
-	}
-	snapshotInfo, err := d.findClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
+// FindSnapshotInfoByID returns the snapshot by the given id.
+func (d *DB) FindSnapshotInfoByID(ctx context.Context, id types.ID) (*database.SnapshotInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+	raw, err := txn.First(tblSnapshots, "id", id.String())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find snapshot by id: %w", err)
 	}
-	return snapshotInfo, nil
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrSnapshotNotFound)
+	}
+
+	return raw.(*database.SnapshotInfo).DeepCopy(), nil
 }
 
-// FindClosestSnapshotMetadata finds the last snapshot of the given document and return snapshot's metadata.
-// (without Snapshotinfo.Snapshot)
-func (d *DB) FindClosestSnapshotMetadata(
+// FindClosestSnapshotInfo finds the last snapshot of the given document.
+func (d *DB) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID types.ID,
 	serverSeq int64,
-) (*database.SnapshotMetadata, error) {
-	projection := database.SnapshotProjection{
-		ID:        true,
-		DocID:     true,
-		ServerSeq: true,
-		Lamport:   true,
-		Snapshot:  false,
-		CreatedAt: true,
-	}
-	snapshotInfo, err := d.findClosestSnapshotFullDataWithProjection(ctx, docID, serverSeq, projection)
-	if err != nil {
-		return nil, err
-	}
-	snapshotMetadata := snapshotInfo.ToSnapshotMetadata()
-	return snapshotMetadata, nil
-}
-
-// findClosestSnapshotFullData finds the last snapshot of the given document.
-func (d *DB) findClosestSnapshotFullDataWithProjection(
-	ctx context.Context,
-	docID types.ID,
-	serverSeq int64,
-	projection database.SnapshotProjection,
+	includeSnapshot bool,
 ) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -1038,23 +1008,15 @@ func (d *DB) findClosestSnapshotFullDataWithProjection(
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.SnapshotInfo)
 		if info.DocID == docID {
-			snapshotInfo = &database.SnapshotInfo{}
-			infoValue := reflect.ValueOf(info).Elem()
-			projectedValue := reflect.ValueOf(snapshotInfo).Elem()
-
-			projectionValue := reflect.ValueOf(projection)
-			projectionType := projectionValue.Type()
-
-			for i := 0; i < projectionValue.NumField(); i++ {
-				fieldName := projectionType.Field(i).Name
-				fieldValue := projectionValue.Field(i).Bool()
-
-				if fieldValue {
-					infoField := infoValue.FieldByName(fieldName)
-					projectedField := projectedValue.FieldByName(fieldName)
-
-					projectedField.Set(infoField)
-				}
+			snapshotInfo = &database.SnapshotInfo{
+				ID:        info.ID,
+				DocID:     info.DocID,
+				ServerSeq: info.ServerSeq,
+				Lamport:	 info.Lamport,
+				CreatedAt: info.CreatedAt,
+			}
+			if includeSnapshot {
+				snapshotInfo.Snapshot = info.Snapshot
 			}
 			break
 		}

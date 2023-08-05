@@ -33,8 +33,8 @@ func storeSnapshot(
 	docInfo *database.DocInfo,
 	minSyncedTicket *time.Ticket,
 ) error {
-	// 01. get the closest snapshot of this docInfo
-	snapshotMetadata, err := be.DB.FindClosestSnapshotMetadata(ctx, docInfo.ID, docInfo.ServerSeq)
+	// 01. get the closest snapshot's metadata of this docInfo
+	snapshotMetadata, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, docInfo.ServerSeq, false)
 	if err != nil {
 		return err
 	}
@@ -57,11 +57,14 @@ func storeSnapshot(
 	}
 
 	// 03. create document instance of the docInfo
-	// TODO: check policy to guarantee atomicity
-	snapshotInfo, err := be.DB.FindClosestSnapshotFullData(ctx, docInfo.ID, docInfo.ServerSeq)
-	if err != nil {
-		return err
+	snapshotInfo := snapshotMetadata
+	if snapshotMetadata.ID != "" {
+		snapshotInfo, err = be.DB.FindSnapshotInfoByID(ctx, snapshotInfo.ID)
+		if err != nil {
+			return err
+		}
 	}
+
 	doc, err := document.NewInternalDocumentFromSnapshot(
 		docInfo.Key,
 		snapshotInfo.ServerSeq,

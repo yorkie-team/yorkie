@@ -207,8 +207,8 @@ func RunFindChangesBetweenServerSeqsTest(
 	})
 }
 
-// RunFindClosestSnapshotFullDataTest runs the FindClosestSnapshotFullData test for the given db.
-func RunFindClosestSnapshotFullDataTest(t *testing.T, db database.Database, projectID types.ID) {
+// RunFindClosestSnapshotInfoTest runs the FindClosestSnapshotInfo test for the given db.
+func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("store and find snapshots test", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := key.Key(fmt.Sprintf("tests$%s", t.Name()))
@@ -227,25 +227,25 @@ func RunFindClosestSnapshotFullDataTest(t *testing.T, db database.Database, proj
 		}))
 
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err := db.FindClosestSnapshotFullData(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		snapshot, err := db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(0), snapshot.ServerSeq)
 
 		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err = db.FindClosestSnapshotFullData(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), snapshot.ServerSeq)
 
 		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.NoError(t, db.CreateSnapshotInfo(ctx, docInfo.ID, doc.InternalDocument()))
-		snapshot, err = db.FindClosestSnapshotFullData(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq)
+		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(2), snapshot.ServerSeq)
 
-		snapshot, err = db.FindClosestSnapshotFullData(ctx, docInfo.ID, 1)
+		snapshot, err = db.FindClosestSnapshotInfo(ctx, docInfo.ID, 1, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), snapshot.ServerSeq)
 	})
