@@ -163,7 +163,7 @@ func (b *Backend) Shutdown() error {
 		logging.DefaultLogger().Error(err)
 	}
 
-	logging.DefaultLogger().Infof("backend stoped: id: %s", b.serverInfo.ID)
+	logging.DefaultLogger().Infof("backend stopped: id: %s", b.serverInfo.ID)
 	return nil
 }
 
