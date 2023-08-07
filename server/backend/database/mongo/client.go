@@ -1049,15 +1049,53 @@ func (c *Client) CreateSnapshotInfo(
 	return nil
 }
 
+// FindSnapshotInfoByID returns the snapshot by the given id.
+func (c *Client) FindSnapshotInfoByID(
+	ctx context.Context,
+	id types.ID,
+) (*database.SnapshotInfo, error) {
+	encodedID, err := encodeID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	result := c.collection(colSnapshots).FindOne(ctx, bson.M{
+		"_id": encodedID,
+	})
+
+	snapshotInfo := &database.SnapshotInfo{}
+	if result.Err() == mongo.ErrNoDocuments {
+		return snapshotInfo, nil
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("find snapshot: %w", result.Err())
+	}
+
+	if err := result.Decode(snapshotInfo); err != nil {
+		return nil, fmt.Errorf("decode snapshot: %w", err)
+	}
+
+	return snapshotInfo, nil
+}
+
 // FindClosestSnapshotInfo finds the last snapshot of the given document.
 func (c *Client) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID types.ID,
 	serverSeq int64,
+	includeSnapshot bool,
 ) (*database.SnapshotInfo, error) {
 	encodedDocID, err := encodeID(docID)
 	if err != nil {
 		return nil, err
+	}
+
+	option := options.FindOne().SetSort(bson.M{
+		"server_seq": -1,
+	})
+
+	if !includeSnapshot {
+		option.SetProjection(bson.M{"Snapshot": 0})
 	}
 
 	result := c.collection(colSnapshots).FindOne(ctx, bson.M{
@@ -1065,9 +1103,7 @@ func (c *Client) FindClosestSnapshotInfo(
 		"server_seq": bson.M{
 			"$lte": serverSeq,
 		},
-	}, options.FindOne().SetSort(bson.M{
-		"server_seq": -1,
-	}))
+	}, option)
 
 	snapshotInfo := &database.SnapshotInfo{}
 	if result.Err() == mongo.ErrNoDocuments {

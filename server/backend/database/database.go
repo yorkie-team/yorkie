@@ -47,6 +47,9 @@ var (
 	// ErrDocumentNotFound is returned when the document could not be found.
 	ErrDocumentNotFound = errors.New("document not found")
 
+	// ErrSnapshotNotFound is returned when the snapshot could not be found.
+	ErrSnapshotNotFound = errors.New("snapshot not found")
+
 	// ErrConflictOnUpdate is returned when a conflict occurs during update.
 	ErrConflictOnUpdate = errors.New("conflict on update")
 
@@ -205,8 +208,16 @@ type Database interface {
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(ctx context.Context, docID types.ID, doc *document.InternalDocument) error
 
+	// FindSnapshotInfoByID returns the snapshot by the given id.
+	FindSnapshotInfoByID(ctx context.Context, id types.ID) (*SnapshotInfo, error)
+
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
-	FindClosestSnapshotInfo(ctx context.Context, docID types.ID, serverSeq int64) (*SnapshotInfo, error)
+	FindClosestSnapshotInfo(
+		ctx context.Context,
+		docID types.ID,
+		serverSeq int64,
+		includeSnapshot bool,
+	) (*SnapshotInfo, error)
 
 	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
 	FindMinSyncedSeqInfo(ctx context.Context, docID types.ID) (*SyncedSeqInfo, error)

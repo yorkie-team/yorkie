@@ -42,3 +42,19 @@ type SnapshotInfo struct {
 	// CreatedAt is the time when the snapshot is created.
 	CreatedAt time.Time `bson:"created_at"`
 }
+
+// DeepCopy returns a deep copy of the SnapshotInfo.
+func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
+	if i == nil {
+		return nil
+	}
+
+	return &SnapshotInfo{
+		ID:        i.ID,
+		DocID:     i.DocID,
+		ServerSeq: i.ServerSeq,
+		Lamport:   i.Lamport,
+		Snapshot:  i.Snapshot,
+		CreatedAt: i.CreatedAt,
+	}
+}

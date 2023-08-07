@@ -969,11 +969,27 @@ func (d *DB) CreateSnapshotInfo(
 	return nil
 }
 
+// FindSnapshotInfoByID returns the snapshot by the given id.
+func (d *DB) FindSnapshotInfoByID(ctx context.Context, id types.ID) (*database.SnapshotInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+	raw, err := txn.First(tblSnapshots, "id", id.String())
+	if err != nil {
+		return nil, fmt.Errorf("find snapshot by id: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrSnapshotNotFound)
+	}
+
+	return raw.(*database.SnapshotInfo).DeepCopy(), nil
+}
+
 // FindClosestSnapshotInfo finds the last snapshot of the given document.
 func (d *DB) FindClosestSnapshotInfo(
 	ctx context.Context,
 	docID types.ID,
 	serverSeq int64,
+	includeSnapshot bool,
 ) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -992,7 +1008,16 @@ func (d *DB) FindClosestSnapshotInfo(
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.SnapshotInfo)
 		if info.DocID == docID {
-			snapshotInfo = info
+			snapshotInfo = &database.SnapshotInfo{
+				ID:        info.ID,
+				DocID:     info.DocID,
+				ServerSeq: info.ServerSeq,
+				Lamport:   info.Lamport,
+				CreatedAt: info.CreatedAt,
+			}
+			if includeSnapshot {
+				snapshotInfo.Snapshot = info.Snapshot
+			}
 			break
 		}
 	}
