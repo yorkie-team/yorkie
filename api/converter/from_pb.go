@@ -737,11 +737,20 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		return crdt.NewCounter(
+		counterValue, err := crdt.CounterValueFromBytes(counterType, pbElement.Value)
+		if err != nil {
+			return nil, err
+		}
+
+		counter, err := crdt.NewCounter(
 			counterType,
-			crdt.CounterValueFromBytes(counterType, pbElement.Value),
+			counterValue,
 			createdAt,
-		), nil
+		)
+		if err != nil {
+			return nil, err
+		}
+		return counter, nil
 	case api.ValueType_VALUE_TYPE_TREE:
 		return BytesToTree(pbElement.Value)
 	}

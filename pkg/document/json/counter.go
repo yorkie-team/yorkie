@@ -71,7 +71,9 @@ func (p *Counter) Increase(v interface{}) *Counter {
 		panic("unsupported type")
 	}
 
-	p.Counter.Increase(primitive)
+	if _, err := p.Counter.Increase(primitive); err != nil {
+		panic(err)
+	}
 
 	p.context.Push(operations.NewIncrease(
 		p.CreatedAt(),

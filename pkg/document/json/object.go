@@ -75,14 +75,22 @@ func (p *Object) SetNewCounter(k string, t crdt.CounterType, n interface{}) *Cou
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		switch t {
 		case crdt.IntegerCnt:
+			counter, err := crdt.NewCounter(crdt.IntegerCnt, n, ticket)
+			if err != nil {
+				panic(err)
+			}
 			return NewCounter(
 				p.context,
-				crdt.NewCounter(crdt.IntegerCnt, n, ticket),
+				counter,
 			)
 		case crdt.LongCnt:
+			counter, err := crdt.NewCounter(crdt.LongCnt, n, ticket)
+			if err != nil {
+				panic(err)
+			}
 			return NewCounter(
 				p.context,
-				crdt.NewCounter(crdt.LongCnt, n, ticket),
+				counter,
 			)
 		default:
 			panic("unsupported type")
