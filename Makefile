@@ -54,6 +54,12 @@ fmt: ## applies format and simplify codes
 lint: ## runs the golang-ci lint, checks for lint violations
 	golangci-lint run ./...
 
+coverage: ## runs coverage tests
+	go clean -testcache
+	go test -tags integration -race -coverprofile=coverage.txt -covermode=atomic ./...
+	go tool cover -html=coverage.txt
+	rm -f coverage.txt
+
 test: ## runs integration tests that require local applications such as MongoDB
 	go clean -testcache
 	go test -tags integration -race ./...

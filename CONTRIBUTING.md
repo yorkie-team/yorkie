@@ -98,7 +98,7 @@ There are multiple types of tests. The location of the test code varies with typ
 We are using [Codecov](https://about.codecov.io) for analyzing PR's code coverage. If you want to check the coverage of your code in local browser, you can run the command below.
 
 ```sh
-go test -tags integration -race -coverprofile=coverage.txt -covermode=atomic ./...; go tool cover -html=coverage.txt; rm coverage.txt
+make coverage
 ```
 
 ## Contributor License Agreement (CLA)
