@@ -18,10 +18,14 @@ package crdt
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
+
+// ErrUnsupportedType returned when the given type is not supported.
+var ErrUnsupportedType = errors.New("unsupported type")
 
 // CounterType represents any type that can be used as a counter.
 type CounterType int
@@ -41,7 +45,7 @@ func CounterValueFromBytes(counterType CounterType, value []byte) (interface{}, 
 	case LongCnt:
 		return int64(binary.LittleEndian.Uint64(value)), nil
 	default:
-		return nil, fmt.Errorf("unsupported type")
+		return nil, ErrUnsupportedType
 	}
 }
 
@@ -78,7 +82,7 @@ func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket
 			createdAt: createdAt,
 		}, nil
 	default:
-		return nil, fmt.Errorf("unsupported type")
+		return nil, ErrUnsupportedType
 	}
 }
 
@@ -94,7 +98,7 @@ func (p *Counter) Bytes() ([]byte, error) {
 		binary.LittleEndian.PutUint64(bytes[:], uint64(val))
 		return bytes[:], nil
 	default:
-		return nil, fmt.Errorf("unsupported type")
+		return nil, ErrUnsupportedType
 	}
 }
 
@@ -156,7 +160,7 @@ func (p *Counter) ValueType() CounterType {
 // So we need to assert int to int32.
 func (p *Counter) Increase(v *Primitive) (*Counter, error) {
 	if !p.IsNumericType() || !v.IsNumericType() {
-		return nil, fmt.Errorf("unsupported type")
+		return nil, ErrUnsupportedType
 	}
 	switch p.valueType {
 	case IntegerCnt:
@@ -172,7 +176,7 @@ func (p *Counter) Increase(v *Primitive) (*Counter, error) {
 		}
 		p.value = p.value.(int64) + longValue
 	default:
-		return nil, fmt.Errorf("unsupported type")
+		return nil, ErrUnsupportedType
 	}
 
 	return p, nil
@@ -198,7 +202,7 @@ func castToInt(value interface{}) (int32, error) {
 	case float64:
 		return int32(val), nil
 	default:
-		return 0, fmt.Errorf("unsupported type")
+		return 0, ErrUnsupportedType
 	}
 }
 
@@ -216,6 +220,6 @@ func castToLong(value interface{}) (int64, error) {
 	case float64:
 		return int64(val), nil
 	default:
-		return 0, fmt.Errorf("unsupported type")
+		return 0, ErrUnsupportedType
 	}
 }

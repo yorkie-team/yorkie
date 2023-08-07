@@ -47,7 +47,7 @@ func TestCounter(t *testing.T) {
 		assert.Equal(t, crdt.IntegerCnt, intCntWithDoubleValue.ValueType())
 
 		_, err = crdt.NewCounter(crdt.IntegerCnt, "", time.InitialTicket)
-		assert.EqualError(t, err, "unsupported type")
+		assert.ErrorIs(t, err, crdt.ErrUnsupportedType)
 
 		longCntWithInt32Value, err := crdt.NewCounter(crdt.LongCnt, int32(math.MaxInt32), time.InitialTicket)
 		assert.NoError(t, err)
@@ -66,7 +66,7 @@ func TestCounter(t *testing.T) {
 		assert.Equal(t, crdt.LongCnt, longCntWithDoubleValue.ValueType())
 
 		_, err = crdt.NewCounter(crdt.LongCnt, "", time.InitialTicket)
-		assert.EqualError(t, err, "unsupported type")
+		assert.ErrorIs(t, err, crdt.ErrUnsupportedType)
 	})
 
 	t.Run("increase test", func(t *testing.T) {
@@ -112,7 +112,7 @@ func TestCounter(t *testing.T) {
 		// error process test
 		unsupportedTypeErrorTest := func(v interface{}) {
 			_, err = crdt.NewCounter(crdt.IntegerCnt, v, time.InitialTicket)
-			assert.EqualError(t, err, "unsupported type")
+			assert.ErrorIs(t, err, crdt.ErrUnsupportedType)
 		}
 		unsupportedTypeErrorTest("str")
 		unsupportedTypeErrorTest(true)
