@@ -51,6 +51,12 @@ docker-compose -f build/docker/docker-compose.yml up --build -d
 make test
 ```
 
+You can automatically check the programmatic and stylistic errors of your code.
+
+```sh
+make lint
+```
+
 ## Design Documents
 
 For developers, [design documents](design/README.md) about core features are provided. You can refer to the docs for understanding the overall structure of Yorkie.
@@ -88,6 +94,13 @@ There are multiple types of tests. The location of the test code varies with typ
 - Integration: These tests cover interactions of package components or interactions between Yorkie packages and some other non-Yorkie system resource (eg: MongoDB, ETCD).
 - Benchmark: These confirm that the performance of the implemented function.
 
+### Code Coverage
+We are using [Codecov](https://about.codecov.io) for analyzing PR's code coverage. If you want to check the coverage of your code in local browser, you can run the command below.
+
+```sh
+make coverage
+```
+
 ## Contributor License Agreement (CLA)
 
 We require that all contributors sign our Contributor License Agreement ("CLA") before we can accept the contribution.
@@ -97,6 +110,8 @@ We require that all contributors sign our Contributor License Agreement ("CLA") 
 Open a pull request ("PR") to any of our open source projects to sign the CLA. A bot will comment on the PR asking you to sign the CLA if you haven't already.
 
 Follow the steps given by the bot to sign the CLA. This will require you to log in with GitHub. We will only use this information for CLA tracking. You only have to sign the CLA once. Once you've signed the CLA, future contributions to the project will not require you to sign again.
+
+If the bot still require you to sign the CLA although you had already signed, you can check your commit's author is equal to the Github account that you logged in.
 
 ### Why Require a CLA?
 
