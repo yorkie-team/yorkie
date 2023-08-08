@@ -63,12 +63,11 @@ func TestHousekeeping(t *testing.T) {
 		clientC, err := memdb.ActivateClient(ctx, project.ID, fmt.Sprintf("%s-C", t.Name()))
 		assert.NoError(t, err)
 
-		housekeepingLastProjectID := database.DefaultProjectID
-		candidates, err := memdb.FindDeactivateCandidates(
+		_, candidates, err := memdb.FindDeactivateCandidates(
 			ctx,
 			10,
 			10,
-			&housekeepingLastProjectID,
+			database.DefaultProjectID,
 		)
 		assert.NoError(t, err)
 		assert.Len(t, candidates, 2)
@@ -81,34 +80,33 @@ func TestHousekeeping(t *testing.T) {
 		ctx := context.Background()
 		memdb, projects := createDBandProjects(t)
 
-		housekeepingLastProjectID := database.DefaultProjectID
 		fetchSize := 4
-		_, err := memdb.FindDeactivateCandidates(
+		lastProjectID, _, err := memdb.FindDeactivateCandidates(
 			ctx,
 			0,
 			fetchSize,
-			&housekeepingLastProjectID,
+			database.DefaultProjectID,
 		)
 		assert.NoError(t, err)
-		assert.Equal(t, projects[fetchSize-1].ID, housekeepingLastProjectID)
+		assert.Equal(t, projects[fetchSize-1].ID, lastProjectID)
 
-		_, err = memdb.FindDeactivateCandidates(
+		lastProjectID, _, err = memdb.FindDeactivateCandidates(
 			ctx,
 			0,
 			fetchSize,
-			&housekeepingLastProjectID,
+			lastProjectID,
 		)
 		assert.NoError(t, err)
-		assert.Equal(t, projects[fetchSize*2-1].ID, housekeepingLastProjectID)
+		assert.Equal(t, projects[fetchSize*2-1].ID, lastProjectID)
 
-		_, err = memdb.FindDeactivateCandidates(
+		lastProjectID, _, err = memdb.FindDeactivateCandidates(
 			ctx,
 			0,
-			4,
-			&housekeepingLastProjectID,
+			fetchSize,
+			lastProjectID,
 		)
 		assert.NoError(t, err)
-		assert.Equal(t, database.DefaultProjectID, housekeepingLastProjectID)
+		assert.Equal(t, database.DefaultProjectID, lastProjectID)
 	})
 }
 

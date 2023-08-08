@@ -239,9 +239,9 @@ func (c *Client) CreateProjectInfo(
 func (c *Client) listProjectInfos(
 	ctx context.Context,
 	pageSize int,
-	housekeepingLastProjectID *types.ID,
+	housekeepingLastProjectID types.ID,
 ) ([]*database.ProjectInfo, error) {
-	encodedID, err := encodeID(*housekeepingLastProjectID)
+	encodedID, err := encodeID(housekeepingLastProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -261,12 +261,6 @@ func (c *Client) listProjectInfos(
 	var infos []*database.ProjectInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("fetch project infos: %w", err)
-	}
-
-	if len(infos) < pageSize {
-		*housekeepingLastProjectID = database.DefaultProjectID
-	} else if len(infos) > 0 {
-		*housekeepingLastProjectID = infos[len(infos)-1].ID
 	}
 
 	return infos, nil
@@ -675,24 +669,30 @@ func (c *Client) FindDeactivateCandidates(
 	ctx context.Context,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
-	housekeepingLastProjectID *types.ID,
-) ([]*database.ClientInfo, error) {
+	housekeepingLastProjectID types.ID,
+) (types.ID, []*database.ClientInfo, error) {
 	projects, err := c.listProjectInfos(ctx, projectFetchSize, housekeepingLastProjectID)
 	if err != nil {
-		return nil, err
+		return database.DefaultProjectID, nil, err
 	}
 
 	var candidates []*database.ClientInfo
 	for _, project := range projects {
 		clientInfos, err := c.findDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
 		if err != nil {
-			return nil, err
+			return database.DefaultProjectID, nil, err
 		}
 
 		candidates = append(candidates, clientInfos...)
 	}
 
-	return candidates, nil
+	var lastProjectID types.ID
+	if len(projects) < projectFetchSize {
+		lastProjectID = database.DefaultProjectID
+	} else {
+		lastProjectID = projects[len(projects)-1].ID
+	}
+	return lastProjectID, candidates, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

@@ -139,8 +139,8 @@ type Database interface {
 		ctx context.Context,
 		candidatesLimitPerProject int,
 		projectFetchSize int,
-		housekeepingLastProjectID *types.ID,
-	) ([]*ClientInfo, error)
+		housekeepingLastProjectID types.ID,
+	) (types.ID, []*ClientInfo, error)
 
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(

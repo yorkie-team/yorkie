@@ -112,9 +112,11 @@ func (h *Housekeeping) run() {
 
 	for {
 		ctx := context.Background()
-		if err := h.deactivateCandidates(ctx, &housekeepingLastProjectID); err != nil {
+		lastProjectID, err := h.deactivateCandidates(ctx, housekeepingLastProjectID)
+		if err != nil {
 			continue
 		}
+		housekeepingLastProjectID = lastProjectID
 
 		select {
 		case <-time.After(h.interval):
@@ -125,15 +127,18 @@ func (h *Housekeeping) run() {
 }
 
 // deactivateCandidates deactivates candidates.
-func (h *Housekeeping) deactivateCandidates(ctx context.Context, housekeepingLastProjectID *types.ID) error {
+func (h *Housekeeping) deactivateCandidates(
+	ctx context.Context,
+	housekeepingLastProjectID types.ID,
+) (types.ID, error) {
 	start := time.Now()
 	locker, err := h.coordinator.NewLocker(ctx, deactivateCandidatesKey)
 	if err != nil {
-		return err
+		return database.DefaultProjectID, err
 	}
 
 	if err := locker.Lock(ctx); err != nil {
-		return err
+		return database.DefaultProjectID, err
 	}
 
 	defer func() {
@@ -142,14 +147,14 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context, housekeepingLas
 		}
 	}()
 
-	candidates, err := h.database.FindDeactivateCandidates(
+	lastProjectID, candidates, err := h.database.FindDeactivateCandidates(
 		ctx,
 		h.candidatesLimitPerProject,
 		h.projectFetchSize,
 		housekeepingLastProjectID,
 	)
 	if err != nil {
-		return err
+		return database.DefaultProjectID, err
 	}
 
 	deactivatedCount := 0
@@ -160,7 +165,7 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context, housekeepingLas
 			clientInfo.ProjectID,
 			clientInfo.ID,
 		); err != nil {
-			return err
+			return database.DefaultProjectID, err
 		}
 
 		deactivatedCount++
@@ -175,5 +180,5 @@ func (h *Housekeeping) deactivateCandidates(ctx context.Context, housekeepingLas
 		)
 	}
 
-	return nil
+	return lastProjectID, nil
 }
