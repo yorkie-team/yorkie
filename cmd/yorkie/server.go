@@ -40,6 +40,7 @@ var (
 
 	adminTokenDuration        time.Duration
 	housekeepingInterval      time.Duration
+	housekeepingLeaseDuration time.Duration
 	clientDeactivateThreshold string
 
 	mongoConnectionURI     string
@@ -70,6 +71,7 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ProjectInfoCacheTTL = projectInfoCacheTTL.String()
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
+			conf.Housekeeping.LeaseDuration = housekeepingLeaseDuration.String()
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -222,6 +224,18 @@ func init() {
 		"housekeeping-candidates-limit-per-project",
 		server.DefaultHousekeepingCandidatesLimitPerProject,
 		"candidates limit per project for a single housekeeping run",
+	)
+	cmd.Flags().BoolVar(
+		&conf.Housekeeping.LeaderElection,
+		"housekeeping-leader-election",
+		server.DefaultHousekeepingLeaderElection,
+		"Enable leader election to run housekeeping only on the leader.",
+	)
+	cmd.Flags().DurationVar(
+		&housekeepingLeaseDuration,
+		"housekeeping-lease-duration",
+		server.DefaultHousekeepingLeaseDuration,
+		"lease duration for a leader election in housekeeping",
 	)
 	cmd.Flags().StringVar(
 		&mongoConnectionURI,

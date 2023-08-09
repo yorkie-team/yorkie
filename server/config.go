@@ -42,6 +42,8 @@ const (
 
 	DefaultHousekeepingInterval                  = 30 * time.Second
 	DefaultHousekeepingCandidatesLimitPerProject = 500
+	DefaultHousekeepingLeaderElection            = false
+	DefaultHousekeepingLeaseDuration             = 60 * time.Second
 
 	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout = 5 * time.Second
@@ -241,6 +243,8 @@ func newConfig(port int, profilingPort int) *Config {
 		Housekeeping: &housekeeping.Config{
 			Interval:                  DefaultHousekeepingInterval.String(),
 			CandidatesLimitPerProject: DefaultHousekeepingCandidatesLimitPerProject,
+			LeaderElection:            DefaultHousekeepingLeaderElection,
+			LeaseDuration:             DefaultHousekeepingLeaseDuration.String(),
 		},
 		Backend: &backend.Config{
 			ClientDeactivateThreshold:  DefaultClientDeactivateThreshold,

@@ -1338,6 +1338,40 @@ func (d *DB) findTicketByServerSeq(
 	), nil
 }
 
+// CreateTTLIndex creates a TTL index.
+func (d *DB) CreateTTLIndex(
+	ctx context.Context,
+	leaseDuration gotime.Duration,
+) error {
+	return nil
+}
+
+// TryToAcquireLeaderLease tries to acquire the leader lease.
+func (d *DB) TryToAcquireLeaderLease(
+	ctx context.Context,
+	hostname string,
+	leaseLockName string,
+	leaseDuration gotime.Duration,
+) (bool, error) {
+	// In memory database, leader is always myself.
+	return true, nil
+}
+
+// RenewLeaderLease renews the leader lease.
+func (d *DB) RenewLeaderLease(
+	ctx context.Context,
+	hostname string,
+	leaseLockName string,
+	leaseDuration gotime.Duration,
+) error {
+	return nil
+}
+
+// FindLeader returns the leader hostname for the given leaseLockName.
+func (d *DB) FindLeader(ctx context.Context, leaseLockName string) (*string, error) {
+	return nil, nil
+}
+
 func newID() types.ID {
 	return types.ID(primitive.NewObjectID().Hex())
 }

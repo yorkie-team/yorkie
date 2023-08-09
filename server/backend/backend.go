@@ -33,6 +33,8 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	memdb "github.com/yorkie-team/yorkie/server/backend/database/memory"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
+	"github.com/yorkie-team/yorkie/server/backend/election"
+	mongoelection "github.com/yorkie-team/yorkie/server/backend/election/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	memsync "github.com/yorkie-team/yorkie/server/backend/sync/memory"
@@ -48,6 +50,7 @@ type Backend struct {
 
 	DB           database.Database
 	Coordinator  sync.Coordinator
+	Elector      election.Elector
 	Metrics      *prometheus.Metrics
 	Background   *background.Background
 	Housekeeping *housekeeping.Housekeeping
@@ -64,11 +67,12 @@ func New(
 ) (*Backend, error) {
 	hostname := conf.Hostname
 	if hostname == "" {
-		hostname, err := os.Hostname()
+		osHostname, err := os.Hostname()
 		if err != nil {
 			return nil, fmt.Errorf("os.Hostname: %w", err)
 		}
-		conf.Hostname = hostname
+		conf.Hostname = osHostname
+		hostname = osHostname
 	}
 
 	serverInfo := &sync.ServerInfo{
@@ -103,10 +107,13 @@ func New(
 		return nil, err
 	}
 
+	elector := mongoelection.NewElector(hostname, db)
+
 	keeping, err := housekeeping.Start(
 		housekeepingConf,
 		db,
 		coordinator,
+		elector,
 	)
 	if err != nil {
 		return nil, err
@@ -118,8 +125,9 @@ func New(
 	}
 
 	logging.DefaultLogger().Infof(
-		"backend created: id: %s, rpc: %s",
+		"backend created: id: %s, rpc: %s, db: %s",
 		serverInfo.ID,
+		serverInfo.Hostname,
 		dbInfo,
 	)
 
@@ -141,6 +149,7 @@ func New(
 		Metrics:      metrics,
 		DB:           db,
 		Coordinator:  coordinator,
+		Elector:      elector,
 		Housekeeping: keeping,
 
 		AuthWebhookCache: authWebhookCache,
@@ -152,6 +161,10 @@ func (b *Backend) Shutdown() error {
 	b.Background.Close()
 
 	if err := b.Housekeeping.Stop(); err != nil {
+		return err
+	}
+
+	if err := b.Elector.Stop(); err != nil {
 		return err
 	}
 

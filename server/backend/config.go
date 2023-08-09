@@ -42,7 +42,7 @@ type Config struct {
 	// we are using server as single-tenant mode, this should be set to true.
 	UseDefaultProject bool `yaml:"UseDefaultProject"`
 
-	// ClientDeactivateThreshold is deactivate threshold of clients in specific project for housekeeping.
+	// ClientDeactivateThreshold is deactivation threshold of clients in specific project for housekeeping.
 	ClientDeactivateThreshold string `yaml:"ClientDeactivateThreshold"`
 
 	// SnapshotThreshold is the threshold that determines if changes should be

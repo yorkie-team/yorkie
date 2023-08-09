@@ -60,6 +60,8 @@ var (
 	AdminPassword                         = server.DefaultAdminPassword
 	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
+	HousekeepingLeaderElection            = false
+	HousekeepingLeaseDuration             = 10 * gotime.Second
 
 	AdminTokenDuration         = "10s"
 	ClientDeactivateThreshold  = "10s"
@@ -75,6 +77,8 @@ var (
 	MongoConnectionURI     = "mongodb://localhost:27017"
 	MongoConnectionTimeout = "5s"
 	MongoPingTimeout       = "5s"
+
+	LeaseDuration = 2 * gotime.Second
 )
 
 func init() {
@@ -225,6 +229,8 @@ func TestConfig() *server.Config {
 		Housekeeping: &housekeeping.Config{
 			Interval:                  HousekeepingInterval.String(),
 			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
+			LeaderElection:            HousekeepingLeaderElection,
+			LeaseDuration:             HousekeepingLeaseDuration.String(),
 		},
 		Backend: &backend.Config{
 			AdminUser:                  server.DefaultAdminUser,

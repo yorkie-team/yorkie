@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/election"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -32,6 +33,7 @@ import (
 
 const (
 	deactivateCandidatesKey = "housekeeping/deactivateCandidates"
+	lockLeaseName           = "housekeeping"
 )
 
 // Config is the configuration for the housekeeping service.
@@ -41,6 +43,12 @@ type Config struct {
 
 	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
 	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
+
+	// LeaderElection is the flag to enable leader election for performing housekeeping only on leader node.
+	LeaderElection bool `yaml:"LeaderElection"`
+
+	// LeaseDuration is the duration that non-leader candidates will wait to force acquire leadership.
+	LeaseDuration string `yaml:"LeaseDuration"`
 }
 
 // Validate validates the configuration.
@@ -49,6 +57,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			`invalid argument %s for "--housekeeping-interval" flag: %w`,
 			c.Interval,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.LeaseDuration); err != nil {
+		return fmt.Errorf(
+			`invalid argument %s for "--housekeeping-lease-duration" flag: %w`,
+			c.LeaseDuration,
 			err,
 		)
 	}
@@ -62,9 +78,12 @@ func (c *Config) Validate() error {
 type Housekeeping struct {
 	database    database.Database
 	coordinator sync.Coordinator
+	elector     election.Elector
 
 	interval                  time.Duration
 	candidatesLimitPerProject int
+	leaderElection            bool
+	leaseDuration             time.Duration
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
@@ -75,8 +94,9 @@ func Start(
 	conf *Config,
 	database database.Database,
 	coordinator sync.Coordinator,
+	elector election.Elector,
 ) (*Housekeeping, error) {
-	h, err := New(conf, database, coordinator)
+	h, err := New(conf, database, coordinator, elector)
 	if err != nil {
 		return nil, err
 	}
@@ -92,10 +112,15 @@ func New(
 	conf *Config,
 	database database.Database,
 	coordinator sync.Coordinator,
+	elector election.Elector,
 ) (*Housekeeping, error) {
 	interval, err := time.ParseDuration(conf.Interval)
 	if err != nil {
 		return nil, fmt.Errorf("parse interval %s: %w", conf.Interval, err)
+	}
+	leaseDuration, err := time.ParseDuration(conf.LeaseDuration)
+	if err != nil {
+		return nil, fmt.Errorf("parse lease duration %s: %w", conf.LeaseDuration, err)
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -103,9 +128,12 @@ func New(
 	return &Housekeeping{
 		database:    database,
 		coordinator: coordinator,
+		elector:     elector,
 
 		interval:                  interval,
 		candidatesLimitPerProject: conf.CandidatesLimitPerProject,
+		leaderElection:            conf.LeaderElection,
+		leaseDuration:             leaseDuration,
 
 		ctx:        ctx,
 		cancelFunc: cancelFunc,
@@ -114,7 +142,20 @@ func New(
 
 // Start starts the housekeeping service.
 func (h *Housekeeping) Start() error {
-	go h.run()
+	if h.leaderElection {
+		err := h.elector.StartElection(
+			lockLeaseName,
+			h.leaseDuration,
+			func(ctx context.Context) { h.run() },
+			func() { h.cancelFunc() },
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		go h.run()
+	}
+
 	return nil
 }
 
