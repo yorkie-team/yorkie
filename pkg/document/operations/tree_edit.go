@@ -82,7 +82,7 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 			return err
 		}
 
-		if e.from.CreatedAt.Compare(e.to.CreatedAt) != 0 || e.from.Offset != e.to.Offset {
+		if !e.from.Equals(e.to) {
 			root.RegisterElementHasRemovedNodes(obj)
 		}
 	default:
