@@ -13,346 +13,348 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-syntax = "proto3";
+ syntax = "proto3";
 
-package yorkie.v1;
-
-import "google/protobuf/timestamp.proto";
-import "google/protobuf/wrappers.proto";
-
-option go_package = ".;v1";
-
-option java_multiple_files = true;
-option java_package = "dev.yorkie.api.v1";
-
-/////////////////////////////////////////
-// Messages for Snapshot               //
-/////////////////////////////////////////
-message Snapshot {
-  JSONElement root = 1;
-  map<string, Presence> presences = 2;
-}
-
-/////////////////////////////////////////
-// Messages for ChangePack             //
-/////////////////////////////////////////
-
-// ChangePack is a message that contains all changes that occurred in a document.
-// It is used to synchronize changes between clients and servers.
-message ChangePack {
-  string document_key = 1;
-  Checkpoint checkpoint = 2;
-  bytes snapshot = 3;
-  repeated Change changes = 4;
-  TimeTicket min_synced_ticket = 5;
-  bool is_removed = 6;
-}
-
-message Change {
-  ChangeID id = 1;
-  string message = 2;
-  repeated Operation operations = 3;
-  PresenceChange presence_change = 4;
-}
-
-message ChangeID {
-  uint32 client_seq = 1;
-  int64 server_seq = 2 [jstype = JS_STRING];
-  int64 lamport = 3 [jstype = JS_STRING];
-  bytes actor_id = 4;
-}
-
-message Operation {
-  message Set {
-    TimeTicket parent_created_at = 1;
-    string key = 2;
-    JSONElementSimple value = 3;
-    TimeTicket executed_at = 4;
-  }
-  message Add {
-    TimeTicket parent_created_at = 1;
-    TimeTicket prev_created_at = 2;
-    JSONElementSimple value = 3;
-    TimeTicket executed_at = 4;
-  }
-  message Move {
-    TimeTicket parent_created_at = 1;
-    TimeTicket prev_created_at = 2;
-    TimeTicket created_at = 3;
-    TimeTicket executed_at = 4;
-  }
-  message Remove {
-    TimeTicket parent_created_at = 1;
-    TimeTicket created_at = 2;
-    TimeTicket executed_at = 3;
-  }
-  message Edit {
-    TimeTicket parent_created_at = 1;
-    TextNodePos from = 2;
-    TextNodePos to = 3;
-    map<string, TimeTicket> created_at_map_by_actor = 4;
-    string content = 5;
-    TimeTicket executed_at = 6;
-    map<string, string> attributes = 7;
-  }
-  // NOTE(hackerwins): Select Operation is not used in the current version.
-  // In the previous version, it was used to represent selection of Text.
-  // However, it has been replaced by Presence now. It is retained for backward
-  // compatibility purposes.
-  message Select {
-    TimeTicket parent_created_at = 1;
-    TextNodePos from = 2;
-    TextNodePos to = 3;
-    TimeTicket executed_at = 4;
-  }
-  message Style {
-    TimeTicket parent_created_at = 1;
-    TextNodePos from = 2;
-    TextNodePos to = 3;
-    map<string, string> attributes = 4;
-    TimeTicket executed_at = 5;
-  }
-  message Increase {
-    TimeTicket parent_created_at = 1;
-    JSONElementSimple value = 2;
-    TimeTicket executed_at = 3;
-  }
-  message TreeEdit {
-    TimeTicket parent_created_at = 1;
-    TreePos from = 2;
-    TreePos to = 3;
-    repeated TreeNodes contents = 4;
-    TimeTicket executed_at = 5;
-  }
-  message TreeStyle {
-    TimeTicket parent_created_at = 1;
-    TreePos from = 2;
-    TreePos to = 3;
-    map<string, string> attributes = 4;
-    TimeTicket executed_at = 5;
-  }
-
-  oneof body {
-    Set set = 1;
-    Add add = 2;
-    Move move = 3;
-    Remove remove = 4;
-    Edit edit = 5;
-    Select select = 6;
-    Style style = 7;
-    Increase increase = 8;
-    TreeEdit tree_edit = 9;
-    TreeStyle tree_style = 10;
-  }
-}
-
-message JSONElementSimple {
-  TimeTicket created_at = 1;
-  TimeTicket moved_at = 2;
-  TimeTicket removed_at = 3;
-  ValueType type = 4;
-  bytes value = 5;
-}
-
-/////////////////////////////////////////
-// Messages for JSON                   //
-/////////////////////////////////////////
-
-message JSONElement {
-  message JSONObject {
-    repeated RHTNode nodes = 1;
-    TimeTicket created_at = 2;
-    TimeTicket moved_at = 3;
-    TimeTicket removed_at = 4;
-  }
-  message JSONArray {
-    repeated RGANode nodes = 1;
-    TimeTicket created_at = 2;
-    TimeTicket moved_at = 3;
-    TimeTicket removed_at = 4;
-  }
-  message Primitive {
-    ValueType type = 1;
-    bytes value = 2;
-    TimeTicket created_at = 3;
-    TimeTicket moved_at = 4;
-    TimeTicket removed_at = 5;
-  }
-  message Text {
-    repeated TextNode nodes = 1;
-    TimeTicket created_at = 2;
-    TimeTicket moved_at = 3;
-    TimeTicket removed_at = 4;
-  }
-  message Counter {
-    ValueType type = 1;
-    bytes value = 2;
-    TimeTicket created_at = 3;
-    TimeTicket moved_at = 4;
-    TimeTicket removed_at = 5;
-  }
-  message Tree {
-    repeated TreeNode nodes = 1;
-    TimeTicket created_at = 2;
-    TimeTicket moved_at = 3;
-    TimeTicket removed_at = 4;
-  }
-
-  oneof body {
-    JSONObject json_object = 1;
-    JSONArray json_array = 2;
-    Primitive primitive = 3;
-    Text text = 5;
-    Counter counter = 6;
-    Tree tree = 7;
-  }
-}
-
-message RHTNode {
-  string key = 1;
-  JSONElement element = 2;
-}
-
-message RGANode {
-  RGANode next = 1;
-  JSONElement element = 2;
-}
-
-message NodeAttr {
-  string value = 1;
-  TimeTicket updated_at = 2;
-}
-
-message TextNode {
-  TextNodeID id = 1;
-  string value = 2;
-  TimeTicket removed_at = 3;
-  TextNodeID ins_prev_id = 4;
-  map<string, NodeAttr> attributes = 5;
-}
-
-message TextNodeID {
-  TimeTicket created_at = 1;
-  int32 offset = 2;
-}
-
-message TreeNode {
-  TreePos pos = 1;
-  string type = 2;
-  string value = 3;
-  TimeTicket removed_at = 4;
-  TreePos ins_prev_pos = 5;
-  int32 depth = 6;
-  map<string, NodeAttr> attributes = 7;
-}
-
-message TreeNodes {
-  repeated TreeNode content = 1;
-}
-
-message TreePos {
-  TimeTicket created_at = 1;
-  int32 offset = 2;
-}
-
-/////////////////////////////////////////
-// Messages for Common                 //
-/////////////////////////////////////////
-
-message User {
-  string id = 1;
-  string username = 2;
-  google.protobuf.Timestamp created_at = 3;
-}
-
-message Project {
-  string id = 1;
-  string name = 2;
-  string public_key = 3;
-  string secret_key = 4;
-  string auth_webhook_url = 5;
-  repeated string auth_webhook_methods = 6;
-  string client_deactivate_threshold = 7;
-  google.protobuf.Timestamp created_at = 8;
-  google.protobuf.Timestamp updated_at = 9;
-}
-
-message UpdatableProjectFields {
-  message AuthWebhookMethods {
-    repeated string methods = 1;
-  }
-
-  google.protobuf.StringValue name = 1;
-  google.protobuf.StringValue auth_webhook_url = 2;
-  AuthWebhookMethods auth_webhook_methods = 3;
-  google.protobuf.StringValue client_deactivate_threshold = 4;
-}
-
-message DocumentSummary {
-  string id = 1;
-  string key = 2;
-  string snapshot = 3;
-  google.protobuf.Timestamp created_at = 4;
-  google.protobuf.Timestamp accessed_at = 5;
-  google.protobuf.Timestamp updated_at = 6;
-}
-
-message PresenceChange {
-  enum ChangeType {
-    CHANGE_TYPE_UNSPECIFIED = 0;
-    CHANGE_TYPE_PUT = 1;
-    CHANGE_TYPE_DELETE = 2;
-    CHANGE_TYPE_CLEAR = 3;
-  }
-  ChangeType type = 1;
-  Presence presence = 2;
-}
-
-message Presence {
-  map<string, string> data = 1;
-}
-
-message Checkpoint {
-  int64 server_seq = 1 [jstype = JS_STRING];
-  uint32 client_seq = 2;
-}
-
-message TextNodePos {
-  TimeTicket created_at = 1;
-  int32 offset = 2;
-  int32 relative_offset = 3;
-}
-
-message TimeTicket {
-  int64 lamport = 1 [jstype = JS_STRING];
-  uint32 delimiter = 2;
-  bytes actor_id = 3;
-}
-
-enum ValueType {
-  VALUE_TYPE_NULL = 0;
-  VALUE_TYPE_BOOLEAN = 1;
-  VALUE_TYPE_INTEGER = 2;
-  VALUE_TYPE_LONG = 3;
-  VALUE_TYPE_DOUBLE = 4;
-  VALUE_TYPE_STRING = 5;
-  VALUE_TYPE_BYTES = 6;
-  VALUE_TYPE_DATE = 7;
-  VALUE_TYPE_JSON_OBJECT = 8;
-  VALUE_TYPE_JSON_ARRAY = 9;
-  VALUE_TYPE_TEXT = 10;
-  VALUE_TYPE_INTEGER_CNT = 11;
-  VALUE_TYPE_LONG_CNT = 12;
-  VALUE_TYPE_TREE = 13;
-}
-
-enum DocEventType {
-  DOC_EVENT_TYPE_DOCUMENTS_CHANGED = 0;
-  DOC_EVENT_TYPE_DOCUMENTS_WATCHED = 1;
-  DOC_EVENT_TYPE_DOCUMENTS_UNWATCHED = 2;
-}
-
-message DocEvent {
-  DocEventType type = 1;
-  bytes publisher = 2;
-}
+ package yorkie.v1;
+ 
+ import "google/protobuf/timestamp.proto";
+ import "google/protobuf/wrappers.proto";
+ 
+ option go_package = ".;v1";
+ 
+ option java_multiple_files = true;
+ option java_package = "dev.yorkie.api.v1";
+ 
+ /////////////////////////////////////////
+ // Messages for Snapshot               //
+ /////////////////////////////////////////
+ message Snapshot {
+   JSONElement root = 1;
+   map<string, Presence> presences = 2;
+ }
+ 
+ /////////////////////////////////////////
+ // Messages for ChangePack             //
+ /////////////////////////////////////////
+ 
+ // ChangePack is a message that contains all changes that occurred in a document.
+ // It is used to synchronize changes between clients and servers.
+ message ChangePack {
+   string document_key = 1;
+   Checkpoint checkpoint = 2;
+   bytes snapshot = 3;
+   repeated Change changes = 4;
+   TimeTicket min_synced_ticket = 5;
+   bool is_removed = 6;
+ }
+ 
+ message Change {
+   ChangeID id = 1;
+   string message = 2;
+   repeated Operation operations = 3;
+   PresenceChange presence_change = 4;
+ }
+ 
+ message ChangeID {
+   uint32 client_seq = 1;
+   int64 server_seq = 2 [jstype = JS_STRING];
+   int64 lamport = 3 [jstype = JS_STRING];
+   bytes actor_id = 4;
+ }
+ 
+ message Operation {
+   message Set {
+     TimeTicket parent_created_at = 1;
+     string key = 2;
+     JSONElementSimple value = 3;
+     TimeTicket executed_at = 4;
+   }
+   message Add {
+     TimeTicket parent_created_at = 1;
+     TimeTicket prev_created_at = 2;
+     JSONElementSimple value = 3;
+     TimeTicket executed_at = 4;
+   }
+   message Move {
+     TimeTicket parent_created_at = 1;
+     TimeTicket prev_created_at = 2;
+     TimeTicket created_at = 3;
+     TimeTicket executed_at = 4;
+   }
+   message Remove {
+     TimeTicket parent_created_at = 1;
+     TimeTicket created_at = 2;
+     TimeTicket executed_at = 3;
+   }
+   message Edit {
+     TimeTicket parent_created_at = 1;
+     TextNodePos from = 2;
+     TextNodePos to = 3;
+     map<string, TimeTicket> created_at_map_by_actor = 4;
+     string content = 5;
+     TimeTicket executed_at = 6;
+     map<string, string> attributes = 7;
+   }
+   message Select {
+     TimeTicket parent_created_at = 1;
+     TextNodePos from = 2;
+     TextNodePos to = 3;
+     TimeTicket executed_at = 4;
+   }
+   message Style {
+     TimeTicket parent_created_at = 1;
+     TextNodePos from = 2;
+     TextNodePos to = 3;
+     map<string, string> attributes = 4;
+     TimeTicket executed_at = 5;
+   }
+   message Increase {
+     TimeTicket parent_created_at = 1;
+     JSONElementSimple value = 2;
+     TimeTicket executed_at = 3;
+   }
+   message TreeEdit {
+     TimeTicket parent_created_at = 1;
+     TreePos from = 2;
+     TreePos to = 3;
+     repeated TreeNodes contents = 4;
+     TimeTicket executed_at = 5;
+   }
+   message TreeStyle {
+     TimeTicket parent_created_at = 1;
+     TreePos from = 2;
+     TreePos to = 3;
+     map<string, string> attributes = 4;
+     TimeTicket executed_at = 5;
+   }
+ 
+   oneof body {
+     Set set = 1;
+     Add add = 2;
+     Move move = 3;
+     Remove remove = 4;
+     Edit edit = 5;
+     Select select = 6;
+     Style style = 7;
+     Increase increase = 8;
+     TreeEdit tree_edit = 9;
+     TreeStyle tree_style = 10;
+   }
+ }
+ 
+ message JSONElementSimple {
+   TimeTicket created_at = 1;
+   TimeTicket moved_at = 2;
+   TimeTicket removed_at = 3;
+   ValueType type = 4;
+   bytes value = 5;
+ }
+ 
+ /////////////////////////////////////////
+ // Messages for JSON                   //
+ /////////////////////////////////////////
+ 
+ message JSONElement {
+   message JSONObject {
+     repeated RHTNode nodes = 1;
+     TimeTicket created_at = 2;
+     TimeTicket moved_at = 3;
+     TimeTicket removed_at = 4;
+   }
+   message JSONArray {
+     repeated RGANode nodes = 1;
+     TimeTicket created_at = 2;
+     TimeTicket moved_at = 3;
+     TimeTicket removed_at = 4;
+   }
+   message Primitive {
+     ValueType type = 1;
+     bytes value = 2;
+     TimeTicket created_at = 3;
+     TimeTicket moved_at = 4;
+     TimeTicket removed_at = 5;
+   }
+   message Text {
+     repeated TextNode nodes = 1;
+     TimeTicket created_at = 2;
+     TimeTicket moved_at = 3;
+     TimeTicket removed_at = 4;
+   }
+   message Counter {
+     ValueType type = 1;
+     bytes value = 2;
+     TimeTicket created_at = 3;
+     TimeTicket moved_at = 4;
+     TimeTicket removed_at = 5;
+   }
+   message Tree {
+     repeated TreeNode nodes = 1;
+     TimeTicket created_at = 2;
+     TimeTicket moved_at = 3;
+     TimeTicket removed_at = 4;
+   }
+ 
+   oneof body {
+     JSONObject json_object = 1;
+     JSONArray json_array = 2;
+     Primitive primitive = 3;
+     Text text = 5;
+     Counter counter = 6;
+     Tree tree = 7;
+   }
+ }
+ 
+ message RHTNode {
+   string key = 1;
+   JSONElement element = 2;
+ }
+ 
+ message RGANode {
+   RGANode next = 1;
+   JSONElement element = 2;
+ }
+ 
+ message NodeAttr {
+   string value = 1;
+   TimeTicket updated_at = 2;
+ }
+ 
+ message TextNode {
+   TextNodeID id = 1;
+   string value = 2;
+   TimeTicket removed_at = 3;
+   TextNodeID ins_prev_id = 4;
+   map<string, NodeAttr> attributes = 5;
+ }
+ 
+ message TextNodeID {
+   TimeTicket created_at = 1;
+   int32 offset = 2;
+ }
+ 
+ message TreeNode {
+   TreeNodeId pos = 1;
+   string type = 2;
+   string value = 3;
+   TimeTicket removed_at = 4;
+   TreeNodeId ins_prev_pos = 5;
+   int32 depth = 6;
+   map<string, NodeAttr> attributes = 7;
+ }
+ 
+ message TreeNodes {
+   repeated TreeNode content = 1;
+ }
+ 
+ message TreeNodeId {
+   TimeTicket created_at = 1;
+   int32 offset = 2;
+ }
+ 
+ message TreePos {
+   TreeNodeId parent_id = 1;
+   TreeNodeId left_sibling_id = 2;
+ }
+ 
+ 
+ /////////////////////////////////////////
+ // Messages for Common                 //
+ /////////////////////////////////////////
+ 
+ message User {
+   string id = 1;
+   string username = 2;
+   google.protobuf.Timestamp created_at = 3;
+ }
+ 
+ message Project {
+   string id = 1;
+   string name = 2;
+   string public_key = 3;
+   string secret_key = 4;
+   string auth_webhook_url = 5;
+   repeated string auth_webhook_methods = 6;
+   string client_deactivate_threshold = 7;
+   google.protobuf.Timestamp created_at = 8;
+   google.protobuf.Timestamp updated_at = 9;
+ }
+ 
+ message UpdatableProjectFields {
+   message AuthWebhookMethods {
+     repeated string methods = 1;
+   }
+ 
+   google.protobuf.StringValue name = 1;
+   google.protobuf.StringValue auth_webhook_url = 2;
+   AuthWebhookMethods auth_webhook_methods = 3;
+   google.protobuf.StringValue client_deactivate_threshold = 4;
+ }
+ 
+ message DocumentSummary {
+   string id = 1;
+   string key = 2;
+   string snapshot = 3;
+   google.protobuf.Timestamp created_at = 4;
+   google.protobuf.Timestamp accessed_at = 5;
+   google.protobuf.Timestamp updated_at = 6;
+ }
+ 
+ message PresenceChange {
+   enum ChangeType {
+     CHANGE_TYPE_UNSPECIFIED = 0;
+     CHANGE_TYPE_PUT = 1;
+     CHANGE_TYPE_DELETE = 2;
+     CHANGE_TYPE_CLEAR = 3;
+   }
+   ChangeType type = 1;
+   Presence presence = 2;
+ }
+ 
+ message Presence {
+   map<string, string> data = 1;
+ }
+ 
+ message Checkpoint {
+   int64 server_seq = 1 [jstype = JS_STRING];
+   uint32 client_seq = 2;
+ }
+ 
+ message TextNodePos {
+   TimeTicket created_at = 1;
+   int32 offset = 2;
+   int32 relative_offset = 3;
+ }
+ 
+ message TimeTicket {
+   int64 lamport = 1 [jstype = JS_STRING];
+   uint32 delimiter = 2;
+   bytes actor_id = 3;
+ }
+ 
+ enum ValueType {
+   VALUE_TYPE_NULL = 0;
+   VALUE_TYPE_BOOLEAN = 1;
+   VALUE_TYPE_INTEGER = 2;
+   VALUE_TYPE_LONG = 3;
+   VALUE_TYPE_DOUBLE = 4;
+   VALUE_TYPE_STRING = 5;
+   VALUE_TYPE_BYTES = 6;
+   VALUE_TYPE_DATE = 7;
+   VALUE_TYPE_JSON_OBJECT = 8;
+   VALUE_TYPE_JSON_ARRAY = 9;
+   VALUE_TYPE_TEXT = 10;
+   VALUE_TYPE_INTEGER_CNT = 11;
+   VALUE_TYPE_LONG_CNT = 12;
+   VALUE_TYPE_TREE = 13;
+ }
+ 
+ enum DocEventType {
+   DOC_EVENT_TYPE_DOCUMENTS_CHANGED = 0;
+   DOC_EVENT_TYPE_DOCUMENTS_WATCHED = 1;
+   DOC_EVENT_TYPE_DOCUMENTS_UNWATCHED = 2;
+ }
+ 
+ message DocEvent {
+   DocEventType type = 1;
+   bytes publisher = 2;
+ }
