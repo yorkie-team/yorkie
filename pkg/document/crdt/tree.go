@@ -35,7 +35,7 @@ var (
 
 var (
 	// DummyTreePos is a dummy position of Tree. It is used to represent the head node of RGASplit.
-	DummyTreePos = &TreePos{
+	DummyTreeNodeId = &TreeNodeID{
 		CreatedAt: time.InitialTicket,
 		Offset:    0,
 	}
@@ -59,7 +59,7 @@ type TreeNodeForTest struct {
 type TreeNode struct {
 	IndexTreeNode *index.Node[*TreeNode]
 
-	Pos       *TreePos
+	Pos       *TreeNodeID
 	RemovedAt *time.Ticket
 
 	Next    *TreeNode
@@ -72,35 +72,57 @@ type TreeNode struct {
 
 // TreePos represents the position of Tree.
 type TreePos struct {
+	ParentId      *TreeNodeID
+	LeftSiblingId *TreeNodeID
+}
+
+// NewTreePos creates a new instance of TreePos.
+func NewTreePos(parentId *TreeNodeID, leftSiblingId *TreeNodeID) *TreePos {
+	return &TreePos{
+		ParentId:      parentId,
+		LeftSiblingId: leftSiblingId,
+	}
+}
+
+// Compare compares the given two CRDTTreePos.
+func (t *TreePos) Equals(other *TreePos) bool {
+	return (t.ParentId.CreatedAt.Compare(other.ParentId.CreatedAt) == 0 &&
+		t.ParentId.Offset == other.ParentId.Offset &&
+		t.LeftSiblingId.CreatedAt.Compare(other.LeftSiblingId.CreatedAt) == 0 &&
+		t.LeftSiblingId.Offset == other.LeftSiblingId.Offset)
+}
+
+// TreePos represents the position of Tree.
+type TreeNodeID struct {
 	CreatedAt *time.Ticket
 	Offset    int
 }
 
 // NewTreePos creates a new instance of TreePos.
-func NewTreePos(createdAt *time.Ticket, offset int) *TreePos {
-	return &TreePos{
+func NewTreeNodeId(createdAt *time.Ticket, offset int) *TreeNodeID {
+	return &TreeNodeID{
 		CreatedAt: createdAt,
 		Offset:    offset,
 	}
 }
 
 // Compare compares the given two CRDTTreePos.
-func (t *TreePos) Compare(other llrb.Key) int {
-	compare := t.CreatedAt.Compare(other.(*TreePos).CreatedAt)
+func (t *TreeNodeID) Compare(other llrb.Key) int {
+	compare := t.CreatedAt.Compare(other.(*TreeNodeID).CreatedAt)
 	if compare != 0 {
 		return compare
 	}
 
-	if t.Offset > other.(*TreePos).Offset {
+	if t.Offset > other.(*TreeNodeID).Offset {
 		return 1
-	} else if t.Offset < other.(*TreePos).Offset {
+	} else if t.Offset < other.(*TreeNodeID).Offset {
 		return -1
 	}
 	return 0
 }
 
 // NewTreeNode creates a new instance of TreeNode.
-func NewTreeNode(pos *TreePos, nodeType string, attributes *RHT, value ...string) *TreeNode {
+func NewTreeNode(pos *TreeNodeID, nodeType string, attributes *RHT, value ...string) *TreeNode {
 	node := &TreeNode{
 		Pos: pos,
 	}
