@@ -132,23 +132,6 @@ func IssueTime(change *change.Context) *time.Ticket {
 	return change.IssueTimeTicket()
 }
 
-// ListEqual is a helper function that checks the nodes in the RGA in Tree.
-func ListEqual(t assert.TestingT, tree *crdt.Tree, expected []string) bool {
-	var nodes []*crdt.TreeNode
-	for _, node := range tree.Nodes() {
-		nodes = append(nodes, node)
-	}
-
-	var actual []string
-	for _, node := range nodes {
-		actual = append(actual, ToDiagnostic(node))
-	}
-
-	assert.Equal(t, expected, actual)
-
-	return true
-}
-
 // NodesBetweenEqual is a helper function that checks the nodes between the given
 // indexes.
 func NodesBetweenEqual(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {

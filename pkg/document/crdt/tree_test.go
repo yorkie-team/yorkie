@@ -101,7 +101,6 @@ func TestTree(t *testing.T) {
 		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "r", nil), helper.IssueTime(ctx))
 		assert.Equal(t, 0, tree.Root().Len())
 		assert.Equal(t, "<r></r>", tree.ToXML())
-		helper.ListEqual(t, tree, []string{"r"})
 
 		//           1
 		// <root> <p> </p> </root>
@@ -109,7 +108,6 @@ func TestTree(t *testing.T) {
 			[]*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<r><p></p></r>", tree.ToXML())
-		helper.ListEqual(t, tree, []string{"p", "r"})
 		assert.Equal(t, 2, tree.Root().Len())
 
 		//           1
@@ -121,7 +119,6 @@ func TestTree(t *testing.T) {
 		)
 		assert.NoError(t, err)
 		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
-		helper.ListEqual(t, tree, []string{"text.hello", "p", "r"})
 		assert.Equal(t, 7, tree.Root().Len())
 
 		//       0   1 2 3 4 5 6    7   8 9  10 11 12 13    14
@@ -132,7 +129,6 @@ func TestTree(t *testing.T) {
 		err = tree.EditByIndex(7, 7, []*crdt.TreeNode{p}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<r><p>hello</p><p>world</p></r>", tree.ToXML())
-		helper.ListEqual(t, tree, []string{"text.hello", "p", "text.world", "p", "r"})
 		assert.Equal(t, 14, tree.Root().Len())
 
 		//       0   1 2 3 4 5 6 7    8   9 10 11 12 13 14    15
@@ -144,7 +140,6 @@ func TestTree(t *testing.T) {
 		)
 		assert.NoError(t, err)
 		assert.Equal(t, "<r><p>hello!</p><p>world</p></r>", tree.ToXML())
-		helper.ListEqual(t, tree, []string{"text.hello", "text.!", "p", "text.world", "p", "r"})
 		assert.Equal(t, crdt.TreeNodeForTest{
 			Type: "r",
 			Children: []crdt.TreeNodeForTest{
@@ -179,7 +174,6 @@ func TestTree(t *testing.T) {
 		)
 		assert.NoError(t, err)
 		assert.Equal(t, "<r><p>hello~!</p><p>world</p></r>", tree.ToXML())
-		helper.ListEqual(t, tree, []string{"text.hello", "text.~", "text.!", "p", "text.world", "p", "r"})
 	})
 
 	t.Run("delete text nodes with Edit test", func(t *testing.T) {
@@ -203,7 +197,6 @@ func TestTree(t *testing.T) {
 			"text", nil, "cd")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
-		helper.ListEqual(t, tree, []string{"text.ab", "p", "text.cd", "p", "root"})
 
 		structure := tree.Structure()
 		assert.Equal(t, 8, structure.Size)
@@ -216,7 +209,6 @@ func TestTree(t *testing.T) {
 		err = tree.EditByIndex(2, 3, nil, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>a</p><p>cd</p></root>", tree.ToXML())
-		helper.ListEqual(t, tree, []string{"text.a", "p", "text.cd", "p", "root"})
 
 		structure = tree.Structure()
 		assert.Equal(t, 7, structure.Size)
@@ -244,7 +236,6 @@ func TestTree(t *testing.T) {
 			"text", nil, "cd")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
-		helper.ListEqual(t, tree, []string{"text.ab", "p", "text.cd", "p", "root"})
 
 		// 02. delete b, c and first paragraph.
 		//       0   1 2 3    4
@@ -252,7 +243,6 @@ func TestTree(t *testing.T) {
 		err = tree.EditByIndex(2, 6, nil, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ad</p></root>", tree.ToXML())
-		helper.ListEqual(t, tree, []string{"text.a", "text.d", "p", "root"})
 
 		structure := tree.Structure()
 		assert.Equal(t, 4, structure.Size)

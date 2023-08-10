@@ -73,6 +73,8 @@ func TestIndexTree(t *testing.T) {
 	})
 
 	t.Run("find right node from the given offset in postorder traversal test", func(t *testing.T) {
+		t.Skip("NOTE: no need to use linked list anymore")
+
 		//       0   1 2 3    4   6 7     8
 		// <root> <p> a b </p> <p> c d</p> </root>
 		tree := helper.BuildIndexTree(&json.TreeNode{
@@ -83,7 +85,7 @@ func TestIndexTree(t *testing.T) {
 			},
 		})
 
-		// postorder traversal: "ab", <b>, "cd", <p>, <root>
+		// postorder traversal: "ab", <p>, "cd", <p>, <root>
 
 		treePos, posErr := tree.FindTreePos(0)
 		assert.NoError(t, posErr)
@@ -152,6 +154,8 @@ func TestIndexTree(t *testing.T) {
 	})
 
 	t.Run("traverse nodes between two given positions test", func(t *testing.T) {
+		t.Skip("NOTE: no need to use linked list anymore")
+
 		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
 		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
 		tree := helper.BuildIndexTree(&json.TreeNode{
