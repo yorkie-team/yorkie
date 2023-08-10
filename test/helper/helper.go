@@ -113,9 +113,9 @@ func TextChangeContext(root *crdt.Root) *change.Context {
 	)
 }
 
-// IssuePos is a helper function that issues a new CRDTTreePos.
-func IssuePos(change *change.Context, offset ...int) *crdt.TreePos {
-	pos := &crdt.TreePos{
+// IssuePos is a helper function that issues a new CRDTTreeNodeID.
+func IssuePos(change *change.Context, offset ...int) *crdt.TreeNodeID {
+	pos := &crdt.TreeNodeID{
 		CreatedAt: change.IssueTimeTicket(),
 		Offset:    0,
 	}
