@@ -18,10 +18,8 @@
 package memory
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"sort"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -235,56 +233,33 @@ func (d *DB) listProjectInfos(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iter, err := txn.Get(
+	iter, err := txn.LowerBound(
 		tblProjects,
 		"id",
+		housekeepingLastProjectID.String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch all projects: %w", err)
+		return nil, fmt.Errorf("fetch projects: %w", err)
 	}
 
 	var infos []*database.ProjectInfo
 
-	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+	for i := 0; i < pageSize; i++ {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
 		info := raw.(*database.ProjectInfo).DeepCopy()
+
+		if i == 0 && info.ID == housekeepingLastProjectID {
+			pageSize++
+			continue
+		}
+
 		infos = append(infos, info)
 	}
 
-	sort.SliceStable(infos, func(i, j int) bool {
-		firstIDBytes, err := infos[i].ID.Bytes()
-		if err != nil {
-			return true
-		}
-		secondIDBytes, err := infos[j].ID.Bytes()
-		if err != nil {
-			return true
-		}
-
-		return bytes.Compare(firstIDBytes, secondIDBytes) < 0
-	})
-
-	beginIndex := 0
-	for i := 0; i < len(infos); i++ {
-		proejctIDBytes, err := infos[i].ID.Bytes()
-		if err != nil {
-			return nil, fmt.Errorf("decode project id: %w", err)
-		}
-		lastProjectIDBytes, err := housekeepingLastProjectID.Bytes()
-		if err != nil {
-			return nil, fmt.Errorf("decode last project id: %w", err)
-		}
-		if bytes.Compare(proejctIDBytes, lastProjectIDBytes) > 0 {
-			beginIndex = i
-			break
-		}
-	}
-
-	lastIndex := beginIndex + pageSize - 1
-	if lastIndex >= len(infos) {
-		lastIndex = len(infos) - 1
-	}
-
-	return infos[beginIndex : lastIndex+1], nil
+	return infos, nil
 }
 
 // ListProjectInfos returns all project infos owned by owner.
