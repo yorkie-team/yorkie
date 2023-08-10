@@ -47,7 +47,7 @@ func TestTreeNode(t *testing.T) {
 
 		left, err := para.Child(0)
 		assert.NoError(t, err)
-		right, err := left.Split(5)
+		right, err := left.Split(5, 0)
 		assert.NoError(t, err)
 		assert.Equal(t, "<p>helloyorkie</p>", crdt.ToXML(para))
 		assert.Equal(t, 11, para.Len())
