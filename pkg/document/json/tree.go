@@ -153,7 +153,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
 				value += content.Value
 			}
 
-			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), index.DefaultTextType, nil, value))
+			nodes = append(nodes, crdt.NewTreeNode(crdt.NewTreeNodeId(ticket, 0), index.DefaultTextType, nil, value))
 		} else {
 			for _, content := range contents {
 				var attributes *crdt.RHT
@@ -165,7 +165,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
 				}
 				var node *crdt.TreeNode
 
-				node = crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), content.Type, attributes, content.Value)
+				node = crdt.NewTreeNode(crdt.NewTreeNodeId(ticket, 0), content.Type, attributes, content.Value)
 
 				for _, child := range content.Children {
 					if err := buildDescendants(t.context, child, node); err != nil {
@@ -205,7 +205,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
 		ticket,
 	))
 
-	if fromPos.CreatedAt.Compare(toPos.CreatedAt) != 0 || fromPos.Offset != toPos.Offset {
+	if !fromPos.Equals(toPos) {
 		t.context.RegisterElementHasRemovedNodes(t.Tree)
 	}
 
@@ -269,10 +269,10 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 // node is nil, it creates a default root node.
 func buildRoot(ctx *change.Context, node *TreeNode, createdAt *time.Ticket) *crdt.TreeNode {
 	if node == nil {
-		return crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), DefaultRootNodeType, nil)
+		return crdt.NewTreeNode(crdt.NewTreeNodeId(createdAt, 0), DefaultRootNodeType, nil)
 	}
 
-	root := crdt.NewTreeNode(crdt.NewTreePos(createdAt, 0), node.Type, nil)
+	root := crdt.NewTreeNode(crdt.NewTreeNodeId(createdAt, 0), node.Type, nil)
 	for _, child := range node.Children {
 		if err := buildDescendants(ctx, child, root); err != nil {
 			panic(err)
@@ -290,7 +290,7 @@ func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) er
 			return err
 		}
 
-		treeNode := crdt.NewTreeNode(crdt.NewTreePos(ctx.IssueTimeTicket(), 0), n.Type, nil, n.Value)
+		treeNode := crdt.NewTreeNode(crdt.NewTreeNodeId(ctx.IssueTimeTicket(), 0), n.Type, nil, n.Value)
 		return parent.Append(treeNode)
 	}
 
@@ -304,7 +304,7 @@ func buildDescendants(ctx *change.Context, n TreeNode, parent *crdt.TreeNode) er
 		}
 	}
 
-	treeNode := crdt.NewTreeNode(crdt.NewTreePos(ticket, 0), n.Type, attributes)
+	treeNode := crdt.NewTreeNode(crdt.NewTreeNodeId(ticket, 0), n.Type, attributes)
 	if err := parent.Append(treeNode); err != nil {
 		return err
 	}
