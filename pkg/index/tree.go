@@ -101,7 +101,7 @@ func postorderTraversal[V Value](node *Node[V], callback func(node *Node[V], dep
 		return
 	}
 
-	for _, child := range node.Children() {
+	for _, child := range node.Children(true) {
 		postorderTraversal(child, callback, depth+1)
 	}
 	callback(node, depth)
@@ -253,6 +253,15 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 	return children
 }
 
+func (n *Node[V]) ChildIndex(node *Node[V]) int {
+	for i, child := range n.Children(true) {
+		if child == node {
+			return i
+		}
+	}
+	return -1
+}
+
 // SetChildren sets the children of the given node.
 func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	if n.IsText() {
@@ -324,7 +333,7 @@ func (n *Node[V]) InsertAfterInternal(newNode, prevNode *Node[V]) error {
 
 // nextSibling returns the next sibling of the node.
 func (n *Node[V]) nextSibling() (*Node[V], error) {
-	offset, err := n.Parent.findOffset(n)
+	offset, err := n.Parent.FindOffset(n)
 	if err != nil {
 		return nil, err
 	}
@@ -343,9 +352,26 @@ func (n *Node[V]) nextSibling() (*Node[V], error) {
 }
 
 // findOffset returns the offset of the given node in the children.
-func (n *Node[V]) findOffset(node *Node[V]) (int, error) {
+func (n *Node[V]) FindOffset(node *Node[V]) (int, error) {
 	if n.IsText() {
 		return 0, ErrInvalidMethodCallForTextNode
+	}
+
+	// If node is removed, node's offset is the offset of left adjacent node that is not removed.
+	// NOTE(sejongk): returning the non-exact offset of node can be potentially risky
+	if node.Value.IsRemoved() {
+		refined := 0
+		for _, child := range n.Children(true) {
+			if child == node {
+				if refined == 0 {
+					return 0, nil
+				}
+				return refined - 1, nil
+			}
+			if !node.Value.IsRemoved() {
+				refined += 1
+			}
+		}
 	}
 
 	for i, child := range n.Children() {
@@ -640,9 +666,9 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 			return nil, ErrInvalidTreePos
 		}
 
-		leftSiblingsSize := 0
-		for _, child := range node.Parent.Children()[:offset] {
-			leftSiblingsSize += child.Length
+		leftSiblingsSize, err := t.LeftSiblingsSize(node.Parent, offset)
+		if err != nil {
+			return nil, err
 		}
 
 		node = node.Parent
@@ -678,6 +704,20 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 	return reversePath, nil
 }
 
+// LeftSiblingsSize returns the size of left siblings of the given node
+func (t *Tree[V]) LeftSiblingsSize(parent *Node[V], offset int) (int, error) {
+	leftSiblingsSize := 0
+	for _, child := range parent.Children()[:offset] {
+
+		if child == nil || child.Value.IsRemoved() {
+			continue
+		}
+		leftSiblingsSize += child.Length
+	}
+
+	return leftSiblingsSize, nil
+}
+
 // PathToTreePos returns treePos from given path
 func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 	if len(path) == 0 {
@@ -705,6 +745,20 @@ func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 		Node:   node,
 		Offset: path[len(path)-1],
 	}, nil
+}
+
+func (t *Tree[V]) PathToIndex(path []int) (int, error) {
+	treePos, err := t.PathToTreePos(path)
+	if err != nil {
+		return -1, err
+	}
+
+	idx, err := t.IndexOf(treePos.Node)
+	if err != nil {
+		return 0, err
+	}
+
+	return idx + treePos.Offset, nil
 }
 
 // findTextPos returns the tree position of the given path element.
@@ -813,7 +867,7 @@ func (t *Tree[V]) IndexOf(node *Node[V]) (int, error) {
 			return 0, errors.New("parent is not found")
 		}
 
-		offset, err := parent.findOffset(current)
+		offset, err := parent.FindOffset(current)
 		if err != nil {
 			return 0, err
 		}
