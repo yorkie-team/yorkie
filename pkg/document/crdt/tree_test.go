@@ -85,7 +85,7 @@ func TestTreeNode(t *testing.T) {
 			left, err := para.Child(0)
 			assert.NoError(t, err)
 			assert.Equal(t, test.length, left.Len())
-			right, err := left.Split(2)
+			right, err := left.Split(2, 0)
 			assert.NoError(t, err)
 			assert.Equal(t, test.length-2, right.Len())
 		}
