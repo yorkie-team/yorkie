@@ -849,7 +849,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("concurrently insert and delete side by side elements test", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -881,7 +880,7 @@ func TestTree(t *testing.T) {
 			root.GetTree("t").Edit(1, 1, &json.TreeNode{Type: "i", Children: []json.TreeNode{}})
 			return nil
 		}))
-		assert.Equal(t, "<root><p>/p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
 		assert.Equal(t, "<root><p><i></i><b></b></p></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
@@ -889,7 +888,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("concurrently delete and insert side by side elements test", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -921,7 +919,7 @@ func TestTree(t *testing.T) {
 			root.GetTree("t").Edit(3, 3, &json.TreeNode{Type: "i", Children: []json.TreeNode{}})
 			return nil
 		}))
-		assert.Equal(t, "<root><p>/p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
 		assert.Equal(t, "<root><p><b></b><i></i></p></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
