@@ -1459,7 +1459,7 @@ func TestTree(t *testing.T) {
 			return nil
 		}))
 		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(3, 3, &[]json.TreeNode{{Type: "text", Value: "a"}, {Type: "text", Value: "bc"}})
+			root.GetTree("t").Edit(3, 3, []*json.TreeNode{{Type: "text", Value: "a"}, {Type: "text", Value: "bc"}}...)
 			return nil
 		}))
 		assert.Equal(t, "<root><p>1</p></root>", d1.Root().GetTree("t").ToXML())
@@ -1498,13 +1498,13 @@ func TestTree(t *testing.T) {
 			return nil
 		}))
 		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(6, 6, &[]json.TreeNode{{
+			root.GetTree("t").Edit(6, 6, []*json.TreeNode{{
 				Type:     "p",
 				Children: []json.TreeNode{{Type: "text", Value: "cd"}},
 			}, {
 				Type:     "i",
 				Children: []json.TreeNode{{Type: "text", Value: "fg"}},
-			}})
+			}}...)
 			return nil
 		}))
 		assert.Equal(t, "<root></root>", d1.Root().GetTree("t").ToXML())
@@ -1540,13 +1540,13 @@ func TestTree(t *testing.T) {
 			return nil
 		}))
 		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(0, 0, &[]json.TreeNode{{
+			root.GetTree("t").Edit(0, 0, []*json.TreeNode{{
 				Type:     "p",
 				Children: []json.TreeNode{{Type: "text", Value: "cd"}},
 			}, {
 				Type:     "i",
 				Children: []json.TreeNode{{Type: "text", Value: "fg"}},
-			}})
+			}}...)
 			return nil
 		}))
 		assert.Equal(t, "<root></root>", d1.Root().GetTree("t").ToXML())
@@ -1582,13 +1582,13 @@ func TestTree(t *testing.T) {
 			return nil
 		}))
 		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(7, 7, &[]json.TreeNode{{
+			root.GetTree("t").Edit(7, 7, []*json.TreeNode{{
 				Type:     "p",
 				Children: []json.TreeNode{{Type: "text", Value: "cd"}},
 			}, {
 				Type:     "i",
 				Children: []json.TreeNode{{Type: "text", Value: "fg"}},
-			}})
+			}}...)
 			return nil
 		}))
 		assert.Equal(t, "<root></root>", d1.Root().GetTree("t").ToXML())
