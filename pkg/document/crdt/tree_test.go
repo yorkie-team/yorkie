@@ -28,8 +28,8 @@ import (
 
 func TestTreeNode(t *testing.T) {
 	t.Run("text node test", func(t *testing.T) {
-		node := crdt.NewTreeNode(crdt.DummyTreeNodeId, "text", nil, "hello")
-		assert.Equal(t, crdt.DummyTreeNodeId, node.Pos)
+		node := crdt.NewTreeNode(crdt.DummyTreeNodeID, "text", nil, "hello")
+		assert.Equal(t, crdt.DummyTreeNodeID, node.Pos)
 		assert.Equal(t, "text", node.Type())
 		assert.Equal(t, "hello", node.Value)
 		assert.Equal(t, 5, node.Len())
@@ -38,8 +38,8 @@ func TestTreeNode(t *testing.T) {
 	})
 
 	t.Run("element node test", func(t *testing.T) {
-		para := crdt.NewTreeNode(crdt.DummyTreeNodeId, "p", nil)
-		err := para.Append(crdt.NewTreeNode(crdt.DummyTreeNodeId, "text", nil, "helloyorkie"))
+		para := crdt.NewTreeNode(crdt.DummyTreeNodeID, "p", nil)
+		err := para.Append(crdt.NewTreeNode(crdt.DummyTreeNodeID, "text", nil, "helloyorkie"))
 		assert.NoError(t, err)
 		assert.Equal(t, "<p>helloyorkie</p>", crdt.ToXML(para))
 		assert.Equal(t, 11, para.Len())
@@ -61,8 +61,8 @@ func TestTreeNode(t *testing.T) {
 	t.Run("element node with attributes test", func(t *testing.T) {
 		attrs := crdt.NewRHT()
 		attrs.Set("font-weight", "bold", time.InitialTicket)
-		node := crdt.NewTreeNode(crdt.DummyTreeNodeId, "span", attrs)
-		err := node.Append(crdt.NewTreeNode(crdt.DummyTreeNodeId, "text", nil, "helloyorkie"))
+		node := crdt.NewTreeNode(crdt.DummyTreeNodeID, "span", attrs)
+		err := node.Append(crdt.NewTreeNode(crdt.DummyTreeNodeID, "text", nil, "helloyorkie"))
 		assert.NoError(t, err)
 		assert.Equal(t, `<span font-weight="bold">helloyorkie</span>`, crdt.ToXML(node))
 	})
@@ -79,8 +79,8 @@ func TestTreeNode(t *testing.T) {
 			{12, "🌷🎁💩😜👍🏳"},
 		}
 		for _, test := range tests {
-			para := crdt.NewTreeNode(crdt.DummyTreeNodeId, "p", nil)
-			err := para.Append(crdt.NewTreeNode(crdt.DummyTreeNodeId, "text", nil, test.value))
+			para := crdt.NewTreeNode(crdt.DummyTreeNodeID, "p", nil)
+			err := para.Append(crdt.NewTreeNode(crdt.DummyTreeNodeID, "text", nil, test.value))
 			assert.NoError(t, err)
 			left, err := para.Child(0)
 			assert.NoError(t, err)

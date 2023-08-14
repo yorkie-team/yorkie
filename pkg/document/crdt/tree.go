@@ -35,7 +35,7 @@ var (
 
 var (
 	// DummyTreePos is a dummy position of Tree. It is used to represent the head node of RGASplit.
-	DummyTreeNodeId = &TreeNodeID{
+	DummyTreeNodeID = &TreeNodeID{
 		CreatedAt: time.InitialTicket,
 		Offset:    0,
 	}
@@ -73,34 +73,41 @@ type TreeNode struct {
 
 // TreePos represents the position of Tree.
 type TreePos struct {
-	ParentId      *TreeNodeID
-	LeftSiblingId *TreeNodeID
+	ParentID      *TreeNodeID
+	LeftSiblingID *TreeNodeID
 }
 
 // NewTreePos creates a new instance of TreePos.
-func NewTreePos(parentId *TreeNodeID, leftSiblingId *TreeNodeID) *TreePos {
+func NewTreePos(parentID *TreeNodeID, leftSiblingID *TreeNodeID) *TreePos {
 	return &TreePos{
-		ParentId:      parentId,
-		LeftSiblingId: leftSiblingId,
+		ParentID:      parentID,
+		LeftSiblingID: leftSiblingID,
 	}
 }
 
 // Compare compares the given two CRDTTreePos.
 func (t *TreePos) Equals(other *TreePos) bool {
-	return (t.ParentId.CreatedAt.Compare(other.ParentId.CreatedAt) == 0 &&
-		t.ParentId.Offset == other.ParentId.Offset &&
-		t.LeftSiblingId.CreatedAt.Compare(other.LeftSiblingId.CreatedAt) == 0 &&
-		t.LeftSiblingId.Offset == other.LeftSiblingId.Offset)
+	return (t.ParentID.CreatedAt.Compare(other.ParentID.CreatedAt) == 0 &&
+		t.ParentID.Offset == other.ParentID.Offset &&
+		t.LeftSiblingID.CreatedAt.Compare(other.LeftSiblingID.CreatedAt) == 0 &&
+		t.LeftSiblingID.Offset == other.LeftSiblingID.Offset)
 }
 
-// TreePos represents the position of Tree.
+/**
+ * `TreeNodeID` represent an ID of a node in the tree. It is used to
+ * identify a node in the tree. It is composed of the creation time of the node
+ * and the offset from the beginning of the node if the node is split.
+ *
+ * Some of replicas may have nodes that are not split yet. In this case, we can
+ * use `map.floorEntry()` to find the adjacent node.
+ */
 type TreeNodeID struct {
 	CreatedAt *time.Ticket
 	Offset    int
 }
 
 // NewTreePos creates a new instance of TreePos.
-func NewTreeNodeId(createdAt *time.Ticket, offset int) *TreeNodeID {
+func NewTreeNodeID(createdAt *time.Ticket, offset int) *TreeNodeID {
 	return &TreeNodeID{
 		CreatedAt: createdAt,
 		Offset:    offset,
@@ -569,8 +576,8 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	}
 
 	return &TreePos{
-		ParentId: node.Value.Pos,
-		LeftSiblingId: &TreeNodeID{
+		ParentID: node.Value.Pos,
+		LeftSiblingID: &TreeNodeID{
 			CreatedAt: leftSibling.Pos.CreatedAt,
 			Offset:    leftSibling.Pos.Offset + offset,
 		},
@@ -774,7 +781,7 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	// handle the same position insertion of RGA.
 	if leftSiblingNode.IsText() {
 		absOffset := leftSiblingNode.Pos.Offset
-		split, err := leftSiblingNode.Split(pos.LeftSiblingId.Offset-absOffset, absOffset)
+		split, err := leftSiblingNode.Split(pos.LeftSiblingID.Offset-absOffset, absOffset)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -811,7 +818,7 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.
 func (t *Tree) toTreePos(pos *TreePos) *index.TreePos[*TreeNode] {
-	if pos.ParentId == nil || pos.LeftSiblingId == nil {
+	if pos.ParentID == nil || pos.LeftSiblingID == nil {
 		return nil
 	}
 
@@ -867,18 +874,18 @@ func (t *Tree) toIndex(pos *TreePos) (int, error) {
 }
 
 func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
-	parentKey, parentNode := t.NodeMapByPos.Floor(pos.ParentId)
-	leftSiblingKey, leftSiblingNode := t.NodeMapByPos.Floor(pos.LeftSiblingId)
+	parentKey, parentNode := t.NodeMapByPos.Floor(pos.ParentID)
+	leftSiblingKey, leftSiblingNode := t.NodeMapByPos.Floor(pos.LeftSiblingID)
 
 	if parentNode == nil ||
 		leftSiblingNode == nil ||
-		parentKey.CreatedAt.Compare(pos.ParentId.CreatedAt) != 0 ||
-		leftSiblingKey.CreatedAt.Compare(pos.LeftSiblingId.CreatedAt) != 0 {
+		parentKey.CreatedAt.Compare(pos.ParentID.CreatedAt) != 0 ||
+		leftSiblingKey.CreatedAt.Compare(pos.LeftSiblingID.CreatedAt) != 0 {
 		return nil, nil
 	}
 
-	if pos.LeftSiblingId.Offset > 0 &&
-		pos.LeftSiblingId.Offset == leftSiblingNode.Pos.Offset &&
+	if pos.LeftSiblingID.Offset > 0 &&
+		pos.LeftSiblingID.Offset == leftSiblingNode.Pos.Offset &&
 		leftSiblingNode.InsPrev != nil {
 		return parentNode, leftSiblingNode.InsPrev
 	}
