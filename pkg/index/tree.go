@@ -265,16 +265,6 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 	return children
 }
 
-// NOTE(sejongk): refactor this - vs OffsetOfChild vs FindOffset
-func (n *Node[V]) ChildIndex(node *Node[V]) int {
-	for i, child := range n.Children(true) {
-		if child == node {
-			return i
-		}
-	}
-	return -1
-}
-
 // SetChildren sets the children of the given node.
 func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	if n.IsText() {
@@ -364,14 +354,14 @@ func (n *Node[V]) nextSibling() (*Node[V], error) {
 	return nil, nil
 }
 
-// findOffset returns the offset of the given node in the children.
+// FindOffset returns the offset of the given node in the children.
 func (n *Node[V]) FindOffset(node *Node[V]) (int, error) {
 	if n.IsText() {
 		return 0, ErrInvalidMethodCallForTextNode
 	}
 
-	// If node is removed, node's offset is the offset of left adjacent node that is not removed.
-	// NOTE(sejongk): returning the non-exact offset of node can be potentially risky
+	// If nodes are removed, the offset of the removed node is the number of
+	// nodes before the node excluding the removed nodes.
 	if node.Value.IsRemoved() {
 		refined := 0
 		for _, child := range n.Children(true) {
@@ -382,7 +372,7 @@ func (n *Node[V]) FindOffset(node *Node[V]) (int, error) {
 				return refined - 1, nil
 			}
 			if !node.Value.IsRemoved() {
-				refined += 1
+				refined++
 			}
 		}
 	}
@@ -718,7 +708,7 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 }
 
 // LeftSiblingsSize returns the size of left siblings of the given node
-func (t *Tree[V]) LeftSiblingsSize(parent *Node[V], offset int) (int, error) { //TODO(sejongk): determine whether to refactor
+func (t *Tree[V]) LeftSiblingsSize(parent *Node[V], offset int) (int, error) {
 	leftSiblingsSize := 0
 	children := parent.Children()
 	for i := 0; i < offset; i++ {
@@ -760,6 +750,7 @@ func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 	}, nil
 }
 
+// PathToIndex converts the given path to index.
 func (t *Tree[V]) PathToIndex(path []int) (int, error) {
 	treePos, err := t.PathToTreePos(path)
 	if err != nil {

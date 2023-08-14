@@ -34,7 +34,7 @@ var (
 )
 
 var (
-	// DummyTreePos is a dummy position of Tree. It is used to represent the head node of RGASplit.
+	// DummyTreeNodeID is a dummy position of Tree. It is used to represent the head node of RGASplit.
 	DummyTreeNodeID = &TreeNodeID{
 		CreatedAt: time.InitialTicket,
 		Offset:    0,
@@ -85,7 +85,7 @@ func NewTreePos(parentID *TreeNodeID, leftSiblingID *TreeNodeID) *TreePos {
 	}
 }
 
-// Compare compares the given two CRDTTreePos.
+// Equals compares the given two CRDTTreePos.
 func (t *TreePos) Equals(other *TreePos) bool {
 	return (t.ParentID.CreatedAt.Compare(other.ParentID.CreatedAt) == 0 &&
 		t.ParentID.Offset == other.ParentID.Offset &&
@@ -93,20 +93,18 @@ func (t *TreePos) Equals(other *TreePos) bool {
 		t.LeftSiblingID.Offset == other.LeftSiblingID.Offset)
 }
 
-/**
- * `TreeNodeID` represent an ID of a node in the tree. It is used to
- * identify a node in the tree. It is composed of the creation time of the node
- * and the offset from the beginning of the node if the node is split.
- *
- * Some of replicas may have nodes that are not split yet. In this case, we can
- * use `map.floorEntry()` to find the adjacent node.
- */
+// TreeNodeID represent an ID of a node in the tree. It is used to
+// identify a node in the tree. It is composed of the creation time of the node
+// and the offset from the beginning of the node if the node is split.
+//
+// Some of replicas may have nodes that are not split yet. In this case, we can
+// use `map.floorEntry()` to find the adjacent node.
 type TreeNodeID struct {
 	CreatedAt *time.Ticket
 	Offset    int
 }
 
-// NewTreePos creates a new instance of TreePos.
+// NewTreeNodeID creates a new instance of TreeNodeID.
 func NewTreeNodeID(createdAt *time.Ticket, offset int) *TreeNodeID {
 	return &TreeNodeID{
 		CreatedAt: createdAt,
@@ -114,6 +112,7 @@ func NewTreeNodeID(createdAt *time.Ticket, offset int) *TreeNodeID {
 	}
 }
 
+// ToIDString returns a string that can be used as an ID for this TreeNodeID.
 func (t *TreeNodeID) ToIDString() string { // TODO(sejongk): change this to be private
 	return t.CreatedAt.StructureAsString() + ":" + strconv.Itoa(t.Offset)
 }
@@ -189,6 +188,7 @@ func (n *TreeNode) Attributes() string {
 	return " " + n.Attrs.ToXML()
 }
 
+// NextNode returns the next node of this TreeNode.
 func (n *TreeNode) NextNode() *TreeNode {
 	return n.Next
 }
@@ -265,6 +265,7 @@ func (n *TreeNode) SplitText(offset, absOffset int) (*TreeNode, error) {
 	return rightNode, nil
 }
 
+// SplitElement splits the given element at the given offset.
 func (n *TreeNode) SplitElement(offset int) (*TreeNode, error) {
 	split := NewTreeNode(&TreeNodeID{
 		CreatedAt: n.Pos.CreatedAt,
@@ -272,8 +273,14 @@ func (n *TreeNode) SplitElement(offset int) (*TreeNode, error) {
 	}, n.Type(), nil)
 	split.RemovedAt = n.RemovedAt
 
-	n.IndexTreeNode.SetChildren(n.IndexTreeNode.Children(true)[0:offset])
-	split.IndexTreeNode.SetChildren(n.IndexTreeNode.Children(true)[offset:]) // NOTE(sejongk): should include tombstones of children?
+	err := n.IndexTreeNode.SetChildren(n.IndexTreeNode.Children(true)[0:offset])
+	if err != nil {
+		return nil, err
+	}
+	err = split.IndexTreeNode.SetChildren(n.IndexTreeNode.Children(true)[offset:])
+	if err != nil {
+		return nil, err
+	}
 
 	nodeLength, splitLength := 0, 0
 	for _, child := range n.IndexTreeNode.Children() {
@@ -606,13 +613,13 @@ func (t *Tree) Edit(from, to *TreePos, contents []*TreeNode, editedAt *time.Tick
 
 		if fromParent == toParent {
 			parent = fromParent
-			fromChildIndex = parent.ChildIndex(fromLeft) + 1
+			fromChildIndex = parent.OffsetOfChild(fromLeft) + 1
 		} else {
 			parent = fromLeft
 			fromChildIndex = 0
 		}
 
-		toChildIndex := parent.ChildIndex(toLeft)
+		toChildIndex := parent.OffsetOfChild(toLeft)
 
 		parentChildern := parent.Children(true)
 		for i := fromChildIndex; i <= toChildIndex; i++ {
@@ -649,10 +656,16 @@ func (t *Tree) Edit(from, to *TreePos, contents []*TreeNode, editedAt *time.Tick
 			// 03-1. insert the content nodes to the tree.
 			if leftInChildren == fromParent {
 				// 03-1-1. when there's no leftSibling, then insert content into very front of parent's children List
-				fromParent.InsertAt(content.IndexTreeNode, 0)
+				err := fromParent.InsertAt(content.IndexTreeNode, 0)
+				if err != nil {
+					return err
+				}
 			} else {
 				// 03-1-2. insert after leftSibling
-				fromParent.InsertAfter(content.IndexTreeNode, leftInChildren)
+				err := fromParent.InsertAfter(content.IndexTreeNode, leftInChildren)
+				if err != nil {
+					return err
+				}
 			}
 
 			leftInChildren = content.IndexTreeNode
@@ -705,13 +718,13 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 
 		if fromParent == toParent {
 			parent = fromParent //TODO(sejongk): js sdk error for idx 0!! fromLeft.Parent would be nil
-			fromChildIndex = fromParent.ChildIndex(fromLeft) + 1
+			fromChildIndex = fromParent.OffsetOfChild(fromLeft) + 1
 		} else {
 			parent = fromLeft
 			fromChildIndex = 0
 		}
 
-		toChildIndex := toParent.ChildIndex(toLeft)
+		toChildIndex := toParent.OffsetOfChild(toLeft)
 
 		// 02. style the nodes.
 		parentChildern := parent.Children(true)
@@ -802,7 +815,7 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	if parentNode == leftSiblingNode {
 		index = 0
 	} else {
-		index = parentNode.IndexTreeNode.ChildIndex(leftSiblingNode.IndexTreeNode)
+		index = parentNode.IndexTreeNode.OffsetOfChild(leftSiblingNode.IndexTreeNode)
 	}
 
 	parentChildren := parentNode.IndexTreeNode.Children(true)
