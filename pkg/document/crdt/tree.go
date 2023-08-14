@@ -815,15 +815,16 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	if parentNode == leftSiblingNode {
 		index = 0
 	} else {
-		index = parentNode.IndexTreeNode.OffsetOfChild(leftSiblingNode.IndexTreeNode)
+		index = parentNode.IndexTreeNode.OffsetOfChild(leftSiblingNode.IndexTreeNode) + 1
 	}
 
 	parentChildren := parentNode.IndexTreeNode.Children(true)
 	for i := index; i < len(parentChildren); i++ {
-		if !parentChildren[i].Value.Pos.CreatedAt.After(editedAt) {
+		next := parentChildren[i].Value
+		if !next.Pos.CreatedAt.After(editedAt) {
 			break
 		}
-		leftSiblingNode = parentChildren[i].Value
+		leftSiblingNode = next
 	}
 
 	return parentNode.IndexTreeNode, leftSiblingNode.IndexTreeNode, nil
