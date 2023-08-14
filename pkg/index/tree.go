@@ -62,6 +62,18 @@ import (
  *
  * In this case, index of TreePos(p, 0) is 0, index of TreePos(p, 1) is 2.
  * Index 1 can be converted to TreePos(i, 0).
+ *
+ * `path` of crdt.IndexTree represents a position like `index` in crdt.IndexTree.
+ * It contains offsets of each node from the root node as elements except the last.
+ * The last element of the path represents the position in the parent node.
+ *
+ * Let's say we have a tree like this:
+ *                     0 1 2
+ * <p> <i> a b </i> <b> c d </b> </p>
+ *
+ * The path of the position between 'c' and 'd' is [1, 1]. The first element of the
+ * path is the offset of the <b> in <p> and the second element represents the position
+ * between 'c' and 'd' in <b>.
  */
 
 var (
@@ -253,6 +265,7 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 	return children
 }
 
+// NOTE(sejongk): refactor this - vs OffsetOfChild vs FindOffset
 func (n *Node[V]) ChildIndex(node *Node[V]) int {
 	for i, child := range n.Children(true) {
 		if child == node {
@@ -705,14 +718,14 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 }
 
 // LeftSiblingsSize returns the size of left siblings of the given node
-func (t *Tree[V]) LeftSiblingsSize(parent *Node[V], offset int) (int, error) {
+func (t *Tree[V]) LeftSiblingsSize(parent *Node[V], offset int) (int, error) { //TODO(sejongk): determine whether to refactor
 	leftSiblingsSize := 0
-	for _, child := range parent.Children()[:offset] {
-
-		if child == nil || child.Value.IsRemoved() {
+	children := parent.Children()
+	for i := 0; i < offset; i++ {
+		if children[i] == nil || children[i].Value.IsRemoved() {
 			continue
 		}
-		leftSiblingsSize += child.Length
+		leftSiblingsSize += children[i].PaddedLength()
 	}
 
 	return leftSiblingsSize, nil
@@ -753,12 +766,12 @@ func (t *Tree[V]) PathToIndex(path []int) (int, error) {
 		return -1, err
 	}
 
-	idx, err := t.IndexOf(treePos.Node)
+	idx, err := t.IndexOf(treePos)
 	if err != nil {
 		return 0, err
 	}
 
-	return idx + treePos.Offset, nil
+	return idx, nil
 }
 
 // findTextPos returns the tree position of the given path element.
@@ -856,35 +869,53 @@ func (t *Tree[V]) FindLeftmost(node *Node[V]) V {
 	return t.FindLeftmost(node.Children()[0])
 }
 
-// IndexOf returns the index of the given node.
-func (t *Tree[V]) IndexOf(node *Node[V]) (int, error) {
-	index := 0
-	current := node
+// IndexOf returns the index of the given tree position.
+func (t *Tree[V]) IndexOf(pos *TreePos[V]) (int, error) {
+	node, offset := pos.Node, pos.Offset
 
-	for current != t.root {
-		parent := current.Parent
-		if parent == nil {
-			return 0, errors.New("parent is not found")
-		}
+	size := 0
+	depth := 1
 
-		offset, err := parent.FindOffset(current)
+	if node.IsText() {
+		size += offset
+
+		parent := node.Parent
+		offsetOfNode, err := parent.FindOffset(node)
 		if err != nil {
 			return 0, err
 		}
 
-		childrenSlice := parent.Children()[:offset]
-		for _, previous := range childrenSlice {
-			index += previous.PaddedLength()
+		leftSiblingsSize, err := t.LeftSiblingsSize(parent, offsetOfNode)
+		if err != nil {
+			return 0, err
 		}
+		size += leftSiblingsSize
 
-		// If this step escape from element node, we should add 1 to the index,
-		// because the element node has open tag.
-		if current != t.root && current != node && !current.IsText() {
-			index++
+		node = node.Parent
+	} else {
+		leftSiblingsSize, err := t.LeftSiblingsSize(node, offset)
+		if err != nil {
+			return 0, err
 		}
-
-		current = parent
+		size += leftSiblingsSize
 	}
 
-	return index, nil
+	for node.Parent != nil {
+		parent := node.Parent
+		offsetOfNode, err := parent.FindOffset(node)
+		if err != nil {
+			return 0, err
+		}
+
+		leftSiblingsSize, err := t.LeftSiblingsSize(parent, offsetOfNode)
+		if err != nil {
+			return 0, err
+		}
+
+		size += leftSiblingsSize
+		depth++
+		node = node.Parent
+	}
+
+	return size + depth - 1, nil
 }

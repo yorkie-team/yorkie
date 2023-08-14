@@ -107,7 +107,7 @@ func NewTreeNodeId(createdAt *time.Ticket, offset int) *TreeNodeID {
 	}
 }
 
-func (t *TreeNodeID) toIDString() string {
+func (t *TreeNodeID) ToIDString() string { // TODO(sejongk): change this to be private
 	return t.CreatedAt.StructureAsString() + ":" + strconv.Itoa(t.Offset)
 }
 
@@ -246,6 +246,7 @@ func (n *TreeNode) SplitText(offset, absOffset int) (*TreeNode, error) {
 		CreatedAt: n.Pos.CreatedAt,
 		Offset:    offset + absOffset,
 	}, n.Type(), nil, string(rightRune))
+	rightNode.RemovedAt = n.RemovedAt
 
 	if err := n.IndexTreeNode.Parent.InsertAfterInternal(
 		rightNode.IndexTreeNode,
@@ -258,10 +259,11 @@ func (n *TreeNode) SplitText(offset, absOffset int) (*TreeNode, error) {
 }
 
 func (n *TreeNode) SplitElement(offset int) (*TreeNode, error) {
-	split, err := n.DeepCopy()
-	if err != nil {
-		return nil, err
-	}
+	split := NewTreeNode(&TreeNodeID{
+		CreatedAt: n.Pos.CreatedAt,
+		Offset:    offset,
+	}, n.Type(), nil)
+	split.RemovedAt = n.RemovedAt
 
 	n.IndexTreeNode.SetChildren(n.IndexTreeNode.Children(true)[0:offset])
 	split.IndexTreeNode.SetChildren(n.IndexTreeNode.Children(true)[offset:]) // NOTE(sejongk): should include tombstones of children?
@@ -385,7 +387,7 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 		}
 		t.NodeMapByPos.Remove(node.Pos)
 		t.Purge(node)
-		delete(t.removedNodeMap, node.Pos.toIDString())
+		delete(t.removedNodeMap, node.Pos.ToIDString())
 	}
 
 	return count, nil
@@ -590,6 +592,7 @@ func (t *Tree) Edit(from, to *TreePos, contents []*TreeNode, editedAt *time.Tick
 
 	// 02. remove the nodes and update linked list and index tree.
 	toBeRemoveds := make([]*TreeNode, 0)
+
 	if fromLeft != toLeft {
 		var fromChildIndex int
 		var parent *index.Node[*TreeNode]
@@ -610,7 +613,7 @@ func (t *Tree) Edit(from, to *TreePos, contents []*TreeNode, editedAt *time.Tick
 
 			if node.Value.Pos.CreatedAt.Lamport() ==
 				editedAt.Lamport() &&
-				node.Value.Pos.CreatedAt.ActorID() != editedAt.ActorID() {
+				node.Value.Pos.CreatedAt.ActorID().String() != editedAt.ActorID().String() {
 				continue
 			}
 
@@ -626,7 +629,7 @@ func (t *Tree) Edit(from, to *TreePos, contents []*TreeNode, editedAt *time.Tick
 			node.remove(editedAt)
 
 			if node.IsRemoved() {
-				t.removedNodeMap[node.Pos.toIDString()] = node
+				t.removedNodeMap[node.Pos.ToIDString()] = node
 			}
 		}
 	}
@@ -651,7 +654,7 @@ func (t *Tree) Edit(from, to *TreePos, contents []*TreeNode, editedAt *time.Tick
 				// make new nodes as tombstone immediately
 				if fromParent.Value.IsRemoved() {
 					node.Value.remove(editedAt)
-					t.removedNodeMap[node.Value.Pos.toIDString()] = node.Value
+					t.removedNodeMap[node.Value.Pos.ToIDString()] = node.Value
 				}
 
 				t.NodeMapByPos.Put(node.Value.Pos, node.Value)
@@ -694,8 +697,8 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 		var parent *index.Node[*TreeNode]
 
 		if fromParent == toParent {
-			parent = fromLeft.Parent
-			fromChildIndex = fromParent.ChildIndex(fromLeft)
+			parent = fromParent //TODO(sejongk): js sdk error for idx 0!! fromLeft.Parent would be nil
+			fromChildIndex = fromParent.ChildIndex(fromLeft) + 1
 		} else {
 			parent = fromLeft
 			fromChildIndex = 0
@@ -855,12 +858,12 @@ func (t *Tree) toIndex(pos *TreePos) (int, error) {
 		return -1, nil
 	}
 
-	idx, err := t.IndexTree.IndexOf(treePos.Node)
+	idx, err := t.IndexTree.IndexOf(treePos)
 	if err != nil {
 		return 0, err
 	}
 
-	return idx + treePos.Offset, nil
+	return idx, nil
 }
 
 func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {

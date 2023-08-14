@@ -648,7 +648,7 @@ func fromTreePos(pbPos *api.TreePos) (*crdt.TreePos, error) {
 		return nil, err
 	}
 
-	leftSiblingId, err := fromTreeNodeId(pbPos.ParentId)
+	leftSiblingId, err := fromTreeNodeId(pbPos.LeftSiblingId)
 	if err != nil {
 		return nil, err
 	}
