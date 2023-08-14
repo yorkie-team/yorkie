@@ -1608,7 +1608,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("handle deletion of insertion anchor concurrently test", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
