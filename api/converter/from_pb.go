@@ -656,7 +656,7 @@ func fromTreePos(pbPos *api.TreePos) (*crdt.TreePos, error) {
 	return crdt.NewTreePos(parentId, leftSiblingId), nil
 }
 
-func fromTreeNodeId(pbPos *api.TreeNodeId) (*crdt.TreeNodeID, error) {
+func fromTreeNodeId(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 	createdAt, err := fromTimeTicket(pbPos.CreatedAt)
 	if err != nil {
 		return nil, err

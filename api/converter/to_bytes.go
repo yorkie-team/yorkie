@@ -313,8 +313,8 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 	return pbNode
 }
 
-func toTreeNodeId(pos *crdt.TreeNodeID) *api.TreeNodeId {
-	return &api.TreeNodeId{
+func toTreeNodeId(pos *crdt.TreeNodeID) *api.TreeNodeID {
+	return &api.TreeNodeID{
 		CreatedAt: ToTimeTicket(pos.CreatedAt),
 		Offset:    int32(pos.Offset),
 	}
@@ -322,11 +322,11 @@ func toTreeNodeId(pos *crdt.TreeNodeID) *api.TreeNodeId {
 
 func toTreePos(pos *crdt.TreePos) *api.TreePos {
 	return &api.TreePos{
-		ParentId: &api.TreeNodeId{
+		ParentId: &api.TreeNodeID{
 			CreatedAt: ToTimeTicket(pos.ParentId.CreatedAt),
 			Offset:    int32(pos.ParentId.Offset),
 		},
-		LeftSiblingId: &api.TreeNodeId{
+		LeftSiblingId: &api.TreeNodeID{
 			CreatedAt: ToTimeTicket(pos.LeftSiblingId.CreatedAt),
 			Offset:    int32(pos.LeftSiblingId.Offset),
 		},
