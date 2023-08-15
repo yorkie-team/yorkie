@@ -224,7 +224,8 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("delete nodes between element nodes test", func(t *testing.T) {
-		t.Skip()
+		t.Skip("TODO(hackerwins): We need to fix this test.")
+
 		// 01. Create a tree with 2 paragraphs.
 		//       0   1 2 3    4   5 6 7    8
 		// <root> <p> a b </p> <p> c d </p> </root>
@@ -266,7 +267,8 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("style node with attributes test", func(t *testing.T) {
-		t.Skip()
+		t.Skip("TODO(hackerwins): We need to fix this test.")
+
 		// 01. style attributes to an element node.
 		ctx := helper.TextChangeContext(helper.TestRoot())
 		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
