@@ -491,6 +491,13 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		return nil, err
 	}
 
+	createdAtMapByActor, err := fromCreatedAtMapByActor(
+		pbTreeEdit.CreatedAtMapByActor,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	nodes, err := FromTreeNodesWhenEdit(pbTreeEdit.Contents)
 	if err != nil {
 		return nil, err
@@ -500,6 +507,7 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		parentCreatedAt,
 		from,
 		to,
+		createdAtMapByActor,
 		nodes,
 		executedAt,
 	), nil

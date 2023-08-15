@@ -477,7 +477,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("concurrently insert and delete contained elements of the same depth test", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -514,6 +513,54 @@ func TestTree(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("concurrently multiple insert and delete contained elements of the same depth test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "1234"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "abcd"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, "<root><p>1234</p><p>abcd</p></root>", d1.Root().GetTree("t").ToXML())
+
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(6, 6, &json.TreeNode{Type: "p", Children: []json.TreeNode{}})
+			return nil
+		}))
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(8, 8, &json.TreeNode{Type: "p", Children: []json.TreeNode{}})
+			return nil
+		}))
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(10, 10, &json.TreeNode{Type: "p", Children: []json.TreeNode{}})
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 12, nil)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>1234</p><p></p><p></p><p></p><p>abcd</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p></p><p></p><p></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p></p><p></p><p></p></root>", d2.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("detecting error when inserting and deleting contained elements at different depths test", func(t *testing.T) {
@@ -595,7 +642,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("concurrently insert and delete contained text test", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -887,7 +933,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("concurrently delete and insert side by side elements test", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1077,7 +1122,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("concurrently insert and delete side by side text test", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1402,7 +1446,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("handle insert within block delete concurrently test", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1439,7 +1482,7 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("handle insert within block delete concurrently test [2]", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
+		t.Skip()
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1475,8 +1518,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>1abc</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
-	t.Run("handle block element insertion within delete test [2]", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
+	t.Run("handle block element insertion within delete test 2", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1564,7 +1606,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("handle concurrent element insert/deletion (right) test", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1643,7 +1684,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("handle deletion after insertion concurrently test", func(t *testing.T) {
-		t.Skip() // TODO(sejonk): Remove this after fixing bugs
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))

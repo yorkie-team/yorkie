@@ -121,8 +121,9 @@ message Operation {
     TimeTicket parent_created_at = 1;
     TreePos from = 2;
     TreePos to = 3;
-    repeated TreeNodes contents = 4;
-    TimeTicket executed_at = 5;
+    map<string, TimeTicket> created_at_map_by_actor = 4;
+    repeated TreeNodes contents = 5;
+    TimeTicket executed_at = 6;
   }
   message TreeStyle {
     TimeTicket parent_created_at = 1;
