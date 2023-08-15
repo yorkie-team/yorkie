@@ -36,6 +36,9 @@ Housekeeping:
   # CandidatesLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
   CandidatesLimitPerProject: 100
 
+  # ProjectFetchSize is the maximum number of projects to be returned to deactivate candidates. (default: 100).
+  ProjectFetchSize: 100
+
 # Backend is the configuration for the backend of Yorkie.
 Backend:
   # UseDefaultProject is whether to use the default project (default: true).

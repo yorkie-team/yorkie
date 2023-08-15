@@ -19,8 +19,10 @@
 package testcases
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"testing"
 	gotime "time"
@@ -619,6 +621,52 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		})
 		assert.NoError(t, err)
 		assert.Len(t, result, len(docInfos)-1)
+	})
+}
+
+// RunFindDeactivateCandidates runs the FindDeactivateCandidates tests for the given db.
+func RunFindDeactivateCandidates(t *testing.T, db database.Database) {
+	t.Run("housekeeping pagination test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// Lists all projects of the dummyOwnerID and otherOwnerID.
+		projects, err := db.ListProjectInfos(ctx, dummyOwnerID)
+		assert.NoError(t, err)
+		otherProjects, err := db.ListProjectInfos(ctx, otherOwnerID)
+		assert.NoError(t, err)
+
+		projects = append(projects, otherProjects...)
+
+		sort.Slice(projects, func(i, j int) bool {
+			iBytes, err := projects[i].ID.Bytes()
+			assert.NoError(t, err)
+			jBytes, err := projects[j].ID.Bytes()
+			assert.NoError(t, err)
+			return bytes.Compare(iBytes, jBytes) < 0
+		})
+
+		fetchSize := 3
+		lastProjectID := database.DefaultProjectID
+
+		for i := 0; i < len(projects)/fetchSize; i++ {
+			lastProjectID, _, err = db.FindDeactivateCandidates(
+				ctx,
+				0,
+				fetchSize,
+				lastProjectID,
+			)
+			assert.NoError(t, err)
+			assert.Equal(t, projects[((i+1)*fetchSize)-1].ID, lastProjectID)
+		}
+
+		lastProjectID, _, err = db.FindDeactivateCandidates(
+			ctx,
+			0,
+			fetchSize,
+			lastProjectID,
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, database.DefaultProjectID, lastProjectID)
 	})
 }
 

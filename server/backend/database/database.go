@@ -138,7 +138,9 @@ type Database interface {
 	FindDeactivateCandidates(
 		ctx context.Context,
 		candidatesLimitPerProject int,
-	) ([]*ClientInfo, error)
+		projectFetchSize int,
+		lastProjectID types.ID,
+	) (types.ID, []*ClientInfo, error)
 
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(

@@ -224,27 +224,38 @@ func (d *DB) CreateProjectInfo(
 	return info, nil
 }
 
-// ListAllProjectInfos returns all project infos.
-func (d *DB) listAllProjectInfos(
+// listProjectInfos returns all project infos rotationally.
+func (d *DB) listProjectInfos(
 	ctx context.Context,
+	pageSize int,
+	housekeepingLastProjectID types.ID,
 ) ([]*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	// TODO(krapie): txn.Get() loads all projects in memory,
-	// which will cause performance issue as number of projects in DB grows.
-	// Therefore, pagination of projects is needed to avoid this issue.
-	iter, err := txn.Get(
+	iter, err := txn.LowerBound(
 		tblProjects,
 		"id",
+		housekeepingLastProjectID.String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch all projects: %w", err)
+		return nil, fmt.Errorf("fetch projects: %w", err)
 	}
 
 	var infos []*database.ProjectInfo
-	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+
+	for i := 0; i < pageSize; i++ {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
 		info := raw.(*database.ProjectInfo).DeepCopy()
+
+		if i == 0 && info.ID == housekeepingLastProjectID {
+			pageSize++
+			continue
+		}
+
 		infos = append(infos, info)
 	}
 
@@ -599,23 +610,32 @@ func (d *DB) findDeactivateCandidatesPerProject(
 func (d *DB) FindDeactivateCandidates(
 	ctx context.Context,
 	candidatesLimitPerProject int,
-) ([]*database.ClientInfo, error) {
-	projects, err := d.listAllProjectInfos(ctx)
+	projectFetchSize int,
+	lastProjectID types.ID,
+) (types.ID, []*database.ClientInfo, error) {
+	projects, err := d.listProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
-		return nil, err
+		return database.DefaultProjectID, nil, err
 	}
 
 	var candidates []*database.ClientInfo
 	for _, project := range projects {
 		infos, err := d.findDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
 		if err != nil {
-			return nil, err
+			return database.DefaultProjectID, nil, err
 		}
 
 		candidates = append(candidates, infos...)
 	}
 
-	return candidates, nil
+	var topProjectID types.ID
+	if len(projects) < projectFetchSize {
+		topProjectID = database.DefaultProjectID
+	} else {
+		topProjectID = projects[len(projects)-1].ID
+	}
+
+	return topProjectID, candidates, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the
