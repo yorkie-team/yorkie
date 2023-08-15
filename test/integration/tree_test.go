@@ -1481,8 +1481,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>1B5</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
-	t.Run("handle insert within block delete concurrently test [2]", func(t *testing.T) {
-		t.Skip()
+	t.Run("handle insert within block delete concurrently test 2", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))

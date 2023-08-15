@@ -251,8 +251,8 @@ func TestDocKey(t testing.TB) key.Key {
 		return key.Key(name)
 	}
 
-	if len(name) > 60 {
-		name = name[:60]
+	if len(name) > 100 {
+		name = name[:100]
 	}
 
 	sb := strings.Builder{}
