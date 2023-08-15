@@ -611,9 +611,9 @@ func (d *DB) FindDeactivateCandidates(
 	ctx context.Context,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
-	housekeepingLastProjectID types.ID,
+	lastProjectID types.ID,
 ) (types.ID, []*database.ClientInfo, error) {
-	projects, err := d.listProjectInfos(ctx, projectFetchSize, housekeepingLastProjectID)
+	projects, err := d.listProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}
@@ -628,14 +628,14 @@ func (d *DB) FindDeactivateCandidates(
 		candidates = append(candidates, infos...)
 	}
 
-	var lastProjectID types.ID
+	var topProjectID types.ID
 	if len(projects) < projectFetchSize {
-		lastProjectID = database.DefaultProjectID
+		topProjectID = database.DefaultProjectID
 	} else {
-		lastProjectID = projects[len(projects)-1].ID
+		topProjectID = projects[len(projects)-1].ID
 	}
 
-	return lastProjectID, candidates, nil
+	return topProjectID, candidates, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

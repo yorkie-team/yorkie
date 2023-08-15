@@ -114,6 +114,7 @@ func (h *Housekeeping) run() {
 		ctx := context.Background()
 		lastProjectID, err := h.deactivateCandidates(ctx, housekeepingLastProjectID)
 		if err != nil {
+			logging.From(ctx).Error(err)
 			continue
 		}
 		housekeepingLastProjectID = lastProjectID
