@@ -176,7 +176,6 @@ func TestGarbageCollection(t *testing.T) {
 	})
 
 	t.Run("garbage collection for tree type test", func(t *testing.T) {
-		t.Skip()
 		doc := document.New(helper.TestDocKey(t))
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
@@ -245,7 +244,6 @@ func TestGarbageCollection(t *testing.T) {
 	})
 
 	t.Run("garbage collection for tree type test (multi clients)", func(t *testing.T) {
-		t.Skip()
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
