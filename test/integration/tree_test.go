@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -383,7 +384,8 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, d1.Root().GetTree("t").ToXML())
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Style(0, 4, map[string]string{"bold": "true"}) //NOTE(sejongk): 0, 4 -> 0,1 / 3,4
+			// NOTE(sejongk): 0, 4 -> 0,1 / 3,4
+			root.GetTree("t").Style(0, 4, map[string]string{"bold": "true"})
 			return nil
 		}))
 
