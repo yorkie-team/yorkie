@@ -52,7 +52,12 @@ type TreeNode struct {
 	InsPrev *TreeNode
 	InsNext *TreeNode
 
+	// Value is optional. If the value is not empty, it means that the node is a
+	// text node.
 	Value string
+
+	// Attrs is optional. If the value is not empty, it means that the node is a
+	// element node.
 	Attrs *RHT
 }
 
@@ -333,7 +338,7 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 // index tree structure.
 type Tree struct {
 	IndexTree      *index.Tree[*TreeNode]
-	NodeMapByPos   *llrb.Tree[*TreeNodeID, *TreeNode]
+	NodeMapByID    *llrb.Tree[*TreeNodeID, *TreeNode]
 	removedNodeMap map[string]*TreeNode
 
 	createdAt *time.Ticket
@@ -345,13 +350,13 @@ type Tree struct {
 func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	tree := &Tree{
 		IndexTree:      index.NewTree[*TreeNode](root.IndexTreeNode),
-		NodeMapByPos:   llrb.NewTree[*TreeNodeID, *TreeNode](),
+		NodeMapByID:    llrb.NewTree[*TreeNodeID, *TreeNode](),
 		removedNodeMap: make(map[string]*TreeNode),
 		createdAt:      createdAt,
 	}
 
 	index.Traverse(tree.IndexTree, func(node *index.Node[*TreeNode], depth int) {
-		tree.NodeMapByPos.Put(node.Value.ID, node.Value)
+		tree.NodeMapByID.Put(node.Value.ID, node.Value)
 	})
 
 	return tree
@@ -382,21 +387,26 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 	}
 
 	for node := range nodesToBeRemoved {
-		if err := node.IndexTreeNode.Parent.RemoveChild(node.IndexTreeNode); err != nil {
+		if err := t.purgeNode(node); err != nil {
 			return 0, err
 		}
-		t.NodeMapByPos.Remove(node.ID)
-		t.Purge(node)
-		delete(t.removedNodeMap, node.ID.toIDString())
 	}
 
 	return count, nil
 }
 
-// Purge physically purges the given node.
-func (t *Tree) Purge(node *TreeNode) {
-	// TODO(hackerwins): Figure out how to purge the node from the index tree.
+// purgeNode physically purges the given node.
+func (t *Tree) purgeNode(node *TreeNode) error {
+	if err := node.IndexTreeNode.Parent.RemoveChild(node.IndexTreeNode); err != nil {
+		return err
+	}
+	t.NodeMapByID.Remove(node.ID)
+
+	// TODO(hackerwins): Reconnect the insertion linked list.
 	node.InsPrev = nil
+
+	delete(t.removedNodeMap, node.ID.toIDString())
+	return nil
 }
 
 // marshal returns the JSON encoding of this Tree.
@@ -531,7 +541,7 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 
 			if split != nil {
 				split.InsPrev = node.Value
-				t.NodeMapByPos.Put(split.ID, split)
+				t.NodeMapByID.Put(split.ID, split)
 
 				if node.Value.InsNext != nil {
 					node.Value.InsNext.InsPrev = split
@@ -671,7 +681,7 @@ func (t *Tree) Edit(from, to *TreePos,
 					t.removedNodeMap[node.Value.ID.toIDString()] = node.Value
 				}
 
-				t.NodeMapByPos.Put(node.Value.ID, node.Value)
+				t.NodeMapByID.Put(node.Value.ID, node.Value)
 			})
 		}
 	}
@@ -768,7 +778,7 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 
 		if split != nil {
 			split.InsPrev = leftSiblingNode
-			t.NodeMapByPos.Put(split.ID, split)
+			t.NodeMapByID.Put(split.ID, split)
 
 			if leftSiblingNode.InsNext != nil {
 				leftSiblingNode.InsNext.InsPrev = split
@@ -853,8 +863,8 @@ func (t *Tree) toIndex(pos *TreePos) (int, error) {
 }
 
 func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
-	parentKey, parentNode := t.NodeMapByPos.Floor(pos.ParentID)
-	leftSiblingKey, leftSiblingNode := t.NodeMapByPos.Floor(pos.LeftSiblingID)
+	parentKey, parentNode := t.NodeMapByID.Floor(pos.ParentID)
+	leftSiblingKey, leftSiblingNode := t.NodeMapByID.Floor(pos.LeftSiblingID)
 
 	if parentNode == nil ||
 		leftSiblingNode == nil ||
