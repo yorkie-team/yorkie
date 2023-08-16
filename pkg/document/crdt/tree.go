@@ -46,7 +46,7 @@ type TreeNodeForTest struct {
 type TreeNode struct {
 	IndexTreeNode *index.Node[*TreeNode]
 
-	Pos       *TreeNodeID
+	ID        *TreeNodeID
 	RemovedAt *time.Ticket
 
 	Next    *TreeNode
@@ -123,7 +123,7 @@ func (t *TreeNodeID) Compare(other llrb.Key) int {
 // NewTreeNode creates a new instance of TreeNode.
 func NewTreeNode(pos *TreeNodeID, nodeType string, attributes *RHT, value ...string) *TreeNode {
 	node := &TreeNode{
-		Pos: pos,
+		ID: pos,
 	}
 
 	if len(value) > 0 {
@@ -238,7 +238,7 @@ func (n *TreeNode) SplitText(offset, absOffset int) (*TreeNode, error) {
 	n.IndexTreeNode.Length = len(leftRune)
 
 	rightNode := NewTreeNode(&TreeNodeID{
-		CreatedAt: n.Pos.CreatedAt,
+		CreatedAt: n.ID.CreatedAt,
 		Offset:    offset + absOffset,
 	}, n.Type(), nil, string(rightRune))
 	rightNode.RemovedAt = n.RemovedAt
@@ -256,7 +256,7 @@ func (n *TreeNode) SplitText(offset, absOffset int) (*TreeNode, error) {
 // SplitElement splits the given element at the given offset.
 func (n *TreeNode) SplitElement(offset int) (*TreeNode, error) {
 	split := NewTreeNode(&TreeNodeID{
-		CreatedAt: n.Pos.CreatedAt,
+		CreatedAt: n.ID.CreatedAt,
 		Offset:    offset,
 	}, n.Type(), nil)
 	split.RemovedAt = n.RemovedAt
@@ -286,7 +286,7 @@ func (n *TreeNode) SplitElement(offset int) (*TreeNode, error) {
 // remove marks the node as removed.
 func (n *TreeNode) remove(removedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
 	justRemoved := n.RemovedAt == nil
-	if !n.Pos.CreatedAt.After(latestCreatedAt) &&
+	if !n.ID.CreatedAt.After(latestCreatedAt) &&
 		(n.RemovedAt == nil || n.RemovedAt.Compare(removedAt) > 0) {
 		n.RemovedAt = removedAt
 		if justRemoved {
@@ -307,9 +307,9 @@ func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) error {
 func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	var clone *TreeNode
 	if n.Attrs != nil {
-		clone = NewTreeNode(n.Pos, n.Type(), n.Attrs.DeepCopy(), n.Value)
+		clone = NewTreeNode(n.ID, n.Type(), n.Attrs.DeepCopy(), n.Value)
 	} else {
-		clone = NewTreeNode(n.Pos, n.Type(), nil, n.Value)
+		clone = NewTreeNode(n.ID, n.Type(), nil, n.Value)
 	}
 	clone.RemovedAt = n.RemovedAt
 
@@ -355,7 +355,7 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 	}
 
 	index.Traverse(tree.IndexTree, func(node *index.Node[*TreeNode], depth int) {
-		tree.NodeMapByPos.Put(node.Value.Pos, node.Value)
+		tree.NodeMapByPos.Put(node.Value.ID, node.Value)
 	})
 
 	return tree
@@ -389,9 +389,9 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 		if err := node.IndexTreeNode.Parent.RemoveChild(node.IndexTreeNode); err != nil {
 			return 0, err
 		}
-		t.NodeMapByPos.Remove(node.Pos)
+		t.NodeMapByPos.Remove(node.ID)
 		t.Purge(node)
-		delete(t.removedNodeMap, node.Pos.ToIDString())
+		delete(t.removedNodeMap, node.ID.ToIDString())
 	}
 
 	return count, nil
@@ -492,7 +492,7 @@ func (t *Tree) InsertAfter(prevNode *TreeNode, newNode *TreeNode) {
 		next.Prev = newNode
 	}
 
-	t.NodeMapByPos.Put(newNode.Pos, newNode)
+	t.NodeMapByPos.Put(newNode.ID, newNode)
 }
 
 // Nodes traverses the tree and returns the list of nodes.
@@ -550,7 +550,7 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 			leftSibling = node.Parent.Value
 		} else {
 			leftSibling = node.Value
-			absOffset := node.Value.Pos.Offset
+			absOffset := node.Value.ID.Offset
 			split, err := node.Value.Split(offset, absOffset)
 			if err != nil {
 				return nil, err
@@ -558,7 +558,7 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 
 			if split != nil {
 				split.InsPrev = node.Value
-				t.NodeMapByPos.Put(split.Pos, split)
+				t.NodeMapByPos.Put(split.ID, split)
 
 				if node.Value.InsNext != nil {
 					node.Value.InsNext.InsPrev = split
@@ -577,10 +577,10 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	}
 
 	return &TreePos{
-		ParentID: node.Value.Pos,
+		ParentID: node.Value.ID,
 		LeftSiblingID: &TreeNodeID{
-			CreatedAt: leftSibling.Pos.CreatedAt,
-			Offset:    leftSibling.Pos.Offset + offset,
+			CreatedAt: leftSibling.ID.CreatedAt,
+			Offset:    leftSibling.ID.Offset + offset,
 		},
 	}, nil
 }
@@ -622,7 +622,7 @@ func (t *Tree) Edit(from, to *TreePos,
 		parentChildren := parent.Children(true)
 		for i := fromChildIndex; i <= toChildIndex; i++ {
 			node := parentChildren[i].Value
-			actorIDHex := node.Pos.CreatedAt.ActorIDHex()
+			actorIDHex := node.ID.CreatedAt.ActorIDHex()
 
 			var latestCreatedAt *time.Ticket
 			if latestCreatedAtMapByActor == nil {
@@ -638,24 +638,24 @@ func (t *Tree) Edit(from, to *TreePos,
 
 			if node.remove(editedAt, latestCreatedAt) {
 				latestCreatedAt = createdAtMapByActor[actorIDHex]
-				createdAt := node.Pos.CreatedAt
+				createdAt := node.ID.CreatedAt
 				if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 					createdAtMapByActor[actorIDHex] = createdAt
 				}
 
-				t.removedNodeMap[node.Pos.ToIDString()] = node
+				t.removedNodeMap[node.ID.ToIDString()] = node
 
 				// traverse the nodes including tombstones
 				index.TraverseNode(node.IndexTreeNode, func(node *index.Node[*TreeNode], depth int) {
 					if node.Value.remove(editedAt, time.MaxTicket) {
 						// TODO(sejongk): Refactor the repeated code.
 						latestCreatedAt = latestCreatedAtMapByActor[actorIDHex]
-						createdAt := node.Value.Pos.CreatedAt
+						createdAt := node.Value.ID.CreatedAt
 						if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 							createdAtMapByActor[actorIDHex] = createdAt
 						}
 
-						t.removedNodeMap[node.Value.Pos.ToIDString()] = node.Value
+						t.removedNodeMap[node.Value.ID.ToIDString()] = node.Value
 					}
 				})
 			}
@@ -687,18 +687,18 @@ func (t *Tree) Edit(from, to *TreePos,
 				// if insertion happens during concurrent editing and parent node has been removed,
 				// make new nodes as tombstone immediately
 				if fromParent.Value.IsRemoved() {
-					actorIDHex := node.Value.Pos.CreatedAt.ActorIDHex()
+					actorIDHex := node.Value.ID.CreatedAt.ActorIDHex()
 					if node.Value.remove(editedAt, time.MaxTicket) {
 						latestCreatedAt := latestCreatedAtMapByActor[actorIDHex]
-						createdAt := node.Value.Pos.CreatedAt
+						createdAt := node.Value.ID.CreatedAt
 						if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 							createdAtMapByActor[actorIDHex] = createdAt
 						}
 					}
-					t.removedNodeMap[node.Value.Pos.ToIDString()] = node.Value
+					t.removedNodeMap[node.Value.ID.ToIDString()] = node.Value
 				}
 
-				t.NodeMapByPos.Put(node.Value.Pos, node.Value)
+				t.NodeMapByPos.Put(node.Value.ID, node.Value)
 			})
 		}
 	}
@@ -778,7 +778,7 @@ func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[
 	// Find the appropriate position. This logic is similar to the logical to
 	// handle the same position insertion of RGA.
 	current := treePos
-	for current.Node.Value.Next != nil && current.Node.Value.Next.Pos.CreatedAt.After(editedAt) &&
+	for current.Node.Value.Next != nil && current.Node.Value.Next.ID.CreatedAt.After(editedAt) &&
 		current.Node.Value.IndexTreeNode.Parent == current.Node.Value.Next.IndexTreeNode.Parent {
 
 		current = &index.TreePos[*TreeNode]{
@@ -815,7 +815,7 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	// Find the appropriate position. This logic is similar to the logical to
 	// handle the same position insertion of RGA.
 	if leftSiblingNode.IsText() {
-		absOffset := leftSiblingNode.Pos.Offset
+		absOffset := leftSiblingNode.ID.Offset
 		split, err := leftSiblingNode.Split(pos.LeftSiblingID.Offset-absOffset, absOffset)
 		if err != nil {
 			return nil, nil, err
@@ -823,7 +823,7 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 
 		if split != nil {
 			split.InsPrev = leftSiblingNode
-			t.NodeMapByPos.Put(split.Pos, split)
+			t.NodeMapByPos.Put(split.ID, split)
 
 			if leftSiblingNode.InsNext != nil {
 				leftSiblingNode.InsNext.InsPrev = split
@@ -841,7 +841,7 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	parentChildren := parentNode.IndexTreeNode.Children(true)
 	for i := idx; i < len(parentChildren); i++ {
 		next := parentChildren[i].Value
-		if !next.Pos.CreatedAt.After(editedAt) {
+		if !next.ID.CreatedAt.After(editedAt) {
 			break
 		}
 		leftSiblingNode = next
@@ -919,7 +919,7 @@ func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
 	}
 
 	if pos.LeftSiblingID.Offset > 0 &&
-		pos.LeftSiblingID.Offset == leftSiblingNode.Pos.Offset &&
+		pos.LeftSiblingID.Offset == leftSiblingNode.ID.Offset &&
 		leftSiblingNode.InsPrev != nil {
 		return parentNode, leftSiblingNode.InsPrev
 	}

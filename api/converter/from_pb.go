@@ -628,7 +628,7 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 }
 
 func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
-	pos, err := fromTreeNodeID(pbNode.Pos)
+	id, err := fromTreeNodeID(pbNode.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -643,7 +643,7 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 	}
 
 	return crdt.NewTreeNode(
-		pos,
+		id,
 		pbNode.Type,
 		attrs,
 		pbNode.Value,

@@ -298,7 +298,7 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 	}
 
 	pbNode := &api.TreeNode{
-		Pos:        toTreeNodeID(treeNode.Pos),
+		Id:         toTreeNodeID(treeNode.ID),
 		Type:       treeNode.Type(),
 		Value:      treeNode.Value,
 		RemovedAt:  ToTimeTicket(treeNode.RemovedAt),
@@ -307,7 +307,7 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 	}
 
 	if treeNode.InsPrev != nil {
-		pbNode.InsPrevPos = toTreeNodeID(treeNode.InsPrev.Pos)
+		pbNode.InsPrevId = toTreeNodeID(treeNode.InsPrev.ID)
 	}
 
 	return pbNode

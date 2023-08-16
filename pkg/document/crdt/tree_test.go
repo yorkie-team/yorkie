@@ -36,7 +36,7 @@ var (
 func TestTreeNode(t *testing.T) {
 	t.Run("text node test", func(t *testing.T) {
 		node := crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "hello")
-		assert.Equal(t, dummyTreeNodeID, node.Pos)
+		assert.Equal(t, dummyTreeNodeID, node.ID)
 		assert.Equal(t, "text", node.Type())
 		assert.Equal(t, "hello", node.Value)
 		assert.Equal(t, 5, node.Len())
@@ -61,8 +61,8 @@ func TestTreeNode(t *testing.T) {
 
 		assert.Equal(t, "hello", left.Value)
 		assert.Equal(t, "yorkie", right.Value)
-		assert.Equal(t, &crdt.TreeNodeID{CreatedAt: time.InitialTicket, Offset: 0}, left.Pos)
-		assert.Equal(t, &crdt.TreeNodeID{CreatedAt: time.InitialTicket, Offset: 5}, right.Pos)
+		assert.Equal(t, &crdt.TreeNodeID{CreatedAt: time.InitialTicket, Offset: 0}, left.ID)
+		assert.Equal(t, &crdt.TreeNodeID{CreatedAt: time.InitialTicket, Offset: 5}, right.ID)
 	})
 
 	t.Run("element node with attributes test", func(t *testing.T) {

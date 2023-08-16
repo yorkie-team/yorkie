@@ -238,11 +238,11 @@ message TextNodeID {
 }
 
 message TreeNode {
-  TreeNodeID pos = 1;
+  TreeNodeID id = 1;
   string type = 2;
   string value = 3;
   TimeTicket removed_at = 4;
-  TreeNodeID ins_prev_pos = 5;
+  TreeNodeID ins_prev_id = 5;
   int32 depth = 6;
   map<string, NodeAttr> attributes = 7;
 }
