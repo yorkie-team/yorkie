@@ -49,8 +49,6 @@ type TreeNode struct {
 	ID        *TreeNodeID
 	RemovedAt *time.Ticket
 
-	Next    *TreeNode
-	Prev    *TreeNode
 	InsPrev *TreeNode
 	InsNext *TreeNode
 
@@ -58,9 +56,14 @@ type TreeNode struct {
 	Attrs *RHT
 }
 
-// TreePos represents the position of Tree.
+// TreePos represents a position in the tree. It is used to determine the
+// position of insertion, deletion, and style change.
 type TreePos struct {
-	ParentID      *TreeNodeID
+	// ParentID is the ID of the parent node.
+	ParentID *TreeNodeID
+
+	// LeftSiblingID is the ID of the left sibling node. If the node is the
+	// parent, it means that the position is leftmost.
 	LeftSiblingID *TreeNodeID
 }
 
@@ -99,9 +102,23 @@ func NewTreeNodeID(createdAt *time.Ticket, offset int) *TreeNodeID {
 	}
 }
 
-// ToIDString returns a string that can be used as an ID for this TreeNodeID.
-func (t *TreeNodeID) ToIDString() string {
-	// TODO(sejongk): change this to be private
+// NewTreeNode creates a new instance of TreeNode.
+func NewTreeNode(id *TreeNodeID, nodeType string, attributes *RHT, value ...string) *TreeNode {
+	node := &TreeNode{ID: id}
+
+	// NOTE(hackerwins): The value of TreeNode is optional. If the value is
+	// empty, it means that the node is an element node.
+	if len(value) > 0 {
+		node.Value = value[0]
+	}
+	node.Attrs = attributes
+	node.IndexTreeNode = index.NewNode(nodeType, node)
+
+	return node
+}
+
+// toIDString returns a string that can be used as an ID for this TreeNodeID.
+func (t *TreeNodeID) toIDString() string {
 	return t.CreatedAt.StructureAsString() + ":" + strconv.Itoa(t.Offset)
 }
 
@@ -118,22 +135,6 @@ func (t *TreeNodeID) Compare(other llrb.Key) int {
 		return -1
 	}
 	return 0
-}
-
-// NewTreeNode creates a new instance of TreeNode.
-func NewTreeNode(pos *TreeNodeID, nodeType string, attributes *RHT, value ...string) *TreeNode {
-	node := &TreeNode{
-		ID: pos,
-	}
-
-	if len(value) > 0 {
-		node.Value = value[0]
-	}
-	node.Attrs = attributes
-
-	node.IndexTreeNode = index.NewNode(nodeType, node)
-
-	return node
 }
 
 // Type returns the type of the Node.
@@ -174,11 +175,6 @@ func (n *TreeNode) Attributes() string {
 	}
 
 	return " " + n.Attrs.ToXML()
-}
-
-// NextNode returns the next node of this TreeNode.
-func (n *TreeNode) NextNode() *TreeNode {
-	return n.Next
 }
 
 // Append appends the given node to the end of the children.
@@ -391,7 +387,7 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 		}
 		t.NodeMapByPos.Remove(node.ID)
 		t.Purge(node)
-		delete(t.removedNodeMap, node.ID.ToIDString())
+		delete(t.removedNodeMap, node.ID.toIDString())
 	}
 
 	return count, nil
@@ -399,16 +395,7 @@ func (t *Tree) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 
 // Purge physically purges the given node.
 func (t *Tree) Purge(node *TreeNode) {
-	if node.Prev != nil {
-		node.Prev.Next = node.Next
-	}
-
-	if node.Next != nil {
-		node.Next.Prev = node.Prev
-	}
-
-	node.Prev = nil
-	node.Next = nil
+	// TODO(hackerwins): Figure out how to purge the node from the index tree.
 	node.InsPrev = nil
 }
 
@@ -479,20 +466,6 @@ func (t *Tree) Remove(removedAt *time.Ticket) bool {
 		return true
 	}
 	return false
-}
-
-// InsertAfter inserts the given node after the given previous node.
-func (t *Tree) InsertAfter(prevNode *TreeNode, newNode *TreeNode) {
-	next := prevNode.Next
-	prevNode.Next = newNode
-	newNode.Prev = prevNode
-
-	if next != nil {
-		newNode.Next = next
-		next.Prev = newNode
-	}
-
-	t.NodeMapByPos.Put(newNode.ID, newNode)
 }
 
 // Nodes traverses the tree and returns the list of nodes.
@@ -643,7 +616,7 @@ func (t *Tree) Edit(from, to *TreePos,
 					createdAtMapByActor[actorIDHex] = createdAt
 				}
 
-				t.removedNodeMap[node.ID.ToIDString()] = node
+				t.removedNodeMap[node.ID.toIDString()] = node
 
 				// traverse the nodes including tombstones
 				index.TraverseNode(node.IndexTreeNode, func(node *index.Node[*TreeNode], depth int) {
@@ -655,7 +628,7 @@ func (t *Tree) Edit(from, to *TreePos,
 							createdAtMapByActor[actorIDHex] = createdAt
 						}
 
-						t.removedNodeMap[node.Value.ID.ToIDString()] = node.Value
+						t.removedNodeMap[node.Value.ID.toIDString()] = node.Value
 					}
 				})
 			}
@@ -695,7 +668,7 @@ func (t *Tree) Edit(from, to *TreePos,
 							createdAtMapByActor[actorIDHex] = createdAt
 						}
 					}
-					t.removedNodeMap[node.Value.ID.ToIDString()] = node.Value
+					t.removedNodeMap[node.Value.ID.toIDString()] = node.Value
 				}
 
 				t.NodeMapByPos.Put(node.Value.ID, node.Value)
@@ -768,41 +741,13 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 	return nil
 }
 
-// findTreePos returns TreePos and the right node of the given index in postorder.
-func (t *Tree) findTreePos(pos *TreePos, editedAt *time.Ticket) (*index.TreePos[*TreeNode], *TreeNode, error) {
-	treePos := t.toTreePos(pos)
-	if treePos == nil {
-		return nil, nil, fmt.Errorf("%p: %w", pos, ErrNodeNotFound)
-	}
-
-	// Find the appropriate position. This logic is similar to the logical to
-	// handle the same position insertion of RGA.
-	current := treePos
-	for current.Node.Value.Next != nil && current.Node.Value.Next.ID.CreatedAt.After(editedAt) &&
-		current.Node.Value.IndexTreeNode.Parent == current.Node.Value.Next.IndexTreeNode.Parent {
-
-		current = &index.TreePos[*TreeNode]{
-			Node:   current.Node.Value.Next.IndexTreeNode,
-			Offset: current.Node.Value.Next.Len(),
-		}
-	}
-
-	// TODO(hackerwins): Consider to use current instead of treePos.
-	right, err := t.IndexTree.FindPostorderRight(treePos)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return current, right, nil
-}
-
 /**
- * TODO(sejongk): clarify the comments
  * findTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
  * splits the text node if necessary.
  *
  * crdt.TreePos is a position in the CRDT perspective. This is different
  * from indexTree.TreePos which is a position of the tree in the local perspective.
+ * TODO(sejongk): clarify the comments
 **/
 func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	*index.Node[*TreeNode], *index.Node[*TreeNode], error,
@@ -925,22 +870,6 @@ func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
 	}
 
 	return parentNode, leftSiblingNode
-}
-
-// nodesBetween returns the nodes between the given range.
-// This method includes the given left node but excludes the given right node.
-func (t *Tree) nodesBetween(left *TreeNode, right *TreeNode, callback func(*TreeNode)) error {
-	current := left
-	for current != right {
-		if current == nil {
-			return errors.New("left and right are not in the same list")
-		}
-
-		callback(current)
-		current = current.Next
-	}
-
-	return nil
 }
 
 // Structure returns the structure of this tree.
