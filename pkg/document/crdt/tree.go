@@ -580,7 +580,7 @@ func (t *Tree) Edit(from, to *TreePos,
 	if err != nil {
 		return nil, err
 	}
-	toParent, toLeft, err := t.findTreeNodesWithSplitText(to, editedAt)
+	_, toLeft, err := t.findTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -592,7 +592,7 @@ func (t *Tree) Edit(from, to *TreePos,
 		var fromChildIndex int
 		var parent *index.Node[*TreeNode]
 
-		if fromParent == toParent {
+		if fromLeft.Parent == toLeft.Parent {
 			parent = fromParent
 			fromChildIndex = parent.OffsetOfChild(fromLeft) + 1
 		} else {
@@ -707,11 +707,11 @@ func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, edited
 // Style applies the given attributes of the given range.
 func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *time.Ticket) error {
 	// 01. split text nodes at the given range if needed.
-	fromParent, fromLeft, err := t.findTreeNodesWithSplitText(from, editedAt)
+	_, fromLeft, err := t.findTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
 		return err
 	}
-	toParent, toLeft, err := t.findTreeNodesWithSplitText(to, editedAt)
+	_, toLeft, err := t.findTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		return err
 	}
@@ -720,16 +720,15 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 		var fromChildIndex int
 		var parent *index.Node[*TreeNode]
 
-		if fromParent == toParent {
-			// TODO(sejongk): JS SDK error for idx 0!! fromLeft.Parent would be nil
-			parent = fromParent
-			fromChildIndex = fromParent.OffsetOfChild(fromLeft) + 1
+		if fromLeft.Parent == toLeft.Parent {
+			parent = fromLeft.Parent
+			fromChildIndex = parent.OffsetOfChild(fromLeft) + 1
 		} else {
 			parent = fromLeft
 			fromChildIndex = 0
 		}
 
-		toChildIndex := toParent.OffsetOfChild(toLeft)
+		toChildIndex := parent.OffsetOfChild(toLeft)
 
 		// 02. style the nodes.
 		parentChildren := parent.Children(true)
