@@ -56,7 +56,7 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("RunFindDocInfosByQuery test", func(t *testing.T) {
-		t.Skip("TODO: the order of docInfos is different with memDB")
+		t.Skip("TODO(hackerwins): the order of docInfos is different with memDB")
 		testcases.RunFindDocInfosByQueryTest(t, cli, projectOneID)
 	})
 
@@ -69,7 +69,7 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("ListUserInfos test", func(t *testing.T) {
-		t.Skip("TODO: time is returned as Local")
+		t.Skip("TODO(hackerwins): time is returned as Local")
 		testcases.RunListUserInfosTest(t, cli)
 	})
 

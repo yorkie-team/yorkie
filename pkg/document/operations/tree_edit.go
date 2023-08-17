@@ -33,6 +33,10 @@ type TreeEdit struct {
 	// toPos represents the end point of the editing range.
 	to *crdt.TreePos
 
+	// latestCreatedAtMapByActor is a map that stores the latest creation time
+	// by actor for the nodes included in the editing range.
+	latestCreatedAtMapByActor map[string]*time.Ticket
+
 	// contents is the content of tree added when editing.
 	contents []*crdt.TreeNode
 
@@ -45,15 +49,17 @@ func NewTreeEdit(
 	parentCreatedAt *time.Ticket,
 	from *crdt.TreePos,
 	to *crdt.TreePos,
+	latestCreatedAtMapByActor map[string]*time.Ticket,
 	contents []*crdt.TreeNode,
 	executedAt *time.Ticket,
 ) *TreeEdit {
 	return &TreeEdit{
-		parentCreatedAt: parentCreatedAt,
-		from:            from,
-		to:              to,
-		contents:        contents,
-		executedAt:      executedAt,
+		parentCreatedAt:           parentCreatedAt,
+		from:                      from,
+		to:                        to,
+		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
+		contents:                  contents,
+		executedAt:                executedAt,
 	}
 }
 
@@ -78,11 +84,11 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 			}
 
 		}
-		if err = obj.Edit(e.from, e.to, contents, e.executedAt); err != nil {
+		if _, err = obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, contents, e.executedAt); err != nil {
 			return err
 		}
 
-		if e.from.CreatedAt.Compare(e.to.CreatedAt) != 0 || e.from.Offset != e.to.Offset {
+		if !e.from.Equals(e.to) {
 			root.RegisterElementHasRemovedNodes(obj)
 		}
 	default:
@@ -120,4 +126,10 @@ func (e *TreeEdit) ParentCreatedAt() *time.Ticket {
 // Contents returns the content of Edit.
 func (e *TreeEdit) Contents() []*crdt.TreeNode {
 	return e.contents
+}
+
+// CreatedAtMapByActor returns the map that stores the latest creation time
+// by actor for the nodes included in the editing range.
+func (e *TreeEdit) CreatedAtMapByActor() map[string]*time.Ticket {
+	return e.latestCreatedAtMapByActor
 }

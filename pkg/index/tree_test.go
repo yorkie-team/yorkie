@@ -83,7 +83,7 @@ func TestIndexTree(t *testing.T) {
 			},
 		})
 
-		// postorder traversal: "ab", <b>, "cd", <p>, <root>
+		// postorder traversal: "ab", <p>, "cd", <p>, <root>
 
 		treePos, posErr := tree.FindTreePos(0)
 		assert.NoError(t, posErr)
@@ -194,7 +194,7 @@ func TestIndexTree(t *testing.T) {
 		assert.NoError(t, posErr)
 		assert.Equal(t, "root", helper.ToDiagnostic(pos.Node.Value))
 		assert.Equal(t, 0, pos.Offset)
-		index, indexErr := tree.IndexOf(pos.Node)
+		index, indexErr := tree.IndexOf(pos)
 		assert.NoError(t, indexErr)
 		assert.Equal(t, 0, index)
 
@@ -202,7 +202,7 @@ func TestIndexTree(t *testing.T) {
 		assert.NoError(t, posErr)
 		assert.Equal(t, "text.a", helper.ToDiagnostic(pos.Node.Value))
 		assert.Equal(t, 0, pos.Offset)
-		index, indexErr = tree.IndexOf(pos.Node)
+		index, indexErr = tree.IndexOf(pos)
 		assert.NoError(t, indexErr)
 		assert.Equal(t, 1, index)
 
@@ -210,47 +210,29 @@ func TestIndexTree(t *testing.T) {
 		assert.NoError(t, posErr)
 		assert.Equal(t, "text.b", helper.ToDiagnostic(pos.Node.Value))
 		assert.Equal(t, 1, pos.Offset)
-		index, indexErr = tree.IndexOf(pos.Node)
+		index, indexErr = tree.IndexOf(pos)
 		assert.NoError(t, indexErr)
-		assert.Equal(t, 2, index)
+		assert.Equal(t, 3, index)
 
 		pos, posErr = tree.FindTreePos(4, true)
 		assert.NoError(t, posErr)
 		assert.Equal(t, "root", helper.ToDiagnostic(pos.Node.Value))
 		assert.Equal(t, 1, pos.Offset)
-		index, indexErr = tree.IndexOf(pos.Node)
+		index, indexErr = tree.IndexOf(pos)
 		assert.NoError(t, indexErr)
-		assert.Equal(t, 0, index)
+		assert.Equal(t, 4, index)
 
 		pos, posErr = tree.FindTreePos(10, true)
 		assert.NoError(t, posErr)
 		assert.Equal(t, "text.fg", helper.ToDiagnostic(pos.Node.Value))
 		assert.Equal(t, 0, pos.Offset)
-		index, indexErr = tree.IndexOf(pos.Node)
+		index, indexErr = tree.IndexOf(pos)
 		assert.NoError(t, indexErr)
 		assert.Equal(t, 10, index)
-
-		firstP := tree.Root().Children()[0]
-		index, indexErr = tree.IndexOf(firstP)
-		assert.NoError(t, indexErr)
-		assert.Equal(t, "p", helper.ToDiagnostic(firstP.Value))
-		assert.Equal(t, 0, index)
-
-		secondP := tree.Root().Children()[1]
-		index, indexErr = tree.IndexOf(secondP)
-		assert.NoError(t, indexErr)
-		assert.Equal(t, "p", helper.ToDiagnostic(secondP.Value))
-		assert.Equal(t, 4, index)
-
-		thirdP := tree.Root().Children()[2]
-		index, indexErr = tree.IndexOf(thirdP)
-		assert.NoError(t, indexErr)
-		assert.Equal(t, "p", helper.ToDiagnostic(thirdP.Value))
-		assert.Equal(t, 9, index)
 	})
 
 	t.Run("find treePos from given path test", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): remove skip")
+		t.Skip("TODO(hackerwins): We need to fix this test")
 
 		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
 		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
