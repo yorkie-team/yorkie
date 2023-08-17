@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -224,7 +225,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("edit its content with path", func(t *testing.T) {
+	t.Run("edit content with path test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{
@@ -255,10 +256,112 @@ func TestTree(t *testing.T) {
 			assert.Equal(t, "<doc><tc><p><tn>aXb!</tn></p></tc></doc>", root.GetTree("t").ToXML())
 
 			root.GetTree("t").EditByPath([]int{0, 0, 1}, []int{0, 0, 1}, &json.TreeNode{
-				Type:     "tn",
-				Children: []json.TreeNode{},
+				Type: "tn",
+				Children: []json.TreeNode{{
+					Type: "text", Value: "cd",
+				}},
 			})
-			assert.Equal(t, "<doc><tc><p><tn>aXb!</tn><tn></tn></p></tc></doc>", root.GetTree("t").ToXML())
+			assert.Equal(t, "<doc><tc><p><tn>aXb!</tn><tn>cd</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 1}, []int{0, 1}, &json.TreeNode{
+				Type: "p",
+				Children: []json.TreeNode{{
+					Type: "tn", Children: []json.TreeNode{{
+						Type: "text", Value: "q",
+					}},
+				}},
+			})
+			assert.Equal(t, "<doc><tc><p><tn>aXb!</tn><tn>cd</tn></p><p><tn>q</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 1, 0, 0}, []int{0, 1, 0, 0}, &json.TreeNode{
+				Type: "text",
+				Value: "a",
+			})
+			assert.Equal(t, "<doc><tc><p><tn>aXb!</tn><tn>cd</tn></p><p><tn>aq</tn></p></tc></doc>", root.GetTree("t").ToXML())
+			
+			assert.Panics(t, func() {doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").EditByPath([]int{0, 0, 4}, []int{0, 0, 4}, &json.TreeNode{
+					Type: "tn",
+					Children: []json.TreeNode{},
+				})
+				return nil
+			 })}, index.ErrUnreachablePath)			
+			return nil
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("edit content with path test 2", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "tc",
+					Children: []json.TreeNode{{
+						Type: "p", Children: []json.TreeNode{{
+							Type: "tn", Children: []json.TreeNode{},
+						}},
+					}},
+				}},
+			})
+			assert.Equal(t, "<doc><tc><p><tn></tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 0, 0, 0}, []int{0, 0, 0, 0}, &json.TreeNode{
+				Type: "text",
+				Value: "a",
+			})
+			assert.Equal(t, "<doc><tc><p><tn>a</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 1}, []int{0, 1}, &json.TreeNode{
+				Type: "p",
+				Children: []json.TreeNode{{
+					Type: "tn", Children: []json.TreeNode{},
+				}},
+			})
+			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn></tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 1, 0, 0}, []int{0, 1, 0, 0}, &json.TreeNode{
+				Type: "text",
+				Value: "b",
+			})
+			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 2}, []int{0, 2}, &json.TreeNode{
+				Type: "p",
+				Children: []json.TreeNode{{
+					Type: "tn", Children: []json.TreeNode{},
+				}},
+			})
+			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p><p><tn></tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 2, 0, 0}, []int{0, 2, 0, 0}, &json.TreeNode{
+				Type: "text",
+				Value: "c",
+			})
+			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p><p><tn>c</tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 3}, []int{0, 3}, &json.TreeNode{
+				Type: "p",
+				Children: []json.TreeNode{{
+					Type: "tn", Children: []json.TreeNode{},
+				}},
+			})
+			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p><p><tn>c</tn></p><p><tn></tn></p></tc></doc>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").EditByPath([]int{0, 3, 0, 0}, []int{0, 3, 0, 0}, &json.TreeNode{
+				Type: "text",
+				Value: "d",
+			})
+			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p><p><tn>c</tn></p><p><tn>d</tn></p></tc></doc>", root.GetTree("t").ToXML())
+			
+			root.GetTree("t").EditByPath([]int{0, 3}, []int{0, 3}, &json.TreeNode{
+				Type: "p",
+				Children: []json.TreeNode{{
+					Type: "tn", Children: []json.TreeNode{},
+				}},
+			})
+			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p><p><tn>c</tn></p><p><tn></tn></p><p><tn>d</tn></p></tc></doc>", root.GetTree("t").ToXML())
 			return nil
 		})
 		assert.NoError(t, err)
@@ -401,6 +504,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{"bold":"true"}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{"italic":"true"}}]}`, d2.Root().GetTree("t").Marshal())
 	})
 
+	// Concurrent editing, overlapping range test
 	t.Run("concurrently delete overlapping elements test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -479,6 +583,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
+	// Concurrent editing, contained range test
 	t.Run("concurrently insert and delete contained elements of the same depth test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -788,6 +893,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root></root>", d1.Root().GetTree("t").ToXML())
 	})
 
+	// Concurrent editing, side by side range test
 	t.Run("concurrently insert side by side elements (left) test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -1340,6 +1446,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
+	// Concurrent editing, complex cases test
 	t.Run("delete text content anchored to another concurrently test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
