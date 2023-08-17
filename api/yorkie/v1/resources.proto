@@ -121,8 +121,9 @@ message Operation {
     TimeTicket parent_created_at = 1;
     TreePos from = 2;
     TreePos to = 3;
-    repeated TreeNodes contents = 4;
-    TimeTicket executed_at = 5;
+    map<string, TimeTicket> created_at_map_by_actor = 4;
+    repeated TreeNodes contents = 5;
+    TimeTicket executed_at = 6;
   }
   message TreeStyle {
     TimeTicket parent_created_at = 1;
@@ -237,11 +238,11 @@ message TextNodeID {
 }
 
 message TreeNode {
-  TreePos pos = 1;
+  TreeNodeID id = 1;
   string type = 2;
   string value = 3;
   TimeTicket removed_at = 4;
-  TreePos ins_prev_pos = 5;
+  TreeNodeID ins_prev_id = 5;
   int32 depth = 6;
   map<string, NodeAttr> attributes = 7;
 }
@@ -250,9 +251,14 @@ message TreeNodes {
   repeated TreeNode content = 1;
 }
 
-message TreePos {
+message TreeNodeID {
   TimeTicket created_at = 1;
   int32 offset = 2;
+}
+
+message TreePos {
+  TreeNodeID parent_id = 1;
+  TreeNodeID left_sibling_id = 2;
 }
 
 /////////////////////////////////////////

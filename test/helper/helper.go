@@ -114,9 +114,9 @@ func TextChangeContext(root *crdt.Root) *change.Context {
 	)
 }
 
-// IssuePos is a helper function that issues a new CRDTTreePos.
-func IssuePos(change *change.Context, offset ...int) *crdt.TreePos {
-	pos := &crdt.TreePos{
+// IssuePos is a helper function that issues a new CRDTTreeNodeID.
+func IssuePos(change *change.Context, offset ...int) *crdt.TreeNodeID {
+	pos := &crdt.TreeNodeID{
 		CreatedAt: change.IssueTimeTicket(),
 		Offset:    0,
 	}
@@ -131,23 +131,6 @@ func IssuePos(change *change.Context, offset ...int) *crdt.TreePos {
 // IssueTime is a helper function that issues a new TimeTicket
 func IssueTime(change *change.Context) *time.Ticket {
 	return change.IssueTimeTicket()
-}
-
-// ListEqual is a helper function that checks the nodes in the RGA in Tree.
-func ListEqual(t assert.TestingT, tree *crdt.Tree, expected []string) bool {
-	var nodes []*crdt.TreeNode
-	for _, node := range tree.Nodes() {
-		nodes = append(nodes, node)
-	}
-
-	var actual []string
-	for _, node := range nodes {
-		actual = append(actual, ToDiagnostic(node))
-	}
-
-	assert.Equal(t, expected, actual)
-
-	return true
 }
 
 // NodesBetweenEqual is a helper function that checks the nodes between the given
@@ -270,8 +253,8 @@ func TestDocKey(t testing.TB) key.Key {
 		return key.Key(name)
 	}
 
-	if len(name) > 60 {
-		name = name[:60]
+	if len(name) > 100 {
+		name = name[:100]
 	}
 
 	sb := strings.Builder{}

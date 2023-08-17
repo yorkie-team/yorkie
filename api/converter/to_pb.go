@@ -381,11 +381,12 @@ func toIncrease(increase *operations.Increase) (*api.Operation_Increase_, error)
 func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 	return &api.Operation_TreeEdit_{
 		TreeEdit: &api.Operation_TreeEdit{
-			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
-			From:            toTreePos(e.FromPos()),
-			To:              toTreePos(e.ToPos()),
-			Contents:        ToTreeNodesWhenEdit(e.Contents()),
-			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
+			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
+			From:                toTreePos(e.FromPos()),
+			To:                  toTreePos(e.ToPos()),
+			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
+			Contents:            ToTreeNodesWhenEdit(e.Contents()),
+			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
 }

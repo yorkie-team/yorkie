@@ -491,6 +491,13 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		return nil, err
 	}
 
+	createdAtMapByActor, err := fromCreatedAtMapByActor(
+		pbTreeEdit.CreatedAtMapByActor,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	nodes, err := FromTreeNodesWhenEdit(pbTreeEdit.Contents)
 	if err != nil {
 		return nil, err
@@ -500,6 +507,7 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		parentCreatedAt,
 		from,
 		to,
+		createdAtMapByActor,
 		nodes,
 		executedAt,
 	), nil
@@ -620,7 +628,7 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 }
 
 func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
-	pos, err := fromTreePos(pbNode.Pos)
+	id, err := fromTreeNodeID(pbNode.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -635,7 +643,7 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 	}
 
 	return crdt.NewTreeNode(
-		pos,
+		id,
 		pbNode.Type,
 		attrs,
 		pbNode.Value,
@@ -643,12 +651,26 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 }
 
 func fromTreePos(pbPos *api.TreePos) (*crdt.TreePos, error) {
+	parentID, err := fromTreeNodeID(pbPos.ParentId)
+	if err != nil {
+		return nil, err
+	}
+
+	leftSiblingID, err := fromTreeNodeID(pbPos.LeftSiblingId)
+	if err != nil {
+		return nil, err
+	}
+
+	return crdt.NewTreePos(parentID, leftSiblingID), nil
+}
+
+func fromTreeNodeID(pbPos *api.TreeNodeID) (*crdt.TreeNodeID, error) {
 	createdAt, err := fromTimeTicket(pbPos.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 
-	return crdt.NewTreePos(
+	return crdt.NewTreeNodeID(
 		createdAt,
 		int(pbPos.Offset),
 	), nil

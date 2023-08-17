@@ -298,7 +298,7 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 	}
 
 	pbNode := &api.TreeNode{
-		Pos:        toTreePos(treeNode.Pos),
+		Id:         toTreeNodeID(treeNode.ID),
 		Type:       treeNode.Type(),
 		Value:      treeNode.Value,
 		RemovedAt:  ToTimeTicket(treeNode.RemovedAt),
@@ -307,15 +307,28 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 	}
 
 	if treeNode.InsPrev != nil {
-		pbNode.InsPrevPos = toTreePos(treeNode.InsPrev.Pos)
+		pbNode.InsPrevId = toTreeNodeID(treeNode.InsPrev.ID)
 	}
 
 	return pbNode
 }
 
-func toTreePos(pos *crdt.TreePos) *api.TreePos {
-	return &api.TreePos{
+func toTreeNodeID(pos *crdt.TreeNodeID) *api.TreeNodeID {
+	return &api.TreeNodeID{
 		CreatedAt: ToTimeTicket(pos.CreatedAt),
 		Offset:    int32(pos.Offset),
+	}
+}
+
+func toTreePos(pos *crdt.TreePos) *api.TreePos {
+	return &api.TreePos{
+		ParentId: &api.TreeNodeID{
+			CreatedAt: ToTimeTicket(pos.ParentID.CreatedAt),
+			Offset:    int32(pos.ParentID.Offset),
+		},
+		LeftSiblingId: &api.TreeNodeID{
+			CreatedAt: ToTimeTicket(pos.LeftSiblingID.CreatedAt),
+			Offset:    int32(pos.LeftSiblingID.Offset),
+		},
 	}
 }
