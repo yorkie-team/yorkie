@@ -157,7 +157,7 @@ func pullSnapshot(
 	}
 	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)
 
-	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllUsers())
 	if err != nil {
 		return nil, err
 	}

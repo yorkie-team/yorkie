@@ -303,16 +303,15 @@ func (d *Document) PresenceForTest(clientID string) innerpresence.Presence {
 	return d.doc.PresenceForTest(clientID)
 }
 
-// Presences returns the presence map of online clients.
-func (d *Document) Presences() map[string]innerpresence.Presence {
+// Users returns online users who are watching the document.
+func (d *Document) Users() map[string]innerpresence.Presence {
 	// TODO(hackerwins): We need to use client key instead of actor ID for exposing presence.
-	return d.doc.Presences()
+	return d.doc.Users()
 }
 
-// AllPresences returns the presence map of all clients
-// regardless of whether the client is online or not.
-func (d *Document) AllPresences() map[string]innerpresence.Presence {
-	return d.doc.AllPresences()
+// AllUsers returns the all users regardless of whether the user is online or not.
+func (d *Document) AllUsers() map[string]innerpresence.Presence {
+	return d.doc.AllUsers()
 }
 
 // SetOnlineClients sets the online clients.

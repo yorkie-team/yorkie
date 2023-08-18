@@ -58,14 +58,14 @@ func TestPresence(t *testing.T) {
 			p.Set("updated", "true")
 			return nil
 		}))
-		encoded, err := gojson.Marshal(d1.AllPresences())
+		encoded, err := gojson.Marshal(d1.AllUsers())
 		assert.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf(`{"%s":{"updated":"true"}}`, c1.ID()), string(encoded))
 
 		// 03 Sync documents and check that the presence is updated on the other client
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
-		encoded, err = gojson.Marshal(d2.AllPresences())
+		encoded, err = gojson.Marshal(d2.AllUsers())
 		assert.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf(`{"%s":{"updated":"true"},"%s":{}}`, c1.ID(), c2.ID()), string(encoded))
 	})
@@ -88,14 +88,14 @@ func TestPresence(t *testing.T) {
 				return nil
 			}))
 		}
-		encoded, err := gojson.Marshal(d1.AllPresences())
+		encoded, err := gojson.Marshal(d1.AllUsers())
 		assert.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf(`{"%s":{"updated":"9"}}`, c1.ID()), string(encoded))
 
 		// 03 Sync documents and check that the presence is updated on the other client
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
-		encoded, err = gojson.Marshal(d2.AllPresences())
+		encoded, err = gojson.Marshal(d2.AllUsers())
 		assert.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf(`{"%s":{"updated":"9"},"%s":{}}`, c1.ID(), c2.ID()), string(encoded))
 	})

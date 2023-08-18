@@ -55,7 +55,7 @@ doc.getMyPresence(); // { color: 'blue', cursor: { x: 1, y: 1 } }
 doc.getPresence(clientID);
 
 // Get all users currently participating in the document
-const users = doc.getPresences();
+const users = doc.getUsers();
 for (const { clientID, presence } of users) {
   // Do something...
 }

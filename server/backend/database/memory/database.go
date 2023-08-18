@@ -967,7 +967,7 @@ func (d *DB) CreateSnapshotInfo(
 	docID types.ID,
 	doc *document.InternalDocument,
 ) error {
-	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
+	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllUsers())
 	if err != nil {
 		return err
 	}

@@ -326,8 +326,8 @@ func (d *InternalDocument) PresenceForTest(clientID string) innerpresence.Presen
 	return d.presences.Load(clientID).DeepCopy()
 }
 
-// Presences returns the presence map of online clients.
-func (d *InternalDocument) Presences() map[string]innerpresence.Presence {
+// Users returns online users who are watching the document.
+func (d *InternalDocument) Users() map[string]innerpresence.Presence {
 	presences := make(map[string]innerpresence.Presence)
 	d.onlineClients.Range(func(key, value interface{}) bool {
 		p := d.presences.Load(key.(string))
@@ -340,9 +340,8 @@ func (d *InternalDocument) Presences() map[string]innerpresence.Presence {
 	return presences
 }
 
-// AllPresences returns the presence map of all clients
-// regardless of whether the client is online or not.
-func (d *InternalDocument) AllPresences() map[string]innerpresence.Presence {
+// AllUsers returns the all users regardless of whether the user is online or not.
+func (d *InternalDocument) AllUsers() map[string]innerpresence.Presence {
 	presences := make(map[string]innerpresence.Presence)
 	d.presences.Range(func(key string, value innerpresence.Presence) bool {
 		presences[key] = value.DeepCopy()
