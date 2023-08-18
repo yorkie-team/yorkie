@@ -360,5 +360,5 @@ enum DocEventType {
 
 message DocEvent {
   DocEventType type = 1;
-  bytes publisher = 2;
+  string publisher = 2;
 }

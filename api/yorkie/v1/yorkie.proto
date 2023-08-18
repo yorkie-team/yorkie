@@ -42,49 +42,45 @@ message ActivateClientRequest {
 }
 
 message ActivateClientResponse {
-  string client_key = 1;
-  bytes client_id = 2;
+  string client_id = 1;
 }
 
 message DeactivateClientRequest {
-  bytes client_id = 1;
+  string client_id = 1;
 }
 
 message DeactivateClientResponse {
-  bytes client_id = 1;
 }
 
 message AttachDocumentRequest {
-  bytes client_id = 1;
+  string client_id = 1;
   ChangePack change_pack = 2;
 }
 
 message AttachDocumentResponse {
-  bytes client_id = 1;
-  string document_id = 2;
-  ChangePack change_pack = 3;
+  string document_id = 1;
+  ChangePack change_pack = 2;
 }
 
 message DetachDocumentRequest {
-  bytes client_id = 1;
+  string client_id = 1;
   string document_id = 2;
   ChangePack change_pack = 3;
   bool remove_if_not_attached = 4;
 }
 
 message DetachDocumentResponse {
-  string client_key = 1;
   ChangePack change_pack = 2;
 }
 
 message WatchDocumentRequest {
-  bytes client_id = 1;
+  string client_id = 1;
   string document_id = 2;
 }
 
 message WatchDocumentResponse {
   message Initialization {
-    repeated bytes client_ids = 1;
+    repeated string client_ids = 1;
   }
 
   oneof body {
@@ -94,24 +90,22 @@ message WatchDocumentResponse {
 }
 
 message RemoveDocumentRequest {
-  bytes client_id = 1;
+  string client_id = 1;
   string document_id = 2;
   ChangePack change_pack = 3;
 }
 
 message RemoveDocumentResponse {
-  string client_key = 1;
-  ChangePack change_pack = 2;
+  ChangePack change_pack = 1;
 }
 
 message PushPullChangesRequest {
-  bytes client_id = 1;
+  string client_id = 1;
   string document_id = 2;
   ChangePack change_pack = 3;
   bool push_only = 4;
 }
 
 message PushPullChangesResponse {
-  bytes client_id = 1;
-  ChangePack change_pack = 2;
+  ChangePack change_pack = 1;
 }

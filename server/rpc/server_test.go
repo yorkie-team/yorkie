@@ -48,9 +48,9 @@ var (
 	defaultProjectName = "default"
 	invalidSlugName    = "@#$%^&*()_+"
 
-	nilClientID, _     = hex.DecodeString("000000000000000000000000")
-	emptyClientID, _   = hex.DecodeString("")
-	invalidClientID, _ = hex.DecodeString("invalid")
+	nilClientID     = "000000000000000000000000"
+	emptyClientID   = ""
+	invalidClientID = "invalid"
 
 	testRPCServer            *rpc.Server
 	testRPCAddr              = fmt.Sprintf("localhost:%d", helper.RPCPort)
@@ -387,6 +387,7 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
+		actorID, _ := hex.DecodeString(activateResp.ClientId)
 		resPack, err := testClient.AttachDocument(
 			context.Background(),
 			&api.AttachDocumentRequest{
@@ -398,7 +399,7 @@ func TestSDKRPCServerBackend(t *testing.T) {
 						Id: &api.ChangeID{
 							ClientSeq: 1,
 							Lamport:   1,
-							ActorId:   activateResp.ClientId,
+							ActorId:   actorID,
 						},
 					}},
 				},
@@ -418,7 +419,7 @@ func TestSDKRPCServerBackend(t *testing.T) {
 						Id: &api.ChangeID{
 							ClientSeq: 2,
 							Lamport:   2,
-							ActorId:   activateResp.ClientId,
+							ActorId:   actorID,
 						},
 					}},
 				},
@@ -438,7 +439,7 @@ func TestSDKRPCServerBackend(t *testing.T) {
 						Id: &api.ChangeID{
 							ClientSeq: 3,
 							Lamport:   3,
-							ActorId:   activateResp.ClientId,
+							ActorId:   actorID,
 						},
 					}},
 				},
