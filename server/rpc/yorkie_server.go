@@ -69,13 +69,8 @@ func (s *yorkieServer) ActivateClient(
 		return nil, err
 	}
 
-	pbClientID, err := cli.ID.Bytes()
-	if err != nil {
-		return nil, err
-	}
-
 	return &api.ActivateClientResponse{
-		ClientId: pbClientID,
+		ClientId: cli.ID.String(),
 	}, nil
 }
 
@@ -84,7 +79,7 @@ func (s *yorkieServer) DeactivateClient(
 	ctx context.Context,
 	req *api.DeactivateClientRequest,
 ) (*api.DeactivateClientResponse, error) {
-	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	actorID, err := time.ActorIDFromHex(req.ClientId)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +104,7 @@ func (s *yorkieServer) AttachDocument(
 	ctx context.Context,
 	req *api.AttachDocumentRequest,
 ) (*api.AttachDocumentResponse, error) {
-	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	actorID, err := time.ActorIDFromHex(req.ClientId)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +173,7 @@ func (s *yorkieServer) DetachDocument(
 	ctx context.Context,
 	req *api.DetachDocumentRequest,
 ) (*api.DetachDocumentResponse, error) {
-	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	actorID, err := time.ActorIDFromHex(req.ClientId)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +255,7 @@ func (s *yorkieServer) PushPullChanges(
 	ctx context.Context,
 	req *api.PushPullChangesRequest,
 ) (*api.PushPullChangesResponse, error) {
-	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	actorID, err := time.ActorIDFromHex(req.ClientId)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +335,7 @@ func (s *yorkieServer) WatchDocument(
 	req *api.WatchDocumentRequest,
 	stream api.YorkieService_WatchDocumentServer,
 ) error {
-	clientID, err := time.ActorIDFromBytes(req.ClientId)
+	clientID, err := time.ActorIDFromHex(req.ClientId)
 	if err != nil {
 		return err
 	}
@@ -396,9 +391,9 @@ func (s *yorkieServer) WatchDocument(
 		s.unwatchDoc(subscription, docID)
 	}()
 
-	var pbClientIDs [][]byte
+	var pbClientIDs []string
 	for _, id := range clientIDs {
-		pbClientIDs = append(pbClientIDs, id.Bytes())
+		pbClientIDs = append(pbClientIDs, id.String())
 	}
 	if err := stream.Send(&api.WatchDocumentResponse{
 		Body: &api.WatchDocumentResponse_Initialization_{
@@ -426,7 +421,7 @@ func (s *yorkieServer) WatchDocument(
 				Body: &api.WatchDocumentResponse_Event{
 					Event: &api.DocEvent{
 						Type:      eventType,
-						Publisher: event.Publisher.Bytes(),
+						Publisher: event.Publisher.String(),
 					},
 				},
 			}); err != nil {
@@ -441,7 +436,7 @@ func (s *yorkieServer) RemoveDocument(
 	ctx context.Context,
 	req *api.RemoveDocumentRequest,
 ) (*api.RemoveDocumentResponse, error) {
-	actorID, err := time.ActorIDFromBytes(req.ClientId)
+	actorID, err := time.ActorIDFromHex(req.ClientId)
 	if err != nil {
 		return nil, err
 	}
