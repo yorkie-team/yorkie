@@ -813,14 +813,14 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 }
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.
-func (t *Tree) toTreePos(pos *TreePos) *index.TreePos[*TreeNode] {
+func (t *Tree) toTreePos(pos *TreePos) (*index.TreePos[*TreeNode], error) {
 	if pos.ParentID == nil || pos.LeftSiblingID == nil {
-		return nil
+		return nil, nil
 	}
 
 	parentNode, leftSiblingNode := t.toTreeNodes(pos)
 	if parentNode == nil || leftSiblingNode == nil {
-		return nil
+		return nil, nil
 	}
 
 	var treePos *index.TreePos[*TreeNode]
@@ -839,7 +839,7 @@ func (t *Tree) toTreePos(pos *TreePos) *index.TreePos[*TreeNode] {
 		} else {
 			leftSiblingOffset, err := parentNode.IndexTreeNode.FindOffset(leftSiblingNode.IndexTreeNode)
 			if err != nil {
-				return nil
+				return nil, err
 			}
 
 			treePos = &index.TreePos[*TreeNode]{
@@ -849,14 +849,18 @@ func (t *Tree) toTreePos(pos *TreePos) *index.TreePos[*TreeNode] {
 		}
 	}
 
-	return treePos
+	return treePos, nil
 }
 
 // toIndex converts the given CRDTTreePos to the index of the tree.
 func (t *Tree) toIndex(pos *TreePos) (int, error) {
-	treePos := t.toTreePos(pos)
+	treePos, err := t.toTreePos(pos)
 	if treePos == nil {
 		return -1, nil
+	}
+
+	if err != nil {
+		return 0, err
 	}
 
 	idx, err := t.IndexTree.IndexOf(treePos)
