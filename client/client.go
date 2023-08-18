@@ -446,9 +446,9 @@ func (c *Client) Watch(
 			}
 
 			switch eventType {
-			case types.DocumentsChangedEvent:
+			case types.DocumentChangedEvent:
 				return &WatchResponse{Type: DocumentChanged}, nil
-			case types.DocumentsWatchedEvent:
+			case types.DocumentWatchedEvent:
 				doc.AddOnlineClient(cli.String())
 				if doc.Presence(cli.String()) == nil {
 					return nil, nil
@@ -460,7 +460,7 @@ func (c *Client) Watch(
 						cli.String(): doc.Presence(cli.String()),
 					},
 				}, nil
-			case types.DocumentsUnwatchedEvent:
+			case types.DocumentUnwatchedEvent:
 				p := doc.Presence(cli.String())
 				doc.RemoveOnlineClient(cli.String())
 				if p == nil {
