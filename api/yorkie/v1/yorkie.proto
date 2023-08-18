@@ -42,8 +42,7 @@ message ActivateClientRequest {
 }
 
 message ActivateClientResponse {
-  string client_key = 1;
-  bytes client_id = 2;
+  bytes client_id = 1;
 }
 
 message DeactivateClientRequest {
@@ -51,7 +50,6 @@ message DeactivateClientRequest {
 }
 
 message DeactivateClientResponse {
-  bytes client_id = 1;
 }
 
 message AttachDocumentRequest {
@@ -60,9 +58,8 @@ message AttachDocumentRequest {
 }
 
 message AttachDocumentResponse {
-  bytes client_id = 1;
-  string document_id = 2;
-  ChangePack change_pack = 3;
+  string document_id = 1;
+  ChangePack change_pack = 2;
 }
 
 message DetachDocumentRequest {
@@ -73,7 +70,6 @@ message DetachDocumentRequest {
 }
 
 message DetachDocumentResponse {
-  string client_key = 1;
   ChangePack change_pack = 2;
 }
 
@@ -100,8 +96,7 @@ message RemoveDocumentRequest {
 }
 
 message RemoveDocumentResponse {
-  string client_key = 1;
-  ChangePack change_pack = 2;
+  ChangePack change_pack = 1;
 }
 
 message PushPullChangesRequest {
@@ -112,6 +107,5 @@ message PushPullChangesRequest {
 }
 
 message PushPullChangesResponse {
-  bytes client_id = 1;
-  ChangePack change_pack = 2;
+  ChangePack change_pack = 1;
 }

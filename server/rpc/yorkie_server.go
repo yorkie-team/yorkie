@@ -75,8 +75,7 @@ func (s *yorkieServer) ActivateClient(
 	}
 
 	return &api.ActivateClientResponse{
-		ClientKey: cli.Key,
-		ClientId:  pbClientID,
+		ClientId: pbClientID,
 	}, nil
 }
 
@@ -97,19 +96,12 @@ func (s *yorkieServer) DeactivateClient(
 	}
 
 	project := projects.From(ctx)
-	cli, err := clients.Deactivate(ctx, s.backend.DB, project.ID, types.IDFromActorID(actorID))
+	_, err = clients.Deactivate(ctx, s.backend.DB, project.ID, types.IDFromActorID(actorID))
 	if err != nil {
 		return nil, err
 	}
 
-	pbClientID, err := cli.ID.Bytes()
-	if err != nil {
-		return nil, err
-	}
-
-	return &api.DeactivateClientResponse{
-		ClientId: pbClientID,
-	}, nil
+	return &api.DeactivateClientResponse{}, nil
 }
 
 // AttachDocument attaches the given document to the client.
