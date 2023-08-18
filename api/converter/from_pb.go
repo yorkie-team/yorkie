@@ -642,12 +642,18 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 		attrs.Set(k, pbAttr.Value, updatedAt)
 	}
 
-	return crdt.NewTreeNode(
+	node := crdt.NewTreeNode(
 		id,
 		pbNode.Type,
 		attrs,
 		pbNode.Value,
-	), nil
+	)
+	node.RemovedAt, err = fromTimeTicket(pbNode.RemovedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return node, nil
 }
 
 func fromTreePos(pbPos *api.TreePos) (*crdt.TreePos, error) {
