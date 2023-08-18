@@ -1,9 +1,9 @@
 ---
-title: peer-awareness
+title: presence
 target-version: 0.4.6
 ---
 
-# Peer Awareness
+# Presence
 
 ## Summary
 
