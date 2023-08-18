@@ -537,7 +537,7 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 	var leftSibling *TreeNode
 
 	if node.IsText() {
-		if node.Parent.Children(true)[0] == node && offset == 0 {
+		if node.Parent.Children(false)[0] == node && offset == 0 {
 			leftSibling = node.Parent.Value
 		} else {
 			leftSibling = node.Value
