@@ -640,7 +640,7 @@ func (t *Tree) Edit(from, to *TreePos,
 				index.TraverseNode(node.IndexTreeNode, func(node *index.Node[*TreeNode], depth int) {
 					if node.Value.remove(editedAt, time.MaxTicket) {
 						// TODO(sejongk): Refactor the repeated code.
-						latestCreatedAt = latestCreatedAtMapByActor[actorIDHex]
+						latestCreatedAt = createdAtMapByActor[actorIDHex]
 						createdAt := node.Value.ID.CreatedAt
 						if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 							createdAtMapByActor[actorIDHex] = createdAt
@@ -680,7 +680,7 @@ func (t *Tree) Edit(from, to *TreePos,
 				if fromParent.Value.IsRemoved() {
 					actorIDHex := node.Value.ID.CreatedAt.ActorIDHex()
 					if node.Value.remove(editedAt, time.MaxTicket) {
-						latestCreatedAt := latestCreatedAtMapByActor[actorIDHex]
+						latestCreatedAt := createdAtMapByActor[actorIDHex]
 						createdAt := node.Value.ID.CreatedAt
 						if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 							createdAtMapByActor[actorIDHex] = createdAt
