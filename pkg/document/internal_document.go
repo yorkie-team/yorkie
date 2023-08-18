@@ -259,6 +259,9 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			if _, ok := d.onlineClients.Load(clientID); ok {
 				switch c.PresenceChange().ChangeType {
 				case innerpresence.Put:
+					// NOTE(chacha912): When the user exists in onlineClients, but
+					// their presence was initially absent, we can consider that we have
+					// received their initial presence, so trigger the 'watched' event.
 					eventType := PresenceChangedEvent
 					if !d.presences.Has(clientID) {
 						eventType = WatchedEvent
@@ -271,6 +274,11 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 					}
 					events = append(events, event)
 				case innerpresence.Clear:
+					// NOTE(chacha912): When the user exists in onlineClients, but
+					// PresenceChange(clear) is received, we can consider it as detachment
+					// occurring before unwatching.
+					// Detached user is no longer participating in the document, we remove
+					// them from the online clients and trigger the 'unwatched' event.
 					event := DocEvent{
 						Type: UnwatchedEvent,
 						Presences: map[string]innerpresence.Presence{

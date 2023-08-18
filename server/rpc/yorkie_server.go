@@ -530,7 +530,7 @@ func (s *yorkieServer) watchDoc(
 		ctx,
 		subscription.Subscriber(),
 		sync.DocEvent{
-			Type:       types.DocumentsWatchedEvent,
+			Type:       types.DocumentWatchedEvent,
 			Publisher:  subscription.Subscriber(),
 			DocumentID: documentID,
 		},
@@ -549,7 +549,7 @@ func (s *yorkieServer) unwatchDoc(
 		ctx,
 		subscription.Subscriber(),
 		sync.DocEvent{
-			Type:       types.DocumentsUnwatchedEvent,
+			Type:       types.DocumentUnwatchedEvent,
 			Publisher:  subscription.Subscriber(),
 			DocumentID: documentID,
 		},

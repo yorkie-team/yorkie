@@ -201,12 +201,12 @@ func ToChangeID(id change.ID) *api.ChangeID {
 // ToDocEventType converts the given model format to Protobuf format.
 func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 	switch eventType {
-	case types.DocumentsChangedEvent:
-		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_CHANGED, nil
-	case types.DocumentsWatchedEvent:
-		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_WATCHED, nil
-	case types.DocumentsUnwatchedEvent:
-		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENTS_UNWATCHED, nil
+	case types.DocumentChangedEvent:
+		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_CHANGED, nil
+	case types.DocumentWatchedEvent:
+		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_WATCHED, nil
+	case types.DocumentUnwatchedEvent:
+		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_UNWATCHED, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}
