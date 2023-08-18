@@ -831,24 +831,22 @@ func (t *Tree) toTreePos(pos *TreePos) *index.TreePos[*TreeNode] {
 			Offset: 0,
 		}
 	} else {
-		leftSiblingOffset, err := parentNode.IndexTreeNode.FindOffset(leftSiblingNode.IndexTreeNode)
-		if err != nil {
-			return nil
-		}
-
-		offset := leftSiblingOffset + 1
 		if leftSiblingNode.IsText() {
-			offset, err = t.IndexTree.LeftSiblingsSize(parentNode.IndexTreeNode, offset)
+			treePos = &index.TreePos[*TreeNode]{
+				Node:   leftSiblingNode.IndexTreeNode,
+				Offset: leftSiblingNode.IndexTreeNode.PaddedLength(),
+			}
+		} else {
+			leftSiblingOffset, err := parentNode.IndexTreeNode.FindOffset(leftSiblingNode.IndexTreeNode)
 			if err != nil {
-				return nil // NOTE(sejongk): should return error instead?
+				return nil
+			}
+
+			treePos = &index.TreePos[*TreeNode]{
+				Node:   parentNode.IndexTreeNode,
+				Offset: leftSiblingOffset + 1,
 			}
 		}
-
-		treePos = &index.TreePos[*TreeNode]{
-			Node:   parentNode.IndexTreeNode,
-			Offset: offset,
-		}
-
 	}
 
 	return treePos
