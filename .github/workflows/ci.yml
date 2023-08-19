@@ -50,7 +50,7 @@ jobs:
       run: make bench
 
     - name: Download previous benchmark data
-      uses: actions/cache@v1
+      uses: actions/cache@v3
       with:
         path: ./cache
         key: ${{ runner.os }}-benchmark
@@ -68,6 +68,6 @@ jobs:
         comment-always: true
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v1
+      uses: codecov/codecov-action@v3
       with:
         file: ./coverage.txt
