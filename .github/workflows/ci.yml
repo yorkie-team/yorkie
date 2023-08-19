@@ -51,7 +51,7 @@ jobs:
       run: make bench
 
     - name: Download previous benchmark data
-      uses: actions/cache@v1
+      uses: actions/cache@v3
       with:
         path: ./cache
         key: ${{ runner.os }}-benchmark
