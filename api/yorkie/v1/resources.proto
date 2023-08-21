@@ -243,8 +243,9 @@ message TreeNode {
   string value = 3;
   TimeTicket removed_at = 4;
   TreeNodeID ins_prev_id = 5;
-  int32 depth = 6;
-  map<string, NodeAttr> attributes = 7;
+  TreeNodeID ins_next_id = 6;
+  int32 depth = 7;
+  map<string, NodeAttr> attributes = 8;
 }
 
 message TreeNodes {

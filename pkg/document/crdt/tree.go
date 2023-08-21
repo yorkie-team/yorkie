@@ -49,8 +49,8 @@ type TreeNode struct {
 	ID        *TreeNodeID
 	RemovedAt *time.Ticket
 
-	InsPrev *TreeNode
-	InsNext *TreeNode
+	InsPrevID *TreeNodeID
+	InsNextID *TreeNodeID
 
 	// Value is optional. If the value is not empty, it means that the node is a
 	// text node.
@@ -402,16 +402,18 @@ func (t *Tree) purgeNode(node *TreeNode) error {
 	}
 	t.NodeMapByID.Remove(node.ID)
 
-	insPrev := node.InsPrev
-	insNext := node.InsNext
-	if insPrev != nil {
-		insPrev.InsNext = insNext
+	insPrevID := node.InsPrevID
+	insNextID := node.InsNextID
+	if insPrevID != nil {
+		insPrev := t.findFloorNode(insPrevID)
+		insPrev.InsNextID = insNextID
 	}
-	if insNext != nil {
-		insNext.InsPrev = insPrev
+	if insNextID != nil {
+		insNext := t.findFloorNode(insNextID)
+		insNext.InsPrevID = insPrevID
 	}
-	node.InsPrev = nil
-	node.InsNext = nil
+	node.InsPrevID = nil
+	node.InsNextID = nil
 
 	delete(t.removedNodeMap, node.ID.toIDString())
 	return nil
@@ -768,14 +770,15 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 		}
 
 		if split != nil {
-			split.InsPrev = leftSiblingNode
+			split.InsPrevID = leftSiblingNode.ID
 			t.NodeMapByID.Put(split.ID, split)
 
-			if leftSiblingNode.InsNext != nil {
-				leftSiblingNode.InsNext.InsPrev = split
-				split.InsNext = leftSiblingNode.InsNext
+			if leftSiblingNode.InsNextID != nil {
+				insNext := t.findFloorNode(leftSiblingNode.InsNextID)
+				insNext.InsPrevID = split.ID
+				split.InsNextID = leftSiblingNode.InsNextID
 			}
-			leftSiblingNode.InsNext = split
+			leftSiblingNode.InsNextID = split.ID
 		}
 	}
 
@@ -880,21 +883,29 @@ func (t *Tree) ToIndex(pos *TreePos) (int, error) {
 	return idx, nil
 }
 
-func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
-	parentKey, parentNode := t.NodeMapByID.Floor(pos.ParentID)
-	leftSiblingKey, leftSiblingNode := t.NodeMapByID.Floor(pos.LeftSiblingID)
+// findFloorNode returns node from given id.
+func (t *Tree) findFloorNode(id *TreeNodeID) *TreeNode {
+	key, node := t.NodeMapByID.Floor(id)
 
-	if parentNode == nil ||
-		leftSiblingNode == nil ||
-		parentKey.CreatedAt.Compare(pos.ParentID.CreatedAt) != 0 ||
-		leftSiblingKey.CreatedAt.Compare(pos.LeftSiblingID.CreatedAt) != 0 {
+	if node == nil || key.CreatedAt.Compare(id.CreatedAt) != 0 {
+		return nil
+	}
+
+	return node
+}
+
+func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
+	parentNode := t.findFloorNode(pos.ParentID)
+	leftSiblingNode := t.findFloorNode(pos.LeftSiblingID)
+
+	if parentNode == nil || leftSiblingNode == nil {
 		return nil, nil
 	}
 
 	if pos.LeftSiblingID.Offset > 0 &&
 		pos.LeftSiblingID.Offset == leftSiblingNode.ID.Offset &&
-		leftSiblingNode.InsPrev != nil {
-		return parentNode, leftSiblingNode.InsPrev
+		leftSiblingNode.InsPrevID != nil {
+		return parentNode, t.findFloorNode(leftSiblingNode.InsPrevID)
 	}
 
 	return parentNode, leftSiblingNode

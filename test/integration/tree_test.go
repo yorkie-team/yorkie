@@ -274,18 +274,20 @@ func TestTree(t *testing.T) {
 			assert.Equal(t, "<doc><tc><p><tn>aXb!</tn><tn>cd</tn></p><p><tn>q</tn></p></tc></doc>", root.GetTree("t").ToXML())
 
 			root.GetTree("t").EditByPath([]int{0, 1, 0, 0}, []int{0, 1, 0, 0}, &json.TreeNode{
-				Type: "text",
+				Type:  "text",
 				Value: "a",
 			})
 			assert.Equal(t, "<doc><tc><p><tn>aXb!</tn><tn>cd</tn></p><p><tn>aq</tn></p></tc></doc>", root.GetTree("t").ToXML())
-			
-			assert.Panics(t, func() {doc.Update(func(root *json.Object, p *presence.Presence) error {
-				root.GetTree("t").EditByPath([]int{0, 0, 4}, []int{0, 0, 4}, &json.TreeNode{
-					Type: "tn",
-					Children: []json.TreeNode{},
+
+			assert.Panics(t, func() {
+				doc.Update(func(root *json.Object, p *presence.Presence) error {
+					root.GetTree("t").EditByPath([]int{0, 0, 4}, []int{0, 0, 4}, &json.TreeNode{
+						Type:     "tn",
+						Children: []json.TreeNode{},
+					})
+					return nil
 				})
-				return nil
-			 })}, index.ErrUnreachablePath)			
+			}, index.ErrUnreachablePath)
 			return nil
 		})
 		assert.NoError(t, err)
@@ -308,7 +310,7 @@ func TestTree(t *testing.T) {
 			assert.Equal(t, "<doc><tc><p><tn></tn></p></tc></doc>", root.GetTree("t").ToXML())
 
 			root.GetTree("t").EditByPath([]int{0, 0, 0, 0}, []int{0, 0, 0, 0}, &json.TreeNode{
-				Type: "text",
+				Type:  "text",
 				Value: "a",
 			})
 			assert.Equal(t, "<doc><tc><p><tn>a</tn></p></tc></doc>", root.GetTree("t").ToXML())
@@ -322,7 +324,7 @@ func TestTree(t *testing.T) {
 			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn></tn></p></tc></doc>", root.GetTree("t").ToXML())
 
 			root.GetTree("t").EditByPath([]int{0, 1, 0, 0}, []int{0, 1, 0, 0}, &json.TreeNode{
-				Type: "text",
+				Type:  "text",
 				Value: "b",
 			})
 			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p></tc></doc>", root.GetTree("t").ToXML())
@@ -336,7 +338,7 @@ func TestTree(t *testing.T) {
 			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p><p><tn></tn></p></tc></doc>", root.GetTree("t").ToXML())
 
 			root.GetTree("t").EditByPath([]int{0, 2, 0, 0}, []int{0, 2, 0, 0}, &json.TreeNode{
-				Type: "text",
+				Type:  "text",
 				Value: "c",
 			})
 			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p><p><tn>c</tn></p></tc></doc>", root.GetTree("t").ToXML())
@@ -350,11 +352,11 @@ func TestTree(t *testing.T) {
 			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p><p><tn>c</tn></p><p><tn></tn></p></tc></doc>", root.GetTree("t").ToXML())
 
 			root.GetTree("t").EditByPath([]int{0, 3, 0, 0}, []int{0, 3, 0, 0}, &json.TreeNode{
-				Type: "text",
+				Type:  "text",
 				Value: "d",
 			})
 			assert.Equal(t, "<doc><tc><p><tn>a</tn></p><p><tn>b</tn></p><p><tn>c</tn></p><p><tn>d</tn></p></tc></doc>", root.GetTree("t").ToXML())
-			
+
 			root.GetTree("t").EditByPath([]int{0, 3}, []int{0, 3}, &json.TreeNode{
 				Type: "p",
 				Children: []json.TreeNode{{
@@ -1950,5 +1952,128 @@ func TestTree(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
+	})
+
+	t.Run("split link can transmitted through rpc", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		}))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, &json.TreeNode{
+				Type:  "text",
+				Value: "1",
+			})
+			return nil
+		}))
+
+		assert.NoError(t, c1.Sync(ctx))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 3, &json.TreeNode{
+				Type:  "text",
+				Value: "1",
+			})
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a11b</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 3, &json.TreeNode{
+				Type:  "text",
+				Value: "12",
+			})
+			return nil
+		}))
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(4, 5, &json.TreeNode{
+				Type:  "text",
+				Value: "21",
+			})
+			return nil
+		}))
+
+		assert.Equal(t, "<root><p>a1221b</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, &json.TreeNode{
+				Type:  "text",
+				Value: "123",
+			})
+			return nil
+		}))
+
+		assert.Equal(t, "<root><p>a12321b</p></root>", d2.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("can calculate size of index tree correctly", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		}))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, &json.TreeNode{
+				Type:  "text",
+				Value: "123",
+			})
+			return nil
+		}))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, &json.TreeNode{
+				Type:  "text",
+				Value: "456",
+			})
+			return nil
+		}))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, &json.TreeNode{
+				Type:  "text",
+				Value: "789",
+			})
+			return nil
+		}))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, &json.TreeNode{
+				Type:  "text",
+				Value: "0123",
+			})
+			return nil
+		}))
+
+		assert.Equal(t, "<root><p>a0123789456123b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.NoError(t, c1.Sync(ctx))
+
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		size := d1.Root().GetTree("t").IndexTree.Root().Len()
+		assert.Equal(t, size, d2.Root().GetTree("t").IndexTree.Root().Len())
 	})
 }

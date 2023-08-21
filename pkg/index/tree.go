@@ -460,7 +460,10 @@ func (n *Node[V]) Prepend(children ...*Node[V]) error {
 	n.children = append(children, n.children...)
 	for _, node := range children {
 		node.Parent = n
-		node.UpdateAncestorsSize()
+
+		if !node.Value.IsRemoved() {
+			node.UpdateAncestorsSize()
+		}
 	}
 
 	return nil
