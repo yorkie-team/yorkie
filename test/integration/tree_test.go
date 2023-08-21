@@ -1863,4 +1863,92 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, "<root><p>A</p></root>", d1.Root().GetTree("t").ToXML())
 	})
+
+	t.Run("Can delete very first text when there is tombstone in front of target text", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			// 01. Create a tree and insert a paragraph.
+			root.SetNewTree("t").Edit(0, 0, &json.TreeNode{
+				Type:     "p",
+				Children: []json.TreeNode{{Type: "text", Value: "abcdefghi"}}})
+			assert.Equal(t, "<root><p>abcdefghi</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(1, 1, &json.TreeNode{
+				Type:  "text",
+				Value: "12345",
+			})
+			assert.Equal(t, "<root><p>12345abcdefghi</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(2, 5)
+			assert.Equal(t, "<root><p>15abcdefghi</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(3, 5)
+			assert.Equal(t, "<root><p>15cdefghi</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(2, 4)
+			assert.Equal(t, "<root><p>1defghi</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(1, 3)
+			assert.Equal(t, "<root><p>efghi</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(1, 2)
+			assert.Equal(t, "<root><p>fghi</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(2, 5)
+			assert.Equal(t, "<root><p>f</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(1, 2)
+			assert.Equal(t, "<root><p></p></root>", root.GetTree("t").ToXML())
+
+			return nil
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("Can delete node when there is more than one text node in front which has size bigger than 1", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			// 01. Create a tree and insert a paragraph.
+			root.SetNewTree("t").Edit(0, 0, &json.TreeNode{
+				Type:     "p",
+				Children: []json.TreeNode{{Type: "text", Value: "abcde"}}})
+			assert.Equal(t, "<root><p>abcde</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(6, 6, &json.TreeNode{
+				Type:  "text",
+				Value: "f",
+			})
+			assert.Equal(t, "<root><p>abcdef</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(7, 7, &json.TreeNode{
+				Type:  "text",
+				Value: "g",
+			})
+			assert.Equal(t, "<root><p>abcdefg</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(7, 8)
+			assert.Equal(t, "<root><p>abcdef</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(6, 7)
+			assert.Equal(t, "<root><p>abcde</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(5, 6)
+			assert.Equal(t, "<root><p>abcd</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(4, 5)
+			assert.Equal(t, "<root><p>abc</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(3, 4)
+			assert.Equal(t, "<root><p>ab</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(2, 3)
+			assert.Equal(t, "<root><p>a</p></root>", root.GetTree("t").ToXML())
+
+			root.GetTree("t").Edit(1, 2)
+			assert.Equal(t, "<root><p></p></root>", root.GetTree("t").ToXML())
+
+			return nil
+		})
+		assert.NoError(t, err)
+	})
 }

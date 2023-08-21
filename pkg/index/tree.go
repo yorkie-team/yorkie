@@ -362,28 +362,17 @@ func (n *Node[V]) FindOffset(node *Node[V]) (int, error) {
 
 	// If nodes are removed, the offset of the removed node is the number of
 	// nodes before the node excluding the removed nodes.
-	if node.Value.IsRemoved() {
-		refined := 0
-		for _, child := range n.Children(true) {
-			if child == node {
-				if refined == 0 {
-					return 0, nil
-				}
-				return refined - 1, nil
-			}
-			if !node.Value.IsRemoved() {
-				refined++
-			}
-		}
-	}
-
-	for i, child := range n.Children() {
+	offset := 0
+	for _, child := range n.Children(true) {
 		if child == node {
-			return i, nil
+			return offset, nil
+		}
+		if !child.Value.IsRemoved() {
+			offset++
 		}
 	}
 
-	return -1, nil
+	return -1, ErrChildNotFound
 }
 
 // IsAncestorOf returns true if the node is an ancestor of the given node.
