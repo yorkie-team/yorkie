@@ -883,14 +883,22 @@ func (t *Tree) ToIndex(pos *TreePos) (int, error) {
 	return idx, nil
 }
 
-func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
-	parentKey, parentNode := t.NodeMapByID.Floor(pos.ParentID)
-	leftSiblingKey, leftSiblingNode := t.NodeMapByID.Floor(pos.LeftSiblingID)
+// findFloorNode returns node from given id.
+func (t *Tree) findFloorNode(id *TreeNodeID) *TreeNode {
+	key, node := t.NodeMapByID.Floor(id)
 
-	if parentNode == nil ||
-		leftSiblingNode == nil ||
-		parentKey.CreatedAt.Compare(pos.ParentID.CreatedAt) != 0 ||
-		leftSiblingKey.CreatedAt.Compare(pos.LeftSiblingID.CreatedAt) != 0 {
+	if node == nil || key.CreatedAt.Compare(id.CreatedAt) != 0 {
+		return nil
+	}
+
+	return node
+}
+
+func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
+	parentNode := t.findFloorNode(pos.ParentID)
+	leftSiblingNode := t.findFloorNode(pos.LeftSiblingID)
+
+	if parentNode == nil || leftSiblingNode == nil {
 		return nil, nil
 	}
 
