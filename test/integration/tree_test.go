@@ -2069,13 +2069,11 @@ func TestTree(t *testing.T) {
 		}))
 
 		assert.Equal(t, "<root><p>a0123789456123b</p></root>", d1.Root().GetTree("t").ToXML())
-
 		assert.NoError(t, c1.Sync(ctx))
+
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
-
 		size := d1.Root().GetTree("t").IndexTree.Root().Len()
-
 		assert.Equal(t, size, d2.Root().GetTree("t").IndexTree.Root().Len())
 	})
 }

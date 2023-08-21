@@ -464,7 +464,6 @@ func (n *Node[V]) Prepend(children ...*Node[V]) error {
 		if !node.Value.IsRemoved() {
 			node.UpdateAncestorsSize()
 		}
-
 	}
 
 	return nil

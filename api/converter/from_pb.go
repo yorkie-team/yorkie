@@ -651,7 +651,6 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 
 	if pbNode.GetInsPrevId() != nil {
 		node.InsPrevID, err = fromTreeNodeID(pbNode.GetInsPrevId())
-
 		if err != nil {
 			return nil, err
 		}
@@ -659,18 +658,12 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 
 	if pbNode.GetInsNextId() != nil {
 		node.InsNextID, err = fromTreeNodeID(pbNode.GetInsNextId())
-
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if err != nil {
-		return nil, err
-	}
-
 	node.RemovedAt, err = fromTimeTicket(pbNode.RemovedAt)
-
 	if err != nil {
 		return nil, err
 	}
