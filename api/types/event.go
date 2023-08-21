@@ -4,15 +4,15 @@ package types
 type DocEventType string
 
 const (
-	// DocumentsChangedEvent is an event indicating that documents are being
+	// DocumentChangedEvent is an event indicating that document is being
 	// modified by a change.
-	DocumentsChangedEvent DocEventType = "documents-changed"
+	DocumentChangedEvent DocEventType = "document-changed"
 
-	// DocumentsWatchedEvent is an event that occurs when documents are watched
+	// DocumentWatchedEvent is an event that occurs when document is watched
 	// by other clients.
-	DocumentsWatchedEvent DocEventType = "documents-watched"
+	DocumentWatchedEvent DocEventType = "document-watched"
 
-	// DocumentsUnwatchedEvent is an event that occurs when documents are
+	// DocumentUnwatchedEvent is an event that occurs when document is
 	// unwatched by other clients.
-	DocumentsUnwatchedEvent DocEventType = "documents-unwatched"
+	DocumentUnwatchedEvent DocEventType = "document-unwatched"
 )

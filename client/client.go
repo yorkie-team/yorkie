@@ -214,7 +214,7 @@ func (c *Client) Activate(ctx context.Context) error {
 		return err
 	}
 
-	clientID, err := time.ActorIDFromBytes(response.ClientId)
+	clientID, err := time.ActorIDFromHex(response.ClientId)
 	if err != nil {
 		return err
 	}
@@ -232,7 +232,7 @@ func (c *Client) Deactivate(ctx context.Context) error {
 	}
 
 	_, err := c.client.DeactivateClient(withShardKey(ctx, c.options.APIKey), &api.DeactivateClientRequest{
-		ClientId: c.id.Bytes(),
+		ClientId: c.id.String(),
 	})
 	if err != nil {
 		return err
@@ -276,7 +276,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	res, err := c.client.AttachDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.AttachDocumentRequest{
-			ClientId:   c.id.Bytes(),
+			ClientId:   c.id.String(),
 			ChangePack: pbChangePack,
 		},
 	)
@@ -349,7 +349,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 	res, err := c.client.DetachDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.DetachDocumentRequest{
-			ClientId:            c.id.Bytes(),
+			ClientId:            c.id.String(),
 			DocumentId:          attachment.docID.String(),
 			ChangePack:          pbChangePack,
 			RemoveIfNotAttached: opts.removeIfNotAttached,
@@ -412,7 +412,7 @@ func (c *Client) Watch(
 	stream, err := c.client.WatchDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.WatchDocumentRequest{
-			ClientId:   c.id.Bytes(),
+			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 		},
 	)
@@ -425,7 +425,7 @@ func (c *Client) Watch(
 		case *api.WatchDocumentResponse_Initialization_:
 			var clientIDs []string
 			for _, clientID := range resp.Initialization.ClientIds {
-				id, err := time.ActorIDFromBytes(clientID)
+				id, err := time.ActorIDFromHex(clientID)
 				if err != nil {
 					return nil, err
 				}
@@ -440,15 +440,15 @@ func (c *Client) Watch(
 				return nil, err
 			}
 
-			cli, err := time.ActorIDFromBytes(resp.Event.Publisher)
+			cli, err := time.ActorIDFromHex(resp.Event.Publisher)
 			if err != nil {
 				return nil, err
 			}
 
 			switch eventType {
-			case types.DocumentsChangedEvent:
+			case types.DocumentChangedEvent:
 				return &WatchResponse{Type: DocumentChanged}, nil
-			case types.DocumentsWatchedEvent:
+			case types.DocumentWatchedEvent:
 				doc.AddOnlineClient(cli.String())
 				if doc.Presence(cli.String()) == nil {
 					return nil, nil
@@ -460,7 +460,7 @@ func (c *Client) Watch(
 						cli.String(): doc.Presence(cli.String()),
 					},
 				}, nil
-			case types.DocumentsUnwatchedEvent:
+			case types.DocumentUnwatchedEvent:
 				p := doc.Presence(cli.String())
 				doc.RemoveOnlineClient(cli.String())
 				if p == nil {
@@ -581,7 +581,7 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	res, err := c.client.PushPullChanges(
 		withShardKey(ctx, c.options.APIKey, opt.key.String()),
 		&api.PushPullChangesRequest{
-			ClientId:   c.id.Bytes(),
+			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
 			PushOnly:   opt.mode == types.SyncModePushOnly,
@@ -626,7 +626,7 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	res, err := c.client.RemoveDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.RemoveDocumentRequest{
-			ClientId:   c.id.Bytes(),
+			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
 		},

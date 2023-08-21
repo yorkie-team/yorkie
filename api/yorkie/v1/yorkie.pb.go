@@ -74,8 +74,7 @@ func (m *ActivateClientRequest) GetClientKey() string {
 }
 
 type ActivateClientResponse struct {
-	ClientKey            string   `protobuf:"bytes,1,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
-	ClientId             []byte   `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientId             string   `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -114,22 +113,15 @@ func (m *ActivateClientResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ActivateClientResponse proto.InternalMessageInfo
 
-func (m *ActivateClientResponse) GetClientKey() string {
+func (m *ActivateClientResponse) GetClientId() string {
 	if m != nil {
-		return m.ClientKey
+		return m.ClientId
 	}
 	return ""
 }
 
-func (m *ActivateClientResponse) GetClientId() []byte {
-	if m != nil {
-		return m.ClientId
-	}
-	return nil
-}
-
 type DeactivateClientRequest struct {
-	ClientId             []byte   `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientId             string   `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -168,15 +160,14 @@ func (m *DeactivateClientRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DeactivateClientRequest proto.InternalMessageInfo
 
-func (m *DeactivateClientRequest) GetClientId() []byte {
+func (m *DeactivateClientRequest) GetClientId() string {
 	if m != nil {
 		return m.ClientId
 	}
-	return nil
+	return ""
 }
 
 type DeactivateClientResponse struct {
-	ClientId             []byte   `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -215,15 +206,8 @@ func (m *DeactivateClientResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DeactivateClientResponse proto.InternalMessageInfo
 
-func (m *DeactivateClientResponse) GetClientId() []byte {
-	if m != nil {
-		return m.ClientId
-	}
-	return nil
-}
-
 type AttachDocumentRequest struct {
-	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientId             string      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
@@ -263,11 +247,11 @@ func (m *AttachDocumentRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_AttachDocumentRequest proto.InternalMessageInfo
 
-func (m *AttachDocumentRequest) GetClientId() []byte {
+func (m *AttachDocumentRequest) GetClientId() string {
 	if m != nil {
 		return m.ClientId
 	}
-	return nil
+	return ""
 }
 
 func (m *AttachDocumentRequest) GetChangePack() *ChangePack {
@@ -278,9 +262,8 @@ func (m *AttachDocumentRequest) GetChangePack() *ChangePack {
 }
 
 type AttachDocumentResponse struct {
-	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	DocumentId           string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
-	ChangePack           *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	DocumentId           string      `protobuf:"bytes,1,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
 	XXX_sizecache        int32       `json:"-"`
@@ -319,13 +302,6 @@ func (m *AttachDocumentResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_AttachDocumentResponse proto.InternalMessageInfo
 
-func (m *AttachDocumentResponse) GetClientId() []byte {
-	if m != nil {
-		return m.ClientId
-	}
-	return nil
-}
-
 func (m *AttachDocumentResponse) GetDocumentId() string {
 	if m != nil {
 		return m.DocumentId
@@ -341,7 +317,7 @@ func (m *AttachDocumentResponse) GetChangePack() *ChangePack {
 }
 
 type DetachDocumentRequest struct {
-	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientId             string      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	DocumentId           string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 	ChangePack           *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	RemoveIfNotAttached  bool        `protobuf:"varint,4,opt,name=remove_if_not_attached,json=removeIfNotAttached,proto3" json:"remove_if_not_attached,omitempty"`
@@ -383,11 +359,11 @@ func (m *DetachDocumentRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DetachDocumentRequest proto.InternalMessageInfo
 
-func (m *DetachDocumentRequest) GetClientId() []byte {
+func (m *DetachDocumentRequest) GetClientId() string {
 	if m != nil {
 		return m.ClientId
 	}
-	return nil
+	return ""
 }
 
 func (m *DetachDocumentRequest) GetDocumentId() string {
@@ -412,7 +388,6 @@ func (m *DetachDocumentRequest) GetRemoveIfNotAttached() bool {
 }
 
 type DetachDocumentResponse struct {
-	ClientKey            string      `protobuf:"bytes,1,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
 	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
@@ -452,13 +427,6 @@ func (m *DetachDocumentResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DetachDocumentResponse proto.InternalMessageInfo
 
-func (m *DetachDocumentResponse) GetClientKey() string {
-	if m != nil {
-		return m.ClientKey
-	}
-	return ""
-}
-
 func (m *DetachDocumentResponse) GetChangePack() *ChangePack {
 	if m != nil {
 		return m.ChangePack
@@ -467,7 +435,7 @@ func (m *DetachDocumentResponse) GetChangePack() *ChangePack {
 }
 
 type WatchDocumentRequest struct {
-	ClientId             []byte   `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientId             string   `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	DocumentId           string   `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -507,11 +475,11 @@ func (m *WatchDocumentRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_WatchDocumentRequest proto.InternalMessageInfo
 
-func (m *WatchDocumentRequest) GetClientId() []byte {
+func (m *WatchDocumentRequest) GetClientId() string {
 	if m != nil {
 		return m.ClientId
 	}
-	return nil
+	return ""
 }
 
 func (m *WatchDocumentRequest) GetDocumentId() string {
@@ -610,7 +578,7 @@ func (*WatchDocumentResponse) XXX_OneofWrappers() []interface{} {
 }
 
 type WatchDocumentResponse_Initialization struct {
-	ClientIds            [][]byte `protobuf:"bytes,1,rep,name=client_ids,json=clientIds,proto3" json:"client_ids,omitempty"`
+	ClientIds            []string `protobuf:"bytes,1,rep,name=client_ids,json=clientIds,proto3" json:"client_ids,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -649,7 +617,7 @@ func (m *WatchDocumentResponse_Initialization) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_WatchDocumentResponse_Initialization proto.InternalMessageInfo
 
-func (m *WatchDocumentResponse_Initialization) GetClientIds() [][]byte {
+func (m *WatchDocumentResponse_Initialization) GetClientIds() []string {
 	if m != nil {
 		return m.ClientIds
 	}
@@ -657,7 +625,7 @@ func (m *WatchDocumentResponse_Initialization) GetClientIds() [][]byte {
 }
 
 type RemoveDocumentRequest struct {
-	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientId             string      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	DocumentId           string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 	ChangePack           *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
@@ -698,11 +666,11 @@ func (m *RemoveDocumentRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RemoveDocumentRequest proto.InternalMessageInfo
 
-func (m *RemoveDocumentRequest) GetClientId() []byte {
+func (m *RemoveDocumentRequest) GetClientId() string {
 	if m != nil {
 		return m.ClientId
 	}
-	return nil
+	return ""
 }
 
 func (m *RemoveDocumentRequest) GetDocumentId() string {
@@ -720,8 +688,7 @@ func (m *RemoveDocumentRequest) GetChangePack() *ChangePack {
 }
 
 type RemoveDocumentResponse struct {
-	ClientKey            string      `protobuf:"bytes,1,opt,name=client_key,json=clientKey,proto3" json:"client_key,omitempty"`
-	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	ChangePack           *ChangePack `protobuf:"bytes,1,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
 	XXX_sizecache        int32       `json:"-"`
@@ -760,13 +727,6 @@ func (m *RemoveDocumentResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RemoveDocumentResponse proto.InternalMessageInfo
 
-func (m *RemoveDocumentResponse) GetClientKey() string {
-	if m != nil {
-		return m.ClientKey
-	}
-	return ""
-}
-
 func (m *RemoveDocumentResponse) GetChangePack() *ChangePack {
 	if m != nil {
 		return m.ChangePack
@@ -775,7 +735,7 @@ func (m *RemoveDocumentResponse) GetChangePack() *ChangePack {
 }
 
 type PushPullChangesRequest struct {
-	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ClientId             string      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	DocumentId           string      `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 	ChangePack           *ChangePack `protobuf:"bytes,3,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	PushOnly             bool        `protobuf:"varint,4,opt,name=push_only,json=pushOnly,proto3" json:"push_only,omitempty"`
@@ -817,11 +777,11 @@ func (m *PushPullChangesRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_PushPullChangesRequest proto.InternalMessageInfo
 
-func (m *PushPullChangesRequest) GetClientId() []byte {
+func (m *PushPullChangesRequest) GetClientId() string {
 	if m != nil {
 		return m.ClientId
 	}
-	return nil
+	return ""
 }
 
 func (m *PushPullChangesRequest) GetDocumentId() string {
@@ -846,8 +806,7 @@ func (m *PushPullChangesRequest) GetPushOnly() bool {
 }
 
 type PushPullChangesResponse struct {
-	ClientId             []byte      `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	ChangePack           *ChangePack `protobuf:"bytes,2,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
+	ChangePack           *ChangePack `protobuf:"bytes,1,opt,name=change_pack,json=changePack,proto3" json:"change_pack,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
 	XXX_sizecache        int32       `json:"-"`
@@ -886,13 +845,6 @@ func (m *PushPullChangesResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_PushPullChangesResponse proto.InternalMessageInfo
 
-func (m *PushPullChangesResponse) GetClientId() []byte {
-	if m != nil {
-		return m.ClientId
-	}
-	return nil
-}
-
 func (m *PushPullChangesResponse) GetChangePack() *ChangePack {
 	if m != nil {
 		return m.ChangePack
@@ -921,49 +873,48 @@ func init() {
 func init() { proto.RegisterFile("yorkie/v1/yorkie.proto", fileDescriptor_40070c858814ab24) }
 
 var fileDescriptor_40070c858814ab24 = []byte{
-	// 661 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0xcd, 0x6e, 0xd3, 0x40,
-	0x10, 0xce, 0xd2, 0x1f, 0x35, 0x93, 0xb6, 0xc0, 0x96, 0xa4, 0x21, 0x15, 0xa9, 0x59, 0x2e, 0x91,
-	0x2a, 0x39, 0xa4, 0x95, 0xca, 0x81, 0x53, 0xdb, 0x20, 0x35, 0x42, 0x82, 0xc8, 0x54, 0x54, 0xad,
-	0x84, 0x2c, 0xd7, 0xde, 0x92, 0x55, 0x5c, 0x6f, 0xb0, 0xd7, 0x96, 0xcc, 0x03, 0x70, 0x83, 0x33,
-	0xef, 0xc0, 0x5b, 0x70, 0xe2, 0xc8, 0x91, 0x23, 0x2a, 0x2f, 0x82, 0x62, 0x3b, 0xc1, 0xeb, 0x9a,
-	0x34, 0x54, 0x54, 0x70, 0xb3, 0x67, 0xe7, 0xfb, 0xfc, 0xcd, 0xec, 0xfc, 0x18, 0x2a, 0x21, 0x77,
-	0xfb, 0x8c, 0x36, 0x83, 0x56, 0x33, 0x7e, 0x52, 0x07, 0x2e, 0x17, 0x1c, 0x17, 0x93, 0xb7, 0xa0,
-	0x55, 0xbb, 0xfb, 0xcb, 0xc5, 0xa5, 0x1e, 0xf7, 0x5d, 0x93, 0x7a, 0xb1, 0x17, 0xd9, 0x86, 0xf2,
-	0x8e, 0x29, 0x58, 0x60, 0x08, 0xba, 0x67, 0x33, 0xea, 0x08, 0x8d, 0xbe, 0xf1, 0xa9, 0x27, 0xf0,
-	0x3d, 0x00, 0x33, 0x32, 0xe8, 0x7d, 0x1a, 0x56, 0x91, 0x82, 0x1a, 0x45, 0xad, 0x18, 0x5b, 0x9e,
-	0xd2, 0x90, 0x1c, 0x40, 0x25, 0x8b, 0xf3, 0x06, 0xdc, 0xf1, 0xe8, 0x25, 0x40, 0xbc, 0x06, 0xc9,
-	0x8b, 0xce, 0xac, 0xea, 0x0d, 0x05, 0x35, 0x16, 0xb5, 0x85, 0xd8, 0xd0, 0xb1, 0xc8, 0x36, 0xac,
-	0xb6, 0xa9, 0x91, 0xab, 0x47, 0xc2, 0xa1, 0x0c, 0xee, 0x11, 0x54, 0x2f, 0xe2, 0x12, 0x3d, 0x13,
-	0x81, 0x36, 0x94, 0x77, 0x84, 0x30, 0xcc, 0x5e, 0x9b, 0x9b, 0xfe, 0xd9, 0x94, 0x9f, 0xc3, 0xdb,
-	0x50, 0x32, 0x7b, 0x86, 0xf3, 0x9a, 0xea, 0x03, 0xc3, 0xec, 0x47, 0x51, 0x94, 0x36, 0xcb, 0xea,
-	0x38, 0xe1, 0xea, 0x5e, 0x74, 0xda, 0x35, 0xcc, 0xbe, 0x06, 0xe6, 0xf8, 0x99, 0x7c, 0x40, 0x50,
-	0xc9, 0x7e, 0x6e, 0x0a, 0x95, 0x78, 0x1d, 0x4a, 0x56, 0x02, 0x18, 0x65, 0xad, 0xa8, 0xc1, 0xc8,
-	0x74, 0x51, 0xd0, 0xcc, 0xb4, 0x82, 0x3e, 0x23, 0x28, 0xb7, 0xe9, 0x1f, 0xc7, 0x7f, 0x5d, 0x7a,
-	0xf0, 0x16, 0x54, 0x5c, 0x7a, 0xc6, 0x03, 0xaa, 0xb3, 0x53, 0xdd, 0xe1, 0x42, 0x37, 0xa2, 0x6c,
-	0x51, 0xab, 0x3a, 0xab, 0xa0, 0xc6, 0x82, 0xb6, 0x12, 0x9f, 0x76, 0x4e, 0x9f, 0x71, 0xb1, 0x93,
-	0x1c, 0x11, 0x0e, 0x95, 0x6c, 0x0c, 0xd3, 0x95, 0xe2, 0x55, 0xaf, 0xf1, 0x00, 0xee, 0x1c, 0x1a,
-	0xe2, 0x2f, 0xe7, 0x8c, 0x7c, 0x43, 0x50, 0xce, 0xd0, 0x26, 0x61, 0x1c, 0xc1, 0x32, 0x73, 0x98,
-	0x60, 0x86, 0xcd, 0xde, 0x1a, 0x82, 0x71, 0x27, 0x22, 0x2f, 0x6d, 0x36, 0x53, 0x52, 0x73, 0x91,
-	0x6a, 0x47, 0x82, 0xed, 0x17, 0xb4, 0x0c, 0x11, 0xde, 0x80, 0x39, 0x1a, 0x50, 0x47, 0x24, 0xc1,
-	0xaf, 0xa4, 0x18, 0xdb, 0xdc, 0x7c, 0x32, 0x3c, 0xda, 0x2f, 0x68, 0xb1, 0x4f, 0xad, 0x09, 0xcb,
-	0x32, 0x61, 0x2a, 0xc1, 0xcc, 0xf2, 0xaa, 0x48, 0x99, 0x69, 0x2c, 0x8e, 0x12, 0xdc, 0xb1, 0xbc,
-	0xdd, 0x79, 0x98, 0x3d, 0xe1, 0x56, 0x48, 0xde, 0x23, 0x28, 0x6b, 0xd1, 0xcd, 0xfd, 0x17, 0x65,
-	0x36, 0xac, 0x98, 0xac, 0x9c, 0xeb, 0xad, 0x98, 0x4f, 0x08, 0x2a, 0x5d, 0xdf, 0xeb, 0x75, 0x7d,
-	0xdb, 0x8e, 0x5d, 0xbc, 0x7f, 0xdb, 0x68, 0x6b, 0x50, 0x1c, 0xf8, 0x5e, 0x4f, 0xe7, 0x8e, 0x1d,
-	0x26, 0xbd, 0xb5, 0x30, 0x34, 0x3c, 0x77, 0xec, 0x90, 0x38, 0xb0, 0x7a, 0x41, 0xec, 0x34, 0x63,
-	0xea, 0x8a, 0xd9, 0xd9, 0x7c, 0x37, 0x07, 0x4b, 0x47, 0x91, 0xd3, 0x0b, 0xea, 0x06, 0xcc, 0xa4,
-	0xf8, 0x10, 0x96, 0xe5, 0xed, 0x82, 0x95, 0x14, 0x4d, 0xee, 0xc2, 0xaa, 0xdd, 0x9f, 0xe0, 0x11,
-	0xab, 0x27, 0x05, 0xfc, 0x0a, 0x6e, 0x65, 0x17, 0x05, 0x26, 0xe9, 0xa2, 0xcf, 0xdf, 0x3e, 0xb5,
-	0x07, 0x13, 0x7d, 0xc6, 0xf4, 0x43, 0xdd, 0xd2, 0x7c, 0x97, 0x75, 0xe7, 0x6d, 0x1a, 0x59, 0x77,
-	0xee, 0x72, 0x88, 0x89, 0xe5, 0x19, 0x27, 0x11, 0xe7, 0x8e, 0x70, 0x89, 0x38, 0x7f, 0x40, 0xc6,
-	0xc4, 0x72, 0x2b, 0x48, 0xc4, 0xb9, 0x4d, 0x2b, 0x11, 0xe7, 0xf7, 0x11, 0x29, 0xe0, 0x63, 0xb8,
-	0x99, 0x29, 0x22, 0x9c, 0xc6, 0xe5, 0x77, 0x43, 0x8d, 0x4c, 0x72, 0x19, 0x73, 0xbf, 0x84, 0x25,
-	0x69, 0xde, 0xe1, 0xf5, 0xdf, 0x4f, 0xc2, 0x98, 0x57, 0xb9, 0x6c, 0x54, 0x92, 0xc2, 0x43, 0xb4,
-	0xbb, 0xf1, 0xe5, 0xbc, 0x8e, 0xbe, 0x9e, 0xd7, 0xd1, 0xf7, 0xf3, 0x3a, 0xfa, 0xf8, 0xa3, 0x5e,
-	0x80, 0xdb, 0x16, 0x0d, 0x46, 0x50, 0x63, 0xc0, 0xd4, 0xa0, 0xd5, 0x45, 0xc7, 0xb3, 0xea, 0xe3,
-	0xa0, 0x75, 0x32, 0x1f, 0xfd, 0x40, 0x6d, 0xfd, 0x0c, 0x00, 0x00, 0xff, 0xff, 0x78, 0xaa, 0xfe,
-	0x50, 0x80, 0x09, 0x00, 0x00,
+	// 650 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0xcf, 0x6e, 0xd3, 0x4e,
+	0x10, 0xce, 0xf6, 0x9f, 0x9a, 0x89, 0xda, 0xdf, 0x8f, 0x2d, 0x49, 0x43, 0x2a, 0x52, 0xb3, 0x5c,
+	0x2a, 0x55, 0x72, 0x48, 0x2b, 0x7a, 0xe1, 0xd4, 0x36, 0x48, 0x8d, 0x90, 0x20, 0x18, 0x44, 0xd5,
+	0x4a, 0xc8, 0x72, 0xed, 0x2d, 0x59, 0xc5, 0xf5, 0xa6, 0xf6, 0xda, 0x92, 0x79, 0x00, 0x6e, 0xdc,
+	0x79, 0x07, 0xde, 0x82, 0x13, 0x47, 0x8e, 0x1c, 0x51, 0x79, 0x11, 0x14, 0xdb, 0x4d, 0xbd, 0xee,
+	0x92, 0x16, 0x8a, 0x04, 0xb7, 0xcd, 0xec, 0x37, 0xdf, 0x7c, 0x3b, 0x99, 0xf9, 0x64, 0xa8, 0xc5,
+	0xdc, 0x1f, 0x30, 0xda, 0x8a, 0xda, 0xad, 0xf4, 0xa4, 0x0f, 0x7d, 0x2e, 0x38, 0x2e, 0x67, 0xbf,
+	0xa2, 0x76, 0xe3, 0xce, 0x05, 0xc4, 0xa7, 0x01, 0x0f, 0x7d, 0x9b, 0x06, 0x29, 0x8a, 0x6c, 0x41,
+	0x75, 0xdb, 0x16, 0x2c, 0xb2, 0x04, 0xdd, 0x75, 0x19, 0xf5, 0x84, 0x41, 0x4f, 0x43, 0x1a, 0x08,
+	0x7c, 0x17, 0xc0, 0x4e, 0x02, 0xe6, 0x80, 0xc6, 0x75, 0xa4, 0xa1, 0xb5, 0xb2, 0x51, 0x4e, 0x23,
+	0x4f, 0x68, 0x4c, 0x1e, 0x42, 0xad, 0x98, 0x17, 0x0c, 0xb9, 0x17, 0x50, 0xbc, 0x02, 0x19, 0xcc,
+	0x64, 0x4e, 0x96, 0x37, 0x9f, 0x06, 0xba, 0x0e, 0xd9, 0x82, 0xe5, 0x0e, 0xb5, 0x94, 0x05, 0x27,
+	0xe6, 0x35, 0xa0, 0x7e, 0x39, 0x2f, 0x2d, 0x48, 0x5c, 0xa8, 0x6e, 0x0b, 0x61, 0xd9, 0xfd, 0x0e,
+	0xb7, 0xc3, 0x93, 0x6b, 0x32, 0xe2, 0x2d, 0xa8, 0xd8, 0x7d, 0xcb, 0x7b, 0x43, 0xcd, 0xa1, 0x65,
+	0x0f, 0xea, 0x53, 0x1a, 0x5a, 0xab, 0x6c, 0x54, 0xf5, 0x71, 0xd3, 0xf4, 0xdd, 0xe4, 0xb6, 0x67,
+	0xd9, 0x03, 0x03, 0xec, 0xf1, 0x99, 0x9c, 0x42, 0xad, 0x58, 0x2d, 0x7b, 0xf8, 0x2a, 0x54, 0x9c,
+	0x2c, 0x76, 0x51, 0x10, 0xce, 0x43, 0x37, 0x28, 0xf9, 0x09, 0x41, 0xb5, 0x43, 0x7f, 0xf9, 0x85,
+	0x05, 0x3d, 0x53, 0x57, 0xe9, 0x99, 0xbe, 0xa6, 0x1e, 0xbc, 0x09, 0x35, 0x9f, 0x9e, 0xf0, 0x88,
+	0x9a, 0xec, 0xd8, 0xf4, 0xb8, 0x30, 0xad, 0xa4, 0x21, 0xd4, 0xa9, 0xcf, 0x68, 0x68, 0x6d, 0xde,
+	0x58, 0x4a, 0x6f, 0xbb, 0xc7, 0x4f, 0xb9, 0xd8, 0xce, 0xae, 0x48, 0x0f, 0x6a, 0xc5, 0x37, 0x64,
+	0x7d, 0xfb, 0xdd, 0xb6, 0xbc, 0x84, 0xdb, 0xfb, 0x96, 0xf8, 0xc3, 0x4d, 0x21, 0x5f, 0x11, 0x54,
+	0x0b, 0xb4, 0x99, 0xce, 0x03, 0x58, 0x64, 0x1e, 0x13, 0xcc, 0x72, 0xd9, 0x5b, 0x4b, 0x30, 0xee,
+	0x25, 0xe4, 0x95, 0x8d, 0x56, 0x4e, 0xaa, 0x32, 0x53, 0xef, 0x4a, 0x69, 0x7b, 0x25, 0xa3, 0x40,
+	0x84, 0xd7, 0x61, 0x96, 0x46, 0xd4, 0x13, 0xd9, 0xe3, 0x97, 0x72, 0x8c, 0x1d, 0x6e, 0x3f, 0x1e,
+	0x5d, 0xed, 0x95, 0x8c, 0x14, 0xd3, 0x68, 0xc1, 0xa2, 0x4c, 0x98, 0xdb, 0x55, 0xe6, 0x04, 0x75,
+	0xa4, 0x4d, 0x5f, 0xec, 0x6a, 0xd7, 0x09, 0x76, 0xe6, 0x60, 0xe6, 0x88, 0x3b, 0x31, 0x79, 0x8f,
+	0xa0, 0x6a, 0x24, 0x7f, 0xcd, 0x3f, 0x31, 0x47, 0xa3, 0x91, 0x28, 0xca, 0x51, 0x8f, 0x04, 0xba,
+	0x2e, 0xe3, 0x47, 0x04, 0xb5, 0x5e, 0x18, 0xf4, 0x7b, 0xa1, 0xeb, 0xa6, 0x90, 0xe0, 0xef, 0xae,
+	0xca, 0x0a, 0x94, 0x87, 0x61, 0xd0, 0x37, 0xb9, 0xe7, 0xc6, 0xd9, 0x76, 0xcc, 0x8f, 0x02, 0xcf,
+	0x3c, 0x37, 0x26, 0xcf, 0x61, 0xf9, 0x92, 0xd8, 0x9b, 0x35, 0x60, 0xe3, 0xdd, 0x2c, 0x2c, 0x1c,
+	0x24, 0xa0, 0x17, 0xd4, 0x8f, 0x98, 0x4d, 0xf1, 0x3e, 0x2c, 0xca, 0x46, 0x8d, 0xb5, 0x1c, 0x8d,
+	0xd2, 0xfb, 0x1b, 0xf7, 0x26, 0x20, 0x32, 0xd3, 0x2d, 0xe1, 0xd7, 0xf0, 0x7f, 0xd1, 0x92, 0x31,
+	0xc9, 0x0f, 0xae, 0xda, 0xe7, 0x1b, 0xf7, 0x27, 0x62, 0xc6, 0xf4, 0x23, 0xdd, 0x92, 0xcf, 0xca,
+	0xba, 0x55, 0x86, 0x2f, 0xeb, 0x56, 0x9a, 0x74, 0x4a, 0x2c, 0x1b, 0x91, 0x44, 0xac, 0xf4, 0x59,
+	0x89, 0x58, 0xed, 0x62, 0x29, 0xb1, 0x3c, 0xce, 0x12, 0xb1, 0x72, 0xf1, 0x24, 0x62, 0xf5, 0x2e,
+	0x90, 0x12, 0x3e, 0x84, 0xff, 0x0a, 0x73, 0x82, 0xf3, 0x79, 0xea, 0x81, 0x6f, 0x90, 0x49, 0x90,
+	0x31, 0xf7, 0x2b, 0x58, 0x90, 0x3c, 0x0b, 0xaf, 0xfe, 0xdc, 0xcd, 0x52, 0x5e, 0xed, 0x2a, 0xbb,
+	0x23, 0xa5, 0x07, 0x68, 0x67, 0xfd, 0xf3, 0x59, 0x13, 0x7d, 0x39, 0x6b, 0xa2, 0x6f, 0x67, 0x4d,
+	0xf4, 0xe1, 0x7b, 0xb3, 0x04, 0xb7, 0x1c, 0x1a, 0x9d, 0xa7, 0x5a, 0x43, 0xa6, 0x47, 0xed, 0x1e,
+	0x3a, 0x9c, 0xd1, 0x1f, 0x45, 0xed, 0xa3, 0xb9, 0xe4, 0x5b, 0x64, 0xf3, 0x47, 0x00, 0x00, 0x00,
+	0xff, 0xff, 0x8c, 0xb9, 0x33, 0xc1, 0xcb, 0x08, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1353,13 +1304,6 @@ func (m *ActivateClientResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 		copy(dAtA[i:], m.ClientId)
 		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientId)))
 		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.ClientKey) > 0 {
-		i -= len(m.ClientKey)
-		copy(dAtA[i:], m.ClientKey)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientKey)))
-		i--
 		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
@@ -1422,13 +1366,6 @@ func (m *DeactivateClientResponse) MarshalToSizedBuffer(dAtA []byte) (int, error
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if len(m.ClientId) > 0 {
-		i -= len(m.ClientId)
-		copy(dAtA[i:], m.ClientId)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientId)))
-		i--
-		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
@@ -1513,19 +1450,12 @@ func (m *AttachDocumentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 			i = encodeVarintYorkie(dAtA, i, uint64(size))
 		}
 		i--
-		dAtA[i] = 0x1a
+		dAtA[i] = 0x12
 	}
 	if len(m.DocumentId) > 0 {
 		i -= len(m.DocumentId)
 		copy(dAtA[i:], m.DocumentId)
 		i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentId)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.ClientId) > 0 {
-		i -= len(m.ClientId)
-		copy(dAtA[i:], m.ClientId)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientId)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1630,13 +1560,6 @@ func (m *DetachDocumentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 		}
 		i--
 		dAtA[i] = 0x12
-	}
-	if len(m.ClientKey) > 0 {
-		i -= len(m.ClientKey)
-		copy(dAtA[i:], m.ClientKey)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientKey)))
-		i--
-		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
@@ -1883,13 +1806,6 @@ func (m *RemoveDocumentResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 			i = encodeVarintYorkie(dAtA, i, uint64(size))
 		}
 		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.ClientKey) > 0 {
-		i -= len(m.ClientKey)
-		copy(dAtA[i:], m.ClientKey)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientKey)))
-		i--
 		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
@@ -1992,13 +1908,6 @@ func (m *PushPullChangesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error)
 			i = encodeVarintYorkie(dAtA, i, uint64(size))
 		}
 		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.ClientId) > 0 {
-		i -= len(m.ClientId)
-		copy(dAtA[i:], m.ClientId)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientId)))
-		i--
 		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
@@ -2037,10 +1946,6 @@ func (m *ActivateClientResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.ClientKey)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
 	l = len(m.ClientId)
 	if l > 0 {
 		n += 1 + l + sovYorkie(uint64(l))
@@ -2073,10 +1978,6 @@ func (m *DeactivateClientResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.ClientId)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -2109,10 +2010,6 @@ func (m *AttachDocumentResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.ClientId)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
 	l = len(m.DocumentId)
 	if l > 0 {
 		n += 1 + l + sovYorkie(uint64(l))
@@ -2160,10 +2057,6 @@ func (m *DetachDocumentResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.ClientKey)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
 	if m.ChangePack != nil {
 		l = m.ChangePack.Size()
 		n += 1 + l + sovYorkie(uint64(l))
@@ -2240,8 +2133,8 @@ func (m *WatchDocumentResponse_Initialization) Size() (n int) {
 	var l int
 	_ = l
 	if len(m.ClientIds) > 0 {
-		for _, b := range m.ClientIds {
-			l = len(b)
+		for _, s := range m.ClientIds {
+			l = len(s)
 			n += 1 + l + sovYorkie(uint64(l))
 		}
 	}
@@ -2281,10 +2174,6 @@ func (m *RemoveDocumentResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.ClientKey)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
 	if m.ChangePack != nil {
 		l = m.ChangePack.Size()
 		n += 1 + l + sovYorkie(uint64(l))
@@ -2328,10 +2217,6 @@ func (m *PushPullChangesResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
-	l = len(m.ClientId)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
 	if m.ChangePack != nil {
 		l = m.ChangePack.Size()
 		n += 1 + l + sovYorkie(uint64(l))
@@ -2462,7 +2347,7 @@ func (m *ActivateClientResponse) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClientKey", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -2490,41 +2375,7 @@ func (m *ActivateClientResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ClientKey = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
-			if m.ClientId == nil {
-				m.ClientId = []byte{}
-			}
+			m.ClientId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -2581,7 +2432,7 @@ func (m *DeactivateClientRequest) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
 			}
-			var byteLen int
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowYorkie
@@ -2591,25 +2442,23 @@ func (m *DeactivateClientRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= int(b&0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
 				return ErrInvalidLengthYorkie
 			}
-			postIndex := iNdEx + byteLen
+			postIndex := iNdEx + intStringLen
 			if postIndex < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
-			if m.ClientId == nil {
-				m.ClientId = []byte{}
-			}
+			m.ClientId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -2662,40 +2511,6 @@ func (m *DeactivateClientResponse) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: DeactivateClientResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
-			if m.ClientId == nil {
-				m.ClientId = []byte{}
-			}
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipYorkie(dAtA[iNdEx:])
@@ -2751,7 +2566,7 @@ func (m *AttachDocumentRequest) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
 			}
-			var byteLen int
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowYorkie
@@ -2761,25 +2576,23 @@ func (m *AttachDocumentRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= int(b&0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
 				return ErrInvalidLengthYorkie
 			}
-			postIndex := iNdEx + byteLen
+			postIndex := iNdEx + intStringLen
 			if postIndex < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
-			if m.ClientId == nil {
-				m.ClientId = []byte{}
-			}
+			m.ClientId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2870,40 +2683,6 @@ func (m *AttachDocumentResponse) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
-			if m.ClientId == nil {
-				m.ClientId = []byte{}
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field DocumentId", wireType)
 			}
 			var stringLen uint64
@@ -2934,7 +2713,7 @@ func (m *AttachDocumentResponse) Unmarshal(dAtA []byte) error {
 			}
 			m.DocumentId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 3:
+		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ChangePack", wireType)
 			}
@@ -3025,7 +2804,7 @@ func (m *DetachDocumentRequest) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
 			}
-			var byteLen int
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowYorkie
@@ -3035,25 +2814,23 @@ func (m *DetachDocumentRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= int(b&0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
 				return ErrInvalidLengthYorkie
 			}
-			postIndex := iNdEx + byteLen
+			postIndex := iNdEx + intStringLen
 			if postIndex < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
-			if m.ClientId == nil {
-				m.ClientId = []byte{}
-			}
+			m.ClientId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -3194,38 +2971,6 @@ func (m *DetachDocumentResponse) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: DetachDocumentResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClientKey", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ClientKey = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ChangePack", wireType)
@@ -3317,7 +3062,7 @@ func (m *WatchDocumentRequest) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
 			}
-			var byteLen int
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowYorkie
@@ -3327,25 +3072,23 @@ func (m *WatchDocumentRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= int(b&0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
 				return ErrInvalidLengthYorkie
 			}
-			postIndex := iNdEx + byteLen
+			postIndex := iNdEx + intStringLen
 			if postIndex < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
-			if m.ClientId == nil {
-				m.ClientId = []byte{}
-			}
+			m.ClientId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -3555,7 +3298,7 @@ func (m *WatchDocumentResponse_Initialization) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ClientIds", wireType)
 			}
-			var byteLen int
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowYorkie
@@ -3565,23 +3308,23 @@ func (m *WatchDocumentResponse_Initialization) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= int(b&0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
 				return ErrInvalidLengthYorkie
 			}
-			postIndex := iNdEx + byteLen
+			postIndex := iNdEx + intStringLen
 			if postIndex < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ClientIds = append(m.ClientIds, make([]byte, postIndex-iNdEx))
-			copy(m.ClientIds[len(m.ClientIds)-1], dAtA[iNdEx:postIndex])
+			m.ClientIds = append(m.ClientIds, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -3638,7 +3381,7 @@ func (m *RemoveDocumentRequest) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
 			}
-			var byteLen int
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowYorkie
@@ -3648,25 +3391,23 @@ func (m *RemoveDocumentRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= int(b&0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
 				return ErrInvalidLengthYorkie
 			}
-			postIndex := iNdEx + byteLen
+			postIndex := iNdEx + intStringLen
 			if postIndex < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
-			if m.ClientId == nil {
-				m.ClientId = []byte{}
-			}
+			m.ClientId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -3789,38 +3530,6 @@ func (m *RemoveDocumentResponse) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClientKey", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ClientKey = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ChangePack", wireType)
 			}
 			var msglen int
@@ -3910,7 +3619,7 @@ func (m *PushPullChangesRequest) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
 			}
-			var byteLen int
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowYorkie
@@ -3920,25 +3629,23 @@ func (m *PushPullChangesRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= int(b&0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			if byteLen < 0 {
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
 				return ErrInvalidLengthYorkie
 			}
-			postIndex := iNdEx + byteLen
+			postIndex := iNdEx + intStringLen
 			if postIndex < 0 {
 				return ErrInvalidLengthYorkie
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
-			if m.ClientId == nil {
-				m.ClientId = []byte{}
-			}
+			m.ClientId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -4080,40 +3787,6 @@ func (m *PushPullChangesResponse) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ClientId = append(m.ClientId[:0], dAtA[iNdEx:postIndex]...)
-			if m.ClientId == nil {
-				m.ClientId = []byte{}
-			}
-			iNdEx = postIndex
-		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ChangePack", wireType)
 			}

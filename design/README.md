@@ -3,7 +3,7 @@
 ## Contents
 
 - [Document Editing](document-editing.md): Local and remote document editing mechanism
-- [Peer Awareness](peer-awareness.md): Algorithm for managing end-user status
+- [Presence](presence.md): For sharing the presence of peers
 - [Data Structure](data-structure.md): CRDT data structures in `crdt` package
 - [Range Deletion in Splay Tree](range-deletion-in-splay-tree.md): Rotation-free range deletion algorithm for splay tree
 - [PubSub](pub-sub.md): Client-side event sharing with gRPC server-side stream and PubSub pattern

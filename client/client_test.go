@@ -86,8 +86,6 @@ func TestClient(t *testing.T) {
 
 	t.Run("x-shard-key test", func(t *testing.T) {
 		dummyID := types.ID("000000000000000000000000")
-		dummyActorID, err := dummyID.Bytes()
-		assert.NoError(t, err)
 
 		testServer, addr := dialTestYorkieServer(t)
 		defer testServer.Stop()
@@ -113,7 +111,7 @@ func TestClient(t *testing.T) {
 				assert.Equal(t, "dummy-api-key", data[types.ShardKey][0])
 
 				return &api.ActivateClientResponse{
-					ClientId: dummyActorID,
+					ClientId: dummyID.String(),
 				}, nil
 			},
 		)
