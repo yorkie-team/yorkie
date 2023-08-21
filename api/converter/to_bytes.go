@@ -306,8 +306,12 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 		Attributes: attrs,
 	}
 
-	if treeNode.InsPrev != nil {
-		pbNode.InsPrevId = toTreeNodeID(treeNode.InsPrev.ID)
+	if treeNode.InsPrevID != nil {
+		pbNode.InsPrevId = toTreeNodeID(treeNode.InsPrevID)
+	}
+
+	if treeNode.InsNextID != nil {
+		pbNode.InsNextId = toTreeNodeID(treeNode.InsNextID)
 	}
 
 	return pbNode
