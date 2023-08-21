@@ -541,22 +541,6 @@ func (t *Tree) FindPos(offset int) (*TreePos, error) {
 			leftSibling = node.Parent.Value
 		} else {
 			leftSibling = node.Value
-			absOffset := node.Value.ID.Offset
-			split, err := node.Value.Split(offset, absOffset)
-			if err != nil {
-				return nil, err
-			}
-
-			if split != nil {
-				split.InsPrev = node.Value
-				t.NodeMapByID.Put(split.ID, split)
-
-				if node.Value.InsNext != nil {
-					node.Value.InsNext.InsPrev = split
-					split.InsNext = node.Value.InsNext
-				}
-				node.Value.InsNext = split
-			}
 		}
 		node = node.Parent
 	} else {
@@ -825,27 +809,54 @@ func (t *Tree) toTreePos(pos *TreePos) (*index.TreePos[*TreeNode], error) {
 
 	var treePos *index.TreePos[*TreeNode]
 
-	if parentNode == leftSiblingNode {
+	if parentNode.IsRemoved() {
+		// If parentNode is removed, treePos is the position of its least alive ancestor.
+		var childNode *TreeNode
+		for parentNode.IsRemoved() {
+			childNode = parentNode
+			parentNode = childNode.IndexTreeNode.Parent.Value
+		}
+
+		childOffset, err := parentNode.IndexTreeNode.FindOffset(childNode.IndexTreeNode)
+		if err != nil {
+			return nil, nil
+		}
+
 		treePos = &index.TreePos[*TreeNode]{
-			Node:   leftSiblingNode.IndexTreeNode,
-			Offset: 0,
+			Node:   parentNode.IndexTreeNode,
+			Offset: childOffset,
 		}
 	} else {
-		if leftSiblingNode.IsText() {
+		if parentNode == leftSiblingNode {
 			treePos = &index.TreePos[*TreeNode]{
 				Node:   leftSiblingNode.IndexTreeNode,
-				Offset: leftSiblingNode.IndexTreeNode.PaddedLength(),
+				Offset: 0,
 			}
 		} else {
-			leftSiblingOffset, err := parentNode.IndexTreeNode.FindOffset(leftSiblingNode.IndexTreeNode)
+			// Find the closest existing leftSibling node.
+			offset, err := parentNode.IndexTreeNode.FindOffset(leftSiblingNode.IndexTreeNode)
 			if err != nil {
-				return nil, err
+				return nil, nil
+			}
+
+			if !leftSiblingNode.IsRemoved() {
+				offset++
+
+				// NOTE(sejongk): the below logic needed?
+				// if leftSiblingNode.IsText() {
+				// 	treePos = &index.TreePos[*TreeNode]{
+				// 		Node:   leftSiblingNode.IndexTreeNode,
+				// 		Offset: leftSiblingNode.IndexTreeNode.PaddedLength(),
+				// 	}
+				// 	return treePos
+				// }
 			}
 
 			treePos = &index.TreePos[*TreeNode]{
 				Node:   parentNode.IndexTreeNode,
-				Offset: leftSiblingOffset + 1,
+				Offset: offset,
 			}
+
 		}
 	}
 
