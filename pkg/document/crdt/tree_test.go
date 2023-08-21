@@ -300,4 +300,49 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
 	})
+
+	t.Run("can find the closest TreePos when parentNode or leftSiblingNode does not exist", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+		//       0
+		// <root> </root>
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "r", nil), helper.IssueTime(ctx))
+		assert.Equal(t, 0, tree.Root().Len())
+		assert.Equal(t, "<r></r>", tree.ToXML())
+
+		//       0   1 2 3    4
+		// <root> <p> a b </p> </root>
+		pNode := crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil)
+		textNode := crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab")
+
+		_, err := tree.EditByIndex(0, 0, nil, []*crdt.TreeNode{pNode}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(1, 1, nil, []*crdt.TreeNode{textNode}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>ab</p></r>", tree.ToXML())
+
+		// Find the closest index.TreePos when leftSiblingNode in crdt.TreePos is removed.
+		//       0   1    2
+		// <root> <p> </p> </root>
+		_, err = tree.EditByIndex(1, 3, nil, nil, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p></p></r>", tree.ToXML())
+
+		treePos := crdt.NewTreePos(pNode.ID, textNode.ID)
+		idx, err := tree.ToIndex(treePos)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, idx)
+
+		// Find the closest index.TreePos when parentNode in crdt.TreePos is removed.
+		//       0
+		// <root> </root>
+		_, err = tree.EditByIndex(0, 2, nil, nil, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r></r>", tree.ToXML())
+
+		treePos = crdt.NewTreePos(pNode.ID, textNode.ID)
+		idx, err = tree.ToIndex(treePos)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, idx)
+	})
 }

@@ -840,16 +840,14 @@ func (t *Tree) toTreePos(pos *TreePos) (*index.TreePos[*TreeNode], error) {
 			}
 
 			if !leftSiblingNode.IsRemoved() {
+				if leftSiblingNode.IsText() {
+					treePos = &index.TreePos[*TreeNode]{
+						Node:   leftSiblingNode.IndexTreeNode,
+						Offset: leftSiblingNode.IndexTreeNode.PaddedLength(),
+					}
+					return treePos, nil
+				}
 				offset++
-
-				// NOTE(sejongk): the below logic needed?
-				// if leftSiblingNode.IsText() {
-				// 	treePos = &index.TreePos[*TreeNode]{
-				// 		Node:   leftSiblingNode.IndexTreeNode,
-				// 		Offset: leftSiblingNode.IndexTreeNode.PaddedLength(),
-				// 	}
-				// 	return treePos
-				// }
 			}
 
 			treePos = &index.TreePos[*TreeNode]{
@@ -863,8 +861,8 @@ func (t *Tree) toTreePos(pos *TreePos) (*index.TreePos[*TreeNode], error) {
 	return treePos, nil
 }
 
-// toIndex converts the given CRDTTreePos to the index of the tree.
-func (t *Tree) toIndex(pos *TreePos) (int, error) {
+// ToIndex converts the given CRDTTreePos to the index of the tree.
+func (t *Tree) ToIndex(pos *TreePos) (int, error) {
 	treePos, err := t.toTreePos(pos)
 	if treePos == nil {
 		return -1, nil
