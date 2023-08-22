@@ -674,7 +674,9 @@ func (t *Tree) Edit(from, to *TreePos,
 	return createdAtMapByActor, nil
 }
 
-func (t *Tree) traverseInPosRange(fromPos, toPos *TreePos, callback func(node *TreeNode, contain index.TagContain)) error {
+func (t *Tree) traverseInPosRange(fromPos, toPos *TreePos,
+	callback func(node *TreeNode, contain index.TagContain),
+) error {
 	fromIdx, err := t.ToIndex(fromPos)
 	if err != nil {
 		return err

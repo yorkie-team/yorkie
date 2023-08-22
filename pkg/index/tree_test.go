@@ -169,7 +169,8 @@ func TestIndexTree(t *testing.T) {
 		//        0   1 2 3    4   5 6 7 8    9   10 11 12    13
 		// `<root> <p> a b </p> <p> c d e </p> <p>  f  g  </p> </root>`
 
-		helper.NodesBetweenEqual(t, tree, 2, 11, []string{"text.b:All", "p:Closing", "text.cde:All", "p:All", "text.fg:All", "p:Opening"})
+		helper.NodesBetweenEqual(t, tree, 2, 11, []string{"text.b:All", "p:Closing",
+			"text.cde:All", "p:All", "text.fg:All", "p:Opening"})
 		helper.NodesBetweenEqual(t, tree, 2, 6, []string{"text.b:All", "p:Closing", "text.cde:All", "p:Opening"})
 		helper.NodesBetweenEqual(t, tree, 0, 1, []string{"p:Opening"})
 		helper.NodesBetweenEqual(t, tree, 3, 4, []string{"p:Closing"})

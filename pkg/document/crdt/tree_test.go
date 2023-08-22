@@ -298,12 +298,14 @@ func TestTree(t *testing.T) {
 		// 02. style attributes to elements.
 		err = tree.StyleByIndex(0, 5, map[string]string{"style": "italic"}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, `<root><p color="red" style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
+		assert.Equal(t, `<root><p color="red" style="italic" weight="bold">ab</p>`+
+			`<p style="italic">cd</p></root>`, tree.ToXML())
 
 		// 03. Ignore styling attributes to text nodes.
 		err = tree.StyleByIndex(1, 3, map[string]string{"bold": "true"}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, `<root><p color="red" style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
+		assert.Equal(t, `<root><p color="red" style="italic" weight="bold">ab</p>`+
+			`<p style="italic">cd</p></root>`, tree.ToXML())
 	})
 
 	t.Run("can find the closest TreePos when parentNode or leftSiblingNode does not exist", func(t *testing.T) {

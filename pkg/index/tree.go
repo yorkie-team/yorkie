@@ -119,14 +119,19 @@ func postorderTraversal[V Value](node *Node[V], callback func(node *Node[V], dep
 	callback(node, depth)
 }
 
+// TagContain represents whether the opening or closing tag of a element is selected.
 type TagContain int
 
 const (
+	// ContainsAll represents that both opening and closing tag of a element are selected.
 	ContainsAll TagContain = 1 + iota
+	// ContainsOpening represents that only the opening tag is selected.
 	ContainsOpening
+	// ContainsClosing represents that only the closing tag is selected.
 	ContainsClosing
 )
 
+// ToString returns the string of TagContain.
 func (c TagContain) ToString() string {
 	var str string
 	switch c {
