@@ -224,8 +224,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("delete nodes between element nodes test", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): We need to fix this test.")
-
 		// 01. Create a tree with 2 paragraphs.
 		//       0   1 2 3    4   5 6 7    8
 		// <root> <p> a b </p> <p> c d </p> </root>
@@ -251,19 +249,22 @@ func TestTree(t *testing.T) {
 		// <root> <p> a d </p> </root>
 		_, err = tree.EditByIndex(2, 6, nil, nil, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, "<root><p>ad</p></root>", tree.ToXML())
+		assert.Equal(t, "<root><p>a</p><p>d</p></root>", tree.ToXML())
 
-		structure := tree.Structure()
-		assert.Equal(t, 4, structure.Size)
-		assert.Equal(t, 2, structure.Children[0].Size)
-		assert.Equal(t, 1, structure.Children[0].Children[0].Size)
-		assert.Equal(t, 1, structure.Children[0].Children[1].Size)
+		// TODO(sejongk): Use the below assertions after implementing Tree.Move.
+		// assert.Equal(t, "<root><p>ad</p></root>", tree.ToXML())
 
-		// 03. insert a new text node at the start of the first paragraph.
-		_, err = tree.EditByIndex(1, 1, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
-			"text", nil, "@")}, helper.IssueTime(ctx))
-		assert.NoError(t, err)
-		assert.Equal(t, "<root><p>@ad</p></root>", tree.ToXML())
+		// structure := tree.Structure()
+		// assert.Equal(t, 4, structure.Size)
+		// assert.Equal(t, 2, structure.Children[0].Size)
+		// assert.Equal(t, 1, structure.Children[0].Children[0].Size)
+		// assert.Equal(t, 1, structure.Children[0].Children[1].Size)
+
+		// // 03. insert a new text node at the start of the first paragraph.
+		// _, err = tree.EditByIndex(1, 1, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+		// 	"text", nil, "@")}, helper.IssueTime(ctx))
+		// assert.NoError(t, err)
+		// assert.Equal(t, "<root><p>@ad</p></root>", tree.ToXML())
 	})
 
 	t.Run("style node with element attributes test", func(t *testing.T) {
@@ -284,21 +285,25 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
 
-		// Currently styling attributes to opening tag is only possible.
-		// TODO(sejongk): We have to let it possible to style attributes to closing tag.
+		// style attributes with opening tag
 		err = tree.StyleByIndex(0, 1, map[string]string{"weight": "bold"}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
 
+		// style attributes with closing tag
+		err = tree.StyleByIndex(3, 4, map[string]string{"color": "red"}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, `<root><p color="red" weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
+
 		// 02. style attributes to elements.
 		err = tree.StyleByIndex(0, 5, map[string]string{"style": "italic"}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, `<root><p style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
+		assert.Equal(t, `<root><p color="red" style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
 
 		// 03. Ignore styling attributes to text nodes.
 		err = tree.StyleByIndex(1, 3, map[string]string{"bold": "true"}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, `<root><p style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
+		assert.Equal(t, `<root><p color="red" style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
 	})
 
 	t.Run("can find the closest TreePos when parentNode or leftSiblingNode does not exist", func(t *testing.T) {

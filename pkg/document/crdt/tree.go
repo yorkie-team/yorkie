@@ -285,10 +285,9 @@ func (n *TreeNode) SplitElement(offset int) (*TreeNode, error) {
 }
 
 // remove marks the node as removed.
-func (n *TreeNode) remove(removedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
+func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	justRemoved := n.RemovedAt == nil
-	if !n.ID.CreatedAt.After(latestCreatedAt) &&
-		(n.RemovedAt == nil || n.RemovedAt.Compare(removedAt) > 0) {
+	if n.RemovedAt == nil || n.RemovedAt.Compare(removedAt) > 0 {
 		n.RemovedAt = removedAt
 		if justRemoved {
 			n.IndexTreeNode.UpdateAncestorsSize()
@@ -296,6 +295,14 @@ func (n *TreeNode) remove(removedAt *time.Ticket, latestCreatedAt *time.Ticket) 
 		return true
 	}
 
+	return false
+}
+
+func (n *TreeNode) canDelete(removedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
+	if !n.ID.CreatedAt.After(latestCreatedAt) &&
+		(n.RemovedAt == nil || n.RemovedAt.Compare(removedAt) > 0) {
+		return true
+	}
 	return false
 }
 
@@ -574,68 +581,53 @@ func (t *Tree) Edit(from, to *TreePos,
 	if err != nil {
 		return nil, err
 	}
-	_, toLeft, err := t.findTreeNodesWithSplitText(to, editedAt)
+	_, _, err = t.findTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		return nil, err
 	}
 
-	// 02. remove the nodes and update linked list and index tree.
+	// 02. remove the nodes and update index tree.
 	createdAtMapByActor := make(map[string]*time.Ticket)
+	var toBeRemoved []*TreeNode
 
-	if fromLeft != toLeft {
-		var fromChildIndex int
-		var parent *index.Node[*TreeNode]
-
-		if fromLeft.Parent == toLeft.Parent {
-			parent = fromParent
-			fromChildIndex = parent.OffsetOfChild(fromLeft) + 1
-		} else {
-			parent = fromLeft
-			fromChildIndex = 0
+	err = t.traverseInPosRange(from, to, func(node *TreeNode, contain index.TagContain) {
+		// If node is a element node and half-contained in the range,
+		// it should not be removed.
+		if !node.IsText() && contain != index.ContainsAll {
+			return
 		}
 
-		toChildIndex := parent.OffsetOfChild(toLeft)
+		actorIDHex := node.ID.CreatedAt.ActorIDHex()
 
-		parentChildren := parent.Children(true)
-		for i := fromChildIndex; i <= toChildIndex; i++ {
-			node := parentChildren[i].Value
-			actorIDHex := node.ID.CreatedAt.ActorIDHex()
-
-			var latestCreatedAt *time.Ticket
-			if latestCreatedAtMapByActor == nil {
-				latestCreatedAt = time.MaxTicket
+		var latestCreatedAt *time.Ticket
+		if latestCreatedAtMapByActor == nil {
+			latestCreatedAt = time.MaxTicket
+		} else {
+			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
+			if ok {
+				latestCreatedAt = createdAt
 			} else {
-				createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
-				if ok {
-					latestCreatedAt = createdAt
-				} else {
-					latestCreatedAt = time.InitialTicket
-				}
+				latestCreatedAt = time.InitialTicket
 			}
+		}
 
-			if node.remove(editedAt, latestCreatedAt) {
-				latestCreatedAt = createdAtMapByActor[actorIDHex]
-				createdAt := node.ID.CreatedAt
-				if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
-					createdAtMapByActor[actorIDHex] = createdAt
-				}
-
-				t.removedNodeMap[node.ID.toIDString()] = node
-
-				// traverse the nodes including tombstones
-				index.TraverseNode(node.IndexTreeNode, func(node *index.Node[*TreeNode], depth int) {
-					if node.Value.remove(editedAt, time.MaxTicket) {
-						// TODO(sejongk): Refactor the repeated code.
-						latestCreatedAt = createdAtMapByActor[actorIDHex]
-						createdAt := node.Value.ID.CreatedAt
-						if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
-							createdAtMapByActor[actorIDHex] = createdAt
-						}
-
-						t.removedNodeMap[node.Value.ID.toIDString()] = node.Value
-					}
-				})
+		if node.canDelete(editedAt, latestCreatedAt) {
+			latestCreatedAt = createdAtMapByActor[actorIDHex]
+			createdAt := node.ID.CreatedAt
+			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
+				createdAtMapByActor[actorIDHex] = createdAt
 			}
+			toBeRemoved = append(toBeRemoved, node)
+		}
+
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, node := range toBeRemoved {
+		if node.remove(editedAt) {
+			t.removedNodeMap[node.ID.toIDString()] = node
 		}
 	}
 
@@ -665,7 +657,7 @@ func (t *Tree) Edit(from, to *TreePos,
 				// make new nodes as tombstone immediately
 				if fromParent.Value.IsRemoved() {
 					actorIDHex := node.Value.ID.CreatedAt.ActorIDHex()
-					if node.Value.remove(editedAt, time.MaxTicket) {
+					if node.Value.remove(editedAt) {
 						latestCreatedAt := createdAtMapByActor[actorIDHex]
 						createdAt := node.Value.ID.CreatedAt
 						if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
@@ -680,6 +672,19 @@ func (t *Tree) Edit(from, to *TreePos,
 		}
 	}
 	return createdAtMapByActor, nil
+}
+
+func (t *Tree) traverseInPosRange(fromPos, toPos *TreePos, callback func(node *TreeNode, contain index.TagContain)) error {
+	fromIdx, err := t.ToIndex(fromPos)
+	if err != nil {
+		return err
+	}
+	toIdx, err := t.ToIndex(toPos)
+	if err != nil {
+		return err
+	}
+
+	return t.IndexTree.NodesBetween(fromIdx, toIdx, callback)
 }
 
 // StyleByIndex applies the given attributes of the given range.
@@ -701,44 +706,28 @@ func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, edited
 // Style applies the given attributes of the given range.
 func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *time.Ticket) error {
 	// 01. split text nodes at the given range if needed.
-	_, fromLeft, err := t.findTreeNodesWithSplitText(from, editedAt)
+	_, _, err := t.findTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
 		return err
 	}
-	_, toLeft, err := t.findTreeNodesWithSplitText(to, editedAt)
+	_, _, err = t.findTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		return err
 	}
 
-	if fromLeft != toLeft {
-		var fromChildIndex int
-		var parent *index.Node[*TreeNode]
+	err = t.traverseInPosRange(from, to, func(node *TreeNode, contain index.TagContain) {
+		if !node.IsRemoved() {
+			if node.Attrs == nil {
+				node.Attrs = NewRHT()
+			}
 
-		if fromLeft.Parent == toLeft.Parent {
-			parent = fromLeft.Parent
-			fromChildIndex = parent.OffsetOfChild(fromLeft) + 1
-		} else {
-			parent = fromLeft
-			fromChildIndex = 0
-		}
-
-		toChildIndex := parent.OffsetOfChild(toLeft)
-
-		// 02. style the nodes.
-		parentChildren := parent.Children(true)
-		for i := fromChildIndex; i <= toChildIndex; i++ {
-			node := parentChildren[i]
-
-			if !node.Value.IsRemoved() {
-				if node.Value.Attrs == nil {
-					node.Value.Attrs = NewRHT()
-				}
-
-				for key, value := range attributes {
-					node.Value.Attrs.Set(key, value, editedAt)
-				}
+			for key, value := range attributes {
+				node.Attrs.Set(key, value, editedAt)
 			}
 		}
+	})
+	if err != nil {
+		return err
 	}
 
 	return nil

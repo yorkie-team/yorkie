@@ -119,10 +119,31 @@ func postorderTraversal[V Value](node *Node[V], callback func(node *Node[V], dep
 	callback(node, depth)
 }
 
+type TagContain int
+
+const (
+	ContainsAll TagContain = 1 + iota
+	ContainsOpening
+	ContainsClosing
+)
+
+func (c TagContain) ToString() string {
+	var str string
+	switch c {
+	case ContainsAll:
+		str = "All"
+	case ContainsOpening:
+		str = "Opening"
+	case ContainsClosing:
+		str = "Closing"
+	}
+	return str
+}
+
 // nodesBetween iterates the nodes between the given range.
 // If the given range is collapsed, the callback is not called.
 // It traverses the tree with postorder traversal.
-func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) error {
+func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V, contain TagContain)) error {
 	if from > to {
 		return fmt.Errorf("from cannot be greater than to %d > %d", from, to)
 	}
@@ -150,6 +171,10 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) e
 			if child.IsText() {
 				toChild = to - pos
 			}
+			// pos can be affected by children traversal and callback call.
+			// so, update pos before these to keep it safe.
+			pos += child.PaddedLength()
+
 			if err := nodesBetween(
 				child,
 				int(math.Max(0, float64(fromChild))),
@@ -160,10 +185,19 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V)) e
 			}
 
 			if fromChild < 0 || toChild > child.Length || child.IsText() {
-				callback(child.Value)
+				var contain TagContain
+				if (fromChild < 0 && toChild > child.Length) || child.IsText() {
+					contain = ContainsAll
+				} else if fromChild < 0 {
+					contain = ContainsOpening
+				} else {
+					contain = ContainsClosing
+				}
+				callback(child.Value, contain)
 			}
+		} else {
+			pos += child.PaddedLength()
 		}
-		pos += child.PaddedLength()
 	}
 
 	return nil
@@ -556,7 +590,7 @@ func (n *Node[V]) OffsetOfChild(node *Node[V]) int {
 }
 
 // NodesBetween returns the nodes between the given range.
-func (t *Tree[V]) NodesBetween(from int, to int, callback func(node V)) error {
+func (t *Tree[V]) NodesBetween(from int, to int, callback func(node V, contain TagContain)) error {
 	return nodesBetween(t.root, from, to, callback)
 }
 
