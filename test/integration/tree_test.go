@@ -2304,5 +2304,4 @@ func TestTree(t *testing.T) {
 		size := d1.Root().GetTree("t").IndexTree.Root().Len()
 		assert.Equal(t, size, d2.Root().GetTree("t").IndexTree.Root().Len())
 	})
-
 }
