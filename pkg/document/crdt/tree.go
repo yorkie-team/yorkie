@@ -577,11 +577,11 @@ func (t *Tree) Edit(from, to *TreePos,
 	editedAt *time.Ticket,
 ) (map[string]*time.Ticket, error) {
 	// 01. split text nodes at the given range if needed.
-	fromParent, fromLeft, err := t.findTreeNodesWithSplitText(from, editedAt)
+	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
 		return nil, err
 	}
-	_, _, err = t.findTreeNodesWithSplitText(to, editedAt)
+	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -590,37 +590,38 @@ func (t *Tree) Edit(from, to *TreePos,
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	var toBeRemoved []*TreeNode
 
-	err = t.traverseInPosRange(from, to, func(node *TreeNode, contain index.TagContain) {
-		// If node is a element node and half-contained in the range,
-		// it should not be removed.
-		if !node.IsText() && contain != index.ContainsAll {
-			return
-		}
+	err = t.traverseInPosRange(fromParent.Value, fromLeft.Value, toParent.Value, toLeft.Value,
+		func(node *TreeNode, contain index.TagContain) {
+			// If node is a element node and half-contained in the range,
+			// it should not be removed.
+			if !node.IsText() && contain != index.ContainsAll {
+				return
+			}
 
-		actorIDHex := node.ID.CreatedAt.ActorIDHex()
+			actorIDHex := node.ID.CreatedAt.ActorIDHex()
 
-		var latestCreatedAt *time.Ticket
-		if latestCreatedAtMapByActor == nil {
-			latestCreatedAt = time.MaxTicket
-		} else {
-			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
-			if ok {
-				latestCreatedAt = createdAt
+			var latestCreatedAt *time.Ticket
+			if latestCreatedAtMapByActor == nil {
+				latestCreatedAt = time.MaxTicket
 			} else {
-				latestCreatedAt = time.InitialTicket
+				createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
+				if ok {
+					latestCreatedAt = createdAt
+				} else {
+					latestCreatedAt = time.InitialTicket
+				}
 			}
-		}
 
-		if node.canDelete(editedAt, latestCreatedAt) {
-			latestCreatedAt = createdAtMapByActor[actorIDHex]
-			createdAt := node.ID.CreatedAt
-			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
-				createdAtMapByActor[actorIDHex] = createdAt
+			if node.canDelete(editedAt, latestCreatedAt) {
+				latestCreatedAt = createdAtMapByActor[actorIDHex]
+				createdAt := node.ID.CreatedAt
+				if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
+					createdAtMapByActor[actorIDHex] = createdAt
+				}
+				toBeRemoved = append(toBeRemoved, node)
 			}
-			toBeRemoved = append(toBeRemoved, node)
-		}
 
-	})
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -674,14 +675,14 @@ func (t *Tree) Edit(from, to *TreePos,
 	return createdAtMapByActor, nil
 }
 
-func (t *Tree) traverseInPosRange(fromPos, toPos *TreePos,
+func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNode,
 	callback func(node *TreeNode, contain index.TagContain),
 ) error {
-	fromIdx, err := t.ToIndex(fromPos)
+	fromIdx, err := t.ToIndex(fromParent, fromLeft)
 	if err != nil {
 		return err
 	}
-	toIdx, err := t.ToIndex(toPos)
+	toIdx, err := t.ToIndex(toParent, toLeft)
 	if err != nil {
 		return err
 	}
@@ -708,26 +709,27 @@ func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, edited
 // Style applies the given attributes of the given range.
 func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *time.Ticket) error {
 	// 01. split text nodes at the given range if needed.
-	_, _, err := t.findTreeNodesWithSplitText(from, editedAt)
+	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
 		return err
 	}
-	_, _, err = t.findTreeNodesWithSplitText(to, editedAt)
+	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
 		return err
 	}
 
-	err = t.traverseInPosRange(from, to, func(node *TreeNode, contain index.TagContain) {
-		if !node.IsRemoved() {
-			if node.Attrs == nil {
-				node.Attrs = NewRHT()
-			}
+	err = t.traverseInPosRange(fromParent.Value, fromLeft.Value, toParent.Value, toLeft.Value,
+		func(node *TreeNode, contain index.TagContain) {
+			if !node.IsRemoved() {
+				if node.Attrs == nil {
+					node.Attrs = NewRHT()
+				}
 
-			for key, value := range attributes {
-				node.Attrs.Set(key, value, editedAt)
+				for key, value := range attributes {
+					node.Attrs.Set(key, value, editedAt)
+				}
 			}
-		}
-	})
+		})
 	if err != nil {
 		return err
 	}
@@ -736,14 +738,14 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 }
 
 /**
- * findTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
+ * FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
  * splits the text node if necessary.
  *
  * crdt.TreePos is a position in the CRDT perspective. This is different
  * from indexTree.TreePos which is a position of the tree in the local perspective.
  * TODO(sejongk): clarify the comments
 **/
-func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
+func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	*index.Node[*TreeNode], *index.Node[*TreeNode], error,
 ) {
 	parentNode, leftSiblingNode := t.toTreeNodes(pos)
@@ -791,12 +793,7 @@ func (t *Tree) findTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 }
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.
-func (t *Tree) toTreePos(pos *TreePos) (*index.TreePos[*TreeNode], error) {
-	if pos.ParentID == nil || pos.LeftSiblingID == nil {
-		return nil, nil
-	}
-
-	parentNode, leftSiblingNode := t.toTreeNodes(pos)
+func (t *Tree) toTreePos(parentNode, leftSiblingNode *TreeNode) (*index.TreePos[*TreeNode], error) {
 	if parentNode == nil || leftSiblingNode == nil {
 		return nil, nil
 	}
@@ -856,8 +853,8 @@ func (t *Tree) toTreePos(pos *TreePos) (*index.TreePos[*TreeNode], error) {
 }
 
 // ToIndex converts the given CRDTTreePos to the index of the tree.
-func (t *Tree) ToIndex(pos *TreePos) (int, error) {
-	treePos, err := t.toTreePos(pos)
+func (t *Tree) ToIndex(parentNode, leftSiblingNode *TreeNode) (int, error) {
+	treePos, err := t.toTreePos(parentNode, leftSiblingNode)
 	if treePos == nil {
 		return -1, nil
 	}

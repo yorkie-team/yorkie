@@ -341,7 +341,10 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<r><p></p></r>", tree.ToXML())
 
 		treePos := crdt.NewTreePos(pNode.ID, textNode.ID)
-		idx, err := tree.ToIndex(treePos)
+
+		parent, leftSibling, err := tree.FindTreeNodesWithSplitText(treePos, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		idx, err := tree.ToIndex(parent.Value, leftSibling.Value)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, idx)
 
@@ -353,7 +356,9 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<r></r>", tree.ToXML())
 
 		treePos = crdt.NewTreePos(pNode.ID, textNode.ID)
-		idx, err = tree.ToIndex(treePos)
+		parent, leftSibling, err = tree.FindTreeNodesWithSplitText(treePos, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		idx, err = tree.ToIndex(parent.Value, leftSibling.Value)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, idx)
 	})
