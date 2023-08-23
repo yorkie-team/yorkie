@@ -737,14 +737,11 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 	return nil
 }
 
-/**
- * FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
- * splits the text node if necessary.
- *
- * crdt.TreePos is a position in the CRDT perspective. This is different
- * from indexTree.TreePos which is a position of the tree in the local perspective.
- * TODO(sejongk): clarify the comments
-**/
+// FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
+// splits the text node if necessary.
+// crdt.TreePos is a position in the CRDT perspective. This is different
+// from indexTree.TreePos which is a position of the tree in the local perspective.
+// TODO(sejongk): clarify the comments
 func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	*index.Node[*TreeNode], *index.Node[*TreeNode], error,
 ) {
