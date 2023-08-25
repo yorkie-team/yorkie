@@ -119,27 +119,27 @@ func postorderTraversal[V Value](node *Node[V], callback func(node *Node[V], dep
 	callback(node, depth)
 }
 
-// TagContain represents whether the opening or closing tag of a element is selected.
-type TagContain int
+// TagContained represents whether the opening or closing tag of a element is selected.
+type TagContained int
 
 const (
-	// ContainsAll represents that both opening and closing tag of a element are selected.
-	ContainsAll TagContain = 1 + iota
-	// ContainsOpening represents that only the opening tag is selected.
-	ContainsOpening
-	// ContainsClosing represents that only the closing tag is selected.
-	ContainsClosing
+	// AllContained represents that both opening and closing tag of a element are selected.
+	AllContained TagContained = 1 + iota
+	// OpeningContained represents that only the opening tag is selected.
+	OpeningContained
+	// ClosingContained represents that only the closing tag is selected.
+	ClosingContained
 )
 
 // ToString returns the string of TagContain.
-func (c TagContain) ToString() string {
+func (c TagContained) ToString() string {
 	var str string
 	switch c {
-	case ContainsAll:
+	case AllContained:
 		str = "All"
-	case ContainsOpening:
+	case OpeningContained:
 		str = "Opening"
-	case ContainsClosing:
+	case ClosingContained:
 		str = "Closing"
 	}
 	return str
@@ -148,7 +148,7 @@ func (c TagContain) ToString() string {
 // nodesBetween iterates the nodes between the given range.
 // If the given range is collapsed, the callback is not called.
 // It traverses the tree with postorder traversal.
-func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V, contain TagContain)) error {
+func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V, contain TagContained)) error {
 	if from > to {
 		return fmt.Errorf("from cannot be greater than to %d > %d", from, to)
 	}
@@ -190,13 +190,13 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V, co
 			}
 
 			if fromChild < 0 || toChild > child.Length || child.IsText() {
-				var contain TagContain
+				var contain TagContained
 				if (fromChild < 0 && toChild > child.Length) || child.IsText() {
-					contain = ContainsAll
+					contain = AllContained
 				} else if fromChild < 0 {
-					contain = ContainsOpening
+					contain = OpeningContained
 				} else {
-					contain = ContainsClosing
+					contain = ClosingContained
 				}
 				callback(child.Value, contain)
 			}
@@ -595,7 +595,7 @@ func (n *Node[V]) OffsetOfChild(node *Node[V]) int {
 }
 
 // NodesBetween returns the nodes between the given range.
-func (t *Tree[V]) NodesBetween(from int, to int, callback func(node V, contain TagContain)) error {
+func (t *Tree[V]) NodesBetween(from int, to int, callback func(node V, contain TagContained)) error {
 	return nodesBetween(t.root, from, to, callback)
 }
 

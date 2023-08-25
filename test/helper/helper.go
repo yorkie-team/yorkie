@@ -137,8 +137,8 @@ func IssueTime(change *change.Context) *time.Ticket {
 // indexes.
 func NodesBetweenEqual(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {
 	var nodes []*crdt.TreeNode
-	var contains []index.TagContain
-	err := tree.NodesBetween(from, to, func(node *crdt.TreeNode, contain index.TagContain) {
+	var contains []index.TagContained
+	err := tree.NodesBetween(from, to, func(node *crdt.TreeNode, contain index.TagContained) {
 		nodes = append(nodes, node)
 		contains = append(contains, contain)
 	})

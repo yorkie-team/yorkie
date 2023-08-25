@@ -591,10 +591,10 @@ func (t *Tree) Edit(from, to *TreePos,
 	var toBeRemoved []*TreeNode
 
 	err = t.traverseInPosRange(fromParent.Value, fromLeft.Value, toParent.Value, toLeft.Value,
-		func(node *TreeNode, contain index.TagContain) {
+		func(node *TreeNode, contain index.TagContained) {
 			// If node is a element node and half-contained in the range,
 			// it should not be removed.
-			if !node.IsText() && contain != index.ContainsAll {
+			if !node.IsText() && contain != index.AllContained {
 				return
 			}
 
@@ -676,7 +676,7 @@ func (t *Tree) Edit(from, to *TreePos,
 }
 
 func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNode,
-	callback func(node *TreeNode, contain index.TagContain),
+	callback func(node *TreeNode, contain index.TagContained),
 ) error {
 	fromIdx, err := t.ToIndex(fromParent, fromLeft)
 	if err != nil {
@@ -719,7 +719,7 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 	}
 
 	err = t.traverseInPosRange(fromParent.Value, fromLeft.Value, toParent.Value, toLeft.Value,
-		func(node *TreeNode, contain index.TagContain) {
+		func(node *TreeNode, contain index.TagContained) {
 			if !node.IsRemoved() {
 				if node.Attrs == nil {
 					node.Attrs = NewRHT()
@@ -741,7 +741,6 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 // splits the text node if necessary.
 // crdt.TreePos is a position in the CRDT perspective. This is different
 // from indexTree.TreePos which is a position of the tree in the local perspective.
-// TODO(sejongk): clarify the comments
 func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	*index.Node[*TreeNode], *index.Node[*TreeNode], error,
 ) {
