@@ -27,16 +27,18 @@ In yorkie, a JSON-like `Tree` is used to represent the document model of a tree-
 
 This tree-based document model resembles XML tree and consists of element nodes and text nodes. element nodes can have attributes, and text nodes contain a string as their value. For example:
 
-<img src="https://github.com/yorkie-team/yorkie/assets/78714820/b5500d8b-43db-4d89-983d-5708b7041cc4" width="500" />
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/b5500d8b-43db-4d89-983d-5708b7041cc4" width="550" />
 
 
 **Operation**
 
-The JSON-like `Tree` provides specialized operations tailored for text editing rather than typical operations of a general tree. To specify the operation's range, an `index` is used. For example:
+The JSON-like `Tree` provides specialized operations tailored for text editing rather than typical operations of a general tree. To specify the operation's range, an `index` or `path` is used. For example:
 
-<img src="https://github.com/yorkie-team/yorkie/assets/78714820/88d6acde-6775-4af2-ae32-ba7a6b324abc" width="450" />
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/9b3420e9-6c18-4114-9f4f-1c8e02324dd6" width="550" />
 
 These `index`es are assigned in order at positions where the user's cursor can reach. These `index`es draw inspiration from ProseMirror's index and share a similar structural concept.
+
+In the case of a `path`, it contains `offset`s of each node from the root node as elements except the last. The last element of the `path` represents the position in the parent node. For example, the `path` of the position between '`k`' and '`i`' is `[1, 4]`. The first element of the `path` is the `offset` of the `<b>` in `<p>` and the second element represents the position between '`k`' and '`i`' in `<b>`.
 
 1. `Tree.Edit`
 
@@ -119,7 +121,7 @@ In the case of local editing, the given `index`es are converted to `CRDTTree.Tre
 
 **Coverage**
 
-<img src="https://github.com/yorkie-team/yorkie/assets/78714820/c911ffb4-9021-4a1f-9a11-b8e28fb41435" width="850" >
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/c911ffb4-9021-4a1f-9a11-b8e28fb41435" width="750" >
 
 Using conditions such as range type, node type, and edit type, 27 possible cases of concurrent editing can be represented.
 
