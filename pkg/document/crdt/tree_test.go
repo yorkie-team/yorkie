@@ -224,8 +224,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("delete nodes between element nodes test", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): We need to fix this test.")
-
 		// 01. Create a tree with 2 paragraphs.
 		//       0   1 2 3    4   5 6 7    8
 		// <root> <p> a b </p> <p> c d </p> </root>
@@ -251,19 +249,22 @@ func TestTree(t *testing.T) {
 		// <root> <p> a d </p> </root>
 		_, err = tree.EditByIndex(2, 6, nil, nil, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, "<root><p>ad</p></root>", tree.ToXML())
+		assert.Equal(t, "<root><p>a</p><p>d</p></root>", tree.ToXML())
 
-		structure := tree.Structure()
-		assert.Equal(t, 4, structure.Size)
-		assert.Equal(t, 2, structure.Children[0].Size)
-		assert.Equal(t, 1, structure.Children[0].Children[0].Size)
-		assert.Equal(t, 1, structure.Children[0].Children[1].Size)
+		// TODO(sejongk): Use the below assertions after implementing Tree.Move.
+		// assert.Equal(t, "<root><p>ad</p></root>", tree.ToXML())
 
-		// 03. insert a new text node at the start of the first paragraph.
-		_, err = tree.EditByIndex(1, 1, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
-			"text", nil, "@")}, helper.IssueTime(ctx))
-		assert.NoError(t, err)
-		assert.Equal(t, "<root><p>@ad</p></root>", tree.ToXML())
+		// structure := tree.Structure()
+		// assert.Equal(t, 4, structure.Size)
+		// assert.Equal(t, 2, structure.Children[0].Size)
+		// assert.Equal(t, 1, structure.Children[0].Children[0].Size)
+		// assert.Equal(t, 1, structure.Children[0].Children[1].Size)
+
+		// // 03. insert a new text node at the start of the first paragraph.
+		// _, err = tree.EditByIndex(1, 1, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+		// 	"text", nil, "@")}, helper.IssueTime(ctx))
+		// assert.NoError(t, err)
+		// assert.Equal(t, "<root><p>@ad</p></root>", tree.ToXML())
 	})
 
 	t.Run("style node with element attributes test", func(t *testing.T) {
@@ -284,21 +285,32 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
 
-		// Currently styling attributes to opening tag is only possible.
-		// TODO(sejongk): We have to let it possible to style attributes to closing tag.
+		// style attributes with opening tag
 		err = tree.StyleByIndex(0, 1, map[string]string{"weight": "bold"}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
 
+		// style attributes with closing tag
+		err = tree.StyleByIndex(3, 4, map[string]string{"color": "red"}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, `<root><p color="red" weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
+
+		// style attributes with the whole
+		err = tree.StyleByIndex(0, 4, map[string]string{"size": "small"}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, `<root><p color="red" size="small" weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
+
 		// 02. style attributes to elements.
 		err = tree.StyleByIndex(0, 5, map[string]string{"style": "italic"}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, `<root><p style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
+		assert.Equal(t, `<root><p color="red" size="small" style="italic" weight="bold">ab</p>`+
+			`<p style="italic">cd</p></root>`, tree.ToXML())
 
 		// 03. Ignore styling attributes to text nodes.
 		err = tree.StyleByIndex(1, 3, map[string]string{"bold": "true"}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, `<root><p style="italic" weight="bold">ab</p><p style="italic">cd</p></root>`, tree.ToXML())
+		assert.Equal(t, `<root><p color="red" size="small" style="italic" weight="bold">ab</p>`+
+			`<p style="italic">cd</p></root>`, tree.ToXML())
 	})
 
 	t.Run("can find the closest TreePos when parentNode or leftSiblingNode does not exist", func(t *testing.T) {
@@ -329,7 +341,10 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<r><p></p></r>", tree.ToXML())
 
 		treePos := crdt.NewTreePos(pNode.ID, textNode.ID)
-		idx, err := tree.ToIndex(treePos)
+
+		parent, leftSibling, err := tree.FindTreeNodesWithSplitText(treePos, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		idx, err := tree.ToIndex(parent.Value, leftSibling.Value)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, idx)
 
@@ -341,8 +356,56 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<r></r>", tree.ToXML())
 
 		treePos = crdt.NewTreePos(pNode.ID, textNode.ID)
-		idx, err = tree.ToIndex(treePos)
+		parent, leftSibling, err = tree.FindTreeNodesWithSplitText(treePos, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		idx, err = tree.ToIndex(parent.Value, leftSibling.Value)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, idx)
+	})
+
+	t.Run("delete nodes in a multi-level range test", func(t *testing.T) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
+		_, err := tree.EditByIndex(0, 0, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(1, 1, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ab")}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(3, 3, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(4, 4, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "x")}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(7, 7, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(8, 8, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(9, 9, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "cd")}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(13, 13, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(14, 14, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"p", nil)}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(15, 15, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "y")}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(17, 17, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "ef")}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p>ab<p>x</p></p><p><p>cd</p></p><p><p>y</p>ef</p></root>", tree.ToXML())
+
+		_, err = tree.EditByIndex(2, 18, nil, nil, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p>a</p><p>f</p></root>", tree.ToXML())
+
+		// TODO(sejongk): Use the below assertion after implementing Tree.Move.
+		// assert.Equal(t, "<root><p>af</p></root>", tree.ToXML())
 	})
 }

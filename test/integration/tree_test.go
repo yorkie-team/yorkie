@@ -668,8 +668,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("edit its content with attributes test", func(t *testing.T) {
-		t.Skip("TODO(hackerwins): We need to fix this test.")
-
 		doc := document.New(helper.TestDocKey(t))
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{Type: "doc"})
@@ -690,12 +688,16 @@ func TestTree(t *testing.T) {
 			assert.Equal(t, `<doc><p bold="true">ab</p><p italic="true">cd</p></doc>`, root.GetTree("t").ToXML())
 
 			root.GetTree("t").Edit(2, 6, nil)
-			assert.Equal(t, `<doc><p italic="true">ad</p></doc>`, root.GetTree("t").ToXML())
+			assert.Equal(t, `<doc><p bold="true">a</p><p italic="true">d</p></doc>`, root.GetTree("t").ToXML())
+			// TODO(sejongk): Use the below assertion after implementing Tree.Move.
+			// assert.Equal(t, `<doc><p italic="true">ad</p></doc>`, root.GetTree("t").ToXML())
 
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `<doc><p italic="true">ad</p></doc>`, doc.Root().GetTree("t").ToXML())
+		assert.Equal(t, `<doc><p bold="true">a</p><p italic="true">d</p></doc>`, doc.Root().GetTree("t").ToXML())
+		// TODO(sejongk): Use the below assertion after implementing Tree.Move.
+		// assert.Equal(t, `<doc><p italic="true">ad</p></doc>`, doc.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("set attributes test", func(t *testing.T) {
