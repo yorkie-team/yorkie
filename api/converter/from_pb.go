@@ -233,6 +233,9 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 			op, err = fromEdit(decoded.Edit)
 		case *api.Operation_Style_:
 			op, err = fromStyle(decoded.Style)
+		case *api.Operation_Select_:
+			// NOTE(hackerwins): Operation_Select is deprecated.
+			continue
 		case *api.Operation_Increase_:
 			op, err = fromIncrease(decoded.Increase)
 		case *api.Operation_TreeEdit_:
