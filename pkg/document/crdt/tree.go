@@ -720,7 +720,7 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 
 	err = t.traverseInPosRange(fromParent.Value, fromLeft.Value, toParent.Value, toLeft.Value,
 		func(node *TreeNode, contain index.TagContained) {
-			if !node.IsRemoved() {
+			if !node.IsRemoved() && !node.IsText() {
 				if node.Attrs == nil {
 					node.Attrs = NewRHT()
 				}

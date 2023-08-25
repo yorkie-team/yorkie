@@ -148,6 +148,7 @@ func (c TagContained) ToString() string {
 // nodesBetween iterates the nodes between the given range.
 // If the given range is collapsed, the callback is not called.
 // It traverses the tree with postorder traversal.
+// NOTE(sejongk): Nodes should not be removed in callback, because it leads wrong behaviors.
 func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V, contain TagContained)) error {
 	if from > to {
 		return fmt.Errorf("from cannot be greater than to %d > %d", from, to)
@@ -176,9 +177,6 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V, co
 			if child.IsText() {
 				toChild = to - pos
 			}
-			// pos can be affected by children traversal and callback call.
-			// so, update pos before these to keep it safe.
-			pos += child.PaddedLength()
 
 			if err := nodesBetween(
 				child,
@@ -200,9 +198,8 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V, co
 				}
 				callback(child.Value, contain)
 			}
-		} else {
-			pos += child.PaddedLength()
 		}
+		pos += child.PaddedLength()
 	}
 
 	return nil
