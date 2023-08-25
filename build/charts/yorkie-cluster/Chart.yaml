@@ -13,8 +13,8 @@ maintainers:
 
 sources:
   - https://github.com/yorkie-team/yorkie
-version: 0.4.5
-appVersion: "0.4.5"
+version: 0.4.6
+appVersion: "0.4.6"
 kubeVersion: ">=1.23.0-0"
 
 keywords:
