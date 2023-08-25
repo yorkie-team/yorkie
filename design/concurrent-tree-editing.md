@@ -21,9 +21,9 @@ This document focuses on `Tree.Edit` operations rather than `Tree.Style`.
 
 ## Proposal Details
 
-### JSON-like Tree
+### XML-like Tree
 
-In yorkie, a JSON-like `Tree` is used to represent the document model of a tree-based text editor.
+In yorkie, a XML-like `Tree` is used to represent the document model of a tree-based text editor.
 
 This tree-based document model resembles XML tree and consists of element nodes and text nodes. element nodes can have attributes, and text nodes contain a string as their value. For example:
 
@@ -32,7 +32,7 @@ This tree-based document model resembles XML tree and consists of element nodes 
 
 **Operation**
 
-The JSON-like `Tree` provides specialized operations tailored for text editing rather than typical operations of a general tree. To specify the operation's range, an `index` or `path` is used. For example:
+The XML-like `Tree` provides specialized operations tailored for text editing rather than typical operations of a general tree. To specify the operation's range, an `index` or `path` is used. For example:
 
 <img src="https://github.com/yorkie-team/yorkie/assets/78714820/9b3420e9-6c18-4114-9f4f-1c8e02324dd6" width="550" />
 
@@ -68,7 +68,7 @@ https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc4972041
 
 Yorkie implements the above [data structure](https://github.com/yorkie-team/yorkie/blob/main/design/data-structure.md) to create a JSON-like `Document`, which consists of different layers, each with its own coordinate system. The dependency graph above can be divided into three main groups. The **JSON-like** group directly used by users to edit JSON-like `Document`s. The **CRDT** Group is utilized from the JSON-like group to resolve conflicts in concurrent editing situations. Finally, the **common** group is used for the detailed implementation of CRDT group and serves general purposes.
 
-Thus, the JSON-like `Tree`, introduced in this document, has dependencies such as '`Tree` → `CRDTTree` → `IndexTree`', and each layer has its own coordinate system:
+Thus, the `Tree`, introduced in this document, has dependencies such as '`Tree` → `CRDTTree` → `IndexTree`', and each layer has its own coordinate system:
 
 <img src="https://github.com/yorkie-team/yorkie/assets/78714820/33519a1e-c8cb-4b4d-9d0e-d2fcc2052013" width="450" />
 
