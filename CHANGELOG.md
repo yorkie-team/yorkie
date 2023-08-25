@@ -7,6 +7,35 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.6] - 2023-08-25
+
+### Added
+* Set cobra default output to stdout by @blurfx in https://github.com/yorkie-team/yorkie/pull/599
+* Fetch latest snapshot metadata to determine snapshot creation need by @hyemmie in https://github.com/yorkie-team/yorkie/pull/597
+* Update contributing docs by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/601
+* Add Pagination to Listing Projects for Housekeeping by @tedkimdev in https://github.com/yorkie-team/yorkie/pull/587
+* Update workflow with latest versions of the actions which runs on Node16 by @jongwooo in https://github.com/yorkie-team/yorkie/pull/620
+* Add integration tree test for sync with js-sdk by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/611
+* Add testcases for sync with js-sdk by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/621
+* Add tree document by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/608
+* Cache ProjectInfo by @blurfx in https://github.com/yorkie-team/yorkie/pull/586
+* Handle concurrent editing of Tree.Edit by @hackerwins, @MoonGyu1, @sejongk in https://github.com/yorkie-team/yorkie/pull/607
+* Support multi-level and partial element selection by @sejongk, @hackerwins in https://github.com/yorkie-team/yorkie/pull/624
+
+### Changed
+* Remove Select operation from Text by @joonhyukchoi in https://github.com/yorkie-team/yorkie/pull/589
+* Change 'Documents' from plural to singular in DocEvent by @chacha912 in https://github.com/yorkie-team/yorkie/pull/613
+* Cleanup proto by @chacha912 in https://github.com/yorkie-team/yorkie/pull/614
+* Replace matrix strategy with environment variable by @jongwooo in https://github.com/yorkie-team/yorkie/pull/619
+* Change TreeNode to have IDs instead of insPrev, insNext  by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/622
+
+### Fixed
+* Fix typos and invalid link in the yorkie design document by @g2hhh2ee in https://github.com/yorkie-team/yorkie/pull/591
+* Clean up code by @hackerwins in https://github.com/yorkie-team/yorkie/pull/595
+* Clean up methods related to presence by @chacha912 in https://github.com/yorkie-team/yorkie/pull/594
+* Remove panic from crdt.RGATreeList by @sejongk in https://github.com/yorkie-team/yorkie/pull/596
+* Fix treePos calculating logic for text node by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/615
+
 ## [0.4.5] - 2023-07-20
 
 ### Added
