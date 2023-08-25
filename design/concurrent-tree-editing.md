@@ -13,7 +13,7 @@ This document introduces the `Tree` data structure, and explains the operations 
 
 ### Goals
 
-This document aims to help new SDK contributors understand the overall `Tree`` data structure and explain how Yorkie ensures consistency when multiple clients are editing concurrently.
+This document aims to help new SDK contributors understand the overall `Tree` data structure and explain how Yorkie ensures consistency when multiple clients are editing concurrently.
 
 ### Non-Goals
 
@@ -27,13 +27,14 @@ In yorkie, a JSON-like `Tree` is used to represent the document model of a tree-
 
 This tree-based document model resembles XML tree and consists of element nodes and text nodes. element nodes can have attributes, and text nodes contain a string as their value. For example:
 
-[이미지]
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/b5500d8b-43db-4d89-983d-5708b7041cc4" width="500" />
+
 
 **Operation**
 
 The JSON-like `Tree` provides specialized operations tailored for text editing rather than typical operations of a general tree. To specify the operation's range, an `index` is used. For example:
 
-[이미지]
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/88d6acde-6775-4af2-ae32-ba7a6b324abc" width="450" />
 
 These `index`es are assigned in order at positions where the user's cursor can reach. These `index`es draw inspiration from ProseMirror's index and share a similar structural concept.
 
@@ -45,7 +46,7 @@ Users can use the `Edit` operation to insert or delete nodes within the `Tree`.
 
 Where `fromIdx` is the starting position of editing, `toIdx` is the ending position, and `contents` represent the nodes to be inserted. If `contents` are omitted, the operation only deletes nodes between `fromIdx` and `toIdx`.
 
-[이미지]
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/c1184839-3e50-41fa-b558-8c0677285660" width="450" />
 
 [코드]
 
@@ -61,17 +62,17 @@ Users can use the `Style` operation to specify attributes for the element nodes 
 
 **Tree Coordinate System**
 
-[이미지]
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/08c1e917-08cf-492c-84c2-cf72b98c38f3" width="600" />
 
 Yorkie implements the above data structure to create a JSON-like `Document`, which consists of different layers, each with its own coordinate system. The dependency graph above can be divided into three main groups. The **JSON-like** group directly used by users to edit JSON-like `Document`s. The **CRDT** Group is utilized from the JSON-like group to resolve conflicts in concurrent editing situations. Finally, the **common** group is used for the detailed implementation of CRDT group and serves general purposes.
 
 Thus, the JSON-like `Tree`, introduced in this document, has dependencies such as **'`Tree` → `CRDTTree` → `IndexTree`'**, and each layer has its own coordinate system:
 
-[이미지]
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/33519a1e-c8cb-4b4d-9d0e-d2fcc2052013" width="450" />
 
 These coordinate systems transform in the order of '`index(path)` → `IndexTree.TreePos` → `CRDTTree.TreeNodeID` → `CRDTTree.TreePos`'.
 
-[이미지]
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/af339dc7-5c03-4cae-a1cb-f5879bfce3be" />
 
 1. `index` → `IndexTree.TreePos`
 
@@ -118,11 +119,11 @@ In the case of local editing, the given `index`es are converted to `CRDTTree.Tre
 
 **Coverage**
 
-[이미지]
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/c911ffb4-9021-4a1f-9a11-b8e28fb41435" width="850" >
 
 Using conditions such as range type, node type, and edit type, 27 possible cases of concurrent editing can be represented.
 
-[이미지]
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/d1054938-b701-4e90-bcbb-8ff5d62b19d4" width="400">
 
 Eventual consistency is guaranteed for these 27 cases. In addition, eventual consistency is ensured for the following edge cases:
 
@@ -137,7 +138,7 @@ Eventual consistency is guaranteed for these 27 cases. In addition, eventual con
 
 `latestCreatedAtMapByActor` is a map that stores the latest creation time by actor for the nodes included in the editing range. However, relying solely on the typical `lamport` clocks that represent local clock of clients, it's not possible to determine if two events are causally related or concurrent. For instance:
 
-[이미지]
+<img src="https://github.com/yorkie-team/yorkie/assets/78714820/cc025542-2c85-40ef-b846-157f38177487" width="450" />
 
 In the case of the example above, during the process of synchronizing operations between clients A and B, client A is unaware of the existence of '`c`' when client B performs `Edit(0,2)`. As a result, an issue arises where the element '`c`', which is within the contained range, gets deleted together.
 
