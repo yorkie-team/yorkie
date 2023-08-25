@@ -1,9 +1,9 @@
 ---
-title: concurrent-tree-editing
+title: tree
 target-version: 0.4.6
 ---
 
-# Concurrent Tree Editing
+# Tree
 
 ## Summary
 
@@ -28,7 +28,6 @@ In yorkie, a XML-like `Tree` is used to represent the document model of a tree-b
 This tree-based document model resembles XML tree and consists of element nodes and text nodes. element nodes can have attributes, and text nodes contain a string as their value. For example:
 
 <img src="https://github.com/yorkie-team/yorkie/assets/78714820/b5500d8b-43db-4d89-983d-5708b7041cc4" width="550" />
-
 
 **Operation**
 
@@ -137,7 +136,6 @@ Eventual consistency is guaranteed for these [27 cases](https://github.com/yorki
 - `lastCreatedAtMapByActor`
 
 https://github.com/yorkie-team/yorkie/blob/81137b32d0d1d3d36be5b63652e5ab0273f536de/pkg/document/operations/tree_edit.go#L36-L38
-
 
 `latestCreatedAtMapByActor` is a map that stores the latest creation time by actor for the nodes included in the editing range. However, relying solely on the typical `lamport` clocks that represent local clock of clients, it's not possible to determine if two events are causally related or concurrent. For instance:
 
