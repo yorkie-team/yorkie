@@ -44,21 +44,21 @@ In the case of a `path`, it contains `offset`s of each node from the root node a
 
 Users can use the `Edit` operation to insert or delete nodes within the `Tree`.
 
-[코드]
+https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/json/tree.go#L115-L131
 
 Where `fromIdx` is the starting position of editing, `toIdx` is the ending position, and `contents` represent the nodes to be inserted. If `contents` are omitted, the operation only deletes nodes between `fromIdx` and `toIdx`.
 
 <img src="https://github.com/yorkie-team/yorkie/assets/78714820/c1184839-3e50-41fa-b558-8c0677285660" width="450" />
 
-[코드]
-
 Similarly, users can specify the editing range using a `path` that leads to the `Tree`'s node in the type of `[]int`.
+
+https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/json/tree.go#L217-L237
 
 2. `Tree.Style`
 
 Users can use the `Style` operation to specify attributes for the element nodes in the `Tree`.
 
-[코드]
+https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/json/tree.go#L239-L268
 
 ### Implementation of Edit Operation
 
@@ -66,9 +66,9 @@ Users can use the `Style` operation to specify attributes for the element nodes 
 
 <img src="https://github.com/yorkie-team/yorkie/assets/78714820/08c1e917-08cf-492c-84c2-cf72b98c38f3" width="600" />
 
-Yorkie implements the above data structure to create a JSON-like `Document`, which consists of different layers, each with its own coordinate system. The dependency graph above can be divided into three main groups. The **JSON-like** group directly used by users to edit JSON-like `Document`s. The **CRDT** Group is utilized from the JSON-like group to resolve conflicts in concurrent editing situations. Finally, the **common** group is used for the detailed implementation of CRDT group and serves general purposes.
+Yorkie implements the above [data structure](https://github.com/yorkie-team/yorkie/blob/main/design/data-structure.md) to create a JSON-like `Document`, which consists of different layers, each with its own coordinate system. The dependency graph above can be divided into three main groups. The **JSON-like** group directly used by users to edit JSON-like `Document`s. The **CRDT** Group is utilized from the JSON-like group to resolve conflicts in concurrent editing situations. Finally, the **common** group is used for the detailed implementation of CRDT group and serves general purposes.
 
-Thus, the JSON-like `Tree`, introduced in this document, has dependencies such as **'`Tree` → `CRDTTree` → `IndexTree`'**, and each layer has its own coordinate system:
+Thus, the JSON-like `Tree`, introduced in this document, has dependencies such as '`Tree` → `CRDTTree` → `IndexTree`', and each layer has its own coordinate system:
 
 <img src="https://github.com/yorkie-team/yorkie/assets/78714820/33519a1e-c8cb-4b4d-9d0e-d2fcc2052013" width="450" />
 
@@ -84,7 +84,7 @@ The `index` is the coordinate system used by users for local editing. This `inde
 
 Next, the obtained `IndexTree.TreePos` is transformed into the logical coordinate system of the distributed tree, represented by `CRDTTree.TreePos`. To achieve this, the given physical position, `IndexTree.TreePos`, is used to find the parent node and left sibling node. Then, a `CRDTTree.TreePos` is created using the unique IDs of the parent node and left sibling node, which are `CRDTTree.TreeNodeID`. This coordinate system is used in subsequent `Tree.Edit` and `Tree.Style` operations.
 
-In the case of remote editing, where the local coordinate system is received from the user in local editing, there is no need for Step 1 since changes are pulled from the server using `ChangePack` to synchronize the changes. (For more details: [링크])
+In the case of remote editing, where the local coordinate system is received from the user in local editing, there is no need for Step 1 since changes are pulled from the server using `ChangePack` to synchronize the changes. Refer to the [document-editing](https://github.com/yorkie-team/yorkie/blob/main/design/document-editing.md) for more details.
 
 **Tree.Edit Logic**
 
@@ -95,23 +95,23 @@ The core process of the `Tree.Edit` operation is as follows:
 3. Delete nodes in the range of `fromTreePos` to `toTreePos`.
 4. Insert the given nodes at the appropriate positions (insert operation only).
 
-**[STEP 1]** Find `CRDTTree.TreePos` from the given `fromIdx` and `toIdx` (local editing only) [링크]
+**[[STEP 1]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/json/tree.go#L121C1-L128)** Find `CRDTTree.TreePos` from the given `fromIdx` and `toIdx` (local editing only)
 
 In the case of local editing, the given `index`es are converted to `CRDTTree.TreePos`. The detailed process is the same as described in the 'Tree Coordinate System' above.
 
-**[STEP 2]** Find the corresponding left sibling node and parent node within the `IndexTree` based on `CRDTTree.TreePos` [링크]
+**[[STEP 2]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L572C1-L580C3)** Find the corresponding left sibling node and parent node within the `IndexTree` based on `CRDTTree.TreePos`
 
 2-1. For text nodes, if necessary, split nodes at the appropriate positions to find the left sibling node.
 
 2-2. Determine the sequence of nodes and find the appropriate position. Since `Clone`s[링크] of each client might exist in different states, the `findFloorNode` function is used to find the closest node (lower bound).
 
-**[STEP 3]** Delete nodes in the range of `fromTreePos` to `toTreePos` [링크]
+**[[STEP 3]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L582-L640)** Delete nodes in the range of `fromTreePos` to `toTreePos`
 
 3-1. Traverse the range and identify nodes to be removed. If a node is an element node and doesn't include both opening and closing tags, it is excluded from removal.
 
 3-2. Update the `latestCreatedAtMapByActor` information for each node and mark nodes with tombstones in the `IndexTree` to indicate removal.
 
-**[STEP 4]** Insert the given nodes at the appropriate positions (insert operation only) [링크]
+**[[STEP 4]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L642-L681)** Insert the given nodes at the appropriate positions (insert operation only)
 
 4-1. If the left sibling node at the insertion position is the same as the parent node, it means the node will be inserted as the leftmost child of the parent. Hence, the node is inserted at the leftmost position of the parent's children list.
 
@@ -127,7 +127,7 @@ Using conditions such as range type, node type, and edit type, 27 possible cases
 
 <img src="https://github.com/yorkie-team/yorkie/assets/78714820/d1054938-b701-4e90-bcbb-8ff5d62b19d4" width="400">
 
-Eventual consistency is guaranteed for these 27 cases. In addition, eventual consistency is ensured for the following edge cases:
+Eventual consistency is guaranteed for these [27 cases](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/test/integration/tree_test.go#L736-L2094). In addition, eventual consistency is ensured for the following edge cases:
 
 - Selecting multiple nodes in a multi-level range
 - Selecting only a part of nodes (e.g., selecting only the opening tag or closing tag of the node)
@@ -136,7 +136,8 @@ Eventual consistency is guaranteed for these 27 cases. In addition, eventual con
 
 - `lastCreatedAtMapByActor`
 
-[코드]
+https://github.com/yorkie-team/yorkie/blob/81137b32d0d1d3d36be5b63652e5ab0273f536de/pkg/document/operations/tree_edit.go#L36-L38
+
 
 `latestCreatedAtMapByActor` is a map that stores the latest creation time by actor for the nodes included in the editing range. However, relying solely on the typical `lamport` clocks that represent local clock of clients, it's not possible to determine if two events are causally related or concurrent. For instance:
 
@@ -148,7 +149,7 @@ To address this, the `lastCreatedAtMapByActor` is utilized during operation exec
 
 - Restricted to only `insertAfter`
 
-[코드]
+https://github.com/yorkie-team/yorkie/blob/422901861aedbd3a86fdcb9cf3b5740d6daf38eb/pkg/index/tree.go#L552-L570
 
 To ensure consistency in concurrent editing scenarios, only the `insertAfter` operation is allowed, rather than `insertBefore`, similar to conventional CRDT algorithms. To achieve this, `CRDTTree.TreePos` takes a form that includes `LeftSiblingID`, thus always maintaining a reference to the left sibling node.
 
@@ -156,7 +157,7 @@ If the left sibling node is the same as the parent node, it indicates that the n
 
 - `FindOffset`
 
-[코드]
+https://github.com/yorkie-team/yorkie/blob/422901861aedbd3a86fdcb9cf3b5740d6daf38eb/pkg/index/tree.go#L393-L412
 
 During the traversal of the given range in `traverseInPosRange` (STEP3), the process of converting the provided `CRDTTree.TreePos` to an `IndexTree.TreePos` is executed. To determine the `offset` for this conversion, the `FindOffset` function is utilized. In doing so, calculating the `offset` excluding the removed nodes prevents potential issues that can arise in concurrent editing scenarios.
 
