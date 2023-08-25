@@ -102,7 +102,7 @@ In the case of local editing, the given `index`es are converted to `CRDTTree.Tre
 
 2-1. For text nodes, if necessary, split nodes at the appropriate positions to find the left sibling node.
 
-2-2. Determine the sequence of nodes and find the appropriate position. Since `Clone`s[링크] of each client might exist in different states, the `findFloorNode` function is used to find the closest node (lower bound).
+2-2. Determine the sequence of nodes and find the appropriate position. Since `Clone`s of each client might exist in different states, the `findFloorNode` function is used to find the closest node (lower bound).
 
 **[[STEP 3]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L582-L640)** Delete nodes in the range of `fromTreePos` to `toTreePos`
 
