@@ -18,6 +18,9 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 * Add integration tree test for sync with js-sdk by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/611
 * Add testcases for sync with js-sdk by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/621
 * Add tree document by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/608
+* Cache ProjectInfo by @blurfx in https://github.com/yorkie-team/yorkie/pull/586
+* Handle concurrent editing of Tree.Edit by @hackerwins, @MoonGyu1, @sejongk in https://github.com/yorkie-team/yorkie/pull/607
+* Support multi-level and partial element selection by @sejongk, @hackerwins in https://github.com/yorkie-team/yorkie/pull/624
 
 ### Changed
 * Remove Select operation from Text by @joonhyukchoi in https://github.com/yorkie-team/yorkie/pull/589
