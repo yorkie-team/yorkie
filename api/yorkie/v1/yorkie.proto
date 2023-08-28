@@ -35,6 +35,11 @@ service YorkieService {
   rpc PushPullChanges (PushPullChangesRequest) returns (PushPullChangesResponse) {}
 
   rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
+
+  rpc WatchEvents (WatchEventsRequest) returns (stream WatchEventsResponse) {}
+  rpc SubscribeEvent (SubscribeEventRequest) returns (SubscribeEventResponse) {}
+  rpc UnsubscribeEvent (UnsubscribeEventRequest) returns (UnsubscribeEventResponse) {}
+  rpc BroadcastEvent (BroadcastEventRequest) returns (BroadcastEventResponse) {}
 }
 
 message ActivateClientRequest {
@@ -108,4 +113,40 @@ message PushPullChangesRequest {
 
 message PushPullChangesResponse {
   ChangePack change_pack = 1;
+}
+
+message WatchEventsRequest {
+  string client_id = 1;
+  string document_id = 2;
+}
+
+message WatchEventsResponse {
+  BroadcastEvent event = 1;
+}
+
+message SubscribeEventRequest {
+  string client_id = 1;
+  string document_id = 2;
+  string type = 3;
+}
+
+message SubscribeEventResponse {
+}
+
+message UnsubscribeEventRequest {
+  string client_id = 1;
+  string document_id = 2;
+  string type = 3;
+}
+
+message UnsubscribeEventResponse {
+}
+
+message BroadcastEventRequest {
+  string client_id = 1;
+  string document_id = 2;
+  BroadcastEvent event = 3;
+}
+
+message BroadcastEventResponse {
 }

@@ -363,3 +363,9 @@ message DocEvent {
   DocEventType type = 1;
   string publisher = 2;
 }
+
+message BroadcastEvent {
+  string publisher = 1;
+  string type = 2;
+  string payload = 3;
+}
