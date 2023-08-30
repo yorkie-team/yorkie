@@ -367,5 +367,5 @@ message DocEvent {
 message BroadcastEvent {
   string publisher = 1;
   string type = 2;
-  string payload = 3;
+  bytes payload = 3;
 }
