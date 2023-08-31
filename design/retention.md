@@ -56,7 +56,7 @@ In conclusion, when a snapshot is created, it should not simply delete the chang
 This can be expressed as a picture above(when SnapshotInterval=10, SnapshotThreshold=5). 
 Assuming that there are a series of C (changes) in chronological order (ServerSeq), S (snapshots) are being created at intervals of 10 and the synchronized ServerSeq is being recorded in SyncedSeq. At this time, there may be a situation where Client A's synchronization is delayed for some reason. 
 
-In this situation, if all previous Cs are deleted when S2 is created, Client A must pull C19 and C20 for synchronization, but it is already deleted and does not exist. This is the reason why the previous changes are deleted based on the minimum synced ServerSeq in the actual implementation.
+In this situation, if all previous Cs are deleted when S3 is created, Client A must pull C19 and C20 for synchronization, but it is already deleted and does not exist. This is the reason why the previous changes are deleted based on the minimum synced ServerSeq in the actual implementation.
 
 ### How it was implemented as code
 
