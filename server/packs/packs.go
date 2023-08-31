@@ -128,10 +128,10 @@ func PushPull(
 				return
 			}
 
-			be.Coordinator.Publish(
+			be.Coordinator.PublishDocEvent(
 				ctx,
 				publisherID,
-				sync.DocEvent{
+				&sync.DocEvent{
 					Type:       types.DocumentChangedEvent,
 					Publisher:  publisherID,
 					DocumentID: docInfo.ID,

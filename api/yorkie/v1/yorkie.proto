@@ -128,6 +128,7 @@ message SubscribeBroadcastRequest {
   string client_id = 1;
   string document_id = 2;
   string type = 3;
+  string subID = 4;
 }
 
 message SubscribeBroadcastResponse {
@@ -137,6 +138,7 @@ message UnsubscribeBroadcastRequest {
   string client_id = 1;
   string document_id = 2;
   string type = 3;
+  string subID = 4;
 }
 
 message UnsubscribeBroadcastResponse {

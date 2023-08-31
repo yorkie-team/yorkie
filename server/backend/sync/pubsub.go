@@ -26,7 +26,6 @@ import (
 // Subscription represents a subscription of a subscriber to documents.
 type Subscription[E Event] struct {
 	id         string
-	docID      types.ID
 	types      []types.EventType
 	subscriber *time.ActorID
 	closed     bool
@@ -37,7 +36,6 @@ type Subscription[E Event] struct {
 func NewSubscription[E Event](docID types.ID, subscriber *time.ActorID) *Subscription[E] {
 	return &Subscription[E]{
 		id:         xid.New().String(),
-		docID:      docID,
 		types:      make([]types.EventType, 0),
 		subscriber: subscriber,
 		events:     make(chan E, 1),
@@ -49,11 +47,6 @@ func (s *Subscription[E]) ID() string {
 	return s.id
 }
 
-// // DocID returns the doc id of this subscription.
-// func (s *Subscription[E]) DocID() types.ID {
-// 	return s.docID
-// }
-
 func (s *Subscription[E]) Types() []types.EventType {
 	return s.types
 }
@@ -63,13 +56,15 @@ func (s *Subscription[E]) AddType(t types.EventType) {
 }
 
 func (s *Subscription[E]) RemoveType(t types.EventType) {
-	var idx int
+	found := -1
 	for i, v := range s.types {
 		if v == t {
-			idx = i
+			found = i
 		}
 	}
-	s.types = append(s.types[:idx], s.types[idx+1:]...)
+	if found != -1 {
+		s.types = append(s.types[:found], s.types[found+1:]...)
+	}
 }
 
 // Events returns the DocEvent channel of this subscription.
@@ -105,32 +100,32 @@ type DocEvent struct {
 	DocumentID types.ID
 }
 
-func (e *DocEvent) TypeString() string {
+func (e DocEvent) TypeString() string {
 	return string(e.Type)
 }
 
-func (e *DocEvent) PublisherString() string {
+func (e DocEvent) PublisherString() string {
 	return e.Publisher.String()
 }
 
-func (e *DocEvent) PayloadString() string {
+func (e DocEvent) PayloadString() string {
 	return string(e.DocumentID)
 }
 
 type BroadcastEvent struct {
-	Type      string
+	Type      types.EventType
 	Publisher *time.ActorID
-	Payload   string
+	Payload   []byte
 }
 
-func (e *BroadcastEvent) TypeString() string {
-	return e.Type
+func (e BroadcastEvent) TypeString() string {
+	return string(e.Type)
 }
 
-func (e *BroadcastEvent) PublisherString() string {
+func (e BroadcastEvent) PublisherString() string {
 	return e.Publisher.String()
 }
 
-func (e *BroadcastEvent) PayloadString() string {
-	return e.Payload
+func (e BroadcastEvent) PayloadString() string {
+	return string(e.Payload)
 }

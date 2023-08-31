@@ -50,13 +50,17 @@ type Method string
 
 // Belows are the names of RPCs.
 const (
-	ActivateClient   Method = "ActivateClient"
-	DeactivateClient Method = "DeactivateClient"
-	AttachDocument   Method = "AttachDocument"
-	DetachDocument   Method = "DetachDocument"
-	RemoveDocument   Method = "RemoveDocument"
-	PushPull         Method = "PushPull"
-	WatchDocuments   Method = "WatchDocuments"
+	ActivateClient       Method = "ActivateClient"
+	DeactivateClient     Method = "DeactivateClient"
+	AttachDocument       Method = "AttachDocument"
+	DetachDocument       Method = "DetachDocument"
+	RemoveDocument       Method = "RemoveDocument"
+	PushPull             Method = "PushPull"
+	WatchDocuments       Method = "WatchDocuments"
+	Broadcast            Method = "Broadcast"
+	WatchBroadcasts      Method = "WatchBroadcasts"
+	SubscribeBroadcast   Method = "SubscribeBroadcast"
+	UnsubscribeBroadcast Method = "UnsubscribeBroadcast"
 )
 
 // IsAuthMethod returns whether the given method can be used for authorization.
@@ -79,6 +83,10 @@ func AuthMethods() []Method {
 		RemoveDocument,
 		PushPull,
 		WatchDocuments,
+		Broadcast,
+		WatchBroadcasts,
+		SubscribeBroadcast,
+		UnsubscribeBroadcast,
 	}
 }
 

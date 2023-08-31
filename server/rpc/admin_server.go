@@ -371,10 +371,10 @@ func (s *adminServer) RemoveDocumentByAdmin(
 
 	// TODO(emplam27): Change the publisherID to the actual user ID. This is a temporary solution.
 	publisherID := time.InitialActorID
-	s.backend.Coordinator.Publish(
+	s.backend.Coordinator.PublishDocEvent(
 		ctx,
 		publisherID,
-		sync.DocEvent{
+		&sync.DocEvent{
 			Type:       types.DocumentChangedEvent,
 			Publisher:  publisherID,
 			DocumentID: docInfo.ID,

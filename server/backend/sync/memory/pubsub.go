@@ -132,7 +132,7 @@ func (m *PubSub[E]) SubscribeDoc(
 	ctx context.Context,
 	subscriber *time.ActorID,
 	documentID types.ID,
-) (string, error) {
+) (*sync.Subscription[E], error) {
 	m.docSubsMapMu.Lock()
 	defer m.docSubsMapMu.Unlock()
 
@@ -158,24 +158,19 @@ func (m *PubSub[E]) SubscribeDoc(
 			subscriber.String(),
 		)
 	}
-	return sub.ID(), nil
+	return sub, nil
 }
 
 // Unwatch unsubscribes the given docKeys.
 func (m *PubSub[E]) UnsubscribeDoc(
 	ctx context.Context,
 	documentID types.ID,
-	subID string,
+	sub *sync.Subscription[E],
 ) {
 	m.docSubsMapMu.Lock()
 	defer m.docSubsMapMu.Unlock()
 
 	docSubs, ok := m.docSubsMapByDocID[documentID]
-	if !ok {
-		return
-	}
-
-	sub, ok := docSubs.subMapBySubIDs[subID]
 	if !ok {
 		return
 	}
@@ -188,7 +183,7 @@ func (m *PubSub[E]) UnsubscribeDoc(
 		)
 	}
 
-	docSubs.Remove(subID)
+	docSubs.Remove(sub.ID())
 
 	if docSubs.Len() == 0 {
 		delete(m.docSubsMapByDocID, documentID)
@@ -340,7 +335,7 @@ func (m *PubSub[E]) Publish(
 }
 
 // ClientIDs returns the clients of the given document.
-func (m *PubSub[E]) ClientIDs(documentID types.ID, eventType types.EventType) []*time.ActorID {
+func (m *PubSub[E]) ClientIDs(documentID types.ID) []*time.ActorID {
 	m.docSubsMapMu.RLock()
 	defer m.docSubsMapMu.RUnlock()
 
@@ -349,16 +344,9 @@ func (m *PubSub[E]) ClientIDs(documentID types.ID, eventType types.EventType) []
 		return nil
 	}
 
-	subIDs, ok := docSubs.subIDsMapByEvent[eventType]
-	if !ok {
-		return nil
-	}
-
 	var ids []*time.ActorID
-	for subID := range subIDs {
-		if sub, ok := docSubs.subMapBySubIDs[subID]; ok {
-			ids = append(ids, sub.Subscriber())
-		}
+	for _, sub := range docSubs.subMapBySubIDs {
+		ids = append(ids, sub.Subscriber())
 	}
 
 	return ids

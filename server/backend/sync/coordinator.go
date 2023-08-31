@@ -38,24 +38,59 @@ type Coordinator interface {
 	NewLocker(ctx context.Context, key Key) (Locker, error)
 
 	// Subscribe subscribes to the given documents.
-	Subscribe(
+	SubscribeDocEvent(
 		ctx context.Context,
 		subscriber *time.ActorID,
 		documentID types.ID,
-	) (*Subscription, []*time.ActorID, error)
+	) (*Subscription[*DocEvent], []*time.ActorID, error)
 
 	// Unsubscribe unsubscribes from the given documents.
-	Unsubscribe(
+	UnsubscribeDocEvent(
 		ctx context.Context,
 		documentID types.ID,
-		sub *Subscription,
+		sub *Subscription[*DocEvent],
 	) error
 
 	// Publish publishes the given event.
-	Publish(ctx context.Context, publisherID *time.ActorID, event DocEvent)
+	PublishDocEvent(
+		ctx context.Context,
+		publisherID *time.ActorID,
+		event *DocEvent,
+	)
 
-	// PublishToLocal publishes the given event.
-	PublishToLocal(ctx context.Context, publisherID *time.ActorID, event DocEvent)
+	SubscribeBroadcasts(
+		ctx context.Context,
+		subscriber *time.ActorID,
+		documentID types.ID,
+	) (*Subscription[*BroadcastEvent], error)
+
+	UnsubscribeBroadcasts(
+		ctx context.Context,
+		documentID types.ID,
+		sub *Subscription[*BroadcastEvent],
+	) error
+
+	SubscribeBroadcastEvent(
+		ctx context.Context,
+		documentID types.ID,
+		eventType types.EventType,
+		subID string,
+	)
+
+	UnsubscribeBroadcastEvent(
+		ctx context.Context,
+		documentID types.ID,
+		eventType types.EventType,
+		subID string,
+	)
+
+	PublishBroadcastEvent(
+		ctx context.Context,
+		documentID types.ID,
+		eventType types.EventType,
+		publisherID *time.ActorID,
+		event *BroadcastEvent,
+	)
 
 	// Members returns the members of this cluster.
 	Members() map[string]*ServerInfo

@@ -506,17 +506,17 @@ func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	clientID *time.ActorID,
 	documentID types.ID,
-) (*sync.Subscription, []*time.ActorID, error) {
-	subscription, clientIDs, err := s.backend.Coordinator.Subscribe(ctx, clientID, documentID)
+) (*sync.Subscription[*sync.DocEvent], []*time.ActorID, error) {
+	subscription, clientIDs, err := s.backend.Coordinator.SubscribeDocEvent(ctx, clientID, documentID)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, nil, err
 	}
 
-	s.backend.Coordinator.Publish(
+	s.backend.Coordinator.PublishDocEvent(
 		ctx,
 		subscription.Subscriber(),
-		sync.DocEvent{
+		&sync.DocEvent{
 			Type:       types.DocumentWatchedEvent,
 			Publisher:  subscription.Subscriber(),
 			DocumentID: documentID,
@@ -527,18 +527,214 @@ func (s *yorkieServer) watchDoc(
 }
 
 func (s *yorkieServer) unwatchDoc(
-	subscription *sync.Subscription,
+	subscription *sync.Subscription[*sync.DocEvent],
 	documentID types.ID,
 ) {
 	ctx := context.Background()
-	_ = s.backend.Coordinator.Unsubscribe(ctx, documentID, subscription)
-	s.backend.Coordinator.Publish(
+	_ = s.backend.Coordinator.UnsubscribeDocEvent(ctx, documentID, subscription)
+	s.backend.Coordinator.PublishDocEvent(
 		ctx,
 		subscription.Subscriber(),
-		sync.DocEvent{
+		&sync.DocEvent{
 			Type:       types.DocumentUnwatchedEvent,
 			Publisher:  subscription.Subscriber(),
 			DocumentID: documentID,
 		},
 	)
+}
+
+func (s *yorkieServer) Broadcast(
+	ctx context.Context,
+	req *api.BroadcastRequest,
+) (*api.BroadcastResponse, error) {
+	clientID, err := time.ActorIDFromHex(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	docID := types.ID(req.DocumentId)
+	if err := docID.Validate(); err != nil {
+		return nil, err
+	}
+
+	docInfo, err := documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		docID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	event, err := converter.FromBroadcastEvent(req.Event)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.Broadcast,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	if _, err = clients.FindClientInfo(ctx, s.backend.DB, project, clientID); err != nil {
+		return nil, err
+	}
+
+	s.backend.Coordinator.PublishBroadcastEvent(ctx, docID, event.Type, event.Publisher, event)
+
+	return &api.BroadcastResponse{}, nil
+}
+
+func (s *yorkieServer) WatchBroadcasts(
+	req *api.WatchBroadcastsRequest,
+	stream api.YorkieService_WatchBroadcastsServer,
+) error {
+	clientID, err := time.ActorIDFromHex(req.ClientId)
+	if err != nil {
+		return err
+	}
+	docID, err := converter.FromDocumentID(req.DocumentId)
+	if err != nil {
+		return err
+	}
+
+	docInfo, err := documents.FindDocInfo(
+		stream.Context(),
+		s.backend,
+		projects.From(stream.Context()),
+		docID,
+	)
+	if err != nil {
+		return nil
+	}
+
+	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
+		Method:     types.WatchBroadcasts,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
+	}); err != nil {
+		return err
+	}
+
+	project := projects.From(stream.Context())
+	if _, err = clients.FindClientInfo(stream.Context(), s.backend.DB, project, clientID); err != nil {
+		return err
+	}
+
+	subscription, err := s.backend.Coordinator.SubscribeBroadcasts(stream.Context(), clientID, docID)
+	if err != nil {
+		logging.From(stream.Context()).Error(err)
+		return err
+	}
+
+	defer func() {
+		_ = s.backend.Coordinator.UnsubscribeBroadcasts(stream.Context(), docID, subscription)
+	}()
+
+	for {
+		select {
+		case <-s.serviceCtx.Done():
+			return nil
+		case <-stream.Context().Done():
+			return nil
+		case event := <-subscription.Events():
+			pbEvent := converter.ToBroadcastEvent(event)
+			if err != nil {
+				return err
+			}
+
+			if err := stream.Send(&api.WatchBroadcastsResponse{
+				Event: pbEvent,
+			}); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (s *yorkieServer) SubscribeBroadcast(
+	ctx context.Context,
+	req *api.SubscribeBroadcastRequest,
+) (*api.SubscribeBroadcastResponse, error) {
+	clientID, err := time.ActorIDFromHex(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	docID, err := converter.FromDocumentID(req.DocumentId)
+	if err != nil {
+		return nil, err
+	}
+
+	docInfo, err := documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		docID,
+	)
+	if err != nil {
+		return nil, nil
+	}
+
+	eventType := types.EventType(req.Type)
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.WatchBroadcasts,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	if _, err = clients.FindClientInfo(ctx, s.backend.DB, project, clientID); err != nil {
+		return nil, err
+	}
+
+	s.backend.Coordinator.SubscribeBroadcastEvent(ctx, docID, eventType, req.SubID)
+
+	return &api.SubscribeBroadcastResponse{}, nil
+}
+
+func (s *yorkieServer) UnsubscribeBroadcast(
+	ctx context.Context,
+	req *api.UnsubscribeBroadcastRequest,
+) (*api.UnsubscribeBroadcastResponse, error) {
+	clientID, err := time.ActorIDFromHex(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	docID, err := converter.FromDocumentID(req.DocumentId)
+	if err != nil {
+		return nil, err
+	}
+
+	docInfo, err := documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		docID,
+	)
+	if err != nil {
+		return nil, nil
+	}
+
+	eventType := types.EventType(req.Type)
+
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.WatchBroadcasts,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	if _, err = clients.FindClientInfo(ctx, s.backend.DB, project, clientID); err != nil {
+		return nil, err
+	}
+
+	s.backend.Coordinator.UnsubscribeBroadcastEvent(ctx, docID, eventType, req.SubID)
+
+	return &api.UnsubscribeBroadcastResponse{}, nil
 }
