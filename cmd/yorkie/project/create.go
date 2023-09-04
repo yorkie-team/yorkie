@@ -36,12 +36,7 @@ func newCreateCommand() *cobra.Command {
 		Use:     "create [name]",
 		Short:   "Create a new project",
 		Example: "yorkie project create sample-project",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := viper.ReadInConfig(); err != nil {
-				return fmt.Errorf("failed to read in config: %w", err)
-			}
-			return nil
-		},
+		PreRunE: config.ReadConfig,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return errors.New("name is required")

@@ -18,7 +18,6 @@ package project
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -32,14 +31,9 @@ import (
 
 func newListCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "ls",
-		Short: "List all projects",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := viper.ReadInConfig(); err != nil {
-				return fmt.Errorf("failed to read in config: %w", err)
-			}
-			return nil
-		},
+		Use:     "ls",
+		Short:   "List all projects",
+		PreRunE: config.ReadConfig,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rpcAddr := viper.GetString("rpcAddr")
 			token, err := config.LoadToken(rpcAddr)

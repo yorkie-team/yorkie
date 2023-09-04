@@ -32,14 +32,9 @@ var (
 
 func newLogoutCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "logout",
-		Short: "Log out from the Yorkie server",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := viper.ReadInConfig(); err != nil {
-				return fmt.Errorf("failed to read in config: %w", err)
-			}
-			return nil
-		},
+		Use:     "logout",
+		Short:   "Log out from the Yorkie server",
+		PreRunE: config.ReadConfig,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf, err := config.Load()
 			if err != nil {

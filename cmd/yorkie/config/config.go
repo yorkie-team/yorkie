@@ -23,6 +23,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -139,5 +142,30 @@ func Delete() error {
 		return fmt.Errorf("remove config file: %w", err)
 	}
 
+	return nil
+}
+
+func ReadConfig(cmd *cobra.Command, args []string) error {
+	configPathValue, err := configPath()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "get config path: %w", err)
+		os.Exit(1)
+	}
+
+	file, err := os.Open(filepath.Clean(configPathValue))
+	if err != nil {
+		if os.IsNotExist(err) {
+			New()
+			return nil
+		}
+
+		return fmt.Errorf("open config file: %w", err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+	if err := viper.ReadInConfig(); err != nil {
+		return fmt.Errorf("failed to read in config: %w", err)
+	}
 	return nil
 }

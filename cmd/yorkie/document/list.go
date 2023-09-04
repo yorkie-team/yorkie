@@ -19,7 +19,6 @@ package document
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -39,14 +38,9 @@ var (
 
 func newListCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "ls [project name]",
-		Short: "List all documents in the project",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := viper.ReadInConfig(); err != nil {
-				return fmt.Errorf("failed to read in config: %w", err)
-			}
-			return nil
-		},
+		Use:     "ls [project name]",
+		Short:   "List all documents in the project",
+		PreRunE: config.ReadConfig,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return errors.New("project is required")

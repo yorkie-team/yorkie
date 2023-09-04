@@ -26,9 +26,10 @@ import (
 
 func newRemoveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove [rpcAddr]",
-		Short: "Remove the context for the specified rpcAddr",
-		Args:  cobra.ExactArgs(1),
+		Use:     "remove [rpcAddr]",
+		Short:   "Remove the context for the specified rpcAddr",
+		Args:    cobra.ExactArgs(1),
+		PreRunE: config.ReadConfig,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf, err := config.Load()
 			if err != nil {

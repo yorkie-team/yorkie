@@ -28,14 +28,9 @@ import (
 
 func newListCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "ls",
-		Short: "List all contexts from configuration",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := viper.ReadInConfig(); err != nil {
-				return fmt.Errorf("failed to read in config: %w", err)
-			}
-			return nil
-		},
+		Use:     "ls",
+		Short:   "List all contexts from configuration",
+		PreRunE: config.ReadConfig,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf, err := config.Load()
 			if err != nil {

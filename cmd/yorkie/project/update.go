@@ -43,12 +43,7 @@ func newUpdateCommand() *cobra.Command {
 		Use:     "update [name]",
 		Short:   "Update a project",
 		Example: "yorkie project update name [options]",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := viper.ReadInConfig(); err != nil {
-				return fmt.Errorf("failed to read in config: %w", err)
-			}
-			return nil
-		},
+		PreRunE: config.ReadConfig,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return errors.New("name is required")
