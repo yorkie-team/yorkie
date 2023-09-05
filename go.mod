@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/client_golang v1.13.0
 	github.com/rs/xid v1.4.0
 	github.com/spf13/cobra v1.5.0
-	github.com/spf13/viper v1.16.0
+	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.3
 	github.com/undefinedlabs/go-mpatch v1.0.6
 	go.mongodb.org/mongo-driver v1.11.7
@@ -24,7 +24,7 @@ require (
 	golang.org/x/crypto v0.9.0
 	golang.org/x/net v0.10.0
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
-	google.golang.org/grpc v1.55.0
+	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/yaml.v2 v2.4.0
 )
