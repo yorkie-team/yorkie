@@ -87,7 +87,11 @@ func (n *RGATreeListNode) Len() int {
 
 // String returns the string representation of this node.
 func (n *RGATreeListNode) String() string {
-	return n.elem.Marshal()
+	elem, err := n.elem.Marshal()
+	if err != nil {
+		return ""
+	}
+	return elem
 }
 
 func (n *RGATreeListNode) isRemoved() bool {
@@ -106,8 +110,11 @@ type RGATreeList struct {
 }
 
 // NewRGATreeList creates a new instance of RGATreeList.
-func NewRGATreeList() *RGATreeList {
-	dummyValue := NewPrimitive(0, time.InitialTicket)
+func NewRGATreeList() (*RGATreeList, error) {
+	dummyValue, err := NewPrimitive(0, time.InitialTicket)
+	if err != nil {
+		return nil, err
+	}
 	dummyValue.SetRemovedAt(time.InitialTicket)
 	dummyHead := newRGATreeListNode(dummyValue)
 	nodeMapByIndex := splay.NewTree(dummyHead.indexNode)
@@ -119,11 +126,11 @@ func NewRGATreeList() *RGATreeList {
 		last:               dummyHead,
 		nodeMapByIndex:     nodeMapByIndex,
 		nodeMapByCreatedAt: nodeMapByCreatedAt,
-	}
+	}, nil
 }
 
 // Marshal returns the JSON encoding of this RGATreeList.
-func (a *RGATreeList) Marshal() string {
+func (a *RGATreeList) Marshal() (string, error) {
 	sb := strings.Builder{}
 	sb.WriteString("[")
 
@@ -136,8 +143,11 @@ func (a *RGATreeList) Marshal() string {
 			} else {
 				sb.WriteString(",")
 			}
-
-			sb.WriteString(current.elem.Marshal())
+			elem, err := current.elem.Marshal()
+			if err != nil {
+				return "", err
+			}
+			sb.WriteString(elem)
 		}
 
 		current = current.next
@@ -145,7 +155,7 @@ func (a *RGATreeList) Marshal() string {
 
 	sb.WriteString("]")
 
-	return sb.String()
+	return sb.String(), nil
 }
 
 // Add adds the given element at the last.

@@ -370,10 +370,10 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 }
 
 // Marshal returns the JSON encoding of this Tree.
-func (t *Tree) Marshal() string {
+func (t *Tree) Marshal() (string, error) {
 	builder := &strings.Builder{}
 	marshal(builder, t.Root())
-	return builder.String()
+	return builder.String(), nil
 }
 
 // removedNodesLen returns the length of removed nodes.

@@ -739,10 +739,11 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		return crdt.NewArray(
-			crdt.NewRGATreeList(),
-			createdAt,
-		), nil
+		elements, err := crdt.NewRGATreeList()
+		if err != nil {
+			return nil, err
+		}
+		return crdt.NewArray(elements, createdAt), nil
 	case api.ValueType_VALUE_TYPE_NULL:
 		fallthrough
 	case api.ValueType_VALUE_TYPE_BOOLEAN:
@@ -766,10 +767,15 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		return crdt.NewPrimitive(
-			crdt.ValueFromBytes(valueType, pbElement.Value),
-			createdAt,
-		), nil
+		value, err := crdt.ValueFromBytes(valueType, pbElement.Value)
+		if err != nil {
+			return nil, err
+		}
+		primitive, err := crdt.NewPrimitive(value, createdAt)
+		if err != nil {
+			return nil, err
+		}
+		return primitive, nil
 	case api.ValueType_VALUE_TYPE_TEXT:
 		createdAt, err := fromTimeTicket(pbElement.CreatedAt)
 		if err != nil {

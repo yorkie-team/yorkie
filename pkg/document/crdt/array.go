@@ -91,8 +91,12 @@ func (a *Array) Elements() []Element {
 }
 
 // Marshal returns the JSON encoding of this Array.
-func (a *Array) Marshal() string {
-	return a.elements.Marshal()
+func (a *Array) Marshal() (string, error) {
+	elements, err := a.elements.Marshal()
+	if err != nil {
+		return "", err
+	}
+	return elements, nil
 }
 
 // StructureAsString returns a String containing the metadata of the elements
@@ -103,8 +107,10 @@ func (a *Array) StructureAsString() string {
 
 // DeepCopy copies itself deeply.
 func (a *Array) DeepCopy() (Element, error) {
-	elements := NewRGATreeList()
-
+	elements, err := NewRGATreeList()
+	if err != nil {
+		return nil, err
+	}
 	for _, node := range a.elements.Nodes() {
 		copiedNode, err := node.elem.DeepCopy()
 		if err != nil {

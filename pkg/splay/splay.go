@@ -216,7 +216,8 @@ func (t *Tree[V]) Find(index int) (*Node[V], int, error) {
 func (t *Tree[V]) String() string {
 	var builder strings.Builder
 	traverseInOrder(t.root, func(node *Node[V]) {
-		builder.WriteString(node.value.String())
+		value := node.value.String()
+		builder.WriteString(value)
 	})
 	return builder.String()
 }
@@ -227,11 +228,12 @@ func (t *Tree[V]) StructureAsString() string {
 	var builder strings.Builder
 
 	traverseInOrder(t.root, func(node *Node[V]) {
+		value := node.value.String()
 		builder.WriteString(fmt.Sprintf(
 			"[%d,%d]%s",
 			node.weight,
 			node.value.Len(),
-			node.value.String(),
+			value,
 		))
 	})
 	return builder.String()

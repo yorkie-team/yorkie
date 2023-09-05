@@ -127,12 +127,16 @@ func (p *Array) AddDate(values ...gotime.Time) *Array {
 }
 
 // AddNewArray adds a new array at the last.
-func (p *Array) AddNewArray() *Array {
+func (p *Array) AddNewArray() (*Array, error) {
+	rgaTreeList, err := crdt.NewRGATreeList()
+	if err != nil {
+		return nil, err
+	}
 	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
-		return NewArray(p.context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
+		return NewArray(p.context, crdt.NewArray(rgaTreeList, ticket))
 	})
 
-	return v.(*Array)
+	return v.(*Array), err
 }
 
 // MoveBefore moves the given element to its new position before the given next element.

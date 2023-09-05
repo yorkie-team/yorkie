@@ -141,7 +141,10 @@ func fromJSONObject(pbObj *api.JSONElement_JSONObject) (*crdt.Object, error) {
 }
 
 func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
-	elements := crdt.NewRGATreeList()
+	elements, err := crdt.NewRGATreeList()
+	if err != nil {
+		return nil, err
+	}
 	for _, pbNode := range pbArr.Nodes {
 		elem, err := fromJSONElement(pbNode.Element)
 		if err != nil {
@@ -193,11 +196,14 @@ func fromJSONPrimitive(
 	if err != nil {
 		return nil, err
 	}
-
-	primitive := crdt.NewPrimitive(
-		crdt.ValueFromBytes(valueType, pbPrim.Value),
-		createdAt,
-	)
+	value, err := crdt.ValueFromBytes(valueType, pbPrim.Value)
+	if err != nil {
+		return nil, err
+	}
+	primitive, err := crdt.NewPrimitive(value, createdAt)
+	if err != nil {
+		return nil, err
+	}
 	primitive.SetMovedAt(movedAt)
 	primitive.SetRemovedAt(removedAt)
 	return primitive, nil

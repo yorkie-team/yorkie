@@ -48,8 +48,12 @@ func (o *Object) Set(k string, v Element) Element {
 }
 
 // Members returns the member of this object as a map.
-func (o *Object) Members() map[string]Element {
-	return o.memberNodes.Elements()
+func (o *Object) Members() (map[string]Element, error) {
+	memberNodes, err := o.memberNodes.Elements()
+	if err != nil {
+		return nil, err
+	}
+	return memberNodes, nil
 }
 
 // Get returns the value of the given key.
@@ -89,8 +93,12 @@ func (o *Object) Descendants(callback func(elem Element, parent Container) bool)
 }
 
 // Marshal returns the JSON encoding of this object.
-func (o *Object) Marshal() string {
-	return o.memberNodes.Marshal()
+func (o *Object) Marshal() (string, error) {
+	memberNodes, err := o.memberNodes.Marshal()
+	if err != nil {
+		return "", err
+	}
+	return memberNodes, nil
 }
 
 // DeepCopy copies itself deeply.

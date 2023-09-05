@@ -34,7 +34,7 @@ func TestPrimitive(t *testing.T) {
 		valueType crdt.ValueType
 		marshal   string
 	}{
-		{nil, crdt.Null, "null"},
+		{nil, crdt.Null, ""},
 		{false, crdt.Boolean, "false"},
 		{true, crdt.Boolean, "true"},
 		{0, crdt.Integer, "0"},
@@ -50,14 +50,25 @@ func TestPrimitive(t *testing.T) {
 		for _, test := range tests {
 			prim := crdt.NewPrimitive(test.value, time.InitialTicket)
 			assert.Equal(t, prim.ValueType(), test.valueType)
-			assert.Equal(t, prim.Value(), crdt.ValueFromBytes(prim.ValueType(), prim.Bytes()))
-			assert.Equal(t, prim.Marshal(), test.marshal)
+			bytes, err := prim.Bytes()
+			assert.NoError(t, err)
+
+			value, err := crdt.ValueFromBytes(prim.ValueType(), bytes)
+			assert.NoError(t, err)
+			assert.Equal(t, prim.Value(), value)
+			marshal, err := prim.Marshal()
+			assert.NoError(t, err)
+			assert.Equal(t, marshal, test.marshal)
 
 			copied, err := prim.DeepCopy()
 			assert.NoError(t, err)
 			assert.Equal(t, prim.CreatedAt(), copied.CreatedAt())
 			assert.Equal(t, prim.MovedAt(), copied.MovedAt())
-			assert.Equal(t, prim.Marshal(), copied.Marshal())
+			marshal, err = prim.Marshal()
+			assert.NoError(t, err)
+			elements, err := copied.Marshal()
+			assert.NoError(t, err)
+			assert.Equal(t, marshal, elements)
 
 			actorID, _ := time.ActorIDFromHex("0")
 			prim.SetMovedAt(time.NewTicket(0, 0, actorID))

@@ -130,11 +130,14 @@ func toPrimitive(primitive *crdt.Primitive) (*api.JSONElement, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	bytes, err := primitive.Bytes()
+	if err != nil {
+		return nil, err
+	}
 	return &api.JSONElement{
 		Body: &api.JSONElement_Primitive_{Primitive: &api.JSONElement_Primitive{
 			Type:      pbValueType,
-			Value:     primitive.Bytes(),
+			Value:     bytes,
 			CreatedAt: ToTimeTicket(primitive.CreatedAt()),
 			MovedAt:   ToTimeTicket(primitive.MovedAt()),
 			RemovedAt: ToTimeTicket(primitive.RemovedAt()),
