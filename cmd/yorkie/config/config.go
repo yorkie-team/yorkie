@@ -145,7 +145,7 @@ func Delete() error {
 	return nil
 }
 
-// Read configuration file for viper before runnning command
+// ReadConfig read configuration file for viper before runnning command
 func ReadConfig(cmd *cobra.Command, args []string) error {
 	configPathValue, err := configPath()
 	if err != nil {
