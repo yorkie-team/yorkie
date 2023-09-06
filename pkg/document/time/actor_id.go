@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sync"
 )
 
 const actorIDSize = 12
@@ -61,7 +62,8 @@ var (
 type ActorID struct {
 	bytes [actorIDSize]byte
 
-	cachedString string
+	cachedString   string
+	cachedStringMu sync.RWMutex
 }
 
 // ActorIDFromHex returns the bytes represented by the hexadecimal string str.
@@ -104,6 +106,23 @@ func ActorIDFromBytes(bytes []byte) (*ActorID, error) {
 // String returns the hexadecimal encoding of ActorID.
 // If the receiver is nil, it would return empty string.
 func (id *ActorID) String() string {
+	id.cachedStringMu.RLock()
+	readLocked := true
+	defer func() {
+		if readLocked {
+			id.cachedStringMu.RUnlock()
+		}
+	}()
+
+	if id.cachedString != "" {
+		return id.cachedString
+	}
+
+	id.cachedStringMu.RUnlock()
+	readLocked = false
+	id.cachedStringMu.Lock()
+	defer id.cachedStringMu.Unlock()
+
 	if id.cachedString == "" {
 		id.cachedString = hex.EncodeToString(id.bytes[:])
 	}
