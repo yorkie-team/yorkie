@@ -22,10 +22,20 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+type eventTypes map[string]struct{}
+
+func (s eventTypes) add(t string) {
+	s[t] = struct{}{}
+}
+
+func (s eventTypes) remove(t string) {
+	delete(s, t)
+}
+
 // Subscription represents a subscription of a subscriber to documents.
 type Subscription struct {
 	id         string
-	types      []string
+	types      eventTypes
 	subscriber *time.ActorID
 	closed     bool
 	events     chan Event
@@ -35,7 +45,7 @@ type Subscription struct {
 func NewSubscription(subscriber *time.ActorID) *Subscription {
 	return &Subscription{
 		id:         xid.New().String(),
-		types:      make([]string, 0),
+		types:      make(eventTypes),
 		subscriber: subscriber,
 		events:     make(chan Event, 1),
 	}
@@ -47,26 +57,18 @@ func (s *Subscription) ID() string {
 }
 
 // Types returns the subscribed event type list.
-func (s *Subscription) Types() []string {
+func (s *Subscription) Types() eventTypes {
 	return s.types
 }
 
 // AddType adds the event type to the subscribed event type list.
 func (s *Subscription) AddType(t string) {
-	s.types = append(s.types, t)
+	s.types.add(t)
 }
 
 // RemoveType removes the event type from the subscribed event type list.
 func (s *Subscription) RemoveType(t string) {
-	found := -1
-	for i, v := range s.types {
-		if v == t {
-			found = i
-		}
-	}
-	if found != -1 {
-		s.types = append(s.types[:found], s.types[found+1:]...)
-	}
+	s.types.remove(t)
 }
 
 // Events returns the Event channel of this subscription.
