@@ -470,6 +470,155 @@ func BenchmarkDocument(b *testing.B) {
 	b.Run("object 10000", func(b *testing.B) {
 		benchmarkObject(10000, b)
 	})
+
+	b.Run("tree 100", func(b *testing.B) {
+		benchmarkTree(100, b)
+	})
+
+	b.Run("tree 1000", func(b *testing.B) {
+		benchmarkTree(1000, b)
+	})
+
+	b.Run("tree 10000", func(b *testing.B) {
+		benchmarkTree(10000, b)
+	})
+
+	b.Run("tree delete all 1000", func(b *testing.B) {
+		benchmarkTreeDeleteAll(1000, b)
+	})
+
+	b.Run("tree edit gc 100", func(b *testing.B) {
+		benchmarkTreeEditGC(100, b)
+	})
+
+	b.Run("tree edit gc 1000", func(b *testing.B) {
+		benchmarkTreeEditGC(1000, b)
+	})
+
+	b.Run("tree split gc 100", func(b *testing.B) {
+		benchmarkTreeSplitGC(100, b)
+	})
+
+	b.Run("tree split gc 1000", func(b *testing.B) {
+		benchmarkTreeSplitGC(1000, b)
+	})
+
+}
+
+func benchmarkTree(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			for c := 1; c <= cnt; c++ {
+				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"})
+			}
+			return nil
+		})
+		assert.NoError(b, err)
+	}
+}
+
+func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			for c := 1; c <= cnt; c++ {
+				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"})
+			}
+			return nil
+		})
+
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.GetTree("t")
+			tree.Edit(1, cnt+1)
+
+			return nil
+		})
+		assert.NoError(b, err)
+	}
+}
+
+func benchmarkTreeEditGC(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			for c := 1; c <= cnt; c++ {
+				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"})
+			}
+			return nil
+		})
+
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.GetTree("t")
+			for c := 1; c <= cnt; c++ {
+				tree.Edit(c, c+1, &json.TreeNode{Type: "text", Value: "b"})
+			}
+
+			return nil
+		})
+		assert.NoError(b, err)
+		assert.Equal(b, cnt, doc.GarbageLen())
+		assert.Equal(b, cnt, doc.GarbageCollect(time.MaxTicket))
+	}
+}
+
+func benchmarkTreeSplitGC(cnt int, b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		doc := document.New("d1")
+
+		var builder strings.Builder
+		for i := 0; i < cnt; i++ {
+			builder.WriteString("a")
+		}
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			tree.Edit(1, 1, &json.TreeNode{Type: "text", Value: builder.String()})
+
+			return nil
+		})
+
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			tree := root.GetTree("t")
+			for c := 1; c <= cnt; c++ {
+				tree.Edit(c, c+1, &json.TreeNode{Type: "text", Value: "b"})
+			}
+
+			return nil
+		})
+		assert.NoError(b, err)
+		assert.Equal(b, cnt, doc.GarbageLen())
+		assert.Equal(b, cnt, doc.GarbageCollect(time.MaxTicket))
+	}
 }
 
 func benchmarkText(cnt int, b *testing.B) {
