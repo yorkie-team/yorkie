@@ -18,6 +18,7 @@
 package document
 
 import (
+	gojson "encoding/json"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -52,6 +53,27 @@ const (
 	PresenceChangedEvent DocEventType = "presence-changed"
 )
 
+// BroadcastRequest represents a request related to "Broadcast" that will be sent
+// through the client.
+type BroadcastRequest struct {
+	RequestType BroadcastRequestType
+	EventType   string
+	Payload     []byte
+}
+
+// BroadcastRequestType represents the type of the broadcast request that will be
+// sent through the client.
+type BroadcastRequestType string
+
+const (
+	// Broadcast means that there is a new message that should be broadcasted.
+	Broadcast BroadcastRequestType = "broadcast"
+	// Subscribe means that the document subscribes a new broadcast event.
+	Subscribe BroadcastRequestType = "subscribe"
+	// Unsubscribe means that the document unsubscribes the broadcast event.
+	Unsubscribe BroadcastRequestType = "unsubscribe"
+)
+
 // Document represents a document accessible to the user.
 //
 // How document works:
@@ -71,15 +93,28 @@ type Document struct {
 	// is used to protect `doc.presences`.
 	clonePresences *innerpresence.Map
 
-	// events is the channel to send events that occurred in the document.
-	events chan DocEvent
+	// docEvents is the channel to send events that occurred in the document.
+	docEvents chan DocEvent
+
+	// broadcastRequests is the channel to send requests related to "Broadcast"
+	// that occurred in the document.
+	broadcastRequests chan BroadcastRequest
+
+	// broadcastEventHandlers is a map of registered event handlers for events.
+	broadcastEventHandlers map[string]func(
+		eventType, publisher string,
+		payload []byte) error
 }
 
 // New creates a new instance of Document.
 func New(key key.Key) *Document {
 	return &Document{
-		doc:    NewInternalDocument(key),
-		events: make(chan DocEvent, 1),
+		doc:               NewInternalDocument(key),
+		docEvents:         make(chan DocEvent, 1),
+		broadcastRequests: make(chan BroadcastRequest, 1),
+		broadcastEventHandlers: make(map[string]func(
+			eventType, publisher string,
+			payload []byte) error),
 	}
 }
 
@@ -151,7 +186,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		}
 
 		for _, e := range events {
-			d.events <- e
+			d.docEvents <- e
 		}
 	}
 
@@ -330,9 +365,62 @@ func (d *Document) RemoveOnlineClient(clientID string) {
 	d.doc.RemoveOnlineClient(clientID)
 }
 
-// Events returns the events of this document.
-func (d *Document) Events() <-chan DocEvent {
-	return d.events
+// DocEvents returns the document events of this document.
+func (d *Document) DocEvents() <-chan DocEvent {
+	return d.docEvents
+}
+
+// BroadcastRequests returns the broadcast requests of this document.
+func (d *Document) BroadcastRequests() <-chan BroadcastRequest {
+	return d.broadcastRequests
+}
+
+// Broadcast encodes the payload and makes a "Broadcast" type request.
+func (d *Document) Broadcast(eventType string, payload any) error {
+	marshaled, err := gojson.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload in broadcast event: %w", err)
+	}
+
+	d.broadcastRequests <- BroadcastRequest{
+		RequestType: Broadcast,
+		EventType:   eventType,
+		Payload:     marshaled,
+	}
+	return nil
+}
+
+// SubscribeBroadcastEvent registers an event handler and makes
+// a "Subscribe" type request.
+func (d *Document) SubscribeBroadcastEvent(
+	eventType string,
+	handler func(eventType, publisher string, payload []byte) error,
+) {
+	d.broadcastEventHandlers[eventType] = handler
+
+	d.broadcastRequests <- BroadcastRequest{
+		RequestType: Subscribe,
+		EventType:   eventType,
+	}
+}
+
+// UnsubscribeBroadcastEvent deregisters the event handler and makes
+// a "Unsubscribe" type request.
+func (d *Document) UnsubscribeBroadcastEvent(
+	eventType string,
+) {
+	delete(d.broadcastEventHandlers, eventType)
+
+	d.broadcastRequests <- BroadcastRequest{
+		RequestType: Unsubscribe,
+		EventType:   eventType,
+	}
+}
+
+// BroadcastEventHandlers returns registered event handlers for events.
+func (d *Document) BroadcastEventHandlers() map[string](func(eventType string,
+	publisher string, payload []byte) error) {
+	return d.broadcastEventHandlers
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

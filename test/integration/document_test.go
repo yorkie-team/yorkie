@@ -20,9 +20,11 @@ package integration
 
 import (
 	"context"
+	gojson "encoding/json"
 	"io"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -418,6 +420,58 @@ func TestDocument(t *testing.T) {
 		_, err = c1.Watch(watchCtx, d1)
 		assert.ErrorIs(t, err, client.ErrDocumentNotAttached)
 	})
+
+	t.Run("broadcast to subscriber except publisher test", func(t *testing.T) {
+		bch := make(chan string)
+		ctx := context.Background()
+		handler := func(eventType, publisher string, payload []byte) error {
+			var mentionedBy string
+			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
+			bch <- mentionedBy
+			return nil
+		}
+
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		rch1, err := c1.Watch(ctx, d1)
+		assert.NoError(t, err)
+		d1.SubscribeBroadcastEvent("mention", handler)
+
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		rch2, err := c2.Watch(ctx, d2)
+		assert.NoError(t, err)
+		d2.SubscribeBroadcastEvent("mention", handler)
+
+		err = d2.Broadcast("mention", "yorkie")
+		assert.NoError(t, err)
+
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rcv := 0
+			for {
+				select {
+				case <-rch1:
+				case <-rch2:
+				case m := <-bch:
+					assert.Equal(t, "yorkie", m)
+					rcv++
+				case <-time.After(3 * time.Second):
+					assert.Equal(t, 1, rcv)
+					return
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		wg.Wait()
+	})
+
+	// TODO(sejongk): broadcast to multiple subscribers
+	// TODO(sejongk): dont broadcast to unsubscribers
 }
 
 func TestDocumentWithProjects(t *testing.T) {
