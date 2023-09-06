@@ -75,8 +75,6 @@ type Coordinator interface {
 	PublishBroadcastEvent(
 		ctx context.Context,
 		documentID types.ID,
-		eventType string,
-		publisherID *time.ActorID,
 		event types.BroadcastEvent,
 	)
 

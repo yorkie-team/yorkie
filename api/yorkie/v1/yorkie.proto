@@ -136,7 +136,8 @@ message UnsubscribeBroadcastEventResponse {
 message BroadcastRequest {
   string client_id = 1;
   string document_id = 2;
-  BroadcastEvent event = 3;
+  string type = 3;
+  bytes payload = 4;
 }
 
 message BroadcastResponse {

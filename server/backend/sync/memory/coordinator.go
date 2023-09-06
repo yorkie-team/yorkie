@@ -114,11 +114,9 @@ func (c *Coordinator) UnsubscribeBroadcastEvent(
 func (c *Coordinator) PublishBroadcastEvent(
 	ctx context.Context,
 	documentID types.ID,
-	eventType string,
-	publisherID *time.ActorID,
 	event types.BroadcastEvent,
 ) {
-	c.pubSub.Publish(ctx, documentID, eventType, publisherID, event)
+	c.pubSub.Publish(ctx, documentID, event.Type, event.Publisher, event)
 }
 
 // Members returns the members of this cluster.

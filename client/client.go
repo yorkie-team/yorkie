@@ -706,11 +706,8 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, eventTyp
 		&api.BroadcastRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
-			Event: &api.BroadcastEvent{
-				Type:      eventType,
-				Publisher: c.id.String(),
-				Payload:   payload,
-			},
+			Type:       eventType,
+			Payload:    payload,
 		},
 	)
 	if err != nil {

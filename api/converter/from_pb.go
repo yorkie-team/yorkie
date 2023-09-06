@@ -856,16 +856,3 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 
 	return updatableProjectFields, nil
 }
-
-// FromBroadcastEvent converts the given Protobuf event to types.BroadcastEvent.
-func FromBroadcastEvent(event *api.BroadcastEvent) (types.BroadcastEvent, error) {
-	publisher, err := time.ActorIDFromHex(event.Publisher)
-	if err != nil {
-		return types.BroadcastEvent{}, err
-	}
-	return types.BroadcastEvent{
-		Type:      event.Type,
-		Publisher: publisher,
-		Payload:   event.Payload,
-	}, nil
-}

@@ -606,11 +606,18 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	event, err := converter.FromBroadcastEvent(req.Event)
 	if err != nil {
 		return nil, err
 	}
-	s.backend.Coordinator.PublishBroadcastEvent(ctx, docID, event.Type, event.Publisher, event)
+	s.backend.Coordinator.PublishBroadcastEvent(
+		ctx,
+		docID,
+		types.BroadcastEvent{
+			Type:      req.Type,
+			Publisher: clientID,
+			Payload:   req.Payload,
+		},
+	)
 
 	return &api.BroadcastResponse{}, nil
 }
