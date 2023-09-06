@@ -19,43 +19,45 @@ package sync
 import (
 	"github.com/rs/xid"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // Subscription represents a subscription of a subscriber to documents.
-type Subscription[E Event] struct {
+type Subscription struct {
 	id         string
-	types      []types.EventType
+	types      []string
 	subscriber *time.ActorID
 	closed     bool
-	events     chan E
+	events     chan Event
 }
 
 // NewSubscription creates a new instance of Subscription.
-func NewSubscription[E Event](docID types.ID, subscriber *time.ActorID) *Subscription[E] {
-	return &Subscription[E]{
+func NewSubscription(subscriber *time.ActorID) *Subscription {
+	return &Subscription{
 		id:         xid.New().String(),
-		types:      make([]types.EventType, 0),
+		types:      make([]string, 0),
 		subscriber: subscriber,
-		events:     make(chan E, 1),
+		events:     make(chan Event, 1),
 	}
 }
 
 // ID returns the id of this subscription.
-func (s *Subscription[E]) ID() string {
+func (s *Subscription) ID() string {
 	return s.id
 }
 
-func (s *Subscription[E]) Types() []types.EventType {
+// Types returns the subscribed event type list.
+func (s *Subscription) Types() []string {
 	return s.types
 }
 
-func (s *Subscription[E]) AddType(t types.EventType) {
+// AddType adds the event type to the subscribed event type list.
+func (s *Subscription) AddType(t string) {
 	s.types = append(s.types, t)
 }
 
-func (s *Subscription[E]) RemoveType(t types.EventType) {
+// RemoveType removes the event type from the subscribed event type list.
+func (s *Subscription) RemoveType(t string) {
 	found := -1
 	for i, v := range s.types {
 		if v == t {
@@ -67,18 +69,18 @@ func (s *Subscription[E]) RemoveType(t types.EventType) {
 	}
 }
 
-// Events returns the DocEvent channel of this subscription.
-func (s *Subscription[E]) Events() chan E {
+// Events returns the Event channel of this subscription.
+func (s *Subscription) Events() chan Event {
 	return s.events
 }
 
 // Subscriber returns the subscriber of this subscription.
-func (s *Subscription[E]) Subscriber() *time.ActorID {
+func (s *Subscription) Subscriber() *time.ActorID {
 	return s.subscriber
 }
 
 // Close closes all resources of this Subscription.
-func (s *Subscription[E]) Close() {
+func (s *Subscription) Close() {
 	if s.closed {
 		return
 	}
@@ -87,45 +89,5 @@ func (s *Subscription[E]) Close() {
 	close(s.events)
 }
 
-type Event interface {
-	TypeString() string
-	PublisherString() string
-	PayloadString() string
-}
-
-// DocEvent represents events that occur related to the document.
-type DocEvent struct {
-	Type       types.DocEventType
-	Publisher  *time.ActorID
-	DocumentID types.ID
-}
-
-func (e DocEvent) TypeString() string {
-	return string(e.Type)
-}
-
-func (e DocEvent) PublisherString() string {
-	return e.Publisher.String()
-}
-
-func (e DocEvent) PayloadString() string {
-	return string(e.DocumentID)
-}
-
-type BroadcastEvent struct {
-	Type      types.EventType
-	Publisher *time.ActorID
-	Payload   []byte
-}
-
-func (e BroadcastEvent) TypeString() string {
-	return string(e.Type)
-}
-
-func (e BroadcastEvent) PublisherString() string {
-	return e.Publisher.String()
-}
-
-func (e BroadcastEvent) PayloadString() string {
-	return string(e.Payload)
-}
+// Event represents a type for publishable events.
+type Event interface{}

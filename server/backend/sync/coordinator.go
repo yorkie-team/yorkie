@@ -38,58 +38,46 @@ type Coordinator interface {
 	NewLocker(ctx context.Context, key Key) (Locker, error)
 
 	// Subscribe subscribes to the given documents.
-	SubscribeDocEvent(
+	SubscribeDoc(
 		ctx context.Context,
 		subscriber *time.ActorID,
 		documentID types.ID,
-	) (*Subscription[*DocEvent], []*time.ActorID, error)
+	) (*Subscription, []*time.ActorID, error)
 
 	// Unsubscribe unsubscribes from the given documents.
-	UnsubscribeDocEvent(
+	UnsubscribeDoc(
 		ctx context.Context,
 		documentID types.ID,
-		sub *Subscription[*DocEvent],
+		sub *Subscription,
 	) error
 
 	// Publish publishes the given event.
 	PublishDocEvent(
 		ctx context.Context,
 		publisherID *time.ActorID,
-		event *DocEvent,
+		event types.DocEvent,
 	)
-
-	SubscribeBroadcasts(
-		ctx context.Context,
-		subscriber *time.ActorID,
-		documentID types.ID,
-	) (*Subscription[*BroadcastEvent], error)
-
-	UnsubscribeBroadcasts(
-		ctx context.Context,
-		documentID types.ID,
-		sub *Subscription[*BroadcastEvent],
-	) error
 
 	SubscribeBroadcastEvent(
 		ctx context.Context,
 		documentID types.ID,
-		eventType types.EventType,
-		subID string,
+		eventType string,
+		subscriber *time.ActorID,
 	)
 
 	UnsubscribeBroadcastEvent(
 		ctx context.Context,
 		documentID types.ID,
-		eventType types.EventType,
-		subID string,
+		eventType string,
+		subscriber *time.ActorID,
 	)
 
 	PublishBroadcastEvent(
 		ctx context.Context,
 		documentID types.ID,
-		eventType types.EventType,
+		eventType string,
 		publisherID *time.ActorID,
-		event *BroadcastEvent,
+		event types.BroadcastEvent,
 	)
 
 	// Members returns the members of this cluster.

@@ -25,7 +25,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
 )
 
@@ -36,9 +35,9 @@ func TestPubSub(t *testing.T) {
 	assert.NoError(t, err)
 
 	t.Run("publish subscribe test", func(t *testing.T) {
-		pubSub := memory.NewPubSub[sync.DocEvent]()
+		pubSub := memory.NewPubSub()
 		id := types.ID(t.Name() + "id")
-		docEvent := sync.DocEvent{
+		docEvent := types.DocEvent{
 			Type:       types.DocumentWatchedEvent,
 			Publisher:  idB,
 			DocumentID: id,
@@ -50,7 +49,7 @@ func TestPubSub(t *testing.T) {
 		assert.NoError(t, err)
 
 		// subscribe "document" type events
-		pubSub.SubscribeEvent(ctx, id, "document", subA.ID())
+		pubSub.SubscribeEvent(ctx, id, "document", idA)
 
 		defer func() {
 			pubSub.UnsubscribeDoc(ctx, id, subA)

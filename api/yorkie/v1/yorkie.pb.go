@@ -492,7 +492,8 @@ func (m *WatchDocumentRequest) GetDocumentId() string {
 type WatchDocumentResponse struct {
 	// Types that are valid to be assigned to Body:
 	//	*WatchDocumentResponse_Initialization_
-	//	*WatchDocumentResponse_Event
+	//	*WatchDocumentResponse_DocEvent
+	//	*WatchDocumentResponse_BroadcastEvent
 	Body                 isWatchDocumentResponse_Body `protobuf_oneof:"body"`
 	XXX_NoUnkeyedLiteral struct{}                     `json:"-"`
 	XXX_unrecognized     []byte                       `json:"-"`
@@ -541,12 +542,16 @@ type isWatchDocumentResponse_Body interface {
 type WatchDocumentResponse_Initialization_ struct {
 	Initialization *WatchDocumentResponse_Initialization `protobuf:"bytes,1,opt,name=initialization,proto3,oneof" json:"initialization,omitempty"`
 }
-type WatchDocumentResponse_Event struct {
-	Event *DocEvent `protobuf:"bytes,2,opt,name=event,proto3,oneof" json:"event,omitempty"`
+type WatchDocumentResponse_DocEvent struct {
+	DocEvent *DocEvent `protobuf:"bytes,2,opt,name=doc_event,json=docEvent,proto3,oneof" json:"doc_event,omitempty"`
+}
+type WatchDocumentResponse_BroadcastEvent struct {
+	BroadcastEvent *BroadcastEvent `protobuf:"bytes,3,opt,name=broadcast_event,json=broadcastEvent,proto3,oneof" json:"broadcast_event,omitempty"`
 }
 
 func (*WatchDocumentResponse_Initialization_) isWatchDocumentResponse_Body() {}
-func (*WatchDocumentResponse_Event) isWatchDocumentResponse_Body()           {}
+func (*WatchDocumentResponse_DocEvent) isWatchDocumentResponse_Body()        {}
+func (*WatchDocumentResponse_BroadcastEvent) isWatchDocumentResponse_Body()  {}
 
 func (m *WatchDocumentResponse) GetBody() isWatchDocumentResponse_Body {
 	if m != nil {
@@ -562,9 +567,16 @@ func (m *WatchDocumentResponse) GetInitialization() *WatchDocumentResponse_Initi
 	return nil
 }
 
-func (m *WatchDocumentResponse) GetEvent() *DocEvent {
-	if x, ok := m.GetBody().(*WatchDocumentResponse_Event); ok {
-		return x.Event
+func (m *WatchDocumentResponse) GetDocEvent() *DocEvent {
+	if x, ok := m.GetBody().(*WatchDocumentResponse_DocEvent); ok {
+		return x.DocEvent
+	}
+	return nil
+}
+
+func (m *WatchDocumentResponse) GetBroadcastEvent() *BroadcastEvent {
+	if x, ok := m.GetBody().(*WatchDocumentResponse_BroadcastEvent); ok {
+		return x.BroadcastEvent
 	}
 	return nil
 }
@@ -573,7 +585,8 @@ func (m *WatchDocumentResponse) GetEvent() *DocEvent {
 func (*WatchDocumentResponse) XXX_OneofWrappers() []interface{} {
 	return []interface{}{
 		(*WatchDocumentResponse_Initialization_)(nil),
-		(*WatchDocumentResponse_Event)(nil),
+		(*WatchDocumentResponse_DocEvent)(nil),
+		(*WatchDocumentResponse_BroadcastEvent)(nil),
 	}
 }
 
@@ -852,26 +865,27 @@ func (m *PushPullChangesResponse) GetChangePack() *ChangePack {
 	return nil
 }
 
-type WatchBroadcastsRequest struct {
+type SubscribeBroadcastEventRequest struct {
 	ClientId             string   `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	DocumentId           string   `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	Type                 string   `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *WatchBroadcastsRequest) Reset()         { *m = WatchBroadcastsRequest{} }
-func (m *WatchBroadcastsRequest) String() string { return proto.CompactTextString(m) }
-func (*WatchBroadcastsRequest) ProtoMessage()    {}
-func (*WatchBroadcastsRequest) Descriptor() ([]byte, []int) {
+func (m *SubscribeBroadcastEventRequest) Reset()         { *m = SubscribeBroadcastEventRequest{} }
+func (m *SubscribeBroadcastEventRequest) String() string { return proto.CompactTextString(m) }
+func (*SubscribeBroadcastEventRequest) ProtoMessage()    {}
+func (*SubscribeBroadcastEventRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_40070c858814ab24, []int{14}
 }
-func (m *WatchBroadcastsRequest) XXX_Unmarshal(b []byte) error {
+func (m *SubscribeBroadcastEventRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *WatchBroadcastsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SubscribeBroadcastEventRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_WatchBroadcastsRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_SubscribeBroadcastEventRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -881,51 +895,57 @@ func (m *WatchBroadcastsRequest) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-func (m *WatchBroadcastsRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WatchBroadcastsRequest.Merge(m, src)
+func (m *SubscribeBroadcastEventRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SubscribeBroadcastEventRequest.Merge(m, src)
 }
-func (m *WatchBroadcastsRequest) XXX_Size() int {
+func (m *SubscribeBroadcastEventRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *WatchBroadcastsRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_WatchBroadcastsRequest.DiscardUnknown(m)
+func (m *SubscribeBroadcastEventRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_SubscribeBroadcastEventRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_WatchBroadcastsRequest proto.InternalMessageInfo
+var xxx_messageInfo_SubscribeBroadcastEventRequest proto.InternalMessageInfo
 
-func (m *WatchBroadcastsRequest) GetClientId() string {
+func (m *SubscribeBroadcastEventRequest) GetClientId() string {
 	if m != nil {
 		return m.ClientId
 	}
 	return ""
 }
 
-func (m *WatchBroadcastsRequest) GetDocumentId() string {
+func (m *SubscribeBroadcastEventRequest) GetDocumentId() string {
 	if m != nil {
 		return m.DocumentId
 	}
 	return ""
 }
 
-type WatchBroadcastsResponse struct {
-	Event                *BroadcastEvent `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}        `json:"-"`
-	XXX_unrecognized     []byte          `json:"-"`
-	XXX_sizecache        int32           `json:"-"`
+func (m *SubscribeBroadcastEventRequest) GetType() string {
+	if m != nil {
+		return m.Type
+	}
+	return ""
 }
 
-func (m *WatchBroadcastsResponse) Reset()         { *m = WatchBroadcastsResponse{} }
-func (m *WatchBroadcastsResponse) String() string { return proto.CompactTextString(m) }
-func (*WatchBroadcastsResponse) ProtoMessage()    {}
-func (*WatchBroadcastsResponse) Descriptor() ([]byte, []int) {
+type SubscribeBroadcastEventResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *SubscribeBroadcastEventResponse) Reset()         { *m = SubscribeBroadcastEventResponse{} }
+func (m *SubscribeBroadcastEventResponse) String() string { return proto.CompactTextString(m) }
+func (*SubscribeBroadcastEventResponse) ProtoMessage()    {}
+func (*SubscribeBroadcastEventResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_40070c858814ab24, []int{15}
 }
-func (m *WatchBroadcastsResponse) XXX_Unmarshal(b []byte) error {
+func (m *SubscribeBroadcastEventResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *WatchBroadcastsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SubscribeBroadcastEventResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_WatchBroadcastsResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_SubscribeBroadcastEventResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -935,47 +955,39 @@ func (m *WatchBroadcastsResponse) XXX_Marshal(b []byte, deterministic bool) ([]b
 		return b[:n], nil
 	}
 }
-func (m *WatchBroadcastsResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WatchBroadcastsResponse.Merge(m, src)
+func (m *SubscribeBroadcastEventResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SubscribeBroadcastEventResponse.Merge(m, src)
 }
-func (m *WatchBroadcastsResponse) XXX_Size() int {
+func (m *SubscribeBroadcastEventResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *WatchBroadcastsResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_WatchBroadcastsResponse.DiscardUnknown(m)
+func (m *SubscribeBroadcastEventResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_SubscribeBroadcastEventResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_WatchBroadcastsResponse proto.InternalMessageInfo
+var xxx_messageInfo_SubscribeBroadcastEventResponse proto.InternalMessageInfo
 
-func (m *WatchBroadcastsResponse) GetEvent() *BroadcastEvent {
-	if m != nil {
-		return m.Event
-	}
-	return nil
-}
-
-type SubscribeBroadcastRequest struct {
+type UnsubscribeBroadcastEventRequest struct {
 	ClientId             string   `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	DocumentId           string   `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
 	Type                 string   `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	SubID                string   `protobuf:"bytes,4,opt,name=subID,proto3" json:"subID,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *SubscribeBroadcastRequest) Reset()         { *m = SubscribeBroadcastRequest{} }
-func (m *SubscribeBroadcastRequest) String() string { return proto.CompactTextString(m) }
-func (*SubscribeBroadcastRequest) ProtoMessage()    {}
-func (*SubscribeBroadcastRequest) Descriptor() ([]byte, []int) {
+func (m *UnsubscribeBroadcastEventRequest) Reset()         { *m = UnsubscribeBroadcastEventRequest{} }
+func (m *UnsubscribeBroadcastEventRequest) String() string { return proto.CompactTextString(m) }
+func (*UnsubscribeBroadcastEventRequest) ProtoMessage()    {}
+func (*UnsubscribeBroadcastEventRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_40070c858814ab24, []int{16}
 }
-func (m *SubscribeBroadcastRequest) XXX_Unmarshal(b []byte) error {
+func (m *UnsubscribeBroadcastEventRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *SubscribeBroadcastRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *UnsubscribeBroadcastEventRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_SubscribeBroadcastRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_UnsubscribeBroadcastEventRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -985,64 +997,57 @@ func (m *SubscribeBroadcastRequest) XXX_Marshal(b []byte, deterministic bool) ([
 		return b[:n], nil
 	}
 }
-func (m *SubscribeBroadcastRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SubscribeBroadcastRequest.Merge(m, src)
+func (m *UnsubscribeBroadcastEventRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UnsubscribeBroadcastEventRequest.Merge(m, src)
 }
-func (m *SubscribeBroadcastRequest) XXX_Size() int {
+func (m *UnsubscribeBroadcastEventRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *SubscribeBroadcastRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_SubscribeBroadcastRequest.DiscardUnknown(m)
+func (m *UnsubscribeBroadcastEventRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_UnsubscribeBroadcastEventRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_SubscribeBroadcastRequest proto.InternalMessageInfo
+var xxx_messageInfo_UnsubscribeBroadcastEventRequest proto.InternalMessageInfo
 
-func (m *SubscribeBroadcastRequest) GetClientId() string {
+func (m *UnsubscribeBroadcastEventRequest) GetClientId() string {
 	if m != nil {
 		return m.ClientId
 	}
 	return ""
 }
 
-func (m *SubscribeBroadcastRequest) GetDocumentId() string {
+func (m *UnsubscribeBroadcastEventRequest) GetDocumentId() string {
 	if m != nil {
 		return m.DocumentId
 	}
 	return ""
 }
 
-func (m *SubscribeBroadcastRequest) GetType() string {
+func (m *UnsubscribeBroadcastEventRequest) GetType() string {
 	if m != nil {
 		return m.Type
 	}
 	return ""
 }
 
-func (m *SubscribeBroadcastRequest) GetSubID() string {
-	if m != nil {
-		return m.SubID
-	}
-	return ""
-}
-
-type SubscribeBroadcastResponse struct {
+type UnsubscribeBroadcastEventResponse struct {
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *SubscribeBroadcastResponse) Reset()         { *m = SubscribeBroadcastResponse{} }
-func (m *SubscribeBroadcastResponse) String() string { return proto.CompactTextString(m) }
-func (*SubscribeBroadcastResponse) ProtoMessage()    {}
-func (*SubscribeBroadcastResponse) Descriptor() ([]byte, []int) {
+func (m *UnsubscribeBroadcastEventResponse) Reset()         { *m = UnsubscribeBroadcastEventResponse{} }
+func (m *UnsubscribeBroadcastEventResponse) String() string { return proto.CompactTextString(m) }
+func (*UnsubscribeBroadcastEventResponse) ProtoMessage()    {}
+func (*UnsubscribeBroadcastEventResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_40070c858814ab24, []int{17}
 }
-func (m *SubscribeBroadcastResponse) XXX_Unmarshal(b []byte) error {
+func (m *UnsubscribeBroadcastEventResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *SubscribeBroadcastResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *UnsubscribeBroadcastEventResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_SubscribeBroadcastResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_UnsubscribeBroadcastEventResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1052,127 +1057,17 @@ func (m *SubscribeBroadcastResponse) XXX_Marshal(b []byte, deterministic bool) (
 		return b[:n], nil
 	}
 }
-func (m *SubscribeBroadcastResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SubscribeBroadcastResponse.Merge(m, src)
+func (m *UnsubscribeBroadcastEventResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UnsubscribeBroadcastEventResponse.Merge(m, src)
 }
-func (m *SubscribeBroadcastResponse) XXX_Size() int {
+func (m *UnsubscribeBroadcastEventResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *SubscribeBroadcastResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_SubscribeBroadcastResponse.DiscardUnknown(m)
+func (m *UnsubscribeBroadcastEventResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_UnsubscribeBroadcastEventResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_SubscribeBroadcastResponse proto.InternalMessageInfo
-
-type UnsubscribeBroadcastRequest struct {
-	ClientId             string   `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	DocumentId           string   `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
-	Type                 string   `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	SubID                string   `protobuf:"bytes,4,opt,name=subID,proto3" json:"subID,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *UnsubscribeBroadcastRequest) Reset()         { *m = UnsubscribeBroadcastRequest{} }
-func (m *UnsubscribeBroadcastRequest) String() string { return proto.CompactTextString(m) }
-func (*UnsubscribeBroadcastRequest) ProtoMessage()    {}
-func (*UnsubscribeBroadcastRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{18}
-}
-func (m *UnsubscribeBroadcastRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *UnsubscribeBroadcastRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_UnsubscribeBroadcastRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *UnsubscribeBroadcastRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_UnsubscribeBroadcastRequest.Merge(m, src)
-}
-func (m *UnsubscribeBroadcastRequest) XXX_Size() int {
-	return m.Size()
-}
-func (m *UnsubscribeBroadcastRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_UnsubscribeBroadcastRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_UnsubscribeBroadcastRequest proto.InternalMessageInfo
-
-func (m *UnsubscribeBroadcastRequest) GetClientId() string {
-	if m != nil {
-		return m.ClientId
-	}
-	return ""
-}
-
-func (m *UnsubscribeBroadcastRequest) GetDocumentId() string {
-	if m != nil {
-		return m.DocumentId
-	}
-	return ""
-}
-
-func (m *UnsubscribeBroadcastRequest) GetType() string {
-	if m != nil {
-		return m.Type
-	}
-	return ""
-}
-
-func (m *UnsubscribeBroadcastRequest) GetSubID() string {
-	if m != nil {
-		return m.SubID
-	}
-	return ""
-}
-
-type UnsubscribeBroadcastResponse struct {
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *UnsubscribeBroadcastResponse) Reset()         { *m = UnsubscribeBroadcastResponse{} }
-func (m *UnsubscribeBroadcastResponse) String() string { return proto.CompactTextString(m) }
-func (*UnsubscribeBroadcastResponse) ProtoMessage()    {}
-func (*UnsubscribeBroadcastResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{19}
-}
-func (m *UnsubscribeBroadcastResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *UnsubscribeBroadcastResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_UnsubscribeBroadcastResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *UnsubscribeBroadcastResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_UnsubscribeBroadcastResponse.Merge(m, src)
-}
-func (m *UnsubscribeBroadcastResponse) XXX_Size() int {
-	return m.Size()
-}
-func (m *UnsubscribeBroadcastResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_UnsubscribeBroadcastResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_UnsubscribeBroadcastResponse proto.InternalMessageInfo
+var xxx_messageInfo_UnsubscribeBroadcastEventResponse proto.InternalMessageInfo
 
 type BroadcastRequest struct {
 	ClientId             string          `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
@@ -1187,7 +1082,7 @@ func (m *BroadcastRequest) Reset()         { *m = BroadcastRequest{} }
 func (m *BroadcastRequest) String() string { return proto.CompactTextString(m) }
 func (*BroadcastRequest) ProtoMessage()    {}
 func (*BroadcastRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{20}
+	return fileDescriptor_40070c858814ab24, []int{18}
 }
 func (m *BroadcastRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1247,7 +1142,7 @@ func (m *BroadcastResponse) Reset()         { *m = BroadcastResponse{} }
 func (m *BroadcastResponse) String() string { return proto.CompactTextString(m) }
 func (*BroadcastResponse) ProtoMessage()    {}
 func (*BroadcastResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_40070c858814ab24, []int{21}
+	return fileDescriptor_40070c858814ab24, []int{19}
 }
 func (m *BroadcastResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1292,12 +1187,10 @@ func init() {
 	proto.RegisterType((*RemoveDocumentResponse)(nil), "yorkie.v1.RemoveDocumentResponse")
 	proto.RegisterType((*PushPullChangesRequest)(nil), "yorkie.v1.PushPullChangesRequest")
 	proto.RegisterType((*PushPullChangesResponse)(nil), "yorkie.v1.PushPullChangesResponse")
-	proto.RegisterType((*WatchBroadcastsRequest)(nil), "yorkie.v1.WatchBroadcastsRequest")
-	proto.RegisterType((*WatchBroadcastsResponse)(nil), "yorkie.v1.WatchBroadcastsResponse")
-	proto.RegisterType((*SubscribeBroadcastRequest)(nil), "yorkie.v1.SubscribeBroadcastRequest")
-	proto.RegisterType((*SubscribeBroadcastResponse)(nil), "yorkie.v1.SubscribeBroadcastResponse")
-	proto.RegisterType((*UnsubscribeBroadcastRequest)(nil), "yorkie.v1.UnsubscribeBroadcastRequest")
-	proto.RegisterType((*UnsubscribeBroadcastResponse)(nil), "yorkie.v1.UnsubscribeBroadcastResponse")
+	proto.RegisterType((*SubscribeBroadcastEventRequest)(nil), "yorkie.v1.SubscribeBroadcastEventRequest")
+	proto.RegisterType((*SubscribeBroadcastEventResponse)(nil), "yorkie.v1.SubscribeBroadcastEventResponse")
+	proto.RegisterType((*UnsubscribeBroadcastEventRequest)(nil), "yorkie.v1.UnsubscribeBroadcastEventRequest")
+	proto.RegisterType((*UnsubscribeBroadcastEventResponse)(nil), "yorkie.v1.UnsubscribeBroadcastEventResponse")
 	proto.RegisterType((*BroadcastRequest)(nil), "yorkie.v1.BroadcastRequest")
 	proto.RegisterType((*BroadcastResponse)(nil), "yorkie.v1.BroadcastResponse")
 }
@@ -1305,60 +1198,58 @@ func init() {
 func init() { proto.RegisterFile("yorkie/v1/yorkie.proto", fileDescriptor_40070c858814ab24) }
 
 var fileDescriptor_40070c858814ab24 = []byte{
-	// 841 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x57, 0x4d, 0x4f, 0xdb, 0x4c,
-	0x10, 0xce, 0x42, 0xe0, 0x25, 0x13, 0xf1, 0xb5, 0x90, 0x10, 0x1c, 0xde, 0x90, 0x77, 0xdf, 0x2f,
-	0x24, 0xa4, 0xa4, 0x01, 0x95, 0x4b, 0x4f, 0x40, 0x2a, 0x91, 0x56, 0x6a, 0x53, 0xd3, 0x82, 0x40,
-	0xad, 0x22, 0xc7, 0x5e, 0x1a, 0x2b, 0xc1, 0x0e, 0xfe, 0x92, 0xd2, 0x5b, 0x55, 0xf5, 0xd8, 0x7b,
-	0xff, 0x43, 0xff, 0x45, 0x4f, 0x3d, 0xf6, 0xd8, 0x63, 0x45, 0xff, 0x47, 0x55, 0xc5, 0x76, 0x8c,
-	0xd7, 0x59, 0x92, 0xb4, 0x44, 0xa2, 0x37, 0x67, 0x77, 0xe6, 0xd9, 0x67, 0x66, 0x67, 0x9f, 0x99,
-	0x40, 0xba, 0xa3, 0x1b, 0x4d, 0x95, 0x16, 0x9d, 0x52, 0xd1, 0xfb, 0x2a, 0xb4, 0x0d, 0xdd, 0xd2,
-	0x71, 0xc2, 0xff, 0xe5, 0x94, 0x84, 0xd5, 0x2b, 0x13, 0x83, 0x9a, 0xba, 0x6d, 0xc8, 0xd4, 0xf4,
-	0xac, 0xc8, 0x0e, 0xa4, 0x76, 0x65, 0x4b, 0x75, 0x24, 0x8b, 0xee, 0xb7, 0x54, 0xaa, 0x59, 0x22,
-	0xbd, 0xb0, 0xa9, 0x69, 0xe1, 0x3f, 0x01, 0x64, 0x77, 0xa1, 0xd6, 0xa4, 0x9d, 0x0c, 0xca, 0xa3,
-	0x8d, 0x84, 0x98, 0xf0, 0x56, 0x1e, 0xd2, 0x0e, 0xb9, 0x0b, 0xe9, 0xa8, 0x9f, 0xd9, 0xd6, 0x35,
-	0x93, 0xe2, 0x2c, 0xf8, 0x66, 0x35, 0x55, 0xf1, 0xfd, 0x66, 0xbc, 0x85, 0x8a, 0x42, 0x76, 0x60,
-	0xa5, 0x4c, 0x25, 0xee, 0x81, 0x03, 0xfd, 0x04, 0xc8, 0xf4, 0xfb, 0x79, 0x07, 0x92, 0x16, 0xa4,
-	0x76, 0x2d, 0x4b, 0x92, 0x1b, 0x65, 0x5d, 0xb6, 0xcf, 0x47, 0x44, 0xc4, 0x3b, 0x90, 0x94, 0x1b,
-	0x92, 0xf6, 0x92, 0xd6, 0xda, 0x92, 0xdc, 0xcc, 0x4c, 0xe4, 0xd1, 0x46, 0x72, 0x2b, 0x55, 0x08,
-	0x92, 0x56, 0xd8, 0x77, 0x77, 0xab, 0x92, 0xdc, 0x14, 0x41, 0x0e, 0xbe, 0xc9, 0x05, 0xa4, 0xa3,
-	0xa7, 0xf9, 0x81, 0xaf, 0x43, 0x52, 0xf1, 0xd7, 0xae, 0x0e, 0x84, 0xde, 0xd2, 0x0d, 0x8e, 0xfc,
-	0x88, 0x20, 0x55, 0xa6, 0x3f, 0x1d, 0x61, 0x84, 0xcf, 0xc4, 0x30, 0x3e, 0x93, 0x23, 0xf2, 0xc1,
-	0xdb, 0x90, 0x36, 0xe8, 0xb9, 0xee, 0xd0, 0x9a, 0x7a, 0x56, 0xd3, 0x74, 0xab, 0x26, 0xb9, 0x09,
-	0xa1, 0x4a, 0x26, 0x9e, 0x47, 0x1b, 0x33, 0xe2, 0x92, 0xb7, 0x5b, 0x39, 0x7b, 0xa4, 0x5b, 0xbb,
-	0xfe, 0x16, 0xa9, 0x42, 0x3a, 0x1a, 0x83, 0x9f, 0xb7, 0x5f, 0x4d, 0xcb, 0x53, 0x58, 0x3e, 0x96,
-	0xac, 0x31, 0x27, 0x85, 0x7c, 0x41, 0x90, 0x8a, 0xc0, 0xfa, 0x3c, 0x4f, 0x60, 0x4e, 0xd5, 0x54,
-	0x4b, 0x95, 0x5a, 0xea, 0x2b, 0xc9, 0x52, 0x75, 0xcd, 0x05, 0x4f, 0x6e, 0x15, 0x43, 0x54, 0xb9,
-	0x9e, 0x85, 0x0a, 0xe3, 0x76, 0x10, 0x13, 0x23, 0x40, 0x78, 0x13, 0xa6, 0xa8, 0x43, 0x35, 0xcb,
-	0x0f, 0x7e, 0x29, 0x84, 0x58, 0xd6, 0xe5, 0xfb, 0xdd, 0xad, 0x83, 0x98, 0xe8, 0xd9, 0x08, 0x45,
-	0x98, 0x63, 0x01, 0x43, 0x6f, 0x55, 0x55, 0xcc, 0x0c, 0xca, 0x4f, 0x5e, 0xbd, 0xd5, 0x8a, 0x62,
-	0xee, 0x4d, 0x43, 0xbc, 0xae, 0x2b, 0x1d, 0xf2, 0x0e, 0x41, 0x4a, 0x74, 0xaf, 0xe6, 0xb7, 0xa8,
-	0xa3, 0x6e, 0x49, 0x44, 0xe9, 0xf0, 0x4b, 0x02, 0x8d, 0x8a, 0xf8, 0x01, 0x41, 0xba, 0x6a, 0x9b,
-	0x8d, 0xaa, 0xdd, 0x6a, 0x79, 0x26, 0xe6, 0xed, 0x3e, 0x95, 0x2c, 0x24, 0xda, 0xb6, 0xd9, 0xa8,
-	0xe9, 0x5a, 0xab, 0xe3, 0xbf, 0x8e, 0x99, 0xee, 0xc2, 0x63, 0xad, 0xd5, 0x21, 0x4f, 0x60, 0xa5,
-	0x8f, 0xec, 0x0d, 0x13, 0x70, 0x04, 0x69, 0xb7, 0x04, 0xf7, 0x0c, 0x5d, 0x52, 0x64, 0xc9, 0xb4,
-	0xc6, 0x13, 0x3f, 0x79, 0x00, 0x2b, 0x7d, 0xb8, 0x3e, 0xd5, 0x62, 0xaf, 0x76, 0x3d, 0x92, 0xab,
-	0x21, 0x92, 0x81, 0xb5, 0x5b, 0xc1, 0x7e, 0xfd, 0x92, 0x37, 0x08, 0x56, 0x0f, 0xed, 0xba, 0x29,
-	0x1b, 0x6a, 0x9d, 0x06, 0x26, 0xe3, 0xb9, 0x27, 0x0c, 0x71, 0xab, 0xd3, 0xa6, 0xee, 0x05, 0x25,
-	0x44, 0xf7, 0x1b, 0x2f, 0xc3, 0x94, 0x69, 0xd7, 0x2b, 0x65, 0x37, 0xff, 0x09, 0xd1, 0xfb, 0x41,
-	0xd6, 0x40, 0xe0, 0x91, 0xf0, 0x7b, 0xca, 0x5b, 0x04, 0xd9, 0x67, 0x9a, 0x79, 0xeb, 0x2c, 0x73,
-	0xb0, 0xc6, 0xa7, 0xe1, 0xf3, 0x7c, 0x8d, 0x60, 0x61, 0xcc, 0xe4, 0x82, 0xfb, 0x9c, 0x1c, 0xf1,
-	0x3e, 0x97, 0x60, 0xb1, 0x8f, 0xd8, 0xd6, 0xf7, 0x3f, 0x60, 0xf6, 0xc4, 0x75, 0x3c, 0xa4, 0x86,
-	0xa3, 0xca, 0x14, 0x1f, 0xc3, 0x1c, 0x3b, 0x31, 0xe0, 0x7c, 0x08, 0x9a, 0x3b, 0x84, 0x08, 0x7f,
-	0x0d, 0xb0, 0xf0, 0x33, 0x10, 0xc3, 0x2f, 0x60, 0x21, 0x3a, 0x1b, 0x60, 0x12, 0x56, 0x50, 0xfe,
-	0xc0, 0x21, 0xfc, 0x3d, 0xd0, 0x26, 0x80, 0xef, 0xf2, 0x66, 0x1a, 0x3e, 0xcb, 0x9b, 0x37, 0x79,
-	0xb0, 0xbc, 0xb9, 0xd3, 0x82, 0x07, 0xcc, 0x76, 0x44, 0x06, 0x98, 0xdb, 0xf0, 0x19, 0x60, 0x7e,
-	0x3b, 0xf5, 0x80, 0x59, 0x5d, 0x65, 0x80, 0xb9, 0x1d, 0x80, 0x01, 0xe6, 0x8b, 0x32, 0x89, 0xe1,
-	0x53, 0x98, 0x8f, 0x08, 0x16, 0x0e, 0xfb, 0xf1, 0x95, 0x57, 0x20, 0x83, 0x4c, 0x02, 0xec, 0x23,
-	0x98, 0x65, 0x9a, 0x27, 0x5e, 0xbf, 0xbe, 0xad, 0x7a, 0xb8, 0xf9, 0x61, 0x7d, 0x97, 0xc4, 0xee,
-	0x20, 0x7c, 0x00, 0x89, 0xa0, 0x3a, 0x71, 0x96, 0x57, 0xcc, 0x3d, 0xbc, 0x35, 0xfe, 0x66, 0xc0,
-	0xf0, 0x39, 0xcc, 0x47, 0x34, 0x90, 0x89, 0x9e, 0xaf, 0xbb, 0x4c, 0xf4, 0xd7, 0x48, 0xa8, 0xcb,
-	0x53, 0x06, 0xdc, 0xaf, 0x47, 0xf8, 0x9f, 0x90, 0xf7, 0xb5, 0x9a, 0x29, 0xfc, 0x3b, 0xc4, 0x2a,
-	0x08, 0x41, 0x85, 0x65, 0x9e, 0x9c, 0xe0, 0xff, 0x42, 0x00, 0x03, 0x64, 0x4f, 0xf8, 0x7f, 0xa8,
-	0x5d, 0xef, 0xa8, 0xbd, 0xcd, 0x4f, 0x97, 0x39, 0xf4, 0xf9, 0x32, 0x87, 0xbe, 0x5e, 0xe6, 0xd0,
-	0xfb, 0x6f, 0xb9, 0x18, 0x2c, 0x2a, 0xd4, 0xe9, 0xf9, 0x4b, 0x6d, 0xb5, 0xe0, 0x94, 0xaa, 0xe8,
-	0x34, 0x5e, 0xb8, 0xe7, 0x94, 0xea, 0xd3, 0xee, 0x9f, 0x91, 0xed, 0x1f, 0x01, 0x00, 0x00, 0xff,
-	0xff, 0xab, 0xeb, 0xd8, 0xa8, 0xcc, 0x0c, 0x00, 0x00,
+	// 810 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0x4f, 0x4f, 0xdb, 0x48,
+	0x14, 0x8f, 0x21, 0xcb, 0x26, 0x2f, 0x22, 0xc0, 0xb0, 0x09, 0xc1, 0xec, 0x86, 0x30, 0x5c, 0xd8,
+	0x65, 0x95, 0x6c, 0x82, 0x96, 0xcb, 0x9e, 0x80, 0xac, 0x44, 0x54, 0xa9, 0x4d, 0x4d, 0x5b, 0x04,
+	0x52, 0x65, 0x39, 0xf6, 0xd0, 0x58, 0x09, 0x9e, 0x60, 0x4f, 0xac, 0xa6, 0xb7, 0x7e, 0x80, 0xde,
+	0xfb, 0x05, 0x7a, 0xea, 0x77, 0xe8, 0xa1, 0xa7, 0x1e, 0xfb, 0x11, 0x2a, 0xfa, 0x45, 0xaa, 0xd8,
+	0x13, 0xe3, 0x31, 0x4e, 0x48, 0x0b, 0x6a, 0x7b, 0x9b, 0xbc, 0x79, 0xbf, 0xdf, 0xfb, 0xf9, 0xe5,
+	0xfd, 0x19, 0xc8, 0x0f, 0xa8, 0xdd, 0x31, 0x49, 0xc5, 0xad, 0x56, 0xfc, 0x53, 0xb9, 0x67, 0x53,
+	0x46, 0x51, 0x9a, 0xff, 0x72, 0xab, 0xf2, 0xea, 0x95, 0x8b, 0x4d, 0x1c, 0xda, 0xb7, 0x75, 0xe2,
+	0xf8, 0x5e, 0x78, 0x17, 0x72, 0x7b, 0x3a, 0x33, 0x5d, 0x8d, 0x91, 0x83, 0xae, 0x49, 0x2c, 0xa6,
+	0x90, 0x8b, 0x3e, 0x71, 0x18, 0xfa, 0x03, 0x40, 0xf7, 0x0c, 0x6a, 0x87, 0x0c, 0x0a, 0x52, 0x49,
+	0xda, 0x4a, 0x2b, 0x69, 0xdf, 0x72, 0x8f, 0x0c, 0xf0, 0xbf, 0x90, 0x8f, 0xe2, 0x9c, 0x1e, 0xb5,
+	0x1c, 0x82, 0xd6, 0x80, 0xbb, 0xa9, 0xa6, 0xc1, 0x71, 0x29, 0xdf, 0xd0, 0x30, 0xf0, 0x2e, 0xac,
+	0xd4, 0x89, 0x16, 0x1b, 0x70, 0x22, 0x4e, 0x86, 0xc2, 0x75, 0x9c, 0x1f, 0x10, 0x77, 0x21, 0xb7,
+	0xc7, 0x98, 0xa6, 0xb7, 0xeb, 0x54, 0xef, 0x9f, 0x4f, 0xc9, 0x88, 0x76, 0x21, 0xa3, 0xb7, 0x35,
+	0xeb, 0x19, 0x51, 0x7b, 0x9a, 0xde, 0x29, 0xcc, 0x94, 0xa4, 0xad, 0x4c, 0x2d, 0x57, 0x0e, 0x92,
+	0x56, 0x3e, 0xf0, 0x6e, 0x9b, 0x9a, 0xde, 0x51, 0x40, 0x0f, 0xce, 0xf8, 0x02, 0xf2, 0xd1, 0x68,
+	0xfc, 0xc3, 0xd7, 0x21, 0x63, 0x70, 0xdb, 0x55, 0x40, 0x18, 0x99, 0x6e, 0x11, 0xf2, 0xbd, 0x04,
+	0xb9, 0x3a, 0xf9, 0xea, 0x2f, 0x8c, 0xe8, 0x99, 0xb9, 0x49, 0xcf, 0xec, 0x94, 0x7a, 0xd0, 0x0e,
+	0xe4, 0x6d, 0x72, 0x4e, 0x5d, 0xa2, 0x9a, 0x67, 0xaa, 0x45, 0x99, 0xaa, 0x79, 0x09, 0x21, 0x46,
+	0x21, 0x59, 0x92, 0xb6, 0x52, 0xca, 0xb2, 0x7f, 0xdb, 0x38, 0xbb, 0x4f, 0xd9, 0x1e, 0xbf, 0xc2,
+	0x4d, 0xc8, 0x47, 0xbf, 0x81, 0xe7, 0xed, 0x5b, 0xd3, 0xf2, 0x08, 0x7e, 0x3b, 0xd6, 0xd8, 0x1d,
+	0x27, 0x05, 0xbf, 0x99, 0x81, 0x5c, 0x84, 0x96, 0xeb, 0x3c, 0x81, 0xac, 0x69, 0x99, 0xcc, 0xd4,
+	0xba, 0xe6, 0x0b, 0x8d, 0x99, 0xd4, 0xf2, 0xc8, 0x33, 0xb5, 0x4a, 0x48, 0x6a, 0x2c, 0xb2, 0xdc,
+	0x10, 0x60, 0x87, 0x09, 0x25, 0x42, 0x84, 0x6a, 0x90, 0x36, 0xa8, 0xae, 0x12, 0x97, 0x58, 0x8c,
+	0x27, 0x60, 0x39, 0xc4, 0x5a, 0xa7, 0xfa, 0xff, 0xc3, 0xab, 0xc3, 0x84, 0x92, 0x32, 0xf8, 0x19,
+	0xd5, 0x61, 0xa1, 0x65, 0x53, 0xcd, 0xd0, 0x35, 0x87, 0x71, 0xa4, 0xff, 0x0f, 0xae, 0x86, 0x90,
+	0xfb, 0x23, 0x8f, 0x11, 0x3e, 0xdb, 0x12, 0x2c, 0x72, 0x05, 0xb2, 0xa2, 0xba, 0x50, 0xe3, 0x9b,
+	0x86, 0x53, 0x90, 0x4a, 0xb3, 0x57, 0x8d, 0xdf, 0x30, 0x9c, 0xfd, 0x39, 0x48, 0xb6, 0xa8, 0x31,
+	0xc0, 0xaf, 0x24, 0xc8, 0x29, 0xde, 0xff, 0xfc, 0x53, 0x14, 0xe5, 0xb0, 0xbe, 0xa2, 0x72, 0xe2,
+	0xeb, 0x4b, 0x9a, 0x96, 0xf1, 0xad, 0x04, 0xf9, 0x66, 0xdf, 0x69, 0x37, 0xfb, 0xdd, 0xae, 0xef,
+	0xe2, 0xfc, 0xd8, 0xbe, 0x5b, 0x83, 0x74, 0xaf, 0xef, 0xb4, 0x55, 0x6a, 0x75, 0x07, 0xbc, 0xd5,
+	0x52, 0x43, 0xc3, 0x03, 0xab, 0x3b, 0xc0, 0x0f, 0x61, 0xe5, 0x9a, 0xd8, 0x5b, 0x26, 0xc0, 0x86,
+	0xe2, 0x51, 0xbf, 0xe5, 0xe8, 0xb6, 0xd9, 0x22, 0x62, 0x21, 0xdd, 0x4d, 0x1e, 0x10, 0x24, 0xd9,
+	0xa0, 0x47, 0xbc, 0x04, 0xa4, 0x15, 0xef, 0x8c, 0x37, 0x60, 0x7d, 0x6c, 0x4c, 0x3e, 0xef, 0x19,
+	0x94, 0x1e, 0x5b, 0xce, 0xf7, 0x16, 0xb6, 0x09, 0x1b, 0x13, 0xa2, 0x72, 0x69, 0x2f, 0x25, 0x58,
+	0x0c, 0xae, 0xee, 0x46, 0x4b, 0x05, 0x7e, 0x99, 0xae, 0xb9, 0x15, 0xdf, 0x0f, 0x2f, 0xc3, 0x52,
+	0x48, 0x82, 0x2f, 0xac, 0xf6, 0xee, 0x57, 0x98, 0x3f, 0xf1, 0x80, 0x47, 0xc4, 0x76, 0x4d, 0x9d,
+	0xa0, 0x63, 0xc8, 0x8a, 0x0b, 0x1c, 0x95, 0x42, 0xd4, 0xb1, 0x6f, 0x02, 0x79, 0x63, 0x82, 0x07,
+	0xcf, 0x40, 0x02, 0x3d, 0x85, 0xc5, 0xe8, 0xaa, 0x46, 0x38, 0x3c, 0xcc, 0xe2, 0xf7, 0xbf, 0xbc,
+	0x39, 0xd1, 0x27, 0xa0, 0x1f, 0xea, 0x16, 0xf6, 0xaf, 0xa8, 0x3b, 0xee, 0x21, 0x20, 0xea, 0x8e,
+	0x5d, 0xde, 0x3e, 0xb1, 0xb8, 0xa0, 0x04, 0xe2, 0xd8, 0xfd, 0x2b, 0x10, 0xc7, 0x6f, 0x37, 0x9f,
+	0x58, 0x9c, 0x4c, 0x02, 0x71, 0xec, 0x0c, 0x15, 0x88, 0xe3, 0xc7, 0x1a, 0x4e, 0xa0, 0x53, 0x58,
+	0x88, 0xb4, 0x3c, 0x0a, 0xe3, 0xe2, 0x67, 0x97, 0x8c, 0x27, 0xb9, 0x04, 0xdc, 0x4f, 0x60, 0x5e,
+	0xd8, 0x65, 0x68, 0x7d, 0xfc, 0x96, 0xf3, 0x79, 0x4b, 0x37, 0xad, 0x41, 0x9c, 0xf8, 0x47, 0x42,
+	0x87, 0x90, 0x0e, 0xaa, 0x13, 0xad, 0xc5, 0x15, 0xf3, 0x88, 0xef, 0xf7, 0xf8, 0xcb, 0x40, 0xa1,
+	0x0d, 0x2b, 0x63, 0x26, 0x05, 0xfa, 0x33, 0x04, 0x9d, 0x3c, 0xc1, 0xe4, 0xbf, 0xa6, 0x71, 0x0d,
+	0x62, 0x3e, 0x87, 0xd5, 0xb1, 0x43, 0x00, 0x6d, 0x87, 0xa8, 0x6e, 0x1a, 0x50, 0xf2, 0xdf, 0xd3,
+	0x39, 0x8f, 0x22, 0xef, 0x6f, 0x7f, 0xb8, 0x2c, 0x4a, 0x1f, 0x2f, 0x8b, 0xd2, 0xa7, 0xcb, 0xa2,
+	0xf4, 0xfa, 0x73, 0x31, 0x01, 0x4b, 0x06, 0x71, 0x47, 0x24, 0x5a, 0xcf, 0x2c, 0xbb, 0xd5, 0xa6,
+	0x74, 0x9a, 0x2c, 0xff, 0xe7, 0x56, 0x5b, 0x73, 0xde, 0xdb, 0x7e, 0xe7, 0x4b, 0x00, 0x00, 0x00,
+	0xff, 0xff, 0x2d, 0x96, 0xd2, 0x36, 0x1b, 0x0c, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1381,9 +1272,8 @@ type YorkieServiceClient interface {
 	PushPullChanges(ctx context.Context, in *PushPullChangesRequest, opts ...grpc.CallOption) (*PushPullChangesResponse, error)
 	WatchDocument(ctx context.Context, in *WatchDocumentRequest, opts ...grpc.CallOption) (YorkieService_WatchDocumentClient, error)
 	Broadcast(ctx context.Context, in *BroadcastRequest, opts ...grpc.CallOption) (*BroadcastResponse, error)
-	WatchBroadcasts(ctx context.Context, in *WatchBroadcastsRequest, opts ...grpc.CallOption) (YorkieService_WatchBroadcastsClient, error)
-	SubscribeBroadcast(ctx context.Context, in *SubscribeBroadcastRequest, opts ...grpc.CallOption) (*SubscribeBroadcastResponse, error)
-	UnsubscribeBroadcast(ctx context.Context, in *UnsubscribeBroadcastRequest, opts ...grpc.CallOption) (*UnsubscribeBroadcastResponse, error)
+	SubscribeBroadcastEvent(ctx context.Context, in *SubscribeBroadcastEventRequest, opts ...grpc.CallOption) (*SubscribeBroadcastEventResponse, error)
+	UnsubscribeBroadcastEvent(ctx context.Context, in *UnsubscribeBroadcastEventRequest, opts ...grpc.CallOption) (*UnsubscribeBroadcastEventResponse, error)
 }
 
 type yorkieServiceClient struct {
@@ -1489,50 +1379,18 @@ func (c *yorkieServiceClient) Broadcast(ctx context.Context, in *BroadcastReques
 	return out, nil
 }
 
-func (c *yorkieServiceClient) WatchBroadcasts(ctx context.Context, in *WatchBroadcastsRequest, opts ...grpc.CallOption) (YorkieService_WatchBroadcastsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_YorkieService_serviceDesc.Streams[1], "/yorkie.v1.YorkieService/WatchBroadcasts", opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &yorkieServiceWatchBroadcastsClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type YorkieService_WatchBroadcastsClient interface {
-	Recv() (*WatchBroadcastsResponse, error)
-	grpc.ClientStream
-}
-
-type yorkieServiceWatchBroadcastsClient struct {
-	grpc.ClientStream
-}
-
-func (x *yorkieServiceWatchBroadcastsClient) Recv() (*WatchBroadcastsResponse, error) {
-	m := new(WatchBroadcastsResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func (c *yorkieServiceClient) SubscribeBroadcast(ctx context.Context, in *SubscribeBroadcastRequest, opts ...grpc.CallOption) (*SubscribeBroadcastResponse, error) {
-	out := new(SubscribeBroadcastResponse)
-	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/SubscribeBroadcast", in, out, opts...)
+func (c *yorkieServiceClient) SubscribeBroadcastEvent(ctx context.Context, in *SubscribeBroadcastEventRequest, opts ...grpc.CallOption) (*SubscribeBroadcastEventResponse, error) {
+	out := new(SubscribeBroadcastEventResponse)
+	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/SubscribeBroadcastEvent", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *yorkieServiceClient) UnsubscribeBroadcast(ctx context.Context, in *UnsubscribeBroadcastRequest, opts ...grpc.CallOption) (*UnsubscribeBroadcastResponse, error) {
-	out := new(UnsubscribeBroadcastResponse)
-	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/UnsubscribeBroadcast", in, out, opts...)
+func (c *yorkieServiceClient) UnsubscribeBroadcastEvent(ctx context.Context, in *UnsubscribeBroadcastEventRequest, opts ...grpc.CallOption) (*UnsubscribeBroadcastEventResponse, error) {
+	out := new(UnsubscribeBroadcastEventResponse)
+	err := c.cc.Invoke(ctx, "/yorkie.v1.YorkieService/UnsubscribeBroadcastEvent", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1549,9 +1407,8 @@ type YorkieServiceServer interface {
 	PushPullChanges(context.Context, *PushPullChangesRequest) (*PushPullChangesResponse, error)
 	WatchDocument(*WatchDocumentRequest, YorkieService_WatchDocumentServer) error
 	Broadcast(context.Context, *BroadcastRequest) (*BroadcastResponse, error)
-	WatchBroadcasts(*WatchBroadcastsRequest, YorkieService_WatchBroadcastsServer) error
-	SubscribeBroadcast(context.Context, *SubscribeBroadcastRequest) (*SubscribeBroadcastResponse, error)
-	UnsubscribeBroadcast(context.Context, *UnsubscribeBroadcastRequest) (*UnsubscribeBroadcastResponse, error)
+	SubscribeBroadcastEvent(context.Context, *SubscribeBroadcastEventRequest) (*SubscribeBroadcastEventResponse, error)
+	UnsubscribeBroadcastEvent(context.Context, *UnsubscribeBroadcastEventRequest) (*UnsubscribeBroadcastEventResponse, error)
 }
 
 // UnimplementedYorkieServiceServer can be embedded to have forward compatible implementations.
@@ -1582,14 +1439,11 @@ func (*UnimplementedYorkieServiceServer) WatchDocument(req *WatchDocumentRequest
 func (*UnimplementedYorkieServiceServer) Broadcast(ctx context.Context, req *BroadcastRequest) (*BroadcastResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Broadcast not implemented")
 }
-func (*UnimplementedYorkieServiceServer) WatchBroadcasts(req *WatchBroadcastsRequest, srv YorkieService_WatchBroadcastsServer) error {
-	return status.Errorf(codes.Unimplemented, "method WatchBroadcasts not implemented")
+func (*UnimplementedYorkieServiceServer) SubscribeBroadcastEvent(ctx context.Context, req *SubscribeBroadcastEventRequest) (*SubscribeBroadcastEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubscribeBroadcastEvent not implemented")
 }
-func (*UnimplementedYorkieServiceServer) SubscribeBroadcast(ctx context.Context, req *SubscribeBroadcastRequest) (*SubscribeBroadcastResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SubscribeBroadcast not implemented")
-}
-func (*UnimplementedYorkieServiceServer) UnsubscribeBroadcast(ctx context.Context, req *UnsubscribeBroadcastRequest) (*UnsubscribeBroadcastResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UnsubscribeBroadcast not implemented")
+func (*UnimplementedYorkieServiceServer) UnsubscribeBroadcastEvent(ctx context.Context, req *UnsubscribeBroadcastEventRequest) (*UnsubscribeBroadcastEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UnsubscribeBroadcastEvent not implemented")
 }
 
 func RegisterYorkieServiceServer(s *grpc.Server, srv YorkieServiceServer) {
@@ -1743,59 +1597,38 @@ func _YorkieService_Broadcast_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _YorkieService_WatchBroadcasts_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(WatchBroadcastsRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(YorkieServiceServer).WatchBroadcasts(m, &yorkieServiceWatchBroadcastsServer{stream})
-}
-
-type YorkieService_WatchBroadcastsServer interface {
-	Send(*WatchBroadcastsResponse) error
-	grpc.ServerStream
-}
-
-type yorkieServiceWatchBroadcastsServer struct {
-	grpc.ServerStream
-}
-
-func (x *yorkieServiceWatchBroadcastsServer) Send(m *WatchBroadcastsResponse) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func _YorkieService_SubscribeBroadcast_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SubscribeBroadcastRequest)
+func _YorkieService_SubscribeBroadcastEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubscribeBroadcastEventRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(YorkieServiceServer).SubscribeBroadcast(ctx, in)
+		return srv.(YorkieServiceServer).SubscribeBroadcastEvent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/yorkie.v1.YorkieService/SubscribeBroadcast",
+		FullMethod: "/yorkie.v1.YorkieService/SubscribeBroadcastEvent",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(YorkieServiceServer).SubscribeBroadcast(ctx, req.(*SubscribeBroadcastRequest))
+		return srv.(YorkieServiceServer).SubscribeBroadcastEvent(ctx, req.(*SubscribeBroadcastEventRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _YorkieService_UnsubscribeBroadcast_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UnsubscribeBroadcastRequest)
+func _YorkieService_UnsubscribeBroadcastEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UnsubscribeBroadcastEventRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(YorkieServiceServer).UnsubscribeBroadcast(ctx, in)
+		return srv.(YorkieServiceServer).UnsubscribeBroadcastEvent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/yorkie.v1.YorkieService/UnsubscribeBroadcast",
+		FullMethod: "/yorkie.v1.YorkieService/UnsubscribeBroadcastEvent",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(YorkieServiceServer).UnsubscribeBroadcast(ctx, req.(*UnsubscribeBroadcastRequest))
+		return srv.(YorkieServiceServer).UnsubscribeBroadcastEvent(ctx, req.(*UnsubscribeBroadcastEventRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1833,23 +1666,18 @@ var _YorkieService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _YorkieService_Broadcast_Handler,
 		},
 		{
-			MethodName: "SubscribeBroadcast",
-			Handler:    _YorkieService_SubscribeBroadcast_Handler,
+			MethodName: "SubscribeBroadcastEvent",
+			Handler:    _YorkieService_SubscribeBroadcastEvent_Handler,
 		},
 		{
-			MethodName: "UnsubscribeBroadcast",
-			Handler:    _YorkieService_UnsubscribeBroadcast_Handler,
+			MethodName: "UnsubscribeBroadcastEvent",
+			Handler:    _YorkieService_UnsubscribeBroadcastEvent_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "WatchDocument",
 			Handler:       _YorkieService_WatchDocument_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "WatchBroadcasts",
-			Handler:       _YorkieService_WatchBroadcasts_Handler,
 			ServerStreams: true,
 		},
 	},
@@ -2277,16 +2105,16 @@ func (m *WatchDocumentResponse_Initialization_) MarshalToSizedBuffer(dAtA []byte
 	}
 	return len(dAtA) - i, nil
 }
-func (m *WatchDocumentResponse_Event) MarshalTo(dAtA []byte) (int, error) {
+func (m *WatchDocumentResponse_DocEvent) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WatchDocumentResponse_Event) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *WatchDocumentResponse_DocEvent) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
-	if m.Event != nil {
+	if m.DocEvent != nil {
 		{
-			size, err := m.Event.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.DocEvent.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -2295,6 +2123,27 @@ func (m *WatchDocumentResponse_Event) MarshalToSizedBuffer(dAtA []byte) (int, er
 		}
 		i--
 		dAtA[i] = 0x12
+	}
+	return len(dAtA) - i, nil
+}
+func (m *WatchDocumentResponse_BroadcastEvent) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *WatchDocumentResponse_BroadcastEvent) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.BroadcastEvent != nil {
+		{
+			size, err := m.BroadcastEvent.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintYorkie(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
 	}
 	return len(dAtA) - i, nil
 }
@@ -2528,7 +2377,7 @@ func (m *PushPullChangesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	return len(dAtA) - i, nil
 }
 
-func (m *WatchBroadcastsRequest) Marshal() (dAtA []byte, err error) {
+func (m *SubscribeBroadcastEventRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2538,12 +2387,12 @@ func (m *WatchBroadcastsRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *WatchBroadcastsRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *SubscribeBroadcastEventRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *WatchBroadcastsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *SubscribeBroadcastEventRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2551,93 +2400,6 @@ func (m *WatchBroadcastsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if len(m.DocumentId) > 0 {
-		i -= len(m.DocumentId)
-		copy(dAtA[i:], m.DocumentId)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.DocumentId)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.ClientId) > 0 {
-		i -= len(m.ClientId)
-		copy(dAtA[i:], m.ClientId)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.ClientId)))
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *WatchBroadcastsResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *WatchBroadcastsResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *WatchBroadcastsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if m.Event != nil {
-		{
-			size, err := m.Event.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintYorkie(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *SubscribeBroadcastRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *SubscribeBroadcastRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *SubscribeBroadcastRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.XXX_unrecognized != nil {
-		i -= len(m.XXX_unrecognized)
-		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if len(m.SubID) > 0 {
-		i -= len(m.SubID)
-		copy(dAtA[i:], m.SubID)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.SubID)))
-		i--
-		dAtA[i] = 0x22
 	}
 	if len(m.Type) > 0 {
 		i -= len(m.Type)
@@ -2663,7 +2425,7 @@ func (m *SubscribeBroadcastRequest) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	return len(dAtA) - i, nil
 }
 
-func (m *SubscribeBroadcastResponse) Marshal() (dAtA []byte, err error) {
+func (m *SubscribeBroadcastEventResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2673,12 +2435,12 @@ func (m *SubscribeBroadcastResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *SubscribeBroadcastResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *SubscribeBroadcastEventResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *SubscribeBroadcastResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *SubscribeBroadcastEventResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2690,7 +2452,7 @@ func (m *SubscribeBroadcastResponse) MarshalToSizedBuffer(dAtA []byte) (int, err
 	return len(dAtA) - i, nil
 }
 
-func (m *UnsubscribeBroadcastRequest) Marshal() (dAtA []byte, err error) {
+func (m *UnsubscribeBroadcastEventRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2700,12 +2462,12 @@ func (m *UnsubscribeBroadcastRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *UnsubscribeBroadcastRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *UnsubscribeBroadcastEventRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *UnsubscribeBroadcastRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *UnsubscribeBroadcastEventRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2713,13 +2475,6 @@ func (m *UnsubscribeBroadcastRequest) MarshalToSizedBuffer(dAtA []byte) (int, er
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
-	}
-	if len(m.SubID) > 0 {
-		i -= len(m.SubID)
-		copy(dAtA[i:], m.SubID)
-		i = encodeVarintYorkie(dAtA, i, uint64(len(m.SubID)))
-		i--
-		dAtA[i] = 0x22
 	}
 	if len(m.Type) > 0 {
 		i -= len(m.Type)
@@ -2745,7 +2500,7 @@ func (m *UnsubscribeBroadcastRequest) MarshalToSizedBuffer(dAtA []byte) (int, er
 	return len(dAtA) - i, nil
 }
 
-func (m *UnsubscribeBroadcastResponse) Marshal() (dAtA []byte, err error) {
+func (m *UnsubscribeBroadcastEventResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2755,12 +2510,12 @@ func (m *UnsubscribeBroadcastResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *UnsubscribeBroadcastResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *UnsubscribeBroadcastEventResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *UnsubscribeBroadcastResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *UnsubscribeBroadcastEventResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -3053,14 +2808,26 @@ func (m *WatchDocumentResponse_Initialization_) Size() (n int) {
 	}
 	return n
 }
-func (m *WatchDocumentResponse_Event) Size() (n int) {
+func (m *WatchDocumentResponse_DocEvent) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.Event != nil {
-		l = m.Event.Size()
+	if m.DocEvent != nil {
+		l = m.DocEvent.Size()
+		n += 1 + l + sovYorkie(uint64(l))
+	}
+	return n
+}
+func (m *WatchDocumentResponse_BroadcastEvent) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.BroadcastEvent != nil {
+		l = m.BroadcastEvent.Size()
 		n += 1 + l + sovYorkie(uint64(l))
 	}
 	return n
@@ -3166,43 +2933,7 @@ func (m *PushPullChangesResponse) Size() (n int) {
 	return n
 }
 
-func (m *WatchBroadcastsRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.ClientId)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
-	l = len(m.DocumentId)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *WatchBroadcastsResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.Event != nil {
-		l = m.Event.Size()
-		n += 1 + l + sovYorkie(uint64(l))
-	}
-	if m.XXX_unrecognized != nil {
-		n += len(m.XXX_unrecognized)
-	}
-	return n
-}
-
-func (m *SubscribeBroadcastRequest) Size() (n int) {
+func (m *SubscribeBroadcastEventRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -3220,17 +2951,13 @@ func (m *SubscribeBroadcastRequest) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovYorkie(uint64(l))
 	}
-	l = len(m.SubID)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
 
-func (m *SubscribeBroadcastResponse) Size() (n int) {
+func (m *SubscribeBroadcastEventResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -3242,7 +2969,7 @@ func (m *SubscribeBroadcastResponse) Size() (n int) {
 	return n
 }
 
-func (m *UnsubscribeBroadcastRequest) Size() (n int) {
+func (m *UnsubscribeBroadcastEventRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -3260,17 +2987,13 @@ func (m *UnsubscribeBroadcastRequest) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovYorkie(uint64(l))
 	}
-	l = len(m.SubID)
-	if l > 0 {
-		n += 1 + l + sovYorkie(uint64(l))
-	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
 
-func (m *UnsubscribeBroadcastResponse) Size() (n int) {
+func (m *UnsubscribeBroadcastEventResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -4301,7 +4024,7 @@ func (m *WatchDocumentResponse) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Event", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field DocEvent", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -4332,7 +4055,42 @@ func (m *WatchDocumentResponse) Unmarshal(dAtA []byte) error {
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Body = &WatchDocumentResponse_Event{v}
+			m.Body = &WatchDocumentResponse_DocEvent{v}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BroadcastEvent", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowYorkie
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthYorkie
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &BroadcastEvent{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Body = &WatchDocumentResponse_BroadcastEvent{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4935,7 +4693,7 @@ func (m *PushPullChangesResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *WatchBroadcastsRequest) Unmarshal(dAtA []byte) error {
+func (m *SubscribeBroadcastEventRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -4958,212 +4716,10 @@ func (m *WatchBroadcastsRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: WatchBroadcastsRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: SubscribeBroadcastEventRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: WatchBroadcastsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ClientId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DocumentId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.DocumentId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipYorkie(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *WatchBroadcastsResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowYorkie
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: WatchBroadcastsResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: WatchBroadcastsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Event", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.Event == nil {
-				m.Event = &BroadcastEvent{}
-			}
-			if err := m.Event.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipYorkie(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *SubscribeBroadcastRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowYorkie
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: SubscribeBroadcastRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SubscribeBroadcastRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SubscribeBroadcastEventRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -5262,38 +4818,6 @@ func (m *SubscribeBroadcastRequest) Unmarshal(dAtA []byte) error {
 			}
 			m.Type = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SubID", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.SubID = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipYorkie(dAtA[iNdEx:])
@@ -5316,7 +4840,7 @@ func (m *SubscribeBroadcastRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *SubscribeBroadcastResponse) Unmarshal(dAtA []byte) error {
+func (m *SubscribeBroadcastEventResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -5339,10 +4863,10 @@ func (m *SubscribeBroadcastResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SubscribeBroadcastResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: SubscribeBroadcastEventResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SubscribeBroadcastResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SubscribeBroadcastEventResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:
@@ -5367,7 +4891,7 @@ func (m *SubscribeBroadcastResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *UnsubscribeBroadcastRequest) Unmarshal(dAtA []byte) error {
+func (m *UnsubscribeBroadcastEventRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -5390,10 +4914,10 @@ func (m *UnsubscribeBroadcastRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: UnsubscribeBroadcastRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: UnsubscribeBroadcastEventRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: UnsubscribeBroadcastRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: UnsubscribeBroadcastEventRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -5492,38 +5016,6 @@ func (m *UnsubscribeBroadcastRequest) Unmarshal(dAtA []byte) error {
 			}
 			m.Type = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SubID", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowYorkie
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthYorkie
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.SubID = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipYorkie(dAtA[iNdEx:])
@@ -5546,7 +5038,7 @@ func (m *UnsubscribeBroadcastRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *UnsubscribeBroadcastResponse) Unmarshal(dAtA []byte) error {
+func (m *UnsubscribeBroadcastEventResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -5569,10 +5061,10 @@ func (m *UnsubscribeBroadcastResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: UnsubscribeBroadcastResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: UnsubscribeBroadcastEventResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: UnsubscribeBroadcastResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: UnsubscribeBroadcastEventResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:

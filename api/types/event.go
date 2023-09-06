@@ -1,5 +1,21 @@
 package types
 
+import "github.com/yorkie-team/yorkie/pkg/document/time"
+
+// DocEvent represents events that occur related to the document.
+type DocEvent struct {
+	Type       DocEventType
+	Publisher  *time.ActorID
+	DocumentID ID
+}
+
+// BroadcastEvent represents events that are delievered to subscribers.
+type BroadcastEvent struct {
+	Type      string
+	Publisher *time.ActorID
+	Payload   []byte
+}
+
 // DocEventType represents the event that the Server delivers to the client.
 type DocEventType string
 
