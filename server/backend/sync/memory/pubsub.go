@@ -32,20 +32,20 @@ import (
 // subscriptionIDs is a set of subscriptionIDs.
 type subscribers map[string]struct{}
 
-func (s subscribers) Add(subscriber *time.ActorID) {
+func (s subscribers) add(subscriber *time.ActorID) {
 	s[subscriber.String()] = struct{}{}
 }
 
-func (s subscribers) Contains(subscriber *time.ActorID) bool {
+func (s subscribers) contains(subscriber *time.ActorID) bool {
 	_, exists := s[subscriber.String()]
 	return exists
 }
 
-func (s subscribers) Remove(subscriber *time.ActorID) {
+func (s subscribers) remove(subscriber *time.ActorID) {
 	delete(s, subscriber.String())
 }
 
-func (s subscribers) Len() int {
+func (s subscribers) len() int {
 	return len(s)
 }
 
@@ -83,11 +83,11 @@ func (s *DocSubs) Remove(subscriber *time.ActorID) {
 		sub.Close()
 
 		// Remove the subscriber from the subscriber lists of subscribed events.
-		for _, t := range sub.Types() {
+		for t := range sub.Types() {
 			if subscribers, ok := s.subscribersMapByEvent[t]; ok {
-				subscribers.Remove(subscriber)
+				subscribers.remove(subscriber)
 
-				if subscribers.Len() == 0 {
+				if subscribers.len() == 0 {
 					delete(s.subscribersMapByEvent, t)
 				}
 			}
@@ -106,7 +106,7 @@ func (s *DocSubs) SubscribeEvent(eventType string, subscriber *time.ActorID) {
 		if _, ok := s.subscribersMapByEvent[eventType]; !ok {
 			s.subscribersMapByEvent[eventType] = make(subscribers)
 		}
-		s.subscribersMapByEvent[eventType].Add(subscriber)
+		s.subscribersMapByEvent[eventType].add(subscriber)
 
 		sub.AddType(eventType)
 	}
@@ -116,9 +116,9 @@ func (s *DocSubs) SubscribeEvent(eventType string, subscriber *time.ActorID) {
 func (s *DocSubs) UnsubscribeEvent(eventType string, subscriber *time.ActorID) {
 	if sub, ok := s.subMapBySubscriber[subscriber.String()]; ok {
 		if subscribers, ok := s.subscribersMapByEvent[eventType]; ok {
-			subscribers.Remove(subscriber)
+			subscribers.remove(subscriber)
 
-			if subscribers.Len() == 0 {
+			if subscribers.len() == 0 {
 				delete(s.subscribersMapByEvent, eventType)
 			}
 		}
@@ -264,7 +264,7 @@ func (m *PubSub) UnsubscribeEvent(
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
-			`SubscribeEvent(%s,%s,%s) Start`,
+			`UnsubscribeEvent(%s,%s,%s) Start`,
 			documentID,
 			eventType,
 			subscriber,
@@ -275,7 +275,7 @@ func (m *PubSub) UnsubscribeEvent(
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
-			`SubscribeEvent(%s,%s,%s) End`,
+			`UnsubscribeEvent(%s,%s,%s) End`,
 			documentID,
 			eventType,
 			subscriber,
@@ -295,7 +295,12 @@ func (m *PubSub) Publish(
 	defer m.docSubsMapMu.RUnlock()
 
 	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(`Publish(%s,%s) Start`, documentID.String(), publisherID.String())
+		logging.From(ctx).Debugf(
+			`Publish(%s,%s,%s) Start`,
+			documentID,
+			eventType,
+			publisherID,
+		)
 	}
 
 	docSubs, ok := m.docSubsMapByDocID[documentID]
@@ -334,7 +339,8 @@ func (m *PubSub) Publish(
 		case sub.Events() <- event:
 		case <-gotime.After(100 * gotime.Millisecond):
 			logging.From(ctx).Warnf(
-				`Publish(%s,%s) to %s timeout`,
+				`Publish %s(%s,%s) to %s timeout`,
+				eventType,
 				documentID.String(),
 				publisherID.String(),
 				sub.Subscriber().String(),
@@ -343,7 +349,12 @@ func (m *PubSub) Publish(
 
 	}
 	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(`Publish(%s,%s) End`, documentID.String(), publisherID.String())
+		logging.From(ctx).Debugf(
+			`Publish(%s,%s,%s) End`,
+			documentID,
+			eventType,
+			publisherID,
+		)
 	}
 }
 

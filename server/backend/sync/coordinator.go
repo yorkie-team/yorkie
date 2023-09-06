@@ -37,27 +37,29 @@ type Coordinator interface {
 	// NewLocker creates a sync.Locker.
 	NewLocker(ctx context.Context, key Key) (Locker, error)
 
-	// Subscribe subscribes to the given documents.
+	// SubscribeDoc subscribes to the given documents.
 	SubscribeDoc(
 		ctx context.Context,
 		subscriber *time.ActorID,
 		documentID types.ID,
 	) (*Subscription, []*time.ActorID, error)
 
-	// Unsubscribe unsubscribes from the given documents.
+	// UnsubscribeDoc unsubscribes from the given documents.
 	UnsubscribeDoc(
 		ctx context.Context,
 		documentID types.ID,
 		sub *Subscription,
 	) error
 
-	// Publish publishes the given event.
+	// PublishDocEvent publishes the given document event.
 	PublishDocEvent(
 		ctx context.Context,
 		publisherID *time.ActorID,
 		event types.DocEvent,
 	)
 
+	// SubscribeBroadcastEvent subscribes to the specified broadcast
+	// event type for the given document.
 	SubscribeBroadcastEvent(
 		ctx context.Context,
 		documentID types.ID,
@@ -65,6 +67,8 @@ type Coordinator interface {
 		subscriber *time.ActorID,
 	)
 
+	// UnsubscribeBroadcastEvent unsubscribes to the specified broadcast
+	// event type for the given document.
 	UnsubscribeBroadcastEvent(
 		ctx context.Context,
 		documentID types.ID,
@@ -72,6 +76,7 @@ type Coordinator interface {
 		subscriber *time.ActorID,
 	)
 
+	// PublishBroadcastEvent publishes the given broadcast event.
 	PublishBroadcastEvent(
 		ctx context.Context,
 		documentID types.ID,

@@ -32,9 +32,9 @@ import (
 )
 
 var (
-	// ErrReservedEventType is returned when the event type is "document".
+	// ErrReservedEventType is returned when the event type is reserved.
 	ErrReservedEventType = errors.New(
-		"the \"document\" event type is reserved for document events")
+		"the event type is reserved for a different use case")
 )
 
 // DocEvent represents the event that occurred in the document.
