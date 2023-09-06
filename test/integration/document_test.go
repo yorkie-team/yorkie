@@ -557,7 +557,6 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("no duplicate broadcasts for duplicate subscriptions", func(t *testing.T) {
-		// t.Skip()
 		bch := make(chan string)
 		ctx := context.Background()
 		handler := func(eventType, publisher string, payload []byte) error {
@@ -576,13 +575,9 @@ func TestDocument(t *testing.T) {
 		err = d1.SubscribeBroadcastEvent("mention", handler)
 		assert.NoError(t, err)
 
-		println("second sub start")
-
 		// d1 subscribes to the broadcast event twice.
 		err = d1.SubscribeBroadcastEvent("mention", handler)
 		assert.NoError(t, err)
-
-		println("second sub end")
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
