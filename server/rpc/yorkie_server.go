@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -33,6 +34,12 @@ import (
 	"github.com/yorkie-team/yorkie/server/packs"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+)
+
+var (
+	// ErrUnsupportedEventType is returned when the given event type is not
+	// supported.
+	ErrUnsupportedEventType = errors.New("unsupported event type")
 )
 
 type yorkieServer struct {
@@ -412,19 +419,38 @@ func (s *yorkieServer) WatchDocument(
 		case <-stream.Context().Done():
 			return nil
 		case event := <-subscription.Events():
-			eventType, err := converter.ToDocEventType(event.Type)
-			if err != nil {
-				return err
+			var pbResp *api.WatchDocumentResponse
+
+			if docEvent, ok := event.(types.DocEvent); ok {
+				eventType, err := converter.ToDocEventType(docEvent.Type)
+				if err != nil {
+					return err
+				}
+
+				pbResp = &api.WatchDocumentResponse{
+					Body: &api.WatchDocumentResponse_DocEvent{
+						DocEvent: &api.DocEvent{
+							Type:      eventType,
+							Publisher: docEvent.Publisher.String(),
+						},
+					},
+				}
+
+			} else if broadcastEvent, ok := event.(types.BroadcastEvent); ok {
+				pbResp = &api.WatchDocumentResponse{
+					Body: &api.WatchDocumentResponse_BroadcastEvent{
+						BroadcastEvent: &api.BroadcastEvent{
+							Type:      broadcastEvent.Type,
+							Publisher: broadcastEvent.Publisher.String(),
+							Payload:   broadcastEvent.Payload,
+						},
+					},
+				}
+			} else {
+				return ErrUnsupportedEventType
 			}
 
-			if err := stream.Send(&api.WatchDocumentResponse{
-				Body: &api.WatchDocumentResponse_Event{
-					Event: &api.DocEvent{
-						Type:      eventType,
-						Publisher: event.Publisher.String(),
-					},
-				},
-			}); err != nil {
+			if err := stream.Send(pbResp); err != nil {
 				return err
 			}
 		}
@@ -506,8 +532,8 @@ func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	clientID *time.ActorID,
 	documentID types.ID,
-) (*sync.Subscription[*sync.DocEvent], []*time.ActorID, error) {
-	subscription, clientIDs, err := s.backend.Coordinator.SubscribeDocEvent(ctx, clientID, documentID)
+) (*sync.Subscription, []*time.ActorID, error) {
+	subscription, clientIDs, err := s.backend.Coordinator.SubscribeDoc(ctx, clientID, documentID)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, nil, err
@@ -516,7 +542,7 @@ func (s *yorkieServer) watchDoc(
 	s.backend.Coordinator.PublishDocEvent(
 		ctx,
 		subscription.Subscriber(),
-		&sync.DocEvent{
+		types.DocEvent{
 			Type:       types.DocumentWatchedEvent,
 			Publisher:  subscription.Subscriber(),
 			DocumentID: documentID,
@@ -527,15 +553,15 @@ func (s *yorkieServer) watchDoc(
 }
 
 func (s *yorkieServer) unwatchDoc(
-	subscription *sync.Subscription[*sync.DocEvent],
+	subscription *sync.Subscription,
 	documentID types.ID,
 ) {
 	ctx := context.Background()
-	_ = s.backend.Coordinator.UnsubscribeDocEvent(ctx, documentID, subscription)
+	_ = s.backend.Coordinator.UnsubscribeDoc(ctx, documentID, subscription)
 	s.backend.Coordinator.PublishDocEvent(
 		ctx,
 		subscription.Subscriber(),
-		&sync.DocEvent{
+		types.DocEvent{
 			Type:       types.DocumentUnwatchedEvent,
 			Publisher:  subscription.Subscriber(),
 			DocumentID: documentID,
@@ -552,8 +578,8 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	docID := types.ID(req.DocumentId)
-	if err := docID.Validate(); err != nil {
+	docID, err := converter.FromDocumentID(req.DocumentId)
+	if err != nil {
 		return nil, err
 	}
 
@@ -567,11 +593,7 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	event, err := converter.FromBroadcastEvent(req.Event)
-	if err != nil {
-		return nil, err
-	}
-
+	// TODO(sejongk): It seems better to use a separate auth attributes for broadcast
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.Broadcast,
 		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
@@ -584,81 +606,19 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
+	event, err := converter.FromBroadcastEvent(req.Event)
+	if err != nil {
+		return nil, err
+	}
 	s.backend.Coordinator.PublishBroadcastEvent(ctx, docID, event.Type, event.Publisher, event)
 
 	return &api.BroadcastResponse{}, nil
 }
 
-func (s *yorkieServer) WatchBroadcasts(
-	req *api.WatchBroadcastsRequest,
-	stream api.YorkieService_WatchBroadcastsServer,
-) error {
-	clientID, err := time.ActorIDFromHex(req.ClientId)
-	if err != nil {
-		return err
-	}
-	docID, err := converter.FromDocumentID(req.DocumentId)
-	if err != nil {
-		return err
-	}
-
-	docInfo, err := documents.FindDocInfo(
-		stream.Context(),
-		s.backend,
-		projects.From(stream.Context()),
-		docID,
-	)
-	if err != nil {
-		return nil
-	}
-
-	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
-		Method:     types.WatchBroadcasts,
-		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
-	}); err != nil {
-		return err
-	}
-
-	project := projects.From(stream.Context())
-	if _, err = clients.FindClientInfo(stream.Context(), s.backend.DB, project, clientID); err != nil {
-		return err
-	}
-
-	subscription, err := s.backend.Coordinator.SubscribeBroadcasts(stream.Context(), clientID, docID)
-	if err != nil {
-		logging.From(stream.Context()).Error(err)
-		return err
-	}
-
-	defer func() {
-		_ = s.backend.Coordinator.UnsubscribeBroadcasts(stream.Context(), docID, subscription)
-	}()
-
-	for {
-		select {
-		case <-s.serviceCtx.Done():
-			return nil
-		case <-stream.Context().Done():
-			return nil
-		case event := <-subscription.Events():
-			pbEvent := converter.ToBroadcastEvent(event)
-			if err != nil {
-				return err
-			}
-
-			if err := stream.Send(&api.WatchBroadcastsResponse{
-				Event: pbEvent,
-			}); err != nil {
-				return err
-			}
-		}
-	}
-}
-
-func (s *yorkieServer) SubscribeBroadcast(
+func (s *yorkieServer) SubscribeBroadcastEvent(
 	ctx context.Context,
-	req *api.SubscribeBroadcastRequest,
-) (*api.SubscribeBroadcastResponse, error) {
+	req *api.SubscribeBroadcastEventRequest,
+) (*api.SubscribeBroadcastEventResponse, error) {
 	clientID, err := time.ActorIDFromHex(req.ClientId)
 	if err != nil {
 		return nil, err
@@ -678,10 +638,9 @@ func (s *yorkieServer) SubscribeBroadcast(
 		return nil, nil
 	}
 
-	eventType := types.EventType(req.Type)
-
+	// TODO(sejongk): It seems better to use a separate auth attributes for broadcast
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.WatchBroadcasts,
+		Method:     types.SubscribeBroadcastEvent,
 		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
 	}); err != nil {
 		return nil, err
@@ -691,16 +650,15 @@ func (s *yorkieServer) SubscribeBroadcast(
 	if _, err = clients.FindClientInfo(ctx, s.backend.DB, project, clientID); err != nil {
 		return nil, err
 	}
+	s.backend.Coordinator.SubscribeBroadcastEvent(ctx, docID, req.Type, clientID)
 
-	s.backend.Coordinator.SubscribeBroadcastEvent(ctx, docID, eventType, req.SubID)
-
-	return &api.SubscribeBroadcastResponse{}, nil
+	return &api.SubscribeBroadcastEventResponse{}, nil
 }
 
-func (s *yorkieServer) UnsubscribeBroadcast(
+func (s *yorkieServer) UnsubscribeBroadcastEvent(
 	ctx context.Context,
-	req *api.UnsubscribeBroadcastRequest,
-) (*api.UnsubscribeBroadcastResponse, error) {
+	req *api.UnsubscribeBroadcastEventRequest,
+) (*api.UnsubscribeBroadcastEventResponse, error) {
 	clientID, err := time.ActorIDFromHex(req.ClientId)
 	if err != nil {
 		return nil, err
@@ -720,10 +678,8 @@ func (s *yorkieServer) UnsubscribeBroadcast(
 		return nil, nil
 	}
 
-	eventType := types.EventType(req.Type)
-
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
-		Method:     types.WatchBroadcasts,
+		Method:     types.UnsubscribeBroadcastEvent,
 		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
 	}); err != nil {
 		return nil, err
@@ -734,7 +690,7 @@ func (s *yorkieServer) UnsubscribeBroadcast(
 		return nil, err
 	}
 
-	s.backend.Coordinator.UnsubscribeBroadcastEvent(ctx, docID, eventType, req.SubID)
+	s.backend.Coordinator.UnsubscribeBroadcastEvent(ctx, docID, req.Type, clientID)
 
-	return &api.UnsubscribeBroadcastResponse{}, nil
+	return &api.UnsubscribeBroadcastEventResponse{}, nil
 }

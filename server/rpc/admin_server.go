@@ -26,7 +26,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -374,7 +373,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	s.backend.Coordinator.PublishDocEvent(
 		ctx,
 		publisherID,
-		&sync.DocEvent{
+		types.DocEvent{
 			Type:       types.DocumentChangedEvent,
 			Publisher:  publisherID,
 			DocumentID: docInfo.ID,
