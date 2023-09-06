@@ -29,7 +29,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 )
 
 // ToUser converts the given model format to Protobuf format.
@@ -536,12 +535,4 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 		}
 	}
 	return pbUpdatableProjectFields, nil
-}
-
-func ToBroadcastEvent(event *sync.BroadcastEvent) *api.BroadcastEvent {
-	return &api.BroadcastEvent{
-		Type:      event.TypeString(),
-		Publisher: event.PublisherString(),
-		Payload:   event.Payload,
-	}
 }

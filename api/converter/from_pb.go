@@ -29,7 +29,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 )
 
 // FromUser converts the given Protobuf formats to model format.
@@ -858,13 +857,14 @@ func FromUpdatableProjectFields(pbProjectFields *api.UpdatableProjectFields) (*t
 	return updatableProjectFields, nil
 }
 
-func FromBroadcastEvent(event *api.BroadcastEvent) (*sync.BroadcastEvent, error) {
+// FromBroadcastEvent converts the given Protobuf event to types.BroadcastEvent.
+func FromBroadcastEvent(event *api.BroadcastEvent) (types.BroadcastEvent, error) {
 	publisher, err := time.ActorIDFromHex(event.Publisher)
 	if err != nil {
-		return nil, err
+		return types.BroadcastEvent{}, err
 	}
-	return &sync.BroadcastEvent{
-		Type:      types.EventType(event.Type),
+	return types.BroadcastEvent{
+		Type:      event.Type,
 		Publisher: publisher,
 		Payload:   event.Payload,
 	}, nil
