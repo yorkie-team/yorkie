@@ -103,12 +103,14 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	if err := p.Text.Style(
+	maxCreationMapByActor, err := p.Text.Style(
 		fromPos,
 		toPos,
+		nil,
 		attributes,
 		ticket,
-	); err != nil {
+	)
+	if err != nil {
 		panic(err)
 	}
 
@@ -116,6 +118,7 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 		p.CreatedAt(),
 		fromPos,
 		toPos,
+		maxCreationMapByActor,
 		attributes,
 		ticket,
 	))
