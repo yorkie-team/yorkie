@@ -435,13 +435,15 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 		rch1, err := c1.Watch(ctx, d1)
 		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", handler)
+		err = d1.SubscribeBroadcastEvent("mention", handler)
+		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		rch2, err := c2.Watch(ctx, d2)
 		assert.NoError(t, err)
-		d2.SubscribeBroadcastEvent("mention", handler)
+		err = d2.SubscribeBroadcastEvent("mention", handler)
+		assert.NoError(t, err)
 
 		err = d2.Broadcast("mention", "yorkie")
 		assert.NoError(t, err)
@@ -472,6 +474,7 @@ func TestDocument(t *testing.T) {
 
 	// TODO(sejongk): broadcast to multiple subscribers
 	// TODO(sejongk): dont broadcast to unsubscribers
+	// TODO(sejongk): reject subscribing document for broadcast
 }
 
 func TestDocumentWithProjects(t *testing.T) {

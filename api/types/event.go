@@ -9,7 +9,8 @@ type DocEvent struct {
 	DocumentID ID
 }
 
-// BroadcastEvent represents events that are delievered to subscribers.
+// BroadcastEvent represents events that are delievered to broadcast
+// event subscribers.
 type BroadcastEvent struct {
 	Type      string
 	Publisher *time.ActorID

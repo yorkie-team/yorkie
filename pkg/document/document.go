@@ -19,6 +19,7 @@ package document
 
 import (
 	gojson "encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -28,6 +29,12 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+)
+
+var (
+	// ErrReservedEventType is returned when the event type is "document".
+	ErrReservedEventType = errors.New(
+		"the \"document\" event type is reserved for document events")
 )
 
 // DocEvent represents the event that occurred in the document.
@@ -377,6 +384,10 @@ func (d *Document) BroadcastRequests() <-chan BroadcastRequest {
 
 // Broadcast encodes the payload and makes a "Broadcast" type request.
 func (d *Document) Broadcast(eventType string, payload any) error {
+	if eventType == "document" {
+		return ErrReservedEventType
+	}
+
 	marshaled, err := gojson.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload in broadcast event: %w", err)
@@ -395,26 +406,36 @@ func (d *Document) Broadcast(eventType string, payload any) error {
 func (d *Document) SubscribeBroadcastEvent(
 	eventType string,
 	handler func(eventType, publisher string, payload []byte) error,
-) {
+) error {
+	if eventType == "document" {
+		return ErrReservedEventType
+	}
+
 	d.broadcastEventHandlers[eventType] = handler
 
 	d.broadcastRequests <- BroadcastRequest{
 		RequestType: Subscribe,
 		EventType:   eventType,
 	}
+	return nil
 }
 
 // UnsubscribeBroadcastEvent deregisters the event handler and makes
 // a "Unsubscribe" type request.
 func (d *Document) UnsubscribeBroadcastEvent(
 	eventType string,
-) {
+) error {
+	if eventType == "document" {
+		return ErrReservedEventType
+	}
+
 	delete(d.broadcastEventHandlers, eventType)
 
 	d.broadcastRequests <- BroadcastRequest{
 		RequestType: Unsubscribe,
 		EventType:   eventType,
 	}
+	return nil
 }
 
 // BroadcastEventHandlers returns registered event handlers for events.
