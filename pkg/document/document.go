@@ -384,7 +384,7 @@ func (d *Document) BroadcastRequests() <-chan BroadcastRequest {
 
 // Broadcast encodes the payload and makes a "Broadcast" type request.
 func (d *Document) Broadcast(eventType string, payload any) error {
-	if eventType == "document" {
+	if isEventTypeReserved(eventType) {
 		return ErrReservedEventType
 	}
 
@@ -407,7 +407,7 @@ func (d *Document) SubscribeBroadcastEvent(
 	eventType string,
 	handler func(eventType, publisher string, payload []byte) error,
 ) error {
-	if eventType == "document" {
+	if isEventTypeReserved(eventType) {
 		return ErrReservedEventType
 	}
 
@@ -425,7 +425,7 @@ func (d *Document) SubscribeBroadcastEvent(
 func (d *Document) UnsubscribeBroadcastEvent(
 	eventType string,
 ) error {
-	if eventType == "document" {
+	if isEventTypeReserved(eventType) {
 		return ErrReservedEventType
 	}
 
@@ -459,4 +459,11 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 		return fmt.Sprintf(msgAndArgs[0].(string), msgAndArgs[1:]...)
 	}
 	return ""
+}
+
+func isEventTypeReserved(eventType string) bool {
+	if eventType == "document" {
+		return true
+	}
+	return false
 }
