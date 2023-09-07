@@ -35,6 +35,10 @@ var (
 	// ErrReservedEventType is returned when the event type is reserved.
 	ErrReservedEventType = errors.New(
 		"the event type is reserved for a different use case")
+
+	// ErrUnsupportedPayloadType is returned when the payload is unserializable to JSON.
+	ErrUnsupportedPayloadType = errors.New(
+		"the payload is an unsupported JSON type")
 )
 
 // DocEvent represents the event that occurred in the document.
@@ -390,7 +394,7 @@ func (d *Document) Broadcast(eventType string, payload any) error {
 
 	marshaled, err := gojson.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("marshal payload in broadcast event: %w", err)
+		return ErrUnsupportedPayloadType
 	}
 
 	d.broadcastRequests <- BroadcastRequest{
@@ -462,8 +466,5 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 }
 
 func isEventTypeReserved(eventType string) bool {
-	if eventType == "document" {
-		return true
-	}
-	return false
+	return eventType == "document"
 }

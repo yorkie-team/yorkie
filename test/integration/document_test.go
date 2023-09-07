@@ -616,6 +616,78 @@ func TestDocument(t *testing.T) {
 		wg.Wait()
 	})
 
+	t.Run("unsubscriber can broadcast", func(t *testing.T) {
+		bch := make(chan string)
+		ctx := context.Background()
+		handler := func(eventType, publisher string, payload []byte) error {
+			var mentionedBy string
+			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
+			// Send the unmarshaled payload to the channel to notify that this
+			// subscriber receives the event.
+			bch <- mentionedBy
+			return nil
+		}
+
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		rch1, err := c1.Watch(ctx, d1)
+		assert.NoError(t, err)
+		err = d1.SubscribeBroadcastEvent("mention", handler)
+		assert.NoError(t, err)
+
+		// c2 doesn't subscribe to the "mention" broadcast event.
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		rch2, err := c2.Watch(ctx, d2)
+		assert.NoError(t, err)
+
+		// The unsubscriber c2 broadcasts the "mention" event.
+		err = d2.Broadcast("mention", "yorkie")
+		assert.NoError(t, err)
+
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rcv := 0
+			for {
+				select {
+				case <-rch1:
+				case <-rch2:
+				case m := <-bch:
+					assert.Equal(t, "yorkie", m)
+					rcv++
+				case <-time.After(1 * time.Second):
+					// Assuming that all subscribers can receive the broadcast
+					// event within this timeout period, check if the subscriber
+					// receives the unsubscriber's event.
+					assert.Equal(t, 1, rcv)
+					return
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		wg.Wait()
+	})
+
+	t.Run("reject to broadcast unserializable payload", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		_, err := c1.Watch(ctx, d1)
+		assert.NoError(t, err)
+		err = d1.SubscribeBroadcastEvent("mention", nil)
+		assert.NoError(t, err)
+
+		// Try to broadcast an unserializable payload.
+		ch := make(chan string)
+		err = d1.Broadcast("mention", ch)
+		assert.ErrorIs(t, document.ErrUnsupportedPayloadType, err)
+	})
+
 }
 
 func TestDocumentWithProjects(t *testing.T) {
