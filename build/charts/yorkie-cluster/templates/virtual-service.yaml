@@ -52,4 +52,5 @@ spec:
           - grpc-status
           - grpc-message
           - grpc-status-details-bin
+          - x-rpc-session-id
         allowCredentials: true

@@ -19,6 +19,8 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -320,6 +322,12 @@ func (s *yorkieServer) PushPullChanges(
 	}
 
 	pbChangePack, err := pulled.ToPBChangePack()
+	if err != nil {
+		return nil, err
+	}
+
+	header := metadata.Pairs("x-rpc-session-id", s.backend.Config.Hostname)
+	err = grpc.SendHeader(ctx, header)
 	if err != nil {
 		return nil, err
 	}

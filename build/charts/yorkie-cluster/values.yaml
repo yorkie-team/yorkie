@@ -8,9 +8,9 @@ yorkie:
     replicaCount: 3
 
   image:
-    repository: yorkieteam/yorkie
+    repository: krapi0314/yorkie
     pullPolicy: IfNotPresent
-    tag: ""
+    tag: "test"
 
   args:
     dbUrl: &mongoUrl mongodb
@@ -47,10 +47,6 @@ ingressGateway:
     ringHash:
       enabled: false
       minimumRingSize: 1024
-
-  # Connection idle timeout for WatchDocument API
-  httpConnection:
-    streamIdleTimeout: 60s
 
   resources: {}
 

@@ -1,30 +1,6 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
-  name: ingress-stream-idle-timeout-filter
-  namespace: istio-system
-spec:
-  workloadSelector:
-    labels:
-      istio: ingressgateway
-  configPatches:
-    - applyTo: NETWORK_FILTER
-      match:
-        context: GATEWAY
-        listener:
-          filterChain:
-            filter:
-              name: "envoy.filters.network.http_connection_manager"
-      patch:
-        operation: MERGE
-        value:
-          typed_config:
-            "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
-            stream_idle_timeout: {{ .Values.ingressGateway.httpConnection.streamIdleTimeout }}
----
-apiVersion: networking.istio.io/v1alpha3
-kind: EnvoyFilter
-metadata:
   name: ingress-shard-key-header-filter
   namespace: istio-system
 spec:
