@@ -75,7 +75,7 @@ func (e *EditReverse) Execute(root *crdt.Root) error {
 
 	switch obj := parent.(type) {
 	case *crdt.Text:
-		from, to, err := obj.CreateRange(int(e.fromIdx),int(e.toIdx))
+		from, to, err := obj.CreateRange(int(e.fromIdx), int(e.toIdx))
 		if err != nil {
 			return err
 		}
