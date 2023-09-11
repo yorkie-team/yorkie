@@ -367,7 +367,6 @@ func toEditReverse(e *operations.EditReverse) (*api.Operation_EditReverse_, erro
 	}, nil
 }
 
-
 func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 	return &api.Operation_Style_{
 		Style: &api.Operation_Style{
