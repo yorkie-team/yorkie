@@ -132,6 +132,15 @@ message Operation {
     map<string, string> attributes = 4;
     TimeTicket executed_at = 5;
   }
+  message EditReverse {
+    TimeTicket parent_created_at = 1;
+    int32 from_idx = 2;
+    int32 to_idx = 3;
+    map<string, TimeTicket> created_at_map_by_actor = 4;
+    string content = 5;
+    TimeTicket executed_at = 6;
+    map<string, string> attributes = 7;
+  }
 
   oneof body {
     Set set = 1;
@@ -144,6 +153,7 @@ message Operation {
     Increase increase = 8;
     TreeEdit tree_edit = 9;
     TreeStyle tree_style = 10;
+    EditReverse edit_reverse = 11;
   }
 }
 

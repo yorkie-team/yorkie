@@ -230,6 +230,8 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toRemove(op)
 		case *operations.Edit:
 			pbOperation.Body, err = toEdit(op)
+		case *operations.EditReverse:
+			pbOperation.Body, err = toEditReverse(op)
 		case *operations.Style:
 			pbOperation.Body, err = toStyle(op)
 		case *operations.Increase:
@@ -350,6 +352,21 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 		},
 	}, nil
 }
+
+func toEditReverse(e *operations.EditReverse) (*api.Operation_EditReverse_, error) {
+	return &api.Operation_EditReverse_{
+		EditReverse: &api.Operation_EditReverse{
+			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
+			FromIdx:             e.FromIdx(),
+			ToIdx:               e.ToIdx(),
+			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
+			Content:             e.Content(),
+			Attributes:          e.Attributes(),
+			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
+		},
+	}, nil
+}
+
 
 func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 	return &api.Operation_Style_{

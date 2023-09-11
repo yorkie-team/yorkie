@@ -231,6 +231,8 @@ func FromOperations(pbOps []*api.Operation) ([]operations.Operation, error) {
 			op, err = fromRemove(decoded.Remove)
 		case *api.Operation_Edit_:
 			op, err = fromEdit(decoded.Edit)
+		case *api.Operation_EditReverse_:
+			op, err = fromEditReverse(decoded.EditReverse)
 		case *api.Operation_Style_:
 			op, err = fromStyle(decoded.Style)
 		case *api.Operation_Select_:
@@ -423,6 +425,33 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 		createdAtMapByActor,
 		pbEdit.Content,
 		pbEdit.Attributes,
+		executedAt,
+	), nil
+}
+
+func fromEditReverse(pbEditReverse *api.Operation_EditReverse) (*operations.EditReverse, error) {
+	parentCreatedAt, err := fromTimeTicket(pbEditReverse.ParentCreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	createdAtMapByActor, err := fromCreatedAtMapByActor(
+		pbEditReverse.CreatedAtMapByActor,
+	)
+	if err != nil {
+		return nil, err
+	}
+	executedAt, err := fromTimeTicket(pbEditReverse.ExecutedAt)
+	if err != nil {
+		return nil, err
+	}
+	return operations.NewEditReverse(
+		parentCreatedAt,
+		pbEditReverse.FromIdx,
+		pbEditReverse.ToIdx,
+		createdAtMapByActor,
+		pbEditReverse.Content,
+		pbEditReverse.Attributes,
 		executedAt,
 	), nil
 }
