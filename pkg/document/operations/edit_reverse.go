@@ -48,7 +48,7 @@ type EditReverse struct {
 	executedAt *time.Ticket
 }
 
-// NewEdit creates a new instance of Edit.
+// NewEditReverse creates a new instance of Edit.
 func NewEditReverse(
 	parentCreatedAt *time.Ticket,
 	fromIdx int32,
@@ -93,12 +93,12 @@ func (e *EditReverse) Execute(root *crdt.Root) error {
 	return nil
 }
 
-// From returns the start index of the editing range.
+// FromIdx returns the start index of the editing range.
 func (e *EditReverse) FromIdx() int32 {
 	return e.fromIdx
 }
 
-// To returns the end index of the editing range.
+// ToIdx returns the end index of the editing range.
 func (e *EditReverse) ToIdx() int32 {
 	return e.toIdx
 }
