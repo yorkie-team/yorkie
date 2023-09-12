@@ -109,9 +109,9 @@ message Operation {
     TimeTicket parent_created_at = 1;
     TextNodePos from = 2;
     TextNodePos to = 3;
-    map<string, TimeTicket> created_at_map_by_actor = 4;
-    map<string, string> attributes = 5;
-    TimeTicket executed_at = 6;
+    map<string, string> attributes = 4;
+    TimeTicket executed_at = 5;
+    map<string, TimeTicket> created_at_map_by_actor = 6;
   }
   message Increase {
     TimeTicket parent_created_at = 1;

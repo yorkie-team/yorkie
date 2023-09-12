@@ -273,7 +273,7 @@ func (t *Text) Style(
 		actorIDHex := node.id.createdAt.ActorIDHex()
 
 		var latestCreatedAt *time.Ticket
-		if latestCreatedAtMapByActor == nil {
+		if len(latestCreatedAtMapByActor) == 0 {
 			latestCreatedAt = time.MaxTicket
 		} else {
 			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
