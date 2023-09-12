@@ -440,6 +440,12 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 	if err != nil {
 		return nil, err
 	}
+	createdAtMapByActor, err := fromCreatedAtMapByActor(
+		pbStyle.CreatedAtMapByActor,
+	)
+	if err != nil {
+		return nil, err
+	}
 	executedAt, err := fromTimeTicket(pbStyle.ExecutedAt)
 	if err != nil {
 		return nil, err
@@ -448,6 +454,7 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 		parentCreatedAt,
 		from,
 		to,
+		createdAtMapByActor,
 		pbStyle.Attributes,
 		executedAt,
 	), nil
