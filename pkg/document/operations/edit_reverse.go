@@ -28,18 +28,15 @@ type EditReverse struct {
 	// Edit.
 	parentCreatedAt *time.Ticket
 
-	// from represents the start index of the editing range.
-	fromIdx int32
+	// deletedIDs represents the ids of deleted nodes from the edit operation.
+	deletedIDs []*TextNodeIDWithLength
 
-	// to represents the end index of the editing range.
-	toIdx int32
+	// insertedIDs represents the ids of inserted nodes from the edit operation.
+	insertedIDs []*TextNodeIDWithLength
 
 	// latestCreatedAtMapByActor is a map that stores the latest creation time
 	// by actor for the nodes included in the editing range.
 	latestCreatedAtMapByActor map[string]*time.Ticket
-
-	// content is the content of text added when editing.
-	content string
 
 	// attributes represents the text style.
 	attributes map[string]string
@@ -48,59 +45,59 @@ type EditReverse struct {
 	executedAt *time.Ticket
 }
 
+type TextNodeIDWithLength struct {
+	nodeID *crdt.RGATreeSplitNodeID
+	length int32
+}
+
+// NewTextNodeIDWithLength returns new TextNodeIDWithLength struct.
+func NewTextNodeIDWithLength(id *crdt.RGATreeSplitNodeID, length int32) *TextNodeIDWithLength {
+	return &TextNodeIDWithLength{id, length}
+}
+
+// NodeID returns the nodeID of this TextNodeIDWithLength.
+func (id *TextNodeIDWithLength) NodeID() *crdt.RGATreeSplitNodeID {
+	return id.nodeID
+}
+
+// Length returns the length of this TextNodeIDWithLength.
+func (id *TextNodeIDWithLength) Length() int32 {
+	return id.length
+}
+
 // NewEditReverse creates a new instance of Edit.
 func NewEditReverse(
 	parentCreatedAt *time.Ticket,
-	fromIdx int32,
-	toIdx int32,
+	deletedIDs []*TextNodeIDWithLength,
+	insertedIDs []*TextNodeIDWithLength,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
-	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 ) *EditReverse {
 	return &EditReverse{
 		parentCreatedAt:           parentCreatedAt,
-		fromIdx:                   fromIdx,
-		toIdx:                     toIdx,
+		deletedIDs:                deletedIDs,
+		insertedIDs:               insertedIDs,
 		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
-		content:                   content,
 		attributes:                attributes,
 		executedAt:                executedAt,
 	}
 }
 
 // Execute executes this operation on the given document(`root`).
+// TODO(Hyemmie): port js-sdk's EditReverseOperation.execute() code
 func (e *EditReverse) Execute(root *crdt.Root) error {
-	parent := root.FindByCreatedAt(e.parentCreatedAt)
-
-	switch obj := parent.(type) {
-	case *crdt.Text:
-		from, to, err := obj.CreateRange(int(e.fromIdx), int(e.toIdx))
-		if err != nil {
-			return err
-		}
-		_, _, err = obj.Edit(from, to, e.latestCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
-		if err != nil {
-			return err
-		}
-		if !from.Equal(to) {
-			root.RegisterElementHasRemovedNodes(obj)
-		}
-	default:
-		return ErrNotApplicableDataType
-	}
-
 	return nil
 }
 
-// FromIdx returns the start index of the editing range.
-func (e *EditReverse) FromIdx() int32 {
-	return e.fromIdx
+// DeletedIDs returns the deleted IDs of this operation.
+func (e *EditReverse) DeletedIDs() []*TextNodeIDWithLength {
+	return e.deletedIDs
 }
 
-// ToIdx returns the end index of the editing range.
-func (e *EditReverse) ToIdx() int32 {
-	return e.toIdx
+// InsertedIDs returns the inserted IDs of this operation.
+func (e *EditReverse) InsertedIDs() []*TextNodeIDWithLength {
+	return e.insertedIDs
 }
 
 // ExecutedAt returns execution time of this operation.
@@ -116,11 +113,6 @@ func (e *EditReverse) SetActor(actorID *time.ActorID) {
 // ParentCreatedAt returns the creation time of the Text.
 func (e *EditReverse) ParentCreatedAt() *time.Ticket {
 	return e.parentCreatedAt
-}
-
-// Content returns the content of Edit.
-func (e *EditReverse) Content() string {
-	return e.content
 }
 
 // Attributes returns the attributes of this Edit.
