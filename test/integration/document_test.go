@@ -618,6 +618,9 @@ func TestDocument(t *testing.T) {
 
 		ctx := context.Background()
 		handler := func(topic, publisher string, payload []byte) error {
+			var mentionedBy string
+			assert.Equal(t, topic, "mention")
+			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
 			return ErrBroadcastEventHandlingError
 		}
 
@@ -631,7 +634,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 		rch2, err := c2.Watch(ctx, d2)
 		assert.NoError(t, err)
-		d1.SubscribeBroadcastEvent("mention", handler)
+		d2.SubscribeBroadcastEvent("mention", handler)
 
 		err = d2.Broadcast("mention", "yorkie")
 		assert.NoError(t, err)
@@ -640,14 +643,22 @@ func TestDocument(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			rcv := 0
 			for {
 				select {
 				case resp := <-rch1:
 					if resp.Err != nil {
+						assert.Equal(t, resp.Type, client.DocumentBroadcast)
 						assert.ErrorIs(t, resp.Err, ErrBroadcastEventHandlingError)
-						return
+						rcv++
 					}
 				case <-rch2:
+				case <-time.After(1 * time.Second):
+					// Assuming that every subscriber can receive the broadcast
+					// event within this timeout period, check if every subscriber
+					// successfully receives the event.
+					assert.Equal(t, 1, rcv)
+					return
 				case <-ctx.Done():
 					return
 				}

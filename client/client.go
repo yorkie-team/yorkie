@@ -410,7 +410,6 @@ func (c *Client) Watch(
 	}
 
 	rch := make(chan WatchResponse)
-
 	stream, err := c.client.WatchDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.WatchDocumentRequest{
@@ -554,7 +553,10 @@ func handleResponse(
 			if handler, ok := doc.BroadcastEventHandlers()[eventBody.Topic]; ok && handler != nil {
 				err := handler(eventBody.Topic, resp.Event.Publisher, eventBody.Payload)
 				if err != nil {
-					return nil, err
+					return &WatchResponse{
+						Type: DocumentBroadcast,
+						Err:  err,
+					}, nil
 				}
 			}
 			return nil, nil

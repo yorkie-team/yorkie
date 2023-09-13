@@ -360,7 +360,7 @@ func (d *Document) RemoveOnlineClient(clientID string) {
 	d.doc.RemoveOnlineClient(clientID)
 }
 
-// Events returns the document events of this document.
+// Events returns the events of this document.
 func (d *Document) Events() <-chan DocEvent {
 	return d.events
 }
@@ -375,7 +375,7 @@ func (d *Document) BroadcastResponses() chan error {
 	return d.broadcastResponses
 }
 
-// Broadcast encodes the payload and makes a "Broadcast" type request.
+// Broadcast encodes the given payload and sends a Broadcast request.
 func (d *Document) Broadcast(topic string, payload any) error {
 	marshaled, err := gojson.Marshal(payload)
 	if err != nil {
@@ -389,8 +389,8 @@ func (d *Document) Broadcast(topic string, payload any) error {
 	return <-d.broadcastResponses
 }
 
-// SubscribeBroadcastEvent subscribes to the registers an event handler and makes
-// a "Subscribe" type request.
+// SubscribeBroadcastEvent subscribes to the given topic and registers
+// an event handler
 func (d *Document) SubscribeBroadcastEvent(
 	topic string,
 	handler func(topic, publisher string, payload []byte) error,
@@ -398,15 +398,15 @@ func (d *Document) SubscribeBroadcastEvent(
 	d.broadcastEventHandlers[topic] = handler
 }
 
-// UnsubscribeBroadcastEvent deregisters the event handler and makes
-// a "Unsubscribe" type request.
+// UnsubscribeBroadcastEvent unsubscribes to the given topic and deregisters
+// the event handler
 func (d *Document) UnsubscribeBroadcastEvent(
 	topic string,
 ) {
 	delete(d.broadcastEventHandlers, topic)
 }
 
-// BroadcastEventHandlers returns registered event handlers for events.
+// BroadcastEventHandlers returns the registered handlers for broadcast events.
 func (d *Document) BroadcastEventHandlers() map[string](func(topic string,
 	publisher string, payload []byte) error) {
 	return d.broadcastEventHandlers
