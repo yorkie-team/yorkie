@@ -98,6 +98,7 @@ const (
 	DocumentWatched   WatchResponseType = "document-watched"
 	DocumentUnwatched WatchResponseType = "document-unwatched"
 	PresenceChanged   WatchResponseType = "presence-changed"
+	DocumentBroadcast WatchResponseType = "document-broadcast"
 )
 
 // WatchResponse is a structure representing response of Watch.
@@ -409,7 +410,6 @@ func (c *Client) Watch(
 	}
 
 	rch := make(chan WatchResponse)
-	bch := make(chan *api.BroadcastEvent)
 
 	stream, err := c.client.WatchDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
@@ -426,7 +426,7 @@ func (c *Client) Watch(
 	if err != nil {
 		return nil, err
 	}
-	if _, err := handleResponse(pbResp, doc, bch); err != nil {
+	if _, err := handleResponse(pbResp, doc); err != nil {
 		return nil, err
 	}
 
@@ -438,7 +438,7 @@ func (c *Client) Watch(
 				close(rch)
 				return
 			}
-			resp, err := handleResponse(pbResp, doc, bch)
+			resp, err := handleResponse(pbResp, doc)
 			if err != nil {
 				rch <- WatchResponse{Err: err}
 				close(rch)
@@ -482,24 +482,7 @@ func (c *Client) Watch(
 		for {
 			select {
 			case r := <-doc.BroadcastRequests():
-				// TODO(sejongk): How to deal with errors in the goroutine?
-				switch r.RequestType {
-				case document.Broadcast:
-					_ = c.broadcast(ctx, doc, r.EventType, r.Payload)
-				case document.Subscribe:
-					_ = c.subscribeBroadcastEvent(ctx, doc, r.EventType)
-				case document.Unsubscribe:
-					_ = c.unsubscribeBroadcastEvent(ctx, doc, r.EventType)
-				}
-			case b := <-bch:
-				if handler, ok := doc.BroadcastEventHandlers()[b.Type]; ok && handler != nil {
-					err := handler(b.Type, b.Publisher, b.Payload)
-					if err != nil {
-						if c.logger.Core().Enabled(zap.DebugLevel) {
-							c.logger.Debug("broadcast event handling error", zap.Error(err))
-						}
-					}
-				}
+				doc.BroadcastResponses() <- c.broadcast(ctx, doc, r.Topic, r.Payload)
 			case <-ctx.Done():
 				return
 			}
@@ -512,7 +495,6 @@ func (c *Client) Watch(
 func handleResponse(
 	pbResp *api.WatchDocumentResponse,
 	doc *document.Document,
-	bch chan *api.BroadcastEvent,
 ) (*WatchResponse, error) {
 	switch resp := pbResp.Body.(type) {
 	case *api.WatchDocumentResponse_Initialization_:
@@ -527,14 +509,13 @@ func handleResponse(
 
 		doc.SetOnlineClients(clientIDs...)
 		return nil, nil
-	case *api.WatchDocumentResponse_DocEvent:
-		// Handle a document event
-		eventType, err := converter.FromEventType(resp.DocEvent.Type)
+	case *api.WatchDocumentResponse_Event:
+		eventType, err := converter.FromEventType(resp.Event.Type)
 		if err != nil {
 			return nil, err
 		}
 
-		cli, err := time.ActorIDFromHex(resp.DocEvent.Publisher)
+		cli, err := time.ActorIDFromHex(resp.Event.Publisher)
 		if err != nil {
 			return nil, err
 		}
@@ -567,12 +548,17 @@ func handleResponse(
 					cli.String(): p,
 				},
 			}, nil
+		case types.DocumentBroadcastEvent:
+			eventBody := resp.Event.Body
+			// If the handler exists, it means that the broadcast topic has been subscribed to.
+			if handler, ok := doc.BroadcastEventHandlers()[eventBody.Topic]; ok && handler != nil {
+				err := handler(eventBody.Topic, resp.Event.Publisher, eventBody.Payload)
+				if err != nil {
+					return nil, err
+				}
+			}
+			return nil, nil
 		}
-
-	case *api.WatchDocumentResponse_BroadcastEvent:
-		// Handle a broadcast event
-		bch <- resp.BroadcastEvent
-		return nil, nil
 	}
 	return nil, ErrUnsupportedWatchResponseType
 }
@@ -691,7 +677,7 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	return nil
 }
 
-func (c *Client) broadcast(ctx context.Context, doc *document.Document, eventType string, payload []byte) error {
+func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic string, payload []byte) error {
 	if c.status != activated {
 		return ErrClientNotActivated
 	}
@@ -706,58 +692,8 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, eventTyp
 		&api.BroadcastRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
-			Type:       eventType,
+			Topic:      topic,
 			Payload:    payload,
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *Client) subscribeBroadcastEvent(ctx context.Context, doc *document.Document, eventType string) error {
-	if c.status != activated {
-		return ErrClientNotActivated
-	}
-
-	attachment, ok := c.attachments[doc.Key()]
-	if !ok {
-		return ErrDocumentNotAttached
-	}
-
-	_, err := c.client.SubscribeBroadcastEvent(
-		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		&api.SubscribeBroadcastEventRequest{
-			ClientId:   c.id.String(),
-			DocumentId: attachment.docID.String(),
-			Type:       eventType,
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *Client) unsubscribeBroadcastEvent(ctx context.Context, doc *document.Document, eventType string) error {
-	if c.status != activated {
-		return ErrClientNotActivated
-	}
-
-	attachment, ok := c.attachments[doc.Key()]
-	if !ok {
-		return ErrDocumentNotAttached
-	}
-
-	_, err := c.client.UnsubscribeBroadcastEvent(
-		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		&api.UnsubscribeBroadcastEventRequest{
-			ClientId:   c.id.String(),
-			DocumentId: attachment.docID.String(),
-			Type:       eventType,
 		},
 	)
 	if err != nil {

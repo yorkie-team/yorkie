@@ -357,15 +357,16 @@ enum DocEventType {
   DOC_EVENT_TYPE_DOCUMENT_CHANGED = 0;
   DOC_EVENT_TYPE_DOCUMENT_WATCHED = 1;
   DOC_EVENT_TYPE_DOCUMENT_UNWATCHED = 2;
+  DOC_EVENT_TYPE_DOCUMENT_BROADCAST = 3;
+}
+
+message DocEventBody {
+  string topic = 1;
+  bytes payload = 2;
 }
 
 message DocEvent {
   DocEventType type = 1;
   string publisher = 2;
-}
-
-message BroadcastEvent {
-  string type = 1;
-  string publisher = 2;
-  bytes payload = 3;
+  DocEventBody body = 3;
 }

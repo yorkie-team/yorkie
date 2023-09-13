@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -370,10 +371,10 @@ func (s *adminServer) RemoveDocumentByAdmin(
 
 	// TODO(emplam27): Change the publisherID to the actual user ID. This is a temporary solution.
 	publisherID := time.InitialActorID
-	s.backend.Coordinator.PublishDocEvent(
+	s.backend.Coordinator.Publish(
 		ctx,
 		publisherID,
-		types.DocEvent{
+		sync.DocEvent{
 			Type:       types.DocumentChangedEvent,
 			Publisher:  publisherID,
 			DocumentID: docInfo.ID,

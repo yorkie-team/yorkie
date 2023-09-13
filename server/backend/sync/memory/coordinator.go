@@ -54,69 +54,47 @@ func (c *Coordinator) NewLocker(
 	}, nil
 }
 
-// SubscribeDoc subscribes to the given documents.
-func (c *Coordinator) SubscribeDoc(
+// Subscribe subscribes to the given documents.
+func (c *Coordinator) Subscribe(
 	ctx context.Context,
 	subscriber *time.ActorID,
 	documentID types.ID,
 ) (*sync.Subscription, []*time.ActorID, error) {
-	sub, err := c.pubSub.SubscribeDoc(ctx, subscriber, documentID)
+	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentID)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	c.pubSub.SubscribeEvent(ctx, documentID, "document", subscriber)
 
 	ids := c.pubSub.ClientIDs(documentID)
 	return sub, ids, nil
 }
 
-// UnsubscribeDoc unsubscribes the given documents.
-func (c *Coordinator) UnsubscribeDoc(
+// Unsubscribe unsubscribes the given documents.
+func (c *Coordinator) Unsubscribe(
 	ctx context.Context,
 	documentID types.ID,
 	sub *sync.Subscription,
 ) error {
-	c.pubSub.UnsubscribeDoc(ctx, documentID, sub)
+	c.pubSub.Unsubscribe(ctx, documentID, sub)
 	return nil
 }
 
-// PublishDocEvent publishes the given document event.
-func (c *Coordinator) PublishDocEvent(
+// Publish publishes the given event.
+func (c *Coordinator) Publish(
 	ctx context.Context,
 	publisherID *time.ActorID,
-	event types.DocEvent,
+	event sync.DocEvent,
 ) {
-	c.pubSub.Publish(ctx, event.DocumentID, "document", publisherID, event)
+	c.pubSub.Publish(ctx, publisherID, event)
 }
 
-// SubscribeBroadcastEvent subscribes the given broadcast event type.
-func (c *Coordinator) SubscribeBroadcastEvent(
+// PublishToLocal publishes the given event.
+func (c *Coordinator) PublishToLocal(
 	ctx context.Context,
-	documentID types.ID,
-	eventType string,
-	subscriber *time.ActorID,
+	publisherID *time.ActorID,
+	event sync.DocEvent,
 ) {
-	c.pubSub.SubscribeEvent(ctx, documentID, eventType, subscriber)
-}
-
-// UnsubscribeBroadcastEvent unsubscribes the given broadcast event type.
-func (c *Coordinator) UnsubscribeBroadcastEvent(
-	ctx context.Context,
-	documentID types.ID,
-	eventType string,
-	subscriber *time.ActorID,
-) {
-	c.pubSub.UnsubscribeEvent(ctx, documentID, eventType, subscriber)
-}
-
-// PublishBroadcastEvent publishes the given broadcast event.
-func (c *Coordinator) PublishBroadcastEvent(
-	ctx context.Context,
-	documentID types.ID,
-	event types.BroadcastEvent,
-) {
-	c.pubSub.Publish(ctx, documentID, event.Type, event.Publisher, event)
+	c.pubSub.Publish(ctx, publisherID, event)
 }
 
 // Members returns the members of this cluster.

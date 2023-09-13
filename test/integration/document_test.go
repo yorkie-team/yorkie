@@ -21,6 +21,7 @@ package integration
 import (
 	"context"
 	gojson "encoding/json"
+	"errors"
 	"io"
 	"sync"
 	"testing"
@@ -424,8 +425,9 @@ func TestDocument(t *testing.T) {
 	t.Run("broadcast to subscribers except publisher test", func(t *testing.T) {
 		bch := make(chan string)
 		ctx := context.Background()
-		handler := func(eventType, publisher string, payload []byte) error {
+		handler := func(topic, publisher string, payload []byte) error {
 			var mentionedBy string
+			assert.Equal(t, topic, "mention")
 			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
 			// Send the unmarshaled payload to the channel to notify that this
 			// subscriber receives the event.
@@ -437,22 +439,19 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 		rch1, err := c1.Watch(ctx, d1)
 		assert.NoError(t, err)
-		err = d1.SubscribeBroadcastEvent("mention", handler)
-		assert.NoError(t, err)
+		d1.SubscribeBroadcastEvent("mention", handler)
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		rch2, err := c2.Watch(ctx, d2)
 		assert.NoError(t, err)
-		err = d2.SubscribeBroadcastEvent("mention", handler)
-		assert.NoError(t, err)
+		d2.SubscribeBroadcastEvent("mention", handler)
 
 		d3 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c3.Attach(ctx, d3))
 		rch3, err := c3.Watch(ctx, d3)
 		assert.NoError(t, err)
-		err = d3.SubscribeBroadcastEvent("mention", handler)
-		assert.NoError(t, err)
+		d3.SubscribeBroadcastEvent("mention", handler)
 
 		err = d3.Broadcast("mention", "yorkie")
 		assert.NoError(t, err)
@@ -471,9 +470,9 @@ func TestDocument(t *testing.T) {
 					assert.Equal(t, "yorkie", m)
 					rcv++
 				case <-time.After(1 * time.Second):
-					// Assuming that all subscribers can receive the broadcast
-					// event within this timeout period, check if the subscribers,
-					// except the publisher, successfully receive the event.
+					// Assuming that every subscriber can receive the broadcast
+					// event within this timeout period, check if every subscriber,
+					// except the publisher, successfully receives the event.
 					assert.Equal(t, 2, rcv)
 					return
 				case <-ctx.Done():
@@ -485,22 +484,12 @@ func TestDocument(t *testing.T) {
 		wg.Wait()
 	})
 
-	t.Run("refuse to subscribe document type for broadcasting", func(t *testing.T) {
-		ctx := context.Background()
-
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		_, err := c1.Watch(ctx, d1)
-		assert.NoError(t, err)
-		err = d1.SubscribeBroadcastEvent("document", nil)
-		assert.ErrorIs(t, err, document.ErrReservedEventType)
-	})
-
 	t.Run("no broadcasts to unsubscribers", func(t *testing.T) {
 		bch := make(chan string)
 		ctx := context.Background()
-		handler := func(eventType, publisher string, payload []byte) error {
+		handler := func(topic, publisher string, payload []byte) error {
 			var mentionedBy string
+			assert.Equal(t, topic, "mention")
 			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
 			// Send the unmarshaled payload to the channel to notify that this
 			// subscriber receives the event.
@@ -512,19 +501,16 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 		rch1, err := c1.Watch(ctx, d1)
 		assert.NoError(t, err)
-		err = d1.SubscribeBroadcastEvent("mention", handler)
-		assert.NoError(t, err)
+		d1.SubscribeBroadcastEvent("mention", handler)
 
 		d2 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c2.Attach(ctx, d2))
 		rch2, err := c2.Watch(ctx, d2)
 		assert.NoError(t, err)
-		err = d2.SubscribeBroadcastEvent("mention", handler)
-		assert.NoError(t, err)
+		d2.SubscribeBroadcastEvent("mention", handler)
 
 		// d1 unsubscribes to the broadcast event.
-		err = d1.UnsubscribeBroadcastEvent("mention")
-		assert.NoError(t, err)
+		d1.UnsubscribeBroadcastEvent("mention")
 
 		err = d2.Broadcast("mention", "yorkie")
 		assert.NoError(t, err)
@@ -542,70 +528,10 @@ func TestDocument(t *testing.T) {
 					assert.Equal(t, "yorkie", m)
 					rcv++
 				case <-time.After(1 * time.Second):
-					// Assuming that all subscribers can receive the broadcast
-					// event within this timeout period, check if the unsubscriber
-					// doesn't receive the event.
+					// Assuming that every subscriber can receive the broadcast
+					// event within this timeout period, check if both the unsubscriber
+					// and the publisher don't receive the event.
 					assert.Equal(t, 0, rcv)
-					return
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
-
-		wg.Wait()
-	})
-
-	t.Run("no duplicate broadcasts for duplicate subscriptions", func(t *testing.T) {
-		bch := make(chan string)
-		ctx := context.Background()
-		handler := func(eventType, publisher string, payload []byte) error {
-			var mentionedBy string
-			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
-			// Send the unmarshaled payload to the channel to notify that this
-			// subscriber receives the event.
-			bch <- mentionedBy
-			return nil
-		}
-
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		rch1, err := c1.Watch(ctx, d1)
-		assert.NoError(t, err)
-		err = d1.SubscribeBroadcastEvent("mention", handler)
-		assert.NoError(t, err)
-
-		// d1 subscribes to the broadcast event twice.
-		err = d1.SubscribeBroadcastEvent("mention", handler)
-		assert.NoError(t, err)
-
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
-		rch2, err := c2.Watch(ctx, d2)
-		assert.NoError(t, err)
-		err = d2.SubscribeBroadcastEvent("mention", handler)
-		assert.NoError(t, err)
-
-		err = d2.Broadcast("mention", "yorkie")
-		assert.NoError(t, err)
-
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			rcv := 0
-			for {
-				select {
-				case <-rch1:
-				case <-rch2:
-				case m := <-bch:
-					assert.Equal(t, "yorkie", m)
-					rcv++
-				case <-time.After(1 * time.Second):
-					// Assuming that all subscribers can receive the broadcast
-					// event within this timeout period, check if the unsubscriber
-					// doesn't receive the event.
-					assert.Equal(t, 1, rcv)
 					return
 				case <-ctx.Done():
 					return
@@ -619,8 +545,9 @@ func TestDocument(t *testing.T) {
 	t.Run("unsubscriber can broadcast", func(t *testing.T) {
 		bch := make(chan string)
 		ctx := context.Background()
-		handler := func(eventType, publisher string, payload []byte) error {
+		handler := func(topic, publisher string, payload []byte) error {
 			var mentionedBy string
+			assert.Equal(t, topic, "mention")
 			assert.NoError(t, gojson.Unmarshal(payload, &mentionedBy))
 			// Send the unmarshaled payload to the channel to notify that this
 			// subscriber receives the event.
@@ -632,8 +559,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 		rch1, err := c1.Watch(ctx, d1)
 		assert.NoError(t, err)
-		err = d1.SubscribeBroadcastEvent("mention", handler)
-		assert.NoError(t, err)
+		d1.SubscribeBroadcastEvent("mention", handler)
 
 		// c2 doesn't subscribe to the "mention" broadcast event.
 		d2 := document.New(helper.TestDocKey(t))
@@ -658,8 +584,8 @@ func TestDocument(t *testing.T) {
 					assert.Equal(t, "yorkie", m)
 					rcv++
 				case <-time.After(1 * time.Second):
-					// Assuming that all subscribers can receive the broadcast
-					// event within this timeout period, check if the subscriber
+					// Assuming that every subscriber can receive the broadcast
+					// event within this timeout period, check if every subscriber
 					// receives the unsubscriber's event.
 					assert.Equal(t, 1, rcv)
 					return
@@ -679,8 +605,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 		_, err := c1.Watch(ctx, d1)
 		assert.NoError(t, err)
-		err = d1.SubscribeBroadcastEvent("mention", nil)
-		assert.NoError(t, err)
+		d1.SubscribeBroadcastEvent("mention", nil)
 
 		// Try to broadcast an unserializable payload.
 		ch := make(chan string)
@@ -688,6 +613,49 @@ func TestDocument(t *testing.T) {
 		assert.ErrorIs(t, document.ErrUnsupportedPayloadType, err)
 	})
 
+	t.Run("error occurs while handling broadcast event", func(t *testing.T) {
+		var ErrBroadcastEventHandlingError = errors.New("")
+
+		ctx := context.Background()
+		handler := func(topic, publisher string, payload []byte) error {
+			return ErrBroadcastEventHandlingError
+		}
+
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		rch1, err := c1.Watch(ctx, d1)
+		assert.NoError(t, err)
+		d1.SubscribeBroadcastEvent("mention", handler)
+
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		rch2, err := c2.Watch(ctx, d2)
+		assert.NoError(t, err)
+		d1.SubscribeBroadcastEvent("mention", handler)
+
+		err = d2.Broadcast("mention", "yorkie")
+		assert.NoError(t, err)
+
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case resp := <-rch1:
+					if resp.Err != nil {
+						assert.ErrorIs(t, resp.Err, ErrBroadcastEventHandlingError)
+						return
+					}
+				case <-rch2:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+
+		wg.Wait()
+	})
 }
 
 func TestDocumentWithProjects(t *testing.T) {

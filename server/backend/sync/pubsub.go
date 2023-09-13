@@ -19,38 +19,24 @@ package sync
 import (
 	"github.com/rs/xid"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
-
-// EventTypes stores the subscribed event types.
-type EventTypes map[string]struct{}
-
-// Add adds the given type to EventTypes.
-func (s EventTypes) Add(t string) {
-	s[t] = struct{}{}
-}
-
-// Remove removes the given type from EventTypes.
-func (s EventTypes) Remove(t string) {
-	delete(s, t)
-}
 
 // Subscription represents a subscription of a subscriber to documents.
 type Subscription struct {
 	id         string
-	types      EventTypes
 	subscriber *time.ActorID
 	closed     bool
-	events     chan Event
+	events     chan DocEvent
 }
 
 // NewSubscription creates a new instance of Subscription.
 func NewSubscription(subscriber *time.ActorID) *Subscription {
 	return &Subscription{
 		id:         xid.New().String(),
-		types:      make(EventTypes),
 		subscriber: subscriber,
-		events:     make(chan Event, 1),
+		events:     make(chan DocEvent, 1),
 	}
 }
 
@@ -59,23 +45,16 @@ func (s *Subscription) ID() string {
 	return s.id
 }
 
-// Types returns the subscribed event type list.
-func (s *Subscription) Types() EventTypes {
-	return s.types
+// DocEvent represents events that occur related to the document.
+type DocEvent struct {
+	Type       types.DocEventType
+	Publisher  *time.ActorID
+	DocumentID types.ID
+	Body       types.DocEventBody
 }
 
-// AddType adds the event type to the subscribed event type list.
-func (s *Subscription) AddType(t string) {
-	s.types.Add(t)
-}
-
-// RemoveType removes the event type from the subscribed event type list.
-func (s *Subscription) RemoveType(t string) {
-	s.types.Remove(t)
-}
-
-// Events returns the Event channel of this subscription.
-func (s *Subscription) Events() chan Event {
+// Events returns the DocEvent channel of this subscription.
+func (s *Subscription) Events() chan DocEvent {
 	return s.events
 }
 
@@ -93,6 +72,3 @@ func (s *Subscription) Close() {
 	s.closed = true
 	close(s.events)
 }
-
-// Event represents a type for publishable events.
-type Event interface{}

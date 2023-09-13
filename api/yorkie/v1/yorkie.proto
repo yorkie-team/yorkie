@@ -37,8 +37,6 @@ service YorkieService {
   rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
 
   rpc Broadcast (BroadcastRequest) returns (BroadcastResponse) {}
-  rpc SubscribeBroadcastEvent (SubscribeBroadcastEventRequest) returns (SubscribeBroadcastEventResponse) {}
-  rpc UnsubscribeBroadcastEvent (UnsubscribeBroadcastEventRequest) returns (UnsubscribeBroadcastEventResponse) {}
 }
 
 message ActivateClientRequest {
@@ -89,8 +87,7 @@ message WatchDocumentResponse {
 
   oneof body {
     Initialization initialization = 1;
-    DocEvent doc_event = 2;
-    BroadcastEvent broadcast_event = 3;
+    DocEvent event = 2;
   }
 }
 
@@ -115,28 +112,10 @@ message PushPullChangesResponse {
   ChangePack change_pack = 1;
 }
 
-message SubscribeBroadcastEventRequest {
-  string client_id = 1;
-  string document_id = 2;
-  string type = 3;
-}
-
-message SubscribeBroadcastEventResponse {
-}
-
-message UnsubscribeBroadcastEventRequest {
-  string client_id = 1;
-  string document_id = 2;
-  string type = 3;
-}
-
-message UnsubscribeBroadcastEventResponse {
-}
-
 message BroadcastRequest {
   string client_id = 1;
   string document_id = 2;
-  string type = 3;
+  string topic = 3;
   bytes payload = 4;
 }
 

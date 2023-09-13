@@ -32,10 +32,6 @@ import (
 )
 
 var (
-	// ErrReservedEventType is returned when the event type is reserved.
-	ErrReservedEventType = errors.New(
-		"the event type is reserved for a different use case")
-
 	// ErrUnsupportedPayloadType is returned when the payload is unserializable to JSON.
 	ErrUnsupportedPayloadType = errors.New(
 		"the payload is an unsupported JSON type")
@@ -64,26 +60,11 @@ const (
 	PresenceChangedEvent DocEventType = "presence-changed"
 )
 
-// BroadcastRequest represents a request related to "Broadcast" that will be sent
-// through the client.
+// BroadcastRequest represents a broadcast request that will be delivered to the client.
 type BroadcastRequest struct {
-	RequestType BroadcastRequestType
-	EventType   string
-	Payload     []byte
+	Topic   string
+	Payload []byte
 }
-
-// BroadcastRequestType represents the type of the broadcast request that will be
-// sent through the client.
-type BroadcastRequestType string
-
-const (
-	// Broadcast means that there is a new message that should be broadcasted.
-	Broadcast BroadcastRequestType = "broadcast"
-	// Subscribe means that the document subscribes a new broadcast event.
-	Subscribe BroadcastRequestType = "subscribe"
-	// Unsubscribe means that the document unsubscribes the broadcast event.
-	Unsubscribe BroadcastRequestType = "unsubscribe"
-)
 
 // Document represents a document accessible to the user.
 //
@@ -107,24 +88,27 @@ type Document struct {
 	// docEvents is the channel to send events that occurred in the document.
 	docEvents chan DocEvent
 
-	// broadcastRequests is the channel to send requests related to "Broadcast"
-	// that occurred in the document.
+	// broadcastRequests is the send-only channel to send broadcast requests.
 	broadcastRequests chan BroadcastRequest
+
+	// broadcastResponses is the receive-only channel to receive broadcast responses.
+	broadcastResponses chan error
 
 	// broadcastEventHandlers is a map of registered event handlers for events.
 	broadcastEventHandlers map[string]func(
-		eventType, publisher string,
+		topic, publisher string,
 		payload []byte) error
 }
 
 // New creates a new instance of Document.
 func New(key key.Key) *Document {
 	return &Document{
-		doc:               NewInternalDocument(key),
-		docEvents:         make(chan DocEvent, 1),
-		broadcastRequests: make(chan BroadcastRequest, 1),
+		doc:                NewInternalDocument(key),
+		docEvents:          make(chan DocEvent, 1),
+		broadcastRequests:  make(chan BroadcastRequest, 1),
+		broadcastResponses: make(chan error, 1),
 		broadcastEventHandlers: make(map[string]func(
-			eventType, publisher string,
+			topic, publisher string,
 			payload []byte) error),
 	}
 }
@@ -386,64 +370,44 @@ func (d *Document) BroadcastRequests() <-chan BroadcastRequest {
 	return d.broadcastRequests
 }
 
-// Broadcast encodes the payload and makes a "Broadcast" type request.
-func (d *Document) Broadcast(eventType string, payload any) error {
-	if isEventTypeReserved(eventType) {
-		return ErrReservedEventType
-	}
+// BroadcastResponses returns the broadcast responses of this document.
+func (d *Document) BroadcastResponses() chan error {
+	return d.broadcastResponses
+}
 
+// Broadcast encodes the payload and makes a "Broadcast" type request.
+func (d *Document) Broadcast(topic string, payload any) error {
 	marshaled, err := gojson.Marshal(payload)
 	if err != nil {
 		return ErrUnsupportedPayloadType
 	}
 
 	d.broadcastRequests <- BroadcastRequest{
-		RequestType: Broadcast,
-		EventType:   eventType,
-		Payload:     marshaled,
+		Topic:   topic,
+		Payload: marshaled,
 	}
-	return nil
+	return <-d.broadcastResponses
 }
 
-// SubscribeBroadcastEvent registers an event handler and makes
+// SubscribeBroadcastEvent subscribes to the registers an event handler and makes
 // a "Subscribe" type request.
 func (d *Document) SubscribeBroadcastEvent(
-	eventType string,
-	handler func(eventType, publisher string, payload []byte) error,
-) error {
-	if isEventTypeReserved(eventType) {
-		return ErrReservedEventType
-	}
-
-	d.broadcastEventHandlers[eventType] = handler
-
-	d.broadcastRequests <- BroadcastRequest{
-		RequestType: Subscribe,
-		EventType:   eventType,
-	}
-	return nil
+	topic string,
+	handler func(topic, publisher string, payload []byte) error,
+) {
+	d.broadcastEventHandlers[topic] = handler
 }
 
 // UnsubscribeBroadcastEvent deregisters the event handler and makes
 // a "Unsubscribe" type request.
 func (d *Document) UnsubscribeBroadcastEvent(
-	eventType string,
-) error {
-	if isEventTypeReserved(eventType) {
-		return ErrReservedEventType
-	}
-
-	delete(d.broadcastEventHandlers, eventType)
-
-	d.broadcastRequests <- BroadcastRequest{
-		RequestType: Unsubscribe,
-		EventType:   eventType,
-	}
-	return nil
+	topic string,
+) {
+	delete(d.broadcastEventHandlers, topic)
 }
 
 // BroadcastEventHandlers returns registered event handlers for events.
-func (d *Document) BroadcastEventHandlers() map[string](func(eventType string,
+func (d *Document) BroadcastEventHandlers() map[string](func(topic string,
 	publisher string, payload []byte) error) {
 	return d.broadcastEventHandlers
 }
@@ -463,8 +427,4 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 		return fmt.Sprintf(msgAndArgs[0].(string), msgAndArgs[1:]...)
 	}
 	return ""
-}
-
-func isEventTypeReserved(eventType string) bool {
-	return eventType == "document"
 }

@@ -1,22 +1,5 @@
 package types
 
-import "github.com/yorkie-team/yorkie/pkg/document/time"
-
-// DocEvent represents events that occur related to the document.
-type DocEvent struct {
-	Type       DocEventType
-	Publisher  *time.ActorID
-	DocumentID ID
-}
-
-// BroadcastEvent represents events that are delievered to broadcast
-// event subscribers.
-type BroadcastEvent struct {
-	Type      string
-	Publisher *time.ActorID
-	Payload   []byte
-}
-
 // DocEventType represents the event that the Server delivers to the client.
 type DocEventType string
 
@@ -32,4 +15,14 @@ const (
 	// DocumentUnwatchedEvent is an event that occurs when document is
 	// unwatched by other clients.
 	DocumentUnwatchedEvent DocEventType = "document-unwatched"
+
+	// DocumentBroadcastEvent is an event that occurs when a payload is broadcasted
+	// on a specific topic.
+	DocumentBroadcastEvent DocEventType = "document-broadcast"
 )
+
+// DocEventBody includes additional data specific to the DocEvent.
+type DocEventBody struct {
+	Topic   string
+	Payload []byte
+}

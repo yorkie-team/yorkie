@@ -29,145 +29,80 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
-// subscriptionIDs is a set of subscriptionIDs.
-type subscribers map[string]struct{}
-
-func (s subscribers) add(subscriber *time.ActorID) {
-	s[subscriber.String()] = struct{}{}
+// subscriptions is a map of subscriptions.
+type subscriptions struct {
+	internalMap map[string]*sync.Subscription
 }
 
-func (s subscribers) contains(subscriber *time.ActorID) bool {
-	_, exists := s[subscriber.String()]
-	return exists
-}
-
-func (s subscribers) remove(subscriber *time.ActorID) {
-	delete(s, subscriber.String())
-}
-
-func (s subscribers) len() int {
-	return len(s)
-}
-
-// DocSubs has the subscription data of the document.
-type DocSubs struct {
-	documentID            types.ID
-	subMapBySubscriber    map[string]*sync.Subscription
-	subscribersMapByEvent map[string]subscribers
-}
-
-// NewDocSubs returns a new DocSubs of the given document id.
-func NewDocSubs(docID types.ID) *DocSubs {
-	return &DocSubs{
-		documentID:            docID,
-		subMapBySubscriber:    make(map[string]*sync.Subscription),
-		subscribersMapByEvent: make(map[string]subscribers),
+func newSubscriptions() *subscriptions {
+	return &subscriptions{
+		internalMap: make(map[string]*sync.Subscription),
 	}
 }
 
-// Len returns the number of the subscribers in the DocSubs.
-func (s *DocSubs) Len() int {
-	return len(s.subMapBySubscriber)
+// Add adds the given subscription.
+func (s *subscriptions) Add(sub *sync.Subscription) {
+	s.internalMap[sub.ID()] = sub
 }
 
-// Add adds the given subscription to the DocSubs.
-func (s *DocSubs) Add(sub *sync.Subscription) {
-	s.subMapBySubscriber[sub.Subscriber().String()] = sub
+// Map returns the internal map of these subscriptions.
+func (s *subscriptions) Map() map[string]*sync.Subscription {
+	return s.internalMap
 }
 
-// Remove closes the given subscription and cleans up the
-// subscription entries related to it.
-func (s *DocSubs) Remove(subscriber *time.ActorID) {
-	if sub, ok := s.subMapBySubscriber[subscriber.String()]; ok {
-		// Close the subscription.
-		sub.Close()
-
-		// Remove the subscriber from the subscriber lists of subscribed events.
-		for t := range sub.Types() {
-			if subscribers, ok := s.subscribersMapByEvent[t]; ok {
-				subscribers.remove(subscriber)
-
-				if subscribers.len() == 0 {
-					delete(s.subscribersMapByEvent, t)
-				}
-			}
-		}
-
-		delete(s.subMapBySubscriber, subscriber.String())
+// Delete deletes the subscription of the given id.
+func (s *subscriptions) Delete(id string) {
+	if subscription, ok := s.internalMap[id]; ok {
+		subscription.Close()
 	}
-
-	// Remove the subscription from subMapBySubscriber
-	delete(s.subMapBySubscriber, subscriber.String())
+	delete(s.internalMap, id)
 }
 
-// SubscribeEvent adds a new subscription entry for the given eventType to the DocSubs.
-func (s *DocSubs) SubscribeEvent(eventType string, subscriber *time.ActorID) {
-	if sub, ok := s.subMapBySubscriber[subscriber.String()]; ok {
-		if _, ok := s.subscribersMapByEvent[eventType]; !ok {
-			s.subscribersMapByEvent[eventType] = make(subscribers)
-		}
-		s.subscribersMapByEvent[eventType].add(subscriber)
-
-		sub.AddType(eventType)
-	}
-}
-
-// UnsubscribeEvent removes the subscription entry for the given eventType from the DocSubs.
-func (s *DocSubs) UnsubscribeEvent(eventType string, subscriber *time.ActorID) {
-	if sub, ok := s.subMapBySubscriber[subscriber.String()]; ok {
-		if subscribers, ok := s.subscribersMapByEvent[eventType]; ok {
-			subscribers.remove(subscriber)
-
-			if subscribers.len() == 0 {
-				delete(s.subscribersMapByEvent, eventType)
-			}
-		}
-
-		sub.RemoveType(eventType)
-	}
+// Len returns the length of these subscriptions.
+func (s *subscriptions) Len() int {
+	return len(s.internalMap)
 }
 
 // PubSub is the memory implementation of PubSub, used for single server.
 type PubSub struct {
-	docSubsMapMu      *gosync.RWMutex
-	docSubsMapByDocID map[types.ID]*DocSubs
+	subscriptionsMapMu      *gosync.RWMutex
+	subscriptionsMapByDocID map[types.ID]*subscriptions
 }
 
 // NewPubSub creates an instance of PubSub.
 func NewPubSub() *PubSub {
 	return &PubSub{
-		docSubsMapMu:      &gosync.RWMutex{},
-		docSubsMapByDocID: make(map[types.ID]*DocSubs),
+		subscriptionsMapMu:      &gosync.RWMutex{},
+		subscriptionsMapByDocID: make(map[types.ID]*subscriptions),
 	}
 }
 
-// SubscribeDoc subscribes to the given document keys.
-func (m *PubSub) SubscribeDoc(
+// Subscribe subscribes to the given document keys.
+func (m *PubSub) Subscribe(
 	ctx context.Context,
 	subscriber *time.ActorID,
 	documentID types.ID,
 ) (*sync.Subscription, error) {
-	m.docSubsMapMu.Lock()
-	defer m.docSubsMapMu.Unlock()
-
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
-			`SubscribeDoc(%s,%s) Start`,
+			`Subscribe(%s,%s) Start`,
 			documentID.String(),
 			subscriber.String(),
 		)
 	}
 
-	sub := sync.NewSubscription(subscriber)
-	if _, ok := m.docSubsMapByDocID[documentID]; !ok {
-		m.docSubsMapByDocID[documentID] = NewDocSubs(documentID)
-	}
+	m.subscriptionsMapMu.Lock()
+	defer m.subscriptionsMapMu.Unlock()
 
-	m.docSubsMapByDocID[documentID].Add(sub)
+	sub := sync.NewSubscription(subscriber)
+	if _, ok := m.subscriptionsMapByDocID[documentID]; !ok {
+		m.subscriptionsMapByDocID[documentID] = newSubscriptions()
+	}
+	m.subscriptionsMapByDocID[documentID].Add(sub)
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
-			`SubscribeDoc(%s,%s) End`,
+			`Subscribe(%s,%s) End`,
 			documentID.String(),
 			subscriber.String(),
 		)
@@ -175,110 +110,38 @@ func (m *PubSub) SubscribeDoc(
 	return sub, nil
 }
 
-// UnsubscribeDoc unsubscribes the given docKeys.
-func (m *PubSub) UnsubscribeDoc(
+// Unsubscribe unsubscribes the given docKeys.
+func (m *PubSub) Unsubscribe(
 	ctx context.Context,
 	documentID types.ID,
 	sub *sync.Subscription,
 ) {
-	m.docSubsMapMu.Lock()
-	defer m.docSubsMapMu.Unlock()
-
-	docSubs, ok := m.docSubsMapByDocID[documentID]
-	if !ok {
-		return
-	}
+	m.subscriptionsMapMu.Lock()
+	defer m.subscriptionsMapMu.Unlock()
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
-			`UnsubscribeDoc(%s,%s) Start`,
+			`Unsubscribe(%s,%s) Start`,
 			documentID,
 			sub.Subscriber().String(),
 		)
 	}
 
-	docSubs.Remove(sub.Subscriber())
+	sub.Close()
 
-	if docSubs.Len() == 0 {
-		delete(m.docSubsMapByDocID, documentID)
+	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
+		subs.Delete(sub.ID())
+
+		if subs.Len() == 0 {
+			delete(m.subscriptionsMapByDocID, documentID)
+		}
 	}
 
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
-			`UnsubscribeDoc(%s,%s) End`,
+			`Unsubscribe(%s,%s) End`,
 			documentID,
 			sub.Subscriber().String(),
-		)
-	}
-}
-
-// SubscribeEvent subscribes to the given event that occurred in the specified document.
-func (m *PubSub) SubscribeEvent(
-	ctx context.Context,
-	documentID types.ID,
-	eventType string,
-	subscriber *time.ActorID,
-) {
-	m.docSubsMapMu.Lock()
-	defer m.docSubsMapMu.Unlock()
-
-	docSubs, ok := m.docSubsMapByDocID[documentID]
-	if !ok {
-		return
-	}
-
-	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(
-			`SubscribeEvent(%s,%s,%s) Start`,
-			documentID,
-			eventType,
-			subscriber,
-		)
-	}
-	docSubs.SubscribeEvent(eventType, subscriber)
-
-	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(
-			`SubscribeEvent(%s,%s,%s) End`,
-			documentID,
-			eventType,
-			subscriber,
-		)
-	}
-}
-
-// UnsubscribeEvent unsubscribes to the given event that occurred in the specified document.
-func (m *PubSub) UnsubscribeEvent(
-	ctx context.Context,
-	documentID types.ID,
-	eventType string,
-	subscriber *time.ActorID,
-) {
-	m.docSubsMapMu.Lock()
-	defer m.docSubsMapMu.Unlock()
-
-	docSubs, ok := m.docSubsMapByDocID[documentID]
-	if !ok {
-		return
-	}
-
-	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(
-			`UnsubscribeEvent(%s,%s,%s) Start`,
-			documentID,
-			eventType,
-			subscriber,
-		)
-	}
-
-	docSubs.UnsubscribeEvent(eventType, subscriber)
-
-	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(
-			`UnsubscribeEvent(%s,%s,%s) End`,
-			documentID,
-			eventType,
-			subscriber,
 		)
 	}
 }
@@ -286,92 +149,60 @@ func (m *PubSub) UnsubscribeEvent(
 // Publish publishes the given event.
 func (m *PubSub) Publish(
 	ctx context.Context,
-	documentID types.ID,
-	eventType string,
 	publisherID *time.ActorID,
-	event sync.Event,
+	event sync.DocEvent,
 ) {
-	m.docSubsMapMu.RLock()
-	defer m.docSubsMapMu.RUnlock()
+	m.subscriptionsMapMu.RLock()
+	defer m.subscriptionsMapMu.RUnlock()
 
+	documentID := event.DocumentID
 	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(
-			`Publish(%s,%s,%s) Start`,
-			documentID,
-			eventType,
-			publisherID,
-		)
+		logging.From(ctx).Debugf(`Publish(%s,%s) Start`, documentID.String(), publisherID.String())
 	}
 
-	docSubs, ok := m.docSubsMapByDocID[documentID]
-	if !ok {
-		return
-	}
+	if subs, ok := m.subscriptionsMapByDocID[documentID]; ok {
+		for _, sub := range subs.Map() {
+			if sub.Subscriber().Compare(publisherID) == 0 {
+				continue
+			}
 
-	subscribers, ok := docSubs.subscribersMapByEvent[eventType]
-	if !ok {
-		return
-	}
+			if logging.Enabled(zap.DebugLevel) {
+				logging.From(ctx).Debugf(
+					`Publish %s(%s,%s) to %s`,
+					event.Type,
+					documentID.String(),
+					publisherID.String(),
+					sub.Subscriber().String(),
+				)
+			}
 
-	for subscriber := range subscribers {
-		sub, ok := docSubs.subMapBySubscriber[subscriber]
-		if !ok {
-			continue
+			// NOTE: When a subscription is being closed by a subscriber,
+			// the subscriber may not receive messages.
+			select {
+			case sub.Events() <- event:
+			case <-gotime.After(100 * gotime.Millisecond):
+				logging.From(ctx).Warnf(
+					`Publish(%s,%s) to %s timeout`,
+					documentID.String(),
+					publisherID.String(),
+					sub.Subscriber().String(),
+				)
+			}
 		}
-
-		if sub.Subscriber().Compare(publisherID) == 0 {
-			continue
-		}
-
-		if logging.Enabled(zap.DebugLevel) {
-			logging.From(ctx).Debugf(
-				`Publish %s(%s,%s) to %s`,
-				eventType,
-				documentID.String(),
-				publisherID.String(),
-				sub.Subscriber().String(),
-			)
-		}
-
-		// NOTE: When a subscription is being closed by a subscriber,
-		// the subscriber may not receive messages.
-		select {
-		case sub.Events() <- event:
-		case <-gotime.After(100 * gotime.Millisecond):
-			logging.From(ctx).Warnf(
-				`Publish %s(%s,%s) to %s timeout`,
-				eventType,
-				documentID.String(),
-				publisherID.String(),
-				sub.Subscriber().String(),
-			)
-		}
-
 	}
 	if logging.Enabled(zap.DebugLevel) {
-		logging.From(ctx).Debugf(
-			`Publish(%s,%s,%s) End`,
-			documentID,
-			eventType,
-			publisherID,
-		)
+		logging.From(ctx).Debugf(`Publish(%s,%s) End`, documentID.String(), publisherID.String())
 	}
 }
 
 // ClientIDs returns the clients of the given document.
 func (m *PubSub) ClientIDs(documentID types.ID) []*time.ActorID {
-	m.docSubsMapMu.RLock()
-	defer m.docSubsMapMu.RUnlock()
-
-	docSubs, ok := m.docSubsMapByDocID[documentID]
-	if !ok {
-		return nil
-	}
+	m.subscriptionsMapMu.RLock()
+	defer m.subscriptionsMapMu.RUnlock()
 
 	var ids []*time.ActorID
-	for _, sub := range docSubs.subMapBySubscriber {
+	for _, sub := range m.subscriptionsMapByDocID[documentID].Map() {
 		ids = append(ids, sub.Subscriber())
 	}
-
 	return ids
 }
