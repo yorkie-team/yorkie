@@ -464,7 +464,7 @@ func (c *Client) Watch(
 	go func() {
 		for {
 			select {
-			case e := <-doc.DocEvents():
+			case e := <-doc.Events():
 				t := PresenceChanged
 				if e.Type == document.WatchedEvent {
 					t = DocumentWatched

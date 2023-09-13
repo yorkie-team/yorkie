@@ -85,8 +85,8 @@ type Document struct {
 	// is used to protect `doc.presences`.
 	clonePresences *innerpresence.Map
 
-	// docEvents is the channel to send events that occurred in the document.
-	docEvents chan DocEvent
+	// events is the channel to send events that occurred in the document.
+	events chan DocEvent
 
 	// broadcastRequests is the send-only channel to send broadcast requests.
 	broadcastRequests chan BroadcastRequest
@@ -104,7 +104,7 @@ type Document struct {
 func New(key key.Key) *Document {
 	return &Document{
 		doc:                NewInternalDocument(key),
-		docEvents:          make(chan DocEvent, 1),
+		events:             make(chan DocEvent, 1),
 		broadcastRequests:  make(chan BroadcastRequest, 1),
 		broadcastResponses: make(chan error, 1),
 		broadcastEventHandlers: make(map[string]func(
@@ -181,7 +181,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		}
 
 		for _, e := range events {
-			d.docEvents <- e
+			d.events <- e
 		}
 	}
 
@@ -360,9 +360,9 @@ func (d *Document) RemoveOnlineClient(clientID string) {
 	d.doc.RemoveOnlineClient(clientID)
 }
 
-// DocEvents returns the document events of this document.
-func (d *Document) DocEvents() <-chan DocEvent {
-	return d.docEvents
+// Events returns the document events of this document.
+func (d *Document) Events() <-chan DocEvent {
+	return d.events
 }
 
 // BroadcastRequests returns the broadcast requests of this document.
