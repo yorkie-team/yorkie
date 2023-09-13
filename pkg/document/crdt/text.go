@@ -250,28 +250,58 @@ func (t *Text) Edit(
 func (t *Text) Style(
 	from,
 	to *RGATreeSplitNodePos,
+	latestCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
-) error {
+) (map[string]*time.Ticket, error) {
 	// 01. Split nodes with from and to
 	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	_, fromRight, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// 02. style nodes between from and to
 	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
+	createdAtMapByActor := make(map[string]*time.Ticket)
+	var toBeStyled []*RGATreeSplitNode[*TextValue]
+
 	for _, node := range nodes {
+		actorIDHex := node.id.createdAt.ActorIDHex()
+
+		var latestCreatedAt *time.Ticket
+		if len(latestCreatedAtMapByActor) == 0 {
+			latestCreatedAt = time.MaxTicket
+		} else {
+			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
+			if ok {
+				latestCreatedAt = createdAt
+			} else {
+				latestCreatedAt = time.InitialTicket
+			}
+		}
+
+		if node.canStyle(executedAt, latestCreatedAt) {
+			latestCreatedAt = createdAtMapByActor[actorIDHex]
+			createdAt := node.id.createdAt
+			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
+				createdAtMapByActor[actorIDHex] = createdAt
+			}
+			toBeStyled = append(toBeStyled, node)
+		}
+	}
+
+	for _, node := range toBeStyled {
 		val := node.value
 		for key, value := range attributes {
 			val.attrs.Set(key, value, executedAt)
 		}
 	}
-	return nil
+
+	return createdAtMapByActor, nil
 }
 
 // Nodes returns the internal nodes of this Text.
