@@ -45,6 +45,8 @@ type EditReverse struct {
 	executedAt *time.Ticket
 }
 
+// TextNodeIDWithLength is the struct representing RGATreeSplitNodeID with
+// the length of the node's content when the reverse operation is defined.
 type TextNodeIDWithLength struct {
 	nodeID *crdt.RGATreeSplitNodeID
 	length int32
