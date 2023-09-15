@@ -7,4 +7,3 @@ rs.initiate(
       ]
     }
   )
-  
