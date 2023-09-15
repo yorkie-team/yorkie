@@ -281,7 +281,7 @@ func (t *Text) Style(
 	}
 
 	// 02. style nodes between from and to
-	if from.Type() != "" && to.Type() != "" {
+	if from.Type() != "none" && to.boundaryType != "none" {
 		// 02-1. Update styleOpsBefore and styleOpsAfter if it is a bold type
 		// TODO(MoonGyu1): Peritext 2. Update styleOpsBefore/styleOpsAfter of fromRight/toRight nodes
 

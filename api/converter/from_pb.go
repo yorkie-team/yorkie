@@ -598,8 +598,8 @@ func fromTextNodeBoundary(
 		boundaryType = crdt.Start
 	case api.BoundaryType_BOUNDARY_TYPE_END:
 		boundaryType = crdt.End
-	default:
-		boundaryType = ""
+	case api.BoundaryType_BOUNDARY_TYPE_NONE:
+		boundaryType = crdt.None
 	}
 
 	return crdt.NewRGATreeSplitNodeBoundary(

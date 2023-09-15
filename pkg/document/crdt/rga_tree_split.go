@@ -23,6 +23,8 @@ const (
 	After  BoundaryType = "after"
 	Start  BoundaryType = "start"
 	End    BoundaryType = "end"
+	// TODO(MoonGyu1): 'None' type can be deleted after replacing existing logic with mark
+	None BoundaryType = "none"
 )
 
 // RGATreeSplitValue is a value of RGATreeSplitNode.

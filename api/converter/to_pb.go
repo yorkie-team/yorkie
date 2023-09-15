@@ -471,36 +471,11 @@ func toTextNodePos(pos *crdt.RGATreeSplitNodePos) *api.TextNodePos {
 }
 
 func toTextNodeBoundary(boundary *crdt.RGATreeSplitNodeBoundary) *api.TextNodeBoundary {
-	switch boundary.Type() {
-	case crdt.Before:
-		return &api.TextNodeBoundary{
-			CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
-			Offset:    int32(boundary.ID().Offset()),
-			Type:      api.BoundaryType_BOUNDARY_TYPE_BEFORE,
-		}
-	case crdt.After:
-		return &api.TextNodeBoundary{
-			CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
-			Offset:    int32(boundary.ID().Offset()),
-			Type:      api.BoundaryType_BOUNDARY_TYPE_AFTER,
-		}
-	case crdt.Start:
-		return &api.TextNodeBoundary{
-			CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
-			Offset:    int32(boundary.ID().Offset()),
-			Type:      api.BoundaryType_BOUNDARY_TYPE_START,
-		}
-	case crdt.End:
-		return &api.TextNodeBoundary{
-			CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
-			Offset:    int32(boundary.ID().Offset()),
-			Type:      api.BoundaryType_BOUNDARY_TYPE_END,
-		}
-	default:
-		return &api.TextNodeBoundary{
-			CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
-			Offset:    int32(boundary.ID().Offset()),
-		}
+	pbBoundaryType := toBoundaryType(boundary.Type())
+	return &api.TextNodeBoundary{
+		CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
+		Offset:    int32(boundary.ID().Offset()),
+		Type:      pbBoundaryType,
 	}
 }
 
@@ -546,6 +521,21 @@ func toCounterType(valueType crdt.CounterType) (api.ValueType, error) {
 	}
 
 	return 0, fmt.Errorf("%d, %w", valueType, ErrUnsupportedCounterType)
+}
+
+func toBoundaryType(boundaryType crdt.BoundaryType) api.BoundaryType {
+	switch boundaryType {
+	case crdt.Before:
+		return api.BoundaryType_BOUNDARY_TYPE_BEFORE
+	case crdt.After:
+		return api.BoundaryType_BOUNDARY_TYPE_AFTER
+	case crdt.Start:
+		return api.BoundaryType_BOUNDARY_TYPE_START
+	case crdt.End:
+		return api.BoundaryType_BOUNDARY_TYPE_END
+	default:
+		return api.BoundaryType_BOUNDARY_TYPE_NONE
+	}
 }
 
 // ToUpdatableProjectFields converts the given model format to Protobuf format.
