@@ -1085,14 +1085,15 @@ func (m *Operation_Select) GetExecutedAt() *TimeTicket {
 }
 
 type Operation_Style struct {
-	ParentCreatedAt      *TimeTicket       `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
-	From                 *TextNodePos      `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To                   *TextNodePos      `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	Attributes           map[string]string `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	ExecutedAt           *TimeTicket       `protobuf:"bytes,5,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
-	XXX_unrecognized     []byte            `json:"-"`
-	XXX_sizecache        int32             `json:"-"`
+	ParentCreatedAt      *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
+	From                 *TextNodePos           `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To                   *TextNodePos           `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Attributes           map[string]string      `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	ExecutedAt           *TimeTicket            `protobuf:"bytes,5,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
+	CreatedAtMapByActor  map[string]*TimeTicket `protobuf:"bytes,6,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}               `json:"-"`
+	XXX_unrecognized     []byte                 `json:"-"`
+	XXX_sizecache        int32                  `json:"-"`
 }
 
 func (m *Operation_Style) Reset()         { *m = Operation_Style{} }
@@ -1159,6 +1160,13 @@ func (m *Operation_Style) GetAttributes() map[string]string {
 func (m *Operation_Style) GetExecutedAt() *TimeTicket {
 	if m != nil {
 		return m.ExecutedAt
+	}
+	return nil
+}
+
+func (m *Operation_Style) GetCreatedAtMapByActor() map[string]*TimeTicket {
+	if m != nil {
+		return m.CreatedAtMapByActor
 	}
 	return nil
 }
@@ -3496,6 +3504,7 @@ func init() {
 	proto.RegisterType((*Operation_Select)(nil), "yorkie.v1.Operation.Select")
 	proto.RegisterType((*Operation_Style)(nil), "yorkie.v1.Operation.Style")
 	proto.RegisterMapType((map[string]string)(nil), "yorkie.v1.Operation.Style.AttributesEntry")
+	proto.RegisterMapType((map[string]*TimeTicket)(nil), "yorkie.v1.Operation.Style.CreatedAtMapByActorEntry")
 	proto.RegisterType((*Operation_Increase)(nil), "yorkie.v1.Operation.Increase")
 	proto.RegisterType((*Operation_TreeEdit)(nil), "yorkie.v1.Operation.TreeEdit")
 	proto.RegisterMapType((map[string]*TimeTicket)(nil), "yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry")
@@ -4765,6 +4774,32 @@ func (m *Operation_Style) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.CreatedAtMapByActor) > 0 {
+		for k := range m.CreatedAtMapByActor {
+			v := m.CreatedAtMapByActor[k]
+			baseI := i
+			if v != nil {
+				{
+					size, err := v.MarshalToSizedBuffer(dAtA[:i])
+					if err != nil {
+						return 0, err
+					}
+					i -= size
+					i = encodeVarintResources(dAtA, i, uint64(size))
+				}
+				i--
+				dAtA[i] = 0x12
+			}
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintResources(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintResources(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x32
+		}
 	}
 	if m.ExecutedAt != nil {
 		{
@@ -7616,6 +7651,19 @@ func (m *Operation_Style) Size() (n int) {
 	if m.ExecutedAt != nil {
 		l = m.ExecutedAt.Size()
 		n += 1 + l + sovResources(uint64(l))
+	}
+	if len(m.CreatedAtMapByActor) > 0 {
+		for k, v := range m.CreatedAtMapByActor {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+				l += 1 + sovResources(uint64(l))
+			}
+			mapEntrySize := 1 + len(k) + sovResources(uint64(len(k))) + l
+			n += mapEntrySize + 1 + sovResources(uint64(mapEntrySize))
+		}
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -11556,6 +11604,135 @@ func (m *Operation_Style) Unmarshal(dAtA []byte) error {
 			if err := m.ExecutedAt.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CreatedAtMapByActor", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResources
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResources
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthResources
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.CreatedAtMapByActor == nil {
+				m.CreatedAtMapByActor = make(map[string]*TimeTicket)
+			}
+			var mapkey string
+			var mapvalue *TimeTicket
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowResources
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowResources
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthResources
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthResources
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var mapmsglen int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowResources
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapmsglen |= int(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					if mapmsglen < 0 {
+						return ErrInvalidLengthResources
+					}
+					postmsgIndex := iNdEx + mapmsglen
+					if postmsgIndex < 0 {
+						return ErrInvalidLengthResources
+					}
+					if postmsgIndex > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = &TimeTicket{}
+					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+						return err
+					}
+					iNdEx = postmsgIndex
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipResources(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if (skippy < 0) || (iNdEx+skippy) < 0 {
+						return ErrInvalidLengthResources
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.CreatedAtMapByActor[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

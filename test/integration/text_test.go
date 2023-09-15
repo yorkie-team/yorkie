@@ -96,6 +96,43 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
+	t.Run("concurrent insertion and deletion test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("k1").Edit(0, 0, "AB")
+			return nil
+		}, "set a new text by c1")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":[{"val":"AB"}]}`, d2.Marshal())
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(0, 2, "")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":[]}`, d1.Marshal())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(1, 1, "C")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":[{"val":"A"},{"val":"C"},{"val":"B"}]}`, d2.Marshal())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, `{"k1":[{"val":"C"}]}`, d1.Marshal())
+	})
+
 	t.Run("rich text test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -225,5 +262,46 @@ func TestText(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.True(t, d1.Root().GetText("k1").CheckWeight())
 		assert.True(t, d2.Root().GetText("k1").CheckWeight())
+	})
+
+	// Peritext test
+	t.Run("ex2. concurrent formatting and insertion test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("k1").Edit(0, 0, "The fox jumped.", nil)
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":[{"val":"The fox jumped."}]}`, d2.Marshal())
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Style(0, 15, map[string]string{"b": "1"})
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":[{"attrs":{"b":"1"},"val":"The fox jumped."}]}`, d1.Marshal())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("k1").Edit(4, 4, "brown ")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"k1":[{"val":"The "},{"val":"brown "},{"val":"fox jumped."}]}`, d2.Marshal())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, `{"k1":[{"attrs":{"b":"1"},"val":"The "},{"val":"brown "},{"attrs":{"b":"1"},"val":"fox jumped."}]}`, d1.Marshal())
+
+		// TODO(MoonGyu1): d1 and d2 should have the result below after applying mark operation
+		// assert.Equal(t, `{"k1":[{"attrs":{"b":"1"},"val":"The "},{"attrs":{"b":"1"},"val":"brown "},{"attrs":{"b":"1"},"val":"fox jumped."}]}`, d1.Marshal())
 	})
 }

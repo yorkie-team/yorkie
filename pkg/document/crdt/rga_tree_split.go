@@ -262,6 +262,12 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, latestCreatedAt *ti
 	return false
 }
 
+// canStyle checks if node is able to set style.
+func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
+	return !s.createdAt().After(latestCreatedAt) &&
+		(s.removedAt == nil || editedAt.After(s.removedAt))
+}
+
 // Value returns the value of this node.
 func (s *RGATreeSplitNode[V]) Value() V {
 	return s.value

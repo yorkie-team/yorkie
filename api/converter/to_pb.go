@@ -381,11 +381,12 @@ func toEditReverse(e *operations.EditReverse) (*api.Operation_EditReverse_, erro
 func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 	return &api.Operation_Style_{
 		Style: &api.Operation_Style{
-			ParentCreatedAt: ToTimeTicket(style.ParentCreatedAt()),
-			From:            toTextNodePos(style.From()),
-			To:              toTextNodePos(style.To()),
-			Attributes:      style.Attributes(),
-			ExecutedAt:      ToTimeTicket(style.ExecutedAt()),
+			ParentCreatedAt:     ToTimeTicket(style.ParentCreatedAt()),
+			From:                toTextNodePos(style.From()),
+			To:                  toTextNodePos(style.To()),
+			CreatedAtMapByActor: toCreatedAtMapByActor(style.CreatedAtMapByActor()),
+			Attributes:          style.Attributes(),
+			ExecutedAt:          ToTimeTicket(style.ExecutedAt()),
 		},
 	}, nil
 }
