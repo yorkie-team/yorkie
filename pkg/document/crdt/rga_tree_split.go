@@ -14,6 +14,17 @@ var (
 	initialNodeID = NewRGATreeSplitNodeID(time.InitialTicket, 0)
 )
 
+// BoundaryType represents any type that can be used as a boundary.
+type BoundaryType string
+
+// The values below are the types that can be used as boundary.
+const (
+	Before BoundaryType = "before"
+	After  BoundaryType = "after"
+	Start  BoundaryType = "start"
+	End    BoundaryType = "end"
+)
+
 // RGATreeSplitValue is a value of RGATreeSplitNode.
 type RGATreeSplitValue interface {
 	Split(offset int) RGATreeSplitValue
@@ -142,6 +153,27 @@ func (pos *RGATreeSplitNodePos) Equal(other *RGATreeSplitNodePos) bool {
 		return false
 	}
 	return pos.relativeOffset == other.relativeOffset
+}
+
+// RGATreeSplitNodeBoundary is a boundary of RGATreeSplitNode.
+type RGATreeSplitNodeBoundary struct {
+	id           *RGATreeSplitNodeID
+	boundaryType BoundaryType
+}
+
+// NewRGATreeSplitNodeBoundary creates a new instance of NewRGATreeSplitNodeBoundary.
+func NewRGATreeSplitNodeBoundary(id *RGATreeSplitNodeID, boundaryType BoundaryType) *RGATreeSplitNodeBoundary {
+	return &RGATreeSplitNodeBoundary{id, boundaryType}
+}
+
+// ID returns the ID of this RGATreeSplitNodeBoundary.
+func (boundary *RGATreeSplitNodeBoundary) ID() *RGATreeSplitNodeID {
+	return boundary.id
+}
+
+// Type returns the boundary type of this RGATreeSplitNodeBoundary.
+func (boundary *RGATreeSplitNodeBoundary) Type() BoundaryType {
+	return boundary.boundaryType
 }
 
 // RGATreeSplitNode is a node of RGATreeSplit.
@@ -352,6 +384,27 @@ func (s *RGATreeSplit[V]) findNodeWithSplit(
 	}
 
 	return node, node.next, nil
+}
+
+func (s *RGATreeSplit[V]) splitNodeByBoundary(
+	boundary *RGATreeSplitNodeBoundary,
+) error {
+	absoluteID := boundary.ID()
+	if absoluteID.CreatedAt() != nil {
+		node, err := s.findFloorNodePreferToLeft(absoluteID)
+		if err != nil {
+			return err
+		}
+
+		relativeOffset := absoluteID.offset - node.id.offset
+
+		_, err = s.splitNode(node, relativeOffset)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {

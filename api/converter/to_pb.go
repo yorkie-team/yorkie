@@ -355,8 +355,8 @@ func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 	return &api.Operation_Style_{
 		Style: &api.Operation_Style{
 			ParentCreatedAt:     ToTimeTicket(style.ParentCreatedAt()),
-			From:                toTextNodePos(style.From()),
-			To:                  toTextNodePos(style.To()),
+			From:                toTextNodeBoundary(style.From()),
+			To:                  toTextNodeBoundary(style.To()),
 			CreatedAtMapByActor: toCreatedAtMapByActor(style.CreatedAtMapByActor()),
 			Attributes:          style.Attributes(),
 			ExecutedAt:          ToTimeTicket(style.ExecutedAt()),
@@ -467,6 +467,40 @@ func toTextNodePos(pos *crdt.RGATreeSplitNodePos) *api.TextNodePos {
 		CreatedAt:      ToTimeTicket(pos.ID().CreatedAt()),
 		Offset:         int32(pos.ID().Offset()),
 		RelativeOffset: int32(pos.RelativeOffset()),
+	}
+}
+
+func toTextNodeBoundary(boundary *crdt.RGATreeSplitNodeBoundary) *api.TextNodeBoundary {
+	switch boundary.Type() {
+	case crdt.Before:
+		return &api.TextNodeBoundary{
+			CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
+			Offset:    int32(boundary.ID().Offset()),
+			Type:      api.BoundaryType_BOUNDARY_TYPE_BEFORE,
+		}
+	case crdt.After:
+		return &api.TextNodeBoundary{
+			CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
+			Offset:    int32(boundary.ID().Offset()),
+			Type:      api.BoundaryType_BOUNDARY_TYPE_AFTER,
+		}
+	case crdt.Start:
+		return &api.TextNodeBoundary{
+			CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
+			Offset:    int32(boundary.ID().Offset()),
+			Type:      api.BoundaryType_BOUNDARY_TYPE_START,
+		}
+	case crdt.End:
+		return &api.TextNodeBoundary{
+			CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
+			Offset:    int32(boundary.ID().Offset()),
+			Type:      api.BoundaryType_BOUNDARY_TYPE_END,
+		}
+	default:
+		return &api.TextNodeBoundary{
+			CreatedAt: ToTimeTicket(boundary.ID().CreatedAt()),
+			Offset:    int32(boundary.ID().Offset()),
+		}
 	}
 }
 

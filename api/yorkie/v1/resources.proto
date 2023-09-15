@@ -107,8 +107,8 @@ message Operation {
   }
   message Style {
     TimeTicket parent_created_at = 1;
-    TextNodePos from = 2;
-    TextNodePos to = 3;
+    TextNodeBoundary from = 2;
+    TextNodeBoundary to = 3;
     map<string, string> attributes = 4;
     TimeTicket executed_at = 5;
     map<string, TimeTicket> created_at_map_by_actor = 6;
@@ -329,6 +329,19 @@ message TextNodePos {
   TimeTicket created_at = 1;
   int32 offset = 2;
   int32 relative_offset = 3;
+}
+
+enum BoundaryType {
+  BOUNDARY_TYPE_BEFORE = 0;
+  BOUNDARY_TYPE_AFTER = 1;
+  BOUNDARY_TYPE_START = 2;
+  BOUNDARY_TYPE_END = 3;
+}
+
+message TextNodeBoundary {
+  TimeTicket created_at = 1;
+  int32 offset = 2;
+  BoundaryType type = 3;
 }
 
 message TimeTicket {

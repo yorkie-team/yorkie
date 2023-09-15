@@ -218,9 +218,22 @@ func (t *Text) Remove(removedAt *time.Ticket) bool {
 	return false
 }
 
-// CreateRange returns a pair of RGATreeSplitNodePos of the given integer offsets.
-func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos, error) {
+// CreatePosRange returns a pair of RGATreeSplitNodePos of the given integer offsets.
+func (t *Text) CreatePosRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNodePos, error) {
 	return t.rgaTreeSplit.createRange(from, to)
+}
+
+// CreateBoundaryRange returns a pair of RGATreeSplitNodeBoundary of the given pos.
+func (t *Text) CreateBoundaryRange(from, to *RGATreeSplitNodePos, editedAt *time.Ticket) (*RGATreeSplitNodeBoundary, *RGATreeSplitNodeBoundary, error) {
+	_, fromRight, err := t.rgaTreeSplit.findNodeWithSplit(from, editedAt)
+	if err != nil {
+		return nil, nil, err
+	}
+	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, editedAt)
+	if err != nil {
+		return nil, nil, err
+	}
+	return NewRGATreeSplitNodeBoundary(fromRight.ID(), ""), NewRGATreeSplitNodeBoundary(toRight.ID(), ""), nil
 }
 
 // Edit edits the given range with the given content and attributes.
@@ -249,23 +262,37 @@ func (t *Text) Edit(
 // Style applies the given attributes of the given range.
 func (t *Text) Style(
 	from,
-	to *RGATreeSplitNodePos,
+	to *RGATreeSplitNodeBoundary,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 ) (map[string]*time.Ticket, error) {
-	// 01. Split nodes with from and to
-	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
-	if err != nil {
-		return nil, err
-	}
-	_, fromRight, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
-	if err != nil {
-		return nil, err
+	// 01. Split nodes with boundaryRange if it is a remote operation
+	isRemote := latestCreatedAtMapByActor != nil
+	if isRemote {
+		err := t.rgaTreeSplit.splitNodeByBoundary(to)
+		if err != nil {
+			return nil, err
+		}
+		err = t.rgaTreeSplit.splitNodeByBoundary(from)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// 02. style nodes between from and to
-	nodes := t.rgaTreeSplit.findBetween(fromRight, toRight)
+	if from.Type() != "" && to.Type() != "" {
+		// 02-1. Update styleOpsBefore and styleOpsAfter if it is a bold type
+		// TODO(MoonGyu1): Peritext 2. Update styleOpsBefore/styleOpsAfter of fromRight/toRight nodes
+
+		createdAtMapByActor := make(map[string]*time.Ticket)
+		return createdAtMapByActor, nil
+	}
+	// 02-2. Apply the existing logic to style nodes if they are not of a bold type
+	fromNode := t.rgaTreeSplit.FindNode(from.ID())
+	toNode := t.rgaTreeSplit.FindNode(to.ID())
+
+	nodes := t.rgaTreeSplit.findBetween(fromNode, toNode)
 	createdAtMapByActor := make(map[string]*time.Ticket)
 	var toBeStyled []*RGATreeSplitNode[*TextValue]
 
