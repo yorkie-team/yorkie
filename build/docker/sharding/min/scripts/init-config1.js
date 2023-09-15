@@ -8,4 +8,3 @@ rs.initiate(
     }
   )
   
-  
