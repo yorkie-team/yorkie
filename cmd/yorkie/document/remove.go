@@ -36,7 +36,7 @@ func newRemoveCommand() *cobra.Command {
 		Use:     "remove [project name] [document key]",
 		Short:   "Remove documents in the project",
 		Example: "yorkie document remove sample-project sample-document [options]",
-		PreRunE: config.ReadConfig,
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return errors.New("project name and document key are required")

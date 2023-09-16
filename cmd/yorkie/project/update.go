@@ -43,7 +43,7 @@ func newUpdateCommand() *cobra.Command {
 		Use:     "update [name]",
 		Short:   "Update a project",
 		Example: "yorkie project update name [options]",
-		PreRunE: config.ReadConfig,
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return errors.New("name is required")

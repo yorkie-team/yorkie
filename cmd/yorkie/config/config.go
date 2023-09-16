@@ -145,26 +145,24 @@ func Delete() error {
 	return nil
 }
 
-// ReadConfig read configuration file for viper before runnning command
-func ReadConfig(cmd *cobra.Command, args []string) error {
+// Preload read configuration file for viper before running command
+func Preload(cmd *cobra.Command, args []string) error {
 	configPathValue, err := configPath()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "get config path: %w", err)
 		os.Exit(1)
 	}
 
-	file, err := os.Open(filepath.Clean(configPathValue))
-	if err != nil {
+	if _, err := os.Stat(filepath.Clean(configPathValue)); err != nil {
 		if os.IsNotExist(err) {
-			New()
-			return nil
+			if saveErr := Save(New()); saveErr != nil {
+				return fmt.Errorf("save default config: %w", saveErr)
+			}
+		} else {
+			return fmt.Errorf("check config file: %w", err)
 		}
-
-		return fmt.Errorf("open config file: %w", err)
 	}
-	defer func() {
-		_ = file.Close()
-	}()
+
 	if err := viper.ReadInConfig(); err != nil {
 		return fmt.Errorf("failed to read in config: %w", err)
 	}

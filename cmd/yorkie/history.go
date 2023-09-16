@@ -39,7 +39,7 @@ func newHistoryCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "history [project name] [document key]",
 		Short:   "Show the history of a document",
-		PreRunE: config.ReadConfig,
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return errors.New("project name and document key are required")

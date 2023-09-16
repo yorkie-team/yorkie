@@ -33,7 +33,7 @@ func newListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "ls",
 		Short:   "List all projects",
-		PreRunE: config.ReadConfig,
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rpcAddr := viper.GetString("rpcAddr")
 			token, err := config.LoadToken(rpcAddr)

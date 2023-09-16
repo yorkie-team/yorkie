@@ -30,7 +30,7 @@ func newListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "ls",
 		Short:   "List all contexts from configuration",
-		PreRunE: config.ReadConfig,
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf, err := config.Load()
 			if err != nil {

@@ -34,7 +34,7 @@ func newLogoutCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "logout",
 		Short:   "Log out from the Yorkie server",
-		PreRunE: config.ReadConfig,
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf, err := config.Load()
 			if err != nil {

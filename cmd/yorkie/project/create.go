@@ -36,7 +36,7 @@ func newCreateCommand() *cobra.Command {
 		Use:     "create [name]",
 		Short:   "Create a new project",
 		Example: "yorkie project create sample-project",
-		PreRunE: config.ReadConfig,
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return errors.New("name is required")

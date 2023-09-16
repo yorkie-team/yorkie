@@ -29,7 +29,7 @@ func newSetContextCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "set",
 		Short:   "Set the current global flags as the context",
-		PreRunE: config.ReadConfig,
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf, err := config.Load()
 			if err != nil {

@@ -35,7 +35,7 @@ func newLoginCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "login",
 		Short:   "Log in to the Yorkie server",
-		PreRunE: config.ReadConfig,
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cli, err := admin.Dial(viper.GetString("rpcAddr"), admin.WithInsecure(viper.GetBool("isInsecure")))
 			if err != nil {
