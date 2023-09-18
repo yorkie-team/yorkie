@@ -224,7 +224,11 @@ func (t *Text) CreatePosRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplit
 }
 
 // CreateBoundaryRange returns a pair of RGATreeSplitNodeBoundary of the given pos.
-func (t *Text) CreateBoundaryRange(from, to *RGATreeSplitNodePos, editedAt *time.Ticket) (*RGATreeSplitNodeBoundary, *RGATreeSplitNodeBoundary, error) {
+func (t *Text) CreateBoundaryRange(
+	from,
+	to *RGATreeSplitNodePos,
+	editedAt *time.Ticket,
+) (*RGATreeSplitNodeBoundary, *RGATreeSplitNodeBoundary, error) {
 	_, fromRight, err := t.rgaTreeSplit.findNodeWithSplit(from, editedAt)
 	if err != nil {
 		return nil, nil, err
