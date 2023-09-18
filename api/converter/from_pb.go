@@ -432,11 +432,11 @@ func fromStyle(pbStyle *api.Operation_Style) (*operations.Style, error) {
 	if err != nil {
 		return nil, err
 	}
-	from, err := fromTextNodePos(pbStyle.From)
+	from, err := fromTextNodeBoundary(pbStyle.From)
 	if err != nil {
 		return nil, err
 	}
-	to, err := fromTextNodePos(pbStyle.To)
+	to, err := fromTextNodeBoundary(pbStyle.To)
 	if err != nil {
 		return nil, err
 	}
@@ -577,6 +577,34 @@ func fromTextNodePos(
 	return crdt.NewRGATreeSplitNodePos(
 		crdt.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),
+	), nil
+}
+
+func fromTextNodeBoundary(
+	pbBoundary *api.TextNodeBoundary,
+) (*crdt.RGATreeSplitNodeBoundary, error) {
+	createdAt, err := fromTimeTicket(pbBoundary.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	var boundaryType crdt.BoundaryType
+	switch pbType := pbBoundary.Type; pbType {
+	case api.BoundaryType_BOUNDARY_TYPE_BEFORE:
+		boundaryType = crdt.Before
+	case api.BoundaryType_BOUNDARY_TYPE_AFTER:
+		boundaryType = crdt.After
+	case api.BoundaryType_BOUNDARY_TYPE_START:
+		boundaryType = crdt.Start
+	case api.BoundaryType_BOUNDARY_TYPE_END:
+		boundaryType = crdt.End
+	case api.BoundaryType_BOUNDARY_TYPE_NONE:
+		boundaryType = crdt.None
+	}
+
+	return crdt.NewRGATreeSplitNodeBoundary(
+		crdt.NewRGATreeSplitNodeID(createdAt, int(pbBoundary.Offset)),
+		boundaryType,
 	), nil
 }
 

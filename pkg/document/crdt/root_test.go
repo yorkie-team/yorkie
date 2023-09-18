@@ -63,28 +63,28 @@ func TestRoot(t *testing.T) {
 		ctx := helper.TextChangeContext(root)
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
-		fromPos, toPos, _ := text.CreateRange(0, 0)
+		fromPos, toPos, _ := text.CreatePosRange(0, 0)
 		_, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, "Hello World", text.String())
 		assert.Equal(t, 0, root.GarbageLen())
 
-		fromPos, toPos, _ = text.CreateRange(5, 10)
+		fromPos, toPos, _ = text.CreatePosRange(5, 10)
 		_, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, "HelloYorkied", text.String())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		fromPos, toPos, _ = text.CreateRange(0, 5)
+		fromPos, toPos, _ = text.CreatePosRange(0, 5)
 		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, "Yorkied", text.String())
 		assert.Equal(t, 2, root.GarbageLen())
 
-		fromPos, toPos, _ = text.CreateRange(6, 7)
+		fromPos, toPos, _ = text.CreatePosRange(6, 7)
 		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		registerElementHasRemovedNodes(fromPos, toPos, root, text)
@@ -125,7 +125,7 @@ func TestRoot(t *testing.T) {
 		}
 
 		for _, tc := range tests {
-			fromPos, toPos, _ := text.CreateRange(tc.from, tc.to)
+			fromPos, toPos, _ := text.CreatePosRange(tc.from, tc.to)
 			_, _, err := text.Edit(fromPos, toPos, nil, tc.content, nil, ctx.IssueTimeTicket())
 			assert.NoError(t, err)
 			registerElementHasRemovedNodes(fromPos, toPos, root, text)
@@ -144,21 +144,21 @@ func TestRoot(t *testing.T) {
 		ctx := helper.TextChangeContext(root)
 		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
 
-		fromPos, toPos, _ := text.CreateRange(0, 0)
+		fromPos, toPos, _ := text.CreatePosRange(0, 0)
 		_, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, `[{"val":"Hello World"}]`, text.Marshal())
 		assert.Equal(t, 0, root.GarbageLen())
 
-		fromPos, toPos, _ = text.CreateRange(6, 11)
+		fromPos, toPos, _ = text.CreatePosRange(6, 11)
 		_, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		registerElementHasRemovedNodes(fromPos, toPos, root, text)
 		assert.Equal(t, `[{"val":"Hello "},{"val":"Yorkie"}]`, text.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		fromPos, toPos, _ = text.CreateRange(0, 6)
+		fromPos, toPos, _ = text.CreatePosRange(0, 6)
 		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		registerElementHasRemovedNodes(fromPos, toPos, root, text)

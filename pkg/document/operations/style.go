@@ -27,10 +27,10 @@ type Style struct {
 	parentCreatedAt *time.Ticket
 
 	// from is the starting point of the range to apply the style to.
-	from *crdt.RGATreeSplitNodePos
+	from *crdt.RGATreeSplitNodeBoundary
 
 	// to is the end point of the range to apply the style to.
-	to *crdt.RGATreeSplitNodePos
+	to *crdt.RGATreeSplitNodeBoundary
 
 	// latestCreatedAtMapByActor is a map that stores the latest creation time
 	// by actor for the nodes included in the range to apply the style to.
@@ -46,8 +46,8 @@ type Style struct {
 // NewStyle creates a new instance of Style.
 func NewStyle(
 	parentCreatedAt *time.Ticket,
-	from *crdt.RGATreeSplitNodePos,
-	to *crdt.RGATreeSplitNodePos,
+	from *crdt.RGATreeSplitNodeBoundary,
+	to *crdt.RGATreeSplitNodeBoundary,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
@@ -75,12 +75,12 @@ func (e *Style) Execute(root *crdt.Root) error {
 }
 
 // From returns the start point of the editing range.
-func (e *Style) From() *crdt.RGATreeSplitNodePos {
+func (e *Style) From() *crdt.RGATreeSplitNodeBoundary {
 	return e.from
 }
 
 // To returns the end point of the editing range.
-func (e *Style) To() *crdt.RGATreeSplitNodePos {
+func (e *Style) To() *crdt.RGATreeSplitNodeBoundary {
 	return e.to
 }
 

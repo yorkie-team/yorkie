@@ -107,8 +107,8 @@ message Operation {
   }
   message Style {
     TimeTicket parent_created_at = 1;
-    TextNodePos from = 2;
-    TextNodePos to = 3;
+    TextNodeBoundary from = 2;
+    TextNodeBoundary to = 3;
     map<string, string> attributes = 4;
     TimeTicket executed_at = 5;
     map<string, TimeTicket> created_at_map_by_actor = 6;
@@ -231,11 +231,23 @@ message TextNode {
   TimeTicket removed_at = 3;
   TextNodeID ins_prev_id = 4;
   map<string, NodeAttr> attributes = 5;
+  MarkOps mark_ops_before = 6;
+  MarkOps mark_ops_after = 7;
 }
 
 message TextNodeID {
   TimeTicket created_at = 1;
   int32 offset = 2;
+}
+
+message MarkOps {
+  repeated MarkOp operations = 1;
+}
+
+message MarkOp {
+  TextNodeBoundary from_boundary = 1;
+  TextNodeBoundary to_boundary = 2;
+  map<string, string> attributes = 3;
 }
 
 message TreeNode {
@@ -329,6 +341,20 @@ message TextNodePos {
   TimeTicket created_at = 1;
   int32 offset = 2;
   int32 relative_offset = 3;
+}
+
+enum BoundaryType {
+  BOUNDARY_TYPE_BEFORE = 0;
+  BOUNDARY_TYPE_AFTER = 1;
+  BOUNDARY_TYPE_START = 2;
+  BOUNDARY_TYPE_END = 3;
+  BOUNDARY_TYPE_NONE = 4;
+}
+
+message TextNodeBoundary {
+  TimeTicket created_at = 1;
+  int32 offset = 2;
+  BoundaryType type = 3;
 }
 
 message TimeTicket {

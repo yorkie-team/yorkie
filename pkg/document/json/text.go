@@ -39,7 +39,7 @@ func NewText(ctx *change.Context, text *crdt.Text) *Text {
 
 // CreateRange creates a range from the given positions.
 func (p *Text) CreateRange(from, to int) (*crdt.RGATreeSplitNodePos, *crdt.RGATreeSplitNodePos) {
-	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreatePosRange(from, to)
 	if err != nil {
 		panic(err)
 	}
@@ -51,7 +51,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
-	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreatePosRange(from, to)
 	if err != nil {
 		panic(err)
 	}
@@ -97,15 +97,27 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	if from > to {
 		panic("from should be less than or equal to to")
 	}
-	fromPos, toPos, err := p.Text.CreateRange(from, to)
+	fromPos, toPos, err := p.Text.CreatePosRange(from, to)
 	if err != nil {
 		panic(err)
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	maxCreationMapByActor, err := p.Text.Style(
+
+	fromBoundary, toBoundary, err := p.Text.CreateBoundaryRange(
 		fromPos,
 		toPos,
+		ticket,
+		// TODO(MoonGyu1): Add mark spec if it is a mark operation
+		// expand,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	maxCreationMapByActor, err := p.Text.Style(
+		fromBoundary,
+		toBoundary,
 		nil,
 		attributes,
 		ticket,
@@ -116,8 +128,8 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 
 	p.context.Push(operations.NewStyle(
 		p.CreatedAt(),
-		fromPos,
-		toPos,
+		fromBoundary,
+		toBoundary,
 		maxCreationMapByActor,
 		attributes,
 		ticket,
