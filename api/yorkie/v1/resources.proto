@@ -231,11 +231,23 @@ message TextNode {
   TimeTicket removed_at = 3;
   TextNodeID ins_prev_id = 4;
   map<string, NodeAttr> attributes = 5;
+  MarkOps mark_ops_before = 6;
+  MarkOps mark_ops_after = 7;
 }
 
 message TextNodeID {
   TimeTicket created_at = 1;
   int32 offset = 2;
+}
+
+message MarkOps {
+  repeated MarkOp operations = 1;
+}
+
+message MarkOp {
+  TextNodeBoundary from_boundary = 1;
+  TextNodeBoundary to_boundary = 2;
+  map<string, string> attributes = 3;
 }
 
 message TreeNode {
