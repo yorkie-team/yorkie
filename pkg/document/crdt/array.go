@@ -30,11 +30,11 @@ type Array struct {
 }
 
 // NewArray creates a new instance of Array.
-func NewArray(elements *RGATreeList, createdAt *time.Ticket) *Array {
+func NewArray(elements *RGATreeList, createdAt *time.Ticket) (*Array, error) {
 	return &Array{
 		elements:  elements,
 		createdAt: createdAt,
-	}
+	}, nil
 }
 
 // Purge physically purge child element.
@@ -121,7 +121,10 @@ func (a *Array) DeepCopy() (Element, error) {
 		}
 	}
 
-	array := NewArray(elements, a.createdAt)
+	array, err := NewArray(elements, a.createdAt)
+	if err != nil {
+		return nil, err
+	}
 	array.removedAt = a.removedAt
 	return array, nil
 }

@@ -168,10 +168,13 @@ func fromJSONArray(pbArr *api.JSONElement_JSONArray) (*crdt.Array, error) {
 		return nil, err
 	}
 
-	arr := crdt.NewArray(
+	arr, err := crdt.NewArray(
 		elements,
 		createdAt,
 	)
+	if err != nil {
+		return nil, err
+	}
 	arr.SetMovedAt(movedAt)
 	arr.SetRemovedAt(removedAt)
 	return arr, nil

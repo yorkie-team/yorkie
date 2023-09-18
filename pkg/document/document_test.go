@@ -129,7 +129,8 @@ func TestDocument(t *testing.T) {
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
 			assert.Equal(t, 3, root.GetArray("k1").Len())
-			assert.Equal(t, `{"k1":[1,2,3]}`, root.Marshal())
+			memberNodes, err := root.Marshal()
+			assert.Equal(t, `{"k1":[1,2,3]}`, memberNodes)
 			assert.Equal(t, "[0,0]0[1,1]1[2,1]2[3,1]3", root.GetArray("k1").StructureAsString())
 
 			root.GetArray("k1").Delete(1)
@@ -429,7 +430,11 @@ func TestDocument(t *testing.T) {
 		doc := document.New("d1")
 
 		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("k1").AddInteger(1, 2, 3)
+			array, err := root.SetNewArray("k1")
+			if err != nil {
+				return err
+			}
+			array.AddInteger(1, 2, 3)
 			return nil
 		})
 		assert.NoError(t, err)

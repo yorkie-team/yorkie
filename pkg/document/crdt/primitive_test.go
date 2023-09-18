@@ -48,7 +48,8 @@ func TestPrimitive(t *testing.T) {
 
 	t.Run("creation and deep copy test", func(t *testing.T) {
 		for _, test := range tests {
-			prim := crdt.NewPrimitive(test.value, time.InitialTicket)
+			prim, err := crdt.NewPrimitive(test.value, time.InitialTicket)
+			assert.NoError(t, err)
 			assert.Equal(t, prim.ValueType(), test.valueType)
 			bytes, err := prim.Bytes()
 			assert.NoError(t, err)
@@ -74,7 +75,8 @@ func TestPrimitive(t *testing.T) {
 			prim.SetMovedAt(time.NewTicket(0, 0, actorID))
 			assert.NotEqual(t, prim.MovedAt(), copied.MovedAt())
 		}
-		longPrim := crdt.NewPrimitive(math.MaxInt32+1, time.InitialTicket)
+		longPrim, err := crdt.NewPrimitive(math.MaxInt32+1, time.InitialTicket)
+		assert.NoError(t, err)
 		assert.Equal(t, longPrim.ValueType(), crdt.Long)
 	})
 }

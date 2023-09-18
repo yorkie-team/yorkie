@@ -30,21 +30,33 @@ func TestArray(t *testing.T) {
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
 
-		a := crdt.NewArray(crdt.NewRGATreeList(), ctx.IssueTimeTicket())
-
-		err := a.Add(crdt.NewPrimitive("1", ctx.IssueTimeTicket()))
+		treeList, err := crdt.NewRGATreeList()
+		a, err := crdt.NewArray(treeList, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
+
+		primitive, err := crdt.NewPrimitive("1", ctx.IssueTimeTicket())
+		assert.NoError(t, err)
+		err = a.Add(primitive)
+		assert.NoError(t, err)
+
 		elements, err := a.Marshal()
 		assert.NoError(t, err)
 		assert.Equal(t, `["1"]`, elements)
+
+		primitive, err = crdt.NewPrimitive("2", ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		err = a.Add(crdt.NewPrimitive("2", ctx.IssueTimeTicket()))
+		err = a.Add(primitive)
 		assert.NoError(t, err)
+
 		elements, err = a.Marshal()
 		assert.NoError(t, err)
 		assert.Equal(t, `["1","2"]`, elements)
-		err = a.Add(crdt.NewPrimitive("3", ctx.IssueTimeTicket()))
+
+		primitive, err = crdt.NewPrimitive("3", ctx.IssueTimeTicket())
 		assert.NoError(t, err)
+		err = a.Add(primitive)
+		assert.NoError(t, err)
+
 		elements, err = a.Marshal()
 		assert.NoError(t, err)
 		assert.Equal(t, `["1","2","3"]`, elements)
