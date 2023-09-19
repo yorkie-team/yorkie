@@ -144,7 +144,7 @@ func (rht *ElementRHT) DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time
 
 // Elements returns a map of elements because the map easy to use for loop.
 // TODO: If we encounter performance issues, we need to replace this with other solution.
-func (rht *ElementRHT) Elements() (map[string]Element, error) {
+func (rht *ElementRHT) Elements() map[string]Element {
 	members := make(map[string]Element)
 	for _, node := range rht.nodeMapByKey {
 		if !node.isRemoved() {
@@ -152,7 +152,7 @@ func (rht *ElementRHT) Elements() (map[string]Element, error) {
 		}
 	}
 
-	return members, nil
+	return members
 }
 
 // Nodes returns a map of elements because the map easy to use for loop.
@@ -183,11 +183,8 @@ func (rht *ElementRHT) purge(elem Element) error {
 }
 
 // Marshal returns the JSON encoding of this map.
-func (rht *ElementRHT) Marshal() (string, error) {
-	members, err := rht.Elements()
-	if err != nil {
-		return "", err
-	}
+func (rht *ElementRHT) Marshal() string {
+	members := rht.Elements()
 
 	size := len(members)
 
@@ -205,13 +202,10 @@ func (rht *ElementRHT) Marshal() (string, error) {
 			sb.WriteString(",")
 		}
 		value := members[k]
-		marshaledValue, err := value.Marshal()
-		if err != nil {
-			return "", err
-		}
+		marshaledValue := value.Marshal()
 		sb.WriteString(fmt.Sprintf(`"%s":%s`, EscapeString(k), marshaledValue))
 	}
 	sb.WriteString("}")
 
-	return sb.String(), nil
+	return sb.String()
 }

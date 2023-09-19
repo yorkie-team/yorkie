@@ -91,12 +91,9 @@ func (a *Array) Elements() []Element {
 }
 
 // Marshal returns the JSON encoding of this Array.
-func (a *Array) Marshal() (string, error) {
-	elements, err := a.elements.Marshal()
-	if err != nil {
-		return "", err
-	}
-	return elements, nil
+func (a *Array) Marshal() string {
+	elements := a.elements.Marshal()
+	return elements
 }
 
 // StructureAsString returns a String containing the metadata of the elements

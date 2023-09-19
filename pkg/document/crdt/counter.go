@@ -103,8 +103,8 @@ func (p *Counter) Bytes() ([]byte, error) {
 }
 
 // Marshal returns the JSON encoding of the value.
-func (p *Counter) Marshal() (string, error) {
-	return fmt.Sprintf("%d", p.value), nil
+func (p *Counter) Marshal() string {
+	return fmt.Sprintf("%d", p.value)
 }
 
 // DeepCopy copies itself deeply.

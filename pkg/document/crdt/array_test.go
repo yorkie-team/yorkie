@@ -39,26 +39,23 @@ func TestArray(t *testing.T) {
 		err = a.Add(primitive)
 		assert.NoError(t, err)
 
-		elements, err := a.Marshal()
 		assert.NoError(t, err)
-		assert.Equal(t, `["1"]`, elements)
+		assert.Equal(t, `["1"]`, a.Marshal())
 
 		primitive, err = crdt.NewPrimitive("2", ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		err = a.Add(primitive)
 		assert.NoError(t, err)
 
-		elements, err = a.Marshal()
 		assert.NoError(t, err)
-		assert.Equal(t, `["1","2"]`, elements)
+		assert.Equal(t, `["1","2"]`, a.Marshal())
 
 		primitive, err = crdt.NewPrimitive("3", ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		err = a.Add(primitive)
 		assert.NoError(t, err)
 
-		elements, err = a.Marshal()
 		assert.NoError(t, err)
-		assert.Equal(t, `["1","2","3"]`, elements)
+		assert.Equal(t, `["1","2","3"]`, a.Marshal())
 	})
 }

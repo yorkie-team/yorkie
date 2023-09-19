@@ -155,6 +155,7 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) (*Primitive, error)
 	default:
 		return nil, ErrUnsupportedType
 	}
+
 	// panic("unsupported type")
 }
 
@@ -198,28 +199,29 @@ func (p *Primitive) Bytes() ([]byte, error) {
 }
 
 // Marshal returns the JSON encoding of the value.
-func (p *Primitive) Marshal() (string, error) {
+func (p *Primitive) Marshal() string {
 	switch p.valueType {
 	case Null:
-		return "", ErrUnsupportedType
+		return ""
 	case Boolean:
-		return fmt.Sprintf("%t", p.value), nil
+		return fmt.Sprintf("%t", p.value)
 	case Integer:
-		return fmt.Sprintf("%d", p.value), nil
+		return fmt.Sprintf("%d", p.value)
 	case Long:
-		return fmt.Sprintf("%d", p.value), nil
+		return fmt.Sprintf("%d", p.value)
 	case Double:
-		return fmt.Sprintf("%f", p.value), nil
+		return fmt.Sprintf("%f", p.value)
 	case String:
-		return fmt.Sprintf(`"%s"`, EscapeString(p.value.(string))), nil
+		return fmt.Sprintf(`"%s"`, EscapeString(p.value.(string)))
 	case Bytes:
 		// TODO: JSON.stringify({a: new Uint8Array([1,2]), b: 2})
 		// {"a":{"0":1,"1":2},"b":2}
-		return fmt.Sprintf(`"%s"`, p.value), nil
+		return fmt.Sprintf(`"%s"`, p.value)
 	case Date:
-		return fmt.Sprintf(`"%s"`, p.value.(gotime.Time).Format(gotime.RFC3339)), nil
+		return fmt.Sprintf(`"%s"`, p.value.(gotime.Time).Format(gotime.RFC3339))
+		// when Null or default
 	default:
-		return "", ErrUnsupportedType
+		return ""
 	}
 	// panic("unsupported type")
 }

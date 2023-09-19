@@ -147,7 +147,7 @@ func (t *Text) String() string {
 }
 
 // Marshal returns the JSON encoding of this Text.
-func (t *Text) Marshal() (string, error) {
+func (t *Text) Marshal() string {
 	var values []string
 
 	node := t.rgaTreeSplit.initialHead.next
@@ -160,7 +160,7 @@ func (t *Text) Marshal() (string, error) {
 		node = node.next
 	}
 
-	return fmt.Sprintf("[%s]", strings.Join(values, ",")), nil
+	return fmt.Sprintf("[%s]", strings.Join(values, ","))
 }
 
 // DeepCopy copies itself deeply.

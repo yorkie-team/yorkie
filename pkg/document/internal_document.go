@@ -186,8 +186,7 @@ func (d *InternalDocument) GarbageLen() int {
 }
 
 // Marshal returns the JSON encoding of this document.
-func (d *InternalDocument) Marshal() (string, error) {
-
+func (d *InternalDocument) Marshal() string {
 	return d.root.Object().Marshal()
 }
 

@@ -42,17 +42,9 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			newArray, err := root.SetNewArray("k1").AddNewArray()
-			if err != nil {
-				return err
-			}
-			newArray.AddString("v1")
-
-			secondArray, err := newArray.AddNewArray()
-			if err != nil {
-				return err
-			}
-			secondArray.AddString("1", "2", "3")
+			root.SetNewArray("k1").
+				AddNewArray().
+				AddString("v1").AddString("1", "2", "3")
 			return nil
 		}, "nested update by c1")
 		assert.NoError(t, err)

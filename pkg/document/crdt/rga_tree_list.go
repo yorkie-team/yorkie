@@ -87,10 +87,7 @@ func (n *RGATreeListNode) Len() int {
 
 // String returns the string representation of this node.
 func (n *RGATreeListNode) String() string {
-	elem, err := n.elem.Marshal()
-	if err != nil {
-		return ""
-	}
+	elem := n.elem.Marshal()
 	return elem
 }
 
@@ -130,7 +127,7 @@ func NewRGATreeList() (*RGATreeList, error) {
 }
 
 // Marshal returns the JSON encoding of this RGATreeList.
-func (a *RGATreeList) Marshal() (string, error) {
+func (a *RGATreeList) Marshal() string {
 	sb := strings.Builder{}
 	sb.WriteString("[")
 
@@ -143,10 +140,7 @@ func (a *RGATreeList) Marshal() (string, error) {
 			} else {
 				sb.WriteString(",")
 			}
-			elem, err := current.elem.Marshal()
-			if err != nil {
-				return "", err
-			}
+			elem := current.elem.Marshal()
 			sb.WriteString(elem)
 		}
 
@@ -155,7 +149,7 @@ func (a *RGATreeList) Marshal() (string, error) {
 
 	sb.WriteString("]")
 
-	return sb.String(), nil
+	return sb.String()
 }
 
 // Add adds the given element at the last.

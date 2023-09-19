@@ -46,18 +46,14 @@ func TestRoot(t *testing.T) {
 			err = array.Add(primitive)
 			assert.NoError(t, err)
 		}
-		elem, err := array.Marshal()
-		assert.NoError(t, err)
-		assert.Equal(t, "[0,1,2]", elem)
+		assert.Equal(t, "[0,1,2]", array.Marshal())
 
 		targetElement, _ := array.Get(1)
 		_, err = array.DeleteByCreatedAt(targetElement.CreatedAt(), ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		root.RegisterRemovedElementPair(array, targetElement)
 
-		elem, err = array.Marshal()
-		assert.NoError(t, err)
-		assert.Equal(t, "[0,2]", elem)
+		assert.Equal(t, "[0,2]", array.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
 		n, err := root.GarbageCollect(time.MaxTicket)

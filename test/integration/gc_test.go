@@ -48,14 +48,7 @@ func TestGarbageCollection(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetInteger("1", 1)
-			array, err = root.SetNewArray("2")
-			if err != nil {
-				return err
-			}
-			_, err = array.AddInteger(1, 2, 3)
-			if err != nil {
-				return err
-			}
+			root.SetNewArray("2").AddInteger(1, 2, 3)
 			root.SetInteger("3", 3)
 			return nil
 		}, "sets 1,2,3")

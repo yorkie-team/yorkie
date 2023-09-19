@@ -21,18 +21,14 @@ func TestRGATreeList(t *testing.T) {
 			err = elements.Add(primitive)
 			assert.NoError(t, err)
 		}
-		elem, err := elements.Marshal()
-		assert.NoError(t, err)
-		assert.Equal(t, `["1","2","3"]`, elem)
+		assert.Equal(t, `["1","2","3"]`, elements.Marshal())
 
 		nodes := elements.Nodes()
 		assert.Equal(t, len(nodes), 3)
 
 		targetElement, err := elements.Get(1)
 		assert.NoError(t, err)
-		elem, err = targetElement.Element().Marshal()
-		assert.NoError(t, err)
-		assert.Equal(t, `"2"`, elem)
+		assert.Equal(t, `"2"`, targetElement.Element().Marshal())
 
 		prevCreatedAt, err := elements.FindPrevCreatedAt(targetElement.CreatedAt())
 		assert.NoError(t, err)
@@ -40,21 +36,15 @@ func TestRGATreeList(t *testing.T) {
 
 		err = elements.MoveAfter(targetElement.CreatedAt(), prevCreatedAt, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		elem, err = elements.Marshal()
-		assert.NoError(t, err)
-		assert.Equal(t, `["2","1","3"]`, elem)
+		assert.Equal(t, `["2","1","3"]`, elements.Marshal())
 
 		_, err = elements.DeleteByCreatedAt(targetElement.CreatedAt(), ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		elem, err = elements.Marshal()
-		assert.NoError(t, err)
-		assert.Equal(t, `["1","3"]`, elem)
+		assert.Equal(t, `["1","3"]`, elements.Marshal())
 
 		_, err = elements.Delete(1, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
-		elem, err = elements.Marshal()
-		assert.NoError(t, err)
-		assert.Equal(t, `["1"]`, elem)
+		assert.Equal(t, `["1"]`, elements.Marshal())
 
 	})
 
