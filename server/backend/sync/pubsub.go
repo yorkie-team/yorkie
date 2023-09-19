@@ -36,7 +36,7 @@ func NewSubscription(subscriber *time.ActorID) *Subscription {
 	return &Subscription{
 		id:         xid.New().String(),
 		subscriber: subscriber,
-		events:     make(chan DocEvent, 1),
+		events:     make(chan DocEvent, 3),
 	}
 }
 
