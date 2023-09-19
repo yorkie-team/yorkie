@@ -31,6 +31,7 @@ func TestArray(t *testing.T) {
 		ctx := helper.TextChangeContext(root)
 
 		treeList, err := crdt.NewRGATreeList()
+		assert.NoError(t, err)
 		a, err := crdt.NewArray(treeList, ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 

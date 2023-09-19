@@ -43,6 +43,7 @@ func TestRoot(t *testing.T) {
 
 		for _, v := range []int{0, 1, 2} {
 			primitive, err := crdt.NewPrimitive(v, ctx.IssueTimeTicket())
+			assert.NoError(t, err)
 			err = array.Add(primitive)
 			assert.NoError(t, err)
 		}
@@ -198,6 +199,7 @@ func TestRoot(t *testing.T) {
 		assert.NoError(t, err)
 		for _, v := range []int{1, 2, 3} {
 			primitive, err := crdt.NewPrimitive(v, ctx.IssueTimeTicket())
+			assert.NoError(t, err)
 			err = arr.Add(primitive)
 			assert.NoError(t, err)
 		}

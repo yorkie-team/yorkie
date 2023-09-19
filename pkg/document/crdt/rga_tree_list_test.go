@@ -18,6 +18,7 @@ func TestRGATreeList(t *testing.T) {
 
 		for _, v := range []string{"1", "2", "3"} {
 			primitive, err := crdt.NewPrimitive(v, ctx.IssueTimeTicket())
+			assert.NoError(t, err)
 			err = elements.Add(primitive)
 			assert.NoError(t, err)
 		}
