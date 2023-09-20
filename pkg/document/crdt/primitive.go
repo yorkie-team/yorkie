@@ -67,8 +67,6 @@ func ValueFromBytes(valueType ValueType, value []byte) (interface{}, error) {
 	default:
 		return nil, ErrUnsupportedType
 	}
-
-	// panic("unsupported type")
 }
 
 // Primitive represents JSON primitive data type including logical lock.
@@ -155,8 +153,6 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) (*Primitive, error)
 	default:
 		return nil, ErrUnsupportedType
 	}
-
-	// panic("unsupported type")
 }
 
 // Bytes creates an array representing the value.
@@ -194,8 +190,6 @@ func (p *Primitive) Bytes() ([]byte, error) {
 	default:
 		return nil, ErrUnsupportedType
 	}
-
-	// panic("unsupported type")
 }
 
 // Marshal returns the JSON encoding of the value.
@@ -223,7 +217,6 @@ func (p *Primitive) Marshal() string {
 	default:
 		return ""
 	}
-	// panic("unsupported type")
 }
 
 // DeepCopy copies itself deeply.
