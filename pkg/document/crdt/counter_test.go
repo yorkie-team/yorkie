@@ -121,10 +121,6 @@ func TestCounter(t *testing.T) {
 		unsupportedTypeErrorTest(true)
 		unsupportedTypeErrorTest([]byte{2})
 		unsupportedTypeErrorTest(gotime.Now())
-
-		//assert.Equal(t, elemInteger, "23")
-		//assert.Equal(t, elemLong, "28")
-		//assert.Equal(t, elemDouble, "21")
 	})
 
 	t.Run("Counter value overflow test", func(t *testing.T) {
