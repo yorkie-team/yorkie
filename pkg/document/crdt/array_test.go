@@ -32,8 +32,7 @@ func TestArray(t *testing.T) {
 
 		treeList, err := crdt.NewRGATreeList()
 		assert.NoError(t, err)
-		a, err := crdt.NewArray(treeList, ctx.IssueTimeTicket())
-		assert.NoError(t, err)
+		a := crdt.NewArray(treeList, ctx.IssueTimeTicket())
 
 		primitive, err := crdt.NewPrimitive("1", ctx.IssueTimeTicket())
 		assert.NoError(t, err)

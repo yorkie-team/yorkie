@@ -51,10 +51,7 @@ func TestPrimitive(t *testing.T) {
 			prim, err := crdt.NewPrimitive(test.value, time.InitialTicket)
 			assert.NoError(t, err)
 			assert.Equal(t, prim.ValueType(), test.valueType)
-			bytes, err := prim.Bytes()
-			assert.NoError(t, err)
-
-			value, err := crdt.ValueFromBytes(prim.ValueType(), bytes)
+			value, err := crdt.ValueFromBytes(prim.ValueType(), prim.Bytes())
 			assert.NoError(t, err)
 			assert.Equal(t, prim.Value(), value)
 			assert.Equal(t, prim.Marshal(), test.marshal)

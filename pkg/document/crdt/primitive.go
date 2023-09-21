@@ -156,39 +156,39 @@ func NewPrimitive(value interface{}, createdAt *time.Ticket) (*Primitive, error)
 }
 
 // Bytes creates an array representing the value.
-func (p *Primitive) Bytes() ([]byte, error) {
+func (p *Primitive) Bytes() []byte {
 	if p.valueType == Null {
-		return nil, nil
+		return nil
 	}
 
 	switch val := p.value.(type) {
 	case bool:
 		if val {
-			return []byte{1}, nil
+			return []byte{1}
 		}
-		return []byte{0}, nil
+		return []byte{0}
 	case int32:
 		bytes := [4]byte{}
 		binary.LittleEndian.PutUint32(bytes[:], uint32(val))
-		return bytes[:], nil
+		return bytes[:]
 	case int64:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], uint64(val))
-		return bytes[:], nil
+		return bytes[:]
 	case float64:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], math.Float64bits(val))
-		return bytes[:], nil
+		return bytes[:]
 	case string:
-		return []byte(val), nil
+		return []byte(val)
 	case []byte:
-		return val, nil
+		return val
 	case gotime.Time:
 		bytes := [8]byte{}
 		binary.LittleEndian.PutUint64(bytes[:], uint64(val.UTC().UnixMilli()))
-		return bytes[:], nil
+		return bytes[:]
 	default:
-		return nil, ErrUnsupportedType
+		return nil
 	}
 }
 

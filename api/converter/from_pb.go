@@ -743,7 +743,7 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		if err != nil {
 			return nil, err
 		}
-		return crdt.NewArray(elements, createdAt)
+		return crdt.NewArray(elements, createdAt), nil
 	case api.ValueType_VALUE_TYPE_NULL:
 		fallthrough
 	case api.ValueType_VALUE_TYPE_BOOLEAN:

@@ -87,8 +87,7 @@ func (n *RGATreeListNode) Len() int {
 
 // String returns the string representation of this node.
 func (n *RGATreeListNode) String() string {
-	elem := n.elem.Marshal()
-	return elem
+	return n.elem.Marshal()
 }
 
 func (n *RGATreeListNode) isRemoved() bool {
@@ -140,8 +139,7 @@ func (a *RGATreeList) Marshal() string {
 			} else {
 				sb.WriteString(",")
 			}
-			elem := current.elem.Marshal()
-			sb.WriteString(elem)
+			sb.WriteString(current.elem.Marshal())
 		}
 
 		current = current.next

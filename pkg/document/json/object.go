@@ -54,13 +54,9 @@ func (p *Object) SetNewArray(k string) *Array {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		elements, err := crdt.NewRGATreeList()
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
-		newArray, err := crdt.NewArray(elements, ticket)
-		if err != nil {
-			panic("unsupported type")
-		}
-		return NewArray(p.context, newArray)
+		return NewArray(p.context, crdt.NewArray(elements, ticket))
 	})
 
 	return v.(*Array)
@@ -130,7 +126,7 @@ func (p *Object) SetNull(k string) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(nil, ticket)
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
 		return primitive
 	})
@@ -142,7 +138,7 @@ func (p *Object) SetBool(k string, v bool) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
 		return primitive
 	})
@@ -154,7 +150,7 @@ func (p *Object) SetInteger(k string, v int) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
 		return primitive
 	})
@@ -166,7 +162,7 @@ func (p *Object) SetLong(k string, v int64) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
 		return primitive
 	})
@@ -179,7 +175,7 @@ func (p *Object) SetDouble(k string, v float64) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
 		return primitive
 	})
@@ -191,7 +187,7 @@ func (p *Object) SetString(k, v string) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
 		return primitive
 	})
@@ -204,7 +200,7 @@ func (p *Object) SetBytes(k string, v []byte) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
 		return primitive
 	})
@@ -217,7 +213,7 @@ func (p *Object) SetDate(k string, v gotime.Time) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
 		return primitive
 	})

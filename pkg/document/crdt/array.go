@@ -30,11 +30,11 @@ type Array struct {
 }
 
 // NewArray creates a new instance of Array.
-func NewArray(elements *RGATreeList, createdAt *time.Ticket) (*Array, error) {
+func NewArray(elements *RGATreeList, createdAt *time.Ticket) *Array {
 	return &Array{
 		elements:  elements,
 		createdAt: createdAt,
-	}, nil
+	}
 }
 
 // Purge physically purge child element.
@@ -92,8 +92,7 @@ func (a *Array) Elements() []Element {
 
 // Marshal returns the JSON encoding of this Array.
 func (a *Array) Marshal() string {
-	elements := a.elements.Marshal()
-	return elements
+	return a.elements.Marshal()
 }
 
 // StructureAsString returns a String containing the metadata of the elements
@@ -118,10 +117,7 @@ func (a *Array) DeepCopy() (Element, error) {
 		}
 	}
 
-	array, err := NewArray(elements, a.createdAt)
-	if err != nil {
-		return nil, err
-	}
+	array := NewArray(elements, a.createdAt)
 	array.removedAt = a.removedAt
 	return array, nil
 }

@@ -45,7 +45,7 @@ func (p *Array) AddNull() *Array {
 	p.addInternal(func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(nil, ticket)
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
 		return primitive
 	})
@@ -59,7 +59,7 @@ func (p *Array) AddBool(values ...bool) *Array {
 		p.addInternal(func(ticket *time.Ticket) crdt.Element {
 			primitive, err := crdt.NewPrimitive(value, ticket)
 			if err != nil {
-				panic("unsupported type")
+				panic(err)
 			}
 			return primitive
 		})
@@ -73,7 +73,7 @@ func (p *Array) AddInteger(values ...int) *Array {
 		p.addInternal(func(ticket *time.Ticket) crdt.Element {
 			primitive, err := crdt.NewPrimitive(value, ticket)
 			if err != nil {
-				panic("unsupported type")
+				panic(err)
 			}
 			return primitive
 		})
@@ -87,7 +87,7 @@ func (p *Array) AddLong(values ...int64) *Array {
 		p.addInternal(func(ticket *time.Ticket) crdt.Element {
 			primitive, err := crdt.NewPrimitive(value, ticket)
 			if err != nil {
-				panic("unsupported type")
+				panic(err)
 			}
 			return primitive
 		})
@@ -101,7 +101,7 @@ func (p *Array) AddDouble(values ...float64) *Array {
 		p.addInternal(func(ticket *time.Ticket) crdt.Element {
 			primitive, err := crdt.NewPrimitive(value, ticket)
 			if err != nil {
-				panic("unsupported type")
+				panic(err)
 			}
 			return primitive
 		})
@@ -115,7 +115,7 @@ func (p *Array) AddString(values ...string) *Array {
 		p.addInternal(func(ticket *time.Ticket) crdt.Element {
 			primitive, err := crdt.NewPrimitive(value, ticket)
 			if err != nil {
-				panic("unsupported type")
+				panic(err)
 			}
 			return primitive
 		})
@@ -129,7 +129,7 @@ func (p *Array) AddBytes(values ...[]byte) *Array {
 		p.addInternal(func(ticket *time.Ticket) crdt.Element {
 			primitive, err := crdt.NewPrimitive(value, ticket)
 			if err != nil {
-				panic("unsupported type")
+				panic(err)
 			}
 			return primitive
 		})
@@ -143,7 +143,7 @@ func (p *Array) AddDate(values ...gotime.Time) *Array {
 		p.addInternal(func(ticket *time.Ticket) crdt.Element {
 			primitive, err := crdt.NewPrimitive(value, ticket)
 			if err != nil {
-				panic("unsupported type")
+				panic(err)
 			}
 			return primitive
 		})
@@ -155,14 +155,10 @@ func (p *Array) AddDate(values ...gotime.Time) *Array {
 func (p *Array) AddNewArray() *Array {
 	elements, err := crdt.NewRGATreeList()
 	if err != nil {
-		panic("unsupported type")
+		panic(err)
 	}
 	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
-		newArray, err := crdt.NewArray(elements, ticket)
-		if err != nil {
-			panic("unsupported type")
-		}
-		return NewArray(p.context, newArray)
+		return NewArray(p.context, crdt.NewArray(elements, ticket))
 	})
 
 	return v.(*Array)
@@ -179,7 +175,7 @@ func (p *Array) InsertIntegerAfter(index int, v int) *Array {
 	p.insertAfterInternal(p.Get(index).CreatedAt(), func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
-			panic("unsupported type")
+			panic(err)
 		}
 		return primitive
 	})
@@ -229,8 +225,7 @@ func (p *Array) Len() int {
 func (p *Array) addInternal(
 	creator func(ticket *time.Ticket) crdt.Element,
 ) crdt.Element {
-	elem := p.insertAfterInternal(p.Array.LastCreatedAt(), creator)
-	return elem
+	return p.insertAfterInternal(p.Array.LastCreatedAt(), creator)
 }
 func (p *Array) insertAfterInternal(
 	prevCreatedAt *time.Ticket,
@@ -242,7 +237,6 @@ func (p *Array) insertAfterInternal(
 
 	copiedValue, err := value.DeepCopy()
 	if err != nil {
-		// return nil, fmt.Errorf("error : %w", err)
 		panic(err)
 	}
 	p.context.Push(operations.NewAdd(
@@ -253,7 +247,6 @@ func (p *Array) insertAfterInternal(
 	))
 
 	if err = p.InsertAfter(prevCreatedAt, value); err != nil {
-		// return nil, fmt.Errorf("error : %w", err)
 		panic(err)
 	}
 	p.context.RegisterElement(value)

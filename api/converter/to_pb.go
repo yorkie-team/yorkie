@@ -421,14 +421,10 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 		if err != nil {
 			return nil, err
 		}
-		bytes, err := elem.Bytes()
-		if err != nil {
-			return nil, err
-		}
 		return &api.JSONElementSimple{
 			Type:      pbValueType,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
-			Value:     bytes,
+			Value:     elem.Bytes(),
 		}, nil
 	case *crdt.Text:
 		return &api.JSONElementSimple{

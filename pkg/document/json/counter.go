@@ -72,7 +72,7 @@ func (p *Counter) Increase(v interface{}) *Counter {
 		panic("unsupported type")
 	}
 	if err != nil {
-		panic("unsupported type")
+		panic(err)
 	}
 	if _, err := p.Counter.Increase(primitive); err != nil {
 		panic(err)

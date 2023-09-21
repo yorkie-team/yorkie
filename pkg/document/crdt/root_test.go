@@ -38,8 +38,7 @@ func TestRoot(t *testing.T) {
 		ctx := helper.TextChangeContext(root)
 		elements, err := crdt.NewRGATreeList()
 		assert.NoError(t, err)
-		array, err := crdt.NewArray(elements, ctx.IssueTimeTicket())
-		assert.NoError(t, err)
+		array := crdt.NewArray(elements, ctx.IssueTimeTicket())
 
 		for _, v := range []int{0, 1, 2} {
 			primitive, err := crdt.NewPrimitive(v, ctx.IssueTimeTicket())
@@ -53,7 +52,6 @@ func TestRoot(t *testing.T) {
 		_, err = array.DeleteByCreatedAt(targetElement.CreatedAt(), ctx.IssueTimeTicket())
 		assert.NoError(t, err)
 		root.RegisterRemovedElementPair(array, targetElement)
-
 		assert.Equal(t, "[0,2]", array.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
@@ -195,8 +193,7 @@ func TestRoot(t *testing.T) {
 		obj.Set("1", primitive)
 		elements, err := crdt.NewRGATreeList()
 		assert.NoError(t, err)
-		arr, err := crdt.NewArray(elements, ctx.IssueTimeTicket())
-		assert.NoError(t, err)
+		arr := crdt.NewArray(elements, ctx.IssueTimeTicket())
 		for _, v := range []int{1, 2, 3} {
 			primitive, err := crdt.NewPrimitive(v, ctx.IssueTimeTicket())
 			assert.NoError(t, err)

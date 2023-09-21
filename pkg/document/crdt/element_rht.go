@@ -202,8 +202,7 @@ func (rht *ElementRHT) Marshal() string {
 			sb.WriteString(",")
 		}
 		value := members[k]
-		marshaledValue := value.Marshal()
-		sb.WriteString(fmt.Sprintf(`"%s":%s`, EscapeString(k), marshaledValue))
+		sb.WriteString(fmt.Sprintf(`"%s":%s`, EscapeString(k), value.Marshal()))
 	}
 	sb.WriteString("}")
 
