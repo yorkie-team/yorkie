@@ -29,10 +29,10 @@ type EditReverse struct {
 	parentCreatedAt *time.Ticket
 
 	// deletedIDs represents the ids of deleted nodes from the edit operation.
-	deletedIDs []*TextNodeIDWithLength
+	deletedIDs []*crdt.RGATreeSplitNodePos
 
 	// insertedIDs represents the ids of inserted nodes from the edit operation.
-	insertedIDs []*TextNodeIDWithLength
+	insertedIDs []*crdt.RGATreeSplitNodePos
 
 	// latestCreatedAtMapByActor is a map that stores the latest creation time
 	// by actor for the nodes included in the editing range.
@@ -45,33 +45,11 @@ type EditReverse struct {
 	executedAt *time.Ticket
 }
 
-// TextNodeIDWithLength is the struct representing RGATreeSplitNodeID with
-// the length of the node's content when the reverse operation is defined.
-type TextNodeIDWithLength struct {
-	nodeID *crdt.RGATreeSplitNodeID
-	length int32
-}
-
-// NewTextNodeIDWithLength returns new TextNodeIDWithLength struct.
-func NewTextNodeIDWithLength(id *crdt.RGATreeSplitNodeID, length int32) *TextNodeIDWithLength {
-	return &TextNodeIDWithLength{id, length}
-}
-
-// NodeID returns the nodeID of this TextNodeIDWithLength.
-func (id *TextNodeIDWithLength) NodeID() *crdt.RGATreeSplitNodeID {
-	return id.nodeID
-}
-
-// Length returns the length of this TextNodeIDWithLength.
-func (id *TextNodeIDWithLength) Length() int32 {
-	return id.length
-}
-
 // NewEditReverse creates a new instance of Edit.
 func NewEditReverse(
 	parentCreatedAt *time.Ticket,
-	deletedIDs []*TextNodeIDWithLength,
-	insertedIDs []*TextNodeIDWithLength,
+	deletedIDs []*crdt.RGATreeSplitNodePos,
+	insertedIDs []*crdt.RGATreeSplitNodePos,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
@@ -93,12 +71,12 @@ func (e *EditReverse) Execute(root *crdt.Root) error {
 }
 
 // DeletedIDs returns the deleted IDs of this operation.
-func (e *EditReverse) DeletedIDs() []*TextNodeIDWithLength {
+func (e *EditReverse) DeletedIDs() []*crdt.RGATreeSplitNodePos {
 	return e.deletedIDs
 }
 
 // InsertedIDs returns the inserted IDs of this operation.
-func (e *EditReverse) InsertedIDs() []*TextNodeIDWithLength {
+func (e *EditReverse) InsertedIDs() []*crdt.RGATreeSplitNodePos {
 	return e.insertedIDs
 }
 

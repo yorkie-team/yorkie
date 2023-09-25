@@ -442,20 +442,20 @@ func fromEditReverse(pbEditReverse *api.Operation_EditReverse) (*operations.Edit
 		return nil, err
 	}
 
-	var deletedIDs []*operations.TextNodeIDWithLength
+	var deletedIDs []*crdt.RGATreeSplitNodePos
 	pbDeletedIDs := pbEditReverse.GetDeletedIds()
 	for _, pbDeletedID := range pbDeletedIDs {
-		deletedID, err := fromTextNodeIDWithLength(pbDeletedID)
+		deletedID, err := fromTextNodePos(pbDeletedID)
 		if err != nil {
 			return nil, err
 		}
 		deletedIDs = append(deletedIDs, deletedID)
 	}
 
-	var insertedIDs []*operations.TextNodeIDWithLength
+	var insertedIDs []*crdt.RGATreeSplitNodePos
 	pbInsertedIDs := pbEditReverse.GetInsertedIds()
 	for _, pbInsertedID := range pbInsertedIDs {
-		insertedID, err := fromTextNodeIDWithLength(pbInsertedID)
+		insertedID, err := fromTextNodePos(pbInsertedID)
 		if err != nil {
 			return nil, err
 		}
@@ -627,16 +627,6 @@ func fromTextNodePos(
 		crdt.NewRGATreeSplitNodeID(createdAt, int(pbPos.Offset)),
 		int(pbPos.RelativeOffset),
 	), nil
-}
-
-func fromTextNodeIDWithLength(
-	pbID *api.TextNodeIDWithLength,
-) (*operations.TextNodeIDWithLength, error) {
-	textNodeID, err := fromTextNodeID(pbID.NodeId)
-	if err != nil {
-		return nil, err
-	}
-	return operations.NewTextNodeIDWithLength(textNodeID, pbID.Length), nil
 }
 
 // FromTreeNodes converts protobuf tree nodes to crdt.TreeNode. The last node

@@ -354,16 +354,16 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 }
 
 func toEditReverse(e *operations.EditReverse) (*api.Operation_EditReverse_, error) {
-	var pbDeletedIDs []*api.TextNodeIDWithLength
+	var pbDeletedIDs []*api.TextNodePos
 	deletedIDs := e.DeletedIDs()
 	for _, deletedID := range deletedIDs {
-		pbDeletedIDs = append(pbDeletedIDs, toTextNodeIDWithLength(deletedID))
+		pbDeletedIDs = append(pbDeletedIDs, toTextNodePos(deletedID))
 	}
 
-	var pbInsertedIDs []*api.TextNodeIDWithLength
+	var pbInsertedIDs []*api.TextNodePos
 	insertedIDs := e.InsertedIDs()
 	for _, insertedID := range insertedIDs {
-		pbInsertedIDs = append(pbInsertedIDs, toTextNodeIDWithLength(insertedID))
+		pbInsertedIDs = append(pbInsertedIDs, toTextNodePos(insertedID))
 	}
 
 	return &api.Operation_EditReverse_{
@@ -494,13 +494,6 @@ func toTextNodePos(pos *crdt.RGATreeSplitNodePos) *api.TextNodePos {
 		CreatedAt:      ToTimeTicket(pos.ID().CreatedAt()),
 		Offset:         int32(pos.ID().Offset()),
 		RelativeOffset: int32(pos.RelativeOffset()),
-	}
-}
-
-func toTextNodeIDWithLength(id *operations.TextNodeIDWithLength) *api.TextNodeIDWithLength {
-	return &api.TextNodeIDWithLength{
-		NodeId: toTextNodeID(id.NodeID()),
-		Length: id.Length(),
 	}
 }
 
