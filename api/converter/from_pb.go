@@ -435,13 +435,6 @@ func fromEditReverse(pbEditReverse *api.Operation_EditReverse) (*operations.Edit
 		return nil, err
 	}
 
-	createdAtMapByActor, err := fromCreatedAtMapByActor(
-		pbEditReverse.CreatedAtMapByActor,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	var deletedIDs []*crdt.RGATreeSplitNodePos
 	pbDeletedIDs := pbEditReverse.GetDeletedIds()
 	for _, pbDeletedID := range pbDeletedIDs {
@@ -470,7 +463,6 @@ func fromEditReverse(pbEditReverse *api.Operation_EditReverse) (*operations.Edit
 		parentCreatedAt,
 		deletedIDs,
 		insertedIDs,
-		createdAtMapByActor,
 		pbEditReverse.Attributes,
 		executedAt,
 	), nil

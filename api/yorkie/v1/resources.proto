@@ -137,9 +137,8 @@ message Operation {
     TimeTicket parent_created_at = 1;
     repeated TextNodePos deleted_ids = 2;
     repeated TextNodePos inserted_ids = 3;
-    map<string, TimeTicket> created_at_map_by_actor = 4;
-    TimeTicket executed_at = 5;
-    map<string, string> attributes = 6;
+    TimeTicket executed_at = 4;
+    map<string, string> attributes = 5;
   }
 
   oneof body {

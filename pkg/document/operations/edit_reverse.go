@@ -50,17 +50,15 @@ func NewEditReverse(
 	parentCreatedAt *time.Ticket,
 	deletedIDs []*crdt.RGATreeSplitNodePos,
 	insertedIDs []*crdt.RGATreeSplitNodePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 ) *EditReverse {
 	return &EditReverse{
-		parentCreatedAt:           parentCreatedAt,
-		deletedIDs:                deletedIDs,
-		insertedIDs:               insertedIDs,
-		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
-		attributes:                attributes,
-		executedAt:                executedAt,
+		parentCreatedAt: parentCreatedAt,
+		deletedIDs:      deletedIDs,
+		insertedIDs:     insertedIDs,
+		attributes:      attributes,
+		executedAt:      executedAt,
 	}
 }
 

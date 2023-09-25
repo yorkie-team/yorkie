@@ -368,12 +368,11 @@ func toEditReverse(e *operations.EditReverse) (*api.Operation_EditReverse_, erro
 
 	return &api.Operation_EditReverse_{
 		EditReverse: &api.Operation_EditReverse{
-			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
-			DeletedIds:          pbDeletedIDs,
-			InsertedIds:         pbInsertedIDs,
-			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
-			Attributes:          e.Attributes(),
-			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
+			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
+			DeletedIds:      pbDeletedIDs,
+			InsertedIds:     pbInsertedIDs,
+			Attributes:      e.Attributes(),
+			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
 }
