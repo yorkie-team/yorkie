@@ -28,8 +28,7 @@ The `json` and `crdt` package has data structures for representing the contents 
 
 Below is the dependency graph of data structures used in a JSON-like document.
 
-
-<img src="https://github.com/yorkie-team/yorkie/assets/78714820/d91aebad-4637-4873-803e-cda025ade1f6" width="700" />
+![data-structure](media/data-structure.png)
 
 
 The data structures can be divided into three groups:
@@ -42,7 +41,7 @@ The data structures of each group have the dependencies shown in the figure abov
 
 ### JSON-like Group
 
-JSON-like data strucutres are used when editing JSON-like documents.
+JSON-like data structures are used when editing JSON-like documents.
 
 - `Primitive`: represents primitive data like `string`, `number`, `boolean`, `null`, etc.
 - `Object`: represents [object type](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object) of JavaScript. Just like JavaScript, you can use `Object` as [hash table](https://en.wikipedia.org/wiki/Hash_table).
@@ -83,7 +82,6 @@ Common data structures can be used for general purposes.
 
 - [`SplayTree`](https://en.wikipedia.org/wiki/Splay_tree): A tree that moves nodes to the root by splaying. This is effective when user frequently access the same location, such as text editing. We use `SplayTree` as an index tree to give each node a weight, and to quickly access the node based on the index.
 - [`LLRBTree`](https://en.wikipedia.org/wiki/Left-leaning_red%E2%80%93black_tree): A tree simpler than Red-Black Tree. Newly added `floor` method finds the node of the largest key less than or equal to the given key.
-- [`Trie`](https://en.wikipedia.org/wiki/Trie): A data structure that can quickly search for prefixes of sequence data such as strings. We use `Trie` to remove nested events when the contents of the `Document` are modified at once.
 - `IndexTree`: A tree implementation to represent a document of text-based editors.
   
 ### Risks and Mitigation
