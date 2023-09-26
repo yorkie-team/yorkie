@@ -28,8 +28,7 @@ The `json` and `crdt` package has data structures for representing the contents 
 
 Below is the dependency graph of data structures used in a JSON-like document.
 
-
-<img src="https://github.com/yorkie-team/yorkie/assets/78714820/d91aebad-4637-4873-803e-cda025ade1f6" width="700" />
+![data-structure](media/data-structure.png)
 
 
 The data structures can be divided into three groups:
@@ -42,7 +41,7 @@ The data structures of each group have the dependencies shown in the figure abov
 
 ### JSON-like Group
 
-JSON-like data strucutres are used when editing JSON-like documents.
+JSON-like data structures are used when editing JSON-like documents.
 
 - `Primitive`: represents primitive data like `string`, `number`, `boolean`, `null`, etc.
 - `Object`: represents [object type](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object) of JavaScript. Just like JavaScript, you can use `Object` as [hash table](https://en.wikipedia.org/wiki/Hash_table).
