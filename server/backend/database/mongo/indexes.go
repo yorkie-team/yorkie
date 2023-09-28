@@ -33,6 +33,16 @@ const (
 	colChanges    = "changes"
 	colSnapshots  = "snapshots"
 	colSyncedSeqs = "syncedseqs"
+
+	colProjectOwnersNames       = "proxy_project_owners_names"
+	colProjectPublicKeys        = "proxy_project_publickeys"
+	colProjectSecretKeys        = "proxy_project_secretkeys"
+	colUserNames                = "proxy_user_usernames"
+	colClientProjectIDsKeys     = "proxy_client_projectids_keys"
+	colDocumentProjectIDsKeys   = "proxy_document_projectids_keys"
+	colChangeDocIDsServerSeqs   = "proxy_change_docids_serverseqs"
+	colSnapshotDocIDsServerSeqs = "proxy_snapshot_docids_serverseqs"
+	colSyncedSeqDocIDsClientIDs = "proxy_synceseq_docids_clientids"
 )
 
 type collectionInfo struct {
@@ -43,26 +53,9 @@ type collectionInfo struct {
 // Below are names and indexes information of collections that stores Yorkie data.
 var collectionInfos = []collectionInfo{
 	{
-		name: colProjects,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "owner", Value: bsonx.Int32(1)},
-				{Key: "name", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}, {
-			Keys:    bsonx.Doc{{Key: "public_key", Value: bsonx.Int32(1)}},
-			Options: options.Index().SetUnique(true),
-		}, {
-			Keys:    bsonx.Doc{{Key: "secret_key", Value: bsonx.Int32(1)}},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
 		name: colUsers,
 		indexes: []mongo.IndexModel{{
-			Keys:    bsonx.Doc{{Key: "username", Value: bsonx.Int32(1)}},
-			Options: options.Index().SetUnique(true),
+			Keys: bsonx.Doc{{Key: "username", Value: bsonx.Int32(1)}},
 		}},
 	},
 	{
@@ -72,7 +65,6 @@ var collectionInfos = []collectionInfo{
 				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "key", Value: bsonx.Int32(1)},
 			},
-			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bsonx.Doc{
 				{Key: "project_id", Value: bsonx.Int32(1)},
@@ -92,11 +84,6 @@ var collectionInfos = []collectionInfo{
 				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "key", Value: bsonx.Int32(1)},
 			},
-			Options: options.Index().SetPartialFilterExpression(
-				bsonx.Doc{
-					{Key: "removed_at", Value: bsonx.Null()},
-				},
-			).SetUnique(true),
 		}},
 	}, {
 		name: colChanges,
@@ -105,7 +92,6 @@ var collectionInfos = []collectionInfo{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
-			Options: options.Index().SetUnique(true),
 		}},
 	}, {
 		name: colSnapshots,
@@ -114,7 +100,6 @@ var collectionInfos = []collectionInfo{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
-			Options: options.Index().SetUnique(true),
 		}},
 	}, {
 		name: colSyncedSeqs,
@@ -123,13 +108,100 @@ var collectionInfos = []collectionInfo{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "client_id", Value: bsonx.Int32(1)},
 			},
-			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bsonx.Doc{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "lamport", Value: bsonx.Int32(1)},
 				{Key: "actor_id", Value: bsonx.Int32(1)},
 			},
+		}},
+	},
+	{
+		name: colProjectOwnersNames,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "owner", Value: bsonx.Int32(1)},
+				{Key: "name", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: colProjectPublicKeys,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "public_key", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: colProjectSecretKeys,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "secret_key", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: colUserNames,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "username", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: colClientProjectIDsKeys,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "key", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: colDocumentProjectIDsKeys,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "key", Value: bsonx.Int32(1)},
+				{Key: "removed_at", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: colChangeDocIDsServerSeqs,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "doc_id", Value: bsonx.Int32(1)},
+				{Key: "server_seq", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: colSnapshotDocIDsServerSeqs,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "doc_id", Value: bsonx.Int32(1)},
+				{Key: "server_seq", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
+		}},
+	},
+	{
+		name: colSyncedSeqDocIDsClientIDs,
+		indexes: []mongo.IndexModel{{
+			Keys: bsonx.Doc{
+				{Key: "doc_id", Value: bsonx.Int32(1)},
+				{Key: "client_id", Value: bsonx.Int32(1)},
+			},
+			Options: options.Index().SetUnique(true),
 		}},
 	},
 }

@@ -214,24 +214,53 @@ func (c *Client) CreateProjectInfo(
 		return nil, err
 	}
 
+	projectID := primitive.NewObjectID()
 	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
-	result, err := c.collection(colProjects).InsertOne(ctx, bson.M{
-		"name":                        info.Name,
-		"owner":                       encodedOwner,
-		"client_deactivate_threshold": info.ClientDeactivateThreshold,
-		"public_key":                  info.PublicKey,
-		"secret_key":                  info.SecretKey,
-		"created_at":                  info.CreatedAt,
-	})
-	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return nil, database.ErrProjectAlreadyExists
-		}
+	info.ID = types.ID(projectID.Hex())
 
-		return nil, fmt.Errorf("create project info: %w", err)
+	cols := []string{colProjectOwnersNames, colProjectPublicKeys, colProjectSecretKeys, colProjects}
+	documents := map[string]bson.M{
+		colProjectOwnersNames: {
+			"project_id": projectID,
+			"owner":      encodedOwner,
+			"name":       info.Name,
+		},
+		colProjectPublicKeys: {
+			"project_id": projectID,
+			"public_key": info.PublicKey,
+		},
+		colProjectSecretKeys: {
+			"project_id": projectID,
+			"secret_key": info.SecretKey,
+		},
+		colProjects: {
+			"_id":                         projectID,
+			"name":                        info.Name,
+			"owner":                       encodedOwner,
+			"client_deactivate_threshold": info.ClientDeactivateThreshold,
+			"public_key":                  info.PublicKey,
+			"secret_key":                  info.SecretKey,
+			"created_at":                  info.CreatedAt,
+		},
 	}
 
-	info.ID = types.ID(result.InsertedID.(primitive.ObjectID).Hex())
+	for idx, col := range cols {
+		if _, err := c.collection(col).InsertOne(ctx, documents[col]); err != nil {
+			// delete previously created proxy info to keep consistency
+			subErr := c.deleteProjectProxyInfo(ctx, documents, cols[:idx])
+			if subErr != nil {
+				return nil, fmt.Errorf(
+					"create project info: %s: delete proxy info: %w", err, subErr)
+			}
+
+			if mongo.IsDuplicateKeyError(err) {
+				return nil, database.ErrProjectAlreadyExists
+			}
+
+			return nil, fmt.Errorf("create project info: %w", err)
+		}
+	}
+
 	return info, nil
 }
 
@@ -384,6 +413,25 @@ func (c *Client) UpdateProjectInfo(
 	}
 	updatableFields["updated_at"] = gotime.Now()
 
+	if projectName, ok := updatableFields["name"]; ok {
+		res := c.collection(colProjectOwnersNames).FindOneAndUpdate(ctx, bson.M{
+			"project_id": encodedID,
+			"owner":      encodedOwner,
+		}, bson.M{
+			"$set": primitive.M{"name": projectName},
+		}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+
+		if err := res.Err(); err != nil {
+			if err == mongo.ErrNoDocuments {
+				return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+			}
+			if mongo.IsDuplicateKeyError(err) {
+				return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+			}
+			return nil, fmt.Errorf("decode project name info: %w", err)
+		}
+	}
+
 	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
 		"_id":   encodedID,
 		"owner": encodedOwner,
@@ -396,9 +444,7 @@ func (c *Client) UpdateProjectInfo(
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
-		if mongo.IsDuplicateKeyError(err) {
-			return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
-		}
+
 		return nil, fmt.Errorf("decode project info: %w", err)
 	}
 
@@ -411,13 +457,16 @@ func (c *Client) CreateUserInfo(
 	username string,
 	hashedPassword string,
 ) (*database.UserInfo, error) {
+	userID := primitive.NewObjectID()
 	info := database.NewUserInfo(username, hashedPassword)
-	result, err := c.collection(colUsers).InsertOne(ctx, bson.M{
-		"username":        info.Username,
-		"hashed_password": info.HashedPassword,
-		"created_at":      info.CreatedAt,
-	})
-	if err != nil {
+	info.ID = types.ID(userID.Hex())
+
+	if _, err := c.collection(colUserNames).InsertOne(
+		ctx,
+		bson.M{
+			"user_id":  userID,
+			"username": info.Username,
+		}); err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return nil, database.ErrUserAlreadyExists
 		}
@@ -425,7 +474,16 @@ func (c *Client) CreateUserInfo(
 		return nil, fmt.Errorf("create user info: %w", err)
 	}
 
-	info.ID = types.ID(result.InsertedID.(primitive.ObjectID).Hex())
+	_, err := c.collection(colUsers).InsertOne(ctx, bson.M{
+		"_id":             userID,
+		"username":        info.Username,
+		"hashed_password": info.HashedPassword,
+		"created_at":      info.CreatedAt,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create user info: %w", err)
+	}
+
 	return info, nil
 }
 
@@ -471,6 +529,19 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	}
 
 	now := gotime.Now()
+	clientID := primitive.NewObjectID()
+	_, err = c.collection(colClientProjectIDsKeys).UpdateOne(ctx, bson.M{
+		"project_id": encodedProjectID,
+		"key":        key,
+	}, bson.M{
+		"$setOnInsert": bson.M{
+			"client_id": clientID,
+		},
+	}, options.Update().SetUpsert(true))
+	if err != nil {
+		return nil, fmt.Errorf("upsert client: %w", err)
+	}
+
 	res, err := c.collection(colClients).UpdateOne(ctx, bson.M{
 		"project_id": encodedProjectID,
 		"key":        key,
@@ -478,6 +549,9 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 		"$set": bson.M{
 			"status":     database.ClientActivated,
 			"updated_at": now,
+		},
+		"$setOnInsert": bson.M{
+			"_id": clientID,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
@@ -487,7 +561,8 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	var result *mongo.SingleResult
 	if res.UpsertedCount > 0 {
 		result = c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
-			"_id": res.UpsertedID,
+			"_id":        res.UpsertedID,
+			"project_id": encodedProjectID,
 		}, bson.M{
 			"$set": bson.M{
 				"created_at": now,
@@ -581,6 +656,11 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		return err
 	}
 
+	encodedProjectID, err := encodeID(docInfo.ProjectID)
+	if err != nil {
+		return err
+	}
+
 	clientDocInfoKey := "documents." + docInfo.ID.String() + "."
 	clientDocInfo, ok := clientInfo.Documents[docInfo.ID]
 	if !ok {
@@ -615,7 +695,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	}
 
 	result := c.collection(colClients).FindOneAndUpdate(ctx, bson.M{
-		"_id": encodedClientID,
+		"_id":        encodedClientID,
+		"project_id": encodedProjectID,
 	}, updater)
 
 	if result.Err() != nil {
@@ -722,9 +803,22 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 		},
 	}
 	now := gotime.Now()
+
+	documentID := primitive.NewObjectID()
+
+	_, err = c.collection(colDocumentProjectIDsKeys).UpdateOne(ctx, filter,
+		bson.M{
+			"$setOnInsert": bson.M{
+				"doc_id": documentID,
+			},
+		}, options.Update().SetUpsert(createDocIfNotExist))
+
 	res, err := c.collection(colDocuments).UpdateOne(ctx, filter, bson.M{
 		"$set": bson.M{
 			"accessed_at": now,
+		},
+		"$setOnInsert": bson.M{
+			"_id": documentID,
 		},
 	}, options.Update().SetUpsert(createDocIfNotExist))
 	if err != nil {
@@ -734,7 +828,8 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 	var result *mongo.SingleResult
 	if res.UpsertedCount > 0 {
 		result = c.collection(colDocuments).FindOneAndUpdate(ctx, bson.M{
-			"_id": res.UpsertedID,
+			"_id":        res.UpsertedID,
+			"project_id": encodedProjectID,
 		}, bson.M{
 			"$set": bson.M{
 				"owner":      encodedOwnerID,
@@ -844,20 +939,40 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 		return err
 	}
 
+	now := gotime.Now()
 	result := c.collection(colDocuments).FindOneAndUpdate(ctx, bson.M{
 		"_id":        encodedDocID,
 		"project_id": encodedProjectID,
 	}, bson.M{
 		"$set": bson.M{
-			"removed_at": gotime.Now(),
+			"removed_at": now,
 		},
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
-	if result.Err() == mongo.ErrNoDocuments {
-		return fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
+	documentInfo := database.DocInfo{}
+	if err := result.Decode(&documentInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
+		}
+
+		return fmt.Errorf("update document info status to removed: %w", err)
 	}
+
+	result = c.collection(colDocumentProjectIDsKeys).FindOneAndUpdate(ctx, bson.M{
+		"doc_id":     encodedDocID,
+		"project_id": encodedProjectID,
+		"key":        documentInfo.Key,
+		"removed_at": bson.M{
+			"$exists": false,
+		},
+	}, bson.M{
+		"$set": bson.M{
+			"removed_at": now,
+		},
+	})
+
 	if result.Err() != nil {
-		return fmt.Errorf("update document info status to removed: %w", result.Err())
+		return fmt.Errorf("update document info status to removed: %w", err)
 	}
 
 	return nil
@@ -877,6 +992,7 @@ func (c *Client) CreateChangeInfos(
 		return err
 	}
 
+	var proxyModels []mongo.WriteModel
 	var models []mongo.WriteModel
 	for _, cn := range changes {
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
@@ -888,27 +1004,51 @@ func (c *Client) CreateChangeInfos(
 			return err
 		}
 
+		changeID := primitive.NewObjectID()
+
+		proxyModels = append(proxyModels, mongo.NewUpdateOneModel().SetFilter(bson.M{
+			"doc_id":     encodedDocID,
+			"server_seq": cn.ServerSeq(),
+		}).SetUpdate(bson.M{
+			"$setOnInsert": bson.M{
+				"change_id": changeID,
+			}}).SetUpsert(true))
+
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"doc_id":     encodedDocID,
 			"server_seq": cn.ServerSeq(),
-		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor_id":        encodeActorID(cn.ID().ActorID()),
-			"client_seq":      cn.ID().ClientSeq(),
-			"lamport":         cn.ID().Lamport(),
-			"message":         cn.Message(),
-			"operations":      encodedOperations,
-			"presence_change": encodedPresence,
-		}}).SetUpsert(true))
+		}).SetUpdate(bson.M{
+			"$set": bson.M{
+				"actor_id":        encodeActorID(cn.ID().ActorID()),
+				"client_seq":      cn.ID().ClientSeq(),
+				"lamport":         cn.ID().Lamport(),
+				"message":         cn.Message(),
+				"operations":      encodedOperations,
+				"presence_change": encodedPresence,
+			},
+			"$setOnInsert": bson.M{
+				"_id": changeID,
+			}}).SetUpsert(true))
 	}
 
 	// TODO(hackerwins): We need to handle the updates for the two collections
 	// below atomically.
 	if len(changes) > 0 {
-		if _, err = c.collection(colChanges).BulkWrite(
+		_, err := c.collection(colChangeDocIDsServerSeqs).BulkWrite(
+			ctx,
+			proxyModels,
+			options.BulkWrite().SetOrdered(true),
+		)
+		if err != nil {
+			return fmt.Errorf("bulk write changes: %w", err)
+		}
+
+		_, err = c.collection(colChanges).BulkWrite(
 			ctx,
 			models,
 			options.BulkWrite().SetOrdered(true),
-		); err != nil {
+		)
+		if err != nil {
 			return fmt.Errorf("bulk write changes: %w", err)
 		}
 	}
@@ -1053,6 +1193,16 @@ func (c *Client) CreateSnapshotInfo(
 	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
 	if err != nil {
 		return err
+	}
+
+	snapshotID := primitive.NewObjectID()
+
+	if _, err := c.collection(colSnapshotDocIDsServerSeqs).InsertOne(ctx, bson.M{
+		"snapshot_id": snapshotID,
+		"doc_id":      encodedDocID,
+		"server_seq":  doc.Checkpoint().ServerSeq,
+	}); err != nil {
+		return fmt.Errorf("insert snapshot: %w", err)
 	}
 
 	if _, err := c.collection(colSnapshots).InsertOne(ctx, bson.M{
@@ -1335,6 +1485,13 @@ func (c *Client) UpdateSyncedSeq(
 	}
 
 	if !isAttached {
+		if _, err = c.collection(colSyncedSeqDocIDsClientIDs).DeleteOne(ctx, bson.M{
+			"doc_id":    encodedDocID,
+			"client_id": encodedClientID,
+		}, options.Delete()); err != nil {
+			return fmt.Errorf("delete synced seq: %w", err)
+		}
+
 		if _, err = c.collection(colSyncedSeqs).DeleteOne(ctx, bson.M{
 			"doc_id":    encodedDocID,
 			"client_id": encodedClientID,
@@ -1359,6 +1516,18 @@ func (c *Client) UpdateSyncedSeq(
 		return nil
 	}
 
+	syncedseqID := primitive.NewObjectID()
+
+	if _, err = c.collection(colSyncedSeqDocIDsClientIDs).UpdateOne(ctx, bson.M{
+		"doc_id":    encodedDocID,
+		"client_id": encodedClientID,
+	}, bson.M{
+		"$setOnInsert": bson.M{
+			"syncedseq_id": syncedseqID,
+		}}, options.Update().SetUpsert(true)); err != nil {
+		return fmt.Errorf("upsert synced seq: %w", err)
+	}
+
 	if _, err = c.collection(colSyncedSeqs).UpdateOne(ctx, bson.M{
 		"doc_id":    encodedDocID,
 		"client_id": encodedClientID,
@@ -1368,7 +1537,9 @@ func (c *Client) UpdateSyncedSeq(
 			"actor_id":   encodeActorID(ticket.ActorID()),
 			"server_seq": serverSeq,
 		},
-	}, options.Update().SetUpsert(true)); err != nil {
+		"$setOnInsert": bson.M{
+			"_id": syncedseqID,
+		}}, options.Update().SetUpsert(true)); err != nil {
 		return fmt.Errorf("upsert synced seq: %w", err)
 	}
 
@@ -1464,6 +1635,24 @@ func (c *Client) collection(
 	return c.client.
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
+}
+
+func (c *Client) deleteProjectProxyInfo(
+	ctx context.Context,
+	filters map[string]bson.M,
+	targetCols []string,
+) error {
+	for _, col := range targetCols {
+		if _, err := c.collection(col).DeleteOne(
+			ctx,
+			filters[col],
+			options.Delete(),
+		); err != nil && err != mongo.ErrNoDocuments {
+			return fmt.Errorf("delete proxy info in %s : %w", col, err)
+		}
+	}
+
+	return nil
 }
 
 // escapeRegex escapes special characters by putting a backslash in front of it.

@@ -1,10 +1,10 @@
 version: '3'
 services:
 
-# Config Server
+  # Config Server
   config1:
     image: mongo:7.0.1
-    container_name: mongo-config1 
+    container_name: mongo-config1
     command:
       - /bin/sh
       - -c
@@ -12,13 +12,36 @@ services:
         sh -c "sleep 5 && mongosh < /scripts/init-config1.js" &
         mongod --port 27017 --configsvr --replSet config-rs --bind_ip_all
     volumes:
-      - ./scripts:/scripts 
+      - ./scripts:/scripts
     ports:
       - 27100:27017
     restart: always
-    
+    networks:
+      - sharding
+  config2:
+    image: mongo:7.0.1
+    container_name: mongo-config2
+    command: mongod --port 27017 --configsvr --replSet config-rs --bind_ip_all
+    volumes:
+      - ./scripts:/scripts
+    ports:
+      - 27101:27017
+    restart: always
+    networks:
+      - sharding
+  config3:
+    image: mongo:7.0.1
+    container_name: mongo-config3
+    command: mongod --port 27017 --configsvr --replSet config-rs --bind_ip_all
+    volumes:
+      - ./scripts:/scripts
+    ports:
+      - 27102:27017
+    restart: always
+    networks:
+      - sharding
 
-# Shards
+  # Shards
   # Shards 1
   shard1-1:
     image: mongo:7.0.1
@@ -34,7 +57,9 @@ services:
     ports:
       - 27110:27017
     restart: always
-    
+    networks:
+      - sharding
+
   shard1-2:
     image: mongo:7.0.1
     container_name: mongo-shard1-2
@@ -44,7 +69,9 @@ services:
     ports:
       - 27111:27017
     restart: always
-    
+    networks:
+      - sharding
+
   shard1-3:
     image: mongo:7.0.1
     container_name: mongo-shard1-3
@@ -54,7 +81,8 @@ services:
     ports:
       - 27112:27017
     restart: always
-    
+    networks:
+      - sharding
 
   # Shards 2
   shard2-1:
@@ -71,7 +99,9 @@ services:
     ports:
       - 27113:27017
     restart: always
-    
+    networks:
+      - sharding
+
   shard2-2:
     image: mongo:7.0.1
     container_name: mongo-shard2-2
@@ -81,7 +111,9 @@ services:
     ports:
       - 27114:27017
     restart: always
-    
+    networks:
+      - sharding
+
   shard2-3:
     image: mongo:7.0.1
     container_name: mongo-shard2-3
@@ -91,9 +123,52 @@ services:
     ports:
       - 27115:27017
     restart: always
-    
+    networks:
+      - sharding
 
-# Mongos
+  # Shards 3
+  shard3-1:
+    image: mongo:7.0.1
+    container_name: mongo-shard3-1
+    command:
+      - /bin/sh
+      - -c
+      - | # run the init script for the primary replica after mongod has been started.
+        sh -c "sleep 5 && mongosh < /scripts/init-shard3-1.js" &
+        mongod --port 27017 --shardsvr --replSet shard-rs-3 --bind_ip_all
+    volumes:
+      - ./scripts:/scripts
+    ports:
+      - 27116:27017
+    restart: always
+    networks:
+      - sharding
+
+  shard3-2:
+    image: mongo:7.0.1
+    container_name: mongo-shard3-2
+    command: mongod --port 27017 --shardsvr --replSet shard-rs-3 --bind_ip_all
+    volumes:
+      - ./scripts:/scripts
+    ports:
+      - 27117:27017
+    restart: always
+    networks:
+      - sharding
+
+  shard3-3:
+    image: mongo:7.0.1
+    container_name: mongo-shard3-3
+    command: mongod --port 27017 --shardsvr --replSet shard-rs-3 --bind_ip_all
+    volumes:
+      - ./scripts:/scripts
+    ports:
+      - 27118:27017
+    restart: always
+    networks:
+      - sharding
+
+  # Mongos
   mongos1:
     image: mongo:7.0.1
     container_name: mongos1
@@ -101,19 +176,26 @@ services:
       - /bin/sh
       - -c
       - | # run the init script for the primary replica after the config servers and the shards has been configured
-        sh -c "sleep 20 && mongosh < /scripts/init-mongos1.js" &
-        mongos --port 27017 --configdb config-rs/config1:27017 --bind_ip_all
+        sh -c "sleep 40 && mongosh < /scripts/init-mongos1.js" &
+        mongos --port 27017 --configdb config-rs/config1:27017,config2:27017,config3:27017 --bind_ip_all
     ports:
-      - 27120:27017
+      - 27017:27017
     restart: always
     volumes:
       - ./scripts:/scripts
-    
-    depends_on:
-      - config1
-      - shard1-1
-      - shard1-2
-      - shard1-3
-      - shard2-1
-      - shard2-2
-      - shard2-3
+    networks:
+      - sharding
+  mongos2:
+    image: mongo:7.0.1
+    container_name: mongos2
+    command: mongos --port 27017 --configdb config-rs/config1:27017,config2:27017,config3:27017 --bind_ip_all
+    ports:
+      - 27018:27017
+    restart: always
+    volumes:
+      - ./scripts:/scripts
+    networks:
+      - sharding
+
+networks:
+  sharding:
