@@ -529,19 +529,6 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	}
 
 	now := gotime.Now()
-	clientID := primitive.NewObjectID()
-	_, err = c.collection(colClientProjectIDsKeys).UpdateOne(ctx, bson.M{
-		"project_id": encodedProjectID,
-		"key":        key,
-	}, bson.M{
-		"$setOnInsert": bson.M{
-			"client_id": clientID,
-		},
-	}, options.Update().SetUpsert(true))
-	if err != nil {
-		return nil, fmt.Errorf("upsert client: %w", err)
-	}
-
 	res, err := c.collection(colClients).UpdateOne(ctx, bson.M{
 		"project_id": encodedProjectID,
 		"key":        key,
@@ -549,9 +536,6 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 		"$set": bson.M{
 			"status":     database.ClientActivated,
 			"updated_at": now,
-		},
-		"$setOnInsert": bson.M{
-			"_id": clientID,
 		},
 	}, options.Update().SetUpsert(true))
 	if err != nil {
@@ -803,22 +787,9 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 		},
 	}
 	now := gotime.Now()
-
-	documentID := primitive.NewObjectID()
-
-	_, err = c.collection(colDocumentProjectIDsKeys).UpdateOne(ctx, filter,
-		bson.M{
-			"$setOnInsert": bson.M{
-				"doc_id": documentID,
-			},
-		}, options.Update().SetUpsert(createDocIfNotExist))
-
 	res, err := c.collection(colDocuments).UpdateOne(ctx, filter, bson.M{
 		"$set": bson.M{
 			"accessed_at": now,
-		},
-		"$setOnInsert": bson.M{
-			"_id": documentID,
 		},
 	}, options.Update().SetUpsert(createDocIfNotExist))
 	if err != nil {
@@ -939,40 +910,20 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 		return err
 	}
 
-	now := gotime.Now()
 	result := c.collection(colDocuments).FindOneAndUpdate(ctx, bson.M{
 		"_id":        encodedDocID,
 		"project_id": encodedProjectID,
 	}, bson.M{
 		"$set": bson.M{
-			"removed_at": now,
+			"removed_at": gotime.Now(),
 		},
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
-	documentInfo := database.DocInfo{}
-	if err := result.Decode(&documentInfo); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
-		}
-
-		return fmt.Errorf("update document info status to removed: %w", err)
+	if result.Err() == mongo.ErrNoDocuments {
+		return fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
 	}
-
-	result = c.collection(colDocumentProjectIDsKeys).FindOneAndUpdate(ctx, bson.M{
-		"doc_id":     encodedDocID,
-		"project_id": encodedProjectID,
-		"key":        documentInfo.Key,
-		"removed_at": bson.M{
-			"$exists": false,
-		},
-	}, bson.M{
-		"$set": bson.M{
-			"removed_at": now,
-		},
-	})
-
 	if result.Err() != nil {
-		return fmt.Errorf("update document info status to removed: %w", err)
+		return fmt.Errorf("update document info status to removed: %w", result.Err())
 	}
 
 	return nil
@@ -992,7 +943,6 @@ func (c *Client) CreateChangeInfos(
 		return err
 	}
 
-	var proxyModels []mongo.WriteModel
 	var models []mongo.WriteModel
 	for _, cn := range changes {
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
@@ -1004,51 +954,27 @@ func (c *Client) CreateChangeInfos(
 			return err
 		}
 
-		changeID := primitive.NewObjectID()
-
-		proxyModels = append(proxyModels, mongo.NewUpdateOneModel().SetFilter(bson.M{
-			"doc_id":     encodedDocID,
-			"server_seq": cn.ServerSeq(),
-		}).SetUpdate(bson.M{
-			"$setOnInsert": bson.M{
-				"change_id": changeID,
-			}}).SetUpsert(true))
-
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"doc_id":     encodedDocID,
 			"server_seq": cn.ServerSeq(),
-		}).SetUpdate(bson.M{
-			"$set": bson.M{
-				"actor_id":        encodeActorID(cn.ID().ActorID()),
-				"client_seq":      cn.ID().ClientSeq(),
-				"lamport":         cn.ID().Lamport(),
-				"message":         cn.Message(),
-				"operations":      encodedOperations,
-				"presence_change": encodedPresence,
-			},
-			"$setOnInsert": bson.M{
-				"_id": changeID,
-			}}).SetUpsert(true))
+		}).SetUpdate(bson.M{"$set": bson.M{
+			"actor_id":        encodeActorID(cn.ID().ActorID()),
+			"client_seq":      cn.ID().ClientSeq(),
+			"lamport":         cn.ID().Lamport(),
+			"message":         cn.Message(),
+			"operations":      encodedOperations,
+			"presence_change": encodedPresence,
+		}}).SetUpsert(true))
 	}
 
 	// TODO(hackerwins): We need to handle the updates for the two collections
 	// below atomically.
 	if len(changes) > 0 {
-		_, err := c.collection(colChangeDocIDsServerSeqs).BulkWrite(
-			ctx,
-			proxyModels,
-			options.BulkWrite().SetOrdered(true),
-		)
-		if err != nil {
-			return fmt.Errorf("bulk write changes: %w", err)
-		}
-
-		_, err = c.collection(colChanges).BulkWrite(
+		if _, err = c.collection(colChanges).BulkWrite(
 			ctx,
 			models,
 			options.BulkWrite().SetOrdered(true),
-		)
-		if err != nil {
+		); err != nil {
 			return fmt.Errorf("bulk write changes: %w", err)
 		}
 	}
@@ -1193,16 +1119,6 @@ func (c *Client) CreateSnapshotInfo(
 	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
 	if err != nil {
 		return err
-	}
-
-	snapshotID := primitive.NewObjectID()
-
-	if _, err := c.collection(colSnapshotDocIDsServerSeqs).InsertOne(ctx, bson.M{
-		"snapshot_id": snapshotID,
-		"doc_id":      encodedDocID,
-		"server_seq":  doc.Checkpoint().ServerSeq,
-	}); err != nil {
-		return fmt.Errorf("insert snapshot: %w", err)
 	}
 
 	if _, err := c.collection(colSnapshots).InsertOne(ctx, bson.M{
@@ -1485,13 +1401,6 @@ func (c *Client) UpdateSyncedSeq(
 	}
 
 	if !isAttached {
-		if _, err = c.collection(colSyncedSeqDocIDsClientIDs).DeleteOne(ctx, bson.M{
-			"doc_id":    encodedDocID,
-			"client_id": encodedClientID,
-		}, options.Delete()); err != nil {
-			return fmt.Errorf("delete synced seq: %w", err)
-		}
-
 		if _, err = c.collection(colSyncedSeqs).DeleteOne(ctx, bson.M{
 			"doc_id":    encodedDocID,
 			"client_id": encodedClientID,
@@ -1516,18 +1425,6 @@ func (c *Client) UpdateSyncedSeq(
 		return nil
 	}
 
-	syncedseqID := primitive.NewObjectID()
-
-	if _, err = c.collection(colSyncedSeqDocIDsClientIDs).UpdateOne(ctx, bson.M{
-		"doc_id":    encodedDocID,
-		"client_id": encodedClientID,
-	}, bson.M{
-		"$setOnInsert": bson.M{
-			"syncedseq_id": syncedseqID,
-		}}, options.Update().SetUpsert(true)); err != nil {
-		return fmt.Errorf("upsert synced seq: %w", err)
-	}
-
 	if _, err = c.collection(colSyncedSeqs).UpdateOne(ctx, bson.M{
 		"doc_id":    encodedDocID,
 		"client_id": encodedClientID,
@@ -1536,9 +1433,6 @@ func (c *Client) UpdateSyncedSeq(
 			"lamport":    ticket.Lamport(),
 			"actor_id":   encodeActorID(ticket.ActorID()),
 			"server_seq": serverSeq,
-		},
-		"$setOnInsert": bson.M{
-			"_id": syncedseqID,
 		}}, options.Update().SetUpsert(true)); err != nil {
 		return fmt.Errorf("upsert synced seq: %w", err)
 	}

@@ -34,15 +34,10 @@ const (
 	colSnapshots  = "snapshots"
 	colSyncedSeqs = "syncedseqs"
 
-	colProjectOwnersNames       = "proxy_project_owners_names"
-	colProjectPublicKeys        = "proxy_project_publickeys"
-	colProjectSecretKeys        = "proxy_project_secretkeys"
-	colUserNames                = "proxy_user_usernames"
-	colClientProjectIDsKeys     = "proxy_client_projectids_keys"
-	colDocumentProjectIDsKeys   = "proxy_document_projectids_keys"
-	colChangeDocIDsServerSeqs   = "proxy_change_docids_serverseqs"
-	colSnapshotDocIDsServerSeqs = "proxy_snapshot_docids_serverseqs"
-	colSyncedSeqDocIDsClientIDs = "proxy_synceseq_docids_clientids"
+	colProjectOwnersNames = "proxy_project_owners_names"
+	colProjectPublicKeys  = "proxy_project_publickeys"
+	colProjectSecretKeys  = "proxy_project_secretkeys"
+	colUserNames          = "proxy_user_usernames"
 )
 
 type collectionInfo struct {
@@ -55,7 +50,8 @@ var collectionInfos = []collectionInfo{
 	{
 		name: colUsers,
 		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{{Key: "username", Value: bsonx.Int32(1)}},
+			Keys:    bsonx.Doc{{Key: "username", Value: bsonx.Int32(1)}},
+			Options: options.Index().SetUnique(true),
 		}},
 	},
 	{
@@ -65,6 +61,7 @@ var collectionInfos = []collectionInfo{
 				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "key", Value: bsonx.Int32(1)},
 			},
+			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bsonx.Doc{
 				{Key: "project_id", Value: bsonx.Int32(1)},
@@ -84,6 +81,11 @@ var collectionInfos = []collectionInfo{
 				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "key", Value: bsonx.Int32(1)},
 			},
+			Options: options.Index().SetPartialFilterExpression(
+				bsonx.Doc{
+					{Key: "removed_at", Value: bsonx.Null()},
+				},
+			).SetUnique(true),
 		}},
 	}, {
 		name: colChanges,
@@ -92,6 +94,7 @@ var collectionInfos = []collectionInfo{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
+			Options: options.Index().SetUnique(true),
 		}},
 	}, {
 		name: colSnapshots,
@@ -100,6 +103,7 @@ var collectionInfos = []collectionInfo{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
+			Options: options.Index().SetUnique(true),
 		}},
 	}, {
 		name: colSyncedSeqs,
@@ -108,6 +112,7 @@ var collectionInfos = []collectionInfo{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "client_id", Value: bsonx.Int32(1)},
 			},
+			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bsonx.Doc{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
@@ -149,57 +154,6 @@ var collectionInfos = []collectionInfo{
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
 				{Key: "username", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
-		name: colClientProjectIDsKeys,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "key", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
-		name: colDocumentProjectIDsKeys,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "project_id", Value: bsonx.Int32(1)},
-				{Key: "key", Value: bsonx.Int32(1)},
-				{Key: "removed_at", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
-		name: colChangeDocIDsServerSeqs,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)},
-				{Key: "server_seq", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
-		name: colSnapshotDocIDsServerSeqs,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)},
-				{Key: "server_seq", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
-		name: colSyncedSeqDocIDsClientIDs,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "doc_id", Value: bsonx.Int32(1)},
-				{Key: "client_id", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}},
