@@ -34,7 +34,7 @@ func TestPrimitive(t *testing.T) {
 		valueType crdt.ValueType
 		marshal   string
 	}{
-		{nil, crdt.Null, ""},
+		{nil, crdt.Null, "null"},
 		{false, crdt.Boolean, "false"},
 		{true, crdt.Boolean, "true"},
 		{0, crdt.Integer, "0"},

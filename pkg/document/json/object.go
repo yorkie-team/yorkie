@@ -130,6 +130,7 @@ func (p *Object) SetNull(k string) *Object {
 		}
 		return primitive
 	})
+
 	return p
 }
 
@@ -142,6 +143,7 @@ func (p *Object) SetBool(k string, v bool) *Object {
 		}
 		return primitive
 	})
+
 	return p
 }
 
@@ -154,6 +156,7 @@ func (p *Object) SetInteger(k string, v int) *Object {
 		}
 		return primitive
 	})
+
 	return p
 }
 
@@ -179,6 +182,7 @@ func (p *Object) SetDouble(k string, v float64) *Object {
 		}
 		return primitive
 	})
+
 	return p
 }
 

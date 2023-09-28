@@ -227,6 +227,7 @@ func (p *Array) addInternal(
 ) crdt.Element {
 	return p.insertAfterInternal(p.Array.LastCreatedAt(), creator)
 }
+
 func (p *Array) insertAfterInternal(
 	prevCreatedAt *time.Ticket,
 	creator func(ticket *time.Ticket) crdt.Element,

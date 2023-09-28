@@ -196,7 +196,7 @@ func (p *Primitive) Bytes() []byte {
 func (p *Primitive) Marshal() string {
 	switch p.valueType {
 	case Null:
-		return ""
+		return "null"
 	case Boolean:
 		return fmt.Sprintf("%t", p.value)
 	case Integer:
@@ -213,7 +213,6 @@ func (p *Primitive) Marshal() string {
 		return fmt.Sprintf(`"%s"`, p.value)
 	case Date:
 		return fmt.Sprintf(`"%s"`, p.value.(gotime.Time).Format(gotime.RFC3339))
-		// when Null or default
 	default:
 		return ""
 	}
