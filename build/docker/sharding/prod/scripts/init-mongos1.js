@@ -10,8 +10,3 @@ sh.shardCollection("yorkie-meta.documents", { project_id: "hashed" })
 sh.shardCollection("yorkie-meta.changes", { doc_id: "hashed", server_seq: 1 })
 sh.shardCollection("yorkie-meta.snapshots", { doc_id: "hashed" })
 sh.shardCollection("yorkie-meta.syncedseqs", { doc_id: "hashed" })
-// proxy collections
-sh.shardCollection("yorkie-meta.project_ids", { project_id: "hashed" })
-sh.shardCollection("yorkie-meta.project_names", { owner: "hashed" })
-sh.shardCollection("yorkie-meta.project_public_keys", { public_key: "hashed" })
-sh.shardCollection("yorkie-meta.project_secret_keys", { secret_key: "hashed" })

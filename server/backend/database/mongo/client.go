@@ -444,9 +444,8 @@ func (c *Client) UpdateProjectInfo(
 		if err = result.Decode(&info); err != mongo.ErrNoDocuments {
 			if err == nil {
 				return nil, database.ErrProjectNameAlreadyExists
-			} else {
-				return nil, fmt.Errorf("decode project info: %w", err)
 			}
+			return nil, fmt.Errorf("decode project info: %w", err)
 		}
 	}
 
