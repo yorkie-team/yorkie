@@ -33,11 +33,6 @@ const (
 	colChanges    = "changes"
 	colSnapshots  = "snapshots"
 	colSyncedSeqs = "syncedseqs"
-
-	colProjectOwnersNames = "proxy_project_owners_names"
-	colProjectPublicKeys  = "proxy_project_publickeys"
-	colProjectSecretKeys  = "proxy_project_secretkeys"
-	colUserNames          = "proxy_user_usernames"
 )
 
 type collectionInfo struct {
@@ -119,43 +114,6 @@ var collectionInfos = []collectionInfo{
 				{Key: "lamport", Value: bsonx.Int32(1)},
 				{Key: "actor_id", Value: bsonx.Int32(1)},
 			},
-		}},
-	},
-	{
-		name: colProjectOwnersNames,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "owner", Value: bsonx.Int32(1)},
-				{Key: "name", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
-		name: colProjectPublicKeys,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "public_key", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
-		name: colProjectSecretKeys,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "secret_key", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
-		}},
-	},
-	{
-		name: colUserNames,
-		indexes: []mongo.IndexModel{{
-			Keys: bsonx.Doc{
-				{Key: "username", Value: bsonx.Int32(1)},
-			},
-			Options: options.Index().SetUnique(true),
 		}},
 	},
 }

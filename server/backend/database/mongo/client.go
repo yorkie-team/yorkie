@@ -37,13 +37,16 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/backend/sync"
+	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
-	config *Config
-	client *mongo.Client
+	config      *Config
+	client      *mongo.Client
+	coordinator sync.Coordinator
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -75,9 +78,15 @@ func Dial(conf *Config) (*Client, error) {
 
 	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
 
+	// TODO(sejongk): Implement the coordinator for a shard. For now, we
+	//  distribute workloads to all shards per document. In the future, we
+	//  will need to distribute workloads of a document.
+	coordinator := memory.NewCoordinator(nil)
+
 	return &Client{
-		config: conf,
-		client: client,
+		config:      conf,
+		client:      client,
+		coordinator: coordinator,
 	}, nil
 }
 
@@ -214,27 +223,30 @@ func (c *Client) CreateProjectInfo(
 		return nil, err
 	}
 
-	projectID := primitive.NewObjectID()
-	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
-	info.ID = types.ID(projectID.Hex())
+	locker, err := c.coordinator.NewLocker(ctx, ProjectKey(owner, name))
+	if err != nil {
+		return nil, err
+	}
 
-	cols := []string{colProjectOwnersNames, colProjectPublicKeys, colProjectSecretKeys, colProjects}
-	documents := map[string]bson.M{
-		colProjectOwnersNames: {
-			"project_id": projectID,
-			"owner":      encodedOwner,
-			"name":       info.Name,
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.From(ctx).Error(err)
+			return
+		}
+	}()
+
+	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
+	result, err := c.collection(colProjects).UpdateOne(ctx, bson.M{
+		"$or": bson.A{
+			bson.M{"name": info.Name, "owner": encodedOwner},
+			bson.M{"public_key": info.PublicKey},
+			bson.M{"secret_key": info.SecretKey},
 		},
-		colProjectPublicKeys: {
-			"project_id": projectID,
-			"public_key": info.PublicKey,
-		},
-		colProjectSecretKeys: {
-			"project_id": projectID,
-			"secret_key": info.SecretKey,
-		},
-		colProjects: {
-			"_id":                         projectID,
+	}, bson.M{
+		"$setOnInsert": bson.M{
 			"name":                        info.Name,
 			"owner":                       encodedOwner,
 			"client_deactivate_threshold": info.ClientDeactivateThreshold,
@@ -242,25 +254,18 @@ func (c *Client) CreateProjectInfo(
 			"secret_key":                  info.SecretKey,
 			"created_at":                  info.CreatedAt,
 		},
+	}, options.Update().SetUpsert(true))
+
+	if err != nil {
+		return nil, fmt.Errorf("create project info: %w", err)
 	}
 
-	for idx, col := range cols {
-		if _, err := c.collection(col).InsertOne(ctx, documents[col]); err != nil {
-			// delete previously created proxy info to keep consistency
-			subErr := c.deleteProjectProxyInfo(ctx, documents, cols[:idx])
-			if subErr != nil {
-				return nil, fmt.Errorf(
-					"create project info: %s: delete proxy info: %w", err, subErr)
-			}
-
-			if mongo.IsDuplicateKeyError(err) {
-				return nil, database.ErrProjectAlreadyExists
-			}
-
-			return nil, fmt.Errorf("create project info: %w", err)
-		}
+	if result.UpsertedCount == 0 {
+		return nil, database.ErrProjectAlreadyExists
 	}
 
+	info.ID = types.ID(result.UpsertedID.(primitive.ObjectID).Hex())
+	println("infoID!!", info.ID, result.UpsertedID)
 	return info, nil
 }
 
@@ -413,22 +418,35 @@ func (c *Client) UpdateProjectInfo(
 	}
 	updatableFields["updated_at"] = gotime.Now()
 
-	if projectName, ok := updatableFields["name"]; ok {
-		res := c.collection(colProjectOwnersNames).FindOneAndUpdate(ctx, bson.M{
-			"project_id": encodedID,
-			"owner":      encodedOwner,
-		}, bson.M{
-			"$set": primitive.M{"name": projectName},
-		}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+	if name, ok := updatableFields["name"]; ok {
+		locker, err := c.coordinator.NewLocker(ctx, ProjectKey(owner, name.(string)))
+		if err != nil {
+			return nil, err
+		}
 
-		if err := res.Err(); err != nil {
-			if err == mongo.ErrNoDocuments {
-				return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
+		if err := locker.Lock(ctx); err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err := locker.Unlock(ctx); err != nil {
+				logging.From(ctx).Error(err)
+				return
 			}
-			if mongo.IsDuplicateKeyError(err) {
-				return nil, fmt.Errorf("%s: %w", *fields.Name, database.ErrProjectNameAlreadyExists)
+		}()
+
+		// check if the combination of owner and name already exists.
+		result := c.collection(colProjects).FindOne(ctx, bson.M{
+			"owner": encodedOwner,
+			"name":  name,
+		})
+
+		info := database.ProjectInfo{}
+		if err = result.Decode(&info); err != mongo.ErrNoDocuments {
+			if err == nil {
+				return nil, database.ErrProjectNameAlreadyExists
+			} else {
+				return nil, fmt.Errorf("decode project info: %w", err)
 			}
-			return nil, fmt.Errorf("decode project name info: %w", err)
 		}
 	}
 
@@ -444,7 +462,6 @@ func (c *Client) UpdateProjectInfo(
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", id, database.ErrProjectNotFound)
 		}
-
 		return nil, fmt.Errorf("decode project info: %w", err)
 	}
 
@@ -457,33 +474,41 @@ func (c *Client) CreateUserInfo(
 	username string,
 	hashedPassword string,
 ) (*database.UserInfo, error) {
-	userID := primitive.NewObjectID()
 	info := database.NewUserInfo(username, hashedPassword)
-	info.ID = types.ID(userID.Hex())
 
-	if _, err := c.collection(colUserNames).InsertOne(
-		ctx,
-		bson.M{
-			"user_id":  userID,
-			"username": info.Username,
-		}); err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-			return nil, database.ErrUserAlreadyExists
-		}
-
-		return nil, fmt.Errorf("create user info: %w", err)
+	locker, err := c.coordinator.NewLocker(ctx, UserKey(username))
+	if err != nil {
+		return nil, err
 	}
 
-	_, err := c.collection(colUsers).InsertOne(ctx, bson.M{
-		"_id":             userID,
-		"username":        info.Username,
-		"hashed_password": info.HashedPassword,
-		"created_at":      info.CreatedAt,
-	})
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.From(ctx).Error(err)
+			return
+		}
+	}()
+
+	result, err := c.collection(colUsers).UpdateOne(ctx, bson.M{
+		"username": info.Username,
+	}, bson.M{
+		"$setOnInsert": bson.M{
+			"hashed_password": info.HashedPassword,
+			"created_at":      info.CreatedAt,
+		},
+	}, options.Update().SetUpsert(true))
+
 	if err != nil {
 		return nil, fmt.Errorf("create user info: %w", err)
 	}
 
+	if result.UpsertedCount == 0 {
+		return nil, database.ErrUserAlreadyExists
+	}
+
+	info.ID = types.ID(result.UpsertedID.(primitive.ObjectID).Hex())
 	return info, nil
 }
 
@@ -527,6 +552,21 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	if err != nil {
 		return nil, err
 	}
+
+	locker, err := c.coordinator.NewLocker(ctx, ClientKey(projectID, key))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.From(ctx).Error(err)
+			return
+		}
+	}()
 
 	now := gotime.Now()
 	res, err := c.collection(colClients).UpdateOne(ctx, bson.M{
@@ -779,6 +819,21 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 		return nil, err
 	}
 
+	locker, err := c.coordinator.NewLocker(ctx, DocumentKey(projectID, docKey.String()))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := locker.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.From(ctx).Error(err)
+			return
+		}
+	}()
+
 	filter := bson.M{
 		"project_id": encodedProjectID,
 		"key":        docKey,
@@ -944,6 +999,7 @@ func (c *Client) CreateChangeInfos(
 	}
 
 	var models []mongo.WriteModel
+	var lockers []sync.Locker
 	for _, cn := range changes {
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
@@ -953,6 +1009,18 @@ func (c *Client) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
+
+		locker, err := c.coordinator.NewLocker(
+			ctx, ChangeKey(docInfo.ID, cn.ServerSeq()))
+		if err != nil {
+			return err
+		}
+
+		if err := locker.Lock(ctx); err != nil {
+			return err
+		}
+
+		lockers = append(lockers, locker)
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"doc_id":     encodedDocID,
@@ -966,6 +1034,15 @@ func (c *Client) CreateChangeInfos(
 			"presence_change": encodedPresence,
 		}}).SetUpsert(true))
 	}
+
+	defer func() {
+		for _, locker := range lockers {
+			if err := locker.Unlock(ctx); err != nil {
+				logging.From(ctx).Error(err)
+				return
+			}
+		}
+	}()
 
 	// TODO(hackerwins): We need to handle the updates for the two collections
 	// below atomically.
@@ -1120,6 +1197,24 @@ func (c *Client) CreateSnapshotInfo(
 	if err != nil {
 		return err
 	}
+
+	locker, err := c.coordinator.NewLocker(
+		ctx, SnapshotKey(docID, doc.Checkpoint().ServerSeq))
+	if err != nil {
+		return err
+	}
+
+	// NOTE: If the project is already being created by another, it is
+	//       not necessary to recreate it, so we can skip it.
+	if err := locker.TryLock(ctx); err != nil {
+		return err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.From(ctx).Error(err)
+			return
+		}
+	}()
 
 	if _, err := c.collection(colSnapshots).InsertOne(ctx, bson.M{
 		"doc_id":     encodedDocID,
@@ -1425,6 +1520,22 @@ func (c *Client) UpdateSyncedSeq(
 		return nil
 	}
 
+	locker, err := c.coordinator.NewLocker(
+		ctx, SyncedSeqKey(docID, clientInfo.ID))
+	if err != nil {
+		return err
+	}
+
+	if err := locker.TryLock(ctx); err != nil {
+		return err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.From(ctx).Error(err)
+			return
+		}
+	}()
+
 	if _, err = c.collection(colSyncedSeqs).UpdateOne(ctx, bson.M{
 		"doc_id":    encodedDocID,
 		"client_id": encodedClientID,
@@ -1565,4 +1676,39 @@ func escapeRegex(str string) string {
 		buf.WriteByte(byte(r))
 	}
 	return buf.String()
+}
+
+// ProjectKey creates a new sync.Key of the project for the given owner and name.
+func ProjectKey(owner types.ID, name string) sync.Key {
+	return sync.NewKey(fmt.Sprintf("project-%s-%s", owner, name))
+}
+
+// UserKey creates a new sync.Key of the user for the given username.
+func UserKey(username string) sync.Key {
+	return sync.NewKey(fmt.Sprintf("user-%s", username))
+}
+
+// ClientKey creates a new sync.Key of the client for the given project id and key.
+func ClientKey(projectID types.ID, key string) sync.Key {
+	return sync.NewKey(fmt.Sprintf("client-%s-%s", projectID, key))
+}
+
+// DocumentKey creates a new sync.Key of the document for the given project id and key.
+func DocumentKey(projectID types.ID, key string) sync.Key {
+	return sync.NewKey(fmt.Sprintf("document-%s-%s", projectID, key))
+}
+
+// ChangeKey creates a new sync.Key of the change for the given doc id and server seq.
+func ChangeKey(docID types.ID, serverSeq int64) sync.Key {
+	return sync.NewKey(fmt.Sprintf("change-%s-%d", docID, serverSeq))
+}
+
+// SnapshotKey creates a new sync.Key of the snapshot for the given doc id and server seq.
+func SnapshotKey(docID types.ID, serverSeq int64) sync.Key {
+	return sync.NewKey(fmt.Sprintf("snapshot-%s-%d", docID, serverSeq))
+}
+
+// SyncedSeqKey creates a new sync.Key of the synced seq for the given doc id and client ID.
+func SyncedSeqKey(docID types.ID, clientID types.ID) sync.Key {
+	return sync.NewKey(fmt.Sprintf("syncedseq-%s-%s", docID, clientID))
 }
