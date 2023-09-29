@@ -108,6 +108,16 @@ func RunFindProjectInfoByNameTest(
 		assert.NoError(t, err)
 	})
 
+	t.Run("duplicate project name test", func(t *testing.T) {
+		ctx := context.Background()
+		_, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		// create a new project with the duplicate name
+		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		assert.ErrorIs(t, err, database.ErrProjectAlreadyExists)
+	})
+
 	t.Run("FindProjectInfoByName test", func(t *testing.T) {
 		ctx := context.Background()
 
