@@ -104,7 +104,6 @@ func (a *Array) StructureAsString() string {
 // DeepCopy copies itself deeply.
 func (a *Array) DeepCopy() (Element, error) {
 	elements := NewRGATreeList()
-
 	for _, node := range a.elements.Nodes() {
 		copiedNode, err := node.elem.DeepCopy()
 		if err != nil {

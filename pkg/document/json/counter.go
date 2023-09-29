@@ -50,6 +50,7 @@ func (p *Counter) Increase(v interface{}) *Counter {
 		panic("unsupported type")
 	}
 	var primitive *crdt.Primitive
+	var err error
 	ticket := p.context.IssueTimeTicket()
 
 	value, kind := convertAssertableOperand(v)
@@ -57,20 +58,22 @@ func (p *Counter) Increase(v interface{}) *Counter {
 	switch p.ValueType() {
 	case crdt.LongCnt:
 		if isInt {
-			primitive = crdt.NewPrimitive(int64(value.(int)), ticket)
+			primitive, err = crdt.NewPrimitive(int64(value.(int)), ticket)
 		} else {
-			primitive = crdt.NewPrimitive(int64(value.(float64)), ticket)
+			primitive, err = crdt.NewPrimitive(int64(value.(float64)), ticket)
 		}
 	case crdt.IntegerCnt:
 		if isInt {
-			primitive = crdt.NewPrimitive(int32(value.(int)), ticket)
+			primitive, err = crdt.NewPrimitive(int32(value.(int)), ticket)
 		} else {
-			primitive = crdt.NewPrimitive(int32(value.(float64)), ticket)
+			primitive, err = crdt.NewPrimitive(int32(value.(float64)), ticket)
 		}
 	default:
 		panic("unsupported type")
 	}
-
+	if err != nil {
+		panic(err)
+	}
 	if _, err := p.Counter.Increase(primitive); err != nil {
 		panic(err)
 	}

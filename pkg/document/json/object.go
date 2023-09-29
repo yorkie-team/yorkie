@@ -52,7 +52,8 @@ func (p *Object) SetNewObject(k string) *Object {
 // SetNewArray sets a new Array for the given key.
 func (p *Object) SetNewArray(k string) *Array {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return NewArray(p.context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
+		elements := crdt.NewRGATreeList()
+		return NewArray(p.context, crdt.NewArray(elements, ticket))
 	})
 
 	return v.(*Array)
@@ -120,7 +121,11 @@ func (p *Object) SetNewTree(k string, initialRoot ...*TreeNode) *Tree {
 // SetNull sets the null for the given key.
 func (p *Object) SetNull(k string) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return crdt.NewPrimitive(nil, ticket)
+		primitive, err := crdt.NewPrimitive(nil, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
 	})
 
 	return p
@@ -129,7 +134,11 @@ func (p *Object) SetNull(k string) *Object {
 // SetBool sets the given boolean for the given key.
 func (p *Object) SetBool(k string, v bool) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return crdt.NewPrimitive(v, ticket)
+		primitive, err := crdt.NewPrimitive(v, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
 	})
 
 	return p
@@ -138,7 +147,11 @@ func (p *Object) SetBool(k string, v bool) *Object {
 // SetInteger sets the given integer for the given key.
 func (p *Object) SetInteger(k string, v int) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return crdt.NewPrimitive(v, ticket)
+		primitive, err := crdt.NewPrimitive(v, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
 	})
 
 	return p
@@ -147,7 +160,11 @@ func (p *Object) SetInteger(k string, v int) *Object {
 // SetLong sets the given long for the given key.
 func (p *Object) SetLong(k string, v int64) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return crdt.NewPrimitive(v, ticket)
+		primitive, err := crdt.NewPrimitive(v, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
 	})
 
 	return p
@@ -156,7 +173,11 @@ func (p *Object) SetLong(k string, v int64) *Object {
 // SetDouble sets the given double for the given key.
 func (p *Object) SetDouble(k string, v float64) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return crdt.NewPrimitive(v, ticket)
+		primitive, err := crdt.NewPrimitive(v, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
 	})
 
 	return p
@@ -165,7 +186,11 @@ func (p *Object) SetDouble(k string, v float64) *Object {
 // SetString sets the given string for the given key.
 func (p *Object) SetString(k, v string) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return crdt.NewPrimitive(v, ticket)
+		primitive, err := crdt.NewPrimitive(v, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
 	})
 
 	return p
@@ -174,7 +199,11 @@ func (p *Object) SetString(k, v string) *Object {
 // SetBytes sets the given bytes for the given key.
 func (p *Object) SetBytes(k string, v []byte) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return crdt.NewPrimitive(v, ticket)
+		primitive, err := crdt.NewPrimitive(v, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
 	})
 
 	return p
@@ -183,7 +212,11 @@ func (p *Object) SetBytes(k string, v []byte) *Object {
 // SetDate sets the given date for the given key.
 func (p *Object) SetDate(k string, v gotime.Time) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return crdt.NewPrimitive(v, ticket)
+		primitive, err := crdt.NewPrimitive(v, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
 	})
 
 	return p
