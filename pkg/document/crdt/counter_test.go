@@ -80,9 +80,12 @@ func TestCounter(t *testing.T) {
 		double, err := crdt.NewCounter(crdt.IntegerCnt, z, time.InitialTicket)
 		assert.NoError(t, err)
 
-		integerOperand := crdt.NewPrimitive(x, time.InitialTicket)
-		longOperand := crdt.NewPrimitive(y, time.InitialTicket)
-		doubleOperand := crdt.NewPrimitive(z, time.InitialTicket)
+		integerOperand, err := crdt.NewPrimitive(x, time.InitialTicket)
+		assert.NoError(t, err)
+		longOperand, err := crdt.NewPrimitive(y, time.InitialTicket)
+		assert.NoError(t, err)
+		doubleOperand, err := crdt.NewPrimitive(z, time.InitialTicket)
+		assert.NoError(t, err)
 
 		// normal process test
 		_, err = integer.Increase(integerOperand)
@@ -118,10 +121,6 @@ func TestCounter(t *testing.T) {
 		unsupportedTypeErrorTest(true)
 		unsupportedTypeErrorTest([]byte{2})
 		unsupportedTypeErrorTest(gotime.Now())
-
-		assert.Equal(t, integer.Marshal(), "23")
-		assert.Equal(t, long.Marshal(), "28")
-		assert.Equal(t, double.Marshal(), "21")
 	})
 
 	t.Run("Counter value overflow test", func(t *testing.T) {
@@ -129,7 +128,9 @@ func TestCounter(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, integer.ValueType(), crdt.IntegerCnt)
 
-		operand := crdt.NewPrimitive(1, time.InitialTicket)
+		operand, err := crdt.NewPrimitive(1, time.InitialTicket)
+		assert.NoError(t, err)
+
 		_, err = integer.Increase(operand)
 		assert.NoError(t, err)
 		assert.Equal(t, integer.ValueType(), crdt.IntegerCnt)

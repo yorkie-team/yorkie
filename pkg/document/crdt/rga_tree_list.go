@@ -107,7 +107,10 @@ type RGATreeList struct {
 
 // NewRGATreeList creates a new instance of RGATreeList.
 func NewRGATreeList() *RGATreeList {
-	dummyValue := NewPrimitive(0, time.InitialTicket)
+	// NOTE(hackerwins): A dummy value can not return an error, so we can ignore
+	// the error check.
+	dummyValue, _ := NewPrimitive(0, time.InitialTicket)
+
 	dummyValue.SetRemovedAt(time.InitialTicket)
 	dummyHead := newRGATreeListNode(dummyValue)
 	nodeMapByIndex := splay.NewTree(dummyHead.indexNode)
@@ -136,7 +139,6 @@ func (a *RGATreeList) Marshal() string {
 			} else {
 				sb.WriteString(",")
 			}
-
 			sb.WriteString(current.elem.Marshal())
 		}
 

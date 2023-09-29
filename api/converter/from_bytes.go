@@ -193,11 +193,14 @@ func fromJSONPrimitive(
 	if err != nil {
 		return nil, err
 	}
-
-	primitive := crdt.NewPrimitive(
-		crdt.ValueFromBytes(valueType, pbPrim.Value),
-		createdAt,
-	)
+	value, err := crdt.ValueFromBytes(valueType, pbPrim.Value)
+	if err != nil {
+		return nil, err
+	}
+	primitive, err := crdt.NewPrimitive(value, createdAt)
+	if err != nil {
+		return nil, err
+	}
 	primitive.SetMovedAt(movedAt)
 	primitive.SetRemovedAt(removedAt)
 	return primitive, nil

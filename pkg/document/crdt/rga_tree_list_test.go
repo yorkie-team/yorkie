@@ -15,10 +15,10 @@ func TestRGATreeList(t *testing.T) {
 		ctx := helper.TextChangeContext(root)
 
 		elements := crdt.NewRGATreeList()
-
-		var err error
 		for _, v := range []string{"1", "2", "3"} {
-			err = elements.Add(crdt.NewPrimitive(v, ctx.IssueTimeTicket()))
+			primitive, err := crdt.NewPrimitive(v, ctx.IssueTimeTicket())
+			assert.NoError(t, err)
+			err = elements.Add(primitive)
 			assert.NoError(t, err)
 		}
 		assert.Equal(t, `["1","2","3"]`, elements.Marshal())
@@ -54,7 +54,9 @@ func TestRGATreeList(t *testing.T) {
 
 		validCreatedAt, invalidCreatedAt := ctx.IssueTimeTicket(), ctx.IssueTimeTicket()
 		elements := crdt.NewRGATreeList()
-		err := elements.Add(crdt.NewPrimitive("1", validCreatedAt))
+		primitive, err := crdt.NewPrimitive("1", validCreatedAt)
+		assert.NoError(t, err)
+		err = elements.Add(primitive)
 		assert.NoError(t, err)
 
 		_, err = elements.DeleteByCreatedAt(invalidCreatedAt, ctx.IssueTimeTicket())
