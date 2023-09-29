@@ -230,6 +230,8 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toRemove(op)
 		case *operations.Edit:
 			pbOperation.Body, err = toEdit(op)
+		case *operations.EditReverse:
+			pbOperation.Body, err = toEditReverse(op)
 		case *operations.Style:
 			pbOperation.Body, err = toStyle(op)
 		case *operations.Increase:
@@ -347,6 +349,30 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 			Content:             e.Content(),
 			Attributes:          e.Attributes(),
 			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
+		},
+	}, nil
+}
+
+func toEditReverse(e *operations.EditReverse) (*api.Operation_EditReverse_, error) {
+	var pbDeletedIDs []*api.TextNodePos
+	deletedIDs := e.DeletedIDs()
+	for _, deletedID := range deletedIDs {
+		pbDeletedIDs = append(pbDeletedIDs, toTextNodePos(deletedID))
+	}
+
+	var pbInsertedIDs []*api.TextNodePos
+	insertedIDs := e.InsertedIDs()
+	for _, insertedID := range insertedIDs {
+		pbInsertedIDs = append(pbInsertedIDs, toTextNodePos(insertedID))
+	}
+
+	return &api.Operation_EditReverse_{
+		EditReverse: &api.Operation_EditReverse{
+			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
+			DeletedIds:      pbDeletedIDs,
+			InsertedIds:     pbInsertedIDs,
+			Attributes:      e.Attributes(),
+			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
 }
