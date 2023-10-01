@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Yorkie Authors. All rights reserved.
+ * Copyright 2023 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,43 +14,25 @@
  * limitations under the License.
  */
 
-package project
+package context
 
 import (
-	"context"
-	"time"
+	"fmt"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
-	"github.com/yorkie-team/yorkie/pkg/units"
 )
 
 func newListCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "ls",
-		Short:   "List all projects",
+		Short:   "List all contexts from configuration",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rpcAddr := viper.GetString("rpcAddr")
-			auth, err := config.LoadAuth(rpcAddr)
-			if err != nil {
-				return err
-			}
-
-			cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
-			if err != nil {
-				return err
-			}
-			defer func() {
-				_ = cli.Close()
-			}()
-
-			ctx := context.Background()
-			projects, err := cli.ListProjects(ctx)
+			conf, err := config.Load()
 			if err != nil {
 				return err
 			}
@@ -61,27 +43,28 @@ func newListCommand() *cobra.Command {
 			tw.Style().Options.SeparateFooter = false
 			tw.Style().Options.SeparateHeader = false
 			tw.Style().Options.SeparateRows = false
-			tw.AppendHeader(table.Row{
-				"NAME",
-				"PUBLIC KEY",
-				"SECRET KEY",
-				"AUTH WEBHOOK URL",
-				"AUTH WEBHOOK METHODS",
-				"CLIENT DEACTIVATE THRESHOLD",
-				"CREATED AT",
-			})
-			for _, project := range projects {
-				tw.AppendRow(table.Row{
-					project.Name,
-					project.PublicKey,
-					project.SecretKey,
-					project.AuthWebhookURL,
-					project.AuthWebhookMethods,
-					project.ClientDeactivateThreshold,
-					units.HumanDuration(time.Now().UTC().Sub(project.CreatedAt)),
-				})
+
+			tw.AppendHeader(table.Row{"CURRENT", "RPC ADDR", "INSECURE", "TOKEN"})
+			for rpcAddr, auth := range conf.Auths {
+				current := ""
+				if rpcAddr == viper.GetString("rpcAddr") {
+					current = "*"
+				}
+
+				insecure := "false"
+				if auth.Insecure {
+					insecure = "true"
+				}
+
+				ellipsisToken := auth.Token
+				if len(auth.Token) > 10 {
+					ellipsisToken = auth.Token[:10] + "..." + auth.Token[len(auth.Token)-10:]
+				}
+
+				tw.AppendRow(table.Row{current, rpcAddr, insecure, ellipsisToken})
 			}
-			cmd.Printf("%s\n", tw.Render())
+
+			fmt.Println(tw.Render())
 
 			return nil
 		},

@@ -14,46 +14,35 @@
  * limitations under the License.
  */
 
-package main
+package context
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
 
-var (
-	flagForce bool
-)
-
-func newLogoutCmd() *cobra.Command {
+func newSetContextCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "logout",
-		Short:   "Log out from the Yorkie server",
+		Use:     "set [RPCAddr]",
+		Short:   "Set the current context to the given RPCAddr",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return ErrRPCEmpty
+			}
+
 			conf, err := config.Load()
 			if err != nil {
 				return err
 			}
 
-			rpcAddr := viper.GetString("rpcAddr")
-			if flagForce {
-				return config.Delete()
+			rpcAddr := args[0]
+			if _, ok := conf.Auths[rpcAddr]; !ok {
+				return ErrNotFoundAuth
 			}
 
-			if len(conf.Auths) <= 1 {
-				return config.Delete()
-			}
-
-			delete(conf.Auths, rpcAddr)
-			if conf.RPCAddr == rpcAddr {
-				for addr := range conf.Auths {
-					conf.RPCAddr = addr
-					break
-				}
-			}
+			conf.RPCAddr = rpcAddr
 
 			return config.Save(conf)
 		},
@@ -61,12 +50,5 @@ func newLogoutCmd() *cobra.Command {
 }
 
 func init() {
-	cmd := newLogoutCmd()
-	cmd.Flags().BoolVar(
-		&flagForce,
-		"force",
-		false,
-		"force log out from all servers",
-	)
-	rootCmd.AddCommand(cmd)
+	SubCmd.AddCommand(newSetContextCmd())
 }

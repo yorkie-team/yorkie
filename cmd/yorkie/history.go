@@ -22,6 +22,7 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -36,19 +37,21 @@ var (
 
 func newHistoryCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "history [project name] [document key]",
-		Short: "Show the history of a document",
+		Use:     "history [project name] [document key]",
+		Short:   "Show the history of a document",
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return errors.New("project name and document key are required")
 			}
 
-			token, err := config.LoadToken(config.RPCAddr)
+			rpcAddr := viper.GetString("rpcAddr")
+			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
 				return err
 			}
 
-			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token), admin.WithInsecure(config.IsInsecure))
+			cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
 			if err != nil {
 				return err
 			}

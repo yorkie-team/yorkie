@@ -28,14 +28,17 @@ import (
 var (
 	username string
 	password string
+	rpcAddr  string
+	insecure bool
 )
 
 func newLoginCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "login",
-		Short: "Log in to the Yorkie server",
+		Use:     "login",
+		Short:   "Log in to Yorkie server",
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cli, err := admin.Dial(config.RPCAddr, admin.WithInsecure(config.IsInsecure))
+			cli, err := admin.Dial(rpcAddr, admin.WithInsecure(insecure))
 			if err != nil {
 				return err
 			}
@@ -51,10 +54,17 @@ func newLoginCmd() *cobra.Command {
 
 			conf, err := config.Load()
 			if err != nil {
-				return nil
+				return err
 			}
 
-			conf.Auths[config.RPCAddr] = token
+			if conf.Auths == nil {
+				conf.Auths = make(map[string]config.Auth)
+			}
+			conf.Auths[rpcAddr] = config.Auth{
+				Token:    token,
+				Insecure: insecure,
+			}
+			conf.RPCAddr = rpcAddr
 			if err := config.Save(conf); err != nil {
 				return err
 			}
@@ -79,6 +89,18 @@ func init() {
 		"p",
 		"",
 		"Password (required if username is set)",
+	)
+	cmd.Flags().StringVar(
+		&rpcAddr,
+		"rpc-addr",
+		"localhost:11101",
+		"Address of the rpc server",
+	)
+	cmd.Flags().BoolVar(
+		&insecure,
+		"insecure",
+		false,
+		"Skip the TLS connection of the client",
 	)
 	cmd.MarkFlagsRequiredTogether("username", "password")
 	rootCmd.AddCommand(cmd)

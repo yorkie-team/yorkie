@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/status"
 
@@ -42,6 +43,7 @@ func newUpdateCommand() *cobra.Command {
 		Use:     "update [name]",
 		Short:   "Update a project",
 		Example: "yorkie project update name [options]",
+		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return errors.New("name is required")
@@ -49,12 +51,13 @@ func newUpdateCommand() *cobra.Command {
 
 			name := args[0]
 
-			token, err := config.LoadToken(config.RPCAddr)
+			rpcAddr := viper.GetString("rpcAddr")
+			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
 				return err
 			}
 
-			cli, err := admin.Dial(config.RPCAddr, admin.WithToken(token), admin.WithInsecure(config.IsInsecure))
+			cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
 			if err != nil {
 				return err
 			}
