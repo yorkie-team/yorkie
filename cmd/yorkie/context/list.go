@@ -37,15 +37,35 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			fmt.Println("Current Context:")
-			fmt.Printf("  rpcAddr: %s\n  isInsecure: %v\n", viper.GetString("rpcAddr"), viper.GetBool("isInsecure"))
+			current := viper.GetString("rpcAddr")
 
-			fmt.Println("All Auth Contexts:")
 			tw := table.NewWriter()
-			tw.AppendHeader(table.Row{"RpcAddr", "Token"})
-			for addr, auth := range conf.Auths {
-				tw.AppendRow(table.Row{addr, auth})
+			tw.Style().Options.DrawBorder = false
+			tw.Style().Options.SeparateColumns = false
+			tw.Style().Options.SeparateFooter = false
+			tw.Style().Options.SeparateHeader = false
+			tw.Style().Options.SeparateRows = false
+
+			tw.AppendHeader(table.Row{"CURRENT", "RPC ADDR", "INSECURE", "TOKEN"})
+			for rpcAddr, auth := range conf.Auths {
+				isCurrent := ""
+				if rpcAddr == current {
+					isCurrent = "*"
+				}
+
+				insecure := "false"
+				if auth.Insecure {
+					insecure = "true"
+				}
+
+				ellipsisToken := auth.Token
+				if len(auth.Token) > 10 {
+					ellipsisToken = auth.Token[:10] + "..." + auth.Token[len(auth.Token)-10:]
+				}
+
+				tw.AppendRow(table.Row{isCurrent, rpcAddr, insecure, ellipsisToken})
 			}
+
 			fmt.Println(tw.Render())
 
 			return nil

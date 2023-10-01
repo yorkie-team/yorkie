@@ -18,9 +18,7 @@ package main
 
 import (
 	"context"
-
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -29,15 +27,17 @@ import (
 var (
 	username string
 	password string
+	rpcAddr  string
+	insecure bool
 )
 
 func newLoginCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "login",
-		Short:   "Log in to the Yorkie server",
+		Short:   "Log in to Yorkie server",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cli, err := admin.Dial(viper.GetString("rpcAddr"), admin.WithInsecure(viper.GetBool("isInsecure")))
+			cli, err := admin.Dial(rpcAddr, admin.WithInsecure(insecure))
 			if err != nil {
 				return err
 			}
@@ -50,17 +50,20 @@ func newLoginCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			conf, err := config.Load()
 			if err != nil {
 				return err
 			}
+
 			if conf.Auths == nil {
-				conf.Auths = make(map[string]string)
+				conf.Auths = make(map[string]config.Auth)
 			}
-			rpcAddr := viper.GetString("rpcAddr")
-			conf.Auths[rpcAddr] = token
+			conf.Auths[rpcAddr] = config.Auth{
+				Token:    token,
+				Insecure: insecure,
+			}
 			conf.RPCAddr = rpcAddr
-			conf.IsInsecure = viper.GetBool("isInsecure")
 			if err := config.Save(conf); err != nil {
 				return err
 			}
@@ -85,6 +88,18 @@ func init() {
 		"p",
 		"",
 		"Password (required if username is set)",
+	)
+	cmd.Flags().StringVar(
+		&rpcAddr,
+		"rpc-addr",
+		"localhost:11101",
+		"Address of the rpc server",
+	)
+	cmd.Flags().BoolVar(
+		&insecure,
+		"insecure",
+		false,
+		"Skip the TLS connection of the client",
 	)
 	cmd.MarkFlagsRequiredTogether("username", "password")
 	rootCmd.AddCommand(cmd)

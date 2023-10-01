@@ -45,11 +45,11 @@ func newRemoveCommand() *cobra.Command {
 			documentKey := args[1]
 
 			rpcAddr := viper.GetString("rpcAddr")
-			token, err := config.LoadToken(rpcAddr)
+			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
 				return err
 			}
-			cli, err := admin.Dial(rpcAddr, admin.WithToken(token), admin.WithInsecure(viper.GetBool("isInsecure")))
+			cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
 			if err != nil {
 				return err
 			}

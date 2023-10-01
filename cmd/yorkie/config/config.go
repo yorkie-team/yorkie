@@ -28,19 +28,13 @@ import (
 	"github.com/spf13/viper"
 )
 
-var (
-	// RPCAddr is the address of the rpc server.
-	RPCAddr string
-	// IsInsecure is whether to disable the TLS connection of the client.
-	IsInsecure bool
-)
-
 // ensureYorkieDir ensures that the directory of Yorkie exists.
 func ensureYorkieDir() (string, error) {
 	yorkieDir := path.Join(os.Getenv("HOME"), ".yorkie")
 	if err := os.MkdirAll(yorkieDir, 0700); err != nil {
 		return "", fmt.Errorf("mkdir: %w", err)
 	}
+
 	return yorkieDir, nil
 }
 
@@ -50,33 +44,45 @@ func configPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("ensure yorkie dir: %w", err)
 	}
+
 	return path.Join(yorkieDir, "config.json"), nil
+}
+
+// Auth is the authentication information.
+type Auth struct {
+	Token    string `json:"token"`
+	Insecure bool   `json:"insecure"`
 }
 
 // Config is the configuration of CLI.
 type Config struct {
 	// Auths is the map of the address and the token.
-	Auths map[string]string `json:"auths"`
+	Auths map[string]Auth `json:"auths"`
+
 	// RPCAddr is the address of the rpc server
 	RPCAddr string `json:"rpcAddr"`
-	// IsInsecure specifies whether to skip the TLS connection of the client
-	IsInsecure bool `json:"isInsecure"`
 }
 
 // New creates a new configuration.
 func New() *Config {
 	return &Config{
-		Auths: make(map[string]string),
+		Auths: make(map[string]Auth),
 	}
 }
 
-// LoadToken loads the token from the given address.
-func LoadToken(addr string) (string, error) {
+// LoadAuth loads the authentication information for the given address.
+func LoadAuth(addr string) (Auth, error) {
 	config, err := Load()
 	if err != nil {
-		return "", fmt.Errorf("load token: %w", err)
+		return Auth{}, fmt.Errorf("load token: %w", err)
 	}
-	return config.Auths[addr], nil
+
+	auth, ok := config.Auths[addr]
+	if !ok {
+		return Auth{}, fmt.Errorf("auth for %s does not exist", addr)
+	}
+
+	return auth, nil
 }
 
 // Load loads the configuration from the given path.

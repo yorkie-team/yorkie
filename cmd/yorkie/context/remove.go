@@ -26,8 +26,8 @@ import (
 
 func newRemoveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "remove [rpcAddr]",
-		Short:   "Remove the context for the specified rpcAddr",
+		Use:     "remove [RPCAddr]",
+		Short:   "Remove the context for the given RPCAddr",
 		Args:    cobra.ExactArgs(1),
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -37,22 +37,13 @@ func newRemoveCmd() *cobra.Command {
 			}
 
 			rpcAddr := args[0]
-
-			// Check if auth exists for the rpcAddr
 			if _, ok := conf.Auths[rpcAddr]; !ok {
-				return fmt.Errorf("no context exists for the rpcAddr: %s", rpcAddr)
+				return fmt.Errorf("auth for %s does not exist", rpcAddr)
 			}
 
-			// Delete the context for the rpcAddr
 			delete(conf.Auths, rpcAddr)
 
-			err = config.Save(conf)
-			if err != nil {
-				return err
-			}
-
-			fmt.Printf("Context for rpcAddr: %s has been removed.\n", rpcAddr)
-			return nil
+			return config.Save(conf)
 		},
 	}
 }

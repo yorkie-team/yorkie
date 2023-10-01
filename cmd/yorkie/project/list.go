@@ -36,12 +36,12 @@ func newListCommand() *cobra.Command {
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rpcAddr := viper.GetString("rpcAddr")
-			token, err := config.LoadToken(rpcAddr)
+			auth, err := config.LoadAuth(rpcAddr)
 			if err != nil {
 				return err
 			}
 
-			cli, err := admin.Dial(rpcAddr, admin.WithToken(token), admin.WithInsecure(viper.GetBool("isInsecure")))
+			cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
 			if err != nil {
 				return err
 			}

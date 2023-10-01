@@ -55,11 +55,7 @@ func init() {
 	viper.AddConfigPath(path.Join(os.Getenv("HOME"), ".yorkie"))
 
 	rootCmd.PersistentFlags().String("rpc-addr", "localhost:11101", "Address of the rpc server")
-	rootCmd.PersistentFlags().Bool("insecure", false, "Skip the TLS connection of the client")
 	if err := viper.BindPFlag("rpcAddr", rootCmd.PersistentFlags().Lookup("rpc-addr")); err != nil {
 		log.Fatalf("Failed to bind rpcAddr flag: %v", err)
-	}
-	if err := viper.BindPFlag("isInsecure", rootCmd.PersistentFlags().Lookup("insecure")); err != nil {
-		log.Fatalf("Failed to bind isInsecure flag: %v", err)
 	}
 }

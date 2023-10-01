@@ -17,8 +17,6 @@
 package context
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -27,8 +25,8 @@ import (
 
 func newSetContextCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "set",
-		Short:   "Set the current global flags as the context",
+		Use:     "set [RPCAddr]",
+		Short:   "Set the current context to the given RPCAddr",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf, err := config.Load()
@@ -38,21 +36,12 @@ func newSetContextCmd() *cobra.Command {
 
 			rpcAddr := viper.GetString("rpcAddr")
 			conf.RPCAddr = rpcAddr
-			conf.IsInsecure = viper.GetBool("isInsecure")
 
-			// check if auth exists for the rpcAddr
 			if _, ok := conf.Auths[rpcAddr]; !ok {
-				conf.Auths[rpcAddr] = ""
-				fmt.Println("A new RPC address has been set. Please log in again.")
+				delete(conf.Auths, rpcAddr)
 			}
 
-			err = config.Save(conf)
-			if err != nil {
-				return err
-			}
-
-			fmt.Println("Context has been updated.")
-			return nil
+			return config.Save(conf)
 		},
 	}
 }
