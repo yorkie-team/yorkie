@@ -17,8 +17,6 @@
 package context
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
@@ -31,6 +29,10 @@ func newRemoveCmd() *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return ErrRPCEmpty
+			}
+
 			conf, err := config.Load()
 			if err != nil {
 				return err
@@ -38,10 +40,16 @@ func newRemoveCmd() *cobra.Command {
 
 			rpcAddr := args[0]
 			if _, ok := conf.Auths[rpcAddr]; !ok {
-				return fmt.Errorf("auth for %s does not exist", rpcAddr)
+				return ErrNotFoundAuth
 			}
 
 			delete(conf.Auths, rpcAddr)
+			if conf.RPCAddr == rpcAddr {
+				for addr := range conf.Auths {
+					conf.RPCAddr = addr
+					break
+				}
+			}
 
 			return config.Save(conf)
 		},

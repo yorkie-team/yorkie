@@ -18,7 +18,6 @@ package context
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 )
@@ -29,17 +28,21 @@ func newSetContextCmd() *cobra.Command {
 		Short:   "Set the current context to the given RPCAddr",
 		PreRunE: config.Preload,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return ErrRPCEmpty
+			}
+
 			conf, err := config.Load()
 			if err != nil {
 				return err
 			}
 
-			rpcAddr := viper.GetString("rpcAddr")
-			conf.RPCAddr = rpcAddr
-
+			rpcAddr := args[0]
 			if _, ok := conf.Auths[rpcAddr]; !ok {
-				delete(conf.Auths, rpcAddr)
+				return ErrNotFoundAuth
 			}
+
+			conf.RPCAddr = rpcAddr
 
 			return config.Save(conf)
 		},

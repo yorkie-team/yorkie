@@ -48,7 +48,13 @@ func newLogoutCmd() *cobra.Command {
 			}
 
 			delete(conf.Auths, rpcAddr)
-			conf.RPCAddr = ""
+			if conf.RPCAddr == rpcAddr {
+				for addr := range conf.Auths {
+					conf.RPCAddr = addr
+					break
+				}
+			}
+
 			return config.Save(conf)
 		},
 	}

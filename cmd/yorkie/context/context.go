@@ -18,7 +18,17 @@
 package context
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
+)
+
+var (
+	// ErrRPCEmpty is returned when the given RPC address is empty.
+	ErrRPCEmpty = errors.New("rpcAddr is required")
+
+	// ErrNotFoundAuth is returned when the given auth is not found.
+	ErrNotFoundAuth = errors.New("not found auth")
 )
 
 var (

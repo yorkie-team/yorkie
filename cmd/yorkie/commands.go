@@ -18,7 +18,6 @@
 package main
 
 import (
-	"log"
 	"os"
 	"path"
 
@@ -55,7 +54,5 @@ func init() {
 	viper.AddConfigPath(path.Join(os.Getenv("HOME"), ".yorkie"))
 
 	rootCmd.PersistentFlags().String("rpc-addr", "localhost:11101", "Address of the rpc server")
-	if err := viper.BindPFlag("rpcAddr", rootCmd.PersistentFlags().Lookup("rpc-addr")); err != nil {
-		log.Fatalf("Failed to bind rpcAddr flag: %v", err)
-	}
+	_ = viper.BindPFlag("rpcAddr", rootCmd.PersistentFlags().Lookup("rpc-addr"))
 }

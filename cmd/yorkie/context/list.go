@@ -37,8 +37,6 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			current := viper.GetString("rpcAddr")
-
 			tw := table.NewWriter()
 			tw.Style().Options.DrawBorder = false
 			tw.Style().Options.SeparateColumns = false
@@ -48,9 +46,9 @@ func newListCommand() *cobra.Command {
 
 			tw.AppendHeader(table.Row{"CURRENT", "RPC ADDR", "INSECURE", "TOKEN"})
 			for rpcAddr, auth := range conf.Auths {
-				isCurrent := ""
-				if rpcAddr == current {
-					isCurrent = "*"
+				current := ""
+				if rpcAddr == viper.GetString("rpcAddr") {
+					current = "*"
 				}
 
 				insecure := "false"
@@ -63,7 +61,7 @@ func newListCommand() *cobra.Command {
 					ellipsisToken = auth.Token[:10] + "..." + auth.Token[len(auth.Token)-10:]
 				}
 
-				tw.AppendRow(table.Row{isCurrent, rpcAddr, insecure, ellipsisToken})
+				tw.AppendRow(table.Row{current, rpcAddr, insecure, ellipsisToken})
 			}
 
 			fmt.Println(tw.Render())
