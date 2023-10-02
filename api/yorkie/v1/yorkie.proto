@@ -35,6 +35,8 @@ service YorkieService {
   rpc PushPullChanges (PushPullChangesRequest) returns (PushPullChangesResponse) {}
 
   rpc WatchDocument (WatchDocumentRequest) returns (stream WatchDocumentResponse) {}
+
+  rpc Broadcast (BroadcastRequest) returns (BroadcastResponse) {}
 }
 
 message ActivateClientRequest {
@@ -108,4 +110,14 @@ message PushPullChangesRequest {
 
 message PushPullChangesResponse {
   ChangePack change_pack = 1;
+}
+
+message BroadcastRequest {
+  string client_id = 1;
+  string document_id = 2;
+  string topic = 3;
+  bytes payload = 4;
+}
+
+message BroadcastResponse {
 }

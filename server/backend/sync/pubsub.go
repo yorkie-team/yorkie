@@ -50,6 +50,7 @@ type DocEvent struct {
 	Type       types.DocEventType
 	Publisher  *time.ActorID
 	DocumentID types.ID
+	Body       types.DocEventBody
 }
 
 // Events returns the DocEvent channel of this subscription.

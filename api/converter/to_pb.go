@@ -207,6 +207,8 @@ func ToDocEventType(eventType types.DocEventType) (api.DocEventType, error) {
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_WATCHED, nil
 	case types.DocumentUnwatchedEvent:
 		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_UNWATCHED, nil
+	case types.DocumentBroadcastEvent:
+		return api.DocEventType_DOC_EVENT_TYPE_DOCUMENT_BROADCAST, nil
 	default:
 		return 0, fmt.Errorf("%s: %w", eventType, ErrUnsupportedEventType)
 	}

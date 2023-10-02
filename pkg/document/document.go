@@ -18,6 +18,8 @@
 package document
 
 import (
+	gojson "encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -27,6 +29,11 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+)
+
+var (
+	// ErrUnsupportedPayloadType is returned when the payload is unserializable to JSON.
+	ErrUnsupportedPayloadType = errors.New("unsupported payload type")
 )
 
 // DocEvent represents the event that occurred in the document.
@@ -52,6 +59,12 @@ const (
 	PresenceChangedEvent DocEventType = "presence-changed"
 )
 
+// BroadcastRequest represents a broadcast request that will be delivered to the client.
+type BroadcastRequest struct {
+	Topic   string
+	Payload []byte
+}
+
 // Document represents a document accessible to the user.
 //
 // How document works:
@@ -73,13 +86,29 @@ type Document struct {
 
 	// events is the channel to send events that occurred in the document.
 	events chan DocEvent
+
+	// broadcastRequests is the send-only channel to send broadcast requests.
+	broadcastRequests chan BroadcastRequest
+
+	// broadcastResponses is the receive-only channel to receive broadcast responses.
+	broadcastResponses chan error
+
+	// broadcastEventHandlers is a map of registered event handlers for events.
+	broadcastEventHandlers map[string]func(
+		topic, publisher string,
+		payload []byte) error
 }
 
 // New creates a new instance of Document.
 func New(key key.Key) *Document {
 	return &Document{
-		doc:    NewInternalDocument(key),
-		events: make(chan DocEvent, 1),
+		doc:                NewInternalDocument(key),
+		events:             make(chan DocEvent, 1),
+		broadcastRequests:  make(chan BroadcastRequest, 1),
+		broadcastResponses: make(chan error, 1),
+		broadcastEventHandlers: make(map[string]func(
+			topic, publisher string,
+			payload []byte) error),
 	}
 }
 
@@ -333,6 +362,56 @@ func (d *Document) RemoveOnlineClient(clientID string) {
 // Events returns the events of this document.
 func (d *Document) Events() <-chan DocEvent {
 	return d.events
+}
+
+// BroadcastRequests returns the broadcast requests of this document.
+func (d *Document) BroadcastRequests() <-chan BroadcastRequest {
+	return d.broadcastRequests
+}
+
+// BroadcastResponses returns the broadcast responses of this document.
+func (d *Document) BroadcastResponses() chan error {
+	return d.broadcastResponses
+}
+
+// Broadcast encodes the given payload and sends a Broadcast request.
+func (d *Document) Broadcast(topic string, payload any) error {
+	marshaled, err := gojson.Marshal(payload)
+	if err != nil {
+		return ErrUnsupportedPayloadType
+	}
+
+	d.broadcastRequests <- BroadcastRequest{
+		Topic:   topic,
+		Payload: marshaled,
+	}
+	return <-d.broadcastResponses
+}
+
+// SubscribeBroadcastEvent subscribes to the given topic and registers
+// an event handler.
+func (d *Document) SubscribeBroadcastEvent(
+	topic string,
+	handler func(topic, publisher string, payload []byte) error,
+) {
+	d.broadcastEventHandlers[topic] = handler
+}
+
+// UnsubscribeBroadcastEvent unsubscribes to the given topic and deregisters
+// the event handler.
+func (d *Document) UnsubscribeBroadcastEvent(
+	topic string,
+) {
+	delete(d.broadcastEventHandlers, topic)
+}
+
+// BroadcastEventHandlers returns the registered handlers for broadcast events.
+func (d *Document) BroadcastEventHandlers() map[string]func(
+	topic string,
+	publisher string,
+	payload []byte,
+) error {
+	return d.broadcastEventHandlers
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

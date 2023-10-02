@@ -57,6 +57,7 @@ const (
 	RemoveDocument   Method = "RemoveDocument"
 	PushPull         Method = "PushPull"
 	WatchDocuments   Method = "WatchDocuments"
+	Broadcast        Method = "Broadcast"
 )
 
 // IsAuthMethod returns whether the given method can be used for authorization.
@@ -79,6 +80,7 @@ func AuthMethods() []Method {
 		RemoveDocument,
 		PushPull,
 		WatchDocuments,
+		Broadcast,
 	}
 }
 

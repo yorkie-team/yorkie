@@ -422,6 +422,10 @@ func (s *yorkieServer) WatchDocument(
 					Event: &api.DocEvent{
 						Type:      eventType,
 						Publisher: event.Publisher.String(),
+						Body: &api.DocEventBody{
+							Topic:   event.Body.Topic,
+							Payload: event.Body.Payload,
+						},
 					},
 				},
 			}); err != nil {
@@ -541,4 +545,58 @@ func (s *yorkieServer) unwatchDoc(
 			DocumentID: documentID,
 		},
 	)
+}
+
+func (s *yorkieServer) Broadcast(
+	ctx context.Context,
+	req *api.BroadcastRequest,
+) (*api.BroadcastResponse, error) {
+	clientID, err := time.ActorIDFromHex(req.ClientId)
+	if err != nil {
+		return nil, err
+	}
+
+	docID, err := converter.FromDocumentID(req.DocumentId)
+	if err != nil {
+		return nil, err
+	}
+
+	docInfo, err := documents.FindDocInfo(
+		ctx,
+		s.backend,
+		projects.From(ctx),
+		docID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(sejongk): It seems better to use a separate auth attributes for broadcast later
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
+		Method:     types.Broadcast,
+		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
+	}); err != nil {
+		return nil, err
+	}
+
+	project := projects.From(ctx)
+	if _, err = clients.FindClientInfo(ctx, s.backend.DB, project, clientID); err != nil {
+		return nil, err
+	}
+
+	s.backend.Coordinator.Publish(
+		ctx,
+		clientID,
+		sync.DocEvent{
+			Type:       types.DocumentBroadcastEvent,
+			Publisher:  clientID,
+			DocumentID: docID,
+			Body: types.DocEventBody{
+				Topic:   req.Topic,
+				Payload: req.Payload,
+			},
+		},
+	)
+
+	return &api.BroadcastResponse{}, nil
 }
