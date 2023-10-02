@@ -33,8 +33,7 @@ import (
 
 var (
 	// ErrUnsupportedPayloadType is returned when the payload is unserializable to JSON.
-	ErrUnsupportedPayloadType = errors.New(
-		"the payload is an unsupported JSON type")
+	ErrUnsupportedPayloadType = errors.New("unsupported payload type")
 )
 
 // DocEvent represents the event that occurred in the document.
@@ -390,7 +389,7 @@ func (d *Document) Broadcast(topic string, payload any) error {
 }
 
 // SubscribeBroadcastEvent subscribes to the given topic and registers
-// an event handler
+// an event handler.
 func (d *Document) SubscribeBroadcastEvent(
 	topic string,
 	handler func(topic, publisher string, payload []byte) error,
@@ -399,7 +398,7 @@ func (d *Document) SubscribeBroadcastEvent(
 }
 
 // UnsubscribeBroadcastEvent unsubscribes to the given topic and deregisters
-// the event handler
+// the event handler.
 func (d *Document) UnsubscribeBroadcastEvent(
 	topic string,
 ) {
@@ -407,8 +406,11 @@ func (d *Document) UnsubscribeBroadcastEvent(
 }
 
 // BroadcastEventHandlers returns the registered handlers for broadcast events.
-func (d *Document) BroadcastEventHandlers() map[string](func(topic string,
-	publisher string, payload []byte) error) {
+func (d *Document) BroadcastEventHandlers() map[string]func(
+	topic string,
+	publisher string,
+	payload []byte,
+) error {
 	return d.broadcastEventHandlers
 }
 

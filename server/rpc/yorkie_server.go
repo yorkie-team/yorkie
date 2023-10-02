@@ -584,9 +584,6 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	if err != nil {
-		return nil, err
-	}
 	s.backend.Coordinator.Publish(
 		ctx,
 		clientID,

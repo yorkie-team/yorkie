@@ -85,15 +85,9 @@ func (c *Coordinator) Publish(
 	publisherID *time.ActorID,
 	event sync.DocEvent,
 ) {
-	c.pubSub.Publish(ctx, publisherID, event)
-}
-
-// PublishToLocal publishes the given event.
-func (c *Coordinator) PublishToLocal(
-	ctx context.Context,
-	publisherID *time.ActorID,
-	event sync.DocEvent,
-) {
+	// NOTE(hackerwins): String() triggers the cache of ActorID to avoid
+	// race condition of concurrent access to the cache.
+	_ = event.Publisher.String()
 	c.pubSub.Publish(ctx, publisherID, event)
 }
 
