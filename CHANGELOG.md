@@ -7,6 +7,26 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.7] - 2023-10-06
+
+### Added
+* Introduce Broadcast API by @sejongk in https://github.com/yorkie-team/yorkie/pull/631
+* Add context to CLI for simplifying CLI commands by @Wu22e and @hackerwins in https://github.com/yorkie-team/yorkie/pull/647
+* Add Tree.Edit benchmark by @JOOHOJANG in https://github.com/yorkie-team/yorkie/pull/637
+
+### Changed
+* Bump checkout from v3 to v4 by @Yaminyam in https://github.com/yorkie-team/yorkie/pull/641
+* Remove panic from crdt.Primitive @fourjae and @hackerwins in https://github.com/yorkie-team/yorkie/pull/636
+
+### Removed
+* Remove unused trie by @hackerwins in https://github.com/yorkie-team/yorkie/pull/646
+
+### Fixed
+* Support concurrent formatting of Text by @MoonGyu1 in https://github.com/yorkie-team/yorkie/pull/639
+* Fix typo in retention design document by @LakHyeonKim in https://github.com/yorkie-team/yorkie/pull/633
+* Update Design Document for Missing Document Links and Ordering by @krapie in https://github.com/yorkie-team/yorkie/pull/630
+* Recover Select to prevent unsupported operation by @hackerwins in https://github.com/yorkie-team/yorkie/pull/629
+
 ## [0.4.6] - 2023-08-25
 
 ### Added
