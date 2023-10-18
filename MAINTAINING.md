@@ -7,8 +7,9 @@
 - Update `YORKIE_VERSION` in [Makefile](https://github.com/yorkie-team/yorkie/blob/main/Makefile#L1).
 - Update `version` and `appVersion` in [yorkie-cluster Helm Chart](https://github.com/yorkie-team/yorkie/blob/main/build/charts/yorkie-cluster/Chart.yaml#L16-L17).
 - If `yorkie-monitoring` or `yorkie-argocd` Helm Chart have changes, you also need to update `version` and `appVersion` for each chart.
-  - [yorkie-monitoring Helm Chart](https://github.com/yorkie-team/yorkie/blob/main/build/charts/yorkie-monitoring/Chart.yaml#L16-L17) 
-  - [yorkie-argocd Helm Chart](https://github.com/yorkie-team/yorkie/blob/main/build/charts/yorkie-argocd/Chart.yaml#L16-L17) 
+  - [yorkie-monitoring Helm Chart](https://github.com/yorkie-team/yorkie/blob/main/build/charts/yorkie-monitoring/Chart.yaml#L16-L17)
+  - [yorkie-argocd Helm Chart](https://github.com/yorkie-team/yorkie/blob/main/build/charts/yorkie-argocd/Chart.yaml#L16-L17)
+- Also, you need to update `helmChartTargetRevision` in `yorkie-argocd` Helm Chart's [values.yaml](https://github.com/yorkie-team/yorkie/blob/main/build/charts/yorkie-argocd/values.yaml#L13) 
 
 ### 2. Write changelog of this version in [CHANGELOG.md](https://github.com/yorkie-team/yorkie/blob/main/CHANGELOG.md).
 
