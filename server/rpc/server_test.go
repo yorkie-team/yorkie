@@ -718,7 +718,7 @@ func TestAdminRPCServerBackend(t *testing.T) {
 				Password: adminPassword,
 			},
 		)
-		assert.Equal(t, codes.Unknown, status.Convert(err).Code())
+		assert.Equal(t, codes.AlreadyExists, status.Convert(err).Code())
 	})
 
 	t.Run("admin login test", func(t *testing.T) {

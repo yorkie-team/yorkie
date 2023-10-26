@@ -59,6 +59,7 @@ var errorToCode = map[error]codes.Code{
 	// AlreadyExists means the requested resource already exists.
 	database.ErrProjectAlreadyExists:     codes.AlreadyExists,
 	database.ErrProjectNameAlreadyExists: codes.AlreadyExists,
+	database.ErrUserAlreadyExists:        codes.AlreadyExists,
 
 	// FailedPrecondition means the request is rejected because the state of the
 	// system is not the desired state.
