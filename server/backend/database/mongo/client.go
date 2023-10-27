@@ -1349,16 +1349,6 @@ func (c *Client) UpdateSyncedSeq(
 		return err
 	}
 
-	// NOTE: skip storing the initial ticket to prevent GC interruption.
-	//       Documents in this state do not need to be saved because they do not
-	//       have any tombstones to be referenced by other documents.
-	//
-	//       (The initial ticket is used as the creation time of the root
-	//       element that operations can not remove.)
-	if ticket.Compare(time.InitialTicket) == 0 {
-		return nil
-	}
-
 	if _, err = c.collection(colSyncedSeqs).UpdateOne(ctx, bson.M{
 		"doc_id":    encodedDocID,
 		"client_id": encodedClientID,
