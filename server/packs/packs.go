@@ -21,6 +21,7 @@ package packs
 import (
 	"context"
 	"fmt"
+	"strconv"
 	gotime "time"
 
 	"go.uber.org/zap"
@@ -29,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -118,6 +120,19 @@ func PushPull(
 	}
 	respPack.MinSyncedTicket = minSyncedTicket
 	respPack.ApplyDocInfo(docInfo)
+
+	pullLog := strconv.Itoa(respPack.ChangesLen())
+	if respPack.SnapshotLen() > 0 {
+		pullLog = units.HumanSize(float64(respPack.SnapshotLen()))
+	}
+	logging.From(ctx).Infof(
+		"SYNC: '%s' is synced by '%s', push: %d, pull: %s, min: %s",
+		docInfo.Key,
+		clientInfo.Key,
+		len(pushedChanges),
+		pullLog,
+		minSyncedTicket.StructureAsString(),
+	)
 
 	// 05. publish document change event then store snapshot asynchronously.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
