@@ -34,6 +34,11 @@ func NewDefaultInterceptor() *DefaultInterceptor {
 	return &DefaultInterceptor{}
 }
 
+const (
+	// SlowThreshold is the threshold for slow RPC.
+	SlowThreshold = 100 * gotime.Millisecond
+)
+
 // Unary creates a unary server interceptor for default.
 func (i *DefaultInterceptor) Unary() grpc.UnaryServerInterceptor {
 	return func(
@@ -50,7 +55,7 @@ func (i *DefaultInterceptor) Unary() grpc.UnaryServerInterceptor {
 			return nil, grpchelper.ToStatusError(err)
 		}
 
-		if gotime.Since(start) > 100*gotime.Millisecond {
+		if gotime.Since(start) > SlowThreshold {
 			reqLogger.Infof("RPC : %q %s", info.FullMethod, gotime.Since(start))
 		}
 		return resp, nil
