@@ -17,12 +17,10 @@
 package grpchelper
 
 import (
+	"connectrpc.com/connect"
 	"errors"
 	"fmt"
-
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/runtime/protoiface"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -38,50 +36,50 @@ import (
 )
 
 // errorToCode maps an error to gRPC status code.
-var errorToCode = map[error]codes.Code{
+var errorToCode = map[error]connect.Code{
 	// InvalidArgument means the request is malformed.
-	converter.ErrPackRequired:       codes.InvalidArgument,
-	converter.ErrCheckpointRequired: codes.InvalidArgument,
-	time.ErrInvalidHexString:        codes.InvalidArgument,
-	time.ErrInvalidActorID:          codes.InvalidArgument,
-	types.ErrInvalidID:              codes.InvalidArgument,
-	clients.ErrInvalidClientID:      codes.InvalidArgument,
-	clients.ErrInvalidClientKey:     codes.InvalidArgument,
-	key.ErrInvalidKey:               codes.InvalidArgument,
-	types.ErrEmptyProjectFields:     codes.InvalidArgument,
+	converter.ErrPackRequired:       connect.CodeInvalidArgument,
+	converter.ErrCheckpointRequired: connect.CodeInvalidArgument,
+	time.ErrInvalidHexString:        connect.CodeInvalidArgument,
+	time.ErrInvalidActorID:          connect.CodeInvalidArgument,
+	types.ErrInvalidID:              connect.CodeInvalidArgument,
+	clients.ErrInvalidClientID:      connect.CodeInvalidArgument,
+	clients.ErrInvalidClientKey:     connect.CodeInvalidArgument,
+	key.ErrInvalidKey:               connect.CodeInvalidArgument,
+	types.ErrEmptyProjectFields:     connect.CodeInvalidArgument,
 
 	// NotFound means the requested resource does not exist.
-	database.ErrProjectNotFound:  codes.NotFound,
-	database.ErrClientNotFound:   codes.NotFound,
-	database.ErrDocumentNotFound: codes.NotFound,
-	database.ErrUserNotFound:     codes.NotFound,
+	database.ErrProjectNotFound:  connect.CodeNotFound,
+	database.ErrClientNotFound:   connect.CodeNotFound,
+	database.ErrDocumentNotFound: connect.CodeNotFound,
+	database.ErrUserNotFound:     connect.CodeNotFound,
 
 	// AlreadyExists means the requested resource already exists.
-	database.ErrProjectAlreadyExists:     codes.AlreadyExists,
-	database.ErrProjectNameAlreadyExists: codes.AlreadyExists,
-	database.ErrUserAlreadyExists:        codes.AlreadyExists,
+	database.ErrProjectAlreadyExists:     connect.CodeAlreadyExists,
+	database.ErrProjectNameAlreadyExists: connect.CodeAlreadyExists,
+	database.ErrUserAlreadyExists:        connect.CodeAlreadyExists,
 
 	// FailedPrecondition means the request is rejected because the state of the
 	// system is not the desired state.
-	database.ErrClientNotActivated:      codes.FailedPrecondition,
-	database.ErrDocumentNotAttached:     codes.FailedPrecondition,
-	database.ErrDocumentAlreadyAttached: codes.FailedPrecondition,
-	documents.ErrDocumentAttached:       codes.FailedPrecondition,
-	packs.ErrInvalidServerSeq:           codes.FailedPrecondition,
-	database.ErrConflictOnUpdate:        codes.FailedPrecondition,
+	database.ErrClientNotActivated:      connect.CodeFailedPrecondition,
+	database.ErrDocumentNotAttached:     connect.CodeFailedPrecondition,
+	database.ErrDocumentAlreadyAttached: connect.CodeFailedPrecondition,
+	documents.ErrDocumentAttached:       connect.CodeFailedPrecondition,
+	packs.ErrInvalidServerSeq:           connect.CodeFailedPrecondition,
+	database.ErrConflictOnUpdate:        connect.CodeFailedPrecondition,
 
 	// Unimplemented means the server does not implement the functionality.
-	converter.ErrUnsupportedOperation:   codes.Unimplemented,
-	converter.ErrUnsupportedElement:     codes.Unimplemented,
-	converter.ErrUnsupportedEventType:   codes.Unimplemented,
-	converter.ErrUnsupportedValueType:   codes.Unimplemented,
-	converter.ErrUnsupportedCounterType: codes.Unimplemented,
+	converter.ErrUnsupportedOperation:   connect.CodeUnimplemented,
+	converter.ErrUnsupportedElement:     connect.CodeUnimplemented,
+	converter.ErrUnsupportedEventType:   connect.CodeUnimplemented,
+	converter.ErrUnsupportedValueType:   connect.CodeUnimplemented,
+	converter.ErrUnsupportedCounterType: connect.CodeUnimplemented,
 
 	// Unauthenticated means the request does not have valid authentication
-	auth.ErrNotAllowed:             codes.Unauthenticated,
-	auth.ErrUnexpectedStatusCode:   codes.Unauthenticated,
-	auth.ErrWebhookTimeout:         codes.Unauthenticated,
-	database.ErrMismatchedPassword: codes.Unauthenticated,
+	auth.ErrNotAllowed:             connect.CodeUnauthenticated,
+	auth.ErrUnexpectedStatusCode:   connect.CodeUnauthenticated,
+	auth.ErrWebhookTimeout:         connect.CodeUnauthenticated,
+	database.ErrMismatchedPassword: connect.CodeUnauthenticated,
 }
 
 func detailsFromError(err error) (protoiface.MessageV1, bool) {
@@ -111,21 +109,21 @@ func ToStatusError(err error) error {
 		cause = errors.Unwrap(cause)
 	}
 	if code, ok := errorToCode[cause]; ok {
-		return status.Error(code, err.Error())
+		return connect.NewError(code, err)
 	}
 
 	// NOTE(hackerwins): InvalidFieldsError has details of invalid fields in
 	// the error message.
 	var invalidFieldsError *validation.StructError
 	if errors.As(err, &invalidFieldsError) {
-		st := status.New(codes.InvalidArgument, err.Error())
-		if details, ok := detailsFromError(err); ok {
-			st, _ = st.WithDetails(details)
-		}
-		return st.Err()
+		st := connect.NewError(connect.CodeInvalidArgument, err)
+		//if details, ok := detailsFromError(err); ok {
+		//	st, _ = st.AddDetail(details)
+		//}
+		return st
 	}
 
-	if err := status.Error(codes.Internal, err.Error()); err != nil {
+	if err := connect.NewError(connect.CodeInternal, err); err != nil {
 		return fmt.Errorf("create status error: %w", err)
 	}
 

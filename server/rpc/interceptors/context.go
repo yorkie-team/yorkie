@@ -18,14 +18,11 @@
 package interceptors
 
 import (
+	"connectrpc.com/connect"
 	"context"
+	"errors"
+	"net/http"
 	"strings"
-
-	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	grpcmetadata "google.golang.org/grpc/metadata"
-	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
@@ -55,75 +52,64 @@ func NewContextInterceptor(be *backend.Backend) *ContextInterceptor {
 }
 
 // Unary creates a unary server interceptor for building additional context.
-func (i *ContextInterceptor) Unary() grpc.UnaryServerInterceptor {
+func (i *ContextInterceptor) Unary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
-		req interface{},
-		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (resp interface{}, err error) {
-		if !isYorkieService(info.FullMethod) {
-			return handler(ctx, req)
-		}
+		req connect.AnyRequest,
+	) (connect.AnyResponse, error) {
+		//if !isYorkieService(info.FullMethod) {
+		//	return handler(ctx, req)
+		//}
 
-		ctx, err = i.buildContext(ctx)
+		ctx, err := i.buildContext(ctx, req.Header())
 		if err != nil {
 			return nil, err
 		}
 
-		resp, err = handler(ctx, req)
+		//data, ok := grpcmetadata.FromIncomingContext(ctx)
+		//if ok {
+		//	sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+		//	i.backend.Metrics.AddUserAgent(
+		//		i.backend.Config.Hostname,
+		//		projects.From(ctx),
+		//		sdkType,
+		//		sdkVersion,
+		//		info.FullMethod,
+		//	)
+		//}
 
-		data, ok := grpcmetadata.FromIncomingContext(ctx)
-		if ok {
-			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-			i.backend.Metrics.AddUserAgent(
-				i.backend.Config.Hostname,
-				projects.From(ctx),
-				sdkType,
-				sdkVersion,
-				info.FullMethod,
-			)
-		}
-
-		return resp, err
+		return next(ctx, req)
 	}
 }
 
 // Stream creates a stream server interceptor for building additional context.
-func (i *ContextInterceptor) Stream() grpc.StreamServerInterceptor {
+func (i *ContextInterceptor) Stream(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(
-		srv interface{},
-		ss grpc.ServerStream,
-		info *grpc.StreamServerInfo,
-		handler grpc.StreamHandler,
-	) (err error) {
-		if !isYorkieService(info.FullMethod) {
-			return handler(srv, ss)
-		}
+		ctx context.Context,
+		conn connect.StreamingHandlerConn,
+	) error {
+		//if !isYorkieService(info.FullMethod) {
+		//	return handler(srv, ss)
+		//}
 
-		ctx, err := i.buildContext(ss.Context())
+		ctx, err := i.buildContext(ctx, conn.RequestHeader())
 		if err != nil {
 			return err
 		}
 
-		wrapped := grpcmiddleware.WrapServerStream(ss)
-		wrapped.WrappedContext = ctx
+		//data, ok := grpcmetadata.FromIncomingContext(ctx)
+		//if ok {
+		//	sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
+		//	i.backend.Metrics.AddUserAgent(
+		//		i.backend.Config.Hostname,
+		//		projects.From(ctx),
+		//		sdkType,
+		//		sdkVersion,
+		//		info.FullMethod,
+		//	)
+		//}
 
-		err = handler(srv, wrapped)
-
-		data, ok := grpcmetadata.FromIncomingContext(ctx)
-		if ok {
-			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-			i.backend.Metrics.AddUserAgent(
-				i.backend.Config.Hostname,
-				projects.From(ctx),
-				sdkType,
-				sdkVersion,
-				info.FullMethod,
-			)
-		}
-
-		return err
+		return next(ctx, conn)
 	}
 }
 
@@ -133,25 +119,21 @@ func isYorkieService(method string) bool {
 
 // buildContext builds a context data for RPC. It includes the metadata of the
 // request and the project information.
-func (i *ContextInterceptor) buildContext(ctx context.Context) (context.Context, error) {
+func (i *ContextInterceptor) buildContext(ctx context.Context, header http.Header) (context.Context, error) {
 	// 01. building metadata
 	md := metadata.Metadata{}
-	data, ok := grpcmetadata.FromIncomingContext(ctx)
-	if !ok {
-		return nil, grpcstatus.Errorf(codes.Unauthenticated, "metadata is not provided")
-	}
 
-	apiKey := data[types.APIKeyKey]
+	apiKey := header.Get(types.APIKeyKey)
 	if len(apiKey) == 0 && !i.backend.Config.UseDefaultProject {
-		return nil, grpcstatus.Errorf(codes.Unauthenticated, "api key is not provided")
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("api key is not provided"))
 	}
 	if len(apiKey) > 0 {
-		md.APIKey = apiKey[0]
+		md.APIKey = apiKey
 	}
 
-	authorization := data[types.AuthorizationKey]
+	authorization := header.Get(types.AuthorizationKey)
 	if len(authorization) > 0 {
-		md.Authorization = authorization[0]
+		md.Authorization = authorization
 	}
 	ctx = metadata.With(ctx, md)
 	cacheKey := md.APIKey
