@@ -74,9 +74,9 @@ func (t *TextValue) Marshal() string {
 	)
 }
 
-// structureAsString returns a String containing the metadata of this value
+// toTestString returns a String containing the metadata of this value
 // for debugging purpose.
-func (t *TextValue) structureAsString() string {
+func (t *TextValue) toTestString() string {
 	return fmt.Sprintf(
 		`%s "%s"`,
 		t.attrs.Marshal(),
@@ -309,10 +309,10 @@ func (t *Text) Nodes() []*RGATreeSplitNode[*TextValue] {
 	return t.rgaTreeSplit.nodes()
 }
 
-// StructureAsString returns a String containing the metadata of the text
+// ToTestString returns a String containing the metadata of the text
 // for debugging purpose.
-func (t *Text) StructureAsString() string {
-	return t.rgaTreeSplit.StructureAsString()
+func (t *Text) ToTestString() string {
+	return t.rgaTreeSplit.ToTestString()
 }
 
 // CheckWeight returns false when there is an incorrect weight node.

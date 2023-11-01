@@ -71,9 +71,9 @@ func NewTicket(
 	}
 }
 
-// StructureAsString returns a string containing the metadata of the ticket
+// ToTestString returns a string containing the metadata of the ticket
 // for debugging purpose.
-func (t *Ticket) StructureAsString() string {
+func (t *Ticket) ToTestString() string {
 	return fmt.Sprintf(
 		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.String()[22:24],
 	)

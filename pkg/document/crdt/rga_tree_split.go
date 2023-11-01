@@ -21,7 +21,7 @@ type RGATreeSplitValue interface {
 	DeepCopy() RGATreeSplitValue
 	String() string
 	Marshal() string
-	structureAsString() string
+	toTestString() string
 }
 
 // RGATreeSplitNodeID is an ID of RGATreeSplitNode.
@@ -85,10 +85,10 @@ func (id *RGATreeSplitNodeID) Split(offset int) *RGATreeSplitNodeID {
 	return NewRGATreeSplitNodeID(id.createdAt, id.offset+offset)
 }
 
-// StructureAsString returns a String containing the metadata of the node id
+// ToTestString returns a String containing the metadata of the node id
 // for debugging purpose.
-func (id *RGATreeSplitNodeID) StructureAsString() string {
-	return fmt.Sprintf("%s:%d", id.createdAt.StructureAsString(), id.offset)
+func (id *RGATreeSplitNodeID) ToTestString() string {
+	return fmt.Sprintf("%s:%d", id.createdAt.ToTestString(), id.offset)
 }
 
 func (id *RGATreeSplitNodeID) hasSameCreatedAt(other *RGATreeSplitNodeID) bool {
@@ -120,10 +120,10 @@ func (pos *RGATreeSplitNodePos) getAbsoluteID() *RGATreeSplitNodeID {
 	return NewRGATreeSplitNodeID(pos.id.createdAt, pos.id.offset+pos.relativeOffset)
 }
 
-// StructureAsString returns a String containing the metadata of the position
+// ToTestString returns a String containing the metadata of the position
 // for debugging purpose.
-func (pos *RGATreeSplitNodePos) StructureAsString() string {
-	return fmt.Sprintf("%s:%d", pos.id.StructureAsString(), pos.relativeOffset)
+func (pos *RGATreeSplitNodePos) ToTestString() string {
+	return fmt.Sprintf("%s:%d", pos.id.ToTestString(), pos.relativeOffset)
 }
 
 // ID returns the ID of this RGATreeSplitNodePos.
@@ -245,10 +245,10 @@ func (s *RGATreeSplitNode[V]) createdAt() *time.Ticket {
 	return s.id.createdAt
 }
 
-// structureAsString returns a String containing the metadata of the node
+// toTestString returns a String containing the metadata of the node
 // for debugging purpose.
-func (s *RGATreeSplitNode[V]) structureAsString() string {
-	return fmt.Sprintf("%s %s", s.id.StructureAsString(), s.value.structureAsString())
+func (s *RGATreeSplitNode[V]) toTestString() string {
+	return fmt.Sprintf("%s %s", s.id.ToTestString(), s.value.toTestString())
 }
 
 // Remove removes this node if it created before the time of deletion are
@@ -357,7 +357,7 @@ func (s *RGATreeSplit[V]) findNodeWithSplit(
 func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
 	node := s.findFloorNode(id)
 	if node == nil {
-		return nil, fmt.Errorf("the node of the given id should be found: " + s.StructureAsString())
+		return nil, fmt.Errorf("the node of the given id should be found: " + s.ToTestString())
 	}
 
 	if id.offset > 0 && node.id.offset == id.offset {
@@ -373,7 +373,7 @@ func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RG
 
 func (s *RGATreeSplit[V]) splitNode(node *RGATreeSplitNode[V], offset int) (*RGATreeSplitNode[V], error) {
 	if offset > node.contentLen() {
-		return nil, fmt.Errorf("offset should be less than or equal to length: " + s.StructureAsString())
+		return nil, fmt.Errorf("offset should be less than or equal to length: " + s.ToTestString())
 	}
 
 	if offset == 0 {
@@ -599,17 +599,17 @@ func (s *RGATreeSplit[V]) nodes() []*RGATreeSplitNode[V] {
 	return nodes
 }
 
-// StructureAsString returns a String containing the metadata of the nodes
+// ToTestString returns a String containing the metadata of the nodes
 // for debugging purpose.
-func (s *RGATreeSplit[V]) StructureAsString() string {
+func (s *RGATreeSplit[V]) ToTestString() string {
 	builder := strings.Builder{}
 
 	node := s.initialHead
 	for node != nil {
 		if node.removedAt != nil {
-			builder.WriteString(fmt.Sprintf("{%s}", node.structureAsString()))
+			builder.WriteString(fmt.Sprintf("{%s}", node.toTestString()))
 		} else {
-			builder.WriteString(fmt.Sprintf("[%s]", node.structureAsString()))
+			builder.WriteString(fmt.Sprintf("[%s]", node.toTestString()))
 		}
 		node = node.next
 	}

@@ -95,10 +95,10 @@ func (a *Array) Marshal() string {
 	return a.elements.Marshal()
 }
 
-// StructureAsString returns a String containing the metadata of the elements
+// ToTestString returns a String containing the metadata of the elements
 // for debugging purpose.
-func (a *Array) StructureAsString() string {
-	return a.elements.StructureAsString()
+func (a *Array) ToTestString() string {
+	return a.elements.ToTestString()
 }
 
 // DeepCopy copies itself deeply.
