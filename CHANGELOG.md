@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.8] - 2023-11-01
+
+### Changed
+* Bump golang.org/x/net from 0.10.0 to 0.17.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/649
+* Bump google.golang.org/grpc from 1.54.0 to 1.56.3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/654
+* Fix ArgoCD version to v2.7.10 by @krapie in https://github.com/yorkie-team/yorkie/pull/653
+* Rename StructureAsString to toTestString by @hackerwins in https://github.com/yorkie-team/yorkie/pull/656
+
+### Fixed
+* Revise Prometheus PVC Spec Syntax Error by @krapie in https://github.com/yorkie-team/yorkie/pull/650
+* Remove skip storing MinSyncedTicket when the ticket is initial by @hackerwins in https://github.com/yorkie-team/yorkie/pull/655
+
 ## [0.4.7] - 2023-10-06
 
 ### Added
