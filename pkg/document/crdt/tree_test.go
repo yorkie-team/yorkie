@@ -170,7 +170,7 @@ func TestTree(t *testing.T) {
 			},
 			Size:      15,
 			IsRemoved: false,
-		}, tree.Structure())
+		}, tree.ToTreeNodeForTest())
 
 		//       0   1 2 3 4 5 6 7 8    9   10 11 12 13 14 15    16
 		// <root> <p> h e l l o ~ ! </p> <p>  w  o  r  l  d  </p>  </root>
@@ -205,10 +205,10 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
 
-		structure := tree.Structure()
-		assert.Equal(t, 8, structure.Size)
-		assert.Equal(t, 2, structure.Children[0].Size)
-		assert.Equal(t, 2, structure.Children[0].Children[0].Size)
+		node := tree.ToTreeNodeForTest()
+		assert.Equal(t, 8, node.Size)
+		assert.Equal(t, 2, node.Children[0].Size)
+		assert.Equal(t, 2, node.Children[0].Children[0].Size)
 
 		// 02. Delete b from the first paragraph.
 		// 	     0   1 2    3   4 5 6    7
@@ -217,10 +217,10 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>a</p><p>cd</p></root>", tree.ToXML())
 
-		structure = tree.Structure()
-		assert.Equal(t, 7, structure.Size)
-		assert.Equal(t, 1, structure.Children[0].Size)
-		assert.Equal(t, 1, structure.Children[0].Children[0].Size)
+		node = tree.ToTreeNodeForTest()
+		assert.Equal(t, 7, node.Size)
+		assert.Equal(t, 1, node.Children[0].Size)
+		assert.Equal(t, 1, node.Children[0].Children[0].Size)
 	})
 
 	t.Run("delete nodes between element nodes test", func(t *testing.T) {
@@ -254,11 +254,11 @@ func TestTree(t *testing.T) {
 		// TODO(sejongk): Use the below assertions after implementing Tree.Move.
 		// assert.Equal(t, "<root><p>ad</p></root>", tree.ToXML())
 
-		// structure := tree.Structure()
-		// assert.Equal(t, 4, structure.Size)
-		// assert.Equal(t, 2, structure.Children[0].Size)
-		// assert.Equal(t, 1, structure.Children[0].Children[0].Size)
-		// assert.Equal(t, 1, structure.Children[0].Children[1].Size)
+		// node := tree.ToTreeNodeForTest()
+		// assert.Equal(t, 4, node.Size)
+		// assert.Equal(t, 2, node.Children[0].Size)
+		// assert.Equal(t, 1, node.Children[0].Children[0].Size)
+		// assert.Equal(t, 1, node.Children[0].Children[1].Size)
 
 		// // 03. insert a new text node at the start of the first paragraph.
 		// _, err = tree.EditByIndex(1, 1, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),

@@ -131,7 +131,7 @@ func PushPull(
 		clientInfo.Key,
 		len(pushedChanges),
 		pullLog,
-		minSyncedTicket.StructureAsString(),
+		minSyncedTicket.ToTestString(),
 	)
 
 	// 05. publish document change event then store snapshot asynchronously.

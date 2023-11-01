@@ -221,7 +221,7 @@ func TestConverter(t *testing.T) {
 		pbNodes := converter.ToTreeNodes(root)
 		clone, err := converter.FromTreeNodes(pbNodes)
 		assert.NoError(t, err)
-		assert.Equal(t, crdt.ToStructure(root), crdt.ToStructure(clone))
+		assert.Equal(t, crdt.ToTreeNodeForTest(root), crdt.ToTreeNodeForTest(clone))
 		assert.Equal(t, crdt.ToXML(root), crdt.ToXML(clone))
 	})
 

@@ -18,6 +18,7 @@ package interceptors
 
 import (
 	"context"
+	"errors"
 	gotime "time"
 
 	"google.golang.org/grpc"
@@ -75,6 +76,11 @@ func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
 		start := gotime.Now()
 		err := handler(srv, ss)
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				reqLogger.Debugf("RPC : stream %q %s => %q", info.FullMethod, gotime.Since(start), err.Error())
+				return grpchelper.ToStatusError(err)
+			}
+
 			reqLogger.Warnf("RPC : stream %q %s => %q", info.FullMethod, gotime.Since(start), err.Error())
 			return grpchelper.ToStatusError(err)
 		}

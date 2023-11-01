@@ -124,7 +124,7 @@ func NewTreeNode(id *TreeNodeID, nodeType string, attributes *RHT, value ...stri
 
 // toIDString returns a string that can be used as an ID for this TreeNodeID.
 func (t *TreeNodeID) toIDString() string {
-	return t.CreatedAt.StructureAsString() + ":" + strconv.Itoa(t.Offset)
+	return t.CreatedAt.ToTestString() + ":" + strconv.Itoa(t.Offset)
 }
 
 // Compare compares the given two CRDTTreePos.
@@ -895,9 +895,9 @@ func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
 	return parentNode, leftSiblingNode
 }
 
-// Structure returns the structure of this tree.
-func (t *Tree) Structure() TreeNodeForTest {
-	return ToStructure(t.Root())
+// ToTreeNodeForTest returns the JSON of this tree for debugging.
+func (t *Tree) ToTreeNodeForTest() TreeNodeForTest {
+	return ToTreeNodeForTest(t.Root())
 }
 
 // PathToPos returns the position of the given path
@@ -915,8 +915,8 @@ func (t *Tree) PathToPos(path []int) (*TreePos, error) {
 	return pos, nil
 }
 
-// ToStructure returns the JSON of this tree for debugging.
-func ToStructure(node *TreeNode) TreeNodeForTest {
+// ToTreeNodeForTest returns the JSON of this tree for debugging.
+func ToTreeNodeForTest(node *TreeNode) TreeNodeForTest {
 	if node.IsText() {
 		currentNode := node
 		return TreeNodeForTest{
@@ -929,7 +929,7 @@ func ToStructure(node *TreeNode) TreeNodeForTest {
 
 	var children []TreeNodeForTest
 	for _, child := range node.IndexTreeNode.Children() {
-		children = append(children, ToStructure(child.Value))
+		children = append(children, ToTreeNodeForTest(child.Value))
 	}
 
 	return TreeNodeForTest{

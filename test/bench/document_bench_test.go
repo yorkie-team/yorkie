@@ -142,22 +142,22 @@ func BenchmarkDocument(b *testing.B) {
 				root.SetNewArray("k1").AddInteger(1).AddInteger(2).AddInteger(3)
 				assert.Equal(b, 3, root.GetArray("k1").Len())
 				assert.Equal(b, `{"k1":[1,2,3]}`, root.Marshal())
-				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[3,1]3", root.GetArray("k1").StructureAsString())
+				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[3,1]3", root.GetArray("k1").ToTestString())
 
 				root.GetArray("k1").Delete(1)
 				assert.Equal(b, `{"k1":[1,3]}`, root.Marshal())
 				assert.Equal(b, 2, root.GetArray("k1").Len())
-				assert.Equal(b, "[0,0]0[1,1]1[2,0]2[1,1]3", root.GetArray("k1").StructureAsString())
+				assert.Equal(b, "[0,0]0[1,1]1[2,0]2[1,1]3", root.GetArray("k1").ToTestString())
 
 				root.GetArray("k1").InsertIntegerAfter(0, 2)
 				assert.Equal(b, `{"k1":[1,2,3]}`, root.Marshal())
 				assert.Equal(b, 3, root.GetArray("k1").Len())
-				assert.Equal(b, "[0,0]0[1,1]1[3,1]2[1,0]2[1,1]3", root.GetArray("k1").StructureAsString())
+				assert.Equal(b, "[0,0]0[1,1]1[3,1]2[1,0]2[1,1]3", root.GetArray("k1").ToTestString())
 
 				root.GetArray("k1").InsertIntegerAfter(2, 4)
 				assert.Equal(b, `{"k1":[1,2,3,4]}`, root.Marshal())
 				assert.Equal(b, 4, root.GetArray("k1").Len())
-				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", root.GetArray("k1").StructureAsString())
+				assert.Equal(b, "[0,0]0[1,1]1[2,1]2[2,0]2[3,1]3[4,1]4", root.GetArray("k1").ToTestString())
 
 				for i := 0; i < root.GetArray("k1").Len(); i++ {
 					assert.Equal(
@@ -195,23 +195,23 @@ func BenchmarkDocument(b *testing.B) {
 				text := root.GetText("k1")
 				assert.Equal(b,
 					`[0:0:00:0 {} ""][1:2:00:0 {} "A"][1:3:00:0 {} "12"]{1:2:00:1 {} "BC"}[1:2:00:3 {} "D"]`,
-					text.StructureAsString(),
+					text.ToTestString(),
 				)
 
 				from, _ := text.CreateRange(0, 0)
-				assert.Equal(b, "0:0:00:0:0", from.StructureAsString())
+				assert.Equal(b, "0:0:00:0:0", from.ToTestString())
 
 				from, _ = text.CreateRange(1, 1)
-				assert.Equal(b, "1:2:00:0:1", from.StructureAsString())
+				assert.Equal(b, "1:2:00:0:1", from.ToTestString())
 
 				from, _ = text.CreateRange(2, 2)
-				assert.Equal(b, "1:3:00:0:1", from.StructureAsString())
+				assert.Equal(b, "1:3:00:0:1", from.ToTestString())
 
 				from, _ = text.CreateRange(3, 3)
-				assert.Equal(b, "1:3:00:0:2", from.StructureAsString())
+				assert.Equal(b, "1:3:00:0:2", from.ToTestString())
 
 				from, _ = text.CreateRange(4, 4)
-				assert.Equal(b, "1:2:00:3:1", from.StructureAsString())
+				assert.Equal(b, "1:2:00:3:1", from.ToTestString())
 				return nil
 			})
 			assert.NoError(b, err)
@@ -248,7 +248,7 @@ func BenchmarkDocument(b *testing.B) {
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {} "Hello world"]`,
-					text.StructureAsString(),
+					text.ToTestString(),
 				)
 				return nil
 			})
@@ -260,7 +260,7 @@ func BenchmarkDocument(b *testing.B) {
 				text.Style(0, 5, map[string]string{"b": "1"})
 				assert.Equal(b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
-					text.StructureAsString(),
+					text.ToTestString(),
 				)
 				return nil
 			})
@@ -277,14 +277,14 @@ func BenchmarkDocument(b *testing.B) {
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hello"][1:2:00:5 {} " world"]`,
-					text.StructureAsString(),
+					text.ToTestString(),
 				)
 
 				text.Style(3, 5, map[string]string{"i": "1"})
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][1:2:00:5 {} " world"]`,
-					text.StructureAsString(),
+					text.ToTestString(),
 				)
 				return nil
 			})
@@ -302,7 +302,7 @@ func BenchmarkDocument(b *testing.B) {
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"]`+
 						`[4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
-					text.StructureAsString(),
+					text.ToTestString(),
 				)
 				return nil
 			})
@@ -319,7 +319,7 @@ func BenchmarkDocument(b *testing.B) {
 				assert.Equal(
 					b,
 					`[0:0:00:0 {} ""][1:2:00:0 {"b":"1"} "Hel"][1:2:00:3 {"b":"1","i":"1"} "lo"][5:1:00:0 {"list":"true"} "\n"][4:1:00:0 {} " Yorkie"]{1:2:00:5 {} " world"}`,
-					text.StructureAsString(),
+					text.ToTestString(),
 				)
 				return nil
 			})

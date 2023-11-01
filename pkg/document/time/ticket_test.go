@@ -31,7 +31,7 @@ func TestTicket(t *testing.T) {
 
 		assert.Equal(t, "0:1:"+ticket.ActorIDHex(), ticket.Key())
 		assert.Equal(t, "0:1:"+ticket.ActorIDHex()[22:24],
-			ticket.StructureAsString())
+			ticket.ToTestString())
 	})
 
 	t.Run("ticket comparing test", func(t *testing.T) {

@@ -221,9 +221,9 @@ func (t *Tree[V]) String() string {
 	return builder.String()
 }
 
-// StructureAsString returns a string containing the metadata of the Node
+// ToTestString returns a string containing the metadata of the Node
 // for debugging purpose.
-func (t *Tree[V]) StructureAsString() string {
+func (t *Tree[V]) ToTestString() string {
 	var builder strings.Builder
 
 	traverseInOrder(t.root, func(node *Node[V]) {
