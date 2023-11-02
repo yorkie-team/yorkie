@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -56,7 +57,7 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	}
 
 	for _, pbOp := range changes {
-		encodedOp, err := pbOp.Marshal()
+		encodedOp, err := proto.Marshal(pbOp)
 		if err != nil {
 			return nil, ErrEncodeOperationFailed
 		}
@@ -92,7 +93,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	var pbOps []*api.Operation
 	for _, bytesOp := range i.Operations {
 		pbOp := api.Operation{}
-		if err := pbOp.Unmarshal(bytesOp); err != nil {
+		if err := proto.Unmarshal(bytesOp, &pbOp); err != nil {
 			return nil, err
 		}
 		pbOps = append(pbOps, &pbOp)

@@ -1,8 +1,11 @@
 version: v1
 plugins:
-  - plugin: gofast
+  - plugin: go
     out: api
-    opt: Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:./api/yorkie/v1,plugins=grpc,paths=source_relative
+    opt: paths=source_relative
+#  - plugin: gofast
+#    out: api
+#    opt: Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:./api/yorkie/v1,plugins=grpc,paths=source_relative
   - plugin: connect-go
     out: api
     opt: paths=source_relative

@@ -18,9 +18,6 @@ package converter
 
 import (
 	"fmt"
-
-	protoTypes "github.com/gogo/protobuf/types"
-
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -33,10 +30,7 @@ import (
 
 // FromUser converts the given Protobuf formats to model format.
 func FromUser(pbUser *api.User) (*types.User, error) {
-	createdAt, err := protoTypes.TimestampFromProto(pbUser.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to timestamp: %w", err)
-	}
+	createdAt := pbUser.CreatedAt.AsTime()
 
 	return &types.User{
 		ID:        types.ID(pbUser.Id),
@@ -60,14 +54,8 @@ func FromProjects(pbProjects []*api.Project) ([]*types.Project, error) {
 
 // FromProject converts the given Protobuf formats to model format.
 func FromProject(pbProject *api.Project) (*types.Project, error) {
-	createdAt, err := protoTypes.TimestampFromProto(pbProject.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to timestamp: %w", err)
-	}
-	updatedAt, err := protoTypes.TimestampFromProto(pbProject.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to timestamp: %w", err)
-	}
+	createdAt := pbProject.CreatedAt.AsTime()
+	updatedAt := pbProject.UpdatedAt.AsTime()
 
 	return &types.Project{
 		ID:                        types.ID(pbProject.Id),
@@ -97,18 +85,9 @@ func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) ([]*types.Documen
 
 // FromDocumentSummary converts the given Protobuf formats to model format.
 func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary, error) {
-	createdAt, err := protoTypes.TimestampFromProto(pbSummary.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to timestamp: %w", err)
-	}
-	accessedAt, err := protoTypes.TimestampFromProto(pbSummary.AccessedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert accessedAt to timestamp: %w", err)
-	}
-	updatedAt, err := protoTypes.TimestampFromProto(pbSummary.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to timestamp: %w", err)
-	}
+	createdAt := pbSummary.CreatedAt.AsTime()
+	accessedAt := pbSummary.AccessedAt.AsTime()
+	updatedAt := pbSummary.UpdatedAt.AsTime()
 	return &types.DocumentSummary{
 		ID:         types.ID(pbSummary.Id),
 		Key:        key.Key(pbSummary.Key),

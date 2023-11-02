@@ -18,9 +18,9 @@ package converter
 
 import (
 	"fmt"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"reflect"
-
-	protoTypes "github.com/gogo/protobuf/types"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -33,10 +33,7 @@ import (
 
 // ToUser converts the given model format to Protobuf format.
 func ToUser(user *types.User) (*api.User, error) {
-	pbCreatedAt, err := protoTypes.TimestampProto(user.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
-	}
+	pbCreatedAt := timestamppb.New(user.CreatedAt)
 
 	return &api.User{
 		Id:        user.ID.String(),
@@ -61,14 +58,8 @@ func ToProjects(projects []*types.Project) ([]*api.Project, error) {
 
 // ToProject converts the given model to Protobuf.
 func ToProject(project *types.Project) (*api.Project, error) {
-	pbCreatedAt, err := protoTypes.TimestampProto(project.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
-	}
-	pbUpdatedAt, err := protoTypes.TimestampProto(project.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to protobuf: %w", err)
-	}
+	pbCreatedAt := timestamppb.New(project.CreatedAt)
+	pbUpdatedAt := timestamppb.New(project.UpdatedAt)
 
 	return &api.Project{
 		Id:                        project.ID.String(),
@@ -98,18 +89,9 @@ func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSum
 
 // ToDocumentSummary converts the given model to Protobuf format.
 func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, error) {
-	pbCreatedAt, err := protoTypes.TimestampProto(summary.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
-	}
-	pbAccessedAt, err := protoTypes.TimestampProto(summary.AccessedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert accessedAt to protobuf: %w", err)
-	}
-	pbUpdatedAt, err := protoTypes.TimestampProto(summary.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to protobuf: %w", err)
-	}
+	pbCreatedAt := timestamppb.New(summary.CreatedAt)
+	pbAccessedAt := timestamppb.New(summary.AccessedAt)
+	pbUpdatedAt := timestamppb.New(summary.UpdatedAt)
 
 	return &api.DocumentSummary{
 		Id:         summary.ID.String(),
@@ -530,10 +512,10 @@ func toCounterType(valueType crdt.CounterType) (api.ValueType, error) {
 func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.UpdatableProjectFields, error) {
 	pbUpdatableProjectFields := &api.UpdatableProjectFields{}
 	if fields.Name != nil {
-		pbUpdatableProjectFields.Name = &protoTypes.StringValue{Value: *fields.Name}
+		pbUpdatableProjectFields.Name = &wrapperspb.StringValue{Value: *fields.Name}
 	}
 	if fields.AuthWebhookURL != nil {
-		pbUpdatableProjectFields.AuthWebhookUrl = &protoTypes.StringValue{Value: *fields.AuthWebhookURL}
+		pbUpdatableProjectFields.AuthWebhookUrl = &wrapperspb.StringValue{Value: *fields.AuthWebhookURL}
 	}
 	if fields.AuthWebhookMethods != nil {
 		pbUpdatableProjectFields.AuthWebhookMethods = &api.UpdatableProjectFields_AuthWebhookMethods{
@@ -543,7 +525,7 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 		pbUpdatableProjectFields.AuthWebhookMethods = nil
 	}
 	if fields.ClientDeactivateThreshold != nil {
-		pbUpdatableProjectFields.ClientDeactivateThreshold = &protoTypes.StringValue{
+		pbUpdatableProjectFields.ClientDeactivateThreshold = &wrapperspb.StringValue{
 			Value: *fields.ClientDeactivateThreshold,
 		}
 	}

@@ -20,7 +20,6 @@ import (
 	"connectrpc.com/connect"
 	"context"
 	"fmt"
-
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -335,7 +334,7 @@ func (s *yorkieServer) PushPullChanges(
 func (s *yorkieServer) WatchDocument(
 	ctx context.Context,
 	req *connect.Request[api.WatchDocumentRequest],
-	stream connect.ServerStream[api.WatchDocumentResponse],
+	stream *connect.ServerStream[api.WatchDocumentResponse],
 ) error {
 	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
