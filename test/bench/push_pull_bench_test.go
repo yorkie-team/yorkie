@@ -300,8 +300,8 @@ func BenchmarkSnapshot(b *testing.B) {
 		benchmarkPullSnapshot(10000, b, be, project)
 	})
 
-	b.Run("Push 300KB-sized 5 snapshots successively", func(b *testing.B) {
+	b.Run("Push 30KB-sized 5 snapshots successively", func(b *testing.B) {
 		// this is for the case the size of the snapshot becomes gradually larger.
-		benchmarkPushSnapshots(5, 10000, b, be, project)
+		benchmarkPushSnapshots(5, 1000, b, be, project)
 	})
 }
