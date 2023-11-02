@@ -19,9 +19,12 @@
 package client
 
 import (
+	"connectrpc.com/connect"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"net/http"
 	"strings"
 
 	"github.com/rs/xid"
@@ -77,8 +80,8 @@ type Attachment struct {
 // It has documents and sends changes of the document in local
 // to the server to synchronize with other replicas in remote.
 type Client struct {
-	conn        *grpc.ClientConn
-	client      api.YorkieServiceClient
+	conn        *http.Client
+	client      v1connect.YorkieServiceClient
 	options     Options
 	dialOptions []grpc.DialOption
 	logger      *zap.Logger
@@ -176,13 +179,8 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 
 // Dial dials the given rpcAddr.
 func (c *Client) Dial(rpcAddr string) error {
-	conn, err := grpc.Dial(rpcAddr, c.dialOptions...)
-	if err != nil {
-		return fmt.Errorf("dial to %s: %w", rpcAddr, err)
-	}
-
-	c.conn = conn
-	c.client = api.NewYorkieServiceClient(conn)
+	c.conn = http.DefaultClient
+	c.client = v1connect.NewYorkieServiceClient(c.conn, "http://"+rpcAddr)
 
 	return nil
 }
@@ -193,9 +191,9 @@ func (c *Client) Close() error {
 		return err
 	}
 
-	if err := c.conn.Close(); err != nil {
-		return fmt.Errorf("close connection: %w", err)
-	}
+	//if err := c.conn.Close(); err != nil {
+	//	return fmt.Errorf("close connection: %w", err)
+	//}
 
 	return nil
 }
@@ -208,14 +206,14 @@ func (c *Client) Activate(ctx context.Context) error {
 		return nil
 	}
 
-	response, err := c.client.ActivateClient(withShardKey(ctx, c.options.APIKey), &api.ActivateClientRequest{
+	response, err := c.client.ActivateClient(withShardKey(ctx, c.options.APIKey), connect.NewRequest(&api.ActivateClientRequest{
 		ClientKey: c.key,
-	})
+	}))
 	if err != nil {
 		return err
 	}
 
-	clientID, err := time.ActorIDFromHex(response.ClientId)
+	clientID, err := time.ActorIDFromHex(response.Msg.ClientId)
 	if err != nil {
 		return err
 	}
@@ -232,9 +230,9 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		return nil
 	}
 
-	_, err := c.client.DeactivateClient(withShardKey(ctx, c.options.APIKey), &api.DeactivateClientRequest{
+	_, err := c.client.DeactivateClient(withShardKey(ctx, c.options.APIKey), connect.NewRequest(&api.DeactivateClientRequest{
 		ClientId: c.id.String(),
-	})
+	}))
 	if err != nil {
 		return err
 	}
@@ -276,16 +274,16 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 
 	res, err := c.client.AttachDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		&api.AttachDocumentRequest{
+		connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   c.id.String(),
 			ChangePack: pbChangePack,
 		},
-	)
+		))
 	if err != nil {
 		return err
 	}
 
-	pack, err := converter.FromChangePack(res.ChangePack)
+	pack, err := converter.FromChangePack(res.Msg.ChangePack)
 	if err != nil {
 		return err
 	}
@@ -308,7 +306,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	doc.SetStatus(document.StatusAttached)
 	c.attachments[doc.Key()] = &Attachment{
 		doc:   doc,
-		docID: types.ID(res.DocumentId),
+		docID: types.ID(res.Msg.DocumentId),
 	}
 
 	return nil
@@ -349,18 +347,18 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 
 	res, err := c.client.DetachDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		&api.DetachDocumentRequest{
+		connect.NewRequest(&api.DetachDocumentRequest{
 			ClientId:            c.id.String(),
 			DocumentId:          attachment.docID.String(),
 			ChangePack:          pbChangePack,
 			RemoveIfNotAttached: opts.removeIfNotAttached,
 		},
-	)
+		))
 	if err != nil {
 		return err
 	}
 
-	pack, err := converter.FromChangePack(res.ChangePack)
+	pack, err := converter.FromChangePack(res.Msg.ChangePack)
 	if err != nil {
 		return err
 	}
@@ -412,16 +410,16 @@ func (c *Client) Watch(
 	rch := make(chan WatchResponse)
 	stream, err := c.client.WatchDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		&api.WatchDocumentRequest{
+		connect.NewRequest(&api.WatchDocumentRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 		},
-	)
+		))
 	if err != nil {
 		return nil, err
 	}
 
-	pbResp, err := stream.Recv()
+	pbResp := stream.Msg()
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +429,7 @@ func (c *Client) Watch(
 
 	go func() {
 		for {
-			pbResp, err := stream.Recv()
+			pbResp := stream.Msg()
 			if err != nil {
 				rch <- WatchResponse{Err: err}
 				close(rch)
@@ -609,18 +607,18 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 
 	res, err := c.client.PushPullChanges(
 		withShardKey(ctx, c.options.APIKey, opt.key.String()),
-		&api.PushPullChangesRequest{
+		connect.NewRequest(&api.PushPullChangesRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
 			PushOnly:   opt.mode == types.SyncModePushOnly,
 		},
-	)
+		))
 	if err != nil {
 		return err
 	}
 
-	pack, err := converter.FromChangePack(res.ChangePack)
+	pack, err := converter.FromChangePack(res.Msg.ChangePack)
 	if err != nil {
 		return err
 	}
@@ -654,17 +652,17 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 
 	res, err := c.client.RemoveDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		&api.RemoveDocumentRequest{
+		connect.NewRequest(&api.RemoveDocumentRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
 		},
-	)
+		))
 	if err != nil {
 		return err
 	}
 
-	pack, err := converter.FromChangePack(res.ChangePack)
+	pack, err := converter.FromChangePack(res.Msg.ChangePack)
 	if err != nil {
 		return err
 	}
@@ -691,13 +689,13 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 
 	_, err := c.client.Broadcast(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		&api.BroadcastRequest{
+		connect.NewRequest(&api.BroadcastRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			Topic:      topic,
 			Payload:    payload,
 		},
-	)
+		))
 	if err != nil {
 		return err
 	}

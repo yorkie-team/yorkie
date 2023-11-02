@@ -51,7 +51,6 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	//
 	//loggingInterceptor := grpchelper.NewLoggingInterceptor()
 	//adminAuthInterceptor := interceptors.NewAdminAuthInterceptor(be, tokenManager)
-	contextInterceptor := interceptors.NewContextInterceptor(be)
 	//defaultInterceptor := interceptors.NewDefaultInterceptor()
 
 	//opts := []grpc.ServerOption{
@@ -71,10 +70,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	//	)),
 	//}
 
-	interceptor := connect.WithInterceptors(
-		connect.UnaryInterceptorFunc(contextInterceptor.Unary),
-		//connect.StreamingHandlerFunc(contextInterceptor.Stream),
-	)
+	interceptor := connect.WithInterceptors(interceptors.NewContextInterceptor(be))
 
 	//if conf.CertFile != "" && conf.KeyFile != "" {
 	//	creds, err := credentials.NewServerTLSFromFile(conf.CertFile, conf.KeyFile)

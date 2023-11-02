@@ -51,8 +51,8 @@ func NewContextInterceptor(be *backend.Backend) *ContextInterceptor {
 	}
 }
 
-// Unary creates a unary server interceptor for building additional context.
-func (i *ContextInterceptor) Unary(next connect.UnaryFunc) connect.UnaryFunc {
+// WrapUnary creates a unary server interceptor for building additional context.
+func (i *ContextInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
 		req connect.AnyRequest,
@@ -82,8 +82,19 @@ func (i *ContextInterceptor) Unary(next connect.UnaryFunc) connect.UnaryFunc {
 	}
 }
 
-// Stream creates a stream server interceptor for building additional context.
-func (i *ContextInterceptor) Stream(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+// WrapStreamingClient creates a stream client interceptor for building additional context.
+func (i *ContextInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+	return func(
+		ctx context.Context,
+		spec connect.Spec,
+	) connect.StreamingClientConn {
+		conn := next(ctx, spec)
+		return conn
+	}
+}
+
+// WrapStreamingHandler creates a stream server interceptor for building additional context.
+func (i *ContextInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(
 		ctx context.Context,
 		conn connect.StreamingHandlerConn,

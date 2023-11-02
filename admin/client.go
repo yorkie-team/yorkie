@@ -18,9 +18,13 @@
 package admin
 
 import (
+	"connectrpc.com/connect"
 	"context"
 	"crypto/tls"
 	"fmt"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"net/http"
 	"strings"
 
 	"go.uber.org/zap"
@@ -31,7 +35,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
@@ -68,8 +71,8 @@ type Options struct {
 
 // Client is a client for admin service.
 type Client struct {
-	conn            *grpc.ClientConn
-	client          api.AdminServiceClient
+	conn            *http.Client
+	client          v1connect.AdminServiceClient
 	dialOptions     []grpc.DialOption
 	authInterceptor *AuthInterceptor
 	logger          *zap.Logger
@@ -125,22 +128,17 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 
 // Dial dials to the admin service.
 func (c *Client) Dial(rpcAddr string) error {
-	conn, err := grpc.Dial(rpcAddr, c.dialOptions...)
-	if err != nil {
-		return fmt.Errorf("dial to %s: %w", rpcAddr, err)
-	}
-
-	c.conn = conn
-	c.client = api.NewAdminServiceClient(conn)
+	c.conn = http.DefaultClient
+	c.client = v1connect.NewAdminServiceClient(c.conn, "http://"+rpcAddr)
 
 	return nil
 }
 
 // Close closes the connection to the admin service.
 func (c *Client) Close() error {
-	if err := c.conn.Close(); err != nil {
-		return fmt.Errorf("close connection: %w", err)
-	}
+	//if err := c.conn.Close(); err != nil {
+	//	return fmt.Errorf("close connection: %w", err)
+	//}
 
 	return nil
 }
@@ -151,17 +149,17 @@ func (c *Client) LogIn(
 	username,
 	password string,
 ) (string, error) {
-	response, err := c.client.LogIn(ctx, &api.LogInRequest{
+	response, err := c.client.LogIn(ctx, connect.NewRequest(&api.LogInRequest{
 		Username: username,
 		Password: password,
-	})
+	}))
 	if err != nil {
 		return "", err
 	}
 
-	c.authInterceptor.SetToken(response.Token)
+	c.authInterceptor.SetToken(response.Msg.Token)
 
-	return response.Token, nil
+	return response.Msg.Token, nil
 }
 
 // SignUp signs up a new user.
@@ -170,56 +168,54 @@ func (c *Client) SignUp(
 	username,
 	password string,
 ) (*types.User, error) {
-	response, err := c.client.SignUp(ctx, &api.SignUpRequest{
+	response, err := c.client.SignUp(ctx, connect.NewRequest(&api.SignUpRequest{
 		Username: username,
 		Password: password,
-	})
+	}))
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromUser(response.User)
+	return converter.FromUser(response.Msg.User)
 }
 
 // CreateProject creates a new project.
 func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project, error) {
 	response, err := c.client.CreateProject(
 		ctx,
-		&api.CreateProjectRequest{
+		connect.NewRequest(&api.CreateProjectRequest{
 			Name: name,
 		},
-	)
+		))
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProject(response.Project)
+	return converter.FromProject(response.Msg.Project)
 }
 
 // GetProject gets the project by name.
 func (c *Client) GetProject(ctx context.Context, name string) (*types.Project, error) {
 	response, err := c.client.GetProject(
 		ctx,
-		&api.GetProjectRequest{Name: name},
-	)
+		connect.NewRequest(&api.GetProjectRequest{Name: name}))
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProject(response.Project)
+	return converter.FromProject(response.Msg.Project)
 }
 
 // ListProjects lists all projects.
 func (c *Client) ListProjects(ctx context.Context) ([]*types.Project, error) {
 	response, err := c.client.ListProjects(
 		ctx,
-		&api.ListProjectsRequest{},
-	)
+		connect.NewRequest(&api.ListProjectsRequest{}))
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProjects(response.Projects)
+	return converter.FromProjects(response.Msg.Projects)
 }
 
 // UpdateProject updates an existing project.
@@ -233,15 +229,15 @@ func (c *Client) UpdateProject(
 		return nil, err
 	}
 
-	response, err := c.client.UpdateProject(ctx, &api.UpdateProjectRequest{
+	response, err := c.client.UpdateProject(ctx, connect.NewRequest(&api.UpdateProjectRequest{
 		Id:     id,
 		Fields: pbProjectField,
-	})
+	}))
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProject(response.Project)
+	return converter.FromProject(response.Msg.Project)
 }
 
 // ListDocuments lists documents.
@@ -255,19 +251,19 @@ func (c *Client) ListDocuments(
 ) ([]*types.DocumentSummary, error) {
 	response, err := c.client.ListDocuments(
 		ctx,
-		&api.ListDocumentsRequest{
+		connect.NewRequest(&api.ListDocumentsRequest{
 			ProjectName:     projectName,
 			PreviousId:      previousID,
 			PageSize:        pageSize,
 			IsForward:       isForward,
 			IncludeSnapshot: includeSnapshot,
 		},
-	)
+		))
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromDocumentSummaries(response.Documents)
+	return converter.FromDocumentSummaries(response.Msg.Documents)
 }
 
 // RemoveDocument removes a document of the given key.
@@ -285,12 +281,12 @@ func (c *Client) RemoveDocument(
 
 	_, err = c.client.RemoveDocumentByAdmin(
 		withShardKey(ctx, apiKey, documentKey),
-		&api.RemoveDocumentByAdminRequest{
+		connect.NewRequest(&api.RemoveDocumentByAdminRequest{
 			ProjectName: projectName,
 			DocumentKey: documentKey,
 			Force:       force,
 		},
-	)
+		))
 	return err
 }
 
@@ -303,19 +299,19 @@ func (c *Client) ListChangeSummaries(
 	pageSize int32,
 	isForward bool,
 ) ([]*types.ChangeSummary, error) {
-	resp, err := c.client.ListChanges(ctx, &api.ListChangesRequest{
+	resp, err := c.client.ListChanges(ctx, connect.NewRequest(&api.ListChangesRequest{
 		ProjectName: projectName,
 		DocumentKey: key.String(),
 		PreviousSeq: previousSeq,
 		PageSize:    pageSize,
 		IsForward:   isForward,
-	})
+	}))
 
 	if err != nil {
 		return nil, err
 	}
 
-	changes, err := converter.FromChanges(resp.Changes)
+	changes, err := converter.FromChanges(resp.Msg.Changes)
 	if err != nil {
 		return nil, err
 	}
@@ -327,11 +323,11 @@ func (c *Client) ListChangeSummaries(
 
 	seq := changes[0].ServerSeq() - 1
 
-	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &api.GetSnapshotMetaRequest{
+	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, connect.NewRequest(&api.GetSnapshotMetaRequest{
 		ProjectName: projectName,
 		DocumentKey: key.String(),
 		ServerSeq:   seq,
-	})
+	}))
 	if err != nil {
 		return nil, err
 	}
@@ -339,8 +335,8 @@ func (c *Client) ListChangeSummaries(
 	newDoc, err := document.NewInternalDocumentFromSnapshot(
 		key,
 		seq,
-		snapshotMeta.Lamport,
-		snapshotMeta.Snapshot,
+		snapshotMeta.Msg.Lamport,
+		snapshotMeta.Msg.Snapshot,
 	)
 
 	if err != nil {

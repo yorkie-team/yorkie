@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"google.golang.org/protobuf/proto"
 )
 
 // ServerPack is similar to change.Pack, but has ChangeInfos instead of Changes
@@ -96,7 +97,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		var pbOps []*api.Operation
 		for _, bytesOp := range info.Operations {
 			pbOp := api.Operation{}
-			if err := pbOp.Unmarshal(bytesOp); err != nil {
+			if err := proto.Unmarshal(bytesOp, &pbOp); err != nil {
 				return nil, err
 			}
 			pbOps = append(pbOps, &pbOp)
