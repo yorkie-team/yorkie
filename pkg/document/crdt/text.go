@@ -135,9 +135,7 @@ func (t *Text) String() string {
 
 	node := t.rgaTreeSplit.initialHead.next
 	for node != nil {
-		if node.createdAt().Compare(t.createdAt) == 0 {
-			// last line
-		} else if node.removedAt == nil {
+		if node.createdAt().Compare(t.createdAt) != 0 && node.removedAt == nil {
 			values = append(values, node.String())
 		}
 		node = node.next
@@ -152,9 +150,7 @@ func (t *Text) Marshal() string {
 
 	node := t.rgaTreeSplit.initialHead.next
 	for node != nil {
-		if node.createdAt().Compare(t.createdAt) == 0 {
-			// last line
-		} else if node.removedAt == nil {
+		if node.createdAt().Compare(t.createdAt) != 0 && node.removedAt == nil {
 			values = append(values, node.Marshal())
 		}
 		node = node.next

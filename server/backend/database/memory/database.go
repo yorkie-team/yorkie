@@ -58,7 +58,7 @@ func (d *DB) Close() error {
 
 // FindProjectInfoByPublicKey returns a project by public key.
 func (d *DB) FindProjectInfoByPublicKey(
-	ctx context.Context,
+	_ context.Context,
 	publicKey string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
@@ -77,7 +77,7 @@ func (d *DB) FindProjectInfoByPublicKey(
 
 // FindProjectInfoByName returns a project by the given name.
 func (d *DB) FindProjectInfoByName(
-	ctx context.Context,
+	_ context.Context,
 	owner types.ID,
 	name string,
 ) (*database.ProjectInfo, error) {
@@ -98,7 +98,7 @@ func (d *DB) FindProjectInfoByName(
 }
 
 // FindProjectInfoByID returns a project by the given id.
-func (d *DB) FindProjectInfoByID(ctx context.Context, id types.ID) (*database.ProjectInfo, error) {
+func (d *DB) FindProjectInfoByID(_ context.Context, id types.ID) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 	raw, err := txn.First(tblProjects, "id", id.String())
@@ -134,7 +134,7 @@ func (d *DB) EnsureDefaultUserAndProject(
 
 // ensureDefaultUserInfo creates the default user if it does not exist.
 func (d *DB) ensureDefaultUserInfo(
-	ctx context.Context,
+	_ context.Context,
 	username,
 	password string,
 ) (*database.UserInfo, error) {
@@ -167,7 +167,7 @@ func (d *DB) ensureDefaultUserInfo(
 
 // ensureDefaultProjectInfo creates the default project if it does not exist.
 func (d *DB) ensureDefaultProjectInfo(
-	ctx context.Context,
+	_ context.Context,
 	defaultUserID types.ID,
 	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
@@ -196,7 +196,7 @@ func (d *DB) ensureDefaultProjectInfo(
 
 // CreateProjectInfo creates a new project.
 func (d *DB) CreateProjectInfo(
-	ctx context.Context,
+	_ context.Context,
 	name string,
 	owner types.ID,
 	clientDeactivateThreshold string,
@@ -226,7 +226,7 @@ func (d *DB) CreateProjectInfo(
 
 // listProjectInfos returns all project infos rotationally.
 func (d *DB) listProjectInfos(
-	ctx context.Context,
+	_ context.Context,
 	pageSize int,
 	housekeepingLastProjectID types.ID,
 ) ([]*database.ProjectInfo, error) {
@@ -264,7 +264,7 @@ func (d *DB) listProjectInfos(
 
 // ListProjectInfos returns all project infos owned by owner.
 func (d *DB) ListProjectInfos(
-	ctx context.Context,
+	_ context.Context,
 	owner types.ID,
 ) ([]*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
@@ -295,7 +295,7 @@ func (d *DB) ListProjectInfos(
 
 // UpdateProjectInfo updates the given project.
 func (d *DB) UpdateProjectInfo(
-	ctx context.Context,
+	_ context.Context,
 	owner types.ID,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
@@ -338,7 +338,7 @@ func (d *DB) UpdateProjectInfo(
 
 // CreateUserInfo creates a new user.
 func (d *DB) CreateUserInfo(
-	ctx context.Context,
+	_ context.Context,
 	username string,
 	hashedPassword string,
 ) (*database.UserInfo, error) {
@@ -364,7 +364,7 @@ func (d *DB) CreateUserInfo(
 }
 
 // FindUserInfo finds a user by the given username.
-func (d *DB) FindUserInfo(ctx context.Context, username string) (*database.UserInfo, error) {
+func (d *DB) FindUserInfo(_ context.Context, username string) (*database.UserInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -380,9 +380,7 @@ func (d *DB) FindUserInfo(ctx context.Context, username string) (*database.UserI
 }
 
 // ListUserInfos returns all users.
-func (d *DB) ListUserInfos(
-	ctx context.Context,
-) ([]*database.UserInfo, error) {
+func (d *DB) ListUserInfos(_ context.Context) ([]*database.UserInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -405,7 +403,7 @@ func (d *DB) ListUserInfos(
 
 // ActivateClient activates a client.
 func (d *DB) ActivateClient(
-	ctx context.Context,
+	_ context.Context,
 	projectID types.ID,
 	key string,
 ) (*database.ClientInfo, error) {
@@ -444,7 +442,7 @@ func (d *DB) ActivateClient(
 }
 
 // DeactivateClient deactivates a client.
-func (d *DB) DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
+func (d *DB) DeactivateClient(_ context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -480,7 +478,7 @@ func (d *DB) DeactivateClient(ctx context.Context, projectID, clientID types.ID)
 }
 
 // FindClientInfoByID finds a client by ID.
-func (d *DB) FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
+func (d *DB) FindClientInfoByID(_ context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -507,7 +505,7 @@ func (d *DB) FindClientInfoByID(ctx context.Context, projectID, clientID types.I
 // UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 // after handling PushPull.
 func (d *DB) UpdateClientInfoAfterPushPull(
-	ctx context.Context,
+	_ context.Context,
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
@@ -567,7 +565,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 
 // findDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
 func (d *DB) findDeactivateCandidatesPerProject(
-	ctx context.Context,
+	_ context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
 ) ([]*database.ClientInfo, error) {
@@ -642,7 +640,7 @@ func (d *DB) FindDeactivateCandidates(
 // createDocIfNotExist condition is true, create the document if it does not
 // exist.
 func (d *DB) FindDocInfoByKeyAndOwner(
-	ctx context.Context,
+	_ context.Context,
 	projectID types.ID,
 	clientID types.ID,
 	key key.Key,
@@ -703,7 +701,7 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 
 // FindDocInfoByKey finds the document of the given key.
 func (d *DB) FindDocInfoByKey(
-	ctx context.Context,
+	_ context.Context,
 	projectID types.ID,
 	key key.Key,
 ) (*database.DocInfo, error) {
@@ -723,7 +721,7 @@ func (d *DB) FindDocInfoByKey(
 
 // FindDocInfoByID finds a docInfo of the given ID.
 func (d *DB) FindDocInfoByID(
-	ctx context.Context,
+	_ context.Context,
 	projectID types.ID,
 	id types.ID,
 ) (*database.DocInfo, error) {
@@ -749,7 +747,7 @@ func (d *DB) FindDocInfoByID(
 
 // UpdateDocInfoStatusToRemoved updates the status of the document to removed.
 func (d *DB) UpdateDocInfoStatusToRemoved(
-	ctx context.Context,
+	_ context.Context,
 	projectID types.ID,
 	id types.ID,
 ) error {
@@ -787,7 +785,7 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 // CreateChangeInfos stores the given changes and doc info. If the
 // removeDoc condition is true, mark IsRemoved to true in doc info.
 func (d *DB) CreateChangeInfos(
-	ctx context.Context,
+	_ context.Context,
 	projectID types.ID,
 	docInfo *database.DocInfo,
 	initialServerSeq int64,
@@ -860,7 +858,7 @@ func (d *DB) CreateChangeInfos(
 // PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
 // save storage.
 func (d *DB) PurgeStaleChanges(
-	ctx context.Context,
+	_ context.Context,
 	docID types.ID,
 ) error {
 	txn := d.db.Txn(true)
@@ -931,7 +929,7 @@ func (d *DB) FindChangesBetweenServerSeqs(
 
 // FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
 func (d *DB) FindChangeInfosBetweenServerSeqs(
-	ctx context.Context,
+	_ context.Context,
 	docID types.ID,
 	from int64,
 	to int64,
@@ -963,7 +961,7 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 
 // CreateSnapshotInfo stores the snapshot of the given document.
 func (d *DB) CreateSnapshotInfo(
-	ctx context.Context,
+	_ context.Context,
 	docID types.ID,
 	doc *document.InternalDocument,
 ) error {
@@ -990,7 +988,7 @@ func (d *DB) CreateSnapshotInfo(
 }
 
 // FindSnapshotInfoByID returns the snapshot by the given id.
-func (d *DB) FindSnapshotInfoByID(ctx context.Context, id types.ID) (*database.SnapshotInfo, error) {
+func (d *DB) FindSnapshotInfoByID(_ context.Context, id types.ID) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 	raw, err := txn.First(tblSnapshots, "id", id.String())
@@ -1006,7 +1004,7 @@ func (d *DB) FindSnapshotInfoByID(ctx context.Context, id types.ID) (*database.S
 
 // FindClosestSnapshotInfo finds the last snapshot of the given document.
 func (d *DB) FindClosestSnapshotInfo(
-	ctx context.Context,
+	_ context.Context,
 	docID types.ID,
 	serverSeq int64,
 	includeSnapshot bool,
@@ -1051,7 +1049,7 @@ func (d *DB) FindClosestSnapshotInfo(
 
 // FindMinSyncedSeqInfo finds the minimum synced sequence info.
 func (d *DB) FindMinSyncedSeqInfo(
-	ctx context.Context,
+	_ context.Context,
 	docID types.ID,
 ) (*database.SyncedSeqInfo, error) {
 	txn := d.db.Txn(false)
@@ -1130,7 +1128,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 
 // UpdateSyncedSeq updates the syncedSeq of the given client.
 func (d *DB) UpdateSyncedSeq(
-	ctx context.Context,
+	_ context.Context,
 	clientInfo *database.ClientInfo,
 	docID types.ID,
 	serverSeq int64,
@@ -1194,7 +1192,7 @@ func (d *DB) UpdateSyncedSeq(
 
 // FindDocInfosByPaging returns the documentInfos of the given paging.
 func (d *DB) FindDocInfosByPaging(
-	ctx context.Context,
+	_ context.Context,
 	projectID types.ID,
 	paging types.Paging[types.ID],
 ) ([]*database.DocInfo, error) {
@@ -1244,7 +1242,7 @@ func (d *DB) FindDocInfosByPaging(
 
 // FindDocInfosByQuery returns the docInfos which match the given query.
 func (d *DB) FindDocInfosByQuery(
-	ctx context.Context,
+	_ context.Context,
 	projectID types.ID,
 	query string,
 	pageSize int,
@@ -1275,7 +1273,7 @@ func (d *DB) FindDocInfosByQuery(
 
 // IsDocumentAttached returns whether the document is attached to clients.
 func (d *DB) IsDocumentAttached(
-	ctx context.Context,
+	_ context.Context,
 	projectID types.ID,
 	docID types.ID,
 	excludeClientID types.ID,

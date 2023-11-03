@@ -152,7 +152,7 @@ func Delete() error {
 }
 
 // Preload read configuration file for viper before running command
-func Preload(cmd *cobra.Command, args []string) error {
+func Preload(_ *cobra.Command, _ []string) error {
 	configPathValue, err := configPath()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "get config path: %w", err)
