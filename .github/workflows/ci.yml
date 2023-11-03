@@ -46,6 +46,30 @@ jobs:
     - name: Test
       run: go test -tags integration -race -coverprofile=coverage.txt -covermode=atomic -v ./...
 
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.txt
+  
+  bench:
+    name: bench
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Set up Go ${{ env.GO_VERSION }}
+      uses: actions/setup-go@v3
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Get tools dependencies
+      run: make tools
+
+    - name: Stack
+      run: docker-compose -f build/docker/docker-compose.yml up --build -d
+
     - name: Bench
       run: make bench
 
@@ -66,8 +90,3 @@ jobs:
         fail-on-alert: false
         github-token: ${{ secrets.GITHUB_TOKEN }}
         comment-always: true
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.txt
