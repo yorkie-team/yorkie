@@ -249,22 +249,19 @@ func TestTree(t *testing.T) {
 		// <root> <p> a d </p> </root>
 		_, err = tree.EditByIndex(2, 6, nil, nil, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, "<root><p>a</p><p>d</p></root>", tree.ToXML())
+		assert.Equal(t, "<root><p>ad</p></root>", tree.ToXML())
 
-		// TODO(sejongk): Use the below assertions after implementing Tree.Move.
-		// assert.Equal(t, "<root><p>ad</p></root>", tree.ToXML())
+		node := tree.ToTreeNodeForTest()
+		assert.Equal(t, 4, node.Size)
+		assert.Equal(t, 2, node.Children[0].Size)
+		assert.Equal(t, 1, node.Children[0].Children[0].Size)
+		assert.Equal(t, 1, node.Children[0].Children[1].Size)
 
-		// node := tree.ToTreeNodeForTest()
-		// assert.Equal(t, 4, node.Size)
-		// assert.Equal(t, 2, node.Children[0].Size)
-		// assert.Equal(t, 1, node.Children[0].Children[0].Size)
-		// assert.Equal(t, 1, node.Children[0].Children[1].Size)
-
-		// // 03. insert a new text node at the start of the first paragraph.
-		// _, err = tree.EditByIndex(1, 1, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
-		// 	"text", nil, "@")}, helper.IssueTime(ctx))
-		// assert.NoError(t, err)
-		// assert.Equal(t, "<root><p>@ad</p></root>", tree.ToXML())
+		// 03. insert a new text node at the start of the first paragraph.
+		_, err = tree.EditByIndex(1, 1, nil, []*crdt.TreeNode{crdt.NewTreeNode(helper.IssuePos(ctx),
+			"text", nil, "@")}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p>@ad</p></root>", tree.ToXML())
 	})
 
 	t.Run("style node with element attributes test", func(t *testing.T) {
@@ -403,9 +400,6 @@ func TestTree(t *testing.T) {
 
 		_, err = tree.EditByIndex(2, 18, nil, nil, helper.IssueTime(ctx))
 		assert.NoError(t, err)
-		assert.Equal(t, "<root><p>a</p><p>f</p></root>", tree.ToXML())
-
-		// TODO(sejongk): Use the below assertion after implementing Tree.Move.
-		// assert.Equal(t, "<root><p>af</p></root>", tree.ToXML())
+		assert.Equal(t, "<root><p>af</p></root>", tree.ToXML())
 	})
 }
