@@ -45,7 +45,7 @@ func NewCoordinator(serverInfo *sync.ServerInfo) *Coordinator {
 
 // NewLocker creates locker of the given key.
 func (c *Coordinator) NewLocker(
-	ctx context.Context,
+	_ context.Context,
 	key sync.Key,
 ) (sync.Locker, error) {
 	return &internalLocker{

@@ -40,6 +40,11 @@ import (
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
+const (
+	// StatusKey is the key of the status field.
+	StatusKey = "status"
+)
+
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
 type Client struct {
 	config *Config
@@ -593,8 +598,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			clientDocInfoKey + "client_seq": clientDocInfo.ClientSeq,
 		},
 		"$set": bson.M{
-			clientDocInfoKey + "status": clientDocInfo.Status,
-			"updated_at":                clientInfo.UpdatedAt,
+			clientDocInfoKey + StatusKey: clientDocInfo.Status,
+			"updated_at":                 clientInfo.UpdatedAt,
 		},
 	}
 
@@ -608,7 +613,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 			"$set": bson.M{
 				clientDocInfoKey + "server_seq": 0,
 				clientDocInfoKey + "client_seq": 0,
-				clientDocInfoKey + "status":     clientDocInfo.Status,
+				clientDocInfoKey + StatusKey:    clientDocInfo.Status,
 				"updated_at":                    clientInfo.UpdatedAt,
 			},
 		}
@@ -866,7 +871,7 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 // CreateChangeInfos stores the given changes and doc info.
 func (c *Client) CreateChangeInfos(
 	ctx context.Context,
-	projectID types.ID,
+	_ types.ID,
 	docInfo *database.DocInfo,
 	initialServerSeq int64,
 	changes []*change.Change,
