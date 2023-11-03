@@ -602,10 +602,16 @@ func (t *Tree) Edit(from, to *TreePos,
 
 			// NOTE(hackerwins): If the node overlaps as an opening tag with the
 			// range then we need to move the remaining children to fromParent.
-			// TODO(hackerwins): Define more clearly merge-able rules between fromParent
-			// and toParent. For now, if fromParent and toParent are the same
-			// type, then we can merge them.
-			if !node.IsText() && contain == index.OpeningContained && fromParent.Type == toParent.Type {
+			if !node.IsText() && contain == index.OpeningContained {
+				// TODO(hackerwins): Define more clearly merge-able rules
+				// between two parents. For now, we only merge two parents are
+				// both element nodes having text children.
+				// e.g. <p>a|b</p><p>c|d</p> -> <p>a|d</p>
+				if !fromParent.Value.IndexTreeNode.HasTextChild() ||
+					!toParent.Value.IndexTreeNode.HasTextChild() {
+					return
+				}
+
 				for _, child := range node.IndexTreeNode.Children() {
 					if slices.Contains(toBeRemoveds, child.Value) {
 						continue

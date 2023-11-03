@@ -210,7 +210,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, 2, node.Children[0].Size)
 		assert.Equal(t, 2, node.Children[0].Children[0].Size)
 
-		// 02. Delete b from the first paragraph.
+		// 02. Delete b from the second paragraph.
 		// 	     0   1 2    3   4 5 6    7
 		// <root> <p> a </p> <p> c d </p> </root>
 		_, err = tree.EditByIndex(2, 3, nil, nil, helper.IssueTime(ctx))
@@ -244,7 +244,7 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
 
-		// 02. delete b, c and first paragraph.
+		// 02. delete b, c and the second paragraph.
 		//       0   1 2 3    4
 		// <root> <p> a d </p> </root>
 		_, err = tree.EditByIndex(2, 6, nil, nil, helper.IssueTime(ctx))
@@ -262,6 +262,43 @@ func TestTree(t *testing.T) {
 			"text", nil, "@")}, helper.IssueTime(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<root><p>@ad</p></root>", tree.ToXML())
+	})
+
+	t.Run("delete nodes between element nodes in different levels test", func(t *testing.T) {
+		// 01. Create a tree with 2 paragraphs.
+		//       0   1   2 3 4    5    6   7 8 9    10
+		// <root> <p> <b> a b </b> </p> <p> c d </p>  </root>
+
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.IssuePos(ctx), "root", nil), helper.IssueTime(ctx))
+		_, err := tree.EditByIndex(0, 0, nil, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil),
+		}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(1, 1, nil, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.IssuePos(ctx), "b", nil),
+		}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(2, 2, nil, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "ab"),
+		}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(6, 6, nil, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.IssuePos(ctx), "p", nil),
+		}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditByIndex(7, 7, nil, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.IssuePos(ctx), "text", nil, "cd"),
+		}, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p><b>ab</b></p><p>cd</p></root>", tree.ToXML())
+
+		// 02. delete b, c and the second paragraph.
+		//       0   1   2 3 4    5
+		// <root> <p> <b> a d </b> </root>
+		_, err = tree.EditByIndex(3, 8, nil, nil, helper.IssueTime(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<root><p><b>ad</b></p></root>", tree.ToXML())
 	})
 
 	t.Run("style node with element attributes test", func(t *testing.T) {
