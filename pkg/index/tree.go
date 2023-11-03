@@ -569,8 +569,8 @@ func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
 	return nil
 }
 
-// hasTextChild returns true if the node has a text child.
-func (n *Node[V]) hasTextChild() bool {
+// HasTextChild returns true if the node has a text child.
+func (n *Node[V]) HasTextChild() bool {
 	for _, child := range n.Children() {
 		if child.IsText() {
 			return true
@@ -765,7 +765,7 @@ func (t *Tree[V]) PathToTreePos(path []int) (*TreePos[V], error) {
 		}
 	}
 
-	if node.hasTextChild() {
+	if node.HasTextChild() {
 		return findTextPos(node, path[len(path)-1])
 	}
 	if len(node.Children()) < path[len(path)-1] {

@@ -37,7 +37,7 @@ function main {
       TARGET="yorkie-v${YORKIE_VERSION}-${GOOS}-${GOARCH}"
       mkdir -p "${TARGET}"
 
-      go build -o "${TARGET}/yorkie${ext}" -ldflags "${GO_LDFLAGS}" ../cmd/yorkie
+      CGO_ENABLED=0 go build -o "${TARGET}/yorkie${ext}" -ldflags "${GO_LDFLAGS}" ../cmd/yorkie
 
       for FILE_NAME in README ROADMAP CHANGELOG ; do
         cp "../${FILE_NAME}.md" "${TARGET}/${FILE_NAME}.md"

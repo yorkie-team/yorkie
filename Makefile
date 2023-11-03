@@ -42,7 +42,7 @@ protoset: ## generate protoset file
 api/yorkie/v1/*.proto
 
 build: ## builds an executable that runs in the current environment
-	go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie
+	CGO_ENABLED=0 go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie
 
 build-binaries: ## builds binaries to attach a new release
 	rm -rf binaries

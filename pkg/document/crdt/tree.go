@@ -19,6 +19,7 @@ package crdt
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -587,15 +588,37 @@ func (t *Tree) Edit(from, to *TreePos,
 	}
 
 	// 02. remove the nodes and update index tree.
+	var toBeRemoveds []*TreeNode
+	var toBeMovedToFromParents []*TreeNode
 	createdAtMapByActor := make(map[string]*time.Ticket)
-	var toBeRemoved []*TreeNode
 
 	err = t.traverseInPosRange(fromParent.Value, fromLeft.Value, toParent.Value, toLeft.Value,
 		func(node *TreeNode, contain index.TagContained) {
-			// If node is a element node and half-contained in the range,
-			// it should not be removed.
-			if !node.IsText() && contain != index.AllContained {
+			// NOTE(hackerwins): If the node overlaps as a closing tag with the
+			// range, then we need to keep it.
+			if !node.IsText() && contain == index.ClosingContained {
 				return
+			}
+
+			// NOTE(hackerwins): If the node overlaps as an opening tag with the
+			// range then we need to move the remaining children to fromParent.
+			if !node.IsText() && contain == index.OpeningContained {
+				// TODO(hackerwins): Define more clearly merge-able rules
+				// between two parents. For now, we only merge two parents are
+				// both element nodes having text children.
+				// e.g. <p>a|b</p><p>c|d</p> -> <p>a|d</p>
+				if !fromParent.Value.IndexTreeNode.HasTextChild() ||
+					!toParent.Value.IndexTreeNode.HasTextChild() {
+					return
+				}
+
+				for _, child := range node.IndexTreeNode.Children() {
+					if slices.Contains(toBeRemoveds, child.Value) {
+						continue
+					}
+
+					toBeMovedToFromParents = append(toBeMovedToFromParents, child.Value)
+				}
 			}
 
 			actorIDHex := node.ID.CreatedAt.ActorIDHex()
@@ -618,7 +641,7 @@ func (t *Tree) Edit(from, to *TreePos,
 				if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 					createdAtMapByActor[actorIDHex] = createdAt
 				}
-				toBeRemoved = append(toBeRemoved, node)
+				toBeRemoveds = append(toBeRemoveds, node)
 			}
 
 		})
@@ -626,9 +649,15 @@ func (t *Tree) Edit(from, to *TreePos,
 		return nil, err
 	}
 
-	for _, node := range toBeRemoved {
+	for _, node := range toBeRemoveds {
 		if node.remove(editedAt) {
 			t.removedNodeMap[node.ID.toIDString()] = node
+		}
+	}
+
+	for _, node := range toBeMovedToFromParents {
+		if err := fromParent.Append(node.IndexTreeNode); err != nil {
+			return nil, err
 		}
 	}
 
