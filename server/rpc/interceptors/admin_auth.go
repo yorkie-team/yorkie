@@ -137,10 +137,7 @@ func isRequiredAuth(method string) bool {
 }
 
 // authenticate does authenticate the request.
-func (i *AdminAuthInterceptor) authenticate(
-	ctx context.Context,
-	method string,
-) (*types.User, error) {
+func (i *AdminAuthInterceptor) authenticate(ctx context.Context, _ string) (*types.User, error) {
 	data, ok := grpcmetadata.FromIncomingContext(ctx)
 	if !ok {
 		return nil, grpcstatus.Errorf(codes.Unauthenticated, "metadata is not provided")

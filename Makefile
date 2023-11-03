@@ -22,7 +22,7 @@ default: help
 tools: ## install tools for developing yorkie
 	go install github.com/gogo/protobuf/protoc-gen-gogo@v1.3.2
 	go install github.com/gogo/protobuf/protoc-gen-gofast@v1.3.2
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.0
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.55.1
 
 proto: ## generate proto files
 	protoc \
