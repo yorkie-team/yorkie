@@ -41,9 +41,9 @@ func (k *intKey) Compare(other llrb.Key) int {
 		return 1
 	} else if k.key < o.key {
 		return -1
-	} else {
-		return 0
 	}
+
+	return 0
 }
 
 type intValue struct {
