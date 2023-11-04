@@ -127,8 +127,7 @@ func TestMain(m *testing.M) {
 	dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	conn := http.DefaultClient
-	contextInterceptor := interceptors.NewContextInterceptor(be)
-	interceptor := connect.WithInterceptors(connect.UnaryInterceptorFunc(contextInterceptor.Unary))
+	interceptor := connect.WithInterceptors(interceptors.NewContextInterceptor(be))
 	testClient = v1connect.NewYorkieServiceClient(conn, "http://"+testRPCAddr, interceptor)
 
 	credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
