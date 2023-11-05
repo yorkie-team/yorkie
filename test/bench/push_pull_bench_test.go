@@ -69,9 +69,9 @@ func setUpBackend(
 }
 
 func setUpDefaultProject(b *testing.B, be *backend.Backend) *types.Project {
-	project_info, err := be.DB.FindProjectInfoByID(context.Background(), database.DefaultProjectID)
+	projectInfo, err := be.DB.FindProjectInfoByID(context.Background(), database.DefaultProjectID)
 	assert.NoError(b, err)
-	return project_info.ToProject()
+	return projectInfo.ToProject()
 }
 
 func setUpClientsAndDocs(
@@ -125,7 +125,7 @@ func createChangePack(
 }
 
 func benchmarkPushChanges(
-	change_cnt int,
+	changeCnt int,
 	b *testing.B,
 	be *backend.Backend,
 	project *types.Project,
@@ -135,7 +135,7 @@ func benchmarkPushChanges(
 		ctx := context.Background()
 		docKey := getDocKey(b, i)
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 1, docKey, b, be)
-		pack := createChangePack(change_cnt, docs[0], b)
+		pack := createChangePack(changeCnt, docs[0], b)
 		docInfo, err := documents.FindDocInfo(ctx, be, project, docID)
 		assert.NoError(b, err)
 		b.StartTimer()
@@ -146,7 +146,7 @@ func benchmarkPushChanges(
 }
 
 func benchmarkPullChanges(
-	change_cnt int,
+	changeCnt int,
 	b *testing.B,
 	be *backend.Backend,
 	project *types.Project,
@@ -158,7 +158,7 @@ func benchmarkPullChanges(
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 2, docKey, b, be)
 		pusherClientInfo, pullerClientInfo := clientInfos[0], clientInfos[1]
 		pusherDoc, pullerDoc := docs[0], docs[1]
-		pushPack := createChangePack(change_cnt, pusherDoc, b)
+		pushPack := createChangePack(changeCnt, pusherDoc, b)
 		pullPack := createChangePack(0, pullerDoc, b)
 
 		docInfo, err := documents.FindDocInfo(ctx, be, project, docID)
@@ -176,8 +176,8 @@ func benchmarkPullChanges(
 }
 
 func benchmarkPushSnapshots(
-	snapshot_cnt int,
-	change_cnt int,
+	snapshotCnt int,
+	changeCnt int,
 	b *testing.B,
 	be *backend.Backend,
 	project *types.Project,
@@ -189,9 +189,9 @@ func benchmarkPushSnapshots(
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 1, docKey, b, be)
 		b.StartTimer()
 
-		for j := 0; j < snapshot_cnt; j++ {
+		for j := 0; j < snapshotCnt; j++ {
 			b.StopTimer()
-			pushPack := createChangePack(change_cnt, docs[0], b)
+			pushPack := createChangePack(changeCnt, docs[0], b)
 			docInfo, err := documents.FindDocInfo(ctx, be, project, docID)
 			assert.NoError(b, err)
 			b.StartTimer()
@@ -211,7 +211,7 @@ func benchmarkPushSnapshots(
 }
 
 func benchmarkPullSnapshot(
-	change_cnt int,
+	changeCnt int,
 	b *testing.B,
 	be *backend.Backend,
 	project *types.Project,
@@ -223,7 +223,7 @@ func benchmarkPullSnapshot(
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 2, docKey, b, be)
 		pusherClientInfo, pullerClientInfo := clientInfos[0], clientInfos[1]
 		pusherDoc, pullerDoc := docs[0], docs[1]
-		pushPack := createChangePack(change_cnt, pusherDoc, b)
+		pushPack := createChangePack(changeCnt, pusherDoc, b)
 		pullPack := createChangePack(0, pullerDoc, b)
 
 		docInfo, err := documents.FindDocInfo(ctx, be, project, docID)
@@ -246,16 +246,20 @@ func BenchmarkChange(b *testing.B) {
 	project := setUpDefaultProject(b, be)
 	b.ResetTimer()
 
-	b.Run("Push 100 Changes", func(b *testing.B) {
+	b.Run("Push 10 Changes", func(b *testing.B) {
 		benchmarkPushChanges(10, b, be, project)
+	})
+
+	b.Run("Push 100 Changes", func(b *testing.B) {
+		benchmarkPushChanges(100, b, be, project)
 	})
 
 	b.Run("Push 1000 Changes", func(b *testing.B) {
 		benchmarkPushChanges(1000, b, be, project)
 	})
 
-	b.Run("Push 10000 Changes", func(b *testing.B) {
-		benchmarkPushChanges(10000, b, be, project)
+	b.Run("Pull 10 Changes", func(b *testing.B) {
+		benchmarkPullChanges(10, b, be, project)
 	})
 
 	b.Run("Pull 100 Changes", func(b *testing.B) {
@@ -264,10 +268,6 @@ func BenchmarkChange(b *testing.B) {
 
 	b.Run("Pull 1000 Changes", func(b *testing.B) {
 		benchmarkPullChanges(1000, b, be, project)
-	})
-
-	b.Run("Pull 10000 Changes", func(b *testing.B) {
-		benchmarkPullChanges(10000, b, be, project)
 	})
 }
 
@@ -284,24 +284,11 @@ func BenchmarkSnapshot(b *testing.B) {
 		benchmarkPushSnapshots(1, 1000, b, be, project)
 	})
 
-	b.Run("Push 300KB snapshot", func(b *testing.B) {
-		benchmarkPushSnapshots(1, 10000, b, be, project)
-	})
-
 	b.Run("Pull 3KB snapshot", func(b *testing.B) {
 		benchmarkPullSnapshot(100, b, be, project)
 	})
 
 	b.Run("Pull 30KB snapshot", func(b *testing.B) {
 		benchmarkPullSnapshot(1000, b, be, project)
-	})
-
-	b.Run("Pull 300KB snapshot", func(b *testing.B) {
-		benchmarkPullSnapshot(10000, b, be, project)
-	})
-
-	b.Run("Push 30KB-sized 5 snapshots successively", func(b *testing.B) {
-		// this is for the case the size of the snapshot becomes gradually larger.
-		benchmarkPushSnapshots(5, 1000, b, be, project)
 	})
 }
