@@ -71,7 +71,7 @@ type Database interface {
 	// FindProjectInfoByName returns a project by the given name.
 	FindProjectInfoByName(
 		ctx context.Context,
-		owner types.ID,
+		owner string,
 		name string,
 	) (*ProjectInfo, error)
 
@@ -93,17 +93,17 @@ type Database interface {
 	CreateProjectInfo(
 		ctx context.Context,
 		name string,
-		owner types.ID,
+		owner string,
 		clientDeactivateThreshold string,
 	) (*ProjectInfo, error)
 
 	// ListProjectInfos returns all project infos owned by owner.
-	ListProjectInfos(ctx context.Context, owner types.ID) ([]*ProjectInfo, error)
+	ListProjectInfos(ctx context.Context, owner string) ([]*ProjectInfo, error)
 
 	// UpdateProjectInfo updates the project.
 	UpdateProjectInfo(
 		ctx context.Context,
-		owner types.ID,
+		owner string,
 		id types.ID,
 		fields *types.UpdatableProjectFields,
 	) (*ProjectInfo, error)

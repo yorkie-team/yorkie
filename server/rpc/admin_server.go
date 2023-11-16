@@ -109,7 +109,7 @@ func (s *adminServer) CreateProject(
 	}
 
 	user := users.From(ctx)
-	project, err := projects.CreateProject(ctx, s.backend, user.ID, req.Name)
+	project, err := projects.CreateProject(ctx, s.backend, user.Username, req.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (s *adminServer) ListProjects(
 	_ *api.ListProjectsRequest,
 ) (*api.ListProjectsResponse, error) {
 	user := users.From(ctx)
-	projectList, err := projects.ListProjects(ctx, s.backend, user.ID)
+	projectList, err := projects.ListProjects(ctx, s.backend, user.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (s *adminServer) GetProject(
 	req *api.GetProjectRequest,
 ) (*api.GetProjectResponse, error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Name)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +183,7 @@ func (s *adminServer) UpdateProject(
 	project, err := projects.UpdateProject(
 		ctx,
 		s.backend,
-		user.ID,
+		user.Username,
 		types.ID(req.Id),
 		fields,
 	)
@@ -207,7 +207,7 @@ func (s *adminServer) GetDocument(
 	req *api.GetDocumentRequest,
 ) (*api.GetDocumentResponse, error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (s *adminServer) GetSnapshotMeta(
 	req *api.GetSnapshotMetaRequest,
 ) (*api.GetSnapshotMetaResponse, error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +271,7 @@ func (s *adminServer) ListDocuments(
 	req *api.ListDocumentsRequest,
 ) (*api.ListDocumentsResponse, error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +307,7 @@ func (s *adminServer) SearchDocuments(
 	req *api.SearchDocumentsRequest,
 ) (*api.SearchDocumentsResponse, error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -340,7 +340,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	req *api.RemoveDocumentByAdminRequest,
 ) (*api.RemoveDocumentByAdminResponse, error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +394,7 @@ func (s *adminServer) ListChanges(
 	req *api.ListChangesRequest,
 ) (*api.ListChangesResponse, error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.ProjectName)
 	if err != nil {
 		return nil, err
 	}
