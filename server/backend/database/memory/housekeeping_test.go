@@ -43,7 +43,12 @@ func TestHousekeeping(t *testing.T) {
 
 		userInfo, err := memdb.CreateUserInfo(ctx, "test", "test")
 		assert.NoError(t, err)
-		project, err := memdb.CreateProjectInfo(ctx, database.DefaultProjectName, userInfo.ID, clientDeactivateThreshold)
+		project, err := memdb.CreateProjectInfo(
+			ctx,
+			database.DefaultProjectName,
+			userInfo.Username,
+			clientDeactivateThreshold,
+		)
 		assert.NoError(t, err)
 
 		yesterday := gotime.Now().Add(-24 * gotime.Hour)
@@ -123,7 +128,12 @@ func createDBandProjects(t *testing.T) (*memory.DB, []*database.ProjectInfo) {
 
 	projects := make([]*database.ProjectInfo, 0)
 	for i := 0; i < 10; i++ {
-		p, err := memdb.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), userInfo.ID, clientDeactivateThreshold)
+		p, err := memdb.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%d project", i),
+			userInfo.Username,
+			clientDeactivateThreshold,
+		)
 		assert.NoError(t, err)
 
 		projects = append(projects, p)

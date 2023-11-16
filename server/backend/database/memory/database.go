@@ -78,13 +78,13 @@ func (d *DB) FindProjectInfoByPublicKey(
 // FindProjectInfoByName returns a project by the given name.
 func (d *DB) FindProjectInfoByName(
 	_ context.Context,
-	owner types.ID,
+	owner string,
 	name string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblProjects, "owner_name", owner.String(), name)
+	raw, err := txn.First(tblProjects, "owner_name", owner, name)
 	if err != nil {
 		return nil, fmt.Errorf("find project by owner and name: %w", err)
 	}
@@ -124,7 +124,7 @@ func (d *DB) EnsureDefaultUserAndProject(
 		return nil, nil, err
 	}
 
-	project, err := d.ensureDefaultProjectInfo(ctx, user.ID, clientDeactivateThreshold)
+	project, err := d.ensureDefaultProjectInfo(ctx, username, clientDeactivateThreshold)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -168,7 +168,7 @@ func (d *DB) ensureDefaultUserInfo(
 // ensureDefaultProjectInfo creates the default project if it does not exist.
 func (d *DB) ensureDefaultProjectInfo(
 	_ context.Context,
-	defaultUserID types.ID,
+	defaultUsername string,
 	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
@@ -181,7 +181,7 @@ func (d *DB) ensureDefaultProjectInfo(
 
 	var info *database.ProjectInfo
 	if raw == nil {
-		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
+		info = database.NewProjectInfo(database.DefaultProjectName, defaultUsername, defaultClientDeactivateThreshold)
 		info.ID = database.DefaultProjectID
 		if err := txn.Insert(tblProjects, info); err != nil {
 			return nil, fmt.Errorf("insert project: %w", err)
@@ -198,7 +198,7 @@ func (d *DB) ensureDefaultProjectInfo(
 func (d *DB) CreateProjectInfo(
 	_ context.Context,
 	name string,
-	owner types.ID,
+	owner string,
 	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
@@ -206,7 +206,7 @@ func (d *DB) CreateProjectInfo(
 
 	// NOTE(hackerwins): Check if the project already exists.
 	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
-	existing, err := txn.First(tblProjects, "owner_name", owner.String(), name)
+	existing, err := txn.First(tblProjects, "owner_name", owner, name)
 	if err != nil {
 		return nil, fmt.Errorf("find project by owner and name: %w", err)
 	}
@@ -265,7 +265,7 @@ func (d *DB) listProjectInfos(
 // ListProjectInfos returns all project infos owned by owner.
 func (d *DB) ListProjectInfos(
 	_ context.Context,
-	owner types.ID,
+	owner string,
 ) ([]*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -273,7 +273,7 @@ func (d *DB) ListProjectInfos(
 	iter, err := txn.LowerBound(
 		tblProjects,
 		"owner_name",
-		owner.String(),
+		owner,
 		"",
 	)
 	if err != nil {
@@ -296,7 +296,7 @@ func (d *DB) ListProjectInfos(
 // UpdateProjectInfo updates the given project.
 func (d *DB) UpdateProjectInfo(
 	_ context.Context,
-	owner types.ID,
+	owner string,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*database.ProjectInfo, error) {
@@ -317,7 +317,7 @@ func (d *DB) UpdateProjectInfo(
 	}
 
 	if fields.Name != nil {
-		existing, err := txn.First(tblProjects, "owner_name", owner.String(), *fields.Name)
+		existing, err := txn.First(tblProjects, "owner_name", owner, *fields.Name)
 		if err != nil {
 			return nil, fmt.Errorf("find project by owner and name: %w", err)
 		}
@@ -384,7 +384,7 @@ func (d *DB) ListUserInfos(_ context.Context) ([]*database.UserInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iter, err := txn.Get(tblUsers, "id")
+	iter, err := txn.Get(tblUsers, "username")
 	if err != nil {
 		return nil, fmt.Errorf("fetch users: %w", err)
 	}

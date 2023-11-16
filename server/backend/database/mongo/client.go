@@ -107,7 +107,7 @@ func (c *Client) EnsureDefaultUserAndProject(
 		return nil, nil, err
 	}
 
-	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID, clientDeactivateThreshold)
+	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.Username, clientDeactivateThreshold)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -162,16 +162,12 @@ func (c *Client) ensureDefaultUserInfo(
 // ensureDefaultProjectInfo creates the default project info if it does not exist.
 func (c *Client) ensureDefaultProjectInfo(
 	ctx context.Context,
-	defaultUserID types.ID,
+	defaultUsername string,
 	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
-	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
+	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUsername, defaultClientDeactivateThreshold)
 	candidate.ID = database.DefaultProjectID
 	encodedID, err := encodeID(candidate.ID)
-	if err != nil {
-		return nil, err
-	}
-	encodedDefaultUserID, err := encodeID(defaultUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +177,7 @@ func (c *Client) ensureDefaultProjectInfo(
 	}, bson.M{
 		"$setOnInsert": bson.M{
 			"name":                        candidate.Name,
-			"owner":                       encodedDefaultUserID,
+			"owner":                       candidate.Owner,
 			"client_deactivate_threshold": candidate.ClientDeactivateThreshold,
 			"public_key":                  candidate.PublicKey,
 			"secret_key":                  candidate.SecretKey,
@@ -211,18 +207,13 @@ func (c *Client) ensureDefaultProjectInfo(
 func (c *Client) CreateProjectInfo(
 	ctx context.Context,
 	name string,
-	owner types.ID,
+	owner string,
 	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
-	encodedOwner, err := encodeID(owner)
-	if err != nil {
-		return nil, err
-	}
-
 	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
 	result, err := c.collection(colProjects).InsertOne(ctx, bson.M{
 		"name":                        info.Name,
-		"owner":                       encodedOwner,
+		"owner":                       owner,
 		"client_deactivate_threshold": info.ClientDeactivateThreshold,
 		"public_key":                  info.PublicKey,
 		"secret_key":                  info.SecretKey,
@@ -274,15 +265,10 @@ func (c *Client) listProjectInfos(
 // ListProjectInfos returns all project infos owned by owner.
 func (c *Client) ListProjectInfos(
 	ctx context.Context,
-	owner types.ID,
+	owner string,
 ) ([]*database.ProjectInfo, error) {
-	encodedOwnerID, err := encodeID(owner)
-	if err != nil {
-		return nil, err
-	}
-
 	cursor, err := c.collection(colProjects).Find(ctx, bson.M{
-		"owner": encodedOwnerID,
+		"owner": owner,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch project infos: %w", err)
@@ -316,17 +302,12 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 // FindProjectInfoByName returns a project by name.
 func (c *Client) FindProjectInfoByName(
 	ctx context.Context,
-	owner types.ID,
+	owner string,
 	name string,
 ) (*database.ProjectInfo, error) {
-	encodedOwner, err := encodeID(owner)
-	if err != nil {
-		return nil, err
-	}
-
 	result := c.collection(colProjects).FindOne(ctx, bson.M{
 		"name":  name,
-		"owner": encodedOwner,
+		"owner": owner,
 	})
 
 	projectInfo := database.ProjectInfo{}
@@ -365,14 +346,10 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 // UpdateProjectInfo updates the project info.
 func (c *Client) UpdateProjectInfo(
 	ctx context.Context,
-	owner types.ID,
+	owner string,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*database.ProjectInfo, error) {
-	encodedOwner, err := encodeID(owner)
-	if err != nil {
-		return nil, err
-	}
 	encodedID, err := encodeID(id)
 	if err != nil {
 		return nil, err
@@ -391,7 +368,7 @@ func (c *Client) UpdateProjectInfo(
 
 	res := c.collection(colProjects).FindOneAndUpdate(ctx, bson.M{
 		"_id":   encodedID,
-		"owner": encodedOwner,
+		"owner": owner,
 	}, bson.M{
 		"$set": updatableFields,
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))

@@ -42,8 +42,8 @@ import (
 )
 
 const (
-	dummyOwnerID              = types.ID("000000000000000000000000")
-	otherOwnerID              = types.ID("000000000000000000000001")
+	dummyOwnerName            = "dummy"
+	otherOwnerName            = "other"
 	dummyClientID             = types.ID("000000000000000000000000")
 	clientDeactivateThreshold = "1h"
 )
@@ -81,42 +81,47 @@ func RunFindProjectInfoByNameTest(
 		ctx := context.Background()
 		suffixes := []int{0, 1, 2}
 		for _, suffix := range suffixes {
-			_, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-%d", t.Name(), suffix), dummyOwnerID, clientDeactivateThreshold)
+			_, err := db.CreateProjectInfo(
+				ctx,
+				fmt.Sprintf("%s-%d", t.Name(), suffix),
+				dummyOwnerName,
+				clientDeactivateThreshold,
+			)
 			assert.NoError(t, err)
 		}
 
-		_, err := db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
+		_, err := db.CreateProjectInfo(ctx, t.Name(), otherOwnerName, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		// Lists all projects that the dummyOwnerID is the owner.
-		projects, err := db.ListProjectInfos(ctx, dummyOwnerID)
+		projects, err := db.ListProjectInfos(ctx, dummyOwnerName)
 		assert.NoError(t, err)
 		assert.Len(t, projects, len(suffixes))
 
-		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		_, err = db.CreateProjectInfo(ctx, t.Name(), dummyOwnerName, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
-		project, err := db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
+		project, err := db.FindProjectInfoByName(ctx, dummyOwnerName, t.Name())
 		assert.NoError(t, err)
 		assert.Equal(t, project.Name, t.Name())
 
 		newName := fmt.Sprintf("%s-%d", t.Name(), 3)
 		fields := &types.UpdatableProjectFields{Name: &newName}
-		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, project.ID, fields)
+		_, err = db.UpdateProjectInfo(ctx, dummyOwnerName, project.ID, fields)
 		assert.NoError(t, err)
-		_, err = db.FindProjectInfoByName(ctx, dummyOwnerID, newName)
+		_, err = db.FindProjectInfoByName(ctx, dummyOwnerName, newName)
 		assert.NoError(t, err)
 	})
 
 	t.Run("FindProjectInfoByName test", func(t *testing.T) {
 		ctx := context.Background()
 
-		info1, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		info1, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerName, clientDeactivateThreshold)
 		assert.NoError(t, err)
-		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
+		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerName, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
-		info2, err := db.FindProjectInfoByName(ctx, dummyOwnerID, t.Name())
+		info2, err := db.FindProjectInfoByName(ctx, dummyOwnerName, t.Name())
 		assert.NoError(t, err)
 		assert.Equal(t, info1.ID, info2.ID)
 	})
@@ -278,7 +283,7 @@ func RunListUserInfosTest(t *testing.T, db database.Database) {
 func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("activate and find client test", func(t *testing.T) {
 		ctx := context.Background()
-		_, err := db.FindClientInfoByID(ctx, projectID, dummyOwnerID)
+		_, err := db.FindClientInfoByID(ctx, projectID, dummyClientID)
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
@@ -293,7 +298,7 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		ctx := context.Background()
 
 		// try to deactivate the client with not exists ID.
-		_, err := db.DeactivateClient(ctx, projectID, dummyOwnerID)
+		_, err := db.DeactivateClient(ctx, projectID, dummyClientID)
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
@@ -337,9 +342,9 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		}
 		newClientDeactivateThreshold := "1h"
 
-		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		info, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerName, clientDeactivateThreshold)
 		assert.NoError(t, err)
-		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerID, clientDeactivateThreshold)
+		_, err = db.CreateProjectInfo(ctx, existName, dummyOwnerName, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		id := info.ID
@@ -352,7 +357,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			ClientDeactivateThreshold: &newClientDeactivateThreshold,
 		}
 		assert.NoError(t, fields.Validate())
-		res, err := db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		res, err := db.UpdateProjectInfo(ctx, dummyOwnerName, id, fields)
 		assert.NoError(t, err)
 		updateInfo, err := db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
@@ -367,7 +372,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			Name: &newName2,
 		}
 		assert.NoError(t, fields.Validate())
-		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		res, err = db.UpdateProjectInfo(ctx, dummyOwnerName, id, fields)
 		assert.NoError(t, err)
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
@@ -383,7 +388,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			AuthWebhookURL: &newAuthWebhookURL2,
 		}
 		assert.NoError(t, fields.Validate())
-		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		res, err = db.UpdateProjectInfo(ctx, dummyOwnerName, id, fields)
 		assert.NoError(t, err)
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
@@ -399,7 +404,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			ClientDeactivateThreshold: &clientDeactivateThreshold2,
 		}
 		assert.NoError(t, fields.Validate())
-		res, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		res, err = db.UpdateProjectInfo(ctx, dummyOwnerName, id, fields)
 		assert.NoError(t, err)
 		updateInfo, err = db.FindProjectInfoByID(ctx, id)
 		assert.NoError(t, err)
@@ -411,12 +416,12 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 
 		// 05. Duplicated name test
 		fields = &types.UpdatableProjectFields{Name: &existName}
-		_, err = db.UpdateProjectInfo(ctx, dummyOwnerID, id, fields)
+		_, err = db.UpdateProjectInfo(ctx, dummyOwnerName, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNameAlreadyExists)
 
 		// 06. OwnerID not match test
 		fields = &types.UpdatableProjectFields{Name: &existName}
-		_, err = db.UpdateProjectInfo(ctx, otherOwnerID, id, fields)
+		_, err = db.UpdateProjectInfo(ctx, otherOwnerName, id, fields)
 		assert.ErrorIs(t, err, database.ErrProjectNotFound)
 	})
 }
@@ -487,7 +492,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		ctx := context.Background()
 
 		// dummy project setup
-		testProjectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		testProjectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerName, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		// dummy document setup
@@ -591,7 +596,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		ctx := context.Background()
 
 		// 01. Initialize a project and create documents.
-		projectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		projectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerName, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		var docInfos []*database.DocInfo
@@ -630,9 +635,9 @@ func RunFindDeactivateCandidates(t *testing.T, db database.Database) {
 		ctx := context.Background()
 
 		// Lists all projects of the dummyOwnerID and otherOwnerID.
-		projects, err := db.ListProjectInfos(ctx, dummyOwnerID)
+		projects, err := db.ListProjectInfos(ctx, dummyOwnerName)
 		assert.NoError(t, err)
-		otherProjects, err := db.ListProjectInfos(ctx, otherOwnerID)
+		otherProjects, err := db.ListProjectInfos(ctx, otherOwnerName)
 		assert.NoError(t, err)
 
 		projects = append(projects, otherProjects...)
