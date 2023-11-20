@@ -1,3 +1,4 @@
+{{ if .Values.ratelimit.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -11,3 +12,4 @@ data:
         rate_limit:
           unit: {{ .Values.ratelimit.unit }}
           requests_per_unit: {{ .Values.ratelimit.requestsPerUnit }}
+{{ end }}

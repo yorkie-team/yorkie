@@ -70,6 +70,7 @@ ingress:
 
 # Configuration for ratelimit
 ratelimit:
+  enabled: false
   name: ratelimit
   unit: minute
   requestsPerUnit: 100

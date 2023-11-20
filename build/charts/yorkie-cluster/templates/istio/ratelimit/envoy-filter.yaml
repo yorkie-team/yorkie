@@ -1,3 +1,4 @@
+{{ if .Values.ratelimit.enabled }}
 apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
@@ -61,3 +62,4 @@ spec:
               - request_headers:
                   header_name: ":path"
                   descriptor_key: "PATH"
+{{ end }}
