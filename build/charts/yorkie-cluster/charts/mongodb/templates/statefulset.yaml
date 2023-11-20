@@ -20,7 +20,6 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/instance: {{ .Values.name }}
-        sidecar.istio.io/inject: "false"
     spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 60
