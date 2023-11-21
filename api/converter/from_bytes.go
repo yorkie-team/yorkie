@@ -67,6 +67,25 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 	return obj, nil
 }
 
+// BytesToArray creates a Array from the given byte array.
+func BytesToArray(snapshot []byte) (*crdt.Array, error) {
+	if snapshot == nil {
+		return nil, errors.New("snapshot should not be nil")
+	}
+
+	pbArray := &api.JSONElement{}
+	if err := proto.Unmarshal(snapshot, pbArray); err != nil {
+		return nil, fmt.Errorf("unmarshal array: %w", err)
+	}
+
+	array, err := fromJSONArray(pbArray.GetJsonArray())
+	if err != nil {
+		return nil, err
+	}
+
+	return array, nil
+}
+
 // BytesToTree creates a Tree from the given byte array.
 func BytesToTree(snapshot []byte) (*crdt.Tree, error) {
 	if snapshot == nil {

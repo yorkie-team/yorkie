@@ -62,6 +62,19 @@ func ObjectToBytes(obj *crdt.Object) ([]byte, error) {
 	return bytes, nil
 }
 
+// ArrayToBytes converts the given array to byte array.
+func ArrayToBytes(array *crdt.Array) ([]byte, error) {
+	pbArray, err := toJSONArray(array)
+	if err != nil {
+		return nil, err
+	}
+	bytes, err := proto.Marshal(pbArray)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Array to bytes: %w", err)
+	}
+	return bytes, nil
+}
+
 // TreeToBytes converts the given tree to byte array.
 func TreeToBytes(tree *crdt.Tree) ([]byte, error) {
 	pbTree := toTree(tree)
