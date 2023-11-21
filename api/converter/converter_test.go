@@ -243,6 +243,28 @@ func TestConverter(t *testing.T) {
 		assert.Equal(t, tree.ToXML(), clone.ToXML())
 	})
 
+	t.Run("array converting to bytes test", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		treeList := crdt.NewRGATreeList()
+		arr := crdt.NewArray(treeList, ctx.IssueTimeTicket())
+		primitive, _ := crdt.NewPrimitive("1", ctx.IssueTimeTicket())
+		_ = arr.Add(primitive)
+		primitive, _ = crdt.NewPrimitive("2", ctx.IssueTimeTicket())
+		_ = arr.Add(primitive)
+		primitive, _ = crdt.NewPrimitive("3", ctx.IssueTimeTicket())
+		_ = arr.Add(primitive)
+
+		bytes, err := converter.ArrayToBytes(arr)
+		assert.NoError(t, err)
+		clone, err := converter.BytesToArray(bytes)
+		assert.NoError(t, err)
+
+		assert.Equal(t, `["1","2","3"]`, arr.Marshal())
+		assert.Equal(t, `["1","2","3"]`, clone.Marshal())
+	})
+
 	t.Run("empty presence converting test", func(t *testing.T) {
 		change, err := innerpresence.NewChangeFromJSON(`{"ChangeType":"put","Presence":{}}`)
 		assert.NoError(t, err)
