@@ -1219,7 +1219,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 func (c *Client) FindDocInfosByPaging(
 	ctx context.Context,
 	projectID types.ID,
-	paging types.Paging[key.Key],
+	paging types.Paging[database.DocOffset],
 ) ([]*database.DocInfo, error) {
 	encodedProjectID, err := encodeID(projectID)
 	if err != nil {
@@ -1234,21 +1234,27 @@ func (c *Client) FindDocInfosByPaging(
 			"$exists": false,
 		},
 	}
-	if paging.Offset != "" {
+	if paging.Offset.Key != "" && paging.Offset.ID != "" {
+		encodedDocID, err := encodeID(paging.Offset.ID)
+		if err != nil {
+			return nil, err
+		}
+
 		k := "$lt"
 		if paging.IsForward {
 			k = "$gt"
 		}
-		filter["key"] = bson.M{
-			k: paging.Offset,
+		filter["$or"] = []bson.M{
+			{"_id": bson.M{k: encodedDocID}},
+			{"_id": encodedDocID, "key": bson.M{k: paging.Offset.Key}},
 		}
 	}
 
 	opts := options.Find().SetLimit(int64(paging.PageSize))
 	if paging.IsForward {
-		opts = opts.SetSort(map[string]int{"key": 1})
+		opts = opts.SetSort(bson.D{{Key: "_id", Value: 1}, {Key: "key", Value: 1}})
 	} else {
-		opts = opts.SetSort(map[string]int{"key": -1})
+		opts = opts.SetSort(bson.D{{Key: "_id", Value: -1}, {Key: "key", Value: -1}})
 	}
 
 	cursor, err := c.collection(colDocuments).Find(ctx, filter, opts)

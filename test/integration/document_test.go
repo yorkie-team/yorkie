@@ -34,6 +34,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -806,11 +807,12 @@ func TestDocumentWithProjects(t *testing.T) {
 
 		assert.NoError(t, cli.Sync(ctx))
 
-		docs, err := adminCli.ListDocuments(ctx, "default", "000000000000000000000000", 0, true, false)
+		offset := database.DocOffset{Key: "", ID: ""}
+		docs, err := adminCli.ListDocuments(ctx, "default", offset, 0, true, false)
 		assert.NoError(t, err)
 		assert.Equal(t, "", docs[0].Snapshot)
 
-		docs, err = adminCli.ListDocuments(ctx, "default", "000000000000000000000000", 0, true, true)
+		docs, err = adminCli.ListDocuments(ctx, "default", offset, 0, true, true)
 		assert.NoError(t, err)
 		assert.NotEqual(t, 0, len(docs[0].Snapshot))
 	})

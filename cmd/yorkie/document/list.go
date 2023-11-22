@@ -28,12 +28,13 @@ import (
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	"github.com/yorkie-team/yorkie/pkg/units"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 var (
-	previousKey string
-	pageSize    int32
-	isForward   bool
+	previousOffset database.DocOffset
+	pageSize       int32
+	isForward      bool
 )
 
 func newListCommand() *cobra.Command {
@@ -63,7 +64,7 @@ func newListCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			documents, err := cli.ListDocuments(ctx, projectName, previousKey, pageSize, isForward, true)
+			documents, err := cli.ListDocuments(ctx, projectName, previousOffset, pageSize, isForward, true)
 			if err != nil {
 				return err
 			}
@@ -100,11 +101,10 @@ func newListCommand() *cobra.Command {
 
 func init() {
 	cmd := newListCommand()
-	cmd.Flags().StringVar(
-		&previousKey,
-		"previous-key",
-		"",
-		"The previous document key to start from",
+	cmd.Flags().Var(
+		&previousOffset,
+		"previous-offset",
+		"The previous document offset to start from",
 	)
 	cmd.Flags().Int32Var(
 		&pageSize,

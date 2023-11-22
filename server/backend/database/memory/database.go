@@ -20,7 +20,6 @@ package memory
 import (
 	"context"
 	"fmt"
-	"strings"
 	gotime "time"
 
 	"github.com/hashicorp/go-memdb"
@@ -1228,7 +1227,7 @@ func (d *DB) UpdateSyncedSeq(
 func (d *DB) FindDocInfosByPaging(
 	_ context.Context,
 	projectID types.ID,
-	paging types.Paging[key.Key],
+	paging types.Paging[database.DocOffset],
 ) ([]*database.DocInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -1238,21 +1237,20 @@ func (d *DB) FindDocInfosByPaging(
 	if paging.IsForward {
 		iterator, err = txn.LowerBound(
 			tblDocuments,
-			"project_id_key",
+			"project_id_id",
 			projectID.String(),
-			paging.Offset.String(),
+			paging.Offset.ID.String(),
 		)
 	} else {
-		offset := paging.Offset
-		if paging.Offset == "" {
-			offset = key.Key(strings.Repeat(string(rune(127)), 120))
+		if paging.Offset.ID == "" {
+			paging.Offset.ID = types.IDFromActorID(time.MaxActorID)
 		}
 
 		iterator, err = txn.ReverseLowerBound(
 			tblDocuments,
-			"project_id_key",
+			"project_id_id",
 			projectID.String(),
-			offset.String(),
+			paging.Offset.ID.String(),
 		)
 	}
 	if err != nil {
@@ -1266,8 +1264,17 @@ func (d *DB) FindDocInfosByPaging(
 			break
 		}
 
-		if info.Key != paging.Offset && info.RemovedAt.IsZero() {
-			docInfos = append(docInfos, info)
+		if info.RemovedAt.IsZero() {
+			include := false
+			if info.ID != paging.Offset.ID {
+				include = true
+			} else if (paging.IsForward && info.Key > paging.Offset.Key) || (!paging.IsForward && info.Key < paging.Offset.Key) {
+				include = true
+			}
+
+			if include {
+				docInfos = append(docInfos, info)
+			}
 		}
 	}
 

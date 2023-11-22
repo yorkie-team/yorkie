@@ -34,6 +34,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 // Option configures Options.
@@ -248,7 +249,7 @@ func (c *Client) UpdateProject(
 func (c *Client) ListDocuments(
 	ctx context.Context,
 	projectName string,
-	previousKey string,
+	previousOffset database.DocOffset,
 	pageSize int32,
 	isForward bool,
 	includeSnapshot bool,
@@ -257,10 +258,11 @@ func (c *Client) ListDocuments(
 		ctx,
 		&api.ListDocumentsRequest{
 			ProjectName:     projectName,
-			PreviousKey:     previousKey,
+			PreviousId:      previousOffset.ID.String(),
 			PageSize:        pageSize,
 			IsForward:       isForward,
 			IncludeSnapshot: includeSnapshot,
+			PreviousKey:     previousOffset.Key.String(),
 		},
 	)
 	if err != nil {

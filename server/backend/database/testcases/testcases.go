@@ -444,29 +444,38 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		}
 
 		// initial page, offset is empty
-		infos, err := db.FindDocInfosByPaging(ctx, projectID, types.Paging[key.Key]{PageSize: pageSize})
+		infos, err := db.FindDocInfosByPaging(ctx, projectID, types.Paging[database.DocOffset]{PageSize: pageSize})
 		assert.NoError(t, err)
 		assertKeys([]key.Key{"8", "7", "6", "5", "4"}, infos)
 
 		// backward
-		infos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[key.Key]{
-			Offset:   infos[len(infos)-1].Key,
+		infos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[database.DocOffset]{
+			Offset: database.DocOffset{
+				Key: infos[len(infos)-1].Key,
+				ID:  infos[len(infos)-1].ID,
+			},
 			PageSize: pageSize,
 		})
 		assert.NoError(t, err)
 		assertKeys([]key.Key{"3", "2", "1", "0"}, infos)
 
 		// backward again
-		emptyInfos, err := db.FindDocInfosByPaging(ctx, projectID, types.Paging[key.Key]{
-			Offset:   infos[len(infos)-1].Key,
+		emptyInfos, err := db.FindDocInfosByPaging(ctx, projectID, types.Paging[database.DocOffset]{
+			Offset: database.DocOffset{
+				Key: infos[len(infos)-1].Key,
+				ID:  infos[len(infos)-1].ID,
+			},
 			PageSize: pageSize,
 		})
 		assert.NoError(t, err)
 		assertKeys(nil, emptyInfos)
 
 		// forward
-		infos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[key.Key]{
-			Offset:    infos[0].Key,
+		infos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[database.DocOffset]{
+			Offset: database.DocOffset{
+				Key: infos[0].Key,
+				ID:  infos[0].ID,
+			},
 			PageSize:  pageSize,
 			IsForward: true,
 		})
@@ -474,8 +483,11 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		assertKeys([]key.Key{"4", "5", "6", "7", "8"}, infos)
 
 		// forward again
-		emptyInfos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[key.Key]{
-			Offset:    infos[len(infos)-1].Key,
+		emptyInfos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[database.DocOffset]{
+			Offset: database.DocOffset{
+				Key: infos[len(infos)-1].Key,
+				ID:  infos[len(infos)-1].ID,
+			},
 			PageSize:  pageSize,
 			IsForward: true,
 		})
@@ -502,63 +514,87 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 
 		cases := []struct {
 			name       string
-			offset     key.Key
+			offset     database.DocOffset
 			pageSize   int
 			isForward  bool
 			testResult []int
 		}{
 			{
-				name:       "FindDocInfosByPaging no flag test",
-				offset:     "",
+				name: "FindDocInfosByPaging no flag test",
+				offset: database.DocOffset{
+					Key: "",
+					ID:  "",
+				},
 				pageSize:   0,
 				isForward:  false,
 				testResult: helper.NewRangeSlice(testDocCnt, 0),
 			},
 			{
-				name:       "FindDocInfosByPaging --forward test",
-				offset:     "",
+				name: "FindDocInfosByPaging --forward test",
+				offset: database.DocOffset{
+					Key: "",
+					ID:  "",
+				},
 				pageSize:   0,
 				isForward:  true,
 				testResult: helper.NewRangeSlice(0, testDocCnt),
 			},
 			{
-				name:       "FindDocInfosByPaging --size test",
-				offset:     "",
+				name: "FindDocInfosByPaging --size test",
+				offset: database.DocOffset{
+					Key: "",
+					ID:  "",
+				},
 				pageSize:   4,
 				isForward:  false,
 				testResult: helper.NewRangeSlice(testDocCnt, testDocCnt-4),
 			},
 			{
-				name:       "FindDocInfosByPaging --size --forward test",
-				offset:     "",
+				name: "FindDocInfosByPaging --size --forward test",
+				offset: database.DocOffset{
+					Key: "",
+					ID:  "",
+				},
 				pageSize:   4,
 				isForward:  true,
 				testResult: helper.NewRangeSlice(0, 3),
 			},
 			{
-				name:       "FindDocInfosByPaging --offset test",
-				offset:     dummyDocInfos[13].Key,
+				name: "FindDocInfosByPaging --offset test",
+				offset: database.DocOffset{
+					Key: dummyDocInfos[13].Key,
+					ID:  dummyDocInfos[13].ID,
+				},
 				pageSize:   0,
 				isForward:  false,
 				testResult: helper.NewRangeSlice(12, 0),
 			},
 			{
-				name:       "FindDocInfosByPaging --forward --offset test",
-				offset:     dummyDocInfos[13].Key,
+				name: "FindDocInfosByPaging --forward --offset test",
+				offset: database.DocOffset{
+					Key: dummyDocInfos[13].Key,
+					ID:  dummyDocInfos[13].ID,
+				},
 				pageSize:   0,
 				isForward:  true,
 				testResult: helper.NewRangeSlice(14, testDocCnt),
 			},
 			{
-				name:       "FindDocInfosByPaging --size --offset test",
-				offset:     dummyDocInfos[13].Key,
+				name: "FindDocInfosByPaging --size --offset test",
+				offset: database.DocOffset{
+					Key: dummyDocInfos[13].Key,
+					ID:  dummyDocInfos[13].ID,
+				},
 				pageSize:   10,
 				isForward:  false,
 				testResult: helper.NewRangeSlice(12, 3),
 			},
 			{
-				name:       "FindDocInfosByPaging --size --forward --offset test",
-				offset:     dummyDocInfos[13].Key,
+				name: "FindDocInfosByPaging --size --forward --offset test",
+				offset: database.DocOffset{
+					Key: dummyDocInfos[13].Key,
+					ID:  dummyDocInfos[13].ID,
+				},
 				pageSize:   10,
 				isForward:  true,
 				testResult: helper.NewRangeSlice(14, 23),
@@ -568,7 +604,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		for _, c := range cases {
 			t.Run(c.name, func(t *testing.T) {
 				ctx := context.Background()
-				testPaging := types.Paging[key.Key]{
+				testPaging := types.Paging[database.DocOffset]{
 					Offset:    c.offset,
 					PageSize:  c.pageSize,
 					IsForward: c.isForward,
@@ -604,7 +640,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		}
 
 		// 02. List the documents.
-		result, err := db.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[key.Key]{
+		result, err := db.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[database.DocOffset]{
 			PageSize:  10,
 			IsForward: false,
 		})
@@ -616,7 +652,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		assert.NoError(t, err)
 
 		// 04. List the documents again and check the filtered result.
-		result, err = db.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[key.Key]{
+		result, err = db.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[database.DocOffset]{
 			PageSize:  10,
 			IsForward: false,
 		})

@@ -48,7 +48,7 @@ func ListDocumentSummaries(
 	ctx context.Context,
 	be *backend.Backend,
 	project *types.Project,
-	paging types.Paging[key.Key],
+	paging types.Paging[database.DocOffset],
 	includeSnapshot bool,
 ) ([]*types.DocumentSummary, error) {
 	if paging.PageSize > pageSizeLimit {

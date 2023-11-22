@@ -20,6 +20,8 @@ package database
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -264,7 +266,7 @@ type Database interface {
 	FindDocInfosByPaging(
 		ctx context.Context,
 		projectID types.ID,
-		paging types.Paging[key.Key],
+		paging types.Paging[DocOffset],
 	) ([]*DocInfo, error)
 
 	// FindDocInfosByQuery returns the documentInfos which match the given query.
@@ -283,4 +285,30 @@ type Database interface {
 		docID types.ID,
 		excludeClientID types.ID,
 	) (bool, error)
+}
+
+type DocOffset struct {
+	Key key.Key
+	ID  types.ID
+}
+
+// String is used both by fmt.Print and by Cobra in help text
+func (o *DocOffset) String() string {
+	return fmt.Sprintf("%s.%s", o.Key, o.ID)
+}
+
+// Set must have pointer receiver so it doesn't change the value of a copy
+func (o *DocOffset) Set(v string) error {
+	parsed := strings.Split(v, ",")
+	if len(parsed) != 2 {
+		return errors.New("use the format 'docKey,docID' for the input")
+	}
+	o.Key = key.Key(parsed[0])
+	o.ID = types.ID(parsed[1])
+	return nil
+}
+
+// Type is only used in help text
+func (o *DocOffset) Type() string {
+	return "DocumentOffset"
 }

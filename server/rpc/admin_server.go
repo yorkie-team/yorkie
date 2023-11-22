@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -280,8 +281,11 @@ func (s *adminServer) ListDocuments(
 		ctx,
 		s.backend,
 		project,
-		types.Paging[key.Key]{
-			Offset:    key.Key(req.PreviousKey),
+		types.Paging[database.DocOffset]{
+			Offset: database.DocOffset{
+				Key: key.Key(req.PreviousKey),
+				ID:  types.ID(req.PreviousId),
+			},
 			PageSize:  int(req.PageSize),
 			IsForward: req.IsForward,
 		},

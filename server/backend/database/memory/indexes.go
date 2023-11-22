@@ -136,6 +136,15 @@ var schema = &memdb.DBSchema{
 						},
 					},
 				},
+				"project_id_id": {
+					Name: "project_id_id",
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "ID"},
+						},
+					},
+				},
 				"project_id_key_removed_at": {
 					Name: "project_id_key_removed_at",
 					Indexer: &memdb.CompoundIndex{
