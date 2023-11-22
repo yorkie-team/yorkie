@@ -84,7 +84,7 @@ func PushPull(
 	be.Metrics.AddPushPullSentOperations(respPack.OperationsLen())
 	be.Metrics.AddPushPullSnapshotBytes(respPack.SnapshotLen())
 
-	if err := clientInfo.UpdateCheckpoint(docInfo.ID, respPack.Checkpoint); err != nil {
+	if err := clientInfo.UpdateCheckpoint(docInfo.Key, docInfo.ID, respPack.Checkpoint); err != nil {
 		return nil, err
 	}
 
@@ -92,7 +92,6 @@ func PushPull(
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		if err := be.DB.CreateChangeInfos(
 			ctx,
-			project.ID,
 			docInfo,
 			initialServerSeq,
 			pushedChanges,
@@ -112,7 +111,7 @@ func PushPull(
 	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
 		ctx,
 		clientInfo,
-		docInfo.ID,
+		docInfo.Key, docInfo.ID,
 		reqPack.Checkpoint.ServerSeq,
 	)
 	if err != nil {
@@ -147,9 +146,10 @@ func PushPull(
 				ctx,
 				publisherID,
 				sync.DocEvent{
-					Type:       types.DocumentChangedEvent,
-					Publisher:  publisherID,
-					DocumentID: docInfo.ID,
+					Type:        types.DocumentChangedEvent,
+					Publisher:   publisherID,
+					DocumentKey: docInfo.Key,
+					DocumentID:  docInfo.ID,
 				},
 			)
 
@@ -196,7 +196,12 @@ func BuildDocumentForServerSeq(
 	docInfo *database.DocInfo,
 	serverSeq int64,
 ) (*document.InternalDocument, error) {
-	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, serverSeq, true)
+	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
+		ctx,
+		docInfo.Key, docInfo.ID,
+		serverSeq,
+		true,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +221,7 @@ func BuildDocumentForServerSeq(
 	// certain size (e.g. 100) and read and gradually reflect it into the document.
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
-		docInfo.ID,
+		docInfo.Key, docInfo.ID,
 		snapshotInfo.ServerSeq+1,
 		serverSeq,
 	)

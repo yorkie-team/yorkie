@@ -60,31 +60,34 @@ func Deactivate(
 		return nil, err
 	}
 
-	for id, clientDocInfo := range clientInfo.Documents {
-		isAttached, err := clientInfo.IsAttached(id)
-		if err != nil {
-			return nil, err
-		}
-		if !isAttached {
-			continue
-		}
+	for docKey, v := range clientInfo.Documents {
+		for docID, clientDocInfo := range v {
+			isAttached, err := clientInfo.IsAttached(docKey, docID)
+			if err != nil {
+				return nil, err
+			}
+			if !isAttached {
+				continue
+			}
 
-		if err := clientInfo.DetachDocument(id); err != nil {
-			return nil, err
-		}
+			if err := clientInfo.DetachDocument(docKey, docID); err != nil {
+				return nil, err
+			}
 
-		// TODO(hackerwins): We need to remove the presence of the client from the document.
-		// Be careful that housekeeping is executed by the leader. And documents are sharded
-		// by the servers in the cluster. So, we need to consider the case where the leader is
-		// not the same as the server that handles the document.
+			// TODO(hackerwins): We need to remove the presence of the client from the document.
+			// Be careful that housekeeping is executed by the leader. And documents are sharded
+			// by the servers in the cluster. So, we need to consider the case where the leader is
+			// not the same as the server that handles the document.
 
-		if err := db.UpdateSyncedSeq(
-			ctx,
-			clientInfo,
-			id,
-			clientDocInfo.ServerSeq,
-		); err != nil {
-			return nil, err
+			if err := db.UpdateSyncedSeq(
+				ctx,
+				clientInfo,
+				docKey,
+				docID,
+				clientDocInfo.ServerSeq,
+			); err != nil {
+				return nil, err
+			}
 		}
 	}
 

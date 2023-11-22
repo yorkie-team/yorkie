@@ -20,6 +20,7 @@ import (
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -47,10 +48,11 @@ func (s *Subscription) ID() string {
 
 // DocEvent represents events that occur related to the document.
 type DocEvent struct {
-	Type       types.DocEventType
-	Publisher  *time.ActorID
-	DocumentID types.ID
-	Body       types.DocEventBody
+	Type        types.DocEventType
+	Publisher   *time.ActorID
+	DocumentKey key.Key
+	DocumentID  types.ID
+	Body        types.DocEventBody
 }
 
 // Events returns the DocEvent channel of this subscription.

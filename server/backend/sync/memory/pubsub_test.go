@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
@@ -37,19 +38,21 @@ func TestPubSub(t *testing.T) {
 
 	t.Run("publish subscribe test", func(t *testing.T) {
 		pubSub := memory.NewPubSub()
+		key := key.Key(t.Name() + "key")
 		id := types.ID(t.Name() + "id")
 		docEvent := sync.DocEvent{
-			Type:       types.DocumentWatchedEvent,
-			Publisher:  idB,
-			DocumentID: id,
+			Type:        types.DocumentWatchedEvent,
+			Publisher:   idB,
+			DocumentKey: key,
+			DocumentID:  id,
 		}
 
 		ctx := context.Background()
 		// subscribe the documents by actorA
-		subA, err := pubSub.Subscribe(ctx, idA, id)
+		subA, err := pubSub.Subscribe(ctx, idA, key, id)
 		assert.NoError(t, err)
 		defer func() {
-			pubSub.Unsubscribe(ctx, id, subA)
+			pubSub.Unsubscribe(ctx, key, id, subA)
 		}()
 
 		var wg gosync.WaitGroup

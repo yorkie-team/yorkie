@@ -248,7 +248,7 @@ func (c *Client) UpdateProject(
 func (c *Client) ListDocuments(
 	ctx context.Context,
 	projectName string,
-	previousID string,
+	previousKey string,
 	pageSize int32,
 	isForward bool,
 	includeSnapshot bool,
@@ -257,7 +257,7 @@ func (c *Client) ListDocuments(
 		ctx,
 		&api.ListDocumentsRequest{
 			ProjectName:     projectName,
-			PreviousId:      previousID,
+			PreviousKey:     previousKey,
 			PageSize:        pageSize,
 			IsForward:       isForward,
 			IncludeSnapshot: includeSnapshot,

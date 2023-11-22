@@ -160,24 +160,23 @@ type Database interface {
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
-	// FindDocInfoByID finds the document of the given ID.
-	FindDocInfoByID(
+	// FindDocInfoByKeyAndID finds the document of the given key and ID.
+	FindDocInfoByKeyAndID(
 		ctx context.Context,
-		projectID types.ID,
-		id types.ID,
+		docKey key.Key,
+		docID types.ID,
 	) (*DocInfo, error)
 
 	// UpdateDocInfoStatusToRemoved updates the document status to removed.
 	UpdateDocInfoStatusToRemoved(
 		ctx context.Context,
-		projectID types.ID,
+		docKey key.Key,
 		docID types.ID,
 	) error
 
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
 	CreateChangeInfos(
 		ctx context.Context,
-		projectID types.ID,
 		docInfo *DocInfo,
 		initialServerSeq int64,
 		changes []*change.Change,
@@ -188,12 +187,14 @@ type Database interface {
 	// save storage.
 	PurgeStaleChanges(
 		ctx context.Context,
+		docKey key.Key,
 		docID types.ID,
 	) error
 
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
 		ctx context.Context,
+		docKey key.Key,
 		docID types.ID,
 		from int64,
 		to int64,
@@ -202,33 +203,50 @@ type Database interface {
 	// FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
 	FindChangeInfosBetweenServerSeqs(
 		ctx context.Context,
+		docKey key.Key,
 		docID types.ID,
 		from int64,
 		to int64,
 	) ([]*ChangeInfo, error)
 
 	// CreateSnapshotInfo stores the snapshot of the given document.
-	CreateSnapshotInfo(ctx context.Context, docID types.ID, doc *document.InternalDocument) error
+	CreateSnapshotInfo(
+		ctx context.Context,
+		docKey key.Key,
+		docID types.ID,
+		doc *document.InternalDocument,
+	) error
 
 	// FindSnapshotInfoByID returns the snapshot by the given id.
-	FindSnapshotInfoByID(ctx context.Context, id types.ID) (*SnapshotInfo, error)
+	FindSnapshotInfoByID(
+		ctx context.Context,
+		docKey key.Key,
+		docID types.ID,
+		serverSeq int64,
+	) (*SnapshotInfo, error)
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
 	FindClosestSnapshotInfo(
 		ctx context.Context,
+		docKey key.Key,
 		docID types.ID,
 		serverSeq int64,
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
 
 	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
-	FindMinSyncedSeqInfo(ctx context.Context, docID types.ID) (*SyncedSeqInfo, error)
+	FindMinSyncedSeqInfo(
+		ctx context.Context,
+		docKey key.Key,
+		docID types.ID,
+	) (*SyncedSeqInfo, error)
 
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 	// and returns the min synced ticket.
 	UpdateAndFindMinSyncedTicket(
 		ctx context.Context,
 		clientInfo *ClientInfo,
+		docKey key.Key,
 		docID types.ID,
 		serverSeq int64,
 	) (*time.Ticket, error)
@@ -237,6 +255,7 @@ type Database interface {
 	UpdateSyncedSeq(
 		ctx context.Context,
 		clientInfo *ClientInfo,
+		docKey key.Key,
 		docID types.ID,
 		serverSeq int64,
 	) error
@@ -245,7 +264,7 @@ type Database interface {
 	FindDocInfosByPaging(
 		ctx context.Context,
 		projectID types.ID,
-		paging types.Paging[types.ID],
+		paging types.Paging[key.Key],
 	) ([]*DocInfo, error)
 
 	// FindDocInfosByQuery returns the documentInfos which match the given query.
@@ -260,6 +279,7 @@ type Database interface {
 	IsDocumentAttached(
 		ctx context.Context,
 		projectID types.ID,
+		docKey key.Key,
 		docID types.ID,
 		excludeClientID types.ID,
 	) (bool, error)

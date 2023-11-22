@@ -20,12 +20,16 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 // SnapshotInfo is a structure representing information of the snapshot.
 type SnapshotInfo struct {
 	// ID is the unique ID of the snapshot.
 	ID types.ID `bson:"_id"`
+
+	// DocKey is the key of the document which the snapshot belongs to.
+	DocKey key.Key `bson:"doc_key"`
 
 	// DocID is the ID of the document which the snapshot belongs to.
 	DocID types.ID `bson:"doc_id"`
@@ -51,6 +55,7 @@ func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 
 	return &SnapshotInfo{
 		ID:        i.ID,
+		DocKey:    i.DocKey,
 		DocID:     i.DocID,
 		ServerSeq: i.ServerSeq,
 		Lamport:   i.Lamport,

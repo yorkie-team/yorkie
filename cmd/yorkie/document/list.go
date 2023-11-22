@@ -31,9 +31,9 @@ import (
 )
 
 var (
-	previousID string
-	pageSize   int32
-	isForward  bool
+	previousKey string
+	pageSize    int32
+	isForward   bool
 )
 
 func newListCommand() *cobra.Command {
@@ -63,7 +63,7 @@ func newListCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			documents, err := cli.ListDocuments(ctx, projectName, previousID, pageSize, isForward, true)
+			documents, err := cli.ListDocuments(ctx, projectName, previousKey, pageSize, isForward, true)
 			if err != nil {
 				return err
 			}
@@ -101,10 +101,10 @@ func newListCommand() *cobra.Command {
 func init() {
 	cmd := newListCommand()
 	cmd.Flags().StringVar(
-		&previousID,
-		"previous-id",
+		&previousKey,
+		"previous-key",
 		"",
-		"The previous document ID to start from",
+		"The previous document key to start from",
 	)
 	cmd.Flags().Int32Var(
 		&pageSize,

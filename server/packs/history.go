@@ -33,13 +33,18 @@ func FindChanges(
 	to int64,
 ) ([]*change.Change, error) {
 	if be.Config.SnapshotWithPurgingChanges {
-		minSyncedSeqInfo, err := be.DB.FindMinSyncedSeqInfo(ctx, docInfo.ID)
+		minSyncedSeqInfo, err := be.DB.FindMinSyncedSeqInfo(
+			ctx,
+			docInfo.Key,
+			docInfo.ID,
+		)
 		if err != nil {
 			return nil, err
 		}
 
 		snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
-			ctx, docInfo.ID,
+			ctx,
+			docInfo.Key, docInfo.ID,
 			minSyncedSeqInfo.ServerSeq+be.Config.SnapshotInterval,
 			false,
 		)
@@ -54,7 +59,7 @@ func FindChanges(
 
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
-		docInfo.ID,
+		docInfo.Key, docInfo.ID,
 		from,
 		to,
 	)

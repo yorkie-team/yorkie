@@ -78,6 +78,7 @@ message DetachDocumentResponse {
 message WatchDocumentRequest {
   string client_id = 1;
   string document_id = 2;
+  string document_key = 3;
 }
 
 message WatchDocumentResponse {
@@ -117,6 +118,7 @@ message BroadcastRequest {
   string document_id = 2;
   string topic = 3;
   bytes payload = 4;
+  string document_key = 5;
 }
 
 message BroadcastResponse {

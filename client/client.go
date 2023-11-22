@@ -413,8 +413,9 @@ func (c *Client) Watch(
 	stream, err := c.client.WatchDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.WatchDocumentRequest{
-			ClientId:   c.id.String(),
-			DocumentId: attachment.docID.String(),
+			ClientId:    c.id.String(),
+			DocumentKey: doc.Key().String(),
+			DocumentId:  attachment.docID.String(),
 		},
 	)
 	if err != nil {
@@ -565,17 +566,6 @@ func handleResponse(
 	return nil, ErrUnsupportedWatchResponseType
 }
 
-// FindDocKey returns the document key of the given document id.
-func (c *Client) FindDocKey(docID string) (key.Key, error) {
-	for _, attachment := range c.attachments {
-		if attachment.docID.String() == docID {
-			return attachment.doc.Key(), nil
-		}
-	}
-
-	return "", ErrDocumentNotAttached
-}
-
 // ID returns the ID of this client.
 func (c *Client) ID() *time.ActorID {
 	return c.id
@@ -692,10 +682,11 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 	_, err := c.client.Broadcast(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.BroadcastRequest{
-			ClientId:   c.id.String(),
-			DocumentId: attachment.docID.String(),
-			Topic:      topic,
-			Payload:    payload,
+			ClientId:    c.id.String(),
+			DocumentKey: doc.Key().String(),
+			DocumentId:  attachment.docID.String(),
+			Topic:       topic,
+			Payload:     payload,
 		},
 	)
 	if err != nil {

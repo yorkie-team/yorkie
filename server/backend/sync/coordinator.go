@@ -22,6 +22,7 @@ import (
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -41,12 +42,14 @@ type Coordinator interface {
 	Subscribe(
 		ctx context.Context,
 		subscriber *time.ActorID,
+		documentKey key.Key,
 		documentID types.ID,
 	) (*Subscription, []*time.ActorID, error)
 
 	// Unsubscribe unsubscribes from the given documents.
 	Unsubscribe(
 		ctx context.Context,
+		documentKey key.Key,
 		documentID types.ID,
 		sub *Subscription,
 	) error
