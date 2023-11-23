@@ -73,5 +73,5 @@ ratelimit:
   enabled: false
   name: ratelimit
   unit: minute
-  requestsPerUnit: 100
+  requestsPerUnit: 10000
   domain: yorkie-ratelimit
