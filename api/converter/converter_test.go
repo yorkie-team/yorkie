@@ -36,13 +36,8 @@ import (
 
 func TestConverter(t *testing.T) {
 	t.Run("snapshot simple test", func(t *testing.T) {
-		obj, err := converter.BytesToObject(nil)
-		assert.NoError(t, err)
-		assert.Equal(t, "{}", obj.Marshal())
-
 		doc := document.New("d1")
-
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1").Edit(0, 0, "A")
 			return nil
 		})
@@ -59,7 +54,7 @@ func TestConverter(t *testing.T) {
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
 
-		obj, err = converter.BytesToObject(bytes)
+		obj, err := converter.BytesToObject(bytes)
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[{"val":"B"}]}`, obj.Marshal())
 	})

@@ -51,7 +51,7 @@ func BytesToSnapshot(snapshot []byte) (*crdt.Object, *innerpresence.Map, error) 
 // BytesToObject creates an Object from the given byte array.
 func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 	if snapshot == nil {
-		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), nil
+		return nil, errors.New("snapshot should not be nil")
 	}
 
 	pbElem := &api.JSONElement{}

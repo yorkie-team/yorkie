@@ -728,8 +728,26 @@ func fromTimeTicket(pbTicket *api.TimeTicket) (*time.Ticket, error) {
 func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 	switch pbType := pbElement.Type; pbType {
 	case api.ValueType_VALUE_TYPE_JSON_OBJECT:
+		if pbElement.Value == nil {
+			createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+			return crdt.NewObject(
+				crdt.NewElementRHT(),
+				createdAt,
+			), nil
+		}
 		return BytesToObject(pbElement.Value)
 	case api.ValueType_VALUE_TYPE_JSON_ARRAY:
+		if pbElement.Value == nil {
+			createdAt, err := fromTimeTicket(pbElement.CreatedAt)
+			if err != nil {
+				return nil, err
+			}
+			elements := crdt.NewRGATreeList()
+			return crdt.NewArray(elements, createdAt), nil
+		}
 		return BytesToArray(pbElement.Value)
 	case api.ValueType_VALUE_TYPE_NULL:
 		fallthrough
