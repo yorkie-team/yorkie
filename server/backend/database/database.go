@@ -287,6 +287,7 @@ type Database interface {
 	) (bool, error)
 }
 
+// DocOffset represents a paging offset when listing documents.
 type DocOffset struct {
 	Key key.Key
 	ID  types.ID

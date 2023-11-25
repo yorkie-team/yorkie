@@ -90,3 +90,28 @@ jobs:
         fail-on-alert: false
         github-token: ${{ secrets.GITHUB_TOKEN }}
         comment-always: true
+
+  shard_test:
+    name: shard_test
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Set up Go ${{ env.GO_VERSION }}
+      uses: actions/setup-go@v3
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    - name: Get tools dependencies
+      run: make tools
+
+    - name: Stack
+      run: docker-compose -f build/docker/sharding/test/docker-compose.yml up --build -d
+
+    - name: Wait for 30 seconds until the DB cluster is ready
+      run: sleep 30s
+
+    - name: Run the tests with shard tag
+      run: go test -tags shard -race -v ./...

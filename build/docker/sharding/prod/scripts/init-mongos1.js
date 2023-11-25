@@ -1,0 +1,12 @@
+sh.addShard("shard-rs-1/shard1-1:27017,shard1-2:27017,shard1-3:27017")
+sh.addShard("shard-rs-2/shard2-1:27017,shard2-2:27017,shard2-3:27017")
+sh.addShard("shard-rs-3/shard3-1:27017,shard3-2:27017,shard3-3:27017")
+
+sh.enableSharding("yorkie-meta")
+sh.shardCollection("yorkie-meta.projects", { owner: 1, name: 1 }, true)
+sh.shardCollection("yorkie-meta.users", { username: 1 }, true)
+sh.shardCollection("yorkie-meta.clients", { project_id: 1, key: 1 }, true)
+sh.shardCollection("yorkie-meta.documents", { project_id: 1, key: 1 }, true)
+sh.shardCollection("yorkie-meta.changes", { doc_id: 1, server_seq: 1 }, true)
+sh.shardCollection("yorkie-meta.snapshots", { doc_id: 1, server_seq: 1 }, true)
+sh.shardCollection("yorkie-meta.syncedseqs", { doc_id: 1, client_id: 1 }, true)

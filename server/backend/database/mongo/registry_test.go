@@ -28,7 +28,7 @@ import (
 )
 
 func TestRegistry(t *testing.T) {
-	registry := newRegistryBuilder().Build()
+	registry := NewRegistryBuilder().Build()
 
 	id := types.ID(primitive.NewObjectID().Hex())
 	data, err := bson.MarshalWithRegistry(registry, bson.M{

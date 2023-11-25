@@ -26,13 +26,20 @@ import (
 )
 
 const (
-	colProjects   = "projects"
-	colUsers      = "users"
-	colClients    = "clients"
-	colDocuments  = "documents"
-	colChanges    = "changes"
-	colSnapshots  = "snapshots"
-	colSyncedSeqs = "syncedseqs"
+	// ColProjects represents the projects collection in the database.
+	ColProjects = "projects"
+	// ColUsers represents the users collection in the database.
+	ColUsers = "users"
+	// ColClients represents the clients collection in the database.
+	ColClients = "clients"
+	// ColDocuments represents the documents collection in the database.
+	ColDocuments = "documents"
+	// ColChanges represents the changes collection in the database.
+	ColChanges = "changes"
+	// ColSnapshots represents the snapshots collection in the database.
+	ColSnapshots = "snapshots"
+	// ColSyncedSeqs represents the syncedseqs collection in the database.
+	ColSyncedSeqs = "syncedseqs"
 )
 
 type collectionInfo struct {
@@ -43,7 +50,7 @@ type collectionInfo struct {
 // Below are names and indexes information of collections that stores Yorkie data.
 var collectionInfos = []collectionInfo{
 	{
-		name: colProjects,
+		name: ColProjects,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
 				{Key: "owner", Value: bsonx.Int32(1)},
@@ -59,14 +66,14 @@ var collectionInfos = []collectionInfo{
 		}},
 	},
 	{
-		name: colUsers,
+		name: ColUsers,
 		indexes: []mongo.IndexModel{{
 			Keys:    bsonx.Doc{{Key: "username", Value: bsonx.Int32(1)}},
 			Options: options.Index().SetUnique(true),
 		}},
 	},
 	{
-		name: colClients,
+		name: ColClients,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
 				{Key: "project_id", Value: bsonx.Int32(1)},
@@ -86,7 +93,7 @@ var collectionInfos = []collectionInfo{
 		}},
 	},
 	{
-		name: colDocuments,
+		name: ColDocuments,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
 				{Key: "key", Value: bsonx.Int32(1)},
@@ -99,7 +106,7 @@ var collectionInfos = []collectionInfo{
 			).SetUnique(true),
 		}},
 	}, {
-		name: colChanges,
+		name: ColChanges,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
 				{Key: "doc_key", Value: bsonx.Int32(1)},
@@ -109,7 +116,7 @@ var collectionInfos = []collectionInfo{
 			Options: options.Index().SetUnique(true),
 		}},
 	}, {
-		name: colSnapshots,
+		name: ColSnapshots,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
 				{Key: "doc_key", Value: bsonx.Int32(1)},
@@ -119,7 +126,7 @@ var collectionInfos = []collectionInfo{
 			Options: options.Index().SetUnique(true),
 		}},
 	}, {
-		name: colSyncedSeqs,
+		name: ColSyncedSeqs,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
 				{Key: "doc_key", Value: bsonx.Int32(1)},

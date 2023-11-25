@@ -195,7 +195,7 @@ func FindDocInfoByKey(
 	)
 }
 
-// FindDocInfo returns a document for the given document ID.
+// FindDocInfoByKeyAndID returns a document for the given document ID.
 func FindDocInfoByKeyAndID(
 	ctx context.Context,
 	be *backend.Backend,
