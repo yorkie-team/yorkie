@@ -191,6 +191,7 @@ func TestRetention(t *testing.T) {
 
 		changes, err := mongoCli.FindChangesBetweenServerSeqs(
 			ctx,
+			docInfo.Key,
 			docInfo.ID,
 			change.InitialServerSeq,
 			change.MaxServerSeq,
@@ -229,6 +230,7 @@ func TestRetention(t *testing.T) {
 
 		changes, err = mongoCli.FindChangesBetweenServerSeqs(
 			ctx,
+			docInfo.Key,
 			docInfo.ID,
 			change.InitialServerSeq,
 			change.MaxServerSeq,
