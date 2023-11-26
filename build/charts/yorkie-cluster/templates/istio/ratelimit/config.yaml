@@ -2,8 +2,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ratelimit-config
-  namespace: {{ .Values.yorkie.namespace }}
+  name: {{ .Values.ratelimit.name }}-config
+  namespace: istio-system
 data:
   config.yaml: |
     domain: {{ .Values.ratelimit.domain }}

@@ -2,8 +2,8 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis
-  namespace: {{ .Values.yorkie.namespace }}
+  name: {{ .Values.ratelimit.name }}-redis
+  namespace: istio-system
   labels:
     app: redis
 spec:

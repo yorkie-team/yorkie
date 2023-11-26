@@ -31,8 +31,8 @@ spec:
             rate_limit_service:
               grpc_service:
                 envoy_grpc:
-                  cluster_name: outbound|8081||ratelimit.yorkie.svc.cluster.local
-                  authority: ratelimit.yorkie.svc.cluster.local
+                  cluster_name: outbound|8081||{{ .Values.ratelimit.name }}.istio-system.svc.cluster.local
+                  authority: {{ .Values.ratelimit.name }}.istio-system.svc.cluster.local
               transport_api_version: V3
 ---
 apiVersion: networking.istio.io/v1alpha3

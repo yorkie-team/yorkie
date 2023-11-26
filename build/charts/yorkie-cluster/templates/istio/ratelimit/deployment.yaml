@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Values.ratelimit.name }}
-  namespace: {{ .Values.yorkie.namespace }}
+  namespace: istio-system
 spec:
   replicas: 1
   selector:
@@ -27,7 +27,7 @@ spec:
         - name: REDIS_SOCKET_TYPE
           value: tcp
         - name: REDIS_URL
-          value: redis:6379
+          value: {{ .Values.ratelimit.name }}-redis:6379
         - name: USE_STATSD
           value: "false"
         - name: RUNTIME_ROOT
