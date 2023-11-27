@@ -409,14 +409,24 @@ func toTreeStyle(style *operations.TreeStyle) (*api.Operation_TreeStyle_, error)
 func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 	switch elem := elem.(type) {
 	case *crdt.Object:
+		bytes, err := ObjectToBytes(elem)
+		if err != nil {
+			return nil, err
+		}
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_JSON_OBJECT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			Value:     bytes,
 		}, nil
 	case *crdt.Array:
+		bytes, err := ArrayToBytes(elem)
+		if err != nil {
+			return nil, err
+		}
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_JSON_ARRAY,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			Value:     bytes,
 		}, nil
 	case *crdt.Primitive:
 		pbValueType, err := toValueType(elem.ValueType())

@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.9] - 2023-11-25
+
+### Added
+* Implement merge elements in Tree.Edit by @hackerwins in https://github.com/yorkie-team/yorkie/pull/659
+* Add PushPull benchmark test by @sejongk in https://github.com/yorkie-team/yorkie/pull/658
+* Setup Dependabot by @jongwooo in https://github.com/yorkie-team/yorkie/pull/675
+
+### Changed
+* Bump up golangci-lint and fix lint errors by @hackerwins in https://github.com/yorkie-team/yorkie/pull/660
+* Modify converter to allow setting values for object and array by @chacha912 and @hackerwins in https://github.com/yorkie-team/yorkie/pull/687
+
 ## [0.4.8] - 2023-11-01
 
 ### Changed
