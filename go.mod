@@ -14,8 +14,8 @@ require (
 	github.com/hashicorp/go-memdb v1.3.3
 	github.com/jedib0t/go-pretty/v6 v6.4.9
 	github.com/prometheus/client_golang v1.13.0
-	github.com/rs/xid v1.5.0
 	github.com/rs/cors v1.10.1
+	github.com/rs/xid v1.5.0
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.17.0
 	github.com/stretchr/testify v1.8.4
@@ -35,6 +35,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
