@@ -54,6 +54,7 @@ jobs:
   bench:
     name: bench
     runs-on: ubuntu-latest
+    permissions: write-all
     steps:
 
     - name: Set up Go ${{ env.GO_VERSION }}
