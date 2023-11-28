@@ -44,11 +44,11 @@ type Server struct {
 
 // NewServer creates a new instance of Server.
 func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
-	//tokenManager := auth.NewTokenManager(
-	//	be.Config.SecretKey,
-	//	be.Config.ParseAdminTokenDuration(),
-	//)
-	//
+	tokenManager := auth.NewTokenManager(
+		be.Config.SecretKey,
+		be.Config.ParseAdminTokenDuration(),
+	)
+
 	//loggingInterceptor := grpchelper.NewLoggingInterceptor()
 	//adminAuthInterceptor := interceptors.NewAdminAuthInterceptor(be, tokenManager)
 	//defaultInterceptor := interceptors.NewDefaultInterceptor()
@@ -71,6 +71,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	//}
 
 	interceptor := connect.WithInterceptors(interceptors.NewContextInterceptor(be))
+	adminAuthInterceptor := connect.WithInterceptors(interceptors.NewAdminAuthInterceptor(be, tokenManager))
 
 	//if conf.CertFile != "" && conf.KeyFile != "" {
 	//	creds, err := credentials.NewServerTLSFromFile(conf.CertFile, conf.KeyFile)
@@ -104,6 +105,10 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	mux.Handle(v1connect.NewYorkieServiceHandler(
 		newYorkieServer(yorkieServiceCtx, be),
 		interceptor,
+	))
+	mux.Handle(v1connect.NewAdminServiceHandler(
+		newAdminServer(be, tokenManager),
+		adminAuthInterceptor,
 	))
 
 	httpServer := &http.Server{

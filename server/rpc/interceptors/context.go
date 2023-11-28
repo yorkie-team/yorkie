@@ -57,9 +57,9 @@ func (i *ContextInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 		ctx context.Context,
 		req connect.AnyRequest,
 	) (connect.AnyResponse, error) {
-		//if !isYorkieService(info.FullMethod) {
-		//	return handler(ctx, req)
-		//}
+		if !isYorkieService(req.Spec().Procedure) {
+			return next(ctx, req)
+		}
 
 		ctx, err := i.buildContext(ctx, req.Header())
 		if err != nil {
@@ -99,9 +99,9 @@ func (i *ContextInterceptor) WrapStreamingHandler(next connect.StreamingHandlerF
 		ctx context.Context,
 		conn connect.StreamingHandlerConn,
 	) error {
-		//if !isYorkieService(info.FullMethod) {
-		//	return handler(srv, ss)
-		//}
+		if !isYorkieService(conn.Spec().Procedure) {
+			return next(ctx, conn)
+		}
 
 		ctx, err := i.buildContext(ctx, conn.RequestHeader())
 		if err != nil {
