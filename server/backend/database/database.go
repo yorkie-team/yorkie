@@ -157,6 +157,7 @@ type Database interface {
 	FindDocInfoByKeyAndOwner(
 		ctx context.Context,
 		projectID types.ID,
+		clientKey string,
 		clientID types.ID,
 		docKey key.Key,
 		createDocIfNotExist bool,

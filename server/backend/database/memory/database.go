@@ -662,6 +662,7 @@ func (d *DB) FindDeactivateCandidates(
 func (d *DB) FindDocInfoByKeyAndOwner(
 	_ context.Context,
 	projectID types.ID,
+	clientKey string,
 	clientID types.ID,
 	key key.Key,
 	createDocIfNotExist bool,
@@ -703,7 +704,8 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 			ID:         newID(),
 			ProjectID:  projectID,
 			Key:        key,
-			Owner:      clientID,
+			OwnerKey:   clientKey,
+			OwnerID:    clientID,
 			ServerSeq:  0,
 			CreatedAt:  now,
 			AccessedAt: now,

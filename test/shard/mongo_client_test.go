@@ -40,6 +40,7 @@ const (
 	projectOneID                = types.ID("000000000000000000000001")
 	projectTwoID                = types.ID("000000000000000000000002")
 	dummyOwnerName              = "dummy"
+	dummyClientKey              = "dummy"
 	dummyClientID               = types.ID("000000000000000000000000")
 	clientDeactivateThreshold   = "1h"
 )
@@ -132,7 +133,7 @@ func TestClientWithShardedDB(t *testing.T) {
 		assert.NoError(t, err)
 
 		docKey1 := key.Key(fmt.Sprintf("%s%d", "duplicateIDTestDocKey", 0))
-		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, dummyClientID, docKey1, true)
+		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, dummyClientKey, dummyClientID, docKey1, true)
 		assert.NoError(t, err)
 
 		// 02. Create an extra document with duplicate ID.
@@ -178,7 +179,7 @@ func TestClientWithShardedDB(t *testing.T) {
 		var duplicateID types.ID
 		for i := 0; i < totalDocCnt-duplicateIDDocCnt; i++ {
 			testDocKey := key.Key("duplicateIDTestDocKey" + strconv.Itoa(i))
-			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, dummyClientID, testDocKey, true)
+			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, dummyClientKey, dummyClientID, testDocKey, true)
 			assert.NoError(t, err)
 			docInfos = append(docInfos, docInfo)
 

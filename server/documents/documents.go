@@ -101,6 +101,7 @@ func GetDocumentSummary(
 	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
 		project.ID,
+		"",
 		types.IDFromActorID(time.InitialActorID),
 		k,
 		false,
@@ -135,6 +136,7 @@ func GetDocumentByServerSeq(
 	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
 		project.ID,
+		"",
 		types.IDFromActorID(time.InitialActorID),
 		k,
 		false,
@@ -218,6 +220,7 @@ func FindDocInfoByKeyAndOwner(
 	return be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
 		project.ID,
+		clientInfo.Key,
 		clientInfo.ID,
 		docKey,
 		createDocIfNotExist,

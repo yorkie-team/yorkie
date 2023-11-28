@@ -686,6 +686,7 @@ func (c *Client) FindDeactivateCandidates(
 func (c *Client) FindDocInfoByKeyAndOwner(
 	ctx context.Context,
 	projectID types.ID,
+	clientKey string,
 	clientID types.ID,
 	docKey key.Key,
 	createDocIfNotExist bool,
@@ -723,7 +724,8 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 			"_id": res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
-				"owner":      encodedOwnerID,
+				"owner_key":  clientKey,
+				"owner_id":   encodedOwnerID,
 				"server_seq": 0,
 				"created_at": now,
 			},

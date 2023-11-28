@@ -37,8 +37,11 @@ type DocInfo struct {
 	// ServerSeq is the sequence number of the last change of the document on the server.
 	ServerSeq int64 `bson:"server_seq"`
 
-	// Owner is the owner(ID of the client) of the document.
-	Owner types.ID `bson:"owner"`
+	// OwnerKey is the key of the document owner.
+	OwnerKey string `bson:"owner_key"`
+
+	// OwnerKey is the ID of the document owner.
+	OwnerID types.ID `bson:"owner_id"`
 
 	// CreatedAt is the time when the document is created.
 	CreatedAt time.Time `bson:"created_at"`
@@ -75,7 +78,8 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 		ProjectID:  info.ProjectID,
 		Key:        info.Key,
 		ServerSeq:  info.ServerSeq,
-		Owner:      info.Owner,
+		OwnerKey:   info.OwnerKey,
+		OwnerID:    info.OwnerID,
 		CreatedAt:  info.CreatedAt,
 		AccessedAt: info.AccessedAt,
 		UpdatedAt:  info.UpdatedAt,
