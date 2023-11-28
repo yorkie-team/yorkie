@@ -127,10 +127,10 @@ type Database interface {
 	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)
 
 	// DeactivateClient deactivates the client of the given ID.
-	DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*ClientInfo, error)
+	DeactivateClient(ctx context.Context, clientKey string, clientID types.ID) (*ClientInfo, error)
 
-	// FindClientInfoByID finds the client of the given ID.
-	FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*ClientInfo, error)
+	// FindClientInfoByKeyAndID finds the client of the given ID.
+	FindClientInfoByKeyAndID(ctx context.Context, clientKey string, clientID types.ID) (*ClientInfo, error)
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.

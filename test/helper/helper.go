@@ -418,7 +418,7 @@ func CreateDummyDocumentWithID(
 	return nil
 }
 
-// FindDocInfosWithID finds the docInfo of the given projectID and docID.
+// FindDocInfosWithID finds the docInfos of the given projectID and docID.
 func FindDocInfosWithID(
 	databaseName string,
 	projectID types.ID,
@@ -442,6 +442,78 @@ func FindDocInfosWithID(
 		ctx,
 		bson.M{
 			"_id":        encodedDocID,
+			"project_id": encodedProjectID,
+		}, options.Find())
+	if err != nil {
+		return nil, err
+	}
+
+	var infos []*database.DocInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, err
+	}
+
+	return infos, nil
+}
+
+// CreateDummyClientWithID creates a new dummy document with the given ID and key.
+func CreateDummyClientWithID(
+	databaseName string,
+	projectID types.ID,
+	clientKey string,
+	clientID types.ID,
+) error {
+	encodedProjectID, err := mongo.EncodeID(projectID)
+	if err != nil {
+		return err
+	}
+	encodedclientID, err := mongo.EncodeID(clientID)
+	if err != nil {
+		return err
+	}
+	cli, err := setupRawMongoClient(databaseName)
+	if err != nil {
+		return err
+	}
+	_, err = cli.Database(databaseName).Collection(mongo.ColClients).InsertOne(
+		context.Background(),
+		bson.M{
+			"_id":        encodedclientID,
+			"project_id": encodedProjectID,
+			"key":        clientKey,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// FindClientInfosWithID finds the clientInfos of the given projectID and clientID.
+func FindClientInfosWithID(
+	databaseName string,
+	projectID types.ID,
+	clientID types.ID,
+) ([]*database.DocInfo, error) {
+	ctx := context.Background()
+	encodedProjectID, err := mongo.EncodeID(projectID)
+	if err != nil {
+		return nil, err
+	}
+	encodedclientID, err := mongo.EncodeID(clientID)
+	if err != nil {
+		return nil, err
+	}
+	cli, err := setupRawMongoClient(databaseName)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, err := cli.Database(databaseName).Collection(mongo.ColClients).Find(
+		ctx,
+		bson.M{
+			"_id":        encodedclientID,
 			"project_id": encodedProjectID,
 		}, options.Find())
 	if err != nil {

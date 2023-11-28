@@ -49,6 +49,7 @@ message ActivateClientResponse {
 
 message DeactivateClientRequest {
   string client_id = 1;
+  string client_key = 2;
 }
 
 message DeactivateClientResponse {
@@ -57,6 +58,7 @@ message DeactivateClientResponse {
 message AttachDocumentRequest {
   string client_id = 1;
   ChangePack change_pack = 2;
+  string client_key = 3;
 }
 
 message AttachDocumentResponse {
@@ -69,6 +71,7 @@ message DetachDocumentRequest {
   string document_id = 2;
   ChangePack change_pack = 3;
   bool remove_if_not_attached = 4;
+  string client_key = 5;
 }
 
 message DetachDocumentResponse {
@@ -79,6 +82,7 @@ message WatchDocumentRequest {
   string client_id = 1;
   string document_id = 2;
   string document_key = 3;
+  string client_key = 4;
 }
 
 message WatchDocumentResponse {
@@ -96,6 +100,7 @@ message RemoveDocumentRequest {
   string client_id = 1;
   string document_id = 2;
   ChangePack change_pack = 3;
+  string client_key = 4;
 }
 
 message RemoveDocumentResponse {
@@ -107,6 +112,7 @@ message PushPullChangesRequest {
   string document_id = 2;
   ChangePack change_pack = 3;
   bool push_only = 4;
+  string client_key = 5;
 }
 
 message PushPullChangesResponse {
@@ -119,6 +125,7 @@ message BroadcastRequest {
   string topic = 3;
   bytes payload = 4;
   string document_key = 5;
+  string client_key = 6;
 }
 
 message BroadcastResponse {

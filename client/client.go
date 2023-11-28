@@ -233,7 +233,8 @@ func (c *Client) Deactivate(ctx context.Context) error {
 	}
 
 	_, err := c.client.DeactivateClient(withShardKey(ctx, c.options.APIKey), &api.DeactivateClientRequest{
-		ClientId: c.id.String(),
+		ClientKey: c.key,
+		ClientId:  c.id.String(),
 	})
 	if err != nil {
 		return err
@@ -277,6 +278,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	res, err := c.client.AttachDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.AttachDocumentRequest{
+			ClientKey:  c.key,
 			ClientId:   c.id.String(),
 			ChangePack: pbChangePack,
 		},
@@ -350,6 +352,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 	res, err := c.client.DetachDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.DetachDocumentRequest{
+			ClientKey:           c.key,
 			ClientId:            c.id.String(),
 			DocumentId:          attachment.docID.String(),
 			ChangePack:          pbChangePack,
@@ -413,6 +416,7 @@ func (c *Client) Watch(
 	stream, err := c.client.WatchDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.WatchDocumentRequest{
+			ClientKey:   c.key,
 			ClientId:    c.id.String(),
 			DocumentKey: doc.Key().String(),
 			DocumentId:  attachment.docID.String(),
@@ -600,6 +604,7 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	res, err := c.client.PushPullChanges(
 		withShardKey(ctx, c.options.APIKey, opt.key.String()),
 		&api.PushPullChangesRequest{
+			ClientKey:  c.key,
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
@@ -645,6 +650,7 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	res, err := c.client.RemoveDocument(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.RemoveDocumentRequest{
+			ClientKey:  c.key,
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
@@ -682,6 +688,7 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 	_, err := c.client.Broadcast(
 		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
 		&api.BroadcastRequest{
+			ClientKey:   c.key,
 			ClientId:    c.id.String(),
 			DocumentKey: doc.Key().String(),
 			DocumentId:  attachment.docID.String(),

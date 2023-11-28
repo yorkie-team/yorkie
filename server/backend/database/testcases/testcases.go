@@ -44,6 +44,7 @@ import (
 const (
 	dummyOwnerName            = "dummy"
 	otherOwnerName            = "other"
+	dummyClientKey            = "dummy"
 	dummyClientID             = types.ID("000000000000000000000000")
 	clientDeactivateThreshold = "1h"
 )
@@ -284,13 +285,13 @@ func RunListUserInfosTest(t *testing.T, db database.Database) {
 func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("activate and find client test", func(t *testing.T) {
 		ctx := context.Background()
-		_, err := db.FindClientInfoByID(ctx, projectID, dummyClientID)
+		_, err := db.FindClientInfoByKeyAndID(ctx, dummyClientKey, dummyClientID)
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
 
-		found, err := db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		found, err := db.FindClientInfoByKeyAndID(ctx, clientInfo.Key, clientInfo.ID)
 		assert.NoError(t, err)
 		assert.Equal(t, clientInfo.Key, found.Key)
 	})
@@ -299,7 +300,7 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		ctx := context.Background()
 
 		// try to deactivate the client with not exists ID.
-		_, err := db.DeactivateClient(ctx, projectID, dummyClientID)
+		_, err := db.DeactivateClient(ctx, dummyClientKey, dummyClientID)
 		assert.ErrorIs(t, err, database.ErrClientNotFound)
 
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
@@ -314,15 +315,16 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientActivated, clientInfo.Status)
 
+		clientKey := clientInfo.Key
 		clientID := clientInfo.ID
 
-		clientInfo, err = db.DeactivateClient(ctx, projectID, clientID)
+		clientInfo, err = db.DeactivateClient(ctx, clientKey, clientID)
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
 
 		// try to deactivate the client twice.
-		clientInfo, err = db.DeactivateClient(ctx, projectID, clientID)
+		clientInfo, err = db.DeactivateClient(ctx, clientKey, clientID)
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
@@ -846,7 +848,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		assert.NotEqual(t, gotime.Time{}, docInfo.RemovedAt)
 
 		// Check whether DocumentRemoved status is set in clientInfo
-		clientInfo, err = db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		clientInfo, err = db.FindClientInfoByKeyAndID(ctx, clientInfo.Key, clientInfo.ID)
 		assert.NoError(t, err)
 		assert.NotEqual(t, database.DocumentRemoved, clientInfo.Documents[docKey][docInfo.ID].Status)
 	})
@@ -882,7 +884,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.Key, docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		result, err := db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		result, err := db.FindClientInfoByKeyAndID(ctx, clientInfo.Key, clientInfo.ID)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].Status, database.DocumentAttached)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ServerSeq, int64(0))
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ClientSeq, uint32(0))
@@ -902,7 +904,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		clientInfo.Documents[docKey][docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		result, err := db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		result, err := db.FindClientInfoByKeyAndID(ctx, clientInfo.Key, clientInfo.ID)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].Status, database.DocumentAttached)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ServerSeq, int64(1))
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ClientSeq, uint32(1))
@@ -913,7 +915,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		clientInfo.Documents[docKey][docInfo.ID].ClientSeq = 5
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		result, err = db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		result, err = db.FindClientInfoByKeyAndID(ctx, clientInfo.Key, clientInfo.ID)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].Status, database.DocumentAttached)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ServerSeq, int64(3))
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ClientSeq, uint32(5))
@@ -924,7 +926,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		clientInfo.Documents[docKey][docInfo.ID].ClientSeq = 3
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		result, err = db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		result, err = db.FindClientInfoByKeyAndID(ctx, clientInfo.Key, clientInfo.ID)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].Status, database.DocumentAttached)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ServerSeq, int64(3))
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ClientSeq, uint32(5))
@@ -944,7 +946,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		clientInfo.Documents[docKey][docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		result, err := db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		result, err := db.FindClientInfoByKeyAndID(ctx, clientInfo.Key, clientInfo.ID)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].Status, database.DocumentAttached)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ServerSeq, int64(1))
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ClientSeq, uint32(1))
@@ -953,7 +955,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		assert.NoError(t, clientInfo.DetachDocument(docKey, docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		result, err = db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		result, err = db.FindClientInfoByKeyAndID(ctx, clientInfo.Key, clientInfo.ID)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].Status, database.DocumentDetached)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ServerSeq, int64(0))
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ClientSeq, uint32(0))
@@ -973,7 +975,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		clientInfo.Documents[docKey][docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		result, err := db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		result, err := db.FindClientInfoByKeyAndID(ctx, clientInfo.Key, clientInfo.ID)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].Status, database.DocumentAttached)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ServerSeq, int64(1))
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ClientSeq, uint32(1))
@@ -982,7 +984,7 @@ func RunUpdateClientInfoAfterPushPullTest(t *testing.T, db database.Database, pr
 		assert.NoError(t, clientInfo.RemoveDocument(docKey, docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		result, err = db.FindClientInfoByID(ctx, projectID, clientInfo.ID)
+		result, err = db.FindClientInfoByKeyAndID(ctx, clientInfo.Key, clientInfo.ID)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].Status, database.DocumentRemoved)
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ServerSeq, int64(0))
 		assert.Equal(t, result.Documents[docKey][docInfo.ID].ClientSeq, uint32(0))

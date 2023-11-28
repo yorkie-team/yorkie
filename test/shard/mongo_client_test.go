@@ -219,4 +219,45 @@ func TestClientWithShardedDB(t *testing.T) {
 		assert.NoError(t, err)
 		testcases.AssertKeys(t, docKeysInReverse, result)
 	})
+
+	t.Run("FindClientInfoByKeyAndID with duplicate ID test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Initialize a project and activate a client.
+		projectInfo, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerName, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		clientKey1 := fmt.Sprintf("%s%d", "duplicateIDTestClientKey", 0)
+		clientInfo1, err := cli.ActivateClient(ctx, projectInfo.ID, clientKey1)
+		assert.NoError(t, err)
+
+		// 02. Create an extra client with duplicate ID.
+		clientKey2 := fmt.Sprintf("%s%d", "duplicateIDTestClientKey", 5)
+		err = helper.CreateDummyClientWithID(
+			shardedDBNameForMongoClient,
+			projectInfo.ID,
+			clientKey2,
+			clientInfo1.ID,
+		)
+		assert.NoError(t, err)
+
+		// 03. Check if there are two clients with the same ID.
+		infos, err := helper.FindClientInfosWithID(
+			shardedDBNameForMongoClient,
+			projectInfo.ID,
+			clientInfo1.ID,
+		)
+		assert.NoError(t, err)
+		assert.Len(t, infos, 2)
+
+		// 04. Check if the client is correctly found using clientKey and clientID.
+		result, err := cli.FindClientInfoByKeyAndID(
+			ctx,
+			clientKey1,
+			clientInfo1.ID,
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, clientInfo1.Key, result.Key)
+		assert.Equal(t, clientInfo1.ID, result.ID)
+	})
 }

@@ -442,7 +442,11 @@ func (d *DB) ActivateClient(
 }
 
 // DeactivateClient deactivates a client.
-func (d *DB) DeactivateClient(_ context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
+func (d *DB) DeactivateClient(
+	_ context.Context,
+	clientKey string,
+	clientID types.ID,
+) (*database.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -450,9 +454,14 @@ func (d *DB) DeactivateClient(_ context.Context, projectID, clientID types.ID) (
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "id", clientID.String())
+	raw, err := txn.First(
+		tblClients,
+		"key_id",
+		clientKey,
+		clientID.String(),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("find client by id: %w", err)
+		return nil, fmt.Errorf("find client by key and id: %w", err)
 	}
 
 	if raw == nil {
@@ -460,9 +469,6 @@ func (d *DB) DeactivateClient(_ context.Context, projectID, clientID types.ID) (
 	}
 
 	clientInfo := raw.(*database.ClientInfo)
-	if err := clientInfo.CheckIfInProject(projectID); err != nil {
-		return nil, err
-	}
 
 	// NOTE(hackerwins): When retrieving objects from go-memdb, references to
 	// the stored objects are returned instead of new objects. This can cause
@@ -477,8 +483,12 @@ func (d *DB) DeactivateClient(_ context.Context, projectID, clientID types.ID) (
 	return clientInfo, nil
 }
 
-// FindClientInfoByID finds a client by ID.
-func (d *DB) FindClientInfoByID(_ context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
+// FindClientInfoByKeyAndID finds a client by the given key and ID.
+func (d *DB) FindClientInfoByKeyAndID(
+	_ context.Context,
+	clientKey string,
+	clientID types.ID,
+) (*database.ClientInfo, error) {
 	if err := clientID.Validate(); err != nil {
 		return nil, err
 	}
@@ -486,19 +496,20 @@ func (d *DB) FindClientInfoByID(_ context.Context, projectID, clientID types.ID)
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "id", clientID.String())
+	raw, err := txn.First(
+		tblClients,
+		"key_id",
+		clientKey,
+		clientID.String(),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("find client by id: %w", err)
+		return nil, fmt.Errorf("find client by key and id: %w", err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
 	}
 
 	clientInfo := raw.(*database.ClientInfo)
-	if err := clientInfo.CheckIfInProject(projectID); err != nil {
-		return nil, err
-	}
-
 	return clientInfo.DeepCopy(), nil
 }
 
@@ -518,9 +529,14 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "id", clientInfo.ID.String())
+	raw, err := txn.First(
+		tblClients,
+		"key_id",
+		clientInfo.Key,
+		clientInfo.ID.String(),
+	)
 	if err != nil {
-		return fmt.Errorf("find client by id: %w", err)
+		return fmt.Errorf("find client by key and id: %w", err)
 	}
 	if raw == nil {
 		return fmt.Errorf("%s: %w", clientInfo.ID, database.ErrClientNotFound)
@@ -1171,9 +1187,10 @@ func (d *DB) UpdateSyncedSeq(
 	if !isAttached {
 		if _, err = txn.DeleteAll(
 			tblSyncedSeqs,
-			"doc_key_doc_id_client_id",
+			"doc_key_doc_id_client_key_client_id",
 			docKey.String(),
 			docID.String(),
+			clientInfo.Key,
 			clientInfo.ID.String(),
 		); err != nil {
 			return fmt.Errorf("delete syncedseqs of the document (%s.%s): %w",
@@ -1190,9 +1207,10 @@ func (d *DB) UpdateSyncedSeq(
 
 	raw, err := txn.First(
 		tblSyncedSeqs,
-		"doc_key_doc_id_client_id",
+		"doc_key_doc_id_client_key_client_id",
 		docKey.String(),
 		docID.String(),
+		clientInfo.Key,
 		clientInfo.ID.String(),
 	)
 	if err != nil {

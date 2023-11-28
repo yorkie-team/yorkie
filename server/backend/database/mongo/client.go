@@ -469,6 +469,7 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	var result *mongo.SingleResult
 	if res.UpsertedCount > 0 {
 		result = c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+			"key": key,
 			"_id": res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
@@ -477,7 +478,8 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 		})
 	} else {
 		result = c.collection(ColClients).FindOne(ctx, bson.M{
-			"key": key,
+			"project_id": encodedProjectID,
+			"key":        key,
 		})
 	}
 
@@ -490,19 +492,19 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 }
 
 // DeactivateClient deactivates the client of the given ID.
-func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
-	encodedProjectID, err := EncodeID(projectID)
-	if err != nil {
-		return nil, err
-	}
+func (c *Client) DeactivateClient(
+	ctx context.Context,
+	clientKey string,
+	clientID types.ID,
+) (*database.ClientInfo, error) {
 	encodedClientID, err := EncodeID(clientID)
 	if err != nil {
 		return nil, err
 	}
 
 	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"_id":        encodedClientID,
-		"project_id": encodedProjectID,
+		"key": clientKey,
+		"_id": encodedClientID,
 	}, bson.M{
 		"$set": bson.M{
 			"status":     database.ClientDeactivated,
@@ -521,20 +523,20 @@ func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types
 	return &clientInfo, nil
 }
 
-// FindClientInfoByID finds the client of the given ID.
-func (c *Client) FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
-	encodedProjectID, err := EncodeID(projectID)
-	if err != nil {
-		return nil, err
-	}
+// FindClientInfoByKeyAndID finds the client of the given key and ID.
+func (c *Client) FindClientInfoByKeyAndID(
+	ctx context.Context,
+	clientKey string,
+	clientID types.ID,
+) (*database.ClientInfo, error) {
 	encodedClientID, err := EncodeID(clientID)
 	if err != nil {
 		return nil, err
 	}
 
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"_id":        encodedClientID,
-		"project_id": encodedProjectID,
+		"key": clientKey,
+		"_id": encodedClientID,
 	}, bson.M{
 		"$set": bson.M{
 			"updated_at": gotime.Now(),
@@ -597,6 +599,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	}
 
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+		"key": clientInfo.Key,
 		"_id": encodedClientID,
 	}, updater)
 
@@ -1332,9 +1335,10 @@ func (c *Client) UpdateSyncedSeq(
 
 	if !isAttached {
 		if _, err = c.collection(ColSyncedSeqs).DeleteOne(ctx, bson.M{
-			"doc_key":   docKey,
-			"doc_id":    encodedDocID,
-			"client_id": encodedClientID,
+			"doc_key":    docKey,
+			"doc_id":     encodedDocID,
+			"client_key": clientInfo.Key,
+			"client_id":  encodedClientID,
 		}, options.Delete()); err != nil {
 			return fmt.Errorf("delete synced seq: %w", err)
 		}
@@ -1347,9 +1351,10 @@ func (c *Client) UpdateSyncedSeq(
 	}
 
 	if _, err = c.collection(ColSyncedSeqs).UpdateOne(ctx, bson.M{
-		"doc_key":   docKey,
-		"doc_id":    encodedDocID,
-		"client_id": encodedClientID,
+		"doc_key":    docKey,
+		"doc_id":     encodedDocID,
+		"client_key": clientInfo.Key,
+		"client_id":  encodedClientID,
 	}, bson.M{
 		"$set": bson.M{
 			"lamport":    ticket.Lamport(),

@@ -48,12 +48,12 @@ func Activate(
 func Deactivate(
 	ctx context.Context,
 	db database.Database,
-	projectID types.ID,
+	clientKey string,
 	clientID types.ID,
 ) (*database.ClientInfo, error) {
-	clientInfo, err := db.FindClientInfoByID(
+	clientInfo, err := db.FindClientInfoByKeyAndID(
 		ctx,
-		projectID,
+		clientKey,
 		clientID,
 	)
 	if err != nil {
@@ -91,19 +91,19 @@ func Deactivate(
 		}
 	}
 
-	return db.DeactivateClient(ctx, projectID, clientID)
+	return db.DeactivateClient(ctx, clientKey, clientID)
 }
 
 // FindClientInfo finds the client with the given id.
 func FindClientInfo(
 	ctx context.Context,
 	db database.Database,
-	project *types.Project,
+	clientKey string,
 	clientID *time.ActorID,
 ) (*database.ClientInfo, error) {
-	return db.FindClientInfoByID(
+	return db.FindClientInfoByKeyAndID(
 		ctx,
-		project.ID,
+		clientKey,
 		types.IDFromActorID(clientID),
 	)
 }
