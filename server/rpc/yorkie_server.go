@@ -90,7 +90,10 @@ func (s *yorkieServer) DeactivateClient(
 		return nil, err
 	}
 
-	_, err = clients.Deactivate(ctx, s.backend.DB, req.ClientKey, types.IDFromActorID(actorID))
+	_, err = clients.Deactivate(ctx, s.backend.DB, types.ClientRefKey{
+		Key: req.ClientKey,
+		ID:  types.IDFromActorID(actorID),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +141,10 @@ func (s *yorkieServer) AttachDocument(
 		}
 	}()
 
-	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, req.ClientKey, actorID)
+	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+		Key: req.ClientKey,
+		ID:  types.IDFromActorID(actorID),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +153,10 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	if err := clientInfo.AttachDocument(docInfo.Key, docInfo.ID); err != nil {
+	if err := clientInfo.AttachDocument(types.DocRefKey{
+		Key: docInfo.Key,
+		ID:  docInfo.ID,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -208,31 +217,37 @@ func (s *yorkieServer) DetachDocument(
 		}
 	}()
 
-	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, req.ClientKey, actorID)
-	if err != nil {
-		return nil, err
+	clientRef := types.ClientRefKey{
+		Key: req.ClientKey,
+		ID:  types.IDFromActorID(actorID),
 	}
-	docInfo, err := documents.FindDocInfoByKeyAndID(ctx, s.backend, pack.DocumentKey, docID)
+	docRef := types.DocRefKey{
+		Key: pack.DocumentKey,
+		ID:  docID,
+	}
+
+	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, clientRef)
 	if err != nil {
 		return nil, err
 	}
 
-	isAttached, err := documents.IsDocumentAttached(
-		ctx, s.backend, project,
-		docInfo.Key, docInfo.ID,
-		clientInfo.ID,
-	)
+	docInfo, err := documents.FindDocInfoByKeyAndID(ctx, s.backend, docRef)
+	if err != nil {
+		return nil, err
+	}
+
+	isAttached, err := documents.IsDocumentAttached(ctx, s.backend, project, docRef, clientRef)
 	if err != nil {
 		return nil, err
 	}
 
 	if req.RemoveIfNotAttached && !isAttached {
 		pack.IsRemoved = true
-		if err := clientInfo.RemoveDocument(docInfo.Key, docInfo.ID); err != nil {
+		if err := clientInfo.RemoveDocument(docRef); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := clientInfo.DetachDocument(docInfo.Key, docInfo.ID); err != nil {
+		if err := clientInfo.DetachDocument(docRef); err != nil {
 			return nil, err
 		}
 	}
@@ -304,16 +319,24 @@ func (s *yorkieServer) PushPullChanges(
 		syncMode = types.SyncModePushOnly
 	}
 
-	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, req.ClientKey, actorID)
-	if err != nil {
-		return nil, err
-	}
-	docInfo, err := documents.FindDocInfoByKeyAndID(ctx, s.backend, pack.DocumentKey, docID)
+	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+		Key: req.ClientKey,
+		ID:  types.IDFromActorID(actorID),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	if err := clientInfo.EnsureDocumentAttached(docInfo.Key, docInfo.ID); err != nil {
+	docRef := types.DocRefKey{
+		Key: pack.DocumentKey,
+		ID:  docID,
+	}
+	docInfo, err := documents.FindDocInfoByKeyAndID(ctx, s.backend, docRef)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := clientInfo.EnsureDocumentAttached(docRef); err != nil {
 		return nil, err
 	}
 
@@ -338,7 +361,7 @@ func (s *yorkieServer) WatchDocument(
 	req *api.WatchDocumentRequest,
 	stream api.YorkieService_WatchDocumentServer,
 ) error {
-	clientID, err := time.ActorIDFromHex(req.ClientId)
+	actorID, err := time.ActorIDFromHex(req.ClientId)
 	if err != nil {
 		return err
 	}
@@ -352,8 +375,10 @@ func (s *yorkieServer) WatchDocument(
 	docInfo, err := documents.FindDocInfoByKeyAndID(
 		stream.Context(),
 		s.backend,
-		docKey,
-		docID,
+		types.DocRefKey{
+			Key: docKey,
+			ID:  docID,
+		},
 	)
 	if err != nil {
 		return nil
@@ -369,15 +394,17 @@ func (s *yorkieServer) WatchDocument(
 	if _, err = clients.FindClientInfo(
 		stream.Context(),
 		s.backend.DB,
-		req.ClientKey,
-		clientID,
+		types.ClientRefKey{
+			Key: req.ClientKey,
+			ID:  types.IDFromActorID(actorID),
+		},
 	); err != nil {
 		return err
 	}
 
 	locker, err := s.backend.Coordinator.NewLocker(
 		stream.Context(),
-		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID.String(), docID)),
+		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", actorID.String(), docID)),
 	)
 	if err != nil {
 		return err
@@ -391,7 +418,7 @@ func (s *yorkieServer) WatchDocument(
 		}
 	}()
 
-	subscription, clientIDs, err := s.watchDoc(stream.Context(), clientID, docKey, docID)
+	subscription, clientIDs, err := s.watchDoc(stream.Context(), actorID, docKey, docID)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
@@ -487,16 +514,24 @@ func (s *yorkieServer) RemoveDocument(
 		}()
 	}
 
-	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, req.ClientKey, actorID)
-	if err != nil {
-		return nil, err
-	}
-	docInfo, err := documents.FindDocInfoByKeyAndID(ctx, s.backend, pack.DocumentKey, docID)
+	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+		Key: req.ClientKey,
+		ID:  types.IDFromActorID(actorID),
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	if err := clientInfo.RemoveDocument(docInfo.Key, docInfo.ID); err != nil {
+	docRef := types.DocRefKey{
+		Key: pack.DocumentKey,
+		ID:  docID,
+	}
+	docInfo, err := documents.FindDocInfoByKeyAndID(ctx, s.backend, docRef)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := clientInfo.RemoveDocument(docRef); err != nil {
 		return nil, err
 	}
 
@@ -564,7 +599,7 @@ func (s *yorkieServer) Broadcast(
 	ctx context.Context,
 	req *api.BroadcastRequest,
 ) (*api.BroadcastResponse, error) {
-	clientID, err := time.ActorIDFromHex(req.ClientId)
+	actorID, err := time.ActorIDFromHex(req.ClientId)
 	if err != nil {
 		return nil, err
 	}
@@ -578,8 +613,10 @@ func (s *yorkieServer) Broadcast(
 	docInfo, err := documents.FindDocInfoByKeyAndID(
 		ctx,
 		s.backend,
-		docKey,
-		docID,
+		types.DocRefKey{
+			Key: docKey,
+			ID:  docID,
+		},
 	)
 	if err != nil {
 		return nil, err
@@ -593,16 +630,19 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	if _, err = clients.FindClientInfo(ctx, s.backend.DB, req.ClientKey, clientID); err != nil {
+	if _, err = clients.FindClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+		Key: req.ClientKey,
+		ID:  types.IDFromActorID(actorID),
+	}); err != nil {
 		return nil, err
 	}
 
 	s.backend.Coordinator.Publish(
 		ctx,
-		clientID,
+		actorID,
 		sync.DocEvent{
 			Type:        types.DocumentBroadcastEvent,
-			Publisher:   clientID,
+			Publisher:   actorID,
 			DocumentKey: docKey,
 			DocumentID:  docID,
 			Body: types.DocEventBody{

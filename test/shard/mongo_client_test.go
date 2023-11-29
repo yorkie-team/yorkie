@@ -133,7 +133,10 @@ func TestClientWithShardedDB(t *testing.T) {
 		assert.NoError(t, err)
 
 		docKey1 := key.Key(fmt.Sprintf("%s%d", "duplicateIDTestDocKey", 0))
-		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, dummyClientKey, dummyClientID, docKey1, true)
+		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, docKey1, types.ClientRefKey{
+			Key: dummyClientKey,
+			ID:  dummyClientID,
+		}, true)
 		assert.NoError(t, err)
 
 		// 02. Create an extra document with duplicate ID.
@@ -158,8 +161,10 @@ func TestClientWithShardedDB(t *testing.T) {
 		// 04. Check if the document is correctly found using docKey and docID.
 		result, err := cli.FindDocInfoByKeyAndID(
 			ctx,
-			docKey1,
-			docInfo1.ID,
+			types.DocRefKey{
+				Key: docKey1,
+				ID:  docInfo1.ID,
+			},
 		)
 		assert.NoError(t, err)
 		assert.Equal(t, docInfo1.Key, result.Key)
@@ -179,7 +184,10 @@ func TestClientWithShardedDB(t *testing.T) {
 		var duplicateID types.ID
 		for i := 0; i < totalDocCnt-duplicateIDDocCnt; i++ {
 			testDocKey := key.Key("duplicateIDTestDocKey" + strconv.Itoa(i))
-			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, dummyClientKey, dummyClientID, testDocKey, true)
+			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, testDocKey, types.ClientRefKey{
+				Key: dummyClientKey,
+				ID:  dummyClientID,
+			}, true)
 			assert.NoError(t, err)
 			docInfos = append(docInfos, docInfo)
 
@@ -213,7 +221,7 @@ func TestClientWithShardedDB(t *testing.T) {
 		}
 
 		// 03. List the documents.
-		result, err := cli.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[database.DocOffset]{
+		result, err := cli.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[types.DocRefKey]{
 			PageSize:  10,
 			IsForward: false,
 		})
@@ -254,8 +262,10 @@ func TestClientWithShardedDB(t *testing.T) {
 		// 04. Check if the client is correctly found using clientKey and clientID.
 		result, err := cli.FindClientInfoByKeyAndID(
 			ctx,
-			clientKey1,
-			clientInfo1.ID,
+			types.ClientRefKey{
+				Key: clientKey1,
+				ID:  clientInfo1.ID,
+			},
 		)
 		assert.NoError(t, err)
 		assert.Equal(t, clientInfo1.Key, result.Key)

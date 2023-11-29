@@ -19,6 +19,7 @@ package packs
 import (
 	"context"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -32,19 +33,20 @@ func FindChanges(
 	from int64,
 	to int64,
 ) ([]*change.Change, error) {
+	docRef := types.DocRefKey{
+		Key: docInfo.Key,
+		ID:  docInfo.ID,
+	}
+
 	if be.Config.SnapshotWithPurgingChanges {
-		minSyncedSeqInfo, err := be.DB.FindMinSyncedSeqInfo(
-			ctx,
-			docInfo.Key,
-			docInfo.ID,
-		)
+		minSyncedSeqInfo, err := be.DB.FindMinSyncedSeqInfo(ctx, docRef)
 		if err != nil {
 			return nil, err
 		}
 
 		snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
 			ctx,
-			docInfo.Key, docInfo.ID,
+			docRef,
 			minSyncedSeqInfo.ServerSeq+be.Config.SnapshotInterval,
 			false,
 		)
@@ -57,11 +59,6 @@ func FindChanges(
 		}
 	}
 
-	changes, err := be.DB.FindChangesBetweenServerSeqs(
-		ctx,
-		docInfo.Key, docInfo.ID,
-		from,
-		to,
-	)
+	changes, err := be.DB.FindChangesBetweenServerSeqs(ctx, docRef, from, to)
 	return changes, err
 }

@@ -26,7 +26,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/documents"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -281,8 +280,8 @@ func (s *adminServer) ListDocuments(
 		ctx,
 		s.backend,
 		project,
-		types.Paging[database.DocOffset]{
-			Offset: database.DocOffset{
+		types.Paging[types.DocRefKey]{
+			Offset: types.DocRefKey{
 				Key: key.Key(req.PreviousKey),
 				ID:  types.ID(req.PreviousId),
 			},
@@ -371,7 +370,10 @@ func (s *adminServer) RemoveDocumentByAdmin(
 
 	if err := documents.RemoveDocument(
 		ctx, s.backend, project,
-		docInfo.Key, docInfo.ID,
+		types.DocRefKey{
+			Key: docInfo.Key,
+			ID:  docInfo.ID,
+		},
 		req.Force,
 	); err != nil {
 		return nil, err

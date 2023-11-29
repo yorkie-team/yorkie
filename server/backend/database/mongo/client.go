@@ -494,16 +494,15 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 // DeactivateClient deactivates the client of the given ID.
 func (c *Client) DeactivateClient(
 	ctx context.Context,
-	clientKey string,
-	clientID types.ID,
+	clientRef types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	encodedClientID, err := EncodeID(clientID)
+	encodedClientID, err := EncodeID(clientRef.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"key": clientKey,
+		"key": clientRef.Key,
 		"_id": encodedClientID,
 	}, bson.M{
 		"$set": bson.M{
@@ -515,7 +514,7 @@ func (c *Client) DeactivateClient(
 	clientInfo := database.ClientInfo{}
 	if err := res.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+			return nil, fmt.Errorf("%s: %w", clientRef, database.ErrClientNotFound)
 		}
 		return nil, fmt.Errorf("decode client info: %w", err)
 	}
@@ -526,16 +525,15 @@ func (c *Client) DeactivateClient(
 // FindClientInfoByKeyAndID finds the client of the given key and ID.
 func (c *Client) FindClientInfoByKeyAndID(
 	ctx context.Context,
-	clientKey string,
-	clientID types.ID,
+	clientRef types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	encodedClientID, err := EncodeID(clientID)
+	encodedClientID, err := EncodeID(clientRef.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"key": clientKey,
+		"key": clientRef.Key,
 		"_id": encodedClientID,
 	}, bson.M{
 		"$set": bson.M{
@@ -546,7 +544,7 @@ func (c *Client) FindClientInfoByKeyAndID(
 	clientInfo := database.ClientInfo{}
 	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+			return nil, fmt.Errorf("%s: %w", clientRef, database.ErrClientNotFound)
 		}
 	}
 
@@ -565,8 +563,13 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		return err
 	}
 
-	clientDocInfoKey := getClientDocInfoKey(docInfo.Key, docInfo.ID)
-	clientDocInfo, ok := clientInfo.Documents[docInfo.Key][docInfo.ID]
+	docRef := types.DocRefKey{
+		Key: docInfo.Key,
+		ID:  docInfo.ID,
+	}
+
+	clientDocInfoKey := getClientDocInfoKey(docRef)
+	clientDocInfo, ok := clientInfo.Documents[docRef]
 	if !ok {
 		return fmt.Errorf("client doc info: %w", database.ErrDocumentNeverAttached)
 	}
@@ -582,7 +585,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		},
 	}
 
-	attached, err := clientInfo.IsAttached(docInfo.Key, docInfo.ID)
+	attached, err := clientInfo.IsAttached(docRef)
 	if err != nil {
 		return err
 	}
@@ -605,7 +608,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	if result.Err() != nil {
 		if result.Err() == mongo.ErrNoDocuments {
-			return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrClientNotFound)
+			return fmt.Errorf("%s.%s: %w", clientInfo.Key, clientInfo.ID, database.ErrClientNotFound)
 		}
 		return fmt.Errorf("update client info: %w", result.Err())
 	}
@@ -686,16 +689,15 @@ func (c *Client) FindDeactivateCandidates(
 func (c *Client) FindDocInfoByKeyAndOwner(
 	ctx context.Context,
 	projectID types.ID,
-	clientKey string,
-	clientID types.ID,
 	docKey key.Key,
+	ownerRef types.ClientRefKey,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
 	encodedProjectID, err := EncodeID(projectID)
 	if err != nil {
 		return nil, err
 	}
-	encodedOwnerID, err := EncodeID(clientID)
+	encodedOwnerID, err := EncodeID(ownerRef.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -724,7 +726,7 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 			"_id": res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
-				"owner_key":  clientKey,
+				"owner_key":  ownerRef.Key,
 				"owner_id":   encodedOwnerID,
 				"server_seq": 0,
 				"created_at": now,
@@ -784,20 +786,19 @@ func (c *Client) FindDocInfoByKey(
 // FindDocInfoByKeyAndID finds a docInfo of the given ID.
 func (c *Client) FindDocInfoByKeyAndID(
 	ctx context.Context,
-	key key.Key,
-	id types.ID,
+	docRef types.DocRefKey,
 ) (*database.DocInfo, error) {
-	encodedDocID, err := EncodeID(id)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	result := c.collection(ColDocuments).FindOne(ctx, bson.M{
-		"key": key,
+		"key": docRef.Key,
 		"_id": encodedDocID,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
-		return nil, fmt.Errorf("%s: %w", id, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("%s: %w", docRef, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
 		return nil, fmt.Errorf("find document: %w", result.Err())
@@ -814,16 +815,15 @@ func (c *Client) FindDocInfoByKeyAndID(
 // UpdateDocInfoStatusToRemoved updates the document status to removed.
 func (c *Client) UpdateDocInfoStatusToRemoved(
 	ctx context.Context,
-	key key.Key,
-	id types.ID,
+	docRef types.DocRefKey,
 ) error {
-	encodedDocID, err := EncodeID(id)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return err
 	}
 
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
-		"key": key,
+		"key": docRef.Key,
 		"_id": encodedDocID,
 	}, bson.M{
 		"$set": bson.M{
@@ -832,7 +832,7 @@ func (c *Client) UpdateDocInfoStatusToRemoved(
 	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	if result.Err() == mongo.ErrNoDocuments {
-		return fmt.Errorf("%s.%s: %w", key, id, database.ErrDocumentNotFound)
+		return fmt.Errorf("%s: %w", docRef, database.ErrDocumentNotFound)
 	}
 	if result.Err() != nil {
 		return fmt.Errorf("update document info status to removed: %w", result.Err())
@@ -911,7 +911,7 @@ func (c *Client) CreateChangeInfos(
 		return fmt.Errorf("update document: %w", err)
 	}
 	if res.MatchedCount == 0 {
-		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
+		return fmt.Errorf("%s.%s: %w", docInfo.Key, docInfo.ID, database.ErrConflictOnUpdate)
 	}
 	if isRemoved {
 		docInfo.RemovedAt = now
@@ -924,10 +924,9 @@ func (c *Client) CreateChangeInfos(
 // save storage.
 func (c *Client) PurgeStaleChanges(
 	ctx context.Context,
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 ) error {
-	encodedDocID, err := EncodeID(docID)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return err
 	}
@@ -937,7 +936,7 @@ func (c *Client) PurgeStaleChanges(
 	result := c.collection(ColSyncedSeqs).FindOne(
 		ctx,
 		bson.M{
-			"doc_key": docKey,
+			"doc_key": docRef.Key,
 			"doc_id":  encodedDocID,
 		},
 		options.FindOne().SetSort(bson.M{"server_seq": 1}),
@@ -957,7 +956,7 @@ func (c *Client) PurgeStaleChanges(
 	if _, err := c.collection(ColChanges).DeleteMany(
 		ctx,
 		bson.M{
-			"doc_key":    docKey,
+			"doc_key":    docRef.Key,
 			"doc_id":     encodedDocID,
 			"server_seq": bson.M{"$lt": minSyncedSeqInfo.ServerSeq},
 		},
@@ -972,12 +971,11 @@ func (c *Client) PurgeStaleChanges(
 // FindChangesBetweenServerSeqs returns the changes between two server sequences.
 func (c *Client) FindChangesBetweenServerSeqs(
 	ctx context.Context,
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 	from int64,
 	to int64,
 ) ([]*change.Change, error) {
-	infos, err := c.FindChangeInfosBetweenServerSeqs(ctx, docKey, docID, from, to)
+	infos, err := c.FindChangeInfosBetweenServerSeqs(ctx, docRef, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -997,18 +995,17 @@ func (c *Client) FindChangesBetweenServerSeqs(
 // FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
 func (c *Client) FindChangeInfosBetweenServerSeqs(
 	ctx context.Context,
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 	from int64,
 	to int64,
 ) ([]*database.ChangeInfo, error) {
-	encodedDocID, err := EncodeID(docID)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
-		"doc_key": docKey,
+		"doc_key": docRef.Key,
 		"doc_id":  encodedDocID,
 		"server_seq": bson.M{
 			"$gte": from,
@@ -1030,11 +1027,10 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 // CreateSnapshotInfo stores the snapshot of the given document.
 func (c *Client) CreateSnapshotInfo(
 	ctx context.Context,
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 	doc *document.InternalDocument,
 ) error {
-	encodedDocID, err := EncodeID(docID)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return err
 	}
@@ -1044,7 +1040,7 @@ func (c *Client) CreateSnapshotInfo(
 	}
 
 	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"doc_key":    docKey,
+		"doc_key":    docRef.Key,
 		"doc_id":     encodedDocID,
 		"server_seq": doc.Checkpoint().ServerSeq,
 		"lamport":    doc.Lamport(),
@@ -1057,20 +1053,19 @@ func (c *Client) CreateSnapshotInfo(
 	return nil
 }
 
-// FindSnapshotInfoByID returns the snapshot by the given id.
-func (c *Client) FindSnapshotInfoByID(
+// FindSnapshotInfo returns the snapshot by the given doc_key, doc_id and server_seq.
+func (c *Client) FindSnapshotInfo(
 	ctx context.Context,
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 	serverSeq int64,
 ) (*database.SnapshotInfo, error) {
-	encodedDocID, err := EncodeID(docID)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
-		"doc_key":    docKey,
+		"doc_key":    docRef.Key,
 		"doc_id":     encodedDocID,
 		"server_seq": serverSeq,
 	})
@@ -1093,12 +1088,11 @@ func (c *Client) FindSnapshotInfoByID(
 // FindClosestSnapshotInfo finds the last snapshot of the given document.
 func (c *Client) FindClosestSnapshotInfo(
 	ctx context.Context,
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 	serverSeq int64,
 	includeSnapshot bool,
 ) (*database.SnapshotInfo, error) {
-	encodedDocID, err := EncodeID(docID)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -1112,7 +1106,7 @@ func (c *Client) FindClosestSnapshotInfo(
 	}
 
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
-		"doc_key": docKey,
+		"doc_key": docRef.Key,
 		"doc_id":  encodedDocID,
 		"server_seq": bson.M{
 			"$lte": serverSeq,
@@ -1137,16 +1131,15 @@ func (c *Client) FindClosestSnapshotInfo(
 // FindMinSyncedSeqInfo finds the minimum synced sequence info.
 func (c *Client) FindMinSyncedSeqInfo(
 	ctx context.Context,
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 ) (*database.SyncedSeqInfo, error) {
-	encodedDocID, err := EncodeID(docID)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	syncedSeqResult := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
-		"doc_key": docKey,
+		"doc_key": docRef.Key,
 		"doc_id":  encodedDocID,
 	}, options.FindOne().SetSort(bson.D{
 		{Key: "server_seq", Value: 1},
@@ -1172,22 +1165,21 @@ func (c *Client) FindMinSyncedSeqInfo(
 func (c *Client) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 	serverSeq int64,
 ) (*time.Ticket, error) {
-	if err := c.UpdateSyncedSeq(ctx, clientInfo, docKey, docID, serverSeq); err != nil {
+	if err := c.UpdateSyncedSeq(ctx, clientInfo, docRef, serverSeq); err != nil {
 		return nil, err
 	}
 
-	encodedDocID, err := EncodeID(docID)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	// 02. find min synced seq of the given document.
 	result := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
-		"doc_key": docKey,
+		"doc_key": docRef.Key,
 		"doc_id":  encodedDocID,
 	}, options.FindOne().SetSort(bson.D{
 		{Key: "lamport", Value: 1},
@@ -1224,7 +1216,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 func (c *Client) FindDocInfosByPaging(
 	ctx context.Context,
 	projectID types.ID,
-	paging types.Paging[database.DocOffset],
+	paging types.Paging[types.DocRefKey],
 ) ([]*database.DocInfo, error) {
 	encodedProjectID, err := EncodeID(projectID)
 	if err != nil {
@@ -1316,11 +1308,10 @@ func (c *Client) FindDocInfosByQuery(
 func (c *Client) UpdateSyncedSeq(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 	serverSeq int64,
 ) error {
-	encodedDocID, err := EncodeID(docID)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return err
 	}
@@ -1330,14 +1321,14 @@ func (c *Client) UpdateSyncedSeq(
 	}
 
 	// 01. update synced seq of the given client.
-	isAttached, err := clientInfo.IsAttached(docKey, docID)
+	isAttached, err := clientInfo.IsAttached(docRef)
 	if err != nil {
 		return err
 	}
 
 	if !isAttached {
 		if _, err = c.collection(ColSyncedSeqs).DeleteOne(ctx, bson.M{
-			"doc_key":    docKey,
+			"doc_key":    docRef.Key,
 			"doc_id":     encodedDocID,
 			"client_key": clientInfo.Key,
 			"client_id":  encodedClientID,
@@ -1347,13 +1338,13 @@ func (c *Client) UpdateSyncedSeq(
 		return nil
 	}
 
-	ticket, err := c.findTicketByServerSeq(ctx, docKey, docID, serverSeq)
+	ticket, err := c.findTicketByServerSeq(ctx, docRef, serverSeq)
 	if err != nil {
 		return err
 	}
 
 	if _, err = c.collection(ColSyncedSeqs).UpdateOne(ctx, bson.M{
-		"doc_key":    docKey,
+		"doc_key":    docRef.Key,
 		"doc_id":     encodedDocID,
 		"client_key": clientInfo.Key,
 		"client_id":  encodedClientID,
@@ -1374,28 +1365,30 @@ func (c *Client) UpdateSyncedSeq(
 func (c *Client) IsDocumentAttached(
 	ctx context.Context,
 	projectID types.ID,
-	docKey key.Key,
-	docID types.ID,
-	excludeClientID types.ID,
+	docRef types.DocRefKey,
+	excludeClientRef types.ClientRefKey,
 ) (bool, error) {
 	encodedProjectID, err := EncodeID(projectID)
 	if err != nil {
 		return false, err
 	}
 
-	clientDocInfoKey := getClientDocInfoKey(docKey, docID)
+	clientDocInfoKey := getClientDocInfoKey(docRef)
 	filter := bson.M{
-		"project_id":                encodedProjectID,
-		clientDocInfoKey + "status": database.DocumentAttached,
+		"project_id":                 encodedProjectID,
+		clientDocInfoKey + StatusKey: database.DocumentAttached,
 	}
 
-	if excludeClientID != "" {
-		encodedExcludeClientID, err := EncodeID(excludeClientID)
+	if excludeClientRef.Key != "" && excludeClientRef.ID != "" {
+		encodedExcludeClientID, err := EncodeID(excludeClientRef.ID)
 		if err != nil {
 			return false, err
 		}
 
-		filter["_id"] = bson.M{"$ne": encodedExcludeClientID}
+		filter["$and"] = []bson.M{
+			{"_id": bson.M{"$ne": encodedExcludeClientID}},
+			{"key": bson.M{"$ne": excludeClientRef.Key}},
+		}
 	}
 
 	result := c.collection(ColClients).FindOne(ctx, filter)
@@ -1408,28 +1401,27 @@ func (c *Client) IsDocumentAttached(
 
 func (c *Client) findTicketByServerSeq(
 	ctx context.Context,
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 	serverSeq int64,
 ) (*time.Ticket, error) {
 	if serverSeq == change.InitialServerSeq {
 		return time.InitialTicket, nil
 	}
 
-	encodedDocID, err := EncodeID(docID)
+	encodedDocID, err := EncodeID(docRef.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	result := c.collection(ColChanges).FindOne(ctx, bson.M{
-		"doc_key":    docKey,
+		"doc_key":    docRef.Key,
 		"doc_id":     encodedDocID,
 		"server_seq": serverSeq,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
 		return nil, fmt.Errorf(
-			"change docID=%s serverSeq=%d: %w",
-			docID.String(),
+			"change doc=%s serverSeq=%d: %w",
+			docRef,
 			serverSeq,
 			database.ErrDocumentNotFound,
 		)
@@ -1482,8 +1474,7 @@ func escapeRegex(str string) string {
 	return buf.String()
 }
 func getClientDocInfoKey(
-	docKey key.Key,
-	docID types.ID,
+	docRef types.DocRefKey,
 ) string {
-	return fmt.Sprintf("documents.%s.%s.", docKey, docID.String())
+	return fmt.Sprintf("documents.%s.%s.", docRef.Key, docRef.ID)
 }

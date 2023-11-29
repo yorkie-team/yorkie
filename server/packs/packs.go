@@ -66,6 +66,11 @@ func PushPull(
 		be.Metrics.ObservePushPullResponseSeconds(gotime.Since(start).Seconds())
 	}()
 
+	docRef := types.DocRefKey{
+		Key: docInfo.Key,
+		ID:  docInfo.ID,
+	}
+
 	// TODO: Changes may be reordered or missing during communication on the network.
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
 	initialServerSeq := docInfo.ServerSeq
@@ -84,7 +89,7 @@ func PushPull(
 	be.Metrics.AddPushPullSentOperations(respPack.OperationsLen())
 	be.Metrics.AddPushPullSnapshotBytes(respPack.SnapshotLen())
 
-	if err := clientInfo.UpdateCheckpoint(docInfo.Key, docInfo.ID, respPack.Checkpoint); err != nil {
+	if err := clientInfo.UpdateCheckpoint(docRef, respPack.Checkpoint); err != nil {
 		return nil, err
 	}
 
@@ -111,7 +116,7 @@ func PushPull(
 	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
 		ctx,
 		clientInfo,
-		docInfo.Key, docInfo.ID,
+		docRef,
 		reqPack.Checkpoint.ServerSeq,
 	)
 	if err != nil {
@@ -196,12 +201,11 @@ func BuildDocumentForServerSeq(
 	docInfo *database.DocInfo,
 	serverSeq int64,
 ) (*document.InternalDocument, error) {
-	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(
-		ctx,
-		docInfo.Key, docInfo.ID,
-		serverSeq,
-		true,
-	)
+	docRef := types.DocRefKey{
+		Key: docInfo.Key,
+		ID:  docInfo.ID,
+	}
+	snapshotInfo, err := be.DB.FindClosestSnapshotInfo(ctx, docRef, serverSeq, true)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +225,7 @@ func BuildDocumentForServerSeq(
 	// certain size (e.g. 100) and read and gradually reflect it into the document.
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
-		docInfo.Key, docInfo.ID,
+		docRef,
 		snapshotInfo.ServerSeq+1,
 		serverSeq,
 	)

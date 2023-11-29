@@ -26,13 +26,13 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	"github.com/yorkie-team/yorkie/pkg/units"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 var (
-	previousOffset database.DocOffset
+	previousOffset types.DocRefKey
 	pageSize       int32
 	isForward      bool
 )

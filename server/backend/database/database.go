@@ -20,8 +20,6 @@ package database
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -126,11 +124,11 @@ type Database interface {
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)
 
-	// DeactivateClient deactivates the client of the given ID.
-	DeactivateClient(ctx context.Context, clientKey string, clientID types.ID) (*ClientInfo, error)
+	// DeactivateClient deactivates the client of the given key and ID.
+	DeactivateClient(ctx context.Context, clientRef types.ClientRefKey) (*ClientInfo, error)
 
-	// FindClientInfoByKeyAndID finds the client of the given ID.
-	FindClientInfoByKeyAndID(ctx context.Context, clientKey string, clientID types.ID) (*ClientInfo, error)
+	// FindClientInfoByKeyAndID finds the client of the given key and ID.
+	FindClientInfoByKeyAndID(ctx context.Context, clientRef types.ClientRefKey) (*ClientInfo, error)
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.
@@ -157,24 +155,21 @@ type Database interface {
 	FindDocInfoByKeyAndOwner(
 		ctx context.Context,
 		projectID types.ID,
-		clientKey string,
-		clientID types.ID,
 		docKey key.Key,
+		ownerRef types.ClientRefKey,
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
 	// FindDocInfoByKeyAndID finds the document of the given key and ID.
 	FindDocInfoByKeyAndID(
 		ctx context.Context,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 	) (*DocInfo, error)
 
 	// UpdateDocInfoStatusToRemoved updates the document status to removed.
 	UpdateDocInfoStatusToRemoved(
 		ctx context.Context,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 	) error
 
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
@@ -190,15 +185,13 @@ type Database interface {
 	// save storage.
 	PurgeStaleChanges(
 		ctx context.Context,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 	) error
 
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
 		ctx context.Context,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 		from int64,
 		to int64,
 	) ([]*change.Change, error)
@@ -206,8 +199,7 @@ type Database interface {
 	// FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
 	FindChangeInfosBetweenServerSeqs(
 		ctx context.Context,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 		from int64,
 		to int64,
 	) ([]*ChangeInfo, error)
@@ -215,24 +207,21 @@ type Database interface {
 	// CreateSnapshotInfo stores the snapshot of the given document.
 	CreateSnapshotInfo(
 		ctx context.Context,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 		doc *document.InternalDocument,
 	) error
 
-	// FindSnapshotInfoByID returns the snapshot by the given id.
-	FindSnapshotInfoByID(
+	// FindSnapshotInfo returns the snapshot by the given doc_key, doc_id and server_seq.
+	FindSnapshotInfo(
 		ctx context.Context,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 		serverSeq int64,
 	) (*SnapshotInfo, error)
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
 	FindClosestSnapshotInfo(
 		ctx context.Context,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 		serverSeq int64,
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
@@ -240,8 +229,7 @@ type Database interface {
 	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
 	FindMinSyncedSeqInfo(
 		ctx context.Context,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 	) (*SyncedSeqInfo, error)
 
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
@@ -249,8 +237,7 @@ type Database interface {
 	UpdateAndFindMinSyncedTicket(
 		ctx context.Context,
 		clientInfo *ClientInfo,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 		serverSeq int64,
 	) (*time.Ticket, error)
 
@@ -258,8 +245,7 @@ type Database interface {
 	UpdateSyncedSeq(
 		ctx context.Context,
 		clientInfo *ClientInfo,
-		docKey key.Key,
-		docID types.ID,
+		docRef types.DocRefKey,
 		serverSeq int64,
 	) error
 
@@ -267,7 +253,7 @@ type Database interface {
 	FindDocInfosByPaging(
 		ctx context.Context,
 		projectID types.ID,
-		paging types.Paging[DocOffset],
+		paging types.Paging[types.DocRefKey],
 	) ([]*DocInfo, error)
 
 	// FindDocInfosByQuery returns the documentInfos which match the given query.
@@ -282,35 +268,7 @@ type Database interface {
 	IsDocumentAttached(
 		ctx context.Context,
 		projectID types.ID,
-		docKey key.Key,
-		docID types.ID,
-		excludeClientID types.ID,
+		docRef types.DocRefKey,
+		excludeClientRef types.ClientRefKey,
 	) (bool, error)
-}
-
-// DocOffset represents a paging offset when listing documents.
-type DocOffset struct {
-	Key key.Key
-	ID  types.ID
-}
-
-// String is used both by fmt.Print and by Cobra in help text
-func (o *DocOffset) String() string {
-	return fmt.Sprintf("%s.%s", o.Key, o.ID)
-}
-
-// Set must have pointer receiver so it doesn't change the value of a copy
-func (o *DocOffset) Set(v string) error {
-	parsed := strings.Split(v, ",")
-	if len(parsed) != 2 {
-		return errors.New("use the format 'docKey,docID' for the input")
-	}
-	o.Key = key.Key(parsed[0])
-	o.ID = types.ID(parsed[1])
-	return nil
-}
-
-// Type is only used in help text
-func (o *DocOffset) Type() string {
-	return "DocumentOffset"
 }

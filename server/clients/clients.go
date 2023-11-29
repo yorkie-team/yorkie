@@ -22,7 +22,6 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
@@ -48,62 +47,50 @@ func Activate(
 func Deactivate(
 	ctx context.Context,
 	db database.Database,
-	clientKey string,
-	clientID types.ID,
+	clientRef types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	clientInfo, err := db.FindClientInfoByKeyAndID(
-		ctx,
-		clientKey,
-		clientID,
-	)
+	clientInfo, err := db.FindClientInfoByKeyAndID(ctx, clientRef)
 	if err != nil {
 		return nil, err
 	}
 
-	for docKey, v := range clientInfo.Documents {
-		for docID, clientDocInfo := range v {
-			isAttached, err := clientInfo.IsAttached(docKey, docID)
-			if err != nil {
-				return nil, err
-			}
-			if !isAttached {
-				continue
-			}
-
-			if err := clientInfo.DetachDocument(docKey, docID); err != nil {
-				return nil, err
-			}
-
-			// TODO(hackerwins): We need to remove the presence of the client from the document.
-			// Be careful that housekeeping is executed by the leader. And documents are sharded
-			// by the servers in the cluster. So, we need to consider the case where the leader is
-			// not the same as the server that handles the document.
-
-			if err := db.UpdateSyncedSeq(
-				ctx,
-				clientInfo,
-				docKey,
-				docID,
-				clientDocInfo.ServerSeq,
-			); err != nil {
-				return nil, err
-			}
+	for docRef, clientDocInfo := range clientInfo.Documents {
+		isAttached, err := clientInfo.IsAttached(docRef)
+		if err != nil {
+			return nil, err
 		}
+		if !isAttached {
+			continue
+		}
+
+		if err := clientInfo.DetachDocument(docRef); err != nil {
+			return nil, err
+		}
+
+		// TODO(hackerwins): We need to remove the presence of the client from the document.
+		// Be careful that housekeeping is executed by the leader. And documents are sharded
+		// by the servers in the cluster. So, we need to consider the case where the leader is
+		// not the same as the server that handles the document.
+
+		if err := db.UpdateSyncedSeq(
+			ctx,
+			clientInfo,
+			docRef,
+			clientDocInfo.ServerSeq,
+		); err != nil {
+			return nil, err
+		}
+
 	}
 
-	return db.DeactivateClient(ctx, clientKey, clientID)
+	return db.DeactivateClient(ctx, clientRef)
 }
 
 // FindClientInfo finds the client with the given id.
 func FindClientInfo(
 	ctx context.Context,
 	db database.Database,
-	clientKey string,
-	clientID *time.ActorID,
+	clientRef types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	return db.FindClientInfoByKeyAndID(
-		ctx,
-		clientKey,
-		types.IDFromActorID(clientID),
-	)
+	return db.FindClientInfoByKeyAndID(ctx, clientRef)
 }

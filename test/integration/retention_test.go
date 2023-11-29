@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -189,10 +190,13 @@ func TestRetention(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
+		docRef := types.DocRefKey{
+			Key: docInfo.Key,
+			ID:  docInfo.ID,
+		}
 		changes, err := mongoCli.FindChangesBetweenServerSeqs(
 			ctx,
-			docInfo.Key,
-			docInfo.ID,
+			docRef,
 			change.InitialServerSeq,
 			change.MaxServerSeq,
 		)
@@ -230,8 +234,7 @@ func TestRetention(t *testing.T) {
 
 		changes, err = mongoCli.FindChangesBetweenServerSeqs(
 			ctx,
-			docInfo.Key,
-			docInfo.ID,
+			docRef,
 			change.InitialServerSeq,
 			change.MaxServerSeq,
 		)

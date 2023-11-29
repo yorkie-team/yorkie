@@ -19,6 +19,7 @@ package packs
 import (
 	"context"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -33,13 +34,12 @@ func storeSnapshot(
 	docInfo *database.DocInfo,
 	minSyncedTicket *time.Ticket,
 ) error {
+	docRef := types.DocRefKey{
+		Key: docInfo.Key,
+		ID:  docInfo.ID,
+	}
 	// 01. get the closest snapshot's metadata of this docInfo
-	snapshotMetadata, err := be.DB.FindClosestSnapshotInfo(
-		ctx,
-		docInfo.Key,
-		docInfo.ID,
-		docInfo.ServerSeq,
-		false)
+	snapshotMetadata, err := be.DB.FindClosestSnapshotInfo(ctx, docRef, docInfo.ServerSeq, false)
 	if err != nil {
 		return err
 	}
@@ -53,8 +53,7 @@ func storeSnapshot(
 	// 02. retrieve the changes between last snapshot and current docInfo
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
-		docInfo.Key,
-		docInfo.ID,
+		docRef,
 		snapshotMetadata.ServerSeq+1,
 		docInfo.ServerSeq,
 	)
@@ -64,13 +63,8 @@ func storeSnapshot(
 
 	// 03. create document instance of the docInfo
 	snapshotInfo := snapshotMetadata
-	if snapshotMetadata.ID != "" {
-		snapshotInfo, err = be.DB.FindSnapshotInfoByID(
-			ctx,
-			snapshotInfo.DocKey,
-			snapshotInfo.DocID,
-			snapshotInfo.ServerSeq,
-		)
+	if snapshotMetadata.DocKey != "" && snapshotInfo.DocID != "" {
+		snapshotInfo, err = be.DB.FindSnapshotInfo(ctx, docRef, snapshotInfo.ServerSeq)
 		if err != nil {
 			return err
 		}
@@ -99,22 +93,13 @@ func storeSnapshot(
 	}
 
 	// 04. save the snapshot of the docInfo
-	if err := be.DB.CreateSnapshotInfo(
-		ctx,
-		docInfo.Key,
-		docInfo.ID,
-		doc,
-	); err != nil {
+	if err := be.DB.CreateSnapshotInfo(ctx, docRef, doc); err != nil {
 		return err
 	}
 
 	// 05. delete changes before the smallest in `syncedseqs` to save storage.
 	if be.Config.SnapshotWithPurgingChanges {
-		if err := be.DB.PurgeStaleChanges(
-			ctx,
-			docInfo.Key,
-			docInfo.ID,
-		); err != nil {
+		if err := be.DB.PurgeStaleChanges(ctx, docRef); err != nil {
 			logging.From(ctx).Error(err)
 		}
 	}
