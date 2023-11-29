@@ -38,7 +38,7 @@ type ID struct {
 	clientSeq uint32
 
 	// serverSeq is the sequence of the change on the server. We can find the
-	// change with serverSeq and documentID in the server. If the change is not
+	// change with serverSeq, documentKey and documentID in the server. If the change is not
 	// stored on the server, serverSeq is 0.
 	serverSeq int64
 

@@ -21,7 +21,6 @@ import (
 	"context"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/locker"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
@@ -59,26 +58,24 @@ func (c *Coordinator) NewLocker(
 func (c *Coordinator) Subscribe(
 	ctx context.Context,
 	subscriber *time.ActorID,
-	documentKey key.Key,
-	documentID types.ID,
+	documentRef types.DocRefKey,
 ) (*sync.Subscription, []*time.ActorID, error) {
-	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentKey, documentID)
+	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentRef)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ids := c.pubSub.ClientIDs(documentKey, documentID)
+	ids := c.pubSub.ClientIDs(documentRef)
 	return sub, ids, nil
 }
 
 // Unsubscribe unsubscribes the given documents.
 func (c *Coordinator) Unsubscribe(
 	ctx context.Context,
-	documentKey key.Key,
-	documentID types.ID,
+	documentRef types.DocRefKey,
 	sub *sync.Subscription,
 ) error {
-	c.pubSub.Unsubscribe(ctx, documentKey, documentID, sub)
+	c.pubSub.Unsubscribe(ctx, documentRef, sub)
 	return nil
 }
 

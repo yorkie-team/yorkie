@@ -245,9 +245,7 @@ func RemoveDocument(
 		return be.DB.UpdateDocInfoStatusToRemoved(ctx, docRef)
 	}
 
-	isAttached, err := be.DB.IsDocumentAttached(ctx, project.ID, docRef, types.ClientRefKey{
-		Key: "", ID: "",
-	})
+	isAttached, err := be.DB.IsDocumentAttached(ctx, project.ID, docRef, types.ClientRefKey{})
 	if err != nil {
 		return err
 	}

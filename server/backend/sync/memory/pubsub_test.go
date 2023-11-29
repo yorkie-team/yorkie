@@ -40,19 +40,22 @@ func TestPubSub(t *testing.T) {
 		pubSub := memory.NewPubSub()
 		key := key.Key(t.Name() + "key")
 		id := types.ID(t.Name() + "id")
+		docRef := types.DocRefKey{
+			Key: key,
+			ID:  id,
+		}
 		docEvent := sync.DocEvent{
 			Type:        types.DocumentWatchedEvent,
 			Publisher:   idB,
-			DocumentKey: key,
-			DocumentID:  id,
+			DocumentRef: docRef,
 		}
 
 		ctx := context.Background()
 		// subscribe the documents by actorA
-		subA, err := pubSub.Subscribe(ctx, idA, key, id)
+		subA, err := pubSub.Subscribe(ctx, idA, docRef)
 		assert.NoError(t, err)
 		defer func() {
-			pubSub.Unsubscribe(ctx, key, id, subA)
+			pubSub.Unsubscribe(ctx, docRef, subA)
 		}()
 
 		var wg gosync.WaitGroup

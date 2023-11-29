@@ -104,7 +104,7 @@ func init() {
 	cmd.Flags().Var(
 		&previousOffset,
 		"previous-offset",
-		"The previous document offset to start from",
+		"The previous document offset to start from. Use the format 'docKey,docID' for the input.",
 	)
 	cmd.Flags().Int32Var(
 		&pageSize,

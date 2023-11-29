@@ -372,13 +372,14 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
+	docRef := types.DocRefKey{
+		Key: docKey,
+		ID:  docID,
+	}
 	docInfo, err := documents.FindDocInfoByKeyAndID(
 		stream.Context(),
 		s.backend,
-		types.DocRefKey{
-			Key: docKey,
-			ID:  docID,
-		},
+		docRef,
 	)
 	if err != nil {
 		return nil
@@ -418,13 +419,13 @@ func (s *yorkieServer) WatchDocument(
 		}
 	}()
 
-	subscription, clientIDs, err := s.watchDoc(stream.Context(), actorID, docKey, docID)
+	subscription, clientIDs, err := s.watchDoc(stream.Context(), actorID, docRef)
 	if err != nil {
 		logging.From(stream.Context()).Error(err)
 		return err
 	}
 	defer func() {
-		s.unwatchDoc(subscription, docKey, docID)
+		s.unwatchDoc(subscription, docRef)
 	}()
 
 	var pbClientIDs []string
@@ -553,10 +554,9 @@ func (s *yorkieServer) RemoveDocument(
 func (s *yorkieServer) watchDoc(
 	ctx context.Context,
 	clientID *time.ActorID,
-	documentKey key.Key,
-	documentID types.ID,
+	documentRef types.DocRefKey,
 ) (*sync.Subscription, []*time.ActorID, error) {
-	subscription, clientIDs, err := s.backend.Coordinator.Subscribe(ctx, clientID, documentKey, documentID)
+	subscription, clientIDs, err := s.backend.Coordinator.Subscribe(ctx, clientID, documentRef)
 	if err != nil {
 		logging.From(ctx).Error(err)
 		return nil, nil, err
@@ -568,8 +568,7 @@ func (s *yorkieServer) watchDoc(
 		sync.DocEvent{
 			Type:        types.DocumentWatchedEvent,
 			Publisher:   subscription.Subscriber(),
-			DocumentKey: documentKey,
-			DocumentID:  documentID,
+			DocumentRef: documentRef,
 		},
 	)
 
@@ -578,19 +577,17 @@ func (s *yorkieServer) watchDoc(
 
 func (s *yorkieServer) unwatchDoc(
 	subscription *sync.Subscription,
-	documentKey key.Key,
-	documentID types.ID,
+	documentRef types.DocRefKey,
 ) {
 	ctx := context.Background()
-	_ = s.backend.Coordinator.Unsubscribe(ctx, documentKey, documentID, subscription)
+	_ = s.backend.Coordinator.Unsubscribe(ctx, documentRef, subscription)
 	s.backend.Coordinator.Publish(
 		ctx,
 		subscription.Subscriber(),
 		sync.DocEvent{
 			Type:        types.DocumentUnwatchedEvent,
 			Publisher:   subscription.Subscriber(),
-			DocumentKey: documentKey,
-			DocumentID:  documentID,
+			DocumentRef: documentRef,
 		},
 	)
 }
@@ -610,13 +607,14 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
+	docRef := types.DocRefKey{
+		Key: docKey,
+		ID:  docID,
+	}
 	docInfo, err := documents.FindDocInfoByKeyAndID(
 		ctx,
 		s.backend,
-		types.DocRefKey{
-			Key: docKey,
-			ID:  docID,
-		},
+		docRef,
 	)
 	if err != nil {
 		return nil, err
@@ -643,8 +641,7 @@ func (s *yorkieServer) Broadcast(
 		sync.DocEvent{
 			Type:        types.DocumentBroadcastEvent,
 			Publisher:   actorID,
-			DocumentKey: docKey,
-			DocumentID:  docID,
+			DocumentRef: docRef,
 			Body: types.DocEventBody{
 				Topic:   req.Topic,
 				Payload: req.Payload,

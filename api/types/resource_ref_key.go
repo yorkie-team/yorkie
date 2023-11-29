@@ -35,7 +35,7 @@ func (r *DocRefKey) String() string {
 	return fmt.Sprintf("Doc (%s.%s)", r.Key, r.ID)
 }
 
-// Set parses the given string (format: `docKey},{docID}`) and assigns the values
+// Set parses the given string (format: `{docKey},{docID}`) and assigns the values
 // to the given DocRefKey.
 func (r *DocRefKey) Set(v string) error {
 	parsed := strings.Split(v, ",")

@@ -153,8 +153,7 @@ func PushPull(
 				sync.DocEvent{
 					Type:        types.DocumentChangedEvent,
 					Publisher:   publisherID,
-					DocumentKey: docInfo.Key,
-					DocumentID:  docInfo.ID,
+					DocumentRef: docRef,
 				},
 			)
 

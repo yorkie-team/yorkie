@@ -257,11 +257,11 @@ func (c *Client) ListDocuments(
 		ctx,
 		&api.ListDocumentsRequest{
 			ProjectName:     projectName,
+			PreviousKey:     previousOffset.Key.String(),
 			PreviousId:      previousOffset.ID.String(),
 			PageSize:        pageSize,
 			IsForward:       isForward,
 			IncludeSnapshot: includeSnapshot,
-			PreviousKey:     previousOffset.Key.String(),
 		},
 	)
 	if err != nil {

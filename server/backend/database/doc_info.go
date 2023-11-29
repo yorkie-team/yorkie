@@ -40,7 +40,7 @@ type DocInfo struct {
 	// OwnerKey is the key of the document owner.
 	OwnerKey string `bson:"owner_key"`
 
-	// OwnerKey is the ID of the document owner.
+	// OwnerID is the ID of the document owner.
 	OwnerID types.ID `bson:"owner_id"`
 
 	// CreatedAt is the time when the document is created.

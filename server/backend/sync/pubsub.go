@@ -20,7 +20,6 @@ import (
 	"github.com/rs/xid"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -50,8 +49,7 @@ func (s *Subscription) ID() string {
 type DocEvent struct {
 	Type        types.DocEventType
 	Publisher   *time.ActorID
-	DocumentKey key.Key
-	DocumentID  types.ID
+	DocumentRef types.DocRefKey
 	Body        types.DocEventBody
 }
 

@@ -33,13 +33,17 @@ func TestCoordinator(t *testing.T) {
 		coordinator := memory.NewCoordinator(nil)
 		docKey := key.Key(t.Name() + "key")
 		docID := types.ID(t.Name() + "id")
+		docRef := types.DocRefKey{
+			Key: docKey,
+			ID:  docID,
+		}
 		ctx := context.Background()
 
 		for i := 0; i < 5; i++ {
 			id, err := time.ActorIDFromBytes([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, byte(i)})
 			assert.NoError(t, err)
 
-			_, clientIDs, err := coordinator.Subscribe(ctx, id, docKey, docID)
+			_, clientIDs, err := coordinator.Subscribe(ctx, id, docRef)
 			assert.NoError(t, err)
 			assert.Len(t, clientIDs, i+1)
 		}
