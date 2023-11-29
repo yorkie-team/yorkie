@@ -17,18 +17,19 @@
 package rpc_test
 
 import (
-	"connectrpc.com/connect"
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
-	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 	"log"
 	"net/http"
 	"os"
 	"testing"
 	"time"
+
+	"connectrpc.com/connect"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -1014,11 +1015,11 @@ func TestConfig_Validate(t *testing.T) {
 		expected error
 	}{
 		{config: &rpc.Config{Port: -1}, expected: rpc.ErrInvalidRPCPort},
-		{config: &rpc.Config{Port: 11101, CertFile: "noSuchCertFile"}, expected: rpc.ErrInvalidCertFile},
-		{config: &rpc.Config{Port: 11101, KeyFile: "noSuchKeyFile"}, expected: rpc.ErrInvalidKeyFile},
+		{config: &rpc.Config{Port: 8080, CertFile: "noSuchCertFile"}, expected: rpc.ErrInvalidCertFile},
+		{config: &rpc.Config{Port: 8080, KeyFile: "noSuchKeyFile"}, expected: rpc.ErrInvalidKeyFile},
 		// not to use tls
 		{config: &rpc.Config{
-			Port:                  11101,
+			Port:                  8080,
 			CertFile:              "",
 			KeyFile:               "",
 			MaxConnectionAge:      "50s",
@@ -1027,7 +1028,7 @@ func TestConfig_Validate(t *testing.T) {
 			expected: nil},
 		// pass any file existing
 		{config: &rpc.Config{
-			Port:                  11101,
+			Port:                  8080,
 			CertFile:              "server_test.go",
 			KeyFile:               "server_test.go",
 			MaxConnectionAge:      "50s",

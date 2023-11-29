@@ -33,12 +33,12 @@ import (
 
 // Below are the values of the default values of Yorkie config.
 const (
-	DefaultRPCPort                  = 11101
+	DefaultRPCPort                  = 8080
 	DefaultRPCMaxRequestsBytes      = 4 * 1024 * 1024 // 4MiB
 	DefaultRPCMaxConnectionAge      = 0 * time.Second
 	DefaultRPCMaxConnectionAgeGrace = 0 * time.Second
 
-	DefaultProfilingPort = 11102
+	DefaultProfilingPort = 8081
 
 	DefaultHousekeepingInterval                  = 30 * time.Second
 	DefaultHousekeepingCandidatesLimitPerProject = 500

@@ -31,7 +31,7 @@ func TestConfig(t *testing.T) {
 	}{
 		{config: &profiling.Config{Port: -1}, expected: profiling.ErrInvalidProfilingPort},
 		{config: &profiling.Config{Port: 0}, expected: profiling.ErrInvalidProfilingPort},
-		{config: &profiling.Config{Port: 11102}, expected: nil},
+		{config: &profiling.Config{Port: 8081}, expected: nil},
 	}
 	for _, scenario := range scenarios {
 		assert.ErrorIs(t, scenario.config.Validate(), scenario.expected, "provided config: %#v", scenario.config)
