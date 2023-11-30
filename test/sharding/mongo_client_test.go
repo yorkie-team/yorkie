@@ -1,4 +1,4 @@
-//go:build shard
+//go:build sharding
 
 /*
  * Copyright 2023 The Yorkie Authors. All rights reserved.
@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package shard
+package sharding
 
 import (
 	"context"
@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	shardedDBNameForMongoClient = "yorkie-meta-1"
+	shardedDBNameForMongoClient = "test-yorkie-meta-mongo-client"
 	dummyProjectID              = types.ID("000000000000000000000000")
 	projectOneID                = types.ID("000000000000000000000001")
 	projectTwoID                = types.ID("000000000000000000000002")

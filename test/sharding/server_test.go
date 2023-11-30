@@ -1,4 +1,4 @@
-//go:build shard
+//go:build sharding
 
 /*
  * Copyright 2023 The Yorkie Authors. All rights reserved.
@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package shard
+package sharding
 
 import (
 	"context"
@@ -41,7 +41,7 @@ import (
 )
 
 var (
-	shardedDBNameForServer   = "yorkie-meta-2"
+	shardedDBNameForServer   = "test-yorkie-meta-server"
 	testRPCServer            *rpc.Server
 	testRPCAddr              = fmt.Sprintf("localhost:%d", helper.RPCPort)
 	testClient               api.YorkieServiceClient

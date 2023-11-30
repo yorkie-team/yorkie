@@ -91,8 +91,8 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         comment-always: true
 
-  shard_test:
-    name: shard_test
+  sharding_test:
+    name: sharding_test
     runs-on: ubuntu-latest
     steps:
 
@@ -113,5 +113,5 @@ jobs:
     - name: Wait for 30 seconds until the DB cluster is ready
       run: sleep 30s
 
-    - name: Run the tests with shard tag
-      run: go test -tags shard -race -v ./test/shard/...
+    - name: Run the tests with sharding tag
+      run: go test -tags sharding -race -v ./test/sharding/...
