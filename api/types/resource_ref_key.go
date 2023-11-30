@@ -24,6 +24,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
+// ErrInvalidDocRefKeySetInput is returned when the input of DocRefKey Set is invalid.
+var ErrInvalidDocRefKeySetInput = errors.New("use the format 'docKey,docID' for the input")
+
 // DocRefKey represents an identifier used to reference a document.
 type DocRefKey struct {
 	Key key.Key
@@ -40,7 +43,7 @@ func (r *DocRefKey) String() string {
 func (r *DocRefKey) Set(v string) error {
 	parsed := strings.Split(v, ",")
 	if len(parsed) != 2 {
-		return errors.New("use the format 'docKey,docID' for the input")
+		return ErrInvalidDocRefKeySetInput
 	}
 	r.Key = key.Key(parsed[0])
 	r.ID = ID(parsed[1])
