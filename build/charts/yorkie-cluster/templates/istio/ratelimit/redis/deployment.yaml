@@ -1,0 +1,26 @@
+{{ if .Values.ratelimit.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.ratelimit.name }}-redis
+  namespace: istio-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - image: redis:alpine
+        imagePullPolicy: Always
+        name: redis
+        ports:
+        - name: redis
+          containerPort: 6379
+      restartPolicy: Always
+      serviceAccountName: ""
+{{ end }}

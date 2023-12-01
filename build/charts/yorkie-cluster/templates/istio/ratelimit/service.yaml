@@ -1,0 +1,25 @@
+{{ if .Values.ratelimit.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.ratelimit.name }}
+  namespace: istio-system
+  labels:
+    app: {{ .Values.ratelimit.name }}
+spec:
+  ports:
+  - name: http-port
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: grpc-port
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  - name: http-debug
+    port: 6070
+    targetPort: 6070
+    protocol: TCP
+  selector:
+    app: ratelimit
+{{ end }}

@@ -1,0 +1,65 @@
+{{ if .Values.ratelimit.enabled }}
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: filter-ratelimit
+  namespace: istio-system
+spec:
+  workloadSelector:
+    labels:
+      istio: ingressgateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+              subFilter:
+                name: "envoy.filters.http.router"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.ratelimit
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
+            # Match it to the ratelimit service config
+            domain: {{ .Values.ratelimit.domain }}
+            failure_mode_deny: true
+            timeout: 10s
+            rate_limit_service:
+              grpc_service:
+                envoy_grpc:
+                  cluster_name: outbound|8081||{{ .Values.ratelimit.name }}.istio-system.svc.cluster.local
+                  authority: {{ .Values.ratelimit.name }}.istio-system.svc.cluster.local
+              transport_api_version: V3
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: filter-ratelimit-svc
+  namespace: istio-system
+spec:
+  workloadSelector:
+    labels:
+      istio: ingressgateway
+  configPatches:
+    - applyTo: VIRTUAL_HOST
+      match:
+        context: GATEWAY
+        routeConfiguration:
+          vhost:
+            name: ""
+            route:
+              action: ANY
+      patch:
+        operation: MERGE
+        # Applies the rate limit rules.
+        value:
+          rate_limits:
+            - actions:
+              - request_headers:
+                  header_name: ":path"
+                  descriptor_key: "PATH"
+{{ end }}

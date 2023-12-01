@@ -1,0 +1,15 @@
+{{ if .Values.ratelimit.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.ratelimit.name }}-config
+  namespace: istio-system
+data:
+  config.yaml: |
+    domain: {{ .Values.ratelimit.domain }}
+    descriptors:
+      - key: PATH
+        rate_limit:
+          unit: {{ .Values.ratelimit.unit }}
+          requests_per_unit: {{ .Values.ratelimit.requestsPerUnit }}
+{{ end }}
