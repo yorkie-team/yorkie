@@ -18,9 +18,10 @@ package converter
 
 import (
 	"fmt"
+	"reflect"
+
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"reflect"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"

@@ -19,24 +19,20 @@
 package client
 
 import (
-	"connectrpc.com/connect"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/rs/xid"
-	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
-	"go.uber.org/zap"
 	"net/http"
 	"strings"
 
-	//"google.golang.org/grpc"
-	//"google.golang.org/grpc/credentials"
-	//"google.golang.org/grpc/credentials/insecure"
-	//"google.golang.org/grpc/metadata"
+	"connectrpc.com/connect"
+	"github.com/rs/xid"
+	"go.uber.org/zap"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
@@ -731,5 +727,6 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
  */
 func withShardKey[T any](conn *connect.Request[T], keys ...string) *connect.Request[T] {
 	conn.Header().Add(types.ShardKey, strings.Join(keys, "/"))
+
 	return conn
 }

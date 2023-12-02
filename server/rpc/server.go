@@ -19,20 +19,22 @@
 package rpc
 
 import (
-	"connectrpc.com/connect"
 	"context"
 	"fmt"
+	"net/http"
+	"time"
+
+	"connectrpc.com/connect"
 	"github.com/rs/cors"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
-	"net/http"
-	"time"
 )
 
 // Server is a normal server that processes the logic requested by the client.

@@ -18,11 +18,13 @@
 package connecthelper
 
 import (
-	"connectrpc.com/connect"
 	"context"
-	"github.com/yorkie-team/yorkie/server/logging"
 	"strconv"
 	"sync/atomic"
+
+	"connectrpc.com/connect"
+
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 type reqID int32

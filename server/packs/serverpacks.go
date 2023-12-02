@@ -17,6 +17,8 @@
 package packs
 
 import (
+	"google.golang.org/protobuf/proto"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -24,7 +26,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"google.golang.org/protobuf/proto"
 )
 
 // ServerPack is similar to change.Pack, but has ChangeInfos instead of Changes

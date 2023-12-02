@@ -18,19 +18,18 @@
 package admin
 
 import (
-	"connectrpc.com/connect"
 	"context"
 	"fmt"
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
-	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"net/http"
 	"strings"
 
+	"connectrpc.com/connect"
 	"go.uber.org/zap"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
@@ -276,13 +275,13 @@ func (c *Client) RemoveDocument(
 	apiKey := project.PublicKey
 
 	_, err = c.client.RemoveDocumentByAdmin(
-		withShardKey(ctx, apiKey, documentKey),
-		connect.NewRequest(&api.RemoveDocumentByAdminRequest{
+		ctx,
+		withShardKey(connect.NewRequest(&api.RemoveDocumentByAdminRequest{
 			ProjectName: projectName,
 			DocumentKey: documentKey,
 			Force:       force,
 		},
-		))
+		), apiKey, documentKey))
 	return err
 }
 
@@ -358,10 +357,9 @@ func (c *Client) ListChangeSummaries(
 /**
  * withShardKey returns a context with the given shard key in metadata.
  */
-func withShardKey(ctx context.Context, keys ...string) context.Context {
-	return metadata.AppendToOutgoingContext(
-		ctx,
-		types.APIKeyKey, keys[0],
-		types.ShardKey, strings.Join(keys, "/"),
-	)
+func withShardKey[T any](conn *connect.Request[T], keys ...string) *connect.Request[T] {
+	conn.Header().Add(types.APIKeyKey, keys[0])
+	conn.Header().Add(types.ShardKey, strings.Join(keys, "/"))
+
+	return conn
 }

@@ -17,10 +17,11 @@
 package interceptors
 
 import (
-	"connectrpc.com/connect"
 	"context"
 	"net/http"
 	"strings"
+
+	"connectrpc.com/connect"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"

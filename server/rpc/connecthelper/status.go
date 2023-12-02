@@ -17,9 +17,10 @@
 package connecthelper
 
 import (
-	"connectrpc.com/connect"
 	"errors"
 	"fmt"
+
+	"connectrpc.com/connect"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/runtime/protoiface"
 

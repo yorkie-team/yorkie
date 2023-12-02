@@ -17,9 +17,10 @@
 package rpc
 
 import (
-	"connectrpc.com/connect"
 	"context"
 	"fmt"
+
+	"connectrpc.com/connect"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"

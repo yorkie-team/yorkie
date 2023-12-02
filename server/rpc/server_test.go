@@ -17,20 +17,21 @@
 package rpc_test
 
 import (
-	"connectrpc.com/connect"
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 	"log"
 	"net/http"
 	"os"
 	"testing"
 
+	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
 	"github.com/yorkie-team/yorkie/admin"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -120,7 +121,11 @@ func TestMain(m *testing.M) {
 	//dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	conn := http.DefaultClient
-	testClient = v1connect.NewYorkieServiceClient(conn, "http://"+testRPCAddr, connect.WithInterceptors(authInterceptor))
+	testClient = v1connect.NewYorkieServiceClient(
+		conn,
+		"http://"+testRPCAddr,
+		connect.WithInterceptors(authInterceptor),
+	)
 
 	//credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
 	//dialOptions = []grpc.DialOption{credentials}
@@ -130,7 +135,11 @@ func TestMain(m *testing.M) {
 	//dialOptions = append(dialOptions, grpc.WithStreamInterceptor(testAdminAuthInterceptor.Stream()))
 
 	adminConn := http.DefaultClient
-	testAdminClient = v1connect.NewAdminServiceClient(adminConn, "http://"+testRPCAddr, connect.WithInterceptors(testAdminAuthInterceptor))
+	testAdminClient = v1connect.NewAdminServiceClient(
+		adminConn,
+		"http://"+testRPCAddr,
+		connect.WithInterceptors(testAdminAuthInterceptor),
+	)
 
 	code := m.Run()
 

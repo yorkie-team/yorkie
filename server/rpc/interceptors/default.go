@@ -17,11 +17,13 @@
 package interceptors
 
 import (
-	"connectrpc.com/connect"
 	"context"
 	"errors"
-	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	gotime "time"
+
+	"connectrpc.com/connect"
+
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 
 	"github.com/yorkie-team/yorkie/server/logging"
 )

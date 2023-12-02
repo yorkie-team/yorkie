@@ -18,6 +18,7 @@ package converter
 
 import (
 	"fmt"
+
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"

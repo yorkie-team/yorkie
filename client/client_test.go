@@ -1,4 +1,4 @@
-//TODO(Krapie) go:build amd64
+//go:build amd64
 
 /*
  * Copyright 2021 The Yorkie Authors. All rights reserved.
@@ -19,19 +19,21 @@
 package client_test
 
 import (
-	"connectrpc.com/connect"
 	"context"
-	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 
+	"connectrpc.com/connect"
+
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
+
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 )
 

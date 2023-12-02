@@ -19,6 +19,7 @@ package converter
 import (
 	"errors"
 	"fmt"
+
 	"google.golang.org/protobuf/proto"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
