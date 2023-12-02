@@ -15,17 +15,14 @@
  */
 
 // Package grpchelper provides helper functions for gRPC.
-package grpchelper
+package connecthelper
 
 import (
+	"connectrpc.com/connect"
 	"context"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"strconv"
 	"sync/atomic"
-
-	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"google.golang.org/grpc"
-
-	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 type reqID int32
@@ -45,30 +42,34 @@ func NewLoggingInterceptor() *LoggingInterceptor {
 	return &LoggingInterceptor{}
 }
 
-// Unary creates a unary server interceptor for request logging.
-func (i *LoggingInterceptor) Unary() grpc.UnaryServerInterceptor {
+// WrapUnary creates a unary server interceptor for building additional context.
+func (i *LoggingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
-		req interface{},
-		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (resp interface{}, err error) {
+		req connect.AnyRequest,
+	) (connect.AnyResponse, error) {
 		reqLogger := logging.New(i.reqID.next())
-		return handler(logging.With(ctx, reqLogger), req)
+		return next(logging.With(ctx, reqLogger), req)
 	}
 }
 
-// Stream creates a stream server interceptor for request logging.
-func (i *LoggingInterceptor) Stream() grpc.StreamServerInterceptor {
+// WrapStreamingClient creates a stream client interceptor for building additional context.
+func (i *LoggingInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(
-		srv interface{},
-		ss grpc.ServerStream,
-		info *grpc.StreamServerInfo,
-		handler grpc.StreamHandler,
+		ctx context.Context,
+		spec connect.Spec,
+	) connect.StreamingClientConn {
+		return next(ctx, spec)
+	}
+}
+
+// WrapStreamingHandler creates a stream server interceptor for building additional context.
+func (i *LoggingInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return func(
+		ctx context.Context,
+		conn connect.StreamingHandlerConn,
 	) error {
 		reqLogger := logging.New(i.reqID.next())
-		wrapped := grpcmiddleware.WrapServerStream(ss)
-		wrapped.WrappedContext = logging.With(ss.Context(), reqLogger)
-		return handler(srv, wrapped)
+		return next(logging.With(ctx, reqLogger), conn)
 	}
 }

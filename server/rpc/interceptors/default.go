@@ -17,14 +17,13 @@
 package interceptors
 
 import (
+	"connectrpc.com/connect"
 	"context"
 	"errors"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	gotime "time"
 
-	"google.golang.org/grpc"
-
 	"github.com/yorkie-team/yorkie/server/logging"
-	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
 )
 
 // DefaultInterceptor is a interceptor for default.
@@ -40,52 +39,58 @@ const (
 	SlowThreshold = 100 * gotime.Millisecond
 )
 
-// Unary creates a unary server interceptor for default.
-func (i *DefaultInterceptor) Unary() grpc.UnaryServerInterceptor {
+// WrapUnary creates a unary server interceptor for building additional context.
+func (i *DefaultInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
-		req interface{},
-		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (interface{}, error) {
+		req connect.AnyRequest,
+	) (connect.AnyResponse, error) {
 		start := gotime.Now()
-		resp, err := handler(ctx, req)
+		resp, err := next(ctx, req)
 		reqLogger := logging.From(ctx)
 		if err != nil {
-			reqLogger.Warnf("RPC : %q %s: %q => %q", info.FullMethod, gotime.Since(start), req, err)
-			return nil, grpchelper.ToStatusError(err)
+			reqLogger.Warnf("RPC : %q %s: %q => %q", req.Spec().Procedure, gotime.Since(start), req, err)
+			return nil, connecthelper.ToStatusError(err)
 		}
 
 		if gotime.Since(start) > SlowThreshold {
-			reqLogger.Infof("RPC : %q %s", info.FullMethod, gotime.Since(start))
+			reqLogger.Infof("RPC : %q %s", req.Spec().Procedure, gotime.Since(start))
 		}
 		return resp, nil
 	}
 }
 
-// Stream creates a stream server interceptor for default.
-func (i *DefaultInterceptor) Stream() grpc.StreamServerInterceptor {
+// WrapStreamingClient creates a stream client interceptor for building additional context.
+func (i *DefaultInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(
-		srv interface{},
-		ss grpc.ServerStream,
-		info *grpc.StreamServerInfo,
-		handler grpc.StreamHandler,
+		ctx context.Context,
+		spec connect.Spec,
+	) connect.StreamingClientConn {
+		return next(ctx, spec)
+	}
+}
+
+// WrapStreamingHandler creates a stream server interceptor for building additional context.
+func (i *DefaultInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return func(
+		ctx context.Context,
+		conn connect.StreamingHandlerConn,
 	) error {
-		reqLogger := logging.From(ss.Context())
+		reqLogger := logging.From(ctx)
 
 		start := gotime.Now()
-		err := handler(srv, ss)
+		err := next(ctx, conn)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				reqLogger.Debugf("RPC : stream %q %s => %q", info.FullMethod, gotime.Since(start), err.Error())
-				return grpchelper.ToStatusError(err)
+				reqLogger.Debugf("RPC : stream %q %s => %q", conn.Spec().Procedure, gotime.Since(start), err.Error())
+				return connecthelper.ToStatusError(err)
 			}
 
-			reqLogger.Warnf("RPC : stream %q %s => %q", info.FullMethod, gotime.Since(start), err.Error())
-			return grpchelper.ToStatusError(err)
+			reqLogger.Warnf("RPC : stream %q %s => %q", conn.Spec().Procedure, gotime.Since(start), err.Error())
+			return connecthelper.ToStatusError(err)
 		}
 
-		reqLogger.Debugf("RPC : stream %q %s", info.FullMethod, gotime.Since(start))
+		reqLogger.Debugf("RPC : stream %q %s", conn.Spec().Procedure, gotime.Since(start))
 		return nil
 	}
 }

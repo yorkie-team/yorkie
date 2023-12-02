@@ -21,6 +21,7 @@ import (
 	"connectrpc.com/connect"
 	"context"
 	"errors"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"net/http"
 	"strings"
 
@@ -29,7 +30,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
-	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
 	"github.com/yorkie-team/yorkie/server/rpc/metadata"
 )
 
@@ -66,17 +66,14 @@ func (i *ContextInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 			return nil, err
 		}
 
-		//data, ok := grpcmetadata.FromIncomingContext(ctx)
-		//if ok {
-		//	sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-		//	i.backend.Metrics.AddUserAgent(
-		//		i.backend.Config.Hostname,
-		//		projects.From(ctx),
-		//		sdkType,
-		//		sdkVersion,
-		//		info.FullMethod,
-		//	)
-		//}
+		sdkType, sdkVersion := connecthelper.SDKTypeAndVersion(req.Header())
+		i.backend.Metrics.AddUserAgent(
+			i.backend.Config.Hostname,
+			projects.From(ctx),
+			sdkType,
+			sdkVersion,
+			req.Spec().Procedure,
+		)
 
 		return next(ctx, req)
 	}
@@ -107,17 +104,14 @@ func (i *ContextInterceptor) WrapStreamingHandler(next connect.StreamingHandlerF
 			return err
 		}
 
-		//data, ok := grpcmetadata.FromIncomingContext(ctx)
-		//if ok {
-		//	sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-		//	i.backend.Metrics.AddUserAgent(
-		//		i.backend.Config.Hostname,
-		//		projects.From(ctx),
-		//		sdkType,
-		//		sdkVersion,
-		//		info.FullMethod,
-		//	)
-		//}
+		sdkType, sdkVersion := connecthelper.SDKTypeAndVersion(conn.RequestHeader())
+		i.backend.Metrics.AddUserAgent(
+			i.backend.Config.Hostname,
+			projects.From(ctx),
+			sdkType,
+			sdkVersion,
+			conn.Spec().Procedure,
+		)
 
 		return next(ctx, conn)
 	}
@@ -154,7 +148,7 @@ func (i *ContextInterceptor) buildContext(ctx context.Context, header http.Heade
 	} else {
 		project, err := projects.GetProjectFromAPIKey(ctx, i.backend, md.APIKey)
 		if err != nil {
-			return nil, grpchelper.ToStatusError(err)
+			return nil, connecthelper.ToStatusError(err)
 		}
 		i.projectInfoCache.Add(cacheKey, project, i.backend.Config.ParseProjectInfoCacheTTL())
 		ctx = projects.With(ctx, project)

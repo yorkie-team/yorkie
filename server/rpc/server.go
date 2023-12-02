@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -70,8 +71,13 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	//	)),
 	//}
 
-	interceptor := connect.WithInterceptors(interceptors.NewContextInterceptor(be))
-	adminAuthInterceptor := connect.WithInterceptors(interceptors.NewAdminAuthInterceptor(be, tokenManager))
+	interceptor := connect.WithInterceptors(
+		connecthelper.NewLoggingInterceptor(),
+		// be.Metrics.ServerMetrics()
+		interceptors.NewAdminAuthInterceptor(be, tokenManager),
+		interceptors.NewContextInterceptor(be),
+		interceptors.NewDefaultInterceptor(),
+	)
 
 	//if conf.CertFile != "" && conf.KeyFile != "" {
 	//	creds, err := credentials.NewServerTLSFromFile(conf.CertFile, conf.KeyFile)
@@ -108,7 +114,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	))
 	mux.Handle(v1connect.NewAdminServiceHandler(
 		newAdminServer(be, tokenManager),
-		adminAuthInterceptor,
+		interceptor,
 	))
 
 	httpServer := &http.Server{

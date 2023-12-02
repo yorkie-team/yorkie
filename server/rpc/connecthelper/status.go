@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package grpchelper
+package connecthelper
 
 import (
 	"connectrpc.com/connect"
