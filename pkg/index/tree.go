@@ -284,16 +284,13 @@ func (n *Node[V]) Append(newNodes ...*Node[V]) error {
 
 // Children returns the children of the given node.
 func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
-	if len(includeRemovedNode) > 0 && includeRemovedNode[0] {
-		return n.children
-	}
-
+	include := len(includeRemovedNode) > 0 && includeRemovedNode[0]
 	// Tombstone nodes remain awhile in the tree during editing.
 	// They will be removed after the editing is done.
 	// So, we need to filter out the tombstone nodes to get the real children.
 	children := make([]*Node[V], 0, len(n.children))
 	for _, child := range n.children {
-		if !child.Value.IsRemoved() {
+		if include || !child.Value.IsRemoved() {
 			children = append(children, child)
 		}
 	}
@@ -311,6 +308,21 @@ func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	for _, child := range children {
 		child.Parent = n
 		child.UpdateAncestorsSize()
+	}
+
+	return nil
+}
+
+// SetChildrenInternal sets the children of the given node.
+// This method does not update the size of the ancestors.
+func (n *Node[V]) SetChildrenInternal(children []*Node[V]) error {
+	if n.IsText() {
+		return ErrInvalidMethodCallForTextNode
+	}
+
+	n.children = children
+	for _, child := range children {
+		child.Parent = n
 	}
 
 	return nil

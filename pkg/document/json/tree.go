@@ -192,8 +192,9 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
 		}
 	}
 
+	// TODO(hackerwins): Connect splitLevel
 	ticket = t.context.LastTimeTicket()
-	maxCreationMapByActor, err := t.Tree.Edit(fromPos, toPos, nil, clones, ticket)
+	maxCreationMapByActor, err := t.Tree.Edit(fromPos, toPos, clones, 0, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -202,8 +203,8 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
 		t.CreatedAt(),
 		fromPos,
 		toPos,
-		maxCreationMapByActor,
 		nodes,
+		maxCreationMapByActor,
 		ticket,
 	))
 

@@ -124,6 +124,7 @@ message Operation {
     TreePos to = 3;
     map<string, TimeTicket> created_at_map_by_actor = 4;
     repeated TreeNodes contents = 5;
+    int32 split_level = 7;
     TimeTicket executed_at = 6;
   }
   message TreeStyle {

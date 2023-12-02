@@ -49,8 +49,8 @@ func NewTreeEdit(
 	parentCreatedAt *time.Ticket,
 	from *crdt.TreePos,
 	to *crdt.TreePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
 	contents []*crdt.TreeNode,
+	latestCreatedAtMapByActor map[string]*time.Ticket,
 	executedAt *time.Ticket,
 ) *TreeEdit {
 	return &TreeEdit{
@@ -84,7 +84,8 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 			}
 
 		}
-		if _, err = obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, contents, e.executedAt); err != nil {
+		// TODO(hackerwins): Connect splitLevel
+		if _, err = obj.Edit(e.from, e.to, contents, 0, e.executedAt, e.latestCreatedAtMapByActor); err != nil {
 			return err
 		}
 
