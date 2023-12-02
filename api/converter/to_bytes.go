@@ -18,9 +18,8 @@ package converter
 
 import (
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"reflect"
-
-	"github.com/gogo/protobuf/proto"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"

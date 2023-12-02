@@ -88,8 +88,7 @@ func (i *ContextInterceptor) WrapStreamingClient(next connect.StreamingClientFun
 		ctx context.Context,
 		spec connect.Spec,
 	) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-		return conn
+		return next(ctx, spec)
 	}
 }
 

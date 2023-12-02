@@ -20,7 +20,6 @@ package admin
 import (
 	"connectrpc.com/connect"
 	"context"
-	"crypto/tls"
 	"fmt"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
@@ -28,9 +27,6 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -71,9 +67,9 @@ type Options struct {
 
 // Client is a client for admin service.
 type Client struct {
-	conn            *http.Client
-	client          v1connect.AdminServiceClient
-	dialOptions     []grpc.DialOption
+	conn   *http.Client
+	client v1connect.AdminServiceClient
+	//dialOptions     []grpc.DialOption
 	authInterceptor *AuthInterceptor
 	logger          *zap.Logger
 }
@@ -85,16 +81,16 @@ func New(opts ...Option) (*Client, error) {
 		opt(&options)
 	}
 
-	tlsConfig := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
-	credentialOptions := grpc.WithTransportCredentials(tlsConfig)
-	if options.IsInsecure {
-		credentialOptions = grpc.WithTransportCredentials(insecure.NewCredentials())
-	}
-	dialOptions := []grpc.DialOption{credentialOptions}
-
-	authInterceptor := NewAuthInterceptor(options.Token)
-	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
-	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
+	//tlsConfig := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
+	//credentialOptions := grpc.WithTransportCredentials(tlsConfig)
+	//if options.IsInsecure {
+	//	credentialOptions = grpc.WithTransportCredentials(insecure.NewCredentials())
+	//}
+	//dialOptions := []grpc.DialOption{credentialOptions}
+	//
+	//authInterceptor := NewAuthInterceptor(options.Token)
+	//dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
+	//dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
 
 	logger := options.Logger
 	if logger == nil {
@@ -106,9 +102,9 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		logger:          logger,
-		dialOptions:     dialOptions,
-		authInterceptor: authInterceptor,
+		logger: logger,
+		//dialOptions:     dialOptions,
+		authInterceptor: NewAuthInterceptor(options.Token),
 	}, nil
 }
 
@@ -129,7 +125,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 // Dial dials to the admin service.
 func (c *Client) Dial(rpcAddr string) error {
 	c.conn = http.DefaultClient
-	c.client = v1connect.NewAdminServiceClient(c.conn, "http://"+rpcAddr)
+	c.client = v1connect.NewAdminServiceClient(c.conn, "http://"+rpcAddr, connect.WithInterceptors(c.authInterceptor))
 
 	return nil
 }

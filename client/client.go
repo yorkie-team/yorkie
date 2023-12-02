@@ -23,16 +23,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/rs/xid"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"go.uber.org/zap"
 	"net/http"
 	"strings"
 
-	"github.com/rs/xid"
-	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
+	//"google.golang.org/grpc"
+	//"google.golang.org/grpc/credentials"
+	//"google.golang.org/grpc/credentials/insecure"
+	//"google.golang.org/grpc/metadata"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -80,11 +80,12 @@ type Attachment struct {
 // It has documents and sends changes of the document in local
 // to the server to synchronize with other replicas in remote.
 type Client struct {
-	conn        *http.Client
-	client      v1connect.YorkieServiceClient
-	options     Options
-	dialOptions []grpc.DialOption
-	logger      *zap.Logger
+	conn          *http.Client
+	client        v1connect.YorkieServiceClient
+	options       Options
+	clientOptions []connect.ClientOption
+	// dialOptions []grpc.DialOption
+	logger *zap.Logger
 
 	id          *time.ActorID
 	key         string
@@ -123,25 +124,29 @@ func New(opts ...Option) (*Client, error) {
 		k = xid.New().String()
 	}
 
-	var dialOptions []grpc.DialOption
+	var clientOptions []connect.ClientOption
 
-	transportCreds := grpc.WithTransportCredentials(insecure.NewCredentials())
-	if options.CertFile != "" {
-		creds, err := credentials.NewClientTLSFromFile(options.CertFile, options.ServerNameOverride)
-		if err != nil {
-			return nil, fmt.Errorf("create client tls from file: %w", err)
-		}
-		transportCreds = grpc.WithTransportCredentials(creds)
-	}
-	dialOptions = append(dialOptions, transportCreds)
+	clientOptions = append(clientOptions, connect.WithInterceptors(NewAuthInterceptor(options.APIKey, options.Token)))
 
-	authInterceptor := NewAuthInterceptor(options.APIKey, options.Token)
-	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
-	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
-
-	if options.MaxCallRecvMsgSize != 0 {
-		dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(options.MaxCallRecvMsgSize)))
-	}
+	//var dialOptions []grpc.DialOption
+	//
+	//transportCreds := grpc.WithTransportCredentials(insecure.NewCredentials())
+	//if options.CertFile != "" {
+	//	creds, err := credentials.NewClientTLSFromFile(options.CertFile, options.ServerNameOverride)
+	//	if err != nil {
+	//		return nil, fmt.Errorf("create client tls from file: %w", err)
+	//	}
+	//	transportCreds = grpc.WithTransportCredentials(creds)
+	//}
+	//dialOptions = append(dialOptions, transportCreds)
+	//
+	//authInterceptor := NewAuthInterceptor(options.APIKey, options.Token)
+	//dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
+	//dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
+	//
+	//if options.MaxCallRecvMsgSize != 0 {
+	//	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(options.MaxCallRecvMsgSize)))
+	//}
 
 	logger := options.Logger
 	if logger == nil {
@@ -153,9 +158,10 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		dialOptions: dialOptions,
-		options:     options,
-		logger:      logger,
+		clientOptions: clientOptions,
+		//dialOptions: dialOptions,
+		options: options,
+		logger:  logger,
 
 		key:         k,
 		status:      deactivated,
@@ -180,7 +186,7 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 // Dial dials the given rpcAddr.
 func (c *Client) Dial(rpcAddr string) error {
 	c.conn = http.DefaultClient
-	c.client = v1connect.NewYorkieServiceClient(c.conn, "http://"+rpcAddr)
+	c.client = v1connect.NewYorkieServiceClient(c.conn, "http://"+rpcAddr, c.clientOptions...)
 
 	return nil
 }
@@ -206,9 +212,12 @@ func (c *Client) Activate(ctx context.Context) error {
 		return nil
 	}
 
-	response, err := c.client.ActivateClient(withShardKey(ctx, c.options.APIKey), connect.NewRequest(&api.ActivateClientRequest{
-		ClientKey: c.key,
-	}))
+	response, err := c.client.ActivateClient(
+		ctx,
+		withShardKey(connect.NewRequest(&api.ActivateClientRequest{
+			ClientKey: c.key,
+		},
+		), c.options.APIKey))
 	if err != nil {
 		return err
 	}
@@ -230,9 +239,12 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		return nil
 	}
 
-	_, err := c.client.DeactivateClient(withShardKey(ctx, c.options.APIKey), connect.NewRequest(&api.DeactivateClientRequest{
-		ClientId: c.id.String(),
-	}))
+	_, err := c.client.DeactivateClient(
+		ctx,
+		withShardKey(connect.NewRequest(&api.DeactivateClientRequest{
+			ClientId: c.id.String(),
+		},
+		), c.options.APIKey))
 	if err != nil {
 		return err
 	}
@@ -273,12 +285,12 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	}
 
 	res, err := c.client.AttachDocument(
-		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		connect.NewRequest(&api.AttachDocumentRequest{
+		ctx,
+		withShardKey(connect.NewRequest(&api.AttachDocumentRequest{
 			ClientId:   c.id.String(),
 			ChangePack: pbChangePack,
 		},
-		))
+		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return err
 	}
@@ -346,14 +358,14 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 	}
 
 	res, err := c.client.DetachDocument(
-		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		connect.NewRequest(&api.DetachDocumentRequest{
+		ctx,
+		withShardKey(connect.NewRequest(&api.DetachDocumentRequest{
 			ClientId:            c.id.String(),
 			DocumentId:          attachment.docID.String(),
 			ChangePack:          pbChangePack,
 			RemoveIfNotAttached: opts.removeIfNotAttached,
 		},
-		))
+		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return err
 	}
@@ -409,12 +421,12 @@ func (c *Client) Watch(
 
 	rch := make(chan WatchResponse)
 	stream, err := c.client.WatchDocument(
-		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		connect.NewRequest(&api.WatchDocumentRequest{
+		ctx,
+		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 		},
-		))
+		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return nil, err
 	}
@@ -606,14 +618,14 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	}
 
 	res, err := c.client.PushPullChanges(
-		withShardKey(ctx, c.options.APIKey, opt.key.String()),
-		connect.NewRequest(&api.PushPullChangesRequest{
+		ctx,
+		withShardKey(connect.NewRequest(&api.PushPullChangesRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
 			PushOnly:   opt.mode == types.SyncModePushOnly,
 		},
-		))
+		), c.options.APIKey, opt.key.String()))
 	if err != nil {
 		return err
 	}
@@ -651,13 +663,13 @@ func (c *Client) Remove(ctx context.Context, doc *document.Document) error {
 	pbChangePack.IsRemoved = true
 
 	res, err := c.client.RemoveDocument(
-		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		connect.NewRequest(&api.RemoveDocumentRequest{
+		ctx,
+		withShardKey(connect.NewRequest(&api.RemoveDocumentRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			ChangePack: pbChangePack,
 		},
-		))
+		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return err
 	}
@@ -688,14 +700,14 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 	}
 
 	_, err := c.client.Broadcast(
-		withShardKey(ctx, c.options.APIKey, doc.Key().String()),
-		connect.NewRequest(&api.BroadcastRequest{
+		ctx,
+		withShardKey(connect.NewRequest(&api.BroadcastRequest{
 			ClientId:   c.id.String(),
 			DocumentId: attachment.docID.String(),
 			Topic:      topic,
 			Payload:    payload,
 		},
-		))
+		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
 		return err
 	}
@@ -704,12 +716,9 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 }
 
 /**
- * withShardKey returns a context with the given shard key in metadata.
+* withShardKey returns a context with the given shard key in metadata.
  */
-func withShardKey(ctx context.Context, keys ...string) context.Context {
-	return metadata.AppendToOutgoingContext(
-		ctx,
-		types.ShardKey,
-		strings.Join(keys, "/"),
-	)
+func withShardKey[T any](conn *connect.Request[T], keys ...string) *connect.Request[T] {
+	conn.Header().Add(types.ShardKey, strings.Join(keys, "/"))
+	return conn
 }
