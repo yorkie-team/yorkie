@@ -98,7 +98,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		for _, bytesOp := range info.Operations {
 			pbOp := api.Operation{}
 			if err := proto.Unmarshal(bytesOp, &pbOp); err != nil {
-				return nil, err
+				return nil, database.ErrDecodeOperationFailed
 			}
 			pbOps = append(pbOps, &pbOp)
 		}

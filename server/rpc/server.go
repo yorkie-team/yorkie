@@ -73,6 +73,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	interceptor := connect.WithInterceptors(
 		connecthelper.NewLoggingInterceptor(),
+		// TODO(krapie): update prometehus metrics server to http server
 		// be.Metrics.ServerMetrics()
 		interceptors.NewAdminAuthInterceptor(be, tokenManager),
 		interceptors.NewContextInterceptor(be),
@@ -157,10 +158,17 @@ func (s *Server) listenAndServe() error {
 func (s *Server) Shutdown(graceful bool) {
 	s.yorkieServiceCancel()
 
+	// TODO(krapie): find graceful way to shutdown http server
 	if graceful {
-		s.httpServer.Shutdown(context.Background())
+		err := s.httpServer.Shutdown(context.Background())
+		if err != nil {
+			return
+		}
 	} else {
-		s.httpServer.Shutdown(context.Background())
+		err := s.httpServer.Shutdown(context.Background())
+		if err != nil {
+			return
+		}
 	}
 }
 

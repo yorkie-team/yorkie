@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Package grpchelper provides helper functions for gRPC.
+// Package connecthelper provides helper functions for gRPC.
 package connecthelper
 
 import (

@@ -34,6 +34,9 @@ import (
 // ErrEncodeOperationFailed is returned when encoding operations failed.
 var ErrEncodeOperationFailed = errors.New("encode operations failed")
 
+// ErrDecodeOperationFailed is returned when decoding operations failed.
+var ErrDecodeOperationFailed = errors.New("decode operations failed")
+
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
 	ID             types.ID `bson:"_id"`
@@ -94,7 +97,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	for _, bytesOp := range i.Operations {
 		pbOp := api.Operation{}
 		if err := proto.Unmarshal(bytesOp, &pbOp); err != nil {
-			return nil, err
+			return nil, ErrDecodeOperationFailed
 		}
 		pbOps = append(pbOps, &pbOp)
 	}

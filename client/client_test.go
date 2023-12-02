@@ -1,4 +1,4 @@
-//go:build amd64
+//TODO(Krapie) go:build amd64
 
 /*
  * Copyright 2021 The Yorkie Authors. All rights reserved.
@@ -19,61 +19,51 @@
 package client_test
 
 import (
+	"connectrpc.com/connect"
 	"context"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
-	"golang.org/x/net/nettest"
-	"google.golang.org/grpc"
-	grpcmetadata "google.golang.org/grpc/metadata"
-
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/client"
 )
 
 type testYorkieServer struct {
-	grpcServer   *grpc.Server
-	yorkieServer *api.UnimplementedYorkieServiceServer
+	httpServer   *httptest.Server
+	yorkieServer *v1connect.UnimplementedYorkieServiceHandler
 }
 
 // dialTestYorkieServer creates a new instance of testYorkieServer and
 // dials it with LocalListener.
-func dialTestYorkieServer(t *testing.T) (*testYorkieServer, string) {
-	yorkieServer := &api.UnimplementedYorkieServiceServer{}
-	grpcServer := grpc.NewServer()
-	api.RegisterYorkieServiceServer(grpcServer, yorkieServer)
+func dialTestYorkieServer() (*testYorkieServer, string) {
+	yorkieServer := &v1connect.UnimplementedYorkieServiceHandler{}
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(yorkieServer, nil))
+	httpServer := httptest.NewUnstartedServer(mux)
 
 	testYorkieServer := &testYorkieServer{
-		grpcServer:   grpcServer,
+		httpServer:   httpServer,
 		yorkieServer: yorkieServer,
 	}
 
-	return testYorkieServer, testYorkieServer.listenAndServe(t)
+	return testYorkieServer, testYorkieServer.listenAndServe()
 }
 
-func (s *testYorkieServer) listenAndServe(t *testing.T) string {
-	lis, err := nettest.NewLocalListener("tcp")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+func (s *testYorkieServer) listenAndServe() string {
+	s.httpServer.Start()
 
-	go func() {
-		if err := s.grpcServer.Serve(lis); err != nil {
-			if err != grpc.ErrServerStopped {
-				t.Error(err)
-			}
-		}
-	}()
-
-	return lis.Addr().String()
+	return s.httpServer.URL
 }
 
 func (s *testYorkieServer) Stop() {
-	s.grpcServer.Stop()
+	s.httpServer.Close()
 }
 
 func TestClient(t *testing.T) {
@@ -87,7 +77,7 @@ func TestClient(t *testing.T) {
 	t.Run("x-shard-key test", func(t *testing.T) {
 		dummyID := types.ID("000000000000000000000000")
 
-		testServer, addr := dialTestYorkieServer(t)
+		testServer, addr := dialTestYorkieServer()
 		defer testServer.Stop()
 
 		cli, err := client.Dial(addr, client.WithAPIKey("dummy-api-key"))
@@ -98,21 +88,20 @@ func TestClient(t *testing.T) {
 			reflect.TypeOf(testServer.yorkieServer),
 			"ActivateClient",
 			func(
-				m *api.UnimplementedYorkieServiceServer,
+				m *v1connect.UnimplementedYorkieServiceHandler,
 				ctx context.Context,
-				req *api.ActivateClientRequest,
-			) (*api.ActivateClientResponse, error) {
+				req *connect.Request[api.ActivateClientRequest],
+			) (*connect.Response[api.ActivateClientResponse], error) {
 				assert.NoError(t, patch.Unpatch())
 				defer func() {
 					assert.NoError(t, patch.Patch())
 				}()
 
-				data, _ := grpcmetadata.FromIncomingContext(ctx)
-				assert.Equal(t, "dummy-api-key", data[types.ShardKey][0])
+				assert.Equal(t, "dummy-api-key", req.Header().Get(types.ShardKey))
 
-				return &api.ActivateClientResponse{
+				return connect.NewResponse(&api.ActivateClientResponse{
 					ClientId: dummyID.String(),
-				}, nil
+				}), nil
 			},
 		)
 		assert.NoError(t, err)
