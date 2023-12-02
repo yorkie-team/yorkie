@@ -431,16 +431,22 @@ func (c *Client) Watch(
 		return nil, err
 	}
 
-	pbResp := stream.Msg()
-	if err != nil {
-		return nil, err
+	for stream.Receive() {
+		pbResp := stream.Msg()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := handleResponse(pbResp, doc); err != nil {
+			return nil, err
+		}
+		break
 	}
-	if _, err := handleResponse(pbResp, doc); err != nil {
-		return nil, err
+	if err = stream.Err(); err != nil {
+		return nil, connect.NewError(connect.CodeUnknown, err)
 	}
 
 	go func() {
-		for {
+		for stream.Receive() {
 			pbResp := stream.Msg()
 			if err != nil {
 				rch <- WatchResponse{Err: err}
@@ -458,6 +464,11 @@ func (c *Client) Watch(
 			}
 
 			rch <- *resp
+		}
+		if err = stream.Err(); err != nil {
+			rch <- WatchResponse{Err: err}
+			close(rch)
+			return
 		}
 	}()
 

@@ -660,8 +660,11 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		assert.NoError(t, err)
 
 		// check if stream is open
-		_ = watchResp.Msg()
-		assert.NoError(t, err)
+		for watchResp.Receive() {
+			resp := watchResp.Msg()
+			assert.NotNil(t, resp)
+			break
+		}
 
 		//// wait for MaxConnectionAge + MaxConnectionAgeGrace
 		//time.Sleep(helper.RPCMaxConnectionAge + helper.RPCMaxConnectionAgeGrace)
