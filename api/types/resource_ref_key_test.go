@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2023 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,32 @@
  * limitations under the License.
  */
 
-package database
+package types_test
 
 import (
+	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
-// SyncedSeqInfo is a structure representing information about the synchronized
-// sequence for each client.
-type SyncedSeqInfo struct {
-	ID        types.ID `bson:"_id"`
-	DocKey    key.Key  `bson:"doc_key"`
-	DocID     types.ID `bson:"doc_id"`
-	ClientID  types.ID `bson:"client_id"`
-	Lamport   int64    `bson:"lamport"`
-	ActorID   types.ID `bson:"actor_id"`
-	ServerSeq int64    `bson:"server_seq"`
+func TestResourceRefKey(t *testing.T) {
+	t.Run("DocRefKey Set test", func(t *testing.T) {
+		docKey := key.Key("docKey")
+		docID := types.ID("docID")
+		docRef := types.DocRefKey{}
+
+		// 01. Give an invalid input to Set.
+		err := docRef.Set("abc")
+		assert.ErrorIs(t, err, types.ErrInvalidDocRefKeyStringFormat)
+
+		// 02. Give a valid input to Set.
+		err = docRef.Set(fmt.Sprintf("%s,%s", docKey, docID))
+		assert.NoError(t, err)
+		assert.Equal(t, docKey, docRef.Key)
+		assert.Equal(t, docID, docRef.ID)
+	})
 }

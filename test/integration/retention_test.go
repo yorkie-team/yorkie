@@ -189,9 +189,10 @@ func TestRetention(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
+		docRefKey := docInfo.RefKey()
 		changes, err := mongoCli.FindChangesBetweenServerSeqs(
 			ctx,
-			docInfo.ID,
+			docRefKey,
 			change.InitialServerSeq,
 			change.MaxServerSeq,
 		)
@@ -229,7 +230,7 @@ func TestRetention(t *testing.T) {
 
 		changes, err = mongoCli.FindChangesBetweenServerSeqs(
 			ctx,
-			docInfo.ID,
+			docRefKey,
 			change.InitialServerSeq,
 			change.MaxServerSeq,
 		)

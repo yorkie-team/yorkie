@@ -17,15 +17,20 @@
 package mongo
 
 import (
+	"fmt"
 	"reflect"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/bsoncodec"
 	"go.mongodb.org/mongo-driver/bson/bsonoptions"
+	"go.mongodb.org/mongo-driver/bson/bsonrw"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
+// newRegistryBuilder returns a new registry builder with the default encoder and decoder.
 func newRegistryBuilder() *bsoncodec.RegistryBuilder {
 	rb := bsoncodec.NewRegistryBuilder()
 
@@ -38,5 +43,64 @@ func newRegistryBuilder() *bsoncodec.RegistryBuilder {
 		bsoncodec.NewStringCodec(bsonoptions.StringCodec().SetDecodeObjectIDAsHex(true)),
 	)
 
+	// Register a decoder that converts the `documents` field in the clients collection
+	// into `database.ClientDocInfo.Documents`. The `documents` field is a two level map
+	// containing a number of `doc_key`.`doc_id`.{`client_seq`, `server_seq`, `status`}s.
+	rb.RegisterTypeDecoder(
+		reflect.TypeOf(make(database.ClientDocInfoMap)),
+		bsoncodec.ValueDecoderFunc(clientDocumentsDecoder),
+	)
+
 	return rb
+}
+
+func clientDocumentsDecoder(_ bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+	docs, err := vr.ReadDocument()
+	if err != nil {
+		return fmt.Errorf("read documents: %w", err)
+	}
+	if val.IsNil() {
+		val.Set(reflect.MakeMap(val.Type()))
+	}
+
+	for {
+		docKey, docInfoByDocIDMapReader, err := docs.ReadElement()
+		if err != nil {
+			if err == bsonrw.ErrEOD {
+				break
+			}
+			return fmt.Errorf("read the element in documents: %w", err)
+		}
+		docInfoByDocIDMap, err := docInfoByDocIDMapReader.ReadDocument()
+		if err != nil {
+			return fmt.Errorf("read docInfoByDocID: %w", err)
+		}
+		for {
+			docID, docInfoReader, err := docInfoByDocIDMap.ReadElement()
+			if err != nil {
+				if err == bsonrw.ErrEOD {
+					break
+				}
+				return fmt.Errorf("read the element in docInfoByDocID: %w", err)
+			}
+
+			docInfo := &database.ClientDocInfo{}
+			docInfoDecoder, err := bson.NewDecoder(docInfoReader)
+			if err != nil {
+				return fmt.Errorf("create docInfoDecoder: %w", err)
+			}
+			err = docInfoDecoder.Decode(docInfo)
+			if err != nil {
+				return fmt.Errorf("decode docInfo: %w", err)
+			}
+
+			docRef := reflect.ValueOf(types.DocRefKey{
+				Key: key.Key(docKey),
+				ID:  types.ID(docID),
+			})
+			val.SetMapIndex(docRef, reflect.ValueOf(docInfo))
+		}
+	}
+
+	return nil
 }

@@ -19,6 +19,7 @@ package key
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/yorkie-team/yorkie/internal/validation"
 )
@@ -26,6 +27,8 @@ import (
 var (
 	// ErrInvalidKey is returned when the key is invalid.
 	ErrInvalidKey = errors.New("invalid key, key must be a slug with 4-120 characters")
+	// MaxKey represents the maximum slug key.
+	MaxKey = Key(strings.Repeat("z", 120))
 )
 
 // Key represents a document key.

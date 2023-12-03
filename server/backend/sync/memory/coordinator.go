@@ -58,24 +58,24 @@ func (c *Coordinator) NewLocker(
 func (c *Coordinator) Subscribe(
 	ctx context.Context,
 	subscriber *time.ActorID,
-	documentID types.ID,
+	documentRefKey types.DocRefKey,
 ) (*sync.Subscription, []*time.ActorID, error) {
-	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentID)
+	sub, err := c.pubSub.Subscribe(ctx, subscriber, documentRefKey)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ids := c.pubSub.ClientIDs(documentID)
+	ids := c.pubSub.ClientIDs(documentRefKey)
 	return sub, ids, nil
 }
 
 // Unsubscribe unsubscribes the given documents.
 func (c *Coordinator) Unsubscribe(
 	ctx context.Context,
-	documentID types.ID,
+	documentRefKey types.DocRefKey,
 	sub *sync.Subscription,
 ) error {
-	c.pubSub.Unsubscribe(ctx, documentID, sub)
+	c.pubSub.Unsubscribe(ctx, documentRefKey, sub)
 	return nil
 }
 

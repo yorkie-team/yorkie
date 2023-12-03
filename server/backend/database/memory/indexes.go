@@ -117,12 +117,23 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
-				"project_id_id": {
-					Name:   "project_id_id",
+				"project_id_key_id": {
+					Name:   "project_id_key_id",
 					Unique: true,
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "Key"},
+							&memdb.StringFieldIndex{Field: "ID"},
+						},
+					},
+				},
+				"key_id": {
+					Name:   "key_id",
+					Unique: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "Key"},
 							&memdb.StringFieldIndex{Field: "ID"},
 						},
 					},
@@ -132,6 +143,16 @@ var schema = &memdb.DBSchema{
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
 							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "Key"},
+						},
+					},
+				},
+				"project_id_id_key": {
+					Name: "project_id_id_key",
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "ProjectID"},
+							&memdb.StringFieldIndex{Field: "ID"},
 							&memdb.StringFieldIndex{Field: "Key"},
 						},
 					},
@@ -156,11 +177,12 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
-				"doc_id_server_seq": {
-					Name:   "doc_id_server_seq",
+				"doc_key_doc_id_server_seq": {
+					Name:   "doc_key_doc_id_server_seq",
 					Unique: true,
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "DocKey"},
 							&memdb.StringFieldIndex{Field: "DocID"},
 							&memdb.IntFieldIndex{Field: "ServerSeq"},
 						},
@@ -176,11 +198,12 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
-				"doc_id_server_seq": {
-					Name:   "doc_id_server_seq",
+				"doc_key_doc_id_server_seq": {
+					Name:   "doc_key_doc_id_server_seq",
 					Unique: true,
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "DocKey"},
 							&memdb.StringFieldIndex{Field: "DocID"},
 							&memdb.IntFieldIndex{Field: "ServerSeq"},
 						},
@@ -196,20 +219,22 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "ID"},
 				},
-				"doc_id_client_id": {
-					Name:   "doc_id_client_id",
+				"doc_key_doc_id_client_id": {
+					Name:   "doc_key_doc_id_client_id",
 					Unique: true,
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "DocKey"},
 							&memdb.StringFieldIndex{Field: "DocID"},
 							&memdb.StringFieldIndex{Field: "ClientID"},
 						},
 					},
 				},
-				"doc_id_lamport_actor_id": {
-					Name: "doc_id_lamport_actor_id",
+				"doc_key_doc_id_lamport_actor_id": {
+					Name: "doc_key_doc_id_lamport_actor_id",
 					Indexer: &memdb.CompoundIndex{
 						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "DocKey"},
 							&memdb.StringFieldIndex{Field: "DocID"},
 							&memdb.IntFieldIndex{Field: "Lamport"},
 							&memdb.StringFieldIndex{Field: "ActorID"},

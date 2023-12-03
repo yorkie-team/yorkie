@@ -658,8 +658,10 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
+		docKey := helper.TestDocKey(t).String()
+
 		packWithNoChanges := &api.ChangePack{
-			DocumentKey: helper.TestDocKey(t).String(),
+			DocumentKey: docKey,
 			Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 		}
 
@@ -676,8 +678,9 @@ func TestSDKRPCServerBackend(t *testing.T) {
 		watchResp, err := testClient.WatchDocument(
 			context.Background(),
 			&api.WatchDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+				ClientId:    activateResp.ClientId,
+				DocumentKey: docKey,
+				DocumentId:  resPack.DocumentId,
 			},
 		)
 		assert.NoError(t, err)

@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
@@ -806,11 +807,12 @@ func TestDocumentWithProjects(t *testing.T) {
 
 		assert.NoError(t, cli.Sync(ctx))
 
-		docs, err := adminCli.ListDocuments(ctx, "default", "000000000000000000000000", 0, true, false)
+		previousRefKey := types.DocRefKey{Key: "", ID: ""}
+		docs, err := adminCli.ListDocuments(ctx, "default", previousRefKey, 0, true, false)
 		assert.NoError(t, err)
 		assert.Equal(t, "", docs[0].Snapshot)
 
-		docs, err = adminCli.ListDocuments(ctx, "default", "000000000000000000000000", 0, true, true)
+		docs, err = adminCli.ListDocuments(ctx, "default", previousRefKey, 0, true, true)
 		assert.NoError(t, err)
 		assert.NotEqual(t, 0, len(docs[0].Snapshot))
 	})

@@ -89,8 +89,8 @@ var collectionInfos = []collectionInfo{
 		name: colDocuments,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
-				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "key", Value: bsonx.Int32(1)},
+				{Key: "project_id", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetPartialFilterExpression(
 				bsonx.Doc{
@@ -102,6 +102,7 @@ var collectionInfos = []collectionInfo{
 		name: colChanges,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
+				{Key: "doc_key", Value: bsonx.Int32(1)},
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
@@ -111,6 +112,7 @@ var collectionInfos = []collectionInfo{
 		name: colSnapshots,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
+				{Key: "doc_key", Value: bsonx.Int32(1)},
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
@@ -120,12 +122,14 @@ var collectionInfos = []collectionInfo{
 		name: colSyncedSeqs,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
+				{Key: "doc_key", Value: bsonx.Int32(1)},
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "client_id", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bsonx.Doc{
+				{Key: "doc_key", Value: bsonx.Int32(1)},
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "lamport", Value: bsonx.Int32(1)},
 				{Key: "actor_id", Value: bsonx.Int32(1)},
