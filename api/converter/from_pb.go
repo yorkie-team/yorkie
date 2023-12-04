@@ -519,8 +519,9 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		parentCreatedAt,
 		from,
 		to,
-		createdAtMapByActor,
 		nodes,
+		int(pbTreeEdit.SplitLevel),
+		createdAtMapByActor,
 		executedAt,
 	), nil
 }

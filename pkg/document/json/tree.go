@@ -112,8 +112,8 @@ func validateTreeNodes(treeNodes []*TreeNode) error {
 	return nil
 }
 
-// Edit edits this tree with the given nodes.
-func (t *Tree) Edit(fromIdx, toIdx int, contents ...*TreeNode) bool {
+// Edit edits this tree with the given node.
+func (t *Tree) Edit(fromIdx, toIdx int, content *TreeNode, splitLevel int) bool {
 	if fromIdx > toIdx {
 		panic(ErrIndexBoundary)
 	}
@@ -127,7 +127,100 @@ func (t *Tree) Edit(fromIdx, toIdx int, contents ...*TreeNode) bool {
 		panic(err)
 	}
 
-	return t.edit(fromPos, toPos, contents)
+	return t.edit(fromPos, toPos, []*TreeNode{content}, splitLevel)
+}
+
+// EditBulk edits this tree with the given nodes.
+func (t *Tree) EditBulk(fromIdx, toIdx int, contents []*TreeNode, splitLevel int) bool {
+	if fromIdx > toIdx {
+		panic(ErrIndexBoundary)
+	}
+
+	fromPos, err := t.Tree.FindPos(fromIdx)
+	if err != nil {
+		panic(err)
+	}
+	toPos, err := t.Tree.FindPos(toIdx)
+	if err != nil {
+		panic(err)
+	}
+
+	return t.edit(fromPos, toPos, contents, splitLevel)
+}
+
+// EditByPath edits this tree with the given path and nodes.
+func (t *Tree) EditByPath(fromPath []int, toPath []int, content *TreeNode, splitLevel int) bool {
+	if len(fromPath) != len(toPath) {
+		panic(ErrPathLenDiff)
+	}
+
+	if len(fromPath) == 0 || len(toPath) == 0 {
+		panic(ErrEmptyPath)
+	}
+
+	fromPos, err := t.Tree.PathToPos(fromPath)
+	if err != nil {
+		panic(err)
+	}
+	toPos, err := t.Tree.PathToPos(toPath)
+	if err != nil {
+		panic(err)
+	}
+
+	return t.edit(fromPos, toPos, []*TreeNode{content}, splitLevel)
+}
+
+// EditBulkByPath edits this tree with the given path and nodes.
+func (t *Tree) EditBulkByPath(fromPath []int, toPath []int, contents []*TreeNode, splitLevel int) bool {
+	if len(fromPath) != len(toPath) {
+		panic(ErrPathLenDiff)
+	}
+
+	if len(fromPath) == 0 || len(toPath) == 0 {
+		panic(ErrEmptyPath)
+	}
+
+	fromPos, err := t.Tree.PathToPos(fromPath)
+	if err != nil {
+		panic(err)
+	}
+	toPos, err := t.Tree.PathToPos(toPath)
+	if err != nil {
+		panic(err)
+	}
+
+	return t.edit(fromPos, toPos, contents, splitLevel)
+}
+
+// Style sets the attributes to the elements of the given range.
+func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
+	if fromIdx > toIdx {
+		panic("from should be less than or equal to to")
+	}
+
+	fromPos, err := t.Tree.FindPos(fromIdx)
+	if err != nil {
+		panic(err)
+	}
+	toPos, err := t.Tree.FindPos(toIdx)
+	if err != nil {
+		panic(err)
+	}
+
+	ticket := t.context.IssueTimeTicket()
+	if err := t.Tree.Style(fromPos, toPos, attributes, ticket); err != nil {
+		panic(err)
+	}
+
+	t.context.Push(operations.NewTreeStyle(
+		t.CreatedAt(),
+		fromPos,
+		toPos,
+		attributes,
+		ticket,
+	))
+
+	return true
 }
 
 // Len returns the length of this tree.
@@ -135,8 +228,8 @@ func (t *Tree) Len() int {
 	return t.IndexTree.Root().Len()
 }
 
-// edit edits the tree with the given nodes
-func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
+// edit edits the tree with the given nodes.
+func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLevel int) bool {
 	ticket := t.context.IssueTimeTicket()
 
 	var nodes []*crdt.TreeNode
@@ -193,7 +286,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
 	}
 
 	ticket = t.context.LastTimeTicket()
-	maxCreationMapByActor, err := t.Tree.Edit(fromPos, toPos, nil, clones, ticket)
+	maxCreationMapByActor, err := t.Tree.Edit(fromPos, toPos, clones, splitLevel, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -202,67 +295,15 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode) bool {
 		t.CreatedAt(),
 		fromPos,
 		toPos,
-		maxCreationMapByActor,
 		nodes,
+		splitLevel,
+		maxCreationMapByActor,
 		ticket,
 	))
 
 	if !fromPos.Equals(toPos) {
 		t.context.RegisterElementHasRemovedNodes(t.Tree)
 	}
-
-	return true
-}
-
-// EditByPath edits this tree with the given path and nodes.
-func (t *Tree) EditByPath(fromPath []int, toPath []int, contents ...*TreeNode) bool {
-	if len(fromPath) != len(toPath) {
-		panic(ErrPathLenDiff)
-	}
-
-	if len(fromPath) == 0 || len(toPath) == 0 {
-		panic(ErrEmptyPath)
-	}
-
-	fromPos, err := t.Tree.PathToPos(fromPath)
-	if err != nil {
-		panic(err)
-	}
-	toPos, err := t.Tree.PathToPos(toPath)
-	if err != nil {
-		panic(err)
-	}
-
-	return t.edit(fromPos, toPos, contents)
-}
-
-// Style sets the attributes to the elements of the given range.
-func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
-	if fromIdx > toIdx {
-		panic("from should be less than or equal to to")
-	}
-
-	fromPos, err := t.Tree.FindPos(fromIdx)
-	if err != nil {
-		panic(err)
-	}
-	toPos, err := t.Tree.FindPos(toIdx)
-	if err != nil {
-		panic(err)
-	}
-
-	ticket := t.context.IssueTimeTicket()
-	if err := t.Tree.Style(fromPos, toPos, attributes, ticket); err != nil {
-		panic(err)
-	}
-
-	t.context.Push(operations.NewTreeStyle(
-		t.CreatedAt(),
-		fromPos,
-		toPos,
-		attributes,
-		ticket,
-	))
 
 	return true
 }

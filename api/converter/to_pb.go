@@ -387,8 +387,9 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
 			From:                toTreePos(e.FromPos()),
 			To:                  toTreePos(e.ToPos()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
 			Contents:            ToTreeNodesWhenEdit(e.Contents()),
+			SplitLevel:          int32(e.SplitLevel()),
+			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
 			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil

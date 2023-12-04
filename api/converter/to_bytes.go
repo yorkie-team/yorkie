@@ -271,7 +271,7 @@ func ToTreeNodes(treeNode *crdt.TreeNode) []*api.TreeNode {
 		return pbTreeNodes
 	}
 
-	index.TraverseNode(treeNode.IndexTreeNode, func(node *index.Node[*crdt.TreeNode], depth int) {
+	index.TraverseNode(treeNode.Index, func(node *index.Node[*crdt.TreeNode], depth int) {
 		pbTreeNodes = append(pbTreeNodes, toTreeNode(node.Value, depth))
 	})
 	return pbTreeNodes
