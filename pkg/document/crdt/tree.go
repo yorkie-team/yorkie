@@ -729,10 +729,10 @@ func (t *Tree) collectBetween(
 				// between two parents. For now, we only merge two parents are
 				// both element nodes having text children.
 				// e.g. <p>a|b</p><p>c|d</p> -> <p>a|d</p>
-				if !fromParent.Index.HasTextChild() ||
-					!toParent.Index.HasTextChild() {
-					return
-				}
+				// if !fromParent.Index.HasTextChild() ||
+				// 	!toParent.Index.HasTextChild() {
+				// 	return
+				// }
 
 				for _, child := range node.Index.Children() {
 					if slices.Contains(toBeRemoveds, child.Value) {
@@ -782,9 +782,15 @@ func (t *Tree) split(fromParent *TreeNode, fromLeft *TreeNode, splitLevel int) e
 	parent := fromParent
 	left := fromLeft
 	for splitCount < splitLevel {
+		var err error
 		offset := 0
 		if left != parent {
-			offset = left.ID.Offset + 1
+			offset, err = parent.Index.FindOffset(left.Index)
+			if err != nil {
+				return err
+			}
+
+			offset++
 		}
 		if err := parent.Split(t, offset); err != nil {
 			return err

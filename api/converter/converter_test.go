@@ -117,7 +117,7 @@ func TestConverter(t *testing.T) {
 						Type:  "text",
 						Value: "Hello world",
 					}},
-				})
+				}, 0)
 
 			return nil
 		})

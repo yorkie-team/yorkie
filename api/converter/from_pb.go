@@ -520,6 +520,7 @@ func fromTreeEdit(pbTreeEdit *api.Operation_TreeEdit) (*operations.TreeEdit, err
 		from,
 		to,
 		nodes,
+		int(pbTreeEdit.SplitLevel),
 		createdAtMapByActor,
 		executedAt,
 	), nil

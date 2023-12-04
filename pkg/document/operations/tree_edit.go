@@ -33,12 +33,15 @@ type TreeEdit struct {
 	// toPos represents the end point of the editing range.
 	to *crdt.TreePos
 
+	// contents is the content of tree added when editing.
+	contents []*crdt.TreeNode
+
+	// splitLevel is the level of the split.
+	splitLevel int
+
 	// latestCreatedAtMapByActor is a map that stores the latest creation time
 	// by actor for the nodes included in the editing range.
 	latestCreatedAtMapByActor map[string]*time.Ticket
-
-	// contents is the content of tree added when editing.
-	contents []*crdt.TreeNode
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
@@ -50,6 +53,7 @@ func NewTreeEdit(
 	from *crdt.TreePos,
 	to *crdt.TreePos,
 	contents []*crdt.TreeNode,
+	splitLevel int,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 	executedAt *time.Ticket,
 ) *TreeEdit {
@@ -57,8 +61,9 @@ func NewTreeEdit(
 		parentCreatedAt:           parentCreatedAt,
 		from:                      from,
 		to:                        to,
-		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
 		contents:                  contents,
+		splitLevel:                splitLevel,
+		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
 		executedAt:                executedAt,
 	}
 }
@@ -84,8 +89,7 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 			}
 
 		}
-		// TODO(hackerwins): Connect splitLevel
-		if _, err = obj.Edit(e.from, e.to, contents, 0, e.executedAt, e.latestCreatedAtMapByActor); err != nil {
+		if _, err = obj.Edit(e.from, e.to, contents, e.splitLevel, e.executedAt, e.latestCreatedAtMapByActor); err != nil {
 			return err
 		}
 
@@ -109,11 +113,6 @@ func (e *TreeEdit) ToPos() *crdt.TreePos {
 	return e.to
 }
 
-// ExecutedAt returns execution time of this operation.
-func (e *TreeEdit) ExecutedAt() *time.Ticket {
-	return e.executedAt
-}
-
 // SetActor sets the given actor to this operation.
 func (e *TreeEdit) SetActor(actorID *time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
@@ -129,8 +128,18 @@ func (e *TreeEdit) Contents() []*crdt.TreeNode {
 	return e.contents
 }
 
+// SplitLevel returns the level of the split.
+func (e *TreeEdit) SplitLevel() int {
+	return e.splitLevel
+}
+
 // CreatedAtMapByActor returns the map that stores the latest creation time
 // by actor for the nodes included in the editing range.
 func (e *TreeEdit) CreatedAtMapByActor() map[string]*time.Ticket {
 	return e.latestCreatedAtMapByActor
+}
+
+// ExecutedAt returns execution time of this operation.
+func (e *TreeEdit) ExecutedAt() *time.Ticket {
+	return e.executedAt
 }
