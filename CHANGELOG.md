@@ -7,6 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.10] - 2023-12-04
+
+### Added
+* Add Rate Limit using Istio Envoy by @joonhyukchoi in https://github.com/yorkie-team/yorkie/pull/674
+* Implement splitLevel of Tree.Edit by @hackerwins in https://github.com/yorkie-team/yorkie/pull/705
+
+### Changed
+* Bump github.com/spf13/viper from 1.15.0 to 1.17.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/693
+* Bump github.com/jedib0t/go-pretty/v6 from 6.4.0 to 6.4.9 by @dependabot in https://github.com/yorkie-team/yorkie/pull/695
+* Bump actions/setup-go from 3 to 4 by @dependabot in https://github.com/yorkie-team/yorkie/pull/698
+* Bump helm/chart-releaser-action from 1.5.0 to 1.6.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/699
+* Bump docker/login-action from 2 to 3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/700
+* Bump google.golang.org/grpc from 1.58.2 to 1.58.3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/701
+* Bump golang.org/x/crypto from 0.14.0 to 0.16.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/702
+* Bump github.com/rs/xid from 1.4.0 to 1.5.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/697
+
 ## [0.4.9] - 2023-11-25
 
 ### Added
