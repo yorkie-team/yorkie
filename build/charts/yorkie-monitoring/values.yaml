@@ -105,6 +105,12 @@ kube-prometheus-stack:
             value: Prometheus
           - name: DS_LOKI
             value: Loki
+        go-processes-dashboard:
+          gnetId: 6671
+          revision: 2
+          datasource:
+            - name: DS_PROMETHEUS-APL
+              value: Prometheus
 
   # Component scraping the kube api server
   kubeApiServer:
