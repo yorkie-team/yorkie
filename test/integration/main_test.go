@@ -1,4 +1,4 @@
-//go:build integration
+//gdo:build integration
 
 /*
  * Copyright 2020 The Yorkie Authors. All rights reserved.
@@ -25,8 +25,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -88,19 +86,6 @@ func syncClientsThenAssertEqual(t *testing.T, pairs []clientAndDocPair) {
 		fmt.Printf("after d%d: %s\n", i+2, v)
 		assert.Equal(t, expected, v)
 	}
-}
-
-// clientConn is a helper function to create a client connection.
-func clientConn() (*grpc.ClientConn, error) {
-	conn, err := grpc.Dial(
-		defaultServer.RPCAddr(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return conn, nil
 }
 
 // activeClients creates and activates the given number of clients.

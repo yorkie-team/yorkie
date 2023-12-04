@@ -438,7 +438,7 @@ func (c *Client) Watch(
 		break
 	}
 	if err = stream.Err(); err != nil {
-		return nil, connect.NewError(connect.CodeUnknown, err)
+		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 
 	go func() {

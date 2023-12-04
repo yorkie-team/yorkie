@@ -22,9 +22,8 @@ import (
 	"context"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -39,18 +38,18 @@ func TestUser(t *testing.T) {
 		password := "password123!"
 
 		_, err := adminCli.LogIn(ctx, username, password)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 
 		_, err = adminCli.SignUp(ctx, "name !@#", password)
-		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 		_, err = adminCli.SignUp(ctx, username, "pass")
-		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 		_, err = adminCli.SignUp(ctx, username, password)
 		assert.NoError(t, err)
 
 		_, err = adminCli.LogIn(ctx, username, "asdf")
-		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	})
 }

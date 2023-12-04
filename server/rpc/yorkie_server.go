@@ -411,9 +411,9 @@ func (s *yorkieServer) WatchDocument(
 	for {
 		select {
 		case <-s.serviceCtx.Done():
-			return nil
+			return context.Canceled
 		case <-ctx.Done():
-			return nil
+			return context.Canceled
 		case event := <-subscription.Events():
 			eventType, err := converter.ToDocEventType(event.Type)
 			if err != nil {

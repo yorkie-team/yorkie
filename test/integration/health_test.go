@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 func TestHealthCheck(t *testing.T) {

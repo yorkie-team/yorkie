@@ -17,6 +17,7 @@
 package connecthelper
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -81,6 +82,9 @@ var errorToCode = map[error]connect.Code{
 	auth.ErrUnexpectedStatusCode:   connect.CodeUnauthenticated,
 	auth.ErrWebhookTimeout:         connect.CodeUnauthenticated,
 	database.ErrMismatchedPassword: connect.CodeUnauthenticated,
+
+	// Canceled means the operation was canceled (typically by the caller).
+	context.Canceled: connect.CodeCanceled,
 }
 
 func detailsFromError(err error) (protoiface.MessageV1, bool) {

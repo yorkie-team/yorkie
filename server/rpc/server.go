@@ -160,17 +160,16 @@ func (s *Server) listenAndServe() error {
 func (s *Server) Shutdown(graceful bool) {
 	s.yorkieServiceCancel()
 
-	// TODO(krapie): find graceful way to shutdown http server
 	if graceful {
-		err := s.httpServer.Shutdown(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := s.httpServer.Shutdown(ctx)
 		if err != nil {
 			return
 		}
 	} else {
-		err := s.httpServer.Shutdown(context.Background())
-		if err != nil {
-			return
-		}
+		// TODO(krapie): find a way to shutdown http server immediately
 	}
 }
 

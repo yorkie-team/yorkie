@@ -24,9 +24,8 @@ import (
 	"sync"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/client"
@@ -65,7 +64,7 @@ func TestAdmin(t *testing.T) {
 
 		// 01. admin tries to remove document that does not exist.
 		err = adminCli.RemoveDocument(ctx, "default", d1.Key().String(), true)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 
 		// 02. client creates a document then admin removes the document.
 		assert.NoError(t, cli.Attach(ctx, d1))
@@ -135,12 +134,12 @@ func TestAdmin(t *testing.T) {
 
 		// 01. try to remove document that does not exist.
 		err = adminCli.RemoveDocument(ctx, "default", doc.Key().String(), false)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 
 		// 02. try to remove document that is attached by the client.
 		assert.NoError(t, cli.Attach(ctx, doc))
 		err = adminCli.RemoveDocument(ctx, "default", doc.Key().String(), false)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 		assert.Equal(t, document.StatusAttached, doc.Status())
 
 		// 03. remove document that is detached by the client.
