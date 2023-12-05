@@ -437,26 +437,29 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 	t.Run("simple FindDocInfosByPaging test", func(t *testing.T) {
 		ctx := context.Background()
 
-		assertKeys := func(expectedKeys []key.Key, infos []*database.DocInfo) {
-			var keys []key.Key
-			for _, info := range infos {
-				keys = append(keys, info.Key)
-			}
-			assert.EqualValues(t, expectedKeys, keys)
-		}
-
 		pageSize := 5
 		totalSize := 9
 		clientInfo, _ := db.ActivateClient(ctx, projectID, t.Name())
+		docInfos := make([]*database.DocInfo, 0, totalSize)
 		for i := 0; i < totalSize; i++ {
-			_, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, key.Key(fmt.Sprintf("%d", i)), true)
+			docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, key.Key(fmt.Sprintf("%d", i)), true)
 			assert.NoError(t, err)
+			docInfos = append(docInfos, docInfo)
+		}
+
+		// NOTE(sejongk): sorting is required because doc_id may not sequentially increase in a sharded DB cluster.
+		SortDocInfos(docInfos)
+		docKeys := make([]key.Key, 0, totalSize)
+		docKeysInReverse := make([]key.Key, 0, totalSize)
+		for _, docInfo := range docInfos {
+			docKeys = append(docKeys, docInfo.Key)
+			docKeysInReverse = append([]key.Key{docInfo.Key}, docKeysInReverse...)
 		}
 
 		// initial page, offset is empty
 		infos, err := db.FindDocInfosByPaging(ctx, projectID, types.Paging[types.DocRefKey]{PageSize: pageSize})
 		assert.NoError(t, err)
-		assertKeys([]key.Key{"8", "7", "6", "5", "4"}, infos)
+		AssertKeys(t, docKeysInReverse[:pageSize], infos)
 
 		// backward
 		infos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[types.DocRefKey]{
@@ -467,7 +470,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			PageSize: pageSize,
 		})
 		assert.NoError(t, err)
-		assertKeys([]key.Key{"3", "2", "1", "0"}, infos)
+		AssertKeys(t, docKeysInReverse[pageSize:], infos)
 
 		// backward again
 		emptyInfos, err := db.FindDocInfosByPaging(ctx, projectID, types.Paging[types.DocRefKey]{
@@ -478,7 +481,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			PageSize: pageSize,
 		})
 		assert.NoError(t, err)
-		assertKeys(nil, emptyInfos)
+		AssertKeys(t, nil, emptyInfos)
 
 		// forward
 		infos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[types.DocRefKey]{
@@ -490,7 +493,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			IsForward: true,
 		})
 		assert.NoError(t, err)
-		assertKeys([]key.Key{"4", "5", "6", "7", "8"}, infos)
+		AssertKeys(t, docKeys[totalSize-pageSize:], infos)
 
 		// forward again
 		emptyInfos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[types.DocRefKey]{
@@ -502,7 +505,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			IsForward: true,
 		})
 		assert.NoError(t, err)
-		assertKeys(nil, emptyInfos)
+		AssertKeys(t, nil, emptyInfos)
 	})
 
 	t.Run("complex FindDocInfosByPaging test", func(t *testing.T) {
@@ -521,6 +524,9 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			assert.NoError(t, err)
 			dummyDocInfos = append(dummyDocInfos, docInfo)
 		}
+
+		// NOTE(sejongk): sorting is required because doc_id may not sequentially increase in a sharded DB cluster.
+		SortDocInfos(dummyDocInfos)
 
 		cases := []struct {
 			name       string
@@ -634,7 +640,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 	})
 
 	t.Run("FindDocInfosByPaging with docInfoRemovedAt test", func(t *testing.T) {
-		const testDocCnt = 3
+		const testDocCnt = 5
 		ctx := context.Background()
 
 		// 01. Initialize a project and create documents.
@@ -649,6 +655,13 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			docInfos = append(docInfos, docInfo)
 		}
 
+		// NOTE(sejongk): sorting is required because doc_id may not sequentially increase in a sharded DB cluster.
+		SortDocInfos(docInfos)
+		docKeysInReverse := make([]key.Key, 0, testDocCnt)
+		for _, docInfo := range docInfos {
+			docKeysInReverse = append([]key.Key{docInfo.Key}, docKeysInReverse...)
+		}
+
 		// 02. List the documents.
 		result, err := db.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[types.DocRefKey]{
 			PageSize:  10,
@@ -656,9 +669,12 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		})
 		assert.NoError(t, err)
 		assert.Len(t, result, len(docInfos))
+		AssertKeys(t, docKeysInReverse, result)
 
-		// 03. Remove a document.
-		err = db.CreateChangeInfos(ctx, projectInfo.ID, docInfos[0], 0, []*change.Change{}, true)
+		// 03. Remove some documents.
+		err = db.CreateChangeInfos(ctx, projectInfo.ID, docInfos[1], 0, []*change.Change{}, true)
+		assert.NoError(t, err)
+		err = db.CreateChangeInfos(ctx, projectInfo.ID, docInfos[3], 0, []*change.Change{}, true)
 		assert.NoError(t, err)
 
 		// 04. List the documents again and check the filtered result.
@@ -667,7 +683,8 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			IsForward: false,
 		})
 		assert.NoError(t, err)
-		assert.Len(t, result, len(docInfos)-1)
+		assert.Len(t, result, len(docInfos)-2)
+		AssertKeys(t, []key.Key{docKeysInReverse[0], docKeysInReverse[2], docKeysInReverse[4]}, result)
 	})
 }
 
@@ -1134,4 +1151,23 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		assert.NoError(t, err)
 		assert.False(t, attached)
 	})
+}
+
+// SortDocInfos sorts the given docInfo slice using the (doc_id, doc_key) ascending order.
+func SortDocInfos(docInfos []*database.DocInfo) {
+	sort.Slice(docInfos, func(i, j int) bool {
+		if docInfos[i].ID != docInfos[j].ID {
+			return docInfos[i].ID < docInfos[j].ID
+		}
+		return docInfos[i].Key < docInfos[j].Key
+	})
+}
+
+// AssertKeys checks the equivalence between the provided expectedKeys and the keys in the given infos.
+func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo) {
+	var keys []key.Key
+	for _, info := range infos {
+		keys = append(keys, info.Key)
+	}
+	assert.EqualValues(t, expectedKeys, keys)
 }

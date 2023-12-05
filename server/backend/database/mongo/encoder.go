@@ -31,7 +31,8 @@ func encodeActorID(id *time.ActorID) primitive.ObjectID {
 	return objectID
 }
 
-func encodeID(id types.ID) (primitive.ObjectID, error) {
+// EncodeID transforms the types.ID value into the primitive.ObjectID value.
+func EncodeID(id types.ID) (primitive.ObjectID, error) {
 	objectID, err := primitive.ObjectIDFromHex(id.String())
 	if err != nil {
 		return objectID, fmt.Errorf("%s: %w", id, types.ErrInvalidID)

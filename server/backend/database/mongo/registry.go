@@ -30,8 +30,8 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-// newRegistryBuilder returns a new registry builder with the default encoder and decoder.
-func newRegistryBuilder() *bsoncodec.RegistryBuilder {
+// NewRegistryBuilder returns a new registry builder with the default encoder and decoder.
+func NewRegistryBuilder() *bsoncodec.RegistryBuilder {
 	rb := bsoncodec.NewRegistryBuilder()
 
 	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
