@@ -1,4 +1,4 @@
-//gdo:build integration
+//go:build integration
 
 /*
  * Copyright 2020 The Yorkie Authors. All rights reserved.

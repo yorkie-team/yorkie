@@ -59,8 +59,10 @@ func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 		ctx context.Context,
 		spec connect.Spec,
 	) connect.StreamingClientConn {
-		ctx.Value(types.APIKeyKey)
-		return next(ctx, spec)
+		conn := next(ctx, spec)
+		conn.RequestHeader().Set(types.APIKeyKey, i.apiKey)
+
+		return conn
 	}
 }
 
