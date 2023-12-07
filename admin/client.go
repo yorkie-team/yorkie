@@ -123,8 +123,12 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 
 // Dial dials to the admin service.
 func (c *Client) Dial(rpcAddr string) error {
+	if !strings.HasPrefix(rpcAddr, "http") {
+		rpcAddr = "http://" + rpcAddr
+	}
+
 	c.conn = http.DefaultClient
-	c.client = v1connect.NewAdminServiceClient(c.conn, "http://"+rpcAddr, connect.WithInterceptors(c.authInterceptor))
+	c.client = v1connect.NewAdminServiceClient(c.conn, rpcAddr, connect.WithInterceptors(c.authInterceptor))
 
 	return nil
 }

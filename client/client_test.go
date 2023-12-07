@@ -26,7 +26,6 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
@@ -47,7 +46,7 @@ type testYorkieServer struct {
 func dialTestYorkieServer() (*testYorkieServer, string) {
 	yorkieServer := &v1connect.UnimplementedYorkieServiceHandler{}
 	mux := http.NewServeMux()
-	mux.Handle(v1connect.NewYorkieServiceHandler(yorkieServer, nil))
+	mux.Handle(v1connect.NewYorkieServiceHandler(yorkieServer))
 	httpServer := httptest.NewUnstartedServer(mux)
 
 	testYorkieServer := &testYorkieServer{
