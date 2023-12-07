@@ -4,12 +4,11 @@ go 1.21
 
 require (
 	connectrpc.com/connect v1.12.0
+	connectrpc.com/grpchealth v1.3.0
 	github.com/go-playground/locales v0.14.0
 	github.com/go-playground/universal-translator v0.18.0
 	github.com/go-playground/validator/v10 v10.11.1
-	github.com/gogo/protobuf v1.3.2
 	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/go-memdb v1.3.3
 	github.com/jedib0t/go-pretty/v6 v6.4.9

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/grpchealth"
 	"github.com/rs/cors"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -120,6 +121,13 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		interceptor,
 	))
 
+	checker := grpchealth.NewStaticChecker(
+		grpchealth.HealthV1ServiceName,
+		v1connect.YorkieServiceName,
+		v1connect.AdminServiceName,
+	)
+	mux.Handle(grpchealth.NewHandler(checker))
+
 	httpServer := &http.Server{
 		Addr: fmt.Sprintf(":%d", conf.Port),
 		Handler: h2c.NewHandler(
@@ -170,6 +178,13 @@ func (s *Server) Shutdown(graceful bool) {
 		}
 	} else {
 		// TODO(krapie): find a way to shutdown http server immediately
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
+		err := s.httpServer.Shutdown(ctx)
+		if err != nil {
+			return
+		}
 	}
 }
 
