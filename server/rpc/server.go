@@ -41,6 +41,7 @@ import (
 // Server is a normal server that processes the logic requested by the client.
 type Server struct {
 	conf                *Config
+	serverMux           *http.ServeMux
 	httpServer          *http.Server
 	yorkieServiceCancel context.CancelFunc
 	tokenManager        *auth.TokenManager
@@ -111,12 +112,12 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
 
-	mux := http.NewServeMux()
-	mux.Handle(v1connect.NewYorkieServiceHandler(
+	serverMux := http.NewServeMux()
+	serverMux.Handle(v1connect.NewYorkieServiceHandler(
 		newYorkieServer(yorkieServiceCtx, be),
 		interceptor,
 	))
-	mux.Handle(v1connect.NewAdminServiceHandler(
+	serverMux.Handle(v1connect.NewAdminServiceHandler(
 		newAdminServer(be, tokenManager),
 		interceptor,
 	))
@@ -126,15 +127,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		v1connect.YorkieServiceName,
 		v1connect.AdminServiceName,
 	)
-	mux.Handle(grpchealth.NewHandler(checker))
-
-	httpServer := &http.Server{
-		Addr: fmt.Sprintf(":%d", conf.Port),
-		Handler: h2c.NewHandler(
-			newCORS().Handler(mux),
-			&http2.Server{},
-		),
-	}
+	serverMux.Handle(grpchealth.NewHandler(checker))
 
 	//grpcServer := grpc.NewServer(opts...)
 	//healthpb.RegisterHealthServer(grpcServer, health.NewServer())
@@ -144,7 +137,8 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	return &Server{
 		conf:                conf,
-		httpServer:          httpServer,
+		serverMux:           serverMux,
+		httpServer:          &http.Server{Addr: fmt.Sprintf(":%d", conf.Port)},
 		yorkieServiceCancel: yorkieServiceCancel,
 	}, nil
 }
@@ -154,58 +148,35 @@ func (s *Server) Start() error {
 	return s.listenAndServe()
 }
 
+// Shutdown shuts down this server.
+func (s *Server) Shutdown(graceful bool) {
+	s.yorkieServiceCancel()
+
+	if graceful {
+		if err := s.httpServer.Shutdown(context.Background()); err != nil {
+			logging.DefaultLogger().Error("HTTP server Shutdown: %v", err)
+		}
+		return
+	}
+
+	if err := s.httpServer.Close(); err != nil {
+		logging.DefaultLogger().Error("HTTP server close: %v", err)
+	}
+}
+
 func (s *Server) listenAndServe() error {
 	go func() {
 		logging.DefaultLogger().Infof(fmt.Sprintf("serving rpc on %d", s.conf.Port))
+		s.httpServer.Handler = h2c.NewHandler(
+			newCORS().Handler(s.serverMux),
+			&http2.Server{},
+		)
 		if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
 			logging.DefaultLogger().Errorf("HTTP server ListenAndServe: %v", err)
 		}
 	}()
 	return nil
 }
-
-// Shutdown shuts down this server.
-func (s *Server) Shutdown(graceful bool) {
-	s.yorkieServiceCancel()
-
-	if graceful {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		err := s.httpServer.Shutdown(ctx)
-		if err != nil {
-			return
-		}
-	} else {
-		// TODO(krapie): find a way to shutdown http server immediately
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-
-		err := s.httpServer.Shutdown(ctx)
-		if err != nil {
-			return
-		}
-	}
-}
-
-//func (s *Server) listenAndServeGRPC() error {
-//	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
-//	if err != nil {
-//		return fmt.Errorf("listen port %d: %w", s.conf.Port, err)
-//	}
-//
-//	go func() {
-//		logging.DefaultLogger().Infof("serving RPC on %d", s.conf.Port)
-//
-//		if err := s.grpcServer.Serve(lis); err != nil {
-//			if err != grpc.ErrServerStopped {
-//				logging.DefaultLogger().Error(err)
-//			}
-//		}
-//	}()
-//
-//	return nil
-//}
 
 func newCORS() *cors.Cors {
 	// To let web developers play with the demo service from browsers, we need a
