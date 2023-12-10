@@ -20,11 +20,9 @@ package prometheus
 import (
 	"fmt"
 
-	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/internal/version"
@@ -50,8 +48,7 @@ var (
 
 // Metrics manages the metric information that Yorkie is trying to measure.
 type Metrics struct {
-	registry      *prometheus.Registry
-	serverMetrics *grpcprometheus.ServerMetrics
+	registry *prometheus.Registry
 
 	serverVersion *prometheus.GaugeVec
 
@@ -69,11 +66,7 @@ type Metrics struct {
 // NewMetrics creates a new instance of Metrics.
 func NewMetrics() (*Metrics, error) {
 	reg := prometheus.NewRegistry()
-	serverMetrics := grpcprometheus.NewServerMetrics()
 
-	if err := reg.Register(serverMetrics); err != nil {
-		return nil, fmt.Errorf("register server metrics: %w", err)
-	}
 	if err := reg.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
 		return nil, fmt.Errorf("register process collector: %w", err)
 	}
@@ -82,8 +75,7 @@ func NewMetrics() (*Metrics, error) {
 	}
 
 	metrics := &Metrics{
-		registry:      reg,
-		serverMetrics: serverMetrics,
+		registry: reg,
 		serverVersion: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: "server",
@@ -218,16 +210,6 @@ func (m *Metrics) AddUserAgent(
 // AddUserAgentWithEmptyProject adds the number of user agent with empty project.
 func (m *Metrics) AddUserAgentWithEmptyProject(hostname string, sdkType, sdkVersion, methodName string) {
 	m.AddUserAgent(hostname, emptyProject, sdkType, sdkVersion, methodName)
-}
-
-// RegisterGRPCServer registers the given gRPC server.
-func (m *Metrics) RegisterGRPCServer(server *grpc.Server) {
-	m.serverMetrics.InitializeMetrics(server)
-}
-
-// ServerMetrics returns the serverMetrics.
-func (m *Metrics) ServerMetrics() *grpcprometheus.ServerMetrics {
-	return m.serverMetrics
 }
 
 // Registry returns the registry of this metrics.

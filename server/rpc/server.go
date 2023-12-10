@@ -54,61 +54,15 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		be.Config.ParseAdminTokenDuration(),
 	)
 
-	//loggingInterceptor := grpchelper.NewLoggingInterceptor()
-	//adminAuthInterceptor := interceptors.NewAdminAuthInterceptor(be, tokenManager)
-	//defaultInterceptor := interceptors.NewDefaultInterceptor()
-
-	//opts := []grpc.ServerOption{
-	//	grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
-	//		loggingInterceptor.Unary(),
-	//		be.Metrics.ServerMetrics().UnaryServerInterceptor(),
-	//		adminAuthInterceptor.Unary(),
-	//		contextInterceptor.Unary(),
-	//		defaultInterceptor.Unary(),
-	//	)),
-	//	grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
-	//		loggingInterceptor.Stream(),
-	//		be.Metrics.ServerMetrics().StreamServerInterceptor(),
-	//		adminAuthInterceptor.Stream(),
-	//		contextInterceptor.Stream(),
-	//		defaultInterceptor.Stream(),
-	//	)),
-	//}
-
 	interceptor := connect.WithInterceptors(
 		connecthelper.NewLoggingInterceptor(),
-		// TODO(krapie): update prometehus metrics server to http server
-		// be.Metrics.ServerMetrics()
+		// TODO(krapie): consider OpenTelemetry for Connect rpc server metrics instead of prometheus
 		interceptors.NewAdminAuthInterceptor(be, tokenManager),
 		interceptors.NewContextInterceptor(be),
 		interceptors.NewDefaultInterceptor(),
 	)
 
-	//if conf.CertFile != "" && conf.KeyFile != "" {
-	//	creds, err := credentials.NewServerTLSFromFile(conf.CertFile, conf.KeyFile)
-	//	if err != nil {
-	//		return nil, fmt.Errorf("load TLS cert: %w", err)
-	//	}
-	//	opts = append(opts, grpc.Creds(creds))
-	//}
-	//
-	//maxConnectionAge, err := time.ParseDuration(conf.MaxConnectionAge)
-	//if err != nil {
-	//	return nil, fmt.Errorf("parse max connection age: %w", err)
-	//}
-	//
-	//maxConnectionAgeGrace, err := time.ParseDuration(conf.MaxConnectionAgeGrace)
-	//if err != nil {
-	//	return nil, fmt.Errorf("parse max connection age grace: %w", err)
-	//}
-	//
-	//opts = append(opts, grpc.MaxRecvMsgSize(int(conf.MaxRequestBytes)))
-	//opts = append(opts, grpc.MaxSendMsgSize(math.MaxInt32))
-	//opts = append(opts, grpc.MaxConcurrentStreams(math.MaxUint32))
-	//opts = append(opts, grpc.KeepaliveParams(keepalive.ServerParameters{
-	//	MaxConnectionAge:      maxConnectionAge,
-	//	MaxConnectionAgeGrace: maxConnectionAgeGrace,
-	//}))
+	// TODO(krapie): find corresponding http/net server configurations that matches with gRPC server options
 
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
 
@@ -128,12 +82,6 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		v1connect.AdminServiceName,
 	)
 	serverMux.Handle(grpchealth.NewHandler(checker))
-
-	//grpcServer := grpc.NewServer(opts...)
-	//healthpb.RegisterHealthServer(grpcServer, health.NewServer())
-	//api.RegisterYorkieServiceServer(grpcServer, newYorkieServer(yorkieServiceCtx, be))
-	//api.RegisterAdminServiceServer(grpcServer, newAdminServer(be, tokenManager))
-	//be.Metrics.RegisterGRPCServer(grpcServer)
 
 	return &Server{
 		conf:                conf,
