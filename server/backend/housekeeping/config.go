@@ -29,6 +29,9 @@ type Config struct {
 	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
 	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
 
+	// HardDeletionLimitPerProject is the maximum number of candidates to be returned per project.
+	HardDeletionLimitPerProject int `yaml:"HardDeletionLimitPerProject"`
+
 	// ProjectFetchSize is the maximum number of projects to be returned to deactivate candidates.
 	ProjectFetchSize int `yaml:"HousekeepingProjectFetchSize"`
 }

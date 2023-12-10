@@ -33,6 +33,7 @@ import (
 
 const (
 	deactivateCandidatesKey = "housekeeping/deactivateCandidates"
+	hardDeletionLockKey     = "housekeeping/hardDeletionLock"
 )
 
 // Housekeeping is the housekeeping service. It periodically runs housekeeping
@@ -95,19 +96,19 @@ func New(
 
 // Start starts the housekeeping service.
 func (h *Housekeeping) Start() error {
-	go h.run()
+	go h.AttachDeactivateCandidates()
+	go h.AttachDocumentHardDeletion()
 	return nil
 }
 
 // Stop stops the housekeeping service.
 func (h *Housekeeping) Stop() error {
 	h.cancelFunc()
-
 	return nil
 }
 
-// run is the housekeeping loop.
-func (h *Housekeeping) run() {
+// AttachDeactivateCandidates is the housekeeping loop.
+func (h *Housekeeping) AttachDeactivateCandidates() {
 	housekeepingLastProjectID := database.DefaultProjectID
 
 	for {
@@ -117,6 +118,7 @@ func (h *Housekeeping) run() {
 			logging.From(ctx).Error(err)
 			continue
 		}
+
 		housekeepingLastProjectID = lastProjectID
 
 		select {
@@ -125,6 +127,64 @@ func (h *Housekeeping) run() {
 			return
 		}
 	}
+}
+
+func (h *Housekeeping) AttachDocumentHardDeletion() {
+	housekeepingLastProjectID := database.DefaultProjectID
+
+	for {
+		ctx := context.Background()
+		lastProjectID, err := h.documentHardDeletion(ctx, housekeepingLastProjectID)
+		if err != nil {
+			logging.From(ctx).Error(err)
+			continue
+		}
+
+		housekeepingLastProjectID = lastProjectID
+
+		select {
+		case <-time.After(h.interval):
+		case <-h.ctx.Done():
+			return
+		}
+	}
+}
+
+func (h *Housekeeping) documentHardDeletion(
+	ctx context.Context,
+	housekeepingLastProjectID types.ID,
+) (types.ID, error) {
+	locker, err := h.coordinator.NewLocker(ctx, hardDeletionLockKey)
+	if err != nil {
+		return database.DefaultProjectID, err
+	}
+	if err := locker.Lock(ctx); err != nil {
+		return database.DefaultProjectID, err
+	}
+	defer func() {
+		if err := locker.Unlock(ctx); err != nil {
+			logging.From(ctx).Error(err)
+		}
+	}()
+
+	lastProjectID, candidates, err := h.database.FindHardDeletionCandidates(
+		ctx,
+		h.candidatesLimitPerProject,
+		h.projectFetchSize,
+		housekeepingLastProjectID,
+	)
+
+	if err != nil {
+		return database.DefaultProjectID, err
+	}
+
+	lastProjectID, err = h.database.HardDeletion(ctx, candidates)
+
+	if err != nil {
+		return database.DefaultProjectID, err
+	}
+
+	return lastProjectID, err
 }
 
 // deactivateCandidates deactivates candidates.
@@ -148,6 +208,7 @@ func (h *Housekeeping) deactivateCandidates(
 		}
 	}()
 
+	// FindDeactivateCandidates 메서드를 호출하여 비활성화할 대상이 되는 후보(candidates)를 데이터베이스에서 조회합니다.
 	lastProjectID, candidates, err := h.database.FindDeactivateCandidates(
 		ctx,
 		h.candidatesLimitPerProject,
@@ -158,6 +219,9 @@ func (h *Housekeeping) deactivateCandidates(
 		return database.DefaultProjectID, err
 	}
 
+	//조회된 후보들에 대해서 for 루프를 사용해 순회하면서 각각을 비활성화합니다.
+	//clients.Deactivate 메서드를 사용하여 실제 비활성화 작업을 수행하고,
+	//그 결과를 deactivatedCount 변수에 누적하여 비활성화된 항목의 수를 추적합니다.
 	deactivatedCount := 0
 	for _, clientInfo := range candidates {
 		if _, err := clients.Deactivate(

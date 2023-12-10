@@ -40,9 +40,10 @@ const (
 
 	DefaultProfilingPort = 8081
 
-	DefaultHousekeepingInterval                  = 30 * time.Second
-	DefaultHousekeepingCandidatesLimitPerProject = 500
-	DefaultHousekeepingProjectFetchSize          = 100
+	DefaultHousekeepingInterval                    = 30 * time.Second
+	DefaultHousekeepingCandidatesLimitPerProject   = 500
+	DefaultHousekeepingHardDeletionLimitPerProject = 500
+	DefaultHousekeepingProjectFetchSize            = 100
 
 	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout = 5 * time.Second
@@ -228,9 +229,10 @@ func newConfig(port int, profilingPort int) *Config {
 			Port: profilingPort,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:                  DefaultHousekeepingInterval.String(),
-			CandidatesLimitPerProject: DefaultHousekeepingCandidatesLimitPerProject,
-			ProjectFetchSize:          DefaultHousekeepingProjectFetchSize,
+			Interval:                    DefaultHousekeepingInterval.String(),
+			CandidatesLimitPerProject:   DefaultHousekeepingCandidatesLimitPerProject,
+			HardDeletionLimitPerProject: DefaultHousekeepingHardDeletionLimitPerProject,
+			ProjectFetchSize:            DefaultHousekeepingProjectFetchSize,
 		},
 		Backend: &backend.Config{
 			ClientDeactivateThreshold:  DefaultClientDeactivateThreshold,

@@ -636,6 +636,26 @@ func (d *DB) FindDeactivateCandidates(
 	return topProjectID, candidates, nil
 }
 
+// FindHardDeletionCandidates finds the clients that need housekeeping.
+func (d *DB) FindHardDeletionCandidates(
+	ctx context.Context,
+	candidatesLimitPerProject int,
+	projectFetchSize int,
+	lastProjectID types.ID,
+) (types.ID, []*database.ClientInfo, error) {
+	// TODO developing...
+	return "1", nil, nil
+}
+
+// HardDeletion Deletes the documents completely.
+func (d *DB) HardDeletion(
+	ctx context.Context,
+	candidates []*database.ClientInfo,
+) (types.ID, error) {
+	// TODO developing...
+	return "1", nil
+}
+
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the
 // createDocIfNotExist condition is true, create the document if it does not
 // exist.
