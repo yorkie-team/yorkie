@@ -235,6 +235,32 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
+// HardDeletion Deletes the documents completely.
+func (c *Client) HardDeletion(
+	ctx context.Context,
+	candidates []*database.ClientInfo,
+) (types.ID, error) {
+	if len(candidates) <= 0 {
+		return database.DefaultProjectID, nil
+	}
+
+	var idList []types.ID
+	for _, candidate := range candidates {
+		idList = append(idList, candidate.ID)
+	}
+
+	_, err := c.collection(colDocuments).DeleteMany(
+		ctx,
+		bson.M{"_id": bson.M{"$in": idList}},
+	)
+
+	if err != nil {
+		return database.DefaultProjectID, fmt.Errorf("deletion Error : %w", err)
+	}
+
+	return idList[len(idList)-1], nil
+}
+
 // listProjectInfos returns all project infos rotationally.
 func (c *Client) listProjectInfos(
 	ctx context.Context,
@@ -628,6 +654,33 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
+// FindHardDeletionCandidatesPerProject finds the clients that need housekeeping per project.
+func (c *Client) FindHardDeletionCandidatesPerProject(
+	ctx context.Context,
+	project *database.ProjectInfo,
+	candidatesLimit int,
+) ([]*database.ClientInfo, error) {
+	encodedProjectID, err := encodeID(project.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	var clientInfos []*database.ClientInfo
+	cursor, err := c.collection(colDocuments).Find(ctx, bson.M{
+		"project_id": encodedProjectID,
+		"deleted_at": bson.M{"$ne": nil},
+	}, options.Find().SetLimit(int64(candidatesLimit)))
+
+	if err != nil {
+		return nil, fmt.Errorf("find deactivate candidates: %w", err)
+	}
+
+	if err := cursor.All(ctx, &clientInfos); err != nil {
+		return nil, fmt.Errorf("fetch hard deletion candidates: %w", err)
+	}
+	return clientInfos, nil
+}
+
 // findDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
 func (c *Client) findDeactivateCandidatesPerProject(
 	ctx context.Context,
@@ -693,6 +746,40 @@ func (c *Client) FindDeactivateCandidates(
 		topProjectID = projects[len(projects)-1].ID
 	}
 	return topProjectID, candidates, nil
+}
+
+// FindHardDeletionCandidates finds the clients that need housekeeping.
+func (c *Client) FindHardDeletionCandidates(
+	ctx context.Context,
+	candidatesLimitPerProject int,
+	projectFetchSize int,
+	lastProjectID types.ID,
+) (types.ID, []*database.ClientInfo, error) {
+	projects, err := c.listProjectInfos(ctx, projectFetchSize, lastProjectID)
+	if err != nil {
+		return database.DefaultProjectID, nil, err
+	}
+
+	var candidates []*database.ClientInfo
+	for _, project := range projects {
+		clientInfos, err := c.FindHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		if err != nil {
+			return database.DefaultProjectID, nil, err
+		}
+		candidates = append(candidates, clientInfos...)
+	}
+
+	return c.DetermineTopProjectID(projects, projectFetchSize), candidates, nil
+}
+
+func (c *Client) DetermineTopProjectID(
+	projects []*database.ProjectInfo,
+	projectFetchSize int,
+) types.ID {
+	if len(projects) < projectFetchSize {
+		return database.DefaultProjectID
+	}
+	return projects[len(projects)-1].ID
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

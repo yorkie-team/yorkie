@@ -142,6 +142,20 @@ type Database interface {
 		lastProjectID types.ID,
 	) (types.ID, []*ClientInfo, error)
 
+	// FindHardDeletionCandidates finds the housekeeping deletion candidates.
+	FindHardDeletionCandidates(
+		ctx context.Context,
+		candidatesLimitPerProject int,
+		projectFetchSize int,
+		lastProjectID types.ID,
+	) (types.ID, []*ClientInfo, error)
+
+	// HardDeletion Document complete deletion in progress
+	HardDeletion(
+		ctx context.Context,
+		candidates []*ClientInfo,
+	) (types.ID, error)
+
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(
 		ctx context.Context,
