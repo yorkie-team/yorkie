@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -718,18 +719,20 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 	return nil
 }
 
-// NewClientTLSFromFile
+/**
+* newTLSConfigFromFile returns a new tls.Config from the given certFile.
+ */
 func newTLSConfigFromFile(certFile, serverNameOverride string) (*tls.Config, error) {
-	b, err := os.ReadFile(certFile)
+	b, err := os.ReadFile(filepath.Clean(certFile))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("credentials: failed to read TLS config file %q: %w", certFile, err)
 	}
 	cp := x509.NewCertPool()
 	if !cp.AppendCertsFromPEM(b) {
 		return nil, fmt.Errorf("credentials: failed to append certificates")
 	}
 
-	return &tls.Config{ServerName: serverNameOverride, RootCAs: cp}, nil
+	return &tls.Config{ServerName: serverNameOverride, RootCAs: cp, MinVersion: tls.VersionTLS13}, nil
 }
 
 /**

@@ -123,12 +123,11 @@ func (s *Server) listenAndServe() error {
 				logging.DefaultLogger().Errorf("HTTP server ListenAndServeTLS: %v", err)
 			}
 			return
-		} else {
-			if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
-				logging.DefaultLogger().Errorf("HTTP server ListenAndServe: %v", err)
-			}
-			return
 		}
+		if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
+			logging.DefaultLogger().Errorf("HTTP server ListenAndServe: %v", err)
+		}
+		return
 	}()
 	return nil
 }
