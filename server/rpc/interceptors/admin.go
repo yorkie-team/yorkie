@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
@@ -64,7 +65,16 @@ func (i *AdminAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFu
 			ctx = users.With(ctx, user)
 		}
 
-		return next(ctx, req)
+		res, err := next(ctx, req)
+
+		i.backend.Metrics.AddServerHandledCounter(
+			"unary",
+			strings.Split(req.Spec().Procedure, "/")[1],
+			strings.Split(req.Spec().Procedure, "/")[2],
+			connecthelper.ToRPCCodeString(err),
+		)
+
+		return res, err
 	}
 }
 
@@ -97,7 +107,16 @@ func (i *AdminAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 			ctx = users.With(ctx, user)
 		}
 
-		return next(ctx, conn)
+		err := next(ctx, conn)
+
+		i.backend.Metrics.AddServerHandledCounter(
+			"server_stream",
+			strings.Split(conn.Spec().Procedure, "/")[1],
+			strings.Split(conn.Spec().Procedure, "/")[2],
+			connecthelper.ToRPCCodeString(err),
+		)
+
+		return err
 	}
 }
 

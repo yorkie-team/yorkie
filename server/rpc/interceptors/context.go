@@ -77,7 +77,16 @@ func (i *ContextInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 			req.Spec().Procedure,
 		)
 
-		return next(ctx, req)
+		res, err := next(ctx, req)
+
+		i.backend.Metrics.AddServerHandledCounter(
+			"unary",
+			strings.Split(req.Spec().Procedure, "/")[1],
+			strings.Split(req.Spec().Procedure, "/")[2],
+			connecthelper.ToRPCCodeString(err),
+		)
+
+		return res, err
 	}
 }
 
@@ -115,7 +124,16 @@ func (i *ContextInterceptor) WrapStreamingHandler(next connect.StreamingHandlerF
 			conn.Spec().Procedure,
 		)
 
-		return next(ctx, conn)
+		err = next(ctx, conn)
+
+		i.backend.Metrics.AddServerHandledCounter(
+			"server_stream",
+			strings.Split(conn.Spec().Procedure, "/")[1],
+			strings.Split(conn.Spec().Procedure, "/")[2],
+			connecthelper.ToRPCCodeString(err),
+		)
+
+		return err
 	}
 }
 

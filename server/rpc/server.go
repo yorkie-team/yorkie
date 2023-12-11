@@ -56,7 +56,6 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	interceptor := connect.WithInterceptors(
 		connecthelper.NewLoggingInterceptor(),
-		// TODO(krapie): consider OpenTelemetry for Connect rpc server metrics instead of prometheus
 		interceptors.NewAdminAuthInterceptor(be, tokenManager),
 		interceptors.NewContextInterceptor(be),
 		interceptors.NewDefaultInterceptor(),

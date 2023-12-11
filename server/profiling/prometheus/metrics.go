@@ -50,7 +50,8 @@ var (
 type Metrics struct {
 	registry *prometheus.Registry
 
-	serverVersion *prometheus.GaugeVec
+	serverVersion        *prometheus.GaugeVec
+	serverHandledCounter *prometheus.CounterVec
 
 	pushPullResponseSeconds         prometheus.Histogram
 	pushPullReceivedChangesTotal    prometheus.Counter
@@ -82,6 +83,12 @@ func NewMetrics() (*Metrics, error) {
 			Name:      "version",
 			Help:      "Which version is running. 1 for 'server_version' label with current version.",
 		}, []string{"server_version"}),
+		serverHandledCounter: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "rpc",
+			Name:      "server_handled_total",
+			Help:      "Total number of RPCs completed on the server, regardless of success or failure.",
+		}, []string{"rpc_type", "rpc_service", "rpc_method", "rpc_code"}),
 		pushPullResponseSeconds: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
 			Subsystem: "pushpull",
@@ -210,6 +217,21 @@ func (m *Metrics) AddUserAgent(
 // AddUserAgentWithEmptyProject adds the number of user agent with empty project.
 func (m *Metrics) AddUserAgentWithEmptyProject(hostname string, sdkType, sdkVersion, methodName string) {
 	m.AddUserAgent(hostname, emptyProject, sdkType, sdkVersion, methodName)
+}
+
+// AddServerHandledCounter adds the number of RPCs completed on the server.
+func (m *Metrics) AddServerHandledCounter(
+	rpcType,
+	rpcService,
+	rpcMethod,
+	rpcCode string,
+) {
+	m.serverHandledCounter.With(prometheus.Labels{
+		"rpc_type":    rpcType,
+		"rpc_service": rpcService,
+		"rpc_method":  rpcMethod,
+		"rpc_code":    rpcCode,
+	}).Inc()
 }
 
 // Registry returns the registry of this metrics.

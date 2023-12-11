@@ -134,3 +134,20 @@ func ToStatusError(err error) error {
 
 	return nil
 }
+
+// ToRPCCodeString returns a string representation of the given error.
+func ToRPCCodeString(err error) string {
+	if err == nil {
+		return "ok"
+	}
+
+	cause := err
+	for errors.Unwrap(cause) != nil {
+		cause = errors.Unwrap(cause)
+	}
+	if code, ok := errorToCode[cause]; ok {
+		return code.String()
+	}
+
+	return connect.CodeInternal.String()
+}
