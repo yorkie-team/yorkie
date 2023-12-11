@@ -118,8 +118,16 @@ func (s *Server) listenAndServe() error {
 			newCORS().Handler(s.serverMux),
 			&http2.Server{},
 		)
-		if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
-			logging.DefaultLogger().Errorf("HTTP server ListenAndServe: %v", err)
+		if s.conf.CertFile != "" && s.conf.KeyFile != "" {
+			if err := s.httpServer.ListenAndServeTLS(s.conf.CertFile, s.conf.KeyFile); err != http.ErrServerClosed {
+				logging.DefaultLogger().Errorf("HTTP server ListenAndServeTLS: %v", err)
+			}
+			return
+		} else {
+			if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
+				logging.DefaultLogger().Errorf("HTTP server ListenAndServe: %v", err)
+			}
+			return
 		}
 	}()
 	return nil
@@ -128,20 +136,35 @@ func (s *Server) listenAndServe() error {
 func newCORS() *cors.Cors {
 	return cors.New(cors.Options{
 		AllowedMethods: []string{
-			http.MethodHead,
+			http.MethodOptions,
 			http.MethodGet,
 			http.MethodPost,
 			http.MethodPut,
-			http.MethodPatch,
 			http.MethodDelete,
 		},
 		AllowOriginFunc: func(origin string) bool {
-			// Allow all origins, which effectively disables CORS.
 			return true
 		},
-		AllowedHeaders: []string{"*"},
+		AllowedHeaders: []string{
+			"Grpc-Timeout",
+			"Content-Type",
+			"Keep-Alive",
+			"User-Agent",
+			"Cache-Control",
+			"Content-Type",
+			"Content-Transfer-Encoding",
+			"Custom-Header-1",
+			"X-Accept-Content-Transfer-Encoding",
+			"X-Accept-Response-Streaming",
+			"X-User-Agent",
+			"X-Yorkie-User-Agent",
+			"X-Grpc-Web",
+			"Authorization",
+			"X-API-Key",
+			"X-Shard-Key",
+		},
+		MaxAge: int(1728 * time.Second),
 		ExposedHeaders: []string{
-			// Content-Type is in the default safelist.
 			"Accept",
 			"Accept-Encoding",
 			"Accept-Post",
@@ -155,11 +178,8 @@ func newCORS() *cors.Cors {
 			"Grpc-Status-Details-Bin",
 			"X-Custom-Header",
 			"Connect-Protocol-Version",
+			"Custom-Header-1",
 		},
-		// Let browsers cache CORS information for longer, which reduces the number
-		// of preflight requests. Any changes to ExposedHeaders won't take effect
-		// until the cached data expires. FF caps this value at 24h, and modern
-		// Chrome caps it at 2h.
-		MaxAge: int(2 * time.Hour / time.Second),
+		AllowCredentials: true,
 	})
 }

@@ -20,9 +20,12 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -80,8 +83,7 @@ type Client struct {
 	client        v1connect.YorkieServiceClient
 	options       Options
 	clientOptions []connect.ClientOption
-	// dialOptions []grpc.DialOption
-	logger *zap.Logger
+	logger        *zap.Logger
 
 	id          *time.ActorID
 	key         string
@@ -120,29 +122,22 @@ func New(opts ...Option) (*Client, error) {
 		k = xid.New().String()
 	}
 
+	conn := &http.Client{}
+	if options.CertFile != "" {
+		tlsConfig, err := newTLSConfigFromFile(options.CertFile, options.ServerNameOverride)
+		if err != nil {
+			return nil, fmt.Errorf("create client tls from file: %w", err)
+		}
+
+		conn.Transport = &http.Transport{TLSClientConfig: tlsConfig}
+	}
+
 	var clientOptions []connect.ClientOption
 
 	clientOptions = append(clientOptions, connect.WithInterceptors(NewAuthInterceptor(options.APIKey, options.Token)))
-
-	//var dialOptions []grpc.DialOption
-	//
-	//transportCreds := grpc.WithTransportCredentials(insecure.NewCredentials())
-	//if options.CertFile != "" {
-	//	creds, err := credentials.NewClientTLSFromFile(options.CertFile, options.ServerNameOverride)
-	//	if err != nil {
-	//		return nil, fmt.Errorf("create client tls from file: %w", err)
-	//	}
-	//	transportCreds = grpc.WithTransportCredentials(creds)
-	//}
-	//dialOptions = append(dialOptions, transportCreds)
-	//
-	//authInterceptor := NewAuthInterceptor(options.APIKey, options.Token)
-	//dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
-	//dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
-	//
-	//if options.MaxCallRecvMsgSize != 0 {
-	//	dialOptions = append(dialOptions, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(options.MaxCallRecvMsgSize)))
-	//}
+	if options.MaxCallRecvMsgSize != 0 {
+		clientOptions = append(clientOptions, connect.WithReadMaxBytes(options.MaxCallRecvMsgSize))
+	}
 
 	logger := options.Logger
 	if logger == nil {
@@ -154,10 +149,10 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
+		conn:          conn,
 		clientOptions: clientOptions,
-		//dialOptions: dialOptions,
-		options: options,
-		logger:  logger,
+		options:       options,
+		logger:        logger,
 
 		key:         k,
 		status:      deactivated,
@@ -185,7 +180,6 @@ func (c *Client) Dial(rpcAddr string) error {
 		rpcAddr = "http://" + rpcAddr
 	}
 
-	c.conn = http.DefaultClient
 	c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
 
 	return nil
@@ -197,9 +191,7 @@ func (c *Client) Close() error {
 		return err
 	}
 
-	//if err := c.conn.Close(); err != nil {
-	//	return fmt.Errorf("close connection: %w", err)
-	//}
+	c.conn.CloseIdleConnections()
 
 	return nil
 }
@@ -724,6 +716,20 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 	}
 
 	return nil
+}
+
+// NewClientTLSFromFile
+func newTLSConfigFromFile(certFile, serverNameOverride string) (*tls.Config, error) {
+	b, err := os.ReadFile(certFile)
+	if err != nil {
+		return nil, err
+	}
+	cp := x509.NewCertPool()
+	if !cp.AppendCertsFromPEM(b) {
+		return nil, fmt.Errorf("credentials: failed to append certificates")
+	}
+
+	return &tls.Config{ServerName: serverNameOverride, RootCAs: cp}, nil
 }
 
 /**

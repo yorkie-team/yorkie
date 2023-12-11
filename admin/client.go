@@ -19,6 +19,7 @@ package admin
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"strings"
@@ -66,9 +67,8 @@ type Options struct {
 
 // Client is a client for admin service.
 type Client struct {
-	conn   *http.Client
-	client v1connect.AdminServiceClient
-	//dialOptions     []grpc.DialOption
+	conn            *http.Client
+	client          v1connect.AdminServiceClient
 	authInterceptor *AuthInterceptor
 	logger          *zap.Logger
 }
@@ -80,16 +80,11 @@ func New(opts ...Option) (*Client, error) {
 		opt(&options)
 	}
 
-	//tlsConfig := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
-	//credentialOptions := grpc.WithTransportCredentials(tlsConfig)
-	//if options.IsInsecure {
-	//	credentialOptions = grpc.WithTransportCredentials(insecure.NewCredentials())
-	//}
-	//dialOptions := []grpc.DialOption{credentialOptions}
-	//
-	//authInterceptor := NewAuthInterceptor(options.Token)
-	//dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
-	//dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
+	conn := &http.Client{}
+	if !options.IsInsecure {
+		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+		conn.Transport = &http.Transport{TLSClientConfig: tlsConfig}
+	}
 
 	logger := options.Logger
 	if logger == nil {
@@ -101,8 +96,8 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
-		logger: logger,
-		//dialOptions:     dialOptions,
+		conn:            conn,
+		logger:          logger,
 		authInterceptor: NewAuthInterceptor(options.Token),
 	}, nil
 }
@@ -127,7 +122,6 @@ func (c *Client) Dial(rpcAddr string) error {
 		rpcAddr = "http://" + rpcAddr
 	}
 
-	c.conn = http.DefaultClient
 	c.client = v1connect.NewAdminServiceClient(c.conn, rpcAddr, connect.WithInterceptors(c.authInterceptor))
 
 	return nil
@@ -135,9 +129,7 @@ func (c *Client) Dial(rpcAddr string) error {
 
 // Close closes the connection to the admin service.
 func (c *Client) Close() error {
-	//if err := c.conn.Close(); err != nil {
-	//	return fmt.Errorf("close connection: %w", err)
-	//}
+	c.conn.CloseIdleConnections()
 
 	return nil
 }
