@@ -425,7 +425,7 @@ func TestTree(t *testing.T) {
 			root.GetTree("t").EditBulk(3, 3, []*json.TreeNode{{
 				Type:  "text",
 				Value: "c",
-			}, &json.TreeNode{
+			}, {
 				Type:  "text",
 				Value: "d",
 			}}, 0)
@@ -451,7 +451,7 @@ func TestTree(t *testing.T) {
 			root.GetTree("t").EditBulk(4, 4, []*json.TreeNode{{
 				Type:     "p",
 				Children: []json.TreeNode{{Type: "text", Value: "cd"}},
-			}, &json.TreeNode{
+			}, {
 				Type:     "i",
 				Children: []json.TreeNode{{Type: "text", Value: "fg"}},
 			}}, 0)
