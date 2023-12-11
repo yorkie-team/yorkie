@@ -23,7 +23,6 @@ import (
 
 	"connectrpc.com/connect"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/protobuf/runtime/protoiface"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -87,7 +86,7 @@ var errorToCode = map[error]connect.Code{
 	context.Canceled: connect.CodeCanceled,
 }
 
-func detailsFromError(err error) (protoiface.MessageV1, bool) {
+func detailsFromError(err error) (*errdetails.BadRequest, bool) {
 	invalidFieldsError, ok := err.(*validation.StructError)
 	if !ok {
 		return nil, false
@@ -102,6 +101,7 @@ func detailsFromError(err error) (protoiface.MessageV1, bool) {
 		}
 		br.FieldViolations = append(br.FieldViolations, v)
 	}
+
 	return br, true
 }
 
@@ -122,9 +122,13 @@ func ToStatusError(err error) error {
 	var invalidFieldsError *validation.StructError
 	if errors.As(err, &invalidFieldsError) {
 		st := connect.NewError(connect.CodeInvalidArgument, err)
-		//if details, ok := detailsFromError(err); ok {
-		//	st, _ = st.AddDetail(details)
-		//}
+		details, ok := detailsFromError(err)
+		if !ok {
+			return st
+		}
+		if detail, err := connect.NewErrorDetail(details); err == nil {
+			st.AddDetail(detail)
+		}
 		return st
 	}
 

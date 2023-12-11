@@ -126,8 +126,6 @@ func (s *Server) listenAndServe() error {
 }
 
 func newCORS() *cors.Cors {
-	// To let web developers play with the demo service from browsers, we need a
-	// very permissive CORS setup.
 	return cors.New(cors.Options{
 		AllowedMethods: []string{
 			http.MethodHead,
