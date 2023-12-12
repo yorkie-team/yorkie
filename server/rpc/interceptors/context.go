@@ -68,6 +68,8 @@ func (i *ContextInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 			return nil, err
 		}
 
+		res, err := next(ctx, req)
+
 		sdkType, sdkVersion := connecthelper.SDKTypeAndVersion(req.Header())
 		i.backend.Metrics.AddUserAgent(
 			i.backend.Config.Hostname,
@@ -76,8 +78,6 @@ func (i *ContextInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 			sdkVersion,
 			req.Spec().Procedure,
 		)
-
-		res, err := next(ctx, req)
 
 		i.backend.Metrics.AddServerHandledCounter(
 			"unary",
@@ -115,6 +115,8 @@ func (i *ContextInterceptor) WrapStreamingHandler(next connect.StreamingHandlerF
 			return err
 		}
 
+		err = next(ctx, conn)
+
 		sdkType, sdkVersion := connecthelper.SDKTypeAndVersion(conn.RequestHeader())
 		i.backend.Metrics.AddUserAgent(
 			i.backend.Config.Hostname,
@@ -123,8 +125,6 @@ func (i *ContextInterceptor) WrapStreamingHandler(next connect.StreamingHandlerF
 			sdkVersion,
 			conn.Spec().Procedure,
 		)
-
-		err = next(ctx, conn)
 
 		i.backend.Metrics.AddServerHandledCounter(
 			"server_stream",
@@ -148,15 +148,15 @@ func (i *ContextInterceptor) buildContext(ctx context.Context, header http.Heade
 	md := metadata.Metadata{}
 
 	apiKey := header.Get(types.APIKeyKey)
-	if len(apiKey) == 0 && !i.backend.Config.UseDefaultProject {
+	if apiKey == "" && !i.backend.Config.UseDefaultProject {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("api key is not provided"))
 	}
-	if len(apiKey) > 0 {
+	if apiKey != "" {
 		md.APIKey = apiKey
 	}
 
 	authorization := header.Get(types.AuthorizationKey)
-	if len(authorization) > 0 {
+	if authorization != "" {
 		md.Authorization = authorization
 	}
 	ctx = metadata.With(ctx, md)

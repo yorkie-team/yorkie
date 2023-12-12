@@ -41,7 +41,7 @@ const (
 	SlowThreshold = 100 * gotime.Millisecond
 )
 
-// WrapUnary creates a unary server interceptor for building additional context.
+// WrapUnary creates a unary server interceptor for default.
 func (i *DefaultInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
@@ -62,7 +62,7 @@ func (i *DefaultInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 	}
 }
 
-// WrapStreamingClient creates a stream client interceptor for building additional context.
+// WrapStreamingClient creates a stream client interceptor for default.
 func (i *DefaultInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(
 		ctx context.Context,
@@ -72,7 +72,7 @@ func (i *DefaultInterceptor) WrapStreamingClient(next connect.StreamingClientFun
 	}
 }
 
-// WrapStreamingHandler creates a stream server interceptor for building additional context.
+// WrapStreamingHandler creates a stream server interceptor for default.
 func (i *DefaultInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(
 		ctx context.Context,

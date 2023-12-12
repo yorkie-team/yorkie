@@ -39,7 +39,7 @@ func NewAuthInterceptor(apiKey, token string) *AuthInterceptor {
 	}
 }
 
-// WrapUnary creates a unary server interceptor for building additional context.
+// WrapUnary creates a unary server interceptor for authorization.
 func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
@@ -53,20 +53,21 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	}
 }
 
-// WrapStreamingClient creates a stream client interceptor for building additional context.
+// WrapStreamingClient creates a stream client interceptor for authorization.
 func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(
 		ctx context.Context,
 		spec connect.Spec,
 	) connect.StreamingClientConn {
 		conn := next(ctx, spec)
+
 		conn.RequestHeader().Set(types.APIKeyKey, i.apiKey)
 
 		return conn
 	}
 }
 
-// WrapStreamingHandler creates a stream server interceptor for building additional context.
+// WrapStreamingHandler creates a stream server interceptor for authorization.
 func (i *AuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(
 		ctx context.Context,

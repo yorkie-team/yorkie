@@ -77,7 +77,6 @@ func TestMain(m *testing.M) {
 		ProjectInfoCacheSize:      helper.ProjectInfoCacheSize,
 		ProjectInfoCacheTTL:       helper.ProjectInfoCacheTTL.String(),
 		AdminTokenDuration:        helper.AdminTokenDuration,
-		UseDefaultProject:         true,
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
 		YorkieDatabase:    helper.TestDBName(),
@@ -101,10 +100,10 @@ func TestMain(m *testing.M) {
 	}
 
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
-		Port: helper.RPCPort,
-		//MaxRequestBytes:       helper.RPCMaxRequestBytes,
-		//MaxConnectionAge:      helper.RPCMaxConnectionAge.String(),
-		//MaxConnectionAgeGrace: helper.RPCMaxConnectionAgeGrace.String(),
+		Port:                  helper.RPCPort,
+		MaxRequestBytes:       helper.RPCMaxRequestBytes,
+		MaxConnectionAge:      helper.RPCMaxConnectionAge.String(),
+		MaxConnectionAgeGrace: helper.RPCMaxConnectionAgeGrace.String(),
 	}, be)
 	if err != nil {
 		log.Fatal(err)
@@ -114,11 +113,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed rpc listen: %s\n", err)
 	}
 
-	//var dialOptions []grpc.DialOption
 	authInterceptor := client.NewAuthInterceptor(project.PublicKey, "")
-	//dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
-	//dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
-	//dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	conn := http.DefaultClient
 	testClient = v1connect.NewYorkieServiceClient(
@@ -127,12 +122,7 @@ func TestMain(m *testing.M) {
 		connect.WithInterceptors(authInterceptor),
 	)
 
-	//credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-	//dialOptions = []grpc.DialOption{credentials}
-
 	testAdminAuthInterceptor = admin.NewAuthInterceptor("")
-	//dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(testAdminAuthInterceptor.Unary()))
-	//dialOptions = append(dialOptions, grpc.WithStreamInterceptor(testAdminAuthInterceptor.Stream()))
 
 	adminConn := http.DefaultClient
 	testAdminClient = v1connect.NewAdminServiceClient(
@@ -675,6 +665,7 @@ func TestSDKRPCServerBackend(t *testing.T) {
 			break
 		}
 
+		// TODO(krapie): find a way to set timeout for stream
 		//// wait for MaxConnectionAge + MaxConnectionAgeGrace
 		//time.Sleep(helper.RPCMaxConnectionAge + helper.RPCMaxConnectionAgeGrace)
 		//

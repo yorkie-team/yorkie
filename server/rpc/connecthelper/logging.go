@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Package connecthelper provides helper functions for gRPC.
+// Package connecthelper provides helper functions for connectRPC.
 package connecthelper
 
 import (
@@ -44,7 +44,7 @@ func NewLoggingInterceptor() *LoggingInterceptor {
 	return &LoggingInterceptor{}
 }
 
-// WrapUnary creates a unary server interceptor for building additional context.
+// WrapUnary creates a unary server interceptor for request logging.
 func (i *LoggingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
@@ -55,7 +55,7 @@ func (i *LoggingInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
 	}
 }
 
-// WrapStreamingClient creates a stream client interceptor for building additional context.
+// WrapStreamingClient creates a stream client interceptor for request logging.
 func (i *LoggingInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(
 		ctx context.Context,
@@ -65,7 +65,7 @@ func (i *LoggingInterceptor) WrapStreamingClient(next connect.StreamingClientFun
 	}
 }
 
-// WrapStreamingHandler creates a stream server interceptor for building additional context.
+// WrapStreamingHandler creates a stream server interceptor for request logging.
 func (i *LoggingInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(
 		ctx context.Context,

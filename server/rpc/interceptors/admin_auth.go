@@ -67,6 +67,15 @@ func (i *AdminAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFu
 
 		res, err := next(ctx, req)
 
+		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
+		sdkType, sdkVersion := connecthelper.SDKTypeAndVersion(req.Header())
+		i.backend.Metrics.AddUserAgentWithEmptyProject(
+			i.backend.Config.Hostname,
+			sdkType,
+			sdkVersion,
+			req.Spec().Procedure,
+		)
+
 		i.backend.Metrics.AddServerHandledCounter(
 			"unary",
 			strings.Split(req.Spec().Procedure, "/")[1],
@@ -78,18 +87,17 @@ func (i *AdminAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFu
 	}
 }
 
-// WrapStreamingClient creates a stream client interceptor for building additional context.
+// WrapStreamingClient creates a stream client interceptor for authentication.
 func (i *AdminAuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(
 		ctx context.Context,
 		spec connect.Spec,
 	) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-		return conn
+		return next(ctx, spec)
 	}
 }
 
-// WrapStreamingHandler creates a stream server interceptor for building additional context.
+// WrapStreamingHandler creates a stream server interceptor for authentication.
 func (i *AdminAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(
 		ctx context.Context,
@@ -108,6 +116,15 @@ func (i *AdminAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 		}
 
 		err := next(ctx, conn)
+
+		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
+		sdkType, sdkVersion := connecthelper.SDKTypeAndVersion(conn.RequestHeader())
+		i.backend.Metrics.AddUserAgentWithEmptyProject(
+			i.backend.Config.Hostname,
+			sdkType,
+			sdkVersion,
+			conn.Spec().Procedure,
+		)
 
 		i.backend.Metrics.AddServerHandledCounter(
 			"server_stream",
@@ -135,7 +152,7 @@ func (i *AdminAuthInterceptor) authenticate(
 	header http.Header,
 ) (*types.User, error) {
 	authorization := header.Get(types.AuthorizationKey)
-	if len(authorization) == 0 {
+	if authorization == "" {
 		return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is not provided")
 	}
 

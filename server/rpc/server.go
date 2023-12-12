@@ -113,7 +113,7 @@ func (s *Server) Shutdown(graceful bool) {
 
 func (s *Server) listenAndServe() error {
 	go func() {
-		logging.DefaultLogger().Infof(fmt.Sprintf("serving rpc on %d", s.conf.Port))
+		logging.DefaultLogger().Infof(fmt.Sprintf("serving RPC on %d", s.conf.Port))
 		s.httpServer.Handler = h2c.NewHandler(
 			newCORS().Handler(s.serverMux),
 			&http2.Server{},

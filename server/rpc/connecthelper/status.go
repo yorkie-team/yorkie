@@ -36,7 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
-// errorToCode maps an error to gRPC status code.
+// errorToCode maps an error to connectRPC status code.
 var errorToCode = map[error]connect.Code{
 	// InvalidArgument means the request is malformed.
 	converter.ErrPackRequired:       connect.CodeInvalidArgument,
@@ -105,8 +105,8 @@ func detailsFromError(err error) (*errdetails.BadRequest, bool) {
 	return br, true
 }
 
-// ToStatusError returns a status.Error from the given logic error. If an error
-// occurs while executing logic in API handler, gRPC status.error should be
+// ToStatusError returns a connect.Error from the given logic error. If an error
+// occurs while executing logic in API handler, connectRPC connect.error should be
 // returned so that the client can know more about the status of the request.
 func ToStatusError(err error) error {
 	cause := err

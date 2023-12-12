@@ -426,26 +426,18 @@ func (c *Client) Watch(
 
 	for stream.Receive() {
 		pbResp := stream.Msg()
-		if err != nil {
-			return nil, err
-		}
 		if _, err := handleResponse(pbResp, doc); err != nil {
 			return nil, err
 		}
 		break
 	}
 	if err = stream.Err(); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, err)
+		return nil, err
 	}
 
 	go func() {
 		for stream.Receive() {
 			pbResp := stream.Msg()
-			if err != nil {
-				rch <- WatchResponse{Err: err}
-				close(rch)
-				return
-			}
 			resp, err := handleResponse(pbResp, doc)
 			if err != nil {
 				rch <- WatchResponse{Err: err}
@@ -732,7 +724,7 @@ func newTLSConfigFromFile(certFile, serverNameOverride string) (*tls.Config, err
 		return nil, fmt.Errorf("credentials: failed to append certificates")
 	}
 
-	return &tls.Config{ServerName: serverNameOverride, RootCAs: cp, MinVersion: tls.VersionTLS13}, nil
+	return &tls.Config{ServerName: serverNameOverride, RootCAs: cp, MinVersion: tls.VersionTLS12}, nil
 }
 
 /**
