@@ -74,13 +74,11 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		newAdminServer(be, tokenManager),
 		interceptor,
 	))
-
-	checker := grpchealth.NewStaticChecker(
+	serverMux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(
 		grpchealth.HealthV1ServiceName,
 		v1connect.YorkieServiceName,
 		v1connect.AdminServiceName,
-	)
-	serverMux.Handle(grpchealth.NewHandler(checker))
+	)))
 
 	return &Server{
 		conf:                conf,

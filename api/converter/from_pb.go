@@ -41,23 +41,16 @@ func FromUser(pbUser *api.User) (*types.User, error) {
 }
 
 // FromProjects converts the given Protobuf formats to model format.
-func FromProjects(pbProjects []*api.Project) ([]*types.Project, error) {
+func FromProjects(pbProjects []*api.Project) []*types.Project {
 	var projects []*types.Project
 	for _, pbProject := range pbProjects {
-		project, err := FromProject(pbProject)
-		if err != nil {
-			return nil, err
-		}
-		projects = append(projects, project)
+		projects = append(projects, FromProject(pbProject))
 	}
-	return projects, nil
+	return projects
 }
 
 // FromProject converts the given Protobuf formats to model format.
-func FromProject(pbProject *api.Project) (*types.Project, error) {
-	createdAt := pbProject.CreatedAt.AsTime()
-	updatedAt := pbProject.UpdatedAt.AsTime()
-
+func FromProject(pbProject *api.Project) *types.Project {
 	return &types.Project{
 		ID:                        types.ID(pbProject.Id),
 		Name:                      pbProject.Name,
@@ -66,37 +59,30 @@ func FromProject(pbProject *api.Project) (*types.Project, error) {
 		ClientDeactivateThreshold: pbProject.ClientDeactivateThreshold,
 		PublicKey:                 pbProject.PublicKey,
 		SecretKey:                 pbProject.SecretKey,
-		CreatedAt:                 createdAt,
-		UpdatedAt:                 updatedAt,
-	}, nil
+		CreatedAt:                 pbProject.CreatedAt.AsTime(),
+		UpdatedAt:                 pbProject.UpdatedAt.AsTime(),
+	}
 }
 
 // FromDocumentSummaries converts the given Protobuf formats to model format.
-func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) ([]*types.DocumentSummary, error) {
+func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) []*types.DocumentSummary {
 	var summaries []*types.DocumentSummary
 	for _, pbSummary := range pbSummaries {
-		summary, err := FromDocumentSummary(pbSummary)
-		if err != nil {
-			return nil, err
-		}
-		summaries = append(summaries, summary)
+		summaries = append(summaries, FromDocumentSummary(pbSummary))
 	}
-	return summaries, nil
+	return summaries
 }
 
 // FromDocumentSummary converts the given Protobuf formats to model format.
-func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary, error) {
-	createdAt := pbSummary.CreatedAt.AsTime()
-	accessedAt := pbSummary.AccessedAt.AsTime()
-	updatedAt := pbSummary.UpdatedAt.AsTime()
+func FromDocumentSummary(pbSummary *api.DocumentSummary) *types.DocumentSummary {
 	return &types.DocumentSummary{
 		ID:         types.ID(pbSummary.Id),
 		Key:        key.Key(pbSummary.Key),
-		CreatedAt:  createdAt,
-		AccessedAt: accessedAt,
-		UpdatedAt:  updatedAt,
+		CreatedAt:  pbSummary.CreatedAt.AsTime(),
+		AccessedAt: pbSummary.AccessedAt.AsTime(),
+		UpdatedAt:  pbSummary.UpdatedAt.AsTime(),
 		Snapshot:   pbSummary.Snapshot,
-	}, nil
+	}
 }
 
 // FromChangePack converts the given Protobuf formats to model format.

@@ -174,39 +174,39 @@ func (c *Client) SignUp(
 func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project, error) {
 	response, err := c.client.CreateProject(
 		ctx,
-		connect.NewRequest(&api.CreateProjectRequest{
-			Name: name,
-		},
-		))
+		connect.NewRequest(&api.CreateProjectRequest{Name: name}),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProject(response.Msg.Project)
+	return converter.FromProject(response.Msg.Project), nil
 }
 
 // GetProject gets the project by name.
 func (c *Client) GetProject(ctx context.Context, name string) (*types.Project, error) {
 	response, err := c.client.GetProject(
 		ctx,
-		connect.NewRequest(&api.GetProjectRequest{Name: name}))
+		connect.NewRequest(&api.GetProjectRequest{Name: name}),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProject(response.Msg.Project)
+	return converter.FromProject(response.Msg.Project), nil
 }
 
 // ListProjects lists all projects.
 func (c *Client) ListProjects(ctx context.Context) ([]*types.Project, error) {
 	response, err := c.client.ListProjects(
 		ctx,
-		connect.NewRequest(&api.ListProjectsRequest{}))
+		connect.NewRequest(&api.ListProjectsRequest{}),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProjects(response.Msg.Projects)
+	return converter.FromProjects(response.Msg.Projects), nil
 }
 
 // UpdateProject updates an existing project.
@@ -228,7 +228,7 @@ func (c *Client) UpdateProject(
 		return nil, err
 	}
 
-	return converter.FromProject(response.Msg.Project)
+	return converter.FromProject(response.Msg.Project), nil
 }
 
 // ListDocuments lists documents.
@@ -254,7 +254,7 @@ func (c *Client) ListDocuments(
 		return nil, err
 	}
 
-	return converter.FromDocumentSummaries(response.Msg.Documents)
+	return converter.FromDocumentSummaries(response.Msg.Documents), nil
 }
 
 // RemoveDocument removes a document of the given key.
@@ -277,7 +277,8 @@ func (c *Client) RemoveDocument(
 			DocumentKey: documentKey,
 			Force:       force,
 		},
-		), apiKey, documentKey))
+		), apiKey, documentKey),
+	)
 	return err
 }
 
