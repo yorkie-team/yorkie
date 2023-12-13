@@ -219,7 +219,7 @@ func (n *TreeNode) Child(offset int) (*TreeNode, error) {
 }
 
 // Split splits the node at the given offset.
-func (n *TreeNode) Split(tree *Tree, offset int) error {
+func (n *TreeNode) Split(tree *Tree, offset int, issueTimeTicket func() *time.Ticket) error {
 	var split *TreeNode
 	var err error
 	if n.IsText() {
@@ -228,7 +228,7 @@ func (n *TreeNode) Split(tree *Tree, offset int) error {
 			return err
 		}
 	} else {
-		split, err = n.SplitElement(offset, n.ID.Offset)
+		split, err = n.SplitElement(offset, issueTimeTicket)
 		if err != nil {
 			return err
 		}
@@ -282,14 +282,14 @@ func (n *TreeNode) SplitText(offset, absOffset int) (*TreeNode, error) {
 }
 
 // SplitElement splits the given element at the given offset.
-func (n *TreeNode) SplitElement(offset, absOffset int) (*TreeNode, error) {
+func (n *TreeNode) SplitElement(offset int, issueTimeTicket func() *time.Ticket) (*TreeNode, error) {
 	// TODO(hackerwins): Define ID of split node for concurrent editing.
 	// Text has fixed content and its split nodes could have limited offset
 	// range. But element node could have arbitrary children and its split
 	// nodes could have arbitrary offset range. So, id could be duplicated
 	// and its order could be broken when concurrent editing happens.
 	// Currently, we use the similar ID of split element with the split text.
-	split := NewTreeNode(&TreeNodeID{CreatedAt: n.ID.CreatedAt, Offset: offset + absOffset}, n.Type(), nil)
+	split := NewTreeNode(&TreeNodeID{CreatedAt: issueTimeTicket(), Offset: 0}, n.Type(), nil)
 	split.RemovedAt = n.RemovedAt
 	if err := n.Index.Parent.InsertAfterInternal(split.Index, n.Index); err != nil {
 		return nil, err
@@ -563,6 +563,7 @@ func (t *Tree) EditT(
 	contents []*TreeNode,
 	splitLevel int,
 	editedAt *time.Ticket,
+	issueTimeTicket func() *time.Ticket,
 ) (map[string]*time.Ticket, error) {
 	fromPos, err := t.FindPos(start)
 	if err != nil {
@@ -573,7 +574,7 @@ func (t *Tree) EditT(
 		return nil, err
 	}
 
-	return t.Edit(fromPos, toPos, contents, splitLevel, editedAt, nil)
+	return t.Edit(fromPos, toPos, contents, splitLevel, editedAt, issueTimeTicket, nil)
 }
 
 // FindPos finds the position of the given index in the tree.
@@ -618,6 +619,7 @@ func (t *Tree) Edit(
 	contents []*TreeNode,
 	splitLevel int,
 	editedAt *time.Ticket,
+	issueTimeTicket func() *time.Ticket,
 	latestCreatedAtMapByActor map[string]*time.Ticket,
 ) (map[string]*time.Ticket, error) {
 	// 01. find nodes from the given range and split nodes.
@@ -653,7 +655,7 @@ func (t *Tree) Edit(
 	}
 
 	// 04. Split: split the element nodes for the given splitLevel.
-	if err := t.split(fromParent, fromLeft, splitLevel); err != nil {
+	if err := t.split(fromParent, fromLeft, splitLevel, issueTimeTicket); err != nil {
 		return nil, err
 	}
 
@@ -773,7 +775,12 @@ func (t *Tree) collectBetween(
 	return toBeRemoveds, toBeMovedToFromParents, createdAtMapByActor, nil
 }
 
-func (t *Tree) split(fromParent *TreeNode, fromLeft *TreeNode, splitLevel int) error {
+func (t *Tree) split(
+	fromParent *TreeNode,
+	fromLeft *TreeNode,
+	splitLevel int,
+	issueTimeTicket func() *time.Ticket,
+) error {
 	if splitLevel == 0 {
 		return nil
 	}
@@ -792,7 +799,7 @@ func (t *Tree) split(fromParent *TreeNode, fromLeft *TreeNode, splitLevel int) e
 
 			offset++
 		}
-		if err := parent.Split(t, offset); err != nil {
+		if err := parent.Split(t, offset, issueTimeTicket); err != nil {
 			return err
 		}
 		left = parent
@@ -881,7 +888,7 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 
 	// 02. Split text node if the left node is text node.
 	if leftNode.IsText() {
-		err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.ID.Offset)
+		err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.ID.Offset, nil)
 		if err != nil {
 			return nil, nil, err
 		}
