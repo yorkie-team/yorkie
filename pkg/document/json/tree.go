@@ -286,7 +286,15 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 	}
 
 	ticket = t.context.LastTimeTicket()
-	maxCreationMapByActor, err := t.Tree.Edit(fromPos, toPos, clones, splitLevel, ticket, nil)
+	maxCreationMapByActor, err := t.Tree.Edit(
+		fromPos,
+		toPos,
+		clones,
+		splitLevel,
+		ticket,
+		t.context.IssueTimeTicket,
+		nil,
+	)
 	if err != nil {
 		panic(err)
 	}

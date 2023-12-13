@@ -89,7 +89,35 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 			}
 
 		}
-		if _, err = obj.Edit(e.from, e.to, contents, e.splitLevel, e.executedAt, e.latestCreatedAtMapByActor); err != nil {
+		if _, err = obj.Edit(
+			e.from,
+			e.to,
+			contents,
+			e.splitLevel,
+			e.executedAt,
+			/**
+			 * TODO(sejongk): When splitting element nodes, a new nodeID is assigned with a different timeTicket.
+			 * In the same change context, the timeTickets share the same lamport and actorID but have different delimiters,
+			 * incremented by one for each.
+			 * Therefore, it is possible to simulate later timeTickets using `editedAt` and the length of `contents`.
+			 * This logic might be unclear; consider refactoring for multi-level concurrent editing in the Tree implementation.
+			 */
+			func() func() *time.Ticket {
+				delimiter := e.executedAt.Delimiter()
+				if contents != nil {
+					delimiter += uint32((len(contents)))
+				}
+				return func() *time.Ticket {
+					delimiter++
+					return time.NewTicket(
+						e.executedAt.Lamport(),
+						delimiter,
+						e.executedAt.ActorID(),
+					)
+				}
+			}(),
+			e.latestCreatedAtMapByActor,
+		); err != nil {
 			return err
 		}
 
