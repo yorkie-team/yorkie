@@ -140,18 +140,6 @@ func (c *Config) ensureDefaultValue() {
 		c.RPC.Port = DefaultRPCPort
 	}
 
-	if c.RPC.MaxRequestBytes == 0 {
-		c.RPC.MaxRequestBytes = DefaultRPCMaxRequestsBytes
-	}
-
-	if c.RPC.MaxConnectionAge == "" {
-		c.RPC.MaxConnectionAge = DefaultRPCMaxConnectionAge.String()
-	}
-
-	if c.RPC.MaxConnectionAgeGrace == "" {
-		c.RPC.MaxConnectionAgeGrace = DefaultRPCMaxConnectionAgeGrace.String()
-	}
-
 	if c.Profiling.Port == 0 {
 		c.Profiling.Port = DefaultProfilingPort
 	}

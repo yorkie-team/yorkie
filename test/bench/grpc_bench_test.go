@@ -44,7 +44,6 @@ var defaultServer *server.Yorkie
 
 func startDefaultServer() {
 	config := helper.TestConfig()
-	config.RPC.MaxRequestBytes = uint64(10 * 1024 * 1024)
 	svr, err := server.New(config)
 	if err != nil {
 		logging.DefaultLogger().Fatal(err)

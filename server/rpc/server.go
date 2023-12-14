@@ -20,7 +20,9 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"time"
 
@@ -41,7 +43,6 @@ import (
 // Server is a normal server that processes the logic requested by the client.
 type Server struct {
 	conf                *Config
-	serverMux           *http.ServeMux
 	httpServer          *http.Server
 	yorkieServiceCancel context.CancelFunc
 	tokenManager        *auth.TokenManager
@@ -54,36 +55,36 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		be.Config.ParseAdminTokenDuration(),
 	)
 
-	interceptor := connect.WithInterceptors(
-		connecthelper.NewLoggingInterceptor(),
-		interceptors.NewAdminAuthInterceptor(be, tokenManager),
-		interceptors.NewContextInterceptor(be),
-		interceptors.NewDefaultInterceptor(),
-	)
-
-	// TODO(krapie): find corresponding http/net server configurations that matches with gRPC server options
+	opts := []connect.HandlerOption{
+		connect.WithInterceptors(
+			connecthelper.NewLoggingInterceptor(),
+			interceptors.NewAdminAuthInterceptor(be, tokenManager),
+			interceptors.NewContextInterceptor(be),
+			interceptors.NewDefaultInterceptor(),
+		),
+	}
 
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
-
-	serverMux := http.NewServeMux()
-	serverMux.Handle(v1connect.NewYorkieServiceHandler(
-		newYorkieServer(yorkieServiceCtx, be),
-		interceptor,
-	))
-	serverMux.Handle(v1connect.NewAdminServiceHandler(
-		newAdminServer(be, tokenManager),
-		interceptor,
-	))
-	serverMux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
+	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
+	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(
 		grpchealth.HealthV1ServiceName,
 		v1connect.YorkieServiceName,
 		v1connect.AdminServiceName,
 	)))
 
+	// TODO(hackerwins): We need to provide proper http server configuration.
 	return &Server{
-		conf:                conf,
-		serverMux:           serverMux,
-		httpServer:          &http.Server{Addr: fmt.Sprintf(":%d", conf.Port)},
+		conf: conf,
+		httpServer: &http.Server{
+			Addr: fmt.Sprintf(":%d", conf.Port),
+			Handler: h2c.NewHandler(newCORS().Handler(mux),
+				&http2.Server{
+					MaxConcurrentStreams: math.MaxUint32,
+				},
+			),
+		},
 		yorkieServiceCancel: yorkieServiceCancel,
 	}, nil
 }
@@ -112,17 +113,15 @@ func (s *Server) Shutdown(graceful bool) {
 func (s *Server) listenAndServe() error {
 	go func() {
 		logging.DefaultLogger().Infof(fmt.Sprintf("serving RPC on %d", s.conf.Port))
-		s.httpServer.Handler = h2c.NewHandler(
-			newCORS().Handler(s.serverMux),
-			&http2.Server{},
-		)
+
 		if s.conf.CertFile != "" && s.conf.KeyFile != "" {
-			if err := s.httpServer.ListenAndServeTLS(s.conf.CertFile, s.conf.KeyFile); err != http.ErrServerClosed {
+			if err := s.httpServer.ListenAndServeTLS(s.conf.CertFile, s.conf.KeyFile); !errors.Is(err, http.ErrServerClosed) {
 				logging.DefaultLogger().Errorf("HTTP server ListenAndServeTLS: %v", err)
 			}
 			return
 		}
-		if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
+
+		if err := s.httpServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			logging.DefaultLogger().Errorf("HTTP server ListenAndServe: %v", err)
 		}
 		return
@@ -140,43 +139,14 @@ func newCORS() *cors.Cors {
 			http.MethodDelete,
 		},
 		AllowOriginFunc: func(origin string) bool {
+			// TODO(hackerwins): We need to provide a way to configure allow origins in the dashboard.
 			return true
 		},
-		AllowedHeaders: []string{
-			"Grpc-Timeout",
-			"Content-Type",
-			"Keep-Alive",
-			"User-Agent",
-			"Cache-Control",
-			"Content-Type",
-			"Content-Transfer-Encoding",
-			"Custom-Header-1",
-			"Connect-Protocol-Version",
-			"X-Accept-Content-Transfer-Encoding",
-			"X-Accept-Response-Streaming",
-			"X-User-Agent",
-			"X-Yorkie-User-Agent",
-			"X-Grpc-Web",
-			"Authorization",
-			"X-API-Key",
-			"X-Shard-Key",
-		},
-		MaxAge: int(1728 * time.Second),
-		ExposedHeaders: []string{
-			"Accept",
-			"Accept-Encoding",
-			"Accept-Post",
-			"Connect-Accept-Encoding",
-			"Connect-Content-Encoding",
-			"Content-Encoding",
-			"Grpc-Accept-Encoding",
-			"Grpc-Encoding",
-			"Grpc-Message",
-			"Grpc-Status",
-			"Grpc-Status-Details-Bin",
-			"X-Custom-Header",
-			"Custom-Header-1",
-		},
+		AllowedHeaders: []string{"*"},
+		ExposedHeaders: []string{"*"},
+		// MaxAge indicates how long (in seconds) the results of a preflight request
+		// can be cached. FF caps this value at 24h, and modern Chrome caps it at 2h.
+		MaxAge:           int(2 * time.Hour / time.Second),
 		AllowCredentials: true,
 	})
 }
