@@ -2514,7 +2514,6 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("can concurrently split and insert into split node", func(t *testing.T) {
-		t.Skip("TODO(sejongk): remove this after implementing multi-level concurrent editing in Tree")
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))

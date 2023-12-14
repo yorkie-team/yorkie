@@ -886,7 +886,15 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 		return nil, nil, fmt.Errorf("%p: %w", pos, ErrNodeNotFound)
 	}
 
-	// 02. Split text node if the left node is text node.
+	// 02. Determine whether the position is left-most and the exact parent
+	// in the current tree.
+	isLeftMost := parentNode == leftNode
+	realParentNode := parentNode
+	if leftNode.Index.Parent != nil && !isLeftMost {
+		realParentNode = leftNode.Index.Parent.Value
+	}
+
+	// 03. Split text node if the left node is text node.
 	if leftNode.IsText() {
 		err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.ID.Offset, nil)
 		if err != nil {
@@ -894,15 +902,15 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 		}
 	}
 
-	// 03. Find the appropriate left node. If some nodes are inserted at the
+	// 04. Find the appropriate left node. If some nodes are inserted at the
 	// same position concurrently, then we need to find the appropriate left
 	// node. This is similar to RGA.
 	idx := 0
-	if parentNode != leftNode {
-		idx = parentNode.Index.OffsetOfChild(leftNode.Index) + 1
+	if !isLeftMost {
+		idx = realParentNode.Index.OffsetOfChild(leftNode.Index) + 1
 	}
 
-	parentChildren := parentNode.Index.Children(true)
+	parentChildren := realParentNode.Index.Children(true)
 	for i := idx; i < len(parentChildren); i++ {
 		next := parentChildren[i].Value
 		if !next.ID.CreatedAt.After(editedAt) {
@@ -911,7 +919,7 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 		leftNode = next
 	}
 
-	return parentNode, leftNode, nil
+	return realParentNode, leftNode, nil
 }
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.
