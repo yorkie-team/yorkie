@@ -20,30 +20,30 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
-	"net"
+	"net/http"
 	"time"
 
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"connectrpc.com/connect"
+	"connectrpc.com/grpchealth"
+	"github.com/rs/cors"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
-	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
-
-	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/keepalive"
 )
 
 // Server is a normal server that processes the logic requested by the client.
 type Server struct {
 	conf                *Config
-	grpcServer          *grpc.Server
+	httpServer          *http.Server
 	yorkieServiceCancel context.CancelFunc
 	tokenManager        *auth.TokenManager
 }
@@ -55,72 +55,43 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 		be.Config.ParseAdminTokenDuration(),
 	)
 
-	loggingInterceptor := grpchelper.NewLoggingInterceptor()
-	adminAuthInterceptor := interceptors.NewAdminAuthInterceptor(be, tokenManager)
-	contextInterceptor := interceptors.NewContextInterceptor(be)
-	defaultInterceptor := interceptors.NewDefaultInterceptor()
-
-	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(grpcmiddleware.ChainUnaryServer(
-			loggingInterceptor.Unary(),
-			be.Metrics.ServerMetrics().UnaryServerInterceptor(),
-			adminAuthInterceptor.Unary(),
-			contextInterceptor.Unary(),
-			defaultInterceptor.Unary(),
-		)),
-		grpc.StreamInterceptor(grpcmiddleware.ChainStreamServer(
-			loggingInterceptor.Stream(),
-			be.Metrics.ServerMetrics().StreamServerInterceptor(),
-			adminAuthInterceptor.Stream(),
-			contextInterceptor.Stream(),
-			defaultInterceptor.Stream(),
-		)),
+	opts := []connect.HandlerOption{
+		connect.WithInterceptors(
+			connecthelper.NewLoggingInterceptor(),
+			interceptors.NewAdminAuthInterceptor(be, tokenManager),
+			interceptors.NewContextInterceptor(be),
+			interceptors.NewDefaultInterceptor(),
+		),
 	}
-
-	if conf.CertFile != "" && conf.KeyFile != "" {
-		creds, err := credentials.NewServerTLSFromFile(conf.CertFile, conf.KeyFile)
-		if err != nil {
-			return nil, fmt.Errorf("load TLS cert: %w", err)
-		}
-		opts = append(opts, grpc.Creds(creds))
-	}
-
-	maxConnectionAge, err := time.ParseDuration(conf.MaxConnectionAge)
-	if err != nil {
-		return nil, fmt.Errorf("parse max connection age: %w", err)
-	}
-
-	maxConnectionAgeGrace, err := time.ParseDuration(conf.MaxConnectionAgeGrace)
-	if err != nil {
-		return nil, fmt.Errorf("parse max connection age grace: %w", err)
-	}
-
-	opts = append(opts, grpc.MaxRecvMsgSize(int(conf.MaxRequestBytes)))
-	opts = append(opts, grpc.MaxSendMsgSize(math.MaxInt32))
-	opts = append(opts, grpc.MaxConcurrentStreams(math.MaxUint32))
-	opts = append(opts, grpc.KeepaliveParams(keepalive.ServerParameters{
-		MaxConnectionAge:      maxConnectionAge,
-		MaxConnectionAgeGrace: maxConnectionAgeGrace,
-	}))
 
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
+	mux := http.NewServeMux()
+	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
+	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
+	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(
+		grpchealth.HealthV1ServiceName,
+		v1connect.YorkieServiceName,
+		v1connect.AdminServiceName,
+	)))
 
-	grpcServer := grpc.NewServer(opts...)
-	healthpb.RegisterHealthServer(grpcServer, health.NewServer())
-	api.RegisterYorkieServiceServer(grpcServer, newYorkieServer(yorkieServiceCtx, be))
-	api.RegisterAdminServiceServer(grpcServer, newAdminServer(be, tokenManager))
-	be.Metrics.RegisterGRPCServer(grpcServer)
-
+	// TODO(hackerwins): We need to provide proper http server configuration.
 	return &Server{
-		conf:                conf,
-		grpcServer:          grpcServer,
+		conf: conf,
+		httpServer: &http.Server{
+			Addr: fmt.Sprintf(":%d", conf.Port),
+			Handler: h2c.NewHandler(newCORS().Handler(mux),
+				&http2.Server{
+					MaxConcurrentStreams: math.MaxUint32,
+				},
+			),
+		},
 		yorkieServiceCancel: yorkieServiceCancel,
 	}, nil
 }
 
 // Start starts this server by opening the rpc port.
 func (s *Server) Start() error {
-	return s.listenAndServeGRPC()
+	return s.listenAndServe()
 }
 
 // Shutdown shuts down this server.
@@ -128,27 +99,54 @@ func (s *Server) Shutdown(graceful bool) {
 	s.yorkieServiceCancel()
 
 	if graceful {
-		s.grpcServer.GracefulStop()
-	} else {
-		s.grpcServer.Stop()
+		if err := s.httpServer.Shutdown(context.Background()); err != nil {
+			logging.DefaultLogger().Error("HTTP server Shutdown: %v", err)
+		}
+		return
+	}
+
+	if err := s.httpServer.Close(); err != nil {
+		logging.DefaultLogger().Error("HTTP server close: %v", err)
 	}
 }
 
-func (s *Server) listenAndServeGRPC() error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.conf.Port))
-	if err != nil {
-		return fmt.Errorf("listen port %d: %w", s.conf.Port, err)
-	}
-
+func (s *Server) listenAndServe() error {
 	go func() {
-		logging.DefaultLogger().Infof("serving RPC on %d", s.conf.Port)
+		logging.DefaultLogger().Infof(fmt.Sprintf("serving RPC on %d", s.conf.Port))
 
-		if err := s.grpcServer.Serve(lis); err != nil {
-			if err != grpc.ErrServerStopped {
-				logging.DefaultLogger().Error(err)
+		if s.conf.CertFile != "" && s.conf.KeyFile != "" {
+			if err := s.httpServer.ListenAndServeTLS(s.conf.CertFile, s.conf.KeyFile); !errors.Is(err, http.ErrServerClosed) {
+				logging.DefaultLogger().Errorf("HTTP server ListenAndServeTLS: %v", err)
 			}
+			return
 		}
-	}()
 
+		if err := s.httpServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			logging.DefaultLogger().Errorf("HTTP server ListenAndServe: %v", err)
+		}
+		return
+	}()
 	return nil
+}
+
+func newCORS() *cors.Cors {
+	return cors.New(cors.Options{
+		AllowedMethods: []string{
+			http.MethodOptions,
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodDelete,
+		},
+		AllowOriginFunc: func(origin string) bool {
+			// TODO(hackerwins): We need to provide a way to configure allow origins in the dashboard.
+			return true
+		},
+		AllowedHeaders: []string{"*"},
+		ExposedHeaders: []string{"*"},
+		// MaxAge indicates how long (in seconds) the results of a preflight request
+		// can be cached. FF caps this value at 24h, and modern Chrome caps it at 2h.
+		MaxAge:           int(2 * time.Hour / time.Second),
+		AllowCredentials: true,
+	})
 }

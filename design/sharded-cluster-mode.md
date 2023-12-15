@@ -109,7 +109,7 @@ spec:
   trafficPolicy:
     portLevelSettings:
       - port:
-          number: 11101
+          number: 8080
         loadBalancer:
           consistentHash:
             ringHash:

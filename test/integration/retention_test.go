@@ -76,7 +76,7 @@ func TestRetention(t *testing.T) {
 
 		adminCli := helper.CreateAdminCli(t, testServer.RPCAddr())
 		assert.NoError(t, err)
-		defer func() { assert.NoError(t, adminCli.Close()) }()
+		defer func() { adminCli.Close() }()
 
 		ctx := context.Background()
 

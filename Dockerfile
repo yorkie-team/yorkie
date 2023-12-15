@@ -35,8 +35,8 @@ COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 # Get and place binary to /bin
 COPY --from=builder /app/bin/yorkie /bin/
 
-# Expose port 11101, 11102 to the outside world
-EXPOSE 11101 11102
+# Expose port 8080, 8081 to the outside world
+EXPOSE 8080 8081
 
 # Define default entrypoint.
 ENTRYPOINT ["yorkie"]

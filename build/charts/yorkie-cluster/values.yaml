@@ -17,8 +17,8 @@ yorkie:
     dbPort: &mongoPort 27017
 
   ports:
-    rpcPort: 11101
-    profilingPort: 11102
+    rpcPort: 8080
+    profilingPort: 8081
 
   resources: {}
 

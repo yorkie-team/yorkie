@@ -19,8 +19,6 @@ package converter
 import (
 	"fmt"
 
-	protoTypes "github.com/gogo/protobuf/types"
-
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -32,43 +30,25 @@ import (
 )
 
 // FromUser converts the given Protobuf formats to model format.
-func FromUser(pbUser *api.User) (*types.User, error) {
-	createdAt, err := protoTypes.TimestampFromProto(pbUser.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to timestamp: %w", err)
-	}
-
+func FromUser(pbUser *api.User) *types.User {
 	return &types.User{
 		ID:        types.ID(pbUser.Id),
 		Username:  pbUser.Username,
-		CreatedAt: createdAt,
-	}, nil
+		CreatedAt: pbUser.CreatedAt.AsTime(),
+	}
 }
 
 // FromProjects converts the given Protobuf formats to model format.
-func FromProjects(pbProjects []*api.Project) ([]*types.Project, error) {
+func FromProjects(pbProjects []*api.Project) []*types.Project {
 	var projects []*types.Project
 	for _, pbProject := range pbProjects {
-		project, err := FromProject(pbProject)
-		if err != nil {
-			return nil, err
-		}
-		projects = append(projects, project)
+		projects = append(projects, FromProject(pbProject))
 	}
-	return projects, nil
+	return projects
 }
 
 // FromProject converts the given Protobuf formats to model format.
-func FromProject(pbProject *api.Project) (*types.Project, error) {
-	createdAt, err := protoTypes.TimestampFromProto(pbProject.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to timestamp: %w", err)
-	}
-	updatedAt, err := protoTypes.TimestampFromProto(pbProject.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to timestamp: %w", err)
-	}
-
+func FromProject(pbProject *api.Project) *types.Project {
 	return &types.Project{
 		ID:                        types.ID(pbProject.Id),
 		Name:                      pbProject.Name,
@@ -77,46 +57,30 @@ func FromProject(pbProject *api.Project) (*types.Project, error) {
 		ClientDeactivateThreshold: pbProject.ClientDeactivateThreshold,
 		PublicKey:                 pbProject.PublicKey,
 		SecretKey:                 pbProject.SecretKey,
-		CreatedAt:                 createdAt,
-		UpdatedAt:                 updatedAt,
-	}, nil
+		CreatedAt:                 pbProject.CreatedAt.AsTime(),
+		UpdatedAt:                 pbProject.UpdatedAt.AsTime(),
+	}
 }
 
 // FromDocumentSummaries converts the given Protobuf formats to model format.
-func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) ([]*types.DocumentSummary, error) {
+func FromDocumentSummaries(pbSummaries []*api.DocumentSummary) []*types.DocumentSummary {
 	var summaries []*types.DocumentSummary
 	for _, pbSummary := range pbSummaries {
-		summary, err := FromDocumentSummary(pbSummary)
-		if err != nil {
-			return nil, err
-		}
-		summaries = append(summaries, summary)
+		summaries = append(summaries, FromDocumentSummary(pbSummary))
 	}
-	return summaries, nil
+	return summaries
 }
 
 // FromDocumentSummary converts the given Protobuf formats to model format.
-func FromDocumentSummary(pbSummary *api.DocumentSummary) (*types.DocumentSummary, error) {
-	createdAt, err := protoTypes.TimestampFromProto(pbSummary.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to timestamp: %w", err)
-	}
-	accessedAt, err := protoTypes.TimestampFromProto(pbSummary.AccessedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert accessedAt to timestamp: %w", err)
-	}
-	updatedAt, err := protoTypes.TimestampFromProto(pbSummary.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to timestamp: %w", err)
-	}
+func FromDocumentSummary(pbSummary *api.DocumentSummary) *types.DocumentSummary {
 	return &types.DocumentSummary{
 		ID:         types.ID(pbSummary.Id),
 		Key:        key.Key(pbSummary.Key),
-		CreatedAt:  createdAt,
-		AccessedAt: accessedAt,
-		UpdatedAt:  updatedAt,
+		CreatedAt:  pbSummary.CreatedAt.AsTime(),
+		AccessedAt: pbSummary.AccessedAt.AsTime(),
+		UpdatedAt:  pbSummary.UpdatedAt.AsTime(),
 		Snapshot:   pbSummary.Snapshot,
-	}, nil
+	}
 }
 
 // FromChangePack converts the given Protobuf formats to model format.

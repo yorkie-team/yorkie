@@ -5,4 +5,4 @@ scrape_configs:
   static_configs:
   - targets:
     # win/mac hosts: Use address: host.docker.internal instead of address: localhost in the line below
-    - host.docker.internal:11102
+    - host.docker.internal:8081

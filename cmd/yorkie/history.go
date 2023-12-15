@@ -56,7 +56,7 @@ func newHistoryCmd() *cobra.Command {
 				return err
 			}
 			defer func() {
-				_ = cli.Close()
+				cli.Close()
 			}()
 
 			ctx := context.Background()

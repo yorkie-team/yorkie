@@ -20,13 +20,11 @@ package integration
 
 import (
 	"context"
-	"io"
 	"sync"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -57,7 +55,10 @@ func TestServer(t *testing.T) {
 					assert.Fail(t, "unexpected ctx done")
 					return
 				case wr := <-wrch:
-					if wr.Err == io.EOF || status.Code(wr.Err) == codes.Canceled {
+					// TODO(hackerwins): Define ClientError instead of using ConnectError later.
+					// For now, we use ConnectError to check whether the stream is closed. To
+					// simplify the interface, we will define ClientError later.
+					if connect.CodeOf(wr.Err) == connect.CodeCanceled {
 						assert.Len(t, wr.Presences, 0)
 						wg.Done()
 						return

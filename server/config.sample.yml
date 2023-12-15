@@ -1,7 +1,7 @@
 # RPC is the configuration for the RPC server.
 RPC:
-  # Port to listen on for RPC connections (default: 11101).
-  Port: 11101
+  # Port to listen on for RPC connections (default: 8080).
+  Port: 8080
 
   # MaxRequestBytes is the maximum client request size in bytes the server will accept (default: 4194304, 4MiB).
   MaxRequestBytes: 4194304
@@ -22,8 +22,8 @@ RPC:
 
 # Profiling is the configuration for the profiling server.
 Profiling:
-  # Port is the port to listen on for serving metrics `/metrics` and pprof (default: 11102).
-  Port: 11102
+  # Port is the port to listen on for serving metrics `/metrics` and pprof (default: 8081).
+  Port: 8081
 
   # EnablePprof is whether to enable the pprof `/debug/pprof` endpoint.
   EnablePprof: false

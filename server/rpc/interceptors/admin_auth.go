@@ -18,18 +18,18 @@ package interceptors
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
-	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"google.golang.org/grpc"
+	"connectrpc.com/connect"
+
 	"google.golang.org/grpc/codes"
-	grpcmetadata "google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
-	"github.com/yorkie-team/yorkie/server/rpc/grpchelper"
+	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
@@ -47,79 +47,93 @@ func NewAdminAuthInterceptor(be *backend.Backend, tokenManager *auth.TokenManage
 	}
 }
 
-// Unary creates a unary server interceptor for authentication.
-func (i *AdminAuthInterceptor) Unary() grpc.UnaryServerInterceptor {
+// WrapUnary creates a unary server interceptor for authentication.
+func (i *AdminAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
-		req interface{},
-		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (resp interface{}, err error) {
-		if !isAdminService(info.FullMethod) {
-			return handler(ctx, req)
+		req connect.AnyRequest,
+	) (connect.AnyResponse, error) {
+		if !isAdminService(req.Spec().Procedure) {
+			return next(ctx, req)
 		}
 
-		if isRequiredAuth(info.FullMethod) {
-			user, err := i.authenticate(ctx, info.FullMethod)
+		if isRequiredAuth(req.Spec().Procedure) {
+			user, err := i.authenticate(ctx, req.Header())
 			if err != nil {
 				return nil, err
 			}
 			ctx = users.With(ctx, user)
 		}
 
-		resp, err = handler(ctx, req)
+		res, err := next(ctx, req)
 
 		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
-		data, ok := grpcmetadata.FromIncomingContext(ctx)
-		if ok {
-			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-			i.backend.Metrics.AddUserAgentWithEmptyProject(
-				i.backend.Config.Hostname,
-				sdkType,
-				sdkVersion,
-				info.FullMethod,
+		sdkType, sdkVersion := connecthelper.SDKTypeAndVersion(req.Header())
+		i.backend.Metrics.AddUserAgentWithEmptyProject(
+			i.backend.Config.Hostname,
+			sdkType,
+			sdkVersion,
+			req.Spec().Procedure,
+		)
+
+		if split := strings.Split(req.Spec().Procedure, "/"); len(split) == 3 {
+			i.backend.Metrics.AddServerHandledCounter(
+				"unary",
+				split[1],
+				split[2],
+				connecthelper.ToRPCCodeString(err),
 			)
 		}
 
-		return resp, err
+		return res, err
 	}
 }
 
-// Stream creates a stream server interceptor for authentication.
-func (i *AdminAuthInterceptor) Stream() grpc.StreamServerInterceptor {
+// WrapStreamingClient creates a stream client interceptor for authentication.
+func (i *AdminAuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(
-		srv interface{},
-		stream grpc.ServerStream,
-		info *grpc.StreamServerInfo,
-		handler grpc.StreamHandler,
-	) (err error) {
-		if !isAdminService(info.FullMethod) {
-			return handler(srv, stream)
+		ctx context.Context,
+		spec connect.Spec,
+	) connect.StreamingClientConn {
+		return next(ctx, spec)
+	}
+}
+
+// WrapStreamingHandler creates a stream server interceptor for authentication.
+func (i *AdminAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return func(
+		ctx context.Context,
+		conn connect.StreamingHandlerConn,
+	) error {
+		if !isAdminService(conn.Spec().Procedure) {
+			return next(ctx, conn)
 		}
 
-		ctx := stream.Context()
-		if isRequiredAuth(info.FullMethod) {
-			user, err := i.authenticate(ctx, info.FullMethod)
+		if isRequiredAuth(conn.Spec().Procedure) {
+			user, err := i.authenticate(ctx, conn.RequestHeader())
 			if err != nil {
 				return err
 			}
-
-			wrapped := grpcmiddleware.WrapServerStream(stream)
-			wrapped.WrappedContext = users.With(ctx, user)
-			stream = wrapped
+			ctx = users.With(ctx, user)
 		}
 
-		err = handler(srv, stream)
+		err := next(ctx, conn)
 
 		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
-		data, ok := grpcmetadata.FromIncomingContext(ctx)
-		if ok {
-			sdkType, sdkVersion := grpchelper.SDKTypeAndVersion(data)
-			i.backend.Metrics.AddUserAgentWithEmptyProject(
-				i.backend.Config.Hostname,
-				sdkType,
-				sdkVersion,
-				info.FullMethod,
+		sdkType, sdkVersion := connecthelper.SDKTypeAndVersion(conn.RequestHeader())
+		i.backend.Metrics.AddUserAgentWithEmptyProject(
+			i.backend.Config.Hostname,
+			sdkType,
+			sdkVersion,
+			conn.Spec().Procedure,
+		)
+
+		if split := strings.Split(conn.Spec().Procedure, "/"); len(split) == 3 {
+			i.backend.Metrics.AddServerHandledCounter(
+				"server_stream",
+				split[1],
+				split[2],
+				connecthelper.ToRPCCodeString(err),
 			)
 		}
 
@@ -137,18 +151,16 @@ func isRequiredAuth(method string) bool {
 }
 
 // authenticate does authenticate the request.
-func (i *AdminAuthInterceptor) authenticate(ctx context.Context, _ string) (*types.User, error) {
-	data, ok := grpcmetadata.FromIncomingContext(ctx)
-	if !ok {
-		return nil, grpcstatus.Errorf(codes.Unauthenticated, "metadata is not provided")
-	}
-
-	authorization := data[types.AuthorizationKey]
-	if len(authorization) == 0 {
+func (i *AdminAuthInterceptor) authenticate(
+	ctx context.Context,
+	header http.Header,
+) (*types.User, error) {
+	authorization := header.Get(types.AuthorizationKey)
+	if authorization == "" {
 		return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is not provided")
 	}
 
-	claims, err := i.tokenManager.Verify(authorization[0])
+	claims, err := i.tokenManager.Verify(authorization)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is invalid")
 	}
