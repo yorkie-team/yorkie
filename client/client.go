@@ -68,6 +68,9 @@ var (
 	// ErrUnsupportedWatchResponseType occurs when the given WatchResponseType
 	// is not supported.
 	ErrUnsupportedWatchResponseType = errors.New("unsupported watch response type")
+
+	// ErrInitializationNotReceived occurs when the first response of the watch stream is not received.
+	ErrInitializationNotReceived = errors.New("initialization is not received")
 )
 
 // Attachment represents the document attached.
@@ -424,12 +427,14 @@ func (c *Client) Watch(
 		return nil, err
 	}
 
-	for stream.Receive() {
-		pbResp := stream.Msg()
-		if _, err := handleResponse(pbResp, doc); err != nil {
-			return nil, err
-		}
-		break
+	// NOTE(hackerwins): We need to receive the first response to initialize
+	// the watch stream. Watch should be blocked until the first response is
+	// received.
+	if !stream.Receive() {
+		return nil, ErrInitializationNotReceived
+	}
+	if _, err := handleResponse(stream.Msg(), doc); err != nil {
+		return nil, err
 	}
 	if err = stream.Err(); err != nil {
 		return nil, err
