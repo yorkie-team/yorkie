@@ -30,14 +30,12 @@ import (
 )
 
 // FromUser converts the given Protobuf formats to model format.
-func FromUser(pbUser *api.User) (*types.User, error) {
-	createdAt := pbUser.CreatedAt.AsTime()
-
+func FromUser(pbUser *api.User) *types.User {
 	return &types.User{
 		ID:        types.ID(pbUser.Id),
 		Username:  pbUser.Username,
-		CreatedAt: createdAt,
-	}, nil
+		CreatedAt: pbUser.CreatedAt.AsTime(),
+	}
 }
 
 // FromProjects converts the given Protobuf formats to model format.

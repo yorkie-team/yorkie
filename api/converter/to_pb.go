@@ -33,35 +33,26 @@ import (
 )
 
 // ToUser converts the given model format to Protobuf format.
-func ToUser(user *types.User) (*api.User, error) {
-	pbCreatedAt := timestamppb.New(user.CreatedAt)
-
+func ToUser(user *types.User) *api.User {
 	return &api.User{
 		Id:        user.ID.String(),
 		Username:  user.Username,
-		CreatedAt: pbCreatedAt,
-	}, nil
+		CreatedAt: timestamppb.New(user.CreatedAt),
+	}
 }
 
 // ToProjects converts the given model to Protobuf.
-func ToProjects(projects []*types.Project) ([]*api.Project, error) {
+func ToProjects(projects []*types.Project) []*api.Project {
 	var pbProjects []*api.Project
 	for _, project := range projects {
-		pbProject, err := ToProject(project)
-		if err != nil {
-			return nil, err
-		}
-		pbProjects = append(pbProjects, pbProject)
+		pbProjects = append(pbProjects, ToProject(project))
 	}
 
-	return pbProjects, nil
+	return pbProjects
 }
 
 // ToProject converts the given model to Protobuf.
-func ToProject(project *types.Project) (*api.Project, error) {
-	pbCreatedAt := timestamppb.New(project.CreatedAt)
-	pbUpdatedAt := timestamppb.New(project.UpdatedAt)
-
+func ToProject(project *types.Project) *api.Project {
 	return &api.Project{
 		Id:                        project.ID.String(),
 		Name:                      project.Name,
@@ -70,38 +61,30 @@ func ToProject(project *types.Project) (*api.Project, error) {
 		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
 		PublicKey:                 project.PublicKey,
 		SecretKey:                 project.SecretKey,
-		CreatedAt:                 pbCreatedAt,
-		UpdatedAt:                 pbUpdatedAt,
-	}, nil
+		CreatedAt:                 timestamppb.New(project.CreatedAt),
+		UpdatedAt:                 timestamppb.New(project.UpdatedAt),
+	}
 }
 
 // ToDocumentSummaries converts the given model to Protobuf.
-func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSummary, error) {
+func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSummary {
 	var pbSummaries []*api.DocumentSummary
 	for _, summary := range summaries {
-		pbSummary, err := ToDocumentSummary(summary)
-		if err != nil {
-			return nil, err
-		}
-		pbSummaries = append(pbSummaries, pbSummary)
+		pbSummaries = append(pbSummaries, ToDocumentSummary(summary))
 	}
-	return pbSummaries, nil
+	return pbSummaries
 }
 
 // ToDocumentSummary converts the given model to Protobuf format.
-func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, error) {
-	pbCreatedAt := timestamppb.New(summary.CreatedAt)
-	pbAccessedAt := timestamppb.New(summary.AccessedAt)
-	pbUpdatedAt := timestamppb.New(summary.UpdatedAt)
-
+func ToDocumentSummary(summary *types.DocumentSummary) *api.DocumentSummary {
 	return &api.DocumentSummary{
 		Id:         summary.ID.String(),
 		Key:        summary.Key.String(),
-		CreatedAt:  pbCreatedAt,
-		AccessedAt: pbAccessedAt,
-		UpdatedAt:  pbUpdatedAt,
+		CreatedAt:  timestamppb.New(summary.CreatedAt),
+		AccessedAt: timestamppb.New(summary.AccessedAt),
+		UpdatedAt:  timestamppb.New(summary.UpdatedAt),
 		Snapshot:   summary.Snapshot,
-	}, nil
+	}
 }
 
 // ToPresences converts the given model to Protobuf format.

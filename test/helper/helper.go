@@ -49,9 +49,9 @@ var testStartedAt int64
 
 // Below are the values of the Yorkie config used in the test.
 var (
-	RPCPort = 21101
+	RPCPort = 11101
 
-	ProfilingPort = 21102
+	ProfilingPort = 11102
 
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword

@@ -30,7 +30,7 @@ import (
 
 func TestUser(t *testing.T) {
 	adminCli := helper.CreateAdminCli(t, defaultServer.RPCAddr())
-	defer func() { assert.NoError(t, adminCli.Close()) }()
+	defer func() { adminCli.Close() }()
 
 	t.Run("user test", func(t *testing.T) {
 		ctx := context.Background()

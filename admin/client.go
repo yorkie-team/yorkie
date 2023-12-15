@@ -128,10 +128,8 @@ func (c *Client) Dial(rpcAddr string) error {
 }
 
 // Close closes the connection to the admin service.
-func (c *Client) Close() error {
+func (c *Client) Close() {
 	c.conn.CloseIdleConnections()
-
-	return nil
 }
 
 // LogIn logs in a user.
@@ -167,7 +165,7 @@ func (c *Client) SignUp(
 		return nil, err
 	}
 
-	return converter.FromUser(response.Msg.User)
+	return converter.FromUser(response.Msg.User), nil
 }
 
 // CreateProject creates a new project.

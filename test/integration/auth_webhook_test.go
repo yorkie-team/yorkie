@@ -84,7 +84,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-	defer func() { assert.NoError(t, adminCli.Close()) }()
+	defer func() { adminCli.Close() }()
 
 	project, err := adminCli.CreateProject(context.Background(), "auth-webhook-test")
 	assert.NoError(t, err)
@@ -199,7 +199,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-		defer func() { assert.NoError(t, adminCli.Close()) }()
+		defer func() { adminCli.Close() }()
 		project, err := adminCli.CreateProject(context.Background(), "success-webhook-after-retries")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
@@ -241,7 +241,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-		defer func() { assert.NoError(t, adminCli.Close()) }()
+		defer func() { adminCli.Close() }()
 		project, err := adminCli.CreateProject(context.Background(), "fail-webhook-after-retries")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
@@ -294,7 +294,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-		defer func() { assert.NoError(t, adminCli.Close()) }()
+		defer func() { adminCli.Close() }()
 		project, err := adminCli.CreateProject(context.Background(), "auth-request-cache")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
@@ -370,7 +370,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-		defer func() { assert.NoError(t, adminCli.Close()) }()
+		defer func() { adminCli.Close() }()
 		project, err := adminCli.CreateProject(context.Background(), "unauth-request-cache")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL

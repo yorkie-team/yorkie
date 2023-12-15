@@ -43,7 +43,7 @@ func TestAdmin(t *testing.T) {
 	_, err = adminCli.LogIn(ctx, "admin", "admin")
 	assert.NoError(t, err)
 	defer func() {
-		assert.NoError(t, adminCli.Close())
+		adminCli.Close()
 	}()
 
 	clients := activeClients(t, 1)

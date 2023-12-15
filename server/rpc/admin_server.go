@@ -65,13 +65,8 @@ func (s *adminServer) SignUp(
 		return nil, err
 	}
 
-	pbUser, err := converter.ToUser(user)
-	if err != nil {
-		return nil, err
-	}
-
 	return connect.NewResponse(&api.SignUpResponse{
-		User: pbUser,
+		User: converter.ToUser(user),
 	}), nil
 }
 
@@ -116,13 +111,8 @@ func (s *adminServer) CreateProject(
 		return nil, err
 	}
 
-	pbProject, err := converter.ToProject(project)
-	if err != nil {
-		return nil, err
-	}
-
 	return connect.NewResponse(&api.CreateProjectResponse{
-		Project: pbProject,
+		Project: converter.ToProject(project),
 	}), nil
 }
 
@@ -137,13 +127,8 @@ func (s *adminServer) ListProjects(
 		return nil, err
 	}
 
-	pbProjects, err := converter.ToProjects(projectList)
-	if err != nil {
-		return nil, err
-	}
-
 	return connect.NewResponse(&api.ListProjectsResponse{
-		Projects: pbProjects,
+		Projects: converter.ToProjects(projectList),
 	}), nil
 }
 
@@ -158,13 +143,8 @@ func (s *adminServer) GetProject(
 		return nil, err
 	}
 
-	pbProject, err := converter.ToProject(project)
-	if err != nil {
-		return nil, err
-	}
-
 	return connect.NewResponse(&api.GetProjectResponse{
-		Project: pbProject,
+		Project: converter.ToProject(project),
 	}), nil
 }
 
@@ -193,13 +173,8 @@ func (s *adminServer) UpdateProject(
 		return nil, err
 	}
 
-	pbProject, err := converter.ToProject(project)
-	if err != nil {
-		return nil, err
-	}
-
 	return connect.NewResponse(&api.UpdateProjectResponse{
-		Project: pbProject,
+		Project: converter.ToProject(project),
 	}), nil
 }
 
@@ -224,13 +199,8 @@ func (s *adminServer) GetDocument(
 		return nil, err
 	}
 
-	pbDocument, err := converter.ToDocumentSummary(document)
-	if err != nil {
-		return nil, err
-	}
-
 	return connect.NewResponse(&api.GetDocumentResponse{
-		Document: pbDocument,
+		Document: converter.ToDocumentSummary(document),
 	}), nil
 }
 
@@ -293,13 +263,8 @@ func (s *adminServer) ListDocuments(
 		return nil, err
 	}
 
-	pbDocuments, err := converter.ToDocumentSummaries(docs)
-	if err != nil {
-		return nil, err
-	}
-
 	return connect.NewResponse(&api.ListDocumentsResponse{
-		Documents: pbDocuments,
+		Documents: converter.ToDocumentSummaries(docs),
 	}), nil
 }
 
@@ -325,14 +290,9 @@ func (s *adminServer) SearchDocuments(
 		return nil, err
 	}
 
-	pbDocuments, err := converter.ToDocumentSummaries(result.Elements)
-	if err != nil {
-		return nil, err
-	}
-
 	return connect.NewResponse(&api.SearchDocumentsResponse{
 		TotalCount: int32(result.TotalCount),
-		Documents:  pbDocuments,
+		Documents:  converter.ToDocumentSummaries(result.Elements),
 	}), nil
 }
 
