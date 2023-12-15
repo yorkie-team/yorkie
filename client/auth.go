@@ -60,9 +60,9 @@ func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) 
 		spec connect.Spec,
 	) connect.StreamingClientConn {
 		conn := next(ctx, spec)
-
 		conn.RequestHeader().Set(types.APIKeyKey, i.apiKey)
-
+		conn.RequestHeader().Set(types.AuthorizationKey, i.token)
+		conn.RequestHeader().Set(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
 		return conn
 	}
 }
