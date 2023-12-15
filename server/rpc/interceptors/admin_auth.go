@@ -76,12 +76,14 @@ func (i *AdminAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFu
 			req.Spec().Procedure,
 		)
 
-		i.backend.Metrics.AddServerHandledCounter(
-			"unary",
-			strings.Split(req.Spec().Procedure, "/")[1],
-			strings.Split(req.Spec().Procedure, "/")[2],
-			connecthelper.ToRPCCodeString(err),
-		)
+		if split := strings.Split(req.Spec().Procedure, "/"); len(split) == 3 {
+			i.backend.Metrics.AddServerHandledCounter(
+				"unary",
+				split[1],
+				split[2],
+				connecthelper.ToRPCCodeString(err),
+			)
+		}
 
 		return res, err
 	}
@@ -126,12 +128,14 @@ func (i *AdminAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 			conn.Spec().Procedure,
 		)
 
-		i.backend.Metrics.AddServerHandledCounter(
-			"server_stream",
-			strings.Split(conn.Spec().Procedure, "/")[1],
-			strings.Split(conn.Spec().Procedure, "/")[2],
-			connecthelper.ToRPCCodeString(err),
-		)
+		if split := strings.Split(conn.Spec().Procedure, "/"); len(split) == 3 {
+			i.backend.Metrics.AddServerHandledCounter(
+				"server_stream",
+				split[1],
+				split[2],
+				connecthelper.ToRPCCodeString(err),
+			)
+		}
 
 		return err
 	}

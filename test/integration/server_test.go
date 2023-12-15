@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"io"
 	"sync"
 	"testing"
 
@@ -56,7 +55,10 @@ func TestServer(t *testing.T) {
 					assert.Fail(t, "unexpected ctx done")
 					return
 				case wr := <-wrch:
-					if wr.Err == io.EOF || connect.CodeOf(wr.Err) == connect.CodeCanceled {
+					// TODO(hackerwins): Define ClientError instead of using ConnectError later.
+					// For now, we use ConnectError to check whether the stream is closed. To
+					// simplify the interface, we will define ClientError later.
+					if connect.CodeOf(wr.Err) == connect.CodeCanceled {
 						assert.Len(t, wr.Presences, 0)
 						wg.Done()
 						return

@@ -27,10 +27,14 @@ import (
 // metadata.
 func SDKTypeAndVersion(header http.Header) (string, string) {
 	yorkieUserAgent := header.Get(types.UserAgentKey)
-	if len(yorkieUserAgent) == 0 {
+	if yorkieUserAgent == "" {
 		return "", ""
 	}
 
-	agent := strings.Split(yorkieUserAgent, "/")
-	return agent[0], agent[1]
+	split := strings.Split(yorkieUserAgent, "/")
+	if len(split) != 2 {
+		return "", ""
+	}
+
+	return split[0], split[1]
 }
