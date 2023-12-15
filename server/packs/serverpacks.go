@@ -17,6 +17,8 @@
 package packs
 
 import (
+	"google.golang.org/protobuf/proto"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -96,8 +98,8 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		var pbOps []*api.Operation
 		for _, bytesOp := range info.Operations {
 			pbOp := api.Operation{}
-			if err := pbOp.Unmarshal(bytesOp); err != nil {
-				return nil, err
+			if err := proto.Unmarshal(bytesOp, &pbOp); err != nil {
+				return nil, database.ErrDecodeOperationFailed
 			}
 			pbOps = append(pbOps, &pbOp)
 		}

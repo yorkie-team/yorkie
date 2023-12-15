@@ -19,8 +19,7 @@ package client
 import (
 	"context"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	"connectrpc.com/connect"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/internal/version"
@@ -40,41 +39,40 @@ func NewAuthInterceptor(apiKey, token string) *AuthInterceptor {
 	}
 }
 
-// Unary creates a unary server interceptor for authorization.
-func (i *AuthInterceptor) Unary() grpc.UnaryClientInterceptor {
+// WrapUnary creates a unary server interceptor for authorization.
+func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
-		method string,
-		req,
-		reply interface{},
-		cc *grpc.ClientConn,
-		invoker grpc.UnaryInvoker,
-		opts ...grpc.CallOption,
-	) error {
-		ctx = metadata.AppendToOutgoingContext(ctx,
-			types.APIKeyKey, i.apiKey,
-			types.AuthorizationKey, i.token,
-			types.UserAgentKey, types.GoSDKType+"/"+version.Version,
-		)
-		return invoker(ctx, method, req, reply, cc, opts...)
+		req connect.AnyRequest,
+	) (connect.AnyResponse, error) {
+		req.Header().Add(types.APIKeyKey, i.apiKey)
+		req.Header().Add(types.AuthorizationKey, i.token)
+		req.Header().Add(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
+
+		return next(ctx, req)
 	}
 }
 
-// Stream creates a stream server interceptor for authorization.
-func (i *AuthInterceptor) Stream() grpc.StreamClientInterceptor {
+// WrapStreamingClient creates a stream client interceptor for authorization.
+func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(
 		ctx context.Context,
-		desc *grpc.StreamDesc,
-		cc *grpc.ClientConn,
-		method string,
-		streamer grpc.Streamer,
-		opts ...grpc.CallOption,
-	) (grpc.ClientStream, error) {
-		ctx = metadata.AppendToOutgoingContext(ctx,
-			types.APIKeyKey, i.apiKey,
-			types.AuthorizationKey, i.token,
-			types.UserAgentKey, types.GoSDKType+"/"+version.Version,
-		)
-		return streamer(ctx, desc, cc, method, opts...)
+		spec connect.Spec,
+	) connect.StreamingClientConn {
+		conn := next(ctx, spec)
+		conn.RequestHeader().Set(types.APIKeyKey, i.apiKey)
+		conn.RequestHeader().Set(types.AuthorizationKey, i.token)
+		conn.RequestHeader().Set(types.UserAgentKey, types.GoSDKType+"/"+version.Version)
+		return conn
+	}
+}
+
+// WrapStreamingHandler creates a stream server interceptor for authorization.
+func (i *AuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return func(
+		ctx context.Context,
+		conn connect.StreamingHandlerConn,
+	) error {
+		return next(ctx, conn)
 	}
 }

@@ -53,6 +53,6 @@ func init() {
 	viper.SetConfigType("json")
 	viper.AddConfigPath(path.Join(os.Getenv("HOME"), ".yorkie"))
 
-	rootCmd.PersistentFlags().String("rpc-addr", "localhost:11101", "Address of the rpc server")
+	rootCmd.PersistentFlags().String("rpc-addr", "localhost:8080", "Address of the rpc server")
 	_ = viper.BindPFlag("rpcAddr", rootCmd.PersistentFlags().Lookup("rpc-addr"))
 }

@@ -21,17 +21,16 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net/http"
 	"strings"
 
+	"connectrpc.com/connect"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
@@ -68,9 +67,8 @@ type Options struct {
 
 // Client is a client for admin service.
 type Client struct {
-	conn            *grpc.ClientConn
-	client          api.AdminServiceClient
-	dialOptions     []grpc.DialOption
+	conn            *http.Client
+	client          v1connect.AdminServiceClient
 	authInterceptor *AuthInterceptor
 	logger          *zap.Logger
 }
@@ -82,16 +80,11 @@ func New(opts ...Option) (*Client, error) {
 		opt(&options)
 	}
 
-	tlsConfig := credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12})
-	credentialOptions := grpc.WithTransportCredentials(tlsConfig)
-	if options.IsInsecure {
-		credentialOptions = grpc.WithTransportCredentials(insecure.NewCredentials())
+	conn := &http.Client{}
+	if !options.IsInsecure {
+		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+		conn.Transport = &http.Transport{TLSClientConfig: tlsConfig}
 	}
-	dialOptions := []grpc.DialOption{credentialOptions}
-
-	authInterceptor := NewAuthInterceptor(options.Token)
-	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
-	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
 
 	logger := options.Logger
 	if logger == nil {
@@ -103,9 +96,9 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	return &Client{
+		conn:            conn,
 		logger:          logger,
-		dialOptions:     dialOptions,
-		authInterceptor: authInterceptor,
+		authInterceptor: NewAuthInterceptor(options.Token),
 	}, nil
 }
 
@@ -125,24 +118,18 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 
 // Dial dials to the admin service.
 func (c *Client) Dial(rpcAddr string) error {
-	conn, err := grpc.Dial(rpcAddr, c.dialOptions...)
-	if err != nil {
-		return fmt.Errorf("dial to %s: %w", rpcAddr, err)
+	if !strings.HasPrefix(rpcAddr, "http") {
+		rpcAddr = "http://" + rpcAddr
 	}
 
-	c.conn = conn
-	c.client = api.NewAdminServiceClient(conn)
+	c.client = v1connect.NewAdminServiceClient(c.conn, rpcAddr, connect.WithInterceptors(c.authInterceptor))
 
 	return nil
 }
 
 // Close closes the connection to the admin service.
-func (c *Client) Close() error {
-	if err := c.conn.Close(); err != nil {
-		return fmt.Errorf("close connection: %w", err)
-	}
-
-	return nil
+func (c *Client) Close() {
+	c.conn.CloseIdleConnections()
 }
 
 // LogIn logs in a user.
@@ -151,17 +138,17 @@ func (c *Client) LogIn(
 	username,
 	password string,
 ) (string, error) {
-	response, err := c.client.LogIn(ctx, &api.LogInRequest{
+	response, err := c.client.LogIn(ctx, connect.NewRequest(&api.LogInRequest{
 		Username: username,
 		Password: password,
-	})
+	}))
 	if err != nil {
 		return "", err
 	}
 
-	c.authInterceptor.SetToken(response.Token)
+	c.authInterceptor.SetToken(response.Msg.Token)
 
-	return response.Token, nil
+	return response.Msg.Token, nil
 }
 
 // SignUp signs up a new user.
@@ -170,56 +157,54 @@ func (c *Client) SignUp(
 	username,
 	password string,
 ) (*types.User, error) {
-	response, err := c.client.SignUp(ctx, &api.SignUpRequest{
+	response, err := c.client.SignUp(ctx, connect.NewRequest(&api.SignUpRequest{
 		Username: username,
 		Password: password,
-	})
+	}))
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromUser(response.User)
+	return converter.FromUser(response.Msg.User), nil
 }
 
 // CreateProject creates a new project.
 func (c *Client) CreateProject(ctx context.Context, name string) (*types.Project, error) {
 	response, err := c.client.CreateProject(
 		ctx,
-		&api.CreateProjectRequest{
-			Name: name,
-		},
+		connect.NewRequest(&api.CreateProjectRequest{Name: name}),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProject(response.Project)
+	return converter.FromProject(response.Msg.Project), nil
 }
 
 // GetProject gets the project by name.
 func (c *Client) GetProject(ctx context.Context, name string) (*types.Project, error) {
 	response, err := c.client.GetProject(
 		ctx,
-		&api.GetProjectRequest{Name: name},
+		connect.NewRequest(&api.GetProjectRequest{Name: name}),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProject(response.Project)
+	return converter.FromProject(response.Msg.Project), nil
 }
 
 // ListProjects lists all projects.
 func (c *Client) ListProjects(ctx context.Context) ([]*types.Project, error) {
 	response, err := c.client.ListProjects(
 		ctx,
-		&api.ListProjectsRequest{},
+		connect.NewRequest(&api.ListProjectsRequest{}),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProjects(response.Projects)
+	return converter.FromProjects(response.Msg.Projects), nil
 }
 
 // UpdateProject updates an existing project.
@@ -233,15 +218,15 @@ func (c *Client) UpdateProject(
 		return nil, err
 	}
 
-	response, err := c.client.UpdateProject(ctx, &api.UpdateProjectRequest{
+	response, err := c.client.UpdateProject(ctx, connect.NewRequest(&api.UpdateProjectRequest{
 		Id:     id,
 		Fields: pbProjectField,
-	})
+	}))
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromProject(response.Project)
+	return converter.FromProject(response.Msg.Project), nil
 }
 
 // ListDocuments lists documents.
@@ -255,19 +240,19 @@ func (c *Client) ListDocuments(
 ) ([]*types.DocumentSummary, error) {
 	response, err := c.client.ListDocuments(
 		ctx,
-		&api.ListDocumentsRequest{
+		connect.NewRequest(&api.ListDocumentsRequest{
 			ProjectName:     projectName,
 			PreviousId:      previousID,
 			PageSize:        pageSize,
 			IsForward:       isForward,
 			IncludeSnapshot: includeSnapshot,
 		},
-	)
+		))
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.FromDocumentSummaries(response.Documents)
+	return converter.FromDocumentSummaries(response.Msg.Documents), nil
 }
 
 // RemoveDocument removes a document of the given key.
@@ -284,12 +269,13 @@ func (c *Client) RemoveDocument(
 	apiKey := project.PublicKey
 
 	_, err = c.client.RemoveDocumentByAdmin(
-		withShardKey(ctx, apiKey, documentKey),
-		&api.RemoveDocumentByAdminRequest{
+		ctx,
+		withShardKey(connect.NewRequest(&api.RemoveDocumentByAdminRequest{
 			ProjectName: projectName,
 			DocumentKey: documentKey,
 			Force:       force,
 		},
+		), apiKey, documentKey),
 	)
 	return err
 }
@@ -303,19 +289,19 @@ func (c *Client) ListChangeSummaries(
 	pageSize int32,
 	isForward bool,
 ) ([]*types.ChangeSummary, error) {
-	resp, err := c.client.ListChanges(ctx, &api.ListChangesRequest{
+	resp, err := c.client.ListChanges(ctx, connect.NewRequest(&api.ListChangesRequest{
 		ProjectName: projectName,
 		DocumentKey: key.String(),
 		PreviousSeq: previousSeq,
 		PageSize:    pageSize,
 		IsForward:   isForward,
-	})
+	}))
 
 	if err != nil {
 		return nil, err
 	}
 
-	changes, err := converter.FromChanges(resp.Changes)
+	changes, err := converter.FromChanges(resp.Msg.Changes)
 	if err != nil {
 		return nil, err
 	}
@@ -327,11 +313,11 @@ func (c *Client) ListChangeSummaries(
 
 	seq := changes[0].ServerSeq() - 1
 
-	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, &api.GetSnapshotMetaRequest{
+	snapshotMeta, err := c.client.GetSnapshotMeta(ctx, connect.NewRequest(&api.GetSnapshotMetaRequest{
 		ProjectName: projectName,
 		DocumentKey: key.String(),
 		ServerSeq:   seq,
-	})
+	}))
 	if err != nil {
 		return nil, err
 	}
@@ -339,8 +325,8 @@ func (c *Client) ListChangeSummaries(
 	newDoc, err := document.NewInternalDocumentFromSnapshot(
 		key,
 		seq,
-		snapshotMeta.Lamport,
-		snapshotMeta.Snapshot,
+		snapshotMeta.Msg.Lamport,
+		snapshotMeta.Msg.Snapshot,
 	)
 
 	if err != nil {
@@ -366,10 +352,9 @@ func (c *Client) ListChangeSummaries(
 /**
  * withShardKey returns a context with the given shard key in metadata.
  */
-func withShardKey(ctx context.Context, keys ...string) context.Context {
-	return metadata.AppendToOutgoingContext(
-		ctx,
-		types.APIKeyKey, keys[0],
-		types.ShardKey, strings.Join(keys, "/"),
-	)
+func withShardKey[T any](conn *connect.Request[T], keys ...string) *connect.Request[T] {
+	conn.Header().Add(types.APIKeyKey, keys[0])
+	conn.Header().Add(types.ShardKey, strings.Join(keys, "/"))
+
+	return conn
 }

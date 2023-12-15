@@ -23,11 +23,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 func TestHealthCheck(t *testing.T) {
-	conn, err := clientConn()
+	// use gRPC health check
+	conn, err := grpc.Dial(
+		defaultServer.RPCAddr(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	assert.NoError(t, err)
 	defer func() {
 		assert.NoError(t, conn.Close())

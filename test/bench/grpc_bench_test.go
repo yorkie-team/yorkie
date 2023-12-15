@@ -44,7 +44,6 @@ var defaultServer *server.Yorkie
 
 func startDefaultServer() {
 	config := helper.TestConfig()
-	config.RPC.MaxRequestBytes = uint64(10 * 1024 * 1024)
 	svr, err := server.New(config)
 	if err != nil {
 		logging.DefaultLogger().Fatal(err)
@@ -302,7 +301,7 @@ func BenchmarkRPC(b *testing.B) {
 
 	b.Run("adminCli to server", func(b *testing.B) {
 		adminCli := helper.CreateAdminCli(b, defaultServer.RPCAddr())
-		defer func() { assert.NoError(b, adminCli.Close()) }()
+		defer func() { adminCli.Close() }()
 
 		ctx := context.Background()
 		for i := 0; i < b.N; i++ {

@@ -21,19 +21,17 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"testing"
-	"time"
 
-	"github.com/gogo/protobuf/types"
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/yorkie-team/yorkie/admin"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -54,9 +52,9 @@ var (
 
 	testRPCServer            *rpc.Server
 	testRPCAddr              = fmt.Sprintf("localhost:%d", helper.RPCPort)
-	testClient               api.YorkieServiceClient
+	testClient               v1connect.YorkieServiceClient
 	testAdminAuthInterceptor *admin.AuthInterceptor
-	testAdminClient          api.AdminServiceClient
+	testAdminClient          v1connect.AdminServiceClient
 
 	invalidChangePack = &api.ChangePack{
 		DocumentKey: "invalid",
@@ -102,10 +100,7 @@ func TestMain(m *testing.M) {
 	}
 
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
-		Port:                  helper.RPCPort,
-		MaxRequestBytes:       helper.RPCMaxRequestBytes,
-		MaxConnectionAge:      helper.RPCMaxConnectionAge.String(),
-		MaxConnectionAgeGrace: helper.RPCMaxConnectionAgeGrace.String(),
+		Port: helper.RPCPort,
 	}, be)
 	if err != nil {
 		log.Fatal(err)
@@ -115,30 +110,23 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed rpc listen: %s\n", err)
 	}
 
-	var dialOptions []grpc.DialOption
 	authInterceptor := client.NewAuthInterceptor(project.PublicKey, "")
-	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
-	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
-	dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-	conn, err := grpc.Dial(testRPCAddr, dialOptions...)
-	if err != nil {
-		log.Fatal(err)
-	}
-	testClient = api.NewYorkieServiceClient(conn)
-
-	credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-	dialOptions = []grpc.DialOption{credentials}
+	conn := http.DefaultClient
+	testClient = v1connect.NewYorkieServiceClient(
+		conn,
+		"http://"+testRPCAddr,
+		connect.WithInterceptors(authInterceptor),
+	)
 
 	testAdminAuthInterceptor = admin.NewAuthInterceptor("")
-	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(testAdminAuthInterceptor.Unary()))
-	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(testAdminAuthInterceptor.Stream()))
 
-	adminConn, err := grpc.Dial(testRPCAddr, dialOptions...)
-	if err != nil {
-		log.Fatal(err)
-	}
-	testAdminClient = api.NewAdminServiceClient(adminConn)
+	adminConn := http.DefaultClient
+	testAdminClient = v1connect.NewAdminServiceClient(
+		adminConn,
+		"http://"+testRPCAddr,
+		connect.WithInterceptors(testAdminAuthInterceptor),
+	)
 
 	code := m.Run()
 
@@ -153,42 +141,36 @@ func TestSDKRPCServerBackend(t *testing.T) {
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
-		)
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 		assert.NoError(t, err)
 
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
-		)
+			connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
 		assert.NoError(t, err)
 
 		// invalid argument
 		_, err = testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: ""},
-		)
-		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: ""}))
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: emptyClientID},
-		)
-		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+			connect.NewRequest(&api.DeactivateClientRequest{ClientId: emptyClientID}))
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 		// client not found
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: nilClientID},
-		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+			connect.NewRequest(&api.DeactivateClientRequest{ClientId: nilClientID}))
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	})
 
 	t.Run("attach/detach document test", func(t *testing.T) {
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
-		)
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
@@ -198,118 +180,116 @@ func TestSDKRPCServerBackend(t *testing.T) {
 
 		resPack, err := testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to attach with invalid client ID
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
+			connect.NewRequest(&api.AttachDocumentRequest{
 				ClientId:   invalidClientID,
 				ChangePack: packWithNoChanges,
 			},
-		)
-		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 		// try to attach with invalid client
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
+			connect.NewRequest(&api.AttachDocumentRequest{
 				ClientId:   nilClientID,
 				ChangePack: packWithNoChanges,
 			},
-		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 
 		// try to attach already attached document
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 
 		// try to attach invalid change pack
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: invalidChangePack,
 			},
-		)
-		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.DetachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to detach already detached document
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.DetachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
-		)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.DetachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: invalidChangePack,
 			},
-		)
-		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 		// document not found
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.DetachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				DocumentId: "000000000000000000000000",
 				ChangePack: &api.ChangePack{
 					Checkpoint: &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 				},
 			},
-		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
-		)
+			connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
 		assert.NoError(t, err)
 
 		// try to attach the document with a deactivated client
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	})
 
 	t.Run("attach/detach on removed document test", func(t *testing.T) {
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
-		)
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
@@ -325,53 +305,53 @@ func TestSDKRPCServerBackend(t *testing.T) {
 
 		resPack, err := testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testClient.RemoveDocument(
 			context.Background(),
-			&api.RemoveDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.RemoveDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to detach document with same ID as removed document
 		// FailedPrecondition because document is not attached.
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.DetachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
-		)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 
 		// try to create new document with same key as removed document
 		resPack, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testClient.RemoveDocument(
 			context.Background(),
-			&api.RemoveDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.RemoveDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
-		)
+			))
 		assert.NoError(t, err)
 	})
 
@@ -383,15 +363,14 @@ func TestSDKRPCServerBackend(t *testing.T) {
 
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()},
-		)
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()}))
 		assert.NoError(t, err)
 
-		actorID, _ := hex.DecodeString(activateResp.ClientId)
+		actorID, _ := hex.DecodeString(activateResp.Msg.ClientId)
 		resPack, err := testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId: activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId: activateResp.Msg.ClientId,
 				ChangePack: &api.ChangePack{
 					DocumentKey: helper.TestDocKey(t).String(),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
@@ -404,14 +383,14 @@ func TestSDKRPCServerBackend(t *testing.T) {
 					}},
 				},
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testClient.PushPullChanges(
 			context.Background(),
-			&api.PushPullChangesRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.PushPullChangesRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: &api.ChangePack{
 					DocumentKey: helper.TestDocKey(t).String(),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
@@ -424,14 +403,14 @@ func TestSDKRPCServerBackend(t *testing.T) {
 					}},
 				},
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.DetachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: &api.ChangePack{
 					DocumentKey: helper.TestDocKey(t).String(),
 					Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
@@ -444,47 +423,46 @@ func TestSDKRPCServerBackend(t *testing.T) {
 					}},
 				},
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to push/pull with detached document
 		_, err = testClient.PushPullChanges(
 			context.Background(),
-			&api.PushPullChangesRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.PushPullChangesRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
-		)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 
 		// try to push/pull with invalid pack
 		_, err = testClient.PushPullChanges(
 			context.Background(),
-			&api.PushPullChangesRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.PushPullChangesRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: invalidChangePack,
 			},
-		)
-		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
-		)
+			connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
 		assert.NoError(t, err)
 
 		// try to push/pull with deactivated client
 		_, err = testClient.PushPullChanges(
 			context.Background(),
-			&api.PushPullChangesRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.PushPullChangesRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
-		)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	})
 
 	t.Run("push/pull on removed document test", func(t *testing.T) {
@@ -501,46 +479,44 @@ func TestSDKRPCServerBackend(t *testing.T) {
 
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()},
-		)
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()}))
 		assert.NoError(t, err)
 
 		resPack, err := testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testClient.RemoveDocument(
 			context.Background(),
-			&api.RemoveDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.RemoveDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to push/pull on removed document
 		_, err = testClient.PushPullChanges(
 			context.Background(),
-			&api.PushPullChangesRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.PushPullChangesRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
-		)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	})
 
 	t.Run("remove document test", func(t *testing.T) {
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
-		)
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
@@ -556,40 +532,39 @@ func TestSDKRPCServerBackend(t *testing.T) {
 
 		resPack, err := testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testClient.RemoveDocument(
 			context.Background(),
-			&api.RemoveDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.RemoveDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to remove removed document
 		_, err = testClient.RemoveDocument(
 			context.Background(),
-			&api.RemoveDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.RemoveDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
-		)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	})
 
 	t.Run("remove document with invalid client state test", func(t *testing.T) {
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
-		)
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
@@ -605,57 +580,55 @@ func TestSDKRPCServerBackend(t *testing.T) {
 
 		resPack, err := testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testClient.DetachDocument(
 			context.Background(),
-			&api.DetachDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.DetachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to remove detached document
 		_, err = testClient.RemoveDocument(
 			context.Background(),
-			&api.RemoveDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.RemoveDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
-		)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 
 		_, err = testClient.DeactivateClient(
 			context.Background(),
-			&api.DeactivateClientRequest{ClientId: activateResp.ClientId},
-		)
+			connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
 		assert.NoError(t, err)
 
 		// try to remove document with a deactivated client
 		_, err = testClient.RemoveDocument(
 			context.Background(),
-			&api.RemoveDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.RemoveDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 				ChangePack: packWithRemoveRequest,
 			},
-		)
-		assert.Equal(t, codes.FailedPrecondition, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 	})
 
 	t.Run("watch document test", func(t *testing.T) {
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
-		)
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
@@ -665,34 +638,38 @@ func TestSDKRPCServerBackend(t *testing.T) {
 
 		resPack, err := testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// watch document
 		watchResp, err := testClient.WatchDocument(
 			context.Background(),
-			&api.WatchDocumentRequest{
-				ClientId:   activateResp.ClientId,
-				DocumentId: resPack.DocumentId,
+			connect.NewRequest(&api.WatchDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
+				DocumentId: resPack.Msg.DocumentId,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// check if stream is open
-		_, err = watchResp.Recv()
-		assert.NoError(t, err)
+		for watchResp.Receive() {
+			resp := watchResp.Msg()
+			assert.NotNil(t, resp)
+			break
+		}
 
-		// wait for MaxConnectionAge + MaxConnectionAgeGrace
-		time.Sleep(helper.RPCMaxConnectionAge + helper.RPCMaxConnectionAgeGrace)
-
-		// check if stream has closed by server (EOF)
-		_, err = watchResp.Recv()
-		assert.Equal(t, codes.Unavailable, status.Code(err))
-		assert.Contains(t, err.Error(), "EOF")
+		// TODO(krapie): find a way to set timeout for stream
+		//// wait for MaxConnectionAge + MaxConnectionAgeGrace
+		//time.Sleep(helper.RPCMaxConnectionAge + helper.RPCMaxConnectionAgeGrace)
+		//
+		//// check if stream has closed by server (EOF)
+		//_ = watchResp.Msg()
+		//assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+		//assert.Contains(t, err.Error(), "EOF")
 	})
 }
 
@@ -703,43 +680,43 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 		_, err := testAdminClient.SignUp(
 			context.Background(),
-			&api.SignUpRequest{
+			connect.NewRequest(&api.SignUpRequest{
 				Username: adminUser,
 				Password: adminPassword,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to sign up with existing username
 		_, err = testAdminClient.SignUp(
 			context.Background(),
-			&api.SignUpRequest{
+			connect.NewRequest(&api.SignUpRequest{
 				Username: adminUser,
 				Password: adminPassword,
 			},
-		)
-		assert.Equal(t, codes.AlreadyExists, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
 	})
 
 	t.Run("admin login test", func(t *testing.T) {
 		_, err := testAdminClient.LogIn(
 			context.Background(),
-			&api.LogInRequest{
+			connect.NewRequest(&api.LogInRequest{
 				Username: helper.AdminUser,
 				Password: helper.AdminPassword,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to log in with invalid password
 		_, err = testAdminClient.LogIn(
 			context.Background(),
-			&api.LogInRequest{
+			connect.NewRequest(&api.LogInRequest{
 				Username: helper.AdminUser,
 				Password: invalidSlugName,
 			},
-		)
-		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	})
 
 	t.Run("admin create project test", func(t *testing.T) {
@@ -747,57 +724,56 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 		resp, err := testAdminClient.LogIn(
 			context.Background(),
-			&api.LogInRequest{
+			connect.NewRequest(&api.LogInRequest{
 				Username: helper.AdminUser,
 				Password: helper.AdminPassword,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
-		testAdminAuthInterceptor.SetToken(resp.Token)
+		testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
 		_, err = testAdminClient.CreateProject(
 			context.Background(),
-			&api.CreateProjectRequest{
+			connect.NewRequest(&api.CreateProjectRequest{
 				Name: projectName,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to create project with existing name
 		_, err = testAdminClient.CreateProject(
 			context.Background(),
-			&api.CreateProjectRequest{
+			connect.NewRequest(&api.CreateProjectRequest{
 				Name: projectName,
 			},
-		)
-		assert.Equal(t, codes.AlreadyExists, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
 	})
 
 	t.Run("admin list projects test", func(t *testing.T) {
 		resp, err := testAdminClient.LogIn(
 			context.Background(),
-			&api.LogInRequest{
+			connect.NewRequest(&api.LogInRequest{
 				Username: helper.AdminUser,
 				Password: helper.AdminPassword,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
-		testAdminAuthInterceptor.SetToken(resp.Token)
+		testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
 		_, err = testAdminClient.CreateProject(
 			context.Background(),
-			&api.CreateProjectRequest{
+			connect.NewRequest(&api.CreateProjectRequest{
 				Name: helper.TestSlugName(t),
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testAdminClient.ListProjects(
 			context.Background(),
-			&api.ListProjectsRequest{},
-		)
+			connect.NewRequest(&api.ListProjectsRequest{}))
 		assert.NoError(t, err)
 	})
 
@@ -806,39 +782,39 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 		resp, err := testAdminClient.LogIn(
 			context.Background(),
-			&api.LogInRequest{
+			connect.NewRequest(&api.LogInRequest{
 				Username: helper.AdminUser,
 				Password: helper.AdminPassword,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
-		testAdminAuthInterceptor.SetToken(resp.Token)
+		testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
 		_, err = testAdminClient.CreateProject(
 			context.Background(),
-			&api.CreateProjectRequest{
+			connect.NewRequest(&api.CreateProjectRequest{
 				Name: projectName,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testAdminClient.GetProject(
 			context.Background(),
-			&api.GetProjectRequest{
+			connect.NewRequest(&api.GetProjectRequest{
 				Name: projectName,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to get project with non-existing name
 		_, err = testAdminClient.GetProject(
 			context.Background(),
-			&api.GetProjectRequest{
+			connect.NewRequest(&api.GetProjectRequest{
 				Name: invalidSlugName,
 			},
-		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	})
 
 	t.Run("admin update project test", func(t *testing.T) {
@@ -846,75 +822,75 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 		resp, err := testAdminClient.LogIn(
 			context.Background(),
-			&api.LogInRequest{
+			connect.NewRequest(&api.LogInRequest{
 				Username: helper.AdminUser,
 				Password: helper.AdminPassword,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
-		testAdminAuthInterceptor.SetToken(resp.Token)
+		testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
 		createResp, err := testAdminClient.CreateProject(
 			context.Background(),
-			&api.CreateProjectRequest{
+			connect.NewRequest(&api.CreateProjectRequest{
 				Name: projectName,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testAdminClient.UpdateProject(
 			context.Background(),
-			&api.UpdateProjectRequest{
-				Id: createResp.Project.Id,
+			connect.NewRequest(&api.UpdateProjectRequest{
+				Id: createResp.Msg.Project.Id,
 				Fields: &api.UpdatableProjectFields{
-					Name: &types.StringValue{Value: "updated"},
+					Name: &wrapperspb.StringValue{Value: "updated"},
 				},
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to update project with invalid field
 		_, err = testAdminClient.UpdateProject(
 			context.Background(),
-			&api.UpdateProjectRequest{
+			connect.NewRequest(&api.UpdateProjectRequest{
 				Id: projectName,
 				Fields: &api.UpdatableProjectFields{
-					Name: &types.StringValue{Value: invalidSlugName},
+					Name: &wrapperspb.StringValue{Value: invalidSlugName},
 				},
 			},
-		)
-		assert.Equal(t, codes.InvalidArgument, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	})
 
 	t.Run("admin list documents test", func(t *testing.T) {
 		resp, err := testAdminClient.LogIn(
 			context.Background(),
-			&api.LogInRequest{
+			connect.NewRequest(&api.LogInRequest{
 				Username: helper.AdminUser,
 				Password: helper.AdminPassword,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
-		testAdminAuthInterceptor.SetToken(resp.Token)
+		testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
 		_, err = testAdminClient.ListDocuments(
 			context.Background(),
-			&api.ListDocumentsRequest{
+			connect.NewRequest(&api.ListDocumentsRequest{
 				ProjectName: defaultProjectName,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to list documents with non-existing project name
 		_, err = testAdminClient.ListDocuments(
 			context.Background(),
-			&api.ListDocumentsRequest{
+			connect.NewRequest(&api.ListDocumentsRequest{
 				ProjectName: invalidSlugName,
 			},
-		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	})
 
 	t.Run("admin get document test", func(t *testing.T) {
@@ -922,19 +898,18 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 		resp, err := testAdminClient.LogIn(
 			context.Background(),
-			&api.LogInRequest{
+			connect.NewRequest(&api.LogInRequest{
 				Username: helper.AdminUser,
 				Password: helper.AdminPassword,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
-		testAdminAuthInterceptor.SetToken(resp.Token)
+		testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
-		)
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
@@ -944,31 +919,31 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testAdminClient.GetDocument(
 			context.Background(),
-			&api.GetDocumentRequest{
+			connect.NewRequest(&api.GetDocumentRequest{
 				ProjectName: defaultProjectName,
 				DocumentKey: testDocumentKey,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to get document with non-existing document name
 		_, err = testAdminClient.GetDocument(
 			context.Background(),
-			&api.GetDocumentRequest{
+			connect.NewRequest(&api.GetDocumentRequest{
 				ProjectName: defaultProjectName,
 				DocumentKey: invalidChangePack.DocumentKey,
 			},
-		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	})
 
 	t.Run("admin list changes test", func(t *testing.T) {
@@ -976,19 +951,18 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 		resp, err := testAdminClient.LogIn(
 			context.Background(),
-			&api.LogInRequest{
+			connect.NewRequest(&api.LogInRequest{
 				Username: helper.AdminUser,
 				Password: helper.AdminPassword,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
-		testAdminAuthInterceptor.SetToken(resp.Token)
+		testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
 		activateResp, err := testClient.ActivateClient(
 			context.Background(),
-			&api.ActivateClientRequest{ClientKey: t.Name()},
-		)
+			connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
 		assert.NoError(t, err)
 
 		packWithNoChanges := &api.ChangePack{
@@ -998,31 +972,31 @@ func TestAdminRPCServerBackend(t *testing.T) {
 
 		_, err = testClient.AttachDocument(
 			context.Background(),
-			&api.AttachDocumentRequest{
-				ClientId:   activateResp.ClientId,
+			connect.NewRequest(&api.AttachDocumentRequest{
+				ClientId:   activateResp.Msg.ClientId,
 				ChangePack: packWithNoChanges,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		_, err = testAdminClient.ListChanges(
 			context.Background(),
-			&api.ListChangesRequest{
+			connect.NewRequest(&api.ListChangesRequest{
 				ProjectName: defaultProjectName,
 				DocumentKey: testDocumentKey,
 			},
-		)
+			))
 		assert.NoError(t, err)
 
 		// try to list changes with non-existing document name
 		_, err = testAdminClient.ListChanges(
 			context.Background(),
-			&api.ListChangesRequest{
+			connect.NewRequest(&api.ListChangesRequest{
 				ProjectName: defaultProjectName,
 				DocumentKey: invalidChangePack.DocumentKey,
 			},
-		)
-		assert.Equal(t, codes.NotFound, status.Convert(err).Code())
+			))
+		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	})
 }
 
@@ -1032,24 +1006,20 @@ func TestConfig_Validate(t *testing.T) {
 		expected error
 	}{
 		{config: &rpc.Config{Port: -1}, expected: rpc.ErrInvalidRPCPort},
-		{config: &rpc.Config{Port: 11101, CertFile: "noSuchCertFile"}, expected: rpc.ErrInvalidCertFile},
-		{config: &rpc.Config{Port: 11101, KeyFile: "noSuchKeyFile"}, expected: rpc.ErrInvalidKeyFile},
+		{config: &rpc.Config{Port: 8080, CertFile: "noSuchCertFile"}, expected: rpc.ErrInvalidCertFile},
+		{config: &rpc.Config{Port: 8080, KeyFile: "noSuchKeyFile"}, expected: rpc.ErrInvalidKeyFile},
 		// not to use tls
 		{config: &rpc.Config{
-			Port:                  11101,
-			CertFile:              "",
-			KeyFile:               "",
-			MaxConnectionAge:      "50s",
-			MaxConnectionAgeGrace: "10s",
+			Port:     8080,
+			CertFile: "",
+			KeyFile:  "",
 		},
 			expected: nil},
 		// pass any file existing
 		{config: &rpc.Config{
-			Port:                  11101,
-			CertFile:              "server_test.go",
-			KeyFile:               "server_test.go",
-			MaxConnectionAge:      "50s",
-			MaxConnectionAgeGrace: "10s",
+			Port:     8080,
+			CertFile: "server_test.go",
+			KeyFile:  "server_test.go",
 		},
 			expected: nil},
 	}

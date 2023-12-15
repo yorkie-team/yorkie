@@ -14,25 +14,27 @@
  * limitations under the License.
  */
 
-package grpchelper
+package connecthelper
 
 import (
+	"net/http"
 	"strings"
-
-	grpcmetadata "google.golang.org/grpc/metadata"
 
 	"github.com/yorkie-team/yorkie/api/types"
 )
 
 // SDKTypeAndVersion returns the type and version of the SDK from the given
 // metadata.
-func SDKTypeAndVersion(data grpcmetadata.MD) (string, string) {
-	yorkieUserAgentSlice := data[types.UserAgentKey]
-	if len(yorkieUserAgentSlice) == 0 {
+func SDKTypeAndVersion(header http.Header) (string, string) {
+	yorkieUserAgent := header.Get(types.UserAgentKey)
+	if yorkieUserAgent == "" {
 		return "", ""
 	}
 
-	yorkieUserAgent := yorkieUserAgentSlice[0]
-	agent := strings.Split(yorkieUserAgent, "/")
-	return agent[0], agent[1]
+	split := strings.Split(yorkieUserAgent, "/")
+	if len(split) != 2 {
+		return "", ""
+	}
+
+	return split[0], split[1]
 }

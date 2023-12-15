@@ -20,11 +20,9 @@ package prometheus
 import (
 	"fmt"
 
-	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"google.golang.org/grpc"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/internal/version"
@@ -50,10 +48,10 @@ var (
 
 // Metrics manages the metric information that Yorkie is trying to measure.
 type Metrics struct {
-	registry      *prometheus.Registry
-	serverMetrics *grpcprometheus.ServerMetrics
+	registry *prometheus.Registry
 
-	serverVersion *prometheus.GaugeVec
+	serverVersion        *prometheus.GaugeVec
+	serverHandledCounter *prometheus.CounterVec
 
 	pushPullResponseSeconds         prometheus.Histogram
 	pushPullReceivedChangesTotal    prometheus.Counter
@@ -69,11 +67,7 @@ type Metrics struct {
 // NewMetrics creates a new instance of Metrics.
 func NewMetrics() (*Metrics, error) {
 	reg := prometheus.NewRegistry()
-	serverMetrics := grpcprometheus.NewServerMetrics()
 
-	if err := reg.Register(serverMetrics); err != nil {
-		return nil, fmt.Errorf("register server metrics: %w", err)
-	}
 	if err := reg.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
 		return nil, fmt.Errorf("register process collector: %w", err)
 	}
@@ -82,14 +76,19 @@ func NewMetrics() (*Metrics, error) {
 	}
 
 	metrics := &Metrics{
-		registry:      reg,
-		serverMetrics: serverMetrics,
+		registry: reg,
 		serverVersion: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: "server",
 			Name:      "version",
 			Help:      "Which version is running. 1 for 'server_version' label with current version.",
 		}, []string{"server_version"}),
+		serverHandledCounter: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "rpc",
+			Name:      "server_handled_total",
+			Help:      "Total number of RPCs completed on the server, regardless of success or failure.",
+		}, []string{"rpc_type", "rpc_service", "rpc_method", "rpc_code"}),
 		pushPullResponseSeconds: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Namespace: namespace,
 			Subsystem: "pushpull",
@@ -220,14 +219,19 @@ func (m *Metrics) AddUserAgentWithEmptyProject(hostname string, sdkType, sdkVers
 	m.AddUserAgent(hostname, emptyProject, sdkType, sdkVersion, methodName)
 }
 
-// RegisterGRPCServer registers the given gRPC server.
-func (m *Metrics) RegisterGRPCServer(server *grpc.Server) {
-	m.serverMetrics.InitializeMetrics(server)
-}
-
-// ServerMetrics returns the serverMetrics.
-func (m *Metrics) ServerMetrics() *grpcprometheus.ServerMetrics {
-	return m.serverMetrics
+// AddServerHandledCounter adds the number of RPCs completed on the server.
+func (m *Metrics) AddServerHandledCounter(
+	rpcType,
+	rpcService,
+	rpcMethod,
+	rpcCode string,
+) {
+	m.serverHandledCounter.With(prometheus.Labels{
+		"rpc_type":    rpcType,
+		"rpc_service": rpcService,
+		"rpc_method":  rpcMethod,
+		"rpc_code":    rpcCode,
+	}).Inc()
 }
 
 // Registry returns the registry of this metrics.
