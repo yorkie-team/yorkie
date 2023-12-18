@@ -41,6 +41,10 @@ spec:
           "--mongo-connection-uri",
           "mongodb://{{ .Values.yorkie.args.dbUrl }}:{{ .Values.yorkie.args.dbPort }}/yorkie-meta",
           "--enable-pprof",
+          "--rpc-port",
+          "{{ .Values.yorkie.ports.rpcPort }}",
+          "--profiling-port",
+          "{{ .Values.yorkie.ports.profilingPort }}",
         ]
         ports:
           - containerPort: {{ .Values.yorkie.ports.rpcPort }}
