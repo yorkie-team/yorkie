@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.11] - 2023-12-18
+
+### Added
+* Support concurrent insertion and splitting in Tree by @sejongk in https://github.com/yorkie-team/yorkie/pull/725
+
+### Changed
+* Migrate RPC to ConnectRPC by @krapie, @hackerwins https://github.com/yorkie-team/yorkie/pull/703
+
+### Fixed
+* Address duplicate nodeIDs in Tree.Split @sejongk https://github.com/yorkie-team/yorkie/pull/724
+
 ## [0.4.10] - 2023-12-04
 
 ### Added
