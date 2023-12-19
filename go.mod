@@ -20,7 +20,7 @@ require (
 	github.com/undefinedlabs/go-mpatch v1.0.6
 	go.mongodb.org/mongo-driver v1.11.7
 	go.uber.org/zap v1.23.0
-	golang.org/x/crypto v0.16.0
+	golang.org/x/crypto v0.17.0
 	golang.org/x/net v0.17.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230920204549-e6e6cdab5c13
 	google.golang.org/grpc v1.58.3
