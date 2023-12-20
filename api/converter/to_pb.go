@@ -20,7 +20,8 @@ import (
 	"fmt"
 	"reflect"
 
-	protoTypes "github.com/gogo/protobuf/types"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -32,44 +33,26 @@ import (
 )
 
 // ToUser converts the given model format to Protobuf format.
-func ToUser(user *types.User) (*api.User, error) {
-	pbCreatedAt, err := protoTypes.TimestampProto(user.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
-	}
-
+func ToUser(user *types.User) *api.User {
 	return &api.User{
 		Id:        user.ID.String(),
 		Username:  user.Username,
-		CreatedAt: pbCreatedAt,
-	}, nil
+		CreatedAt: timestamppb.New(user.CreatedAt),
+	}
 }
 
 // ToProjects converts the given model to Protobuf.
-func ToProjects(projects []*types.Project) ([]*api.Project, error) {
+func ToProjects(projects []*types.Project) []*api.Project {
 	var pbProjects []*api.Project
 	for _, project := range projects {
-		pbProject, err := ToProject(project)
-		if err != nil {
-			return nil, err
-		}
-		pbProjects = append(pbProjects, pbProject)
+		pbProjects = append(pbProjects, ToProject(project))
 	}
 
-	return pbProjects, nil
+	return pbProjects
 }
 
 // ToProject converts the given model to Protobuf.
-func ToProject(project *types.Project) (*api.Project, error) {
-	pbCreatedAt, err := protoTypes.TimestampProto(project.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
-	}
-	pbUpdatedAt, err := protoTypes.TimestampProto(project.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to protobuf: %w", err)
-	}
-
+func ToProject(project *types.Project) *api.Project {
 	return &api.Project{
 		Id:                        project.ID.String(),
 		Name:                      project.Name,
@@ -78,47 +61,30 @@ func ToProject(project *types.Project) (*api.Project, error) {
 		ClientDeactivateThreshold: project.ClientDeactivateThreshold,
 		PublicKey:                 project.PublicKey,
 		SecretKey:                 project.SecretKey,
-		CreatedAt:                 pbCreatedAt,
-		UpdatedAt:                 pbUpdatedAt,
-	}, nil
+		CreatedAt:                 timestamppb.New(project.CreatedAt),
+		UpdatedAt:                 timestamppb.New(project.UpdatedAt),
+	}
 }
 
 // ToDocumentSummaries converts the given model to Protobuf.
-func ToDocumentSummaries(summaries []*types.DocumentSummary) ([]*api.DocumentSummary, error) {
+func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSummary {
 	var pbSummaries []*api.DocumentSummary
 	for _, summary := range summaries {
-		pbSummary, err := ToDocumentSummary(summary)
-		if err != nil {
-			return nil, err
-		}
-		pbSummaries = append(pbSummaries, pbSummary)
+		pbSummaries = append(pbSummaries, ToDocumentSummary(summary))
 	}
-	return pbSummaries, nil
+	return pbSummaries
 }
 
 // ToDocumentSummary converts the given model to Protobuf format.
-func ToDocumentSummary(summary *types.DocumentSummary) (*api.DocumentSummary, error) {
-	pbCreatedAt, err := protoTypes.TimestampProto(summary.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert createdAt to protobuf: %w", err)
-	}
-	pbAccessedAt, err := protoTypes.TimestampProto(summary.AccessedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert accessedAt to protobuf: %w", err)
-	}
-	pbUpdatedAt, err := protoTypes.TimestampProto(summary.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("convert updatedAt to protobuf: %w", err)
-	}
-
+func ToDocumentSummary(summary *types.DocumentSummary) *api.DocumentSummary {
 	return &api.DocumentSummary{
 		Id:         summary.ID.String(),
 		Key:        summary.Key.String(),
-		CreatedAt:  pbCreatedAt,
-		AccessedAt: pbAccessedAt,
-		UpdatedAt:  pbUpdatedAt,
+		CreatedAt:  timestamppb.New(summary.CreatedAt),
+		AccessedAt: timestamppb.New(summary.AccessedAt),
+		UpdatedAt:  timestamppb.New(summary.UpdatedAt),
 		Snapshot:   summary.Snapshot,
-	}, nil
+	}
 }
 
 // ToPresences converts the given model to Protobuf format.
@@ -387,8 +353,9 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
 			From:                toTreePos(e.FromPos()),
 			To:                  toTreePos(e.ToPos()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
 			Contents:            ToTreeNodesWhenEdit(e.Contents()),
+			SplitLevel:          int32(e.SplitLevel()),
+			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
 			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
@@ -409,14 +376,24 @@ func toTreeStyle(style *operations.TreeStyle) (*api.Operation_TreeStyle_, error)
 func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 	switch elem := elem.(type) {
 	case *crdt.Object:
+		bytes, err := ObjectToBytes(elem)
+		if err != nil {
+			return nil, err
+		}
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_JSON_OBJECT,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			Value:     bytes,
 		}, nil
 	case *crdt.Array:
+		bytes, err := ArrayToBytes(elem)
+		if err != nil {
+			return nil, err
+		}
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_JSON_ARRAY,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			Value:     bytes,
 		}, nil
 	case *crdt.Primitive:
 		pbValueType, err := toValueType(elem.ValueType())
@@ -519,10 +496,10 @@ func toCounterType(valueType crdt.CounterType) (api.ValueType, error) {
 func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.UpdatableProjectFields, error) {
 	pbUpdatableProjectFields := &api.UpdatableProjectFields{}
 	if fields.Name != nil {
-		pbUpdatableProjectFields.Name = &protoTypes.StringValue{Value: *fields.Name}
+		pbUpdatableProjectFields.Name = &wrapperspb.StringValue{Value: *fields.Name}
 	}
 	if fields.AuthWebhookURL != nil {
-		pbUpdatableProjectFields.AuthWebhookUrl = &protoTypes.StringValue{Value: *fields.AuthWebhookURL}
+		pbUpdatableProjectFields.AuthWebhookUrl = &wrapperspb.StringValue{Value: *fields.AuthWebhookURL}
 	}
 	if fields.AuthWebhookMethods != nil {
 		pbUpdatableProjectFields.AuthWebhookMethods = &api.UpdatableProjectFields_AuthWebhookMethods{
@@ -532,7 +509,7 @@ func ToUpdatableProjectFields(fields *types.UpdatableProjectFields) (*api.Updata
 		pbUpdatableProjectFields.AuthWebhookMethods = nil
 	}
 	if fields.ClientDeactivateThreshold != nil {
-		pbUpdatableProjectFields.ClientDeactivateThreshold = &protoTypes.StringValue{
+		pbUpdatableProjectFields.ClientDeactivateThreshold = &wrapperspb.StringValue{
 			Value: *fields.ClientDeactivateThreshold,
 		}
 	}

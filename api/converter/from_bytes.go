@@ -20,7 +20,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -30,7 +30,7 @@ import (
 
 // BytesToSnapshot creates a Snapshot from the given byte array.
 func BytesToSnapshot(snapshot []byte) (*crdt.Object, *innerpresence.Map, error) {
-	if snapshot == nil {
+	if len(snapshot) == 0 {
 		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), innerpresence.NewMap(), nil
 	}
 
@@ -50,8 +50,8 @@ func BytesToSnapshot(snapshot []byte) (*crdt.Object, *innerpresence.Map, error) 
 
 // BytesToObject creates an Object from the given byte array.
 func BytesToObject(snapshot []byte) (*crdt.Object, error) {
-	if snapshot == nil {
-		return crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket), nil
+	if len(snapshot) == 0 {
+		return nil, errors.New("snapshot should not be empty")
 	}
 
 	pbElem := &api.JSONElement{}
@@ -67,10 +67,29 @@ func BytesToObject(snapshot []byte) (*crdt.Object, error) {
 	return obj, nil
 }
 
+// BytesToArray creates a Array from the given byte array.
+func BytesToArray(snapshot []byte) (*crdt.Array, error) {
+	if len(snapshot) == 0 {
+		return nil, errors.New("snapshot should not be empty")
+	}
+
+	pbArray := &api.JSONElement{}
+	if err := proto.Unmarshal(snapshot, pbArray); err != nil {
+		return nil, fmt.Errorf("unmarshal array: %w", err)
+	}
+
+	array, err := fromJSONArray(pbArray.GetJsonArray())
+	if err != nil {
+		return nil, err
+	}
+
+	return array, nil
+}
+
 // BytesToTree creates a Tree from the given byte array.
 func BytesToTree(snapshot []byte) (*crdt.Tree, error) {
-	if snapshot == nil {
-		return nil, errors.New("snapshot should not be nil")
+	if len(snapshot) == 0 {
+		return nil, errors.New("snapshot should not be empty")
 	}
 
 	pbTree := &api.JSONElement{}

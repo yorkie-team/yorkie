@@ -43,7 +43,7 @@ func newLoginCmd() *cobra.Command {
 				return err
 			}
 			defer func() {
-				_ = cli.Close()
+				cli.Close()
 			}()
 
 			ctx := context.Background()
@@ -93,7 +93,7 @@ func init() {
 	cmd.Flags().StringVar(
 		&rpcAddr,
 		"rpc-addr",
-		"localhost:11101",
+		"localhost:8080",
 		"Address of the rpc server",
 	)
 	cmd.Flags().BoolVar(

@@ -8,13 +8,11 @@ maintainers:
     email: susukang98@gmail.com
   - name: krapie
     email: krapi0314@gmail.com
-  - name: chacha912
-    email: dkwkdnwk912@gmail.com
 
 sources:
   - https://github.com/yorkie-team/yorkie
-version: 0.4.7
-appVersion: "0.4.7"
+version: 0.4.11
+appVersion: "0.4.11"
 kubeVersion: ">=1.24.0-0"
 
 keywords:

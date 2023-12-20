@@ -1,0 +1,15 @@
+{{ if .Values.ratelimit.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.ratelimit.name }}-redis
+  namespace: istio-system
+  labels:
+    app: redis
+spec:
+  ports:
+  - name: redis
+    port: 6379
+  selector:
+    app: redis
+{{ end }}

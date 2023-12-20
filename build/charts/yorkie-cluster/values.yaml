@@ -17,8 +17,8 @@ yorkie:
     dbPort: &mongoPort 27017
 
   ports:
-    rpcPort: 11101
-    profilingPort: 11102
+    rpcPort: 8080
+    profilingPort: 8081
 
   resources: {}
 
@@ -67,3 +67,11 @@ ingress:
   alb:
     enabled: false
     certArn: arn:aws:acm:ap-northeast-2:123412341234:certificate/1234-1234-1234-1234-1234
+
+# Configuration for ratelimit
+ratelimit:
+  enabled: false
+  name: ratelimit
+  unit: minute
+  requestsPerUnit: 10000
+  domain: yorkie-ratelimit

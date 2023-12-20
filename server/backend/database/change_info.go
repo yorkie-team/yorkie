@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -33,6 +35,9 @@ import (
 
 // ErrEncodeOperationFailed is returned when encoding operations failed.
 var ErrEncodeOperationFailed = errors.New("encode operations failed")
+
+// ErrDecodeOperationFailed is returned when decoding operations failed.
+var ErrDecodeOperationFailed = errors.New("decode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
@@ -58,7 +63,7 @@ func EncodeOperations(operations []operations.Operation) ([][]byte, error) {
 	}
 
 	for _, pbOp := range changes {
-		encodedOp, err := pbOp.Marshal()
+		encodedOp, err := proto.Marshal(pbOp)
 		if err != nil {
 			return nil, ErrEncodeOperationFailed
 		}
@@ -94,8 +99,8 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	var pbOps []*api.Operation
 	for _, bytesOp := range i.Operations {
 		pbOp := api.Operation{}
-		if err := pbOp.Unmarshal(bytesOp); err != nil {
-			return nil, err
+		if err := proto.Unmarshal(bytesOp, &pbOp); err != nil {
+			return nil, ErrDecodeOperationFailed
 		}
 		pbOps = append(pbOps, &pbOp)
 	}

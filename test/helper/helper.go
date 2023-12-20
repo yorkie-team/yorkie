@@ -56,12 +56,9 @@ var testStartedAt int64
 
 // Below are the values of the Yorkie config used in the test.
 var (
-	RPCPort                  = 21101
-	RPCMaxRequestBytes       = uint64(4 * 1024 * 1024)
-	RPCMaxConnectionAge      = 8 * gotime.Second
-	RPCMaxConnectionAgeGrace = 2 * gotime.Second
+	RPCPort = 11101
 
-	ProfilingPort = 21102
+	ProfilingPort = 11102
 
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword
@@ -121,8 +118,8 @@ func TextChangeContext(root *crdt.Root) *change.Context {
 	)
 }
 
-// IssuePos is a helper function that issues a new CRDTTreeNodeID.
-func IssuePos(change *change.Context, offset ...int) *crdt.TreeNodeID {
+// PosT is a helper function that issues a new CRDTTreeNodeID.
+func PosT(change *change.Context, offset ...int) *crdt.TreeNodeID {
 	pos := &crdt.TreeNodeID{
 		CreatedAt: change.IssueTimeTicket(),
 		Offset:    0,
@@ -135,8 +132,8 @@ func IssuePos(change *change.Context, offset ...int) *crdt.TreeNodeID {
 	return pos
 }
 
-// IssueTime is a helper function that issues a new TimeTicket
-func IssueTime(change *change.Context) *time.Ticket {
+// TimeT is a helper function that issues a new TimeTicket
+func TimeT(change *change.Context) *time.Ticket {
 	return change.IssueTimeTicket()
 }
 
@@ -207,10 +204,7 @@ func TestConfig() *server.Config {
 	portOffset += 100
 	return &server.Config{
 		RPC: &rpc.Config{
-			Port:                  RPCPort + portOffset,
-			MaxRequestBytes:       RPCMaxRequestBytes,
-			MaxConnectionAge:      RPCMaxConnectionAge.String(),
-			MaxConnectionAgeGrace: RPCMaxConnectionAgeGrace.String(),
+			Port: RPCPort + portOffset,
 		},
 		Profiling: &profiling.Config{
 			Port: ProfilingPort + portOffset,

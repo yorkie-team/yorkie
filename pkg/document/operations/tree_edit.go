@@ -33,12 +33,15 @@ type TreeEdit struct {
 	// toPos represents the end point of the editing range.
 	to *crdt.TreePos
 
+	// contents is the content of tree added when editing.
+	contents []*crdt.TreeNode
+
+	// splitLevel is the level of the split.
+	splitLevel int
+
 	// latestCreatedAtMapByActor is a map that stores the latest creation time
 	// by actor for the nodes included in the editing range.
 	latestCreatedAtMapByActor map[string]*time.Ticket
-
-	// contents is the content of tree added when editing.
-	contents []*crdt.TreeNode
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
@@ -49,16 +52,18 @@ func NewTreeEdit(
 	parentCreatedAt *time.Ticket,
 	from *crdt.TreePos,
 	to *crdt.TreePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
 	contents []*crdt.TreeNode,
+	splitLevel int,
+	latestCreatedAtMapByActor map[string]*time.Ticket,
 	executedAt *time.Ticket,
 ) *TreeEdit {
 	return &TreeEdit{
 		parentCreatedAt:           parentCreatedAt,
 		from:                      from,
 		to:                        to,
-		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
 		contents:                  contents,
+		splitLevel:                splitLevel,
+		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
 		executedAt:                executedAt,
 	}
 }
@@ -84,7 +89,35 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 			}
 
 		}
-		if _, err = obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, contents, e.executedAt); err != nil {
+		if _, err = obj.Edit(
+			e.from,
+			e.to,
+			contents,
+			e.splitLevel,
+			e.executedAt,
+			/**
+			 * TODO(sejongk): When splitting element nodes, a new nodeID is assigned with a different timeTicket.
+			 * In the same change context, the timeTickets share the same lamport and actorID but have different delimiters,
+			 * incremented by one for each.
+			 * Therefore, it is possible to simulate later timeTickets using `editedAt` and the length of `contents`.
+			 * This logic might be unclear; consider refactoring for multi-level concurrent editing in the Tree implementation.
+			 */
+			func() func() *time.Ticket {
+				delimiter := e.executedAt.Delimiter()
+				if contents != nil {
+					delimiter += uint32((len(contents)))
+				}
+				return func() *time.Ticket {
+					delimiter++
+					return time.NewTicket(
+						e.executedAt.Lamport(),
+						delimiter,
+						e.executedAt.ActorID(),
+					)
+				}
+			}(),
+			e.latestCreatedAtMapByActor,
+		); err != nil {
 			return err
 		}
 
@@ -108,11 +141,6 @@ func (e *TreeEdit) ToPos() *crdt.TreePos {
 	return e.to
 }
 
-// ExecutedAt returns execution time of this operation.
-func (e *TreeEdit) ExecutedAt() *time.Ticket {
-	return e.executedAt
-}
-
 // SetActor sets the given actor to this operation.
 func (e *TreeEdit) SetActor(actorID *time.ActorID) {
 	e.executedAt = e.executedAt.SetActorID(actorID)
@@ -128,8 +156,18 @@ func (e *TreeEdit) Contents() []*crdt.TreeNode {
 	return e.contents
 }
 
+// SplitLevel returns the level of the split.
+func (e *TreeEdit) SplitLevel() int {
+	return e.splitLevel
+}
+
 // CreatedAtMapByActor returns the map that stores the latest creation time
 // by actor for the nodes included in the editing range.
 func (e *TreeEdit) CreatedAtMapByActor() map[string]*time.Ticket {
 	return e.latestCreatedAtMapByActor
+}
+
+// ExecutedAt returns execution time of this operation.
+func (e *TreeEdit) ExecutedAt() *time.Ticket {
+	return e.executedAt
 }

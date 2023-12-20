@@ -25,6 +25,7 @@ import (
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"

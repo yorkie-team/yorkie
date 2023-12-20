@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	"connectrpc.com/connect"
+
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
@@ -51,9 +53,9 @@ func newYorkieServer(serviceCtx context.Context, be *backend.Backend) *yorkieSer
 // ActivateClient activates the given client.
 func (s *yorkieServer) ActivateClient(
 	ctx context.Context,
-	req *api.ActivateClientRequest,
-) (*api.ActivateClientResponse, error) {
-	if req.ClientKey == "" {
+	req *connect.Request[api.ActivateClientRequest],
+) (*connect.Response[api.ActivateClientResponse], error) {
+	if req.Msg.ClientKey == "" {
 		return nil, clients.ErrInvalidClientKey
 	}
 
@@ -64,22 +66,22 @@ func (s *yorkieServer) ActivateClient(
 	}
 
 	project := projects.From(ctx)
-	cli, err := clients.Activate(ctx, s.backend.DB, project, req.ClientKey)
+	cli, err := clients.Activate(ctx, s.backend.DB, project, req.Msg.ClientKey)
 	if err != nil {
 		return nil, err
 	}
 
-	return &api.ActivateClientResponse{
+	return connect.NewResponse(&api.ActivateClientResponse{
 		ClientId: cli.ID.String(),
-	}, nil
+	}), nil
 }
 
 // DeactivateClient deactivates the given client.
 func (s *yorkieServer) DeactivateClient(
 	ctx context.Context,
-	req *api.DeactivateClientRequest,
-) (*api.DeactivateClientResponse, error) {
-	actorID, err := time.ActorIDFromHex(req.ClientId)
+	req *connect.Request[api.DeactivateClientRequest],
+) (*connect.Response[api.DeactivateClientResponse], error) {
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
@@ -96,20 +98,20 @@ func (s *yorkieServer) DeactivateClient(
 		return nil, err
 	}
 
-	return &api.DeactivateClientResponse{}, nil
+	return connect.NewResponse(&api.DeactivateClientResponse{}), nil
 }
 
 // AttachDocument attaches the given document to the client.
 func (s *yorkieServer) AttachDocument(
 	ctx context.Context,
-	req *api.AttachDocumentRequest,
-) (*api.AttachDocumentResponse, error) {
-	actorID, err := time.ActorIDFromHex(req.ClientId)
+	req *connect.Request[api.AttachDocumentRequest],
+) (*connect.Response[api.AttachDocumentResponse], error) {
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.ChangePack)
+	pack, err := converter.FromChangePack(req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
@@ -162,27 +164,27 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	return &api.AttachDocumentResponse{
+	return connect.NewResponse(&api.AttachDocumentResponse{
 		ChangePack: pbChangePack,
 		DocumentId: docInfo.ID.String(),
-	}, nil
+	}), nil
 }
 
 // DetachDocument detaches the given document to the client.
 func (s *yorkieServer) DetachDocument(
 	ctx context.Context,
-	req *api.DetachDocumentRequest,
-) (*api.DetachDocumentResponse, error) {
-	actorID, err := time.ActorIDFromHex(req.ClientId)
+	req *connect.Request[api.DetachDocumentRequest],
+) (*connect.Response[api.DetachDocumentResponse], error) {
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.ChangePack)
+	pack, err := converter.FromChangePack(req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
-	docID := types.ID(req.DocumentId)
+	docID := types.ID(req.Msg.DocumentId)
 	if err := docID.Validate(); err != nil {
 		return nil, err
 	}
@@ -232,7 +234,7 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	if req.RemoveIfNotAttached && !isAttached {
+	if req.Msg.RemoveIfNotAttached && !isAttached {
 		pack.IsRemoved = true
 		if err := clientInfo.RemoveDocument(docRefKey); err != nil {
 			return nil, err
@@ -253,27 +255,27 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
-	return &api.DetachDocumentResponse{
+	return connect.NewResponse(&api.DetachDocumentResponse{
 		ChangePack: pbChangePack,
-	}, nil
+	}), nil
 }
 
 // PushPullChanges stores the changes sent by the client and delivers the changes
 // accumulated in the server to the client.
 func (s *yorkieServer) PushPullChanges(
 	ctx context.Context,
-	req *api.PushPullChangesRequest,
-) (*api.PushPullChangesResponse, error) {
-	actorID, err := time.ActorIDFromHex(req.ClientId)
+	req *connect.Request[api.PushPullChangesRequest],
+) (*connect.Response[api.PushPullChangesResponse], error) {
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.ChangePack)
+	pack, err := converter.FromChangePack(req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
-	docID := types.ID(req.DocumentId)
+	docID := types.ID(req.Msg.DocumentId)
 	if err := docID.Validate(); err != nil {
 		return nil, err
 	}
@@ -306,7 +308,7 @@ func (s *yorkieServer) PushPullChanges(
 	}
 
 	syncMode := types.SyncModePushPull
-	if req.PushOnly {
+	if req.Msg.PushOnly {
 		syncMode = types.SyncModePushOnly
 	}
 
@@ -338,24 +340,25 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	return &api.PushPullChangesResponse{
+	return connect.NewResponse(&api.PushPullChangesResponse{
 		ChangePack: pbChangePack,
-	}, nil
+	}), nil
 }
 
 // WatchDocument connects the stream to deliver events from the given documents
 // to the requesting client.
 func (s *yorkieServer) WatchDocument(
-	req *api.WatchDocumentRequest,
-	stream api.YorkieService_WatchDocumentServer,
+	ctx context.Context,
+	req *connect.Request[api.WatchDocumentRequest],
+	stream *connect.ServerStream[api.WatchDocumentResponse],
 ) error {
-	clientID, err := time.ActorIDFromHex(req.ClientId)
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return err
 	}
 
-	docKey := key.Key(req.DocumentKey)
-	docID, err := converter.FromDocumentID(req.DocumentId)
+	docKey := key.Key(req.Msg.DocumentKey)
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
 	if err != nil {
 		return err
 	}
@@ -365,35 +368,35 @@ func (s *yorkieServer) WatchDocument(
 	}
 
 	docInfo, err := documents.FindDocInfoByRefKey(
-		stream.Context(),
+		ctx,
 		s.backend,
-		projects.From(stream.Context()),
+		projects.From(ctx),
 		docRefKey,
 	)
 	if err != nil {
 		return nil
 	}
 
-	if err := auth.VerifyAccess(stream.Context(), s.backend, &types.AccessInfo{
+	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
 		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
 	}); err != nil {
 		return err
 	}
 
-	project := projects.From(stream.Context())
-	if _, err = clients.FindClientInfo(stream.Context(), s.backend.DB, project, clientID); err != nil {
+	project := projects.From(ctx)
+	if _, err = clients.FindClientInfo(ctx, s.backend.DB, project, clientID); err != nil {
 		return err
 	}
 
 	locker, err := s.backend.Coordinator.NewLocker(
-		stream.Context(),
+		ctx,
 		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID.String(), docID)),
 	)
 	if err != nil {
 		return err
 	}
-	if err := locker.Lock(stream.Context()); err != nil {
+	if err := locker.Lock(ctx); err != nil {
 		return err
 	}
 	defer func() {
@@ -402,9 +405,9 @@ func (s *yorkieServer) WatchDocument(
 		}
 	}()
 
-	subscription, clientIDs, err := s.watchDoc(stream.Context(), clientID, docRefKey)
+	subscription, clientIDs, err := s.watchDoc(ctx, clientID, docRefKey)
 	if err != nil {
-		logging.From(stream.Context()).Error(err)
+		logging.From(ctx).Error(err)
 		return err
 	}
 	defer func() {
@@ -428,9 +431,9 @@ func (s *yorkieServer) WatchDocument(
 	for {
 		select {
 		case <-s.serviceCtx.Done():
-			return nil
-		case <-stream.Context().Done():
-			return nil
+			return context.Canceled
+		case <-ctx.Done():
+			return context.Canceled
 		case event := <-subscription.Events():
 			eventType, err := converter.ToDocEventType(event.Type)
 			if err != nil {
@@ -458,18 +461,18 @@ func (s *yorkieServer) WatchDocument(
 // RemoveDocument removes the given document.
 func (s *yorkieServer) RemoveDocument(
 	ctx context.Context,
-	req *api.RemoveDocumentRequest,
-) (*api.RemoveDocumentResponse, error) {
-	actorID, err := time.ActorIDFromHex(req.ClientId)
+	req *connect.Request[api.RemoveDocumentRequest],
+) (*connect.Response[api.RemoveDocumentResponse], error) {
+	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
 
-	pack, err := converter.FromChangePack(req.ChangePack)
+	pack, err := converter.FromChangePack(req.Msg.ChangePack)
 	if err != nil {
 		return nil, err
 	}
-	docID := types.ID(req.DocumentId)
+	docID := types.ID(req.Msg.DocumentId)
 	if err := docID.Validate(); err != nil {
 		return nil, err
 	}
@@ -526,9 +529,9 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	return &api.RemoveDocumentResponse{
+	return connect.NewResponse(&api.RemoveDocumentResponse{
 		ChangePack: pbChangePack,
-	}, nil
+	}), nil
 }
 
 func (s *yorkieServer) watchDoc(
@@ -574,15 +577,15 @@ func (s *yorkieServer) unwatchDoc(
 
 func (s *yorkieServer) Broadcast(
 	ctx context.Context,
-	req *api.BroadcastRequest,
-) (*api.BroadcastResponse, error) {
-	clientID, err := time.ActorIDFromHex(req.ClientId)
+	req *connect.Request[api.BroadcastRequest],
+) (*connect.Response[api.BroadcastResponse], error) {
+	clientID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
 	}
 
-	docKey := key.Key(req.DocumentKey)
-	docID, err := converter.FromDocumentID(req.DocumentId)
+	docKey := key.Key(req.Msg.DocumentKey)
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
 	if err != nil {
 		return nil, err
 	}
@@ -622,11 +625,11 @@ func (s *yorkieServer) Broadcast(
 			Publisher:      clientID,
 			DocumentRefKey: docRefKey,
 			Body: types.DocEventBody{
-				Topic:   req.Topic,
-				Payload: req.Payload,
+				Topic:   req.Msg.Topic,
+				Payload: req.Msg.Payload,
 			},
 		},
 	)
 
-	return &api.BroadcastResponse{}, nil
+	return connect.NewResponse(&api.BroadcastResponse{}), nil
 }

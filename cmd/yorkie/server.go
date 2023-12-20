@@ -181,24 +181,6 @@ func init() {
 		"",
 		"RPC key file's path",
 	)
-	cmd.Flags().Uint64Var(
-		&conf.RPC.MaxRequestBytes,
-		"rpc-max-requests-bytes",
-		server.DefaultRPCMaxRequestsBytes,
-		"Maximum client request size in bytes the server will accept.",
-	)
-	cmd.Flags().StringVar(
-		&conf.RPC.MaxConnectionAge,
-		"rpc-max-connection-age",
-		server.DefaultRPCMaxConnectionAge.String(),
-		"Maximum duration of connection may exist before it will be closed by sending a GoAway.",
-	)
-	cmd.Flags().StringVar(
-		&conf.RPC.MaxConnectionAgeGrace,
-		"rpc-max-connection-age-grace",
-		server.DefaultRPCMaxConnectionAgeGrace.String(),
-		"Additional grace period after MaxConnectionAge after which connections will be forcibly closed.",
-	)
 	cmd.Flags().IntVar(
 		&conf.Profiling.Port,
 		"profiling-port",

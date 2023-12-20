@@ -25,10 +25,9 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
@@ -85,7 +84,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-	defer func() { assert.NoError(t, adminCli.Close()) }()
+	defer func() { adminCli.Close() }()
 
 	project, err := adminCli.CreateProject(context.Background(), "auth-webhook-test")
 	assert.NoError(t, err)
@@ -127,7 +126,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cliWithoutToken.Close()) }()
 		err = cliWithoutToken.Activate(ctx)
-		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
 		// client with invalid token
 		cliWithInvalidToken, err := client.Dial(
@@ -138,7 +137,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		assert.NoError(t, err)
 		defer func() { assert.NoError(t, cliWithInvalidToken.Close()) }()
 		err = cliWithInvalidToken.Activate(ctx)
-		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	})
 
 	t.Run("Selected method authorization webhook test", func(t *testing.T) {
@@ -176,7 +175,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 
 		doc := document.New(helper.TestDocKey(t))
 		err = cli.Attach(ctx, doc)
-		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
 		_, err = cli.Watch(ctx, doc)
 		assert.Equal(t, client.ErrDocumentNotAttached, err)
@@ -200,7 +199,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-		defer func() { assert.NoError(t, adminCli.Close()) }()
+		defer func() { adminCli.Close() }()
 		project, err := adminCli.CreateProject(context.Background(), "success-webhook-after-retries")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
@@ -242,7 +241,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-		defer func() { assert.NoError(t, adminCli.Close()) }()
+		defer func() { adminCli.Close() }()
 		project, err := adminCli.CreateProject(context.Background(), "fail-webhook-after-retries")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
@@ -264,7 +263,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, cli.Close()) }()
 
 		err = cli.Activate(ctx)
-		assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	})
 
 	t.Run("authorized request cache test", func(t *testing.T) {
@@ -295,7 +294,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-		defer func() { assert.NoError(t, adminCli.Close()) }()
+		defer func() { adminCli.Close() }()
 		project, err := adminCli.CreateProject(context.Background(), "auth-request-cache")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
@@ -371,7 +370,7 @@ func TestAuthWebhook(t *testing.T) {
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
-		defer func() { assert.NoError(t, adminCli.Close()) }()
+		defer func() { adminCli.Close() }()
 		project, err := adminCli.CreateProject(context.Background(), "unauth-request-cache")
 		assert.NoError(t, err)
 		project.AuthWebhookURL = authServer.URL
@@ -395,14 +394,14 @@ func TestAuthWebhook(t *testing.T) {
 		// 01. multiple requests.
 		for i := 0; i < 3; i++ {
 			err = cli.Activate(ctx)
-			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+			assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 		}
 
 		// 02. multiple requests after eviction by ttl.
 		time.Sleep(unauthorizedTTL)
 		for i := 0; i < 3; i++ {
 			err = cli.Activate(ctx)
-			assert.Equal(t, codes.Unauthenticated, status.Convert(err).Code())
+			assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 		}
 		assert.Equal(t, 2, reqCnt)
 	})

@@ -518,7 +518,7 @@ func benchmarkTree(cnt int, b *testing.B) {
 				}},
 			})
 			for c := 1; c <= cnt; c++ {
-				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"})
+				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
 			}
 			return nil
 		})
@@ -539,14 +539,14 @@ func benchmarkTreeDeleteAll(cnt int, b *testing.B) {
 				}},
 			})
 			for c := 1; c <= cnt; c++ {
-				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"})
+				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
 			}
 			return nil
 		})
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")
-			tree.Edit(1, cnt+1)
+			tree.Edit(1, cnt+1, nil, 0)
 
 			return nil
 		})
@@ -567,7 +567,7 @@ func benchmarkTreeEditGC(cnt int, b *testing.B) {
 				}},
 			})
 			for c := 1; c <= cnt; c++ {
-				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"})
+				tree.Edit(c, c, &json.TreeNode{Type: "text", Value: "a"}, 0)
 			}
 			return nil
 		})
@@ -575,7 +575,7 @@ func benchmarkTreeEditGC(cnt int, b *testing.B) {
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")
 			for c := 1; c <= cnt; c++ {
-				tree.Edit(c, c+1, &json.TreeNode{Type: "text", Value: "b"})
+				tree.Edit(c, c+1, &json.TreeNode{Type: "text", Value: "b"}, 0)
 			}
 
 			return nil
@@ -602,7 +602,7 @@ func benchmarkTreeSplitGC(cnt int, b *testing.B) {
 					Children: []json.TreeNode{},
 				}},
 			})
-			tree.Edit(1, 1, &json.TreeNode{Type: "text", Value: builder.String()})
+			tree.Edit(1, 1, &json.TreeNode{Type: "text", Value: builder.String()}, 0)
 
 			return nil
 		})
@@ -610,7 +610,7 @@ func benchmarkTreeSplitGC(cnt int, b *testing.B) {
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			tree := root.GetTree("t")
 			for c := 1; c <= cnt; c++ {
-				tree.Edit(c, c+1, &json.TreeNode{Type: "text", Value: "b"})
+				tree.Edit(c, c+1, &json.TreeNode{Type: "text", Value: "b"}, 0)
 			}
 
 			return nil

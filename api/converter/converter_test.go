@@ -36,13 +36,8 @@ import (
 
 func TestConverter(t *testing.T) {
 	t.Run("snapshot simple test", func(t *testing.T) {
-		obj, err := converter.BytesToObject(nil)
-		assert.NoError(t, err)
-		assert.Equal(t, "{}", obj.Marshal())
-
 		doc := document.New("d1")
-
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("k1").Edit(0, 0, "A")
 			return nil
 		})
@@ -59,7 +54,7 @@ func TestConverter(t *testing.T) {
 		bytes, err := converter.ObjectToBytes(doc.RootObject())
 		assert.NoError(t, err)
 
-		obj, err = converter.BytesToObject(bytes)
+		obj, err := converter.BytesToObject(bytes)
 		assert.NoError(t, err)
 		assert.Equal(t, `{"k1":[{"val":"B"}]}`, obj.Marshal())
 	})
@@ -122,7 +117,7 @@ func TestConverter(t *testing.T) {
 						Type:  "text",
 						Value: "Hello world",
 					}},
-				})
+				}, 0)
 
 			return nil
 		})
@@ -241,6 +236,28 @@ func TestConverter(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.Equal(t, tree.ToXML(), clone.ToXML())
+	})
+
+	t.Run("array converting to bytes test", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		treeList := crdt.NewRGATreeList()
+		arr := crdt.NewArray(treeList, ctx.IssueTimeTicket())
+		primitive, _ := crdt.NewPrimitive("1", ctx.IssueTimeTicket())
+		_ = arr.Add(primitive)
+		primitive, _ = crdt.NewPrimitive("2", ctx.IssueTimeTicket())
+		_ = arr.Add(primitive)
+		primitive, _ = crdt.NewPrimitive("3", ctx.IssueTimeTicket())
+		_ = arr.Add(primitive)
+
+		bytes, err := converter.ArrayToBytes(arr)
+		assert.NoError(t, err)
+		clone, err := converter.BytesToArray(bytes)
+		assert.NoError(t, err)
+
+		assert.Equal(t, `["1","2","3"]`, arr.Marshal())
+		assert.Equal(t, `["1","2","3"]`, clone.Marshal())
 	})
 
 	t.Run("empty presence converting test", func(t *testing.T) {

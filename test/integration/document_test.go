@@ -673,7 +673,7 @@ func TestDocument(t *testing.T) {
 func TestDocumentWithProjects(t *testing.T) {
 	ctx := context.Background()
 	adminCli := helper.CreateAdminCli(t, defaultServer.RPCAddr())
-	defer func() { assert.NoError(t, adminCli.Close()) }()
+	defer func() { adminCli.Close() }()
 
 	project1, err := adminCli.CreateProject(ctx, "project1")
 	assert.NoError(t, err)

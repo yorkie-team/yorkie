@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/gogo/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -58,6 +58,19 @@ func ObjectToBytes(obj *crdt.Object) ([]byte, error) {
 	bytes, err := proto.Marshal(pbElem)
 	if err != nil {
 		return nil, fmt.Errorf("marshal JSON element to bytes: %w", err)
+	}
+	return bytes, nil
+}
+
+// ArrayToBytes converts the given array to byte array.
+func ArrayToBytes(array *crdt.Array) ([]byte, error) {
+	pbArray, err := toJSONArray(array)
+	if err != nil {
+		return nil, err
+	}
+	bytes, err := proto.Marshal(pbArray)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Array to bytes: %w", err)
 	}
 	return bytes, nil
 }
@@ -258,7 +271,7 @@ func ToTreeNodes(treeNode *crdt.TreeNode) []*api.TreeNode {
 		return pbTreeNodes
 	}
 
-	index.TraverseNode(treeNode.IndexTreeNode, func(node *index.Node[*crdt.TreeNode], depth int) {
+	index.TraverseNode(treeNode.Index, func(node *index.Node[*crdt.TreeNode], depth int) {
 		pbTreeNodes = append(pbTreeNodes, toTreeNode(node.Value, depth))
 	})
 	return pbTreeNodes

@@ -7,6 +7,44 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.11] - 2023-12-18
+
+### Added
+* Support concurrent insertion and splitting in Tree by @sejongk in https://github.com/yorkie-team/yorkie/pull/725
+
+### Changed
+* Migrate RPC to ConnectRPC by @krapie, @hackerwins https://github.com/yorkie-team/yorkie/pull/703
+
+### Fixed
+* Address duplicate nodeIDs in Tree.Split @sejongk https://github.com/yorkie-team/yorkie/pull/724
+
+## [0.4.10] - 2023-12-04
+
+### Added
+* Add Rate Limit using Istio Envoy by @joonhyukchoi in https://github.com/yorkie-team/yorkie/pull/674
+* Implement splitLevel of Tree.Edit by @hackerwins in https://github.com/yorkie-team/yorkie/pull/705
+
+### Changed
+* Bump github.com/spf13/viper from 1.15.0 to 1.17.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/693
+* Bump github.com/jedib0t/go-pretty/v6 from 6.4.0 to 6.4.9 by @dependabot in https://github.com/yorkie-team/yorkie/pull/695
+* Bump actions/setup-go from 3 to 4 by @dependabot in https://github.com/yorkie-team/yorkie/pull/698
+* Bump helm/chart-releaser-action from 1.5.0 to 1.6.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/699
+* Bump docker/login-action from 2 to 3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/700
+* Bump google.golang.org/grpc from 1.58.2 to 1.58.3 by @dependabot in https://github.com/yorkie-team/yorkie/pull/701
+* Bump golang.org/x/crypto from 0.14.0 to 0.16.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/702
+* Bump github.com/rs/xid from 1.4.0 to 1.5.0 by @dependabot in https://github.com/yorkie-team/yorkie/pull/697
+
+## [0.4.9] - 2023-11-25
+
+### Added
+* Implement merge elements in Tree.Edit by @hackerwins in https://github.com/yorkie-team/yorkie/pull/659
+* Add PushPull benchmark test by @sejongk in https://github.com/yorkie-team/yorkie/pull/658
+* Setup Dependabot by @jongwooo in https://github.com/yorkie-team/yorkie/pull/675
+
+### Changed
+* Bump up golangci-lint and fix lint errors by @hackerwins in https://github.com/yorkie-team/yorkie/pull/660
+* Modify converter to allow setting values for object and array by @chacha912 and @hackerwins in https://github.com/yorkie-team/yorkie/pull/687
+
 ## [0.4.8] - 2023-11-01
 
 ### Changed

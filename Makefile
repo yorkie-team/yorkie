@@ -1,4 +1,4 @@
-YORKIE_VERSION := 0.4.8
+YORKIE_VERSION := 0.4.11
 
 GO_PROJECT = github.com/yorkie-team/yorkie
 
@@ -20,26 +20,13 @@ GO_LDFLAGS += -X ${GO_PROJECT}/internal/version.BuildDate=${BUILD_DATE}
 default: help
 
 tools: ## install tools for developing yorkie
-	go install github.com/gogo/protobuf/protoc-gen-gogo@v1.3.2
-	go install github.com/gogo/protobuf/protoc-gen-gofast@v1.3.2
+	go install github.com/bufbuild/buf/cmd/buf@v1.28.1
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
+	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.12.0
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.55.1
 
 proto: ## generate proto files
-	protoc \
--I=./api \
--I=$(GOPATH)/src \
---gofast_out=plugins=grpc,\
-Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,\
-Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,\
-Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,:./api/yorkie/v1 \
-api/yorkie/v1/*.proto
-
-protoset: ## generate protoset file
-	protoc \
--I=./api \
---descriptor_set_out=yorkie.protoset \
---include_imports \
-api/yorkie/v1/*.proto
+	buf generate
 
 build: ## builds an executable that runs in the current environment
 	CGO_ENABLED=0 go build -o $(EXECUTABLE) -ldflags "${GO_LDFLAGS}" ./cmd/yorkie

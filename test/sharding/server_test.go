@@ -22,11 +22,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"testing"
 
+	"connectrpc.com/connect"
 	"github.com/yorkie-team/yorkie/admin"
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -36,17 +38,15 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc"
 	"github.com/yorkie-team/yorkie/server/rpc/testcases"
 	"github.com/yorkie-team/yorkie/test/helper"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
 	shardedDBNameForServer   = "test-yorkie-meta-server"
 	testRPCServer            *rpc.Server
 	testRPCAddr              = fmt.Sprintf("localhost:%d", helper.RPCPort)
-	testClient               api.YorkieServiceClient
+	testClient               v1connect.YorkieServiceClient
 	testAdminAuthInterceptor *admin.AuthInterceptor
-	testAdminClient          api.AdminServiceClient
+	testAdminClient          v1connect.AdminServiceClient
 )
 
 func TestMain(m *testing.M) {
@@ -93,10 +93,7 @@ func TestMain(m *testing.M) {
 	}
 
 	testRPCServer, err = rpc.NewServer(&rpc.Config{
-		Port:                  helper.RPCPort,
-		MaxRequestBytes:       helper.RPCMaxRequestBytes,
-		MaxConnectionAge:      helper.RPCMaxConnectionAge.String(),
-		MaxConnectionAgeGrace: helper.RPCMaxConnectionAgeGrace.String(),
+		Port: helper.RPCPort,
 	}, be)
 	if err != nil {
 		log.Fatal(err)
@@ -106,30 +103,23 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed rpc listen: %s\n", err)
 	}
 
-	var dialOptions []grpc.DialOption
 	authInterceptor := client.NewAuthInterceptor(project.PublicKey, "")
-	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(authInterceptor.Unary()))
-	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(authInterceptor.Stream()))
-	dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-	conn, err := grpc.Dial(testRPCAddr, dialOptions...)
-	if err != nil {
-		log.Fatal(err)
-	}
-	testClient = api.NewYorkieServiceClient(conn)
-
-	credentials := grpc.WithTransportCredentials(insecure.NewCredentials())
-	dialOptions = []grpc.DialOption{credentials}
+	conn := http.DefaultClient
+	testClient = v1connect.NewYorkieServiceClient(
+		conn,
+		"http://"+testRPCAddr,
+		connect.WithInterceptors(authInterceptor),
+	)
 
 	testAdminAuthInterceptor = admin.NewAuthInterceptor("")
-	dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(testAdminAuthInterceptor.Unary()))
-	dialOptions = append(dialOptions, grpc.WithStreamInterceptor(testAdminAuthInterceptor.Stream()))
 
-	adminConn, err := grpc.Dial(testRPCAddr, dialOptions...)
-	if err != nil {
-		log.Fatal(err)
-	}
-	testAdminClient = api.NewAdminServiceClient(adminConn)
+	adminConn := http.DefaultClient
+	testAdminClient = v1connect.NewAdminServiceClient(
+		adminConn,
+		"http://"+testRPCAddr,
+		connect.WithInterceptors(testAdminAuthInterceptor),
+	)
 
 	code := m.Run()
 
