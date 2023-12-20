@@ -109,25 +109,25 @@ jobs:
       run: make tools
 
     - name: Check Docker Compose Version
-      run: docker-compose --version
+      run: docker compose --version
 
     - name: Run the Config server, Shard 1 and Shard 2
-      run: docker-compose -f build/docker/sharding/docker-compose.yml up --build -d --wait config1 shard1-1 shard2-1
+      run: docker compose -f build/docker/sharding/docker-compose.yml up --build -d --wait config1 shard1-1 shard2-1
 
     - name: Initialize the Config server
-      run: docker-compose -f build/docker/sharding/docker-compose.yml exec config1 mongosh test /scripts/init-config1.js
+      run: docker compose -f build/docker/sharding/docker-compose.yml exec config1 mongosh test /scripts/init-config1.js
 
     - name: Initialize the Shard 1
-      run: docker-compose -f build/docker/sharding/docker-compose.yml exec shard1-1 mongosh test /scripts/init-shard1-1.js
+      run: docker compose -f build/docker/sharding/docker-compose.yml exec shard1-1 mongosh test /scripts/init-shard1-1.js
     
     - name: Initialize the Shard 2
-      run: docker-compose -f build/docker/sharding/docker-compose.yml exec shard2-1 mongosh test /scripts/init-shard2-1.js
+      run: docker compose -f build/docker/sharding/docker-compose.yml exec shard2-1 mongosh test /scripts/init-shard2-1.js
 
     - name: Run the Mongos
-      run: docker-compose -f build/docker/sharding/docker-compose.yml up --build -d --wait mongos1
+      run: docker compose -f build/docker/sharding/docker-compose.yml up --build -d --wait mongos1
 
     - name: Initialize the Mongos
-      run: docker-compose -f build/docker/sharding/docker-compose.yml exec mongos1 mongosh test /scripts/init-mongos1.js
+      run: docker compose -f build/docker/sharding/docker-compose.yml exec mongos1 mongosh test /scripts/init-mongos1.js
 
     - name: Run the tests with sharding tag
       run: go test -tags sharding -race -v ./test/sharding/...
