@@ -563,6 +563,39 @@ entries:
     version: 0.3.3
   yorkie-monitoring:
   - apiVersion: v2
+    appVersion: 0.4.11
+    created: "2023-12-20T02:55:28.108016131Z"
+    dependencies:
+    - name: kube-prometheus-stack
+      repository: https://prometheus-community.github.io/helm-charts
+      version: 45.9.0
+    - name: loki-stack
+      repository: https://grafana.github.io/helm-charts
+      version: 2.9.9
+    description: yorkie-monitoring provides monitoring system with prometheus and
+      grafana for monitoring yorkie cluster
+    digest: 6b836dacc0055ffadefe4ef2950c186bcd7eddeb645356b9c3657c2b7c360bef
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    keywords:
+    - yorkie
+    - cluster
+    - kubernetes
+    - prometheus
+    - grafana
+    kubeVersion: '>=1.24.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    - email: krapi0314@gmail.com
+      name: krapie
+    name: yorkie-monitoring
+    sources:
+    - https://github.com/yorkie-team/yorkie
+    type: application
+    urls:
+    - https://github.com/yorkie-team/yorkie/releases/download/yorkie-monitoring-0.4.11/yorkie-monitoring-0.4.11.tgz
+    version: 0.4.11
+  - apiVersion: v2
     appVersion: 0.4.7
     created: "2023-10-18T14:08:18.574194321Z"
     dependencies:
@@ -732,4 +765,4 @@ entries:
     urls:
     - yorkie-monitoring-0.3.3.tgz
     version: 0.3.3
-generated: "2023-12-18T01:39:44.069086654Z"
+generated: "2023-12-20T02:55:28.108086563Z"
