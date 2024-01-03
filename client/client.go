@@ -32,6 +32,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/rs/xid"
 	"go.uber.org/zap"
+	"golang.org/x/net/http2"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -133,7 +134,7 @@ func New(opts ...Option) (*Client, error) {
 			return nil, fmt.Errorf("create client tls from file: %w", err)
 		}
 
-		conn.Transport = &http.Transport{TLSClientConfig: tlsConfig}
+		conn.Transport = &http2.Transport{TLSClientConfig: tlsConfig}
 	}
 
 	var clientOptions []connect.ClientOption

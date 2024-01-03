@@ -26,6 +26,7 @@ import (
 
 	"connectrpc.com/connect"
 	"go.uber.org/zap"
+	"golang.org/x/net/http2"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -83,7 +84,7 @@ func New(opts ...Option) (*Client, error) {
 	conn := &http.Client{}
 	if !options.IsInsecure {
 		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
-		conn.Transport = &http.Transport{TLSClientConfig: tlsConfig}
+		conn.Transport = &http2.Transport{TLSClientConfig: tlsConfig}
 	}
 
 	logger := options.Logger
