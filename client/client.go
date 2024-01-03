@@ -32,6 +32,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/rs/xid"
 	"go.uber.org/zap"
+	"golang.org/x/net/http2"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -133,7 +134,7 @@ func New(opts ...Option) (*Client, error) {
 			return nil, fmt.Errorf("create client tls from file: %w", err)
 		}
 
-		conn.Transport = &http.Transport{TLSClientConfig: tlsConfig}
+		conn.Transport = &http2.Transport{TLSClientConfig: tlsConfig}
 	}
 
 	var clientOptions []connect.ClientOption
@@ -180,8 +181,12 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 
 // Dial dials the given rpcAddr.
 func (c *Client) Dial(rpcAddr string) error {
-	if !strings.HasPrefix(rpcAddr, "http") {
-		rpcAddr = "http://" + rpcAddr
+	if !strings.Contains(rpcAddr, "://") {
+		if c.conn.Transport == nil {
+			rpcAddr = "http://" + rpcAddr
+		} else {
+			rpcAddr = "https://" + rpcAddr
+		}
 	}
 
 	c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
