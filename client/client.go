@@ -181,8 +181,12 @@ func Dial(rpcAddr string, opts ...Option) (*Client, error) {
 
 // Dial dials the given rpcAddr.
 func (c *Client) Dial(rpcAddr string) error {
-	if !strings.HasPrefix(rpcAddr, "http") {
-		rpcAddr = "http://" + rpcAddr
+	if !strings.Contains(rpcAddr, "://") {
+		if c.conn.Transport == nil {
+			rpcAddr = "http://" + rpcAddr
+		} else {
+			rpcAddr = "https://" + rpcAddr
+		}
 	}
 
 	c.client = v1connect.NewYorkieServiceClient(c.conn, rpcAddr, c.clientOptions...)
