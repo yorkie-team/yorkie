@@ -31,6 +31,9 @@ import (
 	"github.com/yorkie-team/yorkie/server/users"
 )
 
+// ErrUnauthenticated is returned when authentication is failed.
+var ErrUnauthenticated = errors.New("authorization is not provided")
+
 // AdminAuthInterceptor is an interceptor for authentication.
 type AdminAuthInterceptor struct {
 	backend      *backend.Backend
@@ -155,17 +158,17 @@ func (i *AdminAuthInterceptor) authenticate(
 ) (*types.User, error) {
 	authorization := header.Get(types.AuthorizationKey)
 	if authorization == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authorization is not provided"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 	}
 
 	claims, err := i.tokenManager.Verify(authorization)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authorization is invalid"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 	}
 
 	user, err := users.GetUser(ctx, i.backend, claims.Username)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authorization is invalid"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 	}
 
 	return user, nil
