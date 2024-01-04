@@ -326,7 +326,11 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	if n.RemovedAt == nil || n.RemovedAt.Compare(removedAt) > 0 {
 		n.RemovedAt = removedAt
 		if justRemoved {
-			n.Index.UpdateAncestorsSize()
+			if n.Index.Parent.Value.RemovedAt == nil {
+				n.Index.UpdateAncestorsSize()
+			} else {
+				n.Index.Parent.Length -= n.Index.PaddedLength()
+			}
 		}
 		return true
 	}
@@ -649,8 +653,10 @@ func (t *Tree) Edit(
 
 	// 03. Merge: move the nodes that are marked as moved.
 	for _, node := range toBeMovedToFromParents {
-		if err := fromParent.Append(node); err != nil {
-			return nil, err
+		if node.RemovedAt == nil {
+			if err := fromParent.Append(node); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -717,16 +723,11 @@ func (t *Tree) collectBetween(
 	if err := t.traverseInPosRange(
 		fromParent, fromLeft,
 		toParent, toLeft,
-		func(node *TreeNode, contain index.TagContained) {
-			// NOTE(hackerwins): If the node overlaps as a closing tag with the
-			// range, then we need to keep it.
-			if !node.IsText() && contain == index.ClosingContained {
-				return
-			}
-
-			// NOTE(hackerwins): If the node overlaps as an opening tag with the
+		func(token index.TreeToken[*TreeNode], ended bool) {
+			node, tokenType := token.Node, token.TokenType
+			// NOTE(hackerwins): If the node overlaps as a start token with the
 			// range then we need to move the remaining children to fromParent.
-			if !node.IsText() && contain == index.OpeningContained {
+			if tokenType == index.Start && !ended {
 				// TODO(hackerwins): Define more clearly merge-able rules
 				// between two parents. For now, we only merge two parents are
 				// both element nodes having text children.
@@ -737,10 +738,6 @@ func (t *Tree) collectBetween(
 				// }
 
 				for _, child := range node.Index.Children() {
-					if slices.Contains(toBeRemoveds, child.Value) {
-						continue
-					}
-
 					toBeMovedToFromParents = append(toBeMovedToFromParents, child.Value)
 				}
 			}
@@ -759,13 +756,19 @@ func (t *Tree) collectBetween(
 				}
 			}
 
-			if node.canDelete(editedAt, latestCreatedAt) {
+			// NOTE(sejongk): If the node is removable or its parent is going to
+			// be removed, then this node should be removed.
+			if node.canDelete(editedAt, latestCreatedAt) || slices.Contains(toBeRemoveds, node.Index.Parent.Value) {
 				latestCreatedAt = createdAtMapByActor[actorIDHex]
 				createdAt := node.ID.CreatedAt
 				if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
 					createdAtMapByActor[actorIDHex] = createdAt
 				}
-				toBeRemoveds = append(toBeRemoveds, node)
+				// NOTE(hackerwins): If the node overlaps as an end token with the
+				// range then we need to keep the node.
+				if tokenType == index.Text || tokenType == index.Start {
+					toBeRemoveds = append(toBeRemoveds, node)
+				}
 			}
 		},
 	); err != nil {
@@ -811,7 +814,7 @@ func (t *Tree) split(
 }
 
 func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNode,
-	callback func(node *TreeNode, contain index.TagContained),
+	callback func(token index.TreeToken[*TreeNode], ended bool),
 ) error {
 	fromIdx, err := t.ToIndex(fromParent, fromLeft)
 	if err != nil {
@@ -822,7 +825,7 @@ func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNo
 		return err
 	}
 
-	return t.IndexTree.NodesBetween(fromIdx, toIdx, callback)
+	return t.IndexTree.TokensBetween(fromIdx, toIdx, callback)
 }
 
 // StyleByIndex applies the given attributes of the given range.
@@ -854,7 +857,8 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 	}
 
 	err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft,
-		func(node *TreeNode, contain index.TagContained) {
+		func(token index.TreeToken[*TreeNode], _ bool) {
+			node := token.Node
 			if !node.IsRemoved() && !node.IsText() && len(attributes) > 0 {
 				if node.Attrs == nil {
 					node.Attrs = NewRHT()

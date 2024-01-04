@@ -151,7 +151,7 @@ func TestIndexTree(t *testing.T) {
 		assert.Equal(t, "p", tree.FindCommonAncestor(nodeAB, nodeCD).Type())
 	})
 
-	t.Run("traverse nodes between two given positions test", func(t *testing.T) {
+	t.Run("traverse tokens between two given positions test", func(t *testing.T) {
 		//       0   1 2 3    4   5 6 7 8    9   10 11 12   13
 		// <root> <p> a b </p> <p> c d e </p> <p>  f  g  </p>  </root>
 		tree := helper.BuildIndexTree(&json.TreeNode{
@@ -169,12 +169,12 @@ func TestIndexTree(t *testing.T) {
 		//        0   1 2 3    4   5 6 7 8    9   10 11 12    13
 		// `<root> <p> a b </p> <p> c d e </p> <p>  f  g  </p> </root>`
 
-		helper.NodesBetweenEqual(t, tree, 2, 11, []string{"text.b:All", "p:Closing",
-			"text.cde:All", "p:All", "text.fg:All", "p:Opening"})
-		helper.NodesBetweenEqual(t, tree, 2, 6, []string{"text.b:All", "p:Closing", "text.cde:All", "p:Opening"})
-		helper.NodesBetweenEqual(t, tree, 0, 1, []string{"p:Opening"})
-		helper.NodesBetweenEqual(t, tree, 3, 4, []string{"p:Closing"})
-		helper.NodesBetweenEqual(t, tree, 3, 5, []string{"p:Closing", "p:Opening"})
+		helper.TokensBetweenEqual(t, tree, 2, 11, []string{"text.b:Text", "p:End", "p:Start", "text.cde:Text",
+			"p:End", "p:Start", "text.fg:Text"})
+		helper.TokensBetweenEqual(t, tree, 2, 6, []string{"text.b:Text", "p:End", "p:Start", "text.cde:Text"})
+		helper.TokensBetweenEqual(t, tree, 0, 1, []string{"p:Start"})
+		helper.TokensBetweenEqual(t, tree, 3, 4, []string{"p:End"})
+		helper.TokensBetweenEqual(t, tree, 3, 5, []string{"p:End", "p:Start"})
 	})
 
 	t.Run("find index of the given node test", func(t *testing.T) {

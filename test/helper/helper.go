@@ -130,20 +130,20 @@ func TimeT(change *change.Context) *time.Ticket {
 	return change.IssueTimeTicket()
 }
 
-// NodesBetweenEqual is a helper function that checks the nodes between the given
+// TokensBetweenEqual is a helper function that checks the tokens between the given
 // indexes.
-func NodesBetweenEqual(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {
+func TokensBetweenEqual(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {
 	var nodes []*crdt.TreeNode
-	var contains []index.TagContained
-	err := tree.NodesBetween(from, to, func(node *crdt.TreeNode, contain index.TagContained) {
-		nodes = append(nodes, node)
-		contains = append(contains, contain)
+	var tokenTypes []index.TokenType
+	err := tree.TokensBetween(from, to, func(token index.TreeToken[*crdt.TreeNode], _ bool) {
+		nodes = append(nodes, token.Node)
+		tokenTypes = append(tokenTypes, token.TokenType)
 	})
 	assert.NoError(t, err)
 
 	var actual []string
 	for i := 0; i < len(nodes); i++ {
-		actual = append(actual, fmt.Sprintf("%s:%s", ToDiagnostic(nodes[i]), contains[i].ToString()))
+		actual = append(actual, fmt.Sprintf("%s:%s", ToDiagnostic(nodes[i]), tokenTypes[i].ToString()))
 	}
 	assert.Equal(t, expected, actual)
 
