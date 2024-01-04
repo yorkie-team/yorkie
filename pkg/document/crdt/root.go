@@ -154,12 +154,12 @@ func (r *Root) GarbageLen() int {
 	seen := make(map[string]bool)
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
-		seen[pair.elem.CreatedAt().ToTestString()] = true
+		seen[pair.elem.CreatedAt().Key()] = true
 
 		switch elem := pair.elem.(type) {
 		case Container:
 			elem.Descendants(func(elem Element, parent Container) bool {
-				seen[elem.CreatedAt().ToTestString()] = true
+				seen[elem.CreatedAt().Key()] = true
 				return false
 			})
 		}
