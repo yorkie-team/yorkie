@@ -23,6 +23,9 @@ import (
 
 // Config is the configuration for the housekeeping service.
 type Config struct {
+	// DisableHousekeeping disables the housekeeping service.
+	DisableHousekeeping bool `yaml:"DisableHousekeeping"`
+
 	// Interval is the time between housekeeping runs.
 	Interval string `yaml:"Interval"`
 

@@ -193,23 +193,29 @@ func init() {
 		false,
 		"Enable runtime profiling data via HTTP server.",
 	)
+	cmd.Flags().BoolVar(
+		&conf.Housekeeping.DisableHousekeeping,
+		"disable-housekeeping",
+		false,
+		"Disable housekeeping routine.",
+	)
 	cmd.Flags().DurationVar(
 		&housekeepingInterval,
 		"housekeeping-interval",
 		server.DefaultHousekeepingInterval,
-		"housekeeping interval between housekeeping runs",
+		"Housekeeping interval between housekeeping runs",
 	)
 	cmd.Flags().IntVar(
 		&conf.Housekeeping.CandidatesLimitPerProject,
 		"housekeeping-candidates-limit-per-project",
 		server.DefaultHousekeepingCandidatesLimitPerProject,
-		"candidates limit per project for a single housekeeping run",
+		"Candidates limit per project for a single housekeeping run",
 	)
 	cmd.Flags().IntVar(
 		&conf.Housekeeping.ProjectFetchSize,
 		"housekeeping-project-fetch-size",
 		server.DefaultHousekeepingProjectFetchSize,
-		"housekeeping project fetch size for a single housekeeping run",
+		"Housekeeping project fetch size for a single housekeeping run",
 	)
 	cmd.Flags().StringVar(
 		&mongoConnectionURI,

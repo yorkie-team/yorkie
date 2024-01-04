@@ -60,8 +60,11 @@ func Start(
 	if err != nil {
 		return nil, err
 	}
-	if err := h.Start(); err != nil {
-		return nil, err
+
+	if !conf.DisableHousekeeping {
+		if err := h.Start(); err != nil {
+			return nil, err
+		}
 	}
 
 	return h, nil

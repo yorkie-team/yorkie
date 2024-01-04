@@ -30,6 +30,9 @@ Profiling:
 
 # Housekeeping is the configuration for the housekeeping.
 Housekeeping:
+  # DisableHousekeeping is whether to disable housekeeping (default: false).
+  DisableHousekeeping: false
+
   # Interval is the time between housekeeping runs (default: 1m).
   Interval: 1m
 
