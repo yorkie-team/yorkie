@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.yorkie.name }}-housekeeping
+  namespace: {{ .Values.yorkie.namespace }}
+  labels:
+    app: {{ .Values.yorkie.name }}
+    app.kubernetes.io/name: {{ .Values.yorkie.name }}
+    app.kubernetes.io/instance: {{ .Values.yorkie.name }}
+    app.kubernetes.io/version: {{ .Values.yorkie.image.tag | default .Chart.AppVersion }}
+    app.kubernetes.io/component: batch
+    app.kubernetes.io/part-of: {{ .Values.yorkie.name }}
+    app.kubernetes.io/managed-by: istio
+    version: {{ .Values.yorkie.image.tag | default .Chart.AppVersion }}
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      containers:
+        - name: yorkie-housekeeping
+          image: "{{ .Values.yorkie.image.repository }}:{{ .Values.yorkie.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.yorkie.image.pullPolicy }}
+          args: [
+            "housekeeping",
+            "--mongo-connection-uri",
+            "mongodb://{{ .Values.yorkie.args.dbUrl }}:{{ .Values.yorkie.args.dbPort }}/yorkie-meta",
+          ]
+      restartPolicy: Never

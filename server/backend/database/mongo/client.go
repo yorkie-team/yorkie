@@ -256,7 +256,7 @@ func (c *Client) listProjectInfos(
 
 	cursor, err := c.collection(colProjects).Find(ctx, bson.M{
 		"_id": bson.M{
-			"$gt": encodedID,
+			"$gte": encodedID,
 		},
 	}, opts)
 	if err != nil {
