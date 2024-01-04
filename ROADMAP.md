@@ -14,17 +14,17 @@ Yorkie v1.0 focuses on improving the stability of the server and client to make 
 ### 2024
 
 - Support ProseMirror [#257](https://github.com/yorkie-team/yorkie-js-sdk/issues/257)
-- Support MongoDB Sharded Cluster [#673](https://github.com/yorkie-team/yorkie/issues/673)
 - Multi-User Undo/Redo [#652](https://github.com/yorkie-team/yorkie/issues/652)
 - History API [#52](https://github.com/yorkie-team/yorkie/issues/52)
 - REST API [#677](https://github.com/yorkie-team/yorkie/issues/677)
-- Devtools [#688](https://github.com/yorkie-team/yorkie-js-sdk/issues/688)
 - Improve UI Workflow [#1](https://github.com/yorkie-team/yorkie-ui-poc/issues/1)
 
 ### 2023
 
 - Support batch API for document and presence [#442](https://github.com/yorkie-team/yorkie/issues/442)
 - Sharding-based cluster mode [#472](https://github.com/yorkie-team/yorkie/issues/472)
+- Support MongoDB Sharded Cluster [#673](https://github.com/yorkie-team/yorkie/issues/673)
+- Devtools [#688](https://github.com/yorkie-team/yorkie-js-sdk/issues/688)
 
 ## Yorkie v0.3
 
