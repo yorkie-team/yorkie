@@ -151,18 +151,21 @@ func (r *Root) RemovedElementLen() int {
 // GarbageLen returns the count of removed elements.
 func (r *Root) GarbageLen() int {
 	count := 0
+	seen := make(map[string]bool)
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
-		count++
+		seen[pair.elem.CreatedAt().ToTestString()] = true
 
 		switch elem := pair.elem.(type) {
 		case Container:
 			elem.Descendants(func(elem Element, parent Container) bool {
-				count++
+				seen[elem.CreatedAt().ToTestString()] = true
 				return false
 			})
 		}
 	}
+
+	count += len(seen)
 
 	for _, element := range r.elementHasRemovedNodesSetByCreatedAt {
 		count += element.removedNodesLen()
