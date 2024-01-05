@@ -268,6 +268,28 @@ func (c *Client) listProjectInfos(
 		return nil, fmt.Errorf("fetch project infos: %w", err)
 	}
 
+	if len(infos) < pageSize {
+		opts.SetLimit(int64(pageSize - len(infos)))
+		if err != nil {
+			return nil, err
+		}
+
+		cursor, err := c.collection(colProjects).Find(ctx, bson.M{
+			"_id": bson.M{
+				"$lte": encodedID,
+			},
+		}, opts)
+		if err != nil {
+			return nil, fmt.Errorf("find project infos: %w", err)
+		}
+
+		var newInfos []*database.ProjectInfo
+		if err := cursor.All(ctx, &newInfos); err != nil {
+			return nil, fmt.Errorf("fetch project infos: %w", err)
+		}
+		infos = append(infos, newInfos...)
+	}
+
 	return infos, nil
 }
 
