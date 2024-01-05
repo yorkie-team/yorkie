@@ -275,11 +275,6 @@ func (d *DB) rotateListProjectInfosGreaterThan(
 		infos = append(infos, info)
 	}
 
-	for i := 0; i < len(infos); i++ {
-		fmt.Print(infos[i].ID + " ")
-	}
-	fmt.Println()
-
 	return infos, nil
 }
 
