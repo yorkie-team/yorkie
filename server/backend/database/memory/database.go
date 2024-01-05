@@ -224,8 +224,8 @@ func (d *DB) CreateProjectInfo(
 	return info, nil
 }
 
-// listProjectInfos returns all project infos rotationally.
-func (d *DB) listProjectInfos(
+// rotateListProjectInfosGreaterThan returns all project infos rotationally.
+func (d *DB) rotateListProjectInfosGreaterThan(
 	_ context.Context,
 	pageSize int,
 	housekeepingLastProjectID types.ID,
@@ -247,7 +247,19 @@ func (d *DB) listProjectInfos(
 	for i := 0; i < pageSize; i++ {
 		raw := iter.Next()
 		if raw == nil {
-			break
+			iter, err = txn.LowerBound(
+				tblProjects,
+				"id",
+				database.DefaultProjectID.String(),
+			)
+			if err != nil {
+				return nil, fmt.Errorf("fetch projects: %w", err)
+			}
+
+			raw = iter.Next()
+			if raw == nil {
+				break
+			}
 		}
 		info := raw.(*database.ProjectInfo).DeepCopy()
 
@@ -256,8 +268,17 @@ func (d *DB) listProjectInfos(
 			continue
 		}
 
+		if len(infos) > 0 && infos[0].ID == info.ID {
+			break
+		}
+
 		infos = append(infos, info)
 	}
+
+	for i := 0; i < len(infos); i++ {
+		fmt.Print(infos[i].ID + " ")
+	}
+	fmt.Println()
 
 	return infos, nil
 }
@@ -611,7 +632,7 @@ func (d *DB) FindDeactivateCandidates(
 	projectFetchSize int,
 	lastProjectID types.ID,
 ) (types.ID, []*database.ClientInfo, error) {
-	projects, err := d.listProjectInfos(ctx, projectFetchSize, lastProjectID)
+	projects, err := d.rotateListProjectInfosGreaterThan(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}
