@@ -106,7 +106,7 @@ func TestHousekeeping(t *testing.T) {
 			lastProjectID,
 		)
 		assert.NoError(t, err)
-		assert.Equal(t, database.DefaultProjectID, lastProjectID)
+		assert.Equal(t, projects[1].ID, lastProjectID)
 	})
 }
 
