@@ -666,7 +666,7 @@ func RunFindDeactivateCandidates(t *testing.T, db database.Database) {
 			lastProjectID,
 		)
 		assert.NoError(t, err)
-		assert.Equal(t, database.DefaultProjectID, lastProjectID)
+		assert.Equal(t, projects[fetchSize-(len(projects)%3)-1].ID, lastProjectID)
 	})
 }
 
