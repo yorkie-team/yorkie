@@ -734,6 +734,41 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{"bold":"true"}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{"italic":"true"}}]}`, d2.Root().GetTree("t").Marshal())
 	})
 
+	t.Run("remove attributes test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, d1.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			// NOTE(sejongk): 0, 4 -> 0,1 / 3,4
+			root.GetTree("t").RemoveStyle(0, 4, []string{"italic"})
+			return nil
+		}))
+
+		assert.NoError(t, c1.Sync(ctx))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, d2.Root().GetTree("t").ToXML())
+
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{}}]}`, d1.Root().GetTree("t").Marshal())
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{}}]}`, d2.Root().GetTree("t").Marshal())
+	})
+
 	// Concurrent editing, overlapping range test
 	t.Run("concurrently delete overlapping elements test", func(t *testing.T) {
 		ctx := context.Background()

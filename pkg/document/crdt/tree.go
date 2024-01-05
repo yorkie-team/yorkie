@@ -876,6 +876,34 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 	return nil
 }
 
+// RemoveStyle removes the given attributes of the given range.
+func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, editedAt *time.Ticket) error {
+	// 01. split text nodes at the given range if needed.
+	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
+	if err != nil {
+		return err
+	}
+	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
+	if err != nil {
+		return err
+	}
+
+	err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft,
+		func(token index.TreeToken[*TreeNode], _ bool) {
+			node := token.Node
+			if !node.IsRemoved() && !node.IsText() && len(attributesToRemove) > 0 && node.Attrs != nil {
+				for _, value := range attributesToRemove {
+					node.Attrs.Remove(value, editedAt)
+				}
+			}
+		})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
 // splits the text node if the position is in the middle of the text node.
 // crdt.TreePos is a position in the CRDT perspective. This is different
