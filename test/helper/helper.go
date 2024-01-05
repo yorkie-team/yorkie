@@ -130,9 +130,9 @@ func TimeT(change *change.Context) *time.Ticket {
 	return change.IssueTimeTicket()
 }
 
-// TokensBetweenEqual is a helper function that checks the tokens between the given
+// TokensEqualBetween is a helper function that checks the tokens between the given
 // indexes.
-func TokensBetweenEqual(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {
+func TokensEqualBetween(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {
 	var nodes []*crdt.TreeNode
 	var tokenTypes []index.TokenType
 	err := tree.TokensBetween(from, to, func(token index.TreeToken[*crdt.TreeNode], _ bool) {
@@ -154,7 +154,7 @@ func TokensBetweenEqual(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], fro
 // diagnostic string.
 func ToDiagnostic(node *crdt.TreeNode) string {
 	if node.IsText() {
-		return fmt.Sprintf("%s.%s", node.Type(), node.Value)
+		return node.Value
 	}
 
 	return node.Type()

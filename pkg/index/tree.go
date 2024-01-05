@@ -152,6 +152,10 @@ type TreeToken[V Value] struct {
 }
 
 // tokensBetween iterates the tokens between the given range.
+//
+// For example, if the tree is <p><i>abc</i></p>, the tokens are
+// [p, Start], [i, Start], [abc, Text], [i, End], [p, End].
+//
 // If the given range is collapsed, the callback is not called.
 // It traverses the tree based on the concept of token.
 // NOTE(sejongk): Nodes should not be removed in callback, because it leads wrong behaviors.
