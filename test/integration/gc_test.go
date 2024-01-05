@@ -440,8 +440,8 @@ func TestGarbageCollection(t *testing.T) {
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("shape").
 				SetNewObject("point").
-				SetInteger("point.x", 0).
-				SetInteger("point.y", 0)
+				SetInteger("x", 0).
+				SetInteger("y", 0)
 			root.Delete("shape")
 			return nil
 		})
