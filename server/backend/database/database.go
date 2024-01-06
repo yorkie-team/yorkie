@@ -148,12 +148,12 @@ type Database interface {
 		candidatesLimitPerProject int,
 		projectFetchSize int,
 		lastProjectID types.ID,
-	) (types.ID, []*ClientInfo, error)
+	) ([]*DocInfo, error)
 
 	// HardDeletion Document complete deletion in progress
 	HardDeletion(
 		ctx context.Context,
-		candidates []*ClientInfo,
+		candidates []*DocInfo,
 	) (types.ID, error)
 
 	// FindDocInfoByKey finds the document of the given key.

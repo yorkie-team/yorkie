@@ -565,6 +565,41 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
+// findHardDeletionCandidatesPerProject finds the documents that need housekeeping per project.
+func (d *DB) findHardDeletionCandidatesPerProject(
+	ctx context.Context,
+	project *database.ProjectInfo,
+	candidatesLimit int,
+) ([]*database.DocInfo, error) {
+
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	var documents []*database.DocInfo
+	iterator, err := txn.Get(
+		tblProjects,
+		"project_id",
+		project.ID.String(),
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("fetch hard deletion candidates: %w", err)
+	}
+
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		document := raw.(*database.DocInfo)
+		if candidatesLimit <= len(documents) {
+			break
+		}
+
+		if !document.RemovedAt.IsZero() {
+			documents = append(documents, document)
+		}
+	}
+
+	return documents, nil
+}
+
 // findDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
 func (d *DB) findDeactivateCandidatesPerProject(
 	ctx context.Context,
@@ -644,18 +679,45 @@ func (d *DB) FindHardDeletionCandidates(
 	candidatesLimitPerProject int,
 	projectFetchSize int,
 	lastProjectID types.ID,
-) (types.ID, []*database.ClientInfo, error) {
-	// TODO developing...
-	return "1", nil, nil
+) ([]*database.DocInfo, error) {
+	projects, err := d.listProjectInfos(ctx, projectFetchSize, lastProjectID)
+	if err != nil {
+		return nil, err
+	}
+
+	var candidates []*database.DocInfo
+	for _, project := range projects {
+		documents, err := d.findHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		if err != nil {
+			return nil, err
+		}
+
+		candidates = append(candidates, documents...)
+	}
+
+	return candidates, nil
 }
 
 // HardDeletion Deletes the documents completely.
 func (d *DB) HardDeletion(
 	ctx context.Context,
-	candidates []*database.ClientInfo,
+	candidates []*database.DocInfo,
 ) (types.ID, error) {
-	// TODO developing...
-	return "1", nil
+
+	var lastDeletedID types.ID
+
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	for _, candidate := range candidates {
+		if err := txn.Delete(tblDocuments, candidate); err != nil {
+			return database.DefaultProjectID, fmt.Errorf("fetch hard deletion candidates: %w", err)
+		}
+		lastDeletedID = candidate.ID
+	}
+	txn.Commit()
+
+	return lastDeletedID, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the
