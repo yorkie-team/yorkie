@@ -107,7 +107,7 @@ func (h *Housekeeping) Stop() error {
 	return nil
 }
 
-// AttachDeactivateCandidates is the housekeeping loop.
+// AttachDeactivateCandidates is the housekeeping loop for DeactivateCandidates
 func (h *Housekeeping) AttachDeactivateCandidates() {
 	housekeepingLastProjectID := database.DefaultProjectID
 
@@ -129,6 +129,7 @@ func (h *Housekeeping) AttachDeactivateCandidates() {
 	}
 }
 
+// AttachDocumentHardDeletion is the housekeeping loop for DocumentHardDeletion
 func (h *Housekeeping) AttachDocumentHardDeletion() {
 	housekeepingLastProjectID := database.DefaultProjectID
 
@@ -167,7 +168,7 @@ func (h *Housekeeping) documentHardDeletion(
 		}
 	}()
 
-	lastProjectID, candidates, err := h.database.FindHardDeletionCandidates(
+	candidates, err := h.database.FindHardDeletionCandidates(
 		ctx,
 		h.candidatesLimitPerProject,
 		h.projectFetchSize,
@@ -177,7 +178,7 @@ func (h *Housekeeping) documentHardDeletion(
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
-
+	var lastProjectID types.ID
 	lastProjectID, err = h.database.HardDeletion(ctx, candidates)
 
 	if err != nil {
@@ -208,7 +209,6 @@ func (h *Housekeeping) deactivateCandidates(
 		}
 	}()
 
-	// FindDeactivateCandidates 메서드를 호출하여 비활성화할 대상이 되는 후보(candidates)를 데이터베이스에서 조회합니다.
 	lastProjectID, candidates, err := h.database.FindDeactivateCandidates(
 		ctx,
 		h.candidatesLimitPerProject,
@@ -219,9 +219,6 @@ func (h *Housekeeping) deactivateCandidates(
 		return database.DefaultProjectID, err
 	}
 
-	//조회된 후보들에 대해서 for 루프를 사용해 순회하면서 각각을 비활성화합니다.
-	//clients.Deactivate 메서드를 사용하여 실제 비활성화 작업을 수행하고,
-	//그 결과를 deactivatedCount 변수에 누적하여 비활성화된 항목의 수를 추적합니다.
 	deactivatedCount := 0
 	for _, clientInfo := range candidates {
 		if _, err := clients.Deactivate(
