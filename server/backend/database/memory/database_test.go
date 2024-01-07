@@ -83,4 +83,8 @@ func TestDB(t *testing.T) {
 	t.Run("IsDocumentAttached test", func(t *testing.T) {
 		testcases.RunIsDocumentAttachedTest(t, db, projectID)
 	})
+
+	t.Run("FindDeactivateCandidates test", func(t *testing.T) {
+		testcases.RunFindDeactivateCandidates(t, db)
+	})
 }
