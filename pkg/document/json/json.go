@@ -17,7 +17,11 @@
 // Package json provides the JSON document implementation.
 package json
 
-import "github.com/yorkie-team/yorkie/pkg/document/crdt"
+import (
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+)
 
 func toOriginal(elem crdt.Element) crdt.Element {
 	switch elem := elem.(type) {
@@ -36,4 +40,52 @@ func toOriginal(elem crdt.Element) crdt.Element {
 	}
 
 	panic("unsupported type")
+}
+
+func buildCRDTElement(
+	context *change.Context,
+	value interface{},
+	ticket *time.Ticket,
+) crdt.Element {
+	switch elem := value.(type) {
+	case string:
+		primitive, err := crdt.NewPrimitive(elem, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
+	case map[string]interface{}:
+		obj := NewObject(context, crdt.NewObject(crdt.NewElementRHT(), ticket))
+		members := buildMember(context, elem)
+
+		for key, value := range members {
+			value = toOriginal(value)
+			removed := obj.Set(key, value)
+			obj.context.RegisterElement(value)
+			if removed != nil {
+				obj.context.RegisterRemovedElementPair(obj, removed)
+			}
+		}
+
+		return obj
+	default:
+		panic("unsupported type")
+	}
+
+}
+
+func buildMember(
+	context *change.Context,
+	json map[string]interface{},
+) map[string]crdt.Element {
+
+	members := make(map[string]crdt.Element)
+
+	for key, value := range json {
+		ticket := context.IssueTimeTicket()
+		elem := buildCRDTElement(context, value, ticket)
+		members[key] = elem
+	}
+
+	return members
 }

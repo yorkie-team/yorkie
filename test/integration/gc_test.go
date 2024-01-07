@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -431,22 +432,53 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, d2.GarbageCollect(time.MaxTicket), 3)
 	})
 
-	t.Run("Garbage collection for nested object test", func(t *testing.T) {
+	t.Run("Set new object with json literal test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewObject("shape").
-				SetNewObject("point").
-				SetInteger("point.x", 0).
-				SetInteger("point.y", 0)
+			data := map[string]interface{}{
+				"key":  "value",
+				"key2": "value2",
+				"obj": map[string]interface{}{
+					"key3": "value3",
+				},
+			}
+			root.SetNewObject("shape", data)
+			return nil
+		})
+
+		fmt.Println(d1.Marshal())
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("shape")
 			return nil
 		})
 
-		assert.Equal(t, d1.GarbageLen(), 4) // shape, point, x, y
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 4)
+		assert.Equal(t, d1.GarbageLen(), 5)
+		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 5)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("shape").
+				SetString("key", "value").
+				SetString("key2", "value2").
+				SetNewObject("obj").
+				SetString("key3", "value3")
+
+			return nil
+		})
+
+		fmt.Println(d1.Marshal())
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("shape")
+			return nil
+		})
+
+		assert.Equal(t, d1.GarbageLen(), 5)
+		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 5)
+
 	})
 }

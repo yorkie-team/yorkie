@@ -17,6 +17,7 @@
 package json
 
 import (
+	"fmt"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -40,13 +41,68 @@ func NewObject(ctx *change.Context, root *crdt.Object) *Object {
 	}
 }
 
-// SetNewObject sets a new Object for the given key.
-func (p *Object) SetNewObject(k string) *Object {
-	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
-	})
+// // SetNewObject sets a new Object for the given key.
+// func (p *Object) SetNewObject(k string) *Object {
+// 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+// 		return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
+// 	})
 
-	return v.(*Object)
+// 	return v.(*Object)
+// }
+
+// SetNewObject sets a new Object for the given key.
+func (p *Object) SetNewObject(kv ...interface{}) *Object {
+	fmt.Println("setNewObject ", p.Object.CreatedAt().ToTestString())
+
+	switch len(kv) {
+	case 1: // only gived key
+		k := kv[0].(string)
+		v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
+		})
+		return v.(*Object)
+
+	case 2: // key with value
+		k := kv[0].(string)
+		v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+			// 뭔가 switch로 json 파싱후 setNewobject
+			// switch value := kv[1].(type) {
+			// case :
+
+			// }
+			json := kv[1].(map[string]interface{})
+			return buildCRDTElement(p.context, json, ticket)
+
+			// buildMember ( json )
+
+			// for key, value := range json { // build object member
+			// 	switch value := value.(type) {
+			// 	case string:
+			// 		// 생성할때 p.context 이용, ticket 발급 -->
+			// 		ticket := obj.context.IssueTimeTicket()
+			// 		primitive, err := crdt.NewPrimitive(value, ticket)
+			// 		if err != nil {
+			// 			panic(err)
+			// 		}
+			// 		removed := obj.Set(key, primitive)     // key value map 에 저장
+			// 		obj.context.RegisterElement(primitive) // created map에 저장
+			// 		if removed != nil {
+			// 			obj.context.RegisterRemovedElementPair(obj, removed)
+			// 		}
+			// 		//obj.SetString(key, value)
+			// 	case map[string]interface{}:
+
+			// 	default:
+
+			// 	}
+			// }
+		})
+
+		return v.(*Object)
+	default:
+		panic("too many arguments in call to SetNewObject")
+	}
+
 }
 
 // SetNewArray sets a new Array for the given key.
@@ -185,6 +241,7 @@ func (p *Object) SetDouble(k string, v float64) *Object {
 
 // SetString sets the given string for the given key.
 func (p *Object) SetString(k, v string) *Object {
+	fmt.Println("set string : ", p.CreatedAt().ToTestString())
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {
@@ -329,19 +386,14 @@ func (p *Object) setInternal(
 	creator func(ticket *time.Ticket) crdt.Element,
 ) crdt.Element {
 	ticket := p.context.IssueTimeTicket()
-	elem := creator(ticket)
+	elem := creator(ticket) // create value -> object
+
 	value := toOriginal(elem)
 
 	copiedValue, err := value.DeepCopy()
 	if err != nil {
 		panic(err)
 	}
-	p.context.Push(operations.NewSet(
-		p.CreatedAt(),
-		k,
-		copiedValue,
-		ticket,
-	))
 
 	removed := p.Set(k, value)
 	p.context.RegisterElement(value)
@@ -349,5 +401,12 @@ func (p *Object) setInternal(
 		p.context.RegisterRemovedElementPair(p, removed)
 	}
 
+	// buildCRDTElement(p.context, ) -- 여기부터 아래를 따로 빼서 처리?
+	p.context.Push(operations.NewSet(
+		p.CreatedAt(),
+		k,           // key
+		copiedValue, // value
+		ticket,
+	))
 	return elem
 }
