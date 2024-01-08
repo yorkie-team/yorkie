@@ -75,6 +75,25 @@ func (d *DB) FindProjectInfoByPublicKey(
 	return raw.(*database.ProjectInfo).DeepCopy(), nil
 }
 
+// FindProjectInfoBySecretKey returns a project by secret key.
+func (d *DB) FindProjectInfoBySecretKey(
+	_ context.Context,
+	secretKey string,
+) (*database.ProjectInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblProjects, "secret_key", secretKey)
+	if err != nil {
+		return nil, fmt.Errorf("find project by secret key: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", secretKey, database.ErrProjectNotFound)
+	}
+
+	return raw.(*database.ProjectInfo).DeepCopy(), nil
+}
+
 // FindProjectInfoByName returns a project by the given name.
 func (d *DB) FindProjectInfoByName(
 	_ context.Context,
@@ -374,6 +393,22 @@ func (d *DB) FindUserInfo(_ context.Context, username string) (*database.UserInf
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
+	}
+
+	return raw.(*database.UserInfo).DeepCopy(), nil
+}
+
+// FindUserInfoById finds a user by the given id.
+func (d *DB) FindUserInfoById(_ context.Context, id string) (*database.UserInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "id", id)
+	if err != nil {
+		return nil, fmt.Errorf("find user by id: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", id, database.ErrUserNotFound)
 	}
 
 	return raw.(*database.UserInfo).DeepCopy(), nil

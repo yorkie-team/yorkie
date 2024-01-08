@@ -72,6 +72,25 @@ func RunFindDocInfoTest(
 	})
 }
 
+// RunFindProjectInfoBySecretKeyTest runs the FindProjectInfoBySecretKey test for the given db.
+func RunFindProjectInfoBySecretKeyTest(
+	t *testing.T,
+	db database.Database,
+) {
+	t.Run("FindProjectInfoBySecretKey test", func(t *testing.T) {
+		ctx := context.Background()
+
+		info1, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
+		assert.NoError(t, err)
+		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		info2, err := db.FindProjectInfoBySecretKey(ctx, info1.SecretKey)
+		assert.NoError(t, err)
+		assert.Equal(t, info1.ID, info2.ID)
+	})
+}
+
 // RunFindProjectInfoByNameTest runs the FindProjectInfoByName test for the given db.
 func RunFindProjectInfoByNameTest(
 	t *testing.T,

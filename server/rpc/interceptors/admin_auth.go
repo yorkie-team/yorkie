@@ -28,6 +28,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/users"
@@ -161,14 +162,20 @@ func (i *AdminAuthInterceptor) authenticate(
 	}
 
 	claims, err := i.tokenManager.Verify(authorization)
-	if err != nil {
-		return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is invalid")
+	if err == nil {
+		user, err := users.GetUser(ctx, i.backend, claims.Username)
+		if err == nil {
+			return user, nil
+		}
 	}
 
-	user, err := users.GetUser(ctx, i.backend, claims.Username)
-	if err != nil {
-		return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is invalid")
+	project, err := projects.GetProjectFromSecretKey(ctx, i.backend, authorization)
+	if err == nil {
+		user, err := users.GetUserById(ctx, i.backend, project.Owner.String())
+		if err == nil {
+			return user, nil
+		}
 	}
 
-	return user, nil
+	return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is invalid")
 }

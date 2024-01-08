@@ -81,3 +81,15 @@ func GetUser(
 
 	return info.ToUser(), nil
 }
+
+func GetUserById(
+	ctx context.Context,
+	be *backend.Backend,
+	id string,
+) (*types.User, error) {
+	info, err := be.DB.FindUserInfoById(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return info.ToUser(), nil
+}
