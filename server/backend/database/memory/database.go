@@ -243,10 +243,15 @@ func (d *DB) rotateListProjectInfosGreaterThan(
 	}
 
 	var infos []*database.ProjectInfo
+	isCircular := false
 
 	for i := 0; i < pageSize; i++ {
 		raw := iter.Next()
 		if raw == nil {
+			if isCircular {
+				break
+			}
+
 			iter, err = txn.LowerBound(
 				tblProjects,
 				"id",
@@ -256,10 +261,9 @@ func (d *DB) rotateListProjectInfosGreaterThan(
 				return nil, fmt.Errorf("fetch projects: %w", err)
 			}
 
-			raw = iter.Next()
-			if raw == nil {
-				break
-			}
+			i--
+			isCircular = true
+			continue
 		}
 		info := raw.(*database.ProjectInfo).DeepCopy()
 
