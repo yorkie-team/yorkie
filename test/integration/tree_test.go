@@ -754,7 +754,7 @@ func TestTree(t *testing.T) {
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			// NOTE(sejongk): 0, 4 -> 0,1 / 3,4
-			root.GetTree("t").RemoveStyle(0, 4, []string{"italic"})
+			root.GetTree("t").RemoveStyle(4, 8, []string{"italic"})
 			return nil
 		}))
 
@@ -765,8 +765,8 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, d1.Root().GetTree("t").ToXML())
 		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, d2.Root().GetTree("t").ToXML())
 
-		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{}}]}`, d1.Root().GetTree("t").Marshal())
-		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{}}]}`, d2.Root().GetTree("t").Marshal())
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}]},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{}}]}`, d1.Root().GetTree("t").Marshal())
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}]},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{}}]}`, d2.Root().GetTree("t").Marshal())
 	})
 
 	// Concurrent editing, overlapping range test
