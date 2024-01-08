@@ -240,8 +240,8 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// listProjectInfos returns all project infos rotationally.
-func (c *Client) listProjectInfos(
+// rotateListProjectInfosGreaterThan returns all project infos rotationally.
+func (c *Client) rotateListProjectInfosGreaterThan(
 	ctx context.Context,
 	pageSize int,
 	housekeepingLastProjectID types.ID,
@@ -695,7 +695,7 @@ func (c *Client) FindDeactivateCandidates(
 	projectFetchSize int,
 	lastProjectID types.ID,
 ) (types.ID, []*database.ClientInfo, error) {
-	projects, err := c.listProjectInfos(ctx, projectFetchSize, lastProjectID)
+	projects, err := c.rotateListProjectInfosGreaterThan(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}
