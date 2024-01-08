@@ -20,6 +20,8 @@
 package crdt
 
 import (
+	"fmt"
+
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -76,15 +78,41 @@ func (r *Root) FindByCreatedAt(createdAt *time.Ticket) Element {
 }
 
 // RegisterElement registers the given element to hash table.
-func (r *Root) RegisterElement(elem Element) {
-	r.elementMapByCreatedAt[elem.CreatedAt().Key()] = elem
+func (r *Root) RegisterElement(element Element) {
+	r.elementMapByCreatedAt[element.CreatedAt().Key()] = element
+
+	switch element := element.(type) {
+	case Container:
+		{
+			element.Descendants(func(elem Element, parent Container) bool {
+				r.RegisterElement(elem)
+				return false
+			})
+		}
+	}
 }
 
 // DeregisterElement deregister the given element from hash tables.
-func (r *Root) DeregisterElement(elem Element) {
-	createdAt := elem.CreatedAt().Key()
-	delete(r.elementMapByCreatedAt, createdAt)
-	delete(r.removedElementPairMapByCreatedAt, createdAt)
+func (r *Root) DeregisterElement(element Element) {
+
+	deregisterElementInternal := func(elem Element) {
+		createdAt := elem.CreatedAt().Key()
+		delete(r.elementMapByCreatedAt, createdAt)
+		delete(r.removedElementPairMapByCreatedAt, createdAt)
+	}
+
+	deregisterElementInternal(element)
+
+	switch element := element.(type) {
+	case Container:
+		{
+			element.Descendants(func(elem Element, parent Container) bool {
+				deregisterElementInternal(elem)
+				return false
+			})
+		}
+	}
+
 }
 
 // RegisterRemovedElementPair register the given element pair to hash table.
@@ -159,6 +187,7 @@ func (r *Root) GarbageLen() int {
 		switch elem := pair.elem.(type) {
 		case Container:
 			elem.Descendants(func(elem Element, parent Container) bool {
+
 				seen[elem.CreatedAt().Key()] = true
 				return false
 			})
@@ -178,6 +207,12 @@ func (r *Root) garbageCollect(elem Element) int {
 	count := 0
 
 	callback := func(elem Element, parent Container) bool {
+		//Need to delete later
+		if parent == nil {
+			fmt.Println(elem.CreatedAt().ToTestString())
+		} else {
+			fmt.Println(parent.CreatedAt().ToTestString(), " ", elem.CreatedAt().ToTestString())
+		}
 		r.DeregisterElement(elem)
 		count++
 		return false
