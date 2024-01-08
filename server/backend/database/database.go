@@ -134,8 +134,8 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
-	// NextCyclingProjectInfos returns all project infos rotationally.
-	NextCyclingProjectInfos(
+	// FindNextNCyclingProjectInfos returns all project infos rotationally.
+	FindNextNCyclingProjectInfos(
 		_ context.Context,
 		pageSize int,
 		housekeepingLastProjectID types.ID,

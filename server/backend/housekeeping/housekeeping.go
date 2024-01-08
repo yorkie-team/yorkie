@@ -191,7 +191,7 @@ func (h *Housekeeping) FindDeactivateCandidates(
 	projectFetchSize int,
 	lastProjectID types.ID,
 ) (types.ID, []*database.ClientInfo, error) {
-	projects, err := h.database.NextCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
+	projects, err := h.database.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}

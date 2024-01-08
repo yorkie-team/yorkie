@@ -240,8 +240,8 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// NextCyclingProjectInfos returns all project infos rotationally.
-func (c *Client) NextCyclingProjectInfos(
+// FindNextNCyclingProjectInfos returns all project infos rotationally.
+func (c *Client) FindNextNCyclingProjectInfos(
 	ctx context.Context,
 	pageSize int,
 	housekeepingLastProjectID types.ID,

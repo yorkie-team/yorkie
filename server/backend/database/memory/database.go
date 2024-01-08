@@ -224,11 +224,11 @@ func (d *DB) CreateProjectInfo(
 	return info, nil
 }
 
-// NextCyclingProjectInfos returns all project infos rotationally.
-func (d *DB) NextCyclingProjectInfos(
+// FindNextNCyclingProjectInfos returns all project infos rotationally.
+func (d *DB) FindNextNCyclingProjectInfos(
 	_ context.Context,
 	pageSize int,
-	housekeepingLastProjectID types.ID,
+	lastProjectID types.ID,
 ) ([]*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -236,7 +236,7 @@ func (d *DB) NextCyclingProjectInfos(
 	iter, err := txn.LowerBound(
 		tblProjects,
 		"id",
-		housekeepingLastProjectID.String(),
+		lastProjectID.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetch projects: %w", err)
@@ -267,7 +267,7 @@ func (d *DB) NextCyclingProjectInfos(
 		}
 		info := raw.(*database.ProjectInfo).DeepCopy()
 
-		if i == 0 && info.ID == housekeepingLastProjectID {
+		if i == 0 && info.ID == lastProjectID {
 			pageSize++
 			continue
 		}
