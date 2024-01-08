@@ -48,7 +48,7 @@ func (n *RHTNode) Remove(removedAt *time.Ticket) {
 }
 
 func (n *RHTNode) isRemoved() bool {
-	return n.removedAt != nil
+	return n.removedAt != nil && n.removedAt.Compare(n.updatedAt) == 0
 }
 
 // Key returns the key of this node.
@@ -74,13 +74,15 @@ func (n *RHTNode) RemovedAt() *time.Ticket {
 // RHT is a hashtable with logical clock(Replicated hashtable).
 // For more details about RHT: http://csl.skku.edu/papers/jpdc11.pdf
 type RHT struct {
-	nodeMapByKey map[string]*RHTNode
+	nodeMapByKey           map[string]*RHTNode
+	numberOfRemovedElement int
 }
 
 // NewRHT creates a new instance of RHT.
 func NewRHT() *RHT {
 	return &RHT{
-		nodeMapByKey: make(map[string]*RHTNode),
+		nodeMapByKey:           make(map[string]*RHTNode),
+		numberOfRemovedElement: 0,
 	}
 }
 
@@ -108,6 +110,9 @@ func (rht *RHT) Has(key string) bool {
 // Set sets the value of the given key.
 func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
+		if node != nil && node.isRemoved() {
+			rht.numberOfRemovedElement--
+		}
 		newNode := newRHTNode(k, v, executedAt)
 		rht.nodeMapByKey[k] = newNode
 	}
@@ -115,7 +120,13 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
-	if node, ok := rht.nodeMapByKey[k]; ok && executedAt.After(node.removedAt) {
+	if node, ok := rht.nodeMapByKey[k]; ok && executedAt.After(node.updatedAt) {
+		if !node.isRemoved() {
+			rht.numberOfRemovedElement++
+		}
+		// node is removed if and only if updatedAt = removedAt
+		newNode := newRHTNode(k, node.val, executedAt)
+		rht.nodeMapByKey[k] = newNode
 		node.Remove(executedAt)
 		return node.val
 	}
@@ -141,7 +152,9 @@ func (rht *RHT) Elements() map[string]string {
 func (rht *RHT) Nodes() []*RHTNode {
 	var nodes []*RHTNode
 	for _, node := range rht.nodeMapByKey {
-		nodes = append(nodes, node)
+		if !node.isRemoved() {
+			nodes = append(nodes, node)
+		}
 	}
 
 	return nodes
@@ -149,7 +162,7 @@ func (rht *RHT) Nodes() []*RHTNode {
 
 // Len returns the number of elements.
 func (rht *RHT) Len() int {
-	return len(rht.nodeMapByKey)
+	return len(rht.nodeMapByKey) - rht.numberOfRemovedElement
 }
 
 // DeepCopy copies itself deeply.
