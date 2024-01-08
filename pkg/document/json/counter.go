@@ -42,6 +42,18 @@ func NewCounter(ctx *change.Context, counter *crdt.Counter) *Counter {
 	}
 }
 
+type TempCounter struct {
+	valueType crdt.CounterType
+	value     interface{}
+}
+
+func NewTempCounter(t crdt.CounterType, n interface{}) TempCounter {
+	return TempCounter{
+		valueType: t,
+		value:     n,
+	}
+}
+
 // Increase adds an increase operations.
 // Only numeric types are allowed as operand values, excluding
 // uint64 and uintptr.

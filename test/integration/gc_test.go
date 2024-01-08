@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -445,21 +446,29 @@ func TestGarbageCollection(t *testing.T) {
 				"obj": map[string]interface{}{
 					"key3": 42.2,
 				},
+				"cnt": json.NewTempCounter(crdt.LongCnt, 0),
 			}
 			root.SetNewObject("shape", data)
+			root.GetObject("shape").SetString("key", "changed")
+
+			return nil
+		})
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("shape").GetCounter("cnt").Increase(7)
 			return nil
 		})
 
 		fmt.Println(d1.Marshal())
-		assert.Equal(t, d1.Marshal(), `{"shape":{"key":"value","key2":[1,2,"str"],"obj":{"key3":42.200000}}}`)
+		assert.Equal(t, d1.Marshal(), `{"shape":{"cnt":7,"key":"changed","key2":[1,2,"str"],"obj":{"key3":42.200000}}}`)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("shape")
 			return nil
 		})
 
-		assert.Equal(t, d1.GarbageLen(), 8)
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 8)
+		assert.Equal(t, d1.GarbageLen(), 10)
+		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 10)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("shape").
@@ -471,6 +480,10 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetObject("shape").SetNewObject("obj").
 				SetDouble("key3", 42.2)
 
+			root.GetObject("shape").SetNewCounter("cnt", crdt.LongCnt, 0)
+			root.GetObject("shape").GetCounter("cnt").Increase(7)
+			root.GetObject("shape").SetString("key", "changed")
+
 			return nil
 		})
 
@@ -481,8 +494,8 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 
-		assert.Equal(t, d1.GarbageLen(), 8)
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 8)
+		assert.Equal(t, d1.GarbageLen(), 10)
+		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 10)
 
 	})
 }

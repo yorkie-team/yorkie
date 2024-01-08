@@ -64,9 +64,46 @@ func buildCRDTElement(
 	//case ...*TreeNode:
 	//case Text ->
 
+	case TempCounter:
+		switch elem.valueType {
+		case crdt.IntegerCnt:
+			counter, err := crdt.NewCounter(crdt.IntegerCnt, elem.value, ticket)
+			if err != nil {
+				panic(err)
+			}
+			return NewCounter(
+				context,
+				counter,
+			)
+		case crdt.LongCnt:
+			counter, err := crdt.NewCounter(crdt.LongCnt, elem.value, ticket)
+			if err != nil {
+				panic(err)
+			}
+			return NewCounter(
+				context,
+				counter,
+			)
+		default:
+			panic("unsupported type")
+		}
+
+	case []interface{}: //array
+		array := NewArray(context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
+		// 아래 부분을 NewArray나 crdt.NewArray로 빼는게 좋을 수도...
+		for _, v := range elem {
+			ticket := context.IssueTimeTicket()
+			value := buildCRDTElement(context, v, ticket)
+			value = toOriginal(value)
+			if err := array.InsertAfter(array.LastCreatedAt(), value); err != nil {
+				panic(err)
+			}
+			array.context.RegisterElement(value)
+		}
+		return array
 	case map[string]interface{}:
 		obj := NewObject(context, crdt.NewObject(crdt.NewElementRHT(), ticket))
-		members := buildMember(context, elem)
+		members := buildObjectMember(context, elem)
 
 		for key, value := range members {
 			value = toOriginal(value)
@@ -78,19 +115,6 @@ func buildCRDTElement(
 		}
 
 		return obj
-
-	case []interface{}: //array
-		array := NewArray(context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
-		for _, v := range elem {
-			ticket := context.IssueTimeTicket()
-			value := buildCRDTElement(context, v, ticket)
-			value = toOriginal(value)
-			if err := array.InsertAfter(array.LastCreatedAt(), value); err != nil {
-				panic(err)
-			}
-			array.context.RegisterElement(value)
-		}
-		return array
 	default:
 		// Null
 		primitive, err := crdt.NewPrimitive(nil, ticket)
@@ -102,7 +126,7 @@ func buildCRDTElement(
 
 }
 
-func buildMember(
+func buildObjectMember(
 	context *change.Context,
 	json map[string]interface{},
 ) map[string]crdt.Element {
