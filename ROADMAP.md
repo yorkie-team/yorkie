@@ -1,5 +1,5 @@
 # Roadmap
-This document defines a high level roadmap for Yorkie development and upcoming releases.
+This document defines a high-level roadmap for Yorkie development and upcoming releases.
 The features and themes included in each milestone are optimistic in the sense that many do not have clear owners yet.
 Community and contributor involvement is vital for successfully implementing all desired items for each release.
 We hope that the items listed below will inspire further engagement from the community to keep Yorkie progressing and shipping exciting and valuable features.
@@ -11,13 +11,20 @@ We use the [Projects](https://github.com/orgs/yorkie-team/projects) feature in G
 
 Yorkie v1.0 focuses on improving the stability of the server and client to make Yorkie more reliable.
 
+### 2024
+
+- Support ProseMirror [#257](https://github.com/yorkie-team/yorkie-js-sdk/issues/257)
+- Multi-User Undo/Redo [#652](https://github.com/yorkie-team/yorkie/issues/652)
+- History API [#52](https://github.com/yorkie-team/yorkie/issues/52)
+- REST API [#677](https://github.com/yorkie-team/yorkie/issues/677)
+- Improve UI Workflow [#1](https://github.com/yorkie-team/yorkie-ui-poc/issues/1)
+
 ### 2023
 
-- Tree for text editors using tree model [yorkie-js-sdk#257](https://github.com/yorkie-team/yorkie-js-sdk/issues/257)
 - Support batch API for document and presence [#442](https://github.com/yorkie-team/yorkie/issues/442)
 - Sharding-based cluster mode [#472](https://github.com/yorkie-team/yorkie/issues/472)
-- History API [#52](https://github.com/yorkie-team/yorkie/issues/52)
-- Undo/Redo [#49](https://github.com/yorkie-team/yorkie/issues/49)
+- Support MongoDB Sharded Cluster [#673](https://github.com/yorkie-team/yorkie/issues/673)
+- Devtools [#688](https://github.com/yorkie-team/yorkie-js-sdk/issues/688)
 
 ## Yorkie v0.3
 
@@ -26,7 +33,7 @@ Yorkie v0.3 should provide APIs in the form of service(PaaS) to make it easier f
 ### 2022
 
  - Renewal of [Homepage](https://github.com/yorkie-team/homepage)
- - Admin Web: [Yorkie House](https://github.com/yorkie-team/yorkie-house)
+ - Dashboard [Yorkie House](https://github.com/yorkie-team/yorkie-house)
  - Admin API [#273](https://github.com/yorkie-team/yorkie/issues/273)
  - Multi-tenancy [#310](https://github.com/yorkie-team/yorkie/issues/310)
  - Mobile SDKs [#54](https://github.com/yorkie-team/yorkie/issues/54)
