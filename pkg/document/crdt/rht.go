@@ -29,7 +29,6 @@ type RHTNode struct {
 	key       string
 	val       string
 	updatedAt *time.Ticket
-	removedAt *time.Ticket
 	isRemoved bool
 }
 
@@ -38,20 +37,19 @@ func newRHTNode(key, val string, updatedAt *time.Ticket) *RHTNode {
 		key:       key,
 		val:       val,
 		updatedAt: updatedAt,
+		isRemoved: false,
 	}
 }
 
 // Remove removes this node. It only marks the deleted time (tombstone).
 func (n *RHTNode) Remove(removedAt *time.Ticket) {
-	if n.removedAt == nil || removedAt.After(n.removedAt) {
-		n.removedAt = removedAt
-		n.isRemoved = true
-	}
+	n.updatedAt = removedAt
+	n.isRemoved = true
 }
 
 // IsRemoved returns the node has been removed.
 func (n *RHTNode) IsRemoved() bool {
-	return n.removedAt != nil && n.isRemoved
+	return n.isRemoved
 }
 
 // Key returns the key of this node.
@@ -67,11 +65,6 @@ func (n *RHTNode) Value() string {
 // UpdatedAt returns the last update time.
 func (n *RHTNode) UpdatedAt() *time.Ticket {
 	return n.updatedAt
-}
-
-// RemovedAt returns the deletion time of this node.
-func (n *RHTNode) RemovedAt() *time.Ticket {
-	return n.removedAt
 }
 
 // RHT is a hashtable with logical clock(Replicated hashtable).
