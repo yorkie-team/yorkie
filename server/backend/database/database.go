@@ -138,7 +138,7 @@ type Database interface {
 	FindNextNCyclingProjectInfos(
 		_ context.Context,
 		pageSize int,
-		lastProjectId types.ID,
+		lastProjectID types.ID,
 	) ([]*ProjectInfo, error)
 
 	// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
