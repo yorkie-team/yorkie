@@ -856,7 +856,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>abc</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
-	t.Run("overlapping-merge-and-delete", func(t *testing.T) {
+	t.Run("overlapping-merge-and-delete-element-node", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -897,7 +897,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>a</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
-	t.Run("overlapping-merge-and-delete2", func(t *testing.T) {
+	t.Run("overlapping-merge-and-delete-text-nodes", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -1552,7 +1552,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root></root>", d1.Root().GetTree("t").ToXML())
 	})
 
-	t.Run("contained-merge-and-merge1", func(t *testing.T) {
+	t.Run("contained-merge-and-merge-at-different-levels", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -1598,7 +1598,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p><p>ab</p>c</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
-	t.Run("contained-merge-and-merge2", func(t *testing.T) {
+	t.Run("contained-merge-and-merge-at-the-same-level", func(t *testing.T) {
 		t.Skip("remove this after supporting concurrent merge and split")
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
