@@ -270,9 +270,6 @@ func (c *Client) listProjectInfos(
 
 	if len(infos) < pageSize {
 		opts.SetLimit(int64(pageSize - len(infos)))
-		if err != nil {
-			return nil, err
-		}
 
 		cursor, err := c.collection(colProjects).Find(ctx, bson.M{
 			"_id": bson.M{
