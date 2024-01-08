@@ -441,9 +441,9 @@ func TestGarbageCollection(t *testing.T) {
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			data := map[string]interface{}{
 				"key":  "value",
-				"key2": "value2",
+				"key2": []interface{}{1, 2, "str"},
 				"obj": map[string]interface{}{
-					"key3": "value3",
+					"key3": 42.2,
 				},
 			}
 			root.SetNewObject("shape", data)
@@ -451,21 +451,25 @@ func TestGarbageCollection(t *testing.T) {
 		})
 
 		fmt.Println(d1.Marshal())
+		assert.Equal(t, d1.Marshal(), `{"shape":{"key":"value","key2":[1,2,"str"],"obj":{"key3":42.200000}}}`)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("shape")
 			return nil
 		})
 
-		assert.Equal(t, d1.GarbageLen(), 5)
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 5)
+		assert.Equal(t, d1.GarbageLen(), 8)
+		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 8)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("shape").
 				SetString("key", "value").
-				SetString("key2", "value2").
-				SetNewObject("obj").
-				SetString("key3", "value3")
+				SetNewArray("key2")
+
+			root.GetObject("shape").GetArray("key2").AddInteger(1, 2).AddString("str")
+
+			root.GetObject("shape").SetNewObject("obj").
+				SetDouble("key3", 42.2)
 
 			return nil
 		})
@@ -477,8 +481,8 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 
-		assert.Equal(t, d1.GarbageLen(), 5)
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 5)
+		assert.Equal(t, d1.GarbageLen(), 8)
+		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 8)
 
 	})
 }

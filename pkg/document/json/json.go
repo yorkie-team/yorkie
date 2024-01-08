@@ -61,11 +61,8 @@ func buildCRDTElement(
 
 	//case crdt.CounterType
 	//case Tree
-	//case Text ->
-	//case Array -> 기존에는 빈 array만들고 add연산으로 데이터 추가함
-	// 즉 data 초기화해서 반환 구현 필요
-
 	//case ...*TreeNode:
+	//case Text ->
 
 	case map[string]interface{}:
 		obj := NewObject(context, crdt.NewObject(crdt.NewElementRHT(), ticket))
@@ -82,13 +79,18 @@ func buildCRDTElement(
 
 		return obj
 
-	// case []interface{}:
-	// 	_ = NewArray(context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
-	// 	for _, value := range elem {
-	// 		ticket := context.IssueTimeTicket()
-	// 		value = buildCRDTElement(context, value, ticket)
-
-	// 	}
+	case []interface{}: //array
+		array := NewArray(context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
+		for _, v := range elem {
+			ticket := context.IssueTimeTicket()
+			value := buildCRDTElement(context, v, ticket)
+			value = toOriginal(value)
+			if err := array.InsertAfter(array.LastCreatedAt(), value); err != nil {
+				panic(err)
+			}
+			array.context.RegisterElement(value)
+		}
+		return array
 	default:
 		// Null
 		primitive, err := crdt.NewPrimitive(nil, ticket)
