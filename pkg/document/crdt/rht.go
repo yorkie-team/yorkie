@@ -121,13 +121,18 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 	if node, ok := rht.nodeMapByKey[k]; ok && executedAt.After(node.updatedAt) {
-		if !node.isRemoved() {
+		alreadyRemoved := node.isRemoved()
+		if !alreadyRemoved {
 			rht.numberOfRemovedElement++
 		}
 		// node is removed if and only if updatedAt = removedAt
 		newNode := newRHTNode(k, node.val, executedAt)
 		rht.nodeMapByKey[k] = newNode
 		newNode.Remove(executedAt)
+
+		if alreadyRemoved {
+			return ""
+		}
 		return node.val
 	}
 
