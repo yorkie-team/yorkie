@@ -244,9 +244,9 @@ func (c *Client) CreateProjectInfo(
 func (c *Client) FindNextNCyclingProjectInfos(
 	ctx context.Context,
 	pageSize int,
-	housekeepingLastProjectID types.ID,
+	lastProjectID types.ID,
 ) ([]*database.ProjectInfo, error) {
-	encodedID, err := encodeID(housekeepingLastProjectID)
+	encodedID, err := encodeID(lastProjectID)
 	if err != nil {
 		return nil, err
 	}
