@@ -59,11 +59,15 @@ func buildCRDTElement(
 		}
 		return primitive
 
-	//case crdt.CounterType
 	//case Tree
 	//case ...*TreeNode:
 	//case Text ->
+	case *TreeNode:
 
+		return NewTree(context, crdt.NewTree(buildRoot(context, elem, ticket), ticket))
+
+	case *Text:
+		return NewText(context, crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket))
 	case TempCounter:
 		switch elem.valueType {
 		case crdt.IntegerCnt:

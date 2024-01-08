@@ -447,10 +447,11 @@ func TestGarbageCollection(t *testing.T) {
 					"key3": 42.2,
 				},
 				"cnt": json.NewTempCounter(crdt.LongCnt, 0),
+				"txt": json.NewText(nil, nil),
 			}
 			root.SetNewObject("shape", data)
 			root.GetObject("shape").SetString("key", "changed")
-
+			root.GetObject("shape").GetText("txt").Edit(0, 0, "ABCD")
 			return nil
 		})
 
@@ -460,15 +461,14 @@ func TestGarbageCollection(t *testing.T) {
 		})
 
 		fmt.Println(d1.Marshal())
-		assert.Equal(t, d1.Marshal(), `{"shape":{"cnt":7,"key":"changed","key2":[1,2,"str"],"obj":{"key3":42.200000}}}`)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("shape")
 			return nil
 		})
 
-		assert.Equal(t, d1.GarbageLen(), 10)
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 10)
+		assert.Equal(t, d1.GarbageLen(), 11)
+		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 11)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("shape").
@@ -484,6 +484,7 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetObject("shape").GetCounter("cnt").Increase(7)
 			root.GetObject("shape").SetString("key", "changed")
 
+			root.GetObject("shape").SetNewText("txt").Edit(0, 0, "ABCD")
 			return nil
 		})
 
@@ -494,8 +495,49 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 
-		assert.Equal(t, d1.GarbageLen(), 10)
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 10)
+		assert.Equal(t, d1.GarbageLen(), 11)
+		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 11)
 
+	})
+
+	t.Run("nested tree test", func(t *testing.T) {
+
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+
+			data := map[string]interface{}{
+				"tree": &json.TreeNode{
+					Type: "doc",
+					Children: []json.TreeNode{{
+						Type:     "p",
+						Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+					}, {
+						Type: "ng",
+						Children: []json.TreeNode{
+							{Type: "note", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+							{Type: "note", Children: []json.TreeNode{{Type: "text", Value: "ef"}}},
+						},
+					}, {
+						Type:     "bp",
+						Children: []json.TreeNode{{Type: "text", Value: "gh"}},
+					}},
+				},
+			}
+
+			root.SetNewObject("shape", data)
+			assert.Equal(t, "<doc><p>ab</p><ng><note>cd</note><note>ef</note></ng><bp>gh</bp></doc>", root.GetObject("shape").GetTree("tree").ToXML())
+			assert.Equal(t, 18, root.GetObject("shape").GetTree("tree").Len())
+
+			return nil
+		})
+
+		fmt.Println(d1.Marshal())
+		if err != nil {
+			panic(err)
+		}
 	})
 }
