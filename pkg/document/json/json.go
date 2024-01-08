@@ -18,6 +18,9 @@
 package json
 
 import (
+	"strings"
+	gotime "time"
+
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -48,12 +51,22 @@ func buildCRDTElement(
 	ticket *time.Ticket,
 ) crdt.Element {
 	switch elem := value.(type) {
-	case string:
+	// primitive type
+	case string, int, int32, int64, float32, float64, []byte, bool, gotime.Time:
 		primitive, err := crdt.NewPrimitive(elem, ticket)
 		if err != nil {
 			panic(err)
 		}
 		return primitive
+
+	//case crdt.CounterType
+	//case Tree
+	//case Text ->
+	//case Array -> 기존에는 빈 array만들고 add연산으로 데이터 추가함
+	// 즉 data 초기화해서 반환 구현 필요
+
+	//case ...*TreeNode:
+
 	case map[string]interface{}:
 		obj := NewObject(context, crdt.NewObject(crdt.NewElementRHT(), ticket))
 		members := buildMember(context, elem)
@@ -68,8 +81,21 @@ func buildCRDTElement(
 		}
 
 		return obj
+
+	// case []interface{}:
+	// 	_ = NewArray(context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
+	// 	for _, value := range elem {
+	// 		ticket := context.IssueTimeTicket()
+	// 		value = buildCRDTElement(context, value, ticket)
+
+	// 	}
 	default:
-		panic("unsupported type")
+		// Null
+		primitive, err := crdt.NewPrimitive(nil, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
 	}
 
 }
@@ -82,6 +108,10 @@ func buildMember(
 	members := make(map[string]crdt.Element)
 
 	for key, value := range json {
+		if strings.Contains(key, ".") {
+			panic("key must not contain the '.'.") // error 처리 확인해야함
+		}
+
 		ticket := context.IssueTimeTicket()
 		elem := buildCRDTElement(context, value, ticket)
 		members[key] = elem
