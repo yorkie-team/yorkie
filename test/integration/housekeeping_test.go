@@ -76,10 +76,6 @@ func TestHousekeeping(t *testing.T) {
 		fetchSize := 3
 		lastProjectID := database.DefaultProjectID
 
-		for i := 0; i < len(projects); i++ {
-			fmt.Println(projects[i].ID)
-		}
-		fmt.Println(len(projects))
 		for i := 0; i < len(projects)/fetchSize; i++ {
 			lastProjectID, _, err = h.FindDeactivateCandidates(
 				ctx,
@@ -127,9 +123,7 @@ func TestHousekeeping(t *testing.T) {
 			10,
 			database.DefaultProjectID,
 		)
-		for i := 0; i < len(candidates); i++ {
-			fmt.Println(candidates[i].ID)
-		}
+
 		assert.NoError(t, err)
 		assert.Len(t, candidates, 2)
 		assert.Equal(t, candidates[0].ID, clientA.ID)
