@@ -107,6 +107,8 @@ func TestRHT(t *testing.T) {
 		actual1 := rht.Marshal()
 		assert.Equal(t, expected1, actual1)
 		assert.Equal(t, 2, rht.Len())
+		assert.Equal(t, 2, len(rht.Nodes()))
+		assert.Equal(t, 2, len(rht.Elements()))
 
 		// 2. remove element
 		rht.Remove(key1, ctx.IssueTimeTicket())
@@ -114,6 +116,8 @@ func TestRHT(t *testing.T) {
 		actual2 := rht.Marshal()
 		assert.Equal(t, expected2, actual2)
 		assert.Equal(t, 1, rht.Len())
+		assert.Equal(t, 1, len(rht.Nodes()))
+		assert.Equal(t, 1, len(rht.Elements()))
 
 		// 3. set after remove
 		rht.Set(key1, value11, ctx.IssueTimeTicket())
@@ -121,6 +125,8 @@ func TestRHT(t *testing.T) {
 		actual3 := rht.Marshal()
 		assert.Equal(t, expected3, actual3)
 		assert.Equal(t, 2, rht.Len())
+		assert.Equal(t, 2, len(rht.Nodes()))
+		assert.Equal(t, 2, len(rht.Elements()))
 		assert.Equal(t, `key1="value11" key2="value2"`, rht.ToXML())
 
 		// 4. remove element
@@ -130,13 +136,17 @@ func TestRHT(t *testing.T) {
 		actual4 := rht.Marshal()
 		assert.Equal(t, expected4, actual4)
 		assert.Equal(t, 1, rht.Len())
+		assert.Equal(t, 1, len(rht.Nodes()))
+		assert.Equal(t, 1, len(rht.Elements()))
 
 		// 5. remove element again
-		rht.Remove(key1, ctx.IssueTimeTicket())
+		assert.Equal(t, ``, rht.Remove(key1, ctx.IssueTimeTicket()))
 		expected5 := `{"key2":"value22"}`
 		actual5 := rht.Marshal()
 		assert.Equal(t, expected5, actual5)
 		assert.Equal(t, 1, rht.Len())
+		assert.Equal(t, 1, len(rht.Nodes()))
+		assert.Equal(t, 1, len(rht.Elements()))
 		assert.Equal(t, `key2="value22"`, rht.ToXML())
 
 		// 6. remove element -> clear
@@ -145,6 +155,18 @@ func TestRHT(t *testing.T) {
 		actual6 := rht.Marshal()
 		assert.Equal(t, expected6, actual6)
 		assert.Equal(t, 0, rht.Len())
+		assert.Equal(t, 0, len(rht.Nodes()))
+		assert.Equal(t, 0, len(rht.Elements()))
 		assert.Equal(t, ``, rht.ToXML())
+
+		// 7. remove not exist key
+		assert.Equal(t, ``, rht.Remove(`key3`, ctx.IssueTimeTicket()))
+		expected7 := `{}`
+		actual7 := rht.Marshal()
+		assert.Equal(t, expected7, actual7)
+		assert.Equal(t, 0, rht.Len())
+		assert.Equal(t, ``, rht.ToXML())
+		assert.Equal(t, 0, len(rht.Nodes()))
+		assert.Equal(t, 0, len(rht.Elements()))
 	})
 }
