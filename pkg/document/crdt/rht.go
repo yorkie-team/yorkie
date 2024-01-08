@@ -127,7 +127,7 @@ func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 		// node is removed if and only if updatedAt = removedAt
 		newNode := newRHTNode(k, node.val, executedAt)
 		rht.nodeMapByKey[k] = newNode
-		node.Remove(executedAt)
+		newNode.Remove(executedAt)
 		return node.val
 	}
 
