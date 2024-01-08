@@ -134,13 +134,19 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
-	// FindDeactivateCandidates finds the housekeeping candidates.
-	FindDeactivateCandidates(
-		ctx context.Context,
-		candidatesLimitPerProject int,
-		projectFetchSize int,
-		lastProjectID types.ID,
-	) (types.ID, []*ClientInfo, error)
+	// NextCyclingProjectInfos returns all project infos rotationally.
+	NextCyclingProjectInfos(
+		_ context.Context,
+		pageSize int,
+		housekeepingLastProjectID types.ID,
+	) ([]*ProjectInfo, error)
+
+	// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
+	FindDeactivateCandidatesPerProject(
+		_ context.Context,
+		project *ProjectInfo,
+		candidatesLimit int,
+	) ([]*ClientInfo, error)
 
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(

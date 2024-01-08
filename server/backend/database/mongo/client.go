@@ -240,8 +240,8 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// nextCyclingProjectInfos returns all project infos rotationally.
-func (c *Client) nextCyclingProjectInfos(
+// NextCyclingProjectInfos returns all project infos rotationally.
+func (c *Client) NextCyclingProjectInfos(
 	ctx context.Context,
 	pageSize int,
 	housekeepingLastProjectID types.ID,
@@ -652,8 +652,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// findDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
-func (c *Client) findDeactivateCandidatesPerProject(
+// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
+func (c *Client) FindDeactivateCandidatesPerProject(
 	ctx context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
@@ -686,37 +686,6 @@ func (c *Client) findDeactivateCandidatesPerProject(
 	}
 
 	return clientInfos, nil
-}
-
-// FindDeactivateCandidates finds the clients that need housekeeping.
-func (c *Client) FindDeactivateCandidates(
-	ctx context.Context,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	lastProjectID types.ID,
-) (types.ID, []*database.ClientInfo, error) {
-	projects, err := c.nextCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
-	if err != nil {
-		return database.DefaultProjectID, nil, err
-	}
-
-	var candidates []*database.ClientInfo
-	for _, project := range projects {
-		clientInfos, err := c.findDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
-		if err != nil {
-			return database.DefaultProjectID, nil, err
-		}
-
-		candidates = append(candidates, clientInfos...)
-	}
-
-	var topProjectID types.ID
-	if len(projects) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projects[len(projects)-1].ID
-	}
-	return topProjectID, candidates, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the
