@@ -619,7 +619,10 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 			info.UpdatedAt.After(offset) {
 			break
 		}
-		infos = append(infos, info)
+
+		if info.ProjectID == project.ID {
+			infos = append(infos, info)
+		}
 	}
 	return infos, nil
 }
