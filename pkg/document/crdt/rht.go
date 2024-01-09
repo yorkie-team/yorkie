@@ -95,7 +95,7 @@ func (rht *RHT) Has(key string) bool {
 
 // Set sets the value of the given key.
 func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
-	if node, ok := rht.nodeMapByKey[k]; !ok || node.updatedAt == nil || executedAt.After(node.updatedAt) {
+	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
 		if node != nil && node.isRemoved {
 			rht.numberOfRemovedElement--
 		}
@@ -106,7 +106,7 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
-	if node, ok := rht.nodeMapByKey[k]; ok && (node.updatedAt == nil || executedAt.After(node.updatedAt)) {
+	if node, ok := rht.nodeMapByKey[k]; ok && executedAt.After(node.updatedAt) {
 		alreadyRemoved := node.isRemoved
 		if !alreadyRemoved {
 			rht.numberOfRemovedElement++
