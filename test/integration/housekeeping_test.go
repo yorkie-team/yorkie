@@ -1,4 +1,4 @@
-//go:build integration
+//go:build amd64
 
 /*
  * Copyright 2021 The Yorkie Authors. All rights reserved.
@@ -25,10 +25,8 @@ import (
 	"log"
 	"sort"
 	"testing"
-	gotime "time"
 
 	"github.com/stretchr/testify/assert"
-	monkey "github.com/undefinedlabs/go-mpatch"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -43,7 +41,7 @@ const (
 	clientDeactivateThreshold = "23h"
 )
 
-func setupTestWithDummyData(t *testing.T) *mongo.Client {
+func setupTest(t *testing.T) *mongo.Client {
 	config := &mongo.Config{
 		ConnectionTimeout: "5s",
 		ConnectionURI:     "mongodb://localhost:27017",
@@ -60,7 +58,7 @@ func setupTestWithDummyData(t *testing.T) *mongo.Client {
 
 func TestHousekeeping(t *testing.T) {
 	config := helper.TestConfig()
-	db := setupTestWithDummyData(t)
+	db := setupTest(t)
 
 	projects := createProjects(t, db)
 
@@ -69,8 +67,32 @@ func TestHousekeeping(t *testing.T) {
 	h, err := housekeeping.New(config.Housekeeping, db, coordinator)
 	assert.NoError(t, err)
 
-	// RunFindDeactivateCandidates runs the FindDeactivateCandidates tests for the given db.
-	t.Run("housekeeping pagination test", func(t *testing.T) {
+	t.Run("Housekeeping should work corretly", func(t *testing.T) {
+		yesterday := gotime.Now().Add(-25 * gotime.Hour)
+		patch, err := monkey.PatchMethod(gotime.Now, func() gotime.Time { return yesterday })
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		clients := activeClients(t, 2)
+		c1, c2 := clients[0], clients[1]
+		defer deactivateAndCloseClients(t, clients)
+
+		err = patch.Unpatch()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		clients := activeClients(t, 1)
+		c3 := clients[0]
+		defer deactivateAndCloseClients(t, clients)
+
+		assert.Eqaul(t, c1.IsActive(), false)
+		assert.Eqaul(t, c2.IsActive(), false)
+		assert.Eqaul(t, c3.IsActive(), true)
+	})
+
+	t.Run("`FindDeactivateCandidates` should return correct last projectID", func(t *testing.T) {
 		ctx := context.Background()
 
 		fetchSize := 3
@@ -97,7 +119,7 @@ func TestHousekeeping(t *testing.T) {
 		assert.Equal(t, projects[fetchSize-(len(projects)%3)-1].ID, lastProjectID)
 	})
 
-	t.Run("housekeeping test", func(t *testing.T) {
+	t.Run("`FindDeactivateCandidates` should return correct clients", func(t *testing.T) {
 		ctx := context.Background()
 
 		yesterday := gotime.Now().Add(-24 * gotime.Hour)
@@ -155,5 +177,5 @@ func createProjects(t *testing.T, db *mongo.Client) []*database.ProjectInfo {
 		return bytes.Compare(iBytes, jBytes) < 0
 	})
 
-	return projects
+	return projectsz
 }
