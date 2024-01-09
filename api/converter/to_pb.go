@@ -364,11 +364,12 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 func toTreeStyle(style *operations.TreeStyle) (*api.Operation_TreeStyle_, error) {
 	return &api.Operation_TreeStyle_{
 		TreeStyle: &api.Operation_TreeStyle{
-			ParentCreatedAt: ToTimeTicket(style.ParentCreatedAt()),
-			From:            toTreePos(style.FromPos()),
-			To:              toTreePos(style.ToPos()),
-			Attributes:      style.Attributes(),
-			ExecutedAt:      ToTimeTicket(style.ExecutedAt()),
+			ParentCreatedAt:    ToTimeTicket(style.ParentCreatedAt()),
+			From:               toTreePos(style.FromPos()),
+			To:                 toTreePos(style.ToPos()),
+			Attributes:         style.Attributes(),
+			ExecutedAt:         ToTimeTicket(style.ExecutedAt()),
+			AttributesToRemove: style.AttributesToRemove(),
 		},
 	}, nil
 }

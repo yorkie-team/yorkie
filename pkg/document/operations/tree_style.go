@@ -122,3 +122,8 @@ func (e *TreeStyle) ParentCreatedAt() *time.Ticket {
 func (e *TreeStyle) Attributes() map[string]string {
 	return e.attributes
 }
+
+// AttributesToRemove returns the content of Style.
+func (e *TreeStyle) AttributesToRemove() []string {
+	return e.attributesToRemove
+}
