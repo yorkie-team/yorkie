@@ -125,7 +125,7 @@ type Database interface {
 	FindUserInfo(ctx context.Context, username string) (*UserInfo, error)
 
 	// FindUserInfoById finds a user by the given id.
-	FindUserInfoById(ctx context.Context, id string) (*UserInfo, error)
+	FindUserInfoByID(ctx context.Context, id string) (*UserInfo, error)
 
 	// ListUserInfos returns all users.
 	ListUserInfos(ctx context.Context) ([]*UserInfo, error)

@@ -171,7 +171,7 @@ func (i *AdminAuthInterceptor) authenticate(
 
 	project, err := projects.GetProjectFromSecretKey(ctx, i.backend, authorization)
 	if err == nil {
-		user, err := users.GetUserById(ctx, i.backend, project.Owner.String())
+		user, err := users.GetUserByID(ctx, i.backend, project.Owner.String())
 		if err == nil {
 			return user, nil
 		}

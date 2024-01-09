@@ -82,12 +82,13 @@ func GetUser(
 	return info.ToUser(), nil
 }
 
-func GetUserById(
+// GetUserByID returns a user by ID.
+func GetUserByID(
 	ctx context.Context,
 	be *backend.Backend,
 	id string,
 ) (*types.User, error) {
-	info, err := be.DB.FindUserInfoById(ctx, id)
+	info, err := be.DB.FindUserInfoByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}

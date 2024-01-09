@@ -398,8 +398,8 @@ func (d *DB) FindUserInfo(_ context.Context, username string) (*database.UserInf
 	return raw.(*database.UserInfo).DeepCopy(), nil
 }
 
-// FindUserInfoById finds a user by the given id.
-func (d *DB) FindUserInfoById(_ context.Context, id string) (*database.UserInfo, error) {
+// FindUserInfoByID finds a user by the given ID.
+func (d *DB) FindUserInfoByID(_ context.Context, id string) (*database.UserInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 

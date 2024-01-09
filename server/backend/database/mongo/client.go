@@ -468,8 +468,8 @@ func (c *Client) FindUserInfo(ctx context.Context, username string) (*database.U
 	return &userInfo, nil
 }
 
-// FindUserInfoById returns a user by id.
-func (c *Client) FindUserInfoById(ctx context.Context, id string) (*database.UserInfo, error) {
+// FindUserInfoByID returns a user by ID.
+func (c *Client) FindUserInfoByID(ctx context.Context, id string) (*database.UserInfo, error) {
 	result := c.collection(colUsers).FindOne(ctx, bson.M{
 		"_id": id,
 	})
