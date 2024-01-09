@@ -20,8 +20,6 @@
 package crdt
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -207,12 +205,6 @@ func (r *Root) garbageCollect(elem Element) int {
 	count := 0
 
 	callback := func(elem Element, parent Container) bool {
-		//Need to delete later
-		if parent == nil {
-			fmt.Println(elem.CreatedAt().ToTestString())
-		} else {
-			fmt.Println(parent.CreatedAt().ToTestString(), " ", elem.CreatedAt().ToTestString())
-		}
 		r.DeregisterElement(elem)
 		count++
 		return false

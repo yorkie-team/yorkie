@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -436,41 +435,31 @@ func TestGarbageCollection(t *testing.T) {
 	t.Run("Set new object with json literal test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			data := map[string]interface{}{
-				"key":  "value",
-				"key2": []interface{}{1, 2, "str"},
-				"obj": map[string]interface{}{
+			data := map[string]interface{}{ // 1 : object
+				"key":  "value",                    // 1 : string
+				"key2": []interface{}{1, 2, "str"}, // 4 : array, 1, 2, "str"
+				"obj": map[string]interface{}{ // 2 : object, double
 					"key3": 42.2,
 				},
-				"cnt": json.NewTempCounter(crdt.LongCnt, 0),
-				"txt": json.NewText(nil, nil),
+				"cnt": json.NewTempCounter(crdt.LongCnt, 0), // 1
+				"txt": json.NewText(nil, nil),               // 1
 			}
 			root.SetNewObject("shape", data)
-			root.GetObject("shape").SetString("key", "changed")
+			root.GetObject("shape").SetString("key", "changed") // 1 tombstone
 			root.GetObject("shape").GetText("txt").Edit(0, 0, "ABCD")
-			return nil
-		})
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetObject("shape").GetCounter("cnt").Increase(7)
 			return nil
 		})
+		assert.NoError(t, err)
 
-		fmt.Println(d1.Marshal())
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.Delete("shape")
-			return nil
-		})
-
-		assert.Equal(t, d1.GarbageLen(), 11)
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 11)
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("shape").
 				SetString("key", "value").
 				SetNewArray("key2")
@@ -487,20 +476,34 @@ func TestGarbageCollection(t *testing.T) {
 			root.GetObject("shape").SetNewText("txt").Edit(0, 0, "ABCD")
 			return nil
 		})
+		assert.NoError(t, err)
 
-		fmt.Println(d1.Marshal())
+		assert.Equal(t, d1.Marshal(), `{"shape":{"cnt":7,"key":"changed","key2":[1,2,"str"],"obj":{"key3":42.200000},"txt":[{"val":"ABCD"}]}}`)
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("shape")
 			return nil
 		})
 
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("shape")
+			return nil
+		})
+
+		assert.NoError(t, err)
+
 		assert.Equal(t, d1.GarbageLen(), 11)
 		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 11)
 
+		assert.Equal(t, d2.GarbageLen(), 11)
+		assert.Equal(t, d2.GarbageCollect(time.MaxTicket), 11)
+
 	})
 
-	t.Run("nested tree test", func(t *testing.T) {
+	t.Run("Nested object tree test", func(t *testing.T) {
 
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -535,9 +538,75 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 
-		fmt.Println(d1.Marshal())
-		if err != nil {
-			panic(err)
-		}
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("shape")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		assert.Equal(t, d1.GarbageLen(), 2)
+		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 2)
 	})
+
+	t.Run("Nested object sync test", func(t *testing.T) {
+
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+
+			data := map[string]interface{}{
+				"color": "black",
+			}
+
+			root.SetNewObject("shape", data)
+			return nil
+		})
+
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
+		assert.Equal(t, `{"shape":{"color":"black"}}`, d1.Marshal())
+		assert.Equal(t, `{"shape":{"color":"black"}}`, d2.Marshal())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			data := map[string]interface{}{
+				"color": "yellow",
+			}
+			root.SetNewObject("shape", data)
+			return nil
+		})
+
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		assert.Equal(t, `{"shape":{"color":"yellow"}}`, d1.Marshal())
+		assert.Equal(t, `{"shape":{"color":"yellow"}}`, d2.Marshal())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetObject("shape").Delete("color")
+			return nil
+		})
+
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		assert.Equal(t, d1.GarbageLen(), 1)
+		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 1)
+
+	})
+
 }

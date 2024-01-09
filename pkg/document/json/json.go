@@ -18,7 +18,6 @@
 package json
 
 import (
-	"strings"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -59,9 +58,6 @@ func buildCRDTElement(
 		}
 		return primitive
 
-	//case Tree
-	//case ...*TreeNode:
-	//case Text ->
 	case *TreeNode:
 
 		return NewTree(context, crdt.NewTree(buildRoot(context, elem, ticket), ticket))
@@ -92,9 +88,8 @@ func buildCRDTElement(
 			panic("unsupported type")
 		}
 
-	case []interface{}: //array
+	case []interface{}:
 		array := NewArray(context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
-		// 아래 부분을 NewArray나 crdt.NewArray로 빼는게 좋을 수도...
 		for _, v := range elem {
 			ticket := context.IssueTimeTicket()
 			value := buildCRDTElement(context, v, ticket)
@@ -111,11 +106,7 @@ func buildCRDTElement(
 
 		for key, value := range members {
 			value = toOriginal(value)
-			removed := obj.Set(key, value)
-			obj.context.RegisterElement(value)
-			if removed != nil {
-				obj.context.RegisterRemovedElementPair(obj, removed)
-			}
+			_ = obj.Set(key, value)
 		}
 
 		return obj
@@ -128,24 +119,4 @@ func buildCRDTElement(
 		return primitive
 	}
 
-}
-
-func buildObjectMember(
-	context *change.Context,
-	json map[string]interface{},
-) map[string]crdt.Element {
-
-	members := make(map[string]crdt.Element)
-
-	for key, value := range json {
-		if strings.Contains(key, ".") {
-			panic("key must not contain the '.'.") // error 처리 확인해야함
-		}
-
-		ticket := context.IssueTimeTicket()
-		elem := buildCRDTElement(context, value, ticket)
-		members[key] = elem
-	}
-
-	return members
 }
