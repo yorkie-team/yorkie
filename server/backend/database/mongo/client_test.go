@@ -51,6 +51,14 @@ func setupTestWithDummyData(t *testing.T) *mongo.Client {
 func TestClient(t *testing.T) {
 	cli := setupTestWithDummyData(t)
 
+	t.Run("FindNextNCyclingProjectInfos test", func(t *testing.T) {
+		testcases.RunFindNextNCyclingProjectInfosTest(t, cli)
+	})
+
+	t.Run("FindDeactivateCandidatesPerProject test", func(t *testing.T) {
+		testcases.RunFindDeactivateCandidatesPerProjectTest(t, cli)
+	})
+
 	t.Run("RunFindDocInfo test", func(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, cli, dummyProjectID)
 	})

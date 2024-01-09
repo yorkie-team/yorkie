@@ -181,5 +181,5 @@ func createProjects(t *testing.T, db *mongo.Client) []*database.ProjectInfo {
 		return bytes.Compare(iBytes, jBytes) < 0
 	})
 
-	return projectsz
+	return projects
 }

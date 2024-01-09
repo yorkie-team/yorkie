@@ -1026,3 +1026,75 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		assert.False(t, attached)
 	})
 }
+
+// RunFindNextNCyclingProjectInfos runs the FindNextNCyclingProjectInfos tests for the given db.
+func RunFindNextNCyclingProjectInfosTest(t *testing.T, db database.Database) {
+	t.Run("`RunFindNextNCyclingProjectInfos` should search projects cyclic", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectCnt := 10
+		projects := make([]*database.ProjectInfo, 0)
+		for i := 0; i < projectCnt; i++ {
+			p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-%d-RunFindNextNCyclingProjectInfos", t.Name(), i), otherOwnerID, clientDeactivateThreshold)
+			assert.NoError(t, err)
+			projects = append(projects, p)
+		}
+
+		lastProjectID := database.DefaultProjectID
+		pageSize := 2
+
+		for i := 0; i < 10; i++ {
+			projectInfos, err := db.FindNextNCyclingProjectInfos(ctx, pageSize, lastProjectID)
+			assert.NoError(t, err)
+
+			lastProjectID = projectInfos[len(projectInfos)-1].ID
+
+			assert.Equal(t, projects[((i+1)*pageSize-1)%projectCnt].ID, lastProjectID)
+		}
+
+	})
+}
+
+// FindDeactivateCandidatesPerProject runs the FindNextNCyclingProjectInfos tests for the given db.
+func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Database) {
+	t.Run("`FindDeactivateCandidatesPerProject` should search candidates correctly", func(t *testing.T) {
+		ctx := context.Background()
+
+		p1, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-FindDeactivateCandidatesPerProject", t.Name()), otherOwnerID, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		c3, err := db.ActivateClient(ctx, p1.ID, t.Name()+"1-1")
+		assert.NoError(t, err)
+
+		c4, err := db.ActivateClient(ctx, p1.ID, t.Name()+"1-2")
+		assert.NoError(t, err)
+
+		p2, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-FindDeactivateCandidatesPerProject-2", t.Name()), otherOwnerID, "0s")
+		assert.NoError(t, err)
+
+		c1, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-1")
+		assert.NoError(t, err)
+
+		c2, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-2")
+		assert.NoError(t, err)
+
+		candidates1, err := db.FindDeactivateCandidatesPerProject(ctx, p1, 10)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(candidates1))
+
+		candidates2, err := db.FindDeactivateCandidatesPerProject(ctx, p2, 10)
+		assert.NoError(t, err)
+
+		fmt.Println(c3.ID)
+		fmt.Println(c4.ID)
+
+		idList := make([]types.ID, len(candidates2))
+		for i, candidate := range candidates2 {
+			idList[i] = candidate.ID
+			fmt.Println(candidate.ID)
+		}
+		assert.Equal(t, 2, len(candidates2))
+		assert.Contains(t, idList, c1.ID)
+		assert.Contains(t, idList, c2.ID)
+	})
+}
