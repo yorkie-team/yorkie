@@ -42,13 +42,15 @@ func NewCounter(ctx *change.Context, counter *crdt.Counter) *Counter {
 	}
 }
 
+// TempCounter is a transmission object for creating a counter inside.
 type TempCounter struct {
 	valueType crdt.CounterType
 	value     interface{}
 }
 
-func NewTempCounter(t crdt.CounterType, n interface{}) TempCounter {
-	return TempCounter{
+// NewTempCounter creates a new instance of TempCounter.
+func NewTempCounter(t crdt.CounterType, n interface{}) *TempCounter {
+	return &TempCounter{
 		valueType: t,
 		value:     n,
 	}

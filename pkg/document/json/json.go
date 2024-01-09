@@ -64,7 +64,7 @@ func buildCRDTElement(
 
 	case *Text:
 		return NewText(context, crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket))
-	case TempCounter:
+	case *TempCounter:
 		switch elem.valueType {
 		case crdt.IntegerCnt:
 			counter, err := crdt.NewCounter(crdt.IntegerCnt, elem.value, ticket)
