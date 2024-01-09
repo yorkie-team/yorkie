@@ -32,24 +32,13 @@ type RHTNode struct {
 	isRemoved bool
 }
 
-func newRHTNode(key, val string, updatedAt *time.Ticket) *RHTNode {
+func newRHTNode(key, val string, updatedAt *time.Ticket, isRemoved bool) *RHTNode {
 	return &RHTNode{
 		key:       key,
 		val:       val,
 		updatedAt: updatedAt,
-		isRemoved: false,
+		isRemoved: isRemoved,
 	}
-}
-
-// Remove removes this node. It only marks the deleted time (tombstone).
-func (n *RHTNode) Remove(removedAt *time.Ticket) {
-	n.updatedAt = removedAt
-	n.isRemoved = true
-}
-
-// IsRemoved returns the node has been removed.
-func (n *RHTNode) IsRemoved() bool {
-	return n.isRemoved
 }
 
 // Key returns the key of this node.
@@ -86,7 +75,7 @@ func NewRHT() *RHT {
 // Get returns the value of the given key.
 func (rht *RHT) Get(key string) string {
 	if node, ok := rht.nodeMapByKey[key]; ok {
-		if node.IsRemoved() {
+		if node.isRemoved {
 			return ""
 		}
 		return node.val
@@ -98,7 +87,7 @@ func (rht *RHT) Get(key string) string {
 // Has returns whether the element exists of the given key or not.
 func (rht *RHT) Has(key string) bool {
 	if node, ok := rht.nodeMapByKey[key]; ok {
-		return node != nil && !node.IsRemoved()
+		return node != nil && !node.isRemoved
 	}
 
 	return false
@@ -107,10 +96,10 @@ func (rht *RHT) Has(key string) bool {
 // Set sets the value of the given key.
 func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 	if node, ok := rht.nodeMapByKey[k]; !ok || node.updatedAt == nil || executedAt.After(node.updatedAt) {
-		if node != nil && node.IsRemoved() {
+		if node != nil && node.isRemoved {
 			rht.numberOfRemovedElement--
 		}
-		newNode := newRHTNode(k, v, executedAt)
+		newNode := newRHTNode(k, v, executedAt, false)
 		rht.nodeMapByKey[k] = newNode
 	}
 }
@@ -118,14 +107,13 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 	if node, ok := rht.nodeMapByKey[k]; ok && (node.updatedAt == nil || executedAt.After(node.updatedAt)) {
-		alreadyRemoved := node.IsRemoved()
+		alreadyRemoved := node.isRemoved
 		if !alreadyRemoved {
 			rht.numberOfRemovedElement++
 		}
 		// node is removed if and only if updatedAt = removedAt
-		newNode := newRHTNode(k, node.val, executedAt)
+		newNode := newRHTNode(k, node.val, executedAt, true)
 		rht.nodeMapByKey[k] = newNode
-		newNode.Remove(executedAt)
 
 		if alreadyRemoved {
 			return ""
@@ -141,7 +129,7 @@ func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 func (rht *RHT) Elements() map[string]string {
 	members := make(map[string]string)
 	for _, node := range rht.nodeMapByKey {
-		if !node.IsRemoved() {
+		if !node.isRemoved {
 			members[node.key] = node.val
 		}
 	}
@@ -154,7 +142,7 @@ func (rht *RHT) Elements() map[string]string {
 func (rht *RHT) Nodes() []*RHTNode {
 	var nodes []*RHTNode
 	for _, node := range rht.nodeMapByKey {
-		if !node.IsRemoved() {
+		if !node.isRemoved {
 			nodes = append(nodes, node)
 		}
 	}
