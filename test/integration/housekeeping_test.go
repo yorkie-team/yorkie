@@ -1,4 +1,4 @@
-//go:build amd64
+//go:build integration && amd64
 
 /*
  * Copyright 2021 The Yorkie Authors. All rights reserved.
