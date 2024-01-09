@@ -15,40 +15,28 @@ Yorkie is an open source document store for building collaborative editing appli
 
 Yorkie consists of three main components: Client, Document and Server.
 
- ```
-  Client "A" (Go)                 Server                       MemDB or MongoDB
+```
+ Client "A" (Go)                Self-Hosted Server Or Cloud   MongoDB or MemDB
 ┌───────────────────┐           ┌────────────────────────┐   ┌───────────┐
 │  Document "D-1"   │◄─Changes─►│  Project "P-1"         │   │ Changes   │
 │  { a: 1, b: {} }  │           │ ┌───────────────────┐  │◄─►│ Snapshots │
 └───────────────────┘           │ │  Document "D-1"   │  │   └───────────┘
-  Client "B" (JS)                │ │  { a: 2, b: {} }  │  │
+ Client "B" (JS)                │ │  { a: 2, b: {} }  │  │
 ┌───────────────────┐           │ │                   │  │
 │  Document "D-1"   │◄─Changes─►│ │  Document "D-2"   │  │
 │  { a: 2, b: {} }  │           │ │  { a: 3, b: {} }  │  │
 └───────────────────┘           │ └───────────────────┘  │
-  Admin (CLI, Web)               │                        │
-┌────────────────────┐          └────────────────────────┘
-│  Query "Q-1"       │              ▲
+ Dashboard or CLI               └────────────────────────┘
+┌────────────────────┐              ▲
+│  Query "Q-1"       │              |
 │  P-1.find({a:2})   ├───── Query───┘
 └────────────────────┘
- ```
+```
 
 - Clients can have a replica of the document representing an application model locally on several devices.
 - Each client can independently update the document on their local device, even while offline.
 - When a network connection is available, the client figures out which changes need to be synced from one device to another, and brings them into the same state.
 - If the document was changed concurrently on different devices, Yorkie automatically syncs the changes, so that every replica ends up in the same state with resolving conflict.
-
-## SDKs
-
-Yorkie provides SDKs for Go, JavaScript, iOS, and Android:
-
-- [Go SDK](https://github.com/yorkie-team/yorkie)
-  - Client: https://github.com/yorkie-team/yorkie/tree/main/client
-  - Document: https://github.com/yorkie-team/yorkie/tree/main/pkg/document
-- [JS SDK](https://github.com/yorkie-team/yorkie-js-sdk)
-- [iOS SDK](https://github.com/yorkie-team/yorkie-ios-sdk)
-- [Android SDK](https://github.com/yorkie-team/yorkie-android-sdk)
-- [Dashboard](https://github.com/yorkie-team/dashboard)
 
 ## Documentation
 

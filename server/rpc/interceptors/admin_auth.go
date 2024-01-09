@@ -18,13 +18,11 @@ package interceptors
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
 	"connectrpc.com/connect"
-
-	"google.golang.org/grpc/codes"
-	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -33,6 +31,9 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/users"
 )
+
+// ErrUnauthenticated is returned when authentication is failed.
+var ErrUnauthenticated = errors.New("authorization is not provided")
 
 // AdminAuthInterceptor is an interceptor for authentication.
 type AdminAuthInterceptor struct {
@@ -158,7 +159,7 @@ func (i *AdminAuthInterceptor) authenticate(
 ) (*types.User, error) {
 	authorization := header.Get(types.AuthorizationKey)
 	if authorization == "" {
-		return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is not provided")
+		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 	}
 
 	claims, err := i.tokenManager.Verify(authorization)

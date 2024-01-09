@@ -5,6 +5,7 @@ Yorkie is Apache 2.0 licensed and accepts contributions via GitHub pull requests
 ## Contacts
 
 If you have any questions along the way, please don’t hesitate to ask us
+
 - Discord: [Yorkie Discord](https://discord.com/invite/MVEAwz9sBy).
 
 ## Contribution Flow
@@ -44,7 +45,7 @@ make tools
 make build		# executable: ./bin/yorkie
 ```
 
-You can set testing environment via Docker Compose. It is needed because integration tests require local applications like MongoDB and ETCD.
+You can set testing environment via Docker Compose. It is needed because integration tests require local applications like MongoDB.
 
 ```sh
 docker-compose -f build/docker/docker-compose.yml up --build -d
@@ -90,11 +91,12 @@ Testing is the responsibility of all contributors, but it is also coordinated by
 
 There are multiple types of tests. The location of the test code varies with type, as do the specifics of the environment needed to successfully run the test:
 
-- Unit: These confirm that a particular function behaves as intended. 
-- Integration: These tests cover interactions of package components or interactions between Yorkie packages and some other non-Yorkie system resource (eg: MongoDB, ETCD).
+- Unit: These confirm that a particular function behaves as intended.
+- Integration: These tests cover interactions of package components or interactions between Yorkie packages and some other non-Yorkie system resource (eg: MongoDB).
 - Benchmark: These confirm that the performance of the implemented function.
 
 ### Code Coverage
+
 We are using [Codecov](https://about.codecov.io) for analyzing PR's code coverage. If you want to check the coverage of your code in local browser, you can run the command below.
 
 ```sh

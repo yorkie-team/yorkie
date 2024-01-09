@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.12] - 2024-01-05
+
+### Changed
+* Introduce TreeToken and tokensBetween to Tree by @sejongk in https://github.com/yorkie-team/yorkie/pull/747
+* Add RPC and profiling ports to Yorkie deployment by @hackerwins in https://github.com/yorkie-team/yorkie/pull/727
+
+### Fixed
+* Change CLI TLS configuration to HTTP2 by @krapie in https://github.com/yorkie-team/yorkie/pull/742
+* Replace grpcstatus.Errorf with connect.Error by @chacha912, @highcloud100 in https://github.com/yorkie-team/yorkie/pull/741
+* Fix `getGarbageLen` to retrun correct size by @devleejb in https://github.com/yorkie-team/yorkie/pull/743
+* Fix typo in `MAINTAINING.md` by @devleejb in https://github.com/yorkie-team/yorkie/pull/739
+
 ## [0.4.11] - 2023-12-18
 
 ### Added
