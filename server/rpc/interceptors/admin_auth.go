@@ -178,5 +178,5 @@ func (i *AdminAuthInterceptor) authenticate(
 		}
 	}
 
-	return nil, grpcstatus.Errorf(codes.Unauthenticated, "authorization is invalid")
+	return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 }
