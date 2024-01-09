@@ -80,14 +80,16 @@ func RunFindProjectInfoBySecretKeyTest(
 	t.Run("FindProjectInfoBySecretKey test", func(t *testing.T) {
 		ctx := context.Background()
 
-		info1, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
-		assert.NoError(t, err)
-		_, err = db.CreateProjectInfo(ctx, t.Name(), otherOwnerID, clientDeactivateThreshold)
+		username := "admin@yorkie.dev"
+		password := "hashed-password"
+
+		_, project, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
-		info2, err := db.FindProjectInfoBySecretKey(ctx, info1.SecretKey)
+		info2, err := db.FindProjectInfoBySecretKey(ctx, project.SecretKey)
 		assert.NoError(t, err)
-		assert.Equal(t, info1.ID, info2.ID)
+
+		assert.Equal(t, project.ID, info2.ID)
 	})
 }
 
