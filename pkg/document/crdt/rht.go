@@ -111,7 +111,6 @@ func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 		if !alreadyRemoved {
 			rht.numberOfRemovedElement++
 		}
-		// node is removed if and only if updatedAt = removedAt
 		newNode := newRHTNode(k, node.val, executedAt, true)
 		rht.nodeMapByKey[k] = newNode
 
