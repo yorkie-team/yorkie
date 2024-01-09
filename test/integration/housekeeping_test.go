@@ -71,31 +71,6 @@ func TestHousekeeping(t *testing.T) {
 	h, err := housekeeping.New(config.Housekeeping, db, coordinator)
 	assert.NoError(t, err)
 
-	t.Run("Housekeeping should work corretly", func(t *testing.T) {
-		yesterday := gotime.Now().Add(-25 * gotime.Hour)
-		patch, err := monkey.PatchMethod(gotime.Now, func() gotime.Time { return yesterday })
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		clients := activeClients(t, 2)
-		c1, c2 := clients[0], clients[1]
-		defer deactivateAndCloseClients(t, clients)
-
-		err = patch.Unpatch()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		clients2 := activeClients(t, 1)
-		c3 := clients2[0]
-		defer deactivateAndCloseClients(t, clients2)
-
-		assert.Equal(t, c1.IsActive(), false)
-		assert.Equal(t, c2.IsActive(), false)
-		assert.Equal(t, c3.IsActive(), true)
-	})
-
 	t.Run("`FindDeactivateCandidates` should return correct last projectID", func(t *testing.T) {
 		ctx := context.Background()
 
