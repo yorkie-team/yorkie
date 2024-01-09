@@ -1035,7 +1035,12 @@ func RunFindNextNCyclingProjectInfosTest(t *testing.T, db database.Database) {
 		projectCnt := 10
 		projects := make([]*database.ProjectInfo, 0)
 		for i := 0; i < projectCnt; i++ {
-			p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-%d-RunFindNextNCyclingProjectInfos", t.Name(), i), otherOwnerID, clientDeactivateThreshold)
+			p, err := db.CreateProjectInfo(
+				ctx,
+				fmt.Sprintf("%s-%d-RunFindNextNCyclingProjectInfos", t.Name(), i),
+				otherOwnerID,
+				clientDeactivateThreshold,
+			)
 			assert.NoError(t, err)
 			projects = append(projects, p)
 		}
@@ -1060,7 +1065,12 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 	t.Run("`FindDeactivateCandidatesPerProject` should search candidates correctly", func(t *testing.T) {
 		ctx := context.Background()
 
-		p1, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-FindDeactivateCandidatesPerProject", t.Name()), otherOwnerID, clientDeactivateThreshold)
+		p1, err := db.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%s-FindDeactivateCandidatesPerProject", t.Name()),
+			otherOwnerID,
+			clientDeactivateThreshold,
+		)
 		assert.NoError(t, err)
 
 		c3, err := db.ActivateClient(ctx, p1.ID, t.Name()+"1-1")
@@ -1069,7 +1079,12 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 		c4, err := db.ActivateClient(ctx, p1.ID, t.Name()+"1-2")
 		assert.NoError(t, err)
 
-		p2, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%s-FindDeactivateCandidatesPerProject-2", t.Name()), otherOwnerID, "0s")
+		p2, err := db.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%s-FindDeactivateCandidatesPerProject-2", t.Name()),
+			otherOwnerID,
+			"0s",
+		)
 		assert.NoError(t, err)
 
 		c1, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-1")
