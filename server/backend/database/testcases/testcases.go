@@ -1073,10 +1073,10 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 		)
 		assert.NoError(t, err)
 
-		c3, err := db.ActivateClient(ctx, p1.ID, t.Name()+"1-1")
+		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-1")
 		assert.NoError(t, err)
 
-		c4, err := db.ActivateClient(ctx, p1.ID, t.Name()+"1-2")
+		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-2")
 		assert.NoError(t, err)
 
 		p2, err := db.CreateProjectInfo(
@@ -1100,13 +1100,9 @@ func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Databas
 		candidates2, err := db.FindDeactivateCandidatesPerProject(ctx, p2, 10)
 		assert.NoError(t, err)
 
-		fmt.Println(c3.ID)
-		fmt.Println(c4.ID)
-
 		idList := make([]types.ID, len(candidates2))
 		for i, candidate := range candidates2 {
 			idList[i] = candidate.ID
-			fmt.Println(candidate.ID)
 		}
 		assert.Equal(t, 2, len(candidates2))
 		assert.Contains(t, idList, c1.ID)
