@@ -26,6 +26,10 @@ import (
 	"sort"
 	"testing"
 
+	gotime "time"
+
+	monkey "github.com/undefinedlabs/go-mpatch"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -83,13 +87,13 @@ func TestHousekeeping(t *testing.T) {
 			log.Fatal(err)
 		}
 
-		clients := activeClients(t, 1)
-		c3 := clients[0]
-		defer deactivateAndCloseClients(t, clients)
+		clients2 := activeClients(t, 1)
+		c3 := clients2[0]
+		defer deactivateAndCloseClients(t, clients2)
 
-		assert.Eqaul(t, c1.IsActive(), false)
-		assert.Eqaul(t, c2.IsActive(), false)
-		assert.Eqaul(t, c3.IsActive(), true)
+		assert.Equal(t, c1.IsActive(), false)
+		assert.Equal(t, c2.IsActive(), false)
+		assert.Equal(t, c3.IsActive(), true)
 	})
 
 	t.Run("`FindDeactivateCandidates` should return correct last projectID", func(t *testing.T) {
