@@ -181,8 +181,8 @@ func TestObject(t *testing.T) {
 				"obj": map[string]interface{}{ // 2 : object, double
 					"key3": 42.2,
 				},
-				"cnt": json.NewTempCounter(crdt.LongCnt, 0), // 1
-				"txt": json.NewText(nil, nil),               // 1
+				"cnt": json.CreateCounter(crdt.LongCnt, 0), // 1
+				"txt": json.NewText(nil, nil),              // 1
 			}
 			root.SetNewObject("shape", data)
 			root.GetObject("shape").SetString("key", "changed") // 1 tombstone
@@ -228,11 +228,11 @@ func TestObject(t *testing.T) {
 
 		assert.NoError(t, err)
 
-		assert.Equal(t, d1.GarbageLen(), 11)
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 11)
+		assert.Equal(t, 11, d1.GarbageLen())
+		assert.Equal(t, 11, d1.GarbageCollect(time.MaxTicket))
 
-		assert.Equal(t, d2.GarbageLen(), 11)
-		assert.Equal(t, d2.GarbageCollect(time.MaxTicket), 11)
+		assert.Equal(t, 11, d2.GarbageLen())
+		assert.Equal(t, 11, d2.GarbageCollect(time.MaxTicket))
 
 	})
 
@@ -250,7 +250,7 @@ func TestObject(t *testing.T) {
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 
 			data := map[string]interface{}{
-				"tree": &json.TreeNode{
+				"tree": json.CreateTree(&json.TreeNode{
 					Type: "doc",
 					Children: []json.TreeNode{{
 						Type:     "p",
@@ -265,7 +265,7 @@ func TestObject(t *testing.T) {
 						Type:     "bp",
 						Children: []json.TreeNode{{Type: "text", Value: "gh"}},
 					}},
-				},
+				}),
 			}
 
 			root.SetNewObject("shape", data)
@@ -288,8 +288,8 @@ func TestObject(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		assert.Equal(t, d1.GarbageLen(), 2)
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 2)
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 2, d1.GarbageCollect(time.MaxTicket))
 	})
 
 	t.Run("Nested object sync test", func(t *testing.T) {
@@ -346,12 +346,12 @@ func TestObject(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		assert.Equal(t, d1.GarbageLen(), 1)
-		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 1)
+		assert.Equal(t, 1, d1.GarbageLen())
+		assert.Equal(t, 1, d1.GarbageCollect(time.MaxTicket))
 
 	})
 
-	t.Run("nested object set/delete", func(t *testing.T) {
+	t.Run("Nested object set/delete test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -384,7 +384,7 @@ func TestObject(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("nested object nil type", func(t *testing.T) {
+	t.Run("Nested object nil type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -399,7 +399,64 @@ func TestObject(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, d1.Marshal(), `{"obj":{"emptry":null}}`)
+		assert.Equal(t, `{"obj":{"emptry":null}}`, d1.Marshal())
+	})
+
+	t.Run("Nested object array type test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			json := map[string]interface{}{
+				"array": []interface{}{1, 2, 3},
+			}
+			root.SetNewObject("obj", json)
+			root.GetObject("obj").GetArray("array").AddInteger(4, 5)
+			return nil
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, `{"obj":{"array":[1,2,3,4,5]}}`, d1.Marshal())
+	})
+
+	t.Run("Nested object counter type test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			json := map[string]interface{}{
+				"counter": json.CreateCounter(crdt.LongCnt, 0),
+			}
+			root.SetNewObject("obj", json)
+			root.GetObject("obj").GetCounter("counter").Increase(3)
+			return nil
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, `{"obj":{"counter":3}}`, d1.Marshal())
+	})
+
+	t.Run("Nested object text type test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			json := map[string]interface{}{
+				"text": json.CreateText(),
+			}
+			root.SetNewObject("obj", json)
+			root.GetObject("obj").GetText("text").Edit(0, 0, "ABCD")
+			return nil
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, `{"obj":{"text":[{"val":"ABCD"}]}}`, d1.Marshal())
 	})
 
 }

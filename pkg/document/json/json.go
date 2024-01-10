@@ -44,6 +44,25 @@ func toOriginal(elem crdt.Element) crdt.Element {
 	panic("unsupported type")
 }
 
+func toElement(ctx *change.Context, elem crdt.Element) crdt.Element {
+	switch elem := elem.(type) {
+	case *crdt.Object:
+		return NewObject(ctx, elem)
+	case *crdt.Array:
+		return NewArray(ctx, elem)
+	case *crdt.Text:
+		return NewText(ctx, elem)
+	case *crdt.Counter:
+		return NewCounter(ctx, elem)
+	case *crdt.Tree:
+		return NewTree(ctx, elem)
+	case *crdt.Primitive:
+		return elem
+	}
+
+	panic("unsupported type")
+}
+
 func buildCRDTElement(
 	context *change.Context,
 	value interface{},
@@ -59,53 +78,42 @@ func buildCRDTElement(
 		return primitive
 
 	case *TreeNode:
-
-		return NewTree(context, crdt.NewTree(buildRoot(context, elem, ticket), ticket))
-
+		return crdt.NewTree(buildRoot(context, elem, ticket), ticket)
 	case *Text:
-		return NewText(context, crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket))
-	case *TempCounter:
+		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
+	case *Counter:
 		switch elem.valueType {
 		case crdt.IntegerCnt:
 			counter, err := crdt.NewCounter(crdt.IntegerCnt, elem.value, ticket)
 			if err != nil {
 				panic(err)
 			}
-			return NewCounter(
-				context,
-				counter,
-			)
+			return counter
 		case crdt.LongCnt:
 			counter, err := crdt.NewCounter(crdt.LongCnt, elem.value, ticket)
 			if err != nil {
 				panic(err)
 			}
-			return NewCounter(
-				context,
-				counter,
-			)
+			return counter
 		default:
-			panic("unsupported type")
+			panic("unsupported counter type ")
 		}
 
 	case []interface{}:
-		array := NewArray(context, crdt.NewArray(crdt.NewRGATreeList(), ticket))
+		array := crdt.NewArray(crdt.NewRGATreeList(), ticket)
 		for _, v := range elem {
 			ticket := context.IssueTimeTicket()
 			value := buildCRDTElement(context, v, ticket)
-			value = toOriginal(value)
 			if err := array.InsertAfter(array.LastCreatedAt(), value); err != nil {
 				panic(err)
 			}
-			array.context.RegisterElement(value)
 		}
 		return array
 	case map[string]interface{}:
-		obj := NewObject(context, crdt.NewObject(crdt.NewElementRHT(), ticket))
+		obj := crdt.NewObject(crdt.NewElementRHT(), ticket)
 		members := buildObjectMember(context, elem)
 
 		for key, value := range members {
-			value = toOriginal(value)
 			_ = obj.Set(key, value)
 		}
 

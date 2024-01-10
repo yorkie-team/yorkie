@@ -56,7 +56,7 @@ func (p *Object) SetNewObject(kv ...interface{}) *Object {
 		k := kv[0].(string)
 		v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 			json := kv[1].(map[string]interface{})
-			return buildCRDTElement(p.context, json, ticket)
+			return toElement(p.context, buildCRDTElement(p.context, json, ticket))
 		})
 
 		return v.(*Object)

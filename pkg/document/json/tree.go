@@ -77,6 +77,11 @@ func NewTree(ctx *change.Context, tree *crdt.Tree) *Tree {
 	}
 }
 
+// CreateTree creates a new instance of Tree for json literal.
+func CreateTree(root *TreeNode) *TreeNode {
+	return root
+}
+
 // validateTextNode make sure that text node have non-empty string value
 func validateTextNode(treeNode TreeNode) error {
 	if len(treeNode.Value) == 0 {

@@ -91,12 +91,14 @@ func (r *Root) RegisterElement(element Element) {
 }
 
 // DeregisterElement deregister the given element from hash tables.
-func (r *Root) DeregisterElement(element Element) {
+func (r *Root) DeregisterElement(element Element) int {
+	count := 0
 
 	deregisterElementInternal := func(elem Element) {
 		createdAt := elem.CreatedAt().Key()
 		delete(r.elementMapByCreatedAt, createdAt)
 		delete(r.removedElementPairMapByCreatedAt, createdAt)
+		count++
 	}
 
 	deregisterElementInternal(element)
@@ -111,6 +113,7 @@ func (r *Root) DeregisterElement(element Element) {
 		}
 	}
 
+	return count
 }
 
 // RegisterRemovedElementPair register the given element pair to hash table.
@@ -145,7 +148,7 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 				return 0, err
 			}
 
-			count += r.garbageCollect(pair.elem)
+			count += r.DeregisterElement(pair.elem)
 		}
 	}
 
@@ -196,26 +199,6 @@ func (r *Root) GarbageLen() int {
 
 	for _, element := range r.elementHasRemovedNodesSetByCreatedAt {
 		count += element.removedNodesLen()
-	}
-
-	return count
-}
-
-func (r *Root) garbageCollect(elem Element) int {
-	count := 0
-
-	callback := func(elem Element, parent Container) bool {
-		r.DeregisterElement(elem)
-		count++
-		return false
-	}
-
-	callback(elem, nil)
-	switch elem := elem.(type) {
-	case *Object:
-		elem.Descendants(callback)
-	case *Array:
-		elem.Descendants(callback)
 	}
 
 	return count

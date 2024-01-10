@@ -28,8 +28,24 @@ import (
 // it is used when the user manipulates the counter from the outside.
 type Counter struct {
 	*crdt.Counter
-	context *change.Context
+	context   *change.Context
+	valueType crdt.CounterType
+	value     interface{}
 }
+
+// CreateCounter creates a new instance of Counter without context, crdt.Counter
+func CreateCounter(t crdt.CounterType, n interface{}) *Counter {
+	return &Counter{
+		valueType: t,
+		value:     n,
+	}
+}
+
+// InitializeCounter initializes Counter instance.
+// func (p *Counter) InitializeCounter(ctx *change.Context, counter *crdt.Counter) {
+// 	p.Counter = counter
+// 	p.context = ctx
+// }
 
 // NewCounter create Counter instance.
 func NewCounter(ctx *change.Context, counter *crdt.Counter) *Counter {
@@ -39,20 +55,6 @@ func NewCounter(ctx *change.Context, counter *crdt.Counter) *Counter {
 	return &Counter{
 		Counter: counter,
 		context: ctx,
-	}
-}
-
-// TempCounter is a transmission object for creating a counter inside.
-type TempCounter struct {
-	valueType crdt.CounterType
-	value     interface{}
-}
-
-// NewTempCounter creates a new instance of TempCounter.
-func NewTempCounter(t crdt.CounterType, n interface{}) *TempCounter {
-	return &TempCounter{
-		valueType: t,
-		value:     n,
 	}
 }
 

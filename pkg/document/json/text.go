@@ -37,6 +37,11 @@ func NewText(ctx *change.Context, text *crdt.Text) *Text {
 	}
 }
 
+// CreateText creates a new instance of Text for json literal.
+func CreateText() *Text {
+	return NewText(nil, nil)
+}
+
 // CreateRange creates a range from the given positions.
 func (p *Text) CreateRange(from, to int) (*crdt.RGATreeSplitNodePos, *crdt.RGATreeSplitNodePos) {
 	fromPos, toPos, err := p.Text.CreateRange(from, to)
