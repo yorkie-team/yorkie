@@ -77,13 +77,14 @@ func (r *Root) FindByCreatedAt(createdAt *time.Ticket) Element {
 
 // RegisterElement registers the given element to hash table.
 func (r *Root) RegisterElement(element Element) {
+
 	r.elementMapByCreatedAt[element.CreatedAt().Key()] = element
 
 	switch element := element.(type) {
 	case Container:
 		{
 			element.Descendants(func(elem Element, parent Container) bool {
-				r.RegisterElement(elem)
+				r.elementMapByCreatedAt[elem.CreatedAt().Key()] = elem
 				return false
 			})
 		}
