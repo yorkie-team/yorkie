@@ -21,6 +21,7 @@ package integration
 import (
 	"context"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -457,6 +458,31 @@ func TestObject(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Equal(t, `{"obj":{"text":[{"val":"ABCD"}]}}`, d1.Marshal())
+	})
+
+	t.Run("Nested object primitive type test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		var testInt int32 = 32
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			json := map[string]interface{}{
+				"bool":   true,
+				"long":   9223372036854775807,
+				"int":    testInt,
+				"double": 1.79,
+				"bytes":  []byte{65, 66},
+				"date":   gotime.Date(2022, 3, 2, 9, 10, 0, 0, gotime.UTC),
+			}
+			root.SetNewObject("obj", json)
+			return nil
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, `{"obj":{"bool":true,"bytes":"AB","date":"2022-03-02T09:10:00Z","double":1.790000,"int":32,"long":9223372036854775807}}`, d1.Marshal())
 	})
 
 }

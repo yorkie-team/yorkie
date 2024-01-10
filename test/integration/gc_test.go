@@ -430,4 +430,26 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, d2.GarbageCollect(time.MaxTicket), 3)
 	})
 
+	t.Run("Deregister nested object gc test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			json := map[string]interface{}{
+				"array": []interface{}{'a', 'b', 'c'},
+			}
+
+			root.SetNewObject("obj", json)
+			root.Delete("obj")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		assert.Equal(t, 5, d1.GarbageLen())
+		assert.Equal(t, 5, d1.GarbageCollect(time.MaxTicket))
+
+	})
+
 }
