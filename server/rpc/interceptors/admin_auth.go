@@ -162,6 +162,7 @@ func (i *AdminAuthInterceptor) authenticate(
 		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 	}
 
+	// NOTE(raararaara): If the token is access token, return the user of the token.
 	claims, err := i.tokenManager.Verify(authorization)
 	if err == nil {
 		user, err := users.GetUser(ctx, i.backend, claims.Username)
@@ -170,6 +171,7 @@ func (i *AdminAuthInterceptor) authenticate(
 		}
 	}
 
+	// NOTE(raararaara): If the token is secret key, return the owner of the project.
 	project, err := projects.GetProjectFromSecretKey(ctx, i.backend, authorization)
 	if err == nil {
 		user, err := users.GetUserByID(ctx, i.backend, project.Owner.String())
