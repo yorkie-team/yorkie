@@ -110,13 +110,15 @@ func buildCRDTElement(
 		}
 
 		return obj
-	default:
+	case nil:
 		// Null
 		primitive, err := crdt.NewPrimitive(nil, ticket)
 		if err != nil {
 			panic(err)
 		}
 		return primitive
+	default:
+		panic("unsupported type")
 	}
 
 }

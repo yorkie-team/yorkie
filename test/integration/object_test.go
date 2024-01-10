@@ -211,8 +211,8 @@ func TestObject(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		assert.Equal(t, d1.Marshal(), `{"shape":{"cnt":7,"key":"changed","key2":[1,2,"str"],"obj":{"key3":42.200000},"txt":[{"val":"ABCD"}]}}`)
-		assert.Equal(t, d1.Marshal(), d2.Marshal())
+		assert.Equal(t, `{"shape":{"cnt":7,"key":"changed","key2":[1,2,"str"],"obj":{"key3":42.200000},"txt":[{"val":"ABCD"}]}}`, d1.Marshal())
+		assert.Equal(t, d2.Marshal(), d1.Marshal()) // d1 should be same with d2
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("shape")
@@ -241,6 +241,10 @@ func TestObject(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -271,6 +275,11 @@ func TestObject(t *testing.T) {
 			return nil
 		})
 
+		assert.NoError(t, err)
+
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -340,6 +349,57 @@ func TestObject(t *testing.T) {
 		assert.Equal(t, d1.GarbageLen(), 1)
 		assert.Equal(t, d1.GarbageCollect(time.MaxTicket), 1)
 
+	})
+
+	t.Run("nested object set/delete", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			json := map[string]interface{}{
+				"key1": "value1",
+				"key2": "value2",
+				"key3": "value3",
+			}
+			root.SetNewObject("obj", json)
+			root.SetNewObject("obj2", json)
+			return nil
+		})
+
+		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("obj")
+			root.GetObject("obj2").Delete("key1")
+			return nil
+		})
+		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("nested object nil type", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			json := map[string]interface{}{
+				"emptry": nil,
+			}
+			root.SetNewObject("obj", json)
+			return nil
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, d1.Marshal(), `{"obj":{"emptry":null}}`)
 	})
 
 }
