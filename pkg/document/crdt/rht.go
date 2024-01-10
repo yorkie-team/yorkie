@@ -106,7 +106,15 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
-	if node, ok := rht.nodeMapByKey[k]; ok && executedAt.After(node.updatedAt) {
+	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
+		// NOTE(justiceHui): Even if key is not existed, we must set flag `isRemoved` for concurrency
+		if node == nil {
+			rht.numberOfRemovedElement++
+			newNode := newRHTNode(k, ``, executedAt, true)
+			rht.nodeMapByKey[k] = newNode
+			return ""
+		}
+
 		alreadyRemoved := node.isRemoved
 		if !alreadyRemoved {
 			rht.numberOfRemovedElement++

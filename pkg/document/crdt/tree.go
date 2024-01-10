@@ -891,7 +891,11 @@ func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, edite
 	err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft,
 		func(token index.TreeToken[*TreeNode], _ bool) {
 			node := token.Node
-			if !node.IsRemoved() && !node.IsText() && len(attributesToRemove) > 0 && node.Attrs != nil {
+			// NOTE(justiceHui): Even if key is not existed, we must set flag `isRemoved` for concurrency
+			if !node.IsRemoved() && !node.IsText() {
+				if node.Attrs == nil {
+					node.Attrs = NewRHT()
+				}
 				for _, value := range attributesToRemove {
 					node.Attrs.Remove(value, editedAt)
 				}
