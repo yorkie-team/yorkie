@@ -54,7 +54,6 @@ func NewRoot(root *Object) *Root {
 	r.RegisterElement(root)
 
 	root.Descendants(func(elem Element, parent Container) bool {
-		r.RegisterElement(elem)
 		if elem.RemovedAt() != nil {
 			r.RegisterRemovedElementPair(parent, elem)
 		}
