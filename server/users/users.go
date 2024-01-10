@@ -86,7 +86,7 @@ func GetUser(
 func GetUserByID(
 	ctx context.Context,
 	be *backend.Backend,
-	id string,
+	id types.ID,
 ) (*types.User, error) {
 	info, err := be.DB.FindUserInfoByID(ctx, id)
 	if err != nil {

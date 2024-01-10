@@ -399,16 +399,16 @@ func (d *DB) FindUserInfo(_ context.Context, username string) (*database.UserInf
 }
 
 // FindUserInfoByID finds a user by the given ID.
-func (d *DB) FindUserInfoByID(_ context.Context, id string) (*database.UserInfo, error) {
+func (d *DB) FindUserInfoByID(_ context.Context, clientID types.ID) (*database.UserInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblUsers, "id", id)
+	raw, err := txn.First(tblUsers, "id", clientID.String())
 	if err != nil {
 		return nil, fmt.Errorf("find user by id: %w", err)
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", id, database.ErrUserNotFound)
+		return nil, fmt.Errorf("%s: %w", clientID, database.ErrUserNotFound)
 	}
 
 	return raw.(*database.UserInfo).DeepCopy(), nil
