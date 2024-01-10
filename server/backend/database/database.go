@@ -136,14 +136,14 @@ type Database interface {
 
 	// FindNextNCyclingProjectInfos returns all project infos rotationally.
 	FindNextNCyclingProjectInfos(
-		_ context.Context,
+		ctx context.Context,
 		pageSize int,
 		lastProjectID types.ID,
 	) ([]*ProjectInfo, error)
 
 	// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
 	FindDeactivateCandidatesPerProject(
-		_ context.Context,
+		ctx context.Context,
 		project *ProjectInfo,
 		candidatesLimit int,
 	) ([]*ClientInfo, error)

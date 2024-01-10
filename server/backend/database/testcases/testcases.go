@@ -1029,7 +1029,7 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 
 // RunFindNextNCyclingProjectInfosTest runs the FindNextNCyclingProjectInfos tests for the given db.
 func RunFindNextNCyclingProjectInfosTest(t *testing.T, db database.Database) {
-	t.Run("`RunFindNextNCyclingProjectInfos` should search projects cyclic", func(t *testing.T) {
+	t.Run("FindNextNCyclingProjectInfos cyclic search test", func(t *testing.T) {
 		ctx := context.Background()
 
 		projectCnt := 10
@@ -1060,9 +1060,9 @@ func RunFindNextNCyclingProjectInfosTest(t *testing.T, db database.Database) {
 	})
 }
 
-// RunFindDeactivateCandidatesPerProjectTest runs the FindNextNCyclingProjectInfos tests for the given db.
+// RunFindDeactivateCandidatesPerProjectTest runs the FindDeactivateCandidatesPerProject tests for the given db.
 func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Database) {
-	t.Run("`FindDeactivateCandidatesPerProject` should search candidates correctly", func(t *testing.T) {
+	t.Run("FindDeactivateCandidatesPerProject candidate search test", func(t *testing.T) {
 		ctx := context.Background()
 
 		p1, err := db.CreateProjectInfo(

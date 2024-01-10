@@ -71,7 +71,7 @@ func TestHousekeeping(t *testing.T) {
 	h, err := housekeeping.New(config.Housekeeping, db, coordinator)
 	assert.NoError(t, err)
 
-	t.Run("`FindDeactivateCandidates` should return correct last projectID", func(t *testing.T) {
+	t.Run("FindDeactivateCandidates return value(lastProjectID) test", func(t *testing.T) {
 		ctx := context.Background()
 
 		fetchSize := 3
@@ -98,7 +98,7 @@ func TestHousekeeping(t *testing.T) {
 		assert.Equal(t, projects[fetchSize-(len(projects)%3)-1].ID, lastProjectID)
 	})
 
-	t.Run("`FindDeactivateCandidates` should return correct clients", func(t *testing.T) {
+	t.Run("FindDeactivateCandidates return value(clients) test", func(t *testing.T) {
 		ctx := context.Background()
 
 		yesterday := gotime.Now().Add(-24 * gotime.Hour)
@@ -128,7 +128,7 @@ func TestHousekeeping(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, candidates, 2)
 		assert.Equal(t, candidates[0].ID, clientA.ID)
-		assert.Contains(t, candidates[1].ID, clientB.ID)
+		assert.Equal(t, candidates[1].ID, clientB.ID)
 		assert.NotContains(t, candidates, clientC)
 	})
 }
