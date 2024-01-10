@@ -237,7 +237,7 @@ func TestObject(t *testing.T) {
 
 	})
 
-	t.Run("Nested object tree test", func(t *testing.T) {
+	t.Run("Json object literal tree type test", func(t *testing.T) {
 
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -293,7 +293,7 @@ func TestObject(t *testing.T) {
 		assert.Equal(t, 2, d1.GarbageCollect(time.MaxTicket))
 	})
 
-	t.Run("Nested object sync test", func(t *testing.T) {
+	t.Run("Set new object to json object literal sync test", func(t *testing.T) {
 
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
@@ -352,7 +352,7 @@ func TestObject(t *testing.T) {
 
 	})
 
-	t.Run("Nested object set/delete test", func(t *testing.T) {
+	t.Run("Set new object to json object literal set/delete test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -385,25 +385,7 @@ func TestObject(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("Nested object nil type test", func(t *testing.T) {
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			json := map[string]interface{}{
-				"emptry": nil,
-			}
-			root.SetNewObject("obj", json)
-			return nil
-		})
-
-		assert.NoError(t, err)
-		assert.Equal(t, `{"obj":{"emptry":null}}`, d1.Marshal())
-	})
-
-	t.Run("Nested object array type test", func(t *testing.T) {
+	t.Run("Json object literal array type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -422,7 +404,27 @@ func TestObject(t *testing.T) {
 		assert.Equal(t, `{"obj":{"array":[1,2,3,4,5]}}`, d1.Marshal())
 	})
 
-	t.Run("Nested object counter type test", func(t *testing.T) {
+	t.Run("Json object literal array in array type test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		array2 := []interface{}{7, 8}
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			json := map[string]interface{}{
+				"array": []interface{}{1, 2, 3, array2},
+			}
+			root.SetNewObject("obj", json)
+			return nil
+		})
+
+		assert.NoError(t, err)
+		assert.Equal(t, `{"obj":{"array":[1,2,3,[7,8]]}}`, d1.Marshal())
+	})
+
+	t.Run("Json object literal counter type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -441,7 +443,7 @@ func TestObject(t *testing.T) {
 		assert.Equal(t, `{"obj":{"counter":3}}`, d1.Marshal())
 	})
 
-	t.Run("Nested object text type test", func(t *testing.T) {
+	t.Run("Json object literal text type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -460,7 +462,7 @@ func TestObject(t *testing.T) {
 		assert.Equal(t, `{"obj":{"text":[{"val":"ABCD"}]}}`, d1.Marshal())
 	})
 
-	t.Run("Nested object primitive type test", func(t *testing.T) {
+	t.Run("Json object literal primitive type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -470,6 +472,7 @@ func TestObject(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			json := map[string]interface{}{
+				"nill":   nil,
 				"bool":   true,
 				"long":   9223372036854775807,
 				"int":    testInt,
@@ -482,7 +485,7 @@ func TestObject(t *testing.T) {
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, `{"obj":{"bool":true,"bytes":"AB","date":"2022-03-02T09:10:00Z","double":1.790000,"int":32,"long":9223372036854775807}}`, d1.Marshal())
+		assert.Equal(t, `{"obj":{"bool":true,"bytes":"AB","date":"2022-03-02T09:10:00Z","double":1.790000,"int":32,"long":9223372036854775807,"nill":null}}`, d1.Marshal())
 	})
 
 }
