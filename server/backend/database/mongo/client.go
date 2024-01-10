@@ -468,23 +468,6 @@ func (c *Client) FindUserInfo(ctx context.Context, username string) (*database.U
 	return &userInfo, nil
 }
 
-// FindUserInfoByID returns a user by ID.
-func (c *Client) FindUserInfoByID(ctx context.Context, id string) (*database.UserInfo, error) {
-	result := c.collection(colUsers).FindOne(ctx, bson.M{
-		"_id": id,
-	})
-
-	userInfo := database.UserInfo{}
-	if err := result.Decode(&userInfo); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", id, database.ErrUserNotFound)
-		}
-		return nil, fmt.Errorf("decode user info: %w", err)
-	}
-
-	return &userInfo, nil
-}
-
 // ListUserInfos returns all users.
 func (c *Client) ListUserInfos(
 	ctx context.Context,
@@ -500,6 +483,28 @@ func (c *Client) ListUserInfos(
 	}
 
 	return infos, nil
+}
+
+// FindUserInfoByID returns a user by ID.
+func (c *Client) FindUserInfoByID(ctx context.Context, clientID types.ID) (*database.UserInfo, error) {
+	encodedClientID, err := encodeID(clientID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := c.collection(colUsers).FindOne(ctx, bson.M{
+		"_id": encodedClientID,
+	})
+
+	userInfo := database.UserInfo{}
+	if err := result.Decode(&userInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", clientID, database.ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("decode user info: %w", err)
+	}
+
+	return &userInfo, nil
 }
 
 // ActivateClient activates the client of the given key.

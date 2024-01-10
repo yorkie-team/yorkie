@@ -295,6 +295,24 @@ func RunListUserInfosTest(t *testing.T, db database.Database) {
 	})
 }
 
+// RunFindUserInfoByIDTest runs the FindUserInfoByID test for the given db.
+func RunFindUserInfoByIDTest(t *testing.T, db database.Database) {
+	t.Run("RunFindUserInfoByID test", func(t *testing.T) {
+		ctx := context.Background()
+
+		username := "findUserInfoTestAccount"
+		password := "temporary-password"
+
+		user, _, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		info1, err := db.FindUserInfoByID(ctx, user.ID)
+		assert.NoError(t, err)
+
+		assert.Equal(t, user.ID, info1.ID)
+	})
+}
+
 // RunActivateClientDeactivateClientTest runs the ActivateClient and DeactivateClient tests for the given db.
 func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("activate and find client test", func(t *testing.T) {
