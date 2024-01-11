@@ -240,7 +240,7 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// FindNextNCyclingProjectInfos returns all project infos rotationally.
+// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
 func (c *Client) FindNextNCyclingProjectInfos(
 	ctx context.Context,
 	pageSize int,

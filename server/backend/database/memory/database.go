@@ -224,7 +224,7 @@ func (d *DB) CreateProjectInfo(
 	return info, nil
 }
 
-// FindNextNCyclingProjectInfos returns all project infos rotationally.
+// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
 func (d *DB) FindNextNCyclingProjectInfos(
 	_ context.Context,
 	pageSize int,

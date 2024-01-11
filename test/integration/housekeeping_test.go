@@ -31,6 +31,7 @@ import (
 	monkey "github.com/undefinedlabs/go-mpatch"
 
 	"github.com/stretchr/testify/assert"
+
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -71,7 +72,7 @@ func TestHousekeeping(t *testing.T) {
 	h, err := housekeeping.New(config.Housekeeping, db, coordinator)
 	assert.NoError(t, err)
 
-	t.Run("FindDeactivateCandidates return value(lastProjectID) test", func(t *testing.T) {
+	t.Run("FindDeactivateCandidates return lastProjectID test", func(t *testing.T) {
 		ctx := context.Background()
 
 		fetchSize := 3
@@ -98,7 +99,7 @@ func TestHousekeeping(t *testing.T) {
 		assert.Equal(t, projects[fetchSize-(len(projects)%3)-1].ID, lastProjectID)
 	})
 
-	t.Run("FindDeactivateCandidates return value(clients) test", func(t *testing.T) {
+	t.Run("FindDeactivateCandidates return clients test", func(t *testing.T) {
 		ctx := context.Background()
 
 		yesterday := gotime.Now().Add(-24 * gotime.Hour)
