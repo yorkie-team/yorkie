@@ -19,10 +19,8 @@
 package testcases
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"testing"
 	gotime "time"
@@ -624,52 +622,6 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 	})
 }
 
-// RunFindDeactivateCandidates runs the FindDeactivateCandidates tests for the given db.
-func RunFindDeactivateCandidates(t *testing.T, db database.Database) {
-	t.Run("housekeeping pagination test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// Lists all projects of the dummyOwnerID and otherOwnerID.
-		projects, err := db.ListProjectInfos(ctx, dummyOwnerID)
-		assert.NoError(t, err)
-		otherProjects, err := db.ListProjectInfos(ctx, otherOwnerID)
-		assert.NoError(t, err)
-
-		projects = append(projects, otherProjects...)
-
-		sort.Slice(projects, func(i, j int) bool {
-			iBytes, err := projects[i].ID.Bytes()
-			assert.NoError(t, err)
-			jBytes, err := projects[j].ID.Bytes()
-			assert.NoError(t, err)
-			return bytes.Compare(iBytes, jBytes) < 0
-		})
-
-		fetchSize := 3
-		lastProjectID := database.DefaultProjectID
-
-		for i := 0; i < len(projects)/fetchSize; i++ {
-			lastProjectID, _, err = db.FindDeactivateCandidates(
-				ctx,
-				0,
-				fetchSize,
-				lastProjectID,
-			)
-			assert.NoError(t, err)
-			assert.Equal(t, projects[((i+1)*fetchSize)-1].ID, lastProjectID)
-		}
-
-		lastProjectID, _, err = db.FindDeactivateCandidates(
-			ctx,
-			0,
-			fetchSize,
-			lastProjectID,
-		)
-		assert.NoError(t, err)
-		assert.Equal(t, database.DefaultProjectID, lastProjectID)
-	})
-}
-
 // RunCreateChangeInfosTest runs the CreateChangeInfos tests for the given db.
 func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID types.ID) {
 	t.Run("set RemovedAt in docInfo test", func(t *testing.T) {
@@ -1072,5 +1024,88 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		attached, err = db.IsDocumentAttached(ctx, projectID, d1.ID, c2.ID)
 		assert.NoError(t, err)
 		assert.False(t, attached)
+	})
+}
+
+// RunFindNextNCyclingProjectInfosTest runs the FindNextNCyclingProjectInfos tests for the given db.
+func RunFindNextNCyclingProjectInfosTest(t *testing.T, db database.Database) {
+	t.Run("FindNextNCyclingProjectInfos cyclic search test", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectCnt := 10
+		projects := make([]*database.ProjectInfo, 0)
+		for i := 0; i < projectCnt; i++ {
+			p, err := db.CreateProjectInfo(
+				ctx,
+				fmt.Sprintf("%s-%d-RunFindNextNCyclingProjectInfos", t.Name(), i),
+				otherOwnerID,
+				clientDeactivateThreshold,
+			)
+			assert.NoError(t, err)
+			projects = append(projects, p)
+		}
+
+		lastProjectID := database.DefaultProjectID
+		pageSize := 2
+
+		for i := 0; i < 10; i++ {
+			projectInfos, err := db.FindNextNCyclingProjectInfos(ctx, pageSize, lastProjectID)
+			assert.NoError(t, err)
+
+			lastProjectID = projectInfos[len(projectInfos)-1].ID
+
+			assert.Equal(t, projects[((i+1)*pageSize-1)%projectCnt].ID, lastProjectID)
+		}
+
+	})
+}
+
+// RunFindDeactivateCandidatesPerProjectTest runs the FindDeactivateCandidatesPerProject tests for the given db.
+func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Database) {
+	t.Run("FindDeactivateCandidatesPerProject candidate search test", func(t *testing.T) {
+		ctx := context.Background()
+
+		p1, err := db.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%s-FindDeactivateCandidatesPerProject", t.Name()),
+			otherOwnerID,
+			clientDeactivateThreshold,
+		)
+		assert.NoError(t, err)
+
+		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-1")
+		assert.NoError(t, err)
+
+		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-2")
+		assert.NoError(t, err)
+
+		p2, err := db.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%s-FindDeactivateCandidatesPerProject-2", t.Name()),
+			otherOwnerID,
+			"0s",
+		)
+		assert.NoError(t, err)
+
+		c1, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-1")
+		assert.NoError(t, err)
+
+		c2, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-2")
+		assert.NoError(t, err)
+
+		candidates1, err := db.FindDeactivateCandidatesPerProject(ctx, p1, 10)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(candidates1))
+
+		candidates2, err := db.FindDeactivateCandidatesPerProject(ctx, p2, 10)
+		assert.NoError(t, err)
+
+		idList := make([]types.ID, len(candidates2))
+		for i, candidate := range candidates2 {
+			idList[i] = candidate.ID
+		}
+		assert.Equal(t, 2, len(candidates2))
+		assert.Contains(t, idList, c1.ID)
+		assert.Contains(t, idList, c2.ID)
 	})
 }
