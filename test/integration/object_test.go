@@ -254,43 +254,52 @@ func TestObject(t *testing.T) {
 				"tree": json.CreateTree(&json.TreeNode{
 					Type: "doc",
 					Children: []json.TreeNode{{
-						Type:     "p",
-						Children: []json.TreeNode{{Type: "text", Value: "ab"}},
-					}, {
-						Type: "ng",
-						Children: []json.TreeNode{
-							{Type: "note", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
-							{Type: "note", Children: []json.TreeNode{{Type: "text", Value: "ef"}}},
-						},
-					}, {
-						Type:     "bp",
-						Children: []json.TreeNode{{Type: "text", Value: "gh"}},
+						Type: "p", Children: []json.TreeNode{{
+							Type: "tn", Children: []json.TreeNode{{
+								Type: "text", Value: "a",
+							}, {
+								Type: "text", Value: "b",
+							}},
+						}, {
+							Type: "tn", Children: []json.TreeNode{{
+								Type: "text", Value: "cd",
+							}},
+						}},
 					}},
 				}),
 			}
 
-			root.SetNewObject("shape", data)
-			assert.Equal(t, "<doc><p>ab</p><ng><note>cd</note><note>ef</note></ng><bp>gh</bp></doc>", root.GetObject("shape").GetTree("tree").ToXML())
-			assert.Equal(t, 18, root.GetObject("shape").GetTree("tree").Len())
+			root.SetNewObject("obj", data)
+			assert.Equal(t, `<doc><p><tn>ab</tn><tn>cd</tn></p></doc>`, root.GetObject("obj").GetTree("tree").ToXML())
+
+			root.GetObject("obj").GetTree("tree").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "gh"}, 0)
+			assert.Equal(t, `<doc><p><tn>gh</tn><tn>cd</tn></p></doc>`, root.GetObject("obj").GetTree("tree").ToXML())
 
 			return nil
 		})
 
 		assert.NoError(t, err)
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 2, d1.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 0, d1.GarbageLen())
 
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
+
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.Delete("shape")
+			root.Delete("obj")
 			return nil
 		})
 		assert.NoError(t, err)
 
 		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 2, d1.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 2, d2.GarbageLen())
+		assert.Equal(t, 2, d2.GarbageCollect(time.MaxTicket))
 	})
 
 	t.Run("Set new object to json object literal sync test", func(t *testing.T) {
@@ -391,25 +400,6 @@ func TestObject(t *testing.T) {
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			json := map[string]interface{}{
-				"array": []interface{}{1, 2, 3},
-			}
-			root.SetNewObject("obj", json)
-			root.GetObject("obj").GetArray("array").AddInteger(4, 5)
-			return nil
-		})
-
-		assert.NoError(t, err)
-		assert.Equal(t, `{"obj":{"array":[1,2,3,4,5]}}`, d1.Marshal())
-	})
-
-	t.Run("Json object literal array in array type test", func(t *testing.T) {
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-
 		array2 := []interface{}{7, 8}
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -417,11 +407,17 @@ func TestObject(t *testing.T) {
 				"array": []interface{}{1, 2, 3, array2},
 			}
 			root.SetNewObject("obj", json)
+			assert.Equal(t, `{"obj":{"array":[1,2,3,[7,8]]}}`, root.Marshal())
+
+			root.GetObject("obj").GetArray("array").Delete(3)
+			assert.Equal(t, `{"obj":{"array":[1,2,3]}}`, root.Marshal())
 			return nil
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, `{"obj":{"array":[1,2,3,[7,8]]}}`, d1.Marshal())
+		assert.Equal(t, 3, d1.GarbageLen())
+		assert.Equal(t, 3, d1.GarbageCollect(time.MaxTicket))
+
 	})
 
 	t.Run("Json object literal counter type test", func(t *testing.T) {
@@ -436,11 +432,12 @@ func TestObject(t *testing.T) {
 			}
 			root.SetNewObject("obj", json)
 			root.GetObject("obj").GetCounter("counter").Increase(3)
+			root.GetObject("obj").GetCounter("counter").Increase(-2)
 			return nil
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, `{"obj":{"counter":3}}`, d1.Marshal())
+		assert.Equal(t, `{"obj":{"counter":1}}`, d1.Marshal())
 	})
 
 	t.Run("Json object literal text type test", func(t *testing.T) {
