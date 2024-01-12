@@ -332,6 +332,23 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 	return &projectInfo, nil
 }
 
+// FindProjectInfoBySecretKey returns a project by secret key.
+func (c *Client) FindProjectInfoBySecretKey(ctx context.Context, secretKey string) (*database.ProjectInfo, error) {
+	result := c.collection(colProjects).FindOne(ctx, bson.M{
+		"secret_key": secretKey,
+	})
+
+	projectInfo := database.ProjectInfo{}
+	if err := result.Decode(&projectInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", secretKey, database.ErrProjectNotFound)
+		}
+		return nil, fmt.Errorf("decode project info: %w", err)
+	}
+
+	return &projectInfo, nil
+}
+
 // FindProjectInfoByName returns a project by name.
 func (c *Client) FindProjectInfoByName(
 	ctx context.Context,
@@ -485,6 +502,28 @@ func (c *Client) ListUserInfos(
 	}
 
 	return infos, nil
+}
+
+// FindUserInfoByID returns a user by ID.
+func (c *Client) FindUserInfoByID(ctx context.Context, clientID types.ID) (*database.UserInfo, error) {
+	encodedClientID, err := encodeID(clientID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := c.collection(colUsers).FindOne(ctx, bson.M{
+		"_id": encodedClientID,
+	})
+
+	userInfo := database.UserInfo{}
+	if err := result.Decode(&userInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", clientID, database.ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("decode user info: %w", err)
+	}
+
+	return &userInfo, nil
 }
 
 // ActivateClient activates the client of the given key.

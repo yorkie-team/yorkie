@@ -68,6 +68,12 @@ type Database interface {
 		publicKey string,
 	) (*ProjectInfo, error)
 
+	// FindProjectInfoBySecretKey returns a project by secret key.
+	FindProjectInfoBySecretKey(
+		ctx context.Context,
+		secretKey string,
+	) (*ProjectInfo, error)
+
 	// FindProjectInfoByName returns a project by the given name.
 	FindProjectInfoByName(
 		ctx context.Context,
@@ -117,6 +123,9 @@ type Database interface {
 
 	// FindUserInfo returns a user by the given username.
 	FindUserInfo(ctx context.Context, username string) (*UserInfo, error)
+
+	// FindUserInfoByID finds a user by the given id.
+	FindUserInfoByID(ctx context.Context, id types.ID) (*UserInfo, error)
 
 	// ListUserInfos returns all users.
 	ListUserInfos(ctx context.Context) ([]*UserInfo, error)

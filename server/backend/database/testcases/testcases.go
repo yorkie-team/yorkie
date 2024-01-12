@@ -70,6 +70,27 @@ func RunFindDocInfoTest(
 	})
 }
 
+// RunFindProjectInfoBySecretKeyTest runs the FindProjectInfoBySecretKey test for the given db.
+func RunFindProjectInfoBySecretKeyTest(
+	t *testing.T,
+	db database.Database,
+) {
+	t.Run("FindProjectInfoBySecretKey test", func(t *testing.T) {
+		ctx := context.Background()
+
+		username := "admin@yorkie.dev"
+		password := "hashed-password"
+
+		_, project, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		info2, err := db.FindProjectInfoBySecretKey(ctx, project.SecretKey)
+		assert.NoError(t, err)
+
+		assert.Equal(t, project.ID, info2.ID)
+	})
+}
+
 // RunFindProjectInfoByNameTest runs the FindProjectInfoByName test for the given db.
 func RunFindProjectInfoByNameTest(
 	t *testing.T,
@@ -269,6 +290,24 @@ func RunListUserInfosTest(t *testing.T, db database.Database) {
 		assert.NoError(t, err)
 		assert.Len(t, infos, 1)
 		assert.Equal(t, infos[0], info)
+	})
+}
+
+// RunFindUserInfoByIDTest runs the FindUserInfoByID test for the given db.
+func RunFindUserInfoByIDTest(t *testing.T, db database.Database) {
+	t.Run("RunFindUserInfoByID test", func(t *testing.T) {
+		ctx := context.Background()
+
+		username := "findUserInfoTestAccount"
+		password := "temporary-password"
+
+		user, _, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		info1, err := db.FindUserInfoByID(ctx, user.ID)
+		assert.NoError(t, err)
+
+		assert.Equal(t, user.ID, info1.ID)
 	})
 }
 
