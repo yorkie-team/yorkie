@@ -847,195 +847,6 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}]},{"type":"p","children":[{"type":"text","value":"cd"}]}]}`, d2.Root().GetTree("t").Marshal())
 	})
 
-	t.Run("concurrently edit and style test", func(t *testing.T) {
-		//       0   1 2    3   4 5    6   7 8    9
-		// <root> <p> a </p> <p> b </p> <p> c </p> </root>
-		// 0,3 : |----------|
-		// 3,6 :            |----------|
-		// 6,9 :                       |----------|
-
-		type ranges struct {
-			from1, mid1, to1, from2, to2 int
-			desc                         string
-		}
-
-		rangesToTest := []ranges{
-			{3, 3, 6, 3, 6, `equal`},        // (3, 6) - (3, 6)
-			{0, 3, 9, 3, 6, `A contains B`}, // (0, 9) - (3, 6)
-			{3, 3, 6, 0, 9, `B contains A`}, // (0, 9) - (3, 6)
-			{0, 3, 6, 3, 9, `intersect`},    // (0, 6) - (3, 9)
-			{0, 3, 3, 3, 6, `A -> B`},       // (0, 3) - (3, 6)
-			{3, 3, 6, 0, 3, `B -> A`},       // (0, 3) - (3, 6)
-		}
-
-		operationsToTestA := []string{
-			"insertFront",  // Tree.Edit(from, from, )
-			"insertMiddle", // Tree.edit(mid, mid, )
-			"insertBack",   // Tree.Edit(to, to, )
-			"remove",       // Tree.Edit(from, to, nil, 0)
-			"edit",         // Tree.Edit(from, to, )
-		}
-
-		operationsToTestB := []string{
-			"removeStyle", // Tree.RemoveStyle('italic')
-			"style",       // Tree.Style({'bold': true})
-		}
-
-		runTestStyle := func(interval ranges, op1, op2 string) {
-			clientsInternal := activeClients(t, 2)
-			c1Internal, c2Internal := clientsInternal[0], clientsInternal[1]
-			defer deactivateAndCloseClients(t, clientsInternal)
-
-			ctx := context.Background()
-			d1 := document.New(helper.TestDocKey(t))
-			assert.NoError(t, c1Internal.Attach(ctx, d1))
-			d2 := document.New(helper.TestDocKey(t))
-			assert.NoError(t, c2Internal.Attach(ctx, d2))
-
-			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-				root.SetNewTree("t", &json.TreeNode{
-					Type: "root",
-					Children: []json.TreeNode{
-						{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "a"}}},
-						{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "b"}}},
-						{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "c"}}},
-					},
-				})
-				return nil
-			}))
-			assert.NoError(t, c1Internal.Sync(ctx))
-			assert.NoError(t, c2Internal.Sync(ctx))
-			assert.Equal(t, `<root><p>a</p><p>b</p><p>c</p></root>`, d1.Root().GetTree("t").ToXML())
-			assert.Equal(t, `<root><p>a</p><p>b</p><p>c</p></root>`, d2.Root().GetTree("t").ToXML())
-
-			runOperation := func(doc *document.Document, from, mid, to int, op string) {
-				assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-					if op == `removeStyle` {
-						root.GetTree("t").RemoveStyle(from, to, []string{`italic`})
-					} else if op == `style` {
-						root.GetTree("t").Style(from, to, map[string]string{`bold`: `true`})
-					} else if op == `insertFront` {
-						root.GetTree("t").Edit(from, from, &json.TreeNode{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}, 0)
-					} else if op == `insertMiddle` {
-						root.GetTree("t").Edit(mid, mid, &json.TreeNode{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}, 0)
-					} else if op == `insertBack` {
-						root.GetTree("t").Edit(to, to, &json.TreeNode{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}, 0)
-					} else if op == `remove` {
-						root.GetTree("t").Edit(from, to, nil, 0)
-					} else if op == `edit` {
-						root.GetTree("t").Edit(from, to, &json.TreeNode{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}, 0)
-					}
-					return nil
-				}))
-			}
-
-			runOperation(d1, interval.from1, interval.mid1, interval.to1, op1)
-			runOperation(d2, interval.from2, -1, interval.to2, op2)
-			syncClientsThenAssertEqual(t, []clientAndDocPair{{c1Internal, d1}, {c2Internal, d2}})
-
-			log.Println(interval.desc + " / " + op1 + " / " + op2)
-			log.Println(d1.Root().GetTree("t").ToXML())
-			log.Println(d2.Root().GetTree("t").ToXML())
-			log.Println("test end")
-		}
-
-		// distinct style test
-		for _, interval := range rangesToTest {
-			for i := 0; i < len(operationsToTestA); i++ {
-				for j := 0; j < len(operationsToTestB); j++ {
-					runTestStyle(interval, operationsToTestA[i], operationsToTestB[j])
-				}
-			}
-		}
-	})
-
-	t.Run("concurrently style test", func(t *testing.T) {
-		//       0   1 2    3   4 5    6   7 8    9
-		// <root> <p> a </p> <p> b </p> <p> c </p> </root>
-		// 0,3 : |----------|
-		// 3,6 :            |----------|
-		// 6,9 :                       |----------|
-
-		type ranges struct {
-			from1, to1, from2, to2 int
-			desc                   string
-		}
-
-		rangesToTest := []ranges{
-			{3, 6, 3, 6, `equal`},        // (3, 6) - (3, 6)
-			{0, 9, 3, 6, `contain`},      // (0, 9) - (3, 6)
-			{0, 6, 3, 9, `intersect`},    // (0, 6) - (3, 9)
-			{0, 3, 3, 6, `side-by-side`}, // (0, 3) - (3, 6)
-		}
-
-		operationsToTest := []string{
-			"remove", // Tree.RemoveStyle(x)
-			"aa",     // Tree.Style({x: aa})
-			"bb",     // Tree.Style({x, bb})
-		}
-
-		runTestStyle := func(interval ranges, op1, op2 string, style1, style2 string) {
-			clientsInternal := activeClients(t, 2)
-			c1Internal, c2Internal := clientsInternal[0], clientsInternal[1]
-			defer deactivateAndCloseClients(t, clientsInternal)
-
-			ctx := context.Background()
-			d1 := document.New(helper.TestDocKey(t))
-			assert.NoError(t, c1Internal.Attach(ctx, d1))
-			d2 := document.New(helper.TestDocKey(t))
-			assert.NoError(t, c2Internal.Attach(ctx, d2))
-
-			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-				root.SetNewTree("t", &json.TreeNode{
-					Type: "root",
-					Children: []json.TreeNode{
-						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}}},
-						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "b"}}},
-						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}},
-					},
-				})
-				return nil
-			}))
-			assert.NoError(t, c1Internal.Sync(ctx))
-			assert.NoError(t, c2Internal.Sync(ctx))
-			assert.Equal(t, `<root><p>a</p><p>b</p><p>c</p></root>`, d1.Root().GetTree("t").ToXML())
-			assert.Equal(t, `<root><p>a</p><p>b</p><p>c</p></root>`, d2.Root().GetTree("t").ToXML())
-
-			runOperation := func(doc *document.Document, from, to int, op string, style string) {
-				assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-					if op == `remove` {
-						root.GetTree("t").RemoveStyle(from, to, []string{style})
-					} else {
-						root.GetTree("t").Style(from, to, map[string]string{style: op})
-					}
-					return nil
-				}))
-			}
-
-			runOperation(d1, interval.from1, interval.to1, op1, style1)
-			runOperation(d2, interval.from2, interval.to2, op2, style2)
-			syncClientsThenAssertEqual(t, []clientAndDocPair{{c1Internal, d1}, {c2Internal, d2}})
-		}
-
-		// distinct style test
-		for _, interval := range rangesToTest {
-			for i := 0; i < 2; i++ {
-				for j := 0; j < 2; j++ {
-					runTestStyle(interval, operationsToTest[i], operationsToTest[j], "bold", "italic")
-				}
-			}
-		}
-
-		// common style test
-		for _, interval := range rangesToTest {
-			for i := 0; i < 3; i++ {
-				for j := 0; j < 3; j++ {
-					runTestStyle(interval, operationsToTest[i], operationsToTest[j], "bold", "bold")
-				}
-			}
-		}
-	})
-
 	// Concurrent editing, overlapping range test
 	t.Run("concurrently delete overlapping elements test", func(t *testing.T) {
 		ctx := context.Background()
@@ -2858,4 +2669,225 @@ func TestTree(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, "<root><p>ab</p><p>ced</p></root>", d1.Root().GetTree("t").ToXML())
 	})
+}
+
+func TestTreeConcurrencyStyle(t *testing.T) {
+	//       0   1 2    3   4 5    6   7 8    9
+	// <root> <p> a </p> <p> b </p> <p> c </p> </root>
+	// 0,3 : |----------|
+	// 3,6 :            |----------|
+	// 6,9 :                       |----------|
+
+	initialState := json.TreeNode{
+		Type: "root",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "b"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}},
+		},
+	}
+
+	type rangeType struct {
+		from1, to1, from2, to2 int
+		desc                   string
+	}
+
+	type styleOperationType struct {
+		op, key, value string
+	}
+
+	rangesToTestSameTypeOperation := []rangeType{
+		{3, 6, 3, 6, `equal`},        // (3, 6) - (3, 6)
+		{0, 9, 3, 6, `contain`},      // (0, 9) - (3, 6)
+		{0, 6, 3, 9, `intersect`},    // (0, 6) - (3, 9)
+		{0, 3, 3, 6, `side-by-side`}, // (0, 3) - (3, 6)
+	}
+
+	styleOperationsToTest := []styleOperationType{
+		{"remove", "bold", ""},
+		{"set", "bold", "aa"},
+		{"set", "bold", "bb"},
+		{"remove", "italic", ""},
+		{"set", "italic", "aa"},
+		{"set", "italic", "bb"},
+	}
+
+	runStyleOperation := func(t *testing.T, doc *document.Document, from, to int, operation styleOperationType) {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			if operation.op == `remove` {
+				root.GetTree("t").RemoveStyle(from, to, []string{operation.key})
+			} else if operation.op == `set` {
+				root.GetTree("t").Style(from, to, map[string]string{operation.key: operation.value})
+			}
+			return nil
+		}))
+	}
+
+	runStyleTest := func(interval rangeType, op1, op2 styleOperationType) {
+		clientsInternal := activeClients(t, 2)
+		c1Internal, c2Internal := clientsInternal[0], clientsInternal[1]
+		defer deactivateAndCloseClients(t, clientsInternal)
+
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1Internal.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2Internal.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &initialState)
+			return nil
+		}))
+		assert.NoError(t, c1Internal.Sync(ctx))
+		assert.NoError(t, c2Internal.Sync(ctx))
+		assert.Equal(t, `<root><p>a</p><p>b</p><p>c</p></root>`, d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, `<root><p>a</p><p>b</p><p>c</p></root>`, d2.Root().GetTree("t").ToXML())
+
+		runStyleOperation(t, d1, interval.from1, interval.to1, op1)
+		runStyleOperation(t, d2, interval.from2, interval.to2, op2)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1Internal, d1}, {c2Internal, d2}})
+	}
+
+	for _, interval := range rangesToTestSameTypeOperation {
+		for _, op1 := range styleOperationsToTest {
+			for _, op2 := range styleOperationsToTest {
+				desc := "concurrently style-style test-" + interval.desc + "("
+				desc += op1.op + " " + op1.key + " " + op1.key + ","
+				desc += op2.op + " " + op2.key + " " + op2.key + ")"
+				t.Run(desc, func(t *testing.T) {
+					runStyleTest(interval, op1, op2)
+				})
+			}
+		}
+	}
+}
+
+func TestTreeConcurrencyEditAndStyle(t *testing.T) {
+	//       0   1 2    3   4 5    6   7 8    9
+	// <root> <p> a </p> <p> b </p> <p> c </p> </root>
+	// 0,3 : |----------|
+	// 3,6 :            |----------|
+	// 6,9 :                       |----------|
+
+	initialState := json.TreeNode{
+		Type: "root",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "b"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}},
+		},
+	}
+
+	type rangeType struct {
+		from1, mid1, to1, from2, to2 int
+		desc                         string
+	}
+
+	type editOperationType struct {
+		interval string
+		content  *json.TreeNode
+		desc     string
+	}
+
+	type styleOperationType struct {
+		op, key, value string
+	}
+
+	rangesToTest := []rangeType{
+		{3, 3, 6, 3, 6, `equal`},        // (3, 6) - (3, 6)
+		{0, 3, 9, 3, 6, `A contains B`}, // (0, 9) - (3, 6)
+		{3, 3, 6, 0, 9, `B contains A`}, // (0, 9) - (3, 6)
+		{0, 3, 6, 3, 9, `intersect`},    // (0, 6) - (3, 9)
+		{0, 3, 3, 3, 6, `A -> B`},       // (0, 3) - (3, 6)
+		{3, 3, 6, 0, 3, `B -> A`},       // (0, 3) - (3, 6)
+	}
+
+	content := &json.TreeNode{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}
+
+	editOperationsToTest := []editOperationType{
+		{"front", content, "insertFront"},
+		{"middle", content, "insertMiddle"},
+		{"back", content, "insertBack"},
+		{"range", nil, "erase"},
+		{"range", content, "change"},
+	}
+
+	styleOperationsToTest := []styleOperationType{
+		{"remove", "bold", ""},
+		{"set", "bold", "true"},
+	}
+
+	runEditOperation := func(t *testing.T, doc *document.Document, from, mid, to int, operation editOperationType) {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			st, ed := -1, -1
+			if operation.interval == `front` {
+				st = from
+				ed = from
+			} else if operation.interval == `middle` {
+				st = mid
+				ed = mid
+			} else if operation.interval == `back` {
+				st = to
+				ed = to
+			} else if operation.interval == `range` {
+				st = from
+				ed = to
+			}
+			root.GetTree("t").Edit(st, ed, operation.content, 0)
+			return nil
+		}))
+	}
+
+	runStyleOperation := func(t *testing.T, doc *document.Document, from, to int, operation styleOperationType) {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			if operation.op == `remove` {
+				root.GetTree("t").RemoveStyle(from, to, []string{operation.key})
+			} else if operation.op == `set` {
+				root.GetTree("t").Style(from, to, map[string]string{operation.key: operation.value})
+			}
+			return nil
+		}))
+	}
+
+	runEditStyleTest := func(interval rangeType, op1 editOperationType, op2 styleOperationType) {
+		clientsInternal := activeClients(t, 2)
+		c1Internal, c2Internal := clientsInternal[0], clientsInternal[1]
+		defer deactivateAndCloseClients(t, clientsInternal)
+
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1Internal.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2Internal.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &initialState)
+			return nil
+		}))
+		assert.NoError(t, c1Internal.Sync(ctx))
+		assert.NoError(t, c2Internal.Sync(ctx))
+		assert.Equal(t, `<root><p>a</p><p>b</p><p>c</p></root>`, d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, `<root><p>a</p><p>b</p><p>c</p></root>`, d2.Root().GetTree("t").ToXML())
+
+		runEditOperation(t, d1, interval.from1, interval.mid1, interval.to1, op1)
+		runStyleOperation(t, d2, interval.from2, interval.to2, op2)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1Internal, d1}, {c2Internal, d2}})
+
+		log.Println(interval.desc + " / " + op1.desc + " / " + op2.op)
+		log.Println(d1.Root().GetTree("t").ToXML())
+		log.Println(d2.Root().GetTree("t").ToXML())
+		log.Println("test end")
+	}
+
+	for _, interval := range rangesToTest {
+		for _, op1 := range editOperationsToTest {
+			for _, op2 := range styleOperationsToTest {
+				desc := "concurrently edit-style test-" + interval.desc + "("
+				desc += op1.desc + "," + op2.op + ")"
+				t.Run(desc, func(t *testing.T) {
+					runEditStyleTest(interval, op1, op2)
+				})
+			}
+		}
+	}
 }
