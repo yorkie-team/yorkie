@@ -251,7 +251,7 @@ func TestObject(t *testing.T) {
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 
 			data := map[string]interface{}{
-				"tree": json.CreateTree(&json.TreeNode{
+				"tree": json.NewTree(&json.TreeNode{
 					Type: "doc",
 					Children: []json.TreeNode{{
 						Type: "p", Children: []json.TreeNode{{

@@ -57,7 +57,8 @@ func toElement(ctx *change.Context, elem crdt.Element) crdt.Element {
 		counter := NewCounter(elem.Value(), elem.ValueType())
 		return counter.Initialize(ctx, elem)
 	case *crdt.Tree:
-		return NewTree(ctx, elem)
+		tree := NewTree()
+		return tree.Initialize(ctx, elem)
 	case *crdt.Primitive:
 		return elem
 	}
@@ -77,8 +78,9 @@ func buildCRDTElement(
 			panic(err)
 		}
 		return primitive
-	case *TreeNode:
-		return crdt.NewTree(buildRoot(context, elem, ticket), ticket)
+	case *Tree:
+		crdtTree := crdt.NewTree(buildRoot(context, elem.initialRoot, ticket), ticket)
+		return crdtTree
 	case *Text:
 		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
 	case *Counter:

@@ -93,11 +93,8 @@ func (p *Object) SetNewTree(k string, initialRoot ...*TreeNode) *Tree {
 		if len(initialRoot) > 0 {
 			root = initialRoot[0]
 		}
-
-		return NewTree(
-			p.context,
-			crdt.NewTree(buildRoot(p.context, root, ticket), ticket),
-		)
+		tree := NewTree(root)
+		return tree.Initialize(p.context, crdt.NewTree(buildRoot(p.context, root, ticket), ticket))
 	})
 
 	return v.(*Tree)
@@ -305,7 +302,8 @@ func (p *Object) GetTree(k string) *Tree {
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Tree:
-		return NewTree(p.context, elem)
+		tree := NewTree(nil)
+		return tree.Initialize(p.context, elem)
 	case *Tree:
 		return elem
 	default:
