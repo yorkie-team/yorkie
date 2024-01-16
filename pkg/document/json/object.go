@@ -167,7 +167,6 @@ func (p *Object) SetDouble(k string, v float64) *Object {
 
 // SetString sets the given string for the given key.
 func (p *Object) SetString(k, v string) *Object {
-
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		primitive, err := crdt.NewPrimitive(v, ticket)
 		if err != nil {

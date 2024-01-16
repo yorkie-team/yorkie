@@ -76,7 +76,6 @@ func (r *Root) FindByCreatedAt(createdAt *time.Ticket) Element {
 
 // RegisterElement registers the given element to hash table.
 func (r *Root) RegisterElement(element Element) {
-
 	r.elementMapByCreatedAt[element.CreatedAt().Key()] = element
 
 	switch element := element.(type) {
