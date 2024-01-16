@@ -153,6 +153,11 @@ func (p *Counter) ValueType() CounterType {
 	return p.valueType
 }
 
+// Value returns the value.
+func (p *Counter) Value() interface{} {
+	return p.value
+}
+
 // Increase increases integer, long or double.
 // If the result of the operation is greater than MaxInt32 or less
 // than MinInt32, Counter's value type can be changed Integer to Long.

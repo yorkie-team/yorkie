@@ -33,29 +33,21 @@ type Counter struct {
 	value     interface{}
 }
 
-// CreateCounter creates a new instance of Counter without context, crdt.Counter
-func CreateCounter(t crdt.CounterType, n interface{}) *Counter {
+// NewCounter creates a new instance of Counter without context, crdt.Counter
+func NewCounter(n interface{}, t crdt.CounterType) *Counter {
 	return &Counter{
 		valueType: t,
 		value:     n,
 	}
 }
 
-// InitializeCounter initializes Counter instance.
-// func (p *Counter) InitializeCounter(ctx *change.Context, counter *crdt.Counter) {
-// 	p.Counter = counter
-// 	p.context = ctx
-// }
-
-// NewCounter create Counter instance.
-func NewCounter(ctx *change.Context, counter *crdt.Counter) *Counter {
+// Initialize initializes the Counter with context, crdt.Counter
+func (p *Counter) Initialize(ctx *change.Context, counter *crdt.Counter) {
 	if !counter.IsNumericType() {
 		panic("unsupported type")
 	}
-	return &Counter{
-		Counter: counter,
-		context: ctx,
-	}
+	p.Counter = counter
+	p.context = ctx
 }
 
 // Increase adds an increase operations.

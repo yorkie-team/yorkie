@@ -182,8 +182,8 @@ func TestObject(t *testing.T) {
 				"obj": map[string]interface{}{ // 2 : object, double
 					"key3": 42.2,
 				},
-				"cnt": json.CreateCounter(crdt.LongCnt, 0), // 1
-				"txt": json.NewText(nil, nil),              // 1
+				"cnt": json.NewCounter(0, crdt.LongCnt), // 1
+				"txt": json.NewText(nil, nil),           // 1
 			}
 			root.SetNewObject("shape", data)
 			root.GetObject("shape").SetString("key", "changed") // 1 tombstone
@@ -428,8 +428,8 @@ func TestObject(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			json := map[string]interface{}{
-				"counterLong": json.CreateCounter(crdt.LongCnt, 0),
-				"counterInt":  json.CreateCounter(crdt.IntegerCnt, 0),
+				"counterLong": json.NewCounter(0, crdt.LongCnt),
+				"counterInt":  json.NewCounter(0, crdt.IntegerCnt),
 			}
 			root.SetNewObject("obj", json)
 

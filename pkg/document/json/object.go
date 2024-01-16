@@ -82,28 +82,7 @@ func (p *Object) SetNewText(k string) *Text {
 // SetNewCounter sets a new NewCounter for the given key.
 func (p *Object) SetNewCounter(k string, t crdt.CounterType, n interface{}) *Counter {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		switch t {
-		case crdt.IntegerCnt:
-			counter, err := crdt.NewCounter(crdt.IntegerCnt, n, ticket)
-			if err != nil {
-				panic(err)
-			}
-			return NewCounter(
-				p.context,
-				counter,
-			)
-		case crdt.LongCnt:
-			counter, err := crdt.NewCounter(crdt.LongCnt, n, ticket)
-			if err != nil {
-				panic(err)
-			}
-			return NewCounter(
-				p.context,
-				counter,
-			)
-		default:
-			panic("unsupported type")
-		}
+		return toElement(p.context, buildCRDTElement(p.context, NewCounter(n, t), ticket))
 	})
 
 	return v.(*Counter)
@@ -308,7 +287,9 @@ func (p *Object) GetCounter(k string) *Counter {
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Counter:
-		return NewCounter(p.context, elem)
+		counter := NewCounter(elem.Value(), elem.ValueType())
+		counter.Initialize(p.context, elem)
+		return counter
 	case *Counter:
 		return elem
 	default:
