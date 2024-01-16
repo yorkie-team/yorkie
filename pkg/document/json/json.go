@@ -69,57 +69,29 @@ func buildCRDTElement(
 	ticket *time.Ticket,
 ) crdt.Element {
 	switch elem := value.(type) {
-	// primitive type
 	case string, int, int32, int64, float32, float64, []byte, bool, gotime.Time:
 		primitive, err := crdt.NewPrimitive(elem, ticket)
 		if err != nil {
 			panic(err)
 		}
 		return primitive
-
 	case *TreeNode:
 		return crdt.NewTree(buildRoot(context, elem, ticket), ticket)
 	case *Text:
 		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
 	case *Counter:
-		switch elem.valueType {
-		case crdt.IntegerCnt:
-			counter, err := crdt.NewCounter(crdt.IntegerCnt, elem.value, ticket)
-			if err != nil {
-				panic(err)
-			}
-			return counter
-		case crdt.LongCnt:
-			counter, err := crdt.NewCounter(crdt.LongCnt, elem.value, ticket)
-			if err != nil {
-				panic(err)
-			}
-			return counter
-		default:
-			panic("unsupported counter type ")
+		counter, err := crdt.NewCounter(elem.valueType, elem.value, ticket)
+		if err != nil {
+			panic(err)
 		}
-
+		return counter
 	case []interface{}:
-		array := crdt.NewArray(crdt.NewRGATreeList(), ticket)
-		for _, v := range elem {
-			ticket := context.IssueTimeTicket()
-			value := buildCRDTElement(context, v, ticket)
-			if err := array.InsertAfter(array.LastCreatedAt(), value); err != nil {
-				panic(err)
-			}
-		}
+		array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayMember(context, elem))
 		return array
 	case map[string]interface{}:
-		obj := crdt.NewObject(crdt.NewElementRHT(), ticket)
-		members := buildObjectMember(context, elem)
-
-		for key, value := range members {
-			_ = obj.Set(key, value)
-		}
-
+		obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMember(context, elem))
 		return obj
 	case nil:
-		// Null
 		primitive, err := crdt.NewPrimitive(nil, ticket)
 		if err != nil {
 			panic(err)

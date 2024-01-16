@@ -42,28 +42,19 @@ func NewObject(ctx *change.Context, root *crdt.Object) *Object {
 }
 
 // SetNewObject sets a new Object for the given key.
-func (p *Object) SetNewObject(kv ...interface{}) *Object {
-
-	switch len(kv) {
-	case 1: // key only
-		k := kv[0].(string)
-		v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
-		})
-		return v.(*Object)
-
-	case 2: // key with value
-		k := kv[0].(string)
-		v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-			json := kv[1].(map[string]interface{})
-			return toElement(p.context, buildCRDTElement(p.context, json, ticket))
-		})
-
-		return v.(*Object)
-	default:
+func (p *Object) SetNewObject(k string, v ...map[string]interface{}) *Object {
+	if len(v) > 1 {
 		panic("too many arguments in call to SetNewObject")
 	}
 
+	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		if len(v) == 0 {
+			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
+		}
+		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
+	})
+
+	return value.(*Object)
 }
 
 // SetNewArray sets a new Array for the given key.
@@ -347,8 +338,7 @@ func (p *Object) setInternal(
 	creator func(ticket *time.Ticket) crdt.Element,
 ) crdt.Element {
 	ticket := p.context.IssueTimeTicket()
-	elem := creator(ticket) // create value -> object
-
+	elem := creator(ticket)
 	value := toOriginal(elem)
 
 	copiedValue, err := value.DeepCopy()
@@ -368,22 +358,21 @@ func (p *Object) setInternal(
 		copiedValue,
 		ticket,
 	))
+
 	return elem
 }
 
-// return the element map of the given json
+// buildObjectMember return the element map of the given json.
 func buildObjectMember(
 	context *change.Context,
 	json map[string]interface{},
 ) map[string]crdt.Element {
-
 	members := make(map[string]crdt.Element)
 
 	for key, value := range json {
 		if strings.Contains(key, ".") {
 			panic("key must not contain the '.'.")
 		}
-
 		ticket := context.IssueTimeTicket()
 		elem := buildCRDTElement(context, value, ticket)
 		members[key] = elem

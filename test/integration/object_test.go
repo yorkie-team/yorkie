@@ -428,16 +428,18 @@ func TestObject(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			json := map[string]interface{}{
-				"counter": json.CreateCounter(crdt.LongCnt, 0),
+				"counterLong": json.CreateCounter(crdt.LongCnt, 0),
+				"counterInt":  json.CreateCounter(crdt.IntegerCnt, 0),
 			}
 			root.SetNewObject("obj", json)
-			root.GetObject("obj").GetCounter("counter").Increase(3)
-			root.GetObject("obj").GetCounter("counter").Increase(-2)
+
+			root.GetObject("obj").GetCounter("counterLong").Increase(3)
+			root.GetObject("obj").GetCounter("counterInt").Increase(-2)
 			return nil
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, `{"obj":{"counter":1}}`, d1.Marshal())
+		assert.Equal(t, `{"obj":{"counterInt":-2,"counterLong":3}}`, d1.Marshal())
 	})
 
 	t.Run("Json object literal text type test", func(t *testing.T) {

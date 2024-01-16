@@ -30,7 +30,15 @@ type Array struct {
 }
 
 // NewArray creates a new instance of Array.
-func NewArray(elements *RGATreeList, createdAt *time.Ticket) *Array {
+func NewArray(elements *RGATreeList, createdAt *time.Ticket, value ...[]Element) *Array {
+	if len(value) > 1 {
+		panic("too many arguments in call to NewArray")
+	} else if len(value) == 1 {
+		for _, v := range value[0] {
+			elements.InsertAfter(elements.LastCreatedAt(), v)
+		}
+	}
+
 	return &Array{
 		elements:  elements,
 		createdAt: createdAt,
