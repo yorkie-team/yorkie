@@ -35,7 +35,10 @@ func NewArray(elements *RGATreeList, createdAt *time.Ticket, value ...[]Element)
 		panic("too many arguments in call to NewArray")
 	} else if len(value) == 1 {
 		for _, v := range value[0] {
-			elements.InsertAfter(elements.LastCreatedAt(), v)
+			err := elements.InsertAfter(elements.LastCreatedAt(), v)
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 
