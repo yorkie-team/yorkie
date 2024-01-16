@@ -51,11 +51,11 @@ func toElement(ctx *change.Context, elem crdt.Element) crdt.Element {
 	case *crdt.Array:
 		return NewArray(ctx, elem)
 	case *crdt.Text:
-		return NewText(ctx, elem)
+		text := NewText()
+		return text.Initialize(ctx, elem)
 	case *crdt.Counter:
 		counter := NewCounter(elem.Value(), elem.ValueType())
-		counter.Initialize(ctx, elem)
-		return counter
+		return counter.Initialize(ctx, elem)
 	case *crdt.Tree:
 		return NewTree(ctx, elem)
 	case *crdt.Primitive:

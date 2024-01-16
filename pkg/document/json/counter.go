@@ -42,12 +42,14 @@ func NewCounter(n interface{}, t crdt.CounterType) *Counter {
 }
 
 // Initialize initializes the Counter with context, crdt.Counter
-func (p *Counter) Initialize(ctx *change.Context, counter *crdt.Counter) {
+func (p *Counter) Initialize(ctx *change.Context, counter *crdt.Counter) *Counter {
 	if !counter.IsNumericType() {
 		panic("unsupported type")
 	}
 	p.Counter = counter
 	p.context = ctx
+
+	return p
 }
 
 // Increase adds an increase operations.

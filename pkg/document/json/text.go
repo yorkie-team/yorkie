@@ -30,16 +30,18 @@ type Text struct {
 }
 
 // NewText creates a new instance of Text.
-func NewText(ctx *change.Context, text *crdt.Text) *Text {
+func NewText() *Text {
 	return &Text{
-		Text:    text,
-		context: ctx,
+		Text:    nil,
+		context: nil,
 	}
 }
 
-// CreateText creates a new instance of Text for json literal.
-func CreateText() *Text {
-	return NewText(nil, nil)
+// Initialize initializes the Text with context, crdt.Text
+func (p *Text) Initialize(ctx *change.Context, text *crdt.Text) *Text {
+	p.Text = text
+	p.context = ctx
+	return p
 }
 
 // CreateRange creates a range from the given positions.

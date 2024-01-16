@@ -70,10 +70,8 @@ func (p *Object) SetNewArray(k string) *Array {
 // SetNewText sets a new Text for the given key.
 func (p *Object) SetNewText(k string) *Text {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return NewText(
-			p.context,
-			crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket),
-		)
+		text := NewText()
+		return text.Initialize(p.context, crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket))
 	})
 
 	return v.(*Text)
@@ -270,7 +268,8 @@ func (p *Object) GetText(k string) *Text {
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Text:
-		return NewText(p.context, elem)
+		text := NewText()
+		return text.Initialize(p.context, elem)
 	case *Text:
 		return elem
 	default:
