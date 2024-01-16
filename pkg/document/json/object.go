@@ -58,13 +58,16 @@ func (p *Object) SetNewObject(k string, v ...map[string]interface{}) *Object {
 }
 
 // SetNewArray sets a new Array for the given key.
-func (p *Object) SetNewArray(k string) *Array {
-	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+func (p *Object) SetNewArray(k string, v ...[]interface{}) *Array {
+	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		elements := crdt.NewRGATreeList()
-		return NewArray(p.context, crdt.NewArray(elements, ticket))
+		if len(v) == 0 {
+			return NewArray(p.context, crdt.NewArray(elements, ticket))
+		}
+		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
 	})
 
-	return v.(*Array)
+	return value.(*Array)
 }
 
 // SetNewText sets a new Text for the given key.

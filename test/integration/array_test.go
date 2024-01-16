@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -233,5 +234,55 @@ func TestArray(t *testing.T) {
 		}))
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("Set array with value set, add, delete test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k1", []interface{}{0, 1, 2, []interface{}{3, 4, 5}})
+			assert.Equal(t, `{"k1":[0,1,2,[3,4,5]]}`, root.Marshal())
+
+			root.GetArray("k1").AddInteger(6)
+			assert.Equal(t, `{"k1":[0,1,2,[3,4,5],6]}`, root.Marshal())
+
+			root.GetArray("k1").AddString("7")
+			assert.Equal(t, `{"k1":[0,1,2,[3,4,5],6,"7"]}`, root.Marshal())
+
+			root.GetArray("k1").Delete(5) // delete "7"
+			assert.Equal(t, `{"k1":[0,1,2,[3,4,5],6]}`, root.Marshal())
+			root.Delete("k1")
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, 10, d1.GarbageLen())
+		assert.Equal(t, 10, d1.GarbageCollect(time.MaxTicket))
+	})
+
+	t.Run("Set array with value sync test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k1", []interface{}{0, 1, 2})
+			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
+
+			root.GetArray("k1").Delete(0) // delete "0"
+			assert.Equal(t, `{"k1":[1,2]}`, root.Marshal())
+			root.Delete("k1")
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
+		assert.Equal(t, 4, d1.GarbageLen())
+		assert.Equal(t, 4, d1.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 4, d2.GarbageLen())
+		assert.Equal(t, 4, d2.GarbageCollect(time.MaxTicket))
 	})
 }
