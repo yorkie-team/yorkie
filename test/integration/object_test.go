@@ -211,7 +211,7 @@ func TestObject(t *testing.T) {
 		assert.Equal(t, `{"obj":{"arr":[1,"str"],"cnt":0,"obj":{"key3":42.200000},"str":"v","tree":{"type":"doc","children":[{"type":"p","children":[{"type":"text","value":"ab"}]}]},"txt":[]}}`, d1.Marshal())
 		assert.Equal(t, d2.Marshal(), d1.Marshal())
 
-		// 03. remove the shape object and check the number of tombstones.
+		// 03. remove the object and check the number of tombstones.
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("obj")
 			return nil
@@ -228,187 +228,115 @@ func TestObject(t *testing.T) {
 		assert.Equal(t, 10, d2.GarbageCollect(time.MaxTicket))
 	})
 
-	t.Run("Set new object to json object literal sync test", func(t *testing.T) {
-
+	t.Run("object.set with json literal sync test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-		err = c2.Attach(ctx, d2)
-		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c2.Attach(ctx, d2))
 
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-
-			data := map[string]interface{}{
+		// 01. Sync set newObject from d1 to d2
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("shape", map[string]interface{}{
 				"color": "black",
-			}
-
-			root.SetNewObject("shape", data)
+			})
 			return nil
 		})
-
-		err = c1.Sync(ctx)
 		assert.NoError(t, err)
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		assert.Equal(t, `{"shape":{"color":"black"}}`, d1.Marshal())
-		assert.Equal(t, `{"shape":{"color":"black"}}`, d2.Marshal())
-
+		// 02. Sync overwrite object from d2 to d1
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			data := map[string]interface{}{
+			root.SetNewObject("shape", map[string]interface{}{
 				"color": "yellow",
-			}
-			root.SetNewObject("shape", data)
+			})
 			return nil
 		})
-
-		err = c2.Sync(ctx)
 		assert.NoError(t, err)
-		err = c1.Sync(ctx)
-		assert.NoError(t, err)
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-		assert.Equal(t, `{"shape":{"color":"yellow"}}`, d1.Marshal())
-		assert.Equal(t, `{"shape":{"color":"yellow"}}`, d2.Marshal())
-
+		// 03. Sync delete object from d2 to d1
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetObject("shape").Delete("color")
 			return nil
 		})
-
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-		err = c1.Sync(ctx)
-		assert.NoError(t, err)
-
-		assert.Equal(t, 1, d1.GarbageLen())
-		assert.Equal(t, 1, d1.GarbageCollect(time.MaxTicket))
-
-	})
-
-	t.Run("Set new object to json object literal set/delete test", func(t *testing.T) {
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
-		assert.NoError(t, err)
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			json := map[string]interface{}{
-				"key1": "value1",
-				"key2": "value2",
-				"key3": "value3",
-			}
-			root.SetNewObject("obj", json)
-			root.SetNewObject("obj2", json)
-			return nil
-		})
-
-		assert.NoError(t, err)
-		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.Delete("obj")
-			root.GetObject("obj2").Delete("key1")
-			return nil
-		})
 		assert.NoError(t, err)
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("Json object literal array type test", func(t *testing.T) {
+	t.Run("object.set with json literal array type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
 
-		array2 := []interface{}{7, 8}
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			json := map[string]interface{}{
-				"array": []interface{}{1, 2, 3, array2},
-			}
-			root.SetNewObject("obj", json)
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("obj", map[string]interface{}{
+				"array": []interface{}{1, 2, 3, []interface{}{7, 8}},
+			})
 			assert.Equal(t, `{"obj":{"array":[1,2,3,[7,8]]}}`, root.Marshal())
 
 			root.GetObject("obj").GetArray("array").Delete(3)
 			assert.Equal(t, `{"obj":{"array":[1,2,3]}}`, root.Marshal())
 			return nil
 		})
-
 		assert.NoError(t, err)
+
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 3, d1.GarbageCollect(time.MaxTicket))
-
 	})
 
-	t.Run("Json object literal counter type test", func(t *testing.T) {
+	t.Run("object.set with json literal counter type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
 
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			json := map[string]interface{}{
-				"counterLong": json.NewCounter(0, crdt.LongCnt),
-				"counterInt":  json.NewCounter(0, crdt.IntegerCnt),
-			}
-			root.SetNewObject("obj", json)
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("obj", map[string]interface{}{
+				"cntLong": json.NewCounter(0, crdt.LongCnt),
+				"cntInt":  json.NewCounter(0, crdt.IntegerCnt),
+			})
 
-			root.GetObject("obj").GetCounter("counterLong").Increase(3)
-			root.GetObject("obj").GetCounter("counterInt").Increase(-2)
+			root.GetObject("obj").GetCounter("cntLong").Increase(1)
+			root.GetObject("obj").GetCounter("cntInt").Increase(-1)
 			return nil
 		})
-
 		assert.NoError(t, err)
-		assert.Equal(t, `{"obj":{"counterInt":-2,"counterLong":3}}`, d1.Marshal())
+		assert.Equal(t, `{"obj":{"cntInt":-1,"cntLong":1}}`, d1.Marshal())
 	})
 
-	t.Run("Json object literal text type test", func(t *testing.T) {
+	t.Run("object.set with json literal text type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
 
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			json := map[string]interface{}{
-				"text": json.NewText(),
-			}
-			root.SetNewObject("obj", json)
-			root.GetObject("obj").GetText("text").Edit(0, 0, "ABCD")
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("obj", map[string]interface{}{
+				"txt": json.NewText(),
+			})
+			root.GetObject("obj").GetText("txt").Edit(0, 0, "ABCD")
 			return nil
 		})
-
 		assert.NoError(t, err)
-		assert.Equal(t, `{"obj":{"text":[{"val":"ABCD"}]}}`, d1.Marshal())
+		assert.Equal(t, `{"obj":{"txt":[{"val":"ABCD"}]}}`, d1.Marshal())
 	})
 
-	t.Run("Json object literal primitive type test", func(t *testing.T) {
+	t.Run("object.set with json literal primitive type test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
 
-		var testInt int32 = 32
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			json := map[string]interface{}{
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("obj", map[string]interface{}{
 				"nill":   nil,
 				"bool":   true,
 				"long":   9223372036854775807,
-				"int":    testInt,
+				"int":    32,
 				"double": 1.79,
 				"bytes":  []byte{65, 66},
 				"date":   gotime.Date(2022, 3, 2, 9, 10, 0, 0, gotime.UTC),
-			}
-			root.SetNewObject("obj", json)
+			})
 			return nil
 		})
-
 		assert.NoError(t, err)
 		assert.Equal(t, `{"obj":{"bool":true,"bytes":"AB","date":"2022-03-02T09:10:00Z","double":1.790000,"int":32,"long":9223372036854775807,"nill":null}}`, d1.Marshal())
 	})

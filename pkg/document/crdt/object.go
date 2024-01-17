@@ -31,14 +31,11 @@ type Object struct {
 
 // NewObject creates a new instance of Object.
 func NewObject(memberNodes *ElementRHT, createdAt *time.Ticket, value ...map[string]Element) *Object {
-	if len(value) > 1 {
-		panic("too many arguments in call to NewObject")
-	} else if len(value) == 1 {
+	if len(value) == 1 {
 		for k, v := range value[0] {
 			memberNodes.Set(k, v)
 		}
 	}
-
 	return &Object{
 		memberNodes: memberNodes,
 		createdAt:   createdAt,
