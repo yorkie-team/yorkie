@@ -283,7 +283,7 @@ func TestObject(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		// 03. garbage collect ( 3 elements: array, 1, 2)
+		// 03. garbage collect (3 elements: array, 1, 2)
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 3, d1.GarbageCollect(time.MaxTicket))
 	})

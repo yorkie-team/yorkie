@@ -72,7 +72,7 @@ func buildCRDTElement(
 	ticket *time.Ticket,
 ) crdt.Element {
 	switch elem := value.(type) {
-	case string, int, int32, int64, float32, float64, []byte, bool, gotime.Time:
+	case nil, string, int, int32, int64, float32, float64, []byte, bool, gotime.Time:
 		primitive, err := crdt.NewPrimitive(elem, ticket)
 		if err != nil {
 			panic(err)
@@ -90,17 +90,11 @@ func buildCRDTElement(
 		}
 		return counter
 	case []interface{}:
-		array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayMember(context, elem))
+		array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, elem))
 		return array
 	case map[string]interface{}:
-		obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMember(context, elem))
+		obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
 		return obj
-	case nil:
-		primitive, err := crdt.NewPrimitive(nil, ticket)
-		if err != nil {
-			panic(err)
-		}
-		return primitive
 	default:
 		panic("unsupported type")
 	}

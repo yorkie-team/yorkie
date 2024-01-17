@@ -154,6 +154,7 @@ func (p *Counter) ValueType() CounterType {
 }
 
 // Value returns the value.
+// TODO(hackerwins): We need to use generics to avoid using interface{}.
 func (p *Counter) Value() interface{} {
 	return p.value
 }

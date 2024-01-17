@@ -187,7 +187,6 @@ func (r *Root) GarbageLen() int {
 		switch elem := pair.elem.(type) {
 		case Container:
 			elem.Descendants(func(elem Element, parent Container) bool {
-
 				seen[elem.CreatedAt().Key()] = true
 				return false
 			})

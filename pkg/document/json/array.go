@@ -272,17 +272,17 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 	}
 }
 
-// buildArrayMember return the element slice of the given array.
-func buildArrayMember(
+// buildArrayElements return the element slice of the given array.
+func buildArrayElements(
 	context *change.Context,
 	elements []interface{},
 ) []crdt.Element {
-	members := make([]crdt.Element, len(elements))
+	elems := make([]crdt.Element, len(elements))
 
 	for idx, value := range elements {
 		ticket := context.IssueTimeTicket()
-		members[idx] = buildCRDTElement(context, value, ticket)
+		elems[idx] = buildCRDTElement(context, value, ticket)
 	}
 
-	return members
+	return elems
 }

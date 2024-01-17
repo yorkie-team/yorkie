@@ -430,7 +430,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, d2.GarbageCollect(time.MaxTicket), 3)
 	})
 
-	t.Run("Deregister nested object gc test", func(t *testing.T) {
+	t.Run("deregister nested object gc test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -449,7 +449,6 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.Equal(t, 5, d1.GarbageLen())
 		assert.Equal(t, 5, d1.GarbageCollect(time.MaxTicket))
-
 	})
 
 }

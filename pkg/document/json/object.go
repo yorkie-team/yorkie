@@ -55,6 +55,8 @@ func (p *Object) SetNewObject(k string, v ...map[string]interface{}) *Object {
 
 // SetNewArray sets a new Array for the given key.
 func (p *Object) SetNewArray(k string, v ...[]interface{}) *Array {
+	// TODO(hackerwins): For now, users can only set initial values with []interface{} without
+	// the type information of the elements. We need to support the type information.
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		elements := crdt.NewRGATreeList()
 		if len(v) == 0 {
@@ -338,8 +340,11 @@ func (p *Object) setInternal(
 	return elem
 }
 
-// buildObjectMember return the element map of the given json.
-func buildObjectMember(
+// buildObjectMembers constructs an object where all values from the
+// user-provided object are transformed into CRDTElements.
+// This function takes an object and iterates through its values,
+// converting each value into a corresponding CRDTElement.
+func buildObjectMembers(
 	context *change.Context,
 	json map[string]interface{},
 ) map[string]crdt.Element {
