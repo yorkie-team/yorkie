@@ -54,7 +54,6 @@ func NewRoot(root *Object) *Root {
 	r.RegisterElement(root)
 
 	root.Descendants(func(elem Element, parent Container) bool {
-		r.RegisterElement(elem)
 		if elem.RemovedAt() != nil {
 			r.RegisterRemovedElementPair(parent, elem)
 		}
@@ -76,15 +75,44 @@ func (r *Root) FindByCreatedAt(createdAt *time.Ticket) Element {
 }
 
 // RegisterElement registers the given element to hash table.
-func (r *Root) RegisterElement(elem Element) {
-	r.elementMapByCreatedAt[elem.CreatedAt().Key()] = elem
+func (r *Root) RegisterElement(element Element) {
+	r.elementMapByCreatedAt[element.CreatedAt().Key()] = element
+
+	switch element := element.(type) {
+	case Container:
+		{
+			element.Descendants(func(elem Element, parent Container) bool {
+				r.elementMapByCreatedAt[elem.CreatedAt().Key()] = elem
+				return false
+			})
+		}
+	}
 }
 
-// DeregisterElement deregister the given element from hash tables.
-func (r *Root) DeregisterElement(elem Element) {
-	createdAt := elem.CreatedAt().Key()
-	delete(r.elementMapByCreatedAt, createdAt)
-	delete(r.removedElementPairMapByCreatedAt, createdAt)
+// deregisterElement deregister the given element from hash tables.
+func (r *Root) deregisterElement(element Element) int {
+	count := 0
+
+	deregisterElementInternal := func(elem Element) {
+		createdAt := elem.CreatedAt().Key()
+		delete(r.elementMapByCreatedAt, createdAt)
+		delete(r.removedElementPairMapByCreatedAt, createdAt)
+		count++
+	}
+
+	deregisterElementInternal(element)
+
+	switch element := element.(type) {
+	case Container:
+		{
+			element.Descendants(func(elem Element, parent Container) bool {
+				deregisterElementInternal(elem)
+				return false
+			})
+		}
+	}
+
+	return count
 }
 
 // RegisterRemovedElementPair register the given element pair to hash table.
@@ -119,7 +147,7 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 				return 0, err
 			}
 
-			count += r.garbageCollect(pair.elem)
+			count += r.deregisterElement(pair.elem)
 		}
 	}
 
@@ -169,26 +197,6 @@ func (r *Root) GarbageLen() int {
 
 	for _, element := range r.elementHasRemovedNodesSetByCreatedAt {
 		count += element.removedNodesLen()
-	}
-
-	return count
-}
-
-func (r *Root) garbageCollect(elem Element) int {
-	count := 0
-
-	callback := func(elem Element, parent Container) bool {
-		r.DeregisterElement(elem)
-		count++
-		return false
-	}
-
-	callback(elem, nil)
-	switch elem := elem.(type) {
-	case *Object:
-		elem.Descendants(callback)
-	case *Array:
-		elem.Descendants(callback)
 	}
 
 	return count

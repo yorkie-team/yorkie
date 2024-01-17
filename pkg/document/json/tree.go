@@ -65,16 +65,25 @@ type TreeNode struct {
 // Tree is a CRDT-based tree structure that is used to represent the document
 // tree of text-based editor such as ProseMirror.
 type Tree struct {
+	initialRoot *TreeNode
 	*crdt.Tree
 	context *change.Context
 }
 
 // NewTree creates a new instance of Tree.
-func NewTree(ctx *change.Context, tree *crdt.Tree) *Tree {
-	return &Tree{
-		Tree:    tree,
-		context: ctx,
+func NewTree(root ...*TreeNode) *Tree {
+	var t Tree
+	if len(root) > 0 {
+		t.initialRoot = root[0]
 	}
+	return &t
+}
+
+// Initialize initializes the Tree by the given context and tree.
+func (t *Tree) Initialize(ctx *change.Context, tree *crdt.Tree) *Tree {
+	t.Tree = tree
+	t.context = ctx
+	return t
 }
 
 // validateTextNode make sure that text node have non-empty string value

@@ -17,7 +17,13 @@
 // Package json provides the JSON document implementation.
 package json
 
-import "github.com/yorkie-team/yorkie/pkg/document/crdt"
+import (
+	gotime "time"
+
+	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
+)
 
 func toOriginal(elem crdt.Element) crdt.Element {
 	switch elem := elem.(type) {
@@ -36,4 +42,61 @@ func toOriginal(elem crdt.Element) crdt.Element {
 	}
 
 	panic("unsupported type")
+}
+
+func toElement(ctx *change.Context, elem crdt.Element) crdt.Element {
+	switch elem := elem.(type) {
+	case *crdt.Object:
+		return NewObject(ctx, elem)
+	case *crdt.Array:
+		return NewArray(ctx, elem)
+	case *crdt.Text:
+		text := NewText()
+		return text.Initialize(ctx, elem)
+	case *crdt.Counter:
+		counter := NewCounter(elem.Value(), elem.ValueType())
+		return counter.Initialize(ctx, elem)
+	case *crdt.Tree:
+		tree := NewTree()
+		return tree.Initialize(ctx, elem)
+	case *crdt.Primitive:
+		return elem
+	}
+
+	panic("unsupported type")
+}
+
+func buildCRDTElement(
+	context *change.Context,
+	value interface{},
+	ticket *time.Ticket,
+) crdt.Element {
+	switch elem := value.(type) {
+	case nil, string, int, int32, int64, float32, float64, []byte, bool, gotime.Time:
+		primitive, err := crdt.NewPrimitive(elem, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
+	case *Tree:
+		crdtTree := crdt.NewTree(buildRoot(context, elem.initialRoot, ticket), ticket)
+		return crdtTree
+	case *Text:
+		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
+	case *Counter:
+		counter, err := crdt.NewCounter(elem.valueType, elem.value, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return counter
+	case []interface{}:
+		array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, elem))
+		return array
+	case map[string]interface{}:
+		obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
+		return obj
+	default:
+		panic("unsupported type")
+	}
+
 }

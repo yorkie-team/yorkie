@@ -17,6 +17,7 @@
 package json
 
 import (
+	"strings"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -41,31 +42,37 @@ func NewObject(ctx *change.Context, root *crdt.Object) *Object {
 }
 
 // SetNewObject sets a new Object for the given key.
-func (p *Object) SetNewObject(k string) *Object {
-	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
+func (p *Object) SetNewObject(k string, v ...map[string]interface{}) *Object {
+	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		if len(v) == 0 {
+			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
+		}
+		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
 	})
 
-	return v.(*Object)
+	return value.(*Object)
 }
 
 // SetNewArray sets a new Array for the given key.
-func (p *Object) SetNewArray(k string) *Array {
-	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+// TODO(hackerwins): For now, users can only set initial values with []interface{} without
+// the type information of the elements. We need to support the type information.
+func (p *Object) SetNewArray(k string, v ...[]interface{}) *Array {
+	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		elements := crdt.NewRGATreeList()
-		return NewArray(p.context, crdt.NewArray(elements, ticket))
+		if len(v) == 0 {
+			return NewArray(p.context, crdt.NewArray(elements, ticket))
+		}
+		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
 	})
 
-	return v.(*Array)
+	return value.(*Array)
 }
 
 // SetNewText sets a new Text for the given key.
 func (p *Object) SetNewText(k string) *Text {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return NewText(
-			p.context,
-			crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket),
-		)
+		text := NewText()
+		return text.Initialize(p.context, crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket))
 	})
 
 	return v.(*Text)
@@ -74,28 +81,7 @@ func (p *Object) SetNewText(k string) *Text {
 // SetNewCounter sets a new NewCounter for the given key.
 func (p *Object) SetNewCounter(k string, t crdt.CounterType, n interface{}) *Counter {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		switch t {
-		case crdt.IntegerCnt:
-			counter, err := crdt.NewCounter(crdt.IntegerCnt, n, ticket)
-			if err != nil {
-				panic(err)
-			}
-			return NewCounter(
-				p.context,
-				counter,
-			)
-		case crdt.LongCnt:
-			counter, err := crdt.NewCounter(crdt.LongCnt, n, ticket)
-			if err != nil {
-				panic(err)
-			}
-			return NewCounter(
-				p.context,
-				counter,
-			)
-		default:
-			panic("unsupported type")
-		}
+		return toElement(p.context, buildCRDTElement(p.context, NewCounter(n, t), ticket))
 	})
 
 	return v.(*Counter)
@@ -108,11 +94,8 @@ func (p *Object) SetNewTree(k string, initialRoot ...*TreeNode) *Tree {
 		if len(initialRoot) > 0 {
 			root = initialRoot[0]
 		}
-
-		return NewTree(
-			p.context,
-			crdt.NewTree(buildRoot(p.context, root, ticket), ticket),
-		)
+		tree := NewTree(root)
+		return tree.Initialize(p.context, crdt.NewTree(buildRoot(p.context, root, ticket), ticket))
 	})
 
 	return v.(*Tree)
@@ -282,7 +265,8 @@ func (p *Object) GetText(k string) *Text {
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Text:
-		return NewText(p.context, elem)
+		text := NewText()
+		return text.Initialize(p.context, elem)
 	case *Text:
 		return elem
 	default:
@@ -299,7 +283,9 @@ func (p *Object) GetCounter(k string) *Counter {
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Counter:
-		return NewCounter(p.context, elem)
+		counter := NewCounter(elem.Value(), elem.ValueType())
+		counter.Initialize(p.context, elem)
+		return counter
 	case *Counter:
 		return elem
 	default:
@@ -316,7 +302,8 @@ func (p *Object) GetTree(k string) *Tree {
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Tree:
-		return NewTree(p.context, elem)
+		tree := NewTree()
+		return tree.Initialize(p.context, elem)
 	case *Tree:
 		return elem
 	default:
@@ -336,12 +323,6 @@ func (p *Object) setInternal(
 	if err != nil {
 		panic(err)
 	}
-	p.context.Push(operations.NewSet(
-		p.CreatedAt(),
-		k,
-		copiedValue,
-		ticket,
-	))
 
 	removed := p.Set(k, value)
 	p.context.RegisterElement(value)
@@ -349,5 +330,34 @@ func (p *Object) setInternal(
 		p.context.RegisterRemovedElementPair(p, removed)
 	}
 
+	p.context.Push(operations.NewSet(
+		p.CreatedAt(),
+		k,
+		copiedValue,
+		ticket,
+	))
+
 	return elem
+}
+
+// buildObjectMembers constructs an object where all values from the
+// user-provided object are transformed into CRDTElements.
+// This function takes an object and iterates through its values,
+// converting each value into a corresponding CRDTElement.
+func buildObjectMembers(
+	context *change.Context,
+	json map[string]interface{},
+) map[string]crdt.Element {
+	members := make(map[string]crdt.Element)
+
+	for key, value := range json {
+		if strings.Contains(key, ".") {
+			panic("key must not contain the '.'.")
+		}
+		ticket := context.IssueTimeTicket()
+		elem := buildCRDTElement(context, value, ticket)
+		members[key] = elem
+	}
+
+	return members
 }

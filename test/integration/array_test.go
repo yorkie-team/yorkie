@@ -27,6 +27,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -229,6 +230,60 @@ func TestArray(t *testing.T) {
 			elem := root.GetArray("k1").Get(1)
 			root.GetArray("k1").MoveBefore(next.CreatedAt(), elem.CreatedAt())
 			assert.Equal(t, `{"k1":[1,0,2]}`, root.Marshal())
+			return nil
+		}))
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("array.set with value add, delete test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			// 01. set array with value
+			root.SetNewArray("k1", []interface{}{0, []interface{}{1, 2, 3}})
+			assert.Equal(t, `{"k1":[0,[1,2,3]]}`, root.Marshal())
+
+			// 02. add value to array
+			root.GetArray("k1").AddInteger(4)
+			assert.Equal(t, `{"k1":[0,[1,2,3],4]}`, root.Marshal())
+
+			root.GetArray("k1").AddString("str")
+			assert.Equal(t, `{"k1":[0,[1,2,3],4,"str"]}`, root.Marshal())
+
+			// 03. delete value from array
+			root.GetArray("k1").Delete(3)
+			assert.Equal(t, `{"k1":[0,[1,2,3],4]}`, root.Marshal())
+
+			// 04. remove the array and check the number of tombstones.
+			root.Delete("k1")
+			return nil
+		}))
+
+		assert.Equal(t, 8, d1.GarbageLen())
+		assert.Equal(t, 8, d1.GarbageCollect(time.MaxTicket))
+	})
+
+	t.Run("array.set with value sync test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k1", []interface{}{0, 1, 2})
+			assert.Equal(t, `{"k1":[0,1,2]}`, root.Marshal())
+			return nil
+		}))
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetArray("k1").AddInteger(3)
+			assert.Equal(t, `{"k1":[0,1,2,3]}`, root.Marshal())
 			return nil
 		}))
 
