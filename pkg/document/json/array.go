@@ -281,8 +281,7 @@ func buildArrayMember(
 
 	for idx, value := range elements {
 		ticket := context.IssueTimeTicket()
-		elem := buildCRDTElement(context, value, ticket)
-		members[idx] = elem
+		members[idx] = buildCRDTElement(context, value, ticket)
 	}
 
 	return members

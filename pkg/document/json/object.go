@@ -300,7 +300,7 @@ func (p *Object) GetTree(k string) *Tree {
 
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Tree:
-		tree := NewTree(nil)
+		tree := NewTree()
 		return tree.Initialize(p.context, elem)
 	case *Tree:
 		return elem
