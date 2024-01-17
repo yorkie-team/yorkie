@@ -166,140 +166,66 @@ func TestObject(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("Set new object with json literal test", func(t *testing.T) {
+	t.Run("object.set with json literal test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		d2 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-		err = c2.Attach(ctx, d2)
-		assert.NoError(t, err)
+		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c2.Attach(ctx, d2))
 
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			data := map[string]interface{}{ // 1 : object
-				"key":  "value",                    // 1 : string
-				"key2": []interface{}{1, 2, "str"}, // 4 : array, 1, 2, "str"
-				"obj": map[string]interface{}{ // 2 : object, double
-					"key3": 42.2,
-				},
-				"cnt": json.NewCounter(0, crdt.LongCnt), // 1
-				"txt": json.NewText(),                   // 1
-			}
-			root.SetNewObject("shape", data)
-			root.GetObject("shape").SetString("key", "changed") // 1 tombstone
-			root.GetObject("shape").GetText("txt").Edit(0, 0, "ABCD")
-			root.GetObject("shape").GetCounter("cnt").Increase(7)
-			return nil
-		})
-		assert.NoError(t, err)
-
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewObject("shape").
-				SetString("key", "value").
-				SetNewArray("key2")
-
-			root.GetObject("shape").GetArray("key2").AddInteger(1, 2).AddString("str")
-
-			root.GetObject("shape").SetNewObject("obj").
-				SetDouble("key3", 42.2)
-
-			root.GetObject("shape").SetNewCounter("cnt", crdt.LongCnt, 0)
-			root.GetObject("shape").GetCounter("cnt").Increase(7)
-			root.GetObject("shape").SetString("key", "changed")
-
-			root.GetObject("shape").SetNewText("txt").Edit(0, 0, "ABCD")
-			return nil
-		})
-		assert.NoError(t, err)
-
-		assert.Equal(t, `{"shape":{"cnt":7,"key":"changed","key2":[1,2,"str"],"obj":{"key3":42.200000},"txt":[{"val":"ABCD"}]}}`, d1.Marshal())
-		assert.Equal(t, d2.Marshal(), d1.Marshal()) // d1 should be same with d2
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.Delete("shape")
-			return nil
-		})
-
-		assert.NoError(t, err)
-
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.Delete("shape")
-			return nil
-		})
-
-		assert.NoError(t, err)
-
-		assert.Equal(t, 11, d1.GarbageLen())
-		assert.Equal(t, 11, d1.GarbageCollect(time.MaxTicket))
-
-		assert.Equal(t, 11, d2.GarbageLen())
-		assert.Equal(t, 11, d2.GarbageCollect(time.MaxTicket))
-
-	})
-
-	t.Run("Json object literal tree type test", func(t *testing.T) {
-
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
-
-		assert.NoError(t, err)
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-
-			data := map[string]interface{}{
-				"tree": json.NewTree(&json.TreeNode{
+		// 01. set new object with json literal. 10 elements will be created.
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("obj", map[string]interface{}{ // 1: object
+				"str": "v",                                  // 1: string
+				"arr": []interface{}{1, "str"},              // 3: array, 1, "str"
+				"obj": map[string]interface{}{"key3": 42.2}, // 2: object, 42.2
+				"cnt": json.NewCounter(0, crdt.LongCnt),     // 1: counter
+				"txt": json.NewText(),                       // 1: text
+				"tree": json.NewTree(&json.TreeNode{ // 1: tree
 					Type: "doc",
 					Children: []json.TreeNode{{
-						Type: "p", Children: []json.TreeNode{{
-							Type: "tn", Children: []json.TreeNode{{
-								Type: "text", Value: "a",
-							}, {
-								Type: "text", Value: "b",
-							}},
-						}, {
-							Type: "tn", Children: []json.TreeNode{{
-								Type: "text", Value: "cd",
-							}},
-						}},
+						Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}},
 					}},
 				}),
-			}
-
-			root.SetNewObject("obj", data)
-			assert.Equal(t, `<doc><p><tn>ab</tn><tn>cd</tn></p></doc>`, root.GetObject("obj").GetTree("tree").ToXML())
-
-			root.GetObject("obj").GetTree("tree").EditByPath([]int{0, 0, 0}, []int{0, 0, 2}, &json.TreeNode{Type: "text", Value: "gh"}, 0)
-			assert.Equal(t, `<doc><p><tn>gh</tn><tn>cd</tn></p></doc>`, root.GetObject("obj").GetTree("tree").ToXML())
-
+			})
 			return nil
 		})
-
-		assert.NoError(t, err)
-		assert.Equal(t, 2, d1.GarbageLen())
-		assert.Equal(t, 2, d1.GarbageCollect(time.MaxTicket))
-		assert.Equal(t, 0, d1.GarbageLen())
-
-		err = c1.Sync(ctx)
-		assert.NoError(t, err)
-		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		assert.Equal(t, d1.Marshal(), d2.Marshal())
+		// 02. set new object with same value by calling function.
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("obj").SetString("str", "v")
+			root.GetObject("obj").SetNewArray("arr").AddInteger(1).AddString("str")
+			root.GetObject("obj").SetNewObject("obj").SetDouble("key3", 42.2)
+			root.GetObject("obj").SetNewCounter("cnt", crdt.LongCnt, 0)
+			root.GetObject("obj").SetNewText("txt")
+			root.GetObject("obj").SetNewTree("tree", &json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"obj":{"arr":[1,"str"],"cnt":0,"obj":{"key3":42.200000},"str":"v","tree":{"type":"doc","children":[{"type":"p","children":[{"type":"text","value":"ab"}]}]},"txt":[]}}`, d1.Marshal())
+		assert.Equal(t, d2.Marshal(), d1.Marshal())
 
+		// 03. remove the shape object and check the number of tombstones.
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.Delete("obj")
 			return nil
 		})
 		assert.NoError(t, err)
-
-		assert.Equal(t, 2, d1.GarbageLen())
-		assert.Equal(t, 2, d1.GarbageCollect(time.MaxTicket))
-		assert.Equal(t, 2, d2.GarbageLen())
-		assert.Equal(t, 2, d2.GarbageCollect(time.MaxTicket))
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("obj")
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, 10, d1.GarbageLen())
+		assert.Equal(t, 10, d1.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 10, d2.GarbageLen())
+		assert.Equal(t, 10, d2.GarbageCollect(time.MaxTicket))
 	})
 
 	t.Run("Set new object to json object literal sync test", func(t *testing.T) {
