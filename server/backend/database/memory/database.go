@@ -423,7 +423,7 @@ func (d *DB) FindUserInfoByName(_ context.Context, name string) (*database.UserI
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblUsers, "name", name)
+	raw, err := txn.First(tblUsers, "username", name)
 	if err != nil {
 		return nil, fmt.Errorf("find user by name: %w", err)
 	}
@@ -439,7 +439,7 @@ func (d *DB) ListUserInfos(_ context.Context) ([]*database.UserInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	iter, err := txn.Get(tblUsers, "username")
+	iter, err := txn.Get(tblUsers, "id")
 	if err != nil {
 		return nil, fmt.Errorf("fetch users: %w", err)
 	}
@@ -755,25 +755,18 @@ func (d *DB) FindDocInfoByRefKey(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(
-		tblDocuments,
-		"key_id",
-		refKey.Key.String(),
-		refKey.ID.String(),
-	)
+	raw, err := txn.First(tblDocuments, "id", refKey.ID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find document by refKey: %w", err)
+		return nil, fmt.Errorf("find document by id: %w", err)
 	}
 
 	if raw == nil {
-		return nil, fmt.Errorf("finding doc info by refKey(%s): %w",
-			refKey, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("finding doc info by ID(%s): %w", refKey.ID, database.ErrDocumentNotFound)
 	}
 
 	docInfo := raw.(*database.DocInfo)
 	if docInfo.ProjectID != projectID {
-		return nil, fmt.Errorf("finding doc info by refKey(%s): %w",
-			refKey, database.ErrDocumentNotFound)
+		return nil, fmt.Errorf("finding doc info by ID(%s): %w", refKey.ID, database.ErrDocumentNotFound)
 	}
 
 	return docInfo.DeepCopy(), nil
@@ -788,25 +781,18 @@ func (d *DB) UpdateDocInfoStatusToRemoved(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(
-		tblDocuments,
-		"key_id",
-		refKey.Key.String(),
-		refKey.ID.String(),
-	)
+	raw, err := txn.First(tblDocuments, "id", refKey.ID.String())
 	if err != nil {
-		return fmt.Errorf("find document by refKey: %w", err)
+		return fmt.Errorf("find document by id: %w", err)
 	}
 
 	if raw == nil {
-		return fmt.Errorf("finding doc info by refKey(%s): %w",
-			refKey, database.ErrDocumentNotFound)
+		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.ID, database.ErrDocumentNotFound)
 	}
 
 	docInfo := raw.(*database.DocInfo)
 	if docInfo.ProjectID != projectID {
-		return fmt.Errorf("finding doc info by refKey(%s): %w",
-			refKey, database.ErrDocumentNotFound)
+		return fmt.Errorf("finding doc info by ID(%s): %w", refKey.ID, database.ErrDocumentNotFound)
 	}
 
 	docInfo.RemovedAt = gotime.Now()
@@ -836,8 +822,6 @@ func (d *DB) CreateChangeInfos(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	refKey := docInfo.RefKey()
-
 	for _, cn := range changes {
 		encodedOperations, err := database.EncodeOperations(cn.Operations())
 		if err != nil {
@@ -850,8 +834,7 @@ func (d *DB) CreateChangeInfos(
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
 			ID:             newID(),
-			DocKey:         refKey.Key,
-			DocID:          refKey.ID,
+			DocID:          docInfo.ID,
 			ServerSeq:      cn.ServerSeq(),
 			ActorID:        types.ID(cn.ID().ActorID().String()),
 			ClientSeq:      cn.ClientSeq(),
@@ -866,20 +849,19 @@ func (d *DB) CreateChangeInfos(
 
 	raw, err := txn.First(
 		tblDocuments,
-		"project_id_key_id",
+		"project_id_id",
 		projectID.String(),
-		refKey.Key.String(),
-		refKey.ID.String(),
+		docInfo.ID.String(),
 	)
 	if err != nil {
 		return fmt.Errorf("find document: %w", err)
 	}
 	if raw == nil {
-		return fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrDocumentNotFound)
 	}
 	loadedDocInfo := raw.(*database.DocInfo).DeepCopy()
 	if loadedDocInfo.ServerSeq != initialServerSeq {
-		return fmt.Errorf("%s: %w", refKey, database.ErrConflictOnUpdate)
+		return fmt.Errorf("%s: %w", docInfo.ID, database.ErrConflictOnUpdate)
 	}
 
 	now := gotime.Now()
@@ -911,7 +893,7 @@ func (d *DB) PurgeStaleChanges(
 
 	// Find the smallest server seq in `syncedseqs`.
 	// Because offline client can pull changes when it becomes online.
-	it, err := txn.Get(tblSyncedSeqs, "doc_key_doc_id")
+	it, err := txn.Get(tblSyncedSeqs, "id")
 	if err != nil {
 		return fmt.Errorf("fetch syncedseqs: %w", err)
 	}
@@ -919,8 +901,7 @@ func (d *DB) PurgeStaleChanges(
 	minSyncedServerSeq := change.MaxServerSeq
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		info := raw.(*database.SyncedSeqInfo)
-		if info.DocKey == docRefKey.Key && info.DocID == docRefKey.ID &&
-			info.ServerSeq < minSyncedServerSeq {
+		if info.DocID == docRefKey.ID && info.ServerSeq < minSyncedServerSeq {
 			minSyncedServerSeq = info.ServerSeq
 		}
 	}
@@ -931,8 +912,7 @@ func (d *DB) PurgeStaleChanges(
 	// Delete all changes before the smallest server seq.
 	iterator, err := txn.ReverseLowerBound(
 		tblChanges,
-		"doc_key_doc_id_server_seq",
-		docRefKey.Key.String(),
+		"doc_id_server_seq",
 		docRefKey.ID.String(),
 		minSyncedServerSeq,
 	)
@@ -943,8 +923,7 @@ func (d *DB) PurgeStaleChanges(
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.ChangeInfo)
 		if err = txn.Delete(tblChanges, info); err != nil {
-			return fmt.Errorf("delete change (%s.%s.%d): %w",
-				info.DocKey, info.DocID, info.ServerSeq, err)
+			return fmt.Errorf("delete change %s: %w", info.ID, err)
 		}
 	}
 	return nil
@@ -989,8 +968,7 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 
 	iterator, err := txn.LowerBound(
 		tblChanges,
-		"doc_key_doc_id_server_seq",
-		docRefKey.Key.String(),
+		"doc_id_server_seq",
 		docRefKey.ID.String(),
 		from,
 	)
@@ -1000,8 +978,7 @@ func (d *DB) FindChangeInfosBetweenServerSeqs(
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.ChangeInfo)
-		if info.DocKey != docRefKey.Key || info.DocID != docRefKey.ID ||
-			info.ServerSeq > to {
+		if info.DocID != docRefKey.ID || info.ServerSeq > to {
 			break
 		}
 		infos = append(infos, info.DeepCopy())
@@ -1025,7 +1002,6 @@ func (d *DB) CreateSnapshotInfo(
 
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
 		ID:        newID(),
-		DocKey:    docRefKey.Key,
 		DocID:     docRefKey.ID,
 		ServerSeq: doc.Checkpoint().ServerSeq,
 		Lamport:   doc.Lamport(),
@@ -1045,18 +1021,12 @@ func (d *DB) FindSnapshotInfoByRefKey(
 ) (*database.SnapshotInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
-	raw, err := txn.First(
-		tblSnapshots,
-		"doc_key_doc_id_server_seq",
-		refKey.DocRefKey.Key.String(),
-		refKey.DocRefKey.ID.String(),
-		refKey.ServerSeq,
-	)
+	raw, err := txn.First(tblSnapshots, "id", refKey.ID.String())
 	if err != nil {
-		return nil, fmt.Errorf("find snapshot by refKey: %w", err)
+		return nil, fmt.Errorf("find snapshot by id: %w", err)
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", refKey, database.ErrSnapshotNotFound)
+		return nil, fmt.Errorf("%s: %w", refKey.ID, database.ErrSnapshotNotFound)
 	}
 
 	return raw.(*database.SnapshotInfo).DeepCopy(), nil
@@ -1074,8 +1044,7 @@ func (d *DB) FindClosestSnapshotInfo(
 
 	iterator, err := txn.ReverseLowerBound(
 		tblSnapshots,
-		"doc_key_doc_id_server_seq",
-		docRefKey.Key.String(),
+		"doc_id_server_seq",
 		docRefKey.ID.String(),
 		serverSeq,
 	)
@@ -1086,10 +1055,9 @@ func (d *DB) FindClosestSnapshotInfo(
 	var snapshotInfo *database.SnapshotInfo
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		info := raw.(*database.SnapshotInfo)
-		if info.DocKey == docRefKey.Key && info.DocID == docRefKey.ID {
+		if info.DocID == docRefKey.ID {
 			snapshotInfo = &database.SnapshotInfo{
 				ID:        info.ID,
-				DocKey:    info.DocKey,
 				DocID:     info.DocID,
 				ServerSeq: info.ServerSeq,
 				Lamport:   info.Lamport,
@@ -1117,7 +1085,7 @@ func (d *DB) FindMinSyncedSeqInfo(
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	it, err := txn.Get(tblSyncedSeqs, "doc_id_doc_key_client_id")
+	it, err := txn.Get(tblSyncedSeqs, "id")
 	if err != nil {
 		return nil, fmt.Errorf("fetch syncedseqs: %w", err)
 	}
@@ -1126,8 +1094,7 @@ func (d *DB) FindMinSyncedSeqInfo(
 	minSyncedServerSeq := change.MaxServerSeq
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		info := raw.(*database.SyncedSeqInfo)
-		if info.DocKey == docRefKey.Key && info.DocID == docRefKey.ID &&
-			info.ServerSeq < minSyncedServerSeq {
+		if info.DocID == docRefKey.ID && info.ServerSeq < minSyncedServerSeq {
 			minSyncedServerSeq = info.ServerSeq
 			syncedSeqInfo = info
 		}
@@ -1156,21 +1123,19 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 
 	iterator, err := txn.LowerBound(
 		tblSyncedSeqs,
-		"doc_key_doc_id_lamport_actor_id",
-		docRefKey.Key.String(),
+		"doc_id_lamport_actor_id",
 		docRefKey.ID.String(),
 		int64(0),
 		time.InitialActorID.String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w",
-			docRefKey, err)
+		return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.ID.String(), err)
 	}
 
 	var syncedSeqInfo *database.SyncedSeqInfo
 	if raw := iterator.Next(); raw != nil {
 		info := raw.(*database.SyncedSeqInfo)
-		if info.DocKey == docRefKey.Key && info.DocID == docRefKey.ID {
+		if info.DocID == docRefKey.ID {
 			syncedSeqInfo = info
 		}
 	}
@@ -1209,12 +1174,11 @@ func (d *DB) UpdateSyncedSeq(
 	if !isAttached {
 		if _, err = txn.DeleteAll(
 			tblSyncedSeqs,
-			"doc_key_doc_id_client_id",
-			docRefKey.Key.String(),
+			"doc_id_client_id",
 			docRefKey.ID.String(),
 			clientInfo.ID.String(),
 		); err != nil {
-			return fmt.Errorf("delete syncedseqs of %s: %w", docRefKey, err)
+			return fmt.Errorf("delete syncedseqs of %s: %w", docRefKey.ID.String(), err)
 		}
 		txn.Commit()
 		return nil
@@ -1227,14 +1191,12 @@ func (d *DB) UpdateSyncedSeq(
 
 	raw, err := txn.First(
 		tblSyncedSeqs,
-		"doc_key_doc_id_client_id",
-		docRefKey.Key.String(),
+		"doc_id_client_id",
 		docRefKey.ID.String(),
 		clientInfo.ID.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("fetch syncedseqs of %s: %w",
-			docRefKey, err)
+		return fmt.Errorf("fetch syncedseqs of %s: %w", docRefKey.ID.String(), err)
 	}
 
 	syncedSeqInfo := &database.SyncedSeqInfo{
@@ -1252,7 +1214,7 @@ func (d *DB) UpdateSyncedSeq(
 	}
 
 	if err := txn.Insert(tblSyncedSeqs, syncedSeqInfo); err != nil {
-		return fmt.Errorf("insert syncedseqs of the %s: %w", docRefKey, err)
+		return fmt.Errorf("insert syncedseqs of %s: %w", docRefKey.ID.String(), err)
 	}
 
 	txn.Commit()
@@ -1273,29 +1235,25 @@ func (d *DB) FindDocInfosByPaging(
 	if paging.IsForward {
 		iterator, err = txn.LowerBound(
 			tblDocuments,
-			"project_id_id_key",
+			"project_id_id",
 			projectID.String(),
 			paging.Offset.ID.String(),
-			paging.Offset.Key.String(),
 		)
 	} else {
+		offset := paging.Offset
 		if paging.Offset.ID == "" {
-			paging.Offset.ID = types.IDFromActorID(time.MaxActorID)
-		}
-		if paging.Offset.Key == "" {
-			paging.Offset.Key = key.MaxKey
+			offset.ID = types.IDFromActorID(time.MaxActorID)
 		}
 
 		iterator, err = txn.ReverseLowerBound(
 			tblDocuments,
-			"project_id_id_key",
+			"project_id_id",
 			projectID.String(),
-			paging.Offset.ID.String(),
-			paging.Offset.Key.String(),
+			offset.ID.String(),
 		)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("fetch documents of %s: %w", projectID, err)
+		return nil, fmt.Errorf("fetch documents of %s: %w", projectID.String(), err)
 	}
 
 	var docInfos []*database.DocInfo
@@ -1305,8 +1263,7 @@ func (d *DB) FindDocInfosByPaging(
 			break
 		}
 
-		if info.ID != paging.Offset.ID && info.Key != paging.Offset.Key &&
-			info.RemovedAt.IsZero() {
+		if info.ID != paging.Offset.ID && info.RemovedAt.IsZero() {
 			docInfos = append(docInfos, info)
 		}
 	}
@@ -1391,18 +1348,17 @@ func (d *DB) findTicketByServerSeq(
 
 	raw, err := txn.First(
 		tblChanges,
-		"doc_key_doc_id_server_seq",
-		docRefKey.Key.String(),
+		"doc_id_server_seq",
 		docRefKey.ID.String(),
 		serverSeq,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch change of the %s: %w", docRefKey, err)
+		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.ID.String(), err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf(
-			"%s, serverSeq %d: %w",
-			docRefKey,
+			"docID %s, serverSeq %d: %w",
+			docRefKey.ID.String(),
 			serverSeq,
 			database.ErrDocumentNotFound,
 		)

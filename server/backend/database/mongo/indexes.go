@@ -42,6 +42,11 @@ const (
 	ColSyncedSeqs = "syncedseqs"
 )
 
+// Collections represents the list of all collections in the database.
+var Collections = []string{
+	ColProjects, ColUsers, ColClients,
+	ColDocuments, ColSnapshots, ColSyncedSeqs}
+
 type collectionInfo struct {
 	name    string
 	indexes []mongo.IndexModel

@@ -366,10 +366,7 @@ func CleanUpAllCollections(databaseName string) error {
 		return err
 	}
 
-	collections := []string{mongo.ColProjects, mongo.ColUsers, mongo.ColClients,
-		mongo.ColDocuments, mongo.ColChanges, mongo.ColSnapshots, mongo.ColSyncedSeqs}
-
-	for _, col := range collections {
+	for _, col := range mongo.Collections {
 		_, err := cli.Database(databaseName).Collection(col).DeleteMany(context.Background(), bson.D{})
 		if err != nil {
 			return err
