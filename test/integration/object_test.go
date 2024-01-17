@@ -235,7 +235,7 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 		assert.NoError(t, c2.Attach(ctx, d2))
 
-		// 01. Sync set newObject from d1 to d2
+		// 01. Sync set new object from d1 to d2
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewObject("shape", map[string]interface{}{
 				"color": "black",
@@ -270,17 +270,20 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			// 01. set nested array in object with json literal
 			root.SetNewObject("obj", map[string]interface{}{
 				"array": []interface{}{1, 2, 3, []interface{}{7, 8}},
 			})
 			assert.Equal(t, `{"obj":{"array":[1,2,3,[7,8]]}}`, root.Marshal())
 
+			// 02. delete nested array in object
 			root.GetObject("obj").GetArray("array").Delete(3)
 			assert.Equal(t, `{"obj":{"array":[1,2,3]}}`, root.Marshal())
 			return nil
 		})
 		assert.NoError(t, err)
 
+		// 03. garbage collect ( 3 elements: array, 1, 2)
 		assert.Equal(t, 3, d1.GarbageLen())
 		assert.Equal(t, 3, d1.GarbageCollect(time.MaxTicket))
 	})
@@ -291,16 +294,22 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			// 01. set two type of counter in object with json literal
 			root.SetNewObject("obj", map[string]interface{}{
 				"cntLong": json.NewCounter(0, crdt.LongCnt),
 				"cntInt":  json.NewCounter(0, crdt.IntegerCnt),
 			})
+			assert.Equal(t, `{"obj":{"cntInt":0,"cntLong":0}}`, root.Marshal())
 
+			// 02. increase and decrease counter
 			root.GetObject("obj").GetCounter("cntLong").Increase(1)
 			root.GetObject("obj").GetCounter("cntInt").Increase(-1)
+			assert.Equal(t, `{"obj":{"cntInt":-1,"cntLong":1}}`, root.Marshal())
 			return nil
 		})
 		assert.NoError(t, err)
+
+		// 03. is it also applied to the document
 		assert.Equal(t, `{"obj":{"cntInt":-1,"cntLong":1}}`, d1.Marshal())
 	})
 
@@ -310,13 +319,20 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, c1.Attach(ctx, d1))
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			// 01. set text in object with json literal
 			root.SetNewObject("obj", map[string]interface{}{
 				"txt": json.NewText(),
 			})
+			assert.Equal(t, `{"obj":{"txt":[]}}`, root.Marshal())
+
+			// 02. edit text
 			root.GetObject("obj").GetText("txt").Edit(0, 0, "ABCD")
+			assert.Equal(t, `{"obj":{"txt":[{"val":"ABCD"}]}}`, root.Marshal())
 			return nil
 		})
 		assert.NoError(t, err)
+
+		// 03. is it also applied to the document
 		assert.Equal(t, `{"obj":{"txt":[{"val":"ABCD"}]}}`, d1.Marshal())
 	})
 
@@ -340,5 +356,4 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"obj":{"bool":true,"bytes":"AB","date":"2022-03-02T09:10:00Z","double":1.790000,"int":32,"long":9223372036854775807,"nill":null}}`, d1.Marshal())
 	})
-
 }
