@@ -54,9 +54,9 @@ func (p *Object) SetNewObject(k string, v ...map[string]interface{}) *Object {
 }
 
 // SetNewArray sets a new Array for the given key.
+// TODO(hackerwins): For now, users can only set initial values with []interface{} without
+// the type information of the elements. We need to support the type information.
 func (p *Object) SetNewArray(k string, v ...[]interface{}) *Array {
-	// TODO(hackerwins): For now, users can only set initial values with []interface{} without
-	// the type information of the elements. We need to support the type information.
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		elements := crdt.NewRGATreeList()
 		if len(v) == 0 {

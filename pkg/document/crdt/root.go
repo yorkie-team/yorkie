@@ -89,8 +89,8 @@ func (r *Root) RegisterElement(element Element) {
 	}
 }
 
-// DeregisterElement deregister the given element from hash tables.
-func (r *Root) DeregisterElement(element Element) int {
+// deregisterElement deregister the given element from hash tables.
+func (r *Root) deregisterElement(element Element) int {
 	count := 0
 
 	deregisterElementInternal := func(elem Element) {
@@ -147,7 +147,7 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 				return 0, err
 			}
 
-			count += r.DeregisterElement(pair.elem)
+			count += r.deregisterElement(pair.elem)
 		}
 	}
 

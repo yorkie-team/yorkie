@@ -34,7 +34,7 @@ func NewText() *Text {
 	return &Text{}
 }
 
-// Initialize initializes the Text with context, crdt.Text
+// Initialize initializes the Text by the given context and text.
 func (p *Text) Initialize(ctx *change.Context, text *crdt.Text) *Text {
 	p.Text = text
 	p.context = ctx

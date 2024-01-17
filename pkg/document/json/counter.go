@@ -33,7 +33,7 @@ type Counter struct {
 	value     interface{}
 }
 
-// NewCounter creates a new instance of Counter without context, crdt.Counter
+// NewCounter creates a new instance of Counter.
 func NewCounter(n interface{}, t crdt.CounterType) *Counter {
 	return &Counter{
 		valueType: t,
@@ -41,7 +41,7 @@ func NewCounter(n interface{}, t crdt.CounterType) *Counter {
 	}
 }
 
-// Initialize initializes the Counter with context, crdt.Counter
+// Initialize initializes the Counter by the given context and counter.
 func (p *Counter) Initialize(ctx *change.Context, counter *crdt.Counter) *Counter {
 	if !counter.IsNumericType() {
 		panic("unsupported type")

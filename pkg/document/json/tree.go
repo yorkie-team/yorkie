@@ -79,7 +79,7 @@ func NewTree(root ...*TreeNode) *Tree {
 	return &t
 }
 
-// Initialize initializes the Tree with context, crdt.Tree
+// Initialize initializes the Tree by the given context and tree.
 func (t *Tree) Initialize(ctx *change.Context, tree *crdt.Tree) *Tree {
 	t.Tree = tree
 	t.context = ctx
