@@ -36,6 +36,14 @@ func TestDB(t *testing.T) {
 	db, err := memory.New()
 	assert.NoError(t, err)
 
+	t.Run("FindNextNCyclingProjectInfos test", func(t *testing.T) {
+		testcases.RunFindNextNCyclingProjectInfosTest(t, db)
+	})
+
+	t.Run("FindDeactivateCandidatesPerProject test", func(t *testing.T) {
+		testcases.RunFindDeactivateCandidatesPerProjectTest(t, db)
+	})
+
 	t.Run("RunFindDocInfo test", func(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, db, projectID)
 	})

@@ -92,6 +92,7 @@ func UpdateProject(
 
 // GetProjectFromAPIKey returns a project from an API key.
 func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey string) (*types.Project, error) {
+	// TODO(hackerwins): Default project without API key should be allowed only in standalone mode.
 	if apiKey == "" {
 		info, err := be.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
 		if err != nil {
@@ -110,14 +111,6 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 
 // GetProjectFromSecretKey returns a project from a secret key.
 func GetProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey string) (*types.Project, error) {
-	if secretKey == "" {
-		info, err := be.DB.FindProjectInfoByID(ctx, database.DefaultProjectID)
-		if err != nil {
-			return nil, err
-		}
-		return info.ToProject(), nil
-	}
-
 	info, err := be.DB.FindProjectInfoBySecretKey(ctx, secretKey)
 	if err != nil {
 		return nil, err
