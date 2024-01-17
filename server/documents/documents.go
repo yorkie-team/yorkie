@@ -43,6 +43,22 @@ var (
 	ErrDocumentAttached = fmt.Errorf("document is attached")
 )
 
+// CreateDocument creates a document.
+func CreateDocument(
+	ctx context.Context,
+	be *backend.Backend,
+	key key.Key,
+	owner types.ID,
+	projectName string,
+) (*types.Document, error) {
+	info, err := be.DB.CreateDocInfo(ctx, key, owner, projectName)
+	if err != nil {
+		return nil, err
+	}
+
+	return info.ToDocument(), nil
+}
+
 // ListDocumentSummaries returns a list of document summaries.
 func ListDocumentSummaries(
 	ctx context.Context,

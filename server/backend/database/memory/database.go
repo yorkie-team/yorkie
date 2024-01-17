@@ -671,6 +671,34 @@ func (d *DB) FindDeactivateCandidates(
 	return topProjectID, candidates, nil
 }
 
+// CreateDocInfo creates a new document.
+func (d *DB) CreateDocInfo(
+	_ context.Context,
+	key key.Key,
+	owner types.ID,
+	projectName string,
+) (*database.DocInfo, error) {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	projectInfo, err := txn.First(tblProjects, "owner_name", owner.String(), projectName)
+	if err != nil {
+		return nil, fmt.Errorf("find project by owner and name: %w", err)
+	}
+	if projectInfo == nil {
+		return nil, fmt.Errorf("%s: %w", projectName, database.ErrProjectNotFound)
+	}
+
+	info := database.NewDocInfo(key, owner, projectInfo.(*database.DocInfo).ProjectID)
+	info.ID = newID()
+	if err := txn.Insert(tblDocuments, info); err != nil {
+		return nil, fmt.Errorf("insert document: %w", err)
+	}
+	txn.Commit()
+
+	return info, nil
+}
+
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the
 // createDocIfNotExist condition is true, create the document if it does not
 // exist.

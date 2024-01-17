@@ -53,6 +53,16 @@ type DocInfo struct {
 	RemovedAt time.Time `bson:"removed_at"`
 }
 
+// NewDocInfo creates a new DocInfo of the given key and projectID.
+func NewDocInfo(key key.Key, owner types.ID, projectID types.ID) *DocInfo {
+	return &DocInfo{
+		ProjectID: projectID,
+		Key:       key,
+		Owner:     owner,
+		CreatedAt: time.Now(),
+	}
+}
+
 // IncreaseServerSeq increases server sequence of the document.
 func (info *DocInfo) IncreaseServerSeq() int64 {
 	info.ServerSeq++
@@ -80,5 +90,16 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 		AccessedAt: info.AccessedAt,
 		UpdatedAt:  info.UpdatedAt,
 		RemovedAt:  info.RemovedAt,
+	}
+}
+
+// ToDocument converts the DocInfo to the Document.
+func (info *DocInfo) ToDocument() *types.Document {
+	return &types.Document{
+		ID:        info.ID,
+		ProjectID: info.ProjectID,
+		Key:       info.Key.String(),
+		Owner:     info.Owner,
+		CreatedAt: info.CreatedAt,
 	}
 }

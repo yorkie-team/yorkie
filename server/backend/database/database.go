@@ -250,6 +250,14 @@ type Database interface {
 		serverSeq int64,
 	) error
 
+	// CreateDocInfo creates a new document.
+	CreateDocInfo(
+		ctx context.Context,
+		key key.Key,
+		owner types.ID,
+		projectName string,
+	) (*DocInfo, error)
+
 	// FindDocInfosByPaging returns the documentInfos of the given paging.
 	FindDocInfosByPaging(
 		ctx context.Context,

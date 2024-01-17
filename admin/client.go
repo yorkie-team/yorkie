@@ -234,6 +234,12 @@ func (c *Client) UpdateProject(
 	return converter.FromProject(response.Msg.Project), nil
 }
 
+// CreateDocument creates a new document.
+func (c *Client) CreateDocument(ctx context.Context) (*types.DocumentSummary, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 // ListDocuments lists documents.
 func (c *Client) ListDocuments(
 	ctx context.Context,

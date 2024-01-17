@@ -66,6 +66,11 @@ func ToProject(project *types.Project) *api.Project {
 	}
 }
 
+// ToDocument converts the given model to Protobuf.
+func ToDocument(document *types.Document) *api.Document {
+	return &api.Document{}
+}
+
 // ToDocumentSummaries converts the given model to Protobuf.
 func ToDocumentSummaries(summaries []*types.DocumentSummary) []*api.DocumentSummary {
 	var pbSummaries []*api.DocumentSummary

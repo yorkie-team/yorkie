@@ -739,6 +739,12 @@ func (c *Client) FindDeactivateCandidates(
 	return topProjectID, candidates, nil
 }
 
+// CreateDocInfo creates a new document.
+func (c *Client) CreateDocInfo(ctx context.Context, key key.Key, owner types.ID, projectName string) (*database.DocInfo, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the
 // createDocIfNotExist condition is true, create the document if it does not
 // exist.

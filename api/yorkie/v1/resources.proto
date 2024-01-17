@@ -297,6 +297,15 @@ message UpdatableProjectFields {
   google.protobuf.StringValue client_deactivate_threshold = 4;
 }
 
+message Document {
+  string id = 1;
+  string project_id = 2;
+  string key = 3;
+  string server_seq = 4;
+  string owner = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
 message DocumentSummary {
   string id = 1;
   string key = 2;

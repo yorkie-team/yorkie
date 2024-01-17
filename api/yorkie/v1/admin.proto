@@ -34,6 +34,7 @@ service AdminService {
   rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
   rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
 
+  rpc CreateDocument(CreateDocumentRequest) returns (CreateDocumentResponse) {}
   rpc ListDocuments (ListDocumentsRequest) returns (ListDocumentsResponse) {}
   rpc GetDocument (GetDocumentRequest) returns (GetDocumentResponse) {}
   rpc RemoveDocumentByAdmin (RemoveDocumentByAdminRequest) returns (RemoveDocumentByAdminResponse) {}
@@ -90,6 +91,15 @@ message UpdateProjectRequest {
 
 message UpdateProjectResponse {
   Project project = 1;
+}
+
+message CreateDocumentRequest {
+  string key = 1;
+  string project_name = 2;
+}
+
+message CreateDocumentResponse {
+  Document document = 1;
 }
 
 message ListDocumentsRequest {

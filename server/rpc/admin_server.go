@@ -178,6 +178,22 @@ func (s *adminServer) UpdateProject(
 	}), nil
 }
 
+// CreateDocument creates a new document.
+func (s *adminServer) CreateDocument(
+	ctx context.Context,
+	req *connect.Request[api.CreateDocumentRequest],
+) (*connect.Response[api.CreateDocumentResponse], error) {
+	user := users.From(ctx)
+	document, err := documents.CreateDocument(ctx, s.backend, key.Key(req.Msg.Key), user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.CreateDocumentResponse{
+		Document: converter.ToDocument(document),
+	}), nil
+}
+
 // GetDocument gets the document.
 func (s *adminServer) GetDocument(
 	ctx context.Context,
