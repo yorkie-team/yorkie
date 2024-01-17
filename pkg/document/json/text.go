@@ -31,10 +31,7 @@ type Text struct {
 
 // NewText creates a new instance of Text.
 func NewText() *Text {
-	return &Text{
-		Text:    nil,
-		context: nil,
-	}
+	return &Text{}
 }
 
 // Initialize initializes the Text with context, crdt.Text

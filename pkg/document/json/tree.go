@@ -72,11 +72,11 @@ type Tree struct {
 
 // NewTree creates a new instance of Tree.
 func NewTree(root ...*TreeNode) *Tree {
-	tree := &Tree{}
+	var t Tree
 	if len(root) > 0 {
-		tree.initialRoot = root[0]
+		t.initialRoot = root[0]
 	}
-	return tree
+	return &t
 }
 
 // Initialize initializes the Tree with context, crdt.Tree
