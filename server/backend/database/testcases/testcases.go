@@ -19,7 +19,6 @@
 package testcases
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -72,6 +71,27 @@ func RunFindDocInfoTest(
 		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientInfo.ID, docKey, true)
 		assert.NoError(t, err)
 		assert.Equal(t, docKey, docInfo.Key)
+	})
+}
+
+// RunFindProjectInfoBySecretKeyTest runs the FindProjectInfoBySecretKey test for the given db.
+func RunFindProjectInfoBySecretKeyTest(
+	t *testing.T,
+	db database.Database,
+) {
+	t.Run("FindProjectInfoBySecretKey test", func(t *testing.T) {
+		ctx := context.Background()
+
+		username := "admin@yorkie.dev"
+		password := "hashed-password"
+
+		_, project, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		info2, err := db.FindProjectInfoBySecretKey(ctx, project.SecretKey)
+		assert.NoError(t, err)
+
+		assert.Equal(t, project.ID, info2.ID)
 	})
 }
 
@@ -282,6 +302,24 @@ func RunListUserInfosTest(t *testing.T, db database.Database) {
 		assert.NoError(t, err)
 		assert.Len(t, infos, 1)
 		assert.Equal(t, infos[0], info)
+	})
+}
+
+// RunFindUserInfoByIDTest runs the FindUserInfoByID test for the given db.
+func RunFindUserInfoByIDTest(t *testing.T, db database.Database) {
+	t.Run("RunFindUserInfoByID test", func(t *testing.T) {
+		ctx := context.Background()
+
+		username := "findUserInfoTestAccount"
+		password := "temporary-password"
+
+		user, _, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
+		assert.NoError(t, err)
+
+		info1, err := db.FindUserInfoByName(ctx, user.Username)
+		assert.NoError(t, err)
+
+		assert.Equal(t, user.ID, info1.ID)
 	})
 }
 
@@ -685,52 +723,6 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		assert.NoError(t, err)
 		assert.Len(t, result, len(docInfos)-2)
 		AssertKeys(t, []key.Key{docKeysInReverse[0], docKeysInReverse[2], docKeysInReverse[4]}, result)
-	})
-}
-
-// RunFindDeactivateCandidates runs the FindDeactivateCandidates tests for the given db.
-func RunFindDeactivateCandidates(t *testing.T, db database.Database) {
-	t.Run("housekeeping pagination test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// Lists all projects of the dummyOwnerID and otherOwnerID.
-		projects, err := db.ListProjectInfos(ctx, dummyOwnerName)
-		assert.NoError(t, err)
-		otherProjects, err := db.ListProjectInfos(ctx, otherOwnerName)
-		assert.NoError(t, err)
-
-		projects = append(projects, otherProjects...)
-
-		sort.Slice(projects, func(i, j int) bool {
-			iBytes, err := projects[i].ID.Bytes()
-			assert.NoError(t, err)
-			jBytes, err := projects[j].ID.Bytes()
-			assert.NoError(t, err)
-			return bytes.Compare(iBytes, jBytes) < 0
-		})
-
-		fetchSize := 3
-		lastProjectID := database.DefaultProjectID
-
-		for i := 0; i < len(projects)/fetchSize; i++ {
-			lastProjectID, _, err = db.FindDeactivateCandidates(
-				ctx,
-				0,
-				fetchSize,
-				lastProjectID,
-			)
-			assert.NoError(t, err)
-			assert.Equal(t, projects[((i+1)*fetchSize)-1].ID, lastProjectID)
-		}
-
-		lastProjectID, _, err = db.FindDeactivateCandidates(
-			ctx,
-			0,
-			fetchSize,
-			lastProjectID,
-		)
-		assert.NoError(t, err)
-		assert.Equal(t, database.DefaultProjectID, lastProjectID)
 	})
 }
 
@@ -1150,6 +1142,89 @@ func RunIsDocumentAttachedTest(t *testing.T, db database.Database, projectID typ
 		attached, err = db.IsDocumentAttached(ctx, projectID, docRefKey1, c2.ID)
 		assert.NoError(t, err)
 		assert.False(t, attached)
+	})
+}
+
+// RunFindNextNCyclingProjectInfosTest runs the FindNextNCyclingProjectInfos tests for the given db.
+func RunFindNextNCyclingProjectInfosTest(t *testing.T, db database.Database) {
+	t.Run("FindNextNCyclingProjectInfos cyclic search test", func(t *testing.T) {
+		ctx := context.Background()
+
+		projectCnt := 10
+		projects := make([]*database.ProjectInfo, 0)
+		for i := 0; i < projectCnt; i++ {
+			p, err := db.CreateProjectInfo(
+				ctx,
+				fmt.Sprintf("%s-%d-RunFindNextNCyclingProjectInfos", t.Name(), i),
+				otherOwnerName,
+				clientDeactivateThreshold,
+			)
+			assert.NoError(t, err)
+			projects = append(projects, p)
+		}
+
+		lastProjectID := database.DefaultProjectID
+		pageSize := 2
+
+		for i := 0; i < 10; i++ {
+			projectInfos, err := db.FindNextNCyclingProjectInfos(ctx, pageSize, lastProjectID)
+			assert.NoError(t, err)
+
+			lastProjectID = projectInfos[len(projectInfos)-1].ID
+
+			assert.Equal(t, projects[((i+1)*pageSize-1)%projectCnt].ID, lastProjectID)
+		}
+
+	})
+}
+
+// RunFindDeactivateCandidatesPerProjectTest runs the FindDeactivateCandidatesPerProject tests for the given db.
+func RunFindDeactivateCandidatesPerProjectTest(t *testing.T, db database.Database) {
+	t.Run("FindDeactivateCandidatesPerProject candidate search test", func(t *testing.T) {
+		ctx := context.Background()
+
+		p1, err := db.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%s-FindDeactivateCandidatesPerProject", t.Name()),
+			otherOwnerName,
+			clientDeactivateThreshold,
+		)
+		assert.NoError(t, err)
+
+		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-1")
+		assert.NoError(t, err)
+
+		_, err = db.ActivateClient(ctx, p1.ID, t.Name()+"1-2")
+		assert.NoError(t, err)
+
+		p2, err := db.CreateProjectInfo(
+			ctx,
+			fmt.Sprintf("%s-FindDeactivateCandidatesPerProject-2", t.Name()),
+			otherOwnerName,
+			"0s",
+		)
+		assert.NoError(t, err)
+
+		c1, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-1")
+		assert.NoError(t, err)
+
+		c2, err := db.ActivateClient(ctx, p2.ID, t.Name()+"2-2")
+		assert.NoError(t, err)
+
+		candidates1, err := db.FindDeactivateCandidatesPerProject(ctx, p1, 10)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(candidates1))
+
+		candidates2, err := db.FindDeactivateCandidatesPerProject(ctx, p2, 10)
+		assert.NoError(t, err)
+
+		idList := make([]types.ID, len(candidates2))
+		for i, candidate := range candidates2 {
+			idList[i] = candidate.ID
+		}
+		assert.Equal(t, 2, len(candidates2))
+		assert.Contains(t, idList, c1.ID)
+		assert.Contains(t, idList, c2.ID)
 	})
 }
 

@@ -51,6 +51,14 @@ func setupTestWithDummyData(t *testing.T) *mongo.Client {
 func TestClient(t *testing.T) {
 	cli := setupTestWithDummyData(t)
 
+	t.Run("FindNextNCyclingProjectInfos test", func(t *testing.T) {
+		testcases.RunFindNextNCyclingProjectInfosTest(t, cli)
+	})
+
+	t.Run("FindDeactivateCandidatesPerProject test", func(t *testing.T) {
+		testcases.RunFindDeactivateCandidatesPerProjectTest(t, cli)
+	})
+
 	t.Run("RunFindDocInfo test", func(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, cli, dummyProjectID)
 	})
@@ -71,6 +79,14 @@ func TestClient(t *testing.T) {
 	t.Run("ListUserInfos test", func(t *testing.T) {
 		t.Skip("TODO(hackerwins): time is returned as Local")
 		testcases.RunListUserInfosTest(t, cli)
+	})
+
+	t.Run("FindUserInfoByID test", func(t *testing.T) {
+		testcases.RunFindUserInfoByIDTest(t, cli)
+	})
+
+	t.Run("FindProjectInfoBySecretKey test", func(t *testing.T) {
+		testcases.RunFindProjectInfoBySecretKeyTest(t, cli)
 	})
 
 	t.Run("FindProjectInfoByName test", func(t *testing.T) {
@@ -99,9 +115,5 @@ func TestClient(t *testing.T) {
 
 	t.Run("IsDocumentAttached test", func(t *testing.T) {
 		testcases.RunIsDocumentAttachedTest(t, cli, dummyProjectID)
-	})
-
-	t.Run("FindDeactivateCandidates test", func(t *testing.T) {
-		testcases.RunFindDeactivateCandidates(t, cli)
 	})
 }

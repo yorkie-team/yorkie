@@ -231,13 +231,13 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// listProjectInfos returns all project infos rotationally.
-func (c *Client) listProjectInfos(
+// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
+func (c *Client) FindNextNCyclingProjectInfos(
 	ctx context.Context,
 	pageSize int,
-	housekeepingLastProjectID types.ID,
+	lastProjectID types.ID,
 ) ([]*database.ProjectInfo, error) {
-	encodedID, err := EncodeID(housekeepingLastProjectID)
+	encodedID, err := EncodeID(lastProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -257,6 +257,25 @@ func (c *Client) listProjectInfos(
 	var infos []*database.ProjectInfo
 	if err := cursor.All(ctx, &infos); err != nil {
 		return nil, fmt.Errorf("fetch project infos: %w", err)
+	}
+
+	if len(infos) < pageSize {
+		opts.SetLimit(int64(pageSize - len(infos)))
+
+		cursor, err := c.collection(ColProjects).Find(ctx, bson.M{
+			"_id": bson.M{
+				"$lte": encodedID,
+			},
+		}, opts)
+		if err != nil {
+			return nil, fmt.Errorf("find project infos: %w", err)
+		}
+
+		var newInfos []*database.ProjectInfo
+		if err := cursor.All(ctx, &newInfos); err != nil {
+			return nil, fmt.Errorf("fetch project infos: %w", err)
+		}
+		infos = append(infos, newInfos...)
 	}
 
 	return infos, nil
@@ -292,6 +311,23 @@ func (c *Client) FindProjectInfoByPublicKey(ctx context.Context, publicKey strin
 	if err := result.Decode(&projectInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("%s: %w", publicKey, database.ErrProjectNotFound)
+		}
+		return nil, fmt.Errorf("decode project info: %w", err)
+	}
+
+	return &projectInfo, nil
+}
+
+// FindProjectInfoBySecretKey returns a project by secret key.
+func (c *Client) FindProjectInfoBySecretKey(ctx context.Context, secretKey string) (*database.ProjectInfo, error) {
+	result := c.collection(ColProjects).FindOne(ctx, bson.M{
+		"secret_key": secretKey,
+	})
+
+	projectInfo := database.ProjectInfo{}
+	if err := result.Decode(&projectInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", secretKey, database.ErrProjectNotFound)
 		}
 		return nil, fmt.Errorf("decode project info: %w", err)
 	}
@@ -443,6 +479,23 @@ func (c *Client) ListUserInfos(
 	}
 
 	return infos, nil
+}
+
+// FindUserInfoByName returns a user by the given name.
+func (c *Client) FindUserInfoByName(ctx context.Context, name string) (*database.UserInfo, error) {
+	result := c.collection(ColUsers).FindOne(ctx, bson.M{
+		"username": name,
+	})
+
+	userInfo := database.UserInfo{}
+	if err := result.Decode(&userInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", name, database.ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("decode user info: %w", err)
+	}
+
+	return &userInfo, nil
 }
 
 // ActivateClient activates the client of the given key.
@@ -611,8 +664,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// findDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
-func (c *Client) findDeactivateCandidatesPerProject(
+// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
+func (c *Client) FindDeactivateCandidatesPerProject(
 	ctx context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
@@ -645,37 +698,6 @@ func (c *Client) findDeactivateCandidatesPerProject(
 	}
 
 	return clientInfos, nil
-}
-
-// FindDeactivateCandidates finds the clients that need housekeeping.
-func (c *Client) FindDeactivateCandidates(
-	ctx context.Context,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	lastProjectID types.ID,
-) (types.ID, []*database.ClientInfo, error) {
-	projects, err := c.listProjectInfos(ctx, projectFetchSize, lastProjectID)
-	if err != nil {
-		return database.DefaultProjectID, nil, err
-	}
-
-	var candidates []*database.ClientInfo
-	for _, project := range projects {
-		clientInfos, err := c.findDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
-		if err != nil {
-			return database.DefaultProjectID, nil, err
-		}
-
-		candidates = append(candidates, clientInfos...)
-	}
-
-	var topProjectID types.ID
-	if len(projects) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projects[len(projects)-1].ID
-	}
-	return topProjectID, candidates, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

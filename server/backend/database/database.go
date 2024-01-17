@@ -68,6 +68,12 @@ type Database interface {
 		publicKey string,
 	) (*ProjectInfo, error)
 
+	// FindProjectInfoBySecretKey returns a project by secret key.
+	FindProjectInfoBySecretKey(
+		ctx context.Context,
+		secretKey string,
+	) (*ProjectInfo, error)
+
 	// FindProjectInfoByName returns a project by the given name.
 	FindProjectInfoByName(
 		ctx context.Context,
@@ -118,6 +124,9 @@ type Database interface {
 	// FindUserInfo returns a user by the given username.
 	FindUserInfo(ctx context.Context, username string) (*UserInfo, error)
 
+	// FindUserInfoByName finds a user by the given name.
+	FindUserInfoByName(ctx context.Context, name string) (*UserInfo, error)
+
 	// ListUserInfos returns all users.
 	ListUserInfos(ctx context.Context) ([]*UserInfo, error)
 
@@ -134,13 +143,19 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
-	// FindDeactivateCandidates finds the housekeeping candidates.
-	FindDeactivateCandidates(
+	// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
+	FindNextNCyclingProjectInfos(
 		ctx context.Context,
-		candidatesLimitPerProject int,
-		projectFetchSize int,
+		pageSize int,
 		lastProjectID types.ID,
-	) (types.ID, []*ClientInfo, error)
+	) ([]*ProjectInfo, error)
+
+	// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
+	FindDeactivateCandidatesPerProject(
+		ctx context.Context,
+		project *ProjectInfo,
+		candidatesLimit int,
+	) ([]*ClientInfo, error)
 
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(

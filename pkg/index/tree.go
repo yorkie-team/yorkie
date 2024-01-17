@@ -119,37 +119,47 @@ func postorderTraversal[V Value](node *Node[V], callback func(node *Node[V], dep
 	callback(node, depth)
 }
 
-// TagContained represents whether the opening or closing tag of a element is selected.
-type TagContained int
+// TokenType represents the type of the selected token.
+type TokenType int
 
 const (
-	// AllContained represents that both opening and closing tag of a element are selected.
-	AllContained TagContained = 1 + iota
-	// OpeningContained represents that only the opening tag is selected.
-	OpeningContained
-	// ClosingContained represents that only the closing tag is selected.
-	ClosingContained
+	// Start represents that the start token type.
+	Start TokenType = 1 + iota
+	// End represents that the end token type.
+	End
+	// Text represents that the text token type.
+	Text
 )
 
-// ToString returns the string of TagContain.
-func (c TagContained) ToString() string {
+// ToString returns the string of TokenType.
+func (c TokenType) ToString() string {
 	var str string
 	switch c {
-	case AllContained:
-		str = "All"
-	case OpeningContained:
-		str = "Opening"
-	case ClosingContained:
-		str = "Closing"
+	case Start:
+		str = "Start"
+	case End:
+		str = "End"
+	case Text:
+		str = "Text"
 	}
 	return str
 }
 
-// nodesBetween iterates the nodes between the given range.
+// TreeToken represents a token in XML-like string.
+type TreeToken[V Value] struct {
+	Node      V
+	TokenType TokenType
+}
+
+// tokensBetween iterates the tokens between the given range.
+//
+// For example, if the tree is <p><i>abc</i></p>, the tokens are
+// [p, Start], [i, Start], [abc, Text], [i, End], [p, End].
+//
 // If the given range is collapsed, the callback is not called.
-// It traverses the tree with postorder traversal.
+// It traverses the tree based on the concept of token.
 // NOTE(sejongk): Nodes should not be removed in callback, because it leads wrong behaviors.
-func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V, contain TagContained)) error {
+func tokensBetween[V Value](root *Node[V], from, to int, callback func(token TreeToken[V], ended bool)) error {
 	if from > to {
 		return fmt.Errorf("from cannot be greater than to %d > %d", from, to)
 	}
@@ -178,7 +188,18 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V, co
 				toChild = to - pos
 			}
 
-			if err := nodesBetween(
+			startContained := !child.IsText() && fromChild < 0
+			endContained := !child.IsText() && toChild > child.Length
+			if child.IsText() || startContained {
+				var tokenType TokenType
+				if child.IsText() {
+					tokenType = Text
+				} else {
+					tokenType = Start
+				}
+				callback(TreeToken[V]{child.Value, tokenType}, endContained)
+			}
+			if err := tokensBetween(
 				child,
 				int(math.Max(0, float64(fromChild))),
 				int(math.Min(float64(toChild), float64(child.Length))),
@@ -186,17 +207,8 @@ func nodesBetween[V Value](root *Node[V], from, to int, callback func(node V, co
 			); err != nil {
 				return err
 			}
-
-			if fromChild < 0 || toChild > child.Length || child.IsText() {
-				var contain TagContained
-				if (fromChild < 0 && toChild > child.Length) || child.IsText() {
-					contain = AllContained
-				} else if fromChild < 0 {
-					contain = OpeningContained
-				} else {
-					contain = ClosingContained
-				}
-				callback(child.Value, contain)
+			if endContained {
+				callback(TreeToken[V]{child.Value, End}, endContained)
 			}
 		}
 		pos += child.PaddedLength()
@@ -603,9 +615,9 @@ func (n *Node[V]) OffsetOfChild(node *Node[V]) int {
 	return -1
 }
 
-// NodesBetween returns the nodes between the given range.
-func (t *Tree[V]) NodesBetween(from int, to int, callback func(node V, contain TagContained)) error {
-	return nodesBetween(t.root, from, to, callback)
+// TokensBetween returns the tokens between the given range.
+func (t *Tree[V]) TokensBetween(from int, to int, callback func(token TreeToken[V], ended bool)) error {
+	return tokensBetween(t.root, from, to, callback)
 }
 
 // TreePos is the position of a node in the tree.

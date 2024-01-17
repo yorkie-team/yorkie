@@ -75,6 +75,25 @@ func (d *DB) FindProjectInfoByPublicKey(
 	return raw.(*database.ProjectInfo).DeepCopy(), nil
 }
 
+// FindProjectInfoBySecretKey returns a project by secret key.
+func (d *DB) FindProjectInfoBySecretKey(
+	_ context.Context,
+	secretKey string,
+) (*database.ProjectInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblProjects, "secret_key", secretKey)
+	if err != nil {
+		return nil, fmt.Errorf("find project by secret key: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", secretKey, database.ErrProjectNotFound)
+	}
+
+	return raw.(*database.ProjectInfo).DeepCopy(), nil
+}
+
 // FindProjectInfoByName returns a project by the given name.
 func (d *DB) FindProjectInfoByName(
 	_ context.Context,
@@ -224,11 +243,11 @@ func (d *DB) CreateProjectInfo(
 	return info, nil
 }
 
-// listProjectInfos returns all project infos rotationally.
-func (d *DB) listProjectInfos(
+// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
+func (d *DB) FindNextNCyclingProjectInfos(
 	_ context.Context,
 	pageSize int,
-	housekeepingLastProjectID types.ID,
+	lastProjectID types.ID,
 ) ([]*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -236,24 +255,44 @@ func (d *DB) listProjectInfos(
 	iter, err := txn.LowerBound(
 		tblProjects,
 		"id",
-		housekeepingLastProjectID.String(),
+		lastProjectID.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetch projects: %w", err)
 	}
 
 	var infos []*database.ProjectInfo
+	isCircular := false
 
 	for i := 0; i < pageSize; i++ {
 		raw := iter.Next()
 		if raw == nil {
-			break
+			if isCircular {
+				break
+			}
+
+			iter, err = txn.LowerBound(
+				tblProjects,
+				"id",
+				database.DefaultProjectID.String(),
+			)
+			if err != nil {
+				return nil, fmt.Errorf("fetch projects: %w", err)
+			}
+
+			i--
+			isCircular = true
+			continue
 		}
 		info := raw.(*database.ProjectInfo).DeepCopy()
 
-		if i == 0 && info.ID == housekeepingLastProjectID {
+		if i == 0 && info.ID == lastProjectID {
 			pageSize++
 			continue
+		}
+
+		if len(infos) > 0 && infos[0].ID == info.ID {
+			break
 		}
 
 		infos = append(infos, info)
@@ -374,6 +413,22 @@ func (d *DB) FindUserInfo(_ context.Context, username string) (*database.UserInf
 	}
 	if raw == nil {
 		return nil, fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
+	}
+
+	return raw.(*database.UserInfo).DeepCopy(), nil
+}
+
+// FindUserInfoByName finds a user by the given name.
+func (d *DB) FindUserInfoByName(_ context.Context, name string) (*database.UserInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "name", name)
+	if err != nil {
+		return nil, fmt.Errorf("find user by name: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", name, database.ErrUserNotFound)
 	}
 
 	return raw.(*database.UserInfo).DeepCopy(), nil
@@ -564,8 +619,8 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// findDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
-func (d *DB) findDeactivateCandidatesPerProject(
+// FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
+func (d *DB) FindDeactivateCandidatesPerProject(
 	_ context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
@@ -600,41 +655,12 @@ func (d *DB) findDeactivateCandidatesPerProject(
 			info.UpdatedAt.After(offset) {
 			break
 		}
-		infos = append(infos, info)
+
+		if info.ProjectID == project.ID {
+			infos = append(infos, info)
+		}
 	}
 	return infos, nil
-}
-
-// FindDeactivateCandidates finds the clients that need housekeeping.
-func (d *DB) FindDeactivateCandidates(
-	ctx context.Context,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	lastProjectID types.ID,
-) (types.ID, []*database.ClientInfo, error) {
-	projects, err := d.listProjectInfos(ctx, projectFetchSize, lastProjectID)
-	if err != nil {
-		return database.DefaultProjectID, nil, err
-	}
-
-	var candidates []*database.ClientInfo
-	for _, project := range projects {
-		infos, err := d.findDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
-		if err != nil {
-			return database.DefaultProjectID, nil, err
-		}
-
-		candidates = append(candidates, infos...)
-	}
-
-	var topProjectID types.ID
-	if len(projects) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projects[len(projects)-1].ID
-	}
-
-	return topProjectID, candidates, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

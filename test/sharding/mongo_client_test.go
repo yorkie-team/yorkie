@@ -121,10 +121,6 @@ func TestClientWithShardedDB(t *testing.T) {
 		testcases.RunIsDocumentAttachedTest(t, cli, dummyProjectID)
 	})
 
-	t.Run("FindDeactivateCandidates test", func(t *testing.T) {
-		testcases.RunFindDeactivateCandidates(t, cli)
-	})
-
 	t.Run("FindDocInfoByKeyAndID with duplicate ID test", func(t *testing.T) {
 		ctx := context.Background()
 
