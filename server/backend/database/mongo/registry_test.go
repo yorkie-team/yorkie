@@ -17,6 +17,7 @@
 package mongo
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 
@@ -28,6 +29,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
@@ -44,6 +46,47 @@ func TestRegistry(t *testing.T) {
 	assert.NoError(t, bson.UnmarshalWithRegistry(registry, data, &info))
 	assert.Equal(t, id, info.ID)
 
+}
+
+func TestEncoder(t *testing.T) {
+	t.Run("idEncoder test", func(t *testing.T) {
+		field := "id"
+		id := types.ID(primitive.NewObjectID().Hex())
+
+		buf := new(bytes.Buffer)
+		vw, err := bsonrw.NewBSONValueWriter(buf)
+		assert.NoError(t, err)
+		dw, err := vw.WriteDocument()
+		assert.NoError(t, err)
+		vw, err = dw.WriteDocumentElement(field)
+		assert.NoError(t, err)
+
+		assert.NoError(t, idEncoder(bsoncodec.EncodeContext{}, vw, reflect.ValueOf(id)))
+		assert.NoError(t, dw.WriteDocumentEnd())
+		result := make(map[string]string)
+		assert.NoError(t, bson.Unmarshal(buf.Bytes(), &result))
+		assert.Equal(t, id.String(), result[field])
+	})
+
+	t.Run("actorIDEncoder test", func(t *testing.T) {
+		field := "actor_id"
+		actorID, err := time.ActorIDFromHex(primitive.NewObjectID().Hex())
+		assert.NoError(t, err)
+
+		buf := new(bytes.Buffer)
+		vw, err := bsonrw.NewBSONValueWriter(buf)
+		assert.NoError(t, err)
+		dw, err := vw.WriteDocument()
+		assert.NoError(t, err)
+		vw, err = dw.WriteDocumentElement(field)
+		assert.NoError(t, err)
+
+		assert.NoError(t, actorIDEncoder(bsoncodec.EncodeContext{}, vw, reflect.ValueOf(actorID)))
+		assert.NoError(t, dw.WriteDocumentEnd())
+		result := make(map[string]string)
+		assert.NoError(t, bson.Unmarshal(buf.Bytes(), &result))
+		assert.Equal(t, actorID.String(), result[field])
+	})
 }
 
 func TestDecoder(t *testing.T) {

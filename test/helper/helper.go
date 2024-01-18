@@ -382,14 +382,6 @@ func CreateDummyDocumentWithID(
 	docID types.ID,
 	docKey key.Key,
 ) error {
-	encodedProjectID, err := mongo.EncodeID(projectID)
-	if err != nil {
-		return err
-	}
-	encodedDocID, err := mongo.EncodeID(docID)
-	if err != nil {
-		return err
-	}
 	cli, err := setupRawMongoClient(databaseName)
 	if err != nil {
 		return err
@@ -397,8 +389,8 @@ func CreateDummyDocumentWithID(
 	_, err = cli.Database(databaseName).Collection(mongo.ColDocuments).InsertOne(
 		context.Background(),
 		bson.M{
-			"_id":        encodedDocID,
-			"project_id": encodedProjectID,
+			"_id":        docID,
+			"project_id": projectID,
 			"key":        docKey,
 		},
 	)
@@ -416,14 +408,6 @@ func FindDocInfosWithID(
 	docID types.ID,
 ) ([]*database.DocInfo, error) {
 	ctx := context.Background()
-	encodedProjectID, err := mongo.EncodeID(projectID)
-	if err != nil {
-		return nil, err
-	}
-	encodedDocID, err := mongo.EncodeID(docID)
-	if err != nil {
-		return nil, err
-	}
 	cli, err := setupRawMongoClient(databaseName)
 	if err != nil {
 		return nil, err
@@ -432,8 +416,8 @@ func FindDocInfosWithID(
 	cursor, err := cli.Database(databaseName).Collection(mongo.ColDocuments).Find(
 		ctx,
 		bson.M{
-			"_id":        encodedDocID,
-			"project_id": encodedProjectID,
+			"_id":        docID,
+			"project_id": projectID,
 		}, options.Find())
 	if err != nil {
 		return nil, err
@@ -454,14 +438,6 @@ func CreateDummyClientWithID(
 	clientKey string,
 	clientID types.ID,
 ) error {
-	encodedProjectID, err := mongo.EncodeID(projectID)
-	if err != nil {
-		return err
-	}
-	encodedclientID, err := mongo.EncodeID(clientID)
-	if err != nil {
-		return err
-	}
 	cli, err := setupRawMongoClient(databaseName)
 	if err != nil {
 		return err
@@ -469,8 +445,8 @@ func CreateDummyClientWithID(
 	_, err = cli.Database(databaseName).Collection(mongo.ColClients).InsertOne(
 		context.Background(),
 		bson.M{
-			"_id":        encodedclientID,
-			"project_id": encodedProjectID,
+			"_id":        clientID,
+			"project_id": projectID,
 			"key":        clientKey,
 		},
 	)
