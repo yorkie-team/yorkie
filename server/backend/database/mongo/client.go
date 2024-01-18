@@ -481,23 +481,6 @@ func (c *Client) ListUserInfos(
 	return infos, nil
 }
 
-// FindUserInfoByName returns a user by the given name.
-func (c *Client) FindUserInfoByName(ctx context.Context, name string) (*database.UserInfo, error) {
-	result := c.collection(ColUsers).FindOne(ctx, bson.M{
-		"username": name,
-	})
-
-	userInfo := database.UserInfo{}
-	if err := result.Decode(&userInfo); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", name, database.ErrUserNotFound)
-		}
-		return nil, fmt.Errorf("decode user info: %w", err)
-	}
-
-	return &userInfo, nil
-}
-
 // ActivateClient activates the client of the given key.
 func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key string) (*database.ClientInfo, error) {
 	encodedProjectID, err := EncodeID(projectID)
@@ -1270,6 +1253,12 @@ func (c *Client) FindDocInfosByPaging(
 		if paging.IsForward {
 			k = "$gt"
 		}
+		// NOTE(sejongk): this filter handles the case of duplicate IDs in the MongoDB
+		// sharded cluster.
+		// For example, when the paging direction is forward and the offset is (2, "b"),
+		// this filter includes the documents(e.g. (2, "c"), (3, "d")) that comes after
+		// (2, "b").
+		// (_id, key): [(1, "a"), (2, "b"),(2, "c"), (3, "d")]
 		filter["$or"] = []bson.M{
 			{"_id": bson.M{k: encodedDocID}},
 			{"_id": encodedDocID, "key": bson.M{k: paging.Offset.Key}},

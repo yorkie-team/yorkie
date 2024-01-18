@@ -305,9 +305,9 @@ func RunListUserInfosTest(t *testing.T, db database.Database) {
 	})
 }
 
-// RunFindUserInfoByIDTest runs the FindUserInfoByID test for the given db.
-func RunFindUserInfoByIDTest(t *testing.T, db database.Database) {
-	t.Run("RunFindUserInfoByID test", func(t *testing.T) {
+// RunFindUserInfoTest runs the FindUserInfo test for the given db.
+func RunFindUserInfoTest(t *testing.T, db database.Database) {
+	t.Run("RunFindUserInfo test", func(t *testing.T) {
 		ctx := context.Background()
 
 		username := "findUserInfoTestAccount"
@@ -316,7 +316,7 @@ func RunFindUserInfoByIDTest(t *testing.T, db database.Database) {
 		user, _, err := db.EnsureDefaultUserAndProject(ctx, username, password, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
-		info1, err := db.FindUserInfoByName(ctx, user.Username)
+		info1, err := db.FindUserInfo(ctx, user.Username)
 		assert.NoError(t, err)
 
 		assert.Equal(t, user.ID, info1.ID)
@@ -501,10 +501,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 
 		// backward
 		infos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[types.DocRefKey]{
-			Offset: types.DocRefKey{
-				Key: infos[len(infos)-1].Key,
-				ID:  infos[len(infos)-1].ID,
-			},
+			Offset:   infos[len(infos)-1].RefKey(),
 			PageSize: pageSize,
 		})
 		assert.NoError(t, err)
@@ -512,10 +509,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 
 		// backward again
 		emptyInfos, err := db.FindDocInfosByPaging(ctx, projectID, types.Paging[types.DocRefKey]{
-			Offset: types.DocRefKey{
-				Key: infos[len(infos)-1].Key,
-				ID:  infos[len(infos)-1].ID,
-			},
+			Offset:   infos[len(infos)-1].RefKey(),
 			PageSize: pageSize,
 		})
 		assert.NoError(t, err)
@@ -523,10 +517,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 
 		// forward
 		infos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[types.DocRefKey]{
-			Offset: types.DocRefKey{
-				Key: infos[0].Key,
-				ID:  infos[0].ID,
-			},
+			Offset:    infos[0].RefKey(),
 			PageSize:  pageSize,
 			IsForward: true,
 		})
@@ -535,10 +526,7 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 
 		// forward again
 		emptyInfos, err = db.FindDocInfosByPaging(ctx, projectID, types.Paging[types.DocRefKey]{
-			Offset: types.DocRefKey{
-				Key: infos[len(infos)-1].Key,
-				ID:  infos[len(infos)-1].ID,
-			},
+			Offset:    infos[len(infos)-1].RefKey(),
 			PageSize:  pageSize,
 			IsForward: true,
 		})
@@ -574,81 +562,57 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 			testResult []int
 		}{
 			{
-				name: "FindDocInfosByPaging no flag test",
-				offset: types.DocRefKey{
-					Key: "",
-					ID:  "",
-				},
+				name:       "FindDocInfosByPaging no flag test",
+				offset:     types.EmptyDocRefKey,
 				pageSize:   0,
 				isForward:  false,
 				testResult: helper.NewRangeSlice(testDocCnt, 0),
 			},
 			{
-				name: "FindDocInfosByPaging --forward test",
-				offset: types.DocRefKey{
-					Key: "",
-					ID:  "",
-				},
+				name:       "FindDocInfosByPaging --forward test",
+				offset:     types.EmptyDocRefKey,
 				pageSize:   0,
 				isForward:  true,
 				testResult: helper.NewRangeSlice(0, testDocCnt),
 			},
 			{
-				name: "FindDocInfosByPaging --size test",
-				offset: types.DocRefKey{
-					Key: "",
-					ID:  "",
-				},
+				name:       "FindDocInfosByPaging --size test",
+				offset:     types.EmptyDocRefKey,
 				pageSize:   4,
 				isForward:  false,
 				testResult: helper.NewRangeSlice(testDocCnt, testDocCnt-4),
 			},
 			{
-				name: "FindDocInfosByPaging --size --forward test",
-				offset: types.DocRefKey{
-					Key: "",
-					ID:  "",
-				},
+				name:       "FindDocInfosByPaging --size --forward test",
+				offset:     types.EmptyDocRefKey,
 				pageSize:   4,
 				isForward:  true,
 				testResult: helper.NewRangeSlice(0, 3),
 			},
 			{
-				name: "FindDocInfosByPaging --offset test",
-				offset: types.DocRefKey{
-					Key: dummyDocInfos[13].Key,
-					ID:  dummyDocInfos[13].ID,
-				},
+				name:       "FindDocInfosByPaging --offset test",
+				offset:     dummyDocInfos[13].RefKey(),
 				pageSize:   0,
 				isForward:  false,
 				testResult: helper.NewRangeSlice(12, 0),
 			},
 			{
-				name: "FindDocInfosByPaging --forward --offset test",
-				offset: types.DocRefKey{
-					Key: dummyDocInfos[13].Key,
-					ID:  dummyDocInfos[13].ID,
-				},
+				name:       "FindDocInfosByPaging --forward --offset test",
+				offset:     dummyDocInfos[13].RefKey(),
 				pageSize:   0,
 				isForward:  true,
 				testResult: helper.NewRangeSlice(14, testDocCnt),
 			},
 			{
-				name: "FindDocInfosByPaging --size --offset test",
-				offset: types.DocRefKey{
-					Key: dummyDocInfos[13].Key,
-					ID:  dummyDocInfos[13].ID,
-				},
+				name:       "FindDocInfosByPaging --size --offset test",
+				offset:     dummyDocInfos[13].RefKey(),
 				pageSize:   10,
 				isForward:  false,
 				testResult: helper.NewRangeSlice(12, 3),
 			},
 			{
-				name: "FindDocInfosByPaging --size --forward --offset test",
-				offset: types.DocRefKey{
-					Key: dummyDocInfos[13].Key,
-					ID:  dummyDocInfos[13].ID,
-				},
+				name:       "FindDocInfosByPaging --size --forward --offset test",
+				offset:     dummyDocInfos[13].RefKey(),
 				pageSize:   10,
 				isForward:  true,
 				testResult: helper.NewRangeSlice(14, 23),

@@ -81,16 +81,3 @@ func GetUser(
 
 	return info.ToUser(), nil
 }
-
-// GetUserByName returns a user by the given name.
-func GetUserByName(
-	ctx context.Context,
-	be *backend.Backend,
-	name string,
-) (*types.User, error) {
-	info, err := be.DB.FindUserInfoByName(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return info.ToUser(), nil
-}

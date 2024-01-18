@@ -24,6 +24,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
+// EmptyDocRefKey is an empty value of DocRefKey.
+var EmptyDocRefKey = DocRefKey{"", ""}
+
 // ErrInvalidDocRefKeyStringFormat is returned when the input of DocRefKey Set is invalid.
 var ErrInvalidDocRefKeyStringFormat = errors.New("use the format 'docKey,docID' for the string of the docRefKey")
 
@@ -40,6 +43,7 @@ func (r DocRefKey) String() string {
 
 // Set parses the given string (format: `{docKey},{docID}`) and assigns the values
 // to the given DocRefKey.
+// NOTE(sejongk): This function is necessary for Viper, an external command-line module.
 func (r *DocRefKey) Set(v string) error {
 	parsed := strings.Split(v, ",")
 	if len(parsed) != 2 {
@@ -51,6 +55,7 @@ func (r *DocRefKey) Set(v string) error {
 }
 
 // Type returns the type string of the given DocRefKey, used in cli help text.
+// NOTE(sejongk): This function is necessray for Viper, an external command-line module.
 func (r DocRefKey) Type() string {
 	return "DocumentRefKey"
 }

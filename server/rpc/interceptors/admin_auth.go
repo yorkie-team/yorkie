@@ -174,7 +174,7 @@ func (i *AdminAuthInterceptor) authenticate(
 	// NOTE(raararaara): If the token is secret key, return the owner of the project.
 	project, err := projects.GetProjectFromSecretKey(ctx, i.backend, authorization)
 	if err == nil {
-		user, err := users.GetUserByName(ctx, i.backend, project.Owner)
+		user, err := users.GetUser(ctx, i.backend, project.Owner)
 		if err == nil {
 			return user, nil
 		}

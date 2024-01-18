@@ -44,8 +44,14 @@ const (
 
 // Collections represents the list of all collections in the database.
 var Collections = []string{
-	ColProjects, ColUsers, ColClients,
-	ColDocuments, ColSnapshots, ColSyncedSeqs}
+	ColProjects,
+	ColUsers,
+	ColClients,
+	ColDocuments,
+	ColChanges,
+	ColSnapshots,
+	ColSyncedSeqs,
+}
 
 type collectionInfo struct {
 	name    string

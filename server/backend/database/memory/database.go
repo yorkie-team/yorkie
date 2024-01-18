@@ -418,22 +418,6 @@ func (d *DB) FindUserInfo(_ context.Context, username string) (*database.UserInf
 	return raw.(*database.UserInfo).DeepCopy(), nil
 }
 
-// FindUserInfoByName finds a user by the given name.
-func (d *DB) FindUserInfoByName(_ context.Context, name string) (*database.UserInfo, error) {
-	txn := d.db.Txn(false)
-	defer txn.Abort()
-
-	raw, err := txn.First(tblUsers, "username", name)
-	if err != nil {
-		return nil, fmt.Errorf("find user by name: %w", err)
-	}
-	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", name, database.ErrUserNotFound)
-	}
-
-	return raw.(*database.UserInfo).DeepCopy(), nil
-}
-
 // ListUserInfos returns all users.
 func (d *DB) ListUserInfos(_ context.Context) ([]*database.UserInfo, error) {
 	txn := d.db.Txn(false)
@@ -834,6 +818,7 @@ func (d *DB) CreateChangeInfos(
 
 		if err := txn.Insert(tblChanges, &database.ChangeInfo{
 			ID:             newID(),
+			DocKey:         docInfo.Key,
 			DocID:          docInfo.ID,
 			ServerSeq:      cn.ServerSeq(),
 			ActorID:        types.ID(cn.ID().ActorID().String()),
@@ -1002,6 +987,7 @@ func (d *DB) CreateSnapshotInfo(
 
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
 		ID:        newID(),
+		DocKey:    docRefKey.Key,
 		DocID:     docRefKey.ID,
 		ServerSeq: doc.Checkpoint().ServerSeq,
 		Lamport:   doc.Lamport(),
@@ -1058,6 +1044,7 @@ func (d *DB) FindClosestSnapshotInfo(
 		if info.DocID == docRefKey.ID {
 			snapshotInfo = &database.SnapshotInfo{
 				ID:        info.ID,
+				DocKey:    info.DocKey,
 				DocID:     info.DocID,
 				ServerSeq: info.ServerSeq,
 				Lamport:   info.Lamport,
