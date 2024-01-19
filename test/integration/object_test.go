@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	gotime "time"
 
@@ -365,8 +364,11 @@ func TestObjectSet(t *testing.T) {
 	defer deactivateAndCloseClients(t, clients)
 
 	type (
-		temp struct {
+		T1 struct {
 			M string
+		}
+		T2 struct {
+			M *string
 		}
 	)
 
@@ -384,16 +386,18 @@ func TestObjectSet(t *testing.T) {
 		{"null &map", &map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`},
 
 		// Test with empty string
-		{"str map", map[string]interface{}{"M": empty}, emptyTarget},
-		{"str &map", &map[string]interface{}{"M": empty}, emptyTarget},
-		{"&str map", map[string]interface{}{"M": &empty}, emptyTarget},
-		{"&str &map", &map[string]interface{}{"M": &empty}, emptyTarget},
-		{"str struct", struct{ M string }{M: empty}, emptyTarget},
-		{"str &struct", &struct{ M string }{M: empty}, emptyTarget},
-		{"&str struct", struct{ M *string }{M: &empty}, emptyTarget},
-		{"&str &struct", &struct{ M *string }{M: &empty}, emptyTarget},
-		{"str temp", temp{M: empty}, emptyTarget},
-		{"str &temp", &temp{M: empty}, emptyTarget},
+		{"empty map", map[string]interface{}{"M": empty}, emptyTarget},
+		{"empty &map", &map[string]interface{}{"M": empty}, emptyTarget},
+		{"&empty map", map[string]interface{}{"M": &empty}, emptyTarget},
+		{"&empty &map", &map[string]interface{}{"M": &empty}, emptyTarget},
+		{"empty struct", struct{ M string }{M: empty}, emptyTarget},
+		{"empty &struct", &struct{ M string }{M: empty}, emptyTarget},
+		{"&empty struct", struct{ M *string }{M: &empty}, emptyTarget},
+		{"&empty &struct", &struct{ M *string }{M: &empty}, emptyTarget},
+		{"empty T1", T1{M: empty}, emptyTarget},
+		{"empty &T1", &T1{M: empty}, emptyTarget},
+		{"empty T2", T2{M: &empty}, emptyTarget},
+		{"empty &T2", &T2{M: &empty}, emptyTarget},
 
 		// Test with some text
 		{"str map", map[string]interface{}{"M": text}, textTarget},
@@ -404,8 +408,10 @@ func TestObjectSet(t *testing.T) {
 		{"str &struct", &struct{ M string }{M: text}, textTarget},
 		{"&str struct", struct{ M *string }{M: &text}, textTarget},
 		{"&str &struct", &struct{ M *string }{M: &text}, textTarget},
-		{"str temp", temp{M: text}, textTarget},
-		{"str &temp", &temp{M: text}, textTarget},
+		{"str T", T1{M: text}, textTarget},
+		{"str &T", &T1{M: text}, textTarget},
+		{"str T2", T2{M: &text}, textTarget},
+		{"str &T2", &T2{M: &text}, textTarget},
 	}
 
 	for _, tt := range tests {
@@ -419,7 +425,6 @@ func TestObjectSet(t *testing.T) {
 				return nil
 			})
 			assert.NoError(t, err)
-			fmt.Println(tt.want, " ", d1.Marshal())
 			assert.Equal(t, tt.want, d1.Marshal())
 		})
 	}

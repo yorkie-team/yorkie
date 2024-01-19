@@ -63,7 +63,6 @@ func toElement(ctx *change.Context, elem crdt.Element) crdt.Element {
 	case *crdt.Primitive:
 		return elem
 	}
-
 	panic("unsupported type")
 }
 
@@ -103,8 +102,6 @@ func buildCRDTElement(
 		case reflect.Slice, reflect.Array:
 			array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, elem))
 			return array
-		//case reflect.Struct:
-		//work
 		case reflect.Pointer:
 			return buildCRDTElement(context, reflect.ValueOf(elem).Elem().Interface(), ticket)
 		case reflect.Struct:
