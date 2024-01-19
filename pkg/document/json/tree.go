@@ -207,6 +207,10 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 		panic("from should be less than or equal to to")
 	}
 
+	if len(attributes) == 0 {
+		return true
+	}
+
 	fromPos, err := t.Tree.FindPos(fromIdx)
 	if err != nil {
 		panic(err)
@@ -226,6 +230,41 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 		fromPos,
 		toPos,
 		attributes,
+		ticket,
+	))
+
+	return true
+}
+
+// RemoveStyle sets the attributes to the elements of the given range.
+func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool {
+	if fromIdx > toIdx {
+		panic("from should be less than or equal to to")
+	}
+
+	if len(attributesToRemove) == 0 {
+		return true
+	}
+
+	fromPos, err := t.Tree.FindPos(fromIdx)
+	if err != nil {
+		panic(err)
+	}
+	toPos, err := t.Tree.FindPos(toIdx)
+	if err != nil {
+		panic(err)
+	}
+
+	ticket := t.context.IssueTimeTicket()
+	if err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket); err != nil {
+		panic(err)
+	}
+
+	t.context.Push(operations.NewTreeStyleRemove(
+		t.CreatedAt(),
+		fromPos,
+		toPos,
+		attributesToRemove,
 		ticket,
 	))
 

@@ -32,8 +32,11 @@ type TreeStyle struct {
 	// toPos represents the end point of the editing range.
 	to *crdt.TreePos
 
-	// attributes represents the tree style.
+	// attributes represents the tree style to be added.
 	attributes map[string]string
+
+	// attributesToRemove represents the tree style to be removed.
+	attributesToRemove []string
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
@@ -48,11 +51,30 @@ func NewTreeStyle(
 	executedAt *time.Ticket,
 ) *TreeStyle {
 	return &TreeStyle{
-		parentCreatedAt: parentCreatedAt,
-		from:            from,
-		to:              to,
-		attributes:      attributes,
-		executedAt:      executedAt,
+		parentCreatedAt:    parentCreatedAt,
+		from:               from,
+		to:                 to,
+		attributes:         attributes,
+		attributesToRemove: []string{},
+		executedAt:         executedAt,
+	}
+}
+
+// NewTreeStyleRemove creates a new instance of TreeStyle.
+func NewTreeStyleRemove(
+	parentCreatedAt *time.Ticket,
+	from *crdt.TreePos,
+	to *crdt.TreePos,
+	attributesToRemove []string,
+	executedAt *time.Ticket,
+) *TreeStyle {
+	return &TreeStyle{
+		parentCreatedAt:    parentCreatedAt,
+		from:               from,
+		to:                 to,
+		attributes:         map[string]string{},
+		attributesToRemove: attributesToRemove,
+		executedAt:         executedAt,
 	}
 }
 
@@ -64,7 +86,11 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	return obj.Style(e.from, e.to, e.attributes, e.executedAt)
+	if len(e.attributes) > 0 {
+		return obj.Style(e.from, e.to, e.attributes, e.executedAt)
+	}
+
+	return obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
 }
 
 // FromPos returns the start point of the editing range.
@@ -95,4 +121,9 @@ func (e *TreeStyle) ParentCreatedAt() *time.Ticket {
 // Attributes returns the content of Style.
 func (e *TreeStyle) Attributes() map[string]string {
 	return e.attributes
+}
+
+// AttributesToRemove returns the content of Style.
+func (e *TreeStyle) AttributesToRemove() []string {
+	return e.attributesToRemove
 }

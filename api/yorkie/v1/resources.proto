@@ -133,6 +133,7 @@ message Operation {
     TreePos to = 3;
     map<string, string> attributes = 4;
     TimeTicket executed_at = 5;
+    repeated string attributes_to_remove = 6;
   }
 
   oneof body {
