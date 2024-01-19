@@ -68,6 +68,7 @@ output.txt
 .vscode
 
 # Chart dependencies
-/build/charts/yorkie-cluster/charts/*.tgz
+**/charts/*.tgz
 /build/charts/yorkie-argocd/charts/
 /build/charts/yorkie-monitoring/charts/
+/build/charts/yorkie-mongodb-sharded/charts/
