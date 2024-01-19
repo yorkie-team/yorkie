@@ -26,8 +26,13 @@ import (
 	gotime "time"
 
 	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/bson"
+	gomongo "go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/internal/validation"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -39,8 +44,10 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/index"
 	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
@@ -315,4 +322,135 @@ func NewRangeSlice(start, end int) []int {
 		slice = append(slice, i)
 	}
 	return slice
+}
+
+// setupRawMongoClient returns the raw mongo client.
+func setupRawMongoClient(databaseName string) (*gomongo.Client, error) {
+	conf := &mongo.Config{
+		ConnectionTimeout: "5s",
+		ConnectionURI:     "mongodb://localhost:27017",
+		YorkieDatabase:    databaseName,
+		PingTimeout:       "5s",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), conf.ParseConnectionTimeout())
+	defer cancel()
+
+	client, err := gomongo.Connect(
+		ctx,
+		options.Client().
+			ApplyURI(conf.ConnectionURI).
+			SetRegistry(mongo.NewRegistryBuilder().Build()),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("connect to mongo: %w", err)
+	}
+
+	pingTimeout := conf.ParsePingTimeout()
+	ctxPing, cancel := context.WithTimeout(ctx, pingTimeout)
+	defer cancel()
+
+	if err := client.Ping(ctxPing, readpref.Primary()); err != nil {
+		return nil, fmt.Errorf("ping mongo: %w", err)
+	}
+
+	logging.DefaultLogger().Infof("MongoDB connected, URI: %s, DB: %s", conf.ConnectionURI, conf.YorkieDatabase)
+
+	return client, nil
+}
+
+// CleanUpAllCollections removes all data in every collection.
+func CleanUpAllCollections(databaseName string) error {
+	cli, err := setupRawMongoClient(databaseName)
+	if err != nil {
+		return err
+	}
+
+	for _, col := range mongo.Collections {
+		_, err := cli.Database(databaseName).Collection(col).DeleteMany(context.Background(), bson.D{})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// CreateDummyDocumentWithID creates a new dummy document with the given ID and key.
+func CreateDummyDocumentWithID(
+	databaseName string,
+	projectID types.ID,
+	docID types.ID,
+	docKey key.Key,
+) error {
+	cli, err := setupRawMongoClient(databaseName)
+	if err != nil {
+		return err
+	}
+	_, err = cli.Database(databaseName).Collection(mongo.ColDocuments).InsertOne(
+		context.Background(),
+		bson.M{
+			"_id":        docID,
+			"project_id": projectID,
+			"key":        docKey,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// FindDocInfosWithID finds the docInfos of the given projectID and docID.
+func FindDocInfosWithID(
+	databaseName string,
+	docID types.ID,
+) ([]*database.DocInfo, error) {
+	ctx := context.Background()
+	cli, err := setupRawMongoClient(databaseName)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, err := cli.Database(databaseName).Collection(mongo.ColDocuments).Find(
+		ctx,
+		bson.M{
+			"_id": docID,
+		}, options.Find())
+	if err != nil {
+		return nil, err
+	}
+
+	var infos []*database.DocInfo
+	if err := cursor.All(ctx, &infos); err != nil {
+		return nil, err
+	}
+
+	return infos, nil
+}
+
+// CreateDummyClientWithID creates a new dummy document with the given ID and key.
+func CreateDummyClientWithID(
+	databaseName string,
+	projectID types.ID,
+	clientKey string,
+	clientID types.ID,
+) error {
+	cli, err := setupRawMongoClient(databaseName)
+	if err != nil {
+		return err
+	}
+	_, err = cli.Database(databaseName).Collection(mongo.ColClients).InsertOne(
+		context.Background(),
+		bson.M{
+			"_id":        clientID,
+			"project_id": projectID,
+			"key":        clientKey,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

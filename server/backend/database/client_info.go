@@ -54,6 +54,9 @@ type ClientDocInfo struct {
 	ClientSeq uint32 `bson:"client_seq"`
 }
 
+// ClientDocInfoMap is a map that associates DocRefKey with ClientDocInfo instances.
+type ClientDocInfoMap map[types.ID]*ClientDocInfo
+
 // ClientInfo is a structure representing information of a client.
 type ClientInfo struct {
 	// ID is the unique ID of the client.
@@ -69,7 +72,7 @@ type ClientInfo struct {
 	Status string `bson:"status"`
 
 	// Documents is a map of document which is attached to the client.
-	Documents map[types.ID]*ClientDocInfo `bson:"documents"`
+	Documents ClientDocInfoMap `bson:"documents"`
 
 	// CreatedAt is the time when the client was created.
 	CreatedAt time.Time `bson:"created_at"`
@@ -85,9 +88,9 @@ func (i *ClientInfo) CheckIfInProject(projectID types.ID) error {
 	if i.ProjectID != projectID {
 		return fmt.Errorf(
 			"check client(%s,%s) in project(%s): %w",
-			i.ID.String(),
-			i.ProjectID.String(),
-			projectID.String(),
+			i.ID,
+			i.ProjectID,
+			projectID,
 			ErrClientNotFound,
 		)
 	}
@@ -103,7 +106,8 @@ func (i *ClientInfo) Deactivate() {
 // AttachDocument attaches the given document to this client.
 func (i *ClientInfo) AttachDocument(docID types.ID) error {
 	if i.Status != ClientActivated {
-		return fmt.Errorf("client(%s) attaches document(%s): %w", i.ID.String(), docID.String(), ErrClientNotActivated)
+		return fmt.Errorf("client(%s) attaches %s: %w",
+			i.ID, docID, ErrClientNotActivated)
 	}
 
 	if i.Documents == nil {
@@ -111,7 +115,8 @@ func (i *ClientInfo) AttachDocument(docID types.ID) error {
 	}
 
 	if i.hasDocument(docID) && i.Documents[docID].Status == DocumentAttached {
-		return fmt.Errorf("client(%s) attaches document(%s): %w", i.ID.String(), docID.String(), ErrDocumentAlreadyAttached)
+		return fmt.Errorf("client(%s) attaches %s: %w",
+			i.ID, docID, ErrDocumentAlreadyAttached)
 	}
 
 	i.Documents[docID] = &ClientDocInfo{
@@ -155,7 +160,8 @@ func (i *ClientInfo) RemoveDocument(docID types.ID) error {
 // IsAttached returns whether the given document is attached to this client.
 func (i *ClientInfo) IsAttached(docID types.ID) (bool, error) {
 	if !i.hasDocument(docID) {
-		return false, fmt.Errorf("check document(%s) is attached: %w", docID.String(), ErrDocumentNeverAttached)
+		return false, fmt.Errorf("check %s is attached: %w",
+			docID, ErrDocumentNeverAttached)
 	}
 
 	return i.Documents[docID].Status == DocumentAttached, nil
@@ -177,7 +183,7 @@ func (i *ClientInfo) UpdateCheckpoint(
 	cp change.Checkpoint,
 ) error {
 	if !i.hasDocument(docID) {
-		return fmt.Errorf("update checkpoint in document(%s): %w", docID.String(), ErrDocumentNeverAttached)
+		return fmt.Errorf("update checkpoint in %s: %w", docID, ErrDocumentNeverAttached)
 	}
 
 	i.Documents[docID].ServerSeq = cp.ServerSeq
@@ -190,19 +196,13 @@ func (i *ClientInfo) UpdateCheckpoint(
 // EnsureDocumentAttached ensures the given document is attached.
 func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 	if i.Status != ClientActivated {
-		return fmt.Errorf("ensure attached document(%s) in client(%s): %w",
-			docID.String(),
-			i.ID.String(),
-			ErrClientNotActivated,
-		)
+		return fmt.Errorf("ensure attached %s in client(%s): %w",
+			docID, i.ID, ErrClientNotActivated)
 	}
 
 	if !i.hasDocument(docID) || i.Documents[docID].Status != DocumentAttached {
-		return fmt.Errorf("ensure attached document(%s) in client(%s): %w",
-			docID.String(),
-			i.ID.String(),
-			ErrDocumentNotAttached,
-		)
+		return fmt.Errorf("ensure attached %s in client(%s): %w",
+			docID, i.ID, ErrDocumentNotAttached)
 	}
 
 	return nil
@@ -215,11 +215,11 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 	}
 
 	documents := make(map[types.ID]*ClientDocInfo, len(i.Documents))
-	for k, v := range i.Documents {
-		documents[k] = &ClientDocInfo{
-			Status:    v.Status,
-			ServerSeq: v.ServerSeq,
-			ClientSeq: v.ClientSeq,
+	for docID, docInfo := range i.Documents {
+		documents[docID] = &ClientDocInfo{
+			Status:    docInfo.Status,
+			ServerSeq: docInfo.ServerSeq,
+			ClientSeq: docInfo.ClientSeq,
 		}
 	}
 

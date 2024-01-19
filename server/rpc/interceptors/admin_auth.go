@@ -165,7 +165,7 @@ func (i *AdminAuthInterceptor) authenticate(
 	// NOTE(raararaara): If the token is access token, return the user of the token.
 	claims, err := i.tokenManager.Verify(authorization)
 	if err == nil {
-		user, err := users.GetUser(ctx, i.backend, claims.Username)
+		user, err := users.GetUserByName(ctx, i.backend, claims.Username)
 		if err == nil {
 			return user, nil
 		}

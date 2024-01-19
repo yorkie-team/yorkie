@@ -41,6 +41,7 @@ var ErrDecodeOperationFailed = errors.New("decode operations failed")
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
 	ID             types.ID `bson:"_id"`
+	ProjectID      types.ID `bson:"project_id"`
 	DocID          types.ID `bson:"doc_id"`
 	ServerSeq      int64    `bson:"server_seq"`
 	ClientSeq      uint32   `bson:"client_seq"`

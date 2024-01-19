@@ -1,7 +1,7 @@
 //go:build integration && amd64
 
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2024 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,8 +41,8 @@ import (
 )
 
 const (
-	dummyOwnerID              = types.ID("000000000000000000000003")
-	otherOwnerID              = types.ID("000000000000000000000004")
+	dummyOwnerID              = types.ID("000000000000000000000000")
+	otherOwnerID              = types.ID("000000000000000000000001")
 	clientDeactivateThreshold = "23h"
 )
 

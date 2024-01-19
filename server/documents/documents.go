@@ -195,14 +195,13 @@ func FindDocInfoByKey(
 	)
 }
 
-// FindDocInfo returns a document for the given document ID.
-func FindDocInfo(
+// FindDocInfoByRefKey returns a document for the given document refKey.
+func FindDocInfoByRefKey(
 	ctx context.Context,
 	be *backend.Backend,
-	project *types.Project,
-	docID types.ID,
+	refkey types.DocRefKey,
 ) (*database.DocInfo, error) {
-	return be.DB.FindDocInfoByID(ctx, project.ID, docID)
+	return be.DB.FindDocInfoByRefKey(ctx, refkey)
 }
 
 // FindDocInfoByKeyAndOwner returns a document for the given document key. If
@@ -229,15 +228,14 @@ func FindDocInfoByKeyAndOwner(
 func RemoveDocument(
 	ctx context.Context,
 	be *backend.Backend,
-	project *types.Project,
-	docID types.ID,
+	refKey types.DocRefKey,
 	force bool,
 ) error {
 	if force {
-		return be.DB.UpdateDocInfoStatusToRemoved(ctx, project.ID, docID)
+		return be.DB.UpdateDocInfoStatusToRemoved(ctx, refKey)
 	}
 
-	isAttached, err := be.DB.IsDocumentAttached(ctx, project.ID, docID, "")
+	isAttached, err := be.DB.IsDocumentAttached(ctx, refKey, "")
 	if err != nil {
 		return err
 	}
@@ -245,16 +243,15 @@ func RemoveDocument(
 		return ErrDocumentAttached
 	}
 
-	return be.DB.UpdateDocInfoStatusToRemoved(ctx, project.ID, docID)
+	return be.DB.UpdateDocInfoStatusToRemoved(ctx, refKey)
 }
 
 // IsDocumentAttached returns true if the given document is attached to any client.
 func IsDocumentAttached(
 	ctx context.Context,
 	be *backend.Backend,
-	project *types.Project,
-	docID types.ID,
+	docRefKey types.DocRefKey,
 	excludeClientID types.ID,
 ) (bool, error) {
-	return be.DB.IsDocumentAttached(ctx, project.ID, docID, excludeClientID)
+	return be.DB.IsDocumentAttached(ctx, docRefKey, excludeClientID)
 }

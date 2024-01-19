@@ -17,7 +17,9 @@
 
 package types
 
-import "time"
+import (
+	"time"
+)
 
 // Project is a project that consists of multiple documents and clients.
 type Project struct {

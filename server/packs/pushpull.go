@@ -185,7 +185,7 @@ func pullChangeInfos(
 ) (change.Checkpoint, []*database.ChangeInfo, error) {
 	pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
-		docInfo.ID,
+		docInfo.RefKey(),
 		reqPack.Checkpoint.ServerSeq+1,
 		initialServerSeq,
 	)
