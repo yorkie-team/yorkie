@@ -67,46 +67,11 @@ func toElement(ctx *change.Context, elem crdt.Element) crdt.Element {
 	panic("unsupported type")
 }
 
-func buildCRDTElement2(
-	context *change.Context,
-	value interface{},
-	ticket *time.Ticket,
-) crdt.Element {
-	switch elem := value.(type) {
-	case nil, string, int, int32, int64, float32, float64, []byte, bool, gotime.Time:
-		primitive, err := crdt.NewPrimitive(elem, ticket)
-		if err != nil {
-			panic(err)
-		}
-		return primitive
-	case *Tree:
-		crdtTree := crdt.NewTree(buildRoot(context, elem.initialRoot, ticket), ticket)
-		return crdtTree
-	case *Text:
-		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
-	case *Counter:
-		counter, err := crdt.NewCounter(elem.valueType, elem.value, ticket)
-		if err != nil {
-			panic(err)
-		}
-		return counter
-	case []interface{}, []string, []int, []int32, []int64, []float32, []float64, []bool, []gotime.Time:
-		array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, elem))
-		return array
-	case map[string]interface{}:
-		obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
-		return obj
-	default:
-		panic("unsupported type")
-	}
-}
-
 func buildCRDTElement(
 	context *change.Context,
 	value interface{},
 	ticket *time.Ticket,
 ) crdt.Element {
-
 	switch elem := value.(type) {
 	case nil, string, int, int32, int64, float32, float64, []byte, bool, gotime.Time:
 		primitive, err := crdt.NewPrimitive(elem, ticket)
@@ -114,12 +79,12 @@ func buildCRDTElement(
 			panic(err)
 		}
 		return primitive
-	case *Tree:
+	case Tree:
 		crdtTree := crdt.NewTree(buildRoot(context, elem.initialRoot, ticket), ticket)
 		return crdtTree
-	case *Text:
+	case Text:
 		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
-	case *Counter:
+	case Counter:
 		counter, err := crdt.NewCounter(elem.valueType, elem.value, ticket)
 		if err != nil {
 			panic(err)
@@ -129,7 +94,12 @@ func buildCRDTElement(
 		obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
 		return obj
 	default:
-		if reflect.ValueOf(elem).Kind() == reflect.Slice {
+		// TODO: this is a temporary solution.
+		// We can deal the array type like primitive type. ex) []int, []string, []map[string]interface{}...
+		// However, we need to check the type of buildArrayElements as well.
+		// So this code check only if it's an array or slice.
+		// The type of specific array is handled by buildArrayElements.
+		if reflect.ValueOf(elem).Kind() == reflect.Slice || reflect.ValueOf(elem).Kind() == reflect.Array {
 			array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, elem))
 			return array
 		}

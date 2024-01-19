@@ -291,21 +291,25 @@ func TestArray(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("array.set with certain types of array test", func(t *testing.T) {
+	t.Run("array.set with Counter, Text, Tree array test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
 
-		cnt1 := json.NewCounter(0, crdt.LongCnt)
+		cnt := json.NewCounter(0, crdt.LongCnt)
+		txt := json.NewText()
+		tree := json.NewTree()
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("k1", []*json.Counter{cnt1, cnt1, cnt1})
-			root.GetArray("k1").Get(0).(*json.Counter).Increase(1)
-			assert.Equal(t, `{"k1":[1,0,0]}`, root.Marshal())
+			root.SetNewArray("counters", []json.Counter{cnt, cnt, cnt})
+			root.GetArray("counters").Get(0).(*json.Counter).Increase(1)
+			assert.Equal(t, `{"counters":[1,0,0]}`, root.Marshal())
 
-			root.SetNewArray("k2", []int{0, 1, 2})
-			root.GetArray("k2").AddInteger(3)
-			assert.Equal(t, `[0,1,2,3]`, root.GetArray("k2").Marshal())
+			root.SetNewArray("texts", []json.Text{txt, txt, txt})
+			assert.Equal(t, `[[],[],[]]`, root.GetArray("texts").Marshal())
+
+			root.SetNewArray("forest", []json.Tree{tree, tree})
+			assert.Equal(t, `[{"type":"root","children":[]},{"type":"root","children":[]}]`, root.GetArray("forest").Marshal())
 			return nil
 		}))
 	})

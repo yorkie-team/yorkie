@@ -284,8 +284,7 @@ func (p *Object) GetCounter(k string) *Counter {
 	switch elem := p.Object.Get(k).(type) {
 	case *crdt.Counter:
 		counter := NewCounter(elem.Value(), elem.ValueType())
-		counter.Initialize(p.context, elem)
-		return counter
+		return counter.Initialize(p.context, elem)
 	case *Counter:
 		return elem
 	default:

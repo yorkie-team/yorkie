@@ -34,8 +34,8 @@ type Counter struct {
 }
 
 // NewCounter creates a new instance of Counter.
-func NewCounter(n interface{}, t crdt.CounterType) *Counter {
-	return &Counter{
+func NewCounter(n interface{}, t crdt.CounterType) Counter {
+	return Counter{
 		valueType: t,
 		value:     n,
 	}

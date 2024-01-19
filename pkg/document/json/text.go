@@ -30,8 +30,8 @@ type Text struct {
 }
 
 // NewText creates a new instance of Text.
-func NewText() *Text {
-	return &Text{}
+func NewText() Text {
+	return Text{}
 }
 
 // Initialize initializes the Text by the given context and text.

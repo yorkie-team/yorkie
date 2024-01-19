@@ -296,12 +296,12 @@ func buildArrayElements(
 		return arrayToElements[bool](elements, context)
 	case []gotime.Time:
 		return arrayToElements[gotime.Time](elements, context)
-	case []*Counter:
-		return arrayToElements[*Counter](elements, context)
-	case []*Text:
-		return arrayToElements[*Text](elements, context)
-	case []*Tree:
-		return arrayToElements[*Tree](elements, context)
+	case []Counter:
+		return arrayToElements[Counter](elements, context)
+	case []Text:
+		return arrayToElements[Text](elements, context)
+	case []Tree:
+		return arrayToElements[Tree](elements, context)
 	case []map[string]interface{}:
 		return arrayToElements[map[string]interface{}](elements, context)
 	default:

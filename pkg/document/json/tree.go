@@ -71,12 +71,12 @@ type Tree struct {
 }
 
 // NewTree creates a new instance of Tree.
-func NewTree(root ...*TreeNode) *Tree {
+func NewTree(root ...*TreeNode) Tree {
 	var t Tree
 	if len(root) > 0 {
 		t.initialRoot = root[0]
 	}
-	return &t
+	return t
 }
 
 // Initialize initializes the Tree by the given context and tree.
