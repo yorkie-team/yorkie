@@ -26,14 +26,15 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/yorkie-team/yorkie/admin"
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cmd/yorkie/config"
 	"github.com/yorkie-team/yorkie/pkg/units"
 )
 
 var (
-	previousID string
-	pageSize   int32
-	isForward  bool
+	previousRefKey types.DocRefKey
+	pageSize       int32
+	isForward      bool
 )
 
 func newListCommand() *cobra.Command {
@@ -63,7 +64,7 @@ func newListCommand() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			documents, err := cli.ListDocuments(ctx, projectName, previousID, pageSize, isForward, true)
+			documents, err := cli.ListDocuments(ctx, projectName, previousRefKey, pageSize, isForward, true)
 			if err != nil {
 				return err
 			}
@@ -100,11 +101,10 @@ func newListCommand() *cobra.Command {
 
 func init() {
 	cmd := newListCommand()
-	cmd.Flags().StringVar(
-		&previousID,
-		"previous-id",
-		"",
-		"The previous document ID to start from",
+	cmd.Flags().Var(
+		&previousRefKey,
+		"previous-refKey",
+		"The previous document refKey to start from. Use the format 'docKey,docID' for the input.",
 	)
 	cmd.Flags().Int32Var(
 		&pageSize,

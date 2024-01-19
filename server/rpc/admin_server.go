@@ -106,7 +106,7 @@ func (s *adminServer) CreateProject(
 	}
 
 	user := users.From(ctx)
-	project, err := projects.CreateProject(ctx, s.backend, user.ID, req.Msg.Name)
+	project, err := projects.CreateProject(ctx, s.backend, user.Username, req.Msg.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (s *adminServer) ListProjects(
 	_ *connect.Request[api.ListProjectsRequest],
 ) (*connect.Response[api.ListProjectsResponse], error) {
 	user := users.From(ctx)
-	projectList, err := projects.ListProjects(ctx, s.backend, user.ID)
+	projectList, err := projects.ListProjects(ctx, s.backend, user.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (s *adminServer) GetProject(
 	req *connect.Request[api.GetProjectRequest],
 ) (*connect.Response[api.GetProjectResponse], error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.Name)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.Msg.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (s *adminServer) UpdateProject(
 	project, err := projects.UpdateProject(
 		ctx,
 		s.backend,
-		user.ID,
+		user.Username,
 		types.ID(req.Msg.Id),
 		fields,
 	)
@@ -184,7 +184,7 @@ func (s *adminServer) GetDocument(
 	req *connect.Request[api.GetDocumentRequest],
 ) (*connect.Response[api.GetDocumentResponse], error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (s *adminServer) GetSnapshotMeta(
 	req *connect.Request[api.GetSnapshotMetaRequest],
 ) (*connect.Response[api.GetSnapshotMetaResponse], error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +243,7 @@ func (s *adminServer) ListDocuments(
 	req *connect.Request[api.ListDocumentsRequest],
 ) (*connect.Response[api.ListDocumentsResponse], error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -252,8 +252,11 @@ func (s *adminServer) ListDocuments(
 		ctx,
 		s.backend,
 		project,
-		types.Paging[types.ID]{
-			Offset:    types.ID(req.Msg.PreviousId),
+		types.Paging[types.DocRefKey]{
+			Offset: types.DocRefKey{
+				Key: key.Key(req.Msg.PreviousKey),
+				ID:  types.ID(req.Msg.PreviousId),
+			},
 			PageSize:  int(req.Msg.PageSize),
 			IsForward: req.Msg.IsForward,
 		},
@@ -274,7 +277,7 @@ func (s *adminServer) SearchDocuments(
 	req *connect.Request[api.SearchDocumentsRequest],
 ) (*connect.Response[api.SearchDocumentsResponse], error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +305,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	req *connect.Request[api.RemoveDocumentByAdminRequest],
 ) (*connect.Response[api.RemoveDocumentByAdminResponse], error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +330,11 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		}
 	}()
 
-	if err := documents.RemoveDocument(ctx, s.backend, project, docInfo.ID, req.Msg.Force); err != nil {
+	if err := documents.RemoveDocument(
+		ctx, s.backend, project,
+		docInfo.RefKey(),
+		req.Msg.Force,
+	); err != nil {
 		return nil, err
 	}
 
@@ -337,9 +344,9 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		ctx,
 		publisherID,
 		sync.DocEvent{
-			Type:       types.DocumentChangedEvent,
-			Publisher:  publisherID,
-			DocumentID: docInfo.ID,
+			Type:           types.DocumentChangedEvent,
+			Publisher:      publisherID,
+			DocumentRefKey: docInfo.RefKey(),
 		},
 	)
 
@@ -356,7 +363,7 @@ func (s *adminServer) ListChanges(
 	req *connect.Request[api.ListChangesRequest],
 ) (*connect.Response[api.ListChangesResponse], error) {
 	user := users.From(ctx)
-	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	project, err := projects.GetProject(ctx, s.backend, user.Username, req.Msg.ProjectName)
 	if err != nil {
 		return nil, err
 	}

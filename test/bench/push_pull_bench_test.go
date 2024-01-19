@@ -90,7 +90,7 @@ func setUpClientsAndDocs(
 		assert.NoError(b, err)
 		docInfo, err := be.DB.FindDocInfoByKeyAndOwner(ctx, database.DefaultProjectID, clientInfo.ID, docKey, true)
 		assert.NoError(b, err)
-		assert.NoError(b, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(b, clientInfo.AttachDocument(docInfo.RefKey()))
 		assert.NoError(b, be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		bytesID, _ := clientInfo.ID.Bytes()
@@ -137,7 +137,10 @@ func benchmarkPushChanges(
 		docKey := getDocKey(b, i)
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 1, docKey, b, be)
 		pack := createChangePack(changeCnt, docs[0], b)
-		docInfo, err := documents.FindDocInfo(ctx, be, project, docID)
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, be, project, types.DocRefKey{
+			Key: docKey,
+			ID:  docID,
+		})
 		assert.NoError(b, err)
 		b.StartTimer()
 
@@ -162,12 +165,16 @@ func benchmarkPullChanges(
 		pushPack := createChangePack(changeCnt, pusherDoc, b)
 		pullPack := createChangePack(0, pullerDoc, b)
 
-		docInfo, err := documents.FindDocInfo(ctx, be, project, docID)
+		docRefKey := types.DocRefKey{
+			Key: docKey,
+			ID:  docID,
+		}
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, be, project, docRefKey)
 		assert.NoError(b, err)
 		_, err = packs.PushPull(ctx, be, project, pusherClientInfo, docInfo, pushPack, types.SyncModePushPull)
 		assert.NoError(b, err)
 
-		docInfo, err = documents.FindDocInfo(ctx, be, project, docID)
+		docInfo, err = documents.FindDocInfoByRefKey(ctx, be, project, docRefKey)
 		assert.NoError(b, err)
 		b.StartTimer()
 
@@ -188,12 +195,16 @@ func benchmarkPushSnapshots(
 		ctx := context.Background()
 		docKey := getDocKey(b, i)
 		clientInfos, docID, docs := setUpClientsAndDocs(ctx, 1, docKey, b, be)
+		docRefKey := types.DocRefKey{
+			Key: docKey,
+			ID:  docID,
+		}
 		b.StartTimer()
 
 		for j := 0; j < snapshotCnt; j++ {
 			b.StopTimer()
 			pushPack := createChangePack(changeCnt, docs[0], b)
-			docInfo, err := documents.FindDocInfo(ctx, be, project, docID)
+			docInfo, err := documents.FindDocInfoByRefKey(ctx, be, project, docRefKey)
 			assert.NoError(b, err)
 			b.StartTimer()
 
@@ -227,12 +238,16 @@ func benchmarkPullSnapshot(
 		pushPack := createChangePack(changeCnt, pusherDoc, b)
 		pullPack := createChangePack(0, pullerDoc, b)
 
-		docInfo, err := documents.FindDocInfo(ctx, be, project, docID)
+		docRefKey := types.DocRefKey{
+			Key: docKey,
+			ID:  docID,
+		}
+		docInfo, err := documents.FindDocInfoByRefKey(ctx, be, project, docRefKey)
 		assert.NoError(b, err)
 		_, err = packs.PushPull(ctx, be, project, pusherClientInfo, docInfo, pushPack, types.SyncModePushPull)
 		assert.NoError(b, err)
 
-		docInfo, err = documents.FindDocInfo(ctx, be, project, docID)
+		docInfo, err = documents.FindDocInfoByRefKey(ctx, be, project, docRefKey)
 		assert.NoError(b, err)
 		b.StartTimer()
 

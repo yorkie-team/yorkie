@@ -47,10 +47,10 @@ func (s *Subscription) ID() string {
 
 // DocEvent represents events that occur related to the document.
 type DocEvent struct {
-	Type       types.DocEventType
-	Publisher  *time.ActorID
-	DocumentID types.ID
-	Body       types.DocEventBody
+	Type           types.DocEventType
+	Publisher      *time.ActorID
+	DocumentRefKey types.DocRefKey
+	Body           types.DocEventBody
 }
 
 // Events returns the DocEvent channel of this subscription.

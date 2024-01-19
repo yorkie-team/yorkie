@@ -43,7 +43,7 @@ func pushChanges(
 	reqPack *change.Pack,
 	initialServerSeq int64,
 ) (change.Checkpoint, []*change.Change) {
-	cp := clientInfo.Checkpoint(docInfo.ID)
+	cp := clientInfo.Checkpoint(docInfo.RefKey())
 
 	var pushedChanges []*change.Change
 	for _, cn := range reqPack.Changes {
@@ -185,7 +185,7 @@ func pullChangeInfos(
 ) (change.Checkpoint, []*database.ChangeInfo, error) {
 	pulledChanges, err := be.DB.FindChangeInfosBetweenServerSeqs(
 		ctx,
-		docInfo.ID,
+		docInfo.RefKey(),
 		reqPack.Checkpoint.ServerSeq+1,
 		initialServerSeq,
 	)
