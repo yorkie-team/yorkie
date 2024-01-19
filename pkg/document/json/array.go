@@ -279,36 +279,38 @@ func buildArrayElements(
 ) []crdt.Element {
 	switch elements := elements.(type) {
 	case []interface{}:
-		return convertArrayToElements[any](elements, context)
+		return arrayToElements[any](elements, context)
 	case []int:
-		return convertArrayToElements[int](elements, context)
+		return arrayToElements[int](elements, context)
 	case []int32:
-		return convertArrayToElements[int32](elements, context)
+		return arrayToElements[int32](elements, context)
 	case []int64:
-		return convertArrayToElements[int64](elements, context)
+		return arrayToElements[int64](elements, context)
 	case []float32:
-		return convertArrayToElements[float32](elements, context)
+		return arrayToElements[float32](elements, context)
 	case []float64:
-		return convertArrayToElements[float64](elements, context)
+		return arrayToElements[float64](elements, context)
 	case []string:
-		return convertArrayToElements[string](elements, context)
+		return arrayToElements[string](elements, context)
 	case []bool:
-		return convertArrayToElements[bool](elements, context)
+		return arrayToElements[bool](elements, context)
 	case []gotime.Time:
-		return convertArrayToElements[gotime.Time](elements, context)
+		return arrayToElements[gotime.Time](elements, context)
 	case []*Counter:
-		return convertArrayToElements[*Counter](elements, context)
+		return arrayToElements[*Counter](elements, context)
 	case []*Text:
-		return convertArrayToElements[*Text](elements, context)
+		return arrayToElements[*Text](elements, context)
 	case []*Tree:
-		return convertArrayToElements[*Tree](elements, context)
+		return arrayToElements[*Tree](elements, context)
+	case []map[string]interface{}:
+		return arrayToElements[map[string]interface{}](elements, context)
 	default:
 		panic("unsupported array type")
 	}
 }
 
 // convertArrayToElements converts the given specific type array to crdt.Element array
-func convertArrayToElements[T any](elements []T, context *change.Context) []crdt.Element {
+func arrayToElements[T any](elements []T, context *change.Context) []crdt.Element {
 	elems := make([]crdt.Element, len(elements))
 
 	for idx, value := range elements {

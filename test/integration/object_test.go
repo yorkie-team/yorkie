@@ -272,7 +272,7 @@ func TestObject(t *testing.T) {
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			// 01. set nested array in object with json literal
 			root.SetNewObject("obj", map[string]interface{}{
-				"array": []interface{}{1, 2, 3, []interface{}{7, 8}},
+				"array": []interface{}{1, 2, 3, []int{7, 8}},
 			})
 			assert.Equal(t, `{"obj":{"array":[1,2,3,[7,8]]}}`, root.Marshal())
 
