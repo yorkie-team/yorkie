@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	gotime "time"
 
@@ -356,4 +357,41 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"obj":{"bool":true,"bytes":"AB","date":"2022-03-02T09:10:00Z","double":1.790000,"int":32,"long":9223372036854775807,"nill":null}}`, d1.Marshal())
 	})
+}
+
+func TestObjectSet(t *testing.T) {
+	clients := activeClients(t, 2)
+	c1, _ := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
+
+	msg := "message"
+
+	tests := []struct {
+		CaseName string
+		in       any
+		want     string
+	}{
+		{"null map", map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`},
+		{"null &map", &map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`},
+		{"str map", map[string]interface{}{"M": msg}, `{"obj":{"M":"message"}}`},
+		{"str &map", &map[string]interface{}{"M": msg}, `{"obj":{"M":"message"}}`},
+		{"&str map", map[string]interface{}{"M": &msg}, `{"obj":{"M":"message"}}`},
+		//{"null struct", struct{ M string }{M: ""}, `{"obj":{"M":""}}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.CaseName, func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+
+			err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewObject("obj", tt.in)
+				return nil
+			})
+			assert.NoError(t, err)
+			fmt.Println(tt.want, " ", d1.Marshal())
+			assert.Equal(t, tt.want, d1.Marshal())
+		})
+	}
 }

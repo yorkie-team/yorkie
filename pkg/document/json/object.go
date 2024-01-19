@@ -42,7 +42,7 @@ func NewObject(ctx *change.Context, root *crdt.Object) *Object {
 }
 
 // SetNewObject sets a new Object for the given key.
-func (p *Object) SetNewObject(k string, v ...map[string]interface{}) *Object {
+func (p *Object) SetNewObject(k string, v ...interface{}) *Object {
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		if len(v) == 0 {
 			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))

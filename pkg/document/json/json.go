@@ -99,11 +99,16 @@ func buildCRDTElement(
 		// However, we need to check the type of buildArrayElements as well.
 		// So this code check only if it's an array or slice.
 		// The type of specific array is handled by buildArrayElements.
-		if reflect.ValueOf(elem).Kind() == reflect.Slice || reflect.ValueOf(elem).Kind() == reflect.Array {
+		switch reflect.ValueOf(elem).Kind() {
+		case reflect.Slice, reflect.Array:
 			array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, elem))
 			return array
+		//case reflect.Struct:
+		//work
+		case reflect.Pointer:
+			return buildCRDTElement(context, reflect.ValueOf(elem).Elem().Interface(), ticket)
+		default:
+			panic("unsupported type")
 		}
-		panic("unsupported type")
 	}
-
 }
