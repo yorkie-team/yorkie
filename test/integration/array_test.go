@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -288,5 +289,24 @@ func TestArray(t *testing.T) {
 		}))
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("array.set with certain types of array test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		cnt1 := json.NewCounter(0, crdt.LongCnt)
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("k1", []*json.Counter{cnt1, cnt1, cnt1})
+			root.GetArray("k1").Get(0).(*json.Counter).Increase(1)
+			assert.Equal(t, `{"k1":[1,0,0]}`, root.Marshal())
+
+			root.SetNewArray("k2", []int{0, 1, 2})
+			root.GetArray("k2").AddInteger(3)
+			assert.Equal(t, `[0,1,2,3]`, root.GetArray("k2").Marshal())
+			return nil
+		}))
 	})
 }

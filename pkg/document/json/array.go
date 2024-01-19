@@ -191,7 +191,7 @@ func (p *Array) Get(idx int) crdt.Element {
 		panic(err)
 	}
 
-	return element
+	return toElement(p.context, element)
 }
 
 // Delete deletes the element of the given index.
@@ -275,8 +275,40 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 // buildArrayElements return the element slice of the given array.
 func buildArrayElements(
 	context *change.Context,
-	elements []interface{},
+	elements any,
 ) []crdt.Element {
+	switch elements := elements.(type) {
+	case []interface{}:
+		return convertArrayToElements[any](elements, context)
+	case []int:
+		return convertArrayToElements[int](elements, context)
+	case []int32:
+		return convertArrayToElements[int32](elements, context)
+	case []int64:
+		return convertArrayToElements[int64](elements, context)
+	case []float32:
+		return convertArrayToElements[float32](elements, context)
+	case []float64:
+		return convertArrayToElements[float64](elements, context)
+	case []string:
+		return convertArrayToElements[string](elements, context)
+	case []bool:
+		return convertArrayToElements[bool](elements, context)
+	case []gotime.Time:
+		return convertArrayToElements[gotime.Time](elements, context)
+	case []*Counter:
+		return convertArrayToElements[*Counter](elements, context)
+	case []*Text:
+		return convertArrayToElements[*Text](elements, context)
+	case []*Tree:
+		return convertArrayToElements[*Tree](elements, context)
+	default:
+		panic("unsupported array type")
+	}
+}
+
+// convertArrayToElements converts the given specific type array to crdt.Element array
+func convertArrayToElements[T any](elements []T, context *change.Context) []crdt.Element {
 	elems := make([]crdt.Element, len(elements))
 
 	for idx, value := range elements {

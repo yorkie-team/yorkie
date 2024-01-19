@@ -18,6 +18,7 @@
 package json
 
 import (
+	"reflect"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -66,7 +67,7 @@ func toElement(ctx *change.Context, elem crdt.Element) crdt.Element {
 	panic("unsupported type")
 }
 
-func buildCRDTElement(
+func buildCRDTElement2(
 	context *change.Context,
 	value interface{},
 	ticket *time.Ticket,
@@ -89,13 +90,49 @@ func buildCRDTElement(
 			panic(err)
 		}
 		return counter
-	case []interface{}:
+	case []interface{}, []string, []int, []int32, []int64, []float32, []float64, []bool, []gotime.Time:
 		array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, elem))
 		return array
 	case map[string]interface{}:
 		obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
 		return obj
 	default:
+		panic("unsupported type")
+	}
+}
+
+func buildCRDTElement(
+	context *change.Context,
+	value interface{},
+	ticket *time.Ticket,
+) crdt.Element {
+
+	switch elem := value.(type) {
+	case nil, string, int, int32, int64, float32, float64, []byte, bool, gotime.Time:
+		primitive, err := crdt.NewPrimitive(elem, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return primitive
+	case *Tree:
+		crdtTree := crdt.NewTree(buildRoot(context, elem.initialRoot, ticket), ticket)
+		return crdtTree
+	case *Text:
+		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
+	case *Counter:
+		counter, err := crdt.NewCounter(elem.valueType, elem.value, ticket)
+		if err != nil {
+			panic(err)
+		}
+		return counter
+	case map[string]interface{}:
+		obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
+		return obj
+	default:
+		if reflect.ValueOf(elem).Kind() == reflect.Slice {
+			array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, elem))
+			return array
+		}
 		panic("unsupported type")
 	}
 
