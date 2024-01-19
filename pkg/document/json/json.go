@@ -107,6 +107,13 @@ func buildCRDTElement(
 		//work
 		case reflect.Pointer:
 			return buildCRDTElement(context, reflect.ValueOf(elem).Elem().Interface(), ticket)
+		case reflect.Struct:
+			json := make(map[string]interface{})
+			for i := 0; i < reflect.ValueOf(elem).NumField(); i++ {
+				json[reflect.ValueOf(elem).Type().Field(i).Name] = reflect.ValueOf(elem).Field(i).Interface()
+			}
+			obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, json))
+			return obj
 		default:
 			panic("unsupported type")
 		}
