@@ -92,6 +92,16 @@ func buildCRDTElement(
 	case map[string]interface{}:
 		obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
 		return obj
+	case reflect.Value:
+		json := make(map[string]interface{})
+		for i := 0; i < elem.NumField(); i++ {
+			key := elem.Type().Field(i)
+			value := elem.Field(i)
+			if value.CanInterface() {
+				json[key.Name] = value.Interface()
+			}
+		}
+		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, json))
 	default:
 		// TODO: this is a temporary solution.
 		// We can deal the array type like primitive type. ex) []int, []string, []map[string]interface{}...
@@ -105,12 +115,7 @@ func buildCRDTElement(
 		case reflect.Pointer:
 			return buildCRDTElement(context, reflect.ValueOf(elem).Elem().Interface(), ticket)
 		case reflect.Struct:
-			json := make(map[string]interface{})
-			for i := 0; i < reflect.ValueOf(elem).NumField(); i++ {
-				json[reflect.ValueOf(elem).Type().Field(i).Name] = reflect.ValueOf(elem).Field(i).Interface()
-			}
-			obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, json))
-			return obj
+			return buildCRDTElement(context, reflect.ValueOf(elem), ticket)
 		default:
 			panic("unsupported type")
 		}

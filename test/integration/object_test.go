@@ -370,6 +370,9 @@ func TestObjectSet(t *testing.T) {
 		T2 struct {
 			M *string
 		}
+		T3 struct {
+			m string
+		}
 	)
 
 	empty := ""
@@ -412,6 +415,9 @@ func TestObjectSet(t *testing.T) {
 		{"str &T", &T1{M: text}, textTarget},
 		{"str T2", T2{M: &text}, textTarget},
 		{"str &T2", &T2{M: &text}, textTarget},
+
+		//Test with unexported field
+		{"unexported struct", struct{ m string }{m: text}, `{"obj":{}}`},
 	}
 
 	for _, tt := range tests {

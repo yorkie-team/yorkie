@@ -17,6 +17,7 @@
 package json
 
 import (
+	"reflect"
 	gotime "time"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -305,6 +306,15 @@ func buildArrayElements(
 	case []map[string]interface{}:
 		return arrayToElements[map[string]interface{}](elements, context)
 	default:
+		if reflect.ValueOf(elements).Type().Elem().Kind() == reflect.Struct {
+			length := reflect.ValueOf(elements).Len()
+			array := make([]reflect.Value, length)
+
+			for i := 0; i < length; i++ {
+				array[i] = reflect.ValueOf(elements).Index(i)
+			}
+			return arrayToElements[reflect.Value](array, context)
+		}
 		panic("unsupported array type")
 	}
 }

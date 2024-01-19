@@ -299,6 +299,10 @@ func TestArray(t *testing.T) {
 		cnt := json.NewCounter(0, crdt.LongCnt)
 		txt := json.NewText()
 		tree := json.NewTree()
+		type T1 struct {
+			msg string
+			Msg string
+		}
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("counters", []json.Counter{cnt, cnt, cnt})
@@ -310,6 +314,9 @@ func TestArray(t *testing.T) {
 
 			root.SetNewArray("forest", []json.Tree{tree, tree})
 			assert.Equal(t, `[{"type":"root","children":[]},{"type":"root","children":[]}]`, root.GetArray("forest").Marshal())
+
+			root.SetNewArray("structs", []T1{{"hello", "Hello"}, {"world", "World"}})
+			assert.Equal(t, `[{"Msg":"Hello"},{"Msg":"World"}]`, root.GetArray("structs").Marshal())
 			return nil
 		}))
 	})
