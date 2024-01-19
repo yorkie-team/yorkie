@@ -364,7 +364,16 @@ func TestObjectSet(t *testing.T) {
 	c1, _ := clients[0], clients[1]
 	defer deactivateAndCloseClients(t, clients)
 
-	msg := "message"
+	type (
+		temp struct {
+			M string
+		}
+	)
+
+	empty := ""
+	text := "foo"
+	emptyTarget := `{"obj":{"M":""}}`
+	textTarget := `{"obj":{"M":"foo"}}`
 
 	tests := []struct {
 		CaseName string
@@ -373,10 +382,30 @@ func TestObjectSet(t *testing.T) {
 	}{
 		{"null map", map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`},
 		{"null &map", &map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`},
-		{"str map", map[string]interface{}{"M": msg}, `{"obj":{"M":"message"}}`},
-		{"str &map", &map[string]interface{}{"M": msg}, `{"obj":{"M":"message"}}`},
-		{"&str map", map[string]interface{}{"M": &msg}, `{"obj":{"M":"message"}}`},
-		//{"null struct", struct{ M string }{M: ""}, `{"obj":{"M":""}}`},
+
+		// Test with empty string
+		{"str map", map[string]interface{}{"M": empty}, emptyTarget},
+		{"str &map", &map[string]interface{}{"M": empty}, emptyTarget},
+		{"&str map", map[string]interface{}{"M": &empty}, emptyTarget},
+		{"&str &map", &map[string]interface{}{"M": &empty}, emptyTarget},
+		{"str struct", struct{ M string }{M: empty}, emptyTarget},
+		{"str &struct", &struct{ M string }{M: empty}, emptyTarget},
+		{"&str struct", struct{ M *string }{M: &empty}, emptyTarget},
+		{"&str &struct", &struct{ M *string }{M: &empty}, emptyTarget},
+		{"str temp", temp{M: empty}, emptyTarget},
+		{"str &temp", &temp{M: empty}, emptyTarget},
+
+		// Test with some text
+		{"str map", map[string]interface{}{"M": text}, textTarget},
+		{"str &map", &map[string]interface{}{"M": text}, textTarget},
+		{"&str map", map[string]interface{}{"M": &text}, textTarget},
+		{"&str &map", &map[string]interface{}{"M": &text}, textTarget},
+		{"str struct", struct{ M string }{M: text}, textTarget},
+		{"str &struct", &struct{ M string }{M: text}, textTarget},
+		{"&str struct", struct{ M *string }{M: &text}, textTarget},
+		{"&str &struct", &struct{ M *string }{M: &text}, textTarget},
+		{"str temp", temp{M: text}, textTarget},
+		{"str &temp", &temp{M: text}, textTarget},
 	}
 
 	for _, tt := range tests {
