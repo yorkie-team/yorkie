@@ -359,8 +359,8 @@ func TestObject(t *testing.T) {
 }
 
 func TestObjectSet(t *testing.T) {
-	clients := activeClients(t, 2)
-	c1, _ := clients[0], clients[1]
+	clients := activeClients(t, 1)
+	c1 := clients[0]
 	defer deactivateAndCloseClients(t, clients)
 
 	type (
@@ -378,7 +378,7 @@ func TestObjectSet(t *testing.T) {
 	strTarget := `{"obj":{"M":"foo"}}`
 
 	tests := []struct {
-		CaseName   string
+		caseName   string
 		in         any
 		want       string
 		tombstones int
@@ -457,7 +457,7 @@ func TestObjectSet(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.CaseName, func(t *testing.T) {
+		t.Run(tt.caseName, func(t *testing.T) {
 			ctx := context.Background()
 			d1 := document.New(helper.TestDocKey(t))
 			assert.NoError(t, c1.Attach(ctx, d1))

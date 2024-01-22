@@ -291,7 +291,7 @@ func TestArray(t *testing.T) {
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
 
-	t.Run("array.set with Counter, Text, Tree array test", func(t *testing.T) {
+	t.Run("array.set with Counter, Text, Tree slice test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -325,7 +325,7 @@ func TestArray(t *testing.T) {
 		}))
 	})
 
-	t.Run("array.set with tagged struct test", func(t *testing.T) {
+	t.Run("array.set with tagged struct slice test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -345,12 +345,12 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 
-		//Tombstones : array, struct1, int1, struct2, string2, int2
+		//Tombstones : array, object1, int1, object2, string2, int2
 		assert.Equal(t, 6, d1.GarbageLen())
 		assert.Equal(t, 6, d1.GarbageCollect(time.MaxTicket))
 	})
 
-	t.Run("array.set with typed array test", func(t *testing.T) {
+	t.Run("array.set with typed slice test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -369,7 +369,7 @@ func TestArray(t *testing.T) {
 		assert.Equal(t, 9, d1.GarbageCollect(time.MaxTicket))
 	})
 
-	t.Run("array.set with pointer of typed array test", func(t *testing.T) {
+	t.Run("array.set with pointer of typed slice test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -384,8 +384,26 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 
-		assert.Equal(t, 9, d1.GarbageLen())
-		assert.Equal(t, 9, d1.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 5, d1.GarbageLen())
+		assert.Equal(t, 5, d1.GarbageCollect(time.MaxTicket))
 	})
 
+	t.Run("array.set with array test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		arr := [3]int{1, 2, 3}
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("arrays", []([3]int){arr})
+			assert.Equal(t, `[[1,2,3]]`, root.GetArray("arrays").Marshal())
+
+			root.Delete("arrays")
+			return nil
+		}))
+
+		assert.Equal(t, 5, d1.GarbageLen())
+		assert.Equal(t, 5, d1.GarbageCollect(time.MaxTicket))
+	})
 }

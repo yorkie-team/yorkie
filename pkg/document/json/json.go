@@ -47,7 +47,6 @@ func toOriginal(elem crdt.Element) crdt.Element {
 	case *crdt.Primitive:
 		return elem
 	}
-
 	panic("unsupported type")
 }
 
@@ -102,7 +101,10 @@ func buildCRDTElement(
 		}
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, valuesToMap(elem)))
 	}
-
+	// If the value is Array or Slice, Struct, Pointer, to accept the user defined struct,
+	// we need to handle it separately with reflect.
+	// In the case of a Struct, Pointer, it is treated recursively.
+	// In the case of a Array, Slice, it is processed in the buildArrayElements depending on the type of elements.
 	switch reflect.ValueOf(value).Kind() {
 	case reflect.Slice, reflect.Array:
 		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, value))
@@ -115,7 +117,8 @@ func buildCRDTElement(
 	}
 }
 
-// convertValuetoMap converts reflect.Value(struct) to map[string]interface{}.
+// valuesToMap converts reflect.Value(struct) to map[string]interface{}
+// except the field that has the tag "yorkie:-" or omitEmpty option and the field that is unexported.
 // This code referred to the "encoding/json" implementation.
 func valuesToMap(value reflect.Value) map[string]interface{} {
 	json := make(map[string]interface{})
@@ -173,6 +176,7 @@ func isValidTag(s string) bool {
 }
 
 // Contains reports whether the given option is contained in the tag options.
+// Blank spaces in options are ignored by Trim.
 // This code referred to the "encoding/json/tags.go" implementation.
 func (o tagOptions) Contains(optionName string) bool {
 	if len(o) == 0 {
