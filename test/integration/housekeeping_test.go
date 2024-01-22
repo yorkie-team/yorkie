@@ -1,7 +1,7 @@
 //go:build integration && amd64
 
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2024 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
@@ -41,8 +40,8 @@ import (
 )
 
 const (
-	dummyOwnerID              = types.ID("000000000000000000000003")
-	otherOwnerID              = types.ID("000000000000000000000004")
+	dummyOwnerName            = "dummy"
+	otherOwnerName            = "other"
 	clientDeactivateThreshold = "23h"
 )
 
@@ -141,10 +140,10 @@ func createProjects(t *testing.T, db *mongo.Client) []*database.ProjectInfo {
 
 	projects := make([]*database.ProjectInfo, 0)
 	for i := 0; i < 10; i++ {
-		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerID, clientDeactivateThreshold)
+		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerName, clientDeactivateThreshold)
 		assert.NoError(t, err)
 		projects = append(projects, p)
-		p, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), otherOwnerID, clientDeactivateThreshold)
+		p, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), otherOwnerName, clientDeactivateThreshold)
 		assert.NoError(t, err)
 		projects = append(projects, p)
 	}

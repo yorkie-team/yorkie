@@ -28,6 +28,7 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -41,6 +42,7 @@ var ErrDecodeOperationFailed = errors.New("decode operations failed")
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
 	ID             types.ID `bson:"_id"`
+	DocKey         key.Key  `bson:"doc_key"`
 	DocID          types.ID `bson:"doc_id"`
 	ServerSeq      int64    `bson:"server_seq"`
 	ClientSeq      uint32   `bson:"client_seq"`

@@ -1,5 +1,7 @@
+//go:build sharding
+
 /*
- * Copyright 2021 The Yorkie Authors. All rights reserved.
+ * Copyright 2023 The Yorkie Authors. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +16,7 @@
  * limitations under the License.
  */
 
-package rpc_test
+package sharding
 
 import (
 	"context"
@@ -25,10 +27,8 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/admin"
-	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/api/yorkie/v1/v1connect"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -42,26 +42,21 @@ import (
 )
 
 var (
-	defaultProjectName = "default"
-	invalidSlugName    = "@#$%^&*()_+"
-
-	nilClientID     = "000000000000000000000000"
-	emptyClientID   = ""
-	invalidClientID = "invalid"
-
+	shardedDBNameForServer   = "test-yorkie-meta-server"
 	testRPCServer            *rpc.Server
 	testRPCAddr              = fmt.Sprintf("localhost:%d", helper.RPCPort)
 	testClient               v1connect.YorkieServiceClient
 	testAdminAuthInterceptor *admin.AuthInterceptor
 	testAdminClient          v1connect.AdminServiceClient
-
-	invalidChangePack = &api.ChangePack{
-		DocumentKey: "invalid",
-		Checkpoint:  nil,
-	}
 )
 
 func TestMain(m *testing.M) {
+	// Cleanup the previous data in DB
+	err := helper.CleanUpAllCollections(shardedDBNameForServer)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	met, err := prometheus.NewMetrics()
 	if err != nil {
 		log.Fatal(err)
@@ -78,7 +73,7 @@ func TestMain(m *testing.M) {
 		AdminTokenDuration:        helper.AdminTokenDuration,
 	}, &mongo.Config{
 		ConnectionURI:     helper.MongoConnectionURI,
-		YorkieDatabase:    helper.TestDBName(),
+		YorkieDatabase:    shardedDBNameForServer,
 		ConnectionTimeout: helper.MongoConnectionTimeout,
 		PingTimeout:       helper.MongoPingTimeout,
 	}, &housekeeping.Config{
@@ -136,7 +131,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestSDKRPCServerBackend(t *testing.T) {
+func TestSDKRPCServerBackendWithShardedDB(t *testing.T) {
 	t.Run("activate/deactivate client test", func(t *testing.T) {
 		testcases.RunActivateAndDeactivateClientTest(t, testClient)
 	})
@@ -170,7 +165,7 @@ func TestSDKRPCServerBackend(t *testing.T) {
 	})
 }
 
-func TestAdminRPCServerBackend(t *testing.T) {
+func TestAdminRPCServerBackendWithShardedDB(t *testing.T) {
 	t.Run("admin signup test", func(t *testing.T) {
 		testcases.RunAdminSignUpTest(t, testAdminClient)
 	})
@@ -206,32 +201,4 @@ func TestAdminRPCServerBackend(t *testing.T) {
 	t.Run("admin list changes test", func(t *testing.T) {
 		testcases.RunAdminListChangesTest(t, testClient, testAdminClient, testAdminAuthInterceptor)
 	})
-}
-
-func TestConfig_Validate(t *testing.T) {
-	scenarios := []*struct {
-		config   *rpc.Config
-		expected error
-	}{
-		{config: &rpc.Config{Port: -1}, expected: rpc.ErrInvalidRPCPort},
-		{config: &rpc.Config{Port: 8080, CertFile: "noSuchCertFile"}, expected: rpc.ErrInvalidCertFile},
-		{config: &rpc.Config{Port: 8080, KeyFile: "noSuchKeyFile"}, expected: rpc.ErrInvalidKeyFile},
-		// not to use tls
-		{config: &rpc.Config{
-			Port:     8080,
-			CertFile: "",
-			KeyFile:  "",
-		},
-			expected: nil},
-		// pass any file existing
-		{config: &rpc.Config{
-			Port:     8080,
-			CertFile: "server_test.go",
-			KeyFile:  "server_test.go",
-		},
-			expected: nil},
-	}
-	for _, scenario := range scenarios {
-		assert.ErrorIs(t, scenario.config.Validate(), scenario.expected, "provided config: %#v", scenario.config)
-	}
 }

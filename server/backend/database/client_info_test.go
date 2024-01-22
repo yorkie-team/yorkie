@@ -23,38 +23,44 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
 func TestClientInfo(t *testing.T) {
+	dummyDocKey := key.Key("dummy")
 	dummyDocID := types.ID("000000000000000000000000")
+	dummyDocRefKey := types.DocRefKey{
+		Key: dummyDocKey,
+		ID:  dummyDocID,
+	}
 
 	t.Run("attach/detach document test", func(t *testing.T) {
 		clientInfo := database.ClientInfo{
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID)
+		err := clientInfo.AttachDocument(dummyDocRefKey)
 		assert.NoError(t, err)
-		isAttached, err := clientInfo.IsAttached(dummyDocID)
+		isAttached, err := clientInfo.IsAttached(dummyDocRefKey)
 		assert.NoError(t, err)
 		assert.True(t, isAttached)
 
-		err = clientInfo.UpdateCheckpoint(dummyDocID, change.MaxCheckpoint)
+		err = clientInfo.UpdateCheckpoint(dummyDocRefKey, change.MaxCheckpoint)
 		assert.NoError(t, err)
 
-		err = clientInfo.EnsureDocumentAttached(dummyDocID)
+		err = clientInfo.EnsureDocumentAttached(dummyDocRefKey)
 		assert.NoError(t, err)
 
-		err = clientInfo.DetachDocument(dummyDocID)
+		err = clientInfo.DetachDocument(dummyDocRefKey)
 		assert.NoError(t, err)
-		isAttached, err = clientInfo.IsAttached(dummyDocID)
+		isAttached, err = clientInfo.IsAttached(dummyDocRefKey)
 		assert.NoError(t, err)
 		assert.False(t, isAttached)
 
-		err = clientInfo.AttachDocument(dummyDocID)
+		err = clientInfo.AttachDocument(dummyDocRefKey)
 		assert.NoError(t, err)
-		isAttached, err = clientInfo.IsAttached(dummyDocID)
+		isAttached, err = clientInfo.IsAttached(dummyDocRefKey)
 		assert.NoError(t, err)
 		assert.True(t, isAttached)
 
@@ -86,15 +92,15 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID)
+		err := clientInfo.AttachDocument(dummyDocRefKey)
 		assert.NoError(t, err)
-		isAttached, err := clientInfo.IsAttached(dummyDocID)
+		isAttached, err := clientInfo.IsAttached(dummyDocRefKey)
 		assert.NoError(t, err)
 		assert.True(t, isAttached)
 
 		clientInfo.Deactivate()
 
-		err = clientInfo.EnsureDocumentAttached(dummyDocID)
+		err = clientInfo.EnsureDocumentAttached(dummyDocRefKey)
 		assert.ErrorIs(t, err, database.ErrClientNotActivated)
 	})
 
@@ -103,13 +109,13 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientDeactivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID)
+		err := clientInfo.AttachDocument(dummyDocRefKey)
 		assert.ErrorIs(t, err, database.ErrClientNotActivated)
 
-		err = clientInfo.EnsureDocumentAttached(dummyDocID)
+		err = clientInfo.EnsureDocumentAttached(dummyDocRefKey)
 		assert.ErrorIs(t, err, database.ErrClientNotActivated)
 
-		err = clientInfo.DetachDocument(dummyDocID)
+		err = clientInfo.DetachDocument(dummyDocRefKey)
 		assert.ErrorIs(t, err, database.ErrClientNotActivated)
 	})
 
@@ -117,8 +123,7 @@ func TestClientInfo(t *testing.T) {
 		clientInfo := database.ClientInfo{
 			Status: database.ClientActivated,
 		}
-
-		err := clientInfo.DetachDocument(dummyDocID)
+		err := clientInfo.DetachDocument(dummyDocRefKey)
 		assert.ErrorIs(t, err, database.ErrDocumentNotAttached)
 	})
 
@@ -126,11 +131,10 @@ func TestClientInfo(t *testing.T) {
 		clientInfo := database.ClientInfo{
 			Status: database.ClientActivated,
 		}
-
-		_, err := clientInfo.IsAttached(dummyDocID)
+		_, err := clientInfo.IsAttached(dummyDocRefKey)
 		assert.ErrorIs(t, err, database.ErrDocumentNeverAttached)
 
-		err = clientInfo.UpdateCheckpoint(dummyDocID, change.MaxCheckpoint)
+		err = clientInfo.UpdateCheckpoint(dummyDocRefKey, change.MaxCheckpoint)
 		assert.ErrorIs(t, err, database.ErrDocumentNeverAttached)
 	})
 
@@ -139,13 +143,13 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID)
+		err := clientInfo.AttachDocument(dummyDocRefKey)
 		assert.NoError(t, err)
-		isAttached, err := clientInfo.IsAttached(dummyDocID)
+		isAttached, err := clientInfo.IsAttached(dummyDocRefKey)
 		assert.NoError(t, err)
 		assert.True(t, isAttached)
 
-		err = clientInfo.AttachDocument(dummyDocID)
+		err = clientInfo.AttachDocument(dummyDocRefKey)
 		assert.ErrorIs(t, err, database.ErrDocumentAlreadyAttached)
 	})
 }

@@ -81,8 +81,8 @@ func TestClient(t *testing.T) {
 		testcases.RunListUserInfosTest(t, cli)
 	})
 
-	t.Run("FindUserInfoByID test", func(t *testing.T) {
-		testcases.RunFindUserInfoByIDTest(t, cli)
+	t.Run("FindUserInfo test", func(t *testing.T) {
+		testcases.RunFindUserInfoTest(t, cli)
 	})
 
 	t.Run("FindProjectInfoBySecretKey test", func(t *testing.T) {

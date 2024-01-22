@@ -54,6 +54,9 @@ type ClientDocInfo struct {
 	ClientSeq uint32 `bson:"client_seq"`
 }
 
+// ClientDocInfoMap is a map that associates DocRefKey with ClientDocInfo instances.
+type ClientDocInfoMap map[types.DocRefKey]*ClientDocInfo
+
 // ClientInfo is a structure representing information of a client.
 type ClientInfo struct {
 	// ID is the unique ID of the client.
@@ -69,7 +72,7 @@ type ClientInfo struct {
 	Status string `bson:"status"`
 
 	// Documents is a map of document which is attached to the client.
-	Documents map[types.ID]*ClientDocInfo `bson:"documents"`
+	Documents ClientDocInfoMap `bson:"documents"`
 
 	// CreatedAt is the time when the client was created.
 	CreatedAt time.Time `bson:"created_at"`
@@ -85,9 +88,9 @@ func (i *ClientInfo) CheckIfInProject(projectID types.ID) error {
 	if i.ProjectID != projectID {
 		return fmt.Errorf(
 			"check client(%s,%s) in project(%s): %w",
-			i.ID.String(),
-			i.ProjectID.String(),
-			projectID.String(),
+			i.ID,
+			i.ProjectID,
+			projectID,
 			ErrClientNotFound,
 		)
 	}
@@ -101,20 +104,22 @@ func (i *ClientInfo) Deactivate() {
 }
 
 // AttachDocument attaches the given document to this client.
-func (i *ClientInfo) AttachDocument(docID types.ID) error {
+func (i *ClientInfo) AttachDocument(refKey types.DocRefKey) error {
 	if i.Status != ClientActivated {
-		return fmt.Errorf("client(%s) attaches document(%s): %w", i.ID.String(), docID.String(), ErrClientNotActivated)
+		return fmt.Errorf("client(%s) attaches %s: %w",
+			i.ID, refKey, ErrClientNotActivated)
 	}
 
 	if i.Documents == nil {
-		i.Documents = make(map[types.ID]*ClientDocInfo)
+		i.Documents = make(map[types.DocRefKey]*ClientDocInfo)
 	}
 
-	if i.hasDocument(docID) && i.Documents[docID].Status == DocumentAttached {
-		return fmt.Errorf("client(%s) attaches document(%s): %w", i.ID.String(), docID.String(), ErrDocumentAlreadyAttached)
+	if i.hasDocument(refKey) && i.Documents[refKey].Status == DocumentAttached {
+		return fmt.Errorf("client(%s) attaches %s: %w",
+			i.ID, refKey, ErrDocumentAlreadyAttached)
 	}
 
-	i.Documents[docID] = &ClientDocInfo{
+	i.Documents[refKey] = &ClientDocInfo{
 		Status:    DocumentAttached,
 		ServerSeq: 0,
 		ClientSeq: 0,
@@ -125,45 +130,46 @@ func (i *ClientInfo) AttachDocument(docID types.ID) error {
 }
 
 // DetachDocument detaches the given document from this client.
-func (i *ClientInfo) DetachDocument(docID types.ID) error {
-	if err := i.EnsureDocumentAttached(docID); err != nil {
+func (i *ClientInfo) DetachDocument(refKey types.DocRefKey) error {
+	if err := i.EnsureDocumentAttached(refKey); err != nil {
 		return err
 	}
 
-	i.Documents[docID].Status = DocumentDetached
-	i.Documents[docID].ClientSeq = 0
-	i.Documents[docID].ServerSeq = 0
+	i.Documents[refKey].Status = DocumentDetached
+	i.Documents[refKey].ClientSeq = 0
+	i.Documents[refKey].ServerSeq = 0
 	i.UpdatedAt = time.Now()
 
 	return nil
 }
 
 // RemoveDocument removes the given document from this client.
-func (i *ClientInfo) RemoveDocument(docID types.ID) error {
-	if err := i.EnsureDocumentAttached(docID); err != nil {
+func (i *ClientInfo) RemoveDocument(refKey types.DocRefKey) error {
+	if err := i.EnsureDocumentAttached(refKey); err != nil {
 		return err
 	}
 
-	i.Documents[docID].Status = DocumentRemoved
-	i.Documents[docID].ClientSeq = 0
-	i.Documents[docID].ServerSeq = 0
+	i.Documents[refKey].Status = DocumentRemoved
+	i.Documents[refKey].ClientSeq = 0
+	i.Documents[refKey].ServerSeq = 0
 	i.UpdatedAt = time.Now()
 
 	return nil
 }
 
 // IsAttached returns whether the given document is attached to this client.
-func (i *ClientInfo) IsAttached(docID types.ID) (bool, error) {
-	if !i.hasDocument(docID) {
-		return false, fmt.Errorf("check document(%s) is attached: %w", docID.String(), ErrDocumentNeverAttached)
+func (i *ClientInfo) IsAttached(refKey types.DocRefKey) (bool, error) {
+	if !i.hasDocument(refKey) {
+		return false, fmt.Errorf("check %s is attached: %w",
+			refKey, ErrDocumentNeverAttached)
 	}
 
-	return i.Documents[docID].Status == DocumentAttached, nil
+	return i.Documents[refKey].Status == DocumentAttached, nil
 }
 
 // Checkpoint returns the checkpoint of the given document.
-func (i *ClientInfo) Checkpoint(docID types.ID) change.Checkpoint {
-	clientDocInfo := i.Documents[docID]
+func (i *ClientInfo) Checkpoint(refKey types.DocRefKey) change.Checkpoint {
+	clientDocInfo := i.Documents[refKey]
 	if clientDocInfo == nil {
 		return change.InitialCheckpoint
 	}
@@ -173,36 +179,30 @@ func (i *ClientInfo) Checkpoint(docID types.ID) change.Checkpoint {
 
 // UpdateCheckpoint updates the checkpoint of the given document.
 func (i *ClientInfo) UpdateCheckpoint(
-	docID types.ID,
+	refKey types.DocRefKey,
 	cp change.Checkpoint,
 ) error {
-	if !i.hasDocument(docID) {
-		return fmt.Errorf("update checkpoint in document(%s): %w", docID.String(), ErrDocumentNeverAttached)
+	if !i.hasDocument(refKey) {
+		return fmt.Errorf("update checkpoint in %s: %w", refKey, ErrDocumentNeverAttached)
 	}
 
-	i.Documents[docID].ServerSeq = cp.ServerSeq
-	i.Documents[docID].ClientSeq = cp.ClientSeq
+	i.Documents[refKey].ServerSeq = cp.ServerSeq
+	i.Documents[refKey].ClientSeq = cp.ClientSeq
 	i.UpdatedAt = time.Now()
 
 	return nil
 }
 
 // EnsureDocumentAttached ensures the given document is attached.
-func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
+func (i *ClientInfo) EnsureDocumentAttached(refKey types.DocRefKey) error {
 	if i.Status != ClientActivated {
-		return fmt.Errorf("ensure attached document(%s) in client(%s): %w",
-			docID.String(),
-			i.ID.String(),
-			ErrClientNotActivated,
-		)
+		return fmt.Errorf("ensure attached %s in client(%s): %w",
+			refKey, i.ID, ErrClientNotActivated)
 	}
 
-	if !i.hasDocument(docID) || i.Documents[docID].Status != DocumentAttached {
-		return fmt.Errorf("ensure attached document(%s) in client(%s): %w",
-			docID.String(),
-			i.ID.String(),
-			ErrDocumentNotAttached,
-		)
+	if !i.hasDocument(refKey) || i.Documents[refKey].Status != DocumentAttached {
+		return fmt.Errorf("ensure attached %s in client(%s): %w",
+			refKey, i.ID, ErrDocumentNotAttached)
 	}
 
 	return nil
@@ -214,12 +214,12 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 		return nil
 	}
 
-	documents := make(map[types.ID]*ClientDocInfo, len(i.Documents))
-	for k, v := range i.Documents {
-		documents[k] = &ClientDocInfo{
-			Status:    v.Status,
-			ServerSeq: v.ServerSeq,
-			ClientSeq: v.ClientSeq,
+	documents := make(map[types.DocRefKey]*ClientDocInfo, len(i.Documents))
+	for refKey, docInfo := range i.Documents {
+		documents[refKey] = &ClientDocInfo{
+			Status:    docInfo.Status,
+			ServerSeq: docInfo.ServerSeq,
+			ClientSeq: docInfo.ClientSeq,
 		}
 	}
 
@@ -234,6 +234,6 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 	}
 }
 
-func (i *ClientInfo) hasDocument(docID types.ID) bool {
-	return i.Documents != nil && i.Documents[docID] != nil
+func (i *ClientInfo) hasDocument(refKey types.DocRefKey) bool {
+	return i.Documents != nil && i.Documents[refKey] != nil
 }
