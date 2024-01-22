@@ -518,10 +518,15 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	return &clientInfo, nil
 }
 
-// DeactivateClient deactivates the client of the given ID.
-func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
+// DeactivateClient deactivates the client of the given refKey.
+func (c *Client) DeactivateClient(
+	ctx context.Context,
+	projectID types.ID,
+	refKey types.ClientRefKey,
+) (*database.ClientInfo, error) {
 	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"_id":        clientID,
+		"key":        refKey.Key,
+		"_id":        refKey.ID,
 		"project_id": projectID,
 	}, bson.M{
 		"$set": bson.M{
@@ -533,7 +538,7 @@ func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types
 	clientInfo := database.ClientInfo{}
 	if err := res.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+			return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
 		}
 		return nil, fmt.Errorf("decode client info: %w", err)
 	}
@@ -541,10 +546,15 @@ func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types
 	return &clientInfo, nil
 }
 
-// FindClientInfoByID finds the client of the given ID.
-func (c *Client) FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
+// FindClientInfoByRefKey finds the client of the given refKey.
+func (c *Client) FindClientInfoByRefKey(
+	ctx context.Context,
+	projectID types.ID,
+	refKey types.ClientRefKey,
+) (*database.ClientInfo, error) {
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"_id":        clientID,
+		"key":        refKey.Key,
+		"_id":        refKey.ID,
 		"project_id": projectID,
 	}, bson.M{
 		"$set": bson.M{
@@ -555,7 +565,7 @@ func (c *Client) FindClientInfoByID(ctx context.Context, projectID, clientID typ
 	clientInfo := database.ClientInfo{}
 	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+			return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
 		}
 	}
 
@@ -654,7 +664,7 @@ func (c *Client) FindDeactivateCandidatesPerProject(
 func (c *Client) FindDocInfoByKeyAndOwner(
 	ctx context.Context,
 	projectID types.ID,
-	clientID types.ID,
+	clientRefKey types.ClientRefKey,
 	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
@@ -682,7 +692,7 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 			"_id": res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
-				"owner":      clientID,
+				"owner":      clientRefKey.ID,
 				"server_seq": 0,
 				"created_at": now,
 			},
@@ -1217,9 +1227,10 @@ func (c *Client) UpdateSyncedSeq(
 
 	if !isAttached {
 		if _, err = c.collection(ColSyncedSeqs).DeleteOne(ctx, bson.M{
-			"doc_key":   docRefKey.Key,
-			"doc_id":    docRefKey.ID,
-			"client_id": clientInfo.ID,
+			"doc_key":    docRefKey.Key,
+			"doc_id":     docRefKey.ID,
+			"client_key": clientInfo.Key,
+			"client_id":  clientInfo.ID,
 		}, options.Delete()); err != nil {
 			return fmt.Errorf("delete synced seq: %w", err)
 		}
@@ -1232,9 +1243,10 @@ func (c *Client) UpdateSyncedSeq(
 	}
 
 	if _, err = c.collection(ColSyncedSeqs).UpdateOne(ctx, bson.M{
-		"doc_key":   docRefKey.Key,
-		"doc_id":    docRefKey.ID,
-		"client_id": clientInfo.ID,
+		"doc_key":    docRefKey.Key,
+		"doc_id":     docRefKey.ID,
+		"client_key": clientInfo.Key,
+		"client_id":  clientInfo.ID,
 	}, bson.M{
 		"$set": bson.M{
 			"lamport":    ticket.Lamport(),
@@ -1253,7 +1265,7 @@ func (c *Client) IsDocumentAttached(
 	ctx context.Context,
 	projectID types.ID,
 	docRefKey types.DocRefKey,
-	excludeClientID types.ID,
+	excludeClientRefKey types.ClientRefKey,
 ) (bool, error) {
 	clientDocInfoKey := getClientDocInfoKey(docRefKey)
 	filter := bson.M{
@@ -1261,8 +1273,9 @@ func (c *Client) IsDocumentAttached(
 		clientDocInfoKey + "status": database.DocumentAttached,
 	}
 
-	if excludeClientID != "" {
-		filter["_id"] = bson.M{"$ne": excludeClientID}
+	if excludeClientRefKey != types.EmptyClientRefKey {
+		filter["key"] = bson.M{"$ne": excludeClientRefKey.Key}
+		filter["_id"] = bson.M{"$ne": excludeClientRefKey.ID}
 	}
 
 	result := c.collection(ColClients).FindOne(ctx, filter)

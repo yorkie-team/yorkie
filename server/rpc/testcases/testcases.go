@@ -51,14 +51,18 @@ func RunActivateAndDeactivateClientTest(
 	t *testing.T,
 	testClient v1connect.YorkieServiceClient,
 ) {
+	clientKey := t.Name()
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{
+			ClientKey: clientKey,
+			ClientId:  activateResp.Msg.ClientId,
+		}))
 	assert.NoError(t, err)
 
 	// invalid argument
@@ -69,13 +73,19 @@ func RunActivateAndDeactivateClientTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: emptyClientID}))
+		connect.NewRequest(&api.DeactivateClientRequest{
+			ClientKey: clientKey,
+			ClientId:  emptyClientID,
+		}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 	// client not found
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: nilClientID}))
+		connect.NewRequest(&api.DeactivateClientRequest{
+			ClientKey: clientKey,
+			ClientId:  nilClientID,
+		}))
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
@@ -84,9 +94,10 @@ func RunAttachAndDetachDocumentTest(
 	t *testing.T,
 	testClient v1connect.YorkieServiceClient,
 ) {
+	clientKey := t.Name()
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
@@ -97,6 +108,7 @@ func RunAttachAndDetachDocumentTest(
 	resPack, err := testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},
@@ -107,6 +119,7 @@ func RunAttachAndDetachDocumentTest(
 	_, err = testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   invalidClientID,
 			ChangePack: packWithNoChanges,
 		},
@@ -117,6 +130,7 @@ func RunAttachAndDetachDocumentTest(
 	_, err = testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   nilClientID,
 			ChangePack: packWithNoChanges,
 		},
@@ -127,6 +141,7 @@ func RunAttachAndDetachDocumentTest(
 	_, err = testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},
@@ -137,6 +152,7 @@ func RunAttachAndDetachDocumentTest(
 	_, err = testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: invalidChangePack,
 		},
@@ -146,6 +162,7 @@ func RunAttachAndDetachDocumentTest(
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithNoChanges,
@@ -157,6 +174,7 @@ func RunAttachAndDetachDocumentTest(
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithNoChanges,
@@ -167,6 +185,7 @@ func RunAttachAndDetachDocumentTest(
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: invalidChangePack,
 		},
@@ -177,6 +196,7 @@ func RunAttachAndDetachDocumentTest(
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: "000000000000000000000000",
 			ChangePack: &api.ChangePack{
@@ -188,13 +208,17 @@ func RunAttachAndDetachDocumentTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{
+			ClientKey: clientKey,
+			ClientId:  activateResp.Msg.ClientId,
+		}))
 	assert.NoError(t, err)
 
 	// try to attach the document with a deactivated client
 	_, err = testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},
@@ -207,9 +231,10 @@ func RunAttachAndDetachRemovedDocumentTest(
 	t *testing.T,
 	testClient v1connect.YorkieServiceClient,
 ) {
+	clientKey := t.Name()
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
@@ -226,6 +251,7 @@ func RunAttachAndDetachRemovedDocumentTest(
 	resPack, err := testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},
@@ -235,6 +261,7 @@ func RunAttachAndDetachRemovedDocumentTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithRemoveRequest,
@@ -247,6 +274,7 @@ func RunAttachAndDetachRemovedDocumentTest(
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithNoChanges,
@@ -258,6 +286,7 @@ func RunAttachAndDetachRemovedDocumentTest(
 	resPack, err = testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},
@@ -267,6 +296,7 @@ func RunAttachAndDetachRemovedDocumentTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithRemoveRequest,
@@ -285,16 +315,18 @@ func RunPushPullChangeTest(
 		Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 0},
 	}
 
+	clientKey := helper.TestDocKey(t).String()
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	actorID, _ := hex.DecodeString(activateResp.Msg.ClientId)
 	resPack, err := testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
-			ClientId: activateResp.Msg.ClientId,
+			ClientKey: clientKey,
+			ClientId:  activateResp.Msg.ClientId,
 			ChangePack: &api.ChangePack{
 				DocumentKey: helper.TestDocKey(t).String(),
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
@@ -313,6 +345,7 @@ func RunPushPullChangeTest(
 	_, err = testClient.PushPullChanges(
 		context.Background(),
 		connect.NewRequest(&api.PushPullChangesRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: &api.ChangePack{
@@ -333,6 +366,7 @@ func RunPushPullChangeTest(
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: &api.ChangePack{
@@ -354,6 +388,7 @@ func RunPushPullChangeTest(
 	_, err = testClient.PushPullChanges(
 		context.Background(),
 		connect.NewRequest(&api.PushPullChangesRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithNoChanges,
@@ -365,6 +400,7 @@ func RunPushPullChangeTest(
 	_, err = testClient.PushPullChanges(
 		context.Background(),
 		connect.NewRequest(&api.PushPullChangesRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: invalidChangePack,
@@ -374,13 +410,17 @@ func RunPushPullChangeTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{
+			ClientKey: clientKey,
+			ClientId:  activateResp.Msg.ClientId,
+		}))
 	assert.NoError(t, err)
 
 	// try to push/pull with deactivated client
 	_, err = testClient.PushPullChanges(
 		context.Background(),
 		connect.NewRequest(&api.PushPullChangesRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithNoChanges,
@@ -405,14 +445,16 @@ func RunPushPullChangeOnRemovedDocumentTest(
 		IsRemoved:   true,
 	}
 
+	clientKey := helper.TestDocKey(t).String()
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: helper.TestDocKey(t).String()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	resPack, err := testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},
@@ -422,6 +464,7 @@ func RunPushPullChangeOnRemovedDocumentTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithRemoveRequest,
@@ -433,6 +476,7 @@ func RunPushPullChangeOnRemovedDocumentTest(
 	_, err = testClient.PushPullChanges(
 		context.Background(),
 		connect.NewRequest(&api.PushPullChangesRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithNoChanges,
@@ -446,9 +490,10 @@ func RunRemoveDocumentTest(
 	t *testing.T,
 	testClient v1connect.YorkieServiceClient,
 ) {
+	clientKey := t.Name()
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
@@ -465,6 +510,7 @@ func RunRemoveDocumentTest(
 	resPack, err := testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},
@@ -474,6 +520,7 @@ func RunRemoveDocumentTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithRemoveRequest,
@@ -485,6 +532,7 @@ func RunRemoveDocumentTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithRemoveRequest,
@@ -498,9 +546,10 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 	t *testing.T,
 	testClient v1connect.YorkieServiceClient,
 ) {
+	clientKey := t.Name()
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
@@ -517,6 +566,7 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 	resPack, err := testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},
@@ -526,6 +576,7 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 	_, err = testClient.DetachDocument(
 		context.Background(),
 		connect.NewRequest(&api.DetachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithNoChanges,
@@ -537,6 +588,7 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithRemoveRequest,
@@ -546,13 +598,17 @@ func RunRemoveDocumentWithInvalidClientStateTest(
 
 	_, err = testClient.DeactivateClient(
 		context.Background(),
-		connect.NewRequest(&api.DeactivateClientRequest{ClientId: activateResp.Msg.ClientId}))
+		connect.NewRequest(&api.DeactivateClientRequest{
+			ClientKey: clientKey,
+			ClientId:  activateResp.Msg.ClientId,
+		}))
 	assert.NoError(t, err)
 
 	// try to remove document with a deactivated client
 	_, err = testClient.RemoveDocument(
 		context.Background(),
 		connect.NewRequest(&api.RemoveDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			DocumentId: resPack.Msg.DocumentId,
 			ChangePack: packWithRemoveRequest,
@@ -566,9 +622,10 @@ func RunWatchDocumentTest(
 	t *testing.T,
 	testClient v1connect.YorkieServiceClient,
 ) {
+	clientKey := t.Name()
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	docKey := helper.TestDocKey(t).String()
@@ -581,6 +638,7 @@ func RunWatchDocumentTest(
 	resPack, err := testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},
@@ -591,6 +649,7 @@ func RunWatchDocumentTest(
 	watchResp, err := testClient.WatchDocument(
 		context.Background(),
 		connect.NewRequest(&api.WatchDocumentRequest{
+			ClientKey:   clientKey,
 			ClientId:    activateResp.Msg.ClientId,
 			DocumentKey: docKey,
 			DocumentId:  resPack.Msg.DocumentId,
@@ -887,9 +946,10 @@ func RunAdminGetDocumentTest(
 
 	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
+	clientKey := t.Name()
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
@@ -900,6 +960,7 @@ func RunAdminGetDocumentTest(
 	_, err = testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},
@@ -946,9 +1007,10 @@ func RunAdminListChangesTest(
 
 	testAdminAuthInterceptor.SetToken(resp.Msg.Token)
 
+	clientKey := t.Name()
 	activateResp, err := testClient.ActivateClient(
 		context.Background(),
-		connect.NewRequest(&api.ActivateClientRequest{ClientKey: t.Name()}))
+		connect.NewRequest(&api.ActivateClientRequest{ClientKey: clientKey}))
 	assert.NoError(t, err)
 
 	packWithNoChanges := &api.ChangePack{
@@ -959,6 +1021,7 @@ func RunAdminListChangesTest(
 	_, err = testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
+			ClientKey:  clientKey,
 			ClientId:   activateResp.Msg.ClientId,
 			ChangePack: packWithNoChanges,
 		},

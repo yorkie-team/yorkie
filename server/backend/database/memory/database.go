@@ -496,22 +496,26 @@ func (d *DB) ActivateClient(
 	return clientInfo, nil
 }
 
-// DeactivateClient deactivates a client.
-func (d *DB) DeactivateClient(_ context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
-	if err := clientID.Validate(); err != nil {
+// DeactivateClient deactivates the client of the given refKey.
+func (d *DB) DeactivateClient(
+	_ context.Context,
+	projectID types.ID,
+	refKey types.ClientRefKey,
+) (*database.ClientInfo, error) {
+	if err := refKey.ID.Validate(); err != nil {
 		return nil, err
 	}
 
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "id", clientID.String())
+	raw, err := txn.First(tblClients, "id", refKey.ID.String())
 	if err != nil {
 		return nil, fmt.Errorf("find client by id: %w", err)
 	}
 
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+		return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
 	}
 
 	clientInfo := raw.(*database.ClientInfo)
@@ -532,21 +536,25 @@ func (d *DB) DeactivateClient(_ context.Context, projectID, clientID types.ID) (
 	return clientInfo, nil
 }
 
-// FindClientInfoByID finds a client by ID.
-func (d *DB) FindClientInfoByID(_ context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
-	if err := clientID.Validate(); err != nil {
+// FindClientInfoByRefKey finds the client of the given refKey.
+func (d *DB) FindClientInfoByRefKey(
+	_ context.Context,
+	projectID types.ID,
+	refKey types.ClientRefKey,
+) (*database.ClientInfo, error) {
+	if err := refKey.ID.Validate(); err != nil {
 		return nil, err
 	}
 
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "id", clientID.String())
+	raw, err := txn.First(tblClients, "id", refKey.ID.String())
 	if err != nil {
 		return nil, fmt.Errorf("find client by id: %w", err)
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+		return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
 	}
 
 	clientInfo := raw.(*database.ClientInfo)
@@ -669,7 +677,7 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 func (d *DB) FindDocInfoByKeyAndOwner(
 	_ context.Context,
 	projectID types.ID,
-	clientID types.ID,
+	clientRefKey types.ClientRefKey,
 	key key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
@@ -710,7 +718,7 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 			ID:         newID(),
 			ProjectID:  projectID,
 			Key:        key,
-			Owner:      clientID,
+			Owner:      clientRefKey.ID,
 			ServerSeq:  0,
 			CreatedAt:  now,
 			AccessedAt: now,
@@ -1310,7 +1318,7 @@ func (d *DB) IsDocumentAttached(
 	_ context.Context,
 	projectID types.ID,
 	refKey types.DocRefKey,
-	excludeClientID types.ID,
+	excludeClientRefKey types.ClientRefKey,
 ) (bool, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -1325,7 +1333,7 @@ func (d *DB) IsDocumentAttached(
 
 	for raw := it.Next(); raw != nil; raw = it.Next() {
 		clientInfo := raw.(*database.ClientInfo)
-		if clientInfo.ID == excludeClientID {
+		if clientInfo.Key == excludeClientRefKey.Key && clientInfo.ID == excludeClientRefKey.ID {
 			continue
 		}
 		clientDocInfo := clientInfo.Documents[refKey]

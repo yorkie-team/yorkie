@@ -27,6 +27,7 @@ type SyncedSeqInfo struct {
 	ID        types.ID `bson:"_id"`
 	DocKey    key.Key  `bson:"doc_key"`
 	DocID     types.ID `bson:"doc_id"`
+	ClientKey string   `bson:"client_key"`
 	ClientID  types.ID `bson:"client_id"`
 	Lamport   int64    `bson:"lamport"`
 	ActorID   types.ID `bson:"actor_id"`

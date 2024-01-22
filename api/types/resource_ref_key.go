@@ -27,6 +27,9 @@ import (
 // EmptyDocRefKey is an empty value of DocRefKey.
 var EmptyDocRefKey = DocRefKey{"", ""}
 
+// EmptyClientRefKey is an empty value of ClientRefKey.
+var EmptyClientRefKey = ClientRefKey{"", ""}
+
 // ErrInvalidDocRefKeyStringFormat is returned when the input of DocRefKey Set is invalid.
 var ErrInvalidDocRefKeyStringFormat = errors.New("use the format 'docKey,docID' for the string of the docRefKey")
 
@@ -58,6 +61,17 @@ func (r *DocRefKey) Set(v string) error {
 // NOTE(sejongk): This function is necessray for Viper, an external command-line module.
 func (r DocRefKey) Type() string {
 	return "DocumentRefKey"
+}
+
+// ClientRefKey represents an identifier used to reference a client.
+type ClientRefKey struct {
+	Key string
+	ID  ID
+}
+
+// String returns the string representation of the given ClientRefKey.
+func (r ClientRefKey) String() string {
+	return fmt.Sprintf("Client (%s.%s)", r.Key, r.ID)
 }
 
 // SnapshotRefKey represents an identifier used to reference a snapshot.

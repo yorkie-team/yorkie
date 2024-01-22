@@ -41,6 +41,10 @@ var (
 	// ErrDocumentAttached is returned when the document is attached when
 	// deleting the document.
 	ErrDocumentAttached = fmt.Errorf("document is attached")
+	initialClientRefKey = types.ClientRefKey{
+		Key: "",
+		ID:  types.IDFromActorID(time.InitialActorID),
+	}
 )
 
 // ListDocumentSummaries returns a list of document summaries.
@@ -101,7 +105,7 @@ func GetDocumentSummary(
 	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
 		project.ID,
-		types.IDFromActorID(time.InitialActorID),
+		initialClientRefKey,
 		k,
 		false,
 	)
@@ -135,7 +139,7 @@ func GetDocumentByServerSeq(
 	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
 		project.ID,
-		types.IDFromActorID(time.InitialActorID),
+		initialClientRefKey,
 		k,
 		false,
 	)
@@ -218,7 +222,7 @@ func FindDocInfoByKeyAndOwner(
 	return be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
 		project.ID,
-		clientInfo.ID,
+		clientInfo.RefKey(),
 		docKey,
 		createDocIfNotExist,
 	)
@@ -237,7 +241,7 @@ func RemoveDocument(
 		return be.DB.UpdateDocInfoStatusToRemoved(ctx, project.ID, refKey)
 	}
 
-	isAttached, err := be.DB.IsDocumentAttached(ctx, project.ID, refKey, "")
+	isAttached, err := be.DB.IsDocumentAttached(ctx, project.ID, refKey, types.EmptyClientRefKey)
 	if err != nil {
 		return err
 	}
@@ -254,7 +258,7 @@ func IsDocumentAttached(
 	be *backend.Backend,
 	project *types.Project,
 	docRefKey types.DocRefKey,
-	excludeClientID types.ID,
+	excludeClientRefKey types.ClientRefKey,
 ) (bool, error) {
-	return be.DB.IsDocumentAttached(ctx, project.ID, docRefKey, excludeClientID)
+	return be.DB.IsDocumentAttached(ctx, project.ID, docRefKey, excludeClientRefKey)
 }
