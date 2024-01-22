@@ -71,6 +71,12 @@ func toElement(ctx *change.Context, elem crdt.Element) crdt.Element {
 	panic("unsupported type")
 }
 
+// builcCRDTElement builds CRDT element from the given value.
+// If the value is Array or Slice, Struct, Pointer, to accept the user defined struct,
+// we need to handle it separately with reflect.
+// In the case of a Struct, Pointer, it is treated recursively.
+// In the case of a Slice, it is processed in the buildArrayElements depending on the type of elements.
+// In the case of a Array, it is converted to Slice and processed in the buildArrayElements.
 func buildCRDTElement(
 	context *change.Context,
 	value interface{},
@@ -101,11 +107,6 @@ func buildCRDTElement(
 		}
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, valuesToMap(elem)))
 	}
-	// If the value is Array or Slice, Struct, Pointer, to accept the user defined struct,
-	// we need to handle it separately with reflect.
-	// In the case of a Struct, Pointer, it is treated recursively.
-	// In the case of a Slice, it is processed in the buildArrayElements depending on the type of elements.
-	// In the case of a Array, it is converted to Slice and processed in the buildArrayElements.
 	switch reflect.ValueOf(value).Kind() {
 	case reflect.Slice:
 		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, value))
