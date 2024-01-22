@@ -19,12 +19,18 @@ package json
 
 import (
 	"reflect"
+	"strings"
 	gotime "time"
+	"unicode"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
+
+// tagOptions is the string following a comma in a struct field's "yorkie"
+// tag, or the empty string. It does not include the leading comma.
+type tagOptions string
 
 func toOriginal(elem crdt.Element) crdt.Element {
 	switch elem := elem.(type) {
@@ -79,8 +85,7 @@ func buildCRDTElement(
 		}
 		return primitive
 	case Tree:
-		crdtTree := crdt.NewTree(buildRoot(context, elem.initialRoot, ticket), ticket)
-		return crdtTree
+		return crdt.NewTree(buildRoot(context, elem.initialRoot, ticket), ticket)
 	case Text:
 		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
 	case Counter:
@@ -90,34 +95,120 @@ func buildCRDTElement(
 		}
 		return counter
 	case map[string]interface{}:
-		obj := crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
-		return obj
+		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
 	case reflect.Value:
-		json := make(map[string]interface{})
-		for i := 0; i < elem.NumField(); i++ {
-			key := elem.Type().Field(i)
-			value := elem.Field(i)
-			if value.CanInterface() {
-				json[key.Name] = value.Interface()
-			}
+		if elem.Type().Kind() != reflect.Struct {
+			break
 		}
-		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, json))
+		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, convertValuetoMap(elem)))
+	}
+
+	switch reflect.ValueOf(value).Kind() {
+	case reflect.Slice, reflect.Array:
+		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, value))
+	case reflect.Pointer:
+		return buildCRDTElement(context, reflect.ValueOf(value).Elem().Interface(), ticket)
+	case reflect.Struct:
+		return buildCRDTElement(context, reflect.ValueOf(value), ticket)
 	default:
-		// TODO: this is a temporary solution.
-		// We can deal the array type like primitive type. ex) []int, []string, []map[string]interface{}...
-		// However, we need to check the type of buildArrayElements as well.
-		// So this code check only if it's an array or slice.
-		// The type of specific array is handled by buildArrayElements.
-		switch reflect.ValueOf(elem).Kind() {
-		case reflect.Slice, reflect.Array:
-			array := crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, elem))
-			return array
-		case reflect.Pointer:
-			return buildCRDTElement(context, reflect.ValueOf(elem).Elem().Interface(), ticket)
-		case reflect.Struct:
-			return buildCRDTElement(context, reflect.ValueOf(elem), ticket)
-		default:
-			panic("unsupported type")
+		panic("unsupported type")
+	}
+
+}
+
+// convertValuetoMap converts reflect.Value(struct) to map[string]interface{}.
+// This code referred to the "encoding/json" implementation.
+func convertValuetoMap(value reflect.Value) map[string]interface{} {
+	json := make(map[string]interface{})
+	for i := 0; i < value.NumField(); i++ {
+		field := value.Field(i)
+		fieldType := value.Type().Field(i)
+		tag := fieldType.Tag.Get("yorkie")
+
+		if !field.CanInterface() {
+			continue
+		}
+		if tag == "-" {
+			continue
+		}
+
+		name, options := parseTag(tag)
+		if !isValidTag(name) {
+			name = ""
+		}
+
+		if options.Contains("omitEmpty") && isEmptyValue(field) {
+			continue
+		}
+
+		if name == "" {
+			name = fieldType.Name
+		}
+
+		json[name] = value.Field(i).Interface()
+	}
+	return json
+}
+
+// parseTag parses the given tag to (name, option).
+// This code referred to the "encoding/json/tags.go" implementation.
+func parseTag(tag string) (string, tagOptions) {
+	tag, opt, _ := strings.Cut(tag, ",")
+	return tag, tagOptions(opt)
+}
+
+// isValidTag returns whether the given tag is valid.
+// This code referred to the "encoding/json" implementation.
+func isValidTag(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c):
+			// Backslash and quote chars are reserved, but
+			// otherwise any punctuation chars are allowed
+			// in a tag name.
+		case !unicode.IsLetter(c) && !unicode.IsDigit(c):
+			return false
 		}
 	}
+	return true
+}
+
+// Contains reports whether the given option is contained in the tag options.
+// This code referred to the "encoding/json/tags.go" implementation.
+func (o tagOptions) Contains(optionName string) bool {
+	if len(o) == 0 {
+		return false
+	}
+	s := string(o)
+	for s != "" {
+		var name string
+		name, s, _ = strings.Cut(s, ",")
+		if strings.Trim(name, " ") == optionName {
+			return true
+		}
+	}
+	return false
+}
+
+// isEmptyValue reports whether the given value is empty.
+// This code referred to the "encoding/json/encode.go" implementation.
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return v.Bool() == false
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Pointer:
+		return v.IsNil()
+	}
+	return false
 }

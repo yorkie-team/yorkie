@@ -370,23 +370,29 @@ func TestObjectSet(t *testing.T) {
 		T2 struct {
 			M *string
 		}
-		T3 struct {
-			m string
-		}
 	)
 
 	empty := ""
-	text := "foo"
+	str := "foo"
 	emptyTarget := `{"obj":{"M":""}}`
-	textTarget := `{"obj":{"M":"foo"}}`
+	strTarget := `{"obj":{"M":"foo"}}`
 
 	tests := []struct {
 		CaseName string
 		in       any
 		want     string
 	}{
+		//Test nill
 		{"null map", map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`},
 		{"null &map", &map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`},
+
+		// Test zero value
+		{"zeroValue int struct", struct{ M int }{}, `{"obj":{"M":0}}`},
+		{"zeroValue string struct", struct{ M string }{}, `{"obj":{"M":""}}`},
+		{"zeroValue bytes struct", struct{ M []byte }{M: nil}, `{"obj":{"M":""}}`},
+		{"empty bytes struct", struct{ M []byte }{M: []byte{}}, `{"obj":{"M":""}}`},
+		{"zeroValue array struct", struct{ M []int }{M: nil}, `{"obj":{"M":[]}}`},
+		{"empty array struct", struct{ M []int }{M: []int{}}, `{"obj":{"M":[]}}`},
 
 		// Test with empty string
 		{"empty map", map[string]interface{}{"M": empty}, emptyTarget},
@@ -402,22 +408,47 @@ func TestObjectSet(t *testing.T) {
 		{"empty T2", T2{M: &empty}, emptyTarget},
 		{"empty &T2", &T2{M: &empty}, emptyTarget},
 
-		// Test with some text
-		{"str map", map[string]interface{}{"M": text}, textTarget},
-		{"str &map", &map[string]interface{}{"M": text}, textTarget},
-		{"&str map", map[string]interface{}{"M": &text}, textTarget},
-		{"&str &map", &map[string]interface{}{"M": &text}, textTarget},
-		{"str struct", struct{ M string }{M: text}, textTarget},
-		{"str &struct", &struct{ M string }{M: text}, textTarget},
-		{"&str struct", struct{ M *string }{M: &text}, textTarget},
-		{"&str &struct", &struct{ M *string }{M: &text}, textTarget},
-		{"str T", T1{M: text}, textTarget},
-		{"str &T", &T1{M: text}, textTarget},
-		{"str T2", T2{M: &text}, textTarget},
-		{"str &T2", &T2{M: &text}, textTarget},
+		// Test with some str
+		{"str map", map[string]interface{}{"M": str}, strTarget},
+		{"str &map", &map[string]interface{}{"M": str}, strTarget},
+		{"&str map", map[string]interface{}{"M": &str}, strTarget},
+		{"&str &map", &map[string]interface{}{"M": &str}, strTarget},
+		{"str struct", struct{ M string }{M: str}, strTarget},
+		{"str &struct", &struct{ M string }{M: str}, strTarget},
+		{"&str struct", struct{ M *string }{M: &str}, strTarget},
+		{"&str &struct", &struct{ M *string }{M: &str}, strTarget},
+		{"str T", T1{M: str}, strTarget},
+		{"str &T", &T1{M: str}, strTarget},
+		{"str T2", T2{M: &str}, strTarget},
+		{"str &T2", &T2{M: &str}, strTarget},
 
-		//Test with unexported field
-		{"unexported struct", struct{ m string }{m: text}, `{"obj":{}}`},
+		// Test with unexported field
+		{"unexported struct", struct{ m string }{m: str}, `{"obj":{}}`},
+
+		// Test with - Tag
+		{"- tagged struct", struct {
+			M1 string `yorkie:"-"`
+			M2 string
+		}{M1: str, M2: str}, `{"obj":{"M2":"foo"}}`},
+
+		// Test with omitempty Tag
+		{"omitEmpty tagged struct", struct {
+			M1 string `yorkie:",omitEmpty"`
+			M2 string `yorkie:",omitEmpty"`
+		}{M1: str}, `{"obj":{"M1":"foo"}}`},
+		{"omitEmpty tagged array struct", struct {
+			M1 []int `yorkie:",omitEmpty"`
+			M2 []int `yorkie:",omitEmpty"`
+		}{M1: []int{0, 1, 2}}, `{"obj":{"M1":[0,1,2]}}`},
+		{"omitEmpty tagged empty array struct", struct {
+			M1 []int `yorkie:",omitEmpty"`
+		}{M1: []int{}}, `{"obj":{}}`},
+
+		// Test with field name Tag
+		{"field name tagged struct", struct {
+			M1 string `yorkie:"m1"`
+			M2 string `yorkie:"m2"`
+		}{M1: str, M2: str}, `{"obj":{"m1":"foo","m2":"foo"}}`},
 	}
 
 	for _, tt := range tests {
