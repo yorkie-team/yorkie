@@ -100,7 +100,7 @@ func buildCRDTElement(
 		if elem.Type().Kind() != reflect.Struct {
 			break
 		}
-		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, convertValuetoMap(elem)))
+		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, valuesToMap(elem)))
 	}
 
 	switch reflect.ValueOf(value).Kind() {
@@ -118,17 +118,14 @@ func buildCRDTElement(
 
 // convertValuetoMap converts reflect.Value(struct) to map[string]interface{}.
 // This code referred to the "encoding/json" implementation.
-func convertValuetoMap(value reflect.Value) map[string]interface{} {
+func valuesToMap(value reflect.Value) map[string]interface{} {
 	json := make(map[string]interface{})
 	for i := 0; i < value.NumField(); i++ {
 		field := value.Field(i)
 		fieldType := value.Type().Field(i)
 		tag := fieldType.Tag.Get("yorkie")
 
-		if !field.CanInterface() {
-			continue
-		}
-		if tag == "-" {
+		if !field.CanInterface() || tag == "-" {
 			continue
 		}
 
