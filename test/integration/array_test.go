@@ -358,15 +358,34 @@ func TestArray(t *testing.T) {
 		arr := []int{1, 2, 3}
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("structs", []([]int){arr})
-			assert.Equal(t, `[[1,2,3]]`, root.GetArray("structs").Marshal())
+			root.SetNewArray("arrays", []([]int){arr, arr})
+			assert.Equal(t, `[[1,2,3],[1,2,3]]`, root.GetArray("arrays").Marshal())
 
-			root.Delete("structs")
+			root.Delete("arrays")
 			return nil
 		}))
 
-		//Tombstones : array, struct1, int1, struct2, string2, int2
-		assert.Equal(t, 5, d1.GarbageLen())
-		assert.Equal(t, 5, d1.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 9, d1.GarbageLen())
+		assert.Equal(t, 9, d1.GarbageCollect(time.MaxTicket))
 	})
+
+	t.Run("array.set with pointer of typed array test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		arr := []int{1, 2, 3}
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("arrays", [](*[]int){&arr})
+			assert.Equal(t, `[[1,2,3]]`, root.GetArray("arrays").Marshal())
+
+			root.Delete("arrays")
+			return nil
+		}))
+
+		assert.Equal(t, 9, d1.GarbageLen())
+		assert.Equal(t, 9, d1.GarbageCollect(time.MaxTicket))
+	})
+
 }
