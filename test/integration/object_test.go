@@ -450,6 +450,10 @@ func TestObjectSet(t *testing.T) {
 			M1 string `yorkie:"m1"`
 			M2 string `yorkie:"m2"`
 		}{M1: str, M2: str}, `{"obj":{"m1":"foo","m2":"foo"}}`, 3},
+
+		{"nested user defined struct", struct {
+			M T1
+		}{M: T1{M: str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
 	}
 
 	for _, tt := range tests {

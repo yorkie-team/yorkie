@@ -113,7 +113,6 @@ func buildCRDTElement(
 	default:
 		panic("unsupported type")
 	}
-
 }
 
 // convertValuetoMap converts reflect.Value(struct) to map[string]interface{}.
