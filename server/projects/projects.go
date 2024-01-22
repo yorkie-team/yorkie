@@ -29,7 +29,7 @@ import (
 func CreateProject(
 	ctx context.Context,
 	be *backend.Backend,
-	owner string,
+	owner types.ID,
 	name string,
 ) (*types.Project, error) {
 	info, err := be.DB.CreateProjectInfo(ctx, name, owner, be.Config.ClientDeactivateThreshold)
@@ -44,7 +44,7 @@ func CreateProject(
 func ListProjects(
 	ctx context.Context,
 	be *backend.Backend,
-	owner string,
+	owner types.ID,
 ) ([]*types.Project, error) {
 	infos, err := be.DB.ListProjectInfos(ctx, owner)
 	if err != nil {
@@ -63,7 +63,7 @@ func ListProjects(
 func GetProject(
 	ctx context.Context,
 	be *backend.Backend,
-	owner string,
+	owner types.ID,
 	name string,
 ) (*types.Project, error) {
 	info, err := be.DB.FindProjectInfoByName(ctx, owner, name)
@@ -78,7 +78,7 @@ func GetProject(
 func UpdateProject(
 	ctx context.Context,
 	be *backend.Backend,
-	owner string,
+	owner types.ID,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*types.Project, error) {

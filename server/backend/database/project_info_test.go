@@ -27,9 +27,9 @@ import (
 
 func TestProjectInfo(t *testing.T) {
 	t.Run("update fields test", func(t *testing.T) {
-		dummyOwnerName := "dummy"
+		dummyOwnerID := types.ID("000000000000000000000000")
 		clientDeactivateThreshold := "1h"
-		project := database.NewProjectInfo(t.Name(), dummyOwnerName, clientDeactivateThreshold)
+		project := database.NewProjectInfo(t.Name(), dummyOwnerID, clientDeactivateThreshold)
 
 		testName := "testName"
 		testURL := "testUrl"
@@ -44,7 +44,7 @@ func TestProjectInfo(t *testing.T) {
 
 		project.UpdateFields(&types.UpdatableProjectFields{AuthWebhookMethods: &testMethods})
 		assert.Equal(t, testMethods, project.AuthWebhookMethods)
-		assert.Equal(t, dummyOwnerName, project.Owner)
+		assert.Equal(t, dummyOwnerID, project.Owner)
 
 		project.UpdateFields(&types.UpdatableProjectFields{
 			ClientDeactivateThreshold: &testClientDeactivateThreshold,

@@ -107,7 +107,7 @@ func (c *Client) EnsureDefaultUserAndProject(
 		return nil, nil, err
 	}
 
-	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.Username, clientDeactivateThreshold)
+	projectInfo, err := c.ensureDefaultProjectInfo(ctx, userInfo.ID, clientDeactivateThreshold)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -162,10 +162,10 @@ func (c *Client) ensureDefaultUserInfo(
 // ensureDefaultProjectInfo creates the default project info if it does not exist.
 func (c *Client) ensureDefaultProjectInfo(
 	ctx context.Context,
-	defaultUsername string,
+	defaultUserID types.ID,
 	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
-	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUsername, defaultClientDeactivateThreshold)
+	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
 	candidate.ID = database.DefaultProjectID
 
 	_, err := c.collection(ColProjects).UpdateOne(ctx, bson.M{
@@ -203,7 +203,7 @@ func (c *Client) ensureDefaultProjectInfo(
 func (c *Client) CreateProjectInfo(
 	ctx context.Context,
 	name string,
-	owner string,
+	owner types.ID,
 	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	info := database.NewProjectInfo(name, owner, clientDeactivateThreshold)
@@ -275,7 +275,7 @@ func (c *Client) FindNextNCyclingProjectInfos(
 // ListProjectInfos returns all project infos owned by owner.
 func (c *Client) ListProjectInfos(
 	ctx context.Context,
-	owner string,
+	owner types.ID,
 ) ([]*database.ProjectInfo, error) {
 	cursor, err := c.collection(ColProjects).Find(ctx, bson.M{
 		"owner": owner,
@@ -329,7 +329,7 @@ func (c *Client) FindProjectInfoBySecretKey(ctx context.Context, secretKey strin
 // FindProjectInfoByName returns a project by name.
 func (c *Client) FindProjectInfoByName(
 	ctx context.Context,
-	owner string,
+	owner types.ID,
 	name string,
 ) (*database.ProjectInfo, error) {
 	result := c.collection(ColProjects).FindOne(ctx, bson.M{
@@ -368,7 +368,7 @@ func (c *Client) FindProjectInfoByID(ctx context.Context, id types.ID) (*databas
 // UpdateProjectInfo updates the project info.
 func (c *Client) UpdateProjectInfo(
 	ctx context.Context,
-	owner string,
+	owner types.ID,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*database.ProjectInfo, error) {
@@ -428,8 +428,25 @@ func (c *Client) CreateUserInfo(
 	return info, nil
 }
 
-// FindUserInfo returns a user by username.
-func (c *Client) FindUserInfo(ctx context.Context, username string) (*database.UserInfo, error) {
+// FindUserInfoByID returns a user by ID.
+func (c *Client) FindUserInfoByID(ctx context.Context, clientID types.ID) (*database.UserInfo, error) {
+	result := c.collection(ColUsers).FindOne(ctx, bson.M{
+		"_id": clientID,
+	})
+
+	userInfo := database.UserInfo{}
+	if err := result.Decode(&userInfo); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, fmt.Errorf("%s: %w", clientID, database.ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("decode user info: %w", err)
+	}
+
+	return &userInfo, nil
+}
+
+// FindUserInfoByName returns a user by username.
+func (c *Client) FindUserInfoByName(ctx context.Context, username string) (*database.UserInfo, error) {
 	result := c.collection(ColUsers).FindOne(ctx, bson.M{
 		"username": username,
 	})

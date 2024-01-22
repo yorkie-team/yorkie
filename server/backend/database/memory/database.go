@@ -97,13 +97,13 @@ func (d *DB) FindProjectInfoBySecretKey(
 // FindProjectInfoByName returns a project by the given name.
 func (d *DB) FindProjectInfoByName(
 	_ context.Context,
-	owner string,
+	owner types.ID,
 	name string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblProjects, "owner_name", owner, name)
+	raw, err := txn.First(tblProjects, "owner_name", owner.String(), name)
 	if err != nil {
 		return nil, fmt.Errorf("find project by owner and name: %w", err)
 	}
@@ -143,7 +143,7 @@ func (d *DB) EnsureDefaultUserAndProject(
 		return nil, nil, err
 	}
 
-	project, err := d.ensureDefaultProjectInfo(ctx, username, clientDeactivateThreshold)
+	project, err := d.ensureDefaultProjectInfo(ctx, user.ID, clientDeactivateThreshold)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -187,7 +187,7 @@ func (d *DB) ensureDefaultUserInfo(
 // ensureDefaultProjectInfo creates the default project if it does not exist.
 func (d *DB) ensureDefaultProjectInfo(
 	_ context.Context,
-	defaultUsername string,
+	defaultUserID types.ID,
 	defaultClientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
@@ -200,7 +200,7 @@ func (d *DB) ensureDefaultProjectInfo(
 
 	var info *database.ProjectInfo
 	if raw == nil {
-		info = database.NewProjectInfo(database.DefaultProjectName, defaultUsername, defaultClientDeactivateThreshold)
+		info = database.NewProjectInfo(database.DefaultProjectName, defaultUserID, defaultClientDeactivateThreshold)
 		info.ID = database.DefaultProjectID
 		if err := txn.Insert(tblProjects, info); err != nil {
 			return nil, fmt.Errorf("insert project: %w", err)
@@ -217,7 +217,7 @@ func (d *DB) ensureDefaultProjectInfo(
 func (d *DB) CreateProjectInfo(
 	_ context.Context,
 	name string,
-	owner string,
+	owner types.ID,
 	clientDeactivateThreshold string,
 ) (*database.ProjectInfo, error) {
 	txn := d.db.Txn(true)
@@ -225,7 +225,7 @@ func (d *DB) CreateProjectInfo(
 
 	// NOTE(hackerwins): Check if the project already exists.
 	// https://github.com/hashicorp/go-memdb/issues/7#issuecomment-270427642
-	existing, err := txn.First(tblProjects, "owner_name", owner, name)
+	existing, err := txn.First(tblProjects, "owner_name", owner.String(), name)
 	if err != nil {
 		return nil, fmt.Errorf("find project by owner and name: %w", err)
 	}
@@ -304,7 +304,7 @@ func (d *DB) FindNextNCyclingProjectInfos(
 // ListProjectInfos returns all project infos owned by owner.
 func (d *DB) ListProjectInfos(
 	_ context.Context,
-	owner string,
+	owner types.ID,
 ) ([]*database.ProjectInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
@@ -312,7 +312,7 @@ func (d *DB) ListProjectInfos(
 	iter, err := txn.LowerBound(
 		tblProjects,
 		"owner_name",
-		owner,
+		owner.String(),
 		"",
 	)
 	if err != nil {
@@ -335,7 +335,7 @@ func (d *DB) ListProjectInfos(
 // UpdateProjectInfo updates the given project.
 func (d *DB) UpdateProjectInfo(
 	_ context.Context,
-	owner string,
+	owner types.ID,
 	id types.ID,
 	fields *types.UpdatableProjectFields,
 ) (*database.ProjectInfo, error) {
@@ -356,7 +356,7 @@ func (d *DB) UpdateProjectInfo(
 	}
 
 	if fields.Name != nil {
-		existing, err := txn.First(tblProjects, "owner_name", owner, *fields.Name)
+		existing, err := txn.First(tblProjects, "owner_name", owner.String(), *fields.Name)
 		if err != nil {
 			return nil, fmt.Errorf("find project by owner and name: %w", err)
 		}
@@ -402,8 +402,24 @@ func (d *DB) CreateUserInfo(
 	return info, nil
 }
 
-// FindUserInfo finds a user by the given username.
-func (d *DB) FindUserInfo(_ context.Context, username string) (*database.UserInfo, error) {
+// FindUserInfoByID finds a user by the given ID.
+func (d *DB) FindUserInfoByID(_ context.Context, clientID types.ID) (*database.UserInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "id", clientID.String())
+	if err != nil {
+		return nil, fmt.Errorf("find user by id: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("%s: %w", clientID, database.ErrUserNotFound)
+	}
+
+	return raw.(*database.UserInfo).DeepCopy(), nil
+}
+
+// FindUserInfoByName finds a user by the given username.
+func (d *DB) FindUserInfoByName(_ context.Context, username string) (*database.UserInfo, error) {
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 

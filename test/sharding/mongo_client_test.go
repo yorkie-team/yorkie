@@ -39,8 +39,7 @@ const (
 	dummyProjectID              = types.ID("000000000000000000000000")
 	projectOneID                = types.ID("000000000000000000000001")
 	projectTwoID                = types.ID("000000000000000000000002")
-	dummyOwnerName              = "dummy"
-	dummyClientKey              = "dummy"
+	dummyOwnerID                = types.ID("000000000000000000000000")
 	dummyClientID               = types.ID("000000000000000000000000")
 	clientDeactivateThreshold   = "1h"
 )
@@ -125,7 +124,7 @@ func TestClientWithShardedDB(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. Initialize a project and create a document.
-		projectInfo, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerName, clientDeactivateThreshold)
+		projectInfo, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		docKey1 := key.Key(fmt.Sprintf("%s%d", "duplicateIDTestDocKey", 0))
@@ -171,7 +170,7 @@ func TestClientWithShardedDB(t *testing.T) {
 		ctx := context.Background()
 
 		// 01. Initialize a project and create documents.
-		projectInfo, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerName, clientDeactivateThreshold)
+		projectInfo, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 
 		var docInfos []*database.DocInfo

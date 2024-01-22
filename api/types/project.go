@@ -17,7 +17,9 @@
 
 package types
 
-import "time"
+import (
+	"time"
+)
 
 // Project is a project that consists of multiple documents and clients.
 type Project struct {
@@ -28,7 +30,7 @@ type Project struct {
 	Name string `json:"name"`
 
 	// Owner is the owner of this project.
-	Owner string `json:"owner"`
+	Owner ID `json:"owner"`
 
 	// AuthWebhookURL is the url of the authorization webhook.
 	AuthWebhookURL string `json:"auth_webhook_url"`
