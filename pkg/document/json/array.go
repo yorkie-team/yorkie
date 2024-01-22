@@ -306,7 +306,8 @@ func buildArrayElements(
 	case []map[string]interface{}:
 		return arrayToElements[map[string]interface{}](elements, context)
 	default:
-		if reflect.ValueOf(elements).Type().Elem().Kind() == reflect.Struct {
+		switch reflect.ValueOf(elements).Type().Elem().Kind() {
+		case reflect.Struct:
 			length := reflect.ValueOf(elements).Len()
 			array := make([]reflect.Value, length)
 
@@ -314,6 +315,14 @@ func buildArrayElements(
 				array[i] = reflect.ValueOf(elements).Index(i)
 			}
 			return arrayToElements[reflect.Value](array, context)
+		case reflect.Array, reflect.Slice, reflect.Ptr:
+			length := reflect.ValueOf(elements).Len()
+			array := make([]interface{}, length)
+
+			for i := 0; i < length; i++ {
+				array[i] = reflect.ValueOf(elements).Index(i).Interface()
+			}
+			return arrayToElements[interface{}](array, context)
 		}
 		panic("unsupported array type")
 	}
