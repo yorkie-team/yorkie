@@ -299,25 +299,54 @@ func TestArray(t *testing.T) {
 		cnt := json.NewCounter(0, crdt.LongCnt)
 		txt := json.NewText()
 		tree := json.NewTree()
-		type T1 struct {
-			msg string
-			Msg string
-		}
 
+		// 01. set array with value
+		// 02. Edit value in array
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			// Counter
 			root.SetNewArray("counters", []json.Counter{cnt, cnt, cnt})
 			root.GetArray("counters").Get(0).(*json.Counter).Increase(1)
 			assert.Equal(t, `{"counters":[1,0,0]}`, root.Marshal())
 
+			// Text
 			root.SetNewArray("texts", []json.Text{txt, txt, txt})
-			assert.Equal(t, `[[],[],[]]`, root.GetArray("texts").Marshal())
+			root.GetArray("texts").Get(0).(*json.Text).Edit(0, 0, "hello")
+			assert.Equal(t, `[[{"val":"hello"}],[],[]]`, root.GetArray("texts").Marshal())
 
+			// Tree
 			root.SetNewArray("forest", []json.Tree{tree, tree})
-			assert.Equal(t, `[{"type":"root","children":[]},{"type":"root","children":[]}]`, root.GetArray("forest").Marshal())
-
-			root.SetNewArray("structs", []T1{{"hello", "Hello"}, {"world", "World"}})
-			assert.Equal(t, `[{"Msg":"Hello"},{"Msg":"World"}]`, root.GetArray("structs").Marshal())
+			root.GetArray("forest").Get(0).(*json.Tree).Edit(0, 0, &json.TreeNode{
+				Type:     "p",
+				Children: []json.TreeNode{},
+			}, 0)
+			assert.Equal(t, `[{"type":"root","children":[{"type":"p","children":[]}]},{"type":"root","children":[]}]`, root.GetArray("forest").Marshal())
+			assert.Equal(t, `<root><p></p></root>`, root.GetArray("forest").Get(0).(*json.Tree).ToXML())
 			return nil
 		}))
+	})
+
+	t.Run("array.set with tagged struct test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		type T1 struct {
+			private string
+			Msg     string `yorkie:"msg,omitEmpty"`
+			Num     int    `yorkie:"num"`
+			Skip    string `yorkie:"-"`
+		}
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewArray("structs", []T1{{}, {"def", "def", 1, "skipped"}})
+			assert.Equal(t, `[{"num":0},{"msg":"def","num":1}]`, root.GetArray("structs").Marshal())
+
+			root.Delete("structs")
+			return nil
+		}))
+
+		//Tombstones : array, struct1, int1, struct2, string2, int2
+		assert.Equal(t, 6, d1.GarbageLen())
+		assert.Equal(t, 6, d1.GarbageCollect(time.MaxTicket))
 	})
 }
