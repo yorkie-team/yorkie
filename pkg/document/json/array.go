@@ -274,7 +274,7 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 }
 
 // buildArrayElements return the element slice of the given array.
-// Becuase the type of the given array is interface{}, it is necessary to type assertion.
+// Because the type of the given array is interface{}, it is necessary to type assertion.
 // If the type of elements of the given array is user defined struct or array, it can detect by reflect.
 // In the case of the user defined struct, it is converted to reflect.Value and delegate to arrayToElements.
 // The structure cannot immediately call the interface() because it has an unexposed field.

@@ -111,8 +111,8 @@ func buildCRDTElement(
 	case reflect.Slice:
 		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, value))
 	case reflect.Array:
-		len := reflect.ValueOf(value).Len()
-		slice := reflect.MakeSlice(reflect.SliceOf(reflect.ValueOf(value).Type().Elem()), len, len)
+		length := reflect.ValueOf(value).Len()
+		slice := reflect.MakeSlice(reflect.SliceOf(reflect.ValueOf(value).Type().Elem()), length, length)
 		reflect.Copy(slice, reflect.ValueOf(value))
 		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, slice.Interface()))
 	case reflect.Pointer:
