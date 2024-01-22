@@ -43,7 +43,7 @@ type ProjectInfo struct {
 	Name string `bson:"name"`
 
 	// Owner is the owner of this project.
-	Owner string `bson:"owner"`
+	Owner types.ID `bson:"owner"`
 
 	// PublicKey is the API key of this project.
 	PublicKey string `bson:"public_key"`
@@ -69,7 +69,7 @@ type ProjectInfo struct {
 }
 
 // NewProjectInfo creates a new ProjectInfo of the given name.
-func NewProjectInfo(name string, owner string, clientDeactivateThreshold string) *ProjectInfo {
+func NewProjectInfo(name string, owner types.ID, clientDeactivateThreshold string) *ProjectInfo {
 	return &ProjectInfo{
 		Name:                      name,
 		Owner:                     owner,

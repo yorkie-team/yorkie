@@ -32,6 +32,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
@@ -40,8 +41,8 @@ import (
 )
 
 const (
-	dummyOwnerName            = "dummy"
-	otherOwnerName            = "other"
+	dummyOwnerID              = types.ID("000000000000000000000000")
+	otherOwnerID              = types.ID("000000000000000000000001")
 	clientDeactivateThreshold = "23h"
 )
 
@@ -140,10 +141,10 @@ func createProjects(t *testing.T, db *mongo.Client) []*database.ProjectInfo {
 
 	projects := make([]*database.ProjectInfo, 0)
 	for i := 0; i < 10; i++ {
-		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerName, clientDeactivateThreshold)
+		p, err := db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 		projects = append(projects, p)
-		p, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), otherOwnerName, clientDeactivateThreshold)
+		p, err = db.CreateProjectInfo(ctx, fmt.Sprintf("%d project", i), otherOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
 		projects = append(projects, p)
 	}
