@@ -40,6 +40,7 @@ const (
 	projectOneID                = types.ID("000000000000000000000001")
 	projectTwoID                = types.ID("000000000000000000000002")
 	dummyOwnerID                = types.ID("000000000000000000000000")
+	dummyClientID               = types.ID("000000000000000000000000")
 	clientDeactivateThreshold   = "1h"
 )
 

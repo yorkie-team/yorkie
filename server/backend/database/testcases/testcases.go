@@ -44,6 +44,7 @@ const (
 	dummyOwnerID              = types.ID("000000000000000000000000")
 	otherOwnerID              = types.ID("000000000000000000000001")
 	dummyDocID                = types.ID("000000000000000000000000")
+	dummyClientID             = types.ID("000000000000000000000000")
 	clientDeactivateThreshold = "1h"
 )
 
