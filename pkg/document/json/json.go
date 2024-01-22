@@ -104,7 +104,8 @@ func buildCRDTElement(
 	// If the value is Array or Slice, Struct, Pointer, to accept the user defined struct,
 	// we need to handle it separately with reflect.
 	// In the case of a Struct, Pointer, it is treated recursively.
-	// In the case of a Array, Slice, it is processed in the buildArrayElements depending on the type of elements.
+	// In the case of a Slice, it is processed in the buildArrayElements depending on the type of elements.
+	// In the case of a Array, it is converted to Slice and processed in the buildArrayElements.
 	switch reflect.ValueOf(value).Kind() {
 	case reflect.Slice:
 		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, value))
