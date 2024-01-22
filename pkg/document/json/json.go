@@ -106,8 +106,13 @@ func buildCRDTElement(
 	// In the case of a Struct, Pointer, it is treated recursively.
 	// In the case of a Array, Slice, it is processed in the buildArrayElements depending on the type of elements.
 	switch reflect.ValueOf(value).Kind() {
-	case reflect.Slice, reflect.Array:
+	case reflect.Slice:
 		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, value))
+	case reflect.Array:
+		len := reflect.ValueOf(value).Len()
+		slice := reflect.MakeSlice(reflect.SliceOf(reflect.ValueOf(value).Type().Elem()), len, len)
+		reflect.Copy(slice, reflect.ValueOf(value))
+		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, slice.Interface()))
 	case reflect.Pointer:
 		return buildCRDTElement(context, reflect.ValueOf(value).Elem().Interface(), ticket)
 	case reflect.Struct:

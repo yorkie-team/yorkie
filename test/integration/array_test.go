@@ -396,7 +396,7 @@ func TestArray(t *testing.T) {
 		arr := [3]int{1, 2, 3}
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("arrays", []([3]int){arr})
+			root.SetNewArray("arrays", [1]([3]int){arr})
 			assert.Equal(t, `[[1,2,3]]`, root.GetArray("arrays").Marshal())
 
 			root.Delete("arrays")

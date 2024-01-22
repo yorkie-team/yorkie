@@ -320,7 +320,7 @@ func buildArrayElements(
 				array[i] = reflect.ValueOf(elements).Index(i)
 			}
 			return arrayToElements[reflect.Value](array, context)
-		case reflect.Slice, reflect.Ptr:
+		case reflect.Slice, reflect.Array, reflect.Ptr:
 			length := reflect.ValueOf(elements).Len()
 			array := make([]interface{}, length)
 
