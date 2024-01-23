@@ -17,6 +17,7 @@
 package json
 
 import (
+	"reflect"
 	"strings"
 	gotime "time"
 
@@ -47,6 +48,9 @@ func (p *Object) SetNewObject(k string, v ...interface{}) *Object {
 		if len(v) == 0 {
 			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
 		}
+		if v[0] == nil || (isStruct(v[0]) && isMapStringInterface(v[0])) {
+			panic("unsupported object type")
+		}
 		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
 	})
 
@@ -61,6 +65,10 @@ func (p *Object) SetNewArray(k string, v ...interface{}) *Array {
 		elements := crdt.NewRGATreeList()
 		if len(v) == 0 {
 			return NewArray(p.context, crdt.NewArray(elements, ticket))
+		}
+		if v[0] == nil || (reflect.TypeOf(v[0]).Kind() != reflect.Slice &&
+			reflect.TypeOf(v[0]).Kind() != reflect.Array) {
+			panic("unsupported array type")
 		}
 		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
 	})
@@ -359,4 +367,19 @@ func buildObjectMembers(
 	}
 
 	return members
+}
+
+// isStruct returns whether the given value is struct or not.
+// it also returns true if the given value is a pointer to struct.
+func isStruct(v interface{}) bool {
+	return (reflect.TypeOf(v).Kind() == reflect.Ptr &&
+		reflect.TypeOf(v).Elem().Kind() == reflect.Struct) ||
+		reflect.TypeOf(v).Kind() == reflect.Struct
+}
+
+// isMapStringInterface returns whether the given value is map[string]interface{} or not.
+// it also returns true if the given value is a pointer to map[string]interface{}.
+func isMapStringInterface(v interface{}) bool {
+	return reflect.TypeOf(v) == reflect.TypeOf(map[string]interface{}{}) ||
+		reflect.TypeOf(v) == reflect.TypeOf(&map[string]interface{}{})
 }
