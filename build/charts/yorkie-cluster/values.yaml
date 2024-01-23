@@ -1,11 +1,11 @@
 # Configuration for Yorkie cluster
 yorkie:
   name: yorkie
-  namespace: &namespace yorkie
+  namespace: yorkie
 
   autoscaling:
     enabled: false
-    replicaCount: 1
+    replicaCount: 3
 
   image:
     repository: yorkieteam/yorkie
@@ -13,8 +13,8 @@ yorkie:
     tag: ""
 
   args:
-    dbUrl: &mongoUrl mongodb.mongodb.svc.cluster.local
-    dbPort: &mongoPort 27017
+    dbUrl: mongodb.mongodb.svc.cluster.local
+    dbPort: 27017
 
   ports:
     rpcPort: 8080
