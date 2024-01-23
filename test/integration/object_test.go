@@ -370,6 +370,9 @@ func TestObjectSet(t *testing.T) {
 		T2 struct {
 			M *string
 		}
+		T3 struct {
+			C json.Counter
+		}
 	)
 
 	empty := ""
@@ -424,36 +427,70 @@ func TestObjectSet(t *testing.T) {
 		{"str &T2", &T2{M: &str}, strTarget, 2},
 
 		// Test with unexported field
-		{"unexported struct", struct{ m string }{m: str}, `{"obj":{}}`, 1},
+		{"unexported field in struct", struct{ m string }{m: str}, `{"obj":{}}`, 1},
 
 		// Test with - Tag
-		{"- tagged struct", struct {
+		{"- tagged in struct", struct {
 			M1 string `yorkie:"-"`
 			M2 string
 		}{M1: str, M2: str}, `{"obj":{"M2":"foo"}}`, 2},
 
 		// Test with omitempty Tag
-		{"omitEmpty tagged struct", struct {
+		{"omitEmpty tagged in struct", struct {
 			M1 string `yorkie:",omitEmpty"`
 			M2 string `yorkie:",omitEmpty"`
 		}{M1: str}, `{"obj":{"M1":"foo"}}`, 2},
-		{"omitEmpty tagged array struct", struct {
+		{"omitEmpty tagged array in struct", struct {
 			M1 []int `yorkie:",omitEmpty"`
-			M2 []int `yorkie:",omitEmpty"`
-		}{M1: []int{0, 1, 2}}, `{"obj":{"M1":[0,1,2]}}`, 5},
-		{"omitEmpty tagged empty array struct", struct {
+		}{}, `{"obj":{}}`, 1},
+		{"omitEmpty tagged empty array in struct", struct {
 			M1 []int `yorkie:",omitEmpty"`
 		}{M1: []int{}}, `{"obj":{}}`, 1},
 
 		// Test with field name Tag
-		{"field name tagged struct", struct {
+		{"field name tagged in struct", struct {
 			M1 string `yorkie:"m1"`
 			M2 string `yorkie:"m2"`
 		}{M1: str, M2: str}, `{"obj":{"m1":"foo","m2":"foo"}}`, 3},
 
-		{"nested user defined struct", struct {
-			M T1
-		}{M: T1{M: str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
+		// Test Tree, Text, Counter, Object
+		// uninitialized
+		{"counter in struct", struct{ M json.Counter }{}, `{"obj":{"M":0}}`, 2},
+		{"Text in struct", struct{ M json.Text }{}, `{"obj":{"M":[]}}`, 2},
+		{"Tree in struct", struct{ M json.Tree }{}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
+		{"Object in struct", struct{ M json.Object }{}, `{"obj":{"M":{}}}`, 2},
+		//empty intialized
+		{"Text in struct", struct{ M json.Text }{M: json.NewText()}, `{"obj":{"M":[]}}`, 2},
+		{"Tree in struct", struct{ M json.Tree }{M: json.NewTree()}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
+		//initialized
+		{"counter in struct", struct{ M json.Counter }{M: json.NewCounter(0, crdt.LongCnt)}, `{"obj":{"M":0}}`, 2},
+		{"Tree in struct", struct{ M json.Tree }{M: json.NewTree(&json.TreeNode{
+			Type:     "p",
+			Children: []json.TreeNode{},
+		})}, `{"obj":{"M":{"type":"p","children":[]}}}`, 2},
+		// Tagged
+		{"counter in struct", struct {
+			M1 json.Counter `yorkie:"-"`
+			M2 json.Text    `yorkie:"-"`
+			M3 json.Tree    `yorkie:"-"`
+			M4 json.Object  `yorkie:"-"`
+		}{}, `{"obj":{}}`, 1},
+		{"counter in struct", struct {
+			M1 json.Counter `yorkie:",omitEmpty"`
+			M2 json.Text    `yorkie:",omitEmpty"`
+			M3 json.Tree    `yorkie:",omitEmpty"`
+			M4 json.Object  `yorkie:",omitEmpty"`
+		}{}, `{"obj":{}}`, 1},
+
+		//Test with nested struct
+		{"nested user defined struct", struct{ M T1 }{M: T1{M: str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
+		{"nested &user defined struct", struct{ M *T1 }{M: &T1{M: str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
+		{"nested user defined struct with zero value", struct{ M T1 }{}, `{"obj":{"M":{"M":""}}}`, 3},
+		{"nested &user defined struct with nil", struct{ M *T1 }{M: nil}, `{"obj":{"M":null}}`, 2},
+		{"nested user defined struct with &str", struct{ M *T2 }{M: &T2{M: &str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
+		{"nested object with json.Counter", struct{ M T3 }{M: T3{C: json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
+		{"nested &object with json.Counter", struct{ M *T3 }{M: &T3{C: json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
+		{"nested object with json.Counter with zero value", struct{ M T3 }{}, `{"obj":{"M":{"C":0}}}`, 3},
 	}
 
 	for _, tt := range tests {

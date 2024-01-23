@@ -99,6 +99,8 @@ func buildCRDTElement(
 			panic(err)
 		}
 		return counter
+	case Object: // only for object field declared in user defined struct
+		return crdt.NewObject(crdt.NewElementRHT(), ticket, nil)
 	case map[string]interface{}:
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
 	case reflect.Value:
@@ -116,12 +118,16 @@ func buildCRDTElement(
 		reflect.Copy(slice, reflect.ValueOf(value))
 		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, slice.Interface()))
 	case reflect.Pointer:
-		return buildCRDTElement(context, reflect.ValueOf(value).Elem().Interface(), ticket)
+		val := reflect.ValueOf(value)
+		if val.IsNil() || !val.Elem().CanInterface() {
+			return buildCRDTElement(context, nil, ticket)
+		}
+		return buildCRDTElement(context, val.Elem().Interface(), ticket)
 	case reflect.Struct:
 		return buildCRDTElement(context, reflect.ValueOf(value), ticket)
-	default:
-		panic("unsupported type")
 	}
+
+	panic("unsupported type")
 }
 
 // valuesToMap converts reflect.Value(struct) to map[string]interface{}
