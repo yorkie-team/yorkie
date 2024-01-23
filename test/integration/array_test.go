@@ -361,6 +361,7 @@ func TestArraySet(t *testing.T) {
 		{"float64", []float64{1.1, 2.2}, `[1.100000,2.200000]`, 3},
 		{"string", []string{"a", "b", "c"}, `["a","b","c"]`, 4},
 		{"bool", []bool{true, false, true}, `[true,false,true]`, 4},
+		{"bytes", [][]byte{{65, 66}, {67, 68}}, `["AB","CD"]`, 3},
 		{"time", []gotime.Time{gotime.Date(2022, 3, 2, 9, 10, 0, 0, gotime.UTC)}, `["2022-03-02T09:10:00Z"]`, 2},
 
 		// json Counter, Text, Tree

@@ -48,7 +48,7 @@ func (p *Object) SetNewObject(k string, v ...interface{}) *Object {
 		if len(v) == 0 {
 			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
 		}
-		if v[0] == nil || (isStruct(v[0]) && isMapStringInterface(v[0])) {
+		if v[0] == nil || (!isStruct(v[0]) && !isMapStringInterface(v[0])) {
 			panic("unsupported object type")
 		}
 		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
