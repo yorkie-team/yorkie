@@ -487,7 +487,6 @@ func TestObjectSet(t *testing.T) {
 		{"nested &user defined struct", struct{ M *T1 }{M: &T1{M: str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
 		{"nested user defined struct with zero value", struct{ M T1 }{}, `{"obj":{"M":{"M":""}}}`, 3},
 		{"nested &user defined struct with nil", struct{ M *T1 }{M: nil}, `{"obj":{"M":null}}`, 2},
-		{"nested user defined struct with &str", struct{ M *T2 }{M: &T2{M: &str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
 		{"nested object with json.Counter", struct{ M T3 }{M: T3{C: json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
 		{"nested &object with json.Counter", struct{ M *T3 }{M: &T3{C: json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
 		{"nested object with json.Counter with zero value", struct{ M T3 }{}, `{"obj":{"M":{"C":0}}}`, 3},

@@ -109,6 +109,7 @@ func buildCRDTElement(
 		}
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, valuesToMap(elem)))
 	}
+
 	switch reflect.ValueOf(value).Kind() {
 	case reflect.Slice:
 		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, value))
