@@ -107,7 +107,7 @@ func buildCRDTElement(
 		if elem.Type().Kind() != reflect.Struct {
 			break
 		}
-		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, valuesToMap(elem)))
+		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, valueToMap(elem)))
 	}
 
 	switch reflect.ValueOf(value).Kind() {
@@ -131,10 +131,10 @@ func buildCRDTElement(
 	panic("unsupported type")
 }
 
-// valuesToMap converts reflect.Value(struct) to map[string]interface{}
+// valueToMap converts reflect.Value(struct) to map[string]interface{}
 // except the field that has the tag "yorkie:-" or omitEmpty option and the field that is unexported.
 // This code referred to the "encoding/json" implementation.
-func valuesToMap(value reflect.Value) map[string]interface{} {
+func valueToMap(value reflect.Value) map[string]interface{} {
 	json := make(map[string]interface{})
 	for i := 0; i < value.NumField(); i++ {
 		field := value.Field(i)
@@ -231,6 +231,5 @@ func isEmptyValue(v reflect.Value) bool {
 		}
 		return true
 	}
-
 	return false
 }
