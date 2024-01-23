@@ -21,6 +21,7 @@ package integration
 import (
 	"context"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -324,86 +325,91 @@ func TestArray(t *testing.T) {
 			return nil
 		}))
 	})
+}
 
-	t.Run("array.set with tagged struct slice test", func(t *testing.T) {
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+func TestArraySet(t *testing.T) {
+	clients := activeClients(t, 1)
+	c1 := clients[0]
+	defer deactivateAndCloseClients(t, clients)
 
-		type T1 struct {
-			private string
-			Msg     string `yorkie:"msg,omitEmpty"`
-			Num     int    `yorkie:"num"`
-			Skip    string `yorkie:"-"`
+	type (
+		T1 struct {
+			M string
 		}
+		T2 struct {
+			Skip  string `yorkie:"-"`
+			M     string `yorkie:"m"`
+			Empty string `yorkie:"e,omitEmpty"`
+		}
+	)
 
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("structs", []T1{{}, {"def", "def", 1, "skipped"}})
-			assert.Equal(t, `[{"num":0},{"msg":"def","num":1}]`, root.GetArray("structs").Marshal())
+	arr := [3]int{1, 2, 3}
+	t1 := T1{"a"}
+	map1 := map[string]interface{}{"a": 1, "b": 2}
 
-			root.Delete("structs")
-			return nil
-		}))
+	tests := []struct {
+		caseName   string
+		in         any
+		want       string
+		tombstones int
+	}{
+		// primitive
+		{"int", []int{1, 2, 3}, `[1,2,3]`, 4},
+		{"int32", []int32{1, 2, 3}, `[1,2,3]`, 4},
+		{"int64", []int64{1, 2, 3}, `[1,2,3]`, 4},
+		{"float32", []float32{1.1, 2.2}, `[1.100000,2.200000]`, 3},
+		{"float64", []float64{1.1, 2.2}, `[1.100000,2.200000]`, 3},
+		{"string", []string{"a", "b", "c"}, `["a","b","c"]`, 4},
+		{"bool", []bool{true, false, true}, `[true,false,true]`, 4},
+		{"time", []gotime.Time{gotime.Date(2022, 3, 2, 9, 10, 0, 0, gotime.UTC)}, `["2022-03-02T09:10:00Z"]`, 2},
 
-		//Tombstones : array, object1, int1, object2, string2, int2
-		assert.Equal(t, 6, d1.GarbageLen())
-		assert.Equal(t, 6, d1.GarbageCollect(time.MaxTicket))
-	})
+		// json Counter, Text, Tree
+		{"Counter", []json.Counter{json.NewCounter(1, crdt.LongCnt)}, `[1]`, 2},
+		{"Text", []json.Text{json.NewText()}, `[[]]`, 2},
+		{"Tree", []json.Tree{json.NewTree()}, `[{"type":"root","children":[]}]`, 2},
 
-	t.Run("array.set with typed slice test", func(t *testing.T) {
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		// user defined struct
+		{"not initialized struct", []T1{{}, {}}, `[{"M":""},{"M":""}]`, 5},
+		{"struct", []T1{{"a"}, {"b"}}, `[{"M":"a"},{"M":"b"}]`, 5},
+		{"struct pointers", []*T1{&t1, &t1}, `[{"M":"a"},{"M":"a"}]`, 5},
 
-		arr := []int{1, 2, 3}
+		// user defined struct with tag
+		{"not initialized struct", []T2{{}, {}}, `[{"m":""},{"m":""}]`, 5},
+		{"tagged struct", []T2{{"", "2", ""}, {"", "2", ""}}, `[{"m":"2"},{"m":"2"}]`, 5},
+		{"initialized struct", []T2{{"1", "2", "3"}, {"1", "2", "3"}}, `[{"e":"3","m":"2"},{"e":"3","m":"2"}]`, 7},
 
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("arrays", []([]int){arr, arr})
-			assert.Equal(t, `[[1,2,3],[1,2,3]]`, root.GetArray("arrays").Marshal())
+		// array
+		{"array", [1][3]int{{1, 2, 3}}, `[[1,2,3]]`, 5},
+		{"array pointers", [2]*[3]int{&arr, &arr}, `[[1,2,3],[1,2,3]]`, 9},
 
-			root.Delete("arrays")
-			return nil
-		}))
+		//nestsed slice
+		{"nested slice", [][]int{{1, 2, 3}, {1, 2, 3}}, `[[1,2,3],[1,2,3]]`, 9},
 
-		assert.Equal(t, 9, d1.GarbageLen())
-		assert.Equal(t, 9, d1.GarbageCollect(time.MaxTicket))
-	})
+		// map
+		{"map", []map[string]interface{}{map1, map1}, `[{"a":1,"b":2},{"a":1,"b":2}]`, 7},
+		{"map pointers", []*map[string]interface{}{&map1, &map1}, `[{"a":1,"b":2},{"a":1,"b":2}]`, 7},
+	}
 
-	t.Run("array.set with pointer of typed slice test", func(t *testing.T) {
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
 
-		arr := []int{1, 2, 3}
+			err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewArray("array", tt.in)
+				assert.Equal(t, tt.want, root.GetArray("array").Marshal())
+				return nil
+			})
+			assert.NoError(t, err)
 
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("arrays", [](*[]int){&arr})
-			assert.Equal(t, `[[1,2,3]]`, root.GetArray("arrays").Marshal())
-
-			root.Delete("arrays")
-			return nil
-		}))
-
-		assert.Equal(t, 5, d1.GarbageLen())
-		assert.Equal(t, 5, d1.GarbageCollect(time.MaxTicket))
-	})
-
-	t.Run("array.set with array test", func(t *testing.T) {
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-
-		arr := [3]int{1, 2, 3}
-
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("arrays", [1]([3]int){arr})
-			assert.Equal(t, `[[1,2,3]]`, root.GetArray("arrays").Marshal())
-
-			root.Delete("arrays")
-			return nil
-		}))
-
-		assert.Equal(t, 5, d1.GarbageLen())
-		assert.Equal(t, 5, d1.GarbageCollect(time.MaxTicket))
-	})
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.Delete("array")
+				return nil
+			})
+			assert.NoError(t, err)
+			assert.Equal(t, tt.tombstones, d1.GarbageLen())
+			assert.Equal(t, tt.tombstones, d1.GarbageCollect(time.MaxTicket))
+		})
+	}
 }
