@@ -3,47 +3,50 @@ name: &name mongodb
 port: &port 27017
 clusterDomain: &clusterDomain cluster.local
 
-shards: &shard 2
-replicaCount:
-  configsvr: &configSvrReplicaCount 1
-  shardsvr: &shardSvrReplicaCount 1
-  mongos: &mongosReplicaCount 1
-
-setup:
-  database: yorkie-meta
-  restartPolicy: Never
-  backoffLimit: 0
-  rules:
-    - collectionName: users
-      shardKeys:
-        - name: username
-          method: "1"
-      unique: true
-    - collectionName: documents
-      shardKeys:
-        - name: key
-          method: "1"
-      unique: false
-    - collectionName: changes
-      shardKeys:
-        - name: doc_key
-          method: "1"
-      unique: false
-    - collectionName: snapshots
-      shardKeys:
-        - name: doc_key
-          method: "1"
-      unique: false
-    - collectionName: syncedseqs
-      shardKeys:
-        - name: key
-          method: "1"
-      unique: false
-
 image:
   registry: &imageRegistry docker.io
   repository: &imageRepository mongo
   tag: &imageTag "6.0"
+
+persistence:
+  dataSize: &dataSize 1Gi
+  configSize: &configSize 500Mi
+  storageClass: &storageClass standard
+
+sharded:
+  enabled: true
+  shards: &shard 2
+  replicaCount:
+    configsvr: &configSvrReplicaCount 1
+    shardsvr: &shardSvrReplicaCount 1
+    mongos: &mongosReplicaCount 1
+
+  setup:
+    enabled: true
+    database: yorkie-meta
+    restartPolicy: Never
+    backoffLimit: 0
+    rules:
+      - collectionName: documents
+        shardKeys:
+          - name: key
+            method: "1"
+        unique: false
+      - collectionName: changes
+        shardKeys:
+          - name: doc_key
+            method: "1"
+        unique: false
+      - collectionName: snapshots
+        shardKeys:
+          - name: doc_key
+            method: "1"
+        unique: false
+      - collectionName: syncedseqs
+        shardKeys:
+          - name: doc_key
+            method: "1"
+        unique: false
 
 mongodb-sharded:
   fullnameOverride: *name
@@ -102,8 +105,9 @@ mongodb-sharded:
     startupProbe:
       enabled: false
     persistence:
-      size: 500Mi
+      size: *configSize
       mountPath: /data/configdb
+      storageClass: *storageClass
 
   shardsvr:
     dataNode:
@@ -134,8 +138,9 @@ mongodb-sharded:
       startupProbe:
         enabled: false
     persistence:
-      size: 1Gi
+      size: *dataSize
       mountPath: /data/db
+      storageClass: *storageClass
 
   mongos:
     replicaCount: *mongosReplicaCount

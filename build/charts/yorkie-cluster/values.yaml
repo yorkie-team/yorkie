@@ -5,7 +5,7 @@ yorkie:
 
   autoscaling:
     enabled: false
-    replicaCount: 3
+    replicaCount: 1
 
   image:
     repository: yorkieteam/yorkie
@@ -13,7 +13,7 @@ yorkie:
     tag: ""
 
   args:
-    dbUrl: &mongoUrl mongodb
+    dbUrl: &mongoUrl mongodb.mongodb.svc.cluster.local
     dbPort: &mongoPort 27017
 
   ports:
@@ -22,17 +22,6 @@ yorkie:
 
   resources: {}
 
-# Configuration for internal mongoDB
-mongodb:
-  enabled: true
-
-  namespace: *namespace
-  name: *mongoUrl
-  port: *mongoPort
-  
-  storageClassName: standard
-  storageSize: 1Gi
-  
 # Configuration for istio ingress gateway
 ingressGateway:
   consistentHash:
@@ -43,7 +32,7 @@ ingressGateway:
     maglev:
       enabled: true
       tableSize: 65537
-    
+
     ringHash:
       enabled: false
       minimumRingSize: 1024
@@ -63,7 +52,7 @@ ingress:
   hosts:
     enabled: false
     apiHost: api.yorkie.dev
-    
+
   alb:
     enabled: false
     certArn: arn:aws:acm:ap-northeast-2:123412341234:certificate/1234-1234-1234-1234-1234

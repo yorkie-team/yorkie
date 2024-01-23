@@ -1,4 +1,4 @@
-{{- if .Values.setup }}
+{{- if and .Values.sharded.enabled .Values.sharded.setup.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -13,7 +13,7 @@ metadata:
 spec:
   template:
     spec: 
-      restartPolicy: {{ .Values.setup.restartPolicy }}
+      restartPolicy: {{ .Values.sharded.setup.restartPolicy }}
       containers:
       - name: setup
         image: {{ printf "%s/%s:%s" $.Values.image.registry $.Values.image.repository $.Values.image.tag }}
@@ -25,5 +25,5 @@ spec:
       - name: setup-script
         configMap:
           name: {{ .Values.name }}-setup-script
-  backoffLimit: {{ .Values.setup.backoffLimit }}
+  backoffLimit: {{ .Values.sharded.setup.backoffLimit }}
 {{ end }}
