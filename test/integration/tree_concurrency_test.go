@@ -187,6 +187,73 @@ func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.Tre
 	}
 }
 
+func TestTreeConcurrencyEditEdit(t *testing.T) {
+	//       0   1 2 3 4    5   6 7 8 9    10   11 12 13 14    15
+	// <root> <p> a b c </p> <p> d e f </p>  <p>  g  h  i  </p>  </root>
+
+	initialState := json.TreeNode{
+		Type: "root",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abc"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "def"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ghi"}}},
+		},
+	}
+	initialXML := `<root><p>abc</p><p>def</p><p>ghi</p></root>`
+
+	textNode1 := &json.TreeNode{Type: "text", Value: "A"}
+	textNode2 := &json.TreeNode{Type: "text", Value: "B"}
+	elementNode1 := &json.TreeNode{Type: "b", Children: []json.TreeNode{}}
+	elementNode2 := &json.TreeNode{Type: "i", Children: []json.TreeNode{}}
+
+	ranges := []twoRangesType{
+		// intersect-element: <p>abc</p><p>def</p> - <p>def</p><p>ghi</p>
+		makeTwoRanges(0, 5, 10, 5, 10, 15, `intersect-element`),
+		// intersect-text: ab - bc
+		makeTwoRanges(1, 2, 3, 2, 3, 4, `intersect-text`),
+		// contain-element: <p>abc</p><p>def</p><p>ghi</p> - <p>def</p>
+		makeTwoRanges(0, 5, 15, 5, 5, 10, `contain-element`),
+		// contain-text: abc - b
+		makeTwoRanges(1, 2, 4, 2, 2, 3, `contain-text`),
+		// contain-mixed-type: <p>abc</p><p>def</p><p>ghi</p> - def
+		makeTwoRanges(0, 5, 15, 6, 7, 9, `contain-mixed-type`),
+		// side-by-side-element: <p>abc</p> - <p>def</p>
+		makeTwoRanges(0, 5, 5, 5, 5, 10, `side-by-side-element`),
+		// side-by-side-text: a - bc
+		makeTwoRanges(1, 1, 2, 2, 3, 4, `side-by-side-text`),
+		// equal-text: abc - abc
+		makeTwoRanges(1, 2, 4, 1, 2, 4, `equal-text`),
+		// equal-element: <p>abc</p><p>def</p> - <p>abc</p><p>def</p>
+		makeTwoRanges(0, 5, 10, 0, 5, 10, `equal-element`),
+	}
+
+	editOperations1 := []operationInterface{
+		editOperationType{RangeFront, EditUpdate, textNode1, 0, `insertTextFront`},
+		editOperationType{RangeMiddle, EditUpdate, textNode1, 0, `insertTextMiddle`},
+		editOperationType{RangeBack, EditUpdate, textNode1, 0, `insertTextBack`},
+		editOperationType{RangeAll, EditUpdate, textNode1, 0, `changeText`},
+		editOperationType{RangeFront, EditUpdate, elementNode1, 0, `insertElementFront`},
+		editOperationType{RangeMiddle, EditUpdate, elementNode1, 0, `insertElementMiddle`},
+		editOperationType{RangeBack, EditUpdate, elementNode1, 0, `insertElementBack`},
+		editOperationType{RangeAll, EditUpdate, elementNode1, 0, `changeElement`},
+		editOperationType{RangeAll, EditUpdate, nil, 0, `erase`},
+	}
+
+	editOperations2 := []operationInterface{
+		editOperationType{RangeFront, EditUpdate, textNode2, 0, `insertTextFront`},
+		editOperationType{RangeMiddle, EditUpdate, textNode2, 0, `insertTextMiddle`},
+		editOperationType{RangeBack, EditUpdate, textNode2, 0, `insertTextBack`},
+		editOperationType{RangeAll, EditUpdate, textNode2, 0, `changeText`},
+		editOperationType{RangeFront, EditUpdate, elementNode2, 0, `insertElementFront`},
+		editOperationType{RangeMiddle, EditUpdate, elementNode2, 0, `insertElementMiddle`},
+		editOperationType{RangeBack, EditUpdate, elementNode2, 0, `insertElementBack`},
+		editOperationType{RangeAll, EditUpdate, elementNode2, 0, `changeElement`},
+		editOperationType{RangeAll, EditUpdate, nil, 0, `erase`},
+	}
+
+	RunTestTreeConcurrency("concurrently-edit-edit-test", t, initialState, initialXML, ranges, editOperations1, editOperations2)
+}
+
 func TestTreeConcurrencyStyleStyle(t *testing.T) {
 	//       0   1 2    3   4 5    6   7 8    9
 	// <root> <p> a </p> <p> b </p> <p> c </p> </root>
@@ -205,10 +272,14 @@ func TestTreeConcurrencyStyleStyle(t *testing.T) {
 	initialXML := `<root><p>a</p><p>b</p><p>c</p></root>`
 
 	ranges := []twoRangesType{
-		makeTwoRanges(3, -1, 6, 3, -1, 6, `equal`),        // (3, 6) - (3, 6)
-		makeTwoRanges(0, -1, 9, 3, -1, 6, `contain`),      // (0, 9) - (3, 6)
-		makeTwoRanges(0, -1, 6, 3, -1, 9, `intersect`),    // (0, 6) - (3, 9)
-		makeTwoRanges(0, -1, 3, 3, -1, 6, `side-by-side`), // (0, 3) - (3, 6)
+		// equal: <p>b</p> - <p>b</p>
+		makeTwoRanges(3, -1, 6, 3, -1, 6, `equal`),
+		// contain: <p>a</p><p>b</p><p>c</p> - <p>b</p>
+		makeTwoRanges(0, -1, 9, 3, -1, 6, `contain`),
+		// intersect: <p>a</p><p>b</p> - <p>b</p><p>c</p>
+		makeTwoRanges(0, -1, 6, 3, -1, 9, `intersect`),
+		// side-by-side: <p>a</p> - <p>b</p>
+		makeTwoRanges(0, -1, 3, 3, -1, 6, `side-by-side`),
 	}
 
 	styleOperations := []operationInterface{
@@ -243,12 +314,18 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 	content := &json.TreeNode{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}
 
 	ranges := []twoRangesType{
-		makeTwoRanges(3, 3, 6, 3, -1, 6, `equal`),        // (3, 6) - (3, 6)
-		makeTwoRanges(0, 3, 9, 3, -1, 6, `A contains B`), // (0, 9) - (3, 6)
-		makeTwoRanges(3, 3, 6, 0, -1, 9, `B contains A`), // (0, 9) - (3, 6)
-		makeTwoRanges(0, 3, 6, 3, -1, 9, `intersect`),    // (0, 6) - (3, 9)
-		makeTwoRanges(0, 3, 3, 3, -1, 6, `A -> B`),       // (0, 3) - (3, 6)
-		makeTwoRanges(3, 3, 6, 0, -1, 3, `B -> A`),       // (0, 3) - (3, 6)
+		// equal: <p>b</p> - <p>b</p>
+		makeTwoRanges(3, 3, 6, 3, -1, 6, `equal`),
+		// A contains B: <p>a</p><p>b</p><p>c</p> - <p>b</p>
+		makeTwoRanges(0, 3, 9, 3, -1, 6, `A contains B`),
+		// B contains A: <p>b</p> - <p>a</p><p>b</p><p>c</p>
+		makeTwoRanges(3, 3, 6, 0, -1, 9, `B contains A`),
+		// intersect: <p>a</p><p>b</p> - <p>b</p><p>c</p>
+		makeTwoRanges(0, 3, 6, 3, -1, 9, `intersect`),
+		// A -> B: <p>a</p> - <p>b</p>
+		makeTwoRanges(0, 3, 3, 3, -1, 6, `A -> B`),
+		// B -> A: <p>b</p> - <p>a</p>
+		makeTwoRanges(3, 3, 6, 0, -1, 3, `B -> A`),
 	}
 
 	editOperations := []operationInterface{
