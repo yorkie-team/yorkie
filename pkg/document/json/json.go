@@ -110,7 +110,7 @@ func buildCRDTElement(
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
 	case reflect.Value:
 		// NOTE(highcloud100): This case only occurs when struct's reflect.Value is given.
-		// BuildArrayElements only can throw the arbitary struct as reflect.Value type to this function.
+		// BuildArrayElements only can throw the arbitrary struct as reflect.Value type to this function.
 		if elem.Type().Kind() != reflect.Struct {
 			break
 		}

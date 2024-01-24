@@ -306,22 +306,22 @@ func TestArray(t *testing.T) {
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			// Counter
 			root.SetNewArray("counters", []json.Counter{cnt, cnt, cnt})
-			root.GetArray("counters").Get(0).(*json.Counter).Increase(1)
+			root.GetArray("counters").GetCounter(0).Increase(1)
 			assert.Equal(t, `{"counters":[1,0,0]}`, root.Marshal())
 
 			// Text
 			root.SetNewArray("texts", []json.Text{txt, txt, txt})
-			root.GetArray("texts").Get(0).(*json.Text).Edit(0, 0, "hello")
+			root.GetArray("texts").GetText(0).Edit(0, 0, "hello")
 			assert.Equal(t, `[[{"val":"hello"}],[],[]]`, root.GetArray("texts").Marshal())
 
 			// Tree
 			root.SetNewArray("forest", []json.Tree{tree, tree})
-			root.GetArray("forest").Get(0).(*json.Tree).Edit(0, 0, &json.TreeNode{
+			root.GetArray("forest").GetTree(0).Edit(0, 0, &json.TreeNode{
 				Type:     "p",
 				Children: []json.TreeNode{},
 			}, 0)
 			assert.Equal(t, `[{"type":"root","children":[{"type":"p","children":[]}]},{"type":"root","children":[]}]`, root.GetArray("forest").Marshal())
-			assert.Equal(t, `<root><p></p></root>`, root.GetArray("forest").Get(0).(*json.Tree).ToXML())
+			assert.Equal(t, `<root><p></p></root>`, root.GetArray("forest").GetTree(0).ToXML())
 			return nil
 		}))
 	})

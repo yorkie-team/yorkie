@@ -193,7 +193,115 @@ func (p *Array) Get(idx int) crdt.Element {
 		panic(err)
 	}
 
-	return toElement(p.context, element)
+	return element
+}
+
+// GetObject returns Object of the given index.
+func (p *Array) GetObject(idx int) *Object {
+	if p.Len() <= idx {
+		return nil
+	}
+
+	element, err := p.Array.Get(idx)
+	if err != nil {
+		panic(err)
+	}
+
+	switch elem := element.(type) {
+	case *crdt.Object:
+		return NewObject(p.context, elem)
+	case *Object:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+// GetArray returns Array of the given index.
+func (p *Array) GetArray(idx int) *Array {
+	if p.Len() <= idx {
+		return nil
+	}
+
+	element, err := p.Array.Get(idx)
+	if err != nil {
+		panic(err)
+	}
+
+	switch elem := element.(type) {
+	case *crdt.Array:
+		return NewArray(p.context, elem)
+	case *Array:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+// GetText returns Text of the given index.
+func (p *Array) GetText(idx int) *Text {
+	if p.Len() <= idx {
+		return nil
+	}
+
+	element, err := p.Array.Get(idx)
+	if err != nil {
+		panic(err)
+	}
+
+	switch elem := element.(type) {
+	case *crdt.Text:
+		text := NewText()
+		return text.Initialize(p.context, elem)
+	case *Text:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+// GetCounter returns Counter of the given index.
+func (p *Array) GetCounter(idx int) *Counter {
+	if p.Len() <= idx {
+		return nil
+	}
+
+	element, err := p.Array.Get(idx)
+	if err != nil {
+		panic(err)
+	}
+
+	switch elem := element.(type) {
+	case *crdt.Counter:
+		counter := NewCounter(elem.Value(), elem.ValueType())
+		return counter.Initialize(p.context, elem)
+	case *Counter:
+		return elem
+	default:
+		panic("unsupported type")
+	}
+}
+
+// GetTree returns Tree of the given index.
+func (p *Array) GetTree(idx int) *Tree {
+	if p.Len() <= idx {
+		return nil
+	}
+
+	element, err := p.Array.Get(idx)
+	if err != nil {
+		panic(err)
+	}
+
+	switch elem := element.(type) {
+	case *crdt.Tree:
+		tree := NewTree()
+		return tree.Initialize(p.context, elem)
+	case *Tree:
+		return elem
+	default:
+		panic("unsupported type")
+	}
 }
 
 // Delete deletes the element of the given index.
