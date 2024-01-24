@@ -460,11 +460,11 @@ func TestObjectSet(t *testing.T) {
 		{"Tree in struct", struct{ M json.Tree }{}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
 		{"Object in struct", struct{ M json.Object }{}, `{"obj":{"M":{}}}`, 2},
 		//empty initialized
-		{"Text in struct", struct{ M json.Text }{M: json.NewText()}, `{"obj":{"M":[]}}`, 2},
-		{"Tree in struct", struct{ M json.Tree }{M: json.NewTree()}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
+		{"Text in struct", struct{ M json.Text }{M: *json.NewText()}, `{"obj":{"M":[]}}`, 2},
+		{"Tree in struct", struct{ M json.Tree }{M: *json.NewTree()}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
 		//initialized
-		{"counter in struct", struct{ M json.Counter }{M: json.NewCounter(0, crdt.LongCnt)}, `{"obj":{"M":0}}`, 2},
-		{"Tree in struct", struct{ M json.Tree }{M: json.NewTree(&json.TreeNode{
+		{"counter in struct", struct{ M json.Counter }{M: *json.NewCounter(0, crdt.LongCnt)}, `{"obj":{"M":0}}`, 2},
+		{"Tree in struct", struct{ M json.Tree }{M: *json.NewTree(&json.TreeNode{
 			Type:     "p",
 			Children: []json.TreeNode{},
 		})}, `{"obj":{"M":{"type":"p","children":[]}}}`, 2},
@@ -487,8 +487,8 @@ func TestObjectSet(t *testing.T) {
 		{"nested &user defined struct", struct{ M *T1 }{M: &T1{M: str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
 		{"nested user defined struct with zero value", struct{ M T1 }{}, `{"obj":{"M":{"M":""}}}`, 3},
 		{"nested &user defined struct with nil", struct{ M *T1 }{M: nil}, `{"obj":{"M":null}}`, 2},
-		{"nested object with json.Counter", struct{ M T3 }{M: T3{C: json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
-		{"nested &object with json.Counter", struct{ M *T3 }{M: &T3{C: json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
+		{"nested object with json.Counter", struct{ M T3 }{M: T3{C: *json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
+		{"nested &object with json.Counter", struct{ M *T3 }{M: &T3{C: *json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
 		{"nested object with json.Counter with zero value", struct{ M T3 }{}, `{"obj":{"M":{"C":0}}}`, 3},
 	}
 

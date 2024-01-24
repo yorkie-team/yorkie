@@ -305,17 +305,17 @@ func TestArray(t *testing.T) {
 		// 02. Edit value in array
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			// Counter
-			root.SetNewArray("counters", []json.Counter{cnt, cnt, cnt})
+			root.SetNewArray("counters", []*json.Counter{cnt, cnt, cnt})
 			root.GetArray("counters").GetCounter(0).Increase(1)
 			assert.Equal(t, `{"counters":[1,0,0]}`, root.Marshal())
 
 			// Text
-			root.SetNewArray("texts", []json.Text{txt, txt, txt})
+			root.SetNewArray("texts", []*json.Text{txt, txt, txt})
 			root.GetArray("texts").GetText(0).Edit(0, 0, "hello")
 			assert.Equal(t, `[[{"val":"hello"}],[],[]]`, root.GetArray("texts").Marshal())
 
 			// Tree
-			root.SetNewArray("forest", []json.Tree{tree, tree})
+			root.SetNewArray("forest", []*json.Tree{tree, tree})
 			root.GetArray("forest").GetTree(0).Edit(0, 0, &json.TreeNode{
 				Type:     "p",
 				Children: []json.TreeNode{},
@@ -365,9 +365,9 @@ func TestArraySet(t *testing.T) {
 		{"time", []gotime.Time{gotime.Date(2022, 3, 2, 9, 10, 0, 0, gotime.UTC)}, `["2022-03-02T09:10:00Z"]`, 2},
 
 		// json Counter, Text, Tree
-		{"Counter", []json.Counter{json.NewCounter(1, crdt.LongCnt)}, `[1]`, 2},
-		{"Text", []json.Text{json.NewText()}, `[[]]`, 2},
-		{"Tree", []json.Tree{json.NewTree()}, `[{"type":"root","children":[]}]`, 2},
+		{"Counter", []json.Counter{*json.NewCounter(1, crdt.LongCnt)}, `[1]`, 2},
+		{"Text", []json.Text{*json.NewText()}, `[[]]`, 2},
+		{"Tree", []json.Tree{*json.NewTree()}, `[{"type":"root","children":[]}]`, 2},
 
 		// user defined struct
 		{"not initialized struct", []T1{{}, {}}, `[{"M":""},{"M":""}]`, 5},
