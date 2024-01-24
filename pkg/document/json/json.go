@@ -102,12 +102,15 @@ func buildCRDTElement(
 
 		return counter
 	case Object:
-		// NOTE(highcloud100): only for object field declared in user defined struct
+		// NOTE(highcloud100): This case only occurs when the given struct's element is json.Object.
+		// For example, the given struct is `type Foo struct { Bar Object }`.
+		// User can't initialize the json.Object directly. so just return the empty json.Object.
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, nil)
 	case map[string]any:
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
 	case reflect.Value:
-		// NOTE(highcloud100): ...
+		// NOTE(highcloud100): This case only occurs when struct's reflect.Value is given.
+		// BuildArrayElements only can throw the arbitary struct as reflect.Value type to this function.
 		if elem.Type().Kind() != reflect.Struct {
 			break
 		}
