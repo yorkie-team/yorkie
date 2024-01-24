@@ -49,8 +49,8 @@ func (p *Object) SetNewObject(k string, v ...any) *Object {
 			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
 		}
 
-		// NOTE(highcloud100): ...
-		if v[0] == nil || (!isStruct(v[0]) && !isMapStringInterface(v[0])) {
+		// NOTE(highcloud100): SetNewObject only accepts v of `struct` and `map[string]any` type.
+		if v[0] == nil || !isAllowedType(v[0]) {
 			panic("unsupported object type")
 		}
 		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
@@ -374,7 +374,7 @@ func buildObjectMembers(
 
 // isStruct returns whether the given value is struct or not.
 // it also returns true if the given value is a pointer to struct.
-func isStruct(v interface{}) bool {
+func isStruct(v any) bool {
 	return (reflect.TypeOf(v).Kind() == reflect.Ptr &&
 		reflect.TypeOf(v).Elem().Kind() == reflect.Struct) ||
 		reflect.TypeOf(v).Kind() == reflect.Struct
@@ -385,4 +385,24 @@ func isStruct(v interface{}) bool {
 func isMapStringInterface(v any) bool {
 	return reflect.TypeOf(v) == reflect.TypeOf(map[string]any{}) ||
 		reflect.TypeOf(v) == reflect.TypeOf(&map[string]any{})
+}
+
+// isNotJsonType returns whether the given value is not a JSON type or not.
+// The json struct types should be treated differently from other structures.
+// Because build CRDTElement processes json structural types and other structures separately.
+func isNotJsonType(v any) bool {
+	return reflect.TypeOf(v) != reflect.TypeOf(Counter{}) &&
+		reflect.TypeOf(v) != reflect.TypeOf(&Counter{}) &&
+		reflect.TypeOf(v) != reflect.TypeOf(Text{}) &&
+		reflect.TypeOf(v) != reflect.TypeOf(&Text{}) &&
+		reflect.TypeOf(v) != reflect.TypeOf(Tree{}) &&
+		reflect.TypeOf(v) != reflect.TypeOf(&Tree{}) &&
+		reflect.TypeOf(v) != reflect.TypeOf(Array{}) &&
+		reflect.TypeOf(v) != reflect.TypeOf(&Array{}) &&
+		reflect.TypeOf(v) != reflect.TypeOf(Object{}) &&
+		reflect.TypeOf(v) != reflect.TypeOf(&Object{})
+}
+
+func isAllowedType(v any) bool {
+	return (isStruct(v) || isMapStringInterface(v)) && isNotJsonType(v)
 }

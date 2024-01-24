@@ -375,12 +375,60 @@ func TestObjectSet(t *testing.T) {
 		}
 	)
 
+	typeGaurdTests := []struct {
+		caseName string
+		in       any
+		result   bool
+	}{
+		{"nil", nil, false},
+		{"slice", []int{1, 2, 3}, false},
+		{"&slice", &[]int{1, 2, 3}, false},
+		{"array", [3]int{1, 2, 3}, false},
+		{"&array", &[3]int{1, 2, 3}, false},
+		{"map int", map[string]int{}, false},
+		{"&map int", &map[string]int{}, false},
+		{"int map", map[int]any{}, false},
+		{"&int map", &map[int]any{}, false},
+		{"&json.Text", json.NewText(), false},
+		{"json.Text", *json.NewText(), false},
+		{"&json.Tree", json.NewTree(), false},
+		{"json.Tree", *json.NewTree(), false},
+		{"&json.Counter", json.NewCounter(0, crdt.LongCnt), false},
+		{"json.Counter", *json.NewCounter(0, crdt.LongCnt), false},
+
+		{"map any", map[string]any{}, true},
+		{"&map", &map[string]any{}, true},
+		{"struct", struct{}{}, true},
+		{"&struct", &struct{}{}, true},
+		{"defined struct", T1{}, true},
+		{"&defined struct", &T1{}, true},
+	}
+
+	for _, tt := range typeGaurdTests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+
+			defer func() {
+				a := recover() == nil
+				assert.Equal(t, a, tt.result)
+			}()
+
+			err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewObject("obj", tt.in)
+				return nil
+			})
+			assert.NoError(t, err)
+		})
+	}
+
 	empty := ""
 	str := "foo"
 	emptyTarget := `{"obj":{"M":""}}`
 	strTarget := `{"obj":{"M":"foo"}}`
 
-	tests := []struct {
+	setTests := []struct {
 		caseName   string
 		in         any
 		want       string
@@ -492,7 +540,7 @@ func TestObjectSet(t *testing.T) {
 		{"nested object with json.Counter with zero value", struct{ M T3 }{}, `{"obj":{"M":{"C":0}}}`, 3},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range setTests {
 		t.Run(tt.caseName, func(t *testing.T) {
 			ctx := context.Background()
 			d1 := document.New(helper.TestDocKey(t))
@@ -514,4 +562,5 @@ func TestObjectSet(t *testing.T) {
 			assert.Equal(t, tt.tombstones, d1.GarbageCollect(time.MaxTicket))
 		})
 	}
+
 }
