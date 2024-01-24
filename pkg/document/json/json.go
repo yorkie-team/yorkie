@@ -50,6 +50,7 @@ func toOriginal(elem crdt.Element) crdt.Element {
 	panic("unsupported type")
 }
 
+// toElement converts crdt.Element to the corresponding json.Element.
 func toElement(ctx *change.Context, elem crdt.Element) crdt.Element {
 	switch elem := elem.(type) {
 	case *crdt.Object:
@@ -71,49 +72,55 @@ func toElement(ctx *change.Context, elem crdt.Element) crdt.Element {
 	panic("unsupported type")
 }
 
-// builcCRDTElement builds CRDT element from the given value.
-// If the value is Array or Slice, Struct, Pointer, to accept the user defined struct,
-// we need to handle it separately with reflect.
-// In the case of a Struct, Pointer, it is treated recursively.
-// In the case of a Slice, it is processed in the buildArrayElements depending on the type of elements.
-// In the case of a Array, it is converted to Slice and processed in the buildArrayElements.
+// buildCRDTElement builds crdt.Element from the given value.
 func buildCRDTElement(
 	context *change.Context,
-	value interface{},
+	value any,
 	ticket *time.Ticket,
 ) crdt.Element {
+	// 01. The type of the given value is one of the basic types.
 	switch elem := value.(type) {
 	case nil, string, int, int32, int64, float32, float64, []byte, bool, gotime.Time:
 		primitive, err := crdt.NewPrimitive(elem, ticket)
 		if err != nil {
 			panic(err)
 		}
+
 		return primitive
 	case Tree:
 		return crdt.NewTree(buildRoot(context, elem.initialRoot, ticket), ticket)
 	case Text:
 		return crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ticket)
 	case Counter:
+		if elem.value == nil {
+			elem.value = 0
+		}
 		counter, err := crdt.NewCounter(elem.valueType, elem.value, ticket)
 		if err != nil {
 			panic(err)
 		}
+
 		return counter
-	case Object: // only for object field declared in user defined struct
+	case Object:
+		// NOTE(highcloud100): only for object field declared in user defined struct
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, nil)
-	case map[string]interface{}:
+	case map[string]any:
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
 	case reflect.Value:
+		// NOTE(highcloud100): ...
 		if elem.Type().Kind() != reflect.Struct {
 			break
 		}
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, valueToMap(elem)))
 	}
 
+	// 02. The type of the given value is user defined struct or array.
 	switch reflect.ValueOf(value).Kind() {
 	case reflect.Slice:
 		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, value))
 	case reflect.Array:
+		// TODO(highcloud100): For now, buildArrayElements only accepts slice type.
+		// We need to support array type later to avoid copying the slice.
 		length := reflect.ValueOf(value).Len()
 		slice := reflect.MakeSlice(reflect.SliceOf(reflect.ValueOf(value).Type().Elem()), length, length)
 		reflect.Copy(slice, reflect.ValueOf(value))
@@ -126,14 +133,15 @@ func buildCRDTElement(
 		return buildCRDTElement(context, val.Elem().Interface(), ticket)
 	case reflect.Struct:
 		return buildCRDTElement(context, reflect.ValueOf(value), ticket)
+	default:
+		panic("unsupported type")
 	}
-
-	panic("unsupported type")
 }
 
 // valueToMap converts reflect.Value(struct) to map[string]interface{}
-// except the field that has the tag "yorkie:-" or omitEmpty option and the field that is unexported.
-// This code referred to the "encoding/json" implementation.
+// except the field that has the tag "yorkie:-" or omitEmpty option and the
+// field that is unexported.
+// NOTE(highcloud100): This code referred to the "encoding/json" implementation.
 func valueToMap(value reflect.Value) map[string]interface{} {
 	json := make(map[string]interface{})
 	for i := 0; i < value.NumField(); i++ {
@@ -179,9 +187,9 @@ func isValidTag(s string) bool {
 	for _, c := range s {
 		switch {
 		case strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c):
-			// Backslash and quote chars are reserved, but
-			// otherwise any punctuation chars are allowed
-			// in a tag name.
+		// Backslash and quote chars are reserved, but
+		// otherwise any punctuation chars are allowed
+		// in a tag name.
 		case !unicode.IsLetter(c) && !unicode.IsDigit(c):
 			return false
 		}

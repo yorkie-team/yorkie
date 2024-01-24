@@ -43,11 +43,13 @@ func NewObject(ctx *change.Context, root *crdt.Object) *Object {
 }
 
 // SetNewObject sets a new Object for the given key.
-func (p *Object) SetNewObject(k string, v ...interface{}) *Object {
+func (p *Object) SetNewObject(k string, v ...any) *Object {
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		if len(v) == 0 {
 			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
 		}
+
+		// NOTE(highcloud100): ...
 		if v[0] == nil || (!isStruct(v[0]) && !isMapStringInterface(v[0])) {
 			panic("unsupported object type")
 		}
@@ -60,12 +62,13 @@ func (p *Object) SetNewObject(k string, v ...interface{}) *Object {
 // SetNewArray sets a new Array for the given key.
 // TODO(hackerwins): For now, users can only set initial values with []interface{} without
 // the type information of the elements. We need to support the type information.
-func (p *Object) SetNewArray(k string, v ...interface{}) *Array {
+func (p *Object) SetNewArray(k string, v ...any) *Array {
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		elements := crdt.NewRGATreeList()
 		if len(v) == 0 {
 			return NewArray(p.context, crdt.NewArray(elements, ticket))
 		}
+
 		if v[0] == nil || (reflect.TypeOf(v[0]).Kind() != reflect.Slice &&
 			reflect.TypeOf(v[0]).Kind() != reflect.Array) {
 			panic("unsupported array type")
@@ -377,9 +380,9 @@ func isStruct(v interface{}) bool {
 		reflect.TypeOf(v).Kind() == reflect.Struct
 }
 
-// isMapStringInterface returns whether the given value is map[string]interface{} or not.
-// it also returns true if the given value is a pointer to map[string]interface{}.
-func isMapStringInterface(v interface{}) bool {
-	return reflect.TypeOf(v) == reflect.TypeOf(map[string]interface{}{}) ||
-		reflect.TypeOf(v) == reflect.TypeOf(&map[string]interface{}{})
+// isMapStringInterface returns whether the given value is map[string]any or not.
+// it also returns true if the given value is a pointer to map[string]any.
+func isMapStringInterface(v any) bool {
+	return reflect.TypeOf(v) == reflect.TypeOf(map[string]any{}) ||
+		reflect.TypeOf(v) == reflect.TypeOf(&map[string]any{})
 }

@@ -60,9 +60,6 @@ type Counter struct {
 
 // NewCounter creates a new instance of Counter.
 func NewCounter(valueType CounterType, value interface{}, createdAt *time.Ticket) (*Counter, error) {
-	if value == nil {
-		value = 0
-	}
 	switch valueType {
 	case IntegerCnt:
 		intValue, err := castToInt(value)

@@ -183,6 +183,7 @@ func (p *Array) InsertIntegerAfter(index int, v int) *Array {
 
 // Get element of the given index.
 func (p *Array) Get(idx int) crdt.Element {
+	// TODO(hackerwins): Implement Get methods for specific types like GetObject, ...
 	if p.Len() <= idx {
 		return nil
 	}
@@ -274,17 +275,14 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 }
 
 // buildArrayElements return the element slice of the given array.
-// Because the type of the given array is interface{}, it is necessary to type assertion.
-// If the type of elements of the given array is user defined struct or array, it can detect by reflect.
-// In the case of the user defined struct, it is converted to reflect.Value and delegate to sliceToElements.
-// The structure cannot immediately call the interface() because it can have an unexposed field.
-// In the case of the user defined array, it is converted to interface{} array and delegate to sliceToElements.
+// Because the type of the given array is `any(interface{})`, it is necessary to type assertion.
 func buildArrayElements(
 	context *change.Context,
 	elements any,
 ) []crdt.Element {
+	// 01. The type of elements of the given array is one of the basic types.
 	switch elements := elements.(type) {
-	case []interface{}:
+	case []any:
 		return sliceToElements[any](elements, context)
 	case []int:
 		return sliceToElements[int](elements, context)
@@ -310,28 +308,33 @@ func buildArrayElements(
 		return sliceToElements[Text](elements, context)
 	case []Tree:
 		return sliceToElements[Tree](elements, context)
-	case []map[string]interface{}:
-		return sliceToElements[map[string]interface{}](elements, context)
-	default:
-		switch reflect.ValueOf(elements).Type().Elem().Kind() {
-		case reflect.Struct:
-			length := reflect.ValueOf(elements).Len()
-			array := make([]reflect.Value, length)
+	case []map[string]any:
+		return sliceToElements[map[string]any](elements, context)
+	}
 
-			for i := 0; i < length; i++ {
-				array[i] = reflect.ValueOf(elements).Index(i)
-			}
-			return sliceToElements[reflect.Value](array, context)
-		case reflect.Slice, reflect.Array, reflect.Ptr:
-			length := reflect.ValueOf(elements).Len()
-			array := make([]interface{}, length)
+	// 02. The type of elements of the given array is user defined struct or array.
+	switch reflect.ValueOf(elements).Type().Elem().Kind() {
+	case reflect.Struct:
+		length := reflect.ValueOf(elements).Len()
+		array := make([]reflect.Value, length)
 
-			for i := 0; i < length; i++ {
-				array[i] = reflect.ValueOf(elements).Index(i).Interface()
-			}
-			return sliceToElements[interface{}](array, context)
+		// NOTE(hackerwins): The structure cannot immediately call Interface()
+		// because it can have an unexposed field. If we call Interface(), panic will occur.
+		for i := 0; i < length; i++ {
+			array[i] = reflect.ValueOf(elements).Index(i)
 		}
-		panic("unsupported array type")
+
+		return sliceToElements[reflect.Value](array, context)
+	case reflect.Slice, reflect.Array, reflect.Ptr:
+		length := reflect.ValueOf(elements).Len()
+		array := make([]any, length)
+
+		for i := 0; i < length; i++ {
+			array[i] = reflect.ValueOf(elements).Index(i).Interface()
+		}
+		return sliceToElements[any](array, context)
+	default:
+		panic("unhandled default case")
 	}
 }
 

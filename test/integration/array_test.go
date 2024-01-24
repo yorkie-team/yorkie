@@ -383,7 +383,7 @@ func TestArraySet(t *testing.T) {
 		{"array", [1][3]int{{1, 2, 3}}, `[[1,2,3]]`, 5},
 		{"array pointers", [2]*[3]int{&arr, &arr}, `[[1,2,3],[1,2,3]]`, 9},
 
-		//nestsed slice
+		// nested slice
 		{"nested slice", [][]int{{1, 2, 3}, {1, 2, 3}}, `[[1,2,3],[1,2,3]]`, 9},
 
 		// map

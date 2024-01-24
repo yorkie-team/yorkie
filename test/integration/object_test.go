@@ -386,7 +386,7 @@ func TestObjectSet(t *testing.T) {
 		want       string
 		tombstones int
 	}{
-		//Test nill
+		// Test nll
 		{"null map", map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`, 2},
 		{"null &map", &map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`, 2},
 
@@ -459,7 +459,7 @@ func TestObjectSet(t *testing.T) {
 		{"Text in struct", struct{ M json.Text }{}, `{"obj":{"M":[]}}`, 2},
 		{"Tree in struct", struct{ M json.Tree }{}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
 		{"Object in struct", struct{ M json.Object }{}, `{"obj":{"M":{}}}`, 2},
-		//empty intialized
+		//empty initialized
 		{"Text in struct", struct{ M json.Text }{M: json.NewText()}, `{"obj":{"M":[]}}`, 2},
 		{"Tree in struct", struct{ M json.Tree }{M: json.NewTree()}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
 		//initialized
