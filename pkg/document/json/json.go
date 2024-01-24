@@ -29,7 +29,7 @@ import (
 )
 
 // tagOptions is the string following a comma in a struct field's "yorkie"
-// tag, or the empty string. It does not include the leading comma.
+// tag, or the empty string.
 type tagOptions string
 
 func toOriginal(elem crdt.Element) crdt.Element {
