@@ -324,8 +324,8 @@ func NewRangeSlice(start, end int) []int {
 	return slice
 }
 
-// setupRawMongoClient returns the raw mongo client.
-func setupRawMongoClient(databaseName string) (*gomongo.Client, error) {
+// SetupRawMongoClient returns the raw mongo client.
+func SetupRawMongoClient(databaseName string) (*gomongo.Client, error) {
 	conf := &mongo.Config{
 		ConnectionTimeout: "5s",
 		ConnectionURI:     "mongodb://localhost:27017",
@@ -361,7 +361,7 @@ func setupRawMongoClient(databaseName string) (*gomongo.Client, error) {
 
 // CleanUpAllCollections removes all data in every collection.
 func CleanUpAllCollections(databaseName string) error {
-	cli, err := setupRawMongoClient(databaseName)
+	cli, err := SetupRawMongoClient(databaseName)
 	if err != nil {
 		return err
 	}
@@ -382,7 +382,7 @@ func CreateDummyDocumentWithID(
 	docID types.ID,
 	docKey key.Key,
 ) error {
-	cli, err := setupRawMongoClient(databaseName)
+	cli, err := SetupRawMongoClient(databaseName)
 	if err != nil {
 		return err
 	}
@@ -408,7 +408,7 @@ func FindDocInfosWithID(
 	docID types.ID,
 ) ([]*database.DocInfo, error) {
 	ctx := context.Background()
-	cli, err := setupRawMongoClient(databaseName)
+	cli, err := SetupRawMongoClient(databaseName)
 	if err != nil {
 		return nil, err
 	}
@@ -438,7 +438,7 @@ func CreateDummyClientWithID(
 	clientKey string,
 	clientID types.ID,
 ) error {
-	cli, err := setupRawMongoClient(databaseName)
+	cli, err := SetupRawMongoClient(databaseName)
 	if err != nil {
 		return err
 	}
