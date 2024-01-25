@@ -121,7 +121,7 @@ type Database interface {
 		hashedPassword string,
 	) (*UserInfo, error)
 
-	// FindUserInfoByName returns a user by the given ID.
+	// FindUserInfoByID returns a user by the given ID.
 	FindUserInfoByID(ctx context.Context, id types.ID) (*UserInfo, error)
 
 	// FindUserInfoByName returns a user by the given username.
