@@ -1,0 +1,9 @@
+--- Install Complete ---
+{{ .Release.Name }} successfully installed!
+
+For next steps, follow:
+  $ curl https://github.com/yorkie-team/yorkie/tree/main/charts/yorkie-mongodb
+  
+To learn more about the release, try:
+  $ helm status {{ .Release.Name }}
+  $ helm get all {{ .Release.Name }}

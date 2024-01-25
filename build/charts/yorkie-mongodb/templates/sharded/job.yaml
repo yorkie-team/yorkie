@@ -1,0 +1,29 @@
+{{- if and .Values.sharded.enabled .Values.sharded.setup.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.name }}-setup-job
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/component: mongodb
+    app.kubernetes.io/part-of: yorkie
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    spec: 
+      restartPolicy: {{ .Values.sharded.setup.restartPolicy }}
+      containers:
+      - name: setup
+        image: {{ printf "%s/%s:%s" $.Values.image.registry $.Values.image.repository $.Values.image.tag }}
+        command: [ "/bin/bash", "/etc/config/setup.sh" ]
+        volumeMounts:
+        - name: setup-script
+          mountPath: /etc/config
+      volumes:
+      - name: setup-script
+        configMap:
+          name: {{ .Values.name }}-setup-script
+  backoffLimit: {{ .Values.sharded.setup.backoffLimit }}
+{{ end }}
