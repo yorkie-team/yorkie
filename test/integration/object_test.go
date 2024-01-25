@@ -495,6 +495,10 @@ func TestObjectSet(t *testing.T) {
 		T3 struct {
 			C json.Counter
 		}
+		T4 struct {
+			T1
+			T2
+		}
 	)
 
 	empty := ""
@@ -502,13 +506,18 @@ func TestObjectSet(t *testing.T) {
 	emptyTarget := `{"obj":{"M":""}}`
 	strTarget := `{"obj":{"M":"foo"}}`
 
+	embedded := T4{
+		T1: T1{M: str},
+		T2: T2{M: &str},
+	}
+
 	setTests := []struct {
 		caseName   string
 		in         any
 		want       string
 		tombstones int
 	}{
-		// Test nll
+		//Test nll
 		{"null map", map[string]any{"M": nil}, `{"obj":{"M":null}}`, 2},
 		{"null &map", &map[string]any{"M": nil}, `{"obj":{"M":null}}`, 2},
 
@@ -581,10 +590,10 @@ func TestObjectSet(t *testing.T) {
 		{"Text in struct", struct{ M json.Text }{}, `{"obj":{"M":[]}}`, 2},
 		{"Tree in struct", struct{ M json.Tree }{}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
 		{"Object in struct", struct{ M json.Object }{}, `{"obj":{"M":{}}}`, 2},
-		//empty initialized
+		// empty initialized
 		{"Text in struct", struct{ M json.Text }{M: *json.NewText()}, `{"obj":{"M":[]}}`, 2},
 		{"Tree in struct", struct{ M json.Tree }{M: *json.NewTree()}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
-		//initialized
+		// initialized
 		{"counter in struct", struct{ M json.Counter }{M: *json.NewCounter(0, crdt.LongCnt)}, `{"obj":{"M":0}}`, 2},
 		{"Tree in struct", struct{ M json.Tree }{M: *json.NewTree(&json.TreeNode{
 			Type:     "p",
@@ -604,7 +613,7 @@ func TestObjectSet(t *testing.T) {
 			M4 json.Object  `yorkie:",omitEmpty"`
 		}{}, `{"obj":{}}`, 1},
 
-		//Test with nested struct
+		// Test with nested struct
 		{"nested user defined struct", struct{ M T1 }{M: T1{M: str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
 		{"nested &user defined struct", struct{ M *T1 }{M: &T1{M: str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
 		{"nested user defined struct with zero value", struct{ M T1 }{}, `{"obj":{"M":{"M":""}}}`, 3},
@@ -612,6 +621,9 @@ func TestObjectSet(t *testing.T) {
 		{"nested object with json.Counter", struct{ M T3 }{M: T3{C: *json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
 		{"nested &object with json.Counter", struct{ M *T3 }{M: &T3{C: *json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
 		{"nested object with json.Counter with zero value", struct{ M T3 }{}, `{"obj":{"M":{"C":0}}}`, 3},
+
+		// Test with embedded struct
+		{"embedded struct", embedded, `{"obj":{"T1":{"M":"foo"},"T2":{"M":"foo"}}}`, 5},
 	}
 
 	for _, tt := range setTests {
