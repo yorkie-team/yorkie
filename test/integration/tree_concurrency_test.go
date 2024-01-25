@@ -30,6 +30,11 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
+type testResult struct {
+	flag       bool
+	resultDesc string
+}
+
 type rangeSelector int
 
 const (
@@ -146,7 +151,7 @@ func (op editOperationType) run(t *testing.T, doc *document.Document, user int, 
 func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.TreeNode, initialXML string,
 	rangesArr []twoRangesType, opArr1, opArr2 []operationInterface) {
 
-	runTest := func(ranges twoRangesType, op1, op2 operationInterface) bool {
+	runTest := func(ranges twoRangesType, op1, op2 operationInterface) testResult {
 		clients := activeClients(t, 2)
 		c1, c2 := clients[0], clients[1]
 		defer deactivateAndCloseClients(t, clients)
@@ -169,7 +174,11 @@ func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.Tre
 		op1.run(t, d1, 0, ranges)
 		op2.run(t, d2, 1, ranges)
 
-		return syncClientsThenCheckEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		flag := syncClientsThenCheckEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		if flag {
+			return testResult{flag, `pass`}
+		}
+		return testResult{flag, `different result`}
 	}
 
 	for _, interval := range rangesArr {
@@ -178,8 +187,9 @@ func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.Tre
 				desc := testDesc + "-" + interval.desc
 				desc += "(" + op1.getDesc() + "," + op2.getDesc() + ")"
 				t.Run(desc, func(t *testing.T) {
-					if !runTest(interval, op1, op2) {
-						t.Skip()
+					result := runTest(interval, op1, op2)
+					if !result.flag {
+						t.Skip(result.resultDesc)
 					}
 				})
 			}
@@ -221,34 +231,34 @@ func TestTreeConcurrencyEditEdit(t *testing.T) {
 		makeTwoRanges(0, 5, 5, 5, 5, 10, `side-by-side-element`),
 		// side-by-side-text: a - bc
 		makeTwoRanges(1, 1, 2, 2, 3, 4, `side-by-side-text`),
-		// equal-text: abc - abc
-		makeTwoRanges(1, 2, 4, 1, 2, 4, `equal-text`),
 		// equal-element: <p>abc</p><p>def</p> - <p>abc</p><p>def</p>
 		makeTwoRanges(0, 5, 10, 0, 5, 10, `equal-element`),
+		// equal-text: abc - abc
+		makeTwoRanges(1, 2, 4, 1, 2, 4, `equal-text`),
 	}
 
 	editOperations1 := []operationInterface{
 		editOperationType{RangeFront, EditUpdate, textNode1, 0, `insertTextFront`},
 		editOperationType{RangeMiddle, EditUpdate, textNode1, 0, `insertTextMiddle`},
 		editOperationType{RangeBack, EditUpdate, textNode1, 0, `insertTextBack`},
-		editOperationType{RangeAll, EditUpdate, textNode1, 0, `changeText`},
+		editOperationType{RangeAll, EditUpdate, textNode1, 0, `replaceText`},
 		editOperationType{RangeFront, EditUpdate, elementNode1, 0, `insertElementFront`},
 		editOperationType{RangeMiddle, EditUpdate, elementNode1, 0, `insertElementMiddle`},
 		editOperationType{RangeBack, EditUpdate, elementNode1, 0, `insertElementBack`},
-		editOperationType{RangeAll, EditUpdate, elementNode1, 0, `changeElement`},
-		editOperationType{RangeAll, EditUpdate, nil, 0, `erase`},
+		editOperationType{RangeAll, EditUpdate, elementNode1, 0, `replaceElement`},
+		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
 	}
 
 	editOperations2 := []operationInterface{
 		editOperationType{RangeFront, EditUpdate, textNode2, 0, `insertTextFront`},
 		editOperationType{RangeMiddle, EditUpdate, textNode2, 0, `insertTextMiddle`},
 		editOperationType{RangeBack, EditUpdate, textNode2, 0, `insertTextBack`},
-		editOperationType{RangeAll, EditUpdate, textNode2, 0, `changeText`},
+		editOperationType{RangeAll, EditUpdate, textNode2, 0, `replaceText`},
 		editOperationType{RangeFront, EditUpdate, elementNode2, 0, `insertElementFront`},
 		editOperationType{RangeMiddle, EditUpdate, elementNode2, 0, `insertElementMiddle`},
 		editOperationType{RangeBack, EditUpdate, elementNode2, 0, `insertElementBack`},
-		editOperationType{RangeAll, EditUpdate, elementNode2, 0, `changeElement`},
-		editOperationType{RangeAll, EditUpdate, nil, 0, `erase`},
+		editOperationType{RangeAll, EditUpdate, elementNode2, 0, `replaceElement`},
+		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
 	}
 
 	RunTestTreeConcurrency("concurrently-edit-edit-test", t, initialState, initialXML, ranges, editOperations1, editOperations2)
@@ -332,8 +342,8 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 		editOperationType{RangeFront, EditUpdate, content, 0, `insertFront`},
 		editOperationType{RangeMiddle, EditUpdate, content, 0, `insertMiddle`},
 		editOperationType{RangeBack, EditUpdate, content, 0, `insertBack`},
-		editOperationType{RangeAll, EditUpdate, nil, 0, `erase`},
-		editOperationType{RangeAll, EditUpdate, content, 0, `change`},
+		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
+		editOperationType{RangeAll, EditUpdate, content, 0, `replace`},
 	}
 
 	styleOperations := []operationInterface{
