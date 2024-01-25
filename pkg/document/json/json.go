@@ -169,6 +169,31 @@ func buildCRDTElement(
 		return buildCRDTElement(context, val.Elem().Interface(), ticket, stat)
 	case reflect.Struct:
 		return buildCRDTElement(context, reflect.ValueOf(value), ticket, stat)
+	case reflect.Int, reflect.Int32, reflect.Int64, reflect.Float32, reflect.Float64, reflect.String, reflect.Bool:
+		return buildCRDTElement(context, namedtypeToPrimitive(value), ticket, stat)
+	default:
+		panic("unsupported type")
+	}
+}
+
+// namedtypeToPrimitive converts the given named type to primitive type.
+func namedtypeToPrimitive(value any) any {
+	val := reflect.ValueOf(value)
+	switch val.Kind() {
+	case reflect.Int:
+		return val.Int()
+	case reflect.Int32:
+		return int32(val.Int())
+	case reflect.Int64:
+		return val.Int()
+	case reflect.Float32:
+		return float32(val.Float())
+	case reflect.Float64:
+		return val.Float()
+	case reflect.String:
+		return val.String()
+	case reflect.Bool:
+		return val.Bool()
 	default:
 		panic("unsupported type")
 	}

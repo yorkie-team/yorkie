@@ -486,6 +486,15 @@ func TestObjectSet(t *testing.T) {
 	defer deactivateAndCloseClients(t, clients)
 
 	type (
+		Myint    int
+		MyStruct struct {
+			M Myint
+		}
+
+		t1 struct {
+			M string
+		}
+
 		T1 struct {
 			M string
 		}
@@ -497,7 +506,8 @@ func TestObjectSet(t *testing.T) {
 		}
 		T4 struct {
 			T1
-			T2
+			t1
+			M string
 		}
 	)
 
@@ -508,8 +518,12 @@ func TestObjectSet(t *testing.T) {
 
 	embedded := T4{
 		T1: T1{M: str},
-		T2: T2{M: &str},
+		t1: t1{M: str},
+		M:  "foo",
 	}
+
+	type MyInt int
+	type S struct{ MyInt }
 
 	setTests := []struct {
 		caseName   string
@@ -622,8 +636,16 @@ func TestObjectSet(t *testing.T) {
 		{"nested &object with json.Counter", struct{ M *T3 }{M: &T3{C: *json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
 		{"nested object with json.Counter with zero value", struct{ M T3 }{}, `{"obj":{"M":{"C":0}}}`, 3},
 
-		// Test with embedded struct
-		{"embedded struct", embedded, `{"obj":{"T1":{"M":"foo"},"T2":{"M":"foo"}}}`, 5},
+		//Test with embedded struct
+		{"embedded struct", embedded, `{"obj":{"M":"foo","T1":{"M":"foo"}}}`, 4},
+		{"&embedded struct", &embedded, `{"obj":{"M":"foo","T1":{"M":"foo"}}}`, 4},
+
+		// Test with anonymous field in struct
+		{"anonymous field in struct", S{5}, `{"obj":{"MyInt":5}}`, 2},
+
+		// Test with named type field in struct
+		{"named type field in struct", struct{ M MyInt }{M: 5}, `{"obj":{"M":5}}`, 2},
+		{"named type field in struct", MyStruct{5}, `{"obj":{"M":5}}`, 2},
 	}
 
 	for _, tt := range setTests {
