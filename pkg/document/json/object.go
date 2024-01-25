@@ -61,8 +61,6 @@ func (p *Object) SetNewObject(k string, v ...any) *Object {
 }
 
 // SetNewArray sets a new Array for the given key.
-// TODO(hackerwins): For now, users can only set initial values with []interface{} without
-// the type information of the elements. We need to support the type information.
 func (p *Object) SetNewArray(k string, v ...any) *Array {
 	value := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		elements := crdt.NewRGATreeList()
@@ -90,7 +88,7 @@ func (p *Object) SetNewText(k string) *Text {
 }
 
 // SetNewCounter sets a new NewCounter for the given key.
-func (p *Object) SetNewCounter(k string, t crdt.CounterType, n interface{}) *Counter {
+func (p *Object) SetNewCounter(k string, t crdt.CounterType, n any) *Counter {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		return toElement(p.context, buildCRDTElement(p.context, NewCounter(n, t), ticket, newBuildState()))
 	})
@@ -356,7 +354,7 @@ func (p *Object) setInternal(
 // converting each value into a corresponding CRDTElement.
 func buildObjectMembersFromMap(
 	context *change.Context,
-	json map[string]interface{},
+	json map[string]any,
 	stat *buildState,
 ) map[string]crdt.Element {
 	members := make(map[string]crdt.Element)

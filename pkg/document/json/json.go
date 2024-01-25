@@ -30,14 +30,14 @@ const startDetectingCyclesAfter = 5000
 
 // buildState is used to track the depth of nested structs during decoding.
 type buildState struct {
-	visited map[interface{}]bool
+	visited map[any]bool
 	depth   int
 }
 
 // newBuildState creates a new instance of BuildState.
 func newBuildState() *buildState {
 	return &buildState{
-		visited: make(map[interface{}]bool),
+		visited: make(map[any]bool),
 		depth:   0,
 	}
 }

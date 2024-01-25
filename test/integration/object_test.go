@@ -509,8 +509,8 @@ func TestObjectSet(t *testing.T) {
 		tombstones int
 	}{
 		// Test nll
-		{"null map", map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`, 2},
-		{"null &map", &map[string]interface{}{"M": nil}, `{"obj":{"M":null}}`, 2},
+		{"null map", map[string]any{"M": nil}, `{"obj":{"M":null}}`, 2},
+		{"null &map", &map[string]any{"M": nil}, `{"obj":{"M":null}}`, 2},
 
 		// Test zero value
 		{"zeroValue int struct", struct{ M int }{}, `{"obj":{"M":0}}`, 2},
@@ -521,10 +521,10 @@ func TestObjectSet(t *testing.T) {
 		{"empty array struct", struct{ M []int }{M: []int{}}, `{"obj":{"M":[]}}`, 2},
 
 		// Test with empty string
-		{"empty map", map[string]interface{}{"M": empty}, emptyTarget, 2},
-		{"empty &map", &map[string]interface{}{"M": empty}, emptyTarget, 2},
-		{"&empty map", map[string]interface{}{"M": &empty}, emptyTarget, 2},
-		{"&empty &map", &map[string]interface{}{"M": &empty}, emptyTarget, 2},
+		{"empty map", map[string]any{"M": empty}, emptyTarget, 2},
+		{"empty &map", &map[string]any{"M": empty}, emptyTarget, 2},
+		{"&empty map", map[string]any{"M": &empty}, emptyTarget, 2},
+		{"&empty &map", &map[string]any{"M": &empty}, emptyTarget, 2},
 		{"empty struct", struct{ M string }{M: empty}, emptyTarget, 2},
 		{"empty &struct", &struct{ M string }{M: empty}, emptyTarget, 2},
 		{"&empty struct", struct{ M *string }{M: &empty}, emptyTarget, 2},
@@ -535,10 +535,10 @@ func TestObjectSet(t *testing.T) {
 		{"empty &T2", &T2{M: &empty}, emptyTarget, 2},
 
 		// Test with some str
-		{"str map", map[string]interface{}{"M": str}, strTarget, 2},
-		{"str &map", &map[string]interface{}{"M": str}, strTarget, 2},
-		{"&str map", map[string]interface{}{"M": &str}, strTarget, 2},
-		{"&str &map", &map[string]interface{}{"M": &str}, strTarget, 2},
+		{"str map", map[string]any{"M": str}, strTarget, 2},
+		{"str &map", &map[string]any{"M": str}, strTarget, 2},
+		{"&str map", map[string]any{"M": &str}, strTarget, 2},
+		{"&str &map", &map[string]any{"M": &str}, strTarget, 2},
 		{"str struct", struct{ M string }{M: str}, strTarget, 2},
 		{"str &struct", &struct{ M string }{M: str}, strTarget, 2},
 		{"&str struct", struct{ M *string }{M: &str}, strTarget, 2},
