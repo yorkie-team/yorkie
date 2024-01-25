@@ -613,6 +613,30 @@ entries:
     urls:
     - yorkie-cluster-0.3.3.tgz
     version: 0.3.3
+  yorkie-mongodb:
+  - apiVersion: v2
+    appVersion: 0.4.13
+    created: "2024-01-25T10:42:58.387661712Z"
+    dependencies:
+    - condition: sharded.enabled
+      name: mongodb-sharded
+      repository: https://charts.bitnami.com/bitnami
+      version: 7.2.2
+    description: yorkie-mongodb provides the deployment of MongoDB for the yorkie
+      server, supporting both standalone mode and sharded cluster mode.
+    digest: ff089437b87d7eb331905a8b88be71b9e82a33720e6f7e6bf89b46647febc287
+    icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+    kubeVersion: '>=1.23.0-0'
+    maintainers:
+    - email: susukang98@gmail.com
+      name: hackerwins
+    - email: krapi0314@gmail.com
+      name: krapie
+    name: yorkie-mongodb
+    type: application
+    urls:
+    - https://github.com/yorkie-team/yorkie/releases/download/yorkie-mongodb-0.4.13/yorkie-mongodb-0.4.13.tgz
+    version: 0.4.13
   yorkie-monitoring:
   - apiVersion: v2
     appVersion: 0.4.11
@@ -817,4 +841,4 @@ entries:
     urls:
     - yorkie-monitoring-0.3.3.tgz
     version: 0.3.3
-generated: "2024-01-19T07:49:40.816219568Z"
+generated: "2024-01-25T10:42:58.387717546Z"
