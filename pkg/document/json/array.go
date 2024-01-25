@@ -387,37 +387,38 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 func buildArrayElements(
 	context *change.Context,
 	elements any,
+	stat *buildState,
 ) []crdt.Element {
 	// 01. The type of elements of the given array is one of the basic types.
 	switch elements := elements.(type) {
 	case []any:
-		return sliceToElements[any](elements, context)
+		return sliceToElements[any](elements, context, stat)
 	case []int:
-		return sliceToElements[int](elements, context)
+		return sliceToElements[int](elements, context, stat)
 	case []int32:
-		return sliceToElements[int32](elements, context)
+		return sliceToElements[int32](elements, context, stat)
 	case []int64:
-		return sliceToElements[int64](elements, context)
+		return sliceToElements[int64](elements, context, stat)
 	case []float32:
-		return sliceToElements[float32](elements, context)
+		return sliceToElements[float32](elements, context, stat)
 	case []float64:
-		return sliceToElements[float64](elements, context)
+		return sliceToElements[float64](elements, context, stat)
 	case []string:
-		return sliceToElements[string](elements, context)
+		return sliceToElements[string](elements, context, stat)
 	case []bool:
-		return sliceToElements[bool](elements, context)
+		return sliceToElements[bool](elements, context, stat)
 	case [][]byte:
-		return sliceToElements[[]byte](elements, context)
+		return sliceToElements[[]byte](elements, context, stat)
 	case []gotime.Time:
-		return sliceToElements[gotime.Time](elements, context)
+		return sliceToElements[gotime.Time](elements, context, stat)
 	case []Counter:
-		return sliceToElements[Counter](elements, context)
+		return sliceToElements[Counter](elements, context, stat)
 	case []Text:
-		return sliceToElements[Text](elements, context)
+		return sliceToElements[Text](elements, context, stat)
 	case []Tree:
-		return sliceToElements[Tree](elements, context)
+		return sliceToElements[Tree](elements, context, stat)
 	case []map[string]any:
-		return sliceToElements[map[string]any](elements, context)
+		return sliceToElements[map[string]any](elements, context, stat)
 	}
 
 	// 02. The type of elements of the given array is user defined struct or array.
@@ -432,7 +433,7 @@ func buildArrayElements(
 			array[i] = reflect.ValueOf(elements).Index(i)
 		}
 
-		return sliceToElements[reflect.Value](array, context)
+		return sliceToElements[reflect.Value](array, context, stat)
 	case reflect.Slice, reflect.Array, reflect.Ptr:
 		length := reflect.ValueOf(elements).Len()
 		array := make([]any, length)
@@ -440,19 +441,19 @@ func buildArrayElements(
 		for i := 0; i < length; i++ {
 			array[i] = reflect.ValueOf(elements).Index(i).Interface()
 		}
-		return sliceToElements[any](array, context)
+		return sliceToElements[any](array, context, stat)
 	default:
 		panic("unhandled default case")
 	}
 }
 
 // sliceToElements converts the given specific type array to crdt.Element array
-func sliceToElements[T any](elements []T, context *change.Context) []crdt.Element {
+func sliceToElements[T any](elements []T, context *change.Context, stat *buildState) []crdt.Element {
 	elems := make([]crdt.Element, len(elements))
 
 	for idx, value := range elements {
 		ticket := context.IssueTimeTicket()
-		elems[idx] = buildCRDTElement(context, value, ticket)
+		elems[idx] = buildCRDTElement(context, value, ticket, stat)
 	}
 
 	return elems

@@ -54,7 +54,7 @@ func (p *Object) SetNewObject(k string, v ...any) *Object {
 		if v[0] == nil || !isAllowedType(v[0]) {
 			panic("unsupported object type")
 		}
-		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
+		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket, newBuildState()))
 	})
 
 	return value.(*Object)
@@ -73,7 +73,7 @@ func (p *Object) SetNewArray(k string, v ...any) *Array {
 		if v[0] == nil || !isArrayOrSlice(v[0]) {
 			panic("unsupported array type")
 		}
-		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
+		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket, newBuildState()))
 	})
 
 	return value.(*Array)
@@ -92,7 +92,7 @@ func (p *Object) SetNewText(k string) *Text {
 // SetNewCounter sets a new NewCounter for the given key.
 func (p *Object) SetNewCounter(k string, t crdt.CounterType, n interface{}) *Counter {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
-		return toElement(p.context, buildCRDTElement(p.context, NewCounter(n, t), ticket))
+		return toElement(p.context, buildCRDTElement(p.context, NewCounter(n, t), ticket, newBuildState()))
 	})
 
 	return v.(*Counter)
@@ -357,6 +357,7 @@ func (p *Object) setInternal(
 func buildObjectMembersFromMap(
 	context *change.Context,
 	json map[string]interface{},
+	stat *buildState,
 ) map[string]crdt.Element {
 	members := make(map[string]crdt.Element)
 
@@ -365,7 +366,7 @@ func buildObjectMembersFromMap(
 			panic("key must not contain the '.'.")
 		}
 		ticket := context.IssueTimeTicket()
-		members[key] = buildCRDTElement(context, value, ticket)
+		members[key] = buildCRDTElement(context, value, ticket, stat)
 	}
 
 	return members
@@ -378,6 +379,7 @@ func buildObjectMembersFromMap(
 func buildObjectMembersFromValue(
 	context *change.Context,
 	value reflect.Value,
+	stat *buildState,
 ) map[string]crdt.Element {
 	members := make(map[string]crdt.Element)
 	for i := 0; i < value.NumField(); i++ {
@@ -403,7 +405,7 @@ func buildObjectMembersFromValue(
 		}
 
 		ticket := context.IssueTimeTicket()
-		members[name] = buildCRDTElement(context, value.Field(i).Interface(), ticket)
+		members[name] = buildCRDTElement(context, value.Field(i).Interface(), ticket, stat)
 	}
 	return members
 }

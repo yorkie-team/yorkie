@@ -418,6 +418,68 @@ func TestObjectTypeGuard(t *testing.T) {
 	}
 }
 
+func TestObjectSetCycle(t *testing.T) {
+	clients := activeClients(t, 1)
+	c1 := clients[0]
+	defer deactivateAndCloseClients(t, clients)
+
+	type (
+		PointerCycle struct {
+			Next *PointerCycle
+		}
+		PointerCycleIndirect struct {
+			Ptrs []any
+		}
+		RecursiveSlice []RecursiveSlice
+		T1             struct {
+			M RecursiveSlice
+		}
+	)
+
+	// Unsupported types
+	var (
+		pointerCycle         = &PointerCycle{}
+		pointerCycleIndirect = &PointerCycleIndirect{}
+		mapCycle             = map[string]any{}
+		sliceCycle           = []any{nil}
+		recursiveSliceCycle  = []RecursiveSlice{nil}
+	)
+
+	// Initialize
+	pointerCycle.Next = pointerCycle
+	pointerCycleIndirect.Ptrs = []any{pointerCycleIndirect}
+	mapCycle["k1"] = mapCycle
+	sliceCycle[0] = sliceCycle
+	recursiveSliceCycle[0] = recursiveSliceCycle
+
+	cycleTests := []struct {
+		caseName string
+		in       any
+	}{
+		{"pointer cycle", pointerCycle},
+		{"pointer cycle indirect", pointerCycleIndirect},
+		{"map cycle", mapCycle},
+		{"slice cycle", map[string]any{"k1": sliceCycle}},
+		{"recursive slice cycle", T1{M: recursiveSliceCycle}},
+	}
+
+	for _, tt := range cycleTests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+
+			val := func() {
+				d1.Update(func(root *json.Object, p *presence.Presence) error {
+					root.SetNewObject("obj", tt.in)
+					return nil
+				})
+			}
+			assert.PanicsWithValue(t, "cycle detected", val)
+		})
+	}
+}
+
 func TestObjectSet(t *testing.T) {
 	clients := activeClients(t, 1)
 	c1 := clients[0]

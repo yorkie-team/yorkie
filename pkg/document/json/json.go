@@ -26,6 +26,22 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+const startDetectingCyclesAfter = 5000
+
+// buildState is used to track the depth of nested structs during decoding.
+type buildState struct {
+	visited map[interface{}]bool
+	depth   int
+}
+
+// newBuildState creates a new instance of BuildState.
+func newBuildState() *buildState {
+	return &buildState{
+		visited: make(map[interface{}]bool),
+		depth:   0,
+	}
+}
+
 // tagOptions is the string following a comma in a struct field's "yorkie"
 // tag, or the empty string.
 type tagOptions string
@@ -75,8 +91,27 @@ func buildCRDTElement(
 	context *change.Context,
 	value any,
 	ticket *time.Ticket,
+	stat *buildState,
 ) crdt.Element {
-	// 01. The type of the given value is one of the basic types.
+	// 01. Check the stat for detecting cycles.
+	if stat.depth++; stat.depth > startDetectingCyclesAfter {
+		// If the depth exceeds the `startDetectingCyclesAfter`, it will start to check cycles.
+		// It memorize the visited pointer of reflect.Ptr, reflect.Map, reflect.Slice.
+		switch reflect.ValueOf(value).Kind() {
+		case reflect.Ptr, reflect.Map, reflect.Slice:
+			ptr := reflect.ValueOf(value).Pointer()
+			if stat.visited[ptr] {
+				panic("cycle detected")
+			}
+			stat.visited[ptr] = true
+			defer func() {
+				delete(stat.visited, ptr)
+				stat.depth--
+			}()
+		}
+	}
+
+	// 02. The type of the given value is one of the basic types.
 	switch elem := value.(type) {
 	case nil, string, int, int32, int64, float32, float64, []byte, bool, gotime.Time:
 		primitive, err := crdt.NewPrimitive(elem, ticket)
@@ -105,35 +140,35 @@ func buildCRDTElement(
 		// User can't initialize the json.Object directly. so just return the empty json.Object.
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, nil)
 	case map[string]any:
-		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembersFromMap(context, elem))
+		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembersFromMap(context, elem, stat))
 	case reflect.Value:
 		// NOTE(highcloud100): This case only occurs when struct's reflect.Value is given.
 		// BuildArrayElements only can throw the arbitrary struct as reflect.Value type to this function.
 		if elem.Type().Kind() != reflect.Struct {
 			break
 		}
-		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembersFromValue(context, elem))
+		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembersFromValue(context, elem, stat))
 	}
 
-	// 02. The type of the given value is user defined struct or array.
+	// 03. The type of the given value is user defined struct or array.
 	switch reflect.ValueOf(value).Kind() {
 	case reflect.Slice:
-		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, value))
+		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, value, stat))
 	case reflect.Array:
 		// TODO(highcloud100): For now, buildArrayElements only accepts slice type.
 		// We need to support array type later to avoid copying the slice.
 		length := reflect.ValueOf(value).Len()
 		slice := reflect.MakeSlice(reflect.SliceOf(reflect.ValueOf(value).Type().Elem()), length, length)
 		reflect.Copy(slice, reflect.ValueOf(value))
-		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, slice.Interface()))
+		return crdt.NewArray(crdt.NewRGATreeList(), ticket, buildArrayElements(context, slice.Interface(), stat))
 	case reflect.Pointer:
 		val := reflect.ValueOf(value)
 		if val.IsNil() || !val.Elem().CanInterface() {
-			return buildCRDTElement(context, nil, ticket)
+			return buildCRDTElement(context, nil, ticket, stat)
 		}
-		return buildCRDTElement(context, val.Elem().Interface(), ticket)
+		return buildCRDTElement(context, val.Elem().Interface(), ticket, stat)
 	case reflect.Struct:
-		return buildCRDTElement(context, reflect.ValueOf(value), ticket)
+		return buildCRDTElement(context, reflect.ValueOf(value), ticket, stat)
 	default:
 		panic("unsupported type")
 	}
