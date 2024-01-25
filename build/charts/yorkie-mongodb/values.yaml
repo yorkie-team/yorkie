@@ -8,11 +8,15 @@ image:
   repository: &imageRepository mongo
   tag: &imageTag "6.0"
 
+# Configuration for nodes
 persistence:
+  # DataSize is the size of data nodes in each replica
   dataSize: &dataSize 1Gi
+  # ConfigSize is the size of config nodes in each replica
   configSize: &configSize 500Mi
   storageClass: &storageClass standard
 
+# Configuration for mongodb cluster
 sharded:
   enabled: true
   shards: &shard 2
@@ -21,6 +25,7 @@ sharded:
     shardsvr: &shardSvrReplicaCount 1
     mongos: &mongosReplicaCount 1
 
+  # Configuration for sharding rule
   setup:
     enabled: true
     database: yorkie-meta
@@ -29,25 +34,26 @@ sharded:
     rules:
       - collectionName: documents
         shardKeys:
-          - name: key
+          - name: project_id
             method: "1"
         unique: false
       - collectionName: changes
         shardKeys:
-          - name: doc_key
+          - name: doc_id
             method: "1"
         unique: false
       - collectionName: snapshots
         shardKeys:
-          - name: doc_key
+          - name: doc_id
             method: "1"
         unique: false
       - collectionName: syncedseqs
         shardKeys:
-          - name: doc_key
+          - name: doc_id
             method: "1"
         unique: false
 
+# Configuration for manual dmongodb sharded stack
 mongodb-sharded:
   fullnameOverride: *name
   namespaceOverride: *namespace
@@ -76,6 +82,7 @@ mongodb-sharded:
       mongodb: 27017
     sessionAffinity: None
 
+  # Configuration for config servers
   configsvr:
     replicaCount: *configSvrReplicaCount
     command:
@@ -109,6 +116,7 @@ mongodb-sharded:
       mountPath: /data/configdb
       storageClass: *storageClass
 
+  # Configuration for shard server
   shardsvr:
     dataNode:
       replicaCount: *shardSvrReplicaCount
@@ -142,6 +150,7 @@ mongodb-sharded:
       mountPath: /data/db
       storageClass: *storageClass
 
+  # Configuration for mongos
   mongos:
     replicaCount: *mongosReplicaCount
     command:
@@ -183,7 +192,9 @@ mongodb-sharded:
     startupProbe:
       enabled: false
 
+  # Configuration for Prometheus monitoring
   metrics:
     enabled: true
+    namespace: monitoring
     podMonitor:
       enabled: false
