@@ -88,7 +88,7 @@ func setUpClientsAndDocs(
 	for i := 0; i < n; i++ {
 		clientInfo, err := be.DB.ActivateClient(ctx, database.DefaultProjectID, fmt.Sprintf("client-%d", i))
 		assert.NoError(b, err)
-		docInfo, err := be.DB.FindDocInfoByKeyAndOwner(ctx, database.DefaultProjectID, clientInfo.ID, docKey, true)
+		docInfo, err := be.DB.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.NoError(b, err)
 		assert.NoError(b, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(b, be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))

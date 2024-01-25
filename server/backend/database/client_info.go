@@ -237,3 +237,11 @@ func (i *ClientInfo) DeepCopy() *ClientInfo {
 func (i *ClientInfo) hasDocument(docID types.ID) bool {
 	return i.Documents != nil && i.Documents[docID] != nil
 }
+
+// RefKey returns the refKey of the client.
+func (i *ClientInfo) RefKey() types.ClientRefKey {
+	return types.ClientRefKey{
+		ProjectID: i.ProjectID,
+		ClientID:  i.ID,
+	}
+}

@@ -497,25 +497,25 @@ func (d *DB) ActivateClient(
 }
 
 // DeactivateClient deactivates a client.
-func (d *DB) DeactivateClient(_ context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
-	if err := clientID.Validate(); err != nil {
+func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
+	if err := refKey.ClientID.Validate(); err != nil {
 		return nil, err
 	}
 
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "id", clientID.String())
+	raw, err := txn.First(tblClients, "id", refKey.ClientID.String())
 	if err != nil {
 		return nil, fmt.Errorf("find client by id: %w", err)
 	}
 
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+		return nil, fmt.Errorf("%s: %w", refKey.ClientID, database.ErrClientNotFound)
 	}
 
 	clientInfo := raw.(*database.ClientInfo)
-	if err := clientInfo.CheckIfInProject(projectID); err != nil {
+	if err := clientInfo.CheckIfInProject(refKey.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -532,25 +532,25 @@ func (d *DB) DeactivateClient(_ context.Context, projectID, clientID types.ID) (
 	return clientInfo, nil
 }
 
-// FindClientInfoByID finds a client by ID.
-func (d *DB) FindClientInfoByID(_ context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
-	if err := clientID.Validate(); err != nil {
+// FindClientInfoByRefKey finds a client by the given refKey.
+func (d *DB) FindClientInfoByRefKey(_ context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
+	if err := refKey.ClientID.Validate(); err != nil {
 		return nil, err
 	}
 
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblClients, "id", clientID.String())
+	raw, err := txn.First(tblClients, "id", refKey.ClientID.String())
 	if err != nil {
 		return nil, fmt.Errorf("find client by id: %w", err)
 	}
 	if raw == nil {
-		return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+		return nil, fmt.Errorf("%s: %w", refKey.ClientID, database.ErrClientNotFound)
 	}
 
 	clientInfo := raw.(*database.ClientInfo)
-	if err := clientInfo.CheckIfInProject(projectID); err != nil {
+	if err := clientInfo.CheckIfInProject(refKey.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -668,8 +668,7 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 // exist.
 func (d *DB) FindDocInfoByKeyAndOwner(
 	_ context.Context,
-	projectID types.ID,
-	clientID types.ID,
+	clientRefKey types.ClientRefKey,
 	key key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
@@ -679,7 +678,13 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 	// TODO(hackerwins): Removed documents should be filtered out by the query, but
 	// somehow it does not work. This is a workaround.
 	// val, err := txn.First(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
-	iter, err := txn.Get(tblDocuments, "project_id_key_removed_at", projectID.String(), key.String(), gotime.Time{})
+	iter, err := txn.Get(
+		tblDocuments,
+		"project_id_key_removed_at",
+		clientRefKey.ProjectID.String(),
+		key.String(),
+		gotime.Time{},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("find document by key: %w", err)
 	}
@@ -694,7 +699,12 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 		return nil, fmt.Errorf("find document by key: %w", err)
 	}
 	if !createDocIfNotExist && raw == nil {
-		raw, err = txn.First(tblDocuments, "project_id_key", projectID.String(), key.String())
+		raw, err = txn.First(
+			tblDocuments,
+			"project_id_key",
+			clientRefKey.ProjectID.String(),
+			key.String(),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("find document by key: %w", err)
 		}
@@ -708,9 +718,9 @@ func (d *DB) FindDocInfoByKeyAndOwner(
 	if raw == nil {
 		docInfo = &database.DocInfo{
 			ID:         newID(),
-			ProjectID:  projectID,
+			ProjectID:  clientRefKey.ProjectID,
 			Key:        key,
-			Owner:      clientID,
+			Owner:      clientRefKey.ClientID,
 			ServerSeq:  0,
 			CreatedAt:  now,
 			AccessedAt: now,

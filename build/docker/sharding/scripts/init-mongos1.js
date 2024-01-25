@@ -16,6 +16,7 @@ function shardOfChunk(minKeyOfChunk) {
 // Shard the database for the mongo client test
 const mongoClientDB = "test-yorkie-meta-mongo-client"
 sh.enableSharding(mongoClientDB)
+sh.shardCollection(mongoClientDB + ".clients", { project_id: 1 })
 sh.shardCollection(mongoClientDB + ".documents", { project_id: 1 })
 sh.shardCollection(mongoClientDB + ".changes", { doc_id: 1 })
 sh.shardCollection(mongoClientDB + ".snapshots", { doc_id: 1 })
@@ -30,6 +31,7 @@ db.adminCommand({ moveChunk: mongoClientDB + ".documents", find: { project_id: s
 // Shard the database for the server test
 const serverDB = "test-yorkie-meta-server"
 sh.enableSharding(serverDB)
+sh.shardCollection(serverDB + ".clients", { project_id: 1 })
 sh.shardCollection(serverDB + ".documents", { project_id: 1 })
 sh.shardCollection(serverDB + ".changes", { doc_id: 1 })
 sh.shardCollection(serverDB + ".snapshots", { doc_id: 1 })

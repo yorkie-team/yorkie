@@ -100,8 +100,10 @@ func GetDocumentSummary(
 	// TODO(hackerwins): Split FindDocInfoByKeyAndOwner into upsert and find.
 	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
-		project.ID,
-		types.IDFromActorID(time.InitialActorID),
+		types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(time.InitialActorID),
+		},
 		k,
 		false,
 	)
@@ -134,8 +136,10 @@ func GetDocumentByServerSeq(
 ) (*document.InternalDocument, error) {
 	docInfo, err := be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
-		project.ID,
-		types.IDFromActorID(time.InitialActorID),
+		types.ClientRefKey{
+			ProjectID: project.ID,
+			ClientID:  types.IDFromActorID(time.InitialActorID),
+		},
 		k,
 		false,
 	)
@@ -209,15 +213,13 @@ func FindDocInfoByRefKey(
 func FindDocInfoByKeyAndOwner(
 	ctx context.Context,
 	be *backend.Backend,
-	project *types.Project,
 	clientInfo *database.ClientInfo,
 	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
 	return be.DB.FindDocInfoByKeyAndOwner(
 		ctx,
-		project.ID,
-		clientInfo.ID,
+		clientInfo.RefKey(),
 		docKey,
 		createDocIfNotExist,
 	)

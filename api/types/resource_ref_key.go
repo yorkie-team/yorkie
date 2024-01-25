@@ -20,9 +20,6 @@ import (
 	"fmt"
 )
 
-// EmptyDocRefKey is an empty value of DocRefKey.
-var EmptyDocRefKey = DocRefKey{"", ""}
-
 // DocRefKey represents an identifier used to reference a document.
 type DocRefKey struct {
 	ProjectID ID
@@ -32,6 +29,17 @@ type DocRefKey struct {
 // String returns the string representation of the given DocRefKey.
 func (r DocRefKey) String() string {
 	return fmt.Sprintf("Document (%s.%s)", r.ProjectID, r.DocID)
+}
+
+// ClientRefKey represents an identifier used to reference a client.
+type ClientRefKey struct {
+	ProjectID ID
+	ClientID  ID
+}
+
+// String returns the string representation of the given ClientRefKey.
+func (r ClientRefKey) String() string {
+	return fmt.Sprintf("Client (%s.%s)", r.ProjectID, r.ClientID)
 }
 
 // SnapshotRefKey represents an identifier used to reference a snapshot.

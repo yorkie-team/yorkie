@@ -133,11 +133,11 @@ type Database interface {
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)
 
-	// DeactivateClient deactivates the client of the given ID.
-	DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*ClientInfo, error)
+	// DeactivateClient deactivates the client of the given refKey.
+	DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
 
-	// FindClientInfoByID finds the client of the given ID.
-	FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*ClientInfo, error)
+	// FindClientInfoByRefKey finds the client of the given refKey.
+	FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.
@@ -169,8 +169,7 @@ type Database interface {
 	// exist.
 	FindDocInfoByKeyAndOwner(
 		ctx context.Context,
-		projectID types.ID,
-		clientID types.ID,
+		clientRefKey types.ClientRefKey,
 		docKey key.Key,
 		createDocIfNotExist bool,
 	) (*DocInfo, error)

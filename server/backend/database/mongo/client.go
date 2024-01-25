@@ -498,7 +498,8 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	var result *mongo.SingleResult
 	if res.UpsertedCount > 0 {
 		result = c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-			"_id": res.UpsertedID,
+			"project_id": projectID,
+			"_id":        res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
 				"created_at": now,
@@ -506,7 +507,8 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 		})
 	} else {
 		result = c.collection(ColClients).FindOne(ctx, bson.M{
-			"key": key,
+			"project_id": projectID,
+			"key":        key,
 		})
 	}
 
@@ -518,11 +520,11 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	return &clientInfo, nil
 }
 
-// DeactivateClient deactivates the client of the given ID.
-func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
+// DeactivateClient deactivates the client of the given refKey.
+func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"_id":        clientID,
-		"project_id": projectID,
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.ClientID,
 	}, bson.M{
 		"$set": bson.M{
 			"status":     database.ClientDeactivated,
@@ -533,7 +535,7 @@ func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types
 	clientInfo := database.ClientInfo{}
 	if err := res.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+			return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
 		}
 		return nil, fmt.Errorf("decode client info: %w", err)
 	}
@@ -541,11 +543,11 @@ func (c *Client) DeactivateClient(ctx context.Context, projectID, clientID types
 	return &clientInfo, nil
 }
 
-// FindClientInfoByID finds the client of the given ID.
-func (c *Client) FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*database.ClientInfo, error) {
+// FindClientInfoByRefKey finds the client of the given refKey.
+func (c *Client) FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"_id":        clientID,
-		"project_id": projectID,
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.ClientID,
 	}, bson.M{
 		"$set": bson.M{
 			"updated_at": gotime.Now(),
@@ -555,7 +557,7 @@ func (c *Client) FindClientInfoByID(ctx context.Context, projectID, clientID typ
 	clientInfo := database.ClientInfo{}
 	if err := result.Decode(&clientInfo); err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", clientID, database.ErrClientNotFound)
+			return nil, fmt.Errorf("%s: %w", refKey, database.ErrClientNotFound)
 		}
 	}
 
@@ -569,9 +571,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
-	docRefKey := docInfo.RefKey()
-	clientDocInfoKey := getClientDocInfoKey(docRefKey)
-	clientDocInfo, ok := clientInfo.Documents[docRefKey.DocID]
+	clientDocInfoKey := getClientDocInfoKey(docInfo.ID)
+	clientDocInfo, ok := clientInfo.Documents[docInfo.ID]
 	if !ok {
 		return fmt.Errorf("client doc info: %w", database.ErrDocumentNeverAttached)
 	}
@@ -587,7 +588,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		},
 	}
 
-	attached, err := clientInfo.IsAttached(docRefKey.DocID)
+	attached, err := clientInfo.IsAttached(docInfo.ID)
 	if err != nil {
 		return err
 	}
@@ -604,7 +605,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	}
 
 	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
-		"_id": clientInfo.ID,
+		"project_id": clientInfo.ProjectID,
+		"_id":        clientInfo.ID,
 	}, updater)
 
 	if result.Err() != nil {
@@ -653,13 +655,12 @@ func (c *Client) FindDeactivateCandidatesPerProject(
 // exist.
 func (c *Client) FindDocInfoByKeyAndOwner(
 	ctx context.Context,
-	projectID types.ID,
-	clientID types.ID,
+	clientRefKey types.ClientRefKey,
 	docKey key.Key,
 	createDocIfNotExist bool,
 ) (*database.DocInfo, error) {
 	filter := bson.M{
-		"project_id": projectID,
+		"project_id": clientRefKey.ProjectID,
 		"key":        docKey,
 		"removed_at": bson.M{
 			"$exists": false,
@@ -678,11 +679,11 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 	var result *mongo.SingleResult
 	if res.UpsertedCount > 0 {
 		result = c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
-			"project_id": projectID,
+			"project_id": clientRefKey.ProjectID,
 			"_id":        res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
-				"owner":      clientID,
+				"owner":      clientRefKey.ClientID,
 				"server_seq": 0,
 				"created_at": now,
 			},
@@ -690,7 +691,12 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 	} else {
 		result = c.collection(ColDocuments).FindOne(ctx, filter)
 		if result.Err() == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s %s: %w", projectID, docKey, database.ErrDocumentNotFound)
+			return nil, fmt.Errorf(
+				"%s %s: %w",
+				clientRefKey.ProjectID,
+				docKey,
+				database.ErrDocumentNotFound,
+			)
 		}
 		if result.Err() != nil {
 			return nil, fmt.Errorf("find document: %w", result.Err())
@@ -1243,7 +1249,7 @@ func (c *Client) IsDocumentAttached(
 	docRefKey types.DocRefKey,
 	excludeClientID types.ID,
 ) (bool, error) {
-	clientDocInfoKey := getClientDocInfoKey(docRefKey)
+	clientDocInfoKey := getClientDocInfoKey(docRefKey.DocID)
 	filter := bson.M{
 		"project_id":                docRefKey.ProjectID,
 		clientDocInfoKey + "status": database.DocumentAttached,
@@ -1331,6 +1337,6 @@ func escapeRegex(str string) string {
 	return buf.String()
 }
 
-func getClientDocInfoKey(refKey types.DocRefKey) string {
-	return fmt.Sprintf("documents.%s.", refKey.DocID)
+func getClientDocInfoKey(docID types.ID) string {
+	return fmt.Sprintf("documents.%s.", docID)
 }

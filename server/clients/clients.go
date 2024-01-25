@@ -22,7 +22,6 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
@@ -48,14 +47,9 @@ func Activate(
 func Deactivate(
 	ctx context.Context,
 	db database.Database,
-	projectID types.ID,
-	clientID types.ID,
+	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	clientInfo, err := db.FindClientInfoByID(
-		ctx,
-		projectID,
-		clientID,
-	)
+	clientInfo, err := db.FindClientInfoByRefKey(ctx, refKey)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +76,7 @@ func Deactivate(
 			ctx,
 			clientInfo,
 			types.DocRefKey{
-				ProjectID: projectID,
+				ProjectID: refKey.ProjectID,
 				DocID:     docID,
 			},
 			clientDocInfo.ServerSeq,
@@ -91,19 +85,14 @@ func Deactivate(
 		}
 	}
 
-	return db.DeactivateClient(ctx, projectID, clientID)
+	return db.DeactivateClient(ctx, refKey)
 }
 
-// FindClientInfo finds the client with the given id.
+// FindClientInfo finds the client with the given refKey.
 func FindClientInfo(
 	ctx context.Context,
 	db database.Database,
-	project *types.Project,
-	clientID *time.ActorID,
+	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	return db.FindClientInfoByID(
-		ctx,
-		project.ID,
-		types.IDFromActorID(clientID),
-	)
+	return db.FindClientInfoByRefKey(ctx, refKey)
 }

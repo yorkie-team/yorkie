@@ -128,7 +128,10 @@ func TestClientWithShardedDB(t *testing.T) {
 		docKey2 := key.Key(fmt.Sprintf("%s%d", t.Name(), 2))
 
 		// 01. Initialize a project and create a document.
-		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, projectID1, dummyClientID, docKey1, true)
+		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, types.ClientRefKey{
+			ProjectID: projectID1,
+			ClientID:  dummyClientID,
+		}, docKey1, true)
 		assert.NoError(t, err)
 
 		// 02. Create an extra document with duplicate ID.
