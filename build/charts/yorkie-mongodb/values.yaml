@@ -32,6 +32,11 @@ sharded:
     restartPolicy: Never
     backoffLimit: 0
     rules:
+      - collectionName: clients
+        shardKeys:
+          - name: project_id
+            method: "1"
+        unique: false
       - collectionName: documents
         shardKeys:
           - name: project_id
