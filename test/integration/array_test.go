@@ -327,6 +327,63 @@ func TestArray(t *testing.T) {
 	})
 }
 
+func TestArraySetTypeGuard(t *testing.T) {
+	clients := activeClients(t, 1)
+	c1 := clients[0]
+	defer deactivateAndCloseClients(t, clients)
+
+	type T1 struct {
+		M string
+	}
+
+	typeGuardTests := []struct {
+		caseName string
+		in       any
+		result   bool
+	}{
+		{"nil", nil, false},
+		{"struct", T1{"a"}, false},
+		{"struct pointer", &T1{"a"}, false},
+		{"int", 1, false},
+		{"json.Counter", *json.NewCounter(1, crdt.LongCnt), false},
+		{"json.Text", *json.NewText(), false},
+		{"json.Tree", *json.NewTree(), false},
+		{"&json.Counter", json.NewCounter(1, crdt.LongCnt), false},
+		{"&json.Text", json.NewText(), false},
+		{"&json.Tree", json.NewTree(), false},
+
+		{"int slice", []int{1, 2, 3}, true},
+		{"any slice", []any{1, 2, 3}, true},
+		{"struct slice", []T1{{"a"}, {"b"}}, true},
+		{"struct pointers slice", []*T1{{"a"}, {"b"}}, true},
+		{"int array", [3]int{1, 2, 3}, true},
+		{"any array", [3]any{1, 2, 3}, true},
+		{"struct array", [2]T1{{"a"}, {"b"}}, true},
+		{"struct pointers array", [2]*T1{{"a"}, {"b"}}, true},
+	}
+
+	for _, tt := range typeGuardTests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+
+			val := func() {
+				d1.Update(func(root *json.Object, p *presence.Presence) error {
+					root.SetNewArray("array", tt.in)
+					return nil
+				})
+			}
+			if tt.result {
+				assert.NotPanics(t, val)
+			} else {
+				assert.PanicsWithValue(t, "unsupported array type", val)
+			}
+		})
+	}
+
+}
+
 func TestArraySet(t *testing.T) {
 	clients := activeClients(t, 1)
 	c1 := clients[0]

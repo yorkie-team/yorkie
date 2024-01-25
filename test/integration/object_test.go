@@ -358,24 +358,16 @@ func TestObject(t *testing.T) {
 	})
 }
 
-func TestObjectSet(t *testing.T) {
+func TestObjectTypeGuard(t *testing.T) {
 	clients := activeClients(t, 1)
 	c1 := clients[0]
 	defer deactivateAndCloseClients(t, clients)
 
-	type (
-		T1 struct {
-			M string
-		}
-		T2 struct {
-			M *string
-		}
-		T3 struct {
-			C json.Counter
-		}
-	)
+	type T1 struct {
+		M string
+	}
 
-	typeGaurdTests := []struct {
+	typeGuardTests := []struct {
 		caseName string
 		in       any
 		result   bool
@@ -396,15 +388,15 @@ func TestObjectSet(t *testing.T) {
 		{"&json.Counter", json.NewCounter(0, crdt.LongCnt), false},
 		{"json.Counter", *json.NewCounter(0, crdt.LongCnt), false},
 
-		// {"map any", map[string]any{}, true},
-		// {"&map", &map[string]any{}, true},
-		// {"struct", struct{}{}, true},
-		// {"&struct", &struct{}{}, true},
-		// {"defined struct", T1{}, true},
-		// {"&defined struct", &T1{}, true},
+		{"map any", map[string]any{}, true},
+		{"&map", &map[string]any{}, true},
+		{"struct", struct{}{}, true},
+		{"&struct", &struct{}{}, true},
+		{"defined struct", T1{}, true},
+		{"&defined struct", &T1{}, true},
 	}
 
-	for _, tt := range typeGaurdTests {
+	for _, tt := range typeGuardTests {
 		t.Run(tt.caseName, func(t *testing.T) {
 			ctx := context.Background()
 			d1 := document.New(helper.TestDocKey(t))
@@ -424,6 +416,24 @@ func TestObjectSet(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestObjectSet(t *testing.T) {
+	clients := activeClients(t, 1)
+	c1 := clients[0]
+	defer deactivateAndCloseClients(t, clients)
+
+	type (
+		T1 struct {
+			M string
+		}
+		T2 struct {
+			M *string
+		}
+		T3 struct {
+			C json.Counter
+		}
+	)
 
 	empty := ""
 	str := "foo"
@@ -564,5 +574,4 @@ func TestObjectSet(t *testing.T) {
 			assert.Equal(t, tt.tombstones, d1.GarbageCollect(time.MaxTicket))
 		})
 	}
-
 }

@@ -69,8 +69,7 @@ func (p *Object) SetNewArray(k string, v ...any) *Array {
 			return NewArray(p.context, crdt.NewArray(elements, ticket))
 		}
 
-		if v[0] == nil || (reflect.TypeOf(v[0]).Kind() != reflect.Slice &&
-			reflect.TypeOf(v[0]).Kind() != reflect.Array) {
+		if v[0] == nil || !isArrayOrSlice(v[0]) {
 			panic("unsupported array type")
 		}
 		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket))
@@ -405,4 +404,9 @@ func isNotJSONType(v any) bool {
 
 func isAllowedType(v any) bool {
 	return (isStruct(v) || isMapStringInterface(v)) && isNotJSONType(v)
+}
+
+func isArrayOrSlice(v any) bool {
+	return reflect.TypeOf(v).Kind() == reflect.Slice ||
+		reflect.TypeOf(v).Kind() == reflect.Array
 }
