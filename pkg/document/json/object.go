@@ -390,7 +390,7 @@ func isMapStringInterface(v any) bool {
 // isNotJsonType returns whether the given value is not a JSON type or not.
 // The json struct types should be treated differently from other structures.
 // Because build CRDTElement processes json structural types and other structures separately.
-func isNotJsonType(v any) bool {
+func isNotJSONType(v any) bool {
 	return reflect.TypeOf(v) != reflect.TypeOf(Counter{}) &&
 		reflect.TypeOf(v) != reflect.TypeOf(&Counter{}) &&
 		reflect.TypeOf(v) != reflect.TypeOf(Text{}) &&
@@ -404,5 +404,5 @@ func isNotJsonType(v any) bool {
 }
 
 func isAllowedType(v any) bool {
-	return (isStruct(v) || isMapStringInterface(v)) && isNotJsonType(v)
+	return (isStruct(v) || isMapStringInterface(v)) && isNotJSONType(v)
 }
