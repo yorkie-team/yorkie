@@ -21,14 +21,12 @@ package sharding
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
-	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/database/testcases"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -120,22 +118,23 @@ func TestClientWithShardedDB(t *testing.T) {
 		testcases.RunIsDocumentAttachedTest(t, cli, dummyProjectID)
 	})
 
-	t.Run("FindDocInfoByKeyAndID with duplicate ID test", func(t *testing.T) {
+	t.Run("FindDocInfoByRefKey with duplicate ID test", func(t *testing.T) {
 		ctx := context.Background()
 
-		// 01. Initialize a project and create a document.
-		projectInfo, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
-		assert.NoError(t, err)
+		projectID1 := types.ID("000000000000000000000000")
+		projectID2 := types.ID("FFFFFFFFFFFFFFFFFFFFFFFF")
 
-		docKey1 := key.Key(fmt.Sprintf("%s%d", "duplicateIDTestDocKey", 0))
-		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, dummyClientID, docKey1, true)
+		docKey1 := key.Key(fmt.Sprintf("%s%d", t.Name(), 1))
+		docKey2 := key.Key(fmt.Sprintf("%s%d", t.Name(), 2))
+
+		// 01. Initialize a project and create a document.
+		docInfo1, err := cli.FindDocInfoByKeyAndOwner(ctx, projectID1, dummyClientID, docKey1, true)
 		assert.NoError(t, err)
 
 		// 02. Create an extra document with duplicate ID.
-		docKey2 := key.Key(fmt.Sprintf("%s%d", "duplicateIDTestDocKey", 5))
 		err = helper.CreateDummyDocumentWithID(
 			shardedDBNameForMongoClient,
-			projectInfo.ID,
+			projectID2,
 			docInfo1.ID,
 			docKey2,
 		)
@@ -144,7 +143,6 @@ func TestClientWithShardedDB(t *testing.T) {
 		// 03. Check if there are two documents with the same ID.
 		infos, err := helper.FindDocInfosWithID(
 			shardedDBNameForMongoClient,
-			projectInfo.ID,
 			docInfo1.ID,
 		)
 		assert.NoError(t, err)
@@ -153,69 +151,13 @@ func TestClientWithShardedDB(t *testing.T) {
 		// 04. Check if the document is correctly found using docKey and docID.
 		result, err := cli.FindDocInfoByRefKey(
 			ctx,
-			projectInfo.ID,
 			types.DocRefKey{
-				Key: docKey1,
-				ID:  docInfo1.ID,
+				ProjectID: projectID1,
+				DocID:     docInfo1.ID,
 			},
 		)
 		assert.NoError(t, err)
 		assert.Equal(t, docInfo1.Key, result.Key)
 		assert.Equal(t, docInfo1.ID, result.ID)
-	})
-
-	t.Run("FindDocInfosByPaging with duplicate ID test", func(t *testing.T) {
-		const totalDocCnt = 10
-		const duplicateIDDocCnt = 1
-		ctx := context.Background()
-
-		// 01. Initialize a project and create documents.
-		projectInfo, err := cli.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
-		assert.NoError(t, err)
-
-		var docInfos []*database.DocInfo
-		var duplicateID types.ID
-		for i := 0; i < totalDocCnt-duplicateIDDocCnt; i++ {
-			testDocKey := key.Key("duplicateIDTestDocKey" + strconv.Itoa(i))
-			docInfo, err := cli.FindDocInfoByKeyAndOwner(ctx, projectInfo.ID, dummyClientID, testDocKey, true)
-			assert.NoError(t, err)
-			docInfos = append(docInfos, docInfo)
-
-			if i == 0 {
-				duplicateID = docInfo.ID
-			}
-		}
-		// NOTE(sejongk): sorting is required because doc_id may not sequentially increase in a sharded DB cluster.
-		testcases.SortDocInfos(docInfos)
-
-		// 02. Create an extra document with duplicate ID.
-		for i := totalDocCnt - duplicateIDDocCnt; i < totalDocCnt; i++ {
-			testDocKey := key.Key("duplicateIDTestDocKey" + strconv.Itoa(i))
-			err = helper.CreateDummyDocumentWithID(
-				shardedDBNameForMongoClient,
-				projectInfo.ID,
-				duplicateID,
-				testDocKey,
-			)
-			assert.NoError(t, err)
-			docInfos = append(docInfos, &database.DocInfo{
-				ID:  duplicateID,
-				Key: testDocKey,
-			})
-		}
-		testcases.SortDocInfos(docInfos)
-
-		docKeysInReverse := make([]key.Key, 0, totalDocCnt)
-		for _, docInfo := range docInfos {
-			docKeysInReverse = append([]key.Key{docInfo.Key}, docKeysInReverse...)
-		}
-
-		// 03. List the documents.
-		result, err := cli.FindDocInfosByPaging(ctx, projectInfo.ID, types.Paging[types.DocRefKey]{
-			PageSize:  10,
-			IsForward: false,
-		})
-		assert.NoError(t, err)
-		testcases.AssertKeys(t, docKeysInReverse, result)
 	})
 }

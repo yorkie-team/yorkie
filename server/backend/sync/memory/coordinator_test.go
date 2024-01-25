@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
 )
@@ -31,11 +30,9 @@ import (
 func TestCoordinator(t *testing.T) {
 	t.Run("subscriptions map test", func(t *testing.T) {
 		coordinator := memory.NewCoordinator(nil)
-		docKey := key.Key(t.Name() + "key")
-		docID := types.ID(t.Name() + "id")
 		docRefKey := types.DocRefKey{
-			Key: docKey,
-			ID:  docID,
+			ProjectID: types.ID("000000000000000000000000"),
+			DocID:     types.ID("000000000000000000000000"),
 		}
 		ctx := context.Background()
 

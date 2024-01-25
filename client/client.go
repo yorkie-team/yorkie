@@ -424,9 +424,8 @@ func (c *Client) Watch(
 	stream, err := c.client.WatchDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
-			ClientId:    c.id.String(),
-			DocumentKey: doc.Key().String(),
-			DocumentId:  attachment.docID.String(),
+			ClientId:   c.id.String(),
+			DocumentId: attachment.docID.String(),
 		},
 		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
@@ -698,11 +697,10 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 	_, err := c.client.Broadcast(
 		ctx,
 		withShardKey(connect.NewRequest(&api.BroadcastRequest{
-			ClientId:    c.id.String(),
-			DocumentKey: doc.Key().String(),
-			DocumentId:  attachment.docID.String(),
-			Topic:       topic,
-			Payload:     payload,
+			ClientId:   c.id.String(),
+			DocumentId: attachment.docID.String(),
+			Topic:      topic,
+			Payload:    payload,
 		},
 		), c.options.APIKey, doc.Key().String()))
 	if err != nil {

@@ -404,7 +404,6 @@ func CreateDummyDocumentWithID(
 // FindDocInfosWithID finds the docInfos of the given projectID and docID.
 func FindDocInfosWithID(
 	databaseName string,
-	projectID types.ID,
 	docID types.ID,
 ) ([]*database.DocInfo, error) {
 	ctx := context.Background()
@@ -416,8 +415,7 @@ func FindDocInfosWithID(
 	cursor, err := cli.Database(databaseName).Collection(mongo.ColDocuments).Find(
 		ctx,
 		bson.M{
-			"_id":        docID,
-			"project_id": projectID,
+			"_id": docID,
 		}, options.Find())
 	if err != nil {
 		return nil, err

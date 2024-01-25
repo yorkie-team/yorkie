@@ -591,9 +591,8 @@ func RunWatchDocumentTest(
 	watchResp, err := testClient.WatchDocument(
 		context.Background(),
 		connect.NewRequest(&api.WatchDocumentRequest{
-			ClientId:    activateResp.Msg.ClientId,
-			DocumentKey: docKey,
-			DocumentId:  resPack.Msg.DocumentId,
+			ClientId:   activateResp.Msg.ClientId,
+			DocumentId: resPack.Msg.DocumentId,
 		},
 		))
 	assert.NoError(t, err)

@@ -43,7 +43,7 @@ func pushChanges(
 	reqPack *change.Pack,
 	initialServerSeq int64,
 ) (change.Checkpoint, []*change.Change) {
-	cp := clientInfo.Checkpoint(docInfo.RefKey())
+	cp := clientInfo.Checkpoint(docInfo.ID)
 
 	var pushedChanges []*change.Change
 	for _, cn := range reqPack.Changes {

@@ -94,7 +94,6 @@ message UpdateProjectResponse {
 
 message ListDocumentsRequest {
   string project_name = 1;
-  string previous_key = 6;
   string previous_id = 2;
   int32 page_size = 3;
   bool is_forward = 4;

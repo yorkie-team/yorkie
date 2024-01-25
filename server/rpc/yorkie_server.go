@@ -150,7 +150,7 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	if err := clientInfo.AttachDocument(docInfo.RefKey()); err != nil {
+	if err := clientInfo.AttachDocument(docInfo.ID); err != nil {
 		return nil, err
 	}
 
@@ -184,8 +184,8 @@ func (s *yorkieServer) DetachDocument(
 	if err != nil {
 		return nil, err
 	}
-	docID := types.ID(req.Msg.DocumentId)
-	if err := docID.Validate(); err != nil {
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
+	if err != nil {
 		return nil, err
 	}
 
@@ -217,16 +217,16 @@ func (s *yorkieServer) DetachDocument(
 	}
 
 	docRefKey := types.DocRefKey{
-		Key: pack.DocumentKey,
-		ID:  docID,
+		ProjectID: project.ID,
+		DocID:     docID,
 	}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, project, docRefKey)
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
 	if err != nil {
 		return nil, err
 	}
 
 	isAttached, err := documents.IsDocumentAttached(
-		ctx, s.backend, project,
+		ctx, s.backend,
 		docRefKey,
 		clientInfo.ID,
 	)
@@ -236,11 +236,11 @@ func (s *yorkieServer) DetachDocument(
 
 	if req.Msg.RemoveIfNotAttached && !isAttached {
 		pack.IsRemoved = true
-		if err := clientInfo.RemoveDocument(docRefKey); err != nil {
+		if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
 			return nil, err
 		}
 	} else {
-		if err := clientInfo.DetachDocument(docRefKey); err != nil {
+		if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
 			return nil, err
 		}
 	}
@@ -275,8 +275,8 @@ func (s *yorkieServer) PushPullChanges(
 	if err != nil {
 		return nil, err
 	}
-	docID := types.ID(req.Msg.DocumentId)
-	if err := docID.Validate(); err != nil {
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
+	if err != nil {
 		return nil, err
 	}
 
@@ -318,15 +318,15 @@ func (s *yorkieServer) PushPullChanges(
 	}
 
 	docRefKey := types.DocRefKey{
-		Key: pack.DocumentKey,
-		ID:  docID,
+		ProjectID: project.ID,
+		DocID:     docID,
 	}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, project, docRefKey)
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := clientInfo.EnsureDocumentAttached(docRefKey); err != nil {
+	if err := clientInfo.EnsureDocumentAttached(docInfo.ID); err != nil {
 		return nil, err
 	}
 
@@ -357,20 +357,19 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	docKey := key.Key(req.Msg.DocumentKey)
+	project := projects.From(ctx)
 	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
 	if err != nil {
 		return err
 	}
 	docRefKey := types.DocRefKey{
-		Key: docKey,
-		ID:  docID,
+		ProjectID: project.ID,
+		DocID:     docID,
 	}
 
 	docInfo, err := documents.FindDocInfoByRefKey(
 		ctx,
 		s.backend,
-		projects.From(ctx),
 		docRefKey,
 	)
 	if err != nil {
@@ -384,7 +383,6 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	project := projects.From(ctx)
 	if _, err = clients.FindClientInfo(ctx, s.backend.DB, project, clientID); err != nil {
 		return err
 	}
@@ -472,8 +470,8 @@ func (s *yorkieServer) RemoveDocument(
 	if err != nil {
 		return nil, err
 	}
-	docID := types.ID(req.Msg.DocumentId)
-	if err := docID.Validate(); err != nil {
+	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
+	if err != nil {
 		return nil, err
 	}
 
@@ -507,15 +505,15 @@ func (s *yorkieServer) RemoveDocument(
 	}
 
 	docRefKey := types.DocRefKey{
-		Key: pack.DocumentKey,
-		ID:  docID,
+		ProjectID: project.ID,
+		DocID:     docID,
 	}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, project, docRefKey)
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, docRefKey)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := clientInfo.RemoveDocument(docRefKey); err != nil {
+	if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
 		return nil, err
 	}
 
@@ -584,20 +582,19 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	docKey := key.Key(req.Msg.DocumentKey)
+	project := projects.From(ctx)
 	docID, err := converter.FromDocumentID(req.Msg.DocumentId)
 	if err != nil {
 		return nil, err
 	}
 	docRefKey := types.DocRefKey{
-		Key: docKey,
-		ID:  docID,
+		ProjectID: project.ID,
+		DocID:     docID,
 	}
 
 	docInfo, err := documents.FindDocInfoByRefKey(
 		ctx,
 		s.backend,
-		projects.From(ctx),
 		docRefKey,
 	)
 	if err != nil {
@@ -612,7 +609,6 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	project := projects.From(ctx)
 	if _, err = clients.FindClientInfo(ctx, s.backend.DB, project, clientID); err != nil {
 		return nil, err
 	}

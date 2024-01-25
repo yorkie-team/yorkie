@@ -571,7 +571,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 ) error {
 	docRefKey := docInfo.RefKey()
 	clientDocInfoKey := getClientDocInfoKey(docRefKey)
-	clientDocInfo, ok := clientInfo.Documents[docRefKey]
+	clientDocInfo, ok := clientInfo.Documents[docRefKey.DocID]
 	if !ok {
 		return fmt.Errorf("client doc info: %w", database.ErrDocumentNeverAttached)
 	}
@@ -587,7 +587,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 		},
 	}
 
-	attached, err := clientInfo.IsAttached(docRefKey)
+	attached, err := clientInfo.IsAttached(docRefKey.DocID)
 	if err != nil {
 		return err
 	}
@@ -678,8 +678,8 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 	var result *mongo.SingleResult
 	if res.UpsertedCount > 0 {
 		result = c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
-			"key": docKey,
-			"_id": res.UpsertedID,
+			"project_id": projectID,
+			"_id":        res.UpsertedID,
 		}, bson.M{
 			"$set": bson.M{
 				"owner":      clientID,
@@ -736,13 +736,11 @@ func (c *Client) FindDocInfoByKey(
 // FindDocInfoByRefKey finds a docInfo of the given refKey.
 func (c *Client) FindDocInfoByRefKey(
 	ctx context.Context,
-	projectID types.ID,
 	refKey types.DocRefKey,
 ) (*database.DocInfo, error) {
 	result := c.collection(ColDocuments).FindOne(ctx, bson.M{
-		"key":        refKey.Key,
-		"_id":        refKey.ID,
-		"project_id": projectID,
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.DocID,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
 		return nil, fmt.Errorf("%s: %w", refKey, database.ErrDocumentNotFound)
@@ -762,13 +760,11 @@ func (c *Client) FindDocInfoByRefKey(
 // UpdateDocInfoStatusToRemoved updates the document status to removed.
 func (c *Client) UpdateDocInfoStatusToRemoved(
 	ctx context.Context,
-	projectID types.ID,
 	refKey types.DocRefKey,
 ) error {
 	result := c.collection(ColDocuments).FindOneAndUpdate(ctx, bson.M{
-		"key":        refKey.Key,
-		"_id":        refKey.ID,
-		"project_id": projectID,
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.DocID,
 	}, bson.M{
 		"$set": bson.M{
 			"removed_at": gotime.Now(),
@@ -808,8 +804,8 @@ func (c *Client) CreateChangeInfos(
 		}
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
-			"doc_key":    docRefKey.Key,
-			"doc_id":     docRefKey.ID,
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
 			"server_seq": cn.ServerSeq(),
 		}).SetUpdate(bson.M{"$set": bson.M{
 			"actor_id":        cn.ID().ActorID(),
@@ -843,8 +839,8 @@ func (c *Client) CreateChangeInfos(
 	}
 
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
-		"key":        docRefKey.Key,
-		"_id":        docRefKey.ID,
+		"project_id": docRefKey.ProjectID,
+		"_id":        docRefKey.DocID,
 		"server_seq": initialServerSeq,
 	}, bson.M{
 		"$set": updateFields,
@@ -873,8 +869,8 @@ func (c *Client) PurgeStaleChanges(
 	result := c.collection(ColSyncedSeqs).FindOne(
 		ctx,
 		bson.M{
-			"doc_key": docRefKey.Key,
-			"doc_id":  docRefKey.ID,
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
 		},
 		options.FindOne().SetSort(bson.M{"server_seq": 1}),
 	)
@@ -893,8 +889,8 @@ func (c *Client) PurgeStaleChanges(
 	if _, err := c.collection(ColChanges).DeleteMany(
 		ctx,
 		bson.M{
-			"doc_key":    docRefKey.Key,
-			"doc_id":     docRefKey.ID,
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
 			"server_seq": bson.M{"$lt": minSyncedSeqInfo.ServerSeq},
 		},
 		options.Delete(),
@@ -937,8 +933,8 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	to int64,
 ) ([]*database.ChangeInfo, error) {
 	cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
-		"doc_key": docRefKey.Key,
-		"doc_id":  docRefKey.ID,
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
 		"server_seq": bson.M{
 			"$gte": from,
 			"$lte": to,
@@ -968,8 +964,8 @@ func (c *Client) CreateSnapshotInfo(
 	}
 
 	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"doc_key":    docRefKey.Key,
-		"doc_id":     docRefKey.ID,
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
 		"server_seq": doc.Checkpoint().ServerSeq,
 		"lamport":    doc.Lamport(),
 		"snapshot":   snapshot,
@@ -987,8 +983,8 @@ func (c *Client) FindSnapshotInfoByRefKey(
 	refKey types.SnapshotRefKey,
 ) (*database.SnapshotInfo, error) {
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
-		"doc_key":    refKey.DocRefKey.Key,
-		"doc_id":     refKey.DocRefKey.ID,
+		"project_id": refKey.ProjectID,
+		"doc_id":     refKey.DocID,
 		"server_seq": refKey.ServerSeq,
 	})
 
@@ -1023,8 +1019,8 @@ func (c *Client) FindClosestSnapshotInfo(
 	}
 
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
-		"doc_key": docRefKey.Key,
-		"doc_id":  docRefKey.ID,
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
 		"server_seq": bson.M{
 			"$lte": serverSeq,
 		},
@@ -1051,8 +1047,8 @@ func (c *Client) FindMinSyncedSeqInfo(
 	docRefKey types.DocRefKey,
 ) (*database.SyncedSeqInfo, error) {
 	syncedSeqResult := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
-		"doc_key": docRefKey.Key,
-		"doc_id":  docRefKey.ID,
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
 	}, options.FindOne().SetSort(bson.D{
 		{Key: "server_seq", Value: 1},
 	}))
@@ -1086,8 +1082,8 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 
 	// 02. find min synced seq of the given document.
 	result := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
-		"doc_key": docRefKey.Key,
-		"doc_id":  docRefKey.ID,
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
 	}, options.FindOne().SetSort(bson.D{
 		{Key: "lamport", Value: 1},
 		{Key: "actor_id", Value: 1},
@@ -1123,7 +1119,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 func (c *Client) FindDocInfosByPaging(
 	ctx context.Context,
 	projectID types.ID,
-	paging types.Paging[types.DocRefKey],
+	paging types.Paging[types.ID],
 ) ([]*database.DocInfo, error) {
 	filter := bson.M{
 		"project_id": bson.M{
@@ -1133,28 +1129,21 @@ func (c *Client) FindDocInfosByPaging(
 			"$exists": false,
 		},
 	}
-	if paging.Offset.Key != "" && paging.Offset.ID != "" {
+	if paging.Offset != "" {
 		k := "$lt"
 		if paging.IsForward {
 			k = "$gt"
 		}
-		// NOTE(sejongk): this filter handles the case of duplicate IDs in the MongoDB
-		// sharded cluster.
-		// For example, when the paging direction is forward and the offset is (2, "b"),
-		// this filter includes the documents(e.g. (2, "c"), (3, "d")) that comes after
-		// (2, "b").
-		// (_id, key): [(1, "a"), (2, "b"),(2, "c"), (3, "d")]
-		filter["$or"] = []bson.M{
-			{"_id": bson.M{k: paging.Offset.ID}},
-			{"_id": paging.Offset.ID, "key": bson.M{k: paging.Offset.Key}},
+		filter["_id"] = bson.M{
+			k: paging.Offset,
 		}
 	}
 
 	opts := options.Find().SetLimit(int64(paging.PageSize))
 	if paging.IsForward {
-		opts = opts.SetSort(bson.D{{Key: "_id", Value: 1}, {Key: "key", Value: 1}})
+		opts = opts.SetSort(map[string]int{"_id": 1})
 	} else {
-		opts = opts.SetSort(bson.D{{Key: "_id", Value: -1}, {Key: "key", Value: -1}})
+		opts = opts.SetSort(map[string]int{"_id": -1})
 	}
 
 	cursor, err := c.collection(ColDocuments).Find(ctx, filter, opts)
@@ -1210,16 +1199,16 @@ func (c *Client) UpdateSyncedSeq(
 	serverSeq int64,
 ) error {
 	// 01. update synced seq of the given client.
-	isAttached, err := clientInfo.IsAttached(docRefKey)
+	isAttached, err := clientInfo.IsAttached(docRefKey.DocID)
 	if err != nil {
 		return err
 	}
 
 	if !isAttached {
 		if _, err = c.collection(ColSyncedSeqs).DeleteOne(ctx, bson.M{
-			"doc_key":   docRefKey.Key,
-			"doc_id":    docRefKey.ID,
-			"client_id": clientInfo.ID,
+			"project_id": docRefKey.ProjectID,
+			"doc_id":     docRefKey.DocID,
+			"client_id":  clientInfo.ID,
 		}, options.Delete()); err != nil {
 			return fmt.Errorf("delete synced seq: %w", err)
 		}
@@ -1232,9 +1221,9 @@ func (c *Client) UpdateSyncedSeq(
 	}
 
 	if _, err = c.collection(ColSyncedSeqs).UpdateOne(ctx, bson.M{
-		"doc_key":   docRefKey.Key,
-		"doc_id":    docRefKey.ID,
-		"client_id": clientInfo.ID,
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+		"client_id":  clientInfo.ID,
 	}, bson.M{
 		"$set": bson.M{
 			"lamport":    ticket.Lamport(),
@@ -1251,13 +1240,12 @@ func (c *Client) UpdateSyncedSeq(
 // IsDocumentAttached returns whether the given document is attached to clients.
 func (c *Client) IsDocumentAttached(
 	ctx context.Context,
-	projectID types.ID,
 	docRefKey types.DocRefKey,
 	excludeClientID types.ID,
 ) (bool, error) {
 	clientDocInfoKey := getClientDocInfoKey(docRefKey)
 	filter := bson.M{
-		"project_id":                projectID,
+		"project_id":                docRefKey.ProjectID,
 		clientDocInfoKey + "status": database.DocumentAttached,
 	}
 
@@ -1283,8 +1271,8 @@ func (c *Client) findTicketByServerSeq(
 	}
 
 	result := c.collection(ColChanges).FindOne(ctx, bson.M{
-		"doc_key":    docRefKey.Key,
-		"doc_id":     docRefKey.ID,
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
 		"server_seq": serverSeq,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
@@ -1344,5 +1332,5 @@ func escapeRegex(str string) string {
 }
 
 func getClientDocInfoKey(refKey types.DocRefKey) string {
-	return fmt.Sprintf("documents.%s.%s.", refKey.Key, refKey.ID)
+	return fmt.Sprintf("documents.%s.", refKey.DocID)
 }

@@ -252,11 +252,8 @@ func (s *adminServer) ListDocuments(
 		ctx,
 		s.backend,
 		project,
-		types.Paging[types.DocRefKey]{
-			Offset: types.DocRefKey{
-				Key: key.Key(req.Msg.PreviousKey),
-				ID:  types.ID(req.Msg.PreviousId),
-			},
+		types.Paging[types.ID]{
+			Offset:    types.ID(req.Msg.PreviousId),
 			PageSize:  int(req.Msg.PageSize),
 			IsForward: req.Msg.IsForward,
 		},
@@ -331,7 +328,7 @@ func (s *adminServer) RemoveDocumentByAdmin(
 	}()
 
 	if err := documents.RemoveDocument(
-		ctx, s.backend, project,
+		ctx, s.backend,
 		docInfo.RefKey(),
 		req.Msg.Force,
 	); err != nil {

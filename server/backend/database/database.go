@@ -178,14 +178,12 @@ type Database interface {
 	// FindDocInfoByRefKey finds the document of the given refKey.
 	FindDocInfoByRefKey(
 		ctx context.Context,
-		projectID types.ID,
 		refKey types.DocRefKey,
 	) (*DocInfo, error)
 
 	// UpdateDocInfoStatusToRemoved updates the document status to removed.
 	UpdateDocInfoStatusToRemoved(
 		ctx context.Context,
-		projectID types.ID,
 		refKey types.DocRefKey,
 	) error
 
@@ -270,7 +268,7 @@ type Database interface {
 	FindDocInfosByPaging(
 		ctx context.Context,
 		projectID types.ID,
-		paging types.Paging[types.DocRefKey],
+		paging types.Paging[types.ID],
 	) ([]*DocInfo, error)
 
 	// FindDocInfosByQuery returns the documentInfos which match the given query.
@@ -284,7 +282,6 @@ type Database interface {
 	// IsDocumentAttached returns true if the document is attached to clients.
 	IsDocumentAttached(
 		ctx context.Context,
-		projectID types.ID,
 		docRefKey types.DocRefKey,
 		excludeClientID types.ID,
 	) (bool, error)

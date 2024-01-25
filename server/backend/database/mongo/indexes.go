@@ -87,7 +87,7 @@ var collectionInfos = []collectionInfo{
 		name: ColClients,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
-				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "project_id", Value: bsonx.Int32(1)}, // shard key
 				{Key: "key", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
@@ -107,8 +107,8 @@ var collectionInfos = []collectionInfo{
 		name: ColDocuments,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
+				{Key: "project_id", Value: bsonx.Int32(1)}, // shard key
 				{Key: "key", Value: bsonx.Int32(1)},
-				{Key: "project_id", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetPartialFilterExpression(
 				bsonx.Doc{
@@ -120,8 +120,8 @@ var collectionInfos = []collectionInfo{
 		name: ColChanges,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
-				{Key: "doc_key", Value: bsonx.Int32(1)},
-				{Key: "doc_id", Value: bsonx.Int32(1)},
+				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
@@ -130,8 +130,8 @@ var collectionInfos = []collectionInfo{
 		name: ColSnapshots,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
-				{Key: "doc_key", Value: bsonx.Int32(1)},
-				{Key: "doc_id", Value: bsonx.Int32(1)},
+				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "server_seq", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
@@ -140,15 +140,15 @@ var collectionInfos = []collectionInfo{
 		name: ColSyncedSeqs,
 		indexes: []mongo.IndexModel{{
 			Keys: bsonx.Doc{
-				{Key: "doc_key", Value: bsonx.Int32(1)},
-				{Key: "doc_id", Value: bsonx.Int32(1)},
+				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "client_id", Value: bsonx.Int32(1)},
 			},
 			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bsonx.Doc{
-				{Key: "doc_key", Value: bsonx.Int32(1)},
 				{Key: "doc_id", Value: bsonx.Int32(1)},
+				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "lamport", Value: bsonx.Int32(1)},
 				{Key: "actor_id", Value: bsonx.Int32(1)},
 			},

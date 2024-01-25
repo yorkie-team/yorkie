@@ -17,47 +17,21 @@
 package types
 
 import (
-	"errors"
 	"fmt"
-	"strings"
-
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 // EmptyDocRefKey is an empty value of DocRefKey.
 var EmptyDocRefKey = DocRefKey{"", ""}
 
-// ErrInvalidDocRefKeyStringFormat is returned when the input of DocRefKey Set is invalid.
-var ErrInvalidDocRefKeyStringFormat = errors.New("use the format 'docKey,docID' for the string of the docRefKey")
-
 // DocRefKey represents an identifier used to reference a document.
 type DocRefKey struct {
-	Key key.Key
-	ID  ID
+	ProjectID ID
+	DocID     ID
 }
 
 // String returns the string representation of the given DocRefKey.
 func (r DocRefKey) String() string {
-	return fmt.Sprintf("Document (%s.%s)", r.Key, r.ID)
-}
-
-// Set parses the given string (format: `{docKey},{docID}`) and assigns the values
-// to the given DocRefKey.
-// NOTE(sejongk): This function is necessary for Viper, an external command-line module.
-func (r *DocRefKey) Set(v string) error {
-	parsed := strings.Split(v, ",")
-	if len(parsed) != 2 {
-		return ErrInvalidDocRefKeyStringFormat
-	}
-	r.Key = key.Key(parsed[0])
-	r.ID = ID(parsed[1])
-	return nil
-}
-
-// Type returns the type string of the given DocRefKey, used in cli help text.
-// NOTE(sejongk): This function is necessray for Viper, an external command-line module.
-func (r DocRefKey) Type() string {
-	return "DocumentRefKey"
+	return fmt.Sprintf("Document (%s.%s)", r.ProjectID, r.DocID)
 }
 
 // SnapshotRefKey represents an identifier used to reference a snapshot.
@@ -68,5 +42,5 @@ type SnapshotRefKey struct {
 
 // String returns the string representation of the given SnapshotRefKey.
 func (r SnapshotRefKey) String() string {
-	return fmt.Sprintf("Snapshot (%s.%s.%d)", r.DocRefKey.Key, r.DocRefKey.ID, r.ServerSeq)
+	return fmt.Sprintf("Snapshot (%s.%s.%d)", r.ProjectID, r.DocID, r.ServerSeq)
 }

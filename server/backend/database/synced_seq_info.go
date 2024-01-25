@@ -18,14 +18,13 @@ package database
 
 import (
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/key"
 )
 
 // SyncedSeqInfo is a structure representing information about the synchronized
 // sequence for each client.
 type SyncedSeqInfo struct {
 	ID        types.ID `bson:"_id"`
-	DocKey    key.Key  `bson:"doc_key"`
+	ProjectID types.ID `bson:"project_id"`
 	DocID     types.ID `bson:"doc_id"`
 	ClientID  types.ID `bson:"client_id"`
 	Lamport   int64    `bson:"lamport"`

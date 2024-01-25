@@ -10,27 +10,28 @@ function findAnotherShard(shard) {
 }
 
 function shardOfChunk(minKeyOfChunk) {
-    return db.getSiblingDB("config").chunks.findOne({ min: { key: minKeyOfChunk } }).shard
+    return db.getSiblingDB("config").chunks.findOne({ min: { project_id: minKeyOfChunk } }).shard
 }
 
 // Shard the database for the mongo client test
 const mongoClientDB = "test-yorkie-meta-mongo-client"
 sh.enableSharding(mongoClientDB)
-sh.shardCollection(mongoClientDB + ".documents", { key: 1 })
-sh.shardCollection(mongoClientDB + ".changes", { doc_key: 1 })
-sh.shardCollection(mongoClientDB + ".snapshots", { doc_key: 1 })
-sh.shardCollection(mongoClientDB + ".syncedseqs", { doc_key: 1 })
+sh.shardCollection(mongoClientDB + ".documents", { project_id: 1 })
+sh.shardCollection(mongoClientDB + ".changes", { doc_id: 1 })
+sh.shardCollection(mongoClientDB + ".snapshots", { doc_id: 1 })
+sh.shardCollection(mongoClientDB + ".syncedseqs", { doc_id: 1 })
 
-// Split the inital range at "duplicateIDTestDocKey5" to allow doc_ids duplicate in different shards.
-const docSplitKey = "duplicateIDTestDocKey5"
-sh.splitAt(mongoClientDB + ".documents", { key: docSplitKey })
+// Split the inital range at `splitPoint` to allow doc_ids duplicate in different shards.
+const splitPoint = ObjectId("500000000000000000000000")
+sh.splitAt(mongoClientDB + ".documents", { project_id: splitPoint })
 // Move the chunk to another shard.
-db.adminCommand({ moveChunk: mongoClientDB + ".documents", find: { key: docSplitKey }, to: findAnotherShard(shardOfChunk(docSplitKey)) })
+db.adminCommand({ moveChunk: mongoClientDB + ".documents", find: { project_id: splitPoint }, to: findAnotherShard(shardOfChunk(splitPoint)) })
 
 // Shard the database for the server test
 const serverDB = "test-yorkie-meta-server"
 sh.enableSharding(serverDB)
-sh.shardCollection(serverDB + ".documents", { key: 1 })
-sh.shardCollection(serverDB + ".changes", { doc_key: 1 })
-sh.shardCollection(serverDB + ".snapshots", { doc_key: 1 })
-sh.shardCollection(serverDB + ".syncedseqs", { doc_key: 1 })
+sh.shardCollection(serverDB + ".documents", { project_id: 1 })
+sh.shardCollection(serverDB + ".changes", { doc_id: 1 })
+sh.shardCollection(serverDB + ".snapshots", { doc_id: 1 })
+sh.shardCollection(serverDB + ".syncedseqs", { doc_id: 1 })
+

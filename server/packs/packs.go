@@ -85,7 +85,7 @@ func PushPull(
 	be.Metrics.AddPushPullSnapshotBytes(respPack.SnapshotLen())
 
 	docRefKey := docInfo.RefKey()
-	if err := clientInfo.UpdateCheckpoint(docRefKey, respPack.Checkpoint); err != nil {
+	if err := clientInfo.UpdateCheckpoint(docRefKey.DocID, respPack.Checkpoint); err != nil {
 		return nil, err
 	}
 
