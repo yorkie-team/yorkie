@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"strings"
 	gotime "time"
+	"unicode"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -353,7 +354,7 @@ func (p *Object) setInternal(
 // user-provided object are transformed into CRDTElements.
 // This function takes an object and iterates through its values,
 // converting each value into a corresponding CRDTElement.
-func buildObjectMembers(
+func buildObjectMembersFromMap(
 	context *change.Context,
 	json map[string]interface{},
 ) map[string]crdt.Element {
@@ -364,11 +365,118 @@ func buildObjectMembers(
 			panic("key must not contain the '.'.")
 		}
 		ticket := context.IssueTimeTicket()
-		elem := buildCRDTElement(context, value, ticket)
-		members[key] = elem
+		members[key] = buildCRDTElement(context, value, ticket)
 	}
 
 	return members
+}
+
+// buildObjectMembersFromValue converts reflect.Value(struct) to map[string]crdt.Element{}
+// except the field that has the tag "yorkie:-" or omitEmpty option and the
+// field that is unexported.
+// NOTE(highcloud100): This code referred to the "encoding/json" implementation.
+func buildObjectMembersFromValue(
+	context *change.Context,
+	value reflect.Value,
+) map[string]crdt.Element {
+	members := make(map[string]crdt.Element)
+	for i := 0; i < value.NumField(); i++ {
+		field := value.Field(i)
+		fieldType := value.Type().Field(i)
+		tag := fieldType.Tag.Get("yorkie")
+
+		if !field.CanInterface() || tag == "-" {
+			continue
+		}
+
+		name, options := parseTag(tag)
+		if !isValidTag(name) {
+			name = ""
+		}
+
+		if options.Contains("omitEmpty") && isEmptyValue(field) {
+			continue
+		}
+
+		if name == "" {
+			name = fieldType.Name
+		}
+
+		ticket := context.IssueTimeTicket()
+		members[name] = buildCRDTElement(context, value.Field(i).Interface(), ticket)
+	}
+	return members
+}
+
+// parseTag parses the given tag to (name, option).
+// NOTE(highcloud100): This code referred to the "encoding/json/tags.go" implementation.
+func parseTag(tag string) (string, tagOptions) {
+	tag, opt, _ := strings.Cut(tag, ",")
+	return tag, tagOptions(opt)
+}
+
+// isValidTag returns whether the given tag is valid.
+// NOTE(highcloud100): This code referred to the "encoding/json" implementation.
+func isValidTag(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c):
+		// Backslash and quote chars are reserved, but
+		// otherwise any punctuation chars are allowed
+		// in a tag name.
+		case !unicode.IsLetter(c) && !unicode.IsDigit(c):
+			return false
+		}
+	}
+	return true
+}
+
+// Contains reports whether the given option is contained in the tag options.
+// Blank spaces in options are ignored by Trim.
+// NOTE(highcloud100): This code referred to the "encoding/json/tags.go" implementation.
+func (o tagOptions) Contains(optionName string) bool {
+	if len(o) == 0 {
+		return false
+	}
+	s := string(o)
+	for s != "" {
+		var name string
+		name, s, _ = strings.Cut(s, ",")
+		if strings.Trim(name, " ") == optionName {
+			return true
+		}
+	}
+	return false
+}
+
+// isEmptyValue reports whether the given value is empty.
+// NOTE(highcloud100): This code referred to the "encoding/json/encode.go" implementation.
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool:
+		return v.Bool() == false
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Interface, reflect.Pointer:
+		return v.IsNil()
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			if !isEmptyValue(v.Field(i)) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // isStruct returns whether the given value is struct or not.

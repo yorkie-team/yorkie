@@ -19,9 +19,7 @@ package json
 
 import (
 	"reflect"
-	"strings"
 	gotime "time"
-	"unicode"
 
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -107,14 +105,14 @@ func buildCRDTElement(
 		// User can't initialize the json.Object directly. so just return the empty json.Object.
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, nil)
 	case map[string]any:
-		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, elem))
+		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembersFromMap(context, elem))
 	case reflect.Value:
 		// NOTE(highcloud100): This case only occurs when struct's reflect.Value is given.
 		// BuildArrayElements only can throw the arbitrary struct as reflect.Value type to this function.
 		if elem.Type().Kind() != reflect.Struct {
 			break
 		}
-		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembers(context, valueToMap(elem)))
+		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembersFromValue(context, elem))
 	}
 
 	// 02. The type of the given value is user defined struct or array.
@@ -139,108 +137,4 @@ func buildCRDTElement(
 	default:
 		panic("unsupported type")
 	}
-}
-
-// valueToMap converts reflect.Value(struct) to map[string]interface{}
-// except the field that has the tag "yorkie:-" or omitEmpty option and the
-// field that is unexported.
-// NOTE(highcloud100): This code referred to the "encoding/json" implementation.
-func valueToMap(value reflect.Value) map[string]interface{} {
-	json := make(map[string]interface{})
-	for i := 0; i < value.NumField(); i++ {
-		field := value.Field(i)
-		fieldType := value.Type().Field(i)
-		tag := fieldType.Tag.Get("yorkie")
-
-		if !field.CanInterface() || tag == "-" {
-			continue
-		}
-
-		name, options := parseTag(tag)
-		if !isValidTag(name) {
-			name = ""
-		}
-
-		if options.Contains("omitEmpty") && isEmptyValue(field) {
-			continue
-		}
-
-		if name == "" {
-			name = fieldType.Name
-		}
-
-		json[name] = value.Field(i).Interface()
-	}
-	return json
-}
-
-// parseTag parses the given tag to (name, option).
-// This code referred to the "encoding/json/tags.go" implementation.
-func parseTag(tag string) (string, tagOptions) {
-	tag, opt, _ := strings.Cut(tag, ",")
-	return tag, tagOptions(opt)
-}
-
-// isValidTag returns whether the given tag is valid.
-// This code referred to the "encoding/json" implementation.
-func isValidTag(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		switch {
-		case strings.ContainsRune("!#$%&()*+-./:;<=>?@[]^_{|}~ ", c):
-		// Backslash and quote chars are reserved, but
-		// otherwise any punctuation chars are allowed
-		// in a tag name.
-		case !unicode.IsLetter(c) && !unicode.IsDigit(c):
-			return false
-		}
-	}
-	return true
-}
-
-// Contains reports whether the given option is contained in the tag options.
-// Blank spaces in options are ignored by Trim.
-// This code referred to the "encoding/json/tags.go" implementation.
-func (o tagOptions) Contains(optionName string) bool {
-	if len(o) == 0 {
-		return false
-	}
-	s := string(o)
-	for s != "" {
-		var name string
-		name, s, _ = strings.Cut(s, ",")
-		if strings.Trim(name, " ") == optionName {
-			return true
-		}
-	}
-	return false
-}
-
-// isEmptyValue reports whether the given value is empty.
-// This code referred to the "encoding/json/encode.go" implementation.
-func isEmptyValue(v reflect.Value) bool {
-	switch v.Kind() {
-	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
-		return v.Len() == 0
-	case reflect.Bool:
-		return v.Bool() == false
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() == 0
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return v.Uint() == 0
-	case reflect.Float32, reflect.Float64:
-		return v.Float() == 0
-	case reflect.Interface, reflect.Pointer:
-		return v.IsNil()
-	case reflect.Struct:
-		for i := 0; i < v.NumField(); i++ {
-			if !isEmptyValue(v.Field(i)) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
 }
