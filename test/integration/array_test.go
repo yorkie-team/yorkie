@@ -339,7 +339,7 @@ func TestArraySetTypeGuard(t *testing.T) {
 	typeGuardTests := []struct {
 		caseName string
 		in       any
-		result   bool
+		result   bool // true: not panic, false: panic
 	}{
 		{"nil", nil, false},
 		{"struct", T1{"a"}, false},

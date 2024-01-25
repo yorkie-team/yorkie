@@ -370,7 +370,7 @@ func TestObjectTypeGuard(t *testing.T) {
 	typeGuardTests := []struct {
 		caseName string
 		in       any
-		result   bool
+		result   bool // true: panic, false: not panic
 	}{
 		{"nil", nil, false},
 		{"slice", []int{1, 2, 3}, false},

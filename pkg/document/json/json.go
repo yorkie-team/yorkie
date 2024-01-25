@@ -34,7 +34,7 @@ type buildState struct {
 	depth   int
 }
 
-// newBuildState creates a new instance of BuildState.
+// newBuildState creates a new instance of buildState.
 func newBuildState() *buildState {
 	return &buildState{
 		visited: make(map[any]bool),
@@ -142,7 +142,7 @@ func buildCRDTElement(
 	case map[string]any:
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembersFromMap(context, elem, stat))
 	case reflect.Value:
-		// NOTE(highcloud100): This case only occurs when struct's reflect.Value is given.
+		// NOTE(highcloud100): This case only occurs when reflect.Value of struct is given.
 		// BuildArrayElements only can throw the arbitrary struct as reflect.Value type to this function.
 		if elem.Type().Kind() != reflect.Struct {
 			break
