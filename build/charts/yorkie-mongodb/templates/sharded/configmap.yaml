@@ -1,0 +1,69 @@
+{{- if and .Values.sharded.enabled .Values.sharded.setup.enabled }}
+{{- $domainSuffix := printf "%s.svc.%s:%d" $.Values.namespace $.Values.clusterDomain ($.Values.port | int ) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.name }}-setup-script
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/component: mongodb
+    app.kubernetes.io/part-of: yorkie
+data:
+  setup.sh: |
+    #!/bin/bash
+
+    function waitUntilReady {
+      while true; do
+        mongosh $1 --quiet --eval "db.runCommand('ping').ok"
+        if [ $? -eq 0 ]; then
+            break
+        fi    
+        sleep 5
+      done       
+    }
+
+    {{ $configsvrAddr := include "configReplAddr" (list $.Values.name 0 $domainSuffix) }}
+    echo "Wait until config server is ready..."
+    configsvrAddr="{{ $configsvrAddr }}"
+    echo "Config server address: ${configsvrAddr}"
+    waitUntilReady $configsvrAddr
+    echo "Configure config server"
+    mongosh $configsvrAddr --eval 'rs.initiate({"_id":"{{ include "configReplName" (list $.Values.name) }}", "members":[{"_id":0,"host":"{{ $configsvrAddr }}","priority":5}]})'
+
+    {{ range $i, $e := until ($.Values.sharded.shards | int) }}
+    {{ $shardsvrAddr := include "shardReplAddr" (list $.Values.name $i 0 $domainSuffix) }}
+    echo "{{ printf "Wait until shard%d is ready..." $i }}"
+    shardsvrAddr="{{ $shardsvrAddr }}"
+    echo "{{ printf "Shard%d address: %s" $i $shardsvrAddr }}"
+    waitUntilReady $shardsvrAddr
+    echo "{{ printf "Configure shard%d" $i }}"
+    mongosh $shardsvrAddr --eval 'rs.initiate({"_id":"{{ include "shardReplName" (list $.Values.name $i) }}", "members":[{"_id":0,"host":"{{ $shardsvrAddr }}","priority":5}]})'
+    {{ end }}
+
+    {{ $mongosAddr := include "mongosAddr" (list $.Values.name $domainSuffix) }}
+    echo "Wait until mongos is ready..."
+    mongosAddr="{{ $mongosAddr }}"
+    echo "Mongos address: ${mongosAddr}"
+    waitUntilReady $mongosAddr
+    echo "Configure mongos"
+    mongosh $mongosAddr --eval <<EOF
+      {{- range $i, $e := until ($.Values.sharded.shards | int) }}
+      {{- range $j, $e := until ($.Values.sharded.replicaCount.shardsvr | int) }}
+      sh.addShard("{{ printf "%s/%s" (include "shardReplName" (list $.Values.name $i)) (include "shardReplAddr" (list $.Values.name $i $j $domainSuffix)) }}");
+      {{- end }}
+      {{- end }}
+      sh.enableSharding("{{ .Values.sharded.setup.database }}");
+      {{- range .Values.sharded.setup.rules }}
+      sh.shardCollection(
+        "{{ printf "%s.%s" $.Values.sharded.setup.database .collectionName }}", 
+        { 
+          {{- range .shardKeys }}
+            {{ printf "%s: %s," .name .method }}
+          {{- end }}
+        }, 
+        {{ .unique }}
+      );
+      {{- end }}
+    EOF
+    
+{{ end -}}
