@@ -140,6 +140,9 @@ func buildCRDTElement(
 		// This implementation requires `SetCreatedAt` to modify the ticket of the given json.Object elements.
 		// I think it is dangerous to be able to modify the time ticket arbitrarily.
 		// TODO(highcloud100) : Other good alternatives are needed.
+		if elem.Object == nil {
+			return crdt.NewObject(crdt.NewElementRHT(), ticket, nil)
+		}
 		temp, _ := elem.DeepCopy()
 		if temp.RemovedAt() != nil {
 			panic("The passed json.Object is alreay removed")
