@@ -272,7 +272,7 @@ func TestObject(t *testing.T) {
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
 			// 01. set nested array in object with json literal
 			root.SetNewObject("obj", map[string]interface{}{
-				"array": []interface{}{1, 2, 3, []interface{}{7, 8}},
+				"array": []interface{}{1, 2, 3, []int{7, 8}},
 			})
 			assert.Equal(t, `{"obj":{"array":[1,2,3,[7,8]]}}`, root.Marshal())
 
@@ -355,5 +355,340 @@ func TestObject(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Equal(t, `{"obj":{"bool":true,"bytes":"AB","date":"2022-03-02T09:10:00Z","double":1.790000,"int":32,"long":9223372036854775807,"nill":null}}`, d1.Marshal())
+	})
+}
+
+func TestObjectTypeGuard(t *testing.T) {
+	clients := activeClients(t, 1)
+	c1 := clients[0]
+	defer deactivateAndCloseClients(t, clients)
+
+	type T1 struct {
+		M string
+	}
+
+	typeGuardTests := []struct {
+		caseName   string
+		in         any
+		isNotPanic bool
+	}{
+		{"nil", nil, false},
+		{"slice", []int{1, 2, 3}, false},
+		{"&slice", &[]int{1, 2, 3}, false},
+		{"array", [3]int{1, 2, 3}, false},
+		{"&array", &[3]int{1, 2, 3}, false},
+		{"map int", map[string]int{}, false},
+		{"&map int", &map[string]int{}, false},
+		{"int map", map[int]any{}, false},
+		{"&int map", &map[int]any{}, false},
+		{"&json.Text", json.NewText(), false},
+		{"json.Text", *json.NewText(), false},
+		{"&json.Tree", json.NewTree(), false},
+		{"json.Tree", *json.NewTree(), false},
+		{"&json.Counter", json.NewCounter(0, crdt.LongCnt), false},
+		{"json.Counter", *json.NewCounter(0, crdt.LongCnt), false},
+
+		{"map any", map[string]any{}, true},
+		{"&map", &map[string]any{}, true},
+		{"struct", struct{}{}, true},
+		{"&struct", &struct{}{}, true},
+		{"defined struct", T1{}, true},
+		{"&defined struct", &T1{}, true},
+	}
+
+	for _, tt := range typeGuardTests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+
+			val := func() {
+				d1.Update(func(root *json.Object, p *presence.Presence) error {
+					root.SetNewObject("obj", tt.in)
+					return nil
+				})
+			}
+
+			if tt.isNotPanic {
+				assert.NotPanics(t, val)
+			} else {
+				assert.PanicsWithValue(t, "unsupported object type", val)
+			}
+		})
+	}
+}
+
+func TestObjectSetCycle(t *testing.T) {
+	clients := activeClients(t, 1)
+	c1 := clients[0]
+	defer deactivateAndCloseClients(t, clients)
+
+	type (
+		PointerCycle struct {
+			Next *PointerCycle
+		}
+		PointerCycleIndirect struct {
+			Ptrs []any
+		}
+		RecursiveSlice []RecursiveSlice
+		T1             struct {
+			M RecursiveSlice
+		}
+	)
+
+	// Unsupported types
+	var (
+		pointerCycle         = &PointerCycle{}
+		pointerCycleIndirect = &PointerCycleIndirect{}
+		mapCycle             = map[string]any{}
+		sliceCycle           = []any{nil}
+		recursiveSliceCycle  = []RecursiveSlice{nil}
+	)
+
+	// Initialize
+	pointerCycle.Next = pointerCycle
+	pointerCycleIndirect.Ptrs = []any{pointerCycleIndirect}
+	mapCycle["k1"] = mapCycle
+	sliceCycle[0] = sliceCycle
+	recursiveSliceCycle[0] = recursiveSliceCycle
+
+	cycleTests := []struct {
+		caseName string
+		in       any
+	}{
+		{"pointer cycle", pointerCycle},
+		{"pointer cycle indirect", pointerCycleIndirect},
+		{"map cycle", mapCycle},
+		{"slice cycle", map[string]any{"k1": sliceCycle}},
+		{"recursive slice cycle", T1{M: recursiveSliceCycle}},
+	}
+
+	for _, tt := range cycleTests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+
+			val := func() {
+				d1.Update(func(root *json.Object, p *presence.Presence) error {
+					root.SetNewObject("obj", tt.in)
+					return nil
+				})
+			}
+			assert.PanicsWithValue(t, "cycle detected", val)
+		})
+	}
+}
+
+func TestObjectSet(t *testing.T) {
+	clients := activeClients(t, 1)
+	c1 := clients[0]
+	defer deactivateAndCloseClients(t, clients)
+
+	type (
+		Myint    int
+		MyStruct struct {
+			M Myint
+		}
+
+		t1 struct {
+			M string
+		}
+
+		T1 struct {
+			M string
+		}
+		T2 struct {
+			M *string
+		}
+		T3 struct {
+			C json.Counter
+		}
+		T4 struct {
+			T1
+			t1
+			M string
+		}
+	)
+
+	empty := ""
+	str := "foo"
+	emptyTarget := `{"obj":{"M":""}}`
+	strTarget := `{"obj":{"M":"foo"}}`
+
+	embedded := T4{
+		T1: T1{M: str},
+		t1: t1{M: str},
+		M:  "foo",
+	}
+
+	type MyInt int
+	type S struct{ MyInt }
+
+	setTests := []struct {
+		caseName   string
+		in         any
+		want       string
+		tombstones int
+	}{
+		// Test nll
+		{"null map", map[string]any{"M": nil}, `{"obj":{"M":null}}`, 2},
+		{"null &map", &map[string]any{"M": nil}, `{"obj":{"M":null}}`, 2},
+
+		// Test zero value
+		{"zeroValue int struct", struct{ M int }{}, `{"obj":{"M":0}}`, 2},
+		{"zeroValue string struct", struct{ M string }{}, `{"obj":{"M":""}}`, 2},
+		{"zeroValue bytes struct", struct{ M []byte }{M: nil}, `{"obj":{"M":""}}`, 2},
+		{"empty bytes struct", struct{ M []byte }{M: []byte{}}, `{"obj":{"M":""}}`, 2},
+		{"zeroValue array struct", struct{ M []int }{M: nil}, `{"obj":{"M":[]}}`, 2},
+		{"empty array struct", struct{ M []int }{M: []int{}}, `{"obj":{"M":[]}}`, 2},
+
+		// Test with empty string
+		{"empty map", map[string]any{"M": empty}, emptyTarget, 2},
+		{"empty &map", &map[string]any{"M": empty}, emptyTarget, 2},
+		{"&empty map", map[string]any{"M": &empty}, emptyTarget, 2},
+		{"&empty &map", &map[string]any{"M": &empty}, emptyTarget, 2},
+		{"empty struct", struct{ M string }{M: empty}, emptyTarget, 2},
+		{"empty &struct", &struct{ M string }{M: empty}, emptyTarget, 2},
+		{"&empty struct", struct{ M *string }{M: &empty}, emptyTarget, 2},
+		{"&empty &struct", &struct{ M *string }{M: &empty}, emptyTarget, 2},
+		{"empty T1", T1{M: empty}, emptyTarget, 2},
+		{"empty &T1", &T1{M: empty}, emptyTarget, 2},
+		{"empty T2", T2{M: &empty}, emptyTarget, 2},
+		{"empty &T2", &T2{M: &empty}, emptyTarget, 2},
+
+		// Test with some str
+		{"str map", map[string]any{"M": str}, strTarget, 2},
+		{"str &map", &map[string]any{"M": str}, strTarget, 2},
+		{"&str map", map[string]any{"M": &str}, strTarget, 2},
+		{"&str &map", &map[string]any{"M": &str}, strTarget, 2},
+		{"str struct", struct{ M string }{M: str}, strTarget, 2},
+		{"str &struct", &struct{ M string }{M: str}, strTarget, 2},
+		{"&str struct", struct{ M *string }{M: &str}, strTarget, 2},
+		{"&str &struct", &struct{ M *string }{M: &str}, strTarget, 2},
+		{"str T", T1{M: str}, strTarget, 2},
+		{"str &T", &T1{M: str}, strTarget, 2},
+		{"str T2", T2{M: &str}, strTarget, 2},
+		{"str &T2", &T2{M: &str}, strTarget, 2},
+
+		// Test with unexported field
+		{"unexported field in struct", struct{ m string }{m: str}, `{"obj":{}}`, 1},
+
+		// Test with - Tag
+		{"- tagged in struct", struct {
+			M1 string `yorkie:"-"`
+			M2 string
+		}{M1: str, M2: str}, `{"obj":{"M2":"foo"}}`, 2},
+
+		// Test with omitempty Tag
+		{"omitEmpty tagged in struct", struct {
+			M1 string `yorkie:",omitEmpty"`
+			M2 string `yorkie:",omitEmpty"`
+		}{M1: str}, `{"obj":{"M1":"foo"}}`, 2},
+		{"omitEmpty tagged array in struct", struct {
+			M1 []int `yorkie:",omitEmpty"`
+		}{}, `{"obj":{}}`, 1},
+		{"omitEmpty tagged empty array in struct", struct {
+			M1 []int `yorkie:",omitEmpty"`
+		}{M1: []int{}}, `{"obj":{}}`, 1},
+
+		// Test with field name Tag
+		{"field name tagged in struct", struct {
+			M1 string `yorkie:"m1"`
+			M2 string `yorkie:"m2"`
+		}{M1: str, M2: str}, `{"obj":{"m1":"foo","m2":"foo"}}`, 3},
+
+		// Test Tree, Text, Counter, Object
+		// uninitialized
+		{"counter in struct", struct{ M json.Counter }{}, `{"obj":{"M":0}}`, 2},
+		{"Text in struct", struct{ M json.Text }{}, `{"obj":{"M":[]}}`, 2},
+		{"Tree in struct", struct{ M json.Tree }{}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
+		{"Object in struct", struct{ M json.Object }{}, `{"obj":{"M":{}}}`, 2},
+		// empty initialized
+		{"Text in struct", struct{ M json.Text }{M: *json.NewText()}, `{"obj":{"M":[]}}`, 2},
+		{"Tree in struct", struct{ M json.Tree }{M: *json.NewTree()}, `{"obj":{"M":{"type":"root","children":[]}}}`, 2},
+		// initialized
+		{"counter in struct", struct{ M json.Counter }{M: *json.NewCounter(0, crdt.LongCnt)}, `{"obj":{"M":0}}`, 2},
+		{"Tree in struct", struct{ M json.Tree }{M: *json.NewTree(&json.TreeNode{
+			Type:     "p",
+			Children: []json.TreeNode{},
+		})}, `{"obj":{"M":{"type":"p","children":[]}}}`, 2},
+		// Tagged
+		{"counter in struct", struct {
+			M1 json.Counter `yorkie:"-"`
+			M2 json.Text    `yorkie:"-"`
+			M3 json.Tree    `yorkie:"-"`
+			M4 json.Object  `yorkie:"-"`
+		}{}, `{"obj":{}}`, 1},
+		{"counter in struct", struct {
+			M1 json.Counter `yorkie:",omitEmpty"`
+			M2 json.Text    `yorkie:",omitEmpty"`
+			M3 json.Tree    `yorkie:",omitEmpty"`
+			M4 json.Object  `yorkie:",omitEmpty"`
+		}{}, `{"obj":{}}`, 1},
+
+		// Test with nested struct
+		{"nested user defined struct", struct{ M T1 }{M: T1{M: str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
+		{"nested &user defined struct", struct{ M *T1 }{M: &T1{M: str}}, `{"obj":{"M":{"M":"foo"}}}`, 3},
+		{"nested user defined struct with zero value", struct{ M T1 }{}, `{"obj":{"M":{"M":""}}}`, 3},
+		{"nested &user defined struct with nil", struct{ M *T1 }{M: nil}, `{"obj":{"M":null}}`, 2},
+		{"nested object with json.Counter", struct{ M T3 }{M: T3{C: *json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
+		{"nested &object with json.Counter", struct{ M *T3 }{M: &T3{C: *json.NewCounter(0, crdt.LongCnt)}}, `{"obj":{"M":{"C":0}}}`, 3},
+		{"nested object with json.Counter with zero value", struct{ M T3 }{}, `{"obj":{"M":{"C":0}}}`, 3},
+
+		//Test with embedded struct
+		{"embedded struct", embedded, `{"obj":{"M":"foo","T1":{"M":"foo"}}}`, 4},
+		{"&embedded struct", &embedded, `{"obj":{"M":"foo","T1":{"M":"foo"}}}`, 4},
+
+		// Test with anonymous field in struct
+		{"anonymous field in struct", S{5}, `{"obj":{"MyInt":5}}`, 2},
+
+		// Test with named type field in struct
+		{"named type field in struct", struct{ M MyInt }{M: 5}, `{"obj":{"M":5}}`, 2},
+		{"named type field in struct", MyStruct{5}, `{"obj":{"M":5}}`, 2},
+	}
+
+	for _, tt := range setTests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+
+			err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewObject("obj", tt.in)
+				return nil
+			})
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, d1.Marshal())
+
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.Delete("obj")
+				return nil
+			})
+			assert.NoError(t, err)
+			assert.Equal(t, tt.tombstones, d1.GarbageLen())
+			assert.Equal(t, tt.tombstones, d1.GarbageCollect(time.MaxTicket))
+		})
+	}
+
+	t.Run("object.set with JSON.Object", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		type T struct {
+			M json.Object
+		}
+
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("obj", map[string]interface{}{
+				"key": "value",
+			})
+
+			root.SetNewObject("obj2", T{M: *root.GetObject("obj")})
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"obj":{"key":"value"},"obj2":{"M":{}}}`, d1.Marshal())
 	})
 }

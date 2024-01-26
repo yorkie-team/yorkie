@@ -21,10 +21,12 @@ package integration
 import (
 	"context"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -289,4 +291,183 @@ func TestArray(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 	})
+
+	t.Run("array.set with Counter, Text, Tree slice test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		cnt := json.NewCounter(0, crdt.LongCnt)
+		txt := json.NewText()
+		tree := json.NewTree()
+
+		// 01. set array with value
+		// 02. Edit value in array
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			// Counter
+			root.SetNewArray("counters", []*json.Counter{cnt, cnt, cnt})
+			root.GetArray("counters").GetCounter(0).Increase(1)
+			assert.Equal(t, `{"counters":[1,0,0]}`, root.Marshal())
+
+			// Text
+			root.SetNewArray("texts", []*json.Text{txt, txt, txt})
+			root.GetArray("texts").GetText(0).Edit(0, 0, "hello")
+			assert.Equal(t, `[[{"val":"hello"}],[],[]]`, root.GetArray("texts").Marshal())
+
+			// Tree
+			root.SetNewArray("forest", []*json.Tree{tree, tree})
+			root.GetArray("forest").GetTree(0).Edit(0, 0, &json.TreeNode{
+				Type:     "p",
+				Children: []json.TreeNode{},
+			}, 0)
+			assert.Equal(t, `[{"type":"root","children":[{"type":"p","children":[]}]},{"type":"root","children":[]}]`, root.GetArray("forest").Marshal())
+			assert.Equal(t, `<root><p></p></root>`, root.GetArray("forest").GetTree(0).ToXML())
+			return nil
+		}))
+	})
+}
+
+func TestArraySetTypeGuard(t *testing.T) {
+	clients := activeClients(t, 1)
+	c1 := clients[0]
+	defer deactivateAndCloseClients(t, clients)
+
+	type T1 struct {
+		M string
+	}
+
+	typeGuardTests := []struct {
+		caseName   string
+		in         any
+		isNotPanic bool
+	}{
+		{"nil", nil, false},
+		{"struct", T1{"a"}, false},
+		{"struct pointer", &T1{"a"}, false},
+		{"int", 1, false},
+		{"json.Counter", *json.NewCounter(1, crdt.LongCnt), false},
+		{"json.Text", *json.NewText(), false},
+		{"json.Tree", *json.NewTree(), false},
+		{"&json.Counter", json.NewCounter(1, crdt.LongCnt), false},
+		{"&json.Text", json.NewText(), false},
+		{"&json.Tree", json.NewTree(), false},
+
+		{"int slice", []int{1, 2, 3}, true},
+		{"any slice", []any{1, 2, 3}, true},
+		{"struct slice", []T1{{"a"}, {"b"}}, true},
+		{"struct pointers slice", []*T1{{"a"}, {"b"}}, true},
+		{"int array", [3]int{1, 2, 3}, true},
+		{"any array", [3]any{1, 2, 3}, true},
+		{"struct array", [2]T1{{"a"}, {"b"}}, true},
+		{"struct pointers array", [2]*T1{{"a"}, {"b"}}, true},
+	}
+
+	for _, tt := range typeGuardTests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+
+			val := func() {
+				d1.Update(func(root *json.Object, p *presence.Presence) error {
+					root.SetNewArray("array", tt.in)
+					return nil
+				})
+			}
+			if tt.isNotPanic {
+				assert.NotPanics(t, val)
+			} else {
+				assert.PanicsWithValue(t, "unsupported array type", val)
+			}
+		})
+	}
+
+}
+
+func TestArraySet(t *testing.T) {
+	clients := activeClients(t, 1)
+	c1 := clients[0]
+	defer deactivateAndCloseClients(t, clients)
+
+	type (
+		T1 struct {
+			M string
+		}
+		T2 struct {
+			Skip  string `yorkie:"-"`
+			M     string `yorkie:"m"`
+			Empty string `yorkie:"e,omitEmpty"`
+		}
+	)
+
+	arr := [3]int{1, 2, 3}
+	t1 := T1{"a"}
+	map1 := map[string]interface{}{"a": 1, "b": 2}
+
+	tests := []struct {
+		caseName   string
+		in         any
+		want       string
+		tombstones int
+	}{
+		// primitive
+		{"int", []int{1, 2, 3}, `[1,2,3]`, 4},
+		{"int32", []int32{1, 2, 3}, `[1,2,3]`, 4},
+		{"int64", []int64{1, 2, 3}, `[1,2,3]`, 4},
+		{"float32", []float32{1.1, 2.2}, `[1.100000,2.200000]`, 3},
+		{"float64", []float64{1.1, 2.2}, `[1.100000,2.200000]`, 3},
+		{"string", []string{"a", "b", "c"}, `["a","b","c"]`, 4},
+		{"bool", []bool{true, false, true}, `[true,false,true]`, 4},
+		{"bytes", [][]byte{{65, 66}, {67, 68}}, `["AB","CD"]`, 3},
+		{"time", []gotime.Time{gotime.Date(2022, 3, 2, 9, 10, 0, 0, gotime.UTC)}, `["2022-03-02T09:10:00Z"]`, 2},
+
+		// json Counter, Text, Tree
+		{"Counter", []json.Counter{*json.NewCounter(1, crdt.LongCnt)}, `[1]`, 2},
+		{"Text", []json.Text{*json.NewText()}, `[[]]`, 2},
+		{"Tree", []json.Tree{*json.NewTree()}, `[{"type":"root","children":[]}]`, 2},
+
+		// user defined struct
+		{"not initialized struct", []T1{{}, {}}, `[{"M":""},{"M":""}]`, 5},
+		{"struct", []T1{{"a"}, {"b"}}, `[{"M":"a"},{"M":"b"}]`, 5},
+		{"struct pointers", []*T1{&t1, &t1}, `[{"M":"a"},{"M":"a"}]`, 5},
+
+		// user defined struct with tag
+		{"not initialized struct", []T2{{}, {}}, `[{"m":""},{"m":""}]`, 5},
+		{"tagged struct", []T2{{"", "2", ""}, {"", "2", ""}}, `[{"m":"2"},{"m":"2"}]`, 5},
+		{"initialized struct", []T2{{"1", "2", "3"}, {"1", "2", "3"}}, `[{"e":"3","m":"2"},{"e":"3","m":"2"}]`, 7},
+
+		// array
+		{"array", [1][3]int{{1, 2, 3}}, `[[1,2,3]]`, 5},
+		{"array pointers", [2]*[3]int{&arr, &arr}, `[[1,2,3],[1,2,3]]`, 9},
+
+		// nested slice
+		{"nested slice", [][]int{{1, 2, 3}, {1, 2, 3}}, `[[1,2,3],[1,2,3]]`, 9},
+
+		// map
+		{"map", []map[string]interface{}{map1, map1}, `[{"a":1,"b":2},{"a":1,"b":2}]`, 7},
+		{"map pointers", []*map[string]interface{}{&map1, &map1}, `[{"a":1,"b":2},{"a":1,"b":2}]`, 7},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+
+			err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewArray("array", tt.in)
+				assert.Equal(t, tt.want, root.GetArray("array").Marshal())
+				return nil
+			})
+			assert.NoError(t, err)
+
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.Delete("array")
+				return nil
+			})
+			assert.NoError(t, err)
+			assert.Equal(t, tt.tombstones, d1.GarbageLen())
+			assert.Equal(t, tt.tombstones, d1.GarbageCollect(time.MaxTicket))
+		})
+	}
 }
