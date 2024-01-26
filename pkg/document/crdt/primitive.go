@@ -229,6 +229,11 @@ func (p *Primitive) CreatedAt() *time.Ticket {
 	return p.createdAt
 }
 
+// SetCreatedAt sets the creation time of this element.
+func (p *Primitive) SetCreatedAt(createdAt *time.Ticket) {
+	p.createdAt = createdAt
+}
+
 // MovedAt returns the move time of this element.
 func (p *Primitive) MovedAt() *time.Ticket {
 	return p.movedAt

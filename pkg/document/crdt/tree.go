@@ -510,6 +510,11 @@ func (t *Tree) CreatedAt() *time.Ticket {
 	return t.createdAt
 }
 
+// SetCreatedAt sets the creation time of this Tree.
+func (t *Tree) SetCreatedAt(createdAt *time.Ticket) {
+	t.createdAt = createdAt
+}
+
 // RemovedAt returns the removal time of this Tree.
 func (t *Tree) RemovedAt() *time.Ticket {
 	return t.removedAt

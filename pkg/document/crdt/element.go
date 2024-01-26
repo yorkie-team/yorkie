@@ -68,4 +68,7 @@ type Element interface {
 
 	// Remove removes this element.
 	Remove(*time.Ticket) bool
+
+	// SetCreatedAt sets the creation time of this element.
+	SetCreatedAt(*time.Ticket)
 }

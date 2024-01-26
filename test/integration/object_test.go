@@ -681,14 +681,30 @@ func TestObjectSet(t *testing.T) {
 		}
 
 		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewObject("obj", map[string]interface{}{
-				"key": "value",
+			// 01. set new object with json literal. 10 elements will be created.
+			root.SetNewObject("obj", map[string]interface{}{ // 1: object
+				"str": "v",                                  // 1: string
+				"arr": []interface{}{1, "str"},              // 3: array, 1, "str"
+				"obj": map[string]interface{}{"key3": 42.2}, // 2: object, 42.2
+				"cnt": json.NewCounter(0, crdt.LongCnt),     // 1: counter
+				"txt": json.NewText(),                       // 1: text
+				"tree": json.NewTree(&json.TreeNode{ // 1: tree
+					Type: "doc",
+					Children: []json.TreeNode{{
+						Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+					}},
+				}),
 			})
 
-			root.SetNewObject("obj2", T{M: *root.GetObject("obj")})
+			// 02. set new object with JSON.Object. 11 elements will be created.
+			root.SetNewObject("obj2", T{*root.GetObject("obj")})
+			root.Delete("obj")
+			root.Delete("obj2")
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"obj":{"key":"value"},"obj2":{"M":{}}}`, d1.Marshal())
+
+		assert.Equal(t, 21, d1.GarbageLen())
+		assert.Equal(t, 21, d1.GarbageCollect(time.MaxTicket))
 	})
 }

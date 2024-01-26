@@ -184,6 +184,11 @@ func (t *Text) CreatedAt() *time.Ticket {
 	return t.createdAt
 }
 
+// SetCreatedAt sets the creation time of this Text.
+func (t *Text) SetCreatedAt(createdAt *time.Ticket) {
+	t.createdAt = createdAt
+}
+
 // RemovedAt returns the removal time of this Text.
 func (t *Text) RemovedAt() *time.Ticket {
 	return t.removedAt

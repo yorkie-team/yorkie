@@ -129,6 +129,11 @@ func (a *Array) CreatedAt() *time.Ticket {
 	return a.createdAt
 }
 
+// SetCreatedAt sets the creation time of this array.
+func (a *Array) SetCreatedAt(createdAt *time.Ticket) {
+	a.createdAt = createdAt
+}
+
 // MovedAt returns the move time of this array.
 func (a *Array) MovedAt() *time.Ticket {
 	return a.movedAt

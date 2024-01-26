@@ -137,9 +137,21 @@ func buildCRDTElement(
 	case Object:
 		// NOTE(highcloud100): This case only occurs when the given struct's element is json.Object.
 		// For example, the given struct is `type Foo struct { Bar json.Object }`.
-		// For now, we don't support this case. We need to support this case later.
-		// Check the "object.set with JSON.Object" test case in `object_test.go`.
-		return crdt.NewObject(crdt.NewElementRHT(), ticket, nil)
+		// This implementation requires `SetCreatedAt` to modify the ticket of the given json.Object elements.
+		// I think it is dangerous to be able to modify the time ticket arbitrarily.
+		// TODO(highcloud100) : Other good alternatives are needed.
+		temp, _ := elem.DeepCopy()
+		if temp.RemovedAt() != nil {
+			panic("The passed json.Object is alreay removed")
+		}
+		newElem := toElement(context, temp).(*Object)
+		newElem.SetCreatedAt(ticket)
+		newElem.Descendants(func(elem crdt.Element, parent crdt.Container) bool {
+			ticket := context.IssueTimeTicket()
+			elem.SetCreatedAt(ticket)
+			return false
+		})
+		return newElem.Object
 	case map[string]any:
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembersFromMap(context, elem, stat))
 	case reflect.Value:

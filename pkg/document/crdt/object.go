@@ -120,6 +120,11 @@ func (o *Object) CreatedAt() *time.Ticket {
 	return o.createdAt
 }
 
+// SetCreatedAt sets the creation time of this object.
+func (o *Object) SetCreatedAt(createdAt *time.Ticket) {
+	o.createdAt = createdAt
+}
+
 // MovedAt returns the move time of this object.
 func (o *Object) MovedAt() *time.Ticket {
 	return o.movedAt
