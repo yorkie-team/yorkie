@@ -670,4 +670,25 @@ func TestObjectSet(t *testing.T) {
 			assert.Equal(t, tt.tombstones, d1.GarbageCollect(time.MaxTicket))
 		})
 	}
+
+	t.Run("object.set with JSON.Object", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+
+		type T struct {
+			M json.Object
+		}
+
+		err := d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("obj", map[string]interface{}{
+				"key": "value",
+			})
+
+			root.SetNewObject("obj2", T{M: *root.GetObject("obj")})
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `{"obj":{"key":"value"},"obj2":{"M":{}}}`, d1.Marshal())
+	})
 }

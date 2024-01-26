@@ -137,7 +137,8 @@ func buildCRDTElement(
 	case Object:
 		// NOTE(highcloud100): This case only occurs when the given struct's element is json.Object.
 		// For example, the given struct is `type Foo struct { Bar json.Object }`.
-		// User can't initialize the json.Object directly. so just return the empty json.Object.
+		// For now, we don't support this case. We need to support this case later.
+		// Check the "object.set with JSON.Object" test case in `object_test.go`.
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, nil)
 	case map[string]any:
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, buildObjectMembersFromMap(context, elem, stat))
