@@ -348,7 +348,7 @@ func (p *Object) setInternal(
 	return elem
 }
 
-// buildObjectMembers constructs an object where all values from the
+// buildObjectMembersFromMap constructs an object where all values from the
 // user-provided object are transformed into CRDTElements.
 // This function takes an object and iterates through its values,
 // converting each value into a corresponding CRDTElement.
@@ -496,7 +496,7 @@ func isMapStringInterface(v any) bool {
 
 // isNotJsonType returns whether the given value is not a JSON type or not.
 // The json struct types should be treated differently from other structures.
-// Because build CRDTElement processes json structural types and other structures separately.
+// Because buildCRDTElement processes JSON struct types and other structures separately.
 func isNotJSONType(v any) bool {
 	return reflect.TypeOf(v) != reflect.TypeOf(Counter{}) &&
 		reflect.TypeOf(v) != reflect.TypeOf(&Counter{}) &&

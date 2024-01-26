@@ -28,7 +28,7 @@ import (
 
 const startDetectingCyclesAfter = 5000
 
-// buildState is used to track the depth of nested structs during decoding.
+// buildState is used to track the depth of nested structs during encoding.
 type buildState struct {
 	visited map[any]bool
 	depth   int
@@ -95,7 +95,7 @@ func buildCRDTElement(
 ) crdt.Element {
 	// 01. Check the stat for detecting cycles.
 	if stat.depth++; stat.depth > startDetectingCyclesAfter {
-		// If the depth exceeds the `startDetectingCyclesAfter`, it will start to check cycles.
+		// If the depth exceeds the `startDetectingCyclesAfter`, start checking cycles.
 		// It memorize the visited pointer of reflect.Ptr, reflect.Map, reflect.Slice.
 		switch reflect.ValueOf(value).Kind() {
 		case reflect.Ptr, reflect.Map, reflect.Slice:
@@ -136,7 +136,7 @@ func buildCRDTElement(
 		return counter
 	case Object:
 		// NOTE(highcloud100): This case only occurs when the given struct's element is json.Object.
-		// For example, the given struct is `type Foo struct { Bar Object }`.
+		// For example, the given struct is `type Foo struct { Bar json.Object }`.
 		// User can't initialize the json.Object directly. so just return the empty json.Object.
 		return crdt.NewObject(crdt.NewElementRHT(), ticket, nil)
 	case map[string]any:
