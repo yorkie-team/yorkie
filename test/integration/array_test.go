@@ -337,9 +337,9 @@ func TestArraySetTypeGuard(t *testing.T) {
 	}
 
 	typeGuardTests := []struct {
-		caseName string
-		in       any
-		result   bool // true: not panic, false: panic
+		caseName   string
+		in         any
+		isNotPanic bool
 	}{
 		{"nil", nil, false},
 		{"struct", T1{"a"}, false},
@@ -374,7 +374,7 @@ func TestArraySetTypeGuard(t *testing.T) {
 					return nil
 				})
 			}
-			if tt.result {
+			if tt.isNotPanic {
 				assert.NotPanics(t, val)
 			} else {
 				assert.PanicsWithValue(t, "unsupported array type", val)

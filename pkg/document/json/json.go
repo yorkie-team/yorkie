@@ -26,6 +26,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// startDetectingCyclesAfter is the staring depth of nested structs after which
+// we start checking for cycles. This is a performance optimization to avoid
+// the overhead of checking for cycles.
 const startDetectingCyclesAfter = 5000
 
 // buildState is used to track the depth of nested structs during encoding.
@@ -96,7 +99,7 @@ func buildCRDTElement(
 	// 01. Check the stat for detecting cycles.
 	if stat.depth++; stat.depth > startDetectingCyclesAfter {
 		// If the depth exceeds the `startDetectingCyclesAfter`, start checking cycles.
-		// It memorize the visited pointer of reflect.Ptr, reflect.Map, reflect.Slice.
+		// It memorizes the visited pointer of reflect.Ptr, reflect.Map, reflect.Slice.
 		switch reflect.ValueOf(value).Kind() {
 		case reflect.Ptr, reflect.Map, reflect.Slice:
 			ptr := reflect.ValueOf(value).Pointer()
@@ -171,14 +174,14 @@ func buildCRDTElement(
 	case reflect.Struct:
 		return buildCRDTElement(context, reflect.ValueOf(value), ticket, stat)
 	case reflect.Int, reflect.Int32, reflect.Int64, reflect.Float32, reflect.Float64, reflect.String, reflect.Bool:
-		return buildCRDTElement(context, namedtypeToPrimitive(value), ticket, stat)
+		return buildCRDTElement(context, namedTypeToPrimitive(value), ticket, stat)
 	default:
 		panic("unsupported type")
 	}
 }
 
-// namedtypeToPrimitive converts the given named type to primitive type.
-func namedtypeToPrimitive(value any) any {
+// namedTypeToPrimitive converts the given named type to primitive type.
+func namedTypeToPrimitive(value any) any {
 	val := reflect.ValueOf(value)
 	switch val.Kind() {
 	case reflect.Int:

@@ -50,8 +50,7 @@ func (p *Object) SetNewObject(k string, v ...any) *Object {
 			return NewObject(p.context, crdt.NewObject(crdt.NewElementRHT(), ticket))
 		}
 
-		// NOTE(highcloud100): SetNewObject only accepts v of `struct` and `map[string]any` type.
-		if v[0] == nil || !isAllowedType(v[0]) {
+		if v[0] == nil || isJSONType(v[0]) || !(isStruct(v[0]) || isMapStringInterface(v[0])) {
 			panic("unsupported object type")
 		}
 		return toElement(p.context, buildCRDTElement(p.context, v[0], ticket, newBuildState()))
@@ -494,11 +493,11 @@ func isMapStringInterface(v any) bool {
 		reflect.TypeOf(v) == reflect.TypeOf(&map[string]any{})
 }
 
-// isNotJsonType returns whether the given value is not a JSON type or not.
+// isJSONType returns whether the given value is a JSON type or not.
 // The json struct types should be treated differently from other structures.
 // Because buildCRDTElement processes JSON struct types and other structures separately.
-func isNotJSONType(v any) bool {
-	return reflect.TypeOf(v) != reflect.TypeOf(Counter{}) &&
+func isJSONType(v any) bool {
+	return !(reflect.TypeOf(v) != reflect.TypeOf(Counter{}) &&
 		reflect.TypeOf(v) != reflect.TypeOf(&Counter{}) &&
 		reflect.TypeOf(v) != reflect.TypeOf(Text{}) &&
 		reflect.TypeOf(v) != reflect.TypeOf(&Text{}) &&
@@ -507,11 +506,7 @@ func isNotJSONType(v any) bool {
 		reflect.TypeOf(v) != reflect.TypeOf(Array{}) &&
 		reflect.TypeOf(v) != reflect.TypeOf(&Array{}) &&
 		reflect.TypeOf(v) != reflect.TypeOf(Object{}) &&
-		reflect.TypeOf(v) != reflect.TypeOf(&Object{})
-}
-
-func isAllowedType(v any) bool {
-	return (isStruct(v) || isMapStringInterface(v)) && isNotJSONType(v)
+		reflect.TypeOf(v) != reflect.TypeOf(&Object{}))
 }
 
 func isArrayOrSlice(v any) bool {

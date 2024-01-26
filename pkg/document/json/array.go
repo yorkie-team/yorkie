@@ -183,7 +183,6 @@ func (p *Array) InsertIntegerAfter(index int, v int) *Array {
 
 // Get element of the given index.
 func (p *Array) Get(idx int) crdt.Element {
-	// TODO(hackerwins): Implement Get methods for specific types like GetObject, ...
 	if p.Len() <= idx {
 		return nil
 	}
@@ -383,7 +382,7 @@ func (p *Array) moveBeforeInternal(nextCreatedAt, createdAt *time.Ticket) {
 }
 
 // buildArrayElements return the element slice of the given array.
-// Because the type of the given array is `any(interface{})`, it is necessary to type assertion.
+// Because the type of the given array is `any`, it is necessary to type assertion.
 func buildArrayElements(
 	context *change.Context,
 	elements any,
@@ -427,7 +426,7 @@ func buildArrayElements(
 		length := reflect.ValueOf(elements).Len()
 		array := make([]reflect.Value, length)
 
-		// NOTE(hackerwins): The structure cannot immediately call Interface()
+		// NOTE(highcloud100): The structure cannot immediately call Interface()
 		// because it can have an unexposed field. If we call Interface(), panic will occur.
 		for i := 0; i < length; i++ {
 			array[i] = reflect.ValueOf(elements).Index(i)

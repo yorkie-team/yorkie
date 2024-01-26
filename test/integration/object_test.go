@@ -368,9 +368,9 @@ func TestObjectTypeGuard(t *testing.T) {
 	}
 
 	typeGuardTests := []struct {
-		caseName string
-		in       any
-		result   bool // true: panic, false: not panic
+		caseName   string
+		in         any
+		isNotPanic bool
 	}{
 		{"nil", nil, false},
 		{"slice", []int{1, 2, 3}, false},
@@ -409,7 +409,7 @@ func TestObjectTypeGuard(t *testing.T) {
 				})
 			}
 
-			if tt.result {
+			if tt.isNotPanic {
 				assert.NotPanics(t, val)
 			} else {
 				assert.PanicsWithValue(t, "unsupported object type", val)
@@ -531,7 +531,7 @@ func TestObjectSet(t *testing.T) {
 		want       string
 		tombstones int
 	}{
-		//Test nll
+		// Test nll
 		{"null map", map[string]any{"M": nil}, `{"obj":{"M":null}}`, 2},
 		{"null &map", &map[string]any{"M": nil}, `{"obj":{"M":null}}`, 2},
 
