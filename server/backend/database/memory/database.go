@@ -677,45 +677,52 @@ func (d *DB) FindHardDeletionCandidates(
 	candidatesLimitPerProject int,
 	projectFetchSize int,
 	lastProjectID types.ID,
-) ([]*database.DocInfo, error) {
+) (types.ID, []*database.DocInfo, error) {
 	projects, err := d.listProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
-		return nil, err
+		return database.DefaultProjectID, nil, err
 	}
 
 	var candidates []*database.DocInfo
 	for _, project := range projects {
-		documents, err := d.findHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		infos, err := d.findHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
 		if err != nil {
-			return nil, err
+			return database.DefaultProjectID, nil, err
 		}
 
-		candidates = append(candidates, documents...)
+		candidates = append(candidates, infos...)
 	}
 
-	return candidates, nil
+	var topProjectID types.ID
+	if len(projects) < projectFetchSize {
+		topProjectID = database.DefaultProjectID
+	} else {
+		topProjectID = projects[len(projects)-1].ID
+	}
+
+	return topProjectID, candidates, nil
 }
 
 // HardDeletion Deletes the documents completely.
 func (d *DB) HardDeletion(
 	ctx context.Context,
 	candidates []*database.DocInfo,
-) (types.ID, error) {
-
-	var lastDeletedID types.ID
+) error {
+	if len(candidates) <= 0 {
+		return nil
+	}
 
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
 	for _, candidate := range candidates {
 		if err := txn.Delete(tblDocuments, candidate); err != nil {
-			return database.DefaultProjectID, fmt.Errorf("fetch hard deletion candidates: %w", err)
+			return fmt.Errorf("fetch hard deletion candidates: %w", err)
 		}
-		lastDeletedID = candidate.ID
 	}
 	txn.Commit()
 
-	return lastDeletedID, nil
+	return nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

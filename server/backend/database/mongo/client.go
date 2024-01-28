@@ -244,14 +244,18 @@ func (c *Client) CreateProjectInfo(
 func (c *Client) HardDeletion(
 	ctx context.Context,
 	candidates []*database.DocInfo,
-) (types.ID, error) {
+) error {
 	if len(candidates) <= 0 {
-		return database.DefaultProjectID, nil
+		return nil
 	}
 
-	var idList []types.ID
-	for _, candidate := range candidates {
-		idList = append(idList, candidate.ID)
+	var idList []primitive.ObjectID
+	for _, docInfo := range candidates {
+		encodedID, err := encodeID(docInfo.ID)
+		if err != nil {
+			return err
+		}
+		idList = append(idList, encodedID)
 	}
 
 	_, err := c.collection(colDocuments).DeleteMany(
@@ -260,10 +264,10 @@ func (c *Client) HardDeletion(
 	)
 
 	if err != nil {
-		return database.DefaultProjectID, fmt.Errorf("deletion Error : %w", err)
+		return fmt.Errorf("deletion Error : %w", err)
 	}
 
-	return idList[len(idList)-1], nil
+	return nil
 }
 
 // listProjectInfos returns all project infos rotationally.
@@ -760,22 +764,28 @@ func (c *Client) FindHardDeletionCandidates(
 	candidatesLimitPerProject int,
 	projectFetchSize int,
 	lastProjectID types.ID,
-) ([]*database.DocInfo, error) {
+) (types.ID, []*database.DocInfo, error) {
 	projects, err := c.listProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
-		return nil, err
+		return database.DefaultProjectID, nil, err
 	}
 
 	var candidates []*database.DocInfo
 	for _, project := range projects {
-		clientInfos, err := c.findHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		docInfos, err := c.findHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
 		if err != nil {
-			return nil, err
+			return database.DefaultProjectID, nil, err
 		}
-		candidates = append(candidates, clientInfos...)
+		candidates = append(candidates, docInfos...)
 	}
 
-	return candidates, nil
+	var topProjectID types.ID
+	if len(projects) < projectFetchSize {
+		topProjectID = database.DefaultProjectID
+	} else {
+		topProjectID = projects[len(projects)-1].ID
+	}
+	return topProjectID, candidates, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

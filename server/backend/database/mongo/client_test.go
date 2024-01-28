@@ -104,4 +104,12 @@ func TestClient(t *testing.T) {
 	t.Run("FindDeactivateCandidates test", func(t *testing.T) {
 		testcases.RunFindDeactivateCandidates(t, cli)
 	})
+
+	t.Run("FindHardDeletionCandidates test", func(t *testing.T) {
+		testcases.RunHardDeletionCandidates(t, cli)
+	})
+
+	t.Run("HardDeletion test", func(t *testing.T) {
+		testcases.RunHardDeletion(t, cli)
+	})
 }

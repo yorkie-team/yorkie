@@ -168,7 +168,7 @@ func (h *Housekeeping) documentHardDeletion(
 		}
 	}()
 
-	candidates, err := h.database.FindHardDeletionCandidates(
+	lastProjectID, candidates, err := h.database.FindHardDeletionCandidates(
 		ctx,
 		h.candidatesLimitPerProject,
 		h.projectFetchSize,
@@ -178,8 +178,8 @@ func (h *Housekeeping) documentHardDeletion(
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
-	var lastProjectID types.ID
-	lastProjectID, err = h.database.HardDeletion(ctx, candidates)
+
+	err = h.database.HardDeletion(ctx, candidates)
 
 	if err != nil {
 		return database.DefaultProjectID, err
