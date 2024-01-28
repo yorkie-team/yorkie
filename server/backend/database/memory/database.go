@@ -575,7 +575,7 @@ func (d *DB) findHardDeletionCandidatesPerProject(
 
 	var documents []*database.DocInfo
 	iterator, err := txn.Get(
-		tblProjects,
+		tblDocuments,
 		"project_id",
 		project.ID.String(),
 	)
@@ -586,7 +586,7 @@ func (d *DB) findHardDeletionCandidatesPerProject(
 
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		document := raw.(*database.DocInfo)
-		if candidatesLimit <= len(documents) {
+		if candidatesLimit <= len(documents) && candidatesLimit != 0 {
 			break
 		}
 

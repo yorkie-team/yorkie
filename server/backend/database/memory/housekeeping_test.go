@@ -21,6 +21,9 @@ package memory_test
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/test/helper"
 	"log"
 	"testing"
 	gotime "time"
@@ -78,7 +81,7 @@ func TestHousekeeping(t *testing.T) {
 
 	t.Run("housekeeping pagination test", func(t *testing.T) {
 		ctx := context.Background()
-		memdb, projects := createDBandProjects(t)
+		memdb, projects := CreateDBandProjects(t)
 
 		fetchSize := 4
 		lastProjectID, _, err := memdb.FindDeactivateCandidates(
@@ -108,9 +111,54 @@ func TestHousekeeping(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, database.DefaultProjectID, lastProjectID)
 	})
+
+	t.Run("housekeeping hardDeletion test", func(t *testing.T) {
+		ctx := context.Background()
+		memdb, projects := CreateDBandProjects(t)
+
+		memdb = CreateClientsAndDocuments(t, memdb, projects, true)
+		fetchSize := 4
+		lastProjectID, _, err := memdb.FindHardDeletionCandidates(
+			ctx,
+			0,
+			fetchSize,
+			database.DefaultProjectID,
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, projects[fetchSize-1].ID, lastProjectID)
+
+		lastProjectID, _, err = memdb.FindHardDeletionCandidates(
+			ctx,
+			0,
+			fetchSize,
+			lastProjectID,
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, projects[fetchSize*2-1].ID, lastProjectID)
+
+		var candidates []*database.DocInfo
+		lastProjectID, candidates, err = memdb.FindHardDeletionCandidates(
+			ctx,
+			0,
+			fetchSize,
+			lastProjectID,
+		)
+		assert.NoError(t, err)
+		assert.Equal(t, database.DefaultProjectID, lastProjectID)
+
+		memdb.HardDeletion(ctx, candidates)
+		assert.NoError(t, err)
+		assert.Equal(t, database.DefaultProjectID, lastProjectID)
+		for _, docInfo := range candidates {
+			_, err = memdb.FindDocInfoByID(context.Background(), projectID, docInfo.ID)
+			assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+		}
+	})
+
 }
 
-func createDBandProjects(t *testing.T) (*memory.DB, []*database.ProjectInfo) {
+// CreateDBandProjects Create a MemoryDB based Projects
+func CreateDBandProjects(t *testing.T) (*memory.DB, []*database.ProjectInfo) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -130,4 +178,40 @@ func createDBandProjects(t *testing.T) (*memory.DB, []*database.ProjectInfo) {
 	}
 
 	return memdb, projects
+}
+
+// CreateClientsAndDocuments Create a MemoryDB based documents or deleted documents
+func CreateClientsAndDocuments(
+	t *testing.T,
+	memdb *memory.DB,
+	projects []*database.ProjectInfo,
+	deleteDoc bool,
+) *memory.DB {
+	ctx := context.Background()
+	docKey := helper.TestDocKey(t)
+	t.Helper()
+
+	for _, project := range projects {
+		clientInfo, err := memdb.ActivateClient(ctx, project.ID, t.Name())
+		assert.NoError(t, err)
+
+		docInfo, err := memdb.FindDocInfoByKeyAndOwner(ctx, project.ID, clientInfo.ID, docKey, true)
+		assert.NoError(t, err)
+
+		memdb.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(t, memdb.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		if deleteDoc {
+			assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
+
+			doc := document.New(key.Key(t.Name()))
+			pack := doc.CreateChangePack()
+			err = memdb.CreateChangeInfos(ctx, project.ID, docInfo, 0, pack.Changes, true)
+			assert.NoError(t, err)
+		}
+	}
+
+	return memdb
+
 }
