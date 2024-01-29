@@ -64,7 +64,7 @@ func (c *Config) Validate() error {
 		)
 	}
 
-	if c.DocumentHardDeletionLimitPerProject <= 0 {
+	if c.DocumentHardDeletionLimitPerProject < 0 {
 		return fmt.Errorf(
 			`invalid argument %d for "--housekeeping-document-hard-deletion-limit-per-project" flag`,
 			c.DocumentHardDeletionLimitPerProject,
