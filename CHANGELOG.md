@@ -7,6 +7,17 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.14] - 2024-01-29
+
+### Added
+* Introduce MongoDB sharding rules to Project-wide and Document-wide collections by @sejongk in https://github.com/yorkie-team/yorkie/pull/776
+* Add Helm chart for MongoDB sharded cluster by @sejongk in https://github.com/yorkie-team/yorkie/pull/769
+* Improve object creation with an initial value of specific types by @highcloud100 in https://github.com/yorkie-team/yorkie/pull/766
+
+### Changed
+* Refactor concurrency tests for basic Tree.Edit by @justiceHui in https://github.com/yorkie-team/yorkie/pull/772
+* Remove unnecessary `String()` calls with `stringer` interface by @sejongk in https://github.com/yorkie-team/yorkie/pull/777
+
 ## [0.4.13] - 2024-01-19
 
 ### Added
