@@ -1143,7 +1143,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		time.InitialActorID.String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID.String(), err)
+		return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID, err)
 	}
 
 	var syncedSeqInfo *database.SyncedSeqInfo
@@ -1192,7 +1192,7 @@ func (d *DB) UpdateSyncedSeq(
 			docRefKey.DocID.String(),
 			clientInfo.ID.String(),
 		); err != nil {
-			return fmt.Errorf("delete syncedseqs of %s: %w", docRefKey.DocID.String(), err)
+			return fmt.Errorf("delete syncedseqs of %s: %w", docRefKey.DocID, err)
 		}
 		txn.Commit()
 		return nil
@@ -1210,7 +1210,7 @@ func (d *DB) UpdateSyncedSeq(
 		clientInfo.ID.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("fetch syncedseqs of %s: %w", docRefKey.DocID.String(), err)
+		return fmt.Errorf("fetch syncedseqs of %s: %w", docRefKey.DocID, err)
 	}
 
 	syncedSeqInfo := &database.SyncedSeqInfo{
@@ -1228,7 +1228,7 @@ func (d *DB) UpdateSyncedSeq(
 	}
 
 	if err := txn.Insert(tblSyncedSeqs, syncedSeqInfo); err != nil {
-		return fmt.Errorf("insert syncedseqs of %s: %w", docRefKey.DocID.String(), err)
+		return fmt.Errorf("insert syncedseqs of %s: %w", docRefKey.DocID, err)
 	}
 
 	txn.Commit()
@@ -1267,7 +1267,7 @@ func (d *DB) FindDocInfosByPaging(
 		)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("fetch documents of %s: %w", projectID.String(), err)
+		return nil, fmt.Errorf("fetch documents of %s: %w", projectID, err)
 	}
 
 	var docInfos []*database.DocInfo
@@ -1366,12 +1366,12 @@ func (d *DB) findTicketByServerSeq(
 		serverSeq,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.DocID.String(), err)
+		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.DocID, err)
 	}
 	if raw == nil {
 		return nil, fmt.Errorf(
 			"docID %s, serverSeq %d: %w",
-			docRefKey.DocID.String(),
+			docRefKey.DocID,
 			serverSeq,
 			database.ErrDocumentNotFound,
 		)

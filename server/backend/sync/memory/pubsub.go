@@ -104,7 +104,7 @@ func (m *PubSub) Subscribe(
 		logging.From(ctx).Debugf(
 			`Subscribe(%s,%s) End`,
 			documentRefKey,
-			subscriber.String(),
+			subscriber,
 		)
 	}
 	return sub, nil
@@ -123,7 +123,7 @@ func (m *PubSub) Unsubscribe(
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) Start`,
 			documentRefKey,
-			sub.Subscriber().String(),
+			sub.Subscriber(),
 		)
 	}
 
@@ -141,7 +141,7 @@ func (m *PubSub) Unsubscribe(
 		logging.From(ctx).Debugf(
 			`Unsubscribe(%s,%s) End`,
 			documentRefKey,
-			sub.Subscriber().String(),
+			sub.Subscriber(),
 		)
 	}
 }
@@ -159,7 +159,7 @@ func (m *PubSub) Publish(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(`Publish(%s,%s) Start`,
 			documentRefKey,
-			publisherID.String())
+			publisherID)
 	}
 
 	if subs, ok := m.subscriptionsMapByDocRefKey[documentRefKey]; ok {
@@ -173,8 +173,8 @@ func (m *PubSub) Publish(
 					`Publish %s(%s,%s) to %s`,
 					event.Type,
 					documentRefKey,
-					publisherID.String(),
-					sub.Subscriber().String(),
+					publisherID,
+					sub.Subscriber(),
 				)
 			}
 
@@ -186,8 +186,8 @@ func (m *PubSub) Publish(
 				logging.From(ctx).Warnf(
 					`Publish(%s,%s) to %s timeout`,
 					documentRefKey,
-					publisherID.String(),
-					sub.Subscriber().String(),
+					publisherID,
+					sub.Subscriber(),
 				)
 			}
 		}
@@ -195,7 +195,7 @@ func (m *PubSub) Publish(
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(`Publish(%s,%s) End`,
 			documentRefKey,
-			publisherID.String())
+			publisherID)
 	}
 }
 

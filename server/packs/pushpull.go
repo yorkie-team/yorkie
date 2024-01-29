@@ -72,7 +72,7 @@ func pushChanges(
 			len(reqPack.Changes)-len(pushedChanges),
 			initialServerSeq,
 			docInfo.ServerSeq,
-			cp.String(),
+			cp,
 		)
 	}
 
@@ -168,7 +168,7 @@ func pullSnapshot(
 		reqPack.Checkpoint.ServerSeq+1,
 		initialServerSeq,
 		docInfo.Key,
-		cpAfterPull.String(),
+		cpAfterPull,
 	)
 
 	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot), err
@@ -218,7 +218,7 @@ func pullChangeInfos(
 			pulledChanges[0].ServerSeq,
 			pulledChanges[len(pulledChanges)-1].ServerSeq,
 			docInfo.Key,
-			cpAfterPull.String(),
+			cpAfterPull,
 			len(filteredChanges),
 		)
 	}
