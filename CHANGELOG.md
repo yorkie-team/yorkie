@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.13] - 2024-01-19
+
+### Added
+* Add API for Retrieving All Documents by @raararaara in https://github.com/yorkie-team/yorkie/pull/755
+* Introduce object creation interface with initial values by @highcloud100 in https://github.com/yorkie-team/yorkie/pull/756
+* Implement Tree.RemoveStyle by @justiceHui in https://github.com/yorkie-team/yorkie/pull/748
+
+### Fixed
+* Fix RHT.Remove and Add test code by @justiceHui in https://github.com/yorkie-team/yorkie/pull/752
+* FIx Finding Housekeeping Candidates and Modify Housekeeping Structure by @devleejb in https://github.com/yorkie-team/yorkie/pull/749
+* Add concurrent editing test cases in Tree by @sejongk in https://github.com/yorkie-team/yorkie/pull/751
+
 ## [0.4.12] - 2024-01-05
 
 ### Changed

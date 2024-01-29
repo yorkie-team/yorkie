@@ -1,0 +1,205 @@
+namespace: &namespace mongodb
+name: &name mongodb
+port: &port 27017
+clusterDomain: &clusterDomain cluster.local
+
+image:
+  registry: &imageRegistry docker.io
+  repository: &imageRepository mongo
+  tag: &imageTag "6.0"
+
+# Configuration for nodes
+persistence:
+  # DataSize is the size of data nodes in each replica
+  dataSize: &dataSize 1Gi
+  # ConfigSize is the size of config nodes in each replica
+  configSize: &configSize 500Mi
+  storageClass: &storageClass standard
+
+# Configuration for mongodb cluster
+sharded:
+  enabled: true
+  shards: &shard 2
+  replicaCount:
+    configsvr: &configSvrReplicaCount 1
+    shardsvr: &shardSvrReplicaCount 1
+    mongos: &mongosReplicaCount 1
+
+  # Configuration for sharding rule
+  setup:
+    enabled: true
+    database: yorkie-meta
+    restartPolicy: Never
+    backoffLimit: 0
+    rules:
+      - collectionName: clients
+        shardKeys:
+          - name: project_id
+            method: "1"
+        unique: false
+      - collectionName: documents
+        shardKeys:
+          - name: project_id
+            method: "1"
+        unique: false
+      - collectionName: changes
+        shardKeys:
+          - name: doc_id
+            method: "1"
+        unique: false
+      - collectionName: snapshots
+        shardKeys:
+          - name: doc_id
+            method: "1"
+        unique: false
+      - collectionName: syncedseqs
+        shardKeys:
+          - name: doc_id
+            method: "1"
+        unique: false
+
+# Configuration for manual dmongodb sharded stack
+mongodb-sharded:
+  fullnameOverride: *name
+  namespaceOverride: *namespace
+  clusterDomain: *clusterDomain
+
+  auth:
+    enabled: false
+    rootPassword: yorkie
+    replicaSetKey: yorkie
+
+  shards: *shard
+
+  image:
+    registry: *imageRegistry
+    repository: *imageRepository
+    tag: *imageTag
+
+  common:
+    containerPorts:
+      mongodb: *port
+
+  service:
+    name: *name
+    type: ClusterIP
+    ports:
+      mongodb: 27017
+    sessionAffinity: None
+
+  # Configuration for config servers
+  configsvr:
+    replicaCount: *configSvrReplicaCount
+    command:
+      - mongod
+    args:
+      - --configsvr
+      - --port
+      - "$(MONGODB_PORT_NUMBER)"
+      - --replSet
+      - "$(MONGODB_REPLICA_SET_NAME)"
+      - --bind_ip_all
+    # customReadinessProbe:
+    #   failureThreshold: 6
+    #   initialDelaySeconds: 30
+    #   periodSeconds: 30
+    #   successThreshold: 1
+    #   timeoutSeconds: 60
+    #   exec:
+    #     command:
+    #       - /bin/sh
+    #       - -c
+    #       - mongosh --port $MONGODB_PORT_NUMBER --quiet --eval "db.adminCommand('ping')"
+    livenessProbe:
+      enabled: false
+    readinessProbe:
+      enabled: false
+    startupProbe:
+      enabled: false
+    persistence:
+      size: *configSize
+      mountPath: /data/configdb
+      storageClass: *storageClass
+
+  # Configuration for shard server
+  shardsvr:
+    dataNode:
+      replicaCount: *shardSvrReplicaCount
+      command:
+        - mongod
+        - --shardsvr
+        - --port
+        - "$(MONGODB_PORT_NUMBER)"
+        - --replSet
+        - "$(MONGODB_REPLICA_SET_NAME)"
+        - --bind_ip_all
+      # customReadinessProbe:
+      #   failureThreshold: 6
+      #   initialDelaySeconds: 30
+      #   periodSeconds: 30
+      #   successThreshold: 1
+      #   timeoutSeconds: 60
+      #   exec:
+      #     command:
+      #       - /bin/sh
+      #       - -c
+      #       - mongosh --port $MONGODB_PORT_NUMBER --quiet --eval "db.adminCommand('ping')"
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
+      startupProbe:
+        enabled: false
+    persistence:
+      size: *dataSize
+      mountPath: /data/db
+      storageClass: *storageClass
+
+  # Configuration for mongos
+  mongos:
+    replicaCount: *mongosReplicaCount
+    command:
+      - mongos
+      - --port
+      - "$(MONGODB_PORT_NUMBER)"
+      - --configdb
+      - "$(MONGODB_CFG_REPLICA_SET_NAME)/$(MONGODB_CFG_PRIMARY_HOST):$(MONGODB_PORT_NUMBER)"
+      - --bind_ip_all
+    useStatefulSet: true
+    servicePerReplica:
+      enabled: false
+    # customLivenessProbe:
+    #   failureThreshold: 2
+    #   initialDelaySeconds: 60
+    #   periodSeconds: 30
+    #   successThreshold: 1
+    #   timeoutSeconds: 60
+    #   exec:
+    #     command:
+    #       - /bin/sh
+    #       - -c
+    #       - mongosh --port $MONGODB_PORT_NUMBER --quiet --eval "db.adminCommand('ping')"
+    # customReadinessProbe:
+    #   failureThreshold: 6
+    #   initialDelaySeconds: 30
+    #   periodSeconds: 30
+    #   successThreshold: 1
+    #   timeoutSeconds: 60
+    #   exec:
+    #     command:
+    #       - /bin/sh
+    #       - -c
+    #       - mongosh --port $MONGODB_PORT_NUMBER --quiet --eval "db.adminCommand('ping')"
+    livenessProbe:
+      enabled: false
+    readinessProbe:
+      enabled: false
+    startupProbe:
+      enabled: false
+
+  # Configuration for Prometheus monitoring
+  metrics:
+    enabled: true
+    namespace: monitoring
+    podMonitor:
+      enabled: false

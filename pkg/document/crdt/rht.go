@@ -29,26 +29,16 @@ type RHTNode struct {
 	key       string
 	val       string
 	updatedAt *time.Ticket
-	removedAt *time.Ticket
+	isRemoved bool
 }
 
-func newRHTNode(key, val string, updatedAt *time.Ticket) *RHTNode {
+func newRHTNode(key, val string, updatedAt *time.Ticket, isRemoved bool) *RHTNode {
 	return &RHTNode{
 		key:       key,
 		val:       val,
 		updatedAt: updatedAt,
+		isRemoved: isRemoved,
 	}
-}
-
-// Remove removes this node. It only marks the deleted time (tombstone).
-func (n *RHTNode) Remove(removedAt *time.Ticket) {
-	if n.removedAt == nil || removedAt.After(n.removedAt) {
-		n.removedAt = removedAt
-	}
-}
-
-func (n *RHTNode) isRemoved() bool {
-	return n.removedAt != nil
 }
 
 // Key returns the key of this node.
@@ -66,28 +56,26 @@ func (n *RHTNode) UpdatedAt() *time.Ticket {
 	return n.updatedAt
 }
 
-// RemovedAt returns the deletion time of this node.
-func (n *RHTNode) RemovedAt() *time.Ticket {
-	return n.removedAt
-}
-
 // RHT is a hashtable with logical clock(Replicated hashtable).
 // For more details about RHT: http://csl.skku.edu/papers/jpdc11.pdf
+// NOTE(justiceHui): RHT and ElementRHT has duplicated functions.
 type RHT struct {
-	nodeMapByKey map[string]*RHTNode
+	nodeMapByKey           map[string]*RHTNode
+	numberOfRemovedElement int
 }
 
 // NewRHT creates a new instance of RHT.
 func NewRHT() *RHT {
 	return &RHT{
-		nodeMapByKey: make(map[string]*RHTNode),
+		nodeMapByKey:           make(map[string]*RHTNode),
+		numberOfRemovedElement: 0,
 	}
 }
 
 // Get returns the value of the given key.
 func (rht *RHT) Get(key string) string {
 	if node, ok := rht.nodeMapByKey[key]; ok {
-		if node.isRemoved() {
+		if node.isRemoved {
 			return ""
 		}
 		return node.val
@@ -99,7 +87,7 @@ func (rht *RHT) Get(key string) string {
 // Has returns whether the element exists of the given key or not.
 func (rht *RHT) Has(key string) bool {
 	if node, ok := rht.nodeMapByKey[key]; ok {
-		return node != nil && !node.isRemoved()
+		return node != nil && !node.isRemoved
 	}
 
 	return false
@@ -108,15 +96,35 @@ func (rht *RHT) Has(key string) bool {
 // Set sets the value of the given key.
 func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
-		newNode := newRHTNode(k, v, executedAt)
+		if node != nil && node.isRemoved {
+			rht.numberOfRemovedElement--
+		}
+		newNode := newRHTNode(k, v, executedAt, false)
 		rht.nodeMapByKey[k] = newNode
 	}
 }
 
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
-	if node, ok := rht.nodeMapByKey[k]; ok && executedAt.After(node.removedAt) {
-		node.Remove(executedAt)
+	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
+		// NOTE(justiceHui): Even if key is not existed, we must set flag `isRemoved` for concurrency
+		if node == nil {
+			rht.numberOfRemovedElement++
+			newNode := newRHTNode(k, ``, executedAt, true)
+			rht.nodeMapByKey[k] = newNode
+			return ""
+		}
+
+		alreadyRemoved := node.isRemoved
+		if !alreadyRemoved {
+			rht.numberOfRemovedElement++
+		}
+		newNode := newRHTNode(k, node.val, executedAt, true)
+		rht.nodeMapByKey[k] = newNode
+
+		if alreadyRemoved {
+			return ""
+		}
 		return node.val
 	}
 
@@ -128,7 +136,7 @@ func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 func (rht *RHT) Elements() map[string]string {
 	members := make(map[string]string)
 	for _, node := range rht.nodeMapByKey {
-		if !node.isRemoved() {
+		if !node.isRemoved {
 			members[node.key] = node.val
 		}
 	}
@@ -141,7 +149,9 @@ func (rht *RHT) Elements() map[string]string {
 func (rht *RHT) Nodes() []*RHTNode {
 	var nodes []*RHTNode
 	for _, node := range rht.nodeMapByKey {
-		nodes = append(nodes, node)
+		if !node.isRemoved {
+			nodes = append(nodes, node)
+		}
 	}
 
 	return nodes
@@ -149,7 +159,7 @@ func (rht *RHT) Nodes() []*RHTNode {
 
 // Len returns the number of elements.
 func (rht *RHT) Len() int {
-	return len(rht.nodeMapByKey)
+	return len(rht.nodeMapByKey) - rht.numberOfRemovedElement
 }
 
 // DeepCopy copies itself deeply.

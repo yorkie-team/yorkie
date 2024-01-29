@@ -30,11 +30,15 @@ type Text struct {
 }
 
 // NewText creates a new instance of Text.
-func NewText(ctx *change.Context, text *crdt.Text) *Text {
-	return &Text{
-		Text:    text,
-		context: ctx,
-	}
+func NewText() *Text {
+	return &Text{}
+}
+
+// Initialize initializes the Text by the given context and text.
+func (p *Text) Initialize(ctx *change.Context, text *crdt.Text) *Text {
+	p.Text = text
+	p.context = ctx
+	return p
 }
 
 // CreateRange creates a range from the given positions.

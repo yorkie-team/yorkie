@@ -26,6 +26,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
 	"github.com/yorkie-team/yorkie/server/users"
@@ -161,15 +162,23 @@ func (i *AdminAuthInterceptor) authenticate(
 		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 	}
 
+	// NOTE(raararaara): If the token is access token, return the user of the token.
 	claims, err := i.tokenManager.Verify(authorization)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
+	if err == nil {
+		user, err := users.GetUserByName(ctx, i.backend, claims.Username)
+		if err == nil {
+			return user, nil
+		}
 	}
 
-	user, err := users.GetUser(ctx, i.backend, claims.Username)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
+	// NOTE(raararaara): If the token is secret key, return the owner of the project.
+	project, err := projects.GetProjectFromSecretKey(ctx, i.backend, authorization)
+	if err == nil {
+		user, err := users.GetUserByID(ctx, i.backend, project.Owner)
+		if err == nil {
+			return user, nil
+		}
 	}
 
-	return user, nil
+	return nil, connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
 }

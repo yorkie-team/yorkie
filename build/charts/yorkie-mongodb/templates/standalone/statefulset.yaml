@@ -1,4 +1,4 @@
-{{ if .Values.enabled -}}
+{{ if not .Values.sharded.enabled -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -25,7 +25,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: mongodb
-          image: mongo:4.4.1
+          image: {{ printf "%s/%s:%s" $.Values.image.registry $.Values.image.repository $.Values.image.tag }}
           ports:
             - containerPort: {{ .Values.port }}
           volumeMounts:
@@ -39,8 +39,8 @@ spec:
         name: {{ .Values.name }}-storage
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: {{ .Values.storageClassName }}
+        storageClassName: {{ .Values.persistence.storageClass }}
         resources:
           requests:
-            storage: {{ .Values.storageSize }}
+            storage: {{ .Values.persistence.dataSize }}
 {{ end }}

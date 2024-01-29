@@ -581,17 +581,6 @@ func handleResponse(
 	return nil, ErrUnsupportedWatchResponseType
 }
 
-// FindDocKey returns the document key of the given document id.
-func (c *Client) FindDocKey(docID string) (key.Key, error) {
-	for _, attachment := range c.attachments {
-		if attachment.docID.String() == docID {
-			return attachment.doc.Key(), nil
-		}
-	}
-
-	return "", ErrDocumentNotAttached
-}
-
 // ID returns the ID of this client.
 func (c *Client) ID() *time.ActorID {
 	return c.id

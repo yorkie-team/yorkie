@@ -700,11 +700,9 @@ func TestTree(t *testing.T) {
 	})
 
 	t.Run("set attributes test", func(t *testing.T) {
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
+		doc := document.New(helper.TestDocKey(t))
 
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &json.TreeNode{
 				Type: "root",
 				Children: []json.TreeNode{
@@ -714,24 +712,84 @@ func TestTree(t *testing.T) {
 			})
 			return nil
 		}))
-		assert.NoError(t, c1.Sync(ctx))
-		assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, doc.Root().GetTree("t").ToXML())
 
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			// NOTE(sejongk): 0, 4 -> 0,1 / 3,4
 			root.GetTree("t").Style(0, 4, map[string]string{"bold": "true"})
 			return nil
 		}))
+		assert.Equal(t, `<root><p bold="true">ab</p><p italic="true">cd</p></root>`, doc.Root().GetTree("t").ToXML())
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{"bold":"true"}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{"italic":"true"}}]}`, doc.Root().GetTree("t").Marshal())
+	})
 
-		assert.NoError(t, c1.Sync(ctx))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+	t.Run("remove attributes test", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
 
-		assert.Equal(t, `<root><p bold="true">ab</p><p italic="true">cd</p></root>`, d1.Root().GetTree("t").ToXML())
-		assert.Equal(t, `<root><p bold="true">ab</p><p italic="true">cd</p></root>`, d2.Root().GetTree("t").ToXML())
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				},
+			})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, doc.Root().GetTree("t").ToXML())
 
-		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{"bold":"true"}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{"italic":"true"}}]}`, d1.Root().GetTree("t").Marshal())
-		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}],"attributes":{"bold":"true"}},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{"italic":"true"}}]}`, d2.Root().GetTree("t").Marshal())
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyle(4, 8, []string{"italic"})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, doc.Root().GetTree("t").ToXML())
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}]},{"type":"p","children":[{"type":"text","value":"cd"}]}]}`, doc.Root().GetTree("t").Marshal())
+
+		// remove not exist style
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyle(4, 8, []string{"bold"})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, doc.Root().GetTree("t").ToXML())
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}]},{"type":"p","children":[{"type":"text","value":"cd"}]}]}`, doc.Root().GetTree("t").Marshal())
+	})
+
+	t.Run("set/remove style without any attributes", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				},
+			})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, doc.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			// NOTE(sejongk): 0, 4 -> 0,1 / 3,4
+			root.GetTree("t").Style(0, 4, map[string]string{})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, doc.Root().GetTree("t").ToXML())
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}]},{"type":"p","children":[{"type":"text","value":"cd"}],"attributes":{"italic":"true"}}]}`, doc.Root().GetTree("t").Marshal())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyle(4, 8, []string{"italic"})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, doc.Root().GetTree("t").ToXML())
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}]},{"type":"p","children":[{"type":"text","value":"cd"}]}]}`, doc.Root().GetTree("t").Marshal())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyle(4, 8, []string{})
+			return nil
+		}))
+		assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, doc.Root().GetTree("t").ToXML())
+		assert.Equal(t, `{"type":"root","children":[{"type":"p","children":[{"type":"text","value":"ab"}]},{"type":"p","children":[{"type":"text","value":"cd"}]}]}`, doc.Root().GetTree("t").Marshal())
 	})
 
 	// Concurrent editing, overlapping range test
@@ -811,6 +869,131 @@ func TestTree(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, "<root><p></p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("overlapping-merge-and-merge", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(5, 7, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>bc</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>abc</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("overlapping-merge-and-delete-element-node", func(t *testing.T) {
+		t.Skip("remove this after supporting concurrent merge and split")
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 6, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>a</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("overlapping-merge-and-delete-text-nodes", func(t *testing.T) {
+		t.Skip("remove this after supporting concurrent merge and split")
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "bcde"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>bcde</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>bcde</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(4, 6, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>abcde</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>de</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ade</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	// Concurrent editing, contained range test
@@ -1121,6 +1304,648 @@ func TestTree(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, "<root></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-split-and-split-at-the-same-position", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>a</p><p></p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-split-and-split-at-diffrent-positions-on-the-same-node", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "abc"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>abc</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>abc</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 3, nil, 1)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>bc</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-split-and-split-at-different-levels", func(t *testing.T) {
+		t.Skip("remove this after supporting concurrent merge and split")
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:     "p",
+						Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+					}, {
+						Type:     "p",
+						Children: []json.TreeNode{{Type: "text", Value: "c"}},
+					}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p><p>ab</p><p>c</p></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p><p>ab</p><p>c</p></p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 3, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(5, 5, nil, 1)
+			return nil
+		}))
+		assert.Equal(t, "<root><p><p>a</p><p>b</p><p>c</p></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p><p>ab</p></p><p><p>c</p></p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p><p>a</p><p>b</p></p><p><p>c</p></p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-split-and-insert-into-the-split-position", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, &json.TreeNode{Type: "text", Value: "c"}, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>acb</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ac</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-split-and-insert-into-original-node", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 1, &json.TreeNode{Type: "text", Value: "c"}, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>cab</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ca</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-split-and-insert-into-split-node", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 3, &json.TreeNode{Type: "text", Value: "c"}, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>abc</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>a</p><p>bc</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-split-and-delete-contents-in-split-node", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 3, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>a</p><p></p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-split-and-delete-the-whole-original-and-split-nodes", func(t *testing.T) {
+		t.Skip("remove this after supporting concurrent merge and split")
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 4, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-merge-and-merge-at-different-levels", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:     "p",
+						Children: []json.TreeNode{{Type: "text", Value: "a"}},
+					}, {
+						Type:     "p",
+						Children: []json.TreeNode{{Type: "text", Value: "b"}},
+					}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p><p>a</p><p>b</p></p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p><p>a</p><p>b</p></p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 5, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(7, 9, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p><p>ab</p></p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p><p>a</p><p>b</p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p><p>ab</p>c</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-merge-and-merge-at-the-same-level", func(t *testing.T) {
+		t.Skip("remove this after supporting concurrent merge and split")
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 7, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(5, 7, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ac</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>bc</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ac</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-merge-and-insert", func(t *testing.T) {
+		t.Skip("remove this after supporting concurrent merge and split")
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(4, 4, &json.TreeNode{Type: "text", Value: "c"}, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>cb</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>acb</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-merge-and-delete-the-whole", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 6, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-merge-and-delete-contents-in-merged-node", func(t *testing.T) {
+		t.Skip("remove this after supporting concurrent merge and split")
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "bc"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>bc</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>bc</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(4, 5, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>abc</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ac</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-merge-and-delete-sub-range-in-merged-range", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 7, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 6, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ac</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ac</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-merge-and-split-merged-node", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "bc"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>bc</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>bc</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(5, 5, nil, 1)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>abc</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("contained-merge-and-split-at-multi-levels", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:     "p",
+						Children: []json.TreeNode{{Type: "text", Value: "a"}},
+					}, {
+						Type:     "p",
+						Children: []json.TreeNode{{Type: "text", Value: "b"}},
+					}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p><p>a</p><p>b</p></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p><p>a</p><p>b</p></p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(3, 5, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(4, 4, nil, 1)
+			return nil
+		}))
+		assert.Equal(t, "<root><p><p>ab</p></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p><p>a</p></p><p><p>b</p></p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p><p>ab</p></p><p></p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	// Concurrent editing, side by side range test
@@ -1674,6 +2499,303 @@ func TestTree(t *testing.T) {
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 		assert.Equal(t, "<root><p>12</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("side-by-side-split-and-split", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "cd"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(6, 6, nil, 1)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>cd</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p><p>c</p><p>d</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p><p>d</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("side-by-side-split-and-insert", func(t *testing.T) {
+		t.Skip("remove this after supporting concurrent merge and split")
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(4, 4, &json.TreeNode{
+				Type:     "p",
+				Children: []json.TreeNode{{Type: "text", Value: "c"}},
+			}, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("side-by-side-split-and-delete", func(t *testing.T) {
+		t.Skip("remove this after supporting concurrent merge and split")
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "ab"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 2, nil, 1)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(4, 7, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>ab</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("side-by-side-split-and-delete", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "d"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p><p>d</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p><p>d</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(8, 10, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p><p>c</p><p>d</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>cd</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("side-by-side-merge-and-insert", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(6, 6, &json.TreeNode{
+				Type:     "p",
+				Children: []json.TreeNode{{Type: "text", Value: "c"}},
+			}, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("side-by-side-merge-and-delete", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "c"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(6, 9, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p><p>c</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ab</p></root>", d1.Root().GetTree("t").ToXML())
+	})
+
+	t.Run("side-by-side-merge-and-split", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "a"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "b"}},
+				}, {
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "cd"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>cd</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>cd</p></root>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 4, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(8, 8, nil, 1)
+			return nil
+		}))
+		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>a</p><p>b</p><p>c</p><p>d</p></root>", d2.Root().GetTree("t").ToXML())
+
+		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+		assert.Equal(t, "<root><p>ab</p><p>c</p><p>d</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	// Concurrent editing, complex cases test

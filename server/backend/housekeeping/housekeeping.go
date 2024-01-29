@@ -209,7 +209,7 @@ func (h *Housekeeping) deactivateCandidates(
 		}
 	}()
 
-	lastProjectID, candidates, err := h.database.FindDeactivateCandidates(
+	lastProjectID, candidates, err := h.FindDeactivateCandidates(
 		ctx,
 		h.candidatesLimitPerProject,
 		h.projectFetchSize,
@@ -224,8 +224,7 @@ func (h *Housekeeping) deactivateCandidates(
 		if _, err := clients.Deactivate(
 			ctx,
 			h.database,
-			clientInfo.ProjectID,
-			clientInfo.ID,
+			clientInfo.RefKey(),
 		); err != nil {
 			return database.DefaultProjectID, err
 		}
@@ -243,4 +242,36 @@ func (h *Housekeeping) deactivateCandidates(
 	}
 
 	return lastProjectID, nil
+}
+
+// FindDeactivateCandidates finds the housekeeping candidates.
+func (h *Housekeeping) FindDeactivateCandidates(
+	ctx context.Context,
+	candidatesLimitPerProject int,
+	projectFetchSize int,
+	lastProjectID types.ID,
+) (types.ID, []*database.ClientInfo, error) {
+	projects, err := h.database.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
+	if err != nil {
+		return database.DefaultProjectID, nil, err
+	}
+
+	var candidates []*database.ClientInfo
+	for _, project := range projects {
+		infos, err := h.database.FindDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		if err != nil {
+			return database.DefaultProjectID, nil, err
+		}
+
+		candidates = append(candidates, infos...)
+	}
+
+	var topProjectID types.ID
+	if len(projects) < projectFetchSize {
+		topProjectID = database.DefaultProjectID
+	} else {
+		topProjectID = projects[len(projects)-1].ID
+	}
+
+	return topProjectID, candidates, nil
 }

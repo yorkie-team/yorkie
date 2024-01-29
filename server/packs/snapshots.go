@@ -34,7 +34,12 @@ func storeSnapshot(
 	minSyncedTicket *time.Ticket,
 ) error {
 	// 01. get the closest snapshot's metadata of this docInfo
-	snapshotMetadata, err := be.DB.FindClosestSnapshotInfo(ctx, docInfo.ID, docInfo.ServerSeq, false)
+	docRefKey := docInfo.RefKey()
+	snapshotMetadata, err := be.DB.FindClosestSnapshotInfo(
+		ctx,
+		docRefKey,
+		docInfo.ServerSeq,
+		false)
 	if err != nil {
 		return err
 	}
@@ -48,7 +53,7 @@ func storeSnapshot(
 	// 02. retrieve the changes between last snapshot and current docInfo
 	changes, err := be.DB.FindChangesBetweenServerSeqs(
 		ctx,
-		docInfo.ID,
+		docRefKey,
 		snapshotMetadata.ServerSeq+1,
 		docInfo.ServerSeq,
 	)
@@ -59,7 +64,10 @@ func storeSnapshot(
 	// 03. create document instance of the docInfo
 	snapshotInfo := snapshotMetadata
 	if snapshotMetadata.ID != "" {
-		snapshotInfo, err = be.DB.FindSnapshotInfoByID(ctx, snapshotInfo.ID)
+		snapshotInfo, err = be.DB.FindSnapshotInfoByRefKey(
+			ctx,
+			snapshotInfo.RefKey(),
+		)
 		if err != nil {
 			return err
 		}
@@ -88,7 +96,11 @@ func storeSnapshot(
 	}
 
 	// 04. save the snapshot of the docInfo
-	if err := be.DB.CreateSnapshotInfo(ctx, docInfo.ID, doc); err != nil {
+	if err := be.DB.CreateSnapshotInfo(
+		ctx,
+		docRefKey,
+		doc,
+	); err != nil {
 		return err
 	}
 
@@ -96,7 +108,7 @@ func storeSnapshot(
 	if be.Config.SnapshotWithPurgingChanges {
 		if err := be.DB.PurgeStaleChanges(
 			ctx,
-			docInfo.ID,
+			docRefKey,
 		); err != nil {
 			logging.From(ctx).Error(err)
 		}

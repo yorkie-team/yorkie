@@ -65,16 +65,25 @@ type TreeNode struct {
 // Tree is a CRDT-based tree structure that is used to represent the document
 // tree of text-based editor such as ProseMirror.
 type Tree struct {
+	initialRoot *TreeNode
 	*crdt.Tree
 	context *change.Context
 }
 
 // NewTree creates a new instance of Tree.
-func NewTree(ctx *change.Context, tree *crdt.Tree) *Tree {
-	return &Tree{
-		Tree:    tree,
-		context: ctx,
+func NewTree(root ...*TreeNode) *Tree {
+	var t Tree
+	if len(root) > 0 {
+		t.initialRoot = root[0]
 	}
+	return &t
+}
+
+// Initialize initializes the Tree by the given context and tree.
+func (t *Tree) Initialize(ctx *change.Context, tree *crdt.Tree) *Tree {
+	t.Tree = tree
+	t.context = ctx
+	return t
 }
 
 // validateTextNode make sure that text node have non-empty string value
@@ -198,6 +207,10 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 		panic("from should be less than or equal to to")
 	}
 
+	if len(attributes) == 0 {
+		return true
+	}
+
 	fromPos, err := t.Tree.FindPos(fromIdx)
 	if err != nil {
 		panic(err)
@@ -217,6 +230,41 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 		fromPos,
 		toPos,
 		attributes,
+		ticket,
+	))
+
+	return true
+}
+
+// RemoveStyle sets the attributes to the elements of the given range.
+func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool {
+	if fromIdx > toIdx {
+		panic("from should be less than or equal to to")
+	}
+
+	if len(attributesToRemove) == 0 {
+		return true
+	}
+
+	fromPos, err := t.Tree.FindPos(fromIdx)
+	if err != nil {
+		panic(err)
+	}
+	toPos, err := t.Tree.FindPos(toIdx)
+	if err != nil {
+		panic(err)
+	}
+
+	ticket := t.context.IssueTimeTicket()
+	if err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket); err != nil {
+		panic(err)
+	}
+
+	t.context.Push(operations.NewTreeStyleRemove(
+		t.CreatedAt(),
+		fromPos,
+		toPos,
+		attributesToRemove,
 		ticket,
 	))
 

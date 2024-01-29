@@ -511,6 +511,16 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 		return nil, err
 	}
 
+	if len(pbTreeStyle.AttributesToRemove) > 0 {
+		return operations.NewTreeStyleRemove(
+			parentCreatedAt,
+			from,
+			to,
+			pbTreeStyle.AttributesToRemove,
+			executedAt,
+		), nil
+	}
+
 	return operations.NewTreeStyle(
 		parentCreatedAt,
 		from,

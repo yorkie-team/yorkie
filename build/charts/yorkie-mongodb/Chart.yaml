@@ -1,0 +1,20 @@
+apiVersion: v2
+name: yorkie-mongodb
+description: yorkie-mongodb provides the deployment of MongoDB for the yorkie server, supporting both standalone mode and sharded cluster mode.
+type: application
+icon: https://raw.githubusercontent.com/yorkie-team/yorkie-team.github.io/main/public/favicon-512x512.png
+maintainers:
+  - name: hackerwins
+    email: susukang98@gmail.com
+  - name: krapie
+    email: krapi0314@gmail.com
+
+version: 0.4.13
+appVersion: "0.4.13"
+kubeVersion: ">=1.23.0-0"
+
+dependencies:
+  - name: mongodb-sharded
+    version: "7.2.2"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: sharded.enabled

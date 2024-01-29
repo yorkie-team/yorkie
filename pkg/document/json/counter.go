@@ -28,18 +28,28 @@ import (
 // it is used when the user manipulates the counter from the outside.
 type Counter struct {
 	*crdt.Counter
-	context *change.Context
+	context   *change.Context
+	valueType crdt.CounterType
+	value     interface{}
 }
 
-// NewCounter create Counter instance.
-func NewCounter(ctx *change.Context, counter *crdt.Counter) *Counter {
+// NewCounter creates a new instance of Counter.
+func NewCounter(n interface{}, t crdt.CounterType) *Counter {
+	return &Counter{
+		valueType: t,
+		value:     n,
+	}
+}
+
+// Initialize initializes the Counter by the given context and counter.
+func (p *Counter) Initialize(ctx *change.Context, counter *crdt.Counter) *Counter {
 	if !counter.IsNumericType() {
 		panic("unsupported type")
 	}
-	return &Counter{
-		Counter: counter,
-		context: ctx,
-	}
+	p.Counter = counter
+	p.context = ctx
+
+	return p
 }
 
 // Increase adds an increase operations.

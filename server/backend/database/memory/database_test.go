@@ -36,6 +36,14 @@ func TestDB(t *testing.T) {
 	db, err := memory.New()
 	assert.NoError(t, err)
 
+	t.Run("FindNextNCyclingProjectInfos test", func(t *testing.T) {
+		testcases.RunFindNextNCyclingProjectInfosTest(t, db)
+	})
+
+	t.Run("FindDeactivateCandidatesPerProject test", func(t *testing.T) {
+		testcases.RunFindDeactivateCandidatesPerProjectTest(t, db)
+	})
+
 	t.Run("RunFindDocInfo test", func(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, db, projectID)
 	})
@@ -54,6 +62,18 @@ func TestDB(t *testing.T) {
 
 	t.Run("ListUserInfos test", func(t *testing.T) {
 		testcases.RunListUserInfosTest(t, db)
+	})
+
+	t.Run("FindUserInfoByID test", func(t *testing.T) {
+		testcases.RunFindUserInfoByIDTest(t, db)
+	})
+
+	t.Run("FindUserInfoByName test", func(t *testing.T) {
+		testcases.RunFindUserInfoByNameTest(t, db)
+	})
+
+	t.Run("FindProjectInfoBySecretKey test", func(t *testing.T) {
+		testcases.RunFindProjectInfoBySecretKeyTest(t, db)
 	})
 
 	t.Run("FindProjectInfoByName test", func(t *testing.T) {
