@@ -28,6 +28,8 @@ import (
 
 func TestClientInfo(t *testing.T) {
 	dummyDocID := types.ID("000000000000000000000000")
+	dummyProjectID := types.ID("000000000000000000000000")
+	otherProjectID := types.ID("000000000000000000000001")
 
 	t.Run("attach/detach document test", func(t *testing.T) {
 		clientInfo := database.ClientInfo{
@@ -61,7 +63,6 @@ func TestClientInfo(t *testing.T) {
 	})
 
 	t.Run("check if in project test", func(t *testing.T) {
-		dummyProjectID := types.ID("000000000000000000000000")
 		clientInfo := database.ClientInfo{
 			ProjectID: dummyProjectID,
 		}
@@ -71,8 +72,6 @@ func TestClientInfo(t *testing.T) {
 	})
 
 	t.Run("check if in project error test", func(t *testing.T) {
-		dummyProjectID := types.ID("000000000000000000000000")
-		otherProjectID := types.ID("000000000000000000000001")
 		clientInfo := database.ClientInfo{
 			ProjectID: dummyProjectID,
 		}
@@ -117,7 +116,6 @@ func TestClientInfo(t *testing.T) {
 		clientInfo := database.ClientInfo{
 			Status: database.ClientActivated,
 		}
-
 		err := clientInfo.DetachDocument(dummyDocID)
 		assert.ErrorIs(t, err, database.ErrDocumentNotAttached)
 	})
@@ -126,7 +124,6 @@ func TestClientInfo(t *testing.T) {
 		clientInfo := database.ClientInfo{
 			Status: database.ClientActivated,
 		}
-
 		_, err := clientInfo.IsAttached(dummyDocID)
 		assert.ErrorIs(t, err, database.ErrDocumentNeverAttached)
 

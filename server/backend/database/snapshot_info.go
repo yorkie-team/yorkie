@@ -27,6 +27,9 @@ type SnapshotInfo struct {
 	// ID is the unique ID of the snapshot.
 	ID types.ID `bson:"_id"`
 
+	// ProjectID is the ID of the project which the snapshot belongs to.
+	ProjectID types.ID `bson:"project_id"`
+
 	// DocID is the ID of the document which the snapshot belongs to.
 	DocID types.ID `bson:"doc_id"`
 
@@ -51,10 +54,22 @@ func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 
 	return &SnapshotInfo{
 		ID:        i.ID,
+		ProjectID: i.ProjectID,
 		DocID:     i.DocID,
 		ServerSeq: i.ServerSeq,
 		Lamport:   i.Lamport,
 		Snapshot:  i.Snapshot,
 		CreatedAt: i.CreatedAt,
+	}
+}
+
+// RefKey returns the refKey of the snapshot.
+func (i *SnapshotInfo) RefKey() types.SnapshotRefKey {
+	return types.SnapshotRefKey{
+		DocRefKey: types.DocRefKey{
+			ProjectID: i.ProjectID,
+			DocID:     i.DocID,
+		},
+		ServerSeq: i.ServerSeq,
 	}
 }

@@ -327,7 +327,11 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		}
 	}()
 
-	if err := documents.RemoveDocument(ctx, s.backend, project, docInfo.ID, req.Msg.Force); err != nil {
+	if err := documents.RemoveDocument(
+		ctx, s.backend,
+		docInfo.RefKey(),
+		req.Msg.Force,
+	); err != nil {
 		return nil, err
 	}
 
@@ -337,9 +341,9 @@ func (s *adminServer) RemoveDocumentByAdmin(
 		ctx,
 		publisherID,
 		sync.DocEvent{
-			Type:       types.DocumentChangedEvent,
-			Publisher:  publisherID,
-			DocumentID: docInfo.ID,
+			Type:           types.DocumentChangedEvent,
+			Publisher:      publisherID,
+			DocumentRefKey: docInfo.RefKey(),
 		},
 	)
 

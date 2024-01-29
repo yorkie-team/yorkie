@@ -121,11 +121,11 @@ type Database interface {
 		hashedPassword string,
 	) (*UserInfo, error)
 
-	// FindUserInfo returns a user by the given username.
-	FindUserInfo(ctx context.Context, username string) (*UserInfo, error)
-
-	// FindUserInfoByID finds a user by the given id.
+	// FindUserInfoByID returns a user by the given ID.
 	FindUserInfoByID(ctx context.Context, id types.ID) (*UserInfo, error)
+
+	// FindUserInfoByName returns a user by the given username.
+	FindUserInfoByName(ctx context.Context, username string) (*UserInfo, error)
 
 	// ListUserInfos returns all users.
 	ListUserInfos(ctx context.Context) ([]*UserInfo, error)
@@ -133,11 +133,11 @@ type Database interface {
 	// ActivateClient activates the client of the given key.
 	ActivateClient(ctx context.Context, projectID types.ID, key string) (*ClientInfo, error)
 
-	// DeactivateClient deactivates the client of the given ID.
-	DeactivateClient(ctx context.Context, projectID, clientID types.ID) (*ClientInfo, error)
+	// DeactivateClient deactivates the client of the given refKey.
+	DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
 
-	// FindClientInfoByID finds the client of the given ID.
-	FindClientInfoByID(ctx context.Context, projectID, clientID types.ID) (*ClientInfo, error)
+	// FindClientInfoByRefKey finds the client of the given refKey.
+	FindClientInfoByRefKey(ctx context.Context, refKey types.ClientRefKey) (*ClientInfo, error)
 
 	// UpdateClientInfoAfterPushPull updates the client from the given clientInfo
 	// after handling PushPull.
@@ -169,24 +169,21 @@ type Database interface {
 	// exist.
 	FindDocInfoByKeyAndOwner(
 		ctx context.Context,
-		projectID types.ID,
-		clientID types.ID,
+		clientRefKey types.ClientRefKey,
 		docKey key.Key,
 		createDocIfNotExist bool,
 	) (*DocInfo, error)
 
-	// FindDocInfoByID finds the document of the given ID.
-	FindDocInfoByID(
+	// FindDocInfoByRefKey finds the document of the given refKey.
+	FindDocInfoByRefKey(
 		ctx context.Context,
-		projectID types.ID,
-		id types.ID,
+		refKey types.DocRefKey,
 	) (*DocInfo, error)
 
 	// UpdateDocInfoStatusToRemoved updates the document status to removed.
 	UpdateDocInfoStatusToRemoved(
 		ctx context.Context,
-		projectID types.ID,
-		docID types.ID,
+		refKey types.DocRefKey,
 	) error
 
 	// CreateChangeInfos stores the given changes then updates the given docInfo.
@@ -203,13 +200,13 @@ type Database interface {
 	// save storage.
 	PurgeStaleChanges(
 		ctx context.Context,
-		docID types.ID,
+		docRefKey types.DocRefKey,
 	) error
 
 	// FindChangesBetweenServerSeqs returns the changes between two server sequences.
 	FindChangesBetweenServerSeqs(
 		ctx context.Context,
-		docID types.ID,
+		docRefKey types.DocRefKey,
 		from int64,
 		to int64,
 	) ([]*change.Change, error)
@@ -217,34 +214,44 @@ type Database interface {
 	// FindChangeInfosBetweenServerSeqs returns the changeInfos between two server sequences.
 	FindChangeInfosBetweenServerSeqs(
 		ctx context.Context,
-		docID types.ID,
+		docRefKey types.DocRefKey,
 		from int64,
 		to int64,
 	) ([]*ChangeInfo, error)
 
 	// CreateSnapshotInfo stores the snapshot of the given document.
-	CreateSnapshotInfo(ctx context.Context, docID types.ID, doc *document.InternalDocument) error
+	CreateSnapshotInfo(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+		doc *document.InternalDocument,
+	) error
 
-	// FindSnapshotInfoByID returns the snapshot by the given id.
-	FindSnapshotInfoByID(ctx context.Context, id types.ID) (*SnapshotInfo, error)
+	// FindSnapshotInfoByRefKey returns the snapshot by the given refKey.
+	FindSnapshotInfoByRefKey(
+		ctx context.Context,
+		refKey types.SnapshotRefKey,
+	) (*SnapshotInfo, error)
 
 	// FindClosestSnapshotInfo finds the closest snapshot info in a given serverSeq.
 	FindClosestSnapshotInfo(
 		ctx context.Context,
-		docID types.ID,
+		docRefKey types.DocRefKey,
 		serverSeq int64,
 		includeSnapshot bool,
 	) (*SnapshotInfo, error)
 
 	// FindMinSyncedSeqInfo finds the minimum synced sequence info.
-	FindMinSyncedSeqInfo(ctx context.Context, docID types.ID) (*SyncedSeqInfo, error)
+	FindMinSyncedSeqInfo(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+	) (*SyncedSeqInfo, error)
 
 	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 	// and returns the min synced ticket.
 	UpdateAndFindMinSyncedTicket(
 		ctx context.Context,
 		clientInfo *ClientInfo,
-		docID types.ID,
+		docRefKey types.DocRefKey,
 		serverSeq int64,
 	) (*time.Ticket, error)
 
@@ -252,7 +259,7 @@ type Database interface {
 	UpdateSyncedSeq(
 		ctx context.Context,
 		clientInfo *ClientInfo,
-		docID types.ID,
+		docRefKey types.DocRefKey,
 		serverSeq int64,
 	) error
 
@@ -274,8 +281,7 @@ type Database interface {
 	// IsDocumentAttached returns true if the document is attached to clients.
 	IsDocumentAttached(
 		ctx context.Context,
-		projectID types.ID,
-		docID types.ID,
+		docRefKey types.DocRefKey,
 		excludeClientID types.ID,
 	) (bool, error)
 }

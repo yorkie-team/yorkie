@@ -163,8 +163,7 @@ func (h *Housekeeping) deactivateCandidates(
 		if _, err := clients.Deactivate(
 			ctx,
 			h.database,
-			clientInfo.ProjectID,
-			clientInfo.ID,
+			clientInfo.RefKey(),
 		); err != nil {
 			return database.DefaultProjectID, err
 		}

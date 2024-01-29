@@ -1,0 +1,121 @@
+version: '3'
+services:
+
+  # Config Server
+  config1:
+    image: mongo:6.0
+    container_name: mongo-config1
+    command: mongod --port 27017 --configsvr --replSet config-rs --bind_ip_all
+    volumes:
+      - ./scripts:/scripts
+    ports:
+      - 27100:27017
+    restart: always
+    networks:
+      - sharding
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--host",
+          "config1",
+          "--port",
+          "27017",
+          "--quiet",
+          "--eval",
+          "'db.runCommand(\"ping\").ok'"
+        ]
+      interval: 30s
+
+  # Shards
+  # Shards 1
+  shard1-1:
+    image: mongo:6.0
+    container_name: mongo-shard1-1
+    command: mongod --port 27017 --shardsvr --replSet shard-rs-1 --bind_ip_all
+    volumes:
+      - ./scripts:/scripts
+    ports:
+      - 27110:27017
+    restart: always
+    networks:
+      - sharding
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--host",
+          "shard1-1",
+          "--port",
+          "27017",
+          "--quiet",
+          "--eval",
+          "'db.runCommand(\"ping\").ok'"
+        ]
+      interval: 30s
+
+  # Shards 2
+  shard2-1:
+    image: mongo:6.0
+    container_name: mongo-shard2-1
+    command: mongod --port 27017 --shardsvr --replSet shard-rs-2 --bind_ip_all
+    volumes:
+      - ./scripts:/scripts
+    ports:
+      - 27113:27017
+    restart: always
+    networks:
+      - sharding
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--host",
+          "shard2-1",
+          "--port",
+          "27017",
+          "--quiet",
+          "--eval",
+          "'db.runCommand(\"ping\").ok'"
+        ]
+      interval: 30s
+
+  # Mongos
+  mongos1:
+    image: mongo:6.0
+    container_name: mongos1
+    command: mongos --port 27017 --configdb config-rs/config1:27017 --bind_ip_all
+    ports:
+      - 27017:27017
+    restart: always
+    volumes:
+      - ./scripts:/scripts
+    networks:
+      - sharding
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--host",
+          "mongos1",
+          "--port",
+          "27017",
+          "--quiet",
+          "--eval",
+          "'db.runCommand(\"ping\").ok'"
+        ]
+      interval: 30s
+    depends_on:
+      config1:
+        condition: service_healthy
+      shard1-1:
+        condition: service_healthy
+      shard2-1:
+        condition: service_healthy
+
+networks:
+  sharding:

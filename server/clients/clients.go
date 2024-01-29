@@ -22,7 +22,6 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
@@ -48,20 +47,15 @@ func Activate(
 func Deactivate(
 	ctx context.Context,
 	db database.Database,
-	projectID types.ID,
-	clientID types.ID,
+	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	clientInfo, err := db.FindClientInfoByID(
-		ctx,
-		projectID,
-		clientID,
-	)
+	clientInfo, err := db.FindClientInfoByRefKey(ctx, refKey)
 	if err != nil {
 		return nil, err
 	}
 
-	for id, clientDocInfo := range clientInfo.Documents {
-		isAttached, err := clientInfo.IsAttached(id)
+	for docID, clientDocInfo := range clientInfo.Documents {
+		isAttached, err := clientInfo.IsAttached(docID)
 		if err != nil {
 			return nil, err
 		}
@@ -69,7 +63,7 @@ func Deactivate(
 			continue
 		}
 
-		if err := clientInfo.DetachDocument(id); err != nil {
+		if err := clientInfo.DetachDocument(docID); err != nil {
 			return nil, err
 		}
 
@@ -81,26 +75,24 @@ func Deactivate(
 		if err := db.UpdateSyncedSeq(
 			ctx,
 			clientInfo,
-			id,
+			types.DocRefKey{
+				ProjectID: refKey.ProjectID,
+				DocID:     docID,
+			},
 			clientDocInfo.ServerSeq,
 		); err != nil {
 			return nil, err
 		}
 	}
 
-	return db.DeactivateClient(ctx, projectID, clientID)
+	return db.DeactivateClient(ctx, refKey)
 }
 
-// FindClientInfo finds the client with the given id.
+// FindClientInfo finds the client with the given refKey.
 func FindClientInfo(
 	ctx context.Context,
 	db database.Database,
-	project *types.Project,
-	clientID *time.ActorID,
+	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	return db.FindClientInfoByID(
-		ctx,
-		project.ID,
-		types.IDFromActorID(clientID),
-	)
+	return db.FindClientInfoByRefKey(ctx, refKey)
 }

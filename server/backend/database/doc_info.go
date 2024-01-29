@@ -82,3 +82,11 @@ func (info *DocInfo) DeepCopy() *DocInfo {
 		RemovedAt:  info.RemovedAt,
 	}
 }
+
+// RefKey returns the refKey of the document.
+func (info *DocInfo) RefKey() types.DocRefKey {
+	return types.DocRefKey{
+		ProjectID: info.ProjectID,
+		DocID:     info.ID,
+	}
+}

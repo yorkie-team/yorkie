@@ -41,13 +41,13 @@ type Coordinator interface {
 	Subscribe(
 		ctx context.Context,
 		subscriber *time.ActorID,
-		documentID types.ID,
+		documentRefKey types.DocRefKey,
 	) (*Subscription, []*time.ActorID, error)
 
 	// Unsubscribe unsubscribes from the given documents.
 	Unsubscribe(
 		ctx context.Context,
-		documentID types.ID,
+		documentRefKey types.DocRefKey,
 		sub *Subscription,
 	) error
 
