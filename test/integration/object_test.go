@@ -356,6 +356,71 @@ func TestObject(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `{"obj":{"bool":true,"bytes":"AB","date":"2022-03-02T09:10:00Z","double":1.790000,"int":32,"long":9223372036854775807,"nill":null}}`, d1.Marshal())
 	})
+
+	// gc_test.go
+	t.Run("should not garbage collection", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b").Edit(2, 2, "c")
+			return nil
+		}, "sets text")
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "c")
+			return nil
+		}, "insert c")
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(1, 3, "")
+			return nil
+		}, "delete bd")
+		assert.NoError(t, err)
+		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "1")
+			return nil
+		}, "insert 1")
+		assert.NoError(t, err)
+
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		err = c1.Sync(ctx)
+		assert.NoError(t, err) // 👾 Encounters an error since the node is purged in GC.
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+	})
 }
 
 func TestObjectTypeGuard(t *testing.T) {
