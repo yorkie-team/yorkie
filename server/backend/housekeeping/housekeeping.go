@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	deactivateCandidatesKey = "housekeeping/deactivateCandidates"
-	hardDeletionLockKey     = "housekeeping/hardDeletionLock"
+	deactivateCandidatesKey     = "housekeeping/deactivateCandidates"
+	DocumentHardDeletionLockKey = "housekeeping/DocumentHardDeletionLock"
 )
 
 // Housekeeping is the housekeeping service. It periodically runs housekeeping
@@ -155,7 +155,7 @@ func (h *Housekeeping) documentHardDeletion(
 	ctx context.Context,
 	housekeepingLastProjectID types.ID,
 ) (types.ID, error) {
-	locker, err := h.coordinator.NewLocker(ctx, hardDeletionLockKey)
+	locker, err := h.coordinator.NewLocker(ctx, DocumentHardDeletionLockKey)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
@@ -168,7 +168,7 @@ func (h *Housekeeping) documentHardDeletion(
 		}
 	}()
 
-	lastProjectID, candidates, err := h.database.FindHardDeletionCandidates(
+	lastProjectID, candidates, err := h.database.FindDocumentHardDeletionCandidates(
 		ctx,
 		h.candidatesLimitPerProject,
 		h.projectFetchSize,
@@ -179,7 +179,7 @@ func (h *Housekeeping) documentHardDeletion(
 		return database.DefaultProjectID, err
 	}
 
-	err = h.database.HardDeletion(ctx, candidates)
+	err = h.database.DocumentHardDeletion(ctx, candidates)
 
 	if err != nil {
 		return database.DefaultProjectID, err

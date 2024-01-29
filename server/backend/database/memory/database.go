@@ -619,8 +619,8 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// findHardDeletionCandidatesPerProject finds the documents that need housekeeping per project.
-func (d *DB) findHardDeletionCandidatesPerProject(
+// FindDocumentHardDeletionCandidatesPerProject finds the documents that need housekeeping per project.
+func (d *DB) FindDocumentHardDeletionCandidatesPerProject(
 	ctx context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
@@ -698,21 +698,21 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 	return infos, nil
 }
 
-// FindHardDeletionCandidates finds the clients that need housekeeping.
-func (d *DB) FindHardDeletionCandidates(
+// FindDocumentHardDeletionCandidates finds the clients that need housekeeping.
+func (d *DB) FindDocumentHardDeletionCandidates(
 	ctx context.Context,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
 	lastProjectID types.ID,
 ) (types.ID, []*database.DocInfo, error) {
-	projects, err := d.listProjectInfos(ctx, projectFetchSize, lastProjectID)
+	projects, err := d.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}
 
 	var candidates []*database.DocInfo
 	for _, project := range projects {
-		infos, err := d.findHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		infos, err := d.FindDocumentHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}
@@ -730,8 +730,8 @@ func (d *DB) FindHardDeletionCandidates(
 	return topProjectID, candidates, nil
 }
 
-// HardDeletion Deletes the documents completely.
-func (d *DB) HardDeletion(
+// DocumentHardDeletion Deletes the documents completely.
+func (d *DB) DocumentHardDeletion(
 	ctx context.Context,
 	candidates []*database.DocInfo,
 ) error {

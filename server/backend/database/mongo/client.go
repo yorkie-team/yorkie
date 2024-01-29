@@ -227,8 +227,8 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// HardDeletion Deletes the documents completely.
-func (c *Client) HardDeletion(
+// DocumentHardDeletion Deletes the documents completely.
+func (c *Client) DocumentHardDeletion(
 	ctx context.Context,
 	candidates []*database.DocInfo,
 ) error {
@@ -245,7 +245,7 @@ func (c *Client) HardDeletion(
 		idList = append(idList, encodedID)
 	}
 
-	_, err := c.collection(colDocuments).DeleteMany(
+	_, err := c.collection(ColDocuments).DeleteMany(
 		ctx,
 		bson.M{"_id": bson.M{"$in": idList}},
 	)
@@ -649,8 +649,8 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// findHardDeletionCandidatesPerProject finds the clients that need housekeeping per project.
-func (c *Client) findHardDeletionCandidatesPerProject(
+// FindDocumentHardDeletionCandidatesPerProject finds the clients that need housekeeping per project.
+func (c *Client) FindDocumentHardDeletionCandidatesPerProject(
 	ctx context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
@@ -661,7 +661,7 @@ func (c *Client) findHardDeletionCandidatesPerProject(
 	}
 
 	var DocInfos []*database.DocInfo
-	cursor, err := c.collection(colDocuments).Find(ctx, bson.M{
+	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
 		"project_id": encodedProjectID,
 		"removed_at": bson.M{"$ne": nil},
 	}, options.Find().SetLimit(int64(candidatesLimit)))
@@ -715,14 +715,14 @@ func (c *Client) FindDeactivateCandidates(
 	projectFetchSize int,
 	lastProjectID types.ID,
 ) (types.ID, []*database.ClientInfo, error) {
-	projects, err := c.listProjectInfos(ctx, projectFetchSize, lastProjectID)
+	projects, err := c.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}
 
 	var candidates []*database.ClientInfo
 	for _, project := range projects {
-		clientInfos, err := c.findDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		clientInfos, err := c.FindDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}
@@ -739,21 +739,21 @@ func (c *Client) FindDeactivateCandidates(
 	return topProjectID, candidates, nil
 }
 
-// FindHardDeletionCandidates finds the clients that need housekeeping.
-func (c *Client) FindHardDeletionCandidates(
+// FindDocumentHardDeletionCandidates finds the clients that need housekeeping.
+func (c *Client) FindDocumentHardDeletionCandidates(
 	ctx context.Context,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
 	lastProjectID types.ID,
 ) (types.ID, []*database.DocInfo, error) {
-	projects, err := c.listProjectInfos(ctx, projectFetchSize, lastProjectID)
+	projects, err := c.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}
 
 	var candidates []*database.DocInfo
 	for _, project := range projects {
-		docInfos, err := c.findHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		docInfos, err := c.FindDocumentHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}

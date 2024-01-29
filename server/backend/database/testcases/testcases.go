@@ -1215,57 +1215,9 @@ func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo)
 	assert.EqualValues(t, expectedKeys, keys)
 }
 
-// RunHardDeletionCandidates runs the find for HardDeletionCandidates tests for the given db.
-func RunHardDeletionCandidates(t *testing.T, db database.Database) {
-	t.Run("housekeeping HardDeletions test", func(t *testing.T) {
-		ctx := context.Background()
-
-		// Lists all projects of the dummyOwnerID and otherOwnerID.
-		projects, err := db.ListProjectInfos(ctx, dummyOwnerID)
-		assert.NoError(t, err)
-		otherProjects, err := db.ListProjectInfos(ctx, otherOwnerID)
-		assert.NoError(t, err)
-
-		projects = append(projects, otherProjects...)
-
-		sort.Slice(projects, func(i, j int) bool {
-			iBytes, err := projects[i].ID.Bytes()
-			assert.NoError(t, err)
-			jBytes, err := projects[j].ID.Bytes()
-			assert.NoError(t, err)
-			return bytes.Compare(iBytes, jBytes) < 0
-		})
-
-		fetchSize := 3
-		lastProjectID := database.DefaultProjectID
-
-		for i := 0; i < len(projects)/fetchSize; i++ {
-			lastProjectID, _, err = db.FindHardDeletionCandidates(
-				ctx,
-				0,
-				fetchSize,
-				lastProjectID,
-			)
-			assert.NoError(t, err)
-			assert.Equal(t, projects[((i+1)*fetchSize)-1].ID, lastProjectID)
-		}
-
-		lastProjectID, _, err = db.FindHardDeletionCandidates(
-			ctx,
-			0,
-			fetchSize,
-			lastProjectID,
-		)
-		assert.NoError(t, err)
-		assert.Equal(t, database.DefaultProjectID, lastProjectID)
-
-	})
-
-}
-
-// RunHardDeletion runs Delete document permanently
-func RunHardDeletion(t *testing.T, db database.Database) {
-	t.Run("housekeeping HardDeletion test", func(t *testing.T) {
+// RunDocumentHardDeletion runs Delete document permanently
+func RunDocumentHardDeletion(t *testing.T, db database.Database) {
+	t.Run("housekeeping DocumentHardDeletion test", func(t *testing.T) {
 		ctx := context.Background()
 		projectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
 		assert.NoError(t, err)
@@ -1274,8 +1226,7 @@ func RunHardDeletion(t *testing.T, db database.Database) {
 		// Create a client and two documents
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
-		clientID := clientInfo.ID
-		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, projectID, clientID, helper.TestDocKey(t)+"kakaka", true)
+		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t), true)
 		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
@@ -1291,7 +1242,7 @@ func RunHardDeletion(t *testing.T, db database.Database) {
 
 		var candidates []*database.DocInfo
 
-		lastProjectID, candidates, err = db.FindHardDeletionCandidates(
+		lastProjectID, candidates, err = db.FindDocumentHardDeletionCandidates(
 			ctx,
 			0,
 			fetchSize,
@@ -1300,10 +1251,10 @@ func RunHardDeletion(t *testing.T, db database.Database) {
 		assert.NoError(t, err)
 		assert.Equal(t, database.DefaultProjectID, lastProjectID)
 
-		err = db.HardDeletion(ctx, candidates)
+		err = db.DocumentHardDeletion(ctx, candidates)
 		assert.NoError(t, err)
 
-		_, err = db.FindDocInfoByID(context.Background(), projectID, docInfo.ID)
+		_, err = db.FindDocInfoByRefKey(ctx, docInfo.RefKey())
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
 
 	})
