@@ -38,9 +38,10 @@ var (
 	flagConfPath string
 	flagLogLevel string
 
-	adminTokenDuration        time.Duration
-	housekeepingInterval      time.Duration
-	clientDeactivateThreshold string
+	adminTokenDuration                   time.Duration
+	housekeepingIntervalDeactivateClient time.Duration
+	housekeepingIntervalDocumentDeletion time.Duration
+	clientDeactivateThreshold            string
 
 	mongoConnectionURI     string
 	mongoConnectionTimeout time.Duration
@@ -69,7 +70,8 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.AuthWebhookCacheUnauthTTL = authWebhookCacheUnauthTTL.String()
 			conf.Backend.ProjectInfoCacheTTL = projectInfoCacheTTL.String()
 
-			conf.Housekeeping.Interval = housekeepingInterval.String()
+			conf.Housekeeping.IntervalDeactivateClient = housekeepingIntervalDeactivateClient.String()
+			conf.Housekeeping.IntervalDocumentDeletion = housekeepingIntervalDocumentDeletion.String()
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -194,9 +196,15 @@ func init() {
 		"Enable runtime profiling data via HTTP server.",
 	)
 	cmd.Flags().DurationVar(
-		&housekeepingInterval,
-		"housekeeping-interval",
-		server.DefaultHousekeepingInterval,
+		&housekeepingIntervalDeactivateClient,
+		"housekeeping-intervalDeactivateClient",
+		server.DefaultHousekeepingIntervalDeactivateClient,
+		"housekeeping interval between housekeeping runs",
+	)
+	cmd.Flags().DurationVar(
+		&housekeepingIntervalDocumentDeletion,
+		"housekeeping-intervalDocumentDeletion",
+		server.DefaultHousekeepingIntervalDocumentDeletion,
 		"housekeeping interval between housekeeping runs",
 	)
 	cmd.Flags().IntVar(

@@ -33,7 +33,7 @@ import (
 
 const (
 	deactivateCandidatesKey     = "housekeeping/deactivateCandidates"
-	DocumentHardDeletionLockKey = "housekeeping/DocumentHardDeletionLock"
+	documentHardDeletionLockKey = "housekeeping/DocumentHardDeletionLock"
 )
 
 // Housekeeping is the housekeeping service. It periodically runs housekeeping
@@ -43,7 +43,8 @@ type Housekeeping struct {
 	database    database.Database
 	coordinator sync.Coordinator
 
-	interval                  time.Duration
+	intervalDeactivateClient  time.Duration
+	IntervalDocumentDeletion  time.Duration
 	candidatesLimitPerProject int
 	projectFetchSize          int
 
@@ -74,9 +75,13 @@ func New(
 	database database.Database,
 	coordinator sync.Coordinator,
 ) (*Housekeeping, error) {
-	interval, err := time.ParseDuration(conf.Interval)
+	intervalDeactivateClient, err := time.ParseDuration(conf.IntervalDeactivateClient)
 	if err != nil {
-		return nil, fmt.Errorf("parse interval %s: %w", conf.Interval, err)
+		return nil, fmt.Errorf("parse IntervalDeactivateClient %s: %w", conf.IntervalDeactivateClient, err)
+	}
+	IntervalDocumentDeletion, err := time.ParseDuration(conf.IntervalDocumentDeletion)
+	if err != nil {
+		return nil, fmt.Errorf("parse IntervalDocumentDeletion %s: %w", conf.IntervalDocumentDeletion, err)
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -85,7 +90,8 @@ func New(
 		database:    database,
 		coordinator: coordinator,
 
-		interval:                  interval,
+		intervalDeactivateClient:  intervalDeactivateClient,
+		IntervalDocumentDeletion:  IntervalDocumentDeletion,
 		candidatesLimitPerProject: conf.CandidatesLimitPerProject,
 		projectFetchSize:          conf.ProjectFetchSize,
 
@@ -122,7 +128,7 @@ func (h *Housekeeping) AttachDeactivateCandidates() {
 		housekeepingLastProjectID = lastProjectID
 
 		select {
-		case <-time.After(h.interval):
+		case <-time.After(h.intervalDeactivateClient):
 		case <-h.ctx.Done():
 			return
 		}
@@ -144,7 +150,7 @@ func (h *Housekeeping) AttachDocumentHardDeletion() {
 		housekeepingLastProjectID = lastProjectID
 
 		select {
-		case <-time.After(h.interval):
+		case <-time.After(h.IntervalDocumentDeletion):
 		case <-h.ctx.Done():
 			return
 		}
@@ -155,7 +161,7 @@ func (h *Housekeeping) documentHardDeletion(
 	ctx context.Context,
 	housekeepingLastProjectID types.ID,
 ) (types.ID, error) {
-	locker, err := h.coordinator.NewLocker(ctx, DocumentHardDeletionLockKey)
+	locker, err := h.coordinator.NewLocker(ctx, documentHardDeletionLockKey)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}

@@ -23,8 +23,11 @@ import (
 
 // Config is the configuration for the housekeeping service.
 type Config struct {
-	// Interval is the time between housekeeping runs.
-	Interval string `yaml:"Interval"`
+	// IntervalDeactivateClient is the time between housekeeping runs.
+	IntervalDeactivateClient string `yaml:"Interval"`
+
+	// IntervalDeactivateClient is the time between housekeeping runs.
+	IntervalDocumentDeletion string `yaml:"Interval"`
 
 	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
 	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
@@ -38,10 +41,10 @@ type Config struct {
 
 // Validate validates the configuration.
 func (c *Config) Validate() error {
-	if _, err := time.ParseDuration(c.Interval); err != nil {
+	if _, err := time.ParseDuration(c.IntervalDeactivateClient); err != nil {
 		return fmt.Errorf(
 			`invalid argument %s for "--housekeeping-interval" flag: %w`,
-			c.Interval,
+			c.IntervalDeactivateClient,
 			err,
 		)
 	}

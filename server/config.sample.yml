@@ -30,8 +30,11 @@ Profiling:
 
 # Housekeeping is the configuration for the housekeeping.
 Housekeeping:
-  # Interval is the time between housekeeping runs (default: 1m).
-  Interval: 1m
+  # IntervalDeactivateClient is the time between housekeeping runs (default: 1m).
+  IntervalDeactivateClient: 1m
+
+  # IntervalDocumentDeletion is the time between housekeeping runs (default: 24h).
+  IntervalDocumentDeletion: "24h"
 
   # CandidatesLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
   CandidatesLimitPerProject: 100

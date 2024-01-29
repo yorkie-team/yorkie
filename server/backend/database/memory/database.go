@@ -621,7 +621,7 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 
 // FindDocumentHardDeletionCandidatesPerProject finds the documents that need housekeeping per project.
 func (d *DB) FindDocumentHardDeletionCandidatesPerProject(
-	ctx context.Context,
+	_ context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
 ) ([]*database.DocInfo, error) {
@@ -732,7 +732,7 @@ func (d *DB) FindDocumentHardDeletionCandidates(
 
 // DocumentHardDeletion Deletes the documents completely.
 func (d *DB) DocumentHardDeletion(
-	ctx context.Context,
+	_ context.Context,
 	candidates []*database.DocInfo,
 ) error {
 	if len(candidates) <= 0 {
