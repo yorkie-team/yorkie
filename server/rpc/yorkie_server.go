@@ -404,7 +404,7 @@ func (s *yorkieServer) WatchDocument(
 
 	locker, err := s.backend.Coordinator.NewLocker(
 		ctx,
-		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID.String(), docID)),
+		sync.NewKey(fmt.Sprintf("watchdoc-%s-%s", clientID, docID)),
 	)
 	if err != nil {
 		return err
