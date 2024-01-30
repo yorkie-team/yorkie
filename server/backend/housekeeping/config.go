@@ -23,11 +23,8 @@ import (
 
 // Config is the configuration for the housekeeping service.
 type Config struct {
-	// IntervalDeactivateClient is the time between housekeeping runs.
-	IntervalDeactivateClient string `yaml:"IntervalDeactivateClient"`
-
-	// IntervalDeactivateClient is the time between housekeeping runs.
-	IntervalDocumentDeletion string `yaml:"IntervalDocumentDeletion"`
+	// Interval is the time between housekeeping runs.
+	Interval string `yaml:"Interval"`
 
 	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
 	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
@@ -41,18 +38,10 @@ type Config struct {
 
 // Validate validates the configuration.
 func (c *Config) Validate() error {
-	if _, err := time.ParseDuration(c.IntervalDeactivateClient); err != nil {
+	if _, err := time.ParseDuration(c.Interval); err != nil {
 		return fmt.Errorf(
-			`invalid argument %s for "--housekeeping-intervalDeactivateClient" flag: %w`,
-			c.IntervalDeactivateClient,
-			err,
-		)
-	}
-
-	if _, err := time.ParseDuration(c.IntervalDocumentDeletion); err != nil {
-		return fmt.Errorf(
-			`invalid argument %s for "--housekeeping-intervalDocumentDeletion" flag: %w`,
-			c.IntervalDeactivateClient,
+			`invalid argument %s for "--housekeeping-interval" flag: %w`,
+			c.Interval,
 			err,
 		)
 	}
@@ -60,7 +49,7 @@ func (c *Config) Validate() error {
 	if c.CandidatesLimitPerProject <= 0 {
 		return fmt.Errorf(
 			`invalid argument %d for "--housekeeping-candidates-limit-per-project" flag`,
-			c.CandidatesLimitPerProject,
+			c.ProjectFetchSize,
 		)
 	}
 

@@ -43,8 +43,7 @@ type Housekeeping struct {
 	database    database.Database
 	coordinator sync.Coordinator
 
-	intervalDeactivateClient  time.Duration
-	IntervalDocumentDeletion  time.Duration
+	interval                  time.Duration
 	candidatesLimitPerProject int
 	projectFetchSize          int
 
@@ -75,13 +74,9 @@ func New(
 	database database.Database,
 	coordinator sync.Coordinator,
 ) (*Housekeeping, error) {
-	intervalDeactivateClient, err := time.ParseDuration(conf.IntervalDeactivateClient)
+	interval, err := time.ParseDuration(conf.Interval)
 	if err != nil {
-		return nil, fmt.Errorf("parse IntervalDeactivateClient %s: %w", conf.IntervalDeactivateClient, err)
-	}
-	IntervalDocumentDeletion, err := time.ParseDuration(conf.IntervalDocumentDeletion)
-	if err != nil {
-		return nil, fmt.Errorf("parse IntervalDocumentDeletion %s: %w", conf.IntervalDocumentDeletion, err)
+		return nil, fmt.Errorf("parse interval %s: %w", conf.Interval, err)
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -90,8 +85,7 @@ func New(
 		database:    database,
 		coordinator: coordinator,
 
-		intervalDeactivateClient:  intervalDeactivateClient,
-		IntervalDocumentDeletion:  IntervalDocumentDeletion,
+		interval:                  interval,
 		candidatesLimitPerProject: conf.CandidatesLimitPerProject,
 		projectFetchSize:          conf.ProjectFetchSize,
 
@@ -128,7 +122,7 @@ func (h *Housekeeping) AttachDeactivateCandidates() {
 		housekeepingLastProjectID = lastProjectID
 
 		select {
-		case <-time.After(h.intervalDeactivateClient):
+		case <-time.After(h.interval):
 		case <-h.ctx.Done():
 			return
 		}
@@ -150,7 +144,7 @@ func (h *Housekeeping) AttachDocumentHardDeletion() {
 		housekeepingLastProjectID = lastProjectID
 
 		select {
-		case <-time.After(h.IntervalDocumentDeletion):
+		case <-time.After(h.interval):
 		case <-h.ctx.Done():
 			return
 		}

@@ -62,8 +62,7 @@ var (
 
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword
-	HousekeepingIntervalDeactivateClient  = 10 * gotime.Second
-	HousekeepingIntervalDocumentDeletion  = 10 * gotime.Minute
+	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 	HousekeepingProjectFetchSize          = 10
 
@@ -211,8 +210,7 @@ func TestConfig() *server.Config {
 			Port: ProfilingPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
-			IntervalDeactivateClient:  HousekeepingIntervalDeactivateClient.String(),
-			IntervalDocumentDeletion:  HousekeepingIntervalDocumentDeletion.String(),
+			Interval:                  HousekeepingInterval.String(),
 			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
 			ProjectFetchSize:          HousekeepingProjectFetchSize,
 		},
