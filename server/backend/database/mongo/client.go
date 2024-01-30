@@ -654,16 +654,20 @@ func (c *Client) FindDocumentHardDeletionCandidatesPerProject(
 	ctx context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
+	deleteAfterTime gotime.Duration,
 ) ([]*database.DocInfo, error) {
 	encodedProjectID, err := encodeID(project.ID)
 	if err != nil {
 		return nil, err
 	}
 
+	currentTime := gotime.Now()
+	conditionDeleteAfterTime := currentTime.Add(deleteAfterTime)
+
 	var DocInfos []*database.DocInfo
 	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
 		"project_id": encodedProjectID,
-		"removed_at": bson.M{"$ne": nil},
+		"removed_at": bson.M{"$lt": conditionDeleteAfterTime},
 	}, options.Find().SetLimit(int64(candidatesLimit)))
 
 	if err != nil {
@@ -744,6 +748,7 @@ func (c *Client) FindDocumentHardDeletionCandidates(
 	ctx context.Context,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
+	deletedAfterTime gotime.Duration,
 	lastProjectID types.ID,
 ) (types.ID, []*database.DocInfo, error) {
 	projects, err := c.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
@@ -753,7 +758,12 @@ func (c *Client) FindDocumentHardDeletionCandidates(
 
 	var candidates []*database.DocInfo
 	for _, project := range projects {
-		docInfos, err := c.FindDocumentHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		docInfos, err := c.FindDocumentHardDeletionCandidatesPerProject(
+			ctx,
+			project,
+			candidatesLimitPerProject,
+			deletedAfterTime,
+		)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}

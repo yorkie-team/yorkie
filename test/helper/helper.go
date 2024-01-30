@@ -63,6 +63,7 @@ var (
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword
 	HousekeepingInterval                  = 10 * gotime.Second
+	HousekeepingDeleteAfterTime           = 0 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 	HousekeepingProjectFetchSize          = 10
 
@@ -211,6 +212,7 @@ func TestConfig() *server.Config {
 		},
 		Housekeeping: &housekeeping.Config{
 			Interval:                  HousekeepingInterval.String(),
+			DeleteAfterTime:           HousekeepingDeleteAfterTime.String(),
 			CandidatesLimitPerProject: HousekeepingCandidatesLimitPerProject,
 			ProjectFetchSize:          HousekeepingProjectFetchSize,
 		},

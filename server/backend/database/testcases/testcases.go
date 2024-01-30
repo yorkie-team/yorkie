@@ -1242,11 +1242,15 @@ func RunDocumentHardDeletion(t *testing.T, db database.Database) {
 		lastProjectID := database.DefaultProjectID
 
 		var candidates []*database.DocInfo
+		yesterday := "0s"
+		deleteAfterTime, err := gotime.ParseDuration(yesterday)
+		assert.NoError(t, err)
 
 		lastProjectID, candidates, err = db.FindDocumentHardDeletionCandidates(
 			ctx,
 			0,
 			fetchSize,
+			deleteAfterTime,
 			lastProjectID,
 		)
 		assert.NoError(t, err)

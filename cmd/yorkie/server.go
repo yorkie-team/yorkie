@@ -40,6 +40,7 @@ var (
 
 	adminTokenDuration        time.Duration
 	housekeepingInterval      time.Duration
+	deleteAfterTime           time.Duration
 	clientDeactivateThreshold string
 
 	mongoConnectionURI     string
@@ -70,6 +71,7 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.ProjectInfoCacheTTL = projectInfoCacheTTL.String()
 
 			conf.Housekeeping.Interval = housekeepingInterval.String()
+			conf.Housekeeping.DeleteAfterTime = deleteAfterTime.String()
 
 			if mongoConnectionURI != "" {
 				conf.Mongo = &mongo.Config{
@@ -210,6 +212,12 @@ func init() {
 		"housekeeping-DocumentHardDeletion-limit-per-project",
 		server.DefaultHousekeepingDocumentHardDeletionLimitPerProject,
 		"DocumentHardDeletion limit per project for a single housekeeping run",
+	)
+	cmd.Flags().DurationVar(
+		&deleteAfterTime,
+		"housekeeping-DocumentHardDeletion-delete-after-time",
+		server.DefaultHousekeepingDeleteAfterTime,
+		"DocumentHardDeletion delete after time for a single housekeeping run",
 	)
 	cmd.Flags().IntVar(
 		&conf.Housekeeping.ProjectFetchSize,

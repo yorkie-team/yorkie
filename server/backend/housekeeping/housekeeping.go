@@ -44,6 +44,7 @@ type Housekeeping struct {
 	coordinator sync.Coordinator
 
 	interval                  time.Duration
+	deleteAfterTime           time.Duration
 	candidatesLimitPerProject int
 	projectFetchSize          int
 
@@ -79,6 +80,11 @@ func New(
 		return nil, fmt.Errorf("parse interval %s: %w", conf.Interval, err)
 	}
 
+	deleteAfterTime, err := time.ParseDuration(conf.DeleteAfterTime)
+	if err != nil {
+		return nil, fmt.Errorf("parse deleteAfterTime %s: %w", conf.DeleteAfterTime, err)
+	}
+
 	ctx, cancelFunc := context.WithCancel(context.Background())
 
 	return &Housekeeping{
@@ -86,6 +92,7 @@ func New(
 		coordinator: coordinator,
 
 		interval:                  interval,
+		deleteAfterTime:           deleteAfterTime,
 		candidatesLimitPerProject: conf.CandidatesLimitPerProject,
 		projectFetchSize:          conf.ProjectFetchSize,
 
@@ -172,6 +179,7 @@ func (h *Housekeeping) documentHardDeletion(
 		ctx,
 		h.candidatesLimitPerProject,
 		h.projectFetchSize,
+		h.deleteAfterTime,
 		housekeepingLastProjectID,
 	)
 

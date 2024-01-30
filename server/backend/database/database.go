@@ -20,6 +20,7 @@ package database
 import (
 	"context"
 	"errors"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -162,6 +163,7 @@ type Database interface {
 		ctx context.Context,
 		candidatesLimitPerProject int,
 		projectFetchSize int,
+		deleteAfterTime gotime.Duration,
 		lastProjectID types.ID,
 	) (types.ID, []*DocInfo, error)
 

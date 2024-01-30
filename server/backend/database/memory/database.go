@@ -624,6 +624,7 @@ func (d *DB) FindDocumentHardDeletionCandidatesPerProject(
 	_ context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
+	deleteAfterTime gotime.Duration,
 ) ([]*database.DocInfo, error) {
 
 	txn := d.db.Txn(false)
@@ -640,13 +641,15 @@ func (d *DB) FindDocumentHardDeletionCandidatesPerProject(
 		return nil, fmt.Errorf("fetch hard deletion candidates: %w", err)
 	}
 
+	currentTime := gotime.Now()
+	conditionDeleteAfterTime := currentTime.Add(deleteAfterTime)
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		document := raw.(*database.DocInfo)
 		if candidatesLimit <= len(documents) && candidatesLimit != 0 {
 			break
 		}
 
-		if !document.RemovedAt.IsZero() {
+		if !document.RemovedAt.After(conditionDeleteAfterTime) {
 			documents = append(documents, document)
 		}
 	}
@@ -703,6 +706,7 @@ func (d *DB) FindDocumentHardDeletionCandidates(
 	ctx context.Context,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
+	deletedAfterTime gotime.Duration,
 	lastProjectID types.ID,
 ) (types.ID, []*database.DocInfo, error) {
 	projects, err := d.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
@@ -712,7 +716,12 @@ func (d *DB) FindDocumentHardDeletionCandidates(
 
 	var candidates []*database.DocInfo
 	for _, project := range projects {
-		infos, err := d.FindDocumentHardDeletionCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		infos, err := d.FindDocumentHardDeletionCandidatesPerProject(
+			ctx,
+			project,
+			candidatesLimitPerProject,
+			deletedAfterTime,
+		)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}

@@ -83,6 +83,7 @@ func TestMain(m *testing.M) {
 		PingTimeout:       helper.MongoPingTimeout,
 	}, &housekeeping.Config{
 		Interval:                  helper.HousekeepingInterval.String(),
+		DeleteAfterTime:           helper.HousekeepingDeleteAfterTime.String(),
 		CandidatesLimitPerProject: helper.HousekeepingCandidatesLimitPerProject,
 		ProjectFetchSize:          helper.HousekeepingProjectFetchSize,
 	}, met)

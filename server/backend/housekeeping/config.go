@@ -26,6 +26,9 @@ type Config struct {
 	// Interval is the time between housekeeping runs.
 	Interval string `yaml:"Interval"`
 
+	// DeleteAfterTime finds documents whose removed_at time is older than that time.
+	DeleteAfterTime string `yaml:"HousekeepingDeleteAfterTime"`
+
 	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
 	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
 
@@ -64,6 +67,14 @@ func (c *Config) Validate() error {
 		return fmt.Errorf(
 			`invalid argument %d for "--housekeeping-project-fetc-size" flag`,
 			c.ProjectFetchSize,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.DeleteAfterTime); err != nil {
+		return fmt.Errorf(
+			`invalid argument %v for "--housekeeping-project-delete-after-time" flag: %w`,
+			c.DeleteAfterTime,
+			err,
 		)
 	}
 

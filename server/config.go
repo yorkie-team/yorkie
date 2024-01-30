@@ -41,6 +41,7 @@ const (
 	DefaultProfilingPort = 8081
 
 	DefaultHousekeepingInterval                            = 30 * time.Second
+	DefaultHousekeepingDeleteAfterTime                     = -24 * time.Hour
 	DefaultHousekeepingCandidatesLimitPerProject           = 500
 	DefaultHousekeepingDocumentHardDeletionLimitPerProject = 500
 	DefaultHousekeepingProjectFetchSize                    = 100
@@ -230,6 +231,7 @@ func newConfig(port int, profilingPort int) *Config {
 		},
 		Housekeeping: &housekeeping.Config{
 			Interval:                            DefaultHousekeepingInterval.String(),
+			DeleteAfterTime:                     DefaultHousekeepingDeleteAfterTime.String(),
 			CandidatesLimitPerProject:           DefaultHousekeepingCandidatesLimitPerProject,
 			DocumentHardDeletionLimitPerProject: DefaultHousekeepingDocumentHardDeletionLimitPerProject,
 			ProjectFetchSize:                    DefaultHousekeepingProjectFetchSize,

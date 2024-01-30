@@ -33,6 +33,9 @@ Housekeeping:
   # Interval is the time between housekeeping runs (default: 1m).
   Interval: 1m
 
+  # HousekeepingDeleteAfterTime finds documents whose removed_at time is older than that time. (default: -24h).
+  HousekeepingDeleteAfterTime: -24h
+
   # CandidatesLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
   CandidatesLimitPerProject: 100
 
