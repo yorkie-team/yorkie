@@ -30,6 +30,24 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
+func parseSimpleXML(s string) []string {
+	res := []string{}
+	for i := 0; i < len(s); i++ {
+		now := ``
+		if s[i] == '<' {
+			for i < len(s) && s[i] != '>' {
+				now += string(s[i])
+				i++
+			}
+			now += string(s[i])
+		} else {
+			now += string(s[i])
+		}
+		res = append(res, now)
+	}
+	return res
+}
+
 type testResult struct {
 	flag       bool
 	resultDesc string
@@ -77,6 +95,20 @@ func makeTwoRanges(from1, mid1, to1 int, from2, mid2, to2 int, desc string) twoR
 	return twoRangesType{[2]rangeWithMiddleType{range0, range1}, desc}
 }
 
+func getMergeRange(xml string, interval rangeType) rangeType {
+	content := parseSimpleXML(xml)
+	st, ed := -1, -1
+	for i := interval.from + 1; i <= interval.to; i++ {
+		if st == -1 && len(content[i]) >= 2 && content[i][0] == '<' && content[i][1] == '/' {
+			st = i - 1
+		}
+		if len(content[i]) >= 2 && content[i][0] == '<' && content[i][1] != '/' {
+			ed = i
+		}
+	}
+	return rangeType{st, ed}
+}
+
 type styleOpCode int
 type editOpCode int
 
@@ -89,6 +121,7 @@ const (
 const (
 	EditUndefined editOpCode = iota
 	EditUpdate
+	MergeUpdate
 )
 
 type operationInterface interface {
@@ -138,7 +171,15 @@ func (op editOperationType) run(t *testing.T, doc *document.Document, user int, 
 	from, to := interval.from, interval.to
 
 	assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-		root.GetTree("t").Edit(from, to, op.content, op.splitLevel)
+		if op.op == EditUpdate {
+			root.GetTree("t").Edit(from, to, op.content, op.splitLevel)
+		} else if op.op == MergeUpdate {
+			mergeInterval := getMergeRange(root.GetTree("t").ToXML(), interval)
+			from, to = mergeInterval.from, mergeInterval.to
+			if from != -1 && to != -1 && from < to {
+				root.GetTree("t").Edit(mergeInterval.from, mergeInterval.to, op.content, op.splitLevel)
+			}
+		}
 		return nil
 	}))
 }
@@ -247,6 +288,7 @@ func TestTreeConcurrencyEditEdit(t *testing.T) {
 		editOperationType{RangeBack, EditUpdate, elementNode1, 0, `insertElementBack`},
 		editOperationType{RangeAll, EditUpdate, elementNode1, 0, `replaceElement`},
 		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
+		editOperationType{RangeAll, MergeUpdate, nil, 0, `merge`},
 	}
 
 	editOperations2 := []operationInterface{
@@ -259,6 +301,7 @@ func TestTreeConcurrencyEditEdit(t *testing.T) {
 		editOperationType{RangeBack, EditUpdate, elementNode2, 0, `insertElementBack`},
 		editOperationType{RangeAll, EditUpdate, elementNode2, 0, `replaceElement`},
 		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
+		editOperationType{RangeAll, MergeUpdate, nil, 0, `merge`},
 	}
 
 	RunTestTreeConcurrency("concurrently-edit-edit-test", t, initialState, initialXML, ranges, editOperations1, editOperations2)
@@ -326,6 +369,8 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 	ranges := []twoRangesType{
 		// equal: <p>b</p> - <p>b</p>
 		makeTwoRanges(3, 3, 6, 3, -1, 6, `equal`),
+		// equal multiple: <p>a</p><p>b</p><p>c</p> - <p>a</p><p>b</p><p>c</p>
+		makeTwoRanges(0, 3, 9, 0, 3, 9, `equal multiple`),
 		// A contains B: <p>a</p><p>b</p><p>c</p> - <p>b</p>
 		makeTwoRanges(0, 3, 9, 3, -1, 6, `A contains B`),
 		// B contains A: <p>b</p> - <p>a</p><p>b</p><p>c</p>
@@ -344,6 +389,7 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 		editOperationType{RangeBack, EditUpdate, content, 0, `insertBack`},
 		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
 		editOperationType{RangeAll, EditUpdate, content, 0, `replace`},
+		editOperationType{RangeAll, MergeUpdate, nil, 0, `merge`},
 	}
 
 	styleOperations := []operationInterface{
