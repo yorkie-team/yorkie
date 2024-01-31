@@ -61,6 +61,8 @@ const (
 	RangeMiddle
 	RangeBack
 	RangeAll
+	RangeOneQuarter
+	RangeThreeQuarter
 )
 
 type rangeType struct {
@@ -77,14 +79,22 @@ type twoRangesType struct {
 }
 
 func getRange(ranges twoRangesType, selector rangeSelector, user int) rangeType {
+	interval := ranges.ranges[user]
+	from, mid, to := interval.from, interval.mid, interval.to
 	if selector == RangeFront {
-		return rangeType{ranges.ranges[user].from, ranges.ranges[user].from}
+		return rangeType{from, from}
 	} else if selector == RangeMiddle {
-		return rangeType{ranges.ranges[user].mid, ranges.ranges[user].mid}
+		return rangeType{mid, mid}
 	} else if selector == RangeBack {
-		return rangeType{ranges.ranges[user].to, ranges.ranges[user].to}
+		return rangeType{to, to}
 	} else if selector == RangeAll {
-		return rangeType{ranges.ranges[user].from, ranges.ranges[user].to}
+		return rangeType{from, to}
+	} else if selector == RangeOneQuarter {
+		pos := (from + mid) / 2
+		return rangeType{pos, pos}
+	} else if selector == RangeThreeQuarter {
+		pos := (mid + to) / 2
+		return rangeType{pos, pos}
 	}
 	return rangeType{-1, -1}
 }
@@ -122,6 +132,7 @@ const (
 	EditUndefined editOpCode = iota
 	EditUpdate
 	MergeUpdate
+	SplitUpdate
 )
 
 type operationInterface interface {
@@ -179,6 +190,10 @@ func (op editOperationType) run(t *testing.T, doc *document.Document, user int, 
 			if from != -1 && to != -1 && from < to {
 				root.GetTree("t").Edit(mergeInterval.from, mergeInterval.to, op.content, op.splitLevel)
 			}
+		} else if op.op == SplitUpdate {
+			assert.NotEqual(t, 0, op.splitLevel)
+			assert.Equal(t, from, to)
+			root.GetTree("t").Edit(from, to, op.content, op.splitLevel)
 		}
 		return nil
 	}))
@@ -305,6 +320,64 @@ func TestTreeConcurrencyEditEdit(t *testing.T) {
 	}
 
 	RunTestTreeConcurrency("concurrently-edit-edit-test", t, initialState, initialXML, ranges, editOperations1, editOperations2)
+}
+
+func TestTreeConcurrencySplitEdit(t *testing.T) {
+	//       0   1   2 3 4 5 6    7   8 9 10 11 12    13    14   15 16 17 18 19    20
+	// <root> <p> <p> a b c d </p> <p> e f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </root>
+
+	initialState := json.TreeNode{
+		Type: "root",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}},
+			}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}},
+		},
+	}
+	initialXML := `<root><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></root>`
+
+	content := &json.TreeNode{Type: "i", Children: []json.TreeNode{}}
+
+	ranges := []twoRangesType{
+		// equal: <p>ab'cd</p>
+		makeTwoRanges(1, 4, 7, 2, 4, 6, `equal`),
+		// A contains B: <p>ab'cd</p> - bc
+		makeTwoRanges(1, 4, 7, 3, 4, 5, `A contains B`),
+		// B contains A: <p>ab'cd</p> - <p>abcd</p><p>efgh</p>
+		makeTwoRanges(1, 4, 7, 1, 7, 13, `B contains A`),
+		// left node(text): <p>ab'cd</p> - ab
+		makeTwoRanges(1, 4, 7, 2, 3, 4, `left node(text)`),
+		// right node(text): <p>ab'cd</p> - cd
+		makeTwoRanges(1, 4, 7, 4, 5, 6, `right node(text)`),
+		// left node(element): <p>abcd</p>'<p>efgh</p> - <p>abcd</p>
+		makeTwoRanges(1, 7, 13, 1, 4, 7, `left node(element)`),
+		// right node(element): <p>abcd</p>'<p>efgh</p> - <p>efgh</p>
+		makeTwoRanges(1, 7, 13, 7, 10, 13, `right node(element)`),
+		// A -> B: <p>ab'cd</p> - <p>efgh</p>
+		makeTwoRanges(1, 4, 7, 7, 10, 13, `A -> B`),
+		// B -> A: <p>ef'gh</p> - <p>abcd</p>
+		makeTwoRanges(7, 10, 13, 1, 4, 7, `B -> A`),
+	}
+
+	splitOperations := []operationInterface{
+		editOperationType{RangeMiddle, SplitUpdate, nil, 1, `split-1`},
+		editOperationType{RangeMiddle, SplitUpdate, nil, 1, `split-2`},
+	}
+
+	editOperations := []operationInterface{
+		editOperationType{RangeFront, EditUpdate, content, 0, `insertFront`},
+		editOperationType{RangeMiddle, EditUpdate, content, 0, `insertMiddle`},
+		editOperationType{RangeBack, EditUpdate, content, 0, `insertBack`},
+		editOperationType{RangeAll, EditUpdate, content, 0, "replace"},
+		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
+		editOperationType{RangeAll, MergeUpdate, nil, 0, `merge`},
+		styleOperationType{RangeAll, StyleSet, "bold", "aa", `style`},
+		styleOperationType{RangeAll, StyleRemove, "bold", "", `remove-style`},
+	}
+
+	RunTestTreeConcurrency("concurrently-split-edit-test", t, initialState, initialXML, ranges, splitOperations, editOperations)
 }
 
 func TestTreeConcurrencyStyleStyle(t *testing.T) {
