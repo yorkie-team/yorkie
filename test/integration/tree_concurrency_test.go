@@ -322,36 +322,37 @@ func TestTreeConcurrencyEditEdit(t *testing.T) {
 	RunTestTreeConcurrency("concurrently-edit-edit-test", t, initialState, initialXML, ranges, editOperations1, editOperations2)
 }
 
-// TODO(justiceHui): add split test for splitLevel > 1
 func TestTreeConcurrencySplitSplit(t *testing.T) {
-	//       0   1   2   3 4 5 6 7    8   9 10 11 12 13    14    15   16 17 18 19 20    21    22
-	// <root> <p> <p> <p> a b c d </p> <p> e  f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </p>  </root>
+	//       0   1   2   3   4 5 6 7 8    9   10 11 12 13 14    15    16   17 18 19 20 21    22    23    24
+	// <root> <p> <p> <p> <p> a b c d </p> <p>  e  f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </p>  </p>  </root>
 
 	initialState := json.TreeNode{
 		Type: "root",
 		Children: []json.TreeNode{
 			{Type: "p", Children: []json.TreeNode{
 				{Type: "p", Children: []json.TreeNode{
-					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}},
-					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}},
+					{Type: "p", Children: []json.TreeNode{
+						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}},
+						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}},
+					}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}},
 				}},
-				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}},
 			}},
 		},
 	}
-	initialXML := `<root><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></root>`
+	initialXML := `<root><p><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></p></root>`
 
 	ranges := []twoRangesType{
 		// equal-single-element: <p>abcd</p>
-		makeTwoRanges(2, 5, 8, 2, 5, 8, `equal-single`),
+		makeTwoRanges(3, 6, 9, 3, 6, 9, `equal-single`),
 		// equal-multiple-element: <p>abcd</p><p>efgh</p>
-		makeTwoRanges(2, 8, 14, 2, 8, 14, `equal-multiple`),
+		makeTwoRanges(3, 9, 15, 3, 9, 15, `equal-multiple`),
 		// A contains B same level: <p>abcd</p><p>efgh</p> - <p>efgh</p>
-		makeTwoRanges(2, 8, 14, 8, 11, 14, `A contains B same level`),
+		makeTwoRanges(3, 9, 15, 9, 12, 15, `A contains B same level`),
 		// A contains B multiple level: <p><p>abcd</p><p>efgh</p></p><p>ijkl</p> - <p>efgh</p>
-		makeTwoRanges(1, 15, 21, 8, 11, 14, `A contains B multiple level`),
+		makeTwoRanges(2, 16, 22, 9, 12, 15, `A contains B multiple level`),
 		// side by side
-		makeTwoRanges(2, 5, 8, 8, 11, 14, `B is next to A`),
+		makeTwoRanges(3, 6, 9, 9, 12, 15, `B is next to A`),
 	}
 
 	splitOperations := []operationInterface{
@@ -359,6 +360,10 @@ func TestTreeConcurrencySplitSplit(t *testing.T) {
 		editOperationType{RangeOneQuarter, SplitUpdate, nil, 1, `split-one-quarter-1`},
 		editOperationType{RangeThreeQuarter, SplitUpdate, nil, 1, `split-three-quarter-1`},
 		editOperationType{RangeBack, SplitUpdate, nil, 1, `split-back-1`},
+		editOperationType{RangeFront, SplitUpdate, nil, 2, `split-front-2`},
+		editOperationType{RangeOneQuarter, SplitUpdate, nil, 2, `split-one-quarter-2`},
+		editOperationType{RangeThreeQuarter, SplitUpdate, nil, 2, `split-three-quarter-2`},
+		editOperationType{RangeBack, SplitUpdate, nil, 2, `split-back-2`},
 	}
 
 	RunTestTreeConcurrency("concurrently-split-split-test", t, initialState, initialXML, ranges, splitOperations, splitOperations)
