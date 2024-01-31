@@ -330,13 +330,13 @@ func TestTreeConcurrencySplitEdit(t *testing.T) {
 		Type: "root",
 		Children: []json.TreeNode{
 			{Type: "p", Children: []json.TreeNode{
-				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}},
-				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}},
-			}},
-			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}, Attributes: map[string]string{"italic": "true"}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}, Attributes: map[string]string{"italic": "true"}},
+			}, Attributes: map[string]string{"italic": "true"}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}, Attributes: map[string]string{"italic": "true"}},
 		},
 	}
-	initialXML := `<root><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></root>`
+	initialXML := `<root><p italic="true"><p italic="true">abcd</p><p italic="true">efgh</p></p><p italic="true">ijkl</p></root>`
 
 	content := &json.TreeNode{Type: "i", Children: []json.TreeNode{}}
 
@@ -374,7 +374,7 @@ func TestTreeConcurrencySplitEdit(t *testing.T) {
 		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
 		editOperationType{RangeAll, MergeUpdate, nil, 0, `merge`},
 		styleOperationType{RangeAll, StyleSet, "bold", "aa", `style`},
-		styleOperationType{RangeAll, StyleRemove, "bold", "", `remove-style`},
+		styleOperationType{RangeAll, StyleRemove, "italic", "", `remove-style`},
 	}
 
 	RunTestTreeConcurrency("concurrently-split-edit-test", t, initialState, initialXML, ranges, splitOperations, editOperations)
@@ -430,12 +430,12 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 	initialState := json.TreeNode{
 		Type: "root",
 		Children: []json.TreeNode{
-			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}}},
-			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "b"}}},
-			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}}, Attributes: map[string]string{"color": "red"}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "b"}}, Attributes: map[string]string{"color": "red"}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}, Attributes: map[string]string{"color": "red"}},
 		},
 	}
-	initialXML := `<root><p>a</p><p>b</p><p>c</p></root>`
+	initialXML := `<root><p color="red">a</p><p color="red">b</p><p color="red">c</p></root>`
 
 	content := &json.TreeNode{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}
 
@@ -466,7 +466,7 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 	}
 
 	styleOperations := []operationInterface{
-		styleOperationType{RangeAll, StyleRemove, "bold", "", `remove-bold`},
+		styleOperationType{RangeAll, StyleRemove, "color", "", `remove-bold`},
 		styleOperationType{RangeAll, StyleSet, "bold", "aa", `set-bold-aa`},
 	}
 
