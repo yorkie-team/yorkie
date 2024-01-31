@@ -324,21 +324,19 @@ func TestTreeConcurrencyEditEdit(t *testing.T) {
 
 // TODO(justiceHui): add split test for splitLevel > 1
 func TestTreeConcurrencySplitSplit(t *testing.T) {
-	//       0   1   2   3 4 5 6  7   8   9 10 11 12 13    14    15   16 17 18 19 20    21    22
+	//       0   1   2   3 4 5 6 7    8   9 10 11 12 13    14    15   16 17 18 19 20    21    22
 	// <root> <p> <p> <p> a b c d </p> <p> e  f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </p>  </root>
 
 	initialState := json.TreeNode{
 		Type: "root",
 		Children: []json.TreeNode{
-			{
-				Type: "p", Children: []json.TreeNode{
-					{Type: "p", Children: []json.TreeNode{
-						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}},
-						{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}},
-					}},
-					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}},
-				},
-			},
+			{Type: "p", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}},
+				}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}},
+			}},
 		},
 	}
 	initialXML := `<root><p><p><p>abcd</p><p>efgh</p></p><p>ijkl</p></p></root>`
@@ -367,46 +365,49 @@ func TestTreeConcurrencySplitSplit(t *testing.T) {
 }
 
 func TestTreeConcurrencySplitEdit(t *testing.T) {
-	//       0   1   2 3 4 5 6    7   8 9 10 11 12    13    14   15 16 17 18 19    20
-	// <root> <p> <p> a b c d </p> <p> e f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </root>
+	//       0   1   2   3 4 5 6 7    8   9 10 11 12 13    14    15   16 17 18 19 20    21    22
+	// <root> <p> <p> <p> a b c d </p> <p> e  f  g  h  </p>  </p>  <p>  i  j  k  l  </p>  </p>  </root>
 
 	initialState := json.TreeNode{
 		Type: "root",
 		Children: []json.TreeNode{
 			{Type: "p", Children: []json.TreeNode{
-				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}, Attributes: map[string]string{"italic": "true"}},
-				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}, Attributes: map[string]string{"italic": "true"}},
-			}, Attributes: map[string]string{"italic": "true"}},
-			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}, Attributes: map[string]string{"italic": "true"}},
+				{Type: "p", Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abcd"}}, Attributes: map[string]string{"italic": "true"}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "efgh"}}, Attributes: map[string]string{"italic": "true"}},
+				}, Attributes: map[string]string{"italic": "true"}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ijkl"}}, Attributes: map[string]string{"italic": "true"}},
+			}},
 		},
 	}
-	initialXML := `<root><p italic="true"><p italic="true">abcd</p><p italic="true">efgh</p></p><p italic="true">ijkl</p></root>`
+	initialXML := `<root><p><p italic="true"><p italic="true">abcd</p><p italic="true">efgh</p></p><p italic="true">ijkl</p></p></root>`
 
 	content := &json.TreeNode{Type: "i", Children: []json.TreeNode{}}
 
 	ranges := []twoRangesType{
 		// equal: <p>ab'cd</p>
-		makeTwoRanges(1, 4, 7, 2, 4, 6, `equal`),
+		makeTwoRanges(2, 5, 8, 2, 5, 8, `equal`),
 		// A contains B: <p>ab'cd</p> - bc
-		makeTwoRanges(1, 4, 7, 3, 4, 5, `A contains B`),
+		makeTwoRanges(2, 5, 8, 4, 5, 6, `A contains B`),
 		// B contains A: <p>ab'cd</p> - <p>abcd</p><p>efgh</p>
-		makeTwoRanges(1, 4, 7, 1, 7, 13, `B contains A`),
+		makeTwoRanges(2, 5, 8, 2, 8, 14, `B contains A`),
 		// left node(text): <p>ab'cd</p> - ab
-		makeTwoRanges(1, 4, 7, 2, 3, 4, `left node(text)`),
+		makeTwoRanges(2, 5, 8, 3, 4, 5, `left node(text)`),
 		// right node(text): <p>ab'cd</p> - cd
-		makeTwoRanges(1, 4, 7, 4, 5, 6, `right node(text)`),
+		makeTwoRanges(2, 5, 8, 5, 6, 7, `right node(text)`),
 		// left node(element): <p>abcd</p>'<p>efgh</p> - <p>abcd</p>
-		makeTwoRanges(1, 7, 13, 1, 4, 7, `left node(element)`),
+		makeTwoRanges(2, 8, 14, 2, 5, 8, `left node(element)`),
 		// right node(element): <p>abcd</p>'<p>efgh</p> - <p>efgh</p>
-		makeTwoRanges(1, 7, 13, 7, 10, 13, `right node(element)`),
+		makeTwoRanges(2, 8, 14, 8, 11, 14, `right node(element)`),
 		// A -> B: <p>ab'cd</p> - <p>efgh</p>
-		makeTwoRanges(1, 4, 7, 7, 10, 13, `A -> B`),
+		makeTwoRanges(2, 5, 8, 8, 11, 14, `A -> B`),
 		// B -> A: <p>ef'gh</p> - <p>abcd</p>
-		makeTwoRanges(7, 10, 13, 1, 4, 7, `B -> A`),
+		makeTwoRanges(8, 11, 14, 2, 5, 8, `B -> A`),
 	}
 
 	splitOperations := []operationInterface{
 		editOperationType{RangeMiddle, SplitUpdate, nil, 1, `split-1`},
+		editOperationType{RangeMiddle, SplitUpdate, nil, 2, `split-2`},
 	}
 
 	editOperations := []operationInterface{
