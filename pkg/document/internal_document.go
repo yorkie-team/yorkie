@@ -85,21 +85,28 @@ type InternalDocument struct {
 	// localChanges is the list of the changes that are not yet sent to the
 	// server.
 	localChanges []*change.Change
+
+	// syncedVectorMap is used to store the vector clock of the peer clients.
+	// It is used to determine the minimum synced ticket.
+	syncedVectorMap map[string]time.VectorClock
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
 func NewInternalDocument(k key.Key) *InternalDocument {
 	root := crdt.NewObject(crdt.NewElementRHT(), time.InitialTicket)
+	syncedVectorMap := make(map[string]time.VectorClock)
+	syncedVectorMap[time.InitialActorID.String()] = time.VectorClock{}
 
 	// TODO(hackerwins): We need to initialize the presence of the actor who edited the document.
 	return &InternalDocument{
-		key:           k,
-		status:        StatusDetached,
-		root:          crdt.NewRoot(root),
-		checkpoint:    change.InitialCheckpoint,
-		changeID:      change.InitialID,
-		presences:     innerpresence.NewMap(),
-		onlineClients: &gosync.Map{},
+		key:             k,
+		status:          StatusDetached,
+		root:            crdt.NewRoot(root),
+		checkpoint:      change.InitialCheckpoint,
+		changeID:        change.InitialID,
+		presences:       innerpresence.NewMap(),
+		onlineClients:   &gosync.Map{},
+		syncedVectorMap: syncedVectorMap,
 	}
 }
 
@@ -166,18 +173,27 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
-	if pack.MinSyncedTicket != nil {
-		if _, err := d.GarbageCollect(pack.MinSyncedTicket); err != nil {
-			return err
+	// if pack.MinSyncedTicket != nil {
+	// 	if _, err := d.GarbageCollect(pack.MinSyncedTicket); err != nil {
+	// 		return err
+	// 	}
+	// }
+	minSeqVector := make(map[string]int64)
+	for _, vec := range d.syncedVectorMap {
+		for k, v := range vec {
+			minSeqVector[k] = min(minSeqVector[k], v)
 		}
+	}
+	if _, err := d.GarbageCollect(minSeqVector); err != nil {
+		return err
 	}
 
 	return nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *InternalDocument) GarbageCollect(ticket *time.Ticket) (int, error) {
-	return d.root.GarbageCollect(ticket)
+func (d *InternalDocument) GarbageCollect(minSeqVector map[string]int64) (int, error) {
+	return d.root.GarbageCollect(minSeqVector)
 }
 
 // GarbageLen returns the count of removed elements.
@@ -296,6 +312,12 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 		}
 
 		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
+
+		// update self's synced vector
+		d.syncedVectorMap[d.changeID.ActorID().String()][c.ID().ActorID().String()] = c.ID().Lamport()
+
+		// update peer's synced vector
+		d.syncedVectorMap[c.ID().ActorID().String()] = c.VectorClock()
 	}
 
 	return events, nil

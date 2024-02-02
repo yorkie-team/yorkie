@@ -808,6 +808,10 @@ func (c *Client) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
+		encodedVectorClock, err := database.EncodeVectorClock(cn.VectorClock())
+		if err != nil {
+			return err
+		}
 
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"project_id": docRefKey.ProjectID,
@@ -820,6 +824,7 @@ func (c *Client) CreateChangeInfos(
 			"message":         cn.Message(),
 			"operations":      encodedOperations,
 			"presence_change": encodedPresence,
+			"vector_clock":    encodedVectorClock,
 		}}).SetUpsert(true))
 	}
 
@@ -1076,6 +1081,8 @@ func (c *Client) FindMinSyncedSeqInfo(
 
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 // and returns the min synced ticket.
+// db 업데이트를 한 다음
+// syncedseqs 에서 lamport, actor_id 기준으로 가장 낮은 티켓 반환
 func (c *Client) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,

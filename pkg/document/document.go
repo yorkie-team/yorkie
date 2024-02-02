@@ -99,6 +99,40 @@ type Document struct {
 		payload []byte) error
 }
 
+// PrintSyncedVectorMap prints the synced vector map.
+func (d *Document) PrintSyncedVectorMap(me string) {
+	you := ""
+	if me == "A" {
+		you = "B"
+	} else {
+		you = "A"
+	}
+
+	cur := d.doc.ActorID().String()
+	testMap := make(map[string](map[string]int64))
+	who := ""
+	for k, v := range d.doc.syncedVectorMap {
+		temp := make(map[string]int64)
+		for k2, v2 := range v {
+			if k2 == cur {
+				who = me
+			} else {
+				who = you
+			}
+			temp[who] = v2
+		}
+		if k == cur {
+			who = me
+		} else {
+			who = you
+		}
+		testMap[who] = temp
+	}
+
+	v, _ := gojson.Marshal(testMap)
+	fmt.Println(string(v))
+}
+
 // New creates a new instance of Document.
 func New(key key.Key) *Document {
 	return &Document{
@@ -125,7 +159,7 @@ func (d *Document) Update(
 		return err
 	}
 
-	ctx := change.NewContext(
+	ctx := change.NewContext( // vectorClock update and copy
 		d.doc.changeID.Next(),
 		messageFromMsgAndArgs(msgAndArgs...),
 		d.cloneRoot,
@@ -146,6 +180,11 @@ func (d *Document) Update(
 		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
 			return err
 		}
+
+		// update vector clock in change
+		actorId := d.doc.ActorID().String()
+		d.doc.syncedVectorMap[actorId][actorId] = c.ID().Lamport()
+		c.SetVectorClock(d.doc.syncedVectorMap[actorId])
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
 		d.doc.changeID = ctx.ID()
@@ -197,7 +236,28 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	d.GarbageCollect(pack.MinSyncedTicket)
+
+	minSeqVector := make(map[string]int64)
+	checker := make(map[string]int64)
+	for _, vec := range d.doc.syncedVectorMap {
+		for k, v := range vec {
+
+			if checker[k] == 0 {
+				checker[k] = v
+				continue
+			}
+
+			if minSeqVector[k] == 0 {
+				minSeqVector[k] = min(checker[k], v)
+				continue
+			}
+
+			minSeqVector[k] = min(minSeqVector[k], v)
+
+		}
+	}
+
+	d.GarbageCollect(minSeqVector)
 
 	// 05. Update the status.
 	if pack.IsRemoved {
@@ -279,14 +339,14 @@ func (d *Document) Root() *json.Object {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *Document) GarbageCollect(ticket *time.Ticket) int {
+func (d *Document) GarbageCollect(minSeqVector map[string]int64) int {
 	if d.cloneRoot != nil {
-		if _, err := d.cloneRoot.GarbageCollect(ticket); err != nil {
+		if _, err := d.cloneRoot.GarbageCollect(minSeqVector); err != nil {
 			panic(err)
 		}
 	}
 
-	n, err := d.doc.GarbageCollect(ticket)
+	n, err := d.doc.GarbageCollect(minSeqVector)
 	if err != nil {
 		panic(err)
 	}
@@ -429,4 +489,19 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 		return fmt.Sprintf(msgAndArgs[0].(string), msgAndArgs[1:]...)
 	}
 	return ""
+}
+
+// SetSyncedVectorMap sets the synced vector clock for the given actor.
+// Move the initial actor's vector clock to the given actor's vector clock.
+// And delete the initial actor's vector clock.
+func (d *Document) SetSyncedVectorMap(id *time.ActorID) {
+	// 1. Already has actor id, given from the server.
+	if d.doc.syncedVectorMap[id.String()] != nil {
+		return
+	}
+
+	// 2. If current actor id is initial actor id
+	d.doc.syncedVectorMap[id.String()] = d.doc.syncedVectorMap[time.InitialActorID.String()]
+	delete(d.doc.syncedVectorMap, time.InitialActorID.String())
+
 }

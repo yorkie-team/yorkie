@@ -273,6 +273,8 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 
 	doc.SetActor(c.id)
 
+	doc.SetSyncedVectorMap(c.id)
+
 	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 		p.Initialize(opts.Presence)
 		return nil
@@ -629,7 +631,6 @@ func (c *Client) pushPullChanges(ctx context.Context, opt SyncOptions) error {
 	if err != nil {
 		return err
 	}
-
 	if err := attachment.doc.ApplyChangePack(pack); err != nil {
 		return err
 	}

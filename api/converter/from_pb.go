@@ -136,6 +136,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 			pbChange.Message,
 			ops,
 			FromPresenceChange(pbChange.PresenceChange),
+			pbChange.VectorClock,
 		))
 	}
 

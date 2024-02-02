@@ -246,6 +246,7 @@ func ToChanges(changes []*change.Change) ([]*api.Change, error) {
 			Message:        c.Message(),
 			Operations:     pbOperations,
 			PresenceChange: ToPresenceChange(c.PresenceChange()),
+			VectorClock:    c.VectorClock(),
 		})
 	}
 

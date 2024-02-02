@@ -39,15 +39,19 @@ type Change struct {
 	// presenceChange represents the presenceChange of the user who made the change.
 	// TODO(hackerwins): Consider using changes instead of entire presenceChange.
 	presenceChange *innerpresence.PresenceChange
+
+	// vectorStatus
+	vectorClock time.VectorClock
 }
 
 // New creates a new instance of Change.
-func New(id ID, message string, operations []operations.Operation, p *innerpresence.PresenceChange) *Change {
+func New(id ID, message string, operations []operations.Operation, p *innerpresence.PresenceChange, vectorClock time.VectorClock) *Change {
 	return &Change{
 		id:             id,
 		message:        message,
 		operations:     operations,
 		presenceChange: p,
+		vectorClock:    vectorClock,
 	}
 }
 
@@ -111,4 +115,14 @@ func (c *Change) SetActor(actor *time.ActorID) {
 // PresenceChange returns the presence change of this change.
 func (c *Change) PresenceChange() *innerpresence.PresenceChange {
 	return c.presenceChange
+}
+
+// VectorClock returns the vectorClock of this change.
+func (c *Change) VectorClock() time.VectorClock {
+	return c.vectorClock
+}
+
+// SetVectorClock sets the given vectorClock.
+func (c *Change) SetVectorClock(vectorClock time.VectorClock) {
+	c.vectorClock = vectorClock
 }

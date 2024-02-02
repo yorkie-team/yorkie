@@ -109,11 +109,17 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			return nil, err
 		}
 
+		vc, err := time.NewVectorClockFromJson(info.VectorClock)
+		if err != nil {
+			return nil, err
+		}
+
 		pbChanges = append(pbChanges, &api.Change{
 			Id:             converter.ToChangeID(changeID),
 			Message:        info.Message,
 			Operations:     pbOps,
 			PresenceChange: converter.ToPresenceChange(p),
+			VectorClock:    vc,
 		})
 	}
 

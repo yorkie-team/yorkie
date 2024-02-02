@@ -53,6 +53,7 @@ message Change {
   string message = 2;
   repeated Operation operations = 3;
   PresenceChange presence_change = 4;
+  map<string, int64> vector_clock = 5;
 }
 
 message ChangeID {

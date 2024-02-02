@@ -50,6 +50,7 @@ type ChangeInfo struct {
 	Message        string   `bson:"message"`
 	Operations     [][]byte `bson:"operations"`
 	PresenceChange string   `bson:"presence_change"`
+	VectorClock    string   `bson:"vector_clock"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -86,6 +87,20 @@ func EncodePresenceChange(p *innerpresence.PresenceChange) (string, error) {
 	return string(bytes), nil
 }
 
+// EncodeVectorClock encodes the given vector clock into string.
+func EncodeVectorClock(vc map[string]int64) (string, error) {
+	if vc == nil {
+		return "", nil
+	}
+
+	bytes, err := json.Marshal(vc)
+	if err != nil {
+		return "", fmt.Errorf("marshal vector clock to bytes: %w", err)
+	}
+
+	return string(bytes), nil
+}
+
 // ToChange creates Change model from this ChangeInfo.
 func (i *ChangeInfo) ToChange() (*change.Change, error) {
 	actorID, err := time.ActorIDFromHex(i.ActorID.String())
@@ -114,7 +129,12 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	c := change.New(changeID, i.Message, ops, p)
+	vc, err := time.NewVectorClockFromJson(i.VectorClock)
+	if err != nil {
+		return nil, err
+	}
+
+	c := change.New(changeID, i.Message, ops, p, vc)
 	c.SetServerSeq(i.ServerSeq)
 
 	return c, nil
