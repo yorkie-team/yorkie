@@ -206,6 +206,8 @@ func RunFindChangesBetweenServerSeqsTest(
 		actorID, _ := time.ActorIDFromBytes(bytesID)
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
+		doc.SetSyncedVectorMap(actorID)
+
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("array")
 			return nil
@@ -250,6 +252,7 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
+		doc.SetSyncedVectorMap(actorID)
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("array")

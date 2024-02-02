@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -54,7 +53,7 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, "[0,2]", array.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		n, err := root.GarbageCollect(time.MaxTicket)
+		n, err := root.GarbageCollect(helper.MaxVectorClock())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, n)
 		assert.Equal(t, 0, root.GarbageLen())
@@ -98,7 +97,7 @@ func TestRoot(t *testing.T) {
 		nodeLen := len(text.Nodes())
 		assert.Equal(t, 4, nodeLen)
 
-		n, err := root.GarbageCollect(time.MaxTicket)
+		n, err := root.GarbageCollect(helper.MaxVectorClock())
 		assert.NoError(t, err)
 		assert.Equal(t, 3, n)
 		assert.Equal(t, 0, root.GarbageLen())
@@ -135,7 +134,7 @@ func TestRoot(t *testing.T) {
 			assert.Equal(t, tc.garbage, root.GarbageLen())
 		}
 
-		n, err := root.GarbageCollect(time.MaxTicket)
+		n, err := root.GarbageCollect(helper.MaxVectorClock())
 		assert.NoError(t, err)
 		assert.Equal(t, 3, n)
 		assert.Equal(t, 0, root.GarbageLen())
@@ -172,7 +171,7 @@ func TestRoot(t *testing.T) {
 		nodeLen := len(text.Nodes())
 		assert.Equal(t, 3, nodeLen)
 
-		garbageLen, err := root.GarbageCollect(time.MaxTicket)
+		garbageLen, err := root.GarbageCollect(helper.MaxVectorClock())
 		assert.NoError(t, err)
 		assert.Equal(t, 2, garbageLen)
 		assert.Equal(t, 0, root.GarbageLen())
@@ -210,7 +209,7 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, `{"1":1,"3":3}`, obj.Marshal())
 		assert.Equal(t, 4, root.GarbageLen())
 
-		n, err := root.GarbageCollect(time.MaxTicket)
+		n, err := root.GarbageCollect(helper.MaxVectorClock())
 		assert.NoError(t, err)
 		assert.Equal(t, 4, n)
 		assert.Equal(t, 0, root.GarbageLen())
@@ -220,7 +219,7 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, `{"1":1}`, obj.Marshal())
 		assert.Equal(t, 1, root.GarbageLen())
 
-		n, err = root.GarbageCollect(time.MaxTicket)
+		n, err = root.GarbageCollect(helper.MaxVectorClock())
 		assert.NoError(t, err)
 		assert.Equal(t, 1, n)
 		assert.Equal(t, 0, root.GarbageLen())

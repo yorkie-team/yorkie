@@ -582,7 +582,7 @@ func benchmarkTreeEditGC(cnt int, b *testing.B) {
 		})
 		assert.NoError(b, err)
 		assert.Equal(b, cnt, doc.GarbageLen())
-		assert.Equal(b, cnt, doc.GarbageCollect(time.MaxTicket))
+		assert.Equal(b, cnt, doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID()))
 	}
 }
 
@@ -617,7 +617,7 @@ func benchmarkTreeSplitGC(cnt int, b *testing.B) {
 		})
 		assert.NoError(b, err)
 		assert.Equal(b, cnt, doc.GarbageLen())
-		assert.Equal(b, cnt, doc.GarbageCollect(time.MaxTicket))
+		assert.Equal(b, cnt, doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID())))
 	}
 }
 
@@ -686,7 +686,7 @@ func benchmarkTextEditGC(cnt int, b *testing.B) {
 		}, "replace contents with b")
 		assert.NoError(b, err)
 		assert.Equal(b, cnt, doc.GarbageLen())
-		assert.Equal(b, cnt, doc.GarbageCollect(time.MaxTicket))
+		assert.Equal(b, cnt, doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID())))
 	}
 }
 
@@ -718,7 +718,7 @@ func benchmarkTextSplitGC(cnt int, b *testing.B) {
 		assert.NoError(b, err)
 
 		assert.Equal(b, cnt, doc.GarbageLen())
-		assert.Equal(b, cnt, doc.GarbageCollect(time.MaxTicket))
+		assert.Equal(b, cnt, doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID())))
 	}
 }
 
@@ -756,7 +756,7 @@ func benchmarkArrayGC(cnt int, b *testing.B) {
 		}, "deletes the array")
 		assert.NoError(b, err)
 
-		assert.Equal(b, cnt+1, doc.GarbageCollect(time.MaxTicket))
+		assert.Equal(b, cnt+1, doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID())))
 		assert.NoError(b, err)
 	}
 }

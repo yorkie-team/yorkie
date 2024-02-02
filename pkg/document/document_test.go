@@ -28,7 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 var (
@@ -487,7 +487,7 @@ func TestDocument(t *testing.T) {
 		)
 
 		assert.Equal(t, 1, doc.GarbageLen())
-		doc.GarbageCollect(time.MaxTicket)
+		doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID()))
 		assert.Equal(t, 0, doc.GarbageLen())
 		assert.Equal(
 			t,
@@ -520,7 +520,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 2, doc.GarbageLen())
 
-		doc.GarbageCollect(time.MaxTicket)
+		doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID()))
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 	})

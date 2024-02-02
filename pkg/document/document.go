@@ -236,28 +236,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-
-	minSeqVector := make(map[string]int64)
-	checker := make(map[string]int64)
-	for _, vec := range d.doc.syncedVectorMap {
-		for k, v := range vec {
-
-			if checker[k] == 0 {
-				checker[k] = v
-				continue
-			}
-
-			if minSeqVector[k] == 0 {
-				minSeqVector[k] = min(checker[k], v)
-				continue
-			}
-
-			minSeqVector[k] = min(minSeqVector[k], v)
-
-		}
-	}
-
-	d.GarbageCollect(minSeqVector)
+	d.GarbageCollect(d.doc.syncedVectorMap.MinSyncedVector())
 
 	// 05. Update the status.
 	if pack.IsRemoved {
@@ -339,7 +318,7 @@ func (d *Document) Root() *json.Object {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *Document) GarbageCollect(minSeqVector map[string]int64) int {
+func (d *Document) GarbageCollect(minSeqVector *time.VectorClock) int {
 	if d.cloneRoot != nil {
 		if _, err := d.cloneRoot.GarbageCollect(minSeqVector); err != nil {
 			panic(err)
