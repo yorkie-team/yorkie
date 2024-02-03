@@ -185,6 +185,7 @@ The duplication of `client_id` values can devastate the consistency of documents
     * see details in the following contents.
 
 **Duplicate MongoDB ObjectID**
+
 Both `client_id` and `doc_id` are currently using MongoDB ObjectID as a value. When duplication of ObjectIDs occurs, it works well due to the changed reference keys, until the MongoDB balancer migrates a chunk with duplicate ObjectID. This unexpected action may not harm the consistency of documents, but bring out a temporary failure of the cluster. The conflict should be handled manually by administrators.
 
 <img src="media/mongodb-sharding-duplicate-objectid-migration.png" width="600">
