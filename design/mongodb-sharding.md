@@ -31,7 +31,8 @@ This document will only explain the core concepts of the selected sharding strat
 2. Project-wide: `documents`, `clients`
 3. Document-wide: `changes`, `snapshots`, `syncedseqs` 
 
-![Previous collection relations](media/mongodb-sharding-prev-relation.png)
+<img src="media/mongodb-sharding-prev-relation.png">
+
 
 **Sharding Goals**
 
@@ -144,7 +145,7 @@ Since the uniqueness of `_id` isn't guaranteed across shards, reference keys to 
 
 Considering that MongoDB ensures the uniqueness of `_id` per shard, `Documents` and `Clients` can be identified with the combination of `project_id` and `_id`. Note that the reference keys of document-wide collections are also subsequently changed.
 
-![Reference key changes](media/mongodb-sharding-ref-key-changes.png)
+<img src="media/mongodb-sharding-ref-key-changes.png" width="600">
 
 **Relations between Collections**
 
@@ -172,7 +173,7 @@ This may limit scalability of MongoDB clusters, which means adding more shards b
 
 Using a composite shard key like `(project_id, key)` can resolve this issue. After that, it's possible to split large chunks by `key` values, and migrate the splitted chunks to newly added shards.
 
-![Composite shard key](media/mongodb-sharding-composite-shard-key.png)
+<img src="media/mongodb-sharding-composite-shard-key.png" width="600">
 
 However, this change of shard keys can lead to the value duplication of either `actor_id` or `owner`, which uses `client_id` as a value. Now the values of `client_id` can be duplicated, contrary to the current sharding strategy where locating every client in the same project into the same shard prevents this kind of duplications.
 
@@ -186,7 +187,7 @@ The duplication of `client_id` values can devastate the consistency of documents
 **Duplicate MongoDB ObjectID**
 Both `client_id` and `doc_id` are currently using MongoDB ObjectID as a value. When duplication of ObjectIDs occurs, it works well due to the changed reference keys, until the MongoDB balancer migrates a chunk with duplicate ObjectID. This unexpected action may not harm the consistency of documents, but bring out a temporary failure of the cluster. The conflict should be handled manually by administrators.
 
-![Duplicate ObjectID migration](media/mongodb-sharding-duplicate-objectid-migration.png)
+<img src="media/mongodb-sharding-duplicate-objectid-migration.png" width="600">
 
 However, the possiblity of duplicate ObjectIDs is **extremely low in practical use cases** due to its mechanism.
 ObjectID uses the following format:
