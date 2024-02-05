@@ -7,7 +7,7 @@ target-version: 0.4.14
 
 ## Summary
 
-The Yorkie cluster is responsible for storing the majority of data in the database. Therefore, most loads are concentrated on database clusters rather than application servers. In production environment scenarios, supporting sharding becomes essential for distributing data and query loads across horizontally-scalable db clusters.
+The Yorkie cluster is responsible for storing the majority of the data in the database. Therefore, most loads are concentrated on database clusters rather than application servers. In production environment scenarios, supporting sharding becomes essential for distributing data and query loads across horizontally-scalable DB clusters.
 
 Yorkie now provides compatibility with sharded MongoDB clusters.
 
@@ -15,7 +15,7 @@ The selected sharding strategy, including the target collection, the shard keys,
 
 ### Goals
 
-Provide compatiblity with sharded MongoDB clusters based on requirements in the production environment.
+Provide compatibility with sharded MongoDB clusters based on requirements in the production environment.
 
 ### Non-Goals
 
@@ -168,8 +168,8 @@ For a production deployment, consider the following to ensure data redundancy an
 
 **Limited Scalability due to High Value Frequency of `project_id`**
 
-When there are the limited number of projects, it's likely for data to be concetrated on the small number of chunks and shards.
-This may limit scalability of MongoDB clusters, which means adding more shards becomes ineffective.
+When there are a limited number of projects, it's likely for the data to be concentrated on a small number of chunks and shards.
+This may limit the scalability of MongoDB clusters, which means adding more shards becomes ineffective.
 
 Using a composite shard key like `(project_id, key)` can resolve this issue. After that, it's possible to split large chunks by `key` values, and migrate the splitted chunks to newly added shards.
 
@@ -181,16 +181,16 @@ The duplication of `client_id` values can devastate the consistency of documents
 1. Use `client_key + client_id` as a value.
     * this may increase the size of CRDT metadata and the size of document snapshots.
 2. Introduce a cluster-level GUID generator.
-3. Depend on low possiblity of duplication of MongoDB ObjectID
+3. Depend on the low possibility of duplication of MongoDB ObjectID.
     * see details in the following contents.
 
 **Duplicate MongoDB ObjectID**
 
-Both `client_id` and `doc_id` are currently using MongoDB ObjectID as a value. When duplication of ObjectIDs occurs, it works well due to the changed reference keys, until the MongoDB balancer migrates a chunk with duplicate ObjectID. This unexpected action may not harm the consistency of documents, but bring out a temporary failure of the cluster. The conflict should be handled manually by administrators.
+Both `client_id` and `doc_id` are currently using MongoDB ObjectID as a value. When duplication of ObjectIDs occurs, it works well due to the changed reference keys, until the MongoDB balancer migrates a chunk with a duplicate ObjectID. This unexpected action may not harm the consistency of documents, but may bring out a temporary failure of the cluster. The conflict should be handled manually by administrators.
 
 <img src="media/mongodb-sharding-duplicate-objectid-migration.png" width="600">
 
-However, the possiblity of duplicate ObjectIDs is **extremely low in practical use cases** due to its mechanism.
+However, the possibility of duplicate ObjectIDs is **extremely low in practical use cases** due to its mechanism.
 ObjectID uses the following format:
 ```
 TimeStamp(4 bytes) + MachineId(3 bytes) + ProcessId(2 bytes) + Counter(3 bytes)

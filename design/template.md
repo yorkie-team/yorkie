@@ -3,6 +3,8 @@ title: feature-name
 target-version: X.X.X
 ---
 
+<!-- Make sure to append document link in design README.md after creating the document. -->
+
 # Feature Name
 
 ## Summary
