@@ -466,7 +466,7 @@ func TestArraySet(t *testing.T) {
 			})
 			assert.NoError(t, err)
 			assert.Equal(t, tt.tombstones, d1.GarbageLen())
-			assert.Equal(t, tt.tombstones, d1.GarbageCollect(time.MaxTicket))
+			assert.Equal(t, tt.tombstones, d1.GarbageCollect(helper.MaxVectorClock(d1.ActorID())))
 		})
 	}
 }

@@ -481,6 +481,8 @@ func (d *Document) SetSyncedVectorMap(id *time.ActorID) {
 
 	// 2. If current actor id is initial actor id
 	d.doc.syncedVectorMap[id.String()] = d.doc.syncedVectorMap[time.InitialActorID.String()]
+	d.doc.syncedVectorMap[id.String()][id.String()] = d.doc.syncedVectorMap[id.String()][time.InitialActorID.String()]
+	delete(d.doc.syncedVectorMap[id.String()], time.InitialActorID.String())
 	delete(d.doc.syncedVectorMap, time.InitialActorID.String())
 
 }

@@ -142,7 +142,7 @@ func (r *Root) GarbageCollect(minSeqVector *time.VectorClock) (int, error) {
 	count := 0
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
-		actor := pair.elem.CreatedAt().ActorID()
+		actor := pair.elem.RemovedAt().ActorID()
 		minTicket := time.NewTicket((*minSeqVector)[actor.String()], time.MaxDelimiter, actor)
 
 		if pair.elem.RemovedAt() != nil && minTicket.Compare(pair.elem.RemovedAt()) >= 0 {
