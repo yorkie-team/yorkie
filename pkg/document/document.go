@@ -158,12 +158,13 @@ func (d *Document) Update(
 	if err := d.ensureClone(); err != nil {
 		return err
 	}
+	actorID := d.doc.ActorID().String()
 
 	ctx := change.NewContext( // vectorClock update and copy
 		d.doc.changeID.Next(),
 		messageFromMsgAndArgs(msgAndArgs...),
 		d.cloneRoot,
-		d.doc.syncedVectorMap[d.doc.ActorID().String()].Next(d.doc.ActorID(), 1),
+		d.doc.syncedVectorMap[actorID].CopyAndSet(actorID, d.doc.changeID.Lamport()+1),
 	)
 
 	if err := updater(
@@ -182,10 +183,10 @@ func (d *Document) Update(
 			return err
 		}
 
-		// update vector clock in change
-		actorID := d.doc.ActorID().String()
-		d.doc.syncedVectorMap[actorID].Next(d.doc.ActorID(), 1)
+		// Set the vector clock to change.
 		c.SetVectorClock(d.doc.syncedVectorMap[actorID])
+		// Update the vector clock of the actor.
+		d.doc.syncedVectorMap[actorID][actorID] = ctx.ID().Lamport()
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
 		d.doc.changeID = ctx.ID()

@@ -30,7 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func BenchmarkDocument(b *testing.B) {
@@ -582,7 +582,7 @@ func benchmarkTreeEditGC(cnt int, b *testing.B) {
 		})
 		assert.NoError(b, err)
 		assert.Equal(b, cnt, doc.GarbageLen())
-		assert.Equal(b, cnt, doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID()))
+		assert.Equal(b, cnt, doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID())))
 	}
 }
 
