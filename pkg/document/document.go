@@ -183,9 +183,9 @@ func (d *Document) Update(
 		}
 
 		// update vector clock in change
-		actorId := d.doc.ActorID().String()
-		d.doc.syncedVectorMap[actorId].Next(d.doc.ActorID(), 1)
-		c.SetVectorClock(d.doc.syncedVectorMap[actorId])
+		actorID := d.doc.ActorID().String()
+		d.doc.syncedVectorMap[actorID].Next(d.doc.ActorID(), 1)
+		c.SetVectorClock(d.doc.syncedVectorMap[actorID])
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
 		d.doc.changeID = ctx.ID()

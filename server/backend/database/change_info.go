@@ -129,7 +129,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	vc, err := time.NewVectorClockFromJson(i.VectorClock)
+	vc, err := time.NewVectorClockFromJSON(i.VectorClock)
 	if err != nil {
 		return nil, err
 	}

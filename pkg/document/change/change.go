@@ -45,13 +45,14 @@ type Change struct {
 }
 
 // New creates a new instance of Change.
-func New(id ID, message string, operations []operations.Operation, p *innerpresence.PresenceChange, vectorClock time.VectorClock) *Change {
+func New(id ID, message string, operations []operations.Operation,
+	p *innerpresence.PresenceChange, vc time.VectorClock) *Change {
 	return &Change{
 		id:             id,
 		message:        message,
 		operations:     operations,
 		presenceChange: p,
-		vectorClock:    vectorClock,
+		vectorClock:    vc,
 	}
 }
 

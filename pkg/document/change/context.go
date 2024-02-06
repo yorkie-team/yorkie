@@ -97,6 +97,7 @@ func (c *Context) SetPresenceChange(presenceChange innerpresence.PresenceChange)
 	c.presenceChange = &presenceChange
 }
 
+// VectorClock returns the vector clock of this context.
 func (c *Context) VectorClock() time.VectorClock {
 	return c.vectorClock
 }

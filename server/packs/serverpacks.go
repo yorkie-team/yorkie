@@ -109,7 +109,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			return nil, err
 		}
 
-		vc, err := time.NewVectorClockFromJson(info.VectorClock)
+		vc, err := time.NewVectorClockFromJSON(info.VectorClock)
 		if err != nil {
 			return nil, err
 		}

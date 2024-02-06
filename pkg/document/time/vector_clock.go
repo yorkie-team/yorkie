@@ -5,11 +5,14 @@ import (
 	"fmt"
 )
 
+// VectorClock is a map of actor id to its sequence number.
 type VectorClock map[string]int64
+
+// SyncedVectorMap is a map of actor id to its vector clock.
 type SyncedVectorMap map[string]VectorClock
 
-// NewVectorClock creates a new instance of VectorClock.
-func NewVectorClockFromJson(encodedChange string) (VectorClock, error) {
+// NewVectorClockFromJSON creates a new instance of VectorClock.
+func NewVectorClockFromJSON(encodedChange string) (VectorClock, error) {
 	if encodedChange == "" {
 		return nil, nil
 	}
@@ -24,8 +27,8 @@ func NewVectorClockFromJson(encodedChange string) (VectorClock, error) {
 
 // InitialSyncedVectorMap creates an initial synced vector map.
 func InitialSyncedVectorMap(lamport int64) SyncedVectorMap {
-	actorId := InitialActorID.String()
-	return SyncedVectorMap{actorId: VectorClock{actorId: lamport}}
+	actorID := InitialActorID.String()
+	return SyncedVectorMap{actorID: VectorClock{actorID: lamport}}
 }
 
 // MinSyncedVector returns the minimum vector clock from the given syncedVectorMap.
@@ -53,6 +56,7 @@ func (svm SyncedVectorMap) MinSyncedVector() *VectorClock {
 	return &minSeqVector
 }
 
+// Next update `vectorClock[id] += inc` and return the New VectorClock.
 func (vc VectorClock) Next(id *ActorID, inc int64) VectorClock {
 	if vc == nil {
 		vc = make(VectorClock)

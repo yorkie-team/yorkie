@@ -124,6 +124,7 @@ func (e *Edit) Attributes() map[string]string {
 	return e.attributes
 }
 
+// VectorClock returns the vector clock of this operation.
 func (e *Edit) VectorClock() time.VectorClock {
 	return e.vectorClock
 }
