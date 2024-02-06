@@ -43,7 +43,8 @@ type Container interface {
 type GCElement interface {
 	Element
 	removedNodesLen() int
-	purgeRemovedNodesBefore(ticket *time.Ticket) (int, error)
+	//TODO(highcloud100): Check the case where minSeqVector[actor.String()] is nil
+	purgeRemovedNodesBefore(minSeqVector *time.VectorClock) (int, error)
 }
 
 // Element represents JSON element.

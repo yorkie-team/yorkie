@@ -445,23 +445,23 @@ func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNod
 func (s *RGATreeSplit[V]) edit(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	vectorClock *time.VectorClock,
 	content V,
 	editedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket, error) {
+) (*RGATreeSplitNodePos, error) {
 	// 01. Split nodes with from and to
 	toLeft, toRight, err := s.findNodeWithSplit(to, editedAt)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	fromLeft, fromRight, err := s.findNodeWithSplit(from, editedAt)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
-	latestCreatedAtMap, removedNodeMapByNodeKey := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
+	removedNodeMapByNodeKey := s.deleteNodes(nodesToDelete, vectorClock, editedAt)
 
 	var caretID *RGATreeSplitNodeID
 	if toRight == nil {
@@ -482,7 +482,7 @@ func (s *RGATreeSplit[V]) edit(
 		s.removedNodeMap[key] = removedNode
 	}
 
-	return caretPos, latestCreatedAtMap, nil
+	return caretPos, nil
 }
 
 func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeSplitNode[V] {
@@ -497,14 +497,13 @@ func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeS
 
 func (s *RGATreeSplit[V]) deleteNodes(
 	candidates []*RGATreeSplitNode[V],
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	vectorClock *time.VectorClock,
 	editedAt *time.Ticket,
-) (map[string]*time.Ticket, map[string]*RGATreeSplitNode[V]) {
-	createdAtMapByActor := make(map[string]*time.Ticket)
+) map[string]*RGATreeSplitNode[V] {
 	removedNodeMap := make(map[string]*RGATreeSplitNode[V])
 
 	if len(candidates) == 0 {
-		return createdAtMapByActor, removedNodeMap
+		return removedNodeMap
 	}
 
 	// There are 2 types of nodes in `candidates`: should delete, should not delete.
@@ -515,27 +514,21 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	nodesToKeep = append(nodesToKeep, leftEdge)
 
 	for _, node := range candidates {
-		actorIDHex := node.createdAt().ActorIDHex()
+		actorID := node.createdAt().ActorID()
 
-		var latestCreatedAt *time.Ticket
-		if latestCreatedAtMapByActor == nil {
-			latestCreatedAt = time.MaxTicket
+		var latestSyncedAt *time.Ticket
+		if vectorClock == nil {
+			latestSyncedAt = time.MaxTicket
 		} else {
-			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
+			createdAt, ok := (*vectorClock)[actorID.String()]
 			if ok {
-				latestCreatedAt = createdAt
+				latestSyncedAt = time.NewTicket(createdAt, time.MaxDelimiter, actorID)
 			} else {
-				latestCreatedAt = time.InitialTicket
+				latestSyncedAt = time.InitialTicket
 			}
 		}
 
-		if node.Remove(editedAt, latestCreatedAt) {
-			latestCreatedAt := createdAtMapByActor[actorIDHex]
-			createdAt := node.id.createdAt
-			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
-				createdAtMapByActor[actorIDHex] = createdAt
-			}
-
+		if node.Remove(editedAt, latestSyncedAt) {
 			removedNodeMap[node.id.key()] = node
 		} else {
 			nodesToKeep = append(nodesToKeep, node)
@@ -544,7 +537,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	nodesToKeep = append(nodesToKeep, rightEdge)
 	s.deleteIndexNodes(nodesToKeep)
 
-	return createdAtMapByActor, removedNodeMap
+	return removedNodeMap
 }
 
 // findEdgesOfCandidates finds the edges outside `candidates`,
@@ -623,9 +616,12 @@ func (s *RGATreeSplit[V]) removedNodesLen() int {
 }
 
 // purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (s *RGATreeSplit[V]) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
+func (s *RGATreeSplit[V]) purgeRemovedNodesBefore(minSeqVector *time.VectorClock) (int, error) {
 	count := 0
 	for _, node := range s.removedNodeMap {
+		lamport := (*minSeqVector)[node.removedAt.ActorID().String()]
+		// For now new ticket's actorID is always the same as the node's actorID.
+		ticket := time.NewTicket(lamport, time.MaxDelimiter, node.removedAt.ActorID())
 		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {
 			s.treeByIndex.Delete(node.indexNode)
 			s.purge(node)

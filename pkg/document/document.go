@@ -163,6 +163,7 @@ func (d *Document) Update(
 		d.doc.changeID.Next(),
 		messageFromMsgAndArgs(msgAndArgs...),
 		d.cloneRoot,
+		d.doc.syncedVectorMap[d.doc.ActorID().String()].Next(d.doc.ActorID(), 1),
 	)
 
 	if err := updater(
@@ -183,7 +184,7 @@ func (d *Document) Update(
 
 		// update vector clock in change
 		actorId := d.doc.ActorID().String()
-		d.doc.syncedVectorMap[actorId][actorId] = c.ID().Lamport()
+		d.doc.syncedVectorMap[actorId].Next(d.doc.ActorID(), 1)
 		c.SetVectorClock(d.doc.syncedVectorMap[actorId])
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
@@ -313,7 +314,7 @@ func (d *Document) Root() *json.Object {
 		panic(err)
 	}
 
-	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot)
+	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot, d.doc.syncedVectorMap[d.doc.ActorID().String()])
 	return json.NewObject(ctx, d.cloneRoot.Object())
 }
 

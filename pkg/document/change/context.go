@@ -33,14 +33,16 @@ type Context struct {
 	delimiter      uint32
 	root           *crdt.Root
 	presenceChange *innerpresence.PresenceChange
+	vectorClock    time.VectorClock
 }
 
 // NewContext creates a new instance of Context.
-func NewContext(id ID, message string, root *crdt.Root) *Context {
+func NewContext(id ID, message string, root *crdt.Root, vectorClock time.VectorClock) *Context {
 	return &Context{
-		id:      id,
-		message: message,
-		root:    root,
+		id:          id,
+		message:     message,
+		root:        root,
+		vectorClock: vectorClock,
 	}
 }
 
@@ -93,4 +95,8 @@ func (c *Context) LastTimeTicket() *time.Ticket {
 // SetPresenceChange sets the presence change of the user who made the change.
 func (c *Context) SetPresenceChange(presenceChange innerpresence.PresenceChange) {
 	c.presenceChange = &presenceChange
+}
+
+func (c *Context) VectorClock() time.VectorClock {
+	return c.vectorClock
 }

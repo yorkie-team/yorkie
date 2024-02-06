@@ -55,11 +55,11 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		// (0, 0) -> (1, 0): syncedseqs:(0, 0)
+		// push A[A:2] pull [B:1] => A:{ A:[A:2,B:1], B[B:1] }
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		// (1, 0) -> (1, 1): syncedseqs:(0, 0)
+		// pull A[A:2] -> B:{ A:[A:2], B:[A:2,B:1] }
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
@@ -71,35 +71,35 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// (1, 1) -> (1, 2): syncedseqs:(0, 1)
+		// push B[A:2,B:4] -> B: { A[A:2], B[A:2,B:4] }
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// (1, 2) -> (2, 2): syncedseqs:(1, 1)
+		// pull B[A:2, B:4] -> A: { A[A:2,B:4], B[A:2,B:4] } -> minSyncedVector : [2, 4]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, 4, d1.GarbageLen())
+		assert.Equal(t, 0, d1.GarbageLen()) // gc collected garbage
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// (2, 2) -> (2, 2): syncedseqs:(1, 2)
+		// B: { A[A:2], B[A:2,B:4] }
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, 4, d1.GarbageLen())
+		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// (2, 2) -> (2, 2): syncedseqs:(2, 2): meet GC condition
+		// A: { A[A:2,B:4], B[A:2,B:4] }
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// (2, 2) -> (2, 2): syncedseqs:(2, 2): meet GC condition
+		// B: { A[A:2], B[A:2,B:4] } -> minSyncedVector : [2, 0]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, 4, d2.GarbageLen())
 	})
 
 	t.Run("garbage collection for text type test", func(t *testing.T) {
@@ -123,11 +123,11 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		// (0, 0) -> (1, 0): syncedseqs:(0, 0)
+		// push A[A:2]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		// (1, 0) -> (1, 1): syncedseqs:(0, 0)
+		// pull A[A:2] -> B: { A[A:2], B[A:2,B:1] }
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
@@ -139,26 +139,27 @@ func TestGarbageCollection(t *testing.T) {
 				Edit(0, 1, "a", map[string]string{"b": "1"})
 			return nil
 		}, "edit text type elements")
+
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// (1, 1) -> (1, 2): syncedseqs:(0, 1)
+		// push B[A:2,B:4] -> B: { A[A:2], B[A:2,B:4] }
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// (1, 2) -> (2, 2): syncedseqs:(1, 1)
+		// pull B[A:2,B:4] -> A: {A[A:2,B:4], B[A:2,B:4]}
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, 3, d1.GarbageLen())
+		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
 		// (2, 2) -> (2, 2): syncedseqs:(1, 2)
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, 3, d1.GarbageLen())
+		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
 		// (2, 2) -> (2, 2): syncedseqs:(2, 2): meet GC condition
@@ -171,7 +172,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
+		assert.Equal(t, 3, d2.GarbageLen())
 	})
 
 	t.Run("garbage collection for tree type test", func(t *testing.T) {
@@ -494,7 +495,7 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
@@ -503,16 +504,71 @@ func TestGarbageCollection(t *testing.T) {
 		}, "insert 1")
 		assert.NoError(t, err)
 
-		err = c2.Sync(ctx)
+		err = c2.Sync(ctx) // GC purge 4@A node
 		assert.NoError(t, err)
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		err = c1.Sync(ctx)
-		assert.NoError(t, err) // 👾 Encounters an error since the node is purged in GC.
-		assert.Equal(t, 0, d1.GarbageLen())
+		assert.NoError(t, err)
+		assert.Equal(t, 2, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
+	})
+
+	t.Run("should not garbage collection int Text delete", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text").Edit(0, 0, "a").Edit(1, 1, "b")
+			return nil
+		})
+
+		c1.Sync(ctx)
+		c1.Sync(ctx)
+		c2.Sync(ctx)
+		c2.Sync(ctx)
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "d")
+			return nil
+		})
+
+		c2.Sync(ctx)
+		c2.Sync(ctx)
+		c1.Sync(ctx)
+		c1.Sync(ctx)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "c")
+			return nil
+		})
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetText("text").Edit(2, 2, "1").Edit(1, 4, "")
+			return nil
+		})
+
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 3, d2.GarbageLen())
+
+		c2.Sync(ctx)
+		c2.Sync(ctx)
+		c1.Sync(ctx)
+		c1.Sync(ctx)
+
+		assert.Equal(t, 3, d1.GarbageLen())
+		assert.Equal(t, 3, d2.GarbageLen())
+
+		c2.Sync(ctx)
+		c2.Sync(ctx)
 	})
 }

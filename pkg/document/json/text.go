@@ -68,7 +68,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	_, maxCreationMapByActor, err := p.Text.Edit(
+	_, err = p.Text.Edit(
 		fromPos,
 		toPos,
 		nil,
@@ -84,7 +84,7 @@ func (p *Text) Edit(from, to int, content string, attributes ...map[string]strin
 		p.CreatedAt(),
 		fromPos,
 		toPos,
-		maxCreationMapByActor,
+		p.context.VectorClock(),
 		content,
 		attrs,
 		ticket,

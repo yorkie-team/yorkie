@@ -373,12 +373,6 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
-	createdAtMapByActor, err := fromCreatedAtMapByActor(
-		pbEdit.CreatedAtMapByActor,
-	)
-	if err != nil {
-		return nil, err
-	}
 	executedAt, err := fromTimeTicket(pbEdit.ExecutedAt)
 	if err != nil {
 		return nil, err
@@ -387,7 +381,7 @@ func fromEdit(pbEdit *api.Operation_Edit) (*operations.Edit, error) {
 		parentCreatedAt,
 		from,
 		to,
-		createdAtMapByActor,
+		pbEdit.VectorClock,
 		pbEdit.Content,
 		pbEdit.Attributes,
 		executedAt,

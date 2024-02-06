@@ -143,6 +143,8 @@ func (r *Root) GarbageCollect(minSeqVector *time.VectorClock) (int, error) {
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
 		actor := pair.elem.RemovedAt().ActorID()
+
+		//TODO(highcloud100): Check the case where minSeqVector[actor.String()] is nil
 		minTicket := time.NewTicket((*minSeqVector)[actor.String()], time.MaxDelimiter, actor)
 
 		if pair.elem.RemovedAt() != nil && minTicket.Compare(pair.elem.RemovedAt()) >= 0 {
@@ -155,9 +157,8 @@ func (r *Root) GarbageCollect(minSeqVector *time.VectorClock) (int, error) {
 	}
 
 	for _, node := range r.elementHasRemovedNodesSetByCreatedAt {
-		actor := node.CreatedAt().ActorID()
-		minTicket := time.NewTicket((*minSeqVector)[actor.String()], time.MaxDelimiter, actor)
-		purgedNodes, err := node.purgeRemovedNodesBefore(minTicket)
+
+		purgedNodes, err := node.purgeRemovedNodesBefore(minSeqVector)
 		if err != nil {
 			return 0, err
 		}

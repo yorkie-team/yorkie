@@ -116,6 +116,7 @@ func TextChangeContext(root *crdt.Root) *change.Context {
 		change.InitialID,
 		"",
 		root,
+		time.VectorClock{change.InitialID.ActorID().String(): 0},
 	)
 }
 

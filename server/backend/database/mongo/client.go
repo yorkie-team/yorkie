@@ -1081,8 +1081,6 @@ func (c *Client) FindMinSyncedSeqInfo(
 
 // UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
 // and returns the min synced ticket.
-// db 업데이트를 한 다음
-// syncedseqs 에서 lamport, actor_id 기준으로 가장 낮은 티켓 반환
 func (c *Client) UpdateAndFindMinSyncedTicket(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,

@@ -52,3 +52,11 @@ func (svm SyncedVectorMap) MinSyncedVector() *VectorClock {
 
 	return &minSeqVector
 }
+
+func (vc VectorClock) Next(id *ActorID, inc int64) VectorClock {
+	if vc == nil {
+		vc = make(VectorClock)
+	}
+	vc[id.String()] += inc
+	return vc
+}

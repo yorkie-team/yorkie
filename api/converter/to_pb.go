@@ -309,13 +309,13 @@ func toRemove(remove *operations.Remove) (*api.Operation_Remove_, error) {
 func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 	return &api.Operation_Edit_{
 		Edit: &api.Operation_Edit{
-			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
-			From:                toTextNodePos(e.From()),
-			To:                  toTextNodePos(e.To()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
-			Content:             e.Content(),
-			Attributes:          e.Attributes(),
-			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
+			ParentCreatedAt: ToTimeTicket(e.ParentCreatedAt()),
+			From:            toTextNodePos(e.From()),
+			To:              toTextNodePos(e.To()),
+			VectorClock:     e.VectorClock(),
+			Content:         e.Content(),
+			Attributes:      e.Attributes(),
+			ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
 }

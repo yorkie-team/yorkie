@@ -223,11 +223,11 @@ func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNod
 func (t *Text) Edit(
 	from,
 	to *RGATreeSplitNodePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	vectorClock *time.VectorClock,
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket, error) {
+) (*RGATreeSplitNodePos, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
 		val.attrs.Set(key, value, executedAt)
@@ -236,7 +236,7 @@ func (t *Text) Edit(
 	return t.rgaTreeSplit.edit(
 		from,
 		to,
-		latestCreatedAtMapByActor,
+		vectorClock,
 		val,
 		executedAt,
 	)
@@ -323,6 +323,6 @@ func (t *Text) removedNodesLen() int {
 }
 
 // purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (t *Text) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
-	return t.rgaTreeSplit.purgeRemovedNodesBefore(ticket)
+func (t *Text) purgeRemovedNodesBefore(minSeqVector *time.VectorClock) (int, error) {
+	return t.rgaTreeSplit.purgeRemovedNodesBefore(minSeqVector)
 }
