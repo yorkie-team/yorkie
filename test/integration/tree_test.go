@@ -1343,7 +1343,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>a</p><p></p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
-	t.Run("contained-split-and-split-at-diffrent-positions-on-the-same-node", func(t *testing.T) {
+	t.Run("contained-split-and-split-at-different-positions-on-the-same-node", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
@@ -2623,7 +2623,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>a</p><p>b</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
-	t.Run("side-by-side-split-and-delete", func(t *testing.T) {
+	t.Run("side-by-side-split-and-merge", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		assert.NoError(t, c1.Attach(ctx, d1))
