@@ -34,8 +34,8 @@ type Edit struct {
 	// to represents the end point of the editing range.
 	to *crdt.RGATreeSplitNodePos
 
-	// latestCreatedAtMapByActor is a map that stores the latest creation time
-	// by actor for the nodes included in the editing range.
+	// vectorClock present the actor's vector clock when this edit executed
+	// for the nodes included in the editing range.
 	vectorClock time.VectorClock
 
 	// content is the content of text added when editing.

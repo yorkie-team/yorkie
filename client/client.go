@@ -272,7 +272,7 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	}
 
 	doc.SetActor(c.id)
-	doc.SetSyncedVectorMap(c.id)
+	doc.InternalDocument().SyncedVectorMap().ChangeActorID(c.id)
 
 	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 		p.Initialize(opts.Presence)

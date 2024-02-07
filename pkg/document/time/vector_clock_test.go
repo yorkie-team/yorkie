@@ -17,6 +17,6 @@ func TestVectorClock(t *testing.T) {
 
 		minVec := vec.MinSyncedVector()
 
-		assert.Equal(t, time.VectorClock{"1": 0, "2": 1, "3": 0}, *minVec)
+		assert.Equal(t, time.VectorClock{"1": 0, "2": 1, "3": 0}, minVec)
 	})
 }

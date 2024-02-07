@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -429,19 +430,36 @@ func TestGarbageCollection(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		// push B[A:2,B:4], pull A[A:3] -> B: { A:[A:3], B:[A:3,B:4] } -> GC 3@A
+		// push B[A:2,B:4], pull A[A:3] -> B: { A:[A:3], B:[A:3,B:4] } -> B GC 3@A
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		// push A[A:3,B:1], pull B[A:2,B:4] -> A: { A:[A:3,B:4], B:[A:2,B:4] } -> GC 4@B
+		// pull B[A:2,B:4] -> A: { A:[A:3,B:4], B:[A:2,B:4] } -> A GC 4@B
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
 		assert.Equal(t, 2, d1.GarbageLen()) // 3@A remains
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		assert.Equal(t, 2, d1.GarbageCollect(helper.MaxVectorClock(d1.ActorID())))
-		assert.Equal(t, 0, d2.GarbageCollect(helper.MaxVectorClock(d2.ActorID())))
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("point2")
+			return nil
+		})
+		assert.NoError(t, err)
+
+		// push B[A:3,B:6] -> B: { A:[A:3], B:[A:3,B:6] }
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
+		// pull B[A:3,B:6] -> A: { A:[A:3,B:6], B:[A:3,B:6] } -> A GC 3@A
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d1.PrintSyncedVectorMap("A")
+		d2.PrintSyncedVectorMap("B")
+
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
 	})
 
 	t.Run("deregister nested object gc test", func(t *testing.T) {
@@ -598,5 +616,49 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
+	})
+
+	t.Run("snap shot vector clock test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		for i := 0; i < int(helper.SnapshotThreshold)+2; i++ {
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetInteger(fmt.Sprintf("Padding %d", i), i)
+				return nil
+			})
+			assert.NoError(t, err)
+		}
+
+		c1.Sync(ctx)
+		c1.Sync(ctx)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		fmt.Println(d1.Marshal())
+		fmt.Println(d2.Marshal())
+		d1.PrintSyncedVectorMap("A")
+		d2.PrintSyncedVectorMap("B")
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetInteger("Padding", 1)
+			return nil
+		})
+
+		c2.Sync(ctx)
+		c2.Sync(ctx)
+
+		c1.Sync(ctx)
+		c1.Sync(ctx)
+
+		fmt.Println(d1.Marshal())
+		fmt.Println(d2.Marshal())
+		d1.PrintSyncedVectorMap("A")
+		d2.PrintSyncedVectorMap("B")
+
 	})
 }

@@ -808,7 +808,7 @@ func (c *Client) CreateChangeInfos(
 		if err != nil {
 			return err
 		}
-		encodedVectorClock, err := database.EncodeVectorClock(cn.VectorClock())
+		encodedVectorClock, err := cn.VectorClock().EncodeToString()
 		if err != nil {
 			return err
 		}
@@ -974,13 +974,19 @@ func (c *Client) CreateSnapshotInfo(
 		return err
 	}
 
+	syncedVectorMap, err := doc.SyncedVectorMap().EncodeToString()
+	if err != nil {
+		return err
+	}
+
 	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": doc.Checkpoint().ServerSeq,
-		"lamport":    doc.Lamport(),
-		"snapshot":   snapshot,
-		"created_at": gotime.Now(),
+		"project_id":        docRefKey.ProjectID,
+		"doc_id":            docRefKey.DocID,
+		"server_seq":        doc.Checkpoint().ServerSeq,
+		"lamport":           doc.Lamport(),
+		"snapshot":          snapshot,
+		"created_at":        gotime.Now(),
+		"synced_vector_map": syncedVectorMap,
 	}); err != nil {
 		return fmt.Errorf("insert snapshot: %w", err)
 	}

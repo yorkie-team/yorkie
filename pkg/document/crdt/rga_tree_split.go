@@ -516,13 +516,17 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	for _, node := range candidates {
 		actorID := node.createdAt().ActorID()
 
+		// TODO(highcloud100): rename the latestSyncedAt.
+		// vectorClock can replace the editedAt,
+		// but then the way to get editedAt.ActorID() disappears.
+		// replace and add argument of actorID to the vectorClock.
 		var latestSyncedAt *time.Ticket
 		if vectorClock == nil {
 			latestSyncedAt = time.MaxTicket
 		} else {
 			createdAt, ok := (*vectorClock)[actorID.String()]
 			if ok {
-				latestSyncedAt = time.NewTicket(createdAt, time.MaxDelimiter, actorID)
+				latestSyncedAt = time.NewTicket(createdAt, time.MaxDelimiter, editedAt.ActorID())
 			} else {
 				latestSyncedAt = time.InitialTicket
 			}
@@ -616,10 +620,10 @@ func (s *RGATreeSplit[V]) removedNodesLen() int {
 }
 
 // purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (s *RGATreeSplit[V]) purgeRemovedNodesBefore(minSeqVector *time.VectorClock) (int, error) {
+func (s *RGATreeSplit[V]) purgeRemovedNodesBefore(minSeqVector time.VectorClock) (int, error) {
 	count := 0
 	for _, node := range s.removedNodeMap {
-		lamport := (*minSeqVector)[node.removedAt.ActorID().String()]
+		lamport := minSeqVector[node.removedAt.ActorID().String()]
 		// For now new ticket's actorID is always the same as the node's actorID.
 		ticket := time.NewTicket(lamport, time.MaxDelimiter, node.removedAt.ActorID())
 		if node.removedAt != nil && ticket.Compare(node.removedAt) >= 0 {

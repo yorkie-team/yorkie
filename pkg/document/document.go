@@ -320,7 +320,7 @@ func (d *Document) Root() *json.Object {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *Document) GarbageCollect(minSeqVector *time.VectorClock) int {
+func (d *Document) GarbageCollect(minSeqVector time.VectorClock) int {
 	if d.cloneRoot != nil {
 		if _, err := d.cloneRoot.GarbageCollect(minSeqVector); err != nil {
 			panic(err)
@@ -470,21 +470,4 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 		return fmt.Sprintf(msgAndArgs[0].(string), msgAndArgs[1:]...)
 	}
 	return ""
-}
-
-// SetSyncedVectorMap sets the synced vector clock for the given actor.
-// Move the initial actor's vector clock to the given actor's vector clock.
-// And delete the initial actor's vector clock.
-func (d *Document) SetSyncedVectorMap(id *time.ActorID) {
-	// 1. Already has actor id, given from the server.
-	if d.doc.syncedVectorMap[id.String()] != nil {
-		return
-	}
-
-	// 2. If current actor id is initial actor id
-	d.doc.syncedVectorMap[id.String()] = d.doc.syncedVectorMap[time.InitialActorID.String()]
-	d.doc.syncedVectorMap[id.String()][id.String()] = d.doc.syncedVectorMap[id.String()][time.InitialActorID.String()]
-	delete(d.doc.syncedVectorMap[id.String()], time.InitialActorID.String())
-	delete(d.doc.syncedVectorMap, time.InitialActorID.String())
-
 }

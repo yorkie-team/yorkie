@@ -114,8 +114,13 @@ func NewInternalDocumentFromSnapshot(
 	serverSeq int64,
 	lamport int64,
 	snapshot []byte,
+	syncedVectorMap string,
 ) (*InternalDocument, error) {
 	obj, presences, err := converter.BytesToSnapshot(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	svm, err := time.NewSyncedVectorMapFromJSON(syncedVectorMap)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +133,7 @@ func NewInternalDocumentFromSnapshot(
 		onlineClients:   &gosync.Map{},
 		checkpoint:      change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changeID:        change.InitialID.SyncLamport(lamport),
-		syncedVectorMap: time.InitialSyncedVectorMap(lamport),
+		syncedVectorMap: svm,
 	}, nil
 }
 
@@ -381,4 +386,11 @@ func (d *InternalDocument) AddOnlineClient(clientID string) {
 // RemoveOnlineClient removes the given client from the online clients.
 func (d *InternalDocument) RemoveOnlineClient(clientID string) {
 	d.onlineClients.Delete(clientID)
+}
+
+// SyncedVectorMap returns the synced vector map of the document.
+// NOTE(highcloud100): For now, return the reference to the original map.
+// It should be changed to return a deep copy of the map.
+func (d *InternalDocument) SyncedVectorMap() time.SyncedVectorMap {
+	return d.syncedVectorMap
 }

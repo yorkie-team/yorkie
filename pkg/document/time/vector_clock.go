@@ -25,6 +25,44 @@ func NewVectorClockFromJSON(encodedChange string) (VectorClock, error) {
 	return vc, nil
 }
 
+// EncodeToString encodes the given vector clock to string.
+func (vc VectorClock) EncodeToString() (string, error) {
+	bytes, err := json.Marshal(vc)
+	if err != nil {
+		return "", fmt.Errorf("marshal vector clock to bytes: %w", err)
+	}
+
+	return string(bytes), nil
+}
+
+// NewSyncedVectorMapFromJSON creates a new instance of SyncedVectorMap.
+func NewSyncedVectorMapFromJSON(encodedChange string) (SyncedVectorMap, error) {
+	if encodedChange == "" {
+		return nil, nil
+	}
+
+	vc := SyncedVectorMap{}
+	if err := json.Unmarshal([]byte(encodedChange), &vc); err != nil {
+		return nil, fmt.Errorf("unmarshal vector clock: %w", err)
+	}
+
+	return vc, nil
+}
+
+// EncodeToString encodes the given syncedVectorMap to string.
+func (svm SyncedVectorMap) EncodeToString() (string, error) {
+	if svm == nil {
+		return "", nil
+	}
+
+	bytes, err := json.Marshal(svm)
+	if err != nil {
+		return "", fmt.Errorf("marshal syncedVectorMap to bytes: %w", err)
+	}
+
+	return string(bytes), nil
+}
+
 // InitialSyncedVectorMap creates an initial synced vector map.
 func InitialSyncedVectorMap(lamport int64) SyncedVectorMap {
 	actorID := InitialActorID.String()
@@ -32,7 +70,7 @@ func InitialSyncedVectorMap(lamport int64) SyncedVectorMap {
 }
 
 // MinSyncedVector returns the minimum vector clock from the given syncedVectorMap.
-func (svm SyncedVectorMap) MinSyncedVector() *VectorClock {
+func (svm SyncedVectorMap) MinSyncedVector() VectorClock {
 	minSeqVector := make(VectorClock)
 	checker := make(map[string]int)
 	for _, vec := range svm {
@@ -51,7 +89,7 @@ func (svm SyncedVectorMap) MinSyncedVector() *VectorClock {
 			minSeqVector[k] = 0
 		}
 	}
-	return &minSeqVector
+	return minSeqVector
 }
 
 // Copy returns a new deep copied VectorClock.
@@ -74,4 +112,25 @@ func (vc VectorClock) CopyAndSet(id string, value int64) VectorClock {
 	repl := vc.Copy()
 	repl[id] = value
 	return repl
+}
+
+// ChangeActorID change the InitialActorID into New ActorID.
+// Move the initial actor's vector clock to the given actor's vector clock.
+// And delete the initial actor's vector clock.
+func (svm SyncedVectorMap) ChangeActorID(newID *ActorID) {
+	id := newID.String()
+	// Already has actor id given from the server.
+	if svm[id] != nil {
+		return
+	}
+
+	initID := InitialActorID.String()
+
+	// If current actor id is initial actor id
+	svm[id] = svm[initID]
+	svm[id][id] = svm[id][initID]
+
+	// delete initialID
+	delete(svm[id], initID)
+	delete(svm, initID)
 }

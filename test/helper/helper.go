@@ -488,7 +488,8 @@ func WaitForServerToStart(addr string) error {
 	return fmt.Errorf("timeout for server to start: %s", addr)
 }
 
-func MaxVectorClock(actors ...*time.ActorID) *time.VectorClock {
+// MaxVectorClock return the max vector clock that contains the given actors as key.
+func MaxVectorClock(actors ...*time.ActorID) time.VectorClock {
 	vector := make(time.VectorClock)
 
 	if len(actors) == 0 {
@@ -499,5 +500,5 @@ func MaxVectorClock(actors ...*time.ActorID) *time.VectorClock {
 		vector[id.String()] = time.MaxLamport
 	}
 
-	return &vector
+	return vector
 }

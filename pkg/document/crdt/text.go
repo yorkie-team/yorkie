@@ -323,6 +323,6 @@ func (t *Text) removedNodesLen() int {
 }
 
 // purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (t *Text) purgeRemovedNodesBefore(minSeqVector *time.VectorClock) (int, error) {
+func (t *Text) purgeRemovedNodesBefore(minSeqVector time.VectorClock) (int, error) {
 	return t.rgaTreeSplit.purgeRemovedNodesBefore(minSeqVector)
 }

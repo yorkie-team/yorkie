@@ -427,12 +427,12 @@ func (t *Tree) removedNodesLen() int {
 }
 
 // purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (t *Tree) purgeRemovedNodesBefore(minSeqVector *time.VectorClock) (int, error) {
+func (t *Tree) purgeRemovedNodesBefore(minSeqVector time.VectorClock) (int, error) {
 	count := 0
 	nodesToBeRemoved := make(map[*TreeNode]bool)
 
 	for _, node := range t.removedNodeMap {
-		lamport := (*minSeqVector)[node.RemovedAt.ActorID().String()]
+		lamport := minSeqVector[node.RemovedAt.ActorID().String()]
 		ticket := time.NewTicket(lamport, time.MaxDelimiter, node.RemovedAt.ActorID())
 		if node.RemovedAt != nil && ticket.Compare(node.RemovedAt) >= 0 {
 			count++
