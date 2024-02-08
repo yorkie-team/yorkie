@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"testing"
 	gotime "time"
@@ -453,4 +454,35 @@ func CreateDummyClientWithID(
 	}
 
 	return nil
+}
+
+// WaitForServerToStart waits for the server to start.
+func WaitForServerToStart(addr string) error {
+	maxRetries := 10
+	initialDelay := 100 * gotime.Millisecond
+	maxDelay := 5 * gotime.Second
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Exponential backoff calculation
+		delay := initialDelay * gotime.Duration(1<<uint(attempt))
+		fmt.Println("delay: ", delay)
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+
+		conn, err := net.DialTimeout("tcp", addr, 1*gotime.Second)
+		if err != nil {
+			gotime.Sleep(delay)
+			continue
+		}
+
+		err = conn.Close()
+		if err != nil {
+			return fmt.Errorf("close connection: %w", err)
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("timeout for server to start: %s", addr)
 }
