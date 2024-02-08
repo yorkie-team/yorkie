@@ -117,20 +117,20 @@ func (vc VectorClock) CopyAndSet(id string, value int64) VectorClock {
 // ChangeActorID change the InitialActorID into New ActorID.
 // Move the initial actor's vector clock to the given actor's vector clock.
 // And delete the initial actor's vector clock.
-func (svm SyncedVectorMap) ChangeActorID(newID *ActorID) {
-	id := newID.String()
+func (svm SyncedVectorMap) ChangeActorID(id *ActorID) {
+	newID := id.String()
 	// Already has actor id given from the server.
-	if svm[id] != nil {
+	if svm[newID] != nil {
 		return
 	}
 
 	initID := InitialActorID.String()
 
 	// If current actor id is initial actor id
-	svm[id] = svm[initID]
-	svm[id][id] = svm[id][initID]
+	svm[newID] = svm[initID]
+	svm[newID][newID] = svm[newID][initID]
 
 	// delete initialID
-	delete(svm[id], initID)
+	delete(svm[newID], initID)
 	delete(svm, initID)
 }

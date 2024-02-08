@@ -31,6 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
@@ -168,5 +169,60 @@ func TestSnapshot(t *testing.T) {
 		assert.NoError(t, err)
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+	})
+
+	t.Run("Initialize vector clock from snapshot test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		for i := 0; i < int(helper.SnapshotThreshold); i++ {
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetInteger(fmt.Sprintf("Padding %d", i), i)
+				return nil
+			})
+			assert.NoError(t, err)
+		}
+
+		c1.Sync(ctx)
+		c1.Sync(ctx)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		c1ID := c1.ID().String()
+		c2ID := c2.ID().String()
+
+		assert.Equal(t, time.SyncedVectorMap{
+			c1ID: time.VectorClock{c1ID: 1 + helper.SnapshotThreshold},
+		}, d1.InternalDocument().SyncedVectorMap())
+		assert.Equal(t, time.SyncedVectorMap{
+			c1ID: time.VectorClock{c1ID: 1 + helper.SnapshotThreshold},
+			c2ID: time.VectorClock{c1ID: 1 + helper.SnapshotThreshold, c2ID: 1},
+		}, d2.InternalDocument().SyncedVectorMap())
+
+		assert.Equal(t, d1.Marshal(), d2.Marshal())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetInteger("Padding", 1)
+			return nil
+		})
+
+		c2.Sync(ctx)
+		c2.Sync(ctx)
+
+		c1.Sync(ctx)
+		c1.Sync(ctx)
+
+		assert.Equal(t, time.SyncedVectorMap{
+			c1ID: time.VectorClock{c1ID: 1 + helper.SnapshotThreshold, c2ID: 3 + helper.SnapshotThreshold},
+			c2ID: time.VectorClock{c1ID: 1 + helper.SnapshotThreshold, c2ID: 3 + helper.SnapshotThreshold},
+		}, d1.InternalDocument().SyncedVectorMap())
+		assert.Equal(t, time.SyncedVectorMap{
+			c1ID: time.VectorClock{c1ID: 1 + helper.SnapshotThreshold},
+			c2ID: time.VectorClock{c1ID: 1 + helper.SnapshotThreshold, c2ID: 3 + helper.SnapshotThreshold},
+		}, d2.InternalDocument().SyncedVectorMap())
 	})
 }

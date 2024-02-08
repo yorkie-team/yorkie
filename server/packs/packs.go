@@ -213,6 +213,7 @@ func BuildDocumentForServerSeq(
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
 		snapshotInfo.Snapshot,
+		snapshotInfo.SyncedVectorMap,
 	)
 	if err != nil {
 		return nil, err

@@ -49,6 +49,9 @@ type ServerPack struct {
 
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
+
+	// SyncedVectorMap is SnapShot's synced information.
+	SyncedVectorMap string
 }
 
 // NewServerPack creates a new instance of ServerPack.
@@ -57,12 +60,14 @@ func NewServerPack(
 	cp change.Checkpoint,
 	changeInfos []*database.ChangeInfo,
 	snapshot []byte,
+	syncedVectorMap string,
 ) *ServerPack {
 	return &ServerPack{
-		DocumentKey: key,
-		Checkpoint:  cp,
-		ChangeInfos: changeInfos,
-		Snapshot:    snapshot,
+		DocumentKey:     key,
+		Checkpoint:      cp,
+		ChangeInfos:     changeInfos,
+		Snapshot:        snapshot,
+		SyncedVectorMap: syncedVectorMap,
 	}
 }
 
@@ -130,6 +135,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		Snapshot:        p.Snapshot,
 		MinSyncedTicket: converter.ToTimeTicket(p.MinSyncedTicket),
 		IsRemoved:       p.IsRemoved,
+		SyncedVectorMap: p.SyncedVectorMap,
 	}, nil
 }
 

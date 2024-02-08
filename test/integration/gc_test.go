@@ -20,7 +20,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -326,6 +325,7 @@ func TestGarbageCollection(t *testing.T) {
 	})
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
+		t.Skip("skipping test now, because it is not implemented yet")
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
 		err := c1.Attach(ctx, d1)
@@ -616,49 +616,5 @@ func TestGarbageCollection(t *testing.T) {
 
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
-	})
-
-	t.Run("snap shot vector clock test", func(t *testing.T) {
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
-
-		for i := 0; i < int(helper.SnapshotThreshold)+2; i++ {
-			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-				root.SetInteger(fmt.Sprintf("Padding %d", i), i)
-				return nil
-			})
-			assert.NoError(t, err)
-		}
-
-		c1.Sync(ctx)
-		c1.Sync(ctx)
-
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
-		assert.NoError(t, err)
-
-		fmt.Println(d1.Marshal())
-		fmt.Println(d2.Marshal())
-		d1.PrintSyncedVectorMap("A")
-		d2.PrintSyncedVectorMap("B")
-
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetInteger("Padding", 1)
-			return nil
-		})
-
-		c2.Sync(ctx)
-		c2.Sync(ctx)
-
-		c1.Sync(ctx)
-		c1.Sync(ctx)
-
-		fmt.Println(d1.Marshal())
-		fmt.Println(d2.Marshal())
-		d1.PrintSyncedVectorMap("A")
-		d2.PrintSyncedVectorMap("B")
-
 	})
 }

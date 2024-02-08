@@ -44,6 +44,9 @@ type SnapshotInfo struct {
 
 	// CreatedAt is the time when the snapshot is created.
 	CreatedAt time.Time `bson:"created_at"`
+
+	// SyncedVectorMap is the synced vector map of the snapshot.
+	SyncedVectorMap string `bson:"synced_vector_map"`
 }
 
 // DeepCopy returns a deep copy of the SnapshotInfo.
@@ -53,13 +56,14 @@ func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 	}
 
 	return &SnapshotInfo{
-		ID:        i.ID,
-		ProjectID: i.ProjectID,
-		DocID:     i.DocID,
-		ServerSeq: i.ServerSeq,
-		Lamport:   i.Lamport,
-		Snapshot:  i.Snapshot,
-		CreatedAt: i.CreatedAt,
+		ID:              i.ID,
+		ProjectID:       i.ProjectID,
+		DocID:           i.DocID,
+		ServerSeq:       i.ServerSeq,
+		Lamport:         i.Lamport,
+		Snapshot:        i.Snapshot,
+		CreatedAt:       i.CreatedAt,
+		SyncedVectorMap: i.SyncedVectorMap,
 	}
 }
 

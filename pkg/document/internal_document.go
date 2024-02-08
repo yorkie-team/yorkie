@@ -125,6 +125,12 @@ func NewInternalDocumentFromSnapshot(
 		return nil, err
 	}
 
+	id := change.InitialID.SyncLamport(lamport)
+
+	if svm == nil {
+		svm = time.InitialSyncedVectorMap(id.Lamport())
+	}
+
 	return &InternalDocument{
 		key:             k,
 		status:          StatusDetached,
@@ -132,7 +138,7 @@ func NewInternalDocumentFromSnapshot(
 		presences:       presences,
 		onlineClients:   &gosync.Map{},
 		checkpoint:      change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:        change.InitialID.SyncLamport(lamport),
+		changeID:        id,
 		syncedVectorMap: svm,
 	}, nil
 }
@@ -156,7 +162,7 @@ func (d *InternalDocument) HasLocalChanges() bool {
 func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	// 01. Apply remote changes to both the cloneRoot and the document.
 	if len(pack.Snapshot) > 0 {
-		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
+		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.SyncedVectorMap); err != nil {
 			return err
 		}
 	} else {
@@ -185,7 +191,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *InternalDocument) GarbageCollect(minSeqVector *time.VectorClock) (int, error) {
+func (d *InternalDocument) GarbageCollect(minSeqVector time.VectorClock) (int, error) {
 	return d.root.GarbageCollect(minSeqVector)
 }
 
@@ -246,7 +252,11 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 	return d.root.Object()
 }
 
-func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error {
+func (d *InternalDocument) applySnapshot(
+	snapshot []byte,
+	serverSeq int64,
+	syncedVectorMap time.SyncedVectorMap,
+) error {
 	rootObj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return err
@@ -255,6 +265,7 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
 	d.changeID = d.changeID.SyncLamport(serverSeq)
+	d.syncedVectorMap = syncedVectorMap
 
 	return nil
 }

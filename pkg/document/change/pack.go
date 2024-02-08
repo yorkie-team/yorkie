@@ -41,6 +41,9 @@ type Pack struct {
 
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
+
+	// SyncedVectorMap is SnapShot's synced vector map information.
+	SyncedVectorMap time.SyncedVectorMap
 }
 
 // NewPack creates a new instance of Pack.

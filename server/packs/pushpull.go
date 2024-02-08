@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -95,7 +96,7 @@ func pullPack(
 		return NewServerPack(docInfo.Key, change.Checkpoint{
 			ServerSeq: reqPack.Checkpoint.ServerSeq,
 			ClientSeq: cpAfterPush.ClientSeq,
-		}, nil, nil), nil
+		}, nil, nil, ""), nil
 	}
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
@@ -122,7 +123,7 @@ func pullPack(
 			return nil, err
 		}
 
-		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil), nil
+		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil, ""), nil
 	}
 
 	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
@@ -155,9 +156,23 @@ func pullSnapshot(
 			return nil, err
 		}
 	}
+
+	// Remove the initial actor's vector clock and replace it with the client's vector clock.
+	// This is because the initial actor's vector clock is used for the snapshot.
+	initID := time.InitialActorID.String()
+	delete(doc.SyncedVectorMap(), string(clientInfo.ID))
+	delete(doc.SyncedVectorMap()[initID], initID)
+	doc.SyncedVectorMap()[clientInfo.ID.String()] = doc.SyncedVectorMap()[time.InitialActorID.String()]
+	delete(doc.SyncedVectorMap(), initID)
+
 	cpAfterPull := cpAfterPush.NextServerSeq(docInfo.ServerSeq)
 
 	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
+	if err != nil {
+		return nil, err
+	}
+
+	syncedVectorMap, err := doc.SyncedVectorMap().EncodeToString()
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +186,7 @@ func pullSnapshot(
 		cpAfterPull,
 	)
 
-	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot), err
+	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot, syncedVectorMap), err
 }
 
 func pullChangeInfos(

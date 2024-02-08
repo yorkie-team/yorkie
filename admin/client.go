@@ -332,6 +332,7 @@ func (c *Client) ListChangeSummaries(
 		seq,
 		snapshotMeta.Msg.Lamport,
 		snapshotMeta.Msg.Snapshot,
+		snapshotMeta.Msg.SyncedVectorMap,
 	)
 
 	if err != nil {
