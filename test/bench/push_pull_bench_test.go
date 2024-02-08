@@ -97,6 +97,7 @@ func setUpClientsAndDocs(
 		actorID, _ := time.ActorIDFromBytes(bytesID)
 		doc := document.New(docKey)
 		doc.SetActor(actorID)
+		doc.InternalDocument().SyncedVectorMap().ChangeActorID(actorID)
 		assert.NoError(b, doc.Update(func(root *json.Object, _ *presence.Presence) error {
 			root.SetNewArray("array")
 			return nil
