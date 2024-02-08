@@ -478,11 +478,11 @@ func WaitForServerToStart(addr string) error {
 
 		err = conn.Close()
 		if err != nil {
-			return fmt.Errorf("failed to close connection: %w", err)
+			return fmt.Errorf("close connection: %w", err)
 		}
 
 		return nil
 	}
 
-	return fmt.Errorf("failed to connect server via %s", addr)
+	return fmt.Errorf("timeout for server to start: %s", addr)
 }
