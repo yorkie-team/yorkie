@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 func TestVectorClock(t *testing.T) {
@@ -34,5 +35,28 @@ func TestVectorClock(t *testing.T) {
 		assert.Equal(t, time.SyncedVectorMap{
 			newID.String(): time.VectorClock{newID.String(): 1, "B": 2},
 			"B":            time.VectorClock{"B": 3}}, vec)
+	})
+
+	t.Run("MaxVectorClock initial ID test", func(t *testing.T) {
+		vec := helper.MaxVectorClock()
+
+		assert.Equal(t, time.VectorClock{
+			time.InitialActorID.String(): time.MaxLamport,
+		}, vec.MinSyncedVector())
+	})
+
+	t.Run("MaxVectorClock arbitary IDs test", func(t *testing.T) {
+		newID1, err := time.ActorIDFromHex("111111111111111111111111")
+		assert.NoError(t, err)
+
+		newID2, err := time.ActorIDFromHex("222222222222222222222222")
+		assert.NoError(t, err)
+
+		vec := helper.MaxVectorClock(newID1, newID2)
+
+		assert.Equal(t, time.VectorClock{
+			newID1.String(): time.MaxLamport,
+			newID2.String(): time.MaxLamport,
+		}, vec.MinSyncedVector())
 	})
 }

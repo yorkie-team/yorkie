@@ -120,6 +120,7 @@ func NewInternalDocumentFromSnapshot(
 	if err != nil {
 		return nil, err
 	}
+
 	svm, err := time.NewSyncedVectorMapFromJSON(syncedVectorMap)
 	if err != nil {
 		return nil, err
@@ -183,7 +184,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
-	if _, err := d.GarbageCollect(d.syncedVectorMap.MinSyncedVector()); err != nil {
+	if _, err := d.GarbageCollect(d.SyncedVectorMap()); err != nil {
 		return err
 	}
 
@@ -191,8 +192,8 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *InternalDocument) GarbageCollect(minSeqVector time.VectorClock) (int, error) {
-	return d.root.GarbageCollect(minSeqVector)
+func (d *InternalDocument) GarbageCollect(syncedVectorMap time.SyncedVectorMap) (int, error) {
+	return d.root.GarbageCollect(syncedVectorMap)
 }
 
 // GarbageLen returns the count of removed elements.

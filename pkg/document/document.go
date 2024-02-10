@@ -183,10 +183,10 @@ func (d *Document) Update(
 			return err
 		}
 
-		// Set the vector clock to change.
-		c.SetVectorClock(d.doc.syncedVectorMap[actorID])
 		// Update the vector clock of the actor.
 		d.doc.syncedVectorMap[actorID][actorID] = ctx.ID().Lamport()
+		// Set the vector clock to change.
+		c.SetVectorClock(d.doc.syncedVectorMap[actorID])
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
 		d.doc.changeID = ctx.ID()
@@ -239,7 +239,8 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	d.GarbageCollect(d.doc.syncedVectorMap.MinSyncedVector())
+	//   - delay calculating the minimum vector clock from the syncedVectorMap due to overhead.
+	d.GarbageCollect(d.doc.SyncedVectorMap())
 
 	// 05. Update the status.
 	if pack.IsRemoved {
@@ -321,14 +322,14 @@ func (d *Document) Root() *json.Object {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *Document) GarbageCollect(minSeqVector time.VectorClock) int {
+func (d *Document) GarbageCollect(syncedVectorMap time.SyncedVectorMap) int {
 	if d.cloneRoot != nil {
-		if _, err := d.cloneRoot.GarbageCollect(minSeqVector); err != nil {
+		if _, err := d.cloneRoot.GarbageCollect(syncedVectorMap); err != nil {
 			panic(err)
 		}
 	}
 
-	n, err := d.doc.GarbageCollect(minSeqVector)
+	n, err := d.doc.GarbageCollect(syncedVectorMap)
 	if err != nil {
 		panic(err)
 	}

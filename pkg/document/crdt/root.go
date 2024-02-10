@@ -138,8 +138,14 @@ func (r *Root) DeepCopy() (*Root, error) {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (r *Root) GarbageCollect(minSeqVector time.VectorClock) (int, error) {
+func (r *Root) GarbageCollect(syncedVectorMap time.SyncedVectorMap) (int, error) {
 	count := 0
+
+	if len(r.removedElementPairMapByCreatedAt) == 0 && len(r.elementHasRemovedNodesSetByCreatedAt) == 0 {
+		return count, nil
+	}
+
+	minSeqVector := syncedVectorMap.MinSyncedVector()
 
 	for _, pair := range r.removedElementPairMapByCreatedAt {
 		actor := pair.elem.RemovedAt().ActorID()

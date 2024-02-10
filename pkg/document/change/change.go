@@ -123,7 +123,7 @@ func (c *Change) VectorClock() time.VectorClock {
 	return c.vectorClock
 }
 
-// SetVectorClock sets the given vectorClock.
+// SetVectorClock copy and sets the given vectorClock.
 func (c *Change) SetVectorClock(vectorClock time.VectorClock) {
-	c.vectorClock = vectorClock
+	c.vectorClock = vectorClock.Copy()
 }

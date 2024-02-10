@@ -488,17 +488,19 @@ func WaitForServerToStart(addr string) error {
 	return fmt.Errorf("timeout for server to start: %s", addr)
 }
 
-// MaxVectorClock return the max vector clock that contains the given actors as key.
-func MaxVectorClock(actors ...*time.ActorID) time.VectorClock {
-	vector := make(time.VectorClock)
+// MaxVectorClock return the SyncedVectorMap that contains the given actors as key and Max Lamport.
+func MaxVectorClock(actors ...*time.ActorID) time.SyncedVectorMap {
 
 	if len(actors) == 0 {
 		actors = append(actors, time.InitialActorID)
 	}
 
-	for _, id := range actors {
-		vector[id.String()] = time.MaxLamport
+	syncedVectorMap := time.SyncedVectorMap{}
+	syncedVectorMap[actors[0].String()] = time.VectorClock{}
+
+	for i := 0; i < len(actors); i++ {
+		syncedVectorMap[actors[0].String()][actors[i].String()] = time.MaxLamport
 	}
 
-	return vector
+	return syncedVectorMap
 }
