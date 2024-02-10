@@ -45,7 +45,7 @@ func TestVectorClock(t *testing.T) {
 		}, vec.MinSyncedVector())
 	})
 
-	t.Run("MaxVectorClock arbitary IDs test", func(t *testing.T) {
+	t.Run("MaxVectorClock arbitrary IDs test", func(t *testing.T) {
 		newID1, err := time.ActorIDFromHex("111111111111111111111111")
 		assert.NoError(t, err)
 
