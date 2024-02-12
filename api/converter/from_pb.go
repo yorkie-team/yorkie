@@ -143,6 +143,7 @@ func FromChanges(pbChanges []*api.Change) ([]*change.Change, error) {
 			ops,
 			FromPresenceChange(pbChange.PresenceChange),
 			pbChange.VectorClock,
+			pbChange.DetachFlag,
 		))
 	}
 

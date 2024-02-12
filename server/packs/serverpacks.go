@@ -125,6 +125,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			Operations:     pbOps,
 			PresenceChange: converter.ToPresenceChange(p),
 			VectorClock:    vc,
+			DetachFlag:     info.DetachFlag,
 		})
 	}
 

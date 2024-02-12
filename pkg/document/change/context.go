@@ -53,7 +53,7 @@ func (c *Context) ID() ID {
 
 // ToChange creates a new change of this context.
 func (c *Context) ToChange() *Change {
-	return New(c.id, c.message, c.operations, c.presenceChange, nil)
+	return New(c.id, c.message, c.operations, c.presenceChange, nil, false)
 }
 
 // HasChange returns whether this context has changes.

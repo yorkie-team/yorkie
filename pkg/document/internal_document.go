@@ -317,12 +317,20 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 		}
 
 		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
+		changeActorID := c.ID().ActorID().String()
 
 		// update self's synced vector
-		d.syncedVectorMap[d.changeID.ActorID().String()][c.ID().ActorID().String()] = c.ID().Lamport()
+		d.syncedVectorMap[d.changeID.ActorID().String()][changeActorID] = c.ID().Lamport()
+
+		// If an actor is detached from the server,
+		// delete the vector clock for that actor from SyncVectorMap.
+		if c.DetachFlag() {
+			delete(d.syncedVectorMap, changeActorID)
+			continue
+		}
 
 		// update peer's synced vector
-		d.syncedVectorMap[c.ID().ActorID().String()] = c.VectorClock()
+		d.syncedVectorMap[changeActorID] = c.VectorClock()
 	}
 
 	return events, nil
@@ -405,4 +413,16 @@ func (d *InternalDocument) RemoveOnlineClient(clientID string) {
 // It should be changed to return a deep copy of the map.
 func (d *InternalDocument) SyncedVectorMap() time.SyncedVectorMap {
 	return d.syncedVectorMap
+}
+
+// SetDetachFlag set the detach flag as true.
+func (d *InternalDocument) SetDetachFlag() error {
+	length := len(d.localChanges)
+
+	if length == 0 {
+		return errors.New("doc doesn't have changes")
+	}
+
+	d.localChanges[length-1].SetDetachFlag(true)
+	return nil
 }

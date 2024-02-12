@@ -40,19 +40,23 @@ type Change struct {
 	// TODO(hackerwins): Consider using changes instead of entire presenceChange.
 	presenceChange *innerpresence.PresenceChange
 
-	// vectorStatus
+	// vectorClock is a Actor's vectorClock with this change applied.
 	vectorClock time.VectorClock
+
+	// detachFlag indicates that the Actor has been removed since this change.
+	detachFlag bool
 }
 
 // New creates a new instance of Change.
 func New(id ID, message string, operations []operations.Operation,
-	p *innerpresence.PresenceChange, vc time.VectorClock) *Change {
+	p *innerpresence.PresenceChange, vc time.VectorClock, dflag bool) *Change {
 	return &Change{
 		id:             id,
 		message:        message,
 		operations:     operations,
 		presenceChange: p,
 		vectorClock:    vc,
+		detachFlag:     dflag,
 	}
 }
 
@@ -126,4 +130,14 @@ func (c *Change) VectorClock() time.VectorClock {
 // SetVectorClock copy and sets the given vectorClock.
 func (c *Change) SetVectorClock(vectorClock time.VectorClock) {
 	c.vectorClock = vectorClock.Copy()
+}
+
+// DetachFlag returns the detach flag of this change.
+func (c *Change) DetachFlag() bool {
+	return c.detachFlag
+}
+
+// SetDetachFlag sets the given detach flag.
+func (c *Change) SetDetachFlag(flag bool) {
+	c.detachFlag = flag
 }

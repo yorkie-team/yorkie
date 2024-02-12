@@ -55,6 +55,7 @@ message Change {
   repeated Operation operations = 3;
   PresenceChange presence_change = 4;
   map<string, int64> vector_clock = 5;
+  bool detach_flag = 6;
 }
 
 message ChangeID {

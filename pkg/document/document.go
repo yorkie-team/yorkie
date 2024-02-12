@@ -473,3 +473,9 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 	}
 	return ""
 }
+
+// SetDetachFlag set the last change's detach flag as true.
+// It is used to remove the vector clock of detached Actor from SyncedVectorClock.
+func (d *Document) SetDetachFlag() error {
+	return d.doc.SetDetachFlag()
+}

@@ -51,6 +51,7 @@ type ChangeInfo struct {
 	Operations     [][]byte `bson:"operations"`
 	PresenceChange string   `bson:"presence_change"`
 	VectorClock    string   `bson:"vector_clock"`
+	DetachFlag     bool     `bson:"detach_flag"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -120,7 +121,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	c := change.New(changeID, i.Message, ops, p, vc)
+	c := change.New(changeID, i.Message, ops, p, vc, i.DetachFlag)
 	c.SetServerSeq(i.ServerSeq)
 
 	return c, nil

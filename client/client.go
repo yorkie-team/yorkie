@@ -354,6 +354,10 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 		return err
 	}
 
+	if err := doc.SetDetachFlag(); err != nil {
+		return err
+	}
+
 	pbChangePack, err := converter.ToChangePack(doc.CreateChangePack())
 	if err != nil {
 		return err

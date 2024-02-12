@@ -825,6 +825,7 @@ func (c *Client) CreateChangeInfos(
 			"operations":      encodedOperations,
 			"presence_change": encodedPresence,
 			"vector_clock":    encodedVectorClock,
+			"detach_flag":     cn.DetachFlag(),
 		}}).SetUpsert(true))
 	}
 
