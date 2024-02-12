@@ -105,6 +105,6 @@ func TestDB(t *testing.T) {
 	})
 
 	t.Run("DocumentHardDeletion test", func(t *testing.T) {
-		testcases.RunDocumentHardDeletion(t, db)
+		testcases.RunDocumentHardDeletionTest(t, db)
 	})
 }

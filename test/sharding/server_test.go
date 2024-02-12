@@ -77,11 +77,12 @@ func TestMain(m *testing.M) {
 		ConnectionTimeout: helper.MongoConnectionTimeout,
 		PingTimeout:       helper.MongoPingTimeout,
 	}, &housekeeping.Config{
-		Interval:                            helper.HousekeepingInterval.String(),
-		DeleteAfterTime:                     helper.HousekeepingDeleteAfterTime.String(),
-		CandidatesLimitPerProject:           helper.HousekeepingCandidatesLimitPerProject,
-		DocumentHardDeletionLimitPerProject: helper.HousekeepingDocumentHardDeletionLimitPerProject,
-		ProjectFetchSize:                    helper.HousekeepingProjectFetchSize,
+		IntervalDeactivateCandidates:                 helper.HousekeepingIntervalDeactivateCandidates.String(),
+		IntervalDeleteDocuments:                      helper.HousekeepingIntervalDeleteDocuments.String(),
+		DocumentHardDeletionGracefulPeriod:           helper.HousekeepingDocumentHardDeletionGracefulPeriod.String(),
+		ClientDeactivationCandidateLimitPerProject:   helper.HousekeepingClientDeactivationCandidateLimitPerProject,
+		DocumentHardDeletionCandidateLimitPerProject: helper.HousekeepingDocumentHardDeletionCandidateLimitPerProject,
+		ProjectFetchSize:                             helper.HousekeepingProjectFetchSize,
 	}, met)
 	if err != nil {
 		log.Fatal(err)

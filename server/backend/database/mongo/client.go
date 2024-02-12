@@ -227,34 +227,33 @@ func (c *Client) CreateProjectInfo(
 	return info, nil
 }
 
-// DocumentHardDeletion Deletes the documents completely.
-func (c *Client) DocumentHardDeletion(
+// DeleteDocument Deletes the documents completely.
+func (c *Client) DeleteDocument(
 	ctx context.Context,
 	candidates []*database.DocInfo,
-) error {
+) (int64, error) {
 	if len(candidates) <= 0 {
-		return nil
+		return 0, nil
 	}
 
-	var idList []primitive.ObjectID
+	var idList []types.ID
 	for _, docInfo := range candidates {
-		encodedID, err := encodeID(docInfo.ID)
-		if err != nil {
-			return err
-		}
-		idList = append(idList, encodedID)
+		idList = append(
+			idList,
+			docInfo.ID,
+		)
 	}
 
-	_, err := c.collection(ColDocuments).DeleteMany(
+	deletedResult, err := c.collection(ColDocuments).DeleteMany(
 		ctx,
 		bson.M{"_id": bson.M{"$in": idList}},
 	)
 
 	if err != nil {
-		return fmt.Errorf("deletion Error : %w", err)
+		return deletedResult.DeletedCount, fmt.Errorf("deletion Error : %w", err)
 	}
 
-	return nil
+	return deletedResult.DeletedCount, nil
 }
 
 // FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
@@ -649,25 +648,21 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
-// FindDocumentHardDeletionCandidatesPerProject finds the clients that need housekeeping per project.
+// FindDocumentHardDeletionCandidatesPerProject finds the documents that need housekeeping per project.
 func (c *Client) FindDocumentHardDeletionCandidatesPerProject(
 	ctx context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
-	deleteAfterTime gotime.Duration,
+	documentHardDeletionGracefulPeriod gotime.Duration,
 ) ([]*database.DocInfo, error) {
-	encodedProjectID, err := encodeID(project.ID)
-	if err != nil {
-		return nil, err
-	}
 
 	currentTime := gotime.Now()
-	conditionDeleteAfterTime := currentTime.Add(deleteAfterTime)
+	hardDeletionGracefulPeriod := currentTime.Add(-documentHardDeletionGracefulPeriod)
 
 	var DocInfos []*database.DocInfo
 	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
-		"project_id": encodedProjectID,
-		"removed_at": bson.M{"$lt": conditionDeleteAfterTime},
+		"project_id": project.ID,
+		"removed_at": bson.M{"$lt": hardDeletionGracefulPeriod},
 	}, options.Find().SetLimit(int64(candidatesLimit)))
 
 	if err != nil {
@@ -715,7 +710,7 @@ func (c *Client) FindDeactivateCandidatesPerProject(
 // FindDeactivateCandidates finds the clients that need housekeeping.
 func (c *Client) FindDeactivateCandidates(
 	ctx context.Context,
-	candidatesLimitPerProject int,
+	documentHardDeletionCandidateLimitPerProject int,
 	projectFetchSize int,
 	lastProjectID types.ID,
 ) (types.ID, []*database.ClientInfo, error) {
@@ -726,48 +721,12 @@ func (c *Client) FindDeactivateCandidates(
 
 	var candidates []*database.ClientInfo
 	for _, project := range projects {
-		clientInfos, err := c.FindDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		clientInfos, err := c.FindDeactivateCandidatesPerProject(ctx, project, documentHardDeletionCandidateLimitPerProject)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}
 
 		candidates = append(candidates, clientInfos...)
-	}
-
-	var topProjectID types.ID
-	if len(projects) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projects[len(projects)-1].ID
-	}
-	return topProjectID, candidates, nil
-}
-
-// FindDocumentHardDeletionCandidates finds the clients that need housekeeping.
-func (c *Client) FindDocumentHardDeletionCandidates(
-	ctx context.Context,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	deletedAfterTime gotime.Duration,
-	lastProjectID types.ID,
-) (types.ID, []*database.DocInfo, error) {
-	projects, err := c.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
-	if err != nil {
-		return database.DefaultProjectID, nil, err
-	}
-
-	var candidates []*database.DocInfo
-	for _, project := range projects {
-		docInfos, err := c.FindDocumentHardDeletionCandidatesPerProject(
-			ctx,
-			project,
-			candidatesLimitPerProject,
-			deletedAfterTime,
-		)
-		if err != nil {
-			return database.DefaultProjectID, nil, err
-		}
-		candidates = append(candidates, docInfos...)
 	}
 
 	var topProjectID types.ID

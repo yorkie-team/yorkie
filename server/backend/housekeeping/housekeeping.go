@@ -43,10 +43,12 @@ type Housekeeping struct {
 	database    database.Database
 	coordinator sync.Coordinator
 
-	interval                  time.Duration
-	deleteAfterTime           time.Duration
-	candidatesLimitPerProject int
-	projectFetchSize          int
+	intervalDeactivateCandidates                 time.Duration
+	intervalDeleteDocuments                      time.Duration
+	documentHardDeletionGracefulPeriod           time.Duration
+	clientDeactivationCandidateLimitPerProject   int
+	DocumentHardDeletionCandidateLimitPerProject int
+	projectFetchSize                             int
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
@@ -75,14 +77,21 @@ func New(
 	database database.Database,
 	coordinator sync.Coordinator,
 ) (*Housekeeping, error) {
-	interval, err := time.ParseDuration(conf.Interval)
+	intervalDeactivateCandidates, err := time.ParseDuration(conf.IntervalDeactivateCandidates)
 	if err != nil {
-		return nil, fmt.Errorf("parse interval %s: %w", conf.Interval, err)
+		return nil, fmt.Errorf("parse intervalDeactivateCandidates %s: %w",
+			conf.IntervalDeactivateCandidates, err)
 	}
 
-	deleteAfterTime, err := time.ParseDuration(conf.DeleteAfterTime)
+	intervalDeleteDocuments, err := time.ParseDuration(conf.IntervalDeleteDocuments)
 	if err != nil {
-		return nil, fmt.Errorf("parse deleteAfterTime %s: %w", conf.DeleteAfterTime, err)
+		return nil, fmt.Errorf("parse intervalDeleteDocuments %s: %w", conf.IntervalDeleteDocuments, err)
+	}
+
+	documentHardDeletionGracefulPeriod, err := time.ParseDuration(conf.DocumentHardDeletionGracefulPeriod)
+	if err != nil {
+		return nil, fmt.Errorf("parse documentHardDeletionGracefulPeriod %s: %w",
+			conf.DocumentHardDeletionGracefulPeriod, err)
 	}
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -91,10 +100,12 @@ func New(
 		database:    database,
 		coordinator: coordinator,
 
-		interval:                  interval,
-		deleteAfterTime:           deleteAfterTime,
-		candidatesLimitPerProject: conf.CandidatesLimitPerProject,
-		projectFetchSize:          conf.ProjectFetchSize,
+		intervalDeactivateCandidates:                 intervalDeactivateCandidates,
+		intervalDeleteDocuments:                      intervalDeleteDocuments,
+		documentHardDeletionGracefulPeriod:           documentHardDeletionGracefulPeriod,
+		clientDeactivationCandidateLimitPerProject:   conf.ClientDeactivationCandidateLimitPerProject,
+		DocumentHardDeletionCandidateLimitPerProject: conf.DocumentHardDeletionCandidateLimitPerProject,
+		projectFetchSize:                             conf.ProjectFetchSize,
 
 		ctx:        ctx,
 		cancelFunc: cancelFunc,
@@ -129,7 +140,7 @@ func (h *Housekeeping) AttachDeactivateCandidates() {
 		housekeepingLastProjectID = lastProjectID
 
 		select {
-		case <-time.After(h.interval):
+		case <-time.After(h.intervalDeactivateCandidates):
 		case <-h.ctx.Done():
 			return
 		}
@@ -142,7 +153,7 @@ func (h *Housekeeping) AttachDocumentHardDeletion() {
 
 	for {
 		ctx := context.Background()
-		lastProjectID, err := h.documentHardDeletion(ctx, housekeepingLastProjectID)
+		lastProjectID, err := h.DeleteDocument(ctx, housekeepingLastProjectID)
 		if err != nil {
 			logging.From(ctx).Error(err)
 			continue
@@ -151,35 +162,39 @@ func (h *Housekeeping) AttachDocumentHardDeletion() {
 		housekeepingLastProjectID = lastProjectID
 
 		select {
-		case <-time.After(h.interval):
+		case <-time.After(h.intervalDeleteDocuments):
 		case <-h.ctx.Done():
 			return
 		}
 	}
 }
 
-func (h *Housekeeping) documentHardDeletion(
+// DeleteDocument deletes a document
+func (h *Housekeeping) DeleteDocument(
 	ctx context.Context,
 	housekeepingLastProjectID types.ID,
 ) (types.ID, error) {
+	start := time.Now()
 	locker, err := h.coordinator.NewLocker(ctx, documentHardDeletionLockKey)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
+
 	if err := locker.Lock(ctx); err != nil {
 		return database.DefaultProjectID, err
 	}
+
 	defer func() {
 		if err := locker.Unlock(ctx); err != nil {
 			logging.From(ctx).Error(err)
 		}
 	}()
 
-	lastProjectID, candidates, err := h.database.FindDocumentHardDeletionCandidates(
+	lastProjectID, candidates, err := h.FindDocumentHardDeletionCandidates(
 		ctx,
-		h.candidatesLimitPerProject,
+		h.DocumentHardDeletionCandidateLimitPerProject,
 		h.projectFetchSize,
-		h.deleteAfterTime,
+		h.documentHardDeletionGracefulPeriod,
 		housekeepingLastProjectID,
 	)
 
@@ -187,13 +202,22 @@ func (h *Housekeeping) documentHardDeletion(
 		return database.DefaultProjectID, err
 	}
 
-	err = h.database.DocumentHardDeletion(ctx, candidates)
+	deletedDocumentsCount, err := h.database.DeleteDocument(ctx, candidates)
 
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
 
-	return lastProjectID, err
+	if len(candidates) > 0 {
+		logging.From(ctx).Infof(
+			"HSKP: candidates %d, hard deleted %d, %s",
+			len(candidates),
+			deletedDocumentsCount,
+			time.Since(start),
+		)
+	}
+
+	return lastProjectID, nil
 }
 
 // deactivateCandidates deactivates candidates.
@@ -219,7 +243,7 @@ func (h *Housekeeping) deactivateCandidates(
 
 	lastProjectID, candidates, err := h.FindDeactivateCandidates(
 		ctx,
-		h.candidatesLimitPerProject,
+		h.clientDeactivationCandidateLimitPerProject,
 		h.projectFetchSize,
 		housekeepingLastProjectID,
 	)
@@ -255,7 +279,7 @@ func (h *Housekeeping) deactivateCandidates(
 // FindDeactivateCandidates finds the housekeeping candidates.
 func (h *Housekeeping) FindDeactivateCandidates(
 	ctx context.Context,
-	candidatesLimitPerProject int,
+	clientDeactivationCandidateLimitPerProject int,
 	projectFetchSize int,
 	lastProjectID types.ID,
 ) (types.ID, []*database.ClientInfo, error) {
@@ -266,7 +290,45 @@ func (h *Housekeeping) FindDeactivateCandidates(
 
 	var candidates []*database.ClientInfo
 	for _, project := range projects {
-		infos, err := h.database.FindDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		infos, err := h.database.FindDeactivateCandidatesPerProject(ctx, project, clientDeactivationCandidateLimitPerProject)
+		if err != nil {
+			return database.DefaultProjectID, nil, err
+		}
+
+		candidates = append(candidates, infos...)
+	}
+
+	var topProjectID types.ID
+	if len(projects) < projectFetchSize {
+		topProjectID = database.DefaultProjectID
+	} else {
+		topProjectID = projects[len(projects)-1].ID
+	}
+
+	return topProjectID, candidates, nil
+}
+
+// FindDocumentHardDeletionCandidates finds the clients that need housekeeping.
+func (h *Housekeeping) FindDocumentHardDeletionCandidates(
+	ctx context.Context,
+	documentHardDeletionCandidateLimitPerProject int,
+	projectFetchSize int,
+	deletedAfterTime time.Duration,
+	lastProjectID types.ID,
+) (types.ID, []*database.DocInfo, error) {
+	projects, err := h.database.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
+	if err != nil {
+		return database.DefaultProjectID, nil, err
+	}
+
+	var candidates []*database.DocInfo
+	for _, project := range projects {
+		infos, err := h.database.FindDocumentHardDeletionCandidatesPerProject(
+			ctx,
+			project,
+			documentHardDeletionCandidateLimitPerProject,
+			deletedAfterTime,
+		)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}

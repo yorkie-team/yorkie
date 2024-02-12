@@ -1215,8 +1215,8 @@ func AssertKeys(t *testing.T, expectedKeys []key.Key, infos []*database.DocInfo)
 	assert.EqualValues(t, expectedKeys, keys)
 }
 
-// RunDocumentHardDeletion runs Delete document permanently
-func RunDocumentHardDeletion(t *testing.T, db database.Database) {
+// RunDocumentHardDeletionTest runs Delete document permanently
+func RunDocumentHardDeletionTest(t *testing.T, db database.Database) {
 	t.Run("housekeeping DocumentHardDeletion test", func(t *testing.T) {
 		ctx := context.Background()
 		projectInfo, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID, clientDeactivateThreshold)
@@ -1242,22 +1242,22 @@ func RunDocumentHardDeletion(t *testing.T, db database.Database) {
 		lastProjectID := database.DefaultProjectID
 
 		var candidates []*database.DocInfo
-		yesterday := "0s"
-		deleteAfterTime, err := gotime.ParseDuration(yesterday)
+		GracePeriod := "0s"
+		documentHardDeletionGracefulPeriod, err := gotime.ParseDuration(GracePeriod)
 		assert.NoError(t, err)
 
-		lastProjectID, candidates, err = db.FindDocumentHardDeletionCandidates(
+		candidates, err = db.FindDocumentHardDeletionCandidatesPerProject(
 			ctx,
-			0,
+			projectInfo,
 			fetchSize,
-			deleteAfterTime,
-			lastProjectID,
+			documentHardDeletionGracefulPeriod,
 		)
 		assert.NoError(t, err)
 		assert.Equal(t, database.DefaultProjectID, lastProjectID)
 
-		err = db.DocumentHardDeletion(ctx, candidates)
+		deletedDocumentsCount, err := db.DeleteDocument(ctx, candidates)
 		assert.NoError(t, err)
+		assert.Equal(t, int(deletedDocumentsCount), len(candidates))
 
 		_, err = db.FindDocInfoByRefKey(ctx, docInfo.RefKey())
 		assert.ErrorIs(t, err, database.ErrDocumentNotFound)

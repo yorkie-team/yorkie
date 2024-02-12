@@ -40,11 +40,12 @@ const (
 
 	DefaultProfilingPort = 8081
 
-	DefaultHousekeepingInterval                            = 30 * time.Second
-	DefaultHousekeepingDeleteAfterTime                     = -24 * time.Hour
-	DefaultHousekeepingCandidatesLimitPerProject           = 500
-	DefaultHousekeepingDocumentHardDeletionLimitPerProject = 500
-	DefaultHousekeepingProjectFetchSize                    = 100
+	DefaultHousekeepingIntervalDeactivateCandidates                 = 30 * time.Second
+	DefaultHousekeepingIntervalDeleteDocuments                      = 30 * time.Second
+	DefaultHousekeepingDocumentHardDeletionGracefulPeriod           = 24 * time.Hour
+	DefaultHousekeepingClientDeactivationCandidateLimitPerProject   = 500
+	DefaultHousekeepingDocumentHardDeletionCandidateLimitPerProject = 500
+	DefaultHousekeepingProjectFetchSize                             = 100
 
 	DefaultMongoConnectionURI     = "mongodb://localhost:27017"
 	DefaultMongoConnectionTimeout = 5 * time.Second
@@ -230,11 +231,12 @@ func newConfig(port int, profilingPort int) *Config {
 			Port: profilingPort,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:                            DefaultHousekeepingInterval.String(),
-			DeleteAfterTime:                     DefaultHousekeepingDeleteAfterTime.String(),
-			CandidatesLimitPerProject:           DefaultHousekeepingCandidatesLimitPerProject,
-			DocumentHardDeletionLimitPerProject: DefaultHousekeepingDocumentHardDeletionLimitPerProject,
-			ProjectFetchSize:                    DefaultHousekeepingProjectFetchSize,
+			IntervalDeactivateCandidates:                 DefaultHousekeepingIntervalDeactivateCandidates.String(),
+			IntervalDeleteDocuments:                      DefaultHousekeepingIntervalDeleteDocuments.String(),
+			DocumentHardDeletionGracefulPeriod:           DefaultHousekeepingDocumentHardDeletionGracefulPeriod.String(),
+			ClientDeactivationCandidateLimitPerProject:   DefaultHousekeepingClientDeactivationCandidateLimitPerProject,
+			DocumentHardDeletionCandidateLimitPerProject: DefaultHousekeepingDocumentHardDeletionCandidateLimitPerProject,
+			ProjectFetchSize:                             DefaultHousekeepingProjectFetchSize,
 		},
 		Backend: &backend.Config{
 			ClientDeactivateThreshold:  DefaultClientDeactivateThreshold,

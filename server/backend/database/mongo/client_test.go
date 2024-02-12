@@ -122,6 +122,6 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("DocumentHardDeletion test", func(t *testing.T) {
-		testcases.RunDocumentHardDeletion(t, cli)
+		testcases.RunDocumentHardDeletionTest(t, cli)
 	})
 }

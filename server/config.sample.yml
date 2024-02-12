@@ -30,17 +30,20 @@ Profiling:
 
 # Housekeeping is the configuration for the housekeeping.
 Housekeeping:
-  # Interval is the time between housekeeping runs (default: 1m).
-  Interval: 1m
+  # IntervalDeactivateCandidates is the time between housekeeping runs (default: 1m).
+  IntervalDeactivateCandidates: 1m
 
-  # HousekeepingDeleteAfterTime finds documents whose removed_at time is older than that time. (default: -24h).
-  HousekeepingDeleteAfterTime: -24h
+  # IntervalDeleteDocuments is the time between housekeeping runs (default: 1m).
+  IntervalDeleteDocuments: 1m
 
-  # CandidatesLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
-  CandidatesLimitPerProject: 100
+  # HousekeepingDocumentHardDeletionGracefulPeriod finds documents whose removed_at time is older than that time. (default: 24h).
+  HousekeepingDocumentHardDeletionGracefulPeriod: 24h
 
-  # DocumentHardDeletionLimitPerProject is the maximum number of candidates to be returned per project (default: 500).
-  DocumentHardDeletionLimitPerProject: 500
+  # ClientDeactivationCandidateLimitPerProject is the maximum number of candidates to be returned per project (default: 100).
+  ClientDeactivationCandidateLimitPerProject: 100
+
+  # DocumentHardDeletionCandidateLimitPerProject is the maximum number of candidates to be returned per project (default: 500).
+  DocumentHardDeletionCandidateLimitPerProject: 500
 
   # ProjectFetchSize is the maximum number of projects to be returned to deactivate candidates. (default: 100).
   ProjectFetchSize: 100

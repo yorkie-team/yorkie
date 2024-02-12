@@ -624,7 +624,7 @@ func (d *DB) FindDocumentHardDeletionCandidatesPerProject(
 	_ context.Context,
 	project *database.ProjectInfo,
 	candidatesLimit int,
-	deleteAfterTime gotime.Duration,
+	documentHardDeletionGracefulPeriod gotime.Duration,
 ) ([]*database.DocInfo, error) {
 
 	txn := d.db.Txn(false)
@@ -642,14 +642,14 @@ func (d *DB) FindDocumentHardDeletionCandidatesPerProject(
 	}
 
 	currentTime := gotime.Now()
-	conditionDeleteAfterTime := currentTime.Add(deleteAfterTime)
+	conditionDocumentHardDeletionGracefulPeriod := currentTime.Add(-documentHardDeletionGracefulPeriod)
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		document := raw.(*database.DocInfo)
 		if candidatesLimit <= len(documents) && candidatesLimit != 0 {
 			break
 		}
 
-		if !document.RemovedAt.After(conditionDeleteAfterTime) {
+		if document.RemovedAt.Before(conditionDocumentHardDeletionGracefulPeriod) {
 			documents = append(documents, document)
 		}
 	}
@@ -701,64 +701,28 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 	return infos, nil
 }
 
-// FindDocumentHardDeletionCandidates finds the clients that need housekeeping.
-func (d *DB) FindDocumentHardDeletionCandidates(
-	ctx context.Context,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	deletedAfterTime gotime.Duration,
-	lastProjectID types.ID,
-) (types.ID, []*database.DocInfo, error) {
-	projects, err := d.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
-	if err != nil {
-		return database.DefaultProjectID, nil, err
-	}
-
-	var candidates []*database.DocInfo
-	for _, project := range projects {
-		infos, err := d.FindDocumentHardDeletionCandidatesPerProject(
-			ctx,
-			project,
-			candidatesLimitPerProject,
-			deletedAfterTime,
-		)
-		if err != nil {
-			return database.DefaultProjectID, nil, err
-		}
-
-		candidates = append(candidates, infos...)
-	}
-
-	var topProjectID types.ID
-	if len(projects) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projects[len(projects)-1].ID
-	}
-
-	return topProjectID, candidates, nil
-}
-
-// DocumentHardDeletion Deletes the documents completely.
-func (d *DB) DocumentHardDeletion(
+// DeleteDocument Deletes the documents completely.
+func (d *DB) DeleteDocument(
 	_ context.Context,
 	candidates []*database.DocInfo,
-) error {
+) (int64, error) {
 	if len(candidates) <= 0 {
-		return nil
+		return 0, nil
 	}
 
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
+	var deletedCount int64
 	for _, candidate := range candidates {
 		if err := txn.Delete(tblDocuments, candidate); err != nil {
-			return fmt.Errorf("fetch hard deletion candidates: %w", err)
+			return 0, fmt.Errorf("fetch hard deletion candidates: %w", err)
 		}
+		deletedCount++
 	}
 	txn.Commit()
 
-	return nil
+	return deletedCount, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

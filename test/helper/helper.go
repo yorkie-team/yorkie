@@ -60,13 +60,14 @@ var (
 
 	ProfilingPort = 11102
 
-	AdminUser                                       = server.DefaultAdminUser
-	AdminPassword                                   = server.DefaultAdminPassword
-	HousekeepingInterval                            = 10 * gotime.Second
-	HousekeepingDeleteAfterTime                     = 0 * gotime.Second
-	HousekeepingCandidatesLimitPerProject           = 10
-	HousekeepingDocumentHardDeletionLimitPerProject = 10
-	HousekeepingProjectFetchSize                    = 10
+	AdminUser                                                = server.DefaultAdminUser
+	AdminPassword                                            = server.DefaultAdminPassword
+	HousekeepingIntervalDeactivateCandidates                 = 10 * gotime.Second
+	HousekeepingIntervalDeleteDocuments                      = 10 * gotime.Second
+	HousekeepingDocumentHardDeletionGracefulPeriod           = 0 * gotime.Second
+	HousekeepingClientDeactivationCandidateLimitPerProject   = 10
+	HousekeepingDocumentHardDeletionCandidateLimitPerProject = 10
+	HousekeepingProjectFetchSize                             = 10
 
 	AdminTokenDuration         = "10s"
 	ClientDeactivateThreshold  = "10s"
@@ -212,11 +213,12 @@ func TestConfig() *server.Config {
 			Port: ProfilingPort + portOffset,
 		},
 		Housekeeping: &housekeeping.Config{
-			Interval:                            HousekeepingInterval.String(),
-			DeleteAfterTime:                     HousekeepingDeleteAfterTime.String(),
-			CandidatesLimitPerProject:           HousekeepingCandidatesLimitPerProject,
-			DocumentHardDeletionLimitPerProject: HousekeepingDocumentHardDeletionLimitPerProject,
-			ProjectFetchSize:                    HousekeepingProjectFetchSize,
+			IntervalDeactivateCandidates:                 HousekeepingIntervalDeactivateCandidates.String(),
+			IntervalDeleteDocuments:                      HousekeepingIntervalDeleteDocuments.String(),
+			DocumentHardDeletionGracefulPeriod:           HousekeepingDocumentHardDeletionGracefulPeriod.String(),
+			ClientDeactivationCandidateLimitPerProject:   HousekeepingClientDeactivationCandidateLimitPerProject,
+			DocumentHardDeletionCandidateLimitPerProject: HousekeepingDocumentHardDeletionCandidateLimitPerProject,
+			ProjectFetchSize:                             HousekeepingProjectFetchSize,
 		},
 		Backend: &backend.Config{
 			AdminUser:                  server.DefaultAdminUser,

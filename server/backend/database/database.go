@@ -158,20 +158,19 @@ type Database interface {
 		candidatesLimit int,
 	) ([]*ClientInfo, error)
 
-	// FindDocumentHardDeletionCandidates finds the housekeeping deletion candidates.
-	FindDocumentHardDeletionCandidates(
+	// FindDocumentHardDeletionCandidatesPerProject finds the documents that need to be deleted housekeeping per project.
+	FindDocumentHardDeletionCandidatesPerProject(
 		ctx context.Context,
-		candidatesLimitPerProject int,
-		projectFetchSize int,
-		deleteAfterTime gotime.Duration,
-		lastProjectID types.ID,
-	) (types.ID, []*DocInfo, error)
+		project *ProjectInfo,
+		candidatesLimit int,
+		documentHardDeletionGracefulPeriod gotime.Duration,
+	) ([]*DocInfo, error)
 
-	// DocumentHardDeletion Document complete deletion in progress
-	DocumentHardDeletion(
+	// DeleteDocument Document complete deletion in progress
+	DeleteDocument(
 		ctx context.Context,
-		candidate []*DocInfo,
-	) error
+		candidates []*DocInfo,
+	) (int64, error)
 
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(
