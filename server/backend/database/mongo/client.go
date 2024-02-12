@@ -662,7 +662,7 @@ func (c *Client) FindDocumentHardDeletionCandidatesPerProject(
 	var DocInfos []*database.DocInfo
 	cursor, err := c.collection(ColDocuments).Find(ctx, bson.M{
 		"project_id": project.ID,
-		"removed_at": bson.M{"$lt": hardDeletionGracefulPeriod},
+		"removed_at": bson.M{"$lte": hardDeletionGracefulPeriod},
 	}, options.Find().SetLimit(int64(candidatesLimit)))
 
 	if err != nil {

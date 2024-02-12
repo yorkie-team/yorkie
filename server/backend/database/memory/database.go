@@ -649,7 +649,7 @@ func (d *DB) FindDocumentHardDeletionCandidatesPerProject(
 			break
 		}
 
-		if document.RemovedAt.Before(conditionDocumentHardDeletionGracefulPeriod) {
+		if !document.RemovedAt.After(conditionDocumentHardDeletionGracefulPeriod) {
 			documents = append(documents, document)
 		}
 	}
