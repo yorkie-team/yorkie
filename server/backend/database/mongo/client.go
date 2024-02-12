@@ -975,19 +975,19 @@ func (c *Client) CreateSnapshotInfo(
 		return err
 	}
 
-	syncedVectorMap, err := doc.SyncedVectorMap().EncodeToString()
+	latestVectorClock, err := doc.SyncedVectorMap()[doc.ActorID().String()].EncodeToString()
 	if err != nil {
 		return err
 	}
 
 	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"project_id":        docRefKey.ProjectID,
-		"doc_id":            docRefKey.DocID,
-		"server_seq":        doc.Checkpoint().ServerSeq,
-		"lamport":           doc.Lamport(),
-		"snapshot":          snapshot,
-		"created_at":        gotime.Now(),
-		"synced_vector_map": syncedVectorMap,
+		"project_id":          docRefKey.ProjectID,
+		"doc_id":              docRefKey.DocID,
+		"server_seq":          doc.Checkpoint().ServerSeq,
+		"lamport":             doc.Lamport(),
+		"snapshot":            snapshot,
+		"created_at":          gotime.Now(),
+		"latest_vector_clock": latestVectorClock,
 	}); err != nil {
 		return fmt.Errorf("insert snapshot: %w", err)
 	}

@@ -231,15 +231,15 @@ func (s *adminServer) GetSnapshotMeta(
 		return nil, err
 	}
 
-	syncedVectorMap, err := doc.SyncedVectorMap().EncodeToString()
+	latestVectorClock, err := doc.SyncedVectorMap()[doc.ActorID().String()].EncodeToString()
 	if err != nil {
 		return nil, err
 	}
 
 	return connect.NewResponse(&api.GetSnapshotMetaResponse{
-		Lamport:         doc.Lamport(),
-		Snapshot:        snapshot,
-		SyncedVectorMap: syncedVectorMap,
+		Lamport:           doc.Lamport(),
+		Snapshot:          snapshot,
+		LatestVectorClock: latestVectorClock,
 	}), nil
 }
 

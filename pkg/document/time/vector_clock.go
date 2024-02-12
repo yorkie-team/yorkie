@@ -35,34 +35,6 @@ func (vc VectorClock) EncodeToString() (string, error) {
 	return string(bytes), nil
 }
 
-// NewSyncedVectorMapFromJSON creates a new instance of SyncedVectorMap.
-func NewSyncedVectorMapFromJSON(encodedChange string) (SyncedVectorMap, error) {
-	if encodedChange == "" {
-		return nil, nil
-	}
-
-	vc := SyncedVectorMap{}
-	if err := json.Unmarshal([]byte(encodedChange), &vc); err != nil {
-		return nil, fmt.Errorf("unmarshal vector clock: %w", err)
-	}
-
-	return vc, nil
-}
-
-// EncodeToString encodes the given syncedVectorMap to string.
-func (svm SyncedVectorMap) EncodeToString() (string, error) {
-	if svm == nil {
-		return "", nil
-	}
-
-	bytes, err := json.Marshal(svm)
-	if err != nil {
-		return "", fmt.Errorf("marshal syncedVectorMap to bytes: %w", err)
-	}
-
-	return string(bytes), nil
-}
-
 // InitialSyncedVectorMap creates an initial synced vector map.
 func InitialSyncedVectorMap(lamport int64) SyncedVectorMap {
 	actorID := InitialActorID.String()
@@ -133,4 +105,25 @@ func (svm SyncedVectorMap) ChangeActorID(id *ActorID) {
 	// delete initialID
 	delete(svm[newID], initID)
 	delete(svm, initID)
+}
+
+// NewSVMFromLatestVectorClock creates a new instance of SyncedVectorMap from the given latestVectorClock.
+func NewSVMFromLatestVectorClock(latestVectorClock string) (SyncedVectorMap, error) {
+	if latestVectorClock == "" {
+		return nil, nil
+	}
+
+	vc := VectorClock{}
+	if err := json.Unmarshal([]byte(latestVectorClock), &vc); err != nil {
+		return nil, fmt.Errorf("unmarshal vector clock: %w", err)
+	}
+
+	svm := SyncedVectorMap{}
+
+	for k := range vc {
+		svm[k] = VectorClock{}
+	}
+	svm[InitialActorID.String()] = vc
+
+	return svm, nil
 }

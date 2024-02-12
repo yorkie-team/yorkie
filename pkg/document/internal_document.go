@@ -114,19 +114,20 @@ func NewInternalDocumentFromSnapshot(
 	serverSeq int64,
 	lamport int64,
 	snapshot []byte,
-	syncedVectorMap string,
+	LatestVectorClock string,
 ) (*InternalDocument, error) {
 	obj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return nil, err
 	}
 
-	svm, err := time.NewSyncedVectorMapFromJSON(syncedVectorMap)
+	id := change.InitialID.SyncLamport(lamport)
+
+	// Create a new instance of SyncedVectorMap from the given LatestVectorClock.
+	svm, err := time.NewSVMFromLatestVectorClock(LatestVectorClock)
 	if err != nil {
 		return nil, err
 	}
-
-	id := change.InitialID.SyncLamport(lamport)
 
 	if svm == nil {
 		svm = time.InitialSyncedVectorMap(id.Lamport())
@@ -163,7 +164,7 @@ func (d *InternalDocument) HasLocalChanges() bool {
 func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	// 01. Apply remote changes to both the cloneRoot and the document.
 	if len(pack.Snapshot) > 0 {
-		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.SyncedVectorMap); err != nil {
+		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.LatestVectorClock); err != nil {
 			return err
 		}
 	} else {
@@ -256,17 +257,30 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 func (d *InternalDocument) applySnapshot(
 	snapshot []byte,
 	serverSeq int64,
-	syncedVectorMap time.SyncedVectorMap,
+	syncedVectorMap string,
 ) error {
 	rootObj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return err
 	}
 
+	svm, err := time.NewSVMFromLatestVectorClock(syncedVectorMap)
+	if err != nil {
+		return err
+	}
+
+	// Remove the initial actor's vector clock and replace it with the client's vector clock.
+	// This is because the initial actor's vector clock is used for the snapshot.
+	initID := time.InitialActorID.String()
+	delete(svm, d.ActorID().String())
+	delete(svm[initID], initID)
+	svm[d.ActorID().String()] = svm[time.InitialActorID.String()]
+	delete(svm, initID)
+
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
 	d.changeID = d.changeID.SyncLamport(serverSeq)
-	d.syncedVectorMap = syncedVectorMap
+	d.syncedVectorMap = svm
 
 	return nil
 }

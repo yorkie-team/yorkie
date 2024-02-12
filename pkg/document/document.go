@@ -202,7 +202,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		d.cloneRoot = nil
 		d.clonePresences = nil
 		if err := d.doc.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq,
-			pack.SyncedVectorMap); err != nil {
+			pack.LatestVectorClock); err != nil {
 			return err
 		}
 	} else {

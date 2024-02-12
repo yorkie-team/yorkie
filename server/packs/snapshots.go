@@ -78,7 +78,7 @@ func storeSnapshot(
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
 		snapshotInfo.Snapshot,
-		snapshotInfo.SyncedVectorMap,
+		snapshotInfo.LatestVectorClock,
 	)
 	if err != nil {
 		return err

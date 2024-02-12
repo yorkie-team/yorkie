@@ -102,19 +102,14 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		return nil, err
 	}
 
-	syncedVectorMap, err := time.NewSyncedVectorMapFromJSON(pbPack.SyncedVectorMap)
-	if err != nil {
-		return nil, err
-	}
-
 	return &change.Pack{
-		DocumentKey:     key.Key(pbPack.DocumentKey),
-		Checkpoint:      fromCheckpoint(pbPack.Checkpoint),
-		Changes:         changes,
-		Snapshot:        pbPack.Snapshot,
-		MinSyncedTicket: minSyncedTicket,
-		IsRemoved:       pbPack.IsRemoved,
-		SyncedVectorMap: syncedVectorMap,
+		DocumentKey:       key.Key(pbPack.DocumentKey),
+		Checkpoint:        fromCheckpoint(pbPack.Checkpoint),
+		Changes:           changes,
+		Snapshot:          pbPack.Snapshot,
+		MinSyncedTicket:   minSyncedTicket,
+		IsRemoved:         pbPack.IsRemoved,
+		LatestVectorClock: pbPack.LatestVectorClock,
 	}, nil
 }
 

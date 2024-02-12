@@ -332,7 +332,7 @@ func (c *Client) ListChangeSummaries(
 		seq,
 		snapshotMeta.Msg.Lamport,
 		snapshotMeta.Msg.Snapshot,
-		snapshotMeta.Msg.SyncedVectorMap,
+		snapshotMeta.Msg.LatestVectorClock,
 	)
 
 	if err != nil {
