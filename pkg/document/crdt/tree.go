@@ -941,21 +941,18 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	// 04. Find the appropriate left node. If some nodes are inserted at the
 	// same position concurrently, then we need to find the appropriate left
 	// node. This is similar to RGA.
+	idx := 0
+	if !isLeftMost {
+		idx = realParentNode.Index.OffsetOfChild(leftNode.Index) + 1
+	}
 
-	if editedAt != nil {
-		idx := 0
-		if !isLeftMost {
-			idx = realParentNode.Index.OffsetOfChild(leftNode.Index) + 1
+	parentChildren := realParentNode.Index.Children(true)
+	for i := idx; i < len(parentChildren); i++ {
+		next := parentChildren[i].Value
+		if !next.ID.CreatedAt.After(editedAt) {
+			break
 		}
-
-		parentChildren := realParentNode.Index.Children(true)
-		for i := idx; i < len(parentChildren); i++ {
-			next := parentChildren[i].Value
-			if !next.ID.CreatedAt.After(editedAt) {
-				break
-			}
-			leftNode = next
-		}
+		leftNode = next
 	}
 
 	return realParentNode, leftNode, nil
