@@ -43,7 +43,10 @@ type Pack struct {
 	IsRemoved bool
 
 	// LatestVectorClock is the latest vector clock of the document.
-	LatestVectorClock string
+	LatestVectorClock time.VectorClock
+
+	// MinSeqVector is the minimum vector clock of the document.
+	MinSeqVectorClock time.VectorClock
 }
 
 // NewPack creates a new instance of Pack.

@@ -975,7 +975,7 @@ func (c *Client) CreateSnapshotInfo(
 		return err
 	}
 
-	latestVectorClock, err := doc.SyncedVectorMap()[doc.ActorID().String()].EncodeToString()
+	latestVectorClock, err := doc.VectorClock().EncodeToString()
 	if err != nil {
 		return err
 	}

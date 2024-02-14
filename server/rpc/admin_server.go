@@ -231,7 +231,7 @@ func (s *adminServer) GetSnapshotMeta(
 		return nil, err
 	}
 
-	latestVectorClock, err := doc.SyncedVectorMap()[doc.ActorID().String()].EncodeToString()
+	latestVectorClock, err := doc.VectorClock().EncodeToString()
 	if err != nil {
 		return nil, err
 	}

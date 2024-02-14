@@ -47,6 +47,7 @@ message ChangePack {
   TimeTicket min_synced_ticket = 5;
   bool is_removed = 6;
   string latest_vector_clock = 7;
+  string min_synced_vector_clock = 8;
 }
 
 message Change {

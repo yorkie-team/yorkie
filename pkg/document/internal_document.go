@@ -86,9 +86,8 @@ type InternalDocument struct {
 	// server.
 	localChanges []*change.Change
 
-	// syncedVectorMap is used to store the vector clock of the peer clients.
-	// It is used to determine the minimum synced ticket.
-	syncedVectorMap time.SyncedVectorMap
+	// vectorClock is the vector clock of the document.
+	vectorClock time.VectorClock
 }
 
 // NewInternalDocument creates a new instance of InternalDocument.
@@ -97,14 +96,14 @@ func NewInternalDocument(k key.Key) *InternalDocument {
 
 	// TODO(hackerwins): We need to initialize the presence of the actor who edited the document.
 	return &InternalDocument{
-		key:             k,
-		status:          StatusDetached,
-		root:            crdt.NewRoot(root),
-		checkpoint:      change.InitialCheckpoint,
-		changeID:        change.InitialID,
-		presences:       innerpresence.NewMap(),
-		onlineClients:   &gosync.Map{},
-		syncedVectorMap: time.InitialSyncedVectorMap(0),
+		key:           k,
+		status:        StatusDetached,
+		root:          crdt.NewRoot(root),
+		checkpoint:    change.InitialCheckpoint,
+		changeID:      change.InitialID,
+		presences:     innerpresence.NewMap(),
+		onlineClients: &gosync.Map{},
+		vectorClock:   time.InitialVectorClock(),
 	}
 }
 
@@ -114,7 +113,7 @@ func NewInternalDocumentFromSnapshot(
 	serverSeq int64,
 	lamport int64,
 	snapshot []byte,
-	LatestVectorClock string,
+	latestVectorClock string,
 ) (*InternalDocument, error) {
 	obj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
@@ -123,25 +122,21 @@ func NewInternalDocumentFromSnapshot(
 
 	id := change.InitialID.SyncLamport(lamport)
 
-	// Create a new instance of SyncedVectorMap from the given LatestVectorClock.
-	svm, err := time.NewSVMFromLatestVectorClock(LatestVectorClock)
-	if err != nil {
-		return nil, err
-	}
+	lvc, err := time.NewVectorClockFromJSON(latestVectorClock)
 
-	if svm == nil {
-		svm = time.InitialSyncedVectorMap(id.Lamport())
+	if lvc == nil {
+		lvc = time.VectorClock{time.InitialActorID.String(): id.Lamport()}
 	}
 
 	return &InternalDocument{
-		key:             k,
-		status:          StatusDetached,
-		root:            crdt.NewRoot(obj),
-		presences:       presences,
-		onlineClients:   &gosync.Map{},
-		checkpoint:      change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:        id,
-		syncedVectorMap: svm,
+		key:           k,
+		status:        StatusDetached,
+		root:          crdt.NewRoot(obj),
+		presences:     presences,
+		onlineClients: &gosync.Map{},
+		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
+		changeID:      id,
+		vectorClock:   lvc,
 	}, nil
 }
 
@@ -185,7 +180,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 	// 03. Update the checkpoint.
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
-	if _, err := d.GarbageCollect(d.SyncedVectorMap()); err != nil {
+	if _, err := d.GarbageCollect(pack.MinSeqVectorClock); err != nil {
 		return err
 	}
 
@@ -193,8 +188,8 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack) error {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *InternalDocument) GarbageCollect(syncedVectorMap time.SyncedVectorMap) (int, error) {
-	return d.root.GarbageCollect(syncedVectorMap)
+func (d *InternalDocument) GarbageCollect(minSeqVector time.VectorClock) (int, error) {
+	return d.root.GarbageCollect(minSeqVector)
 }
 
 // GarbageLen returns the count of removed elements.
@@ -257,30 +252,20 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 func (d *InternalDocument) applySnapshot(
 	snapshot []byte,
 	serverSeq int64,
-	syncedVectorMap string,
+	LatestVectorClock time.VectorClock,
 ) error {
 	rootObj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return err
 	}
 
-	svm, err := time.NewSVMFromLatestVectorClock(syncedVectorMap)
-	if err != nil {
-		return err
-	}
-
-	// Remove the initial actor's vector clock and replace it with the client's vector clock.
-	// This is because the initial actor's vector clock is used for the snapshot.
-	initID := time.InitialActorID.String()
-	delete(svm, d.ActorID().String())
-	delete(svm[initID], initID)
-	svm[d.ActorID().String()] = svm[time.InitialActorID.String()]
-	delete(svm, initID)
+	// change vector clock initial id to doc's id
+	delete(LatestVectorClock, time.InitialActorID.String())
 
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
 	d.changeID = d.changeID.SyncLamport(serverSeq)
-	d.syncedVectorMap = svm
+	d.vectorClock = LatestVectorClock
 
 	return nil
 }
@@ -334,17 +319,16 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 		changeActorID := c.ID().ActorID().String()
 
 		// update self's synced vector
-		d.syncedVectorMap[d.changeID.ActorID().String()][changeActorID] = c.ID().Lamport()
+		d.VectorClock()[changeActorID] = c.ID().Lamport()
 
 		// If an actor is detached from the server,
 		// delete the vector clock for that actor from SyncVectorMap.
-		if c.DetachFlag() {
-			delete(d.syncedVectorMap, changeActorID)
-			continue
-		}
+		// if c.DetachFlag() {
+		// 	delete(d.syncedVectorMap, changeActorID)
+		// 	continue
+		// }
 
 		// update peer's synced vector
-		d.syncedVectorMap[changeActorID] = c.VectorClock()
 	}
 
 	return events, nil
@@ -425,8 +409,13 @@ func (d *InternalDocument) RemoveOnlineClient(clientID string) {
 // SyncedVectorMap returns the synced vector map of the document.
 // NOTE(highcloud100): For now, return the reference to the original map.
 // It should be changed to return a deep copy of the map.
-func (d *InternalDocument) SyncedVectorMap() time.SyncedVectorMap {
-	return d.syncedVectorMap
+// func (d *InternalDocument) SyncedVectorMap() time.SyncedVectorMap {
+// 	return d.syncedVectorMap
+// }
+
+// VectorClock returns the vector clock of the document.
+func (d *InternalDocument) VectorClock() time.VectorClock {
+	return d.vectorClock
 }
 
 // SetDetachFlag set the detach flag as true.

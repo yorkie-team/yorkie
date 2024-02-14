@@ -99,39 +99,39 @@ type Document struct {
 		payload []byte) error
 }
 
-// PrintSyncedVectorMap prints the synced vector map.
-func (d *Document) PrintSyncedVectorMap(me string) {
-	you := ""
-	if me == "A" {
-		you = "B"
-	} else {
-		you = "A"
-	}
+// // PrintSyncedVectorMap prints the synced vector map.
+// func (d *Document) PrintSyncedVectorMap(me string) {
+// 	you := ""
+// 	if me == "A" {
+// 		you = "B"
+// 	} else {
+// 		you = "A"
+// 	}
 
-	cur := d.doc.ActorID().String()
-	testMap := make(map[string](map[string]int64))
-	who := ""
-	for k, v := range d.doc.syncedVectorMap {
-		temp := make(map[string]int64)
-		for k2, v2 := range v {
-			if k2 == cur {
-				who = me
-			} else {
-				who = you
-			}
-			temp[who] = v2
-		}
-		if k == cur {
-			who = me
-		} else {
-			who = you
-		}
-		testMap[who] = temp
-	}
+// 	cur := d.doc.ActorID().String()
+// 	testMap := make(map[string](map[string]int64))
+// 	who := ""
+// 	for k, v := range d.doc.syncedVectorMap {
+// 		temp := make(map[string]int64)
+// 		for k2, v2 := range v {
+// 			if k2 == cur {
+// 				who = me
+// 			} else {
+// 				who = you
+// 			}
+// 			temp[who] = v2
+// 		}
+// 		if k == cur {
+// 			who = me
+// 		} else {
+// 			who = you
+// 		}
+// 		testMap[who] = temp
+// 	}
 
-	v, _ := gojson.Marshal(testMap)
-	fmt.Println(string(v))
-}
+// 	v, _ := gojson.Marshal(testMap)
+// 	fmt.Println(string(v))
+// }
 
 // New creates a new instance of Document.
 func New(key key.Key) *Document {
@@ -164,7 +164,7 @@ func (d *Document) Update(
 		d.doc.changeID.Next(),
 		messageFromMsgAndArgs(msgAndArgs...),
 		d.cloneRoot,
-		d.doc.syncedVectorMap[actorID].CopyAndSet(actorID, d.doc.changeID.Lamport()+1),
+		d.doc.VectorClock().CopyAndSet(actorID, d.doc.Lamport()+1),
 	)
 
 	if err := updater(
@@ -184,9 +184,9 @@ func (d *Document) Update(
 		}
 
 		// Update the vector clock of the actor.
-		d.doc.syncedVectorMap[actorID][actorID] = ctx.ID().Lamport()
+		d.doc.VectorClock()[actorID] = ctx.ID().Lamport()
 		// Set the vector clock to change.
-		c.SetVectorClock(d.doc.syncedVectorMap[actorID])
+		c.SetVectorClock(d.doc.VectorClock())
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
 		d.doc.changeID = ctx.ID()
@@ -240,7 +240,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 
 	// 04. Do Garbage collection.
 	//   - delay calculating the minimum vector clock from the syncedVectorMap due to overhead.
-	d.GarbageCollect(d.doc.SyncedVectorMap())
+	d.GarbageCollect(pack.MinSeqVectorClock)
 
 	// 05. Update the status.
 	if pack.IsRemoved {
@@ -317,19 +317,19 @@ func (d *Document) Root() *json.Object {
 		panic(err)
 	}
 
-	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot, d.doc.syncedVectorMap[d.doc.ActorID().String()])
+	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot, d.doc.VectorClock().Copy())
 	return json.NewObject(ctx, d.cloneRoot.Object())
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *Document) GarbageCollect(syncedVectorMap time.SyncedVectorMap) int {
+func (d *Document) GarbageCollect(minSeqVector time.VectorClock) int {
 	if d.cloneRoot != nil {
-		if _, err := d.cloneRoot.GarbageCollect(syncedVectorMap); err != nil {
+		if _, err := d.cloneRoot.GarbageCollect(minSeqVector); err != nil {
 			panic(err)
 		}
 	}
 
-	n, err := d.doc.GarbageCollect(syncedVectorMap)
+	n, err := d.doc.GarbageCollect(minSeqVector)
 	if err != nil {
 		panic(err)
 	}

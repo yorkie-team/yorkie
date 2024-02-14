@@ -27,7 +27,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -456,9 +455,6 @@ func TestGarbageCollection(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		d1.PrintSyncedVectorMap("A")
-		d2.PrintSyncedVectorMap("B")
-
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 	})
@@ -620,30 +616,30 @@ func TestGarbageCollection(t *testing.T) {
 	})
 }
 
-func TestVectorClock(t *testing.T) {
-	t.Run("Delete actor's vector clock who has detaced", func(t *testing.T) {
-		clients := activeClients(t, 2)
-		c1, c2 := clients[0], clients[1]
+// func TestVectorClock(t *testing.T) {
+// 	t.Run("Delete actor's vector clock who has detaced", func(t *testing.T) {
+// 		clients := activeClients(t, 2)
+// 		c1, c2 := clients[0], clients[1]
 
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
-		assert.NoError(t, err)
+// 		ctx := context.Background()
+// 		d1 := document.New(helper.TestDocKey(t))
+// 		err := c1.Attach(ctx, d1)
+// 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
-		assert.NoError(t, err)
+// 		d2 := document.New(helper.TestDocKey(t))
+// 		err = c2.Attach(ctx, d2)
+// 		assert.NoError(t, err)
 
-		err = c1.Detach(ctx, d1)
-		assert.NoError(t, err)
+// 		err = c1.Detach(ctx, d1)
+// 		assert.NoError(t, err)
 
-		c2.Sync(ctx)
+// 		c2.Sync(ctx)
 
-		assert.Equal(t, time.SyncedVectorMap{
-			c2.ID().String(): time.VectorClock{
-				c2.ID().String(): 1,
-				c1.ID().String(): 2,
-			},
-		}, d2.InternalDocument().SyncedVectorMap())
-	})
-}
+// 		assert.Equal(t, time.SyncedVectorMap{
+// 			c2.ID().String(): time.VectorClock{
+// 				c2.ID().String(): 1,
+// 				c1.ID().String(): 2,
+// 			},
+// 		}, d2.InternalDocument().SyncedVectorMap())
+// 	})
+// }

@@ -9,7 +9,7 @@ import (
 type VectorClock map[string]int64
 
 // SyncedVectorMap is a map of actor id to its vector clock.
-type SyncedVectorMap map[string]VectorClock
+//type SyncedVectorMap map[string]VectorClock
 
 // NewVectorClockFromJSON creates a new instance of VectorClock.
 func NewVectorClockFromJSON(encodedChange string) (VectorClock, error) {
@@ -25,6 +25,27 @@ func NewVectorClockFromJSON(encodedChange string) (VectorClock, error) {
 	return vc, nil
 }
 
+// InitialVectorClock returns an initial vector clock.
+func InitialVectorClock() VectorClock {
+	return VectorClock{InitialActorID.String(): 0}
+}
+
+func (vc VectorClock) ChangeActorID(id *ActorID) {
+	newID := id.String()
+	// Already has actor id given from the server.
+	if vc[newID] != 0 {
+		return
+	}
+
+	initID := InitialActorID.String()
+
+	// If current actor id is initial actor id
+	vc[newID] = vc[initID]
+
+	// delete initialID
+	delete(vc, initID)
+}
+
 // EncodeToString encodes the given vector clock to string.
 func (vc VectorClock) EncodeToString() (string, error) {
 	bytes, err := json.Marshal(vc)
@@ -35,34 +56,34 @@ func (vc VectorClock) EncodeToString() (string, error) {
 	return string(bytes), nil
 }
 
-// InitialSyncedVectorMap creates an initial synced vector map.
-func InitialSyncedVectorMap(lamport int64) SyncedVectorMap {
-	actorID := InitialActorID.String()
-	return SyncedVectorMap{actorID: VectorClock{actorID: lamport}}
-}
+// // InitialSyncedVectorMap creates an initial synced vector map.
+// func InitialSyncedVectorMap(lamport int64) SyncedVectorMap {
+// 	actorID := InitialActorID.String()
+// 	return SyncedVectorMap{actorID: VectorClock{actorID: lamport}}
+// }
 
-// MinSyncedVector returns the minimum vector clock from the given syncedVectorMap.
-func (svm SyncedVectorMap) MinSyncedVector() VectorClock {
-	minSeqVector := make(VectorClock)
-	checker := make(map[string]int)
-	for _, vec := range svm {
-		for k, v := range vec {
-			checker[k]++
-			if minSeqVector[k] == 0 {
-				minSeqVector[k] = v
-			} else {
-				minSeqVector[k] = min(minSeqVector[k], v)
-			}
-		}
-	}
+// // MinSyncedVector returns the minimum vector clock from the given syncedVectorMap.
+// func (svm SyncedVectorMap) MinSyncedVector() VectorClock {
+// 	minSeqVector := make(VectorClock)
+// 	checker := make(map[string]int)
+// 	for _, vec := range svm {
+// 		for k, v := range vec {
+// 			checker[k]++
+// 			if minSeqVector[k] == 0 {
+// 				minSeqVector[k] = v
+// 			} else {
+// 				minSeqVector[k] = min(minSeqVector[k], v)
+// 			}
+// 		}
+// 	}
 
-	for k, v := range checker {
-		if v != len(svm) {
-			minSeqVector[k] = 0
-		}
-	}
-	return minSeqVector
-}
+// 	for k, v := range checker {
+// 		if v != len(svm) {
+// 			minSeqVector[k] = 0
+// 		}
+// 	}
+// 	return minSeqVector
+// }
 
 // Copy returns a new deep copied VectorClock.
 func (vc VectorClock) Copy() VectorClock {
@@ -89,41 +110,41 @@ func (vc VectorClock) CopyAndSet(id string, value int64) VectorClock {
 // ChangeActorID change the InitialActorID into New ActorID.
 // Move the initial actor's vector clock to the given actor's vector clock.
 // And delete the initial actor's vector clock.
-func (svm SyncedVectorMap) ChangeActorID(id *ActorID) {
-	newID := id.String()
-	// Already has actor id given from the server.
-	if svm[newID] != nil {
-		return
-	}
+// func (svm SyncedVectorMap) ChangeActorID(id *ActorID) {
+// 	newID := id.String()
+// 	// Already has actor id given from the server.
+// 	if svm[newID] != nil {
+// 		return
+// 	}
 
-	initID := InitialActorID.String()
+// 	initID := InitialActorID.String()
 
-	// If current actor id is initial actor id
-	svm[newID] = svm[initID]
-	svm[newID][newID] = svm[newID][initID]
+// 	// If current actor id is initial actor id
+// 	svm[newID] = svm[initID]
+// 	svm[newID][newID] = svm[newID][initID]
 
-	// delete initialID
-	delete(svm[newID], initID)
-	delete(svm, initID)
-}
+// 	// delete initialID
+// 	delete(svm[newID], initID)
+// 	delete(svm, initID)
+// }
 
-// NewSVMFromLatestVectorClock creates a new instance of SyncedVectorMap from the given latestVectorClock.
-func NewSVMFromLatestVectorClock(latestVectorClock string) (SyncedVectorMap, error) {
-	if latestVectorClock == "" {
-		return nil, nil
-	}
+// // NewSVMFromLatestVectorClock creates a new instance of SyncedVectorMap from the given latestVectorClock.
+// func NewSVMFromLatestVectorClock(latestVectorClock string) (SyncedVectorMap, error) {
+// 	if latestVectorClock == "" {
+// 		return nil, nil
+// 	}
 
-	vc := VectorClock{}
-	if err := json.Unmarshal([]byte(latestVectorClock), &vc); err != nil {
-		return nil, fmt.Errorf("unmarshal vector clock: %w", err)
-	}
+// 	vc := VectorClock{}
+// 	if err := json.Unmarshal([]byte(latestVectorClock), &vc); err != nil {
+// 		return nil, fmt.Errorf("unmarshal vector clock: %w", err)
+// 	}
 
-	svm := SyncedVectorMap{}
+// 	svm := SyncedVectorMap{}
 
-	for k := range vc {
-		svm[k] = VectorClock{}
-	}
-	svm[InitialActorID.String()] = vc
+// 	for k := range vc {
+// 		svm[k] = VectorClock{}
+// 	}
+// 	svm[InitialActorID.String()] = vc
 
-	return svm, nil
-}
+// 	return svm, nil
+// }
