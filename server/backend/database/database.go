@@ -284,4 +284,9 @@ type Database interface {
 		docRefKey types.DocRefKey,
 		excludeClientID types.ID,
 	) (bool, error)
+
+	CalculateMinSyncedVector(
+		ctx context.Context,
+		docRefKey types.DocRefKey,
+	) (time.VectorClock, error)
 }

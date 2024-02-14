@@ -63,6 +63,11 @@ func pushChanges(
 		cp = cp.SyncClientSeq(cn.ClientSeq())
 	}
 
+	// If the client has pushed changes, update the latest change seq.
+	if len(reqPack.Changes) > 0 {
+		cp.SetLatestChangeSeq(cp.ServerSeq)
+	}
+
 	if len(reqPack.Changes) > 0 {
 		logging.From(ctx).Debugf(
 			"PUSH: '%s' pushes %d changes into '%s', rejected %d changes, serverSeq: %d -> %d, cp: %s",
@@ -95,7 +100,7 @@ func pullPack(
 		return NewServerPack(docInfo.Key, change.Checkpoint{
 			ServerSeq: reqPack.Checkpoint.ServerSeq,
 			ClientSeq: cpAfterPush.ClientSeq,
-		}, nil, nil, ""), nil
+		}, nil, nil, nil, nil), nil
 	}
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
@@ -122,7 +127,7 @@ func pullPack(
 			return nil, err
 		}
 
-		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil, ""), nil
+		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil, nil, nil), nil
 	}
 
 	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
@@ -163,11 +168,6 @@ func pullSnapshot(
 		return nil, err
 	}
 
-	latestVectorClock, err := doc.VectorClock().EncodeToString()
-	if err != nil {
-		return nil, err
-	}
-
 	logging.From(ctx).Debugf(
 		"PULL: '%s' build snapshot with changes(%d~%d) from '%s', cp: %s",
 		clientInfo.Key,
@@ -177,7 +177,7 @@ func pullSnapshot(
 		cpAfterPull,
 	)
 
-	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot, latestVectorClock), err
+	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot, doc.VectorClock(), nil), err
 }
 
 func pullChangeInfos(

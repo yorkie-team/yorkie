@@ -329,6 +329,7 @@ message Presence {
 message Checkpoint {
   int64 server_seq = 1 [jstype = JS_STRING];
   uint32 client_seq = 2;
+  int64 latest_server_seq = 3 [jstype = JS_STRING];
 }
 
 message TextNodePos {

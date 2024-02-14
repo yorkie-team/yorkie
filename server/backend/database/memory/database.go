@@ -1390,6 +1390,13 @@ func (d *DB) findTicketByServerSeq(
 	), nil
 }
 
+func (d *DB) CalculateMinSyncedVector(
+	ctx context.Context,
+	docRefKey types.DocRefKey,
+) (time.VectorClock, error) {
+	return time.InitialVectorClock(), nil
+}
+
 func newID() types.ID {
 	return types.ID(primitive.NewObjectID().Hex())
 }

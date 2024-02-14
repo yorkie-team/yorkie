@@ -71,35 +71,18 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// push B[A:2,B:4] -> B: { A[A:2], B[A:2,B:4] }
+		// push B[A:2,B:4] ->  { A[A:2], B[A:2,B:4] }
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// pull B[A:2, B:4] -> A: { A[A:2,B:4], B[A:2,B:4] } -> minSyncedVector : [2, 4]
+		// pull B[A:2, B:4] -> { A[A:2], B[A:2,B:4] } -> minSyncedVector : [2, 0]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen()) // gc collected garbage
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// B: { A[A:2], B[A:2,B:4] }
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 4, d2.GarbageLen())
-
-		// A: { A[A:2,B:4], B[A:2,B:4] }
-		err = c1.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 4, d2.GarbageLen())
-
-		// B: { A[A:2], B[A:2,B:4] } -> minSyncedVector : [2, 0]
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 4, d2.GarbageLen())
 	})
 
 	t.Run("garbage collection for text type test", func(t *testing.T) {

@@ -26,30 +26,30 @@ import (
 
 func TestCheckPoint(t *testing.T) {
 	t.Run("check point test", func(t *testing.T) {
-		cp := change.NewCheckpoint(change.InitialServerSeq, change.InitialClientSeq)
-		assert.True(t, cp.Equals(change.NewCheckpoint(0, 0)))
-		assert.False(t, cp.Equals(change.NewCheckpoint(1, 1)))
-		assert.False(t, cp.Equals(change.NewCheckpoint(1, 0)))
-		assert.False(t, cp.Equals(change.NewCheckpoint(0, 1)))
-		assert.False(t, cp.Equals(change.NewCheckpoint(1, 1)))
+		cp := change.NewCheckpoint(change.InitialServerSeq, change.InitialClientSeq, change.LatestChangeSeq)
+		assert.True(t, cp.Equals(change.NewCheckpoint(0, 0, 0)))
+		assert.False(t, cp.Equals(change.NewCheckpoint(1, 1, 0)))
+		assert.False(t, cp.Equals(change.NewCheckpoint(1, 0, 0)))
+		assert.False(t, cp.Equals(change.NewCheckpoint(0, 1, 0)))
+		assert.False(t, cp.Equals(change.NewCheckpoint(1, 1, 0)))
 		assert.Equal(t, "serverSeq=0, clientSeq=0", cp.String())
 
 		assert.Equal(t, cp, cp.NextServerSeq(0))
-		assert.Equal(t, change.NewCheckpoint(5, 0), cp.NextServerSeq(5))
-		assert.Equal(t, change.NewCheckpoint(0, 1), cp.NextClientSeq())
-		assert.Equal(t, change.NewCheckpoint(0, 0), cp.IncreaseClientSeq(0))
-		assert.Equal(t, change.NewCheckpoint(0, 5), cp.IncreaseClientSeq(5))
+		assert.Equal(t, change.NewCheckpoint(5, 0, 0), cp.NextServerSeq(5))
+		assert.Equal(t, change.NewCheckpoint(0, 1, 0), cp.NextClientSeq())
+		assert.Equal(t, change.NewCheckpoint(0, 0, 0), cp.IncreaseClientSeq(0))
+		assert.Equal(t, change.NewCheckpoint(0, 5, 0), cp.IncreaseClientSeq(5))
 
-		cp = change.NewCheckpoint(10, 20)
-		assert.Equal(t, change.NewCheckpoint(10, 20), cp.SyncClientSeq(5))
-		assert.Equal(t, change.NewCheckpoint(10, 30), cp.SyncClientSeq(30))
+		cp = change.NewCheckpoint(10, 20, 0)
+		assert.Equal(t, change.NewCheckpoint(10, 20, 0), cp.SyncClientSeq(5))
+		assert.Equal(t, change.NewCheckpoint(10, 30, 0), cp.SyncClientSeq(30))
 
-		assert.Equal(t, cp, cp.Forward(change.NewCheckpoint(1, 2)))
-		assert.Equal(t, change.NewCheckpoint(20, 30),
-			cp.Forward(change.NewCheckpoint(20, 30)))
-		assert.Equal(t, change.NewCheckpoint(10, 30),
-			cp.Forward(change.NewCheckpoint(5, 30)))
-		assert.Equal(t, change.NewCheckpoint(20, 20),
-			cp.Forward(change.NewCheckpoint(20, 5)))
+		assert.Equal(t, cp, cp.Forward(change.NewCheckpoint(1, 2, 0)))
+		assert.Equal(t, change.NewCheckpoint(20, 30, 0),
+			cp.Forward(change.NewCheckpoint(20, 30, 0)))
+		assert.Equal(t, change.NewCheckpoint(10, 30, 0),
+			cp.Forward(change.NewCheckpoint(5, 30, 0)))
+		assert.Equal(t, change.NewCheckpoint(20, 20, 0),
+			cp.Forward(change.NewCheckpoint(20, 5, 0)))
 	})
 }

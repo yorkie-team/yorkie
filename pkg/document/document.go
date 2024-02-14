@@ -239,7 +239,6 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	//   - delay calculating the minimum vector clock from the syncedVectorMap due to overhead.
 	d.GarbageCollect(pack.MinSeqVectorClock)
 
 	// 05. Update the status.

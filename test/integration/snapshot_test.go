@@ -30,6 +30,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server/backend/background"
 	"github.com/yorkie-team/yorkie/test/helper"
@@ -227,56 +228,56 @@ func TestSnapshot(t *testing.T) {
 	// })
 }
 
-// func TestSnapshotlimit(t *testing.T) {
+func TestSnapshotlimit(t *testing.T) {
 
-// 	initialState := json.TreeNode{
-// 		Type: "root",
-// 		Children: []json.TreeNode{
-// 			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}}},
-// 			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "b"}}},
-// 			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}},
-// 		},
-// 	}
-// 	initialXML := `<root><p>a</p><p>b</p><p>c</p></root>`
+	initialState := json.TreeNode{
+		Type: "root",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "b"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}},
+		},
+	}
+	initialXML := `<root><p>a</p><p>b</p><p>c</p></root>`
 
-// 	for i := 0; i < 900; i++ {
-// 		t.Run(fmt.Sprintf("iteration"), func(t *testing.T) {
-// 			if i == 117 {
-// 				fmt.Println("break")
-// 			}
-// 			fmt.Println("-------------------------iteration ", i)
-// 			ctx := context.Background()
-// 			clients := activeClients(t, 2)
-// 			c1, c2 := clients[0], clients[1]
-// 			defer deactivateAndCloseClients(t, clients)
+	for i := 0; i < 900; i++ {
+		t.Run(fmt.Sprintf("iteration"), func(t *testing.T) {
+			if i == 117 {
+				fmt.Println("break")
+			}
+			fmt.Println("-------------------------iteration ", i)
+			ctx := context.Background()
+			clients := activeClients(t, 2)
+			c1, c2 := clients[0], clients[1]
+			//defer deactivateAndCloseClients(t, clients)
 
-// 			d1 := document.New(key.Key("testsnapshotlimit-iteration"))
-// 			err := c1.Attach(ctx, d1)
-// 			if err != nil {
-// 				println(err.Error())
-// 			}
-// 			assert.NoError(t, err)
-// 			d2 := document.New(key.Key("testsnapshotlimit-iteration"))
-// 			err = c2.Attach(ctx, d2)
-// 			if err != nil {
-// 				println(err.Error())
-// 			}
-// 			assert.NoError(t, err)
+			d1 := document.New(key.Key("testsnapshotlimit-iteration"))
+			err := c1.Attach(ctx, d1)
+			if err != nil {
+				println(err.Error())
+			}
+			assert.NoError(t, err)
+			d2 := document.New(key.Key("testsnapshotlimit-iteration"))
+			err = c2.Attach(ctx, d2)
+			if err != nil {
+				println(err.Error())
+			}
+			assert.NoError(t, err)
 
-// 			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-// 				root.SetNewTree("t", &initialState)
-// 				return nil
-// 			}, "set initial state"))
-// 			assert.NoError(t, c1.Sync(ctx))
-// 			assert.NoError(t, c2.Sync(ctx))
-// 			assert.Equal(t, initialXML, d1.Root().GetTree("t").ToXML())
-// 			assert.Equal(t, initialXML, d2.Root().GetTree("t").ToXML())
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewTree("t", &initialState)
+				return nil
+			}, "set initial state"))
+			assert.NoError(t, c1.Sync(ctx))
+			assert.NoError(t, c2.Sync(ctx))
+			assert.Equal(t, initialXML, d1.Root().GetTree("t").ToXML())
+			assert.Equal(t, initialXML, d2.Root().GetTree("t").ToXML())
 
-// 			// op1.run(t, d1, 0, ranges)
-// 			// op2.run(t, d2, 1, ranges)
+			// op1.run(t, d1, 0, ranges)
+			// op2.run(t, d2, 1, ranges)
 
-// 			_ = syncClientsThenCheckEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
+			_ = syncClientsThenCheckEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
 
-// 		})
-// 	}
-// }
+		})
+	}
+}

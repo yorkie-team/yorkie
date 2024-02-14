@@ -28,18 +28,23 @@ const (
 	// InitialServerSeq is the initial sequence number of the server.
 	InitialServerSeq = 0
 
+	// LatestChangeSeq is the latest change's server sequence of the client.
+	LatestChangeSeq = 0
+
 	// MaxClientSeq is the maximum sequence number of the client.
 	MaxClientSeq = math.MaxUint32
 
 	// MaxServerSeq is the maximum sequence number of the server.
 	MaxServerSeq = int64(math.MaxInt64)
+
+	MaxLatestChangeSeq = int64(math.MaxInt64)
 )
 
 // InitialCheckpoint is the initial value of Checkpoint.
-var InitialCheckpoint = NewCheckpoint(InitialServerSeq, InitialClientSeq)
+var InitialCheckpoint = NewCheckpoint(InitialServerSeq, InitialClientSeq, LatestChangeSeq)
 
 // MaxCheckpoint is the maximum value of Checkpoint.
-var MaxCheckpoint = NewCheckpoint(MaxServerSeq, MaxClientSeq)
+var MaxCheckpoint = NewCheckpoint(MaxServerSeq, MaxClientSeq, MaxLatestChangeSeq)
 
 // Checkpoint is used to determine the client received changes.
 // It is not meant to be used to determine the logical order of changes.
@@ -52,13 +57,17 @@ type Checkpoint struct {
 	// clientSeq is the sequence of the change within the client that made the
 	// change.
 	ClientSeq uint32
+
+	// LatestChangeSeq is the latest change's server sequence of the client.
+	LatestChangeSeq int64
 }
 
 // NewCheckpoint creates a new instance of Checkpoint.
-func NewCheckpoint(serverSeq int64, clientSeq uint32) Checkpoint {
+func NewCheckpoint(serverSeq int64, clientSeq uint32, latestChangeSeq int64) Checkpoint {
 	return Checkpoint{
-		ServerSeq: serverSeq,
-		ClientSeq: clientSeq,
+		ServerSeq:       serverSeq,
+		ClientSeq:       clientSeq,
+		LatestChangeSeq: latestChangeSeq,
 	}
 }
 
@@ -68,7 +77,7 @@ func (cp Checkpoint) NextServerSeq(serverSeq int64) Checkpoint {
 		return cp
 	}
 
-	return NewCheckpoint(serverSeq, cp.ClientSeq)
+	return NewCheckpoint(serverSeq, cp.ClientSeq, cp.LatestChangeSeq)
 }
 
 // NextClientSeq creates a new instance with next client sequence.
@@ -81,14 +90,14 @@ func (cp Checkpoint) IncreaseClientSeq(inc uint32) Checkpoint {
 	if inc == 0 {
 		return cp
 	}
-	return NewCheckpoint(cp.ServerSeq, cp.ClientSeq+inc)
+	return NewCheckpoint(cp.ServerSeq, cp.ClientSeq+inc, cp.LatestChangeSeq)
 }
 
 // SyncClientSeq updates the given clientSeq if it is greater than the internal
 // value.
 func (cp Checkpoint) SyncClientSeq(clientSeq uint32) Checkpoint {
 	if cp.ClientSeq < clientSeq {
-		return NewCheckpoint(cp.ServerSeq, clientSeq)
+		return NewCheckpoint(cp.ServerSeq, clientSeq, cp.LatestChangeSeq)
 	}
 
 	return cp
@@ -111,7 +120,7 @@ func (cp Checkpoint) Forward(other Checkpoint) Checkpoint {
 		maxClientSeq = other.ClientSeq
 	}
 
-	return NewCheckpoint(maxServerSeq, maxClientSeq)
+	return NewCheckpoint(maxServerSeq, maxClientSeq, cp.LatestChangeSeq)
 }
 
 // Equals returns whether the given checkpoint is equal to this checkpoint or not.
@@ -123,4 +132,9 @@ func (cp Checkpoint) Equals(other Checkpoint) bool {
 // String returns the string of information about this checkpoint.
 func (cp Checkpoint) String() string {
 	return fmt.Sprintf("serverSeq=%d, clientSeq=%d", cp.ServerSeq, cp.ClientSeq)
+}
+
+// SetLatestChangeSeq sets the latest change's server sequence of the client.
+func (cp *Checkpoint) SetLatestChangeSeq(seq int64) {
+	cp.LatestChangeSeq = seq
 }

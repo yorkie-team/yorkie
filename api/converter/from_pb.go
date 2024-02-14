@@ -128,6 +128,7 @@ func fromCheckpoint(pbCheckpoint *api.Checkpoint) change.Checkpoint {
 	return change.NewCheckpoint(
 		pbCheckpoint.ServerSeq,
 		pbCheckpoint.ClientSeq,
+		pbCheckpoint.LatestServerSeq,
 	)
 }
 

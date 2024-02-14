@@ -122,6 +122,17 @@ func PushPull(
 	respPack.MinSyncedTicket = minSyncedTicket
 	respPack.ApplyDocInfo(docInfo)
 
+	// 05. caculate the min synced vector clock.
+	minSyncedVector, err := be.DB.CalculateMinSyncedVector(
+		ctx,
+		docRefKey,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	respPack.MinSyncedVectorClock = minSyncedVector
+
 	pullLog := strconv.Itoa(respPack.ChangesLen())
 	if respPack.SnapshotLen() > 0 {
 		pullLog = units.HumanSize(float64(respPack.SnapshotLen()))

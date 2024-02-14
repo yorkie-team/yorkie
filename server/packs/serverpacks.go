@@ -51,7 +51,10 @@ type ServerPack struct {
 	IsRemoved bool
 
 	// LatestVectorClock is the latest vector clock of the document.
-	LatestVectorClock string
+	LatestVectorClock time.VectorClock
+
+	// MinSyncedVectorClock is the minimum vector clock of the document.
+	MinSyncedVectorClock time.VectorClock
 }
 
 // NewServerPack creates a new instance of ServerPack.
@@ -60,14 +63,16 @@ func NewServerPack(
 	cp change.Checkpoint,
 	changeInfos []*database.ChangeInfo,
 	snapshot []byte,
-	latestVectorClock string,
+	latestVectorClock time.VectorClock,
+	minSyncedVectorClock time.VectorClock,
 ) *ServerPack {
 	return &ServerPack{
-		DocumentKey:       key,
-		Checkpoint:        cp,
-		ChangeInfos:       changeInfos,
-		Snapshot:          snapshot,
-		LatestVectorClock: latestVectorClock,
+		DocumentKey:          key,
+		Checkpoint:           cp,
+		ChangeInfos:          changeInfos,
+		Snapshot:             snapshot,
+		LatestVectorClock:    latestVectorClock,
+		MinSyncedVectorClock: minSyncedVectorClock,
 	}
 }
 
@@ -129,14 +134,25 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		})
 	}
 
+	lVC, err := p.LatestVectorClock.EncodeToString()
+	if err != nil {
+		return nil, err
+	}
+
+	minVC, err := p.MinSyncedVectorClock.EncodeToString()
+	if err != nil {
+		return nil, err
+	}
+
 	return &api.ChangePack{
-		DocumentKey:       p.DocumentKey.String(),
-		Checkpoint:        converter.ToCheckpoint(p.Checkpoint),
-		Changes:           pbChanges,
-		Snapshot:          p.Snapshot,
-		MinSyncedTicket:   converter.ToTimeTicket(p.MinSyncedTicket),
-		IsRemoved:         p.IsRemoved,
-		LatestVectorClock: p.LatestVectorClock,
+		DocumentKey:          p.DocumentKey.String(),
+		Checkpoint:           converter.ToCheckpoint(p.Checkpoint),
+		Changes:              pbChanges,
+		Snapshot:             p.Snapshot,
+		MinSyncedTicket:      converter.ToTimeTicket(p.MinSyncedTicket),
+		IsRemoved:            p.IsRemoved,
+		LatestVectorClock:    lVC,
+		MinSyncedVectorClock: minVC,
 	}, nil
 }
 

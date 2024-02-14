@@ -49,9 +49,10 @@ const (
 // ClientDocInfo is a structure representing information of the document
 // attached to the client.
 type ClientDocInfo struct {
-	Status    string `bson:"status"`
-	ServerSeq int64  `bson:"server_seq"`
-	ClientSeq uint32 `bson:"client_seq"`
+	Status          string `bson:"status"`
+	ServerSeq       int64  `bson:"server_seq"`
+	ClientSeq       uint32 `bson:"client_seq"`
+	LatestChangeSeq int64  `bson:"latest_change_seq"`
 }
 
 // ClientDocInfoMap is a map that associates DocRefKey with ClientDocInfo instances.
@@ -174,7 +175,7 @@ func (i *ClientInfo) Checkpoint(docID types.ID) change.Checkpoint {
 		return change.InitialCheckpoint
 	}
 
-	return change.NewCheckpoint(clientDocInfo.ServerSeq, clientDocInfo.ClientSeq)
+	return change.NewCheckpoint(clientDocInfo.ServerSeq, clientDocInfo.ClientSeq, clientDocInfo.LatestChangeSeq)
 }
 
 // UpdateCheckpoint updates the checkpoint of the given document.
@@ -188,6 +189,7 @@ func (i *ClientInfo) UpdateCheckpoint(
 
 	i.Documents[docID].ServerSeq = cp.ServerSeq
 	i.Documents[docID].ClientSeq = cp.ClientSeq
+	i.Documents[docID].LatestChangeSeq = cp.LatestChangeSeq
 	i.UpdatedAt = time.Now()
 
 	return nil
