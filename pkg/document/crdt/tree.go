@@ -860,6 +860,10 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 		func(token index.TreeToken[*TreeNode], _ bool) {
 			node := token.Node
 			if !node.IsRemoved() && !node.IsText() && len(attributes) > 0 {
+				if editedAt.After(node.ID.CreatedAt) {
+					return
+				}
+
 				if node.Attrs == nil {
 					node.Attrs = NewRHT()
 				}
@@ -893,6 +897,9 @@ func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, edite
 			node := token.Node
 			// NOTE(justiceHui): Even if key is not existed, we must set flag `isRemoved` for concurrency
 			if !node.IsRemoved() && !node.IsText() {
+				if editedAt.After(node.ID.CreatedAt) {
+					return
+				}
 				if node.Attrs == nil {
 					node.Attrs = NewRHT()
 				}
