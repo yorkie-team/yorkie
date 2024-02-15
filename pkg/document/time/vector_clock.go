@@ -8,13 +8,10 @@ import (
 // VectorClock is a map of actor id to its sequence number.
 type VectorClock map[string]int64
 
-// SyncedVectorMap is a map of actor id to its vector clock.
-//type SyncedVectorMap map[string]VectorClock
-
 // NewVectorClockFromJSON creates a new instance of VectorClock.
 func NewVectorClockFromJSON(encodedChange string) (VectorClock, error) {
 	if encodedChange == "" {
-		return nil, nil
+		return VectorClock{}, nil
 	}
 
 	vc := VectorClock{}

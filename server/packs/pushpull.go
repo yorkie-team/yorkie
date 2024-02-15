@@ -100,7 +100,7 @@ func pullPack(
 		return NewServerPack(docInfo.Key, change.Checkpoint{
 			ServerSeq: reqPack.Checkpoint.ServerSeq,
 			ClientSeq: cpAfterPush.ClientSeq,
-		}, nil, nil, nil, nil), nil
+		}, nil, nil, "", ""), nil
 	}
 
 	if initialServerSeq < reqPack.Checkpoint.ServerSeq {
@@ -127,7 +127,7 @@ func pullPack(
 			return nil, err
 		}
 
-		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil, nil, nil), nil
+		return NewServerPack(docInfo.Key, cpAfterPull, pulledChanges, nil, "", ""), nil
 	}
 
 	return pullSnapshot(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq)
@@ -177,7 +177,12 @@ func pullSnapshot(
 		cpAfterPull,
 	)
 
-	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot, doc.VectorClock(), nil), err
+	latestVectorClock, err := doc.VectorClock().EncodeToString()
+	if err != nil {
+		return nil, err
+	}
+
+	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot, latestVectorClock, ""), err
 }
 
 func pullChangeInfos(

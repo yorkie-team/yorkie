@@ -826,6 +826,7 @@ func (d *DB) CreateChangeInfos(
 	initialServerSeq int64,
 	changes []*change.Change,
 	isRemoved bool,
+	initialVectorClock time.VectorClock,
 ) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
@@ -1120,54 +1121,56 @@ func (d *DB) FindMinSyncedSeqInfo(
 	return syncedSeqInfo, nil
 }
 
-// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
-// and returns the min synced ticket.
-func (d *DB) UpdateAndFindMinSyncedTicket(
+// UpdateAndFindMinSyncedVector updates the given serverSeq of the given client
+// and returns the MinSyncedVector of the document.
+func (d *DB) UpdateAndFindMinSyncedVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	serverSeq int64,
-) (*time.Ticket, error) {
-	if err := d.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
-		return nil, err
-	}
+) (string, error) {
+	return "", nil
 
-	txn := d.db.Txn(false)
-	defer txn.Abort()
+	// if err := d.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
+	// 	return nil, err
+	// }
 
-	iterator, err := txn.LowerBound(
-		tblSyncedSeqs,
-		"doc_id_lamport_actor_id",
-		docRefKey.DocID.String(),
-		int64(0),
-		time.InitialActorID.String(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID, err)
-	}
+	// txn := d.db.Txn(false)
+	// defer txn.Abort()
 
-	var syncedSeqInfo *database.SyncedSeqInfo
-	if raw := iterator.Next(); raw != nil {
-		info := raw.(*database.SyncedSeqInfo)
-		if info.DocID == docRefKey.DocID {
-			syncedSeqInfo = info
-		}
-	}
+	// iterator, err := txn.LowerBound(
+	// 	tblSyncedSeqs,
+	// 	"doc_id_lamport_actor_id",
+	// 	docRefKey.DocID.String(),
+	// 	int64(0),
+	// 	time.InitialActorID.String(),
+	// )
+	// if err != nil {
+	// 	return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID, err)
+	// }
 
-	if syncedSeqInfo == nil || syncedSeqInfo.ServerSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
-	}
+	// var syncedSeqInfo *database.SyncedSeqInfo
+	// if raw := iterator.Next(); raw != nil {
+	// 	info := raw.(*database.SyncedSeqInfo)
+	// 	if info.DocID == docRefKey.DocID {
+	// 		syncedSeqInfo = info
+	// 	}
+	// }
 
-	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
-	if err != nil {
-		return nil, err
-	}
+	// if syncedSeqInfo == nil || syncedSeqInfo.ServerSeq == change.InitialServerSeq {
+	// 	return time.InitialTicket, nil
+	// }
 
-	return time.NewTicket(
-		syncedSeqInfo.Lamport,
-		time.MaxDelimiter,
-		actorID,
-	), nil
+	// actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// return time.NewTicket(
+	// 	syncedSeqInfo.Lamport,
+	// 	time.MaxDelimiter,
+	// 	actorID,
+	// ), nil
 }
 
 // UpdateSyncedSeq updates the syncedSeq of the given client.

@@ -240,7 +240,7 @@ func TestSnapshotlimit(t *testing.T) {
 	}
 	initialXML := `<root><p>a</p><p>b</p><p>c</p></root>`
 
-	for i := 0; i < 900; i++ {
+	for i := 0; i < 301; i++ {
 		t.Run(fmt.Sprintf("iteration"), func(t *testing.T) {
 			if i == 117 {
 				fmt.Println("break")

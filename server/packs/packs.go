@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -70,6 +71,12 @@ func PushPull(
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
 	initialServerSeq := docInfo.ServerSeq
 
+	// This used to save the LatestVectorClock in each serverSeq's change info.
+	latestVectorClock, err := time.NewVectorClockFromJSON(docInfo.LatestVectorClock)
+	if err != nil {
+		return nil, err
+	}
+
 	// 01. push changes: filter out the changes that are already saved in the database.
 	cpAfterPush, pushedChanges := pushChanges(ctx, clientInfo, docInfo, reqPack, initialServerSeq)
 	be.Metrics.AddPushPullReceivedChanges(reqPack.ChangesLen())
@@ -98,6 +105,7 @@ func PushPull(
 			initialServerSeq,
 			pushedChanges,
 			reqPack.IsRemoved,
+			latestVectorClock,
 		); err != nil {
 			return nil, err
 		}
@@ -110,7 +118,7 @@ func PushPull(
 	// 04. update and find min synced ticket for garbage collection.
 	// NOTE(hackerwins): Since the client could not receive the response, the
 	// requested seq(reqPack) is stored instead of the response seq(resPack).
-	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
+	minSyncedVector, err := be.DB.UpdateAndFindMinSyncedVector(
 		ctx,
 		clientInfo,
 		docRefKey,
@@ -119,17 +127,8 @@ func PushPull(
 	if err != nil {
 		return nil, err
 	}
-	respPack.MinSyncedTicket = minSyncedTicket
-	respPack.ApplyDocInfo(docInfo)
 
-	// 05. caculate the min synced vector clock.
-	minSyncedVector, err := be.DB.CalculateMinSyncedVector(
-		ctx,
-		docRefKey,
-	)
-	if err != nil {
-		return nil, err
-	}
+	respPack.ApplyDocInfo(docInfo)
 
 	respPack.MinSyncedVectorClock = minSyncedVector
 
@@ -143,7 +142,7 @@ func PushPull(
 		clientInfo.Key,
 		len(pushedChanges),
 		pullLog,
-		minSyncedTicket.ToTestString(),
+		//minSyncedTicket.ToTestString(),
 	)
 
 	// 05. publish document change event then store snapshot asynchronously.
@@ -188,7 +187,7 @@ func PushPull(
 				ctx,
 				be,
 				docInfo,
-				minSyncedTicket,
+				nil, // need to delete
 			); err != nil {
 				logging.From(ctx).Error(err)
 			}
