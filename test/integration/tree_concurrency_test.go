@@ -207,16 +207,17 @@ func (op editOperationType) run(t *testing.T, doc *document.Document, user int, 
 func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.TreeNode, initialXML string,
 	rangesArr []twoRangesType, opArr1, opArr2 []operationInterface) {
 
-	runTest := func(ranges twoRangesType, op1, op2 operationInterface) testResult {
-		clients := activeClients(t, 2)
-		c1, c2 := clients[0], clients[1]
-		defer deactivateAndCloseClients(t, clients)
+	clients := activeClients(t, 2)
+	c1, c2 := clients[0], clients[1]
+	defer deactivateAndCloseClients(t, clients)
 
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
+	ctx := context.Background()
+	d1 := document.New(helper.TestDocKey(t))
+	assert.NoError(t, c1.Attach(ctx, d1))
+	d2 := document.New(helper.TestDocKey(t))
+	assert.NoError(t, c2.Attach(ctx, d2))
+
+	runTest := func(ranges twoRangesType, op1, op2 operationInterface) testResult {
 
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &initialState)
