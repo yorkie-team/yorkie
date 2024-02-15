@@ -40,19 +40,19 @@ var ErrDecodeOperationFailed = errors.New("decode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	ID                types.ID `bson:"_id"`
-	ProjectID         types.ID `bson:"project_id"`
-	DocID             types.ID `bson:"doc_id"`
-	ServerSeq         int64    `bson:"server_seq"`
-	ClientSeq         uint32   `bson:"client_seq"`
-	Lamport           int64    `bson:"lamport"`
-	ActorID           types.ID `bson:"actor_id"`
-	Message           string   `bson:"message"`
-	Operations        [][]byte `bson:"operations"`
-	PresenceChange    string   `bson:"presence_change"`
-	VectorClock       string   `bson:"vector_clock"`
-	LatestVectorClock string   `bson:"latest_vector_clock"`
-	DetachFlag        bool     `bson:"detach_flag"`
+	ID             types.ID `bson:"_id"`
+	ProjectID      types.ID `bson:"project_id"`
+	DocID          types.ID `bson:"doc_id"`
+	ServerSeq      int64    `bson:"server_seq"`
+	ClientSeq      uint32   `bson:"client_seq"`
+	Lamport        int64    `bson:"lamport"`
+	ActorID        types.ID `bson:"actor_id"`
+	Message        string   `bson:"message"`
+	Operations     [][]byte `bson:"operations"`
+	PresenceChange string   `bson:"presence_change"`
+	VectorClock    string   `bson:"vector_clock"`
+	VersionVector  string   `bson:"version_vector"`
+	DetachFlag     bool     `bson:"detach_flag"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.

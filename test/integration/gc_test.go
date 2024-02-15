@@ -55,11 +55,11 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		// push A[A:2] pull [B:1] => A:{ A:[A:2,B:1], B[B:1] }
+		// push A[A:2] pull [B:1] -> A:[A:2,B:1]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		// pull A[A:2] -> B:{ A:[A:2], B:[A:2,B:1] }
+		// pull A[A:2] -> B:[A:2,B:1]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
@@ -71,13 +71,13 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// push B[A:2,B:4] ->  { A[A:2], B[A:2,B:4] }
+		// push B[A:2,B:4] ->  B[A:2,B:4]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 4, d2.GarbageLen())
 
-		// pull B[A:2, B:4] -> { A[A:2], B[A:2,B:4] } -> minSyncedVector : [2, 0]
+		// pull B[A:2, B:4] -> A[A:2,B:4] -> meet GC
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen()) // gc collected garbage
@@ -110,7 +110,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		// pull A[A:2] -> B: { A[A:2], B[A:2,B:1] }
+		// pull A[A:2] -> B[A:2,B:1]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
@@ -127,35 +127,18 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// push B[A:2,B:4] -> B: { A[A:2], B[A:2,B:4] }
+		// push B[A:2,B:4] -> B[A:2,B:4]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// pull B[A:2,B:4] -> A: {A[A:2,B:4], B[A:2,B:4]} : meet GC condition
+		// pull B[A:2,B:4] -> A[A:2,B:4] : meet GC condition
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// B: { A[A:2], B[A:2,B:4] }
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 3, d2.GarbageLen())
-
-		// A: { A[A:2,B:4], B[A:2,B:4] }
-		err = c1.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 3, d2.GarbageLen())
-
-		// B: { A[A:2], B[A:2,B:4] }
-		err = c2.Sync(ctx)
-		assert.NoError(t, err)
-		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 3, d2.GarbageLen())
 	})
 
 	t.Run("garbage collection for tree type test", func(t *testing.T) {
@@ -260,11 +243,11 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 
-		// push A[A:2] pull [B:1] => A: { A:[A:2,B:1], B[B:1] }
+		// push A[A:2] pull [B:1] => A:[A:2,B:1]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		// pull A[A:2] -> B: { A:[A:2], B:[A:2,B:1] }
+		// pull A[A:2] -> B:[A:2,B:1]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
@@ -276,35 +259,35 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, d1.GarbageLen(), 0)
 		assert.Equal(t, d2.GarbageLen(), 2)
 
-		// push B[A:2,B:4] -> B: { A[A:2], B[A:2,B:4] }
+		// push B[A:2,B:4] -> B[A:2,B:4]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, d1.GarbageLen(), 0)
 		assert.Equal(t, d2.GarbageLen(), 2)
 
-		// pull B[A:2,B:4] -> A: { A[A:2,B:4], B[A:2,B:4] } : meet GC condition
+		// pull B[A:2,B:4] -> A[A:2,B:4] meet GC condition
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, d1.GarbageLen(), 0)
 		assert.Equal(t, d2.GarbageLen(), 2)
 
-		// B: { A[A:2], B[A:2,B:4] }
+		// B[A:2,B:4]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, d1.GarbageLen(), 0)
-		assert.Equal(t, d2.GarbageLen(), 2)
+		assert.Equal(t, d2.GarbageLen(), 0)
 
-		// A: { A[A:2,B:4], B[A:2,B:4] }
+		// A[A:2,B:4], B[A:2,B:4]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, d1.GarbageLen(), 0)
-		assert.Equal(t, d2.GarbageLen(), 2)
+		assert.Equal(t, d2.GarbageLen(), 0)
 
-		// B: { A[A:2], B[A:2,B:4] }
+		// A[A:2,B:4], B[A:2,B:4]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, d1.GarbageLen(), 0)
-		assert.Equal(t, d2.GarbageLen(), 2)
+		assert.Equal(t, d2.GarbageLen(), 0)
 	})
 
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
@@ -409,19 +392,20 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, d2.GarbageLen())
 
-		// push A[A:3], pull B[B:1] -> A: { A:[A:3,B:1], B:[B:1] }
+		// push A[A:3], pull B[B:1] -> A:[A:3,B:1]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		// push B[A:2,B:4], pull A[A:3] -> B: { A:[A:3], B:[A:3,B:4] } -> B GC 3@A
+		// push B[A:2,B:4], pull A[A:3] -> B:[A:3,B:4] -> B GC 3@A
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
+		assert.Equal(t, 0, d2.GarbageLen())
 
-		// pull B[A:2,B:4] -> A: { A:[A:3,B:4], B:[A:2,B:4] } -> A GC 4@B
+		// pull B[A:2,B:4] -> A:[A:3,B:4] -> A GC 3@A
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
-		assert.Equal(t, 2, d1.GarbageLen()) // 3@A remains
+		assert.Equal(t, 0, d1.GarbageLen()) // 3@A remains
 		assert.Equal(t, 0, d2.GarbageLen())
 
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
@@ -430,11 +414,11 @@ func TestGarbageCollection(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		// push B[A:3,B:6] -> B: { A:[A:3], B:[A:3,B:6] }
+		// push B[A:3,B:6] -> B:[A:3,B:6]
 		err = c2.Sync(ctx)
 		assert.NoError(t, err)
 
-		// pull B[A:3,B:6] -> A: { A:[A:3,B:6], B:[A:3,B:6] } -> A GC 3@A
+		// pull B[A:3,B:6] -> A:[A:3,B:6]
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
 
@@ -524,7 +508,7 @@ func TestGarbageCollection(t *testing.T) {
 
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, 2, d1.GarbageLen())
+		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 0, d2.GarbageLen())
 	})
 
@@ -543,11 +527,11 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 
-		// push A[A:2] -> A: { A:[A:2] }
+		// push A[A:2] -> A:[A:2]
 		c1.Sync(ctx)
 		c1.Sync(ctx)
 
-		// push B[A:1,B:1], pull A[A:2] -> B: { A:[A:2], B:[A:2,B:1] }
+		// push B[A:1,B:1], pull A[A:2] -> B:[A:2,B:1]
 		c2.Sync(ctx)
 		c2.Sync(ctx)
 
@@ -556,11 +540,11 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 
-		// push B[A:2,B:4] -> B: { A:[A:2], B:[A:2,B:4] }
+		// push B[A:2,B:4] -> B:[A:2,B:4]
 		c2.Sync(ctx)
 		c2.Sync(ctx)
 
-		// pull B[A:2,B:4] -> A: { A:[A:2,B:4], B:[A:2,B:4] } -> minSyncedVector : [2, 4]
+		// pull B[A:2,B:4] -> A:[A:2,B:4] -> Synced VersionVector : [2, 4]
 		c1.Sync(ctx)
 		c1.Sync(ctx)
 
@@ -579,50 +563,72 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// push B[A:2,B:5] -> B: { A:[A:2], B:[A:2,B:5] }
+		// push B[A:2,B:5] -> B:[A:2,B:5]
 		c2.Sync(ctx)
 		c2.Sync(ctx)
 
-		// push A[A:5,B:4], pull B[A:2,B:5] -> A: { A:[A:5,B:5], B:[A:2,B:5] } -> minSyncedVector : [2, 5]
+		// push A[A:5,B:4], pull B[A:2,B:5] -> A:[A:5,B:5] -> Synced VersionVector : [2, 5]
 		c1.Sync(ctx)
 		c1.Sync(ctx)
 
 		assert.Equal(t, 0, d1.GarbageLen())
 		assert.Equal(t, 3, d2.GarbageLen())
 
-		// pull A[A:5,B:4] -> B: { A:[A:5,B:4], B:[A:5,B:5] } -> minSyncedVector : [5, 4]
+		// pull A[A:5,B:4] -> B:[A:5,B:5] -> Synced VersionVector : [5, 5]
 		c2.Sync(ctx)
 		c2.Sync(ctx)
 
 		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 3, d2.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
 	})
 }
 
-// func TestVectorClock(t *testing.T) {
-// 	t.Run("Delete actor's vector clock who has detaced", func(t *testing.T) {
-// 		clients := activeClients(t, 2)
-// 		c1, c2 := clients[0], clients[1]
+func TestVectorClock(t *testing.T) {
+	t.Run("Delete actor's vector clock who has detaced", func(t *testing.T) {
+		clients := activeClients(t, 2)
+		c1, c2 := clients[0], clients[1]
 
-// 		ctx := context.Background()
-// 		d1 := document.New(helper.TestDocKey(t))
-// 		err := c1.Attach(ctx, d1)
-// 		assert.NoError(t, err)
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
 
-// 		d2 := document.New(helper.TestDocKey(t))
-// 		err = c2.Attach(ctx, d2)
-// 		assert.NoError(t, err)
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
 
-// 		err = c1.Detach(ctx, d1)
-// 		assert.NoError(t, err)
+		// update and delete
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("obj").SetInteger("1", 1)
+			root.Delete("obj")
+			return nil
+		})
 
-// 		c2.Sync(ctx)
+		// push B[A:1,B:3] -> B[A:1,B:3]
+		c2.Sync(ctx)
 
-// 		assert.Equal(t, time.SyncedVectorMap{
-// 			c2.ID().String(): time.VectorClock{
-// 				c2.ID().String(): 1,
-// 				c1.ID().String(): 2,
-// 			},
-// 		}, d2.InternalDocument().SyncedVectorMap())
-// 	})
-// }
+		// currently d2 has garbage, Synced VersionVector is [A:1] due to client A.
+		assert.Equal(t, 2, d2.GarbageLen())
+
+		// If client A detaches, Synced VersionVector promote to [A:1, B:3].
+		// push A[A:2] -> A:[A:2,B:3]
+		err = c1.Detach(ctx, d1)
+		assert.NoError(t, err)
+
+		// pull A[A:2] -> B:[A:2,B:3] -> GC
+		c2.Sync(ctx)
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("obj2").SetInteger("1", 1)
+			root.Delete("obj2")
+			return nil
+		})
+		assert.Equal(t, 2, d2.GarbageLen())
+
+		// A is detached, so B's Synced VersionVector is [A:2, B:5].
+		// push B[A:2,B:5] -> B:[A:2,B:5]
+		c2.Sync(ctx)
+		assert.Equal(t, 0, d2.GarbageLen())
+	})
+}

@@ -42,11 +42,13 @@ type Pack struct {
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
 
-	// LatestVectorClock is the latest vector clock of the document.
-	LatestVectorClock time.VectorClock
+	// LatestVersionVector is the latest VersionVector of the document.
+	// It used to build document from the snapshot.
+	LatestVersionVector time.VectorClock
 
-	// MinSeqVector is the minimum vector clock of the document.
-	MinSeqVectorClock time.VectorClock
+	// SyncedVersionVector is the Synced VersionVector of the document.
+	// It used to collect garbage on the replica on the client.
+	SyncedVersionVector time.VectorClock
 }
 
 // NewPack creates a new instance of Pack.

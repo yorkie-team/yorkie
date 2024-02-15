@@ -194,7 +194,7 @@ type Database interface {
 		initialServerSeq int64,
 		changes []*change.Change,
 		isRemoved bool,
-		latestVectorClock time.VectorClock,
+		latestVersionVector time.VectorClock,
 	) error
 
 	// PurgeStaleChanges delete changes before the smallest in `syncedseqs` to
@@ -247,9 +247,9 @@ type Database interface {
 		docRefKey types.DocRefKey,
 	) (*SyncedSeqInfo, error)
 
-	// UpdateAndFindMinSyncedVector updates the given serverSeq of the given client
-	// and returns the MinSyncedVector of the document.
-	UpdateAndFindMinSyncedVector(
+	// UpdateAndFindSyncdVersionVector updates the given serverSeq of the given client
+	// and returns the SyncedVersionVector of the document.
+	UpdateAndFindSyncdVersionVector(
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
@@ -285,9 +285,4 @@ type Database interface {
 		docRefKey types.DocRefKey,
 		excludeClientID types.ID,
 	) (bool, error)
-
-	CalculateMinSyncedVector(
-		ctx context.Context,
-		docRefKey types.DocRefKey,
-	) (time.VectorClock, error)
 }

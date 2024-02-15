@@ -826,8 +826,11 @@ func (d *DB) CreateChangeInfos(
 	initialServerSeq int64,
 	changes []*change.Change,
 	isRemoved bool,
-	initialVectorClock time.VectorClock,
+	latestVersionVector time.VectorClock,
 ) error {
+	// NOTE(highcloud100) : Need to update memory database like mongoDB
+	_ = latestVersionVector
+
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -1121,14 +1124,19 @@ func (d *DB) FindMinSyncedSeqInfo(
 	return syncedSeqInfo, nil
 }
 
-// UpdateAndFindMinSyncedVector updates the given serverSeq of the given client
-// and returns the MinSyncedVector of the document.
-func (d *DB) UpdateAndFindMinSyncedVector(
+// UpdateAndFindSyncdVersionVector updates the given serverSeq of the given client
+// and returns the SyncdVersionVector of the document.
+func (d *DB) UpdateAndFindSyncdVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	serverSeq int64,
 ) (string, error) {
+	// NOTE(highcloud100) : Need to update memory database like mongoDB
+	_ = serverSeq
+	_ = ctx
+	_ = clientInfo
+	_ = docRefKey
 	return "", nil
 
 	// if err := d.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
@@ -1391,13 +1399,6 @@ func (d *DB) findTicketByServerSeq(
 		time.MaxDelimiter,
 		actorID,
 	), nil
-}
-
-func (d *DB) CalculateMinSyncedVector(
-	ctx context.Context,
-	docRefKey types.DocRefKey,
-) (time.VectorClock, error) {
-	return time.InitialVectorClock(), nil
 }
 
 func newID() types.ID {

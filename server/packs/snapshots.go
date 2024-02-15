@@ -21,7 +21,6 @@ import (
 
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -31,7 +30,6 @@ func storeSnapshot(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,
-	minSyncedTicket *time.Ticket,
 ) error {
 	// 01. get the closest snapshot's metadata of this docInfo
 	docRefKey := docInfo.RefKey()
@@ -78,7 +76,7 @@ func storeSnapshot(
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
 		snapshotInfo.Snapshot,
-		snapshotInfo.LatestVectorClock,
+		snapshotInfo.VersionVector,
 	)
 	if err != nil {
 		return err
@@ -90,7 +88,6 @@ func storeSnapshot(
 		changes,
 		nil,
 	)
-	pack.MinSyncedTicket = minSyncedTicket
 
 	if err := doc.ApplyChangePack(pack); err != nil {
 		return err

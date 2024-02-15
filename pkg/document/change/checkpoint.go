@@ -37,6 +37,7 @@ const (
 	// MaxServerSeq is the maximum sequence number of the server.
 	MaxServerSeq = int64(math.MaxInt64)
 
+	// MaxLatestChangeSeq is the maximum sequence number of the latest change.
 	MaxLatestChangeSeq = int64(math.MaxInt64)
 )
 

@@ -102,25 +102,25 @@ func FromChangePack(pbPack *api.ChangePack) (*change.Pack, error) {
 		return nil, err
 	}
 
-	lvc, err := time.NewVectorClockFromJSON(pbPack.LatestVectorClock)
+	lvv, err := time.NewVectorClockFromJSON(pbPack.LatestVersionVector)
 	if err != nil {
 		return nil, err
 	}
 
-	mvc, err := time.NewVectorClockFromJSON(pbPack.MinSyncedVectorClock)
+	svv, err := time.NewVectorClockFromJSON(pbPack.SyncedVersionVector)
 	if err != nil {
 		return nil, err
 	}
 
 	return &change.Pack{
-		DocumentKey:       key.Key(pbPack.DocumentKey),
-		Checkpoint:        fromCheckpoint(pbPack.Checkpoint),
-		Changes:           changes,
-		Snapshot:          pbPack.Snapshot,
-		MinSyncedTicket:   minSyncedTicket,
-		IsRemoved:         pbPack.IsRemoved,
-		LatestVectorClock: lvc,
-		MinSeqVectorClock: mvc,
+		DocumentKey:         key.Key(pbPack.DocumentKey),
+		Checkpoint:          fromCheckpoint(pbPack.Checkpoint),
+		Changes:             changes,
+		Snapshot:            pbPack.Snapshot,
+		MinSyncedTicket:     minSyncedTicket,
+		IsRemoved:           pbPack.IsRemoved,
+		LatestVersionVector: lvv,
+		SyncedVersionVector: svv,
 	}, nil
 }
 

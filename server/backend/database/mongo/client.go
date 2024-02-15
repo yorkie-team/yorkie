@@ -43,6 +43,8 @@ import (
 const (
 	// StatusKey is the key of the status field.
 	StatusKey = "status"
+	// ServerSeqKey is the key of the server_seq field.
+	ServerSeqKey = "server_seq"
 )
 
 // Client is a client that connects to Mongo DB and reads or saves Yorkie data.
@@ -579,7 +581,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	updater := bson.M{
 		"$max": bson.M{
-			clientDocInfoKey + "server_seq":        clientDocInfo.ServerSeq,
+			clientDocInfoKey + ServerSeqKey:        clientDocInfo.ServerSeq,
 			clientDocInfoKey + "client_seq":        clientDocInfo.ClientSeq,
 			clientDocInfoKey + "latest_change_seq": clientDocInfo.LatestChangeSeq,
 		},
@@ -597,7 +599,7 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	if !attached {
 		updater = bson.M{
 			"$set": bson.M{
-				clientDocInfoKey + "server_seq": 0,
+				clientDocInfoKey + ServerSeqKey: 0,
 				clientDocInfoKey + "client_seq": 0,
 				clientDocInfoKey + StatusKey:    clientDocInfo.Status,
 				"updated_at":                    clientInfo.UpdatedAt,
@@ -685,7 +687,7 @@ func (c *Client) FindDocInfoByKeyAndOwner(
 		}, bson.M{
 			"$set": bson.M{
 				"owner":      clientRefKey.ClientID,
-				"server_seq": 0,
+				ServerSeqKey: 0,
 				"created_at": now,
 			},
 		})
@@ -796,7 +798,7 @@ func (c *Client) CreateChangeInfos(
 	initialServerSeq int64,
 	changes []*change.Change,
 	isRemoved bool,
-	initialVectorClock time.VectorClock,
+	latestVersionVector time.VectorClock,
 ) error {
 	docRefKey := docInfo.RefKey()
 
@@ -815,11 +817,11 @@ func (c *Client) CreateChangeInfos(
 			return err
 		}
 
-		// update the latest vector clock
-		initialVectorClock[cn.ID().ActorID().String()] = max(
-			cn.ID().Lamport(), initialVectorClock[cn.ID().ActorID().String()])
+		// update the latest version vector
+		latestVersionVector[cn.ID().ActorID().String()] = max(
+			cn.ID().Lamport(), latestVersionVector[cn.ID().ActorID().String()])
 
-		latestVectorClock, err := initialVectorClock.EncodeToString()
+		lvv, err := latestVersionVector.EncodeToString()
 		if err != nil {
 			return err
 		}
@@ -827,17 +829,17 @@ func (c *Client) CreateChangeInfos(
 		models = append(models, mongo.NewUpdateOneModel().SetFilter(bson.M{
 			"project_id": docRefKey.ProjectID,
 			"doc_id":     docRefKey.DocID,
-			"server_seq": cn.ServerSeq(),
+			ServerSeqKey: cn.ServerSeq(),
 		}).SetUpdate(bson.M{"$set": bson.M{
-			"actor_id":            cn.ID().ActorID(),
-			"client_seq":          cn.ID().ClientSeq(),
-			"lamport":             cn.ID().Lamport(),
-			"message":             cn.Message(),
-			"operations":          encodedOperations,
-			"presence_change":     encodedPresence,
-			"vector_clock":        encodedVectorClock,
-			"latest_vector_clock": latestVectorClock,
-			"detach_flag":         cn.DetachFlag(),
+			"actor_id":        cn.ID().ActorID(),
+			"client_seq":      cn.ID().ClientSeq(),
+			"lamport":         cn.ID().Lamport(),
+			"message":         cn.Message(),
+			"operations":      encodedOperations,
+			"presence_change": encodedPresence,
+			"vector_clock":    encodedVectorClock,
+			"version_vector":  lvv,
+			"detach_flag":     cn.DetachFlag(),
 		}}).SetUpsert(true))
 	}
 
@@ -854,16 +856,16 @@ func (c *Client) CreateChangeInfos(
 	}
 
 	// encode string and save the latest vector clock
-	lvc, err := initialVectorClock.EncodeToString()
+	lvv, err := latestVersionVector.EncodeToString()
 	if err != nil {
 		return err
 	}
 
 	now := gotime.Now()
 	updateFields := bson.M{
-		"server_seq":          docInfo.ServerSeq,
-		"updated_at":          now,
-		"latest_vector_clock": lvc,
+		ServerSeqKey:            docInfo.ServerSeq,
+		"updated_at":            now,
+		"latest_version_vector": lvv,
 	}
 	if isRemoved {
 		updateFields["removed_at"] = now
@@ -872,7 +874,7 @@ func (c *Client) CreateChangeInfos(
 	res, err := c.collection(ColDocuments).UpdateOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"_id":        docRefKey.DocID,
-		"server_seq": initialServerSeq,
+		ServerSeqKey: initialServerSeq,
 	}, bson.M{
 		"$set": updateFields,
 	})
@@ -903,7 +905,7 @@ func (c *Client) PurgeStaleChanges(
 			"project_id": docRefKey.ProjectID,
 			"doc_id":     docRefKey.DocID,
 		},
-		options.FindOne().SetSort(bson.M{"server_seq": 1}),
+		options.FindOne().SetSort(bson.M{ServerSeqKey: 1}),
 	)
 	if result.Err() == mongo.ErrNoDocuments {
 		return nil
@@ -922,7 +924,7 @@ func (c *Client) PurgeStaleChanges(
 		bson.M{
 			"project_id": docRefKey.ProjectID,
 			"doc_id":     docRefKey.DocID,
-			"server_seq": bson.M{"$lt": minSyncedSeqInfo.ServerSeq},
+			ServerSeqKey: bson.M{"$lt": minSyncedSeqInfo.ServerSeq},
 		},
 		options.Delete(),
 	); err != nil {
@@ -966,7 +968,7 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	cursor, err := c.collection(ColChanges).Find(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
-		"server_seq": bson.M{
+		ServerSeqKey: bson.M{
 			"$gte": from,
 			"$lte": to,
 		},
@@ -994,7 +996,7 @@ func (c *Client) CreateSnapshotInfo(
 		return err
 	}
 
-	latestVectorClock, err := doc.VectorClock().EncodeToString()
+	latestVectorClock, err := doc.VersionVector().EncodeToString()
 	if err != nil {
 		return err
 	}
@@ -1002,7 +1004,7 @@ func (c *Client) CreateSnapshotInfo(
 	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
 		"project_id":          docRefKey.ProjectID,
 		"doc_id":              docRefKey.DocID,
-		"server_seq":          doc.Checkpoint().ServerSeq,
+		ServerSeqKey:          doc.Checkpoint().ServerSeq,
 		"lamport":             doc.Lamport(),
 		"snapshot":            snapshot,
 		"created_at":          gotime.Now(),
@@ -1022,7 +1024,7 @@ func (c *Client) FindSnapshotInfoByRefKey(
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
 		"project_id": refKey.ProjectID,
 		"doc_id":     refKey.DocID,
-		"server_seq": refKey.ServerSeq,
+		ServerSeqKey: refKey.ServerSeq,
 	})
 
 	snapshotInfo := &database.SnapshotInfo{}
@@ -1048,7 +1050,7 @@ func (c *Client) FindClosestSnapshotInfo(
 	includeSnapshot bool,
 ) (*database.SnapshotInfo, error) {
 	option := options.FindOne().SetSort(bson.M{
-		"server_seq": -1,
+		ServerSeqKey: -1,
 	})
 
 	if !includeSnapshot {
@@ -1058,7 +1060,7 @@ func (c *Client) FindClosestSnapshotInfo(
 	result := c.collection(ColSnapshots).FindOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
-		"server_seq": bson.M{
+		ServerSeqKey: bson.M{
 			"$lte": serverSeq,
 		},
 	}, option)
@@ -1087,7 +1089,7 @@ func (c *Client) FindMinSyncedSeqInfo(
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
 	}, options.FindOne().SetSort(bson.D{
-		{Key: "server_seq", Value: 1},
+		{Key: ServerSeqKey, Value: 1},
 	}))
 	if syncedSeqResult.Err() == mongo.ErrNoDocuments {
 		syncedSeqInfo := database.SyncedSeqInfo{}
@@ -1105,9 +1107,9 @@ func (c *Client) FindMinSyncedSeqInfo(
 	return &syncedSeqInfo, nil
 }
 
-// UpdateAndFindMinSyncedVector updates the given serverSeq of the given client
-// and returns the MinSyncedVector of the document.
-func (c *Client) UpdateAndFindMinSyncedVector(
+// UpdateAndFindSyncdVersionVector updates the given serverSeq of the given client
+// and returns the SyncdVersionVetor of the document.
+func (c *Client) UpdateAndFindSyncdVersionVector(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
@@ -1117,13 +1119,17 @@ func (c *Client) UpdateAndFindMinSyncedVector(
 		return "", err
 	}
 
+	// NOTE(highcloud100) : we need to decide the standard of the synced sequence.
+	// Now Assume that the change client took is synchronized sequence.
+	// However, as with the previous version, the changes taken by the client cannot be assumed to be applied
+
 	clientDocInfoKey := getClientDocInfoKey(docRefKey.DocID)
 	result := c.collection(ColClients).FindOne(ctx, bson.M{
 		"project_id":                docRefKey.ProjectID,
 		"status":                    database.ClientActivated,
 		clientDocInfoKey + "status": database.DocumentAttached,
 	}, options.FindOne().SetSort(bson.D{
-		{Key: clientDocInfoKey + "server_seq", Value: 1},
+		{Key: clientDocInfoKey + ServerSeqKey, Value: 1},
 	}))
 	if result.Err() == mongo.ErrNoDocuments {
 		return "", nil
@@ -1142,7 +1148,7 @@ func (c *Client) UpdateAndFindMinSyncedVector(
 	// 	"project_id": docRefKey.ProjectID,
 	// 	"doc_id":     docRefKey.DocID,
 	// }, options.FindOne().SetSort(bson.D{
-	// 	{Key: "server_seq", Value: 1},
+	// 	{Key: ServerSeqKey, Value: 1},
 	// }))
 	// if result.Err() == mongo.ErrNoDocuments {
 	// 	return "", nil
@@ -1160,7 +1166,7 @@ func (c *Client) UpdateAndFindMinSyncedVector(
 	result = c.collection(ColChanges).FindOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
-		"server_seq": syncedSeqInfo.Documents[docRefKey.DocID].ServerSeq,
+		ServerSeqKey: syncedSeqInfo.Documents[docRefKey.DocID].ServerSeq,
 	}, options.FindOne().SetSort(bson.D{
 		{Key: "lamport", Value: 1},
 	}))
@@ -1168,7 +1174,7 @@ func (c *Client) UpdateAndFindMinSyncedVector(
 		return "", nil
 	}
 	if result.Err() != nil {
-		return "", fmt.Errorf("find server_seq's change: %w", result.Err())
+		return "", fmt.Errorf("find server seq's change: %w", result.Err())
 	}
 
 	changeInfo := database.ChangeInfo{}
@@ -1176,7 +1182,7 @@ func (c *Client) UpdateAndFindMinSyncedVector(
 		return "", fmt.Errorf("decode change: %w", err)
 	}
 
-	return changeInfo.LatestVectorClock, nil
+	return changeInfo.VersionVector, nil
 }
 
 // FindDocInfosByPaging returns the docInfos of the given paging.
@@ -1292,7 +1298,7 @@ func (c *Client) UpdateSyncedSeq(
 		"$set": bson.M{
 			"lamport":    ticket.Lamport(),
 			"actor_id":   ticket.ActorID(),
-			"server_seq": serverSeq,
+			ServerSeqKey: serverSeq,
 		},
 	}, options.Update().SetUpsert(true)); err != nil {
 		return fmt.Errorf("upsert synced seq: %w", err)
@@ -1337,7 +1343,7 @@ func (c *Client) findTicketByServerSeq(
 	result := c.collection(ColChanges).FindOne(ctx, bson.M{
 		"project_id": docRefKey.ProjectID,
 		"doc_id":     docRefKey.DocID,
-		"server_seq": serverSeq,
+		ServerSeqKey: serverSeq,
 	})
 	if result.Err() == mongo.ErrNoDocuments {
 		return nil, fmt.Errorf(
@@ -1375,81 +1381,6 @@ func (c *Client) collection(
 	return c.client.
 		Database(c.config.YorkieDatabase).
 		Collection(name, opts...)
-}
-
-// CalculateMinSyncedVector calculates the minimum synced vector of the given docs.
-func (c *Client) CalculateMinSyncedVector(
-	ctx context.Context,
-	docRefKey types.DocRefKey,
-) (time.VectorClock, error) {
-	clientDocInfoKey := getClientDocInfoKey(docRefKey.DocID)
-
-	// 01. find active client's latest change's server seqs.
-	cursor, err := c.collection(ColClients).Find(ctx, bson.M{
-		"project_id":                docRefKey.ProjectID,
-		"status":                    database.ClientActivated,
-		clientDocInfoKey + "status": database.DocumentAttached,
-	}, options.Find())
-	if err != nil {
-		return time.InitialVectorClock(), fmt.Errorf("find latest change's server seqs: %w", err)
-	}
-
-	var clientInfos []database.ClientInfo
-	if err := cursor.All(ctx, &clientInfos); err != nil {
-		return time.InitialVectorClock(), fmt.Errorf("fetch latest change's server seqs: %w", err)
-	}
-
-	latestChangeSeqs := make([]int64, len(clientInfos))
-	for i, result := range clientInfos {
-		latestChangeSeqs[i] = result.Documents[docRefKey.DocID].LatestChangeSeq
-	}
-
-	// 02. find active client's latest change's vector clocks.
-	cursor, err = c.collection(ColChanges).Find(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": bson.M{"$in": latestChangeSeqs},
-	}, options.Find().SetProjection(bson.M{"vector_clock": 1}))
-	if err != nil {
-		return time.InitialVectorClock(), fmt.Errorf("find vector clocks: %w", err)
-	}
-
-	var changeInfos []database.ChangeInfo
-	if err := cursor.All(ctx, &changeInfos); err != nil {
-		return time.InitialVectorClock(), fmt.Errorf("fetch vector clocks: %w", err)
-	}
-
-	// 03. decode vector clocks.
-	vectorClocks := make([]time.VectorClock, len(changeInfos))
-	for i, vc := range changeInfos {
-		vc, err := time.NewVectorClockFromJSON(vc.VectorClock)
-		if err != nil {
-			return time.InitialVectorClock(), err
-		}
-		vectorClocks[i] = vc
-	}
-
-	// 04. calculate min synced vector.
-	minSeqVector := make(time.VectorClock)
-
-	checker := make(map[string]int)
-	for _, vec := range vectorClocks {
-		for k, v := range vec {
-			checker[k]++
-			if minSeqVector[k] == 0 {
-				minSeqVector[k] = v
-			} else {
-				minSeqVector[k] = min(minSeqVector[k], v)
-			}
-		}
-	}
-
-	for k, v := range checker {
-		if v != len(vectorClocks) {
-			minSeqVector[k] = 0
-		}
-	}
-	return minSeqVector, nil
 }
 
 // escapeRegex escapes special characters by putting a backslash in front of it.

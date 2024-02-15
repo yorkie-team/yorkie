@@ -164,7 +164,7 @@ func (d *Document) Update(
 		d.doc.changeID.Next(),
 		messageFromMsgAndArgs(msgAndArgs...),
 		d.cloneRoot,
-		d.doc.VectorClock().CopyAndSet(actorID, d.doc.Lamport()+1),
+		d.doc.versionVector.CopyAndSet(actorID, d.doc.Lamport()+1),
 	)
 
 	if err := updater(
@@ -184,9 +184,9 @@ func (d *Document) Update(
 		}
 
 		// Update the vector clock of the actor.
-		d.doc.VectorClock()[actorID] = ctx.ID().Lamport()
+		d.doc.versionVector[actorID] = ctx.ID().Lamport()
 		// Set the vector clock to change.
-		c.SetVectorClock(d.doc.VectorClock())
+		c.SetVectorClock(d.doc.versionVector)
 
 		d.doc.localChanges = append(d.doc.localChanges, c)
 		d.doc.changeID = ctx.ID()
@@ -202,7 +202,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		d.cloneRoot = nil
 		d.clonePresences = nil
 		if err := d.doc.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq,
-			pack.LatestVectorClock); err != nil {
+			pack.LatestVersionVector); err != nil {
 			return err
 		}
 	} else {
@@ -239,7 +239,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	d.doc.checkpoint = d.doc.checkpoint.Forward(pack.Checkpoint)
 
 	// 04. Do Garbage collection.
-	d.GarbageCollect(pack.MinSeqVectorClock)
+	d.GarbageCollect(pack.SyncedVersionVector)
 
 	// 05. Update the status.
 	if pack.IsRemoved {
@@ -316,19 +316,19 @@ func (d *Document) Root() *json.Object {
 		panic(err)
 	}
 
-	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot, d.doc.VectorClock().Copy())
+	ctx := change.NewContext(d.doc.changeID.Next(), "", d.cloneRoot, d.doc.versionVector.Copy())
 	return json.NewObject(ctx, d.cloneRoot.Object())
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *Document) GarbageCollect(minSeqVector time.VectorClock) int {
+func (d *Document) GarbageCollect(SyncedVersionVector time.VectorClock) int {
 	if d.cloneRoot != nil {
-		if _, err := d.cloneRoot.GarbageCollect(minSeqVector); err != nil {
+		if _, err := d.cloneRoot.GarbageCollect(SyncedVersionVector); err != nil {
 			panic(err)
 		}
 	}
 
-	n, err := d.doc.GarbageCollect(minSeqVector)
+	n, err := d.doc.GarbageCollect(SyncedVersionVector)
 	if err != nil {
 		panic(err)
 	}

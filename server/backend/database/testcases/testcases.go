@@ -206,7 +206,7 @@ func RunFindChangesBetweenServerSeqsTest(
 		actorID, _ := time.ActorIDFromBytes(bytesID)
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
-		doc.InternalDocument().VectorClock().ChangeActorID(actorID)
+		doc.InternalDocument().VersionVector().ChangeActorID(actorID)
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("array")
@@ -224,7 +224,7 @@ func RunFindChangesBetweenServerSeqsTest(
 		}
 
 		// Store changes
-		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, false)
+		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, false, time.VectorClock{})
 		assert.NoError(t, err)
 
 		// Find changes
@@ -252,7 +252,7 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 
 		doc := document.New(key.Key(t.Name()))
 		doc.SetActor(actorID)
-		doc.InternalDocument().VectorClock().ChangeActorID(actorID)
+		doc.InternalDocument().VersionVector().ChangeActorID(actorID)
 
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewArray("array")
@@ -697,9 +697,9 @@ func RunFindDocInfosByPagingTest(t *testing.T, db database.Database, projectID t
 		AssertKeys(t, docKeysInReverse, result)
 
 		// 03. Remove some documents.
-		err = db.CreateChangeInfos(ctx, projectInfo.ID, docInfos[1], 0, []*change.Change{}, true)
+		err = db.CreateChangeInfos(ctx, projectInfo.ID, docInfos[1], 0, []*change.Change{}, true, time.VectorClock{})
 		assert.NoError(t, err)
-		err = db.CreateChangeInfos(ctx, projectInfo.ID, docInfos[3], 0, []*change.Change{}, true)
+		err = db.CreateChangeInfos(ctx, projectInfo.ID, docInfos[3], 0, []*change.Change{}, true, time.VectorClock{})
 		assert.NoError(t, err)
 
 		// 04. List the documents again and check the filtered result.
@@ -727,7 +727,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		// 02. Remove the document and check the document is removed.
-		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, []*change.Change{}, true)
+		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, []*change.Change{}, true, time.VectorClock{})
 		assert.NoError(t, err)
 		docInfo, err = db.FindDocInfoByRefKey(ctx, docRefKey)
 		assert.NoError(t, err)
@@ -747,7 +747,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 		// 02. Remove the document.
 		assert.NoError(t, clientInfo1.RemoveDocument(docRefKey1.DocID))
-		err := db.CreateChangeInfos(ctx, projectID, docInfo1, 0, []*change.Change{}, true)
+		err := db.CreateChangeInfos(ctx, projectID, docInfo1, 0, []*change.Change{}, true, time.VectorClock{})
 		assert.NoError(t, err)
 
 		// 03. Create a document with same key and check they have same key but different id.
@@ -774,7 +774,7 @@ func RunCreateChangeInfosTest(t *testing.T, db database.Database, projectID type
 
 		// Set removed_at in docInfo and store changes
 		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
-		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, true)
+		err := db.CreateChangeInfos(ctx, projectID, docInfo, 0, pack.Changes, true, time.VectorClock{})
 		assert.NoError(t, err)
 
 		// Check whether removed_at is set in docInfo

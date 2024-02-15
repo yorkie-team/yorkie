@@ -71,8 +71,8 @@ func PushPull(
 	// We should check the change.pack with checkpoint to make sure the changes are in the correct order.
 	initialServerSeq := docInfo.ServerSeq
 
-	// This used to save the LatestVectorClock in each serverSeq's change info.
-	latestVectorClock, err := time.NewVectorClockFromJSON(docInfo.LatestVectorClock)
+	// This used to save the LatestVersionVector in each serverSeq's change info.
+	latestVersionVector, err := time.NewVectorClockFromJSON(docInfo.LatestVersionVector)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func PushPull(
 			initialServerSeq,
 			pushedChanges,
 			reqPack.IsRemoved,
-			latestVectorClock,
+			latestVersionVector,
 		); err != nil {
 			return nil, err
 		}
@@ -118,7 +118,7 @@ func PushPull(
 	// 04. update and find min synced ticket for garbage collection.
 	// NOTE(hackerwins): Since the client could not receive the response, the
 	// requested seq(reqPack) is stored instead of the response seq(resPack).
-	minSyncedVector, err := be.DB.UpdateAndFindMinSyncedVector(
+	syncedVersionVector, err := be.DB.UpdateAndFindSyncdVersionVector(
 		ctx,
 		clientInfo,
 		docRefKey,
@@ -129,8 +129,7 @@ func PushPull(
 	}
 
 	respPack.ApplyDocInfo(docInfo)
-
-	respPack.MinSyncedVectorClock = minSyncedVector
+	respPack.SyncedVersionVector = syncedVersionVector
 
 	pullLog := strconv.Itoa(respPack.ChangesLen())
 	if respPack.SnapshotLen() > 0 {
@@ -187,7 +186,6 @@ func PushPull(
 				ctx,
 				be,
 				docInfo,
-				nil, // need to delete
 			); err != nil {
 				logging.From(ctx).Error(err)
 			}
@@ -223,7 +221,7 @@ func BuildDocumentForServerSeq(
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
 		snapshotInfo.Snapshot,
-		snapshotInfo.LatestVectorClock,
+		snapshotInfo.VersionVector,
 	)
 	if err != nil {
 		return nil, err

@@ -52,9 +52,9 @@ type DocInfo struct {
 	// RemovedAt is the time when the document is removed.
 	RemovedAt time.Time `bson:"removed_at"`
 
-	// LatestVectorClock is the latest vector clock of the document.
+	// LatestVersionVector is the latest vector clock of the document.
 	// It is calculated by the cumulative of the vector clocks of the changes.
-	LatestVectorClock string `bson:"latest_vector_clock"`
+	LatestVersionVector string `bson:"latest_version_vector"`
 }
 
 // IncreaseServerSeq increases server sequence of the document.

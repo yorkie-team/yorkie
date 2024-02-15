@@ -177,12 +177,12 @@ func pullSnapshot(
 		cpAfterPull,
 	)
 
-	latestVectorClock, err := doc.VectorClock().EncodeToString()
+	latestVersionVector, err := doc.VersionVector().EncodeToString()
 	if err != nil {
 		return nil, err
 	}
 
-	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot, latestVectorClock, ""), err
+	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot, latestVersionVector, ""), err
 }
 
 func pullChangeInfos(

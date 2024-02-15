@@ -50,11 +50,11 @@ type ServerPack struct {
 	// IsRemoved is a flag that indicates whether the document is removed.
 	IsRemoved bool
 
-	// LatestVectorClock is the latest vector clock of the document.
-	LatestVectorClock string
+	// LatestVersionVector is the latest vector clock of the document.
+	LatestVersionVector string
 
-	// MinSyncedVectorClock is the minimum vector clock of the document.
-	MinSyncedVectorClock string
+	// SyncedVersionVector is the minimum vector clock of the document.
+	SyncedVersionVector string
 }
 
 // NewServerPack creates a new instance of ServerPack.
@@ -63,16 +63,16 @@ func NewServerPack(
 	cp change.Checkpoint,
 	changeInfos []*database.ChangeInfo,
 	snapshot []byte,
-	latestVectorClock string,
-	minSyncedVectorClock string,
+	latestVersionVector string,
+	syncedVersionVector string,
 ) *ServerPack {
 	return &ServerPack{
-		DocumentKey:          key,
-		Checkpoint:           cp,
-		ChangeInfos:          changeInfos,
-		Snapshot:             snapshot,
-		LatestVectorClock:    latestVectorClock,
-		MinSyncedVectorClock: minSyncedVectorClock,
+		DocumentKey:         key,
+		Checkpoint:          cp,
+		ChangeInfos:         changeInfos,
+		Snapshot:            snapshot,
+		LatestVersionVector: latestVersionVector,
+		SyncedVersionVector: syncedVersionVector,
 	}
 }
 
@@ -135,14 +135,14 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	}
 
 	return &api.ChangePack{
-		DocumentKey:          p.DocumentKey.String(),
-		Checkpoint:           converter.ToCheckpoint(p.Checkpoint),
-		Changes:              pbChanges,
-		Snapshot:             p.Snapshot,
-		MinSyncedTicket:      converter.ToTimeTicket(p.MinSyncedTicket),
-		IsRemoved:            p.IsRemoved,
-		LatestVectorClock:    p.LatestVectorClock,
-		MinSyncedVectorClock: p.MinSyncedVectorClock,
+		DocumentKey:         p.DocumentKey.String(),
+		Checkpoint:          converter.ToCheckpoint(p.Checkpoint),
+		Changes:             pbChanges,
+		Snapshot:            p.Snapshot,
+		MinSyncedTicket:     converter.ToTimeTicket(p.MinSyncedTicket),
+		IsRemoved:           p.IsRemoved,
+		LatestVersionVector: p.LatestVersionVector,
+		SyncedVersionVector: p.SyncedVersionVector,
 	}, nil
 }
 

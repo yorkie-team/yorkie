@@ -138,7 +138,7 @@ func (r *Root) DeepCopy() (*Root, error) {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (r *Root) GarbageCollect(minSeqVector time.VectorClock) (int, error) {
+func (r *Root) GarbageCollect(SyncedVersionVector time.VectorClock) (int, error) {
 	count := 0
 
 	if len(r.removedElementPairMapByCreatedAt) == 0 && len(r.elementHasRemovedNodesSetByCreatedAt) == 0 {
@@ -148,8 +148,8 @@ func (r *Root) GarbageCollect(minSeqVector time.VectorClock) (int, error) {
 	for _, pair := range r.removedElementPairMapByCreatedAt {
 		actor := pair.elem.RemovedAt().ActorID()
 
-		//TODO(highcloud100): Check the case where minSeqVector[actor.String()] is nil
-		minTicket := time.NewTicket(minSeqVector[actor.String()], time.MaxDelimiter, actor)
+		//TODO(highcloud100): Check the case where SyncedVersionVector[actor.String()] is nil
+		minTicket := time.NewTicket(SyncedVersionVector[actor.String()], time.MaxDelimiter, actor)
 
 		if pair.elem.RemovedAt() != nil && minTicket.Compare(pair.elem.RemovedAt()) >= 0 {
 			if err := pair.parent.Purge(pair.elem); err != nil {
@@ -162,7 +162,7 @@ func (r *Root) GarbageCollect(minSeqVector time.VectorClock) (int, error) {
 
 	for _, node := range r.elementHasRemovedNodesSetByCreatedAt {
 
-		purgedNodes, err := node.purgeRemovedNodesBefore(minSeqVector)
+		purgedNodes, err := node.purgeRemovedNodesBefore(SyncedVersionVector)
 		if err != nil {
 			return 0, err
 		}

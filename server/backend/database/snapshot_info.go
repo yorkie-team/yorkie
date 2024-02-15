@@ -45,8 +45,8 @@ type SnapshotInfo struct {
 	// CreatedAt is the time when the snapshot is created.
 	CreatedAt time.Time `bson:"created_at"`
 
-	// LatestVectorClock is the latest vector clock of the snapshot.
-	LatestVectorClock string `bson:"synced_vector_map"`
+	// VersionVector is the latest vector clock of the snapshot.
+	VersionVector string `bson:"version_vector"`
 }
 
 // DeepCopy returns a deep copy of the SnapshotInfo.
@@ -56,14 +56,14 @@ func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 	}
 
 	return &SnapshotInfo{
-		ID:                i.ID,
-		ProjectID:         i.ProjectID,
-		DocID:             i.DocID,
-		ServerSeq:         i.ServerSeq,
-		Lamport:           i.Lamport,
-		Snapshot:          i.Snapshot,
-		CreatedAt:         i.CreatedAt,
-		LatestVectorClock: i.LatestVectorClock,
+		ID:            i.ID,
+		ProjectID:     i.ProjectID,
+		DocID:         i.DocID,
+		ServerSeq:     i.ServerSeq,
+		Lamport:       i.Lamport,
+		Snapshot:      i.Snapshot,
+		CreatedAt:     i.CreatedAt,
+		VersionVector: i.VersionVector,
 	}
 }
 
