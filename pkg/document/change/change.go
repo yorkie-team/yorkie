@@ -112,3 +112,8 @@ func (c *Change) SetActor(actor *time.ActorID) {
 func (c *Change) PresenceChange() *innerpresence.PresenceChange {
 	return c.presenceChange
 }
+
+// CausallyAfter returns whether this change is causally after the given change.
+func (c *Change) CausallyAfter(other *Change) bool {
+	return c.id.CausallyAfter(other.id)
+}

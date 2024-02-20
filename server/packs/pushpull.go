@@ -171,7 +171,10 @@ func pullSnapshot(
 		cpAfterPull,
 	)
 
-	return NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot), err
+	pack := NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot)
+	vector := doc.VersionVector()
+	pack.SnapshotVersionVector = &vector
+	return pack, nil
 }
 
 func pullChangeInfos(

@@ -185,7 +185,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 	if len(pack.Snapshot) > 0 {
 		d.cloneRoot = nil
 		d.clonePresences = nil
-		if err := d.doc.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
+		if err := d.doc.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.SnapshotVersionVector); err != nil {
 			return err
 		}
 	} else {
@@ -291,6 +291,11 @@ func (d *Document) ActorID() *time.ActorID {
 // SetStatus updates the status of this document.
 func (d *Document) SetStatus(status StatusType) {
 	d.doc.SetStatus(status)
+}
+
+// VersionVector returns the version vector of this document.
+func (d *Document) VersionVector() time.VersionVector {
+	return d.doc.VersionVector()
 }
 
 // Status returns the status of this document.

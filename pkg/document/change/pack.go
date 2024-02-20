@@ -35,6 +35,9 @@ type Pack struct {
 	// Snapshot is a byte array that encode the document.
 	Snapshot []byte
 
+	// SnapshotVersionVector is the version vector of the snapshot if it exists.
+	SnapshotVersionVector time.VersionVector
+
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
 	MinSyncedTicket *time.Ticket
@@ -58,7 +61,7 @@ func NewPack(
 	}
 }
 
-// HasChanges returns the whether pack has changes or not.
+// HasChanges returns whether pack has changes or not.
 func (p *Pack) HasChanges() bool {
 	return len(p.Changes) > 0
 }

@@ -108,6 +108,7 @@ func NewInternalDocumentFromSnapshot(
 	k key.Key,
 	serverSeq int64,
 	lamport int64,
+	vector time.VersionVector,
 	snapshot []byte,
 ) (*InternalDocument, error) {
 	obj, presences, err := converter.BytesToSnapshot(snapshot)
@@ -122,7 +123,7 @@ func NewInternalDocumentFromSnapshot(
 		presences:     presences,
 		onlineClients: &gosync.Map{},
 		checkpoint:    change.InitialCheckpoint.NextServerSeq(serverSeq),
-		changeID:      change.InitialID.SyncLamport(lamport),
+		changeID:      change.InitialID.SetClocks(lamport, vector),
 	}, nil
 }
 
@@ -145,7 +146,7 @@ func (d *InternalDocument) HasLocalChanges() bool {
 func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) error {
 	// 01. Apply remote changes to both the cloneRoot and the document.
 	if len(pack.Snapshot) > 0 {
-		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq); err != nil {
+		if err := d.applySnapshot(pack.Snapshot, pack.Checkpoint.ServerSeq, pack.SnapshotVersionVector); err != nil {
 			return err
 		}
 	} else {
@@ -205,6 +206,8 @@ func (d *InternalDocument) SetActor(actor *time.ActorID) {
 		c.SetActor(actor)
 	}
 	d.changeID = d.changeID.SetActor(actor)
+
+	// TODO(hackerwins): We need to update the root object as well.
 }
 
 // Lamport returns the Lamport clock of this document.
@@ -215,6 +218,11 @@ func (d *InternalDocument) Lamport() int64 {
 // ActorID returns ID of the actor currently editing the document.
 func (d *InternalDocument) ActorID() *time.ActorID {
 	return d.changeID.ActorID()
+}
+
+// VersionVector returns the version vector of this document.
+func (d *InternalDocument) VersionVector() time.VersionVector {
+	return d.changeID.VersionVector()
 }
 
 // SetStatus sets the status of this document.
@@ -237,7 +245,7 @@ func (d *InternalDocument) RootObject() *crdt.Object {
 	return d.root.Object()
 }
 
-func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error {
+func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64, vector time.VersionVector) error {
 	rootObj, presences, err := converter.BytesToSnapshot(snapshot)
 	if err != nil {
 		return err
@@ -245,7 +253,9 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error
 
 	d.root = crdt.NewRoot(rootObj)
 	d.presences = presences
-	d.changeID = d.changeID.SyncLamport(serverSeq)
+
+	// TODO(hackerwins): We need to check we can use serverSeq as lamport timestamp.
+	d.changeID = d.changeID.SetClocks(serverSeq, vector)
 
 	return nil
 }
@@ -276,7 +286,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 				case innerpresence.Clear:
 					// NOTE(chacha912): When the user exists in onlineClients, but
 					// PresenceChange(clear) is received, we can consider it as detachment
-					// occurring before unwatching.
+					// occurring before unwatch.
 					// Detached user is no longer participating in the document, we remove
 					// them from the online clients and trigger the 'unwatched' event.
 					event := DocEvent{
@@ -295,7 +305,7 @@ func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, 
 			return nil, err
 		}
 
-		d.changeID = d.changeID.SyncLamport(c.ID().Lamport())
+		d.changeID = d.changeID.SyncClocks(c.ID())
 	}
 
 	return events, nil

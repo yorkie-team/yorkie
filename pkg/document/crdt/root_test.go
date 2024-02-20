@@ -61,7 +61,53 @@ func TestRoot(t *testing.T) {
 	})
 
 	t.Run("garbage collection for text test", func(t *testing.T) {
-		steps := []struct {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+		text := crdt.NewText(crdt.NewRGATreeSplit(crdt.InitialTextNode()), ctx.IssueTimeTicket())
+
+		fromPos, toPos, _ := text.CreateRange(0, 0)
+		_, _, err := text.Edit(fromPos, toPos, nil, "Hello World", nil, ctx.IssueTimeTicket())
+		assert.NoError(t, err)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
+		assert.Equal(t, "Hello World", text.String())
+		assert.Equal(t, 0, root.GarbageLen())
+
+		fromPos, toPos, _ = text.CreateRange(5, 10)
+		_, _, err = text.Edit(fromPos, toPos, nil, "Yorkie", nil, ctx.IssueTimeTicket())
+		assert.NoError(t, err)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
+		assert.Equal(t, "HelloYorkied", text.String())
+		assert.Equal(t, 1, root.GarbageLen())
+
+		fromPos, toPos, _ = text.CreateRange(0, 5)
+		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
+		assert.NoError(t, err)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
+		assert.Equal(t, "Yorkied", text.String())
+		assert.Equal(t, 2, root.GarbageLen())
+
+		fromPos, toPos, _ = text.CreateRange(6, 7)
+		_, _, err = text.Edit(fromPos, toPos, nil, "", nil, ctx.IssueTimeTicket())
+		assert.NoError(t, err)
+		registerElementHasRemovedNodes(fromPos, toPos, root, text)
+		assert.Equal(t, "Yorkie", text.String())
+		assert.Equal(t, 3, root.GarbageLen())
+
+		// It contains code marked tombstone.
+		// CausallyAfter calling the garbage collector, the node will be removed.
+		nodeLen := len(text.Nodes())
+		assert.Equal(t, 4, nodeLen)
+
+		n, err := root.GarbageCollect(time.MaxTicket)
+		assert.NoError(t, err)
+		assert.Equal(t, 3, n)
+		assert.Equal(t, 0, root.GarbageLen())
+		nodeLen = len(text.Nodes())
+		assert.Equal(t, 1, nodeLen)
+	})
+
+	t.Run("garbage collection for fragments of text", func(t *testing.T) {
+		type test struct {
 			from    int
 			to      int
 			content string

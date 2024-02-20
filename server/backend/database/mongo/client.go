@@ -841,6 +841,7 @@ func (c *Client) CreateChangeInfos(
 			"actor_id":        cn.ID().ActorID(),
 			"client_seq":      cn.ID().ClientSeq(),
 			"lamport":         cn.ID().Lamport(),
+			"version_vector":  cn.ID().VersionVector(),
 			"message":         cn.Message(),
 			"operations":      encodedOperations,
 			"presence_change": encodedPresence,
@@ -994,12 +995,13 @@ func (c *Client) CreateSnapshotInfo(
 	}
 
 	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": doc.Checkpoint().ServerSeq,
-		"lamport":    doc.Lamport(),
-		"snapshot":   snapshot,
-		"created_at": gotime.Now(),
+		"project_id":     docRefKey.ProjectID,
+		"doc_id":         docRefKey.DocID,
+		"server_seq":     doc.Checkpoint().ServerSeq,
+		"lamport":        doc.Lamport(),
+		"version_vector": doc.VersionVector(),
+		"snapshot":       snapshot,
+		"created_at":     gotime.Now(),
 	}); err != nil {
 		return fmt.Errorf("insert snapshot: %w", err)
 	}
@@ -1058,6 +1060,7 @@ func (c *Client) FindClosestSnapshotInfo(
 
 	snapshotInfo := &database.SnapshotInfo{}
 	if result.Err() == mongo.ErrNoDocuments {
+		snapshotInfo.VersionVector = time.NewVersionVector()
 		return snapshotInfo, nil
 	}
 	if result.Err() != nil {

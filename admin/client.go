@@ -327,10 +327,16 @@ func (c *Client) ListChangeSummaries(
 		return nil, err
 	}
 
+	vector, err := converter.FromVersionVector(snapshotMeta.Msg.VersionVector)
+	if err != nil {
+		return nil, err
+	}
+
 	newDoc, err := document.NewInternalDocumentFromSnapshot(
 		key,
 		seq,
 		snapshotMeta.Msg.Lamport,
+		vector,
 		snapshotMeta.Msg.Snapshot,
 	)
 

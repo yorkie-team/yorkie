@@ -56,13 +56,15 @@ var (
 	ErrInvalidActorID = errors.New("invalid actor id")
 )
 
+// actorID is the type of ActorID. It is composed of 12 bytes.
+type actorID [actorIDSize]byte
+
 // ActorID represents the unique ID of the client. It is composed of 12 bytes.
 // It caches the string representation of ActorID to reduce the number of calls
 // to hex.EncodeToString. This causes a multi-routine problem, so it is
 // recommended to use it in a single routine or to use it after locking.
 type ActorID struct {
-	bytes [actorIDSize]byte
-
+	bytes        actorID
 	cachedString string
 }
 

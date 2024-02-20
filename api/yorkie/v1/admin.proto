@@ -140,6 +140,7 @@ message GetSnapshotMetaRequest {
 message GetSnapshotMetaResponse {
   bytes snapshot = 1;
   int64 lamport = 2  [jstype = JS_STRING];
+  VersionVector version_vector = 3;
 }
 
 message SearchDocumentsRequest {

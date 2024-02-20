@@ -308,6 +308,7 @@ func RunPushPullChangeTest(
 	assert.NoError(t, err)
 
 	actorID, _ := hex.DecodeString(activateResp.Msg.ClientId)
+	pbVector, _ := converter.ToVersionVector(time.NewVersionVector())
 	resPack, err := testClient.AttachDocument(
 		context.Background(),
 		connect.NewRequest(&api.AttachDocumentRequest{
@@ -317,9 +318,10 @@ func RunPushPullChangeTest(
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 1},
 				Changes: []*api.Change{{
 					Id: &api.ChangeID{
-						ClientSeq: 1,
-						Lamport:   1,
-						ActorId:   actorID,
+						ClientSeq:     1,
+						Lamport:       1,
+						ActorId:       actorID,
+						VersionVector: pbVector,
 					},
 				}},
 			},
@@ -337,9 +339,10 @@ func RunPushPullChangeTest(
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 2},
 				Changes: []*api.Change{{
 					Id: &api.ChangeID{
-						ClientSeq: 2,
-						Lamport:   2,
-						ActorId:   actorID,
+						ClientSeq:     2,
+						Lamport:       2,
+						ActorId:       actorID,
+						VersionVector: pbVector,
 					},
 				}},
 			},
@@ -357,9 +360,10 @@ func RunPushPullChangeTest(
 				Checkpoint:  &api.Checkpoint{ServerSeq: 0, ClientSeq: 3},
 				Changes: []*api.Change{{
 					Id: &api.ChangeID{
-						ClientSeq: 3,
-						Lamport:   3,
-						ActorId:   actorID,
+						ClientSeq:     3,
+						Lamport:       3,
+						ActorId:       actorID,
+						VersionVector: pbVector,
 					},
 				}},
 			},

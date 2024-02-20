@@ -17,9 +17,10 @@
 package database
 
 import (
-	"time"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // SnapshotInfo is a structure representing information of the snapshot.
@@ -39,11 +40,14 @@ type SnapshotInfo struct {
 	// Lamport is the Lamport timestamp of the snapshot.
 	Lamport int64 `bson:"lamport"`
 
+	// VersionVector is the version vector of the snapshot.
+	VersionVector time.VersionVector `bson:"version_vector"`
+
 	// Snapshot is the snapshot data.
 	Snapshot []byte `bson:"snapshot"`
 
 	// CreatedAt is the time when the snapshot is created.
-	CreatedAt time.Time `bson:"created_at"`
+	CreatedAt gotime.Time `bson:"created_at"`
 }
 
 // DeepCopy returns a deep copy of the SnapshotInfo.
@@ -53,13 +57,14 @@ func (i *SnapshotInfo) DeepCopy() *SnapshotInfo {
 	}
 
 	return &SnapshotInfo{
-		ID:        i.ID,
-		ProjectID: i.ProjectID,
-		DocID:     i.DocID,
-		ServerSeq: i.ServerSeq,
-		Lamport:   i.Lamport,
-		Snapshot:  i.Snapshot,
-		CreatedAt: i.CreatedAt,
+		ID:            i.ID,
+		ProjectID:     i.ProjectID,
+		DocID:         i.DocID,
+		ServerSeq:     i.ServerSeq,
+		Lamport:       i.Lamport,
+		VersionVector: i.VersionVector,
+		Snapshot:      i.Snapshot,
+		CreatedAt:     i.CreatedAt,
 	}
 }
 

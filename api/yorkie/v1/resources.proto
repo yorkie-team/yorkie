@@ -43,6 +43,7 @@ message ChangePack {
   string document_key = 1;
   Checkpoint checkpoint = 2;
   bytes snapshot = 3;
+  VersionVector snapshot_version_vector = 7;
   repeated Change changes = 4;
   TimeTicket min_synced_ticket = 5;
   bool is_removed = 6;
@@ -60,6 +61,11 @@ message ChangeID {
   int64 server_seq = 2 [jstype = JS_STRING];
   int64 lamport = 3 [jstype = JS_STRING];
   bytes actor_id = 4;
+  VersionVector version_vector = 5;
+}
+
+message VersionVector {
+  map<string, int64> vector = 1;
 }
 
 message Operation {

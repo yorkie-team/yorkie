@@ -40,16 +40,17 @@ var ErrDecodeOperationFailed = errors.New("decode operations failed")
 
 // ChangeInfo is a structure representing information of a change.
 type ChangeInfo struct {
-	ID             types.ID `bson:"_id"`
-	ProjectID      types.ID `bson:"project_id"`
-	DocID          types.ID `bson:"doc_id"`
-	ServerSeq      int64    `bson:"server_seq"`
-	ClientSeq      uint32   `bson:"client_seq"`
-	Lamport        int64    `bson:"lamport"`
-	ActorID        types.ID `bson:"actor_id"`
-	Message        string   `bson:"message"`
-	Operations     [][]byte `bson:"operations"`
-	PresenceChange string   `bson:"presence_change"`
+	ID             types.ID           `bson:"_id"`
+	ProjectID      types.ID           `bson:"project_id"`
+	DocID          types.ID           `bson:"doc_id"`
+	ServerSeq      int64              `bson:"server_seq"`
+	ClientSeq      uint32             `bson:"client_seq"`
+	Lamport        int64              `bson:"lamport"`
+	ActorID        types.ID           `bson:"actor_id"`
+	VersionVector  time.VersionVector `bson:"version_vector"`
+	Message        string             `bson:"message"`
+	Operations     [][]byte           `bson:"operations"`
+	PresenceChange string             `bson:"presence_change"`
 }
 
 // EncodeOperations encodes the given operations into bytes array.
@@ -93,7 +94,7 @@ func (i *ChangeInfo) ToChange() (*change.Change, error) {
 		return nil, err
 	}
 
-	changeID := change.NewID(i.ClientSeq, i.ServerSeq, i.Lamport, actorID)
+	changeID := change.NewID(i.ClientSeq, i.ServerSeq, i.Lamport, actorID, i.VersionVector)
 
 	var pbOps []*api.Operation
 	for _, bytesOp := range i.Operations {
