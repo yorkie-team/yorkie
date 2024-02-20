@@ -43,6 +43,9 @@ type ServerPack struct {
 	// Snapshot is a byte array that encode the document.
 	Snapshot []byte
 
+	// SnapshotVersionVector is the version vector of the snapshot.
+	SnapshotVersionVector *time.VersionVector
+
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
 	MinSyncedTicket *time.Ticket
@@ -93,7 +96,8 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 		if err != nil {
 			return nil, err
 		}
-		changeID := change.NewID(info.ClientSeq, info.ServerSeq, info.Lamport, actorID)
+
+		changeID := change.NewID(info.ClientSeq, info.ServerSeq, info.Lamport, actorID, info.VersionVector)
 
 		var pbOps []*api.Operation
 		for _, bytesOp := range info.Operations {
@@ -109,22 +113,38 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 			return nil, err
 		}
 
+		pbChangeID, err := converter.ToChangeID(changeID)
+		if err != nil {
+			return nil, err
+		}
+
 		pbChanges = append(pbChanges, &api.Change{
-			Id:             converter.ToChangeID(changeID),
+			Id:             pbChangeID,
 			Message:        info.Message,
 			Operations:     pbOps,
 			PresenceChange: converter.ToPresenceChange(p),
 		})
 	}
 
-	return &api.ChangePack{
+	pbPack := &api.ChangePack{
 		DocumentKey:     p.DocumentKey.String(),
 		Checkpoint:      converter.ToCheckpoint(p.Checkpoint),
 		Changes:         pbChanges,
-		Snapshot:        p.Snapshot,
 		MinSyncedTicket: converter.ToTimeTicket(p.MinSyncedTicket),
 		IsRemoved:       p.IsRemoved,
-	}, nil
+	}
+
+	if p.Snapshot != nil {
+		pbVersionVector, err := converter.ToVersionVector(*p.SnapshotVersionVector)
+		if err != nil {
+			return nil, err
+		}
+
+		pbPack.Snapshot = p.Snapshot
+		pbPack.SnapshotVersionVector = pbVersionVector
+	}
+
+	return pbPack, nil
 }
 
 // ApplyDocInfo applies the given DocInfo to the ServerPack.

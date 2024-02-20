@@ -212,6 +212,7 @@ func BuildDocumentForServerSeq(
 		docInfo.Key,
 		snapshotInfo.ServerSeq,
 		snapshotInfo.Lamport,
+		snapshotInfo.VersionVector,
 		snapshotInfo.Snapshot,
 	)
 	if err != nil {

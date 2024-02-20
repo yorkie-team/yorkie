@@ -524,4 +524,61 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 	})
+
+	t.Run("version vector test", func(t *testing.T) {
+		// 01. create document with actorA and update it twice and check version vector.
+		actorA, err := time.ActorIDFromHex("000000000000000000000001")
+		assert.NoError(t, err)
+		docA := document.New("doc")
+		docA.SetActor(actorA)
+		assert.Equal(t, "{}", docA.VersionVector().Marshal())
+
+		assert.NoError(t, docA.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k1", "1")
+			return nil
+		}))
+		assert.Equal(t, "{000000000000000000000001:1}", docA.VersionVector().Marshal())
+
+		assert.NoError(t, docA.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k1", "2")
+			return nil
+		}))
+		assert.Equal(t, "{000000000000000000000001:2}", docA.VersionVector().Marshal())
+
+		packA := docA.CreateChangePack()
+		packA.MinSyncedTicket = time.InitialTicket
+		assert.True(t, packA.Changes[1].CausallyAfter(packA.Changes[0]))
+		assert.False(t, packA.Changes[0].CausallyAfter(packA.Changes[1]))
+
+		// 02. create document with actorB and apply change packA of docA to docB and check version vector.
+		actorB, err := time.ActorIDFromHex("000000000000000000000002")
+		assert.NoError(t, err)
+		docB := document.New("doc")
+		docB.SetActor(actorB)
+		assert.Equal(t, "{}", docB.VersionVector().Marshal())
+		assert.NoError(t, docB.ApplyChangePack(packA))
+		assert.Equal(t, "{000000000000000000000001:2}", docB.VersionVector().Marshal())
+
+		assert.NoError(t, docB.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k2", "3")
+			return nil
+		}))
+		assert.Equal(t, "{000000000000000000000001:2,000000000000000000000002:3}", docB.VersionVector().Marshal())
+		packB := docB.CreateChangePack()
+		packB.MinSyncedTicket = time.InitialTicket
+		assert.True(t, packB.Changes[0].CausallyAfter(packA.Changes[1]))
+
+		// 03. update docA and docB concurrently and check version vector.
+		assert.NoError(t, docA.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k1", "4")
+			return nil
+		}))
+		assert.NoError(t, docB.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("k2", "5")
+			return nil
+		}))
+		packA = docA.CreateChangePack()
+		packB = docB.CreateChangePack()
+		assert.False(t, packA.Changes[2].CausallyAfter(packB.Changes[1]))
+	})
 }
