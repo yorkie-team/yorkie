@@ -729,6 +729,8 @@ func (t *Tree[V]) TreePosToPath(treePos *TreePos[V]) ([]int, error) {
 		node = node.Parent
 		path = append(path, leftSiblingsSize+treePos.Offset)
 	} else if node.HasTextChild() {
+		// TODO(hackerwins): The function does not consider the situation
+		// where Element and Text nodes are mixed in the Element's Children.
 		leftSiblingsSize, err := t.LeftSiblingsSize(node, treePos.Offset)
 		if err != nil {
 			return nil, err
