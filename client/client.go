@@ -78,6 +78,10 @@ var (
 type Attachment struct {
 	doc   *document.Document
 	docID types.ID
+
+	rch        <-chan WatchResponse
+	ctx        context.Context
+	cancelFunc context.CancelFunc
 }
 
 // Client is a normal client that can communicate with the server.
@@ -322,6 +326,15 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		docID: types.ID(res.Msg.DocumentId),
 	}
 
+	watchCtx, cancelFunc := context.WithCancel(ctx)
+	c.attachments[doc.Key()].ctx = watchCtx
+	c.attachments[doc.Key()].cancelFunc = cancelFunc
+
+	err = c.runWatchLoop(watchCtx, doc)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -384,6 +397,9 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 	}
 	delete(c.attachments, doc.Key())
 
+	attachment.cancelFunc()
+	attachment.rch = nil
+
 	return nil
 }
 
@@ -406,21 +422,36 @@ func (c *Client) Sync(ctx context.Context, options ...SyncOptions) error {
 	return nil
 }
 
-// Watch subscribes to events on a given documentIDs.
+// Subscribe subscribes to events on a given document.
+// TODO(krapie): temporary implementation to keep consistency with other SDKs.
+func (c *Client) Subscribe(
+	doc *document.Document,
+) (<-chan WatchResponse, context.CancelFunc, error) {
+	attachment, ok := c.attachments[doc.Key()]
+	if !ok {
+		return nil, nil, ErrDocumentNotAttached
+	}
+
+	return attachment.rch, attachment.cancelFunc, nil
+}
+
+// runWatchLoop subscribes to events on a given documentIDs.
 // If an error occurs before stream initialization, the second response, error,
 // is returned. If the context "ctx" is canceled or timed out, returned channel
 // is closed, and "WatchResponse" from this closed channel has zero events and
 // nil "Err()".
-func (c *Client) Watch(
+func (c *Client) runWatchLoop(
 	ctx context.Context,
 	doc *document.Document,
-) (<-chan WatchResponse, error) {
+) error {
 	attachment, ok := c.attachments[doc.Key()]
 	if !ok {
-		return nil, ErrDocumentNotAttached
+		return ErrDocumentNotAttached
 	}
 
 	rch := make(chan WatchResponse)
+	attachment.rch = rch
+
 	stream, err := c.client.WatchDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
@@ -429,20 +460,20 @@ func (c *Client) Watch(
 		},
 		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// NOTE(hackerwins): We need to receive the first response to initialize
-	// the watch stream. Watch should be blocked until the first response is
+	// the watch stream. runWatchLoop should be blocked until the first response is
 	// received.
 	if !stream.Receive() {
-		return nil, ErrInitializationNotReceived
+		return ErrInitializationNotReceived
 	}
 	if _, err := handleResponse(stream.Msg(), doc); err != nil {
-		return nil, err
+		return err
 	}
 	if err = stream.Err(); err != nil {
-		return nil, err
+		return err
 	}
 
 	go func() {
@@ -504,7 +535,7 @@ func (c *Client) Watch(
 		}
 	}()
 
-	return rch, nil
+	return nil
 }
 
 func handleResponse(

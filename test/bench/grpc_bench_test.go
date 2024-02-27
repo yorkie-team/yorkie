@@ -221,9 +221,9 @@ func BenchmarkRPC(b *testing.B) {
 		})
 		assert.NoError(b, err)
 
-		rch1, err := c1.Watch(ctx, d1)
+		rch1, _, err := c1.Subscribe(d1)
 		assert.NoError(b, err)
-		rch2, err := c2.Watch(ctx, d2)
+		rch2, _, err := c2.Subscribe(d2)
 		assert.NoError(b, err)
 
 		done1 := make(chan bool)
