@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"connectrpc.com/connect"
 	"github.com/rs/xid"
@@ -72,12 +73,17 @@ var (
 
 	// ErrInitializationNotReceived occurs when the first response of the watch stream is not received.
 	ErrInitializationNotReceived = errors.New("initialization is not received")
+
+	// ErrAlreadySubscribed occurs when the client is already subscribed to the document.
+	ErrAlreadySubscribed = errors.New("already subscribed")
 )
 
 // Attachment represents the document attached.
 type Attachment struct {
 	doc   *document.Document
 	docID types.ID
+
+	isSubscribed atomic.Bool
 
 	rch        <-chan WatchResponse
 	ctx        context.Context
@@ -359,6 +365,8 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 		return ErrDocumentNotAttached
 	}
 
+	attachment.cancelFunc()
+
 	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 		p.Clear()
 		return nil
@@ -397,9 +405,6 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 	}
 	delete(c.attachments, doc.Key())
 
-	attachment.cancelFunc()
-	attachment.rch = nil
-
 	return nil
 }
 
@@ -431,6 +436,11 @@ func (c *Client) Subscribe(
 	if !ok {
 		return nil, nil, ErrDocumentNotAttached
 	}
+
+	if attachment.isSubscribed.Load() {
+		return nil, nil, ErrAlreadySubscribed
+	}
+	attachment.isSubscribed.Store(true)
 
 	return attachment.rch, attachment.cancelFunc, nil
 }
@@ -485,13 +495,14 @@ func (c *Client) runWatchLoop(
 				close(rch)
 				return
 			}
-			if resp == nil {
+			if resp == nil || !attachment.isSubscribed.Load() {
 				continue
 			}
 
 			rch <- *resp
 		}
 		if err = stream.Err(); err != nil {
+			attachment.isSubscribed.Store(false)
 			rch <- WatchResponse{Err: err}
 			close(rch)
 			return

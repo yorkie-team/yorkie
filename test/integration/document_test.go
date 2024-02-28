@@ -166,7 +166,6 @@ func TestDocument(t *testing.T) {
 		rch, _, err := c1.Subscribe(d1)
 		assert.NoError(t, err)
 
-		isPresenceChangedEvent := true
 		go func() {
 			defer wg.Done()
 
@@ -178,16 +177,7 @@ func TestDocument(t *testing.T) {
 				}
 				assert.NoError(t, resp.Err)
 
-				// TODO(krapie): event includes presence changes in the document too.
-				// therefore, there will be
-				// 1. DocumentChanged from client 2 (Presence change)
-				// 2. DocumentWatched from client 2 (Watch event)
-				// 3. DocumentChanged from client 2 (Document change)
 				if resp.Type == client.DocumentChanged {
-					if isPresenceChangedEvent {
-						isPresenceChangedEvent = false
-						continue
-					}
 					err := c1.Sync(ctx, client.WithDocKey(d1.Key()))
 					assert.NoError(t, err)
 					return
