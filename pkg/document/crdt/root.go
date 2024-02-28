@@ -19,6 +19,7 @@
 // shared among multiple replicas.
 package crdt
 
+import "C"
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -27,6 +28,11 @@ import (
 type ElementPair struct {
 	parent Container
 	elem   Element
+}
+
+type RHTPair struct {
+	treeNode TreeNode
+	rhtNode  RHTNode
 }
 
 // Root is a structure represents the root of JSON. It has a hash table of
@@ -39,6 +45,7 @@ type Root struct {
 	object                               *Object
 	elementMapByCreatedAt                map[string]Element
 	removedElementPairMapByCreatedAt     map[string]ElementPair
+	removedRHTPairMapByUpdatedAt         map[string]RHTPair
 	elementHasRemovedNodesSetByCreatedAt map[string]GCElement
 }
 
@@ -47,6 +54,7 @@ func NewRoot(root *Object) *Root {
 	r := &Root{
 		elementMapByCreatedAt:                make(map[string]Element),
 		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
+		removedRHTPairMapByUpdatedAt:         make(map[string]RHTPair),
 		elementHasRemovedNodesSetByCreatedAt: make(map[string]GCElement),
 	}
 
@@ -54,6 +62,15 @@ func NewRoot(root *Object) *Root {
 	r.RegisterElement(root)
 
 	root.Descendants(func(elem Element, parent Container) bool {
+		if tree, ok := elem.(*Tree); ok {
+			for _, node := range tree.Nodes() {
+				if node.Attrs != nil && node.Attrs.Len() > 0 {
+					for _, attr := range node.Attrs.Nodes() {
+						r.RegisterRemovedRHTPair(*node, *attr)
+					}
+				}
+			}
+		}
 		if elem.RemovedAt() != nil {
 			r.RegisterRemovedElementPair(parent, elem)
 		}
@@ -123,6 +140,14 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	}
 }
 
+// RegisterRemovedRHTPair register the given element pair to hash table.
+func (r *Root) RegisterRemovedRHTPair(treeNode TreeNode, rhtNode RHTNode) {
+	r.removedRHTPairMapByUpdatedAt[rhtNode.UpdatedAt().Key()] = RHTPair{
+		treeNode,
+		rhtNode,
+	}
+}
+
 // RegisterElementHasRemovedNodes register the given element with garbage to hash table.
 func (r *Root) RegisterElementHasRemovedNodes(element GCElement) {
 	r.elementHasRemovedNodesSetByCreatedAt[element.CreatedAt().Key()] = element
@@ -148,6 +173,16 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 			}
 
 			count += r.deregisterElement(pair.elem)
+		}
+	}
+
+	for _, pair := range r.removedRHTPairMapByUpdatedAt {
+		if pair.rhtNode.isRemoved && ticket.Compare(pair.rhtNode.UpdatedAt()) >= 0 {
+			if err := pair.treeNode.Attrs.purgeNode(pair.rhtNode); err != nil {
+				return 0, err
+			}
+
+			count++
 		}
 	}
 

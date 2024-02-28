@@ -131,6 +131,16 @@ func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 	return ""
 }
 
+func (rht *RHT) purgeNode(node RHTNode) error {
+	rhtNode, ok := rht.nodeMapByKey[node.Key()]
+	if !ok {
+		return fmt.Errorf("purge %s: %w", node.Key(), ErrChildNotFound)
+	}
+	delete(rht.nodeMapByKey, rhtNode.Key())
+
+	return nil
+}
+
 // Elements returns a map of elements because the map easy to use for loop.
 // TODO: If we encounter performance issues, we need to replace this with other solution.
 func (rht *RHT) Elements() map[string]string {
