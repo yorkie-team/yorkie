@@ -85,9 +85,9 @@ type Attachment struct {
 
 	isSubscribed atomic.Bool
 
-	rch        <-chan WatchResponse
-	ctx        context.Context
-	cancelFunc context.CancelFunc
+	rch              <-chan WatchResponse
+	watchCtx         context.Context
+	closeWatchStream context.CancelFunc
 }
 
 // Client is a normal client that can communicate with the server.
@@ -333,8 +333,8 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	}
 
 	watchCtx, cancelFunc := context.WithCancel(ctx)
-	c.attachments[doc.Key()].ctx = watchCtx
-	c.attachments[doc.Key()].cancelFunc = cancelFunc
+	c.attachments[doc.Key()].watchCtx = watchCtx
+	c.attachments[doc.Key()].closeWatchStream = cancelFunc
 
 	err = c.runWatchLoop(watchCtx, doc)
 	if err != nil {
@@ -365,7 +365,7 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 		return ErrDocumentNotAttached
 	}
 
-	attachment.cancelFunc()
+	attachment.closeWatchStream()
 
 	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 		p.Clear()
@@ -442,12 +442,13 @@ func (c *Client) Subscribe(
 	}
 	attachment.isSubscribed.Store(true)
 
-	return attachment.rch, attachment.cancelFunc, nil
+	return attachment.rch, attachment.closeWatchStream, nil
 }
 
+// TODO(krapie): need restart logic if watch loop is closed.
 // runWatchLoop subscribes to events on a given documentIDs.
 // If an error occurs before stream initialization, the second response, error,
-// is returned. If the context "ctx" is canceled or timed out, returned channel
+// is returned. If the context "watchCtx" is canceled or timed out, returned channel
 // is closed, and "WatchResponse" from this closed channel has zero events and
 // nil "Err()".
 func (c *Client) runWatchLoop(
