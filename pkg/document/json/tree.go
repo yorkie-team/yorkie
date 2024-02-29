@@ -275,7 +275,7 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 			return false
 		}
 		for _, node := range nodes {
-			if node.Attrs.RemovedRHTNodesLen() > 0 {
+			if node.Attrs != nil && node.Attrs.RemovedRHTNodesLen() > 0 {
 				t.context.RegisterTreeNodeHasRemovedRHTNodes(*node)
 			}
 		}

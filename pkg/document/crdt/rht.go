@@ -56,6 +56,7 @@ func (n *RHTNode) UpdatedAt() *time.Ticket {
 	return n.updatedAt
 }
 
+// IsRemoved returns whether node is removed or not.
 func (n *RHTNode) IsRemoved() bool {
 	return n.isRemoved
 }
@@ -110,6 +111,7 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 	}
 }
 
+// RemovedRHTNodesLen returns the number of removed nodes.
 func (rht *RHT) RemovedRHTNodesLen() int {
 	return len(rht.removedNodeMap)
 }
@@ -193,7 +195,9 @@ func (rht *RHT) Elements() map[string]string {
 func (rht *RHT) Nodes() []*RHTNode {
 	var nodes []*RHTNode
 	for _, node := range rht.nodeMapByKey {
-		nodes = append(nodes, node)
+		if !node.isRemoved {
+			nodes = append(nodes, node)
+		}
 	}
 
 	return nodes

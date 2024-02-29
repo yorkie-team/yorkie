@@ -97,7 +97,7 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 			return err
 		}
 		for _, node := range nodes {
-			if node.Attrs.RemovedRHTNodesLen() > 0 {
+			if node.Attrs != nil && node.Attrs.RemovedRHTNodesLen() > 0 {
 				root.RegisterTreeNodeHasRemovedRHTNodes(*node)
 			}
 		}

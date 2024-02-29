@@ -550,6 +550,7 @@ func (t *Tree) Nodes() []*TreeNode {
 	return nodes
 }
 
+// NodesInRange traverses the tree and returns the list of node of given range.
 func (t *Tree) NodesInRange(fromPos, toPos *TreePos) ([]*TreeNode, error) {
 	var nodes []*TreeNode
 	fromParent, fromLeft := t.toTreeNodes(fromPos)
