@@ -268,6 +268,19 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 		ticket,
 	))
 
+	if !fromPos.Equals(toPos) {
+		nodes, err := t.Tree.NodesInRange(fromPos, toPos)
+		if err != nil {
+			// TODO: err handling
+			return false
+		}
+		for _, node := range nodes {
+			if node.Attrs.RemovedRHTNodesLen() > 0 {
+				t.context.RegisterTreeNodeHasRemovedRHTNodes(*node)
+			}
+		}
+	}
+
 	return true
 }
 

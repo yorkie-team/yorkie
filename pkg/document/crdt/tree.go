@@ -550,6 +550,30 @@ func (t *Tree) Nodes() []*TreeNode {
 	return nodes
 }
 
+func (t *Tree) NodesInRange(fromPos, toPos *TreePos) ([]*TreeNode, error) {
+	var nodes []*TreeNode
+	fromParent, fromLeft := t.toTreeNodes(fromPos)
+	toParent, toLeft := t.toTreeNodes(toPos)
+
+	fromIdx, err := t.ToIndex(fromParent, fromLeft)
+	if err != nil {
+		return nodes, err
+	}
+	toIdx, err := t.ToIndex(toParent, toLeft)
+	if err != nil {
+		return nodes, err
+	}
+
+	err1 := t.IndexTree.TokensBetween(fromIdx, toIdx, func(token index.TreeToken[*TreeNode], _ bool) {
+		node := token.Node
+		if !node.IsRemoved() {
+			nodes = append(nodes, node)
+		}
+	})
+
+	return nodes, err1
+}
+
 // Root returns the root node of the tree.
 func (t *Tree) Root() *TreeNode {
 	return t.IndexTree.Root().Value

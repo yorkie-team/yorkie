@@ -80,6 +80,10 @@ func (c *Context) RegisterRemovedElementPair(parent crdt.Container, deleted crdt
 	c.root.RegisterRemovedElementPair(parent, deleted)
 }
 
+func (c *Context) RegisterTreeNodeHasRemovedRHTNodes(treeNode crdt.TreeNode) {
+	c.root.RegisterTreeNodeHasRemovedRHTNodes(treeNode)
+}
+
 // RegisterElementHasRemovedNodes register the given text element with garbage to hash table.
 func (c *Context) RegisterElementHasRemovedNodes(element crdt.GCElement) {
 	c.root.RegisterElementHasRemovedNodes(element)

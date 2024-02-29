@@ -56,11 +56,16 @@ func (n *RHTNode) UpdatedAt() *time.Ticket {
 	return n.updatedAt
 }
 
+func (n *RHTNode) IsRemoved() bool {
+	return n.isRemoved
+}
+
 // RHT is a hashtable with logical clock(Replicated hashtable).
 // For more details about RHT: http://csl.skku.edu/papers/jpdc11.pdf
 // NOTE(justiceHui): RHT and ElementRHT has duplicated functions.
 type RHT struct {
 	nodeMapByKey           map[string]*RHTNode
+	removedNodeMap         map[string]*RHTNode
 	numberOfRemovedElement int
 }
 
@@ -68,6 +73,7 @@ type RHT struct {
 func NewRHT() *RHT {
 	return &RHT{
 		nodeMapByKey:           make(map[string]*RHTNode),
+		removedNodeMap:         make(map[string]*RHTNode),
 		numberOfRemovedElement: 0,
 	}
 }
@@ -104,13 +110,20 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 	}
 }
 
+func (rht *RHT) RemovedRHTNodesLen() int {
+	return len(rht.removedNodeMap)
+}
+
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
 		// NOTE(justiceHui): Even if key is not existed, we must set flag `isRemoved` for concurrency
 		if node == nil {
+
 			rht.numberOfRemovedElement++
 			newNode := newRHTNode(k, ``, executedAt, true)
+			// TODO: need to clean up
+			rht.removedNodeMap[k] = newNode
 			rht.nodeMapByKey[k] = newNode
 			return ""
 		}
@@ -120,6 +133,7 @@ func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 			rht.numberOfRemovedElement++
 		}
 		newNode := newRHTNode(k, node.val, executedAt, true)
+		rht.removedNodeMap[k] = newNode
 		rht.nodeMapByKey[k] = newNode
 
 		if alreadyRemoved {
@@ -131,7 +145,27 @@ func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
 	return ""
 }
 
-func (rht *RHT) purgeNode(node RHTNode) error {
+func (rht *RHT) purgeRemovedRHTNodesBefore(ticket *time.Ticket) (int, error) {
+	count := 0
+	nodesToBeRemoved := make(map[*RHTNode]bool)
+
+	for _, node := range rht.removedNodeMap {
+		if node.IsRemoved() && ticket.Compare(node.UpdatedAt()) >= 0 {
+			count++
+			nodesToBeRemoved[node] = true
+		}
+	}
+
+	for node := range nodesToBeRemoved {
+		if err := rht.purgeNode(node); err != nil {
+			return 0, err
+		}
+	}
+
+	return count, nil
+}
+
+func (rht *RHT) purgeNode(node *RHTNode) error {
 	rhtNode, ok := rht.nodeMapByKey[node.Key()]
 	if !ok {
 		return fmt.Errorf("purge %s: %w", node.Key(), ErrChildNotFound)
@@ -159,9 +193,7 @@ func (rht *RHT) Elements() map[string]string {
 func (rht *RHT) Nodes() []*RHTNode {
 	var nodes []*RHTNode
 	for _, node := range rht.nodeMapByKey {
-		if !node.isRemoved {
-			nodes = append(nodes, node)
-		}
+		nodes = append(nodes, node)
 	}
 
 	return nodes
