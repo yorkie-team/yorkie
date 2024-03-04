@@ -16,7 +16,7 @@ require (
 	github.com/rs/xid v1.5.0
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.17.0
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	github.com/undefinedlabs/go-mpatch v1.0.6
 	go.mongodb.org/mongo-driver v1.11.7
 	go.uber.org/zap v1.23.0
