@@ -1,0 +1,5 @@
+openapi: 3.1.0
+info:
+  title: Yorkie
+  description: "Yorkie is an open source document store for building collaborative editing applications."
+  version: v0.4.14
