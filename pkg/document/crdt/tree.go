@@ -551,6 +551,7 @@ func (t *Tree) Nodes() []*TreeNode {
 }
 
 // NodesInRange traverses the tree and returns the list of node of given range.
+// TODO: erase unnecessary function
 func (t *Tree) NodesInRange(fromPos, toPos *TreePos) ([]*TreeNode, error) {
 	var nodes []*TreeNode
 	fromParent, fromLeft := t.toTreeNodes(fromPos)
@@ -902,15 +903,16 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 }
 
 // RemoveStyle removes the given attributes of the given range.
-func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, editedAt *time.Ticket) error {
+func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, editedAt *time.Ticket) ([]*TreeNode, error) {
+	var treeNodesHasAttrsToRemove []*TreeNode
 	// 01. split text nodes at the given range if needed.
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft,
@@ -924,13 +926,14 @@ func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, edite
 				for _, value := range attributesToRemove {
 					node.Attrs.Remove(value, editedAt)
 				}
+				treeNodesHasAttrsToRemove = append(treeNodesHasAttrsToRemove, node)
 			}
 		})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return treeNodesHasAttrsToRemove, nil
 }
 
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and

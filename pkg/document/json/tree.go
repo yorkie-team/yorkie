@@ -256,8 +256,14 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	if err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket); err != nil {
+	treeNodesHasAttrsToRemove, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket)
+	if err != nil {
 		panic(err)
+	}
+	for _, treeNode := range treeNodesHasAttrsToRemove {
+		if treeNode.Attrs != nil && treeNode.Attrs.RemovedRHTNodesLen() > 0 {
+			t.context.RegisterTreeNodeHasRemovedRHTNodes(*treeNode)
+		}
 	}
 
 	t.context.Push(operations.NewTreeStyleRemove(
@@ -267,19 +273,6 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 		attributesToRemove,
 		ticket,
 	))
-
-	if !fromPos.Equals(toPos) {
-		nodes, err := t.Tree.NodesInRange(fromPos, toPos)
-		if err != nil {
-			// TODO: err handling
-			return false
-		}
-		for _, node := range nodes {
-			if node.Attrs != nil && node.Attrs.RemovedRHTNodesLen() > 0 {
-				t.context.RegisterTreeNodeHasRemovedRHTNodes(*node)
-			}
-		}
-	}
 
 	return true
 }

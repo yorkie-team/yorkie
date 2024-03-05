@@ -90,16 +90,10 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 		return obj.Style(e.from, e.to, e.attributes, e.executedAt)
 	}
 
-	err := obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
-	if err == nil && !e.from.Equals(e.to) {
-		nodes, err := obj.NodesInRange(e.from, e.to)
-		if err != nil {
-			return err
-		}
-		for _, node := range nodes {
-			if node.Attrs != nil && node.Attrs.RemovedRHTNodesLen() > 0 {
-				root.RegisterTreeNodeHasRemovedRHTNodes(*node)
-			}
+	treeNodesHasAttrsToRemove, err := obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
+	for _, treeNode := range treeNodesHasAttrsToRemove {
+		if treeNode.Attrs != nil && treeNode.Attrs.RemovedRHTNodesLen() > 0 {
+			root.RegisterTreeNodeHasRemovedRHTNodes(*treeNode)
 		}
 	}
 	return err
