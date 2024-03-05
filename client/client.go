@@ -83,6 +83,7 @@ type Attachment struct {
 	doc   *document.Document
 	docID types.ID
 
+	// TODO(krapie): assuming that a client do not open multiple subscriptions for the same document.
 	isSubscribed atomic.Bool
 
 	rch              <-chan WatchResponse
@@ -428,7 +429,6 @@ func (c *Client) Sync(ctx context.Context, options ...SyncOptions) error {
 }
 
 // Subscribe subscribes to events on a given document.
-// TODO(krapie): temporary implementation to keep consistency with other SDKs.
 func (c *Client) Subscribe(
 	doc *document.Document,
 ) (<-chan WatchResponse, context.CancelFunc, error) {
@@ -445,7 +445,6 @@ func (c *Client) Subscribe(
 	return attachment.rch, attachment.closeWatchStream, nil
 }
 
-// TODO(krapie): need restart logic if watch loop is closed.
 // runWatchLoop subscribes to events on a given documentIDs.
 // If an error occurs before stream initialization, the second response, error,
 // is returned. If the context "watchCtx" is canceled or timed out, returned channel
@@ -459,9 +458,6 @@ func (c *Client) runWatchLoop(
 	if !ok {
 		return ErrDocumentNotAttached
 	}
-
-	rch := make(chan WatchResponse)
-	attachment.rch = rch
 
 	stream, err := c.client.WatchDocument(
 		ctx,
@@ -487,12 +483,16 @@ func (c *Client) runWatchLoop(
 		return err
 	}
 
+	rch := make(chan WatchResponse)
+	attachment.rch = rch
+
 	go func() {
 		for stream.Receive() {
 			pbResp := stream.Msg()
 			resp, err := handleResponse(pbResp, doc)
 			if err != nil {
 				rch <- WatchResponse{Err: err}
+				ctx.Done()
 				close(rch)
 				return
 			}
@@ -505,7 +505,14 @@ func (c *Client) runWatchLoop(
 		if err = stream.Err(); err != nil {
 			attachment.isSubscribed.Store(false)
 			rch <- WatchResponse{Err: err}
+			ctx.Done()
 			close(rch)
+
+			// If watch stream is disconnected, we re-establish the watch stream.
+			err = c.runWatchLoop(ctx, doc)
+			if err != nil {
+				return
+			}
 			return
 		}
 	}()
