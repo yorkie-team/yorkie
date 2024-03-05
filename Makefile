@@ -65,6 +65,16 @@ docker: ## builds docker images with the current version and latest tag
 docker-latest: ## builds docker images with latest tag
 	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:latest .
 
+docker-swagger:
+	docker run -p 3000:8080 \
+  		-e URLS="[ \
+			{ url: 'docs/yorkie/v1/admin.openapi.yaml', name: 'Admin' }, \
+			{ url: 'docs/yorkie/v1/resources.openapi.yaml', name: 'Resources' }, \
+			{ url: 'docs/yorkie/v1/yorkie.openapi.yaml', name: 'Yorkie' }  \
+		]" \
+		-v `pwd`/api/docs:/usr/share/nginx/html/docs/ \
+  		swaggerapi/swagger-ui
+
 help:
 	@echo 'Commands:'
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "    %-20s %s\n", $$1, $$2}'
