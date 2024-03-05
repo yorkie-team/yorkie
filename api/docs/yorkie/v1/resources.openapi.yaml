@@ -4,6 +4,11 @@ info:
     editing applications.
   title: Yorkie
   version: v0.4.14
+servers:
+- description: Production server
+  url: https://api.yorkie.dev
+- description: Local server
+  url: http://localhost:8080
 paths: {}
 components:
   responses:
@@ -1683,3 +1688,10 @@ components:
         - 13
       title: ValueType
       type: string
+  securitySchemes:
+    ApiKeyAuth:
+      in: header
+      name: Authorization
+      type: apiKey
+security:
+- ApiKeyAuth: []
