@@ -65,7 +65,7 @@ docker: ## builds docker images with the current version and latest tag
 docker-latest: ## builds docker images with latest tag
 	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:latest .
 
-docker-swagger: ## runs swagger-ui with the yorkie api docs
+swagger: ## runs swagger-ui with the yorkie api docs
 	docker run -p 3000:8080 \
   		-e URLS="[ \
 			{ url: 'docs/yorkie/v1/admin.openapi.yaml', name: 'Admin' }, \
