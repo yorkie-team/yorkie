@@ -91,11 +91,14 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 	}
 
 	treeNodesHasAttrsToRemove, err := obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
-	for _, treeNode := range treeNodesHasAttrsToRemove {
-		if treeNode.Attrs != nil && treeNode.Attrs.RemovedRHTNodesLen() > 0 {
-			root.RegisterTreeNodeHasRemovedRHTNodes(*treeNode)
+	if treeNodesHasAttrsToRemove != nil {
+		for _, treeNode := range treeNodesHasAttrsToRemove {
+			if treeNode.Attrs != nil && treeNode.Attrs.RemovedRHTNodesLen() > 0 {
+				root.RegisterTreeNodeHasRemovedRHTNodes(*treeNode)
+			}
 		}
 	}
+
 	return err
 }
 

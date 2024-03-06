@@ -260,9 +260,11 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	if err != nil {
 		panic(err)
 	}
-	for _, treeNode := range treeNodesHasAttrsToRemove {
-		if treeNode.Attrs != nil && treeNode.Attrs.RemovedRHTNodesLen() > 0 {
-			t.context.RegisterTreeNodeHasRemovedRHTNodes(*treeNode)
+	if treeNodesHasAttrsToRemove != nil {
+		for _, treeNode := range treeNodesHasAttrsToRemove {
+			if treeNode.Attrs != nil && treeNode.Attrs.RemovedRHTNodesLen() > 0 {
+				t.context.RegisterTreeNodeHasRemovedRHTNodes(*treeNode)
+			}
 		}
 	}
 

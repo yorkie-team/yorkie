@@ -58,7 +58,6 @@ func NewRoot(root *Object) *Root {
 	root.Descendants(func(elem Element, parent Container) bool {
 		if tree, ok := elem.(*Tree); ok {
 			for _, node := range tree.Nodes() {
-				// TODO: check if node.attr has removed RHTNode
 				if node.Attrs.RemovedRHTNodesLen() > 0 {
 					r.RegisterTreeNodeHasRemovedRHTNodes(*node)
 				}
@@ -172,7 +171,6 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 			return 0, err
 		}
 
-		// TODO: remove TreeNode info from treeNodeHasRemovedRHTNodesSetByID
 		if purgedNodes > 0 {
 			delete(r.treeNodeHasRemovedRHTNodesSetByID, node.ID.toIDString())
 		}
