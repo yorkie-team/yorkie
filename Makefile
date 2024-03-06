@@ -24,6 +24,7 @@ tools: ## install tools for developing yorkie
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.12.0
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.55.1
+	go install github.com/sudorandom/protoc-gen-connect-openapi@v0.5.5
 
 proto: ## generate proto files
 	buf generate
@@ -63,6 +64,16 @@ docker: ## builds docker images with the current version and latest tag
 
 docker-latest: ## builds docker images with latest tag
 	docker buildx build --push --platform linux/amd64,linux/arm64,linux/386 -t yorkieteam/yorkie:latest .
+
+swagger: ## runs swagger-ui with the yorkie api docs
+	docker run -p 3000:8080 \
+  		-e URLS="[ \
+			{ url: 'docs/yorkie/v1/admin.openapi.yaml', name: 'Admin' }, \
+			{ url: 'docs/yorkie/v1/resources.openapi.yaml', name: 'Resources' }, \
+			{ url: 'docs/yorkie/v1/yorkie.openapi.yaml', name: 'Yorkie' }  \
+		]" \
+		-v `pwd`/api/docs:/usr/share/nginx/html/docs/ \
+  		swaggerapi/swagger-ui
 
 help:
 	@echo 'Commands:'
