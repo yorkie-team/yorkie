@@ -372,3 +372,8 @@ func (d *InternalDocument) AddOnlineClient(clientID string) {
 func (d *InternalDocument) RemoveOnlineClient(clientID string) {
 	d.onlineClients.Delete(clientID)
 }
+
+// GetLastLocalChange returns the latest local change info for debugging.
+func (d *InternalDocument) GetLastLocalChange() *change.Change {
+	return d.localChanges[len(d.localChanges)-1]
+}
