@@ -801,12 +801,6 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 
 		const snapshotThreshold = 500
-		//assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-		//	for idx := 0; idx < snapshotThreshold; idx++ {
-		//		root.SetInteger("i", 0)
-		//	}
-		//	return nil
-		//}))
 
 		for idx := 0; idx < snapshotThreshold; idx++ {
 			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {

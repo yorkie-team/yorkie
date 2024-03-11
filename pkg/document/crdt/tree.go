@@ -361,6 +361,8 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 	}
 	clone.RemovedAt = n.RemovedAt
 
+	clone.InsPrevID = n.InsPrevID
+	clone.InsNextID = n.InsNextID
 	if n.IsText() {
 		return clone, nil
 	}

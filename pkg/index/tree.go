@@ -319,7 +319,9 @@ func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	n.children = children
 	for _, child := range children {
 		child.Parent = n
-		child.UpdateAncestorsSize()
+		if !child.Value.IsRemoved() {
+			child.UpdateAncestorsSize()
+		}
 	}
 
 	return nil
