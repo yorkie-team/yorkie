@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.15] - 2024-03-11
+
+### Added
+* Add Swagger Serving Command by @devleejb in https://github.com/yorkie-team/yorkie/pull/812
+* Add MongoDB sharding document by @sejongk in https://github.com/yorkie-team/yorkie/pull/781
+* Add merge and split concurrency tests by @justiceHui in https://github.com/yorkie-team/yorkie/pull/780
+
+### Fixed
+* Prevent RunTestConcurrency from creating garbage clients by @justiceHui in https://github.com/yorkie-team/yorkie/pull/793
+* Add Test Server Wait Helper Function by @krapie in https://github.com/yorkie-team/yorkie/pull/787
+* Update Design Document for Missing Document Link and Instructon by @krapie in https://github.com/yorkie-team/yorkie/pull/782
+
 ## [0.4.14] - 2024-01-29
 
 ### Added
