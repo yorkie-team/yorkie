@@ -1032,19 +1032,6 @@ func (t *Tree) ToIndex(parentNode, leftSiblingNode *TreeNode) (int, error) {
 	return idx, nil
 }
 
-// ToPath returns path from given CRDTTreePos
-func (t *Tree) ToPath(parentNode, leftSiblingNode *TreeNode) ([]int, error) {
-	treePos, err := t.toTreePos(parentNode, leftSiblingNode)
-	if err != nil {
-		return make([]int, 0), err
-	}
-	if treePos == nil {
-		return make([]int, 0), nil
-	}
-
-	return t.IndexTree.TreePosToPath(treePos)
-}
-
 // findFloorNode returns node from given id.
 func (t *Tree) findFloorNode(id *TreeNodeID) *TreeNode {
 	key, node := t.NodeMapByID.Floor(id)
