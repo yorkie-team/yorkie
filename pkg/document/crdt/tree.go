@@ -917,7 +917,7 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket) (
 	*TreeNode, *TreeNode, error,
 ) {
 	// 01. Find the parent and left sibling nodes of the given position.
-	parentNode, leftNode := t.toTreeNodes(pos)
+	parentNode, leftNode := t.ToTreeNodes(pos)
 	if parentNode == nil || leftNode == nil {
 		return nil, nil, fmt.Errorf("%p: %w", pos, ErrNodeNotFound)
 	}
@@ -1030,6 +1030,19 @@ func (t *Tree) ToIndex(parentNode, leftSiblingNode *TreeNode) (int, error) {
 	return idx, nil
 }
 
+// ToPath returns path from given CRDTTreePos
+func (t *Tree) ToPath(parentNode, leftSiblingNode *TreeNode) ([]int, error) {
+	treePos, err := t.toTreePos(parentNode, leftSiblingNode)
+	if err != nil {
+		return make([]int, 0), err
+	}
+	if treePos == nil {
+		return make([]int, 0), nil
+	}
+
+	return t.IndexTree.TreePosToPath(treePos)
+}
+
 // findFloorNode returns node from given id.
 func (t *Tree) findFloorNode(id *TreeNodeID) *TreeNode {
 	key, node := t.NodeMapByID.Floor(id)
@@ -1041,11 +1054,11 @@ func (t *Tree) findFloorNode(id *TreeNodeID) *TreeNode {
 	return node
 }
 
-// toTreeNodes converts the pos to parent and left sibling nodes.
+// ToTreeNodes converts the pos to parent and left sibling nodes.
 // If the position points to the middle of a node, then the left sibling node
 // is the node that contains the position. Otherwise, the left sibling node is
 // the node that is the left of the position.
-func (t *Tree) toTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
+func (t *Tree) ToTreeNodes(pos *TreePos) (*TreeNode, *TreeNode) {
 	parentNode := t.findFloorNode(pos.ParentID)
 	leftNode := t.findFloorNode(pos.LeftSiblingID)
 
