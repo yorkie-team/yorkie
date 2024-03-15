@@ -417,7 +417,6 @@ func TestTree(t *testing.T) {
 
 		fromPos, _ := d2.Root().GetTree("t").PathToPos([]int{0, 5})
 		fromParent, fromLeft := d2.Root().GetTree("t").ToTreeNodes(fromPos)
-		fromPath, _ := d2.Root().GetTree("t").ToPath(fromParent, fromLeft)
 
 		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{0, 4}, []int{0, 5}, nil, 0)
@@ -431,7 +430,8 @@ func TestTree(t *testing.T) {
 
 			return nil
 		}))
-		fromPath, _ = d2.Root().GetTree("t").ToPath(fromParent, fromLeft)
+		fromPath, err := d2.Root().GetTree("t").ToPath(fromParent, fromLeft)
+		assert.NoError(t, err)
 		assert.Equal(t, []int{0, 5}, fromPath)
 
 		assert.NoError(t, c2.Sync(ctx))
