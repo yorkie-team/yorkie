@@ -984,7 +984,6 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<r><c><u><p><n></n></p></u></c><c><p><n>1 카카오2 네이3</n></p></c></r>", d3.Root().GetTree("t").ToXML())
 		assert.Equal(t, "<r><c><u><p><n></n></p></u></c><c><p><n>1 카카오2 네이3</n></p></c></r>", d2.Root().GetTree("t").ToXML())
 
-		// TODO: panic: unreachable path
 		assert.NoError(t, d3.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").EditByPath([]int{1, 0, 0, 4}, []int{1, 0, 0, 5}, nil, 0)
 			root.GetTree("t").EditByPath([]int{1, 0, 0, 3}, []int{1, 0, 0, 4}, nil, 0)
