@@ -595,7 +595,7 @@ func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
 
 // HasTextChild returns true if the node's children consist of only text children.
 func (n *Node[V]) HasTextChild() bool {
-	if len(n.children) > 0 {
+	if len(n.Children()) > 0 {
 		for _, child := range n.Children() {
 			if !child.IsText() {
 				return false
