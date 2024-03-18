@@ -1034,7 +1034,7 @@ func (t *Tree) ToIndex(parentNode, leftSiblingNode *TreeNode) (int, error) {
 func (t *Tree) ToPath(parentNode, leftSiblingNode *TreeNode) ([]int, error) {
 	treePos, err := t.toTreePos(parentNode, leftSiblingNode)
 	if err != nil {
-		return make([]int, 0), err
+		return nil, err
 	}
 	if treePos == nil {
 		return make([]int, 0), nil
