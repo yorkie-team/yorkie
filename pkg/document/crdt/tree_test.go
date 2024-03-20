@@ -416,6 +416,42 @@ func TestTreeEdit(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, idx)
 	})
+
+	t.Run("length test", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+
+		// 01. Create a tree and insert a paragraph with text.
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+		assert.Equal(t, 0, tree.Root().Len())
+		assert.Equal(t, "<r></r>", tree.ToXML())
+
+		_, err := tree.EditT(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.
+			PosT(ctx), "p", nil)}, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p></p></r>", tree.ToXML())
+		assert.Equal(t, 2, tree.Root().Len())
+
+		_, err = tree.EditT(1, 1, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "hel_lo"),
+		}, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>hel_lo</p></r>", tree.ToXML())
+		assert.Equal(t, 8, tree.Root().Len())
+
+		// 02. Erase 3rd character from the text.
+		_, err = tree.EditT(4, 5, nil, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+		assert.Equal(t, 7, tree.Root().Len())
+
+		// 03. Makes a deep copy of root.
+		copyRoot, err := tree.Root().DeepCopy()
+		assert.NoError(t, err)
+
+		// 04. Check if the length of the deep copied root is the same as the length of the original.
+		assert.Equal(t, 7, copyRoot.Len())
+	})
 }
 
 func TestTreeSplit(t *testing.T) {
