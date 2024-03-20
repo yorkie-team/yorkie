@@ -298,10 +298,10 @@ func (n *TreeNode) SplitElement(offset int, issueTimeTicket func() *time.Ticket)
 
 	leftChildren := n.Index.Children(true)[0:offset]
 	rightChildren := n.Index.Children(true)[offset:]
-	if err := n.Index.SetChildrenInternal(leftChildren); err != nil {
+	if err := n.Index.SetChildren(leftChildren); err != nil {
 		return nil, err
 	}
-	if err := split.Index.SetChildrenInternal(rightChildren); err != nil {
+	if err := split.Index.SetChildren(rightChildren); err != nil {
 		return nil, err
 	}
 
@@ -360,6 +360,7 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 		clone = NewTreeNode(n.ID, n.Type(), nil, n.Value)
 	}
 	clone.RemovedAt = n.RemovedAt
+	clone.Index.Length = n.Index.Length
 
 	clone.InsPrevID = n.InsPrevID
 	clone.InsNextID = n.InsNextID
