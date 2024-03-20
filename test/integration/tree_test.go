@@ -375,6 +375,79 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("find correct path after deleting leftNode test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		// 01. Create a tree and insert a paragraph with text.
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "r",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:  "text",
+						Value: "hello",
+					}},
+				}},
+			})
+
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<r><p>hello</p></r>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<r><p>hello</p></r>", d2.Root().GetTree("t").ToXML())
+
+		// 02. Insert additional character between 3rd character and 4th character.
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").EditByPath([]int{0, 3}, []int{0, 3}, &json.TreeNode{
+				Type:  "text",
+				Value: "3",
+			}, 0)
+
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, "<r><p>hel3lo</p></r>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<r><p>hel3lo</p></r>", d2.Root().GetTree("t").ToXML())
+
+		// 03. Get fromParent, fromLeft node from path [0, 5] before fix
+		fromPos, _ := d2.Root().GetTree("t").PathToPos([]int{0, 5})
+		fromParent, fromLeft := d2.Root().GetTree("t").ToTreeNodes(fromPos)
+
+		// 04. Apply modification
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			// 04-1. Erase 3rd character from the text, which immediately preceding the treePos obtained above.
+			root.GetTree("t").EditByPath([]int{0, 4}, []int{0, 5}, nil, 0)
+			assert.Equal(t, "<r><p>hel3o</p></r>", d2.Root().GetTree("t").ToXML())
+
+			// 04-2. Insert character between 3rd character and 4th character.
+			root.GetTree("t").EditByPath([]int{0, 4}, []int{0, 4}, &json.TreeNode{
+				Type:  "text",
+				Value: "m",
+			}, 0)
+			assert.Equal(t, "<r><p>hel3mo</p></r>", d2.Root().GetTree("t").ToXML())
+
+			return nil
+		}))
+
+		// 05. Check if the path is identical when re-obtaining the path from `fromParent` and `fromLeft` after fix.
+		fromPath, err := d2.Root().GetTree("t").ToPath(fromParent, fromLeft)
+		assert.NoError(t, err)
+		assert.Equal(t, []int{0, 5}, fromPath)
+
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.Equal(t, "<r><p>hel3mo</p></r>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<r><p>hel3mo</p></r>", d2.Root().GetTree("t").ToXML())
+	})
+
 	t.Run("sync its content with other clients test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
