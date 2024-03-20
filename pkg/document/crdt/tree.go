@@ -1037,7 +1037,7 @@ func (t *Tree) ToPath(parentNode, leftSiblingNode *TreeNode) ([]int, error) {
 		return nil, err
 	}
 	if treePos == nil {
-		return make([]int, 0), nil
+		return nil, nil
 	}
 
 	return t.IndexTree.TreePosToPath(treePos)

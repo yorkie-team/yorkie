@@ -595,17 +595,18 @@ func (n *Node[V]) InsertAfter(newNode, referenceNode *Node[V]) error {
 
 // HasTextChild returns true if the node's children consist of only text children.
 func (n *Node[V]) HasTextChild() bool {
-	if len(n.Children()) > 0 {
-		for _, child := range n.Children() {
-			if !child.IsText() {
-				return false
-			}
-		}
-
-		return true
+	children := n.Children()
+	if len(children) == 0 {
+		return false
 	}
 
-	return false
+	for _, child := range children {
+		if !child.IsText() {
+			return false
+		}
+	}
+
+	return true
 }
 
 // OffsetOfChild returns offset of children of the given node.
