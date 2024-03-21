@@ -619,6 +619,44 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
+// FindDocumentHardDeletionCandidatesPerProject finds the documents that need housekeeping per project.
+func (d *DB) FindDocumentHardDeletionCandidatesPerProject(
+	_ context.Context,
+	project *database.ProjectInfo,
+	candidatesLimit int,
+	documentHardDeletionGracefulPeriod gotime.Duration,
+) ([]*database.DocInfo, error) {
+
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	var documents []*database.DocInfo
+	iterator, err := txn.Get(
+		tblDocuments,
+		"project_id",
+		project.ID.String(),
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("fetch hard deletion candidates: %w", err)
+	}
+
+	currentTime := gotime.Now()
+	conditionDocumentHardDeletionGracefulPeriod := currentTime.Add(-documentHardDeletionGracefulPeriod)
+	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
+		document := raw.(*database.DocInfo)
+		if candidatesLimit <= len(documents) && candidatesLimit != 0 {
+			break
+		}
+
+		if !document.RemovedAt.After(conditionDocumentHardDeletionGracefulPeriod) {
+			documents = append(documents, document)
+		}
+	}
+
+	return documents, nil
+}
+
 // FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
 func (d *DB) FindDeactivateCandidatesPerProject(
 	_ context.Context,
@@ -661,6 +699,30 @@ func (d *DB) FindDeactivateCandidatesPerProject(
 		}
 	}
 	return infos, nil
+}
+
+// DeleteDocument Deletes the documents completely.
+func (d *DB) DeleteDocument(
+	_ context.Context,
+	candidates []*database.DocInfo,
+) (int64, error) {
+	if len(candidates) <= 0 {
+		return 0, nil
+	}
+
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	var deletedCount int64
+	for _, candidate := range candidates {
+		if err := txn.Delete(tblDocuments, candidate); err != nil {
+			return 0, fmt.Errorf("fetch hard deletion candidates: %w", err)
+		}
+		deletedCount++
+	}
+	txn.Commit()
+
+	return deletedCount, nil
 }
 
 // FindDocInfoByKeyAndOwner finds the document of the given key. If the

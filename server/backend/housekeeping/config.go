@@ -23,11 +23,20 @@ import (
 
 // Config is the configuration for the housekeeping service.
 type Config struct {
-	// Interval is the time between housekeeping runs.
-	Interval string `yaml:"Interval"`
+	// IntervalDeactivateCandidates is the time between housekeeping runs for deactivate candidates.
+	IntervalDeactivateCandidates string `yaml:"IntervalDeactivateCandidates"`
 
-	// CandidatesLimitPerProject is the maximum number of candidates to be returned per project.
-	CandidatesLimitPerProject int `yaml:"CandidatesLimitPerProject"`
+	// IntervalDeleteDocuments is the time between housekeeping runs for document deletion.
+	IntervalDeleteDocuments string `yaml:"IntervalDeleteDocuments"`
+
+	// DocumentHardDeletionGracefulPeriod finds documents whose removed_at time is older than that time.
+	DocumentHardDeletionGracefulPeriod string `yaml:"HousekeepingDocumentHardDeletionGracefulPeriod"`
+
+	// ClientDeactivationCandidateLimitPerProject is the maximum number of candidates to be returned per project.
+	ClientDeactivationCandidateLimitPerProject int `yaml:"ClientDeactivationCandidateLimitPerProject"`
+
+	// DocumentHardDeletionCandidateLimitPerProject is the maximum number of candidates to be returned per project.
+	DocumentHardDeletionCandidateLimitPerProject int `yaml:"DocumentHardDeletionCandidateLimitPerProject"`
 
 	// ProjectFetchSize is the maximum number of projects to be returned to deactivate candidates.
 	ProjectFetchSize int `yaml:"HousekeepingProjectFetchSize"`
@@ -35,18 +44,41 @@ type Config struct {
 
 // Validate validates the configuration.
 func (c *Config) Validate() error {
-	if _, err := time.ParseDuration(c.Interval); err != nil {
+	if _, err := time.ParseDuration(c.IntervalDeactivateCandidates); err != nil {
 		return fmt.Errorf(
-			`invalid argument %s for "--housekeeping-interval" flag: %w`,
-			c.Interval,
+			`invalid argument %s for "--housekeeping-interval-deactivate-candidates" flag: %w`,
+			c.IntervalDeactivateCandidates,
 			err,
 		)
 	}
 
-	if c.CandidatesLimitPerProject <= 0 {
+	if _, err := time.ParseDuration(c.IntervalDeleteDocuments); err != nil {
+		return fmt.Errorf(
+			`invalid argument %s for "--housekeeping-interval-delete-documents" flag: %w`,
+			c.IntervalDeleteDocuments,
+			err,
+		)
+	}
+
+	if _, err := time.ParseDuration(c.DocumentHardDeletionGracefulPeriod); err != nil {
+		return fmt.Errorf(
+			`invalid argument %v for "--housekeeping-project-delete-graceful-period" flag: %w`,
+			c.DocumentHardDeletionGracefulPeriod,
+			err,
+		)
+	}
+
+	if c.ClientDeactivationCandidateLimitPerProject <= 0 {
 		return fmt.Errorf(
 			`invalid argument %d for "--housekeeping-candidates-limit-per-project" flag`,
 			c.ProjectFetchSize,
+		)
+	}
+
+	if c.DocumentHardDeletionCandidateLimitPerProject <= 0 {
+		return fmt.Errorf(
+			`invalid argument %d for "--housekeeping-document-hard-deletion-limit-per-project" flag`,
+			c.DocumentHardDeletionCandidateLimitPerProject,
 		)
 	}
 

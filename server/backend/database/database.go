@@ -20,6 +20,7 @@ package database
 import (
 	"context"
 	"errors"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
@@ -156,6 +157,20 @@ type Database interface {
 		project *ProjectInfo,
 		candidatesLimit int,
 	) ([]*ClientInfo, error)
+
+	// FindDocumentHardDeletionCandidatesPerProject finds the documents that need to be deleted housekeeping per project.
+	FindDocumentHardDeletionCandidatesPerProject(
+		ctx context.Context,
+		project *ProjectInfo,
+		candidatesLimit int,
+		documentHardDeletionGracefulPeriod gotime.Duration,
+	) ([]*DocInfo, error)
+
+	// DeleteDocument Document complete deletion in progress
+	DeleteDocument(
+		ctx context.Context,
+		candidates []*DocInfo,
+	) (int64, error)
 
 	// FindDocInfoByKey finds the document of the given key.
 	FindDocInfoByKey(

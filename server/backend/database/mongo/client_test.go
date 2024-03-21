@@ -120,4 +120,8 @@ func TestClient(t *testing.T) {
 	t.Run("IsDocumentAttached test", func(t *testing.T) {
 		testcases.RunIsDocumentAttachedTest(t, cli, dummyProjectID)
 	})
+
+	t.Run("DocumentHardDeletion test", func(t *testing.T) {
+		testcases.RunDocumentHardDeletionTest(t, cli)
+	})
 }
