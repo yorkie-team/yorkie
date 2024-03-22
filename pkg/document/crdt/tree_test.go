@@ -17,7 +17,6 @@
 package crdt_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,17 +39,6 @@ type TreeNodePair struct {
 	parentNodeID *crdt.TreeNodeID
 }
 
-func buildTreeHash(node *crdt.TreeNode) string {
-	builder := strings.Builder{}
-	builder.WriteString("(")
-	builder.WriteString(node.ID.ToIDString())
-	for _, child := range node.Index.Children(true) {
-		builder.WriteString(buildTreeHash(child.Value))
-	}
-	builder.WriteString(")")
-	return builder.String()
-}
-
 func CollectNodesWithParentID(node *crdt.TreeNode, parentNodeID *crdt.TreeNodeID) []TreeNodePair {
 	var list []TreeNodePair
 
@@ -62,10 +50,6 @@ func CollectNodesWithParentID(node *crdt.TreeNode, parentNodeID *crdt.TreeNodeID
 }
 
 func assertEqualTreeNode(t *testing.T, nodeA, nodeB *crdt.TreeNode) {
-	//tupleA := buildTreeHash(nodeA)
-	//tupleB := buildTreeHash(nodeB)
-	//assert.Equal(t, tupleA, tupleB)
-
 	listA := CollectNodesWithParentID(nodeA, nil)
 	listB := CollectNodesWithParentID(nodeB, nil)
 	assert.Equal(t, listA, listB)
