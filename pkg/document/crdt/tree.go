@@ -123,8 +123,8 @@ func NewTreeNode(id *TreeNodeID, nodeType string, attributes *RHT, value ...stri
 	return node
 }
 
-// toIDString returns a string that can be used as an ID for this TreeNodeID.
-func (t *TreeNodeID) toIDString() string {
+// ToIDString returns a string that can be used as an ID for this TreeNodeID.
+func (t *TreeNodeID) ToIDString() string {
 	return t.CreatedAt.ToTestString() + ":" + strconv.Itoa(t.Offset)
 }
 
@@ -353,17 +353,17 @@ func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) error {
 
 // DeepCopy copies itself deeply.
 func (n *TreeNode) DeepCopy() (*TreeNode, error) {
-	var clone *TreeNode
+	var attrs *RHT
 	if n.Attrs != nil {
-		clone = NewTreeNode(n.ID, n.Type(), n.Attrs.DeepCopy(), n.Value)
-	} else {
-		clone = NewTreeNode(n.ID, n.Type(), nil, n.Value)
+		attrs = n.Attrs.DeepCopy()
 	}
-	clone.RemovedAt = n.RemovedAt
-	clone.Index.Length = n.Index.Length
 
+	clone := NewTreeNode(n.ID, n.Type(), attrs, n.Value)
+	clone.Index.Length = n.Index.Length
+	clone.RemovedAt = n.RemovedAt
 	clone.InsPrevID = n.InsPrevID
 	clone.InsNextID = n.InsNextID
+
 	if n.IsText() {
 		return clone, nil
 	}
@@ -377,6 +377,7 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 
 		children = append(children, node.Index)
 	}
+
 	if err := clone.Index.SetChildren(children); err != nil {
 		return nil, err
 	}
@@ -470,7 +471,7 @@ func (t *Tree) purgeNode(node *TreeNode) error {
 	node.InsPrevID = nil
 	node.InsNextID = nil
 
-	delete(t.removedNodeMap, node.ID.toIDString())
+	delete(t.removedNodeMap, node.ID.ToIDString())
 	return nil
 }
 
@@ -650,7 +651,7 @@ func (t *Tree) Edit(
 	// 02. Delete: delete the nodes that are marked as removed.
 	for _, node := range toBeRemoveds {
 		if node.remove(editedAt) {
-			t.removedNodeMap[node.ID.toIDString()] = node
+			t.removedNodeMap[node.ID.ToIDString()] = node
 		}
 	}
 
@@ -701,7 +702,7 @@ func (t *Tree) Edit(
 							createdAtMapByActor[actorIDHex] = createdAt
 						}
 					}
-					t.removedNodeMap[node.Value.ID.toIDString()] = node.Value
+					t.removedNodeMap[node.Value.ID.ToIDString()] = node.Value
 				}
 
 				t.NodeMapByID.Put(node.Value.ID, node.Value)

@@ -119,15 +119,6 @@ func syncClientsThenCheckEqual(t *testing.T, pairs []clientAndDocPair) bool {
 	return true
 }
 
-// activateSingleClient creates and activates a single client.
-func activateSingleClient(t *testing.T) *client.Client {
-	c, err := client.Dial(defaultServer.RPCAddr())
-	assert.NoError(t, err)
-	assert.NoError(t, c.Activate(context.Background()))
-
-	return c
-}
-
 // activeClients creates and activates the given number of clients.
 func activeClients(t *testing.T, n int) (clients []*client.Client) {
 	for i := 0; i < n; i++ {
