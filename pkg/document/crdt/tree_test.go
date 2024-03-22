@@ -35,7 +35,7 @@ var (
 	}
 )
 
-type treeNodePair struct {
+type TreeNodePair struct {
 	treeNode     *crdt.TreeNode
 	parentNodeID *crdt.TreeNodeID
 }
@@ -51,10 +51,10 @@ func buildTreeHash(node *crdt.TreeNode) string {
 	return builder.String()
 }
 
-func CollectNodesWithParentID(node *crdt.TreeNode, parentNodeID *crdt.TreeNodeID) []treeNodePair {
-	var list []treeNodePair
+func CollectNodesWithParentID(node *crdt.TreeNode, parentNodeID *crdt.TreeNodeID) []TreeNodePair {
+	var list []TreeNodePair
 
-	list = append(list, treeNodePair{node, parentNodeID})
+	list = append(list, TreeNodePair{node, parentNodeID})
 	for _, child := range node.Index.Children(true) {
 		list = append(list, CollectNodesWithParentID(child.Value, node.ID)...)
 	}
