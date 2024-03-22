@@ -417,21 +417,18 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, 0, idx)
 	})
 
-	t.Run("length test", func(t *testing.T) {
+	t.Run("reflects changes in treeNodes' length accurately with DeepCopy test", func(t *testing.T) {
+		// 01. Create a tree and insert a paragraph with text.
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
-
-		// 01. Create a tree and insert a paragraph with text.
 		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
 		assert.Equal(t, 0, tree.Root().Len())
 		assert.Equal(t, "<r></r>", tree.ToXML())
-
 		_, err := tree.EditT(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.
 			PosT(ctx), "p", nil)}, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<r><p></p></r>", tree.ToXML())
 		assert.Equal(t, 2, tree.Root().Len())
-
 		_, err = tree.EditT(1, 1, []*crdt.TreeNode{
 			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "hel_lo"),
 		}, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
@@ -445,12 +442,58 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
 		assert.Equal(t, 7, tree.Root().Len())
 
-		// 03. Makes a deep copy of root.
+		// 03. Makes a deep copy of crdt.Tree.Root.
 		copyRoot, err := tree.Root().DeepCopy()
 		assert.NoError(t, err)
 
 		// 04. Check if the length of the deep copied root is the same as the length of the original.
 		assert.Equal(t, 7, copyRoot.Len())
+	})
+
+	// TODO: identify test name, define step
+	t.Run("insPrevId test", func(t *testing.T) {
+		root := helper.TestRoot()
+		ctx := helper.TextChangeContext(root)
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+		assert.Equal(t, 0, tree.Root().Len())
+		assert.Equal(t, "<r></r>", tree.ToXML())
+
+		pNode := crdt.NewTreeNode(helper.PosT(ctx), "p", nil)
+		_, err := tree.EditT(0, 0, []*crdt.TreeNode{pNode}, 0,
+			helper.TimeT(ctx), issueTimeTicket(ctx))
+		assert.NoError(t, err)
+		_, err = tree.EditT(1, 1, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "hello"),
+		}, 0,
+			helper.TimeT(ctx), issueTimeTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+
+		_, err = tree.EditT(3, 3, nil, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+
+		left, err := pNode.Child(0)
+		assert.NoError(t, err)
+		right, err := pNode.Child(1)
+		assert.NoError(t, err)
+
+		assert.Equal(t, left.InsNextID, right.ID)
+		assert.Equal(t, right.InsPrevID, left.ID)
+
+		copyRoot, err := tree.Root().DeepCopy()
+		assert.NoError(t, err)
+
+		para, err := copyRoot.Child(0)
+		assert.NoError(t, err)
+
+		left, err = para.Child(0)
+		assert.NoError(t, err)
+		right, err = para.Child(1)
+		assert.NoError(t, err)
+
+		assert.Equal(t, left.InsNextID, right.ID)
+		assert.Equal(t, right.InsPrevID, left.ID)
 	})
 }
 
