@@ -35,6 +35,11 @@ var (
 	}
 )
 
+type treeNodePair struct {
+	treeNode     *crdt.TreeNode
+	parentNodeID *crdt.TreeNodeID
+}
+
 func buildTreeHash(node *crdt.TreeNode) string {
 	builder := strings.Builder{}
 	builder.WriteString("(")
@@ -46,19 +51,24 @@ func buildTreeHash(node *crdt.TreeNode) string {
 	return builder.String()
 }
 
-func assertEqualTreeNode(t *testing.T, nodeA, nodeB *crdt.TreeNode) {
-	tupleA := buildTreeHash(nodeA)
-	tupleB := buildTreeHash(nodeB)
-	assert.Equal(t, tupleA, tupleB)
+func CollectNodesWithParentID(node *crdt.TreeNode, parentNodeID *crdt.TreeNodeID) []treeNodePair {
+	var list []treeNodePair
 
-	// TODO(raararaara): Check the equality of the node's attributes.
-	// para, _ := tree.Root().Child(0)
-	// left, _ := para.Child(0)
-	// assert.NoError(t, err)
-	// right, err := para.Child(1)
-	// assert.NoError(t, err)
-	// assert.Equal(t, left.InsNextID, right.ID)
-	// assert.Equal(t, right.InsPrevID, left.ID)
+	list = append(list, treeNodePair{node, parentNodeID})
+	for _, child := range node.Index.Children(true) {
+		list = append(list, CollectNodesWithParentID(child.Value, node.ID)...)
+	}
+	return list
+}
+
+func assertEqualTreeNode(t *testing.T, nodeA, nodeB *crdt.TreeNode) {
+	//tupleA := buildTreeHash(nodeA)
+	//tupleB := buildTreeHash(nodeB)
+	//assert.Equal(t, tupleA, tupleB)
+
+	listA := CollectNodesWithParentID(nodeA, nil)
+	listB := CollectNodesWithParentID(nodeB, nil)
+	assert.Equal(t, listA, listB)
 }
 
 func createHelloTree(t *testing.T, ctx *change.Context) *crdt.Tree {
