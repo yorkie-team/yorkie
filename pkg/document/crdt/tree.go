@@ -298,10 +298,10 @@ func (n *TreeNode) SplitElement(offset int, issueTimeTicket func() *time.Ticket)
 
 	leftChildren := n.Index.Children(true)[0:offset]
 	rightChildren := n.Index.Children(true)[offset:]
-	if err := n.Index.SetChildrenInternal(leftChildren); err != nil {
+	if err := n.Index.SetChildren(leftChildren); err != nil {
 		return nil, err
 	}
-	if err := split.Index.SetChildrenInternal(rightChildren); err != nil {
+	if err := split.Index.SetChildren(rightChildren); err != nil {
 		return nil, err
 	}
 
@@ -353,13 +353,16 @@ func (n *TreeNode) InsertAt(newNode *TreeNode, offset int) error {
 
 // DeepCopy copies itself deeply.
 func (n *TreeNode) DeepCopy() (*TreeNode, error) {
-	var clone *TreeNode
+	var attrs *RHT
 	if n.Attrs != nil {
-		clone = NewTreeNode(n.ID, n.Type(), n.Attrs.DeepCopy(), n.Value)
-	} else {
-		clone = NewTreeNode(n.ID, n.Type(), nil, n.Value)
+		attrs = n.Attrs.DeepCopy()
 	}
+
+	clone := NewTreeNode(n.ID, n.Type(), attrs, n.Value)
+	clone.Index.Length = n.Index.Length
 	clone.RemovedAt = n.RemovedAt
+	clone.InsPrevID = n.InsPrevID
+	clone.InsNextID = n.InsNextID
 
 	if n.IsText() {
 		return clone, nil
@@ -374,6 +377,7 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 
 		children = append(children, node.Index)
 	}
+
 	if err := clone.Index.SetChildren(children); err != nil {
 		return nil, err
 	}

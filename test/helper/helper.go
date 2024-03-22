@@ -198,6 +198,28 @@ func BuildTreeNode(node *json.TreeNode) *crdt.TreeNode {
 	return doc.Root().GetTree("test").Root()
 }
 
+type treeNodePair struct {
+	node     *crdt.TreeNode
+	parentID *crdt.TreeNodeID
+}
+
+func createTreeNodePairs(node *crdt.TreeNode, parentID *crdt.TreeNodeID) []treeNodePair {
+	var pairs []treeNodePair
+
+	pairs = append(pairs, treeNodePair{node, parentID})
+	for _, child := range node.Index.Children(true) {
+		pairs = append(pairs, createTreeNodePairs(child.Value, node.ID)...)
+	}
+	return pairs
+}
+
+// AssertEqualTreeNode asserts that the given TreeNodes are equal.
+func AssertEqualTreeNode(t *testing.T, nodeA, nodeB *crdt.TreeNode) {
+	pairsA := createTreeNodePairs(nodeA, nil)
+	pairsB := createTreeNodePairs(nodeB, nil)
+	assert.Equal(t, pairsA, pairsB)
+}
+
 var portOffset = 0
 
 // TestConfig returns config for creating Yorkie instance.

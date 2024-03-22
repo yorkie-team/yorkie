@@ -34,6 +34,25 @@ var (
 	}
 )
 
+func createHelloTree(t *testing.T, ctx *change.Context) *crdt.Tree {
+	// TODO(raararaara): This test should be generalized. e.g) createTree(ctx, "<r><p>hello</p></r>")
+	// https://pkg.go.dev/encoding/xml#Unmarshal
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	_, err := tree.EditT(0, 0, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "p", nil),
+	}, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
+	assert.NoError(t, err)
+
+	_, err = tree.EditT(1, 1, []*crdt.TreeNode{
+		crdt.NewTreeNode(helper.PosT(ctx), "text", nil, "hello"),
+	}, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+	assert.Equal(t, 7, tree.Root().Len())
+
+	return tree
+}
+
 func TestTreeNode(t *testing.T) {
 	t.Run("text node test", func(t *testing.T) {
 		node := crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "hello")
@@ -106,6 +125,35 @@ func TestTreeNode(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, test.length-2, right.Len())
 		}
+	})
+
+	t.Run("deepcopy test with deletion", func(t *testing.T) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx)
+
+		// To make tree have a deletion to check length modification.
+		_, err := tree.EditT(4, 5, nil, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>helo</p></r>", tree.ToXML())
+		assert.Equal(t, 6, tree.Root().Len())
+
+		clone, err := tree.Root().DeepCopy()
+		assert.NoError(t, err)
+		helper.AssertEqualTreeNode(t, tree.Root(), clone)
+	})
+
+	t.Run("deepcopy test with split", func(t *testing.T) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx)
+
+		// To make tree have split text nodes.
+		_, err := tree.EditT(3, 3, nil, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+
+		clone, err := tree.Root().DeepCopy()
+		assert.NoError(t, err)
+		helper.AssertEqualTreeNode(t, tree.Root(), clone)
 	})
 }
 
@@ -416,6 +464,7 @@ func TestTreeEdit(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, idx)
 	})
+
 }
 
 func TestTreeSplit(t *testing.T) {

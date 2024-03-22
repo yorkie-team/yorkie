@@ -311,23 +311,8 @@ func (n *Node[V]) Children(includeRemovedNode ...bool) []*Node[V] {
 }
 
 // SetChildren sets the children of the given node.
-func (n *Node[V]) SetChildren(children []*Node[V]) error {
-	if n.IsText() {
-		return ErrInvalidMethodCallForTextNode
-	}
-
-	n.children = children
-	for _, child := range children {
-		child.Parent = n
-		child.UpdateAncestorsSize()
-	}
-
-	return nil
-}
-
-// SetChildrenInternal sets the children of the given node.
 // This method does not update the size of the ancestors.
-func (n *Node[V]) SetChildrenInternal(children []*Node[V]) error {
+func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	if n.IsText() {
 		return ErrInvalidMethodCallForTextNode
 	}
