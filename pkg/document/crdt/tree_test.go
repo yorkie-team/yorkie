@@ -128,33 +128,29 @@ func TestTreeNode(t *testing.T) {
 	})
 
 	t.Run("deepcopy test with deletion", func(t *testing.T) {
-		// 01. Create a tree with `<r><p>hello</p></r>`
 		ctx := helper.TextChangeContext(helper.TestRoot())
 		tree := createHelloTree(t, ctx)
 
-		// 02. Erase 3rd character from the text.
+		// To make tree have a deletion to check length modification.
 		_, err := tree.EditT(4, 5, nil, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<r><p>helo</p></r>", tree.ToXML())
 		assert.Equal(t, 6, tree.Root().Len())
 
-		// 03. Make a deep copy of the root and check if the node is the same as the original.
 		clone, err := tree.Root().DeepCopy()
 		assert.NoError(t, err)
 		helper.AssertEqualTreeNode(t, tree.Root(), clone)
 	})
 
 	t.Run("deepcopy test with split", func(t *testing.T) {
-		// 01. Create a tree with `<r><p>hello</p></r>`
 		ctx := helper.TextChangeContext(helper.TestRoot())
 		tree := createHelloTree(t, ctx)
 
-		// 02. Split the text node at the 3rd character.
+		// To make tree have split text nodes.
 		_, err := tree.EditT(3, 3, nil, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
 		assert.NoError(t, err)
 		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
 
-		// 03. Make a deep copy of the root and check if the node is the same as the original.
 		clone, err := tree.Root().DeepCopy()
 		assert.NoError(t, err)
 		helper.AssertEqualTreeNode(t, tree.Root(), clone)
