@@ -34,28 +34,9 @@ var (
 	}
 )
 
-type TreeNodePair struct {
-	treeNode     *crdt.TreeNode
-	parentNodeID *crdt.TreeNodeID
-}
-
-func CollectNodesWithParentID(node *crdt.TreeNode, parentNodeID *crdt.TreeNodeID) []TreeNodePair {
-	var list []TreeNodePair
-
-	list = append(list, TreeNodePair{node, parentNodeID})
-	for _, child := range node.Index.Children(true) {
-		list = append(list, CollectNodesWithParentID(child.Value, node.ID)...)
-	}
-	return list
-}
-
-func assertEqualTreeNode(t *testing.T, nodeA, nodeB *crdt.TreeNode) {
-	listA := CollectNodesWithParentID(nodeA, nil)
-	listB := CollectNodesWithParentID(nodeB, nil)
-	assert.Equal(t, listA, listB)
-}
-
 func createHelloTree(t *testing.T, ctx *change.Context) *crdt.Tree {
+	// TODO(raararaara): This test should be generalized. e.g) createTree(ctx, "<r><p>hello</p></r>")
+	// https://pkg.go.dev/encoding/xml#Unmarshal
 	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
 	_, err := tree.EditT(0, 0, []*crdt.TreeNode{
 		crdt.NewTreeNode(helper.PosT(ctx), "p", nil),
@@ -160,7 +141,7 @@ func TestTreeNode(t *testing.T) {
 		// 03. Make a deep copy of the root and check if the node is the same as the original.
 		clone, err := tree.Root().DeepCopy()
 		assert.NoError(t, err)
-		assertEqualTreeNode(t, tree.Root(), clone)
+		helper.AssertEqualTreeNode(t, tree.Root(), clone)
 	})
 
 	t.Run("deepcopy test with split", func(t *testing.T) {
@@ -176,7 +157,7 @@ func TestTreeNode(t *testing.T) {
 		// 03. Make a deep copy of the root and check if the node is the same as the original.
 		clone, err := tree.Root().DeepCopy()
 		assert.NoError(t, err)
-		assertEqualTreeNode(t, tree.Root(), clone)
+		helper.AssertEqualTreeNode(t, tree.Root(), clone)
 	})
 }
 

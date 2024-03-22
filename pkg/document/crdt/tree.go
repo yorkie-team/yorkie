@@ -123,8 +123,8 @@ func NewTreeNode(id *TreeNodeID, nodeType string, attributes *RHT, value ...stri
 	return node
 }
 
-// ToIDString returns a string that can be used as an ID for this TreeNodeID.
-func (t *TreeNodeID) ToIDString() string {
+// toIDString returns a string that can be used as an ID for this TreeNodeID.
+func (t *TreeNodeID) toIDString() string {
 	return t.CreatedAt.ToTestString() + ":" + strconv.Itoa(t.Offset)
 }
 
@@ -471,7 +471,7 @@ func (t *Tree) purgeNode(node *TreeNode) error {
 	node.InsPrevID = nil
 	node.InsNextID = nil
 
-	delete(t.removedNodeMap, node.ID.ToIDString())
+	delete(t.removedNodeMap, node.ID.toIDString())
 	return nil
 }
 
@@ -651,7 +651,7 @@ func (t *Tree) Edit(
 	// 02. Delete: delete the nodes that are marked as removed.
 	for _, node := range toBeRemoveds {
 		if node.remove(editedAt) {
-			t.removedNodeMap[node.ID.ToIDString()] = node
+			t.removedNodeMap[node.ID.toIDString()] = node
 		}
 	}
 
@@ -702,7 +702,7 @@ func (t *Tree) Edit(
 							createdAtMapByActor[actorIDHex] = createdAt
 						}
 					}
-					t.removedNodeMap[node.Value.ID.ToIDString()] = node.Value
+					t.removedNodeMap[node.Value.ID.toIDString()] = node.Value
 				}
 
 				t.NodeMapByID.Put(node.Value.ID, node.Value)
