@@ -45,7 +45,7 @@ func TestServer(t *testing.T) {
 		assert.NoError(t, cli.Attach(ctx, doc))
 
 		wg := sync.WaitGroup{}
-		wrch, err := cli.Watch(ctx, doc)
+		wrch, _, err := cli.Subscribe(doc)
 		assert.NoError(t, err)
 
 		go func() {

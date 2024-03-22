@@ -139,9 +139,8 @@ func TestPresence(t *testing.T) {
 		wgEvents := sync.WaitGroup{}
 		wgEvents.Add(1)
 
-		watch1Ctx, cancel1 := context.WithCancel(ctx)
+		wrch, cancel1, err := c1.Subscribe(d1)
 		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
 		assert.NoError(t, err)
 		go func() {
 			defer func() {
@@ -177,8 +176,7 @@ func TestPresence(t *testing.T) {
 				c2.ID().String(): {},
 			},
 		})
-		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		_, err = c2.Watch(watch2Ctx, d2)
+		_, cancel2, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
 
 		// 04. Update the second client's presence.
@@ -224,9 +222,8 @@ func TestPresence(t *testing.T) {
 		wgEvents := sync.WaitGroup{}
 		wgEvents.Add(1)
 
-		watch1Ctx, cancel1 := context.WithCancel(ctx)
+		wrch, cancel1, err := c1.Subscribe(d1)
 		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
 		assert.NoError(t, err)
 		go func() {
 			defer func() {
@@ -263,9 +260,8 @@ func TestPresence(t *testing.T) {
 				c2.ID().String(): {},
 			},
 		})
-		watch2Ctx, cancel2 := context.WithCancel(ctx)
+		_, cancel2, err := c2.Subscribe(d2)
 		defer cancel2()
-		_, err = c2.Watch(watch2Ctx, d2)
 		assert.NoError(t, err)
 
 		// 04. Update the second client's presence.
@@ -313,9 +309,8 @@ func TestPresence(t *testing.T) {
 		wgEvents := sync.WaitGroup{}
 		wgEvents.Add(1)
 
-		watch1Ctx, cancel1 := context.WithCancel(ctx)
+		wrch, cancel1, err := c1.Subscribe(d1)
 		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
 		assert.NoError(t, err)
 		go func() {
 			defer func() {
@@ -352,9 +347,8 @@ func TestPresence(t *testing.T) {
 				c2.ID().String(): {},
 			},
 		})
-		watch2Ctx, cancel2 := context.WithCancel(ctx)
+		_, cancel2, err := c2.Subscribe(d2)
 		defer cancel2()
-		_, err = c2.Watch(watch2Ctx, d2)
 		assert.NoError(t, err)
 
 		// 04. Update the second client's presence.
@@ -405,9 +399,8 @@ func TestPresence(t *testing.T) {
 		wgEvents := sync.WaitGroup{}
 		wgEvents.Add(1)
 
-		watch1Ctx, cancel1 := context.WithCancel(ctx)
+		wrch, cancel1, err := c1.Subscribe(d1)
 		defer cancel1()
-		wrch, err := c1.Watch(watch1Ctx, d1)
 		assert.NoError(t, err)
 		go func() {
 			defer func() {
@@ -452,13 +445,11 @@ func TestPresence(t *testing.T) {
 				c2.ID().String(): d2.MyPresence(),
 			},
 		})
-		watch2Ctx, cancel2 := context.WithCancel(ctx)
-		_, err = c2.Watch(watch2Ctx, d2)
+		_, cancel2, err := c2.Subscribe(d2)
 		assert.NoError(t, err)
 		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(helper.TestDocKey(t))))
 
-		watch3Ctx, cancel3 := context.WithCancel(ctx)
-		_, err = c2.Watch(watch3Ctx, d3)
+		_, cancel3, err := c2.Subscribe(d3)
 		assert.NoError(t, err)
 
 		// 05. The second client unwatch the documents attached by itself.

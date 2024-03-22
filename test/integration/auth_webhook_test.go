@@ -177,7 +177,7 @@ func TestProjectAuthWebhook(t *testing.T) {
 		err = cli.Attach(ctx, doc)
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
-		_, err = cli.Watch(ctx, doc)
+		_, _, err = cli.Subscribe(doc)
 		assert.Equal(t, client.ErrDocumentNotAttached, err)
 	})
 }
