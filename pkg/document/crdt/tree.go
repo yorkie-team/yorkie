@@ -478,7 +478,7 @@ func (t *Tree) purgeNode(node *TreeNode) error {
 // marshal returns the JSON encoding of this Tree.
 func marshal(builder *strings.Builder, node *TreeNode) {
 	if node.IsText() {
-		builder.WriteString(fmt.Sprintf(`{"type":"%s","value":"%s"}`, node.Type(), node.Value))
+		builder.WriteString(fmt.Sprintf(`{"type":"%s","value":"%s"}`, node.Type(), EscapeString(node.Value)))
 		return
 	}
 
