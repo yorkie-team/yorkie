@@ -172,8 +172,7 @@ func pullSnapshot(
 	)
 
 	pack := NewServerPack(docInfo.Key, cpAfterPull, nil, snapshot)
-	vector := doc.VersionVector()
-	pack.SnapshotVersionVector = &vector
+	pack.SnapshotVersionVector = doc.VersionVector()
 	return pack, nil
 }
 

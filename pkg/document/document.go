@@ -71,6 +71,8 @@ type Option func(*Options)
 // Options configures how we set up the document.
 type Options struct {
 	// DisableGC disables garbage collection.
+	// NOTE(hackerwins): This is temporary option. We need to remove this option
+	// after introducing the garbage collection based on the version vector.
 	DisableGC bool
 }
 
@@ -214,7 +216,7 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 
 	// 04. Do Garbage collection.
 	if !d.options.DisableGC {
-		d.GarbageCollect(pack.MinSyncedTicket)
+		d.GarbageCollect(pack.MinSyncedVersionVector)
 	}
 
 	// 05. Update the status.
@@ -324,14 +326,14 @@ func (d *Document) Root() *json.Object {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *Document) GarbageCollect(ticket *time.Ticket) int {
+func (d *Document) GarbageCollect(vector time.VersionVector) int {
 	if d.cloneRoot != nil {
-		if _, err := d.cloneRoot.GarbageCollect(ticket); err != nil {
+		if _, err := d.cloneRoot.GarbageCollect(vector); err != nil {
 			panic(err)
 		}
 	}
 
-	n, err := d.doc.GarbageCollect(ticket)
+	n, err := d.doc.GarbageCollect(vector)
 	if err != nil {
 		panic(err)
 	}

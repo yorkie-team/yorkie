@@ -79,9 +79,9 @@ func (v VersionVector) Marshal() string {
 	return builder.String()
 }
 
-// CausallyAfter returns whether this VersionVector is causally after the given
-// VersionVector.
-func (v VersionVector) CausallyAfter(other VersionVector) bool {
+// AfterOrEqual returns whether this VersionVector is causally after or equal
+// the given VersionVector.
+func (v VersionVector) AfterOrEqual(other VersionVector) bool {
 	for k, val := range v {
 		if val < other[k] {
 			return false
@@ -95,4 +95,11 @@ func (v VersionVector) CausallyAfter(other VersionVector) bool {
 	}
 
 	return true
+}
+
+// After returns whether this VersionVector is causally after the given ticket.
+func (v VersionVector) After(other *Ticket) bool {
+	actorID := other.ActorID()
+	ticket := NewTicket(v.VersionOf(actorID), MaxDelimiter, actorID)
+	return ticket.Compare(other) >= 0
 }

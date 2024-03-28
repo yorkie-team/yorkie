@@ -47,6 +47,9 @@ var (
 	// ErrDocumentNotFound is returned when the document could not be found.
 	ErrDocumentNotFound = errors.New("document not found")
 
+	// ErrChangeNotFound is returned when the change could not be found.
+	ErrChangeNotFound = errors.New("change not found")
+
 	// ErrSnapshotNotFound is returned when the snapshot could not be found.
 	ErrSnapshotNotFound = errors.New("snapshot not found")
 
@@ -254,6 +257,15 @@ type Database interface {
 		docRefKey types.DocRefKey,
 		serverSeq int64,
 	) (*time.Ticket, error)
+
+	// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
+	// and returns the SyncedVersionVector of the document.
+	UpdateAndFindMinSyncedVersionVector(
+		ctx context.Context,
+		clientInfo *ClientInfo,
+		docRefKey types.DocRefKey,
+		serverSeq int64,
+	) (time.VersionVector, error)
 
 	// UpdateSyncedSeq updates the syncedSeq of the given client.
 	UpdateSyncedSeq(

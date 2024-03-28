@@ -29,6 +29,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 var (
@@ -487,7 +488,7 @@ func TestDocument(t *testing.T) {
 		)
 
 		assert.Equal(t, 1, doc.GarbageLen())
-		doc.GarbageCollect(time.MaxTicket)
+		doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID()))
 		assert.Equal(t, 0, doc.GarbageLen())
 		assert.Equal(
 			t,
@@ -520,7 +521,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 2, doc.GarbageLen())
 
-		doc.GarbageCollect(time.MaxTicket)
+		doc.GarbageCollect(helper.MaxVectorClock(doc.ActorID()))
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 	})
@@ -547,8 +548,8 @@ func TestDocument(t *testing.T) {
 
 		packA := docA.CreateChangePack()
 		packA.MinSyncedTicket = time.InitialTicket
-		assert.True(t, packA.Changes[1].CausallyAfter(packA.Changes[0]))
-		assert.False(t, packA.Changes[0].CausallyAfter(packA.Changes[1]))
+		assert.True(t, packA.Changes[1].AfterOrEqual(packA.Changes[0]))
+		assert.False(t, packA.Changes[0].AfterOrEqual(packA.Changes[1]))
 
 		// 02. create document with actorB and apply change packA of docA to docB and check version vector.
 		actorB, err := time.ActorIDFromHex("000000000000000000000002")
@@ -567,7 +568,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, int64(3), docB.VersionVector().VersionOf(actorB))
 		packB := docB.CreateChangePack()
 		packB.MinSyncedTicket = time.InitialTicket
-		assert.True(t, packB.Changes[0].CausallyAfter(packA.Changes[1]))
+		assert.True(t, packB.Changes[0].AfterOrEqual(packA.Changes[1]))
 
 		// 03. update docA and docB concurrently and check version vector.
 		assert.NoError(t, docA.Update(func(r *json.Object, p *presence.Presence) error {
@@ -580,6 +581,6 @@ func TestDocument(t *testing.T) {
 		}))
 		packA = docA.CreateChangePack()
 		packB = docB.CreateChangePack()
-		assert.False(t, packA.Changes[2].CausallyAfter(packB.Changes[1]))
+		assert.False(t, packA.Changes[2].AfterOrEqual(packB.Changes[1]))
 	})
 }

@@ -162,7 +162,7 @@ func (id ID) VersionVector() time.VersionVector {
 	return id.versionVector
 }
 
-// CausallyAfter returns whether this ID is causally after the given ID.
-func (id ID) CausallyAfter(other ID) bool {
-	return id.versionVector.CausallyAfter(other.versionVector)
+// AfterOrEqual returns whether this ID is causally after or equal the given ID.
+func (id ID) AfterOrEqual(other ID) bool {
+	return id.versionVector.AfterOrEqual(other.versionVector)
 }

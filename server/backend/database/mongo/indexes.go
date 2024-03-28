@@ -147,6 +147,12 @@ var collectionInfos = []collectionInfo{
 			Options: options.Index().SetUnique(true),
 		}, {
 			Keys: bsonx.Doc{
+				{Key: "doc_id", Value: bsonx.Int32(1)}, // shard key
+				{Key: "project_id", Value: bsonx.Int32(1)},
+				{Key: "server_seq", Value: bsonx.Int32(1)},
+			},
+		}, {
+			Keys: bsonx.Doc{
 				{Key: "doc_id", Value: bsonx.Int32(1)},
 				{Key: "project_id", Value: bsonx.Int32(1)},
 				{Key: "lamport", Value: bsonx.Int32(1)},

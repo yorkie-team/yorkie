@@ -139,6 +139,20 @@ func TimeT(change *change.Context) *time.Ticket {
 	return change.IssueTimeTicket()
 }
 
+// MaxVectorClock return the SyncedVectorMap that contains the given actors as key and Max Lamport.
+func MaxVectorClock(actors ...*time.ActorID) time.VersionVector {
+	if len(actors) == 0 {
+		actors = append(actors, time.InitialActorID)
+	}
+
+	vector := time.NewVersionVector()
+	for i := 0; i < len(actors); i++ {
+		vector.Set(actors[i], time.MaxLamport)
+	}
+
+	return vector
+}
+
 // TokensEqualBetween is a helper function that checks the tokens between the given
 // indexes.
 func TokensEqualBetween(t assert.TestingT, tree *index.Tree[*crdt.TreeNode], from, to int, expected []string) bool {

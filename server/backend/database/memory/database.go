@@ -1133,10 +1133,12 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	docRefKey types.DocRefKey,
 	serverSeq int64,
 ) (*time.Ticket, error) {
+	// 01. update synced seq of the given client and document.
 	if err := d.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
 		return nil, err
 	}
 
+	// 02. find min synced seq of the given document.
 	txn := d.db.Txn(false)
 	defer txn.Abort()
 
@@ -1173,6 +1175,65 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		time.MaxDelimiter,
 		actorID,
 	), nil
+}
+
+// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
+// and returns the SyncedVersionVector of the document.
+func (d *DB) UpdateAndFindMinSyncedVersionVector(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	serverSeq int64,
+) (time.VersionVector, error) {
+	// 01. update synced seq of the given client and document.
+	if err := d.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
+		return nil, err
+	}
+
+	// 02. find the min synced seq of the document.
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	iterator, err := txn.LowerBound(
+		tblSyncedSeqs,
+		"doc_id_server_seq",
+		docRefKey.DocID.String(),
+		int64(0),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID, err)
+	}
+
+	var syncedSeqInfo *database.SyncedSeqInfo
+	if raw := iterator.Next(); raw != nil {
+		info := raw.(*database.SyncedSeqInfo)
+		if info.DocID == docRefKey.DocID {
+			syncedSeqInfo = info
+		}
+	}
+
+	if syncedSeqInfo == nil || syncedSeqInfo.ServerSeq == change.InitialServerSeq {
+		return nil, nil
+	}
+
+	// 03. find the synced version vector of the min synced seq.
+	// TODO(hackerwins): We need to find the min synced seq of the changes.
+	// min synced seq of the changes is the equivalent of LCA in the dependency graph.
+	raw, err := txn.First(
+		tblChanges,
+		"doc_id_server_seq",
+		docRefKey.DocID.String(),
+		syncedSeqInfo.ServerSeq,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.DocID, err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("fetch change of %s: %w", docRefKey.DocID, database.ErrChangeNotFound)
+	}
+
+	changeInfo := raw.(*database.ChangeInfo)
+	return changeInfo.VersionVector.DeepCopy(), nil
 }
 
 // UpdateSyncedSeq updates the syncedSeq of the given client.

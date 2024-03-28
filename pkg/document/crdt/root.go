@@ -143,11 +143,11 @@ func (r *Root) DeepCopy() (*Root, error) {
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
+func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 	count := 0
 
 	for _, pair := range r.gcElementPairMap {
-		if ticket.Compare(pair.elem.RemovedAt()) >= 0 {
+		if vector.After(pair.elem.RemovedAt()) {
 			if err := pair.parent.Purge(pair.elem); err != nil {
 				return 0, err
 			}
@@ -157,7 +157,7 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	}
 
 	for _, pair := range r.gcNodePairMap {
-		if ticket.Compare(pair.Child.RemovedAt()) >= 0 {
+		if vector.After(pair.Child.RemovedAt()) {
 			if err := pair.Parent.Purge(pair.Child); err != nil {
 				return 0, err
 			}

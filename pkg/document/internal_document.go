@@ -168,7 +168,7 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 	d.checkpoint = d.checkpoint.Forward(pack.Checkpoint)
 
 	if !disableGC && pack.MinSyncedTicket != nil {
-		if _, err := d.GarbageCollect(pack.MinSyncedTicket); err != nil {
+		if _, err := d.GarbageCollect(pack.MinSyncedVersionVector); err != nil {
 			return err
 		}
 	}
@@ -177,8 +177,8 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 }
 
 // GarbageCollect purge elements that were removed before the given time.
-func (d *InternalDocument) GarbageCollect(ticket *time.Ticket) (int, error) {
-	return d.root.GarbageCollect(ticket)
+func (d *InternalDocument) GarbageCollect(vector time.VersionVector) (int, error) {
+	return d.root.GarbageCollect(vector)
 }
 
 // GarbageLen returns the count of removed elements.

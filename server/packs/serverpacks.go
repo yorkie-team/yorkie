@@ -44,7 +44,10 @@ type ServerPack struct {
 	Snapshot []byte
 
 	// SnapshotVersionVector is the version vector of the snapshot.
-	SnapshotVersionVector *time.VersionVector
+	SnapshotVersionVector time.VersionVector
+
+	// MinSyncedVersionVector is the minimum version vector of the client who attached the document.
+	MinSyncedVersionVector time.VersionVector
 
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
@@ -135,7 +138,7 @@ func (p *ServerPack) ToPBChangePack() (*api.ChangePack, error) {
 	}
 
 	if p.Snapshot != nil {
-		pbVersionVector, err := converter.ToVersionVector(*p.SnapshotVersionVector)
+		pbVersionVector, err := converter.ToVersionVector(p.SnapshotVersionVector)
 		if err != nil {
 			return nil, err
 		}

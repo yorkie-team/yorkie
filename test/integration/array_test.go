@@ -29,7 +29,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -265,7 +264,7 @@ func TestArray(t *testing.T) {
 		}))
 
 		assert.Equal(t, 8, d1.GarbageLen())
-		assert.Equal(t, 8, d1.GarbageCollect(time.MaxTicket))
+		assert.Equal(t, 8, d1.GarbageCollect(helper.MaxVectorClock(d1.ActorID())))
 	})
 
 	t.Run("array.set with value sync test", func(t *testing.T) {
@@ -467,7 +466,7 @@ func TestArraySet(t *testing.T) {
 			})
 			assert.NoError(t, err)
 			assert.Equal(t, tt.tombstones, d1.GarbageLen())
-			assert.Equal(t, tt.tombstones, d1.GarbageCollect(time.MaxTicket))
+			assert.Equal(t, tt.tombstones, d1.GarbageCollect(helper.MaxVectorClock(d1.ActorID())))
 		})
 	}
 }

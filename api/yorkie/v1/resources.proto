@@ -45,7 +45,8 @@ message ChangePack {
   bytes snapshot = 3;
   VersionVector snapshot_version_vector = 7;
   repeated Change changes = 4;
-  TimeTicket min_synced_ticket = 5;
+  TimeTicket min_synced_ticket = 5; // Deprecated
+  VersionVector min_synced_version_vector = 8;
   bool is_removed = 6;
 }
 

@@ -20,6 +20,7 @@ package mongo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	gotime "time"
@@ -487,7 +488,7 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 		"key":        key,
 	}, bson.M{
 		"$set": bson.M{
-			"status":     database.ClientActivated,
+			StatusKey:    database.ClientActivated,
 			"updated_at": now,
 		},
 	}, options.Update().SetUpsert(true))
@@ -528,7 +529,7 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 	}, bson.A{
 		bson.M{
 			"$set": bson.M{
-				"status":     database.ClientDeactivated,
+				StatusKey:    database.ClientDeactivated,
 				"updated_at": gotime.Now(),
 				"documents": bson.M{
 					"$arrayToObject": bson.M{
@@ -543,7 +544,7 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 										"then": bson.M{
 											"client_seq": 0,
 											"server_seq": 0,
-											"status":     database.DocumentDetached,
+											StatusKey:    database.DocumentDetached,
 										},
 										"else": "$$doc.v",
 									},
@@ -595,7 +596,6 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 ) error {
-	clientDocInfoKey := getClientDocInfoKey(docInfo.ID)
 	clientDocInfo, ok := clientInfo.Documents[docInfo.ID]
 	if !ok {
 		return fmt.Errorf("client doc info: %w", database.ErrDocumentNeverAttached)
@@ -603,12 +603,12 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	updater := bson.M{
 		"$max": bson.M{
-			clientDocInfoKey + "server_seq": clientDocInfo.ServerSeq,
-			clientDocInfoKey + "client_seq": clientDocInfo.ClientSeq,
+			clientDocInfoKey(docInfo.ID, "server_seq"): clientDocInfo.ServerSeq,
+			clientDocInfoKey(docInfo.ID, "client_seq"): clientDocInfo.ClientSeq,
 		},
 		"$set": bson.M{
-			clientDocInfoKey + StatusKey: clientDocInfo.Status,
-			"updated_at":                 clientInfo.UpdatedAt,
+			clientDocInfoKey(docInfo.ID, StatusKey): clientDocInfo.Status,
+			"updated_at":                            clientInfo.UpdatedAt,
 		},
 	}
 
@@ -620,10 +620,10 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	if !attached {
 		updater = bson.M{
 			"$set": bson.M{
-				clientDocInfoKey + "server_seq": 0,
-				clientDocInfoKey + "client_seq": 0,
-				clientDocInfoKey + StatusKey:    clientDocInfo.Status,
-				"updated_at":                    clientInfo.UpdatedAt,
+				clientDocInfoKey(docInfo.ID, "server_seq"): 0,
+				clientDocInfoKey(docInfo.ID, "client_seq"): 0,
+				clientDocInfoKey(docInfo.ID, StatusKey):    clientDocInfo.Status,
+				"updated_at":                               clientInfo.UpdatedAt,
 			},
 		}
 	}
@@ -656,7 +656,7 @@ func (c *Client) FindDeactivateCandidatesPerProject(
 
 	cursor, err := c.collection(ColClients).Find(ctx, bson.M{
 		"project_id": project.ID,
-		"status":     database.ClientActivated,
+		StatusKey:    database.ClientActivated,
 		"updated_at": bson.M{
 			"$lte": gotime.Now().Add(-clientDeactivateThreshold),
 		},
@@ -1109,6 +1109,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 	docRefKey types.DocRefKey,
 	serverSeq int64,
 ) (*time.Ticket, error) {
+	// 01. update synced seq of the given client and document.
 	if err := c.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
 		return nil, err
 	}
@@ -1121,7 +1122,7 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		{Key: "lamport", Value: 1},
 		{Key: "actor_id", Value: 1},
 	}))
-	if result.Err() == mongo.ErrNoDocuments {
+	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
 		return time.InitialTicket, nil
 	}
 	if result.Err() != nil {
@@ -1146,6 +1147,64 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		time.MaxDelimiter,
 		actorID,
 	), nil
+}
+
+// UpdateAndFindMinSyncedVersionVector updates the given serverSeq of the given client
+// and returns the SyncedVersionVector of the document.
+func (c *Client) UpdateAndFindMinSyncedVersionVector(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docRefKey types.DocRefKey,
+	serverSeq int64,
+) (time.VersionVector, error) {
+	// 01. update synced seq of the given client and document.
+	if err := c.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
+		return nil, err
+	}
+
+	// 02. find min synced seq of the given document.
+	result := c.collection(ColSyncedSeqs).FindOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+	}, options.FindOne().SetSort(bson.D{
+		{Key: "server_seq", Value: 1},
+	}))
+	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
+		return nil, nil
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("find smallest syncedseq: %w", result.Err())
+	}
+	syncedSeqInfo := database.SyncedSeqInfo{}
+	if err := result.Decode(&syncedSeqInfo); err != nil {
+		return nil, fmt.Errorf("decode syncedseq: %w", err)
+	}
+
+	if syncedSeqInfo.ServerSeq == change.InitialServerSeq {
+		return nil, nil
+	}
+
+	// 03. find the version vector of the min synced seq.
+	// TODO(hackerwins): We need to find the min synced seq of the changes.
+	// min synced seq of the changes is the equivalent of LCA in the dependency graph.
+	result = c.collection(ColChanges).FindOne(ctx, bson.M{
+		"project_id": docRefKey.ProjectID,
+		"doc_id":     docRefKey.DocID,
+		"server_seq": syncedSeqInfo.ServerSeq,
+	})
+	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
+		return nil, nil
+	}
+	if result.Err() != nil {
+		return nil, fmt.Errorf("find server seq's change: %w", result.Err())
+	}
+
+	changeInfo := database.ChangeInfo{}
+	if err := result.Decode(&changeInfo); err != nil {
+		return nil, fmt.Errorf("decode change: %w", err)
+	}
+
+	return changeInfo.VersionVector, nil
 }
 
 // FindDocInfosByPaging returns the docInfos of the given paging.
@@ -1279,10 +1338,9 @@ func (c *Client) IsDocumentAttached(
 	docRefKey types.DocRefKey,
 	excludeClientID types.ID,
 ) (bool, error) {
-	clientDocInfoKey := getClientDocInfoKey(docRefKey.DocID)
 	filter := bson.M{
-		"project_id":                docRefKey.ProjectID,
-		clientDocInfoKey + "status": database.DocumentAttached,
+		"project_id": docRefKey.ProjectID,
+		clientDocInfoKey(docRefKey.DocID, StatusKey): database.DocumentAttached,
 	}
 
 	if excludeClientID != "" {
@@ -1367,6 +1425,7 @@ func escapeRegex(str string) string {
 	return buf.String()
 }
 
-func getClientDocInfoKey(docID types.ID) string {
-	return fmt.Sprintf("documents.%s.", docID)
+// clientDocInfoKey returns the key for the client document info.
+func clientDocInfoKey(docID types.ID, prefix string) string {
+	return fmt.Sprintf("documents.%s.%s", docID, prefix)
 }
