@@ -77,6 +77,7 @@ func (v VersionVector) Marshal() string {
 // CausallyAfter returns whether this VersionVector is causally after the given
 // VersionVector.
 func (v VersionVector) CausallyAfter(other VersionVector) bool {
+	// TODO(hackerwins): This logic should detect whether two version vectors are equal.
 	for k, val := range v {
 		if val < other[k] {
 			return false
