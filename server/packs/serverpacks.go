@@ -46,6 +46,9 @@ type ServerPack struct {
 	// SnapshotVersionVector is the version vector of the snapshot.
 	SnapshotVersionVector *time.VersionVector
 
+	// MinSyncedVersionVector is the minimum version vector of the client who attached the document.
+	MinSyncedVersionVector *time.VersionVector
+
 	// MinSyncedTicket is the minimum logical time taken by clients who attach the document.
 	// It used to collect garbage on the replica on the client.
 	MinSyncedTicket *time.Ticket

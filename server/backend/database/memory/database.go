@@ -1120,16 +1120,16 @@ func (d *DB) FindMinSyncedSeqInfo(
 	return syncedSeqInfo, nil
 }
 
-// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
+// UpdateAndFindMinSyncedTime updates the given serverSeq of the given client
 // and returns the min synced ticket.
-func (d *DB) UpdateAndFindMinSyncedTicket(
+func (d *DB) UpdateAndFindMinSyncedTime(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	serverSeq int64,
-) (*time.Ticket, error) {
+) (*time.VersionVector, *time.Ticket, error) {
 	if err := d.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	txn := d.db.Txn(false)
@@ -1143,7 +1143,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		time.InitialActorID.String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID, err)
+		return nil, nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID, err)
 	}
 
 	var syncedSeqInfo *database.SyncedSeqInfo
@@ -1155,15 +1155,17 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	}
 
 	if syncedSeqInfo == nil || syncedSeqInfo.ServerSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
+		return nil, time.InitialTicket, nil
 	}
 
 	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return time.NewTicket(
+	// TODO(hackerwins): Build a version vector from syncedSeqInfo.
+
+	return nil, time.NewTicket(
 		syncedSeqInfo.Lamport,
 		time.MaxDelimiter,
 		actorID,

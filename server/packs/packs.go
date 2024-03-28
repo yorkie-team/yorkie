@@ -107,10 +107,10 @@ func PushPull(
 		return nil, err
 	}
 
-	// 04. update and find min synced ticket for garbage collection.
+	// 04. update and find min synced logical time for garbage collection.
 	// NOTE(hackerwins): Since the client could not receive the response, the
 	// requested seq(reqPack) is stored instead of the response seq(resPack).
-	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
+	minSyncedVersionVector, minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTime(
 		ctx,
 		clientInfo,
 		docRefKey,
@@ -119,6 +119,7 @@ func PushPull(
 	if err != nil {
 		return nil, err
 	}
+	respPack.MinSyncedVersionVector = minSyncedVersionVector
 	respPack.MinSyncedTicket = minSyncedTicket
 	respPack.ApplyDocInfo(docInfo)
 
