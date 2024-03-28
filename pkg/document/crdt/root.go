@@ -39,6 +39,7 @@ type Root struct {
 	object                               *Object
 	elementMapByCreatedAt                map[string]Element
 	removedElementPairMapByCreatedAt     map[string]ElementPair
+	treeNodeHasRemovedRHTNodesSetByID    map[string]TreeNode
 	elementHasRemovedNodesSetByCreatedAt map[string]GCElement
 }
 
@@ -47,6 +48,7 @@ func NewRoot(root *Object) *Root {
 	r := &Root{
 		elementMapByCreatedAt:                make(map[string]Element),
 		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
+		treeNodeHasRemovedRHTNodesSetByID:    make(map[string]TreeNode),
 		elementHasRemovedNodesSetByCreatedAt: make(map[string]GCElement),
 	}
 
@@ -54,6 +56,13 @@ func NewRoot(root *Object) *Root {
 	r.RegisterElement(root)
 
 	root.Descendants(func(elem Element, parent Container) bool {
+		if tree, ok := elem.(*Tree); ok {
+			for _, node := range tree.Nodes() {
+				if node.Attrs.RemovedRHTNodesLen() > 0 {
+					r.RegisterTreeNodeHasRemovedRHTNodes(*node)
+				}
+			}
+		}
 		if elem.RemovedAt() != nil {
 			r.RegisterRemovedElementPair(parent, elem)
 		}
@@ -123,6 +132,11 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	}
 }
 
+// RegisterTreeNodeHasRemovedRHTNodes register the given treeNode to hash table.
+func (r *Root) RegisterTreeNodeHasRemovedRHTNodes(treeNode TreeNode) {
+	r.treeNodeHasRemovedRHTNodesSetByID[treeNode.ID.toIDString()] = treeNode
+}
+
 // RegisterElementHasRemovedNodes register the given element with garbage to hash table.
 func (r *Root) RegisterElementHasRemovedNodes(element GCElement) {
 	r.elementHasRemovedNodesSetByCreatedAt[element.CreatedAt().Key()] = element
@@ -149,6 +163,20 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 
 			count += r.deregisterElement(pair.elem)
 		}
+	}
+
+	for _, node := range r.treeNodeHasRemovedRHTNodesSetByID {
+		purgedNodes, err := node.Attrs.purgeRemovedRHTNodesBefore(ticket)
+		if err != nil {
+			return 0, err
+		}
+
+		if purgedNodes > 0 {
+			delete(r.treeNodeHasRemovedRHTNodesSetByID, node.ID.toIDString())
+		}
+
+		count += purgedNodes
+
 	}
 
 	for _, node := range r.elementHasRemovedNodesSetByCreatedAt {
@@ -194,6 +222,10 @@ func (r *Root) GarbageLen() int {
 	}
 
 	count += len(seen)
+
+	for _, node := range r.treeNodeHasRemovedRHTNodesSetByID {
+		count += node.Attrs.RemovedRHTNodesLen()
+	}
 
 	for _, element := range r.elementHasRemovedNodesSetByCreatedAt {
 		count += element.removedNodesLen()

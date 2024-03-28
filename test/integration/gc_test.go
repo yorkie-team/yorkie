@@ -321,6 +321,63 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, d2.GarbageLen(), 0)
 	})
 
+	t.Run("garbage collection for tree attribute test (multi clients)", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type: "p",
+					Children: []json.TreeNode{{
+						Type:     "tn",
+						Children: []json.TreeNode{{Type: "text", Value: "a"}, {Type: "text", Value: "b"}},
+					}, {
+						Type:       "tn",
+						Children:   []json.TreeNode{{Type: "text", Value: "cd"}},
+						Attributes: map[string]string{"italic": "true"},
+					}},
+				}},
+			})
+			assert.Equal(t, `<doc><p><tn>ab</tn><tn italic="true">cd</tn></p></doc>`, root.GetTree("t").ToXML())
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		// (0, 0) -> (1, 0): syncedseqs:(0, 0)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		// (1, 0) -> (1, 1): syncedseqs:(0, 0)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyle(5, 9, []string{"italic"})
+			return nil
+		}))
+		assert.Equal(t, `<doc><p><tn>ab</tn><tn>cd</tn></p></doc>`, d2.Root().GetTree("t").ToXML())
+		assert.NoError(t, err)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
+
+		// (1, 1) -> (1, 2): syncedseqs:(0, 1)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, 1, d1.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
+	})
+
 	t.Run("garbage collection with detached document test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))
