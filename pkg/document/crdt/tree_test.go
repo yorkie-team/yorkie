@@ -468,20 +468,19 @@ func TestTreeEdit(t *testing.T) {
 	t.Run("marshal test", func(t *testing.T) {
 		ctx := helper.TextChangeContext(helper.TestRoot())
 		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "root", nil), helper.TimeT(ctx))
-		_, err := tree.EditT(0, 0, []*crdt.TreeNode{crdt.NewTreeNode(helper.PosT(ctx), "p", nil)}, 0,
-			helper.TimeT(ctx), issueTimeTicket(ctx))
+		_, err := tree.EditT(0, 0, []*crdt.TreeNode{
+			crdt.NewTreeNode(helper.PosT(ctx), "p", nil),
+		}, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
 		assert.NoError(t, err)
 		_, err = tree.EditT(1, 1, []*crdt.TreeNode{
 			crdt.NewTreeNode(helper.PosT(ctx), "text", nil, `"Hello" \n i'm yorkie!`),
-		}, 0,
-			helper.TimeT(ctx), issueTimeTicket(ctx))
+		}, 0, helper.TimeT(ctx), issueTimeTicket(ctx))
 		assert.NoError(t, err)
 
 		assert.Equal(t, `<root><p>"Hello" \n i'm yorkie!</p></root>`, tree.ToXML())
 		assert.Equal(
 			t,
-			`{"type":"root","children":[{"type":"p",`+
-				`"children":[{"type":"text","value":"\"Hello\" \\n i'm yorkie!"}]}]}`,
+			`{"type":"root","children":[{"type":"p",children":[{"type":"text","value":"\"Hello\" \\n i'm yorkie!"}]}]}`,
 			tree.Marshal(),
 		)
 	})
