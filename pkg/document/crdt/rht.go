@@ -41,6 +41,18 @@ func newRHTNode(key, val string, updatedAt *time.Ticket, isRemoved bool) *RHTNod
 	}
 }
 
+// Remove removes this node. It marks RHTNode as removed and updates the value of `updatedAt` (tombstone).
+func (n *RHTNode) Remove(removedAt *time.Ticket) bool {
+	if removedAt != nil && removedAt.After(n.UpdatedAt()) &&
+		!n.isRemoved || removedAt.After(n.UpdatedAt()) {
+		n.isRemoved = true
+		n.updatedAt = removedAt
+
+		return true
+	}
+	return false
+}
+
 // Key returns the key of this node.
 func (n *RHTNode) Key() string {
 	return n.key
@@ -60,15 +72,14 @@ func (n *RHTNode) UpdatedAt() *time.Ticket {
 // For more details about RHT: http://csl.skku.edu/papers/jpdc11.pdf
 // NOTE(justiceHui): RHT and ElementRHT has duplicated functions.
 type RHT struct {
-	nodeMapByKey           map[string]*RHTNode
-	numberOfRemovedElement int
+	// nodeMapByKey is a map with values of nodes by key.
+	nodeMapByKey map[string]*RHTNode
 }
 
 // NewRHT creates a new instance of RHT.
 func NewRHT() *RHT {
 	return &RHT{
-		nodeMapByKey:           make(map[string]*RHTNode),
-		numberOfRemovedElement: 0,
+		nodeMapByKey: make(map[string]*RHTNode),
 	}
 }
 
@@ -94,41 +105,28 @@ func (rht *RHT) Has(key string) bool {
 }
 
 // Set sets the value of the given key.
-func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
-	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
-		if node != nil && node.isRemoved {
-			rht.numberOfRemovedElement--
-		}
-		newNode := newRHTNode(k, v, executedAt, false)
+func (rht *RHT) Set(k, v string, executedAt *time.Ticket) *RHTNode {
+	node, ok := rht.nodeMapByKey[k]
+	var removed *RHTNode
+	if ok && node.Remove(executedAt) {
+		removed = node
+	}
+	newNode := newRHTNode(k, v, executedAt, false)
+	if !ok || node.isRemoved {
 		rht.nodeMapByKey[k] = newNode
 	}
+
+	return removed
 }
 
 // Remove removes the Element of the given key.
-func (rht *RHT) Remove(k string, executedAt *time.Ticket) string {
-	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
-		// NOTE(justiceHui): Even if key is not existed, we must set flag `isRemoved` for concurrency
-		if node == nil {
-			rht.numberOfRemovedElement++
-			newNode := newRHTNode(k, ``, executedAt, true)
-			rht.nodeMapByKey[k] = newNode
-			return ""
-		}
-
-		alreadyRemoved := node.isRemoved
-		if !alreadyRemoved {
-			rht.numberOfRemovedElement++
-		}
-		newNode := newRHTNode(k, node.val, executedAt, true)
-		rht.nodeMapByKey[k] = newNode
-
-		if alreadyRemoved {
-			return ""
-		}
-		return node.val
+func (rht *RHT) Remove(k string, executedAt *time.Ticket) *RHTNode {
+	node, ok := rht.nodeMapByKey[k]
+	if !ok || !node.Remove(executedAt) {
+		return nil
 	}
 
-	return ""
+	return node
 }
 
 // Elements returns a map of elements because the map easy to use for loop.
@@ -144,14 +142,12 @@ func (rht *RHT) Elements() map[string]string {
 	return members
 }
 
-// Nodes returns a map of elements because the map easy to use for loop.
+// Nodes returns a list of RHTNodes.
 // TODO: If we encounter performance issues, we need to replace this with other solution.
 func (rht *RHT) Nodes() []*RHTNode {
 	var nodes []*RHTNode
 	for _, node := range rht.nodeMapByKey {
-		if !node.isRemoved {
-			nodes = append(nodes, node)
-		}
+		nodes = append(nodes, node)
 	}
 
 	return nodes
@@ -159,7 +155,13 @@ func (rht *RHT) Nodes() []*RHTNode {
 
 // Len returns the number of elements.
 func (rht *RHT) Len() int {
-	return len(rht.nodeMapByKey) - rht.numberOfRemovedElement
+	count := 0
+	for _, node := range rht.Nodes() {
+		if !node.isRemoved {
+			count++
+		}
+	}
+	return count
 }
 
 // DeepCopy copies itself deeply.
