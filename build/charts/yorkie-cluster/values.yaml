@@ -13,8 +13,7 @@ yorkie:
     tag: ""
 
   args:
-    dbUrl: mongodb.mongodb.svc.cluster.local
-    dbPort: 27017
+    dbConnectionUri: mongodb://mongodb.mongodb.svc.cluster.local:27017/yorkie-meta
 
   ports:
     rpcPort: 8080

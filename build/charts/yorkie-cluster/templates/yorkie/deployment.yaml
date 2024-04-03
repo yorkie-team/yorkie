@@ -39,7 +39,7 @@ spec:
         args: [
           "server",
           "--mongo-connection-uri",
-          "mongodb://{{ .Values.yorkie.args.dbUrl }}:{{ .Values.yorkie.args.dbPort }}/yorkie-meta",
+          "{{ .Values.yorkie.args.dbConnectionUri }}",
           "--enable-pprof",
           "--rpc-port",
           "{{ .Values.yorkie.ports.rpcPort }}",
