@@ -2,7 +2,7 @@ apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
   name: ingress-stream-idle-timeout-filter
-  namespace: istio-system
+  namespace: {{ .Values.yorkie.namespace }}
 spec:
   workloadSelector:
     labels:
@@ -26,7 +26,7 @@ apiVersion: networking.istio.io/v1alpha3
 kind: EnvoyFilter
 metadata:
   name: ingress-shard-key-header-filter
-  namespace: istio-system
+  namespace: {{ .Values.yorkie.namespace }}
 spec:
   workloadSelector:
     labels:
