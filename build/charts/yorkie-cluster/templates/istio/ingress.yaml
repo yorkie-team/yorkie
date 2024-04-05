@@ -19,8 +19,6 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/backend-protocol: HTTP
     alb.ingress.kubernetes.io/backend-protocol-version: HTTP2
-    alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.hosts.apiHost }}
-    alb.ingress.kubernetes.io/group.order: '10'
   {{ end }}
 spec:
   ingressClassName: {{ .Values.ingress.ingressClassName }}
