@@ -16,9 +16,7 @@ metadata:
   {{ end }}
   {{ if .Values.ingress.ncpAlb.enabled }}
   annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/backend-protocol: HTTP
-    alb.ingress.kubernetes.io/backend-protocol-version: HTTP2
   {{ end }}
 spec:
   ingressClassName: {{ .Values.ingress.ingressClassName }}
