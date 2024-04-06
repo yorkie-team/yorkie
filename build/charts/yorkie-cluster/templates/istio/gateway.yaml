@@ -4,9 +4,8 @@ metadata:
   name: {{ .Values.yorkie.name }}-gateway
   namespace: {{ .Values.yorkie.namespace }}
 spec:
-  # use istio default controller
   selector:
-    istio: ingressgateway
+    istio: yorkie-gateway
   servers:
     - port:
         number: 80
