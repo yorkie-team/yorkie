@@ -13,6 +13,7 @@ Installs the yorkie-cluster, which provides cluster mode for Yorkie server to ha
 Before installing the chart, you need to install Istio with [Istio Operator](https://istio.io/latest/docs/setup/install/operator/) using [istioctl](https://istio.io/latest/docs/setup/getting-started/#download).
 
 ```bash
+kubectl create namespace yorkie
 istioctl install -f <(curl -s https://raw.githubusercontent.com/yorkie-team/yorkie/main/build/charts/yorkie-cluster/istio-operator.yaml)
 ```
 
@@ -50,6 +51,7 @@ Also, you need to uninstall istio with [istioctl](https://istio.io/latest/docs/s
 
 ```bash
 istioctl uninstall --purge
+kubectl delete namespace yorkie
 ```
 
 This will remove all the istio components including CRDs.

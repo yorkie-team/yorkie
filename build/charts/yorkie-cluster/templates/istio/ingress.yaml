@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ .Values.yorkie.name }}
-  namespace: istio-system
+  namespace: {{ .Values.yorkie.namespace }}
   {{ if .Values.ingress.alb.enabled }}
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
@@ -29,6 +29,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: istio-ingressgateway
+                name: yorkie-gateway
                 port:
                   number: 80
