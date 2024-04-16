@@ -83,7 +83,7 @@ type Attachment struct {
 	doc   *document.Document
 	docID types.ID
 
-	// TODO(krapie): assuming that a client do not open multiple subscriptions for the same document.
+	// TODO(krapie): We need to consider the case where a client opens multiple subscriptions for the same document.
 	isSubscribed atomic.Bool
 
 	rch              <-chan WatchResponse
@@ -437,10 +437,9 @@ func (c *Client) Subscribe(
 		return nil, nil, ErrDocumentNotAttached
 	}
 
-	if attachment.isSubscribed.Load() {
+	if !attachment.isSubscribed.CompareAndSwap(false, true) {
 		return nil, nil, ErrAlreadySubscribed
 	}
-	attachment.isSubscribed.Store(true)
 
 	return attachment.rch, attachment.closeWatchStream, nil
 }
