@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"connectrpc.com/connect"
 	"github.com/rs/xid"
@@ -72,12 +73,22 @@ var (
 
 	// ErrInitializationNotReceived occurs when the first response of the watch stream is not received.
 	ErrInitializationNotReceived = errors.New("initialization is not received")
+
+	// ErrAlreadySubscribed occurs when the client is already subscribed to the document.
+	ErrAlreadySubscribed = errors.New("already subscribed")
 )
 
 // Attachment represents the document attached.
 type Attachment struct {
 	doc   *document.Document
 	docID types.ID
+
+	// TODO(krapie): We need to consider the case where a client opens multiple subscriptions for the same document.
+	isSubscribed atomic.Bool
+
+	rch              <-chan WatchResponse
+	watchCtx         context.Context
+	closeWatchStream context.CancelFunc
 }
 
 // Client is a normal client that can communicate with the server.
@@ -322,6 +333,15 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 		docID: types.ID(res.Msg.DocumentId),
 	}
 
+	watchCtx, cancelFunc := context.WithCancel(ctx)
+	c.attachments[doc.Key()].watchCtx = watchCtx
+	c.attachments[doc.Key()].closeWatchStream = cancelFunc
+
+	err = c.runWatchLoop(watchCtx, doc)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -345,6 +365,8 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 	if !ok {
 		return ErrDocumentNotAttached
 	}
+
+	attachment.closeWatchStream()
 
 	if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 		p.Clear()
@@ -406,21 +428,36 @@ func (c *Client) Sync(ctx context.Context, options ...SyncOptions) error {
 	return nil
 }
 
-// Watch subscribes to events on a given documentIDs.
-// If an error occurs before stream initialization, the second response, error,
-// is returned. If the context "ctx" is canceled or timed out, returned channel
-// is closed, and "WatchResponse" from this closed channel has zero events and
-// nil "Err()".
-func (c *Client) Watch(
-	ctx context.Context,
+// Subscribe subscribes to events on a given document.
+func (c *Client) Subscribe(
 	doc *document.Document,
-) (<-chan WatchResponse, error) {
+) (<-chan WatchResponse, context.CancelFunc, error) {
 	attachment, ok := c.attachments[doc.Key()]
 	if !ok {
-		return nil, ErrDocumentNotAttached
+		return nil, nil, ErrDocumentNotAttached
 	}
 
-	rch := make(chan WatchResponse)
+	if !attachment.isSubscribed.CompareAndSwap(false, true) {
+		return nil, nil, ErrAlreadySubscribed
+	}
+
+	return attachment.rch, attachment.closeWatchStream, nil
+}
+
+// runWatchLoop subscribes to events on a given documentIDs.
+// If an error occurs before stream initialization, the second response, error,
+// is returned. If the context "watchCtx" is canceled or timed out, returned channel
+// is closed, and "WatchResponse" from this closed channel has zero events and
+// nil "Err()".
+func (c *Client) runWatchLoop(
+	ctx context.Context,
+	doc *document.Document,
+) error {
+	attachment, ok := c.attachments[doc.Key()]
+	if !ok {
+		return ErrDocumentNotAttached
+	}
+
 	stream, err := c.client.WatchDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
@@ -429,21 +466,24 @@ func (c *Client) Watch(
 		},
 		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// NOTE(hackerwins): We need to receive the first response to initialize
-	// the watch stream. Watch should be blocked until the first response is
+	// the watch stream. runWatchLoop should be blocked until the first response is
 	// received.
 	if !stream.Receive() {
-		return nil, ErrInitializationNotReceived
+		return ErrInitializationNotReceived
 	}
 	if _, err := handleResponse(stream.Msg(), doc); err != nil {
-		return nil, err
+		return err
 	}
 	if err = stream.Err(); err != nil {
-		return nil, err
+		return err
 	}
+
+	rch := make(chan WatchResponse)
+	attachment.rch = rch
 
 	go func() {
 		for stream.Receive() {
@@ -451,18 +491,27 @@ func (c *Client) Watch(
 			resp, err := handleResponse(pbResp, doc)
 			if err != nil {
 				rch <- WatchResponse{Err: err}
+				ctx.Done()
 				close(rch)
 				return
 			}
-			if resp == nil {
+			if resp == nil || !attachment.isSubscribed.Load() {
 				continue
 			}
 
 			rch <- *resp
 		}
 		if err = stream.Err(); err != nil {
+			attachment.isSubscribed.Store(false)
 			rch <- WatchResponse{Err: err}
+			ctx.Done()
 			close(rch)
+
+			// If watch stream is disconnected, we re-establish the watch stream.
+			err = c.runWatchLoop(ctx, doc)
+			if err != nil {
+				return
+			}
 			return
 		}
 	}()
@@ -504,7 +553,7 @@ func (c *Client) Watch(
 		}
 	}()
 
-	return rch, nil
+	return nil
 }
 
 func handleResponse(
