@@ -143,6 +143,7 @@ func (rht *RHT) Nodes() []*RHTNode {
 	return nodes
 }
 
+// RemovedNodesLen returns the number of tombstone nodes.
 func (rht *RHT) RemovedNodesLen() int {
 	count := 0
 	for _, node := range rht.nodeMapByKey {

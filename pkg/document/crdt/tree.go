@@ -118,10 +118,6 @@ func NewTreeNode(id *TreeNodeID, nodeType string, attributes *RHT, value ...stri
 		node.Value = value[0]
 	}
 	node.Attrs = attributes
-	//if attributes != nil {
-	//	_ = node.Attrs.PurgeRemovedNodesBefore(id.CreatedAt)
-	//}
-
 	node.Index = index.NewNode(nodeType, node)
 
 	return node
