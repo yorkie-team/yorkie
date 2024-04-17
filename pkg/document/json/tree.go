@@ -256,7 +256,8 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	if err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket); err != nil {
+	nodes, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket)
+	if err != nil {
 		panic(err)
 	}
 
@@ -267,6 +268,10 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 		attributesToRemove,
 		ticket,
 	))
+
+	for _, node := range nodes {
+		t.context.RegisterNodeHasRemovedRHTNodes(*node)
+	}
 
 	return true
 }

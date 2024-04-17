@@ -40,6 +40,7 @@ type Root struct {
 	elementMapByCreatedAt                map[string]Element
 	removedElementPairMapByCreatedAt     map[string]ElementPair
 	elementHasRemovedNodesSetByCreatedAt map[string]GCElement
+	nodeHasRemovedRHTNodesSetByID        map[string]TreeNode
 }
 
 // NewRoot creates a new instance of Root.
@@ -48,6 +49,7 @@ func NewRoot(root *Object) *Root {
 		elementMapByCreatedAt:                make(map[string]Element),
 		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
 		elementHasRemovedNodesSetByCreatedAt: make(map[string]GCElement),
+		nodeHasRemovedRHTNodesSetByID:        make(map[string]TreeNode),
 	}
 
 	r.object = root
@@ -128,6 +130,11 @@ func (r *Root) RegisterElementHasRemovedNodes(element GCElement) {
 	r.elementHasRemovedNodesSetByCreatedAt[element.CreatedAt().Key()] = element
 }
 
+// RegisterNodeHasRemovedRHTNodes register the given element with garbage to hash table.
+func (r *Root) RegisterNodeHasRemovedRHTNodes(treeNode TreeNode) {
+	r.nodeHasRemovedRHTNodesSetByID[treeNode.ID.toIDString()] = treeNode
+}
+
 // DeepCopy copies itself deeply.
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
@@ -149,6 +156,18 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 
 			count += r.deregisterElement(pair.elem)
 		}
+	}
+
+	for _, node := range r.nodeHasRemovedRHTNodesSetByID {
+		purgedRHTNodes, err := node.PurgeRHTNodes(ticket)
+		if err != nil {
+			return 0, err
+		}
+
+		if purgedRHTNodes > 0 {
+			delete(r.nodeHasRemovedRHTNodesSetByID, node.ID.toIDString())
+		}
+		count += purgedRHTNodes
 	}
 
 	for _, node := range r.elementHasRemovedNodesSetByCreatedAt {
@@ -194,6 +213,10 @@ func (r *Root) GarbageLen() int {
 	}
 
 	count += len(seen)
+
+	for _, node := range r.nodeHasRemovedRHTNodesSetByID {
+		count += node.Attrs.removedNodesLen()
+	}
 
 	for _, element := range r.elementHasRemovedNodesSetByCreatedAt {
 		count += element.removedNodesLen()

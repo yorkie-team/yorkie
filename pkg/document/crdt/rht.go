@@ -143,8 +143,8 @@ func (rht *RHT) Nodes() []*RHTNode {
 	return nodes
 }
 
-// RemovedNodesLen returns the number of tombstone nodes.
-func (rht *RHT) RemovedNodesLen() int {
+// removedNodesLen returns the number of tombstone nodes.
+func (rht *RHT) removedNodesLen() int {
 	count := 0
 	for _, node := range rht.nodeMapByKey {
 		if node.isRemoved {
@@ -155,8 +155,8 @@ func (rht *RHT) RemovedNodesLen() int {
 	return count
 }
 
-// PurgeRemovedNodesBefore physically purges nodes that have been removed.
-func (rht *RHT) PurgeRemovedNodesBefore(ticket *time.Ticket) error {
+// purgeRemovedNodesBefore physically purges nodes that have been removed.
+func (rht *RHT) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 	count := 0
 	nodesToBeRemoved := make(map[*RHTNode]bool)
 
@@ -169,10 +169,10 @@ func (rht *RHT) PurgeRemovedNodesBefore(ticket *time.Ticket) error {
 
 	for node := range nodesToBeRemoved {
 		if err := rht.purge(node); err != nil {
-			return err
+			return 0, err
 		}
 	}
-	return nil
+	return count, nil
 }
 
 // purge physically purges the given node.

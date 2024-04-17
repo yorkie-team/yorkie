@@ -85,6 +85,11 @@ func (c *Context) RegisterElementHasRemovedNodes(element crdt.GCElement) {
 	c.root.RegisterElementHasRemovedNodes(element)
 }
 
+// RegisterNodeHasRemovedRHTNodes register the given element with garbage to hash table.
+func (c *Context) RegisterNodeHasRemovedRHTNodes(treeNode crdt.TreeNode) {
+	c.root.RegisterNodeHasRemovedRHTNodes(treeNode)
+}
+
 // LastTimeTicket returns the last time ticket issued by this context.
 func (c *Context) LastTimeTicket() *time.Ticket {
 	return c.id.NewTimeTicket(c.delimiter)

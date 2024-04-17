@@ -386,6 +386,15 @@ func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
 	return n.Index.InsertAfter(content.Index, children.Index)
 }
 
+// PurgeRHTNodes physically purges RHTNode that have been removed.
+func (n *TreeNode) PurgeRHTNodes(ticket *time.Ticket) (int, error) {
+	count, err := n.Attrs.purgeRemovedNodesBefore(ticket)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 // Tree represents the tree of CRDT. It has doubly linked list structure and
 // index tree structure.
 type Tree struct {
@@ -864,9 +873,6 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 					node.Attrs = NewRHT()
 				}
 
-				if err := node.Attrs.PurgeRemovedNodesBefore(editedAt); err != nil {
-					return
-				}
 				for key, value := range attributes {
 					node.Attrs.Set(key, value, editedAt)
 				}
@@ -880,15 +886,16 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 }
 
 // RemoveStyle removes the given attributes of the given range.
-func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, editedAt *time.Ticket) error {
+func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, editedAt *time.Ticket) ([]*TreeNode, error) {
+	nodeHasRemovedRHTNodes := make([]*TreeNode, 0)
 	// 01. split text nodes at the given range if needed.
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft,
@@ -899,21 +906,18 @@ func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, edite
 				if node.Attrs == nil {
 					node.Attrs = NewRHT()
 				}
-
-				if err := node.Attrs.PurgeRemovedNodesBefore(editedAt); err != nil {
-					return
-				}
-
 				for _, value := range attributesToRemove {
 					node.Attrs.Remove(value, editedAt)
 				}
+
+				nodeHasRemovedRHTNodes = append(nodeHasRemovedRHTNodes, node)
 			}
 		})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return nodeHasRemovedRHTNodes, nil
 }
 
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and

@@ -89,8 +89,13 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 	if len(e.attributes) > 0 {
 		return obj.Style(e.from, e.to, e.attributes, e.executedAt)
 	}
-
-	return obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
+	nodes, err := obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
+	if err == nil {
+		for _, node := range nodes {
+			root.RegisterNodeHasRemovedRHTNodes(*node)
+		}
+	}
+	return err
 }
 
 // FromPos returns the start point of the editing range.
