@@ -383,6 +383,34 @@ func TestGarbageCollection(t *testing.T) {
 		assert.Equal(t, 6, d2.GarbageLen())
 	})
 
+	t.Run("garbage collection for tree remove style", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+
+		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "root",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+					{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+				},
+			})
+			assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, root.GetTree("t").ToXML())
+
+			return nil
+		})
+		assert.NoError(t, err)
+
+		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyle(4, 8, []string{"italic"})
+			assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, root.GetTree("t").ToXML())
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, doc.GarbageLen(), 1)
+		assert.Equal(t, doc.GarbageCollect(time.MaxTicket), 1)
+		assert.Equal(t, doc.GarbageLen(), 0)
+	})
+
 	t.Run("GarbageLen should return the actual number of elements garbage-collected", func(t *testing.T) {
 		ctx := context.Background()
 		docKey := helper.TestDocKey(t)
