@@ -118,6 +118,10 @@ func NewTreeNode(id *TreeNodeID, nodeType string, attributes *RHT, value ...stri
 		node.Value = value[0]
 	}
 	node.Attrs = attributes
+	//if attributes != nil {
+	//	_ = node.Attrs.PurgeRemovedNodesBefore(id.CreatedAt)
+	//}
+
 	node.Index = index.NewNode(nodeType, node)
 
 	return node
@@ -864,6 +868,9 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 					node.Attrs = NewRHT()
 				}
 
+				if err := node.Attrs.PurgeRemovedNodesBefore(editedAt); err != nil {
+					return
+				}
 				for key, value := range attributes {
 					node.Attrs.Set(key, value, editedAt)
 				}
@@ -896,6 +903,11 @@ func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, edite
 				if node.Attrs == nil {
 					node.Attrs = NewRHT()
 				}
+
+				if err := node.Attrs.PurgeRemovedNodesBefore(editedAt); err != nil {
+					return
+				}
+
 				for _, value := range attributesToRemove {
 					node.Attrs.Remove(value, editedAt)
 				}
