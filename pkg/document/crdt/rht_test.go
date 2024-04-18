@@ -141,84 +141,103 @@ func TestRHT_Remove(t *testing.T) {
 	key2, val2, val22 := `key2`, `value2`, `value22`
 
 	tests := []struct {
-		desc       string
-		insertKey  []string
-		insertVal  []string
-		deleteKey  []string
-		deleteVal  []string
-		expectXML  string
-		expectJSON string
-		expectSize int
+		desc            string
+		insertKey       []string
+		insertVal       []string
+		deleteKey       []string
+		deleteVal       []string
+		expectXML       string
+		expectJSON      string
+		expectSize      int
+		expectTotalSize int
 	}{
 		{
-			desc:       `1. set elements`,
-			insertKey:  []string{key1, key2},
-			insertVal:  []string{val1, val2},
-			deleteKey:  []string{},
-			deleteVal:  []string{},
-			expectXML:  `key1="value1" key2="value2"`,
-			expectJSON: `{"key1":"value1","key2":"value2"}`,
-			expectSize: 2,
+			desc:            `1. set single element`,
+			insertKey:       []string{key1},
+			insertVal:       []string{val1},
+			deleteKey:       []string{},
+			deleteVal:       []string{},
+			expectXML:       `key1="value1"`,
+			expectJSON:      `{"key1":"value1"}`,
+			expectSize:      1,
+			expectTotalSize: 1,
 		},
 		{
-			desc:       `2. remove element`,
-			insertKey:  []string{},
-			insertVal:  []string{},
-			deleteKey:  []string{key1},
-			deleteVal:  []string{val1},
-			expectXML:  `key2="value2"`,
-			expectJSON: `{"key2":"value2"}`,
-			expectSize: 1,
+			desc:            `2. set another element`,
+			insertKey:       []string{key2},
+			insertVal:       []string{val2},
+			deleteKey:       []string{},
+			deleteVal:       []string{},
+			expectXML:       `key1="value1" key2="value2"`,
+			expectJSON:      `{"key1":"value1","key2":"value2"}`,
+			expectSize:      2,
+			expectTotalSize: 2,
 		},
 		{
-			desc:       `3. set after remove`,
-			insertKey:  []string{key1},
-			insertVal:  []string{val11},
-			deleteKey:  []string{},
-			deleteVal:  []string{},
-			expectXML:  `key1="value11" key2="value2"`,
-			expectJSON: `{"key1":"value11","key2":"value2"}`,
-			expectSize: 2,
+			desc:            `3. remove element`,
+			insertKey:       []string{},
+			insertVal:       []string{},
+			deleteKey:       []string{key1},
+			deleteVal:       []string{val1},
+			expectXML:       `key2="value2"`,
+			expectJSON:      `{"key2":"value2"}`,
+			expectSize:      1,
+			expectTotalSize: 2,
 		},
 		{
-			desc:       `4. remove element`,
-			insertKey:  []string{key2},
-			insertVal:  []string{val22},
-			deleteKey:  []string{key1},
-			deleteVal:  []string{val11},
-			expectXML:  `key2="value22"`,
-			expectJSON: `{"key2":"value22"}`,
-			expectSize: 1,
+			desc:            `4. set after remove`,
+			insertKey:       []string{key1},
+			insertVal:       []string{val11},
+			deleteKey:       []string{},
+			deleteVal:       []string{},
+			expectXML:       `key1="value11" key2="value2"`,
+			expectJSON:      `{"key1":"value11","key2":"value2"}`,
+			expectSize:      2,
+			expectTotalSize: 2,
 		},
 		{
-			desc:       `5. remove element again`,
-			insertKey:  []string{},
-			insertVal:  []string{},
-			deleteKey:  []string{key1},
-			deleteVal:  []string{val11},
-			expectXML:  `key2="value22"`,
-			expectJSON: `{"key2":"value22"}`,
-			expectSize: 1,
+			desc:            `5. remove element`,
+			insertKey:       []string{key2},
+			insertVal:       []string{val22},
+			deleteKey:       []string{key1},
+			deleteVal:       []string{val11},
+			expectXML:       `key2="value22"`,
+			expectJSON:      `{"key2":"value22"}`,
+			expectSize:      1,
+			expectTotalSize: 2,
 		},
 		{
-			desc:       `6. remove element(cleared)`,
-			insertKey:  []string{},
-			insertVal:  []string{},
-			deleteKey:  []string{key2},
-			deleteVal:  []string{val22},
-			expectXML:  ``,
-			expectJSON: `{}`,
-			expectSize: 0,
+			desc:            `6. remove element again`,
+			insertKey:       []string{},
+			insertVal:       []string{},
+			deleteKey:       []string{key1},
+			deleteVal:       []string{val11},
+			expectXML:       `key2="value22"`,
+			expectJSON:      `{"key2":"value22"}`,
+			expectSize:      1,
+			expectTotalSize: 2,
 		},
 		{
-			desc:       `7. remove not exist key`,
-			insertKey:  []string{},
-			insertVal:  []string{},
-			deleteKey:  []string{`not-exist-key`},
-			deleteVal:  []string{``},
-			expectXML:  ``,
-			expectJSON: `{}`,
-			expectSize: 0,
+			desc:            `7. remove element(cleared)`,
+			insertKey:       []string{},
+			insertVal:       []string{},
+			deleteKey:       []string{key2},
+			deleteVal:       []string{val22},
+			expectXML:       ``,
+			expectJSON:      `{}`,
+			expectSize:      0,
+			expectTotalSize: 2,
+		},
+		{
+			desc:            `8. remove not exist key`,
+			insertKey:       []string{},
+			insertVal:       []string{},
+			deleteKey:       []string{`not-exist-key`},
+			deleteVal:       []string{``},
+			expectXML:       ``,
+			expectJSON:      `{}`,
+			expectSize:      0,
+			expectTotalSize: 2,
 		},
 	}
 
@@ -241,8 +260,8 @@ func TestRHT_Remove(t *testing.T) {
 			assert.Equal(t, tt.expectXML, rht.ToXML())
 			assert.Equal(t, tt.expectJSON, rht.Marshal())
 			assert.Equal(t, tt.expectSize, rht.Len())
-			//assert.Equal(t, tt.expectSize, len(rht.Nodes()))
 			assert.Equal(t, tt.expectSize, len(rht.Elements()))
+			assert.Equal(t, tt.expectTotalSize, len(rht.Nodes()))
 		})
 	}
 }
