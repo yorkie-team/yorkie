@@ -7,6 +7,22 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.17] - 2024-04-19
+
+### Added
+
+- Support NCP ALB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/835
+
+### Changed
+
+- Move Client.Watch inside Client.Attach by @krapie in https://github.com/yorkie-team/yorkie/pull/803
+- Use DBConnectionURI directly by @hackerwins in https://github.com/yorkie-team/yorkie/pull/833
+- Move `istio-ingressgateway` to Yorkie Namespace by @krapie in https://github.com/yorkie-team/yorkie/pull/836
+
+### Fixed
+
+- Provide CODECOV_TOKEN to codecov-action by @hackerwins in https://github.com/yorkie-team/yorkie/pull/843
+
 ## [0.4.16] - 2024-03-29
 
 ### Fixed
