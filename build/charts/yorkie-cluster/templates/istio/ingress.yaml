@@ -17,7 +17,7 @@ metadata:
   {{ if .Values.ingress.ncpAlb.enabled }}
   annotations:
     # Set alb.ingress.kubernetes.io/ssl-certificate-no annotation to TLS certificate's number issued by NCP
-    alb.ingress.kubernetes.io/ssl-certificate-no: {{ .Values.ingress.ncpAlb.certNo }}
+    alb.ingress.kubernetes.io/ssl-certificate-no: "{{ .Values.ingress.ncpAlb.certNo }}"
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     alb.ingress.kubernetes.io/backend-protocol: HTTP
