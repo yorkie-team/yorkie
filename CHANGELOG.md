@@ -7,6 +7,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.18] - 2024-04-23
+
+### Added
+
+- Support `yorkie-monitoring` and `yorkie-argocd` Charts on NCP by @krapie in https://github.com/yorkie-team/yorkie/pull/846
+
 ## [0.4.17] - 2024-04-19
 
 ### Added
