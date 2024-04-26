@@ -224,10 +224,12 @@ func (n *TreeNode) GetID() string {
 	return n.ID.toIDString()
 }
 
+// GetRemovedAt represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 func (n *TreeNode) GetRemovedAt() *time.Ticket {
 	return n.RemovedAt
 }
 
+// Parent represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 func (n *TreeNode) Parent() *TreeNode {
 	if n.Index.Parent == nil {
 		return nil
@@ -235,6 +237,7 @@ func (n *TreeNode) Parent() *TreeNode {
 	return n.Index.Parent.Value
 }
 
+// LiftUp represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 func (n *TreeNode) LiftUp(indexMap map[string]*IterableNode) {
 	par := n.Parent()
 	if par == nil {

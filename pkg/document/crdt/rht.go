@@ -69,11 +69,13 @@ func (n *RHTNode) UpdatedAt() *time.Ticket {
 	return n.updatedAt
 }
 
+// GetID represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 func (n *RHTNode) GetID() string {
 	return n.key
 	//return n.updatedAt.Key()
 }
 
+// GetRemovedAt represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 func (n *RHTNode) GetRemovedAt() *time.Ticket {
 	if n.isRemoved {
 		return n.updatedAt
@@ -119,17 +121,30 @@ func (rht *RHT) Has(key string) bool {
 
 // Set sets the value of the given key.
 func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
-	rht.nodeMapByKey[k] = newRHTNode(k, v, executedAt, false)
+	node, ok := rht.nodeMapByKey[k]
+
+	newNode := newRHTNode(k, v, executedAt, false)
+	if !ok || executedAt.After(node.updatedAt) {
+		rht.nodeMapByKey[k] = newNode
+	}
 }
 
 // Remove removes the Element of the given key.
 func (rht *RHT) Remove(k string, executedAt *time.Ticket) *RHTNode {
-	node, ok := rht.nodeMapByKey[k]
-	if !ok || !node.Remove(executedAt) {
-		return nil
+	if node, ok := rht.nodeMapByKey[k]; !ok || node.Remove(executedAt) {
+		if !ok {
+			newNode := newRHTNode(k, ``, executedAt, true)
+			rht.nodeMapByKey[k] = newNode
+
+			return newNode
+		}
+		newNode := newRHTNode(k, node.val, executedAt, true)
+		rht.nodeMapByKey[k] = newNode
+
+		return newNode
 	}
 
-	return node
+	return nil
 }
 
 // Elements returns a map of elements because the map easy to use for loop.

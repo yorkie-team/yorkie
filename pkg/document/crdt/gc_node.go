@@ -2,6 +2,7 @@ package crdt
 
 import "github.com/yorkie-team/yorkie/pkg/document/time"
 
+// GCNode represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 type GCNode interface {
 	// GetID returns id.
 	GetID() string
@@ -9,6 +10,7 @@ type GCNode interface {
 	Purge(ticket *time.Ticket) (int, error)
 }
 
+// IterableNode represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 type IterableNode struct {
 	GCNode
 	value     interface{}
@@ -17,6 +19,7 @@ type IterableNode struct {
 	removedAt *time.Ticket
 }
 
+// NewIterableNode represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 func NewIterableNode(value interface{}) *IterableNode {
 	ret := &IterableNode{
 		value:    value,
@@ -31,6 +34,7 @@ func NewIterableNode(value interface{}) *IterableNode {
 	return ret
 }
 
+// GetID represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 func (n *IterableNode) GetID() string {
 	if gcNode, ok := n.value.(GCNode); ok {
 		return gcNode.GetID()
@@ -38,6 +42,7 @@ func (n *IterableNode) GetID() string {
 	return ""
 }
 
+// GetRemovedAt represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 func (n *IterableNode) GetRemovedAt() *time.Ticket {
 	if gcNode, ok := n.value.(GCNode); ok {
 		return gcNode.GetRemovedAt()
@@ -45,6 +50,7 @@ func (n *IterableNode) GetRemovedAt() *time.Ticket {
 	return nil
 }
 
+// AddChild represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 func (n *IterableNode) AddChild(child interface{}) {
 	childNode, ok := child.(*IterableNode)
 	if ok {
@@ -53,6 +59,7 @@ func (n *IterableNode) AddChild(child interface{}) {
 	}
 }
 
+// Purge represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 func (n *IterableNode) Purge(ticket *time.Ticket) (int, error) {
 	if gcNode, ok := n.value.(GCNode); ok {
 		return gcNode.Purge(ticket)

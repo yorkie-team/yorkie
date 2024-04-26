@@ -237,7 +237,7 @@ func TestRHT_Remove(t *testing.T) {
 			expectXML:       ``,
 			expectJSON:      `{}`,
 			expectSize:      0,
-			expectTotalSize: 2,
+			expectTotalSize: 3,
 		},
 	}
 

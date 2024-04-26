@@ -29,6 +29,7 @@ type ElementPair struct {
 	elem   Element
 }
 
+// GCPair represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
 type GCPair struct {
 	parent GCNode
 	child  GCNode
@@ -161,7 +162,7 @@ func (r *Root) DeepCopy() (*Root, error) {
 	return NewRoot(copiedObject.(*Object)), nil
 }
 
-func (r *Root) BuildTree() {
+func (r *Root) buildTree() {
 	for _, pair := range r.gcNodePairMapByID {
 		child := NewIterableNode(pair.child)
 		r.indexMap[pair.child.GetID()] = child
@@ -195,7 +196,8 @@ func (r *Root) traverseForGC(cur *IterableNode, ticket *time.Ticket) (int, error
 				return 0, err2
 			}
 			ret += _add2
-			if ticket.After(nxt.GetRemovedAt()) {
+			rm := nxt.GetRemovedAt()
+			if rm != nil && ticket.After(nxt.GetRemovedAt()) {
 				delete(r.gcNodePairMapByID, nxt.GetID())
 			}
 		}
@@ -207,7 +209,7 @@ func (r *Root) traverseForGC(cur *IterableNode, ticket *time.Ticket) (int, error
 // GarbageCollect purge elements that were removed before the given time.
 func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	count := 0
-	r.BuildTree()
+	r.buildTree()
 	for _, node := range r.indexMap {
 		if node.par == nil {
 			// TODO: do traverse from here
