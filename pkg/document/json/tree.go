@@ -270,7 +270,10 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	))
 
 	for _, node := range nodes {
-		t.context.RegisterNodeHasRemovedRHTNodes(*node)
+		for _, rhtNode := range node.Attrs.Nodes() {
+			t.context.RegisterGCNodePairMapByID(node, rhtNode)
+		}
+		//t.context.RegisterNodeHasRemovedRHTNodes(*node)
 	}
 
 	return true

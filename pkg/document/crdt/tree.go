@@ -45,6 +45,7 @@ type TreeNodeForTest struct {
 
 // TreeNode is a node of Tree.
 type TreeNode struct {
+	GCNode
 	Index *index.Node[*TreeNode]
 
 	ID        *TreeNodeID
@@ -218,6 +219,38 @@ func (n *TreeNode) Child(offset int) (*TreeNode, error) {
 	return child.Value, nil
 }
 
+// GetID returns id.
+func (n *TreeNode) GetID() string {
+	return n.ID.toIDString()
+}
+
+func (n *TreeNode) GetRemovedAt() *time.Ticket {
+	return n.RemovedAt
+}
+
+func (n *TreeNode) Parent() *TreeNode {
+	if n.Index.Parent == nil {
+		return nil
+	}
+	return n.Index.Parent.Value
+}
+
+func (n *TreeNode) LiftUp(indexMap map[string]*IterableNode) {
+	par := n.Parent()
+	if par == nil {
+		return
+	}
+	parentNode, ok := indexMap[par.GetID()]
+	if ok {
+		return
+	}
+	parentNode = NewIterableNode(par)
+	indexMap[par.GetID()] = parentNode
+	// TODO: How to handle generic or template?
+	parentNode.AddChild(n)
+	par.LiftUp(indexMap)
+}
+
 // Split splits the node at the given offset.
 func (n *TreeNode) Split(tree *Tree, offset int, issueTimeTicket func() *time.Ticket) error {
 	var split *TreeNode
@@ -386,8 +419,8 @@ func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
 	return n.Index.InsertAfter(content.Index, children.Index)
 }
 
-// PurgeRHTNodes physically purges RHTNode that have been removed.
-func (n *TreeNode) PurgeRHTNodes(ticket *time.Ticket) (int, error) {
+// Purge physically purges RHTNode that have been removed.
+func (n *TreeNode) Purge(ticket *time.Ticket) (int, error) {
 	count, err := n.Attrs.purgeRemovedNodesBefore(ticket)
 	if err != nil {
 		return 0, err

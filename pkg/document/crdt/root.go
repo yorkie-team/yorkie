@@ -29,6 +29,11 @@ type ElementPair struct {
 	elem   Element
 }
 
+type GCPair struct {
+	parent GCNode
+	child  GCNode
+}
+
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
 // received from server.
@@ -41,6 +46,8 @@ type Root struct {
 	removedElementPairMapByCreatedAt     map[string]ElementPair
 	elementHasRemovedNodesSetByCreatedAt map[string]GCElement
 	nodeHasRemovedRHTNodesSetByID        map[string]TreeNode
+	gcNodePairMapByID                    map[string]GCPair
+	indexMap                             map[string]*IterableNode
 }
 
 // NewRoot creates a new instance of Root.
@@ -50,6 +57,8 @@ func NewRoot(root *Object) *Root {
 		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
 		elementHasRemovedNodesSetByCreatedAt: make(map[string]GCElement),
 		nodeHasRemovedRHTNodesSetByID:        make(map[string]TreeNode),
+		gcNodePairMapByID:                    make(map[string]GCPair),
+		indexMap:                             make(map[string]*IterableNode),
 	}
 
 	r.object = root
@@ -135,6 +144,14 @@ func (r *Root) RegisterNodeHasRemovedRHTNodes(treeNode TreeNode) {
 	r.nodeHasRemovedRHTNodesSetByID[treeNode.ID.toIDString()] = treeNode
 }
 
+// RegisterGCNodePairMapByID register TODO.
+func (r *Root) RegisterGCNodePairMapByID(parent GCNode, child GCNode) {
+	r.gcNodePairMapByID[child.GetID()] = GCPair{
+		parent,
+		child,
+	}
+}
+
 // DeepCopy copies itself deeply.
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
@@ -144,10 +161,64 @@ func (r *Root) DeepCopy() (*Root, error) {
 	return NewRoot(copiedObject.(*Object)), nil
 }
 
+func (r *Root) BuildTree() {
+	for _, pair := range r.gcNodePairMapByID {
+		child := NewIterableNode(pair.child)
+		r.indexMap[pair.child.GetID()] = child
+		parentNode, ok := r.indexMap[pair.parent.GetID()]
+		if !ok {
+			// need to make parent node
+			parentNode = NewIterableNode(pair.parent)
+			r.indexMap[pair.parent.GetID()] = parentNode
+		}
+		parentNode.AddChild(child)
+		switch node := pair.parent.(type) {
+		case *TreeNode:
+			node.LiftUp(r.indexMap)
+		}
+	}
+}
+
+func (r *Root) traverseForGC(cur *IterableNode, ticket *time.Ticket) (int, error) {
+	var ret = 0
+	if _, ok := r.gcNodePairMapByID[cur.GetID()]; ok {
+		ret++
+	}
+	for _, nxt := range cur.children {
+		_, err := r.traverseForGC(nxt, ticket)
+		if err != nil {
+			return 0, err
+		}
+		if _, ok := r.gcNodePairMapByID[nxt.GetID()]; ok {
+			_add2, err2 := cur.Purge(ticket)
+			if err2 != nil {
+				return 0, err2
+			}
+			ret += _add2
+			if ticket.After(nxt.GetRemovedAt()) {
+				delete(r.gcNodePairMapByID, nxt.GetID())
+			}
+		}
+	}
+
+	return ret, nil
+}
+
 // GarbageCollect purge elements that were removed before the given time.
 func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	count := 0
-
+	r.BuildTree()
+	for _, node := range r.indexMap {
+		if node.par == nil {
+			// TODO: do traverse from here
+			_add, err := r.traverseForGC(node, ticket)
+			if err != nil {
+				return 0, err
+			}
+			count += _add
+			//fmt.Println("found root")
+		}
+	}
 	for _, pair := range r.removedElementPairMapByCreatedAt {
 		if pair.elem.RemovedAt() != nil && ticket.Compare(pair.elem.RemovedAt()) >= 0 {
 			if err := pair.parent.Purge(pair.elem); err != nil {
@@ -158,17 +229,17 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 		}
 	}
 
-	for _, node := range r.nodeHasRemovedRHTNodesSetByID {
-		purgedRHTNodes, err := node.PurgeRHTNodes(ticket)
-		if err != nil {
-			return 0, err
-		}
-
-		if purgedRHTNodes > 0 {
-			delete(r.nodeHasRemovedRHTNodesSetByID, node.ID.toIDString())
-		}
-		count += purgedRHTNodes
-	}
+	//for _, node := range r.nodeHasRemovedRHTNodesSetByID {
+	//	purgedRHTNodes, err := node.PurgeRHTNodes(ticket)
+	//	if err != nil {
+	//		return 0, err
+	//	}
+	//
+	//	if purgedRHTNodes > 0 {
+	//		delete(r.nodeHasRemovedRHTNodesSetByID, node.ID.toIDString())
+	//	}
+	//	count += purgedRHTNodes
+	//}
 
 	for _, node := range r.elementHasRemovedNodesSetByCreatedAt {
 		purgedNodes, err := node.purgeRemovedNodesBefore(ticket)
@@ -213,10 +284,10 @@ func (r *Root) GarbageLen() int {
 	}
 
 	count += len(seen)
-
-	for _, node := range r.nodeHasRemovedRHTNodesSetByID {
-		count += node.Attrs.removedNodesLen()
-	}
+	count += len(r.gcNodePairMapByID)
+	//for _, node := range r.nodeHasRemovedRHTNodesSetByID {
+	//	count += node.Attrs.removedNodesLen()
+	//}
 
 	for _, element := range r.elementHasRemovedNodesSetByCreatedAt {
 		count += element.removedNodesLen()

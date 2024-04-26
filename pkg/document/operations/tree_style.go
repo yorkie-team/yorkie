@@ -92,7 +92,10 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 	nodes, err := obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
 	if err == nil {
 		for _, node := range nodes {
-			root.RegisterNodeHasRemovedRHTNodes(*node)
+			for _, rhtNode := range node.Attrs.Nodes() {
+				root.RegisterGCNodePairMapByID(node, rhtNode)
+			}
+			//root.RegisterNodeHasRemovedRHTNodes(*node)
 		}
 	}
 	return err

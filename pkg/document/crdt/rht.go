@@ -26,6 +26,7 @@ import (
 
 // RHTNode is a node of RHT(Replicated Hashtable).
 type RHTNode struct {
+	GCNode
 	key       string
 	val       string
 	updatedAt *time.Ticket
@@ -66,6 +67,18 @@ func (n *RHTNode) Value() string {
 // UpdatedAt returns the last update time.
 func (n *RHTNode) UpdatedAt() *time.Ticket {
 	return n.updatedAt
+}
+
+func (n *RHTNode) GetID() string {
+	return n.key
+	//return n.updatedAt.Key()
+}
+
+func (n *RHTNode) GetRemovedAt() *time.Ticket {
+	if n.isRemoved {
+		return n.updatedAt
+	}
+	return nil
 }
 
 // RHT is a hashtable with logical clock(Replicated hashtable).

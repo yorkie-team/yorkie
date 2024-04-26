@@ -90,6 +90,11 @@ func (c *Context) RegisterNodeHasRemovedRHTNodes(treeNode crdt.TreeNode) {
 	c.root.RegisterNodeHasRemovedRHTNodes(treeNode)
 }
 
+// RegisterGCNodePairMapByID register TODO.
+func (c *Context) RegisterGCNodePairMapByID(parent crdt.GCNode, child crdt.GCNode) {
+	c.root.RegisterGCNodePairMapByID(parent, child)
+}
+
 // LastTimeTicket returns the last time ticket issued by this context.
 func (c *Context) LastTimeTicket() *time.Ticket {
 	return c.id.NewTimeTicket(c.delimiter)
