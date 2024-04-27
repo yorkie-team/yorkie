@@ -95,7 +95,6 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 			for _, rhtNode := range node.Attrs.Nodes() {
 				root.RegisterGCNodePairMapByID(node, rhtNode)
 			}
-			//root.RegisterNodeHasRemovedRHTNodes(*node)
 		}
 	}
 	return err

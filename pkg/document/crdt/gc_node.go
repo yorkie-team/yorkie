@@ -2,7 +2,7 @@ package crdt
 
 import "github.com/yorkie-team/yorkie/pkg/document/time"
 
-// GCNode represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// GCNode represents a common node with GC.
 type GCNode interface {
 	// GetID returns id.
 	GetID() string
@@ -10,7 +10,7 @@ type GCNode interface {
 	Purge(ticket *time.Ticket) (int, error)
 }
 
-// IterableNode represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// IterableNode is a node type for generalized garbage collection.
 type IterableNode struct {
 	GCNode
 	value     interface{}
@@ -19,7 +19,7 @@ type IterableNode struct {
 	removedAt *time.Ticket
 }
 
-// NewIterableNode represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// NewIterableNode creates a new instance of IterableNode.
 func NewIterableNode(value interface{}) *IterableNode {
 	ret := &IterableNode{
 		value:    value,
@@ -34,7 +34,7 @@ func NewIterableNode(value interface{}) *IterableNode {
 	return ret
 }
 
-// GetID represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// GetID returns the ID of this IterableNode.
 func (n *IterableNode) GetID() string {
 	if gcNode, ok := n.value.(GCNode); ok {
 		return gcNode.GetID()
@@ -42,7 +42,7 @@ func (n *IterableNode) GetID() string {
 	return ""
 }
 
-// GetRemovedAt represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// GetRemovedAt returns the removal time of this IterableNode.
 func (n *IterableNode) GetRemovedAt() *time.Ticket {
 	if gcNode, ok := n.value.(GCNode); ok {
 		return gcNode.GetRemovedAt()
@@ -50,7 +50,7 @@ func (n *IterableNode) GetRemovedAt() *time.Ticket {
 	return nil
 }
 
-// AddChild represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// AddChild appends the given node to the end of the children.
 func (n *IterableNode) AddChild(child interface{}) {
 	childNode, ok := child.(*IterableNode)
 	if ok {
@@ -59,7 +59,7 @@ func (n *IterableNode) AddChild(child interface{}) {
 	}
 }
 
-// Purge represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// Purge physically purges IterableNode that have been removed.
 func (n *IterableNode) Purge(ticket *time.Ticket) (int, error) {
 	if gcNode, ok := n.value.(GCNode); ok {
 		return gcNode.Purge(ticket)

@@ -69,13 +69,13 @@ func (n *RHTNode) UpdatedAt() *time.Ticket {
 	return n.updatedAt
 }
 
-// GetID represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// GetID returns the ID of this RHTNode.
 func (n *RHTNode) GetID() string {
-	return n.key
+	return n.key + n.updatedAt.ToTestString()
 	//return n.updatedAt.Key()
 }
 
-// GetRemovedAt represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// GetRemovedAt returns the removal time of this RHTNode.
 func (n *RHTNode) GetRemovedAt() *time.Ticket {
 	if n.isRemoved {
 		return n.updatedAt

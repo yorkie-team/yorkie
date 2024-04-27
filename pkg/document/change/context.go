@@ -85,11 +85,6 @@ func (c *Context) RegisterElementHasRemovedNodes(element crdt.GCElement) {
 	c.root.RegisterElementHasRemovedNodes(element)
 }
 
-// RegisterNodeHasRemovedRHTNodes register the given element with garbage to hash table.
-func (c *Context) RegisterNodeHasRemovedRHTNodes(treeNode crdt.TreeNode) {
-	c.root.RegisterNodeHasRemovedRHTNodes(treeNode)
-}
-
 // RegisterGCNodePairMapByID register TODO.
 func (c *Context) RegisterGCNodePairMapByID(parent crdt.GCNode, child crdt.GCNode) {
 	c.root.RegisterGCNodePairMapByID(parent, child)

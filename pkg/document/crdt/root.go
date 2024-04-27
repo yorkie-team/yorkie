@@ -46,7 +46,6 @@ type Root struct {
 	elementMapByCreatedAt                map[string]Element
 	removedElementPairMapByCreatedAt     map[string]ElementPair
 	elementHasRemovedNodesSetByCreatedAt map[string]GCElement
-	nodeHasRemovedRHTNodesSetByID        map[string]TreeNode
 	gcNodePairMapByID                    map[string]GCPair
 	indexMap                             map[string]*IterableNode
 }
@@ -57,7 +56,6 @@ func NewRoot(root *Object) *Root {
 		elementMapByCreatedAt:                make(map[string]Element),
 		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
 		elementHasRemovedNodesSetByCreatedAt: make(map[string]GCElement),
-		nodeHasRemovedRHTNodesSetByID:        make(map[string]TreeNode),
 		gcNodePairMapByID:                    make(map[string]GCPair),
 		indexMap:                             make(map[string]*IterableNode),
 	}
@@ -140,12 +138,7 @@ func (r *Root) RegisterElementHasRemovedNodes(element GCElement) {
 	r.elementHasRemovedNodesSetByCreatedAt[element.CreatedAt().Key()] = element
 }
 
-// RegisterNodeHasRemovedRHTNodes register the given element with garbage to hash table.
-func (r *Root) RegisterNodeHasRemovedRHTNodes(treeNode TreeNode) {
-	r.nodeHasRemovedRHTNodesSetByID[treeNode.ID.toIDString()] = treeNode
-}
-
-// RegisterGCNodePairMapByID register TODO.
+// RegisterGCNodePairMapByID register the given GCNode pair to hash table.
 func (r *Root) RegisterGCNodePairMapByID(parent GCNode, child GCNode) {
 	r.gcNodePairMapByID[child.GetID()] = GCPair{
 		parent,
@@ -175,7 +168,7 @@ func (r *Root) buildTree() {
 		parentNode.AddChild(child)
 		switch node := pair.parent.(type) {
 		case *TreeNode:
-			node.LiftUp(r.indexMap)
+			node.liftUp(r.indexMap)
 		}
 	}
 }

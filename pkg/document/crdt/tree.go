@@ -224,12 +224,12 @@ func (n *TreeNode) GetID() string {
 	return n.ID.toIDString()
 }
 
-// GetRemovedAt represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// GetRemovedAt returns the removal time of this TreeNode.
 func (n *TreeNode) GetRemovedAt() *time.Ticket {
 	return n.RemovedAt
 }
 
-// Parent represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// Parent returns the parent of this TreeNode.
 func (n *TreeNode) Parent() *TreeNode {
 	if n.Index.Parent == nil {
 		return nil
@@ -237,8 +237,8 @@ func (n *TreeNode) Parent() *TreeNode {
 	return n.Index.Parent.Value
 }
 
-// LiftUp represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
-func (n *TreeNode) LiftUp(indexMap map[string]*IterableNode) {
+// liftUp builds a subgraph of tree for garbage collection from the bottom up.
+func (n *TreeNode) liftUp(indexMap map[string]*IterableNode) {
 	par := n.Parent()
 	if par == nil {
 		return
@@ -249,9 +249,8 @@ func (n *TreeNode) LiftUp(indexMap map[string]*IterableNode) {
 	}
 	parentNode = NewIterableNode(par)
 	indexMap[par.GetID()] = parentNode
-	// TODO: How to handle generic or template?
 	parentNode.AddChild(n)
-	par.LiftUp(indexMap)
+	par.liftUp(indexMap)
 }
 
 // Split splits the node at the given offset.
