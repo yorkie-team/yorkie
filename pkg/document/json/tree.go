@@ -271,7 +271,9 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 
 	for _, node := range nodes {
 		for _, rhtNode := range node.Attrs.Nodes() {
-			t.context.RegisterGCNodePairMapByID(node, rhtNode)
+			if removedAt := rhtNode.GetRemovedAt(); removedAt != nil && removedAt.Compare(ticket) == 0 {
+				t.context.RegisterGCNodePairMapByID(node, rhtNode)
+			}
 		}
 	}
 

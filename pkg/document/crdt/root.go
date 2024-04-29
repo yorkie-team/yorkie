@@ -29,7 +29,8 @@ type ElementPair struct {
 	elem   Element
 }
 
-// GCPair represents ..writing comment is one of the hardest work for me, so I left temporarily left as TODO.
+// GCPair represents pair that has a parent GCNode and child GCNode.
+// Actual GC target is child GCNode.
 type GCPair struct {
 	parent GCNode
 	child  GCNode
@@ -175,22 +176,23 @@ func (r *Root) buildTree() {
 
 func (r *Root) traverseForGC(cur *IterableNode, ticket *time.Ticket) (int, error) {
 	var ret = 0
-	if _, ok := r.gcNodePairMapByID[cur.GetID()]; ok {
-		ret++
-	}
+	//if _, ok := r.gcNodePairMapByID[cur.GetID()]; ok {
+	//	ret++
+	//}
 	for _, nxt := range cur.children {
+		// 순회를 먼저 하여 아래쪽 노드가 먼저 제거되도록 함.
 		_, err := r.traverseForGC(nxt, ticket)
 		if err != nil {
 			return 0, err
 		}
+		// GC 수행.
 		if _, ok := r.gcNodePairMapByID[nxt.GetID()]; ok {
-			_add2, err2 := cur.Purge(ticket)
-			if err2 != nil {
-				return 0, err2
+			count, err := cur.Purge(ticket)
+			if err != nil {
+				return 0, err
 			}
-			ret += _add2
-			rm := nxt.GetRemovedAt()
-			if rm != nil && ticket.After(nxt.GetRemovedAt()) {
+			ret += count
+			if removedAt := nxt.GetRemovedAt(); removedAt != nil && ticket.After(removedAt) {
 				delete(r.gcNodePairMapByID, nxt.GetID())
 			}
 		}
@@ -205,13 +207,11 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	r.buildTree()
 	for _, node := range r.indexMap {
 		if node.par == nil {
-			// TODO: do traverse from here
 			_add, err := r.traverseForGC(node, ticket)
 			if err != nil {
 				return 0, err
 			}
 			count += _add
-			//fmt.Println("found root")
 		}
 	}
 	for _, pair := range r.removedElementPairMapByCreatedAt {
@@ -223,18 +223,6 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 			count += r.deregisterElement(pair.elem)
 		}
 	}
-
-	//for _, node := range r.nodeHasRemovedRHTNodesSetByID {
-	//	purgedRHTNodes, err := node.PurgeRHTNodes(ticket)
-	//	if err != nil {
-	//		return 0, err
-	//	}
-	//
-	//	if purgedRHTNodes > 0 {
-	//		delete(r.nodeHasRemovedRHTNodesSetByID, node.ID.toIDString())
-	//	}
-	//	count += purgedRHTNodes
-	//}
 
 	for _, node := range r.elementHasRemovedNodesSetByCreatedAt {
 		purgedNodes, err := node.purgeRemovedNodesBefore(ticket)
@@ -279,10 +267,8 @@ func (r *Root) GarbageLen() int {
 	}
 
 	count += len(seen)
+
 	count += len(r.gcNodePairMapByID)
-	//for _, node := range r.nodeHasRemovedRHTNodesSetByID {
-	//	count += node.Attrs.removedNodesLen()
-	//}
 
 	for _, element := range r.elementHasRemovedNodesSetByCreatedAt {
 		count += element.removedNodesLen()

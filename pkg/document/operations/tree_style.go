@@ -93,9 +93,12 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 	if err == nil {
 		for _, node := range nodes {
 			for _, rhtNode := range node.Attrs.Nodes() {
-				root.RegisterGCNodePairMapByID(node, rhtNode)
+				if removedAt := rhtNode.GetRemovedAt(); removedAt != nil && removedAt.Compare(e.executedAt) == 0 {
+					root.RegisterGCNodePairMapByID(node, rhtNode)
+				}
 			}
 		}
+		return nil
 	}
 	return err
 }

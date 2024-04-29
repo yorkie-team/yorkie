@@ -391,10 +391,10 @@ func TestGarbageCollection(t *testing.T) {
 				Type: "root",
 				Children: []json.TreeNode{
 					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
-					{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+					{Type: "p", Attributes: map[string]string{"italic": "true", "bold": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
 				},
 			})
-			assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, root.GetTree("t").ToXML())
+			assert.Equal(t, `<root><p>ab</p><p bold="true" italic="true">cd</p></root>`, root.GetTree("t").ToXML())
 
 			return nil
 		})
@@ -402,7 +402,7 @@ func TestGarbageCollection(t *testing.T) {
 
 		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").RemoveStyle(4, 8, []string{"italic"})
-			assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, root.GetTree("t").ToXML())
+			assert.Equal(t, `<root><p>ab</p><p bold="true">cd</p></root>`, root.GetTree("t").ToXML())
 			return nil
 		})
 		assert.NoError(t, err)
@@ -426,10 +426,10 @@ func TestGarbageCollection(t *testing.T) {
 				Type: "root",
 				Children: []json.TreeNode{
 					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
-					{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+					{Type: "p", Attributes: map[string]string{"bold": "true", "italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
 				},
 			})
-			assert.Equal(t, `<root><p>ab</p><p italic="true">cd</p></root>`, root.GetTree("t").ToXML())
+			assert.Equal(t, `<root><p>ab</p><p bold="true" italic="true">cd</p></root>`, root.GetTree("t").ToXML())
 
 			return nil
 		})
@@ -442,7 +442,7 @@ func TestGarbageCollection(t *testing.T) {
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").RemoveStyle(4, 8, []string{"italic"})
-			assert.Equal(t, `<root><p>ab</p><p>cd</p></root>`, root.GetTree("t").ToXML())
+			assert.Equal(t, `<root><p>ab</p><p bold="true">cd</p></root>`, root.GetTree("t").ToXML())
 			return nil
 		})
 		assert.NoError(t, err)
