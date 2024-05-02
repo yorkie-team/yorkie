@@ -255,7 +255,7 @@ func (n *TreeNode) liftUp(iterableNodeMap map[string]*IterableNode) {
 		par.liftUp(iterableNodeMap)
 	}
 
-	node := NewIterableNode(n)
+	node := iterableNodeMap[n.GetID()]
 	parentNode.AddChild(node)
 }
 
@@ -429,10 +429,15 @@ func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
 
 // Purge physically purges RHTNode that have been removed.
 func (n *TreeNode) Purge(ticket *time.Ticket) (int, error) {
+	if n.Attrs == nil {
+		return 0, nil
+	}
 	count, err := n.Attrs.purgeRemovedNodesBefore(ticket)
 	if err != nil {
 		return 0, err
 	}
+	// TODO(raararaara): This method must also purge children with type TreeNode.
+
 	return count, nil
 }
 

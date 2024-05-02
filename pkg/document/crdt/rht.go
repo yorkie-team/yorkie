@@ -82,6 +82,11 @@ func (n *RHTNode) GetRemovedAt() *time.Ticket {
 	return nil
 }
 
+// Purge physically purges children of given node.
+func (n *RHTNode) Purge(ticket *time.Ticket) (int, error) {
+	return 0, nil
+}
+
 // RHT is a hashtable with logical clock(Replicated hashtable).
 // For more details about RHT: http://csl.skku.edu/papers/jpdc11.pdf
 // NOTE(justiceHui): RHT and ElementRHT has duplicated functions.

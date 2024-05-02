@@ -35,12 +35,12 @@ func NewIterableNode(value GCNode) *IterableNode {
 	return ret
 }
 
-// GetID returns the ID of this IterableNode.
+// GetID returns the ID of this node.
 func (n *IterableNode) GetID() string {
 	return n.value.GetID()
 }
 
-// GetRemovedAt returns the removal time of this IterableNode.
+// GetRemovedAt returns the removal time of this node.
 func (n *IterableNode) GetRemovedAt() *time.Ticket {
 	return n.value.GetRemovedAt()
 }
@@ -51,7 +51,7 @@ func (n *IterableNode) AddChild(child *IterableNode) {
 	n.children = append(n.children, child)
 }
 
-// Purge physically purges IterableNode that have been removed.
+// Purge physically purges children of given node that have been removed.
 func (n *IterableNode) Purge(ticket *time.Ticket) (int, error) {
 	return n.value.Purge(ticket)
 }

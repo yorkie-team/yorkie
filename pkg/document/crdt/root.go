@@ -178,38 +178,42 @@ func (r *Root) buildTreeForGC() map[string]*IterableNode {
 	return iterableNodeMap
 }
 
-func (r *Root) traverseForGC(currentNode *IterableNode, ticket *time.Ticket) (int, error) {
+func (r *Root) traverseForGC(currentNode *IterableNode, iterableNodeMap map[string]*IterableNode, ticket *time.Ticket) (int, error) {
 	var totalPurged = 0
 	for _, child := range currentNode.children {
-		_, err := r.traverseForGC(child, ticket)
+		count, err := r.traverseForGC(child, iterableNodeMap, ticket)
 		if err != nil {
 			return 0, err
 		}
-		// GC 수행.
-		if _, ok := r.gcNodePairMapByID[child.GetID()]; ok {
-			count, err := currentNode.Purge(ticket)
-			if err != nil {
-				return 0, err
-			}
 
-			totalPurged += count
+		totalPurged += count
+	}
+	count, err := currentNode.Purge(ticket)
+	if err != nil {
+		return 0, err
+	}
 
+	totalPurged += count
+
+	if count > 0 {
+		for _, child := range currentNode.children {
 			if removedAt := child.GetRemovedAt(); removedAt != nil && ticket.After(removedAt) {
 				delete(r.gcNodePairMapByID, child.GetID())
 			}
 		}
 	}
 
+	delete(iterableNodeMap, currentNode.GetID())
 	return totalPurged, nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
 func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	count := 0
-	indexMap := r.buildTreeForGC()
-	for _, node := range indexMap {
+	iterableNodeMap := r.buildTreeForGC()
+	for _, node := range iterableNodeMap {
 		if node.par == nil {
-			purgedNodes, err := r.traverseForGC(node, ticket)
+			purgedNodes, err := r.traverseForGC(node, iterableNodeMap, ticket)
 			if err != nil {
 				return 0, err
 			}
