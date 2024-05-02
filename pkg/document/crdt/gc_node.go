@@ -4,9 +4,11 @@ import "github.com/yorkie-team/yorkie/pkg/document/time"
 
 // GCNode represents a common node with GC.
 type GCNode interface {
-	// GetID returns id.
+	// GetID returns the IDString of this node.
 	GetID() string
+	// GetRemovedAt returns the removal time of this node.
 	GetRemovedAt() *time.Ticket
+	// Purge physically purges children of given node.
 	Purge(ticket *time.Ticket) (int, error)
 }
 

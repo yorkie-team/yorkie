@@ -85,7 +85,7 @@ func (c *Context) RegisterElementHasRemovedNodes(element crdt.GCElement) {
 	c.root.RegisterElementHasRemovedNodes(element)
 }
 
-// RegisterGCNodePairMapByID register TODO.
+// RegisterGCNodePairMapByID register the given GCNode pair to hash table.
 func (c *Context) RegisterGCNodePairMapByID(parent crdt.GCNode, child crdt.GCNode) {
 	c.root.RegisterGCNodePairMapByID(parent, child)
 }

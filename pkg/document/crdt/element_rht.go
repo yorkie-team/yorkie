@@ -110,7 +110,7 @@ func (rht *ElementRHT) Set(k string, v Element) Element {
 	if !ok || v.CreatedAt().After(node.elem.CreatedAt()) {
 		rht.nodeMapByKey[k] = newNode
 	}
-
+	// TODO(raararaara): Overwritten node does not need to be purged.
 	return removed
 }
 

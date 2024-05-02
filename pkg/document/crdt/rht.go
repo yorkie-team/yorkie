@@ -69,13 +69,13 @@ func (n *RHTNode) UpdatedAt() *time.Ticket {
 	return n.updatedAt
 }
 
-// GetID returns the ID of this RHTNode.
+// GetID returns the IDString of this node.
 func (n *RHTNode) GetID() string {
 	return n.key + n.updatedAt.ToTestString()
 	//return n.updatedAt.Key()
 }
 
-// GetRemovedAt returns the removal time of this RHTNode.
+// GetRemovedAt returns the removal time of this node.
 func (n *RHTNode) GetRemovedAt() *time.Ticket {
 	if n.isRemoved {
 		return n.updatedAt
@@ -121,10 +121,8 @@ func (rht *RHT) Has(key string) bool {
 
 // Set sets the value of the given key.
 func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
-	node, ok := rht.nodeMapByKey[k]
-
-	newNode := newRHTNode(k, v, executedAt, false)
-	if !ok || executedAt.After(node.updatedAt) {
+	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
+		newNode := newRHTNode(k, v, executedAt, false)
 		rht.nodeMapByKey[k] = newNode
 	}
 }
@@ -169,18 +167,6 @@ func (rht *RHT) Nodes() []*RHTNode {
 	}
 
 	return nodes
-}
-
-// removedNodesLen returns the number of tombstone nodes.
-func (rht *RHT) removedNodesLen() int {
-	count := 0
-	for _, node := range rht.nodeMapByKey {
-		if node.isRemoved {
-			count++
-		}
-	}
-
-	return count
 }
 
 // purgeRemovedNodesBefore physically purges nodes that have been removed.

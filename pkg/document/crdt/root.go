@@ -48,7 +48,6 @@ type Root struct {
 	removedElementPairMapByCreatedAt     map[string]ElementPair
 	elementHasRemovedNodesSetByCreatedAt map[string]GCElement
 	gcNodePairMapByID                    map[string]GCPair
-	indexMap                             map[string]*IterableNode
 }
 
 // NewRoot creates a new instance of Root.
@@ -58,7 +57,6 @@ func NewRoot(root *Object) *Root {
 		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
 		elementHasRemovedNodesSetByCreatedAt: make(map[string]GCElement),
 		gcNodePairMapByID:                    make(map[string]GCPair),
-		indexMap:                             make(map[string]*IterableNode),
 	}
 
 	r.object = root
@@ -156,62 +154,66 @@ func (r *Root) DeepCopy() (*Root, error) {
 	return NewRoot(copiedObject.(*Object)), nil
 }
 
-func (r *Root) buildTree() {
+func (r *Root) buildTreeForGC() map[string]*IterableNode {
+	iterableNodeMap := make(map[string]*IterableNode)
 	for _, pair := range r.gcNodePairMapByID {
 		child := NewIterableNode(pair.child)
-		r.indexMap[pair.child.GetID()] = child
-		parentNode, ok := r.indexMap[pair.parent.GetID()]
-		if !ok {
-			// need to make parent node
+		iterableNodeMap[pair.child.GetID()] = child
+
+		parentID := pair.parent.GetID()
+		parentNode, exists := iterableNodeMap[parentID]
+		if !exists {
 			parentNode = NewIterableNode(pair.parent)
-			r.indexMap[pair.parent.GetID()] = parentNode
+			iterableNodeMap[parentID] = parentNode
 		}
+
 		parentNode.AddChild(child)
+
 		switch node := pair.parent.(type) {
 		case *TreeNode:
-			node.liftUp(r.indexMap)
+			node.liftUp(iterableNodeMap)
 		}
 	}
+
+	return iterableNodeMap
 }
 
-func (r *Root) traverseForGC(cur *IterableNode, ticket *time.Ticket) (int, error) {
-	var ret = 0
-	//if _, ok := r.gcNodePairMapByID[cur.GetID()]; ok {
-	//	ret++
-	//}
-	for _, nxt := range cur.children {
-		// 순회를 먼저 하여 아래쪽 노드가 먼저 제거되도록 함.
-		_, err := r.traverseForGC(nxt, ticket)
+func (r *Root) traverseForGC(currentNode *IterableNode, ticket *time.Ticket) (int, error) {
+	var totalPurged = 0
+	for _, child := range currentNode.children {
+		_, err := r.traverseForGC(child, ticket)
 		if err != nil {
 			return 0, err
 		}
 		// GC 수행.
-		if _, ok := r.gcNodePairMapByID[nxt.GetID()]; ok {
-			count, err := cur.Purge(ticket)
+		if _, ok := r.gcNodePairMapByID[child.GetID()]; ok {
+			count, err := currentNode.Purge(ticket)
 			if err != nil {
 				return 0, err
 			}
-			ret += count
-			if removedAt := nxt.GetRemovedAt(); removedAt != nil && ticket.After(removedAt) {
-				delete(r.gcNodePairMapByID, nxt.GetID())
+
+			totalPurged += count
+
+			if removedAt := child.GetRemovedAt(); removedAt != nil && ticket.After(removedAt) {
+				delete(r.gcNodePairMapByID, child.GetID())
 			}
 		}
 	}
 
-	return ret, nil
+	return totalPurged, nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
 func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	count := 0
-	r.buildTree()
-	for _, node := range r.indexMap {
+	indexMap := r.buildTreeForGC()
+	for _, node := range indexMap {
 		if node.par == nil {
-			_add, err := r.traverseForGC(node, ticket)
+			purgedNodes, err := r.traverseForGC(node, ticket)
 			if err != nil {
 				return 0, err
 			}
-			count += _add
+			count += purgedNodes
 		}
 	}
 	for _, pair := range r.removedElementPairMapByCreatedAt {

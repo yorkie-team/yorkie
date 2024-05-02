@@ -413,11 +413,12 @@ func TestGarbageCollection(t *testing.T) {
 
 	t.Run("garbage collection for tree remove style (multi clients)", func(t *testing.T) {
 		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
+		docKey := helper.TestDocKey(t)
+		d1 := document.New(docKey)
 		err := c1.Attach(ctx, d1)
 		assert.NoError(t, err)
 
-		d2 := document.New(helper.TestDocKey(t))
+		d2 := document.New(docKey)
 		err = c2.Attach(ctx, d2)
 		assert.NoError(t, err)
 

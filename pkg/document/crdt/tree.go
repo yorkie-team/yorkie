@@ -219,7 +219,7 @@ func (n *TreeNode) Child(offset int) (*TreeNode, error) {
 	return child.Value, nil
 }
 
-// GetID returns id.
+// GetID returns the IDString of this node.
 func (n *TreeNode) GetID() string {
 	return n.ID.toIDString()
 }
@@ -238,19 +238,25 @@ func (n *TreeNode) Parent() *TreeNode {
 }
 
 // liftUp builds a subgraph of tree for garbage collection from the bottom up.
-func (n *TreeNode) liftUp(indexMap map[string]*IterableNode) {
+func (n *TreeNode) liftUp(iterableNodeMap map[string]*IterableNode) {
+	if n == nil {
+		return
+	}
+
 	par := n.Parent()
 	if par == nil {
 		return
 	}
-	parentNode, ok := indexMap[par.GetID()]
-	if ok {
-		return
+
+	parentID := par.GetID()
+	parentNode, exists := iterableNodeMap[parentID]
+	if !exists {
+		parentNode = NewIterableNode(par)
+		iterableNodeMap[parentID] = parentNode
+		par.liftUp(iterableNodeMap)
 	}
-	parentNode = NewIterableNode(par)
-	indexMap[par.GetID()] = parentNode
+
 	parentNode.AddChild(n)
-	par.liftUp(indexMap)
 }
 
 // Split splits the node at the given offset.
