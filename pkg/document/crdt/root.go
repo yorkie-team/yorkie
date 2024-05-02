@@ -178,7 +178,11 @@ func (r *Root) buildTreeForGC() map[string]*IterableNode {
 	return iterableNodeMap
 }
 
-func (r *Root) traverseForGC(currentNode *IterableNode, iterableNodeMap map[string]*IterableNode, ticket *time.Ticket) (int, error) {
+func (r *Root) traverseForGC(
+	currentNode *IterableNode,
+	iterableNodeMap map[string]*IterableNode,
+	ticket *time.Ticket,
+) (int, error) {
 	var totalPurged = 0
 	for _, child := range currentNode.children {
 		count, err := r.traverseForGC(child, iterableNodeMap, ticket)

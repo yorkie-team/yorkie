@@ -83,7 +83,7 @@ func (n *RHTNode) GetRemovedAt() *time.Ticket {
 }
 
 // Purge physically purges children of given node.
-func (n *RHTNode) Purge(ticket *time.Ticket) (int, error) {
+func (n *RHTNode) Purge(_ *time.Ticket) (int, error) {
 	return 0, nil
 }
 
