@@ -9,7 +9,8 @@ type GCNode interface {
 	// GetRemovedAt returns the removal time of this node.
 	GetRemovedAt() *time.Ticket
 	// Purge physically purges children of given node.
-	Purge(ticket *time.Ticket) (int, error)
+	//Purge(ticket *time.Ticket) (int, error)
+	Purge(node GCNode, ticket *time.Ticket) (int, error)
 }
 
 // IterableNode is a node type for generalized garbage collection.
@@ -52,6 +53,6 @@ func (n *IterableNode) AddChild(child *IterableNode) {
 }
 
 // Purge physically purges children of given node that have been removed.
-func (n *IterableNode) Purge(ticket *time.Ticket) (int, error) {
-	return n.value.Purge(ticket)
+func (n *IterableNode) Purge(node GCNode, executedAt *time.Ticket) (int, error) {
+	return n.value.Purge(node, executedAt)
 }

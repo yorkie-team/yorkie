@@ -428,17 +428,26 @@ func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
 }
 
 // Purge physically purges RHTNode that have been removed.
-func (n *TreeNode) Purge(ticket *time.Ticket) (int, error) {
+func (n *TreeNode) Purge(node GCNode, executedAt *time.Ticket) (int, error) {
 	if n.Attrs == nil {
 		return 0, nil
 	}
-	count, err := n.Attrs.purgeRemovedNodesBefore(ticket)
-	if err != nil {
-		return 0, err
+	iterableNode, ok := node.(*IterableNode)
+	if !ok {
+		return 0, fmt.Errorf("node is not of type *IterableNode")
 	}
-	// TODO(raararaara): This method must also purge children with type TreeNode.
 
-	return count, nil
+	if rhtNode, ok := iterableNode.value.(*RHTNode); ok {
+		key := rhtNode.key
+
+		count, err := n.Attrs.purgeByUpdatedAt(key, executedAt)
+		if err != nil {
+			return 0, err
+		}
+		return count, err
+	}
+
+	return 0, nil
 }
 
 // Tree represents the tree of CRDT. It has doubly linked list structure and

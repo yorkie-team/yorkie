@@ -191,19 +191,14 @@ func (r *Root) traverseForGC(
 		}
 
 		totalPurged += count
-	}
-	count, err := currentNode.Purge(ticket)
-	if err != nil {
-		return 0, err
-	}
 
-	totalPurged += count
-
-	if count > 0 {
-		for _, child := range currentNode.children {
-			if removedAt := child.GetRemovedAt(); removedAt != nil && ticket.After(removedAt) {
-				delete(r.gcNodePairMapByID, child.GetID())
-			}
+		count, err = currentNode.Purge(child, ticket)
+		if err != nil {
+			return 0, err
+		}
+		if count > 0 {
+			delete(r.gcNodePairMapByID, child.GetID())
+			totalPurged += count
 		}
 	}
 

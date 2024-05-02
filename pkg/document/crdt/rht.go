@@ -83,7 +83,7 @@ func (n *RHTNode) GetRemovedAt() *time.Ticket {
 }
 
 // Purge physically purges children of given node.
-func (n *RHTNode) Purge(_ *time.Ticket) (int, error) {
+func (n *RHTNode) Purge(_ GCNode, _ *time.Ticket) (int, error) {
 	return 0, nil
 }
 
@@ -191,6 +191,15 @@ func (rht *RHT) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
 		}
 	}
 	return count, nil
+}
+
+func (rht *RHT) purgeByUpdatedAt(key string, ticket *time.Ticket) (int, error) {
+	if node, ok := rht.nodeMapByKey[key]; ok && ticket.After(node.updatedAt) {
+		delete(rht.nodeMapByKey, key)
+		return 1, nil
+	}
+
+	return 0, nil
 }
 
 // purge physically purges the given node.
