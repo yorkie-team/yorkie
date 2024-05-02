@@ -32,8 +32,8 @@ type ElementPair struct {
 // GCPair represents pair that has a parent GCNode and child GCNode.
 // Actual GC target is child GCNode.
 type GCPair struct {
-	parent GCNode
-	child  GCNode
+	Parent GCNode
+	Child  GCNode
 }
 
 // Root is a structure represents the root of JSON. It has a hash table of
@@ -157,19 +157,19 @@ func (r *Root) DeepCopy() (*Root, error) {
 func (r *Root) buildTreeForGC() map[string]*IterableNode {
 	iterableNodeMap := make(map[string]*IterableNode)
 	for _, pair := range r.gcNodePairMapByID {
-		child := NewIterableNode(pair.child)
-		iterableNodeMap[pair.child.GetID()] = child
+		child := NewIterableNode(pair.Child)
+		iterableNodeMap[pair.Child.GetID()] = child
 
-		parentID := pair.parent.GetID()
+		parentID := pair.Parent.GetID()
 		parentNode, exists := iterableNodeMap[parentID]
 		if !exists {
-			parentNode = NewIterableNode(pair.parent)
+			parentNode = NewIterableNode(pair.Parent)
 			iterableNodeMap[parentID] = parentNode
 		}
 
 		parentNode.AddChild(child)
 
-		switch node := pair.parent.(type) {
+		switch node := pair.Parent.(type) {
 		case *TreeNode:
 			node.liftUp(iterableNodeMap)
 		}

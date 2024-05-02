@@ -256,7 +256,7 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	nodes, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket)
+	gcPair, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket)
 	if err != nil {
 		panic(err)
 	}
@@ -269,12 +269,8 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 		ticket,
 	))
 
-	for _, node := range nodes {
-		for _, rhtNode := range node.Attrs.Nodes() {
-			if removedAt := rhtNode.GetRemovedAt(); removedAt != nil && removedAt.Compare(ticket) == 0 {
-				t.context.RegisterGCNodePairMapByID(node, rhtNode)
-			}
-		}
+	for _, pair := range gcPair {
+		t.context.RegisterGCNodePairMapByID(pair.Parent, pair.Child)
 	}
 
 	return true

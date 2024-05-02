@@ -89,18 +89,16 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 	if len(e.attributes) > 0 {
 		return obj.Style(e.from, e.to, e.attributes, e.executedAt)
 	}
-	nodes, err := obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
-	if err == nil {
-		for _, node := range nodes {
-			for _, rhtNode := range node.Attrs.Nodes() {
-				if removedAt := rhtNode.GetRemovedAt(); removedAt != nil && removedAt.Compare(e.executedAt) == 0 {
-					root.RegisterGCNodePairMapByID(node, rhtNode)
-				}
-			}
-		}
-		return nil
+	gcPair, err := obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
+	if err != nil {
+		return err
 	}
-	return err
+
+	for _, pair := range gcPair {
+		root.RegisterGCNodePairMapByID(pair.Parent, pair.Child)
+	}
+
+	return nil
 }
 
 // FromPos returns the start point of the editing range.

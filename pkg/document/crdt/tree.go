@@ -45,7 +45,6 @@ type TreeNodeForTest struct {
 
 // TreeNode is a node of Tree.
 type TreeNode struct {
-	GCNode
 	Index *index.Node[*TreeNode]
 
 	ID        *TreeNodeID
@@ -256,7 +255,8 @@ func (n *TreeNode) liftUp(iterableNodeMap map[string]*IterableNode) {
 		par.liftUp(iterableNodeMap)
 	}
 
-	parentNode.AddChild(n)
+	node := NewIterableNode(n)
+	parentNode.AddChild(node)
 }
 
 // Split splits the node at the given offset.
@@ -927,8 +927,13 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 }
 
 // RemoveStyle removes the given attributes of the given range.
-func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, editedAt *time.Ticket) ([]*TreeNode, error) {
-	nodeHasRemovedRHTNodes := make([]*TreeNode, 0)
+func (t *Tree) RemoveStyle(
+	from, to *TreePos,
+	attributesToRemove []string,
+	editedAt *time.Ticket,
+) (map[string]GCPair, error) {
+	gcPair := make(map[string]GCPair)
+	//nodeHasRemovedRHTNodes := make([]*TreeNode, 0)
 	// 01. split text nodes at the given range if needed.
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
@@ -948,17 +953,22 @@ func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, edite
 					node.Attrs = NewRHT()
 				}
 				for _, value := range attributesToRemove {
-					node.Attrs.Remove(value, editedAt)
+					if removedRhtNode := node.Attrs.Remove(value, editedAt); removedRhtNode != nil {
+						gcPair[removedRhtNode.GetID()] = GCPair{
+							node,
+							removedRhtNode,
+						}
+					}
 				}
 
-				nodeHasRemovedRHTNodes = append(nodeHasRemovedRHTNodes, node)
+				//nodeHasRemovedRHTNodes = append(nodeHasRemovedRHTNodes, node)
 			}
 		})
 	if err != nil {
 		return nil, err
 	}
-
-	return nodeHasRemovedRHTNodes, nil
+	return gcPair, nil
+	//return nodeHasRemovedRHTNodes, nil
 }
 
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
