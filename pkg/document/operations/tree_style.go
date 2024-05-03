@@ -94,8 +94,8 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 		return err
 	}
 
-	for _, pair := range gcPair {
-		root.RegisterGCNodePairMapByID(pair.Parent, pair.Child)
+	for k, pair := range gcPair {
+		root.RegisterGCNodePairMapByID(k, pair.Parent, pair.Child)
 	}
 
 	return nil

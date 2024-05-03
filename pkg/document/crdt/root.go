@@ -138,8 +138,8 @@ func (r *Root) RegisterElementHasRemovedNodes(element GCElement) {
 }
 
 // RegisterGCNodePairMapByID register the given GCNode pair to hash table.
-func (r *Root) RegisterGCNodePairMapByID(parent GCNode, child GCNode) {
-	r.gcNodePairMapByID[child.GetID()] = GCPair{
+func (r *Root) RegisterGCNodePairMapByID(key string, parent GCNode, child GCNode) {
+	r.gcNodePairMapByID[key] = GCPair{
 		parent,
 		child,
 	}
@@ -156,9 +156,9 @@ func (r *Root) DeepCopy() (*Root, error) {
 
 func (r *Root) buildTreeForGC() map[string]*IterableNode {
 	iterableNodeMap := make(map[string]*IterableNode)
-	for _, pair := range r.gcNodePairMapByID {
-		child := NewIterableNode(pair.Child)
-		iterableNodeMap[pair.Child.GetID()] = child
+	for k, pair := range r.gcNodePairMapByID {
+		child := NewIterableNode(pair.Child, k)
+		iterableNodeMap[k] = child
 
 		parentID := pair.Parent.GetID()
 		parentNode, exists := iterableNodeMap[parentID]

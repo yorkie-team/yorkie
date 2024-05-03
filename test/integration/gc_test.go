@@ -434,8 +434,8 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, 1, doc.GarbageLen())                   // should return 2
-		assert.Equal(t, 1, doc.GarbageCollect(time.MaxTicket)) // should return 2
+		assert.Equal(t, 2, doc.GarbageLen())
+		assert.Equal(t, 2, doc.GarbageCollect(time.MaxTicket))
 		assert.Equal(t, 0, doc.GarbageLen())
 	})
 

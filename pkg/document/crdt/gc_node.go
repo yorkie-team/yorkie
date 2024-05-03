@@ -15,6 +15,7 @@ type GCNode interface {
 
 // IterableNode is a node type for generalized garbage collection.
 type IterableNode struct {
+	ID        string
 	value     GCNode
 	par       *IterableNode
 	children  []*IterableNode
@@ -22,8 +23,9 @@ type IterableNode struct {
 }
 
 // NewIterableNode creates a new instance of IterableNode.
-func NewIterableNode(value GCNode) *IterableNode {
+func NewIterableNode(value GCNode, IDString ...string) *IterableNode {
 	ret := &IterableNode{
+		ID:       value.GetID(),
 		value:    value,
 		par:      nil,
 		children: make([]*IterableNode, 0),
@@ -32,13 +34,16 @@ func NewIterableNode(value GCNode) *IterableNode {
 	if ok {
 		ret.removedAt = iterableNode.GetRemovedAt()
 	}
+	if len(IDString) > 0 {
+		ret.ID = IDString[0]
+	}
 
 	return ret
 }
 
 // GetID returns the ID of this node.
 func (n *IterableNode) GetID() string {
-	return n.value.GetID()
+	return n.ID
 }
 
 // GetRemovedAt returns the removal time of this node.

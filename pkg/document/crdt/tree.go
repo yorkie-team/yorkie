@@ -968,7 +968,9 @@ func (t *Tree) RemoveStyle(
 				}
 				for _, value := range attributesToRemove {
 					if removedRhtNode := node.Attrs.Remove(value, editedAt); removedRhtNode != nil {
-						gcPair[removedRhtNode.GetID()] = GCPair{
+						// NOTE(raararaara): RHTNode does not have a unique key.
+						// Therefore, it can be made unique by making it dependent on the ID of the TreeNode.
+						gcPair[node.GetID()+removedRhtNode.GetID()] = GCPair{
 							node,
 							removedRhtNode,
 						}
