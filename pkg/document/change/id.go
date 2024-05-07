@@ -84,7 +84,7 @@ func (id ID) Next() ID {
 		clientSeq:     id.clientSeq + 1,
 		lamport:       id.lamport + 1,
 		actorID:       id.actorID,
-		versionVector: versionVector.DeepCopy(),
+		versionVector: versionVector,
 	}
 }
 

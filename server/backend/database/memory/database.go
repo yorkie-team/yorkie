@@ -845,9 +845,10 @@ func (d *DB) CreateChangeInfos(
 			ProjectID:      docInfo.ProjectID,
 			DocID:          docInfo.ID,
 			ServerSeq:      cn.ServerSeq(),
-			ActorID:        types.ID(cn.ID().ActorID().String()),
 			ClientSeq:      cn.ClientSeq(),
 			Lamport:        cn.ID().Lamport(),
+			ActorID:        types.ID(cn.ID().ActorID().String()),
+			VersionVector:  cn.ID().VersionVector(),
 			Message:        cn.Message(),
 			Operations:     encodedOperations,
 			PresenceChange: encodedPresence,
@@ -1010,13 +1011,14 @@ func (d *DB) CreateSnapshotInfo(
 	defer txn.Abort()
 
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
-		ID:        newID(),
-		ProjectID: docRefKey.ProjectID,
-		DocID:     docRefKey.DocID,
-		ServerSeq: doc.Checkpoint().ServerSeq,
-		Lamport:   doc.Lamport(),
-		Snapshot:  snapshot,
-		CreatedAt: gotime.Now(),
+		ID:            newID(),
+		ProjectID:     docRefKey.ProjectID,
+		DocID:         docRefKey.DocID,
+		ServerSeq:     doc.Checkpoint().ServerSeq,
+		Lamport:       doc.Lamport(),
+		VersionVector: doc.VersionVector().DeepCopy(),
+		Snapshot:      snapshot,
+		CreatedAt:     gotime.Now(),
 	}); err != nil {
 		return fmt.Errorf("create snapshot: %w", err)
 	}
@@ -1070,12 +1072,13 @@ func (d *DB) FindClosestSnapshotInfo(
 		info := raw.(*database.SnapshotInfo)
 		if info.DocID == docRefKey.DocID {
 			snapshotInfo = &database.SnapshotInfo{
-				ID:        info.ID,
-				ProjectID: info.ProjectID,
-				DocID:     info.DocID,
-				ServerSeq: info.ServerSeq,
-				Lamport:   info.Lamport,
-				CreatedAt: info.CreatedAt,
+				ID:            info.ID,
+				ProjectID:     info.ProjectID,
+				DocID:         info.DocID,
+				ServerSeq:     info.ServerSeq,
+				Lamport:       info.Lamport,
+				VersionVector: info.VersionVector,
+				CreatedAt:     info.CreatedAt,
 			}
 			if includeSnapshot {
 				snapshotInfo.Snapshot = info.Snapshot
@@ -1085,7 +1088,9 @@ func (d *DB) FindClosestSnapshotInfo(
 	}
 
 	if snapshotInfo == nil {
-		return &database.SnapshotInfo{}, nil
+		return &database.SnapshotInfo{
+			VersionVector: time.NewVersionVector(),
+		}, nil
 	}
 
 	return snapshotInfo, nil
