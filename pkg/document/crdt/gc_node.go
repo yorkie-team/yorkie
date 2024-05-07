@@ -6,34 +6,37 @@ import "github.com/yorkie-team/yorkie/pkg/document/time"
 type GCNode interface {
 	// GetID returns the IDString of this node.
 	GetID() string
+
 	// GetRemovedAt returns the removal time of this node.
 	GetRemovedAt() *time.Ticket
-	// Purge physically purges children of given node.
-	//Purge(ticket *time.Ticket) (int, error)
+
+	// Purge physically purges the given child of this node.
 	Purge(node GCNode, ticket *time.Ticket) (int, error)
 }
 
-// IterableNode is a node type for generalized garbage collection.
-type IterableNode struct {
+// GCTreeNode is a node type for generalized garbage collection.
+type GCTreeNode struct {
 	ID        string
 	value     GCNode
-	par       *IterableNode
-	children  []*IterableNode
+	par       *GCTreeNode
+	children  []*GCTreeNode
 	removedAt *time.Ticket
 }
 
-// NewIterableNode creates a new instance of IterableNode.
-func NewIterableNode(value GCNode, IDString ...string) *IterableNode {
-	ret := &IterableNode{
-		ID:       value.GetID(),
-		value:    value,
-		par:      nil,
-		children: make([]*IterableNode, 0),
+// NewGCTreeNode creates a new instance of GCTreeNode.
+func NewGCTreeNode(value GCNode, IDString ...string) *GCTreeNode {
+	ret := &GCTreeNode{
+		ID:        value.GetID(),
+		value:     value,
+		par:       nil,
+		children:  make([]*GCTreeNode, 0),
+		removedAt: value.GetRemovedAt(),
 	}
-	iterableNode, ok := value.(*IterableNode)
-	if ok {
-		ret.removedAt = iterableNode.GetRemovedAt()
-	}
+	//gcTreeNode, ok := value.(*GCTreeNode)
+	//if ok {
+	//	ret.removedAt = gcTreeNode.GetRemovedAt()
+	//}
+
 	if len(IDString) > 0 {
 		ret.ID = IDString[0]
 	}
@@ -42,22 +45,22 @@ func NewIterableNode(value GCNode, IDString ...string) *IterableNode {
 }
 
 // GetID returns the ID of this node.
-func (n *IterableNode) GetID() string {
+func (n *GCTreeNode) GetID() string {
 	return n.ID
 }
 
 // GetRemovedAt returns the removal time of this node.
-func (n *IterableNode) GetRemovedAt() *time.Ticket {
+func (n *GCTreeNode) GetRemovedAt() *time.Ticket {
 	return n.value.GetRemovedAt()
 }
 
 // AddChild appends the given node to the end of the children.
-func (n *IterableNode) AddChild(child *IterableNode) {
+func (n *GCTreeNode) AddChild(child *GCTreeNode) {
 	child.par = n
 	n.children = append(n.children, child)
 }
 
-// Purge physically purges children of given node that have been removed.
-func (n *IterableNode) Purge(node GCNode, executedAt *time.Ticket) (int, error) {
+// Purge physically purges the given child of this node.
+func (n *GCTreeNode) Purge(node GCNode, executedAt *time.Ticket) (int, error) {
 	return n.value.Purge(node, executedAt)
 }

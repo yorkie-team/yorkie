@@ -26,7 +26,6 @@ import (
 
 // RHTNode is a node of RHT(Replicated Hashtable).
 type RHTNode struct {
-	GCNode
 	key       string
 	val       string
 	updatedAt *time.Ticket
@@ -71,7 +70,7 @@ func (n *RHTNode) UpdatedAt() *time.Ticket {
 
 // GetID returns the IDString of this node.
 func (n *RHTNode) GetID() string {
-	return n.updatedAt.Key()
+	return n.updatedAt.Key() + ":" + n.key
 }
 
 // GetRemovedAt returns the removal time of this node.
@@ -83,6 +82,8 @@ func (n *RHTNode) GetRemovedAt() *time.Ticket {
 }
 
 // Purge physically purges children of given node.
+// NOTE(raararaara): This method was added only for consistency.
+// It will not be used unless additional children of RHTNode are implemented.
 func (n *RHTNode) Purge(_ GCNode, _ *time.Ticket) (int, error) {
 	return 0, nil
 }

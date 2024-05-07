@@ -237,7 +237,7 @@ func (n *TreeNode) Parent() *TreeNode {
 }
 
 // liftUp builds a subgraph of tree for garbage collection from the bottom up.
-func (n *TreeNode) liftUp(iterableNodeMap map[string]*IterableNode) {
+func (n *TreeNode) liftUp(gcTreeNodeMap map[string]*GCTreeNode) {
 	if n == nil {
 		return
 	}
@@ -248,14 +248,14 @@ func (n *TreeNode) liftUp(iterableNodeMap map[string]*IterableNode) {
 	}
 
 	parentID := par.GetID()
-	parentNode, exists := iterableNodeMap[parentID]
+	parentNode, exists := gcTreeNodeMap[parentID]
 	if !exists {
-		parentNode = NewIterableNode(par)
-		iterableNodeMap[parentID] = parentNode
-		par.liftUp(iterableNodeMap)
+		parentNode = NewGCTreeNode(par)
+		gcTreeNodeMap[parentID] = parentNode
+		par.liftUp(gcTreeNodeMap)
 	}
 
-	node := iterableNodeMap[n.GetID()]
+	node := gcTreeNodeMap[n.GetID()]
 	parentNode.AddChild(node)
 }
 
@@ -432,12 +432,12 @@ func (n *TreeNode) Purge(node GCNode, executedAt *time.Ticket) (int, error) {
 	if n.Attrs == nil {
 		return 0, nil
 	}
-	iterableNode, ok := node.(*IterableNode)
+	gcTreeNode, ok := node.(*GCTreeNode)
 	if !ok {
-		return 0, fmt.Errorf("node is not of type *IterableNode")
+		return 0, fmt.Errorf("node is not of type *GCTreeNode")
 	}
 
-	if rhtNode, ok := iterableNode.value.(*RHTNode); ok {
+	if rhtNode, ok := gcTreeNode.value.(*RHTNode); ok {
 		key := rhtNode.key
 
 		count, err := n.Attrs.purgeByUpdatedAt(key, executedAt)
@@ -970,14 +970,12 @@ func (t *Tree) RemoveStyle(
 					if removedRhtNode := node.Attrs.Remove(value, editedAt); removedRhtNode != nil {
 						// NOTE(raararaara): RHTNode does not have a unique key.
 						// Therefore, it can be made unique by making it dependent on the ID of the TreeNode.
-						gcPair[node.GetID()+removedRhtNode.GetID()] = GCPair{
+						gcPair[node.GetID()+":"+removedRhtNode.GetID()] = GCPair{
 							node,
 							removedRhtNode,
 						}
 					}
 				}
-
-				//nodeHasRemovedRHTNodes = append(nodeHasRemovedRHTNodes, node)
 			}
 		})
 	if err != nil {

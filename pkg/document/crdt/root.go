@@ -154,65 +154,78 @@ func (r *Root) DeepCopy() (*Root, error) {
 	return NewRoot(copiedObject.(*Object)), nil
 }
 
-func (r *Root) buildTreeForGC() map[string]*IterableNode {
-	iterableNodeMap := make(map[string]*IterableNode)
+func (r *Root) buildTreeForGC() map[string]*GCTreeNode {
+	gcTreeNodeMap := make(map[string]*GCTreeNode)
+
 	for k, pair := range r.gcNodePairMapByID {
-		child := NewIterableNode(pair.Child, k)
-		iterableNodeMap[k] = child
+		child := NewGCTreeNode(pair.Child, k)
+		gcTreeNodeMap[k] = child
 
 		parentID := pair.Parent.GetID()
-		parentNode, exists := iterableNodeMap[parentID]
+		parentNode, exists := gcTreeNodeMap[parentID]
 		if !exists {
-			parentNode = NewIterableNode(pair.Parent)
-			iterableNodeMap[parentID] = parentNode
+			parentNode = NewGCTreeNode(pair.Parent)
+			gcTreeNodeMap[parentID] = parentNode
 		}
 
 		parentNode.AddChild(child)
 
+		// TODO(raararaara): What to do if it is a type that cannot define Parent?
+		// The current specification has the limitation that the target node must have a Parent.
 		switch node := pair.Parent.(type) {
 		case *TreeNode:
-			node.liftUp(iterableNodeMap)
+			node.liftUp(gcTreeNodeMap)
 		}
 	}
 
-	return iterableNodeMap
+	return gcTreeNodeMap
 }
 
 func (r *Root) traverseForGC(
-	currentNode *IterableNode,
-	iterableNodeMap map[string]*IterableNode,
+	currentNode *GCTreeNode,
+	gcTreeNodeMap map[string]*GCTreeNode,
 	ticket *time.Ticket,
+	skip bool,
 ) (int, error) {
 	var totalPurged = 0
 	for _, child := range currentNode.children {
-		count, err := r.traverseForGC(child, iterableNodeMap, ticket)
+		if _, ok := r.gcNodePairMapByID[child.GetID()]; ok {
+
+			if !skip {
+				subTreeCount, err := currentNode.Purge(child, ticket)
+				if err != nil {
+					return 0, err
+				}
+				if subTreeCount > 0 {
+					totalPurged += subTreeCount
+				}
+				skip = true
+			}
+			if ticket.After(child.removedAt) {
+				delete(r.gcNodePairMapByID, child.GetID())
+				totalPurged++
+			}
+		}
+
+		count, err := r.traverseForGC(child, gcTreeNodeMap, ticket, skip)
 		if err != nil {
 			return 0, err
 		}
-
 		totalPurged += count
-
-		count, err = currentNode.Purge(child, ticket)
-		if err != nil {
-			return 0, err
-		}
-		if count > 0 {
-			delete(r.gcNodePairMapByID, child.GetID())
-			totalPurged += count
-		}
 	}
 
-	delete(iterableNodeMap, currentNode.GetID())
+	delete(gcTreeNodeMap, currentNode.GetID())
 	return totalPurged, nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
 func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	count := 0
-	iterableNodeMap := r.buildTreeForGC()
-	for _, node := range iterableNodeMap {
+	gcTreeNodeMap := r.buildTreeForGC()
+	for _, node := range gcTreeNodeMap {
+		// TODO(raararaara): A clearer expression is needed than the current method.
 		if node.par == nil {
-			purgedNodes, err := r.traverseForGC(node, iterableNodeMap, ticket)
+			purgedNodes, err := r.traverseForGC(node, gcTreeNodeMap, ticket, false)
 			if err != nil {
 				return 0, err
 			}

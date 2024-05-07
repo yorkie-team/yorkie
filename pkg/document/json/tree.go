@@ -269,8 +269,8 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 		ticket,
 	))
 
-	for _, pair := range gcPair {
-		t.context.RegisterGCNodePairMapByID(pair.Parent, pair.Child)
+	for key, pair := range gcPair {
+		t.context.RegisterGCNodePairMapByID(key, pair.Parent, pair.Child)
 	}
 
 	return true

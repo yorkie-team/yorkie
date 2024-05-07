@@ -86,8 +86,8 @@ func (c *Context) RegisterElementHasRemovedNodes(element crdt.GCElement) {
 }
 
 // RegisterGCNodePairMapByID register the given GCNode pair to hash table.
-func (c *Context) RegisterGCNodePairMapByID(parent crdt.GCNode, child crdt.GCNode) {
-	c.root.RegisterGCNodePairMapByID(parent.GetID()+child.GetID(), parent, child)
+func (c *Context) RegisterGCNodePairMapByID(key string, parent crdt.GCNode, child crdt.GCNode) {
+	c.root.RegisterGCNodePairMapByID(key, parent, child)
 }
 
 // LastTimeTicket returns the last time ticket issued by this context.
