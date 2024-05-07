@@ -94,7 +94,7 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, 3, root.GarbageLen())
 
 		// It contains code marked tombstone.
-		// After calling the garbage collector, the node will be removed.
+		// CausallyAfter calling the garbage collector, the node will be removed.
 		nodeLen := len(text.Nodes())
 		assert.Equal(t, 4, nodeLen)
 
@@ -168,7 +168,7 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, 2, root.GarbageLen())
 
 		// It contains code marked tombstone.
-		// After calling the garbage collector, the node will be removed.
+		// CausallyAfter calling the garbage collector, the node will be removed.
 		nodeLen := len(text.Nodes())
 		assert.Equal(t, 3, nodeLen)
 

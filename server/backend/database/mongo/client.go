@@ -817,6 +817,7 @@ func (c *Client) CreateChangeInfos(
 			"actor_id":        cn.ID().ActorID(),
 			"client_seq":      cn.ID().ClientSeq(),
 			"lamport":         cn.ID().Lamport(),
+			"version_vector":  cn.ID().VersionVector(),
 			"message":         cn.Message(),
 			"operations":      encodedOperations,
 			"presence_change": encodedPresence,
@@ -970,12 +971,13 @@ func (c *Client) CreateSnapshotInfo(
 	}
 
 	if _, err := c.collection(ColSnapshots).InsertOne(ctx, bson.M{
-		"project_id": docRefKey.ProjectID,
-		"doc_id":     docRefKey.DocID,
-		"server_seq": doc.Checkpoint().ServerSeq,
-		"lamport":    doc.Lamport(),
-		"snapshot":   snapshot,
-		"created_at": gotime.Now(),
+		"project_id":     docRefKey.ProjectID,
+		"doc_id":         docRefKey.DocID,
+		"server_seq":     doc.Checkpoint().ServerSeq,
+		"lamport":        doc.Lamport(),
+		"version_vector": doc.VersionVector(),
+		"snapshot":       snapshot,
+		"created_at":     gotime.Now(),
 	}); err != nil {
 		return fmt.Errorf("insert snapshot: %w", err)
 	}
@@ -1034,6 +1036,7 @@ func (c *Client) FindClosestSnapshotInfo(
 
 	snapshotInfo := &database.SnapshotInfo{}
 	if result.Err() == mongo.ErrNoDocuments {
+		snapshotInfo.VersionVector = time.NewVersionVector()
 		return snapshotInfo, nil
 	}
 	if result.Err() != nil {
@@ -1074,16 +1077,16 @@ func (c *Client) FindMinSyncedSeqInfo(
 	return &syncedSeqInfo, nil
 }
 
-// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
+// UpdateAndFindMinSyncedTime updates the given serverSeq of the given client
 // and returns the min synced ticket.
-func (c *Client) UpdateAndFindMinSyncedTicket(
+func (c *Client) UpdateAndFindMinSyncedTime(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	serverSeq int64,
-) (*time.Ticket, error) {
+) (*time.VersionVector, *time.Ticket, error) {
 	if err := c.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 02. find min synced seq of the given document.
@@ -1095,26 +1098,28 @@ func (c *Client) UpdateAndFindMinSyncedTicket(
 		{Key: "actor_id", Value: 1},
 	}))
 	if result.Err() == mongo.ErrNoDocuments {
-		return time.InitialTicket, nil
+		return nil, time.InitialTicket, nil
 	}
 	if result.Err() != nil {
-		return nil, fmt.Errorf("find smallest syncedseq: %w", result.Err())
+		return nil, nil, fmt.Errorf("find smallest syncedseq: %w", result.Err())
 	}
 	syncedSeqInfo := database.SyncedSeqInfo{}
 	if err := result.Decode(&syncedSeqInfo); err != nil {
-		return nil, fmt.Errorf("decode syncedseq: %w", err)
+		return nil, nil, fmt.Errorf("decode syncedseq: %w", err)
 	}
 
 	if syncedSeqInfo.ServerSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
+		return nil, time.InitialTicket, nil
 	}
 
 	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return time.NewTicket(
+	// TODO(hackerwins): Build a version vector from syncedSeqInfo.
+
+	return nil, time.NewTicket(
 		syncedSeqInfo.Lamport,
 		time.MaxDelimiter,
 		actorID,

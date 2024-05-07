@@ -845,9 +845,10 @@ func (d *DB) CreateChangeInfos(
 			ProjectID:      docInfo.ProjectID,
 			DocID:          docInfo.ID,
 			ServerSeq:      cn.ServerSeq(),
-			ActorID:        types.ID(cn.ID().ActorID().String()),
 			ClientSeq:      cn.ClientSeq(),
 			Lamport:        cn.ID().Lamport(),
+			ActorID:        types.ID(cn.ID().ActorID().String()),
+			VersionVector:  cn.ID().VersionVector(),
 			Message:        cn.Message(),
 			Operations:     encodedOperations,
 			PresenceChange: encodedPresence,
@@ -1010,13 +1011,14 @@ func (d *DB) CreateSnapshotInfo(
 	defer txn.Abort()
 
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
-		ID:        newID(),
-		ProjectID: docRefKey.ProjectID,
-		DocID:     docRefKey.DocID,
-		ServerSeq: doc.Checkpoint().ServerSeq,
-		Lamport:   doc.Lamport(),
-		Snapshot:  snapshot,
-		CreatedAt: gotime.Now(),
+		ID:            newID(),
+		ProjectID:     docRefKey.ProjectID,
+		DocID:         docRefKey.DocID,
+		ServerSeq:     doc.Checkpoint().ServerSeq,
+		Lamport:       doc.Lamport(),
+		VersionVector: doc.VersionVector().DeepCopy(),
+		Snapshot:      snapshot,
+		CreatedAt:     gotime.Now(),
 	}); err != nil {
 		return fmt.Errorf("create snapshot: %w", err)
 	}
@@ -1070,12 +1072,13 @@ func (d *DB) FindClosestSnapshotInfo(
 		info := raw.(*database.SnapshotInfo)
 		if info.DocID == docRefKey.DocID {
 			snapshotInfo = &database.SnapshotInfo{
-				ID:        info.ID,
-				ProjectID: info.ProjectID,
-				DocID:     info.DocID,
-				ServerSeq: info.ServerSeq,
-				Lamport:   info.Lamport,
-				CreatedAt: info.CreatedAt,
+				ID:            info.ID,
+				ProjectID:     info.ProjectID,
+				DocID:         info.DocID,
+				ServerSeq:     info.ServerSeq,
+				Lamport:       info.Lamport,
+				VersionVector: info.VersionVector,
+				CreatedAt:     info.CreatedAt,
 			}
 			if includeSnapshot {
 				snapshotInfo.Snapshot = info.Snapshot
@@ -1085,7 +1088,9 @@ func (d *DB) FindClosestSnapshotInfo(
 	}
 
 	if snapshotInfo == nil {
-		return &database.SnapshotInfo{}, nil
+		return &database.SnapshotInfo{
+			VersionVector: time.NewVersionVector(),
+		}, nil
 	}
 
 	return snapshotInfo, nil
@@ -1120,16 +1125,16 @@ func (d *DB) FindMinSyncedSeqInfo(
 	return syncedSeqInfo, nil
 }
 
-// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
+// UpdateAndFindMinSyncedTime updates the given serverSeq of the given client
 // and returns the min synced ticket.
-func (d *DB) UpdateAndFindMinSyncedTicket(
+func (d *DB) UpdateAndFindMinSyncedTime(
 	ctx context.Context,
 	clientInfo *database.ClientInfo,
 	docRefKey types.DocRefKey,
 	serverSeq int64,
-) (*time.Ticket, error) {
+) (*time.VersionVector, *time.Ticket, error) {
 	if err := d.UpdateSyncedSeq(ctx, clientInfo, docRefKey, serverSeq); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	txn := d.db.Txn(false)
@@ -1143,7 +1148,7 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 		time.InitialActorID.String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID, err)
+		return nil, nil, fmt.Errorf("fetch smallest syncedseq of %s: %w", docRefKey.DocID, err)
 	}
 
 	var syncedSeqInfo *database.SyncedSeqInfo
@@ -1155,15 +1160,17 @@ func (d *DB) UpdateAndFindMinSyncedTicket(
 	}
 
 	if syncedSeqInfo == nil || syncedSeqInfo.ServerSeq == change.InitialServerSeq {
-		return time.InitialTicket, nil
+		return nil, time.InitialTicket, nil
 	}
 
 	actorID, err := time.ActorIDFromHex(syncedSeqInfo.ActorID.String())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return time.NewTicket(
+	// TODO(hackerwins): Build a version vector from syncedSeqInfo.
+
+	return nil, time.NewTicket(
 		syncedSeqInfo.Lamport,
 		time.MaxDelimiter,
 		actorID,

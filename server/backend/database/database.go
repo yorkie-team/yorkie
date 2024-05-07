@@ -246,14 +246,14 @@ type Database interface {
 		docRefKey types.DocRefKey,
 	) (*SyncedSeqInfo, error)
 
-	// UpdateAndFindMinSyncedTicket updates the given serverSeq of the given client
-	// and returns the min synced ticket.
-	UpdateAndFindMinSyncedTicket(
+	// UpdateAndFindMinSyncedTime updates the given serverSeq of the given client
+	// and returns the min synced time.
+	UpdateAndFindMinSyncedTime(
 		ctx context.Context,
 		clientInfo *ClientInfo,
 		docRefKey types.DocRefKey,
 		serverSeq int64,
-	) (*time.Ticket, error)
+	) (*time.VersionVector, *time.Ticket, error)
 
 	// UpdateSyncedSeq updates the syncedSeq of the given client.
 	UpdateSyncedSeq(
