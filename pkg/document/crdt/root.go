@@ -203,7 +203,6 @@ func (r *Root) traverseForGC(
 			}
 			if ticket.After(child.removedAt) {
 				delete(r.gcNodePairMapByID, child.GetID())
-				totalPurged++
 			}
 		}
 
