@@ -221,7 +221,8 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	if err := t.Tree.Style(fromPos, toPos, attributes, ticket); err != nil {
+	maxCreationMapByActor, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	if err != nil {
 		panic(err)
 	}
 
@@ -229,6 +230,7 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 		t.CreatedAt(),
 		fromPos,
 		toPos,
+		maxCreationMapByActor,
 		attributes,
 		ticket,
 	))

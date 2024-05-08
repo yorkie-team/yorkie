@@ -39,9 +39,9 @@ type TreeEdit struct {
 	// splitLevel is the level of the split.
 	splitLevel int
 
-	// latestCreatedAtMapByActor is a map that stores the latest creation time
+	// maxCreatedAtMapByActor is a map that stores the latest creation time
 	// by actor for the nodes included in the editing range.
-	latestCreatedAtMapByActor map[string]*time.Ticket
+	maxCreatedAtMapByActor map[string]*time.Ticket
 
 	// executedAt is the time the operation was executed.
 	executedAt *time.Ticket
@@ -54,17 +54,17 @@ func NewTreeEdit(
 	to *crdt.TreePos,
 	contents []*crdt.TreeNode,
 	splitLevel int,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	executedAt *time.Ticket,
 ) *TreeEdit {
 	return &TreeEdit{
-		parentCreatedAt:           parentCreatedAt,
-		from:                      from,
-		to:                        to,
-		contents:                  contents,
-		splitLevel:                splitLevel,
-		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
-		executedAt:                executedAt,
+		parentCreatedAt:        parentCreatedAt,
+		from:                   from,
+		to:                     to,
+		contents:               contents,
+		splitLevel:             splitLevel,
+		maxCreatedAtMapByActor: maxCreatedAtMapByActor,
+		executedAt:             executedAt,
 	}
 }
 
@@ -105,7 +105,7 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 			func() func() *time.Ticket {
 				delimiter := e.executedAt.Delimiter()
 				if contents != nil {
-					delimiter += uint32((len(contents)))
+					delimiter += uint32(len(contents))
 				}
 				return func() *time.Ticket {
 					delimiter++
@@ -116,7 +116,7 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 					)
 				}
 			}(),
-			e.latestCreatedAtMapByActor,
+			e.maxCreatedAtMapByActor,
 		); err != nil {
 			return err
 		}
@@ -161,10 +161,10 @@ func (e *TreeEdit) SplitLevel() int {
 	return e.splitLevel
 }
 
-// CreatedAtMapByActor returns the map that stores the latest creation time
+// MaxCreatedAtMapByActor returns the map that stores the latest creation time
 // by actor for the nodes included in the editing range.
-func (e *TreeEdit) CreatedAtMapByActor() map[string]*time.Ticket {
-	return e.latestCreatedAtMapByActor
+func (e *TreeEdit) MaxCreatedAtMapByActor() map[string]*time.Ticket {
+	return e.maxCreatedAtMapByActor
 }
 
 // ExecutedAt returns execution time of this operation.

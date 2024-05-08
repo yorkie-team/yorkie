@@ -388,28 +388,28 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, "<root><p>ab</p><p>cd</p></root>", tree.ToXML())
 
 		// style attributes with opening tag
-		err = tree.StyleByIndex(0, 1, map[string]string{"weight": "bold"}, helper.TimeT(ctx))
+		_, err = tree.StyleByIndex(0, 1, map[string]string{"weight": "bold"}, helper.TimeT(ctx), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
 
 		// style attributes with closing tag
-		err = tree.StyleByIndex(3, 4, map[string]string{"color": "red"}, helper.TimeT(ctx))
+		_, err = tree.StyleByIndex(3, 4, map[string]string{"color": "red"}, helper.TimeT(ctx), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p color="red" weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
 
 		// style attributes with the whole
-		err = tree.StyleByIndex(0, 4, map[string]string{"size": "small"}, helper.TimeT(ctx))
+		_, err = tree.StyleByIndex(0, 4, map[string]string{"size": "small"}, helper.TimeT(ctx), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p color="red" size="small" weight="bold">ab</p><p>cd</p></root>`, tree.ToXML())
 
 		// 02. style attributes to elements.
-		err = tree.StyleByIndex(0, 5, map[string]string{"style": "italic"}, helper.TimeT(ctx))
+		_, err = tree.StyleByIndex(0, 5, map[string]string{"style": "italic"}, helper.TimeT(ctx), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p color="red" size="small" style="italic" weight="bold">ab</p>`+
 			`<p style="italic">cd</p></root>`, tree.ToXML())
 
 		// 03. Ignore styling attributes to text nodes.
-		err = tree.StyleByIndex(1, 3, map[string]string{"bold": "true"}, helper.TimeT(ctx))
+		_, err = tree.StyleByIndex(1, 3, map[string]string{"bold": "true"}, helper.TimeT(ctx), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, `<root><p color="red" size="small" style="italic" weight="bold">ab</p>`+
 			`<p style="italic">cd</p></root>`, tree.ToXML())

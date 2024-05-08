@@ -34,9 +34,9 @@ type Edit struct {
 	// to represents the end point of the editing range.
 	to *crdt.RGATreeSplitNodePos
 
-	// latestCreatedAtMapByActor is a map that stores the latest creation time
+	// maxCreatedAtMapByActor is a map that stores the latest creation time
 	// by actor for the nodes included in the editing range.
-	latestCreatedAtMapByActor map[string]*time.Ticket
+	maxCreatedAtMapByActor map[string]*time.Ticket
 
 	// content is the content of text added when editing.
 	content string
@@ -53,19 +53,19 @@ func NewEdit(
 	parentCreatedAt *time.Ticket,
 	from *crdt.RGATreeSplitNodePos,
 	to *crdt.RGATreeSplitNodePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 ) *Edit {
 	return &Edit{
-		parentCreatedAt:           parentCreatedAt,
-		from:                      from,
-		to:                        to,
-		latestCreatedAtMapByActor: latestCreatedAtMapByActor,
-		content:                   content,
-		attributes:                attributes,
-		executedAt:                executedAt,
+		parentCreatedAt:        parentCreatedAt,
+		from:                   from,
+		to:                     to,
+		maxCreatedAtMapByActor: maxCreatedAtMapByActor,
+		content:                content,
+		attributes:             attributes,
+		executedAt:             executedAt,
 	}
 }
 
@@ -75,7 +75,7 @@ func (e *Edit) Execute(root *crdt.Root) error {
 
 	switch obj := parent.(type) {
 	case *crdt.Text:
-		_, _, err := obj.Edit(e.from, e.to, e.latestCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
+		_, _, err := obj.Edit(e.from, e.to, e.maxCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
 		if err != nil {
 			return err
 		}
@@ -124,8 +124,8 @@ func (e *Edit) Attributes() map[string]string {
 	return e.attributes
 }
 
-// CreatedAtMapByActor returns the map that stores the latest creation time
+// MaxCreatedAtMapByActor returns the map that stores the latest creation time
 // by actor for the nodes included in the editing range.
-func (e *Edit) CreatedAtMapByActor() map[string]*time.Ticket {
-	return e.latestCreatedAtMapByActor
+func (e *Edit) MaxCreatedAtMapByActor() map[string]*time.Ticket {
+	return e.maxCreatedAtMapByActor
 }

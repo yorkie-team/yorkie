@@ -30,20 +30,24 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
+/**
+ * parseSimpleXML parses the given XML string into a slice of strings.
+ * For example, "<p>abc</p>" returns ["<p>", "abc", "</p>"].
+ */
 func parseSimpleXML(s string) []string {
-	res := []string{}
+	var res []string
 	for i := 0; i < len(s); i++ {
-		now := ``
+		current := ""
 		if s[i] == '<' {
 			for i < len(s) && s[i] != '>' {
-				now += string(s[i])
+				current += string(s[i])
 				i++
 			}
-			now += string(s[i])
+			current += string(s[i])
 		} else {
-			now += string(s[i])
+			current += string(s[i])
 		}
-		res = append(res, now)
+		res = append(res, current)
 	}
 	return res
 }
@@ -218,7 +222,6 @@ func RunTestTreeConcurrency(testDesc string, t *testing.T, initialState json.Tre
 	assert.NoError(t, c2.Attach(ctx, d2))
 
 	runTest := func(ranges twoRangesType, op1, op2 operationInterface) testResult {
-
 		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewTree("t", &initialState)
 			return nil
