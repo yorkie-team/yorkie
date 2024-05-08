@@ -223,7 +223,7 @@ func (t *Text) CreateRange(from, to int) (*RGATreeSplitNodePos, *RGATreeSplitNod
 func (t *Text) Edit(
 	from,
 	to *RGATreeSplitNodePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
@@ -236,7 +236,7 @@ func (t *Text) Edit(
 	return t.rgaTreeSplit.edit(
 		from,
 		to,
-		latestCreatedAtMapByActor,
+		maxCreatedAtMapByActor,
 		val,
 		executedAt,
 	)
@@ -246,7 +246,7 @@ func (t *Text) Edit(
 func (t *Text) Style(
 	from,
 	to *RGATreeSplitNodePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
 ) (map[string]*time.Ticket, error) {
@@ -268,22 +268,22 @@ func (t *Text) Style(
 	for _, node := range nodes {
 		actorIDHex := node.id.createdAt.ActorIDHex()
 
-		var latestCreatedAt *time.Ticket
-		if len(latestCreatedAtMapByActor) == 0 {
-			latestCreatedAt = time.MaxTicket
+		var maxCreatedAt *time.Ticket
+		if len(maxCreatedAtMapByActor) == 0 {
+			maxCreatedAt = time.MaxTicket
 		} else {
-			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
+			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 			if ok {
-				latestCreatedAt = createdAt
+				maxCreatedAt = createdAt
 			} else {
-				latestCreatedAt = time.InitialTicket
+				maxCreatedAt = time.InitialTicket
 			}
 		}
 
-		if node.canStyle(executedAt, latestCreatedAt) {
-			latestCreatedAt = createdAtMapByActor[actorIDHex]
+		if node.canStyle(executedAt, maxCreatedAt) {
+			maxCreatedAt = createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
-			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
+			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt
 			}
 			toBeStyled = append(toBeStyled, node)

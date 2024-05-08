@@ -253,8 +253,8 @@ func (s *RGATreeSplitNode[V]) toTestString() string {
 
 // Remove removes this node if it created before the time of deletion are
 // deleted. It only marks the deleted time (tombstone).
-func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
-	if !s.createdAt().After(latestCreatedAt) &&
+func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, maxCreatedAt *time.Ticket) bool {
+	if !s.createdAt().After(maxCreatedAt) &&
 		(s.removedAt == nil || removedAt.After(s.removedAt)) {
 		s.removedAt = removedAt
 		return true
@@ -263,8 +263,8 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, latestCreatedAt *ti
 }
 
 // canStyle checks if node is able to set style.
-func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
-	return !s.createdAt().After(latestCreatedAt) &&
+func (s *RGATreeSplitNode[V]) canStyle(editedAt *time.Ticket, maxCreatedAt *time.Ticket) bool {
+	return !s.createdAt().After(maxCreatedAt) &&
 		(s.removedAt == nil || editedAt.After(s.removedAt))
 }
 
@@ -445,7 +445,7 @@ func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNod
 func (s *RGATreeSplit[V]) edit(
 	from *RGATreeSplitNodePos,
 	to *RGATreeSplitNodePos,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	content V,
 	editedAt *time.Ticket,
 ) (*RGATreeSplitNodePos, map[string]*time.Ticket, error) {
@@ -461,7 +461,7 @@ func (s *RGATreeSplit[V]) edit(
 
 	// 02. delete between from and to
 	nodesToDelete := s.findBetween(fromRight, toRight)
-	latestCreatedAtMap, removedNodeMapByNodeKey := s.deleteNodes(nodesToDelete, latestCreatedAtMapByActor, editedAt)
+	maxCreatedAtMap, removedNodeMapByNodeKey := s.deleteNodes(nodesToDelete, maxCreatedAtMapByActor, editedAt)
 
 	var caretID *RGATreeSplitNodeID
 	if toRight == nil {
@@ -482,7 +482,7 @@ func (s *RGATreeSplit[V]) edit(
 		s.removedNodeMap[key] = removedNode
 	}
 
-	return caretPos, latestCreatedAtMap, nil
+	return caretPos, maxCreatedAtMap, nil
 }
 
 func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeSplitNode[V] {
@@ -497,7 +497,7 @@ func (s *RGATreeSplit[V]) findBetween(from, to *RGATreeSplitNode[V]) []*RGATreeS
 
 func (s *RGATreeSplit[V]) deleteNodes(
 	candidates []*RGATreeSplitNode[V],
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	editedAt *time.Ticket,
 ) (map[string]*time.Ticket, map[string]*RGATreeSplitNode[V]) {
 	createdAtMapByActor := make(map[string]*time.Ticket)
@@ -517,22 +517,22 @@ func (s *RGATreeSplit[V]) deleteNodes(
 	for _, node := range candidates {
 		actorIDHex := node.createdAt().ActorIDHex()
 
-		var latestCreatedAt *time.Ticket
-		if latestCreatedAtMapByActor == nil {
-			latestCreatedAt = time.MaxTicket
+		var maxCreatedAt *time.Ticket
+		if maxCreatedAtMapByActor == nil {
+			maxCreatedAt = time.MaxTicket
 		} else {
-			createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
+			createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 			if ok {
-				latestCreatedAt = createdAt
+				maxCreatedAt = createdAt
 			} else {
-				latestCreatedAt = time.InitialTicket
+				maxCreatedAt = time.InitialTicket
 			}
 		}
 
-		if node.Remove(editedAt, latestCreatedAt) {
-			latestCreatedAt := createdAtMapByActor[actorIDHex]
+		if node.Remove(editedAt, maxCreatedAt) {
+			maxCreatedAt := createdAtMapByActor[actorIDHex]
 			createdAt := node.id.createdAt
-			if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
+			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
 				createdAtMapByActor[actorIDHex] = createdAt
 			}
 

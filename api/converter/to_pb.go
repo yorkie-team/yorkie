@@ -311,7 +311,7 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 			ParentCreatedAt:     ToTimeTicket(e.ParentCreatedAt()),
 			From:                toTextNodePos(e.From()),
 			To:                  toTextNodePos(e.To()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
+			CreatedAtMapByActor: toCreatedAtMapByActor(e.MaxCreatedAtMapByActor()),
 			Content:             e.Content(),
 			Attributes:          e.Attributes(),
 			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
@@ -325,7 +325,7 @@ func toStyle(style *operations.Style) (*api.Operation_Style_, error) {
 			ParentCreatedAt:     ToTimeTicket(style.ParentCreatedAt()),
 			From:                toTextNodePos(style.From()),
 			To:                  toTextNodePos(style.To()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(style.CreatedAtMapByActor()),
+			CreatedAtMapByActor: toCreatedAtMapByActor(style.MaxCreatedAtMapByActor()),
 			Attributes:          style.Attributes(),
 			ExecutedAt:          ToTimeTicket(style.ExecutedAt()),
 		},
@@ -355,7 +355,7 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 			To:                  toTreePos(e.ToPos()),
 			Contents:            ToTreeNodesWhenEdit(e.Contents()),
 			SplitLevel:          int32(e.SplitLevel()),
-			CreatedAtMapByActor: toCreatedAtMapByActor(e.CreatedAtMapByActor()),
+			CreatedAtMapByActor: toCreatedAtMapByActor(e.MaxCreatedAtMapByActor()),
 			ExecutedAt:          ToTimeTicket(e.ExecutedAt()),
 		},
 	}, nil
@@ -364,12 +364,13 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 func toTreeStyle(style *operations.TreeStyle) (*api.Operation_TreeStyle_, error) {
 	return &api.Operation_TreeStyle_{
 		TreeStyle: &api.Operation_TreeStyle{
-			ParentCreatedAt:    ToTimeTicket(style.ParentCreatedAt()),
-			From:               toTreePos(style.FromPos()),
-			To:                 toTreePos(style.ToPos()),
-			Attributes:         style.Attributes(),
-			ExecutedAt:         ToTimeTicket(style.ExecutedAt()),
-			AttributesToRemove: style.AttributesToRemove(),
+			ParentCreatedAt:     ToTimeTicket(style.ParentCreatedAt()),
+			From:                toTreePos(style.FromPos()),
+			To:                  toTreePos(style.ToPos()),
+			Attributes:          style.Attributes(),
+			ExecutedAt:          ToTimeTicket(style.ExecutedAt()),
+			AttributesToRemove:  style.AttributesToRemove(),
+			CreatedAtMapByActor: toCreatedAtMapByActor(style.MaxCreatedAtMapByActor()),
 		},
 	}, nil
 }

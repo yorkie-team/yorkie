@@ -108,7 +108,7 @@ In the case of local editing, the given `index`es are converted to `CRDTTree.Tre
 
 3-1. Traverse the range and identify nodes to be removed. If a node is an element node and doesn't include both opening and closing tags, it is excluded from removal.
 
-3-2. Update the `latestCreatedAtMapByActor` information for each node and mark nodes with tombstones in the `IndexTree` to indicate removal.
+3-2. Update the `maxCreatedAtMapByActor` information for each node and mark nodes with tombstones in the `IndexTree` to indicate removal.
 
 **[[STEP 4]](https://github.com/yorkie-team/yorkie/blob/fd3b15c7d2c482464b6c8470339bcc497204114e/pkg/document/crdt/tree.go#L642-L681)** Insert the given nodes at the appropriate positions (insert operation only)
 
@@ -137,7 +137,7 @@ Eventual consistency is guaranteed for these [27 cases](https://github.com/yorki
 
 https://github.com/yorkie-team/yorkie/blob/81137b32d0d1d3d36be5b63652e5ab0273f536de/pkg/document/operations/tree_edit.go#L36-L38
 
-`latestCreatedAtMapByActor` is a map that stores the latest creation time by actor for the nodes included in the editing range. However, relying solely on the typical `lamport` clocks that represent local clock of clients, it's not possible to determine if two events are causally related or concurrent. For instance:
+`maxCreatedAtMapByActor` is a map that stores the latest creation time by actor for the nodes included in the editing range. However, relying solely on the typical `lamport` clocks that represent local clock of clients, it's not possible to determine if two events are causally related or concurrent. For instance:
 
 <img src="https://github.com/yorkie-team/yorkie/assets/78714820/cc025542-2c85-40ef-b846-157f38177487" width="450" />
 

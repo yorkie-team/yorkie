@@ -338,12 +338,17 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	return false
 }
 
-func (n *TreeNode) canDelete(removedAt *time.Ticket, latestCreatedAt *time.Ticket) bool {
-	if !n.ID.CreatedAt.After(latestCreatedAt) &&
+func (n *TreeNode) canDelete(removedAt *time.Ticket, maxCreatedAt *time.Ticket) bool {
+	if !n.ID.CreatedAt.After(maxCreatedAt) &&
 		(n.RemovedAt == nil || n.RemovedAt.Compare(removedAt) > 0) {
 		return true
 	}
 	return false
+}
+
+func (n *TreeNode) canStyle(editedAt *time.Ticket, maxCreatedAt *time.Ticket) bool {
+	return !n.ID.CreatedAt.After(maxCreatedAt) &&
+		(n.RemovedAt == nil || editedAt.After(n.RemovedAt))
 }
 
 // InsertAt inserts the given node at the given offset.
@@ -628,7 +633,7 @@ func (t *Tree) Edit(
 	splitLevel int,
 	editedAt *time.Ticket,
 	issueTimeTicket func() *time.Ticket,
-	latestCreatedAtMapByActor map[string]*time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 ) (map[string]*time.Ticket, error) {
 	// 01. find nodes from the given range and split nodes.
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
@@ -640,9 +645,9 @@ func (t *Tree) Edit(
 		return nil, err
 	}
 
-	toBeRemoveds, toBeMovedToFromParents, createdAtMapByActor, err := t.collectBetween(
+	toBeRemoveds, toBeMovedToFromParents, maxCreatedAtMap, err := t.collectBetween(
 		fromParent, fromLeft, toParent, toLeft,
-		latestCreatedAtMapByActor, editedAt,
+		maxCreatedAtMapByActor, editedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -696,10 +701,10 @@ func (t *Tree) Edit(
 				if fromParent.IsRemoved() {
 					actorIDHex := node.Value.ID.CreatedAt.ActorIDHex()
 					if node.Value.remove(editedAt) {
-						latestCreatedAt := createdAtMapByActor[actorIDHex]
+						maxCreatedAt := maxCreatedAtMap[actorIDHex]
 						createdAt := node.Value.ID.CreatedAt
-						if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
-							createdAtMapByActor[actorIDHex] = createdAt
+						if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
+							maxCreatedAtMap[actorIDHex] = createdAt
 						}
 					}
 					t.removedNodeMap[node.Value.ID.toIDString()] = node.Value
@@ -710,16 +715,16 @@ func (t *Tree) Edit(
 		}
 	}
 
-	return createdAtMapByActor, nil
+	return maxCreatedAtMap, nil
 }
 
 // collectBetween collects nodes that are marked as removed or moved. It also
-// returns the latestCreatedAtMapByActor that is used to determine whether the
+// returns the maxCreatedAtMapByActor that is used to determine whether the
 // node can be deleted or not.
 func (t *Tree) collectBetween(
 	fromParent *TreeNode, fromLeft *TreeNode,
 	toParent *TreeNode, toLeft *TreeNode,
-	latestCreatedAtMapByActor map[string]*time.Ticket, editedAt *time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket, editedAt *time.Ticket,
 ) ([]*TreeNode, []*TreeNode, map[string]*time.Ticket, error) {
 	var toBeRemoveds []*TreeNode
 	var toBeMovedToFromParents []*TreeNode
@@ -748,24 +753,24 @@ func (t *Tree) collectBetween(
 
 			actorIDHex := node.ID.CreatedAt.ActorIDHex()
 
-			var latestCreatedAt *time.Ticket
-			if latestCreatedAtMapByActor == nil {
-				latestCreatedAt = time.MaxTicket
+			var maxCreatedAt *time.Ticket
+			if maxCreatedAtMapByActor == nil {
+				maxCreatedAt = time.MaxTicket
 			} else {
-				createdAt, ok := latestCreatedAtMapByActor[actorIDHex]
+				createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
 				if ok {
-					latestCreatedAt = createdAt
+					maxCreatedAt = createdAt
 				} else {
-					latestCreatedAt = time.InitialTicket
+					maxCreatedAt = time.InitialTicket
 				}
 			}
 
 			// NOTE(sejongk): If the node is removable or its parent is going to
 			// be removed, then this node should be removed.
-			if node.canDelete(editedAt, latestCreatedAt) || slices.Contains(toBeRemoveds, node.Index.Parent.Value) {
-				latestCreatedAt = createdAtMapByActor[actorIDHex]
+			if node.canDelete(editedAt, maxCreatedAt) || slices.Contains(toBeRemoveds, node.Index.Parent.Value) {
+				maxCreatedAt = createdAtMapByActor[actorIDHex]
 				createdAt := node.ID.CreatedAt
-				if latestCreatedAt == nil || createdAt.After(latestCreatedAt) {
+				if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
 					createdAtMapByActor[actorIDHex] = createdAt
 				}
 				// NOTE(hackerwins): If the node overlaps as an end token with the
@@ -834,36 +839,68 @@ func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNo
 
 // StyleByIndex applies the given attributes of the given range.
 // This method uses indexes instead of a pair of TreePos for testing.
-func (t *Tree) StyleByIndex(start, end int, attributes map[string]string, editedAt *time.Ticket) error {
+func (t *Tree) StyleByIndex(
+	start, end int,
+	attributes map[string]string,
+	editedAt *time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
+) (map[string]*time.Ticket, error) {
 	fromPos, err := t.FindPos(start)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	toPos, err := t.FindPos(end)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return t.Style(fromPos, toPos, attributes, editedAt)
+	return t.Style(fromPos, toPos, attributes, editedAt, maxCreatedAtMapByActor)
 }
 
 // Style applies the given attributes of the given range.
-func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *time.Ticket) error {
+func (t *Tree) Style(
+	from, to *TreePos,
+	attributes map[string]string,
+	editedAt *time.Ticket,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
+) (map[string]*time.Ticket, error) {
 	// 01. split text nodes at the given range if needed.
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	createdAtMapByActor := make(map[string]*time.Ticket)
 	err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft,
 		func(token index.TreeToken[*TreeNode], _ bool) {
 			node := token.Node
-			if !node.IsRemoved() && !node.IsText() && len(attributes) > 0 {
+
+			actorIDHex := node.ID.CreatedAt.ActorIDHex()
+
+			var maxCreatedAt *time.Ticket
+			if maxCreatedAtMapByActor == nil {
+				maxCreatedAt = time.MaxTicket
+			} else {
+				createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
+				if ok {
+					maxCreatedAt = createdAt
+				} else {
+					maxCreatedAt = time.InitialTicket
+				}
+			}
+
+			if node.canStyle(editedAt, maxCreatedAt) && !node.IsText() && len(attributes) > 0 {
+				maxCreatedAt = createdAtMapByActor[actorIDHex]
+				createdAt := node.ID.CreatedAt
+				if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
+					createdAtMapByActor[actorIDHex] = createdAt
+				}
+
 				if node.Attrs == nil {
 					node.Attrs = NewRHT()
 				}
@@ -874,10 +911,10 @@ func (t *Tree) Style(from, to *TreePos, attributes map[string]string, editedAt *
 			}
 		})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return createdAtMapByActor, nil
 }
 
 // RemoveStyle removes the given attributes of the given range.

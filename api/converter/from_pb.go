@@ -521,10 +521,18 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 		), nil
 	}
 
+	createdAtMapByActor, err := fromCreatedAtMapByActor(
+		pbTreeStyle.CreatedAtMapByActor,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return operations.NewTreeStyle(
 		parentCreatedAt,
 		from,
 		to,
+		createdAtMapByActor,
 		pbTreeStyle.Attributes,
 		executedAt,
 	), nil
