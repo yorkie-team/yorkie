@@ -154,81 +154,18 @@ func (r *Root) DeepCopy() (*Root, error) {
 	return NewRoot(copiedObject.(*Object)), nil
 }
 
-func (r *Root) buildTreeForGC() map[string]*GCTreeNode {
-	gcTreeNodeMap := make(map[string]*GCTreeNode)
-
-	for k, pair := range r.gcNodePairMapByID {
-		child := NewGCTreeNode(pair.Child, k)
-		gcTreeNodeMap[k] = child
-
-		parentID := pair.Parent.GetID()
-		parentNode, exists := gcTreeNodeMap[parentID]
-		if !exists {
-			parentNode = NewGCTreeNode(pair.Parent)
-			gcTreeNodeMap[parentID] = parentNode
-		}
-
-		parentNode.AddChild(child)
-
-		// TODO(raararaara): What to do if it is a type that cannot define Parent?
-		// The current specification has the limitation that the target node must have a Parent.
-		switch node := pair.Parent.(type) {
-		case *TreeNode:
-			node.liftUp(gcTreeNodeMap)
-		}
-	}
-
-	return gcTreeNodeMap
-}
-
-func (r *Root) traverseForGC(
-	currentNode *GCTreeNode,
-	gcTreeNodeMap map[string]*GCTreeNode,
-	ticket *time.Ticket,
-	skip bool,
-) (int, error) {
-	var totalPurged = 0
-	for _, child := range currentNode.children {
-		if _, ok := r.gcNodePairMapByID[child.GetID()]; ok {
-
-			if !skip {
-				subTreeCount, err := currentNode.Purge(child, ticket)
-				if err != nil {
-					return 0, err
-				}
-				if subTreeCount > 0 {
-					totalPurged += subTreeCount
-				}
-				skip = true
-			}
-			if ticket.After(child.removedAt) {
-				delete(r.gcNodePairMapByID, child.GetID())
-			}
-		}
-
-		count, err := r.traverseForGC(child, gcTreeNodeMap, ticket, skip)
-		if err != nil {
-			return 0, err
-		}
-		totalPurged += count
-	}
-
-	delete(gcTreeNodeMap, currentNode.GetID())
-	return totalPurged, nil
-}
-
 // GarbageCollect purge elements that were removed before the given time.
 func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	count := 0
-	gcTreeNodeMap := r.buildTreeForGC()
-	for _, node := range gcTreeNodeMap {
-		// TODO(raararaara): A clearer expression is needed than the current method.
-		if node.par == nil {
-			purgedNodes, err := r.traverseForGC(node, gcTreeNodeMap, ticket, false)
+
+	for key, pair := range r.gcNodePairMapByID {
+		if pair.Child.GetRemovedAt() != nil && ticket.After(pair.Child.GetRemovedAt()) {
+			purgedNodes, err := pair.Parent.Purge(pair.Child, ticket)
 			if err != nil {
 				return 0, err
 			}
 			count += purgedNodes
+			delete(r.gcNodePairMapByID, key)
 		}
 	}
 	for _, pair := range r.removedElementPairMapByCreatedAt {

@@ -228,37 +228,6 @@ func (n *TreeNode) GetRemovedAt() *time.Ticket {
 	return n.RemovedAt
 }
 
-// Parent returns the parent of this TreeNode.
-func (n *TreeNode) Parent() *TreeNode {
-	if n.Index.Parent == nil {
-		return nil
-	}
-	return n.Index.Parent.Value
-}
-
-// liftUp builds a subgraph of tree for garbage collection from the bottom up.
-func (n *TreeNode) liftUp(gcTreeNodeMap map[string]*GCTreeNode) {
-	if n == nil {
-		return
-	}
-
-	par := n.Parent()
-	if par == nil {
-		return
-	}
-
-	parentID := par.GetID()
-	parentNode, exists := gcTreeNodeMap[parentID]
-	if !exists {
-		parentNode = NewGCTreeNode(par)
-		gcTreeNodeMap[parentID] = parentNode
-		par.liftUp(gcTreeNodeMap)
-	}
-
-	node := gcTreeNodeMap[n.GetID()]
-	parentNode.AddChild(node)
-}
-
 // Split splits the node at the given offset.
 func (n *TreeNode) Split(tree *Tree, offset int, issueTimeTicket func() *time.Ticket) error {
 	var split *TreeNode
@@ -432,12 +401,8 @@ func (n *TreeNode) Purge(node GCNode, executedAt *time.Ticket) (int, error) {
 	if n.Attrs == nil {
 		return 0, nil
 	}
-	gcTreeNode, ok := node.(*GCTreeNode)
-	if !ok {
-		return 0, fmt.Errorf("node is not of type *GCTreeNode")
-	}
 
-	if rhtNode, ok := gcTreeNode.value.(*RHTNode); ok {
+	if rhtNode, ok := node.(*RHTNode); ok {
 		key := rhtNode.key
 
 		count, err := n.Attrs.purgeByUpdatedAt(key, executedAt)
@@ -981,8 +946,8 @@ func (t *Tree) RemoveStyle(
 	if err != nil {
 		return nil, err
 	}
+
 	return gcPair, nil
-	//return nodeHasRemovedRHTNodes, nil
 }
 
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
