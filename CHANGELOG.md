@@ -7,6 +7,13 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.19] - 2024-05-10
+
+### Fixed
+
+- Handle concurrent editing and styling in Tree by @hackerwins in https://github.com/yorkie-team/yorkie/pull/854
+- Fix inconsistent garbage collection for multiple nodes in text and tree type by @chacha912 in https://github.com/yorkie-team/yorkie/pull/855
+
 ## [0.4.18] - 2024-04-23
 
 ### Added
