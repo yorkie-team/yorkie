@@ -157,7 +157,7 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 			return 0, err
 		}
 
-		if purgedNodes > 0 {
+		if node.removedNodesLen() == 0 {
 			delete(r.elementHasRemovedNodesSetByCreatedAt, node.CreatedAt().Key())
 		}
 		count += purgedNodes
