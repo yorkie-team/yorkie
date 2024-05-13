@@ -155,6 +155,20 @@ func TestTreeNode(t *testing.T) {
 		assert.NoError(t, err)
 		helper.AssertEqualTreeNode(t, tree.Root(), clone)
 	})
+
+	t.Run("ToXML test", func(t *testing.T) {
+		node := crdt.NewTreeNode(dummyTreeNodeID, "text", nil, "hello")
+		assert.Equal(t, "hello", crdt.ToXML(node))
+
+		para := crdt.NewTreeNode(dummyTreeNodeID, "p", nil)
+		assert.NoError(t, para.Append(node))
+		assert.Equal(t, "<p>hello</p>", crdt.ToXML(para))
+
+		elemWithAttrs := crdt.NewTreeNode(dummyTreeNodeID, "p", nil)
+		assert.NoError(t, elemWithAttrs.Append(node))
+		elemWithAttrs.SetAttr("b", "t", time.MaxTicket)
+		assert.Equal(t, `<p b="t">hello</p>`, crdt.ToXML(elemWithAttrs))
+	})
 }
 
 func TestTreeEdit(t *testing.T) {
