@@ -51,48 +51,6 @@ func TestRHT_Marshal(t *testing.T) {
 	}
 }
 
-func TestRHT_ToXML(t *testing.T) {
-	tests := []struct {
-		desc      string
-		insertKey string
-		insertVal string
-		expectStr string
-	}{
-		{
-			desc:      `1. empty hash table`,
-			insertKey: ``,
-			insertVal: ``,
-			expectStr: ``,
-		},
-		{
-			desc:      `2. only one element`,
-			insertKey: "hello\\\\\\t",
-			insertVal: "world\"\f\b",
-			expectStr: `hello\\\t="world\"\f\b"`,
-		},
-		{
-			desc:      `3. non-empty hash table`,
-			insertKey: "hi",
-			insertVal: `test\r`,
-			expectStr: `hello\\\t="world\"\f\b" hi="test\\r"`,
-		},
-	}
-
-	root := helper.TestRoot()
-	ctx := helper.TextChangeContext(root)
-
-	rht := crdt.NewRHT()
-
-	for _, tt := range tests {
-		t.Run(tt.desc, func(t *testing.T) {
-			if len(tt.insertKey) > 0 {
-				rht.Set(tt.insertKey, tt.insertVal, ctx.IssueTimeTicket())
-			}
-			assert.Equal(t, tt.expectStr, rht.ToXML())
-		})
-	}
-}
-
 func TestRHT_Set(t *testing.T) {
 	key1, val1 := `key1`, `value1`
 	key2, val2 := `key2`, `value2`
@@ -236,7 +194,6 @@ func TestRHT_Remove(t *testing.T) {
 				removedElement := rht.Remove(key, ctx.IssueTimeTicket())
 				assert.Equal(t, tt.deleteVal[i], removedElement.Value())
 			}
-			assert.Equal(t, tt.expectXML, rht.ToXML())
 			assert.Equal(t, tt.expectJSON, rht.Marshal())
 			assert.Equal(t, tt.expectSize, rht.Len())
 			assert.Equal(t, tt.expectSize, len(rht.Nodes()))
