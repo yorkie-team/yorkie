@@ -198,28 +198,3 @@ func (rht *RHT) Marshal() string {
 
 	return sb.String()
 }
-
-// ToXML returns the XML representation of this hashtable.
-func (rht *RHT) ToXML() string {
-	members := rht.Elements()
-
-	size := len(members)
-
-	// Extract and sort the keys
-	keys := make([]string, 0, size)
-	for k := range members {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	sb := strings.Builder{}
-	for idx, k := range keys {
-		if idx > 0 {
-			sb.WriteString(" ")
-		}
-		value := members[k]
-		sb.WriteString(fmt.Sprintf(`%s="%s"`, k, EscapeString(value)))
-	}
-
-	return sb.String()
-}

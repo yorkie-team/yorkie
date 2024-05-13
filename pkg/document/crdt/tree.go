@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -184,8 +185,27 @@ func (n *TreeNode) Attributes() string {
 	if n.Attrs == nil || n.Attrs.Len() == 0 {
 		return ""
 	}
+	members := n.Attrs.Elements()
 
-	return " " + n.Attrs.ToXML()
+	size := len(members)
+
+	// Extract and sort the keys
+	keys := make([]string, 0, size)
+	for k := range members {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	sb := strings.Builder{}
+	for idx, k := range keys {
+		if idx > 0 {
+			sb.WriteString(" ")
+		}
+		value := members[k]
+		sb.WriteString(fmt.Sprintf(`%s="%s"`, k, EscapeString(value)))
+	}
+
+	return " " + sb.String()
 }
 
 // Append appends the given node to the end of the children.
@@ -393,6 +413,15 @@ func (n *TreeNode) DeepCopy() (*TreeNode, error) {
 // InsertAfter inserts the given node after the given leftSibling.
 func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
 	return n.Index.InsertAfter(content.Index, children.Index)
+}
+
+// SetAttr sets the attribute of the node.
+func (n *TreeNode) SetAttr(k string, v string, ticket *time.Ticket) {
+	if n.Attrs == nil {
+		n.Attrs = NewRHT()
+	}
+
+	n.Attrs.Set(k, v, ticket)
 }
 
 // Tree represents the tree of CRDT. It has doubly linked list structure and
@@ -901,12 +930,8 @@ func (t *Tree) Style(
 					createdAtMapByActor[actorIDHex] = createdAt
 				}
 
-				if node.Attrs == nil {
-					node.Attrs = NewRHT()
-				}
-
 				for key, value := range attributes {
-					node.Attrs.Set(key, value, editedAt)
+					node.SetAttr(key, value, editedAt)
 				}
 			}
 		})
