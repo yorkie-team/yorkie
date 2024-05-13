@@ -174,44 +174,13 @@ func (rht *RHT) Nodes() []*RHTNode {
 	return nodes
 }
 
-// purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (rht *RHT) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
-	count := 0
-	nodesToBeRemoved := make(map[*RHTNode]bool)
-
-	for _, node := range rht.nodeMapByKey {
-		if node.isRemoved && ticket.After(node.UpdatedAt()) {
-			count++
-			nodesToBeRemoved[node] = true
-		}
-	}
-
-	for node := range nodesToBeRemoved {
-		if err := rht.purge(node); err != nil {
-			return 0, err
-		}
-	}
-	return count, nil
-}
-
-func (rht *RHT) purgeByUpdatedAt(key string, ticket *time.Ticket) (int, error) {
+func (rht *RHT) purge(key string, ticket *time.Ticket) (int, error) {
 	if node, ok := rht.nodeMapByKey[key]; ok && ticket.After(node.updatedAt) {
 		delete(rht.nodeMapByKey, key)
 		return 1, nil
 	}
 
 	return 0, nil
-}
-
-// purge physically purges the given node.
-func (rht *RHT) purge(node *RHTNode) error {
-	node, ok := rht.nodeMapByKey[node.key]
-	if !ok {
-		return fmt.Errorf("purge %s: %w", node.key, ErrChildNotFound)
-	}
-	delete(rht.nodeMapByKey, node.key)
-
-	return nil
 }
 
 // Len returns the number of elements.

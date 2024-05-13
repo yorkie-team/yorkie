@@ -405,7 +405,7 @@ func (n *TreeNode) Purge(node GCNode, executedAt *time.Ticket) (int, error) {
 	if rhtNode, ok := node.(*RHTNode); ok {
 		key := rhtNode.key
 
-		count, err := n.Attrs.purgeByUpdatedAt(key, executedAt)
+		count, err := n.Attrs.purge(key, executedAt)
 		if err != nil {
 			return 0, err
 		}
