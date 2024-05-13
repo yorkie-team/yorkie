@@ -98,7 +98,16 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 		}
 	}
 
-	return obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
+	pairs, err := obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
+	if err != nil {
+		return err
+	}
+
+	for _, pair := range pairs {
+		root.RegisterGCPair(pair)
+	}
+
+	return nil
 }
 
 // FromPos returns the start point of the editing range.

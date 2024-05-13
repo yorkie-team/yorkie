@@ -29,6 +29,13 @@ type ElementPair struct {
 	elem   Element
 }
 
+// GCPair is a structure that represents a pair of parent and child for garbage
+// collection.
+type GCPair struct {
+	Parent GCParent
+	Child  GCChild
+}
+
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
 // received from server.
@@ -40,6 +47,7 @@ type Root struct {
 	elementMapByCreatedAt                map[string]Element
 	removedElementPairMapByCreatedAt     map[string]ElementPair
 	elementHasRemovedNodesSetByCreatedAt map[string]GCElement
+	gcPairMapByID                        map[string]GCPair
 }
 
 // NewRoot creates a new instance of Root.
@@ -48,6 +56,7 @@ func NewRoot(root *Object) *Root {
 		elementMapByCreatedAt:                make(map[string]Element),
 		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
 		elementHasRemovedNodesSetByCreatedAt: make(map[string]GCElement),
+		gcPairMapByID:                        make(map[string]GCPair),
 	}
 
 	r.object = root
@@ -200,4 +209,9 @@ func (r *Root) GarbageLen() int {
 	}
 
 	return count
+}
+
+// RegisterGCPair registers the given pair to hash table.
+func (r *Root) RegisterGCPair(pair GCPair) {
+	r.gcPairMapByID[pair.Child.ID()] = pair
 }

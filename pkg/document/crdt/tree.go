@@ -43,25 +43,6 @@ type TreeNodeForTest struct {
 	IsRemoved bool
 }
 
-// TreeNode is a node of Tree.
-type TreeNode struct {
-	Index *index.Node[*TreeNode]
-
-	ID        *TreeNodeID
-	RemovedAt *time.Ticket
-
-	InsPrevID *TreeNodeID
-	InsNextID *TreeNodeID
-
-	// Value is optional. If the value is not empty, it means that the node is a
-	// text node.
-	Value string
-
-	// Attrs is optional. If the value is not empty,
-	//it means that the node is an element node.
-	Attrs *RHT
-}
-
 // TreePos represents a position in the tree. It is used to determine the
 // position of insertion, deletion, and style change.
 type TreePos struct {
@@ -148,6 +129,25 @@ func (t *TreeNodeID) Equals(id *TreeNodeID) bool {
 	return t.CreatedAt.Compare(id.CreatedAt) == 0 && t.Offset == id.Offset
 }
 
+// TreeNode is a node of Tree.
+type TreeNode struct {
+	Index *index.Node[*TreeNode]
+
+	ID        *TreeNodeID
+	RemovedAt *time.Ticket
+
+	InsPrevID *TreeNodeID
+	InsNextID *TreeNodeID
+
+	// Value is optional. If the value is not empty, it means that the node is a
+	// text node.
+	Value string
+
+	// Attrs is optional. If the value is not empty,
+	//it means that the node is an element node.
+	Attrs *RHT
+}
+
 // Type returns the type of the Node.
 func (n *TreeNode) Type() string {
 	return n.Index.Type
@@ -216,6 +216,12 @@ func (n *TreeNode) Child(offset int) (*TreeNode, error) {
 	}
 
 	return child.Value, nil
+}
+
+// Purge removes the given child from the children.
+func (n *TreeNode) Purge(child GCChild) {
+	rhtNode := child.(*RHTNode)
+	n.Attrs.Purge(rhtNode)
 }
 
 // Split splits the node at the given offset.
@@ -918,17 +924,18 @@ func (t *Tree) Style(
 }
 
 // RemoveStyle removes the given attributes of the given range.
-func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, editedAt *time.Ticket) error {
+func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, editedAt *time.Ticket) ([]GCPair, error) {
 	// 01. split text nodes at the given range if needed.
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	var pairs []GCPair
 	err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft,
 		func(token index.TreeToken[*TreeNode], _ bool) {
 			node := token.Node
@@ -938,15 +945,20 @@ func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, edite
 					node.Attrs = NewRHT()
 				}
 				for _, value := range attributesToRemove {
-					node.Attrs.Remove(value, editedAt)
+					if rhtNode := node.Attrs.Remove(value, editedAt); rhtNode != nil {
+						pairs = append(pairs, GCPair{
+							Parent: node,
+							Child:  rhtNode,
+						})
+					}
 				}
 			}
 		})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return pairs, nil
 }
 
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
