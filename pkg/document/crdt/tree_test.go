@@ -166,8 +166,11 @@ func TestTreeNode(t *testing.T) {
 
 		elemWithAttrs := crdt.NewTreeNode(dummyTreeNodeID, "p", nil)
 		assert.NoError(t, elemWithAttrs.Append(node))
+		elemWithAttrs.SetAttr("e", "\"true\"", time.MaxTicket)
+		assert.Equal(t, `<p e="\"true\"">hello</p>`, crdt.ToXML(elemWithAttrs))
+
 		elemWithAttrs.SetAttr("b", "t", time.MaxTicket)
-		assert.Equal(t, `<p b="t">hello</p>`, crdt.ToXML(elemWithAttrs))
+		assert.Equal(t, `<p b="t" e="\"true\"">hello</p>`, crdt.ToXML(elemWithAttrs))
 	})
 }
 
