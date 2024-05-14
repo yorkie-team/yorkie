@@ -172,6 +172,17 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 		count += purgedNodes
 	}
 
+	for _, pair := range r.gcPairMapByID {
+		if ticket.Compare(pair.Child.RemovedAt()) >= 0 {
+			if err := pair.Parent.Purge(pair.Child); err != nil {
+				return 0, err
+			}
+
+			delete(r.gcPairMapByID, pair.Child.ID())
+			count++
+		}
+	}
+
 	return count, nil
 }
 
@@ -208,10 +219,17 @@ func (r *Root) GarbageLen() int {
 		count += element.removedNodesLen()
 	}
 
+	count += len(r.gcPairMapByID)
+
 	return count
 }
 
 // RegisterGCPair registers the given pair to hash table.
 func (r *Root) RegisterGCPair(pair GCPair) {
+	if _, ok := r.gcPairMapByID[pair.Child.ID()]; ok {
+		delete(r.gcPairMapByID, pair.Child.ID())
+		return
+	}
+
 	r.gcPairMapByID[pair.Child.ID()] = pair
 }

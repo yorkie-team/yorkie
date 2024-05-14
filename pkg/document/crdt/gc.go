@@ -20,7 +20,7 @@ import "github.com/yorkie-team/yorkie/pkg/document/time"
 
 // GCParent is an interface for the parent of the garbage collection target.
 type GCParent interface {
-	Purge(node GCChild)
+	Purge(node GCChild) error
 }
 
 // GCChild is an interface for the child of the garbage collection target.

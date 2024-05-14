@@ -191,8 +191,8 @@ func TestRHT_Remove(t *testing.T) {
 				rht.Set(key, tt.insertVal[i], ctx.IssueTimeTicket())
 			}
 			for i, key := range tt.deleteKey {
-				removedElement := rht.Remove(key, ctx.IssueTimeTicket())
-				assert.Equal(t, tt.deleteVal[i], removedElement.Value())
+				nodes := rht.Remove(key, ctx.IssueTimeTicket())
+				assert.Equal(t, tt.deleteVal[i], nodes[len(nodes)-1].Value())
 			}
 			assert.Equal(t, tt.expectJSON, rht.Marshal())
 			assert.Equal(t, tt.expectSize, rht.Len())

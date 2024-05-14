@@ -239,9 +239,9 @@ func (n *TreeNode) Child(offset int) (*TreeNode, error) {
 }
 
 // Purge removes the given child from the children.
-func (n *TreeNode) Purge(child GCChild) {
+func (n *TreeNode) Purge(child GCChild) error {
 	rhtNode := child.(*RHTNode)
-	n.Attrs.Purge(rhtNode)
+	return n.Attrs.Purge(rhtNode)
 }
 
 // Split splits the node at the given offset.
@@ -431,7 +431,7 @@ func (n *TreeNode) SetAttr(k string, v string, ticket *time.Ticket) {
 }
 
 // RemoveAttr removes the given attribute of the element.
-func (n *TreeNode) RemoveAttr(k string, ticket *time.Ticket) *RHTNode {
+func (n *TreeNode) RemoveAttr(k string, ticket *time.Ticket) []*RHTNode {
 	if n.Attrs == nil {
 		n.Attrs = NewRHT()
 	}
@@ -971,10 +971,11 @@ func (t *Tree) RemoveStyle(from, to *TreePos, attrs []string, editedAt *time.Tic
 		}
 
 		for _, attr := range attrs {
-			if valueNode := node.RemoveAttr(attr, editedAt); valueNode != nil {
+			rhtNodes := node.RemoveAttr(attr, editedAt)
+			for _, rhtNode := range rhtNodes {
 				pairs = append(pairs, GCPair{
 					Parent: node,
-					Child:  valueNode,
+					Child:  rhtNode,
 				})
 			}
 		}

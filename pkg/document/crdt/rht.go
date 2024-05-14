@@ -118,32 +118,38 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
 	}
 }
 
-// Remove removes the Element of the given key.
-func (rht *RHT) Remove(k string, executedAt *time.Ticket) *RHTNode {
-	// TODO(hackerwins): We need to consider the logic and the policy of removing the element.
+// Remove removes the value of the given key.
+func (rht *RHT) Remove(k string, executedAt *time.Ticket) []*RHTNode {
+	// NOTE(hackerwins): We need to consider the logic and the policy of removing the element.
 	// A. RHT always overrides the value of the same key in a immutable way.
 	// B. Even if the key is not existed, RHT sets the flag `isRemoved` for concurrency.
-	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
-		// NOTE(justiceHui): Even if key is not existed, we must set flag `isRemoved` for concurrency
-		if node == nil {
-			rht.numberOfRemovedElement++
-			newNode := newRHTNode(k, ``, executedAt, true)
-			rht.nodeMapByKey[k] = newNode
-			return newNode
-		}
-
-		alreadyRemoved := node.isRemoved
-		if !alreadyRemoved {
-			rht.numberOfRemovedElement++
-		}
-
-		newNode := newRHTNode(k, node.val, executedAt, true)
+	node, ok := rht.nodeMapByKey[k]
+	if !ok {
+		rht.numberOfRemovedElement++
+		newNode := newRHTNode(k, "", executedAt, true)
 		rht.nodeMapByKey[k] = newNode
-
-		return newNode
+		return []*RHTNode{newNode}
 	}
 
-	return nil
+	if !executedAt.After(node.updatedAt) {
+		return nil
+	}
+
+	alreadyRemoved := node.isRemoved
+	if !alreadyRemoved {
+		rht.numberOfRemovedElement++
+	}
+
+	var gcNodes []*RHTNode
+	if alreadyRemoved {
+		gcNodes = append(gcNodes, node)
+	}
+
+	newNode := newRHTNode(k, node.val, executedAt, true)
+	rht.nodeMapByKey[k] = newNode
+	gcNodes = append(gcNodes, newNode)
+
+	return gcNodes
 }
 
 // Elements returns a map of elements because the map easy to use for loop.
@@ -215,10 +221,11 @@ func (rht *RHT) Marshal() string {
 }
 
 // Purge purges the given child node.
-func (rht *RHT) Purge(child *RHTNode) {
-	// NOTE(hackerwins): RHT always overrides the value of the same key.
-	// So, we don't know whether the given child is the same as the node in the map.
-	if node, ok := rht.nodeMapByKey[child.key]; ok && node.ID() == child.ID() {
-		delete(rht.nodeMapByKey, child.key)
+func (rht *RHT) Purge(child *RHTNode) error {
+	if node, ok := rht.nodeMapByKey[child.key]; !ok || node.ID() != child.ID() {
+		return ErrChildNotFound
 	}
+
+	delete(rht.nodeMapByKey, child.key)
+	return nil
 }
