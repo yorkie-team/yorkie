@@ -108,14 +108,23 @@ func (rht *RHT) Has(key string) bool {
 }
 
 // Set sets the value of the given key.
-func (rht *RHT) Set(k, v string, executedAt *time.Ticket) {
-	if node, ok := rht.nodeMapByKey[k]; !ok || executedAt.After(node.updatedAt) {
-		if node != nil && node.isRemoved {
-			rht.numberOfRemovedElement--
-		}
+func (rht *RHT) Set(k, v string, executedAt *time.Ticket) *RHTNode {
+	node := rht.nodeMapByKey[k]
+
+	if node != nil && node.isRemoved {
+		rht.numberOfRemovedElement--
+	}
+
+	if node == nil || executedAt.After(node.updatedAt) {
 		newNode := newRHTNode(k, v, executedAt, false)
 		rht.nodeMapByKey[k] = newNode
 	}
+
+	if node != nil && node.isRemoved {
+		return node
+	}
+
+	return nil
 }
 
 // Remove removes the value of the given key.
@@ -223,7 +232,8 @@ func (rht *RHT) Marshal() string {
 // Purge purges the given child node.
 func (rht *RHT) Purge(child *RHTNode) error {
 	if node, ok := rht.nodeMapByKey[child.key]; !ok || node.ID() != child.ID() {
-		return ErrChildNotFound
+		//return ErrChildNotFound
+		return nil
 	}
 
 	delete(rht.nodeMapByKey, child.key)

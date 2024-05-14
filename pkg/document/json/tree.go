@@ -221,9 +221,13 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	maxCreationMapByActor, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
+	maxCreationMapByActor, pairs, err := t.Tree.Style(fromPos, toPos, attributes, ticket, nil)
 	if err != nil {
 		panic(err)
+	}
+
+	for _, pair := range pairs {
+		t.context.RegisterGCPair(pair)
 	}
 
 	t.context.Push(operations.NewTreeStyle(

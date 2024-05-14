@@ -524,81 +524,111 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 	})
+}
 
-	t.Run("tree attributes GC test", func(t *testing.T) {
-		doc := document.New("doc")
+type styleOpCode int
 
-		// 01. Set And Remove
+const (
+	StyleUndefined styleOpCode = iota
+	StyleRemove
+	StyleSet
+)
 
-		// Initial
-		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
-				Type: "r",
-			}).Edit(0, 0, &json.TreeNode{
-				Type: "p",
-			}, 0)
-			return nil
+type styleOperationType struct {
+	op         styleOpCode
+	key, value string
+}
+
+func (op styleOperationType) run(t *testing.T, doc *document.Document) {
+	assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+		if op.op == StyleRemove {
+			root.GetTree("t").RemoveStyle(0, 1, []string{op.key})
+		} else if op.op == StyleSet {
+			root.GetTree("t").Style(0, 1, map[string]string{op.key: op.value})
+		}
+		return nil
+	}))
+}
+
+func TestTreeAttributeGC(t *testing.T) {
+	tests := []struct {
+		desc       string
+		ops        []styleOperationType
+		garbageLen []int
+		expectXML  []string
+	}{
+		{
+			desc: "style-style test",
+			ops: []styleOperationType{
+				{StyleSet, "b", "t"},
+				{StyleSet, "b", "f"},
+			},
+			garbageLen: []int{0, 0},
+			expectXML: []string{
+				`<r><p b="t"></p></r>`,
+				`<r><p b="f"></p></r>`,
+			},
+		},
+		{
+			desc: "style-remove test",
+			ops: []styleOperationType{
+				{StyleSet, "b", "t"},
+				{StyleRemove, "b", ""},
+			},
+			garbageLen: []int{0, 1},
+			expectXML: []string{
+				`<r><p b="t"></p></r>`,
+				`<r><p></p></r>`,
+			},
+		},
+		{
+			desc: "remove-style test",
+			ops: []styleOperationType{
+				{StyleRemove, "b", ""},
+				{StyleSet, "b", "t"},
+			},
+			garbageLen: []int{1, 0},
+			expectXML: []string{
+				`<r><p></p></r>`,
+				`<r><p b="t"></p></r>`,
+			},
+		},
+		{
+			desc: "remove-remove test",
+			ops: []styleOperationType{
+				{StyleRemove, "b", ""},
+				{StyleRemove, "b", ""},
+			},
+			garbageLen: []int{1, 1},
+			expectXML: []string{
+				`<r><p></p></r>`,
+				`<r><p></p></r>`,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			doc := document.New("doc")
+			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewTree("t", &json.TreeNode{
+					Type:     "r",
+					Children: []json.TreeNode{{Type: "p"}},
+				})
+				return nil
+			})
+			assert.NoError(t, err)
+			assert.Equal(t, "<r><p></p></r>", doc.Root().GetTree("t").ToXML())
+			assert.Equal(t, 0, doc.GarbageLen())
+
+			for i := 0; i < len(tc.ops); i++ {
+				tc.ops[i].run(t, doc)
+				assert.Equal(t, tc.expectXML[i], doc.Root().GetTree("t").ToXML())
+				assert.Equal(t, tc.garbageLen[i], doc.GarbageLen())
+			}
+
+			doc.GarbageCollect(time.MaxTicket)
+			assert.Equal(t, 0, doc.GarbageLen())
 		})
-		assert.NoError(t, err)
-		assert.Equal(t, `<r><p></p></r>`, doc.Root().GetTree("t").ToXML())
-		assert.Equal(t, 0, doc.GarbageLen())
-
-		// Set Style
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Style(0, 1, map[string]string{"b": "t"})
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, `<r><p b="t"></p></r>`, doc.Root().GetTree("t").ToXML())
-		assert.Equal(t, 0, doc.GarbageLen())
-
-		// Remove Style
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").RemoveStyle(0, 1, []string{"b"})
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, `<r><p></p></r>`, doc.Root().GetTree("t").ToXML())
-		assert.Equal(t, 1, doc.GarbageLen())
-
-		doc.GarbageCollect(time.MaxTicket)
-		assert.Equal(t, 0, doc.GarbageLen())
-
-		doc = document.New("doc")
-
-		// 02. Remove And Remove
-		// Initial
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t", &json.TreeNode{
-				Type: "r",
-			}).Edit(0, 0, &json.TreeNode{
-				Type: "p",
-			}, 0)
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, `<r><p></p></r>`, doc.Root().GetTree("t").ToXML())
-		assert.Equal(t, 0, doc.GarbageLen())
-
-		// Remove Style
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").RemoveStyle(0, 1, []string{"b"})
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, `<r><p></p></r>`, doc.Root().GetTree("t").ToXML())
-		assert.Equal(t, 1, doc.GarbageLen())
-
-		// Remove Style
-		err = doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").RemoveStyle(0, 1, []string{"b"})
-			return nil
-		})
-		assert.NoError(t, err)
-		assert.Equal(t, `<r><p></p></r>`, doc.Root().GetTree("t").ToXML())
-		assert.Equal(t, 1, doc.GarbageLen())
-
-		doc.GarbageCollect(time.MaxTicket)
-		assert.Equal(t, 0, doc.GarbageLen())
-	})
+	}
 }
