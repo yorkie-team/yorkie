@@ -635,28 +635,55 @@ func TestTreeAttributeGC(t *testing.T) {
 
 func TestTreeAttributeWithTreeNodeGC(t *testing.T) {
 	tests := []struct {
-		desc       string
-		op         styleOperationType
-		garbageLen []int
-		expectXML  []string
+		desc           string
+		op             styleOperationType
+		garbageLen     []int
+		expectXML      []string
+		gcBeforeDelete bool
 	}{
 		{
 			desc:       "Set-Delete test",
 			op:         styleOperationType{StyleSet, "b", "t"},
-			garbageLen: []int{0, 1},
+			garbageLen: []int{0, 0, 1},
 			expectXML: []string{
+				`<r><p b="t"></p></r>`,
 				`<r><p b="t"></p></r>`,
 				`<r></r>`,
 			},
+			gcBeforeDelete: false,
 		},
 		{
 			desc:       "Remove-Delete test",
 			op:         styleOperationType{StyleRemove, "b", ""},
-			garbageLen: []int{1, 2},
+			garbageLen: []int{1, 1, 2},
 			expectXML: []string{
+				`<r><p></p></r>`,
 				`<r><p></p></r>`,
 				`<r></r>`,
 			},
+			gcBeforeDelete: false,
+		},
+		{
+			desc:       "Remove-Delete with flush test",
+			op:         styleOperationType{StyleRemove, "b", ""},
+			garbageLen: []int{1, 0, 1},
+			expectXML: []string{
+				`<r><p></p></r>`,
+				`<r><p></p></r>`,
+				`<r></r>`,
+			},
+			gcBeforeDelete: true,
+		},
+		{
+			desc:       "Remove-Delete with flush test",
+			op:         styleOperationType{StyleRemove, "b", ""},
+			garbageLen: []int{1, 0, 1},
+			expectXML: []string{
+				`<r><p></p></r>`,
+				`<r><p></p></r>`,
+				`<r></r>`,
+			},
+			gcBeforeDelete: true,
 		},
 	}
 
@@ -678,13 +705,19 @@ func TestTreeAttributeWithTreeNodeGC(t *testing.T) {
 			assert.Equal(t, tc.expectXML[0], doc.Root().GetTree("t").ToXML())
 			assert.Equal(t, tc.garbageLen[0], doc.GarbageLen())
 
+			if tc.gcBeforeDelete == true {
+				doc.GarbageCollect(time.MaxTicket)
+			}
+			assert.Equal(t, tc.expectXML[1], doc.Root().GetTree("t").ToXML())
+			assert.Equal(t, tc.garbageLen[1], doc.GarbageLen())
+
 			err = doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetTree("t").Edit(0, 2, nil, 0)
 				return nil
 			})
 			assert.NoError(t, err)
-			assert.Equal(t, tc.expectXML[1], doc.Root().GetTree("t").ToXML())
-			assert.Equal(t, tc.garbageLen[1], doc.GarbageLen())
+			assert.Equal(t, tc.expectXML[2], doc.Root().GetTree("t").ToXML())
+			assert.Equal(t, tc.garbageLen[2], doc.GarbageLen())
 
 			doc.GarbageCollect(time.MaxTicket)
 			assert.Equal(t, 0, doc.GarbageLen())
