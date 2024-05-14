@@ -258,12 +258,12 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	gcPairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket)
+	pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket)
 	if err != nil {
 		panic(err)
 	}
 
-	for _, pair := range gcPairs {
+	for _, pair := range pairs {
 		t.context.RegisterGCPair(pair)
 	}
 

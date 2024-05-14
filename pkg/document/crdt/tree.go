@@ -421,13 +421,22 @@ func (n *TreeNode) InsertAfter(content *TreeNode, children *TreeNode) error {
 	return n.Index.InsertAfter(content.Index, children.Index)
 }
 
-// SetAttr sets the attribute of the node.
+// SetAttr sets the given attribute of the element.
 func (n *TreeNode) SetAttr(k string, v string, ticket *time.Ticket) {
 	if n.Attrs == nil {
 		n.Attrs = NewRHT()
 	}
 
 	n.Attrs.Set(k, v, ticket)
+}
+
+// RemoveAttr removes the given attribute of the element.
+func (n *TreeNode) RemoveAttr(k string, ticket *time.Ticket) *RHTNode {
+	if n.Attrs == nil {
+		n.Attrs = NewRHT()
+	}
+
+	return n.Attrs.Remove(k, ticket)
 }
 
 // Tree represents the tree of CRDT. It has doubly linked list structure and
@@ -896,11 +905,10 @@ func (t *Tree) StyleByIndex(
 // Style applies the given attributes of the given range.
 func (t *Tree) Style(
 	from, to *TreePos,
-	attributes map[string]string,
+	attrs map[string]string,
 	editedAt *time.Ticket,
 	maxCreatedAtMapByActor map[string]*time.Ticket,
 ) (map[string]*time.Ticket, error) {
-	// 01. split text nodes at the given range if needed.
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
 		return nil, err
@@ -911,37 +919,33 @@ func (t *Tree) Style(
 	}
 
 	createdAtMapByActor := make(map[string]*time.Ticket)
-	err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft,
-		func(token index.TreeToken[*TreeNode], _ bool) {
-			node := token.Node
+	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
+		node := token.Node
+		actorIDHex := node.ID.CreatedAt.ActorIDHex()
 
-			actorIDHex := node.ID.CreatedAt.ActorIDHex()
-
-			var maxCreatedAt *time.Ticket
-			if maxCreatedAtMapByActor == nil {
-				maxCreatedAt = time.MaxTicket
+		var maxCreatedAt *time.Ticket
+		if maxCreatedAtMapByActor == nil {
+			maxCreatedAt = time.MaxTicket
+		} else {
+			if createdAt, ok := maxCreatedAtMapByActor[actorIDHex]; ok {
+				maxCreatedAt = createdAt
 			} else {
-				createdAt, ok := maxCreatedAtMapByActor[actorIDHex]
-				if ok {
-					maxCreatedAt = createdAt
-				} else {
-					maxCreatedAt = time.InitialTicket
-				}
+				maxCreatedAt = time.InitialTicket
+			}
+		}
+
+		if node.canStyle(editedAt, maxCreatedAt) && !node.IsText() && len(attrs) > 0 {
+			maxCreatedAt = createdAtMapByActor[actorIDHex]
+			createdAt := node.ID.CreatedAt
+			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
+				createdAtMapByActor[actorIDHex] = createdAt
 			}
 
-			if node.canStyle(editedAt, maxCreatedAt) && !node.IsText() && len(attributes) > 0 {
-				maxCreatedAt = createdAtMapByActor[actorIDHex]
-				createdAt := node.ID.CreatedAt
-				if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
-					createdAtMapByActor[actorIDHex] = createdAt
-				}
-
-				for key, value := range attributes {
-					node.SetAttr(key, value, editedAt)
-				}
+			for key, value := range attrs {
+				node.SetAttr(key, value, editedAt)
 			}
-		})
-	if err != nil {
+		}
+	}); err != nil {
 		return nil, err
 	}
 
@@ -949,8 +953,7 @@ func (t *Tree) Style(
 }
 
 // RemoveStyle removes the given attributes of the given range.
-func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, editedAt *time.Ticket) ([]GCPair, error) {
-	// 01. split text nodes at the given range if needed.
+func (t *Tree) RemoveStyle(from, to *TreePos, attrs []string, editedAt *time.Ticket) ([]GCPair, error) {
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
 		return nil, err
@@ -961,25 +964,21 @@ func (t *Tree) RemoveStyle(from, to *TreePos, attributesToRemove []string, edite
 	}
 
 	var pairs []GCPair
-	err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft,
-		func(token index.TreeToken[*TreeNode], _ bool) {
-			node := token.Node
-			// NOTE(justiceHui): Even if key is not existed, we must set flag `isRemoved` for concurrency
-			if !node.IsRemoved() && !node.IsText() {
-				if node.Attrs == nil {
-					node.Attrs = NewRHT()
-				}
-				for _, value := range attributesToRemove {
-					if rhtNode := node.Attrs.Remove(value, editedAt); rhtNode != nil {
-						pairs = append(pairs, GCPair{
-							Parent: node,
-							Child:  rhtNode,
-						})
-					}
-				}
+	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
+		node := token.Node
+		if node.IsRemoved() || node.IsText() {
+			return
+		}
+
+		for _, attr := range attrs {
+			if valueNode := node.RemoveAttr(attr, editedAt); valueNode != nil {
+				pairs = append(pairs, GCPair{
+					Parent: node,
+					Child:  valueNode,
+				})
 			}
-		})
-	if err != nil {
+		}
+	}); err != nil {
 		return nil, err
 	}
 
