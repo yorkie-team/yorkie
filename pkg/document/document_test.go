@@ -664,12 +664,12 @@ func TestTreeAttributeWithTreeNodeGC(t *testing.T) {
 			gcBeforeDelete: false,
 		},
 		{
-			desc:       "Remove-Delete with flush test",
-			op:         styleOperationType{StyleRemove, "b", ""},
-			garbageLen: []int{1, 0, 1},
+			desc:       "Set-Delete with flush test",
+			op:         styleOperationType{StyleSet, "b", "t"},
+			garbageLen: []int{0, 0, 1},
 			expectXML: []string{
-				`<r><p></p></r>`,
-				`<r><p></p></r>`,
+				`<r><p b="t"></p></r>`,
+				`<r><p b="t"></p></r>`,
 				`<r></r>`,
 			},
 			gcBeforeDelete: true,
