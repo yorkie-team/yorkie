@@ -111,7 +111,7 @@ func (rht *RHT) Has(key string) bool {
 func (rht *RHT) Set(k, v string, executedAt *time.Ticket) *RHTNode {
 	node := rht.nodeMapByKey[k]
 
-	if node != nil && node.isRemoved {
+	if node != nil && node.isRemoved && executedAt.After(node.updatedAt) {
 		rht.numberOfRemovedElement--
 	}
 
@@ -237,5 +237,6 @@ func (rht *RHT) Purge(child *RHTNode) error {
 	}
 
 	delete(rht.nodeMapByKey, child.key)
+	rht.numberOfRemovedElement--
 	return nil
 }
