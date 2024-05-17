@@ -36,20 +36,18 @@ type ElementPair struct {
 // Every element has a unique time ticket at creation, which allows us to find
 // a particular element.
 type Root struct {
-	object                               *Object
-	elementMapByCreatedAt                map[string]Element
-	removedElementPairMapByCreatedAt     map[string]ElementPair
-	elementHasRemovedNodesSetByCreatedAt map[string]GCElement
-	gcPairMapByID                        map[string]GCPair
+	object                           *Object
+	elementMapByCreatedAt            map[string]Element
+	removedElementPairMapByCreatedAt map[string]ElementPair
+	gcPairMapByID                    map[string]GCPair
 }
 
 // NewRoot creates a new instance of Root.
 func NewRoot(root *Object) *Root {
 	r := &Root{
-		elementMapByCreatedAt:                make(map[string]Element),
-		removedElementPairMapByCreatedAt:     make(map[string]ElementPair),
-		elementHasRemovedNodesSetByCreatedAt: make(map[string]GCElement),
-		gcPairMapByID:                        make(map[string]GCPair),
+		elementMapByCreatedAt:            make(map[string]Element),
+		removedElementPairMapByCreatedAt: make(map[string]ElementPair),
+		gcPairMapByID:                    make(map[string]GCPair),
 	}
 
 	r.object = root
@@ -125,11 +123,6 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 	}
 }
 
-// RegisterElementHasRemovedNodes register the given element with garbage to hash table.
-func (r *Root) RegisterElementHasRemovedNodes(element GCElement) {
-	r.elementHasRemovedNodesSetByCreatedAt[element.CreatedAt().Key()] = element
-}
-
 // DeepCopy copies itself deeply.
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
@@ -151,18 +144,6 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 
 			count += r.deregisterElement(pair.elem)
 		}
-	}
-
-	for _, node := range r.elementHasRemovedNodesSetByCreatedAt {
-		purgedNodes, err := node.purgeRemovedNodesBefore(ticket)
-		if err != nil {
-			return 0, err
-		}
-
-		if node.removedNodesLen() == 0 {
-			delete(r.elementHasRemovedNodesSetByCreatedAt, node.CreatedAt().Key())
-		}
-		count += purgedNodes
 	}
 
 	for _, pair := range r.gcPairMapByID {
@@ -207,11 +188,6 @@ func (r *Root) GarbageLen() int {
 	}
 
 	count += len(seen)
-
-	for _, element := range r.elementHasRemovedNodesSetByCreatedAt {
-		count += element.removedNodesLen()
-	}
-
 	count += len(r.gcPairMapByID)
 
 	return count

@@ -369,6 +369,7 @@ func (n *TreeNode) SplitElement(offset int, issueTimeTicket func() *time.Ticket)
 // remove marks the node as removed.
 func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	justRemoved := n.removedAt == nil
+
 	if n.removedAt == nil || n.removedAt.Compare(removedAt) > 0 {
 		n.removedAt = removedAt
 		if justRemoved {
@@ -378,7 +379,7 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 				n.Index.Parent.Length -= n.Index.PaddedLength()
 			}
 		}
-		return true
+		return justRemoved
 	}
 
 	return false

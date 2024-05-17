@@ -41,7 +41,7 @@ func newRHTNode(key, val string, updatedAt *time.Ticket, isRemoved bool) *RHTNod
 	}
 }
 
-// ID returns the ID of this node.
+// IDString returns the string representation of this node.
 func (n *RHTNode) IDString() string {
 	return n.updatedAt.Key() + ":" + n.key
 }

@@ -75,12 +75,13 @@ func (e *Edit) Execute(root *crdt.Root) error {
 
 	switch obj := parent.(type) {
 	case *crdt.Text:
-		_, _, err := obj.Edit(e.from, e.to, e.maxCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
+		_, _, pairs, err := obj.Edit(e.from, e.to, e.maxCreatedAtMapByActor, e.content, e.attributes, e.executedAt)
 		if err != nil {
 			return err
 		}
-		if !e.from.Equal(e.to) {
-			root.RegisterElementHasRemovedNodes(obj)
+
+		for _, pair := range pairs {
+			root.RegisterGCPair(pair)
 		}
 	default:
 		return ErrNotApplicableDataType

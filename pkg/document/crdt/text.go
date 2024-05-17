@@ -233,7 +233,7 @@ func (t *Text) Edit(
 	content string,
 	attributes map[string]string,
 	executedAt *time.Ticket,
-) (*RGATreeSplitNodePos, map[string]*time.Ticket, error) {
+) (*RGATreeSplitNodePos, map[string]*time.Ticket, []GCPair, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
 		val.attrs.Set(key, value, executedAt)
@@ -327,14 +327,4 @@ func (t *Text) ToTestString() string {
 // for debugging purpose.
 func (t *Text) CheckWeight() bool {
 	return t.rgaTreeSplit.CheckWeight()
-}
-
-// removedNodesLen returns length of removed nodes
-func (t *Text) removedNodesLen() int {
-	return t.rgaTreeSplit.removedNodesLen()
-}
-
-// purgeRemovedNodesBefore physically purges nodes that have been removed.
-func (t *Text) purgeRemovedNodesBefore(ticket *time.Ticket) (int, error) {
-	return t.rgaTreeSplit.purgeRemovedNodesBefore(ticket)
 }
