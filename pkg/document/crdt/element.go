@@ -39,13 +39,6 @@ type Container interface {
 	DeleteByCreatedAt(createdAt *time.Ticket, deletedAt *time.Ticket) (Element, error)
 }
 
-// GCElement represents Element which has GC.
-type GCElement interface {
-	Element
-	removedNodesLen() int
-	purgeRemovedNodesBefore(ticket *time.Ticket) (int, error)
-}
-
 // Element represents JSON element.
 type Element interface {
 	// Marshal returns the JSON encoding of this element.

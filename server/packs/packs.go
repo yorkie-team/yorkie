@@ -245,7 +245,7 @@ func BuildDocumentForServerSeq(
 			"after apply %d changes: elements: %d removeds: %d, %s",
 			len(changes),
 			doc.Root().ElementMapLen(),
-			doc.Root().RemovedElementLen(),
+			doc.Root().GarbageElementLen(),
 			doc.RootObject().Marshal(),
 		)
 	}

@@ -208,7 +208,7 @@ func createTreeNodePairs(node *crdt.TreeNode, parentID *crdt.TreeNodeID) []treeN
 
 	pairs = append(pairs, treeNodePair{node, parentID})
 	for _, child := range node.Index.Children(true) {
-		pairs = append(pairs, createTreeNodePairs(child.Value, node.ID)...)
+		pairs = append(pairs, createTreeNodePairs(child.Value, node.ID())...)
 	}
 	return pairs
 }

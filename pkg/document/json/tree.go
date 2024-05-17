@@ -345,7 +345,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 	}
 
 	ticket = t.context.LastTimeTicket()
-	maxCreationMapByActor, err := t.Tree.Edit(
+	maxCreationMapByActor, pairs, err := t.Tree.Edit(
 		fromPos,
 		toPos,
 		clones,
@@ -358,6 +358,10 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		panic(err)
 	}
 
+	for _, pair := range pairs {
+		t.context.RegisterGCPair(pair)
+	}
+
 	t.context.Push(operations.NewTreeEdit(
 		t.CreatedAt(),
 		fromPos,
@@ -367,10 +371,6 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		maxCreationMapByActor,
 		ticket,
 	))
-
-	if !fromPos.Equals(toPos) {
-		t.context.RegisterElementHasRemovedNodes(t.Tree)
-	}
 
 	return true
 }

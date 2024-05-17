@@ -41,8 +41,8 @@ func newRHTNode(key, val string, updatedAt *time.Ticket, isRemoved bool) *RHTNod
 	}
 }
 
-// ID returns the ID of this node.
-func (n *RHTNode) ID() string {
+// IDString returns the string representation of this node.
+func (n *RHTNode) IDString() string {
 	return n.updatedAt.Key() + ":" + n.key
 }
 
@@ -231,8 +231,8 @@ func (rht *RHT) Marshal() string {
 
 // Purge purges the given child node.
 func (rht *RHT) Purge(child *RHTNode) error {
-	if node, ok := rht.nodeMapByKey[child.key]; !ok || node.ID() != child.ID() {
-		//return ErrChildNotFound
+	if node, ok := rht.nodeMapByKey[child.key]; !ok || node.IDString() != child.IDString() {
+		// TODO(hackerwins): Should we return an error when the child is not found?
 		return nil
 	}
 

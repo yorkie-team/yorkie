@@ -32,6 +32,6 @@ type GCParent interface {
 
 // GCChild is an interface for the child of the garbage collection target.
 type GCChild interface {
-	ID() string
+	IDString() string
 	RemovedAt() *time.Ticket
 }
