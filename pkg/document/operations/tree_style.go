@@ -92,13 +92,25 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
+	var pairs []crdt.GCPair
+	var err error
 	if len(e.attributes) > 0 {
-		if _, err := obj.Style(e.from, e.to, e.attributes, e.executedAt, e.maxCreatedAtMapByActor); err != nil {
+		_, pairs, err = obj.Style(e.from, e.to, e.attributes, e.executedAt, e.maxCreatedAtMapByActor)
+		if err != nil {
+			return err
+		}
+	} else {
+		pairs, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
+		if err != nil {
 			return err
 		}
 	}
 
-	return obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
+	for _, pair := range pairs {
+		root.RegisterGCPair(pair)
+	}
+
+	return nil
 }
 
 // FromPos returns the start point of the editing range.

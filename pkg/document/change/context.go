@@ -85,6 +85,11 @@ func (c *Context) RegisterElementHasRemovedNodes(element crdt.GCElement) {
 	c.root.RegisterElementHasRemovedNodes(element)
 }
 
+// RegisterGCPair registers the given GC pair to the root.
+func (c *Context) RegisterGCPair(pair crdt.GCPair) {
+	c.root.RegisterGCPair(pair)
+}
+
 // LastTimeTicket returns the last time ticket issued by this context.
 func (c *Context) LastTimeTicket() *time.Ticket {
 	return c.id.NewTimeTicket(c.delimiter)

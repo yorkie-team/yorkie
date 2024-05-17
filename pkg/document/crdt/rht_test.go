@@ -153,7 +153,7 @@ func TestRHT_Remove(t *testing.T) {
 			insertKey:  []string{},
 			insertVal:  []string{},
 			deleteKey:  []string{key1},
-			deleteVal:  []string{``},
+			deleteVal:  []string{val11},
 			expectXML:  `key2="value22"`,
 			expectJSON: `{"key2":"value22"}`,
 			expectSize: 1,
@@ -191,8 +191,8 @@ func TestRHT_Remove(t *testing.T) {
 				rht.Set(key, tt.insertVal[i], ctx.IssueTimeTicket())
 			}
 			for i, key := range tt.deleteKey {
-				removedElement := rht.Remove(key, ctx.IssueTimeTicket())
-				assert.Equal(t, tt.deleteVal[i], removedElement)
+				nodes := rht.Remove(key, ctx.IssueTimeTicket())
+				assert.Equal(t, tt.deleteVal[i], nodes[len(nodes)-1].Value())
 			}
 			assert.Equal(t, tt.expectJSON, rht.Marshal())
 			assert.Equal(t, tt.expectSize, rht.Len())

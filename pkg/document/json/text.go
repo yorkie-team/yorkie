@@ -107,7 +107,7 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	}
 
 	ticket := p.context.IssueTimeTicket()
-	maxCreationMapByActor, err := p.Text.Style(
+	maxCreationMapByActor, pairs, err := p.Text.Style(
 		fromPos,
 		toPos,
 		nil,
@@ -116,6 +116,10 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	)
 	if err != nil {
 		panic(err)
+	}
+
+	for _, pair := range pairs {
+		p.context.RegisterGCPair(pair)
 	}
 
 	p.context.Push(operations.NewStyle(

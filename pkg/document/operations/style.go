@@ -70,8 +70,16 @@ func (e *Style) Execute(root *crdt.Root) error {
 		return ErrNotApplicableDataType
 	}
 
-	_, err := obj.Style(e.from, e.to, e.maxCreatedAtMapByActor, e.attributes, e.executedAt)
-	return err
+	_, pairs, err := obj.Style(e.from, e.to, e.maxCreatedAtMapByActor, e.attributes, e.executedAt)
+	if err != nil {
+		return err
+	}
+
+	for _, pair := range pairs {
+		root.RegisterGCPair(pair)
+	}
+
+	return nil
 }
 
 // From returns the start point of the editing range.
