@@ -42,7 +42,7 @@ func newRHTNode(key, val string, updatedAt *time.Ticket, isRemoved bool) *RHTNod
 }
 
 // ID returns the ID of this node.
-func (n *RHTNode) ID() string {
+func (n *RHTNode) IDString() string {
 	return n.updatedAt.Key() + ":" + n.key
 }
 
@@ -231,7 +231,7 @@ func (rht *RHT) Marshal() string {
 
 // Purge purges the given child node.
 func (rht *RHT) Purge(child *RHTNode) error {
-	if node, ok := rht.nodeMapByKey[child.key]; !ok || node.ID() != child.ID() {
+	if node, ok := rht.nodeMapByKey[child.key]; !ok || node.IDString() != child.IDString() {
 		//return ErrChildNotFound
 		return nil
 	}

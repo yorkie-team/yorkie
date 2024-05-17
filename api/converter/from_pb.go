@@ -658,10 +658,11 @@ func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 		}
 	}
 
-	node.RemovedAt, err = fromTimeTicket(pbNode.RemovedAt)
+	removedAt, err := fromTimeTicket(pbNode.RemovedAt)
 	if err != nil {
 		return nil, err
 	}
+	node.SetRemovedAt(removedAt)
 
 	return node, nil
 }

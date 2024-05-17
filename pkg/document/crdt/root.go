@@ -171,7 +171,7 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 				return 0, err
 			}
 
-			delete(r.gcPairMapByID, pair.Child.ID())
+			delete(r.gcPairMapByID, pair.Child.IDString())
 			count++
 		}
 	}
@@ -219,10 +219,10 @@ func (r *Root) GarbageLen() int {
 
 // RegisterGCPair registers the given pair to hash table.
 func (r *Root) RegisterGCPair(pair GCPair) {
-	if _, ok := r.gcPairMapByID[pair.Child.ID()]; ok {
-		delete(r.gcPairMapByID, pair.Child.ID())
+	if _, ok := r.gcPairMapByID[pair.Child.IDString()]; ok {
+		delete(r.gcPairMapByID, pair.Child.IDString())
 		return
 	}
 
-	r.gcPairMapByID[pair.Child.ID()] = pair
+	r.gcPairMapByID[pair.Child.IDString()] = pair
 }

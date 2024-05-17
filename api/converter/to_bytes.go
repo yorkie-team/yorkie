@@ -310,10 +310,10 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 	}
 
 	pbNode := &api.TreeNode{
-		Id:         toTreeNodeID(treeNode.ID),
+		Id:         toTreeNodeID(treeNode.ID()),
 		Type:       treeNode.Type(),
 		Value:      treeNode.Value,
-		RemovedAt:  ToTimeTicket(treeNode.RemovedAt),
+		RemovedAt:  ToTimeTicket(treeNode.RemovedAt()),
 		Depth:      int32(depth),
 		Attributes: attrs,
 	}

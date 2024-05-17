@@ -89,7 +89,7 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 			}
 
 		}
-		if _, err = obj.Edit(
+		_, pairs, err := obj.Edit(
 			e.from,
 			e.to,
 			contents,
@@ -117,13 +117,16 @@ func (e *TreeEdit) Execute(root *crdt.Root) error {
 				}
 			}(),
 			e.maxCreatedAtMapByActor,
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
 
-		if !e.from.Equals(e.to) {
-			root.RegisterElementHasRemovedNodes(obj)
+		for _, pair := range pairs {
+			root.RegisterGCPair(pair)
+
 		}
+
 	default:
 		return ErrNotApplicableDataType
 	}
