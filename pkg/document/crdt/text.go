@@ -110,6 +110,25 @@ func (t *TextValue) Purge(child GCChild) error {
 	return t.attrs.Purge(rhtNode)
 }
 
+// GCPairs returns the pairs of GC.
+func (t *TextValue) GCPairs() []GCPair {
+	if t.attrs == nil {
+		return nil
+	}
+
+	var pairs []GCPair
+	for _, node := range t.attrs.Nodes() {
+		if node.isRemoved {
+			pairs = append(pairs, GCPair{
+				Parent: t,
+				Child:  node,
+			})
+		}
+	}
+
+	return pairs
+}
+
 // InitialTextNode creates an initial node of Text. The text is edited
 // as this node is split into multiple nodes.
 func InitialTextNode() *RGATreeSplitNode[*TextValue] {
@@ -183,6 +202,25 @@ func (t *Text) DeepCopy() (Element, error) {
 	}
 
 	return NewText(rgaTreeSplit, t.createdAt), nil
+}
+
+// GCPairs returns the pairs of GC.
+func (t *Text) GCPairs() []GCPair {
+	var pairs []GCPair
+	for _, node := range t.Nodes() {
+		if node.removedAt != nil {
+			pairs = append(pairs, GCPair{
+				Parent: t.rgaTreeSplit,
+				Child:  node,
+			})
+		}
+
+		for _, p := range node.Value().GCPairs() {
+			pairs = append(pairs, p)
+		}
+	}
+
+	return pairs
 }
 
 // CreatedAt returns the creation time of this Text.

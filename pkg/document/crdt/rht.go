@@ -232,7 +232,7 @@ func (rht *RHT) Marshal() string {
 // Purge purges the given child node.
 func (rht *RHT) Purge(child *RHTNode) error {
 	if node, ok := rht.nodeMapByKey[child.key]; !ok || node.IDString() != child.IDString() {
-		//return ErrChildNotFound
+		// TODO(hackerwins): Should we return an error when the child is not found?
 		return nil
 	}
 

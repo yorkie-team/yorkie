@@ -460,6 +460,25 @@ func (n *TreeNode) RemoveAttr(k string, ticket *time.Ticket) []*RHTNode {
 	return n.Attrs.Remove(k, ticket)
 }
 
+// GCPairs returns the pairs of GC.
+func (n *TreeNode) GCPairs() []GCPair {
+	if n.Attrs == nil {
+		return nil
+	}
+
+	var pairs []GCPair
+	for _, node := range n.Attrs.Nodes() {
+		if node.isRemoved {
+			pairs = append(pairs, GCPair{
+				Parent: n,
+				Child:  node,
+			})
+		}
+	}
+
+	return pairs
+}
+
 // Tree represents the tree of CRDT. It has doubly linked list structure and
 // index tree structure.
 type Tree struct {
@@ -550,6 +569,26 @@ func (t *Tree) DeepCopy() (Element, error) {
 	}
 
 	return NewTree(node, t.createdAt), nil
+}
+
+// GCPairs returns the pairs of GC.
+func (t *Tree) GCPairs() []GCPair {
+	var pairs []GCPair
+
+	for _, node := range t.Nodes() {
+		if node.removedAt != nil {
+			pairs = append(pairs, GCPair{
+				Parent: t,
+				Child:  node,
+			})
+		}
+
+		for _, p := range node.GCPairs() {
+			pairs = append(pairs, p)
+		}
+	}
+
+	return pairs
 }
 
 // CreatedAt returns the creation time of this Tree.

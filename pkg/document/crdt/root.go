@@ -36,18 +36,18 @@ type ElementPair struct {
 // Every element has a unique time ticket at creation, which allows us to find
 // a particular element.
 type Root struct {
-	object                           *Object
-	elementMapByCreatedAt            map[string]Element
-	removedElementPairMapByCreatedAt map[string]ElementPair
-	gcPairMapByID                    map[string]GCPair
+	object           *Object
+	elementMap       map[string]Element
+	gcElementPairMap map[string]ElementPair
+	gcNodePairMap    map[string]GCPair
 }
 
 // NewRoot creates a new instance of Root.
 func NewRoot(root *Object) *Root {
 	r := &Root{
-		elementMapByCreatedAt:            make(map[string]Element),
-		removedElementPairMapByCreatedAt: make(map[string]ElementPair),
-		gcPairMapByID:                    make(map[string]GCPair),
+		elementMap:       make(map[string]Element),
+		gcElementPairMap: make(map[string]ElementPair),
+		gcNodePairMap:    make(map[string]GCPair),
 	}
 
 	r.object = root
@@ -57,7 +57,17 @@ func NewRoot(root *Object) *Root {
 		if elem.RemovedAt() != nil {
 			r.RegisterRemovedElementPair(parent, elem)
 		}
-		// TODO(hackerwins): Register text elements with garbage
+
+		switch e := elem.(type) {
+		case *Text:
+			for _, pair := range e.GCPairs() {
+				r.RegisterGCPair(pair)
+			}
+		case *Tree:
+			for _, pair := range e.GCPairs() {
+				r.RegisterGCPair(pair)
+			}
+		}
 		return false
 	})
 
@@ -71,18 +81,18 @@ func (r *Root) Object() *Object {
 
 // FindByCreatedAt returns the element of given creation time.
 func (r *Root) FindByCreatedAt(createdAt *time.Ticket) Element {
-	return r.elementMapByCreatedAt[createdAt.Key()]
+	return r.elementMap[createdAt.Key()]
 }
 
 // RegisterElement registers the given element to hash table.
 func (r *Root) RegisterElement(element Element) {
-	r.elementMapByCreatedAt[element.CreatedAt().Key()] = element
+	r.elementMap[element.CreatedAt().Key()] = element
 
 	switch element := element.(type) {
 	case Container:
 		{
 			element.Descendants(func(elem Element, parent Container) bool {
-				r.elementMapByCreatedAt[elem.CreatedAt().Key()] = elem
+				r.elementMap[elem.CreatedAt().Key()] = elem
 				return false
 			})
 		}
@@ -95,8 +105,8 @@ func (r *Root) deregisterElement(element Element) int {
 
 	deregisterElementInternal := func(elem Element) {
 		createdAt := elem.CreatedAt().Key()
-		delete(r.elementMapByCreatedAt, createdAt)
-		delete(r.removedElementPairMapByCreatedAt, createdAt)
+		delete(r.elementMap, createdAt)
+		delete(r.gcElementPairMap, createdAt)
 		count++
 	}
 
@@ -117,7 +127,7 @@ func (r *Root) deregisterElement(element Element) int {
 
 // RegisterRemovedElementPair register the given element pair to hash table.
 func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
-	r.removedElementPairMapByCreatedAt[elem.CreatedAt().Key()] = ElementPair{
+	r.gcElementPairMap[elem.CreatedAt().Key()] = ElementPair{
 		parent,
 		elem,
 	}
@@ -136,8 +146,8 @@ func (r *Root) DeepCopy() (*Root, error) {
 func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 	count := 0
 
-	for _, pair := range r.removedElementPairMapByCreatedAt {
-		if pair.elem.RemovedAt() != nil && ticket.Compare(pair.elem.RemovedAt()) >= 0 {
+	for _, pair := range r.gcElementPairMap {
+		if ticket.Compare(pair.elem.RemovedAt()) >= 0 {
 			if err := pair.parent.Purge(pair.elem); err != nil {
 				return 0, err
 			}
@@ -146,13 +156,13 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 		}
 	}
 
-	for _, pair := range r.gcPairMapByID {
+	for _, pair := range r.gcNodePairMap {
 		if ticket.Compare(pair.Child.RemovedAt()) >= 0 {
 			if err := pair.Parent.Purge(pair.Child); err != nil {
 				return 0, err
 			}
 
-			delete(r.gcPairMapByID, pair.Child.IDString())
+			delete(r.gcNodePairMap, pair.Child.IDString())
 			count++
 		}
 	}
@@ -162,20 +172,14 @@ func (r *Root) GarbageCollect(ticket *time.Ticket) (int, error) {
 
 // ElementMapLen returns the size of element map.
 func (r *Root) ElementMapLen() int {
-	return len(r.elementMapByCreatedAt)
+	return len(r.elementMap)
 }
 
-// RemovedElementLen returns the size of removed element map.
-func (r *Root) RemovedElementLen() int {
-	return len(r.removedElementPairMapByCreatedAt)
-}
-
-// GarbageLen returns the count of removed elements.
-func (r *Root) GarbageLen() int {
-	count := 0
+// GarbageElementLen return the count of removed elements.
+func (r *Root) GarbageElementLen() int {
 	seen := make(map[string]bool)
 
-	for _, pair := range r.removedElementPairMapByCreatedAt {
+	for _, pair := range r.gcElementPairMap {
 		seen[pair.elem.CreatedAt().Key()] = true
 
 		switch elem := pair.elem.(type) {
@@ -187,18 +191,22 @@ func (r *Root) GarbageLen() int {
 		}
 	}
 
-	count += len(seen)
-	count += len(r.gcPairMapByID)
+	return len(seen)
+}
 
-	return count
+// GarbageLen returns the count of removed elements and internal nodes.
+func (r *Root) GarbageLen() int {
+	return r.GarbageElementLen() + len(r.gcNodePairMap)
 }
 
 // RegisterGCPair registers the given pair to hash table.
 func (r *Root) RegisterGCPair(pair GCPair) {
-	if _, ok := r.gcPairMapByID[pair.Child.IDString()]; ok {
-		delete(r.gcPairMapByID, pair.Child.IDString())
+	// NOTE(hackerwins): If the child is already registered, it means that the
+	// child should be removed from the cache.
+	if _, ok := r.gcNodePairMap[pair.Child.IDString()]; ok {
+		delete(r.gcNodePairMap, pair.Child.IDString())
 		return
 	}
 
-	r.gcPairMapByID[pair.Child.IDString()] = pair
+	r.gcNodePairMap[pair.Child.IDString()] = pair
 }
