@@ -18,6 +18,13 @@ package crdt
 
 import "github.com/yorkie-team/yorkie/pkg/document/time"
 
+// GCPair is a structure that represents a pair of parent and child for garbage
+// collection.
+type GCPair struct {
+	Parent GCParent
+	Child  GCChild
+}
+
 // GCParent is an interface for the parent of the garbage collection target.
 type GCParent interface {
 	Purge(node GCChild) error

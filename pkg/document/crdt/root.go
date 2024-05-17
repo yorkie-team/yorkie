@@ -29,13 +29,6 @@ type ElementPair struct {
 	elem   Element
 }
 
-// GCPair is a structure that represents a pair of parent and child for garbage
-// collection.
-type GCPair struct {
-	Parent GCParent
-	Child  GCChild
-}
-
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
 // received from server.
