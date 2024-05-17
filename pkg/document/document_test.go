@@ -643,3 +643,71 @@ func TestTreeNodeAndAttrGC(t *testing.T) {
 		})
 	}
 }
+
+func TestTextNodeAndAttrGC(t *testing.T) {
+	type opCode int
+	const (
+		NoOp opCode = iota
+		Style
+		DeleteNode
+		GC
+	)
+
+	type operation struct {
+		code opCode
+		key  string
+		val  string
+	}
+
+	type step struct {
+		op         operation
+		garbageLen int
+		expectXML  string
+	}
+
+	tests := []struct {
+		desc  string
+		steps []step
+	}{
+		{
+			desc: "style-style test",
+			steps: []step{
+				{operation{Style, "b", "t"}, 0, `[{"attrs":{"b":"t"},"val":"AB"}]`},
+				{operation{Style, "b", "f"}, 0, `[{"attrs":{"b":"f"},"val":"AB"}]`},
+			},
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(fmt.Sprintf("%d. %s", i+1, tc.desc), func(t *testing.T) {
+			doc := document.New("doc")
+			err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewText("t").Edit(0, 0, "AB")
+				return nil
+			})
+			assert.NoError(t, err)
+			assert.Equal(t, `[{"val":"AB"}]`, doc.Root().GetText("t").Marshal())
+			assert.Equal(t, 0, doc.GarbageLen())
+
+			// 02. Run test steps
+			for _, s := range tc.steps {
+				assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+					if s.op.code == Style {
+						root.GetText("t").Style(0, 2, map[string]string{s.op.key: s.op.val})
+					} else if s.op.code == DeleteNode {
+						root.GetText("t").Edit(0, 2, "")
+					} else if s.op.code == GC {
+						doc.GarbageCollect(time.MaxTicket)
+					}
+					return nil
+				}))
+				assert.Equal(t, s.expectXML, doc.Root().GetText("t").Marshal())
+				assert.Equal(t, s.garbageLen, doc.GarbageLen())
+			}
+
+			// 03. Garbage collect
+			doc.GarbageCollect(time.MaxTicket)
+			assert.Equal(t, 0, doc.GarbageLen())
+		})
+	}
+}

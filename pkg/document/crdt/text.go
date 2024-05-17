@@ -104,6 +104,12 @@ func (t *TextValue) DeepCopy() RGATreeSplitValue {
 	}
 }
 
+// Purge removes the given ticket from this value.
+func (t *TextValue) Purge(child GCChild) error {
+	rhtNode := child.(*RHTNode)
+	return t.attrs.Purge(rhtNode)
+}
+
 // InitialTextNode creates an initial node of Text. The text is edited
 // as this node is split into multiple nodes.
 func InitialTextNode() *RGATreeSplitNode[*TextValue] {
@@ -249,15 +255,15 @@ func (t *Text) Style(
 	maxCreatedAtMapByActor map[string]*time.Ticket,
 	attributes map[string]string,
 	executedAt *time.Ticket,
-) (map[string]*time.Ticket, error) {
+) (map[string]*time.Ticket, []GCPair, error) {
 	// 01. Split nodes with from and to
 	_, toRight, err := t.rgaTreeSplit.findNodeWithSplit(to, executedAt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	_, fromRight, err := t.rgaTreeSplit.findNodeWithSplit(from, executedAt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 02. style nodes between from and to
@@ -290,14 +296,20 @@ func (t *Text) Style(
 		}
 	}
 
+	var pairs []GCPair
 	for _, node := range toBeStyled {
 		val := node.value
 		for key, value := range attributes {
-			val.attrs.Set(key, value, executedAt)
+			if rhtNode := val.attrs.Set(key, value, executedAt); rhtNode != nil {
+				pairs = append(pairs, GCPair{
+					Parent: node.Value(),
+					Child:  rhtNode,
+				})
+			}
 		}
 	}
 
-	return createdAtMapByActor, nil
+	return createdAtMapByActor, pairs, nil
 }
 
 // Nodes returns the internal nodes of this Text.

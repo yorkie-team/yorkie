@@ -136,7 +136,7 @@ func (pos *RGATreeSplitNodePos) RelativeOffset() int {
 	return pos.relativeOffset
 }
 
-// Equal returns the whether the given pos equals or not.
+// Equal returns whether the given pos equals or not.
 func (pos *RGATreeSplitNodePos) Equal(other *RGATreeSplitNodePos) bool {
 	if !pos.id.Equal(other.id) {
 		return false
