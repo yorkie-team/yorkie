@@ -236,7 +236,7 @@ func BuildDocumentForServerSeq(
 		change.InitialCheckpoint.NextServerSeq(serverSeq),
 		changes,
 		nil,
-	)); err != nil {
+	), be.Config.SnapshotDisableGC); err != nil {
 		return nil, err
 	}
 

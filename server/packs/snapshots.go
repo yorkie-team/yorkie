@@ -91,7 +91,7 @@ func storeSnapshot(
 	)
 	pack.MinSyncedTicket = minSyncedTicket
 
-	if err := doc.ApplyChangePack(pack); err != nil {
+	if err := doc.ApplyChangePack(pack, be.Config.SnapshotDisableGC); err != nil {
 		return err
 	}
 

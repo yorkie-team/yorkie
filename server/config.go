@@ -58,6 +58,7 @@ const (
 	DefaultSnapshotThreshold          = 500
 	DefaultSnapshotInterval           = 1000
 	DefaultSnapshotWithPurgingChanges = false
+	DefaultSnapshotDisableGC          = false
 
 	DefaultAuthWebhookMaxRetries      = 10
 	DefaultAuthWebhookMaxWaitInterval = 3000 * time.Millisecond

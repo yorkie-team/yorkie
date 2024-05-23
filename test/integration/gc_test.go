@@ -20,14 +20,17 @@ package integration
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/server"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -601,5 +604,64 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, `<r>ad</r>`, d2.Root().GetTree("tree").ToXML())
 		assert.Equal(t, 0, d1.GarbageLen())
+	})
+
+	t.Run("Should not collect the garbage if the DisableGC is true", func(t *testing.T) {
+		// 01. Create a new server with SnapshotDisableGC set to true
+		conf := helper.TestConfig()
+		conf.Backend.SnapshotDisableGC = true
+		conf.Backend.SnapshotThreshold = 10
+		conf.Backend.SnapshotInterval = 10
+		testServer, err := server.New(conf)
+		assert.NoError(t, err)
+		assert.NoError(t, testServer.Start())
+		defer func() {
+			assert.NoError(t, testServer.Shutdown(true))
+		}()
+
+		ctx := context.Background()
+		c1, err := client.Dial(testServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, c1.Activate(ctx))
+		defer func() {
+			assert.NoError(t, c1.Deactivate(ctx))
+			assert.NoError(t, c1.Close())
+		}()
+
+		// 02. Create a document and update it to check if the garbage is collected
+		d1 := document.New(helper.TestDocKey(t), document.WithDisableGC())
+		assert.NoError(t, c1.Attach(ctx, d1))
+		defer func() {
+			assert.NoError(t, c1.Detach(ctx, d1))
+		}()
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("text").Edit(0, 0, "-")
+			return nil
+		}))
+		for i := 0; i < int(conf.Backend.SnapshotInterval); i++ {
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetText("text").Edit(0, 1, strconv.Itoa(i))
+				return nil
+			}))
+		}
+		assert.Equal(t, int(conf.Backend.SnapshotInterval), d1.GarbageLen())
+		assert.NoError(t, c1.Sync(ctx))
+
+		// 03. Check if the garbage is collected after the snapshot interval
+		c2, err := client.Dial(testServer.RPCAddr())
+		assert.NoError(t, err)
+		assert.NoError(t, c2.Activate(ctx))
+		defer func() {
+			assert.NoError(t, c2.Deactivate(ctx))
+			assert.NoError(t, c2.Close())
+		}()
+
+		d2 := document.New(helper.TestDocKey(t), document.WithDisableGC())
+		assert.NoError(t, c2.Attach(ctx, d2))
+		defer func() {
+			assert.NoError(t, c2.Detach(ctx, d2))
+		}()
+		assert.Equal(t, int(conf.Backend.SnapshotInterval), d2.GarbageLen())
 	})
 }
