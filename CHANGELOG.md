@@ -7,6 +7,19 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.20] - 2024-05-24
+
+### Added
+
+- Implement RHT.GC by @hackerwins in https://github.com/yorkie-team/yorkie/pull/864
+- Add Resource Configuration in `yorkie-mongodb` Helm chart by @krapie in https://github.com/yorkie-team/yorkie/pull/872
+- Add snapshot-disable-gc flag by @hackerwins in https://github.com/yorkie-team/yorkie/pull/874
+
+### Changed
+
+- Move ToXML from RHT to TreeNode by @raararaara in https://github.com/yorkie-team/yorkie/pull/863
+- Apply GCPair to TreeNode, TextNode by @hackerwins in https://github.com/yorkie-team/yorkie/pull/866
+
 ## [0.4.19] - 2024-05-10
 
 ### Fixed
