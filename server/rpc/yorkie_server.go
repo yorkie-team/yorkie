@@ -144,7 +144,7 @@ func (s *yorkieServer) AttachDocument(
 		}
 	}()
 
-	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
@@ -217,7 +217,7 @@ func (s *yorkieServer) DetachDocument(
 		}
 	}()
 
-	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
@@ -321,7 +321,7 @@ func (s *yorkieServer) PushPullChanges(
 		syncMode = types.SyncModePushOnly
 	}
 
-	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
@@ -395,7 +395,7 @@ func (s *yorkieServer) WatchDocument(
 		return err
 	}
 
-	if _, err = clients.FindClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
 	}); err != nil {
@@ -514,7 +514,7 @@ func (s *yorkieServer) RemoveDocument(
 		}()
 	}
 
-	clientInfo, err := clients.FindClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
 	})
@@ -627,7 +627,7 @@ func (s *yorkieServer) Broadcast(
 		return nil, err
 	}
 
-	if _, err = clients.FindClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(clientID),
 	}); err != nil {

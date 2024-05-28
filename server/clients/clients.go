@@ -88,11 +88,20 @@ func Deactivate(
 	return db.DeactivateClient(ctx, refKey)
 }
 
-// FindClientInfo finds the client with the given refKey.
-func FindClientInfo(
+// FindActiveClientInfo find the active client info by the given ref key.
+func FindActiveClientInfo(
 	ctx context.Context,
 	db database.Database,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	return db.FindClientInfoByRefKey(ctx, refKey)
+	info, err := db.FindClientInfoByRefKey(ctx, refKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := info.EnsureActivated(); err != nil {
+		return nil, err
+	}
+
+	return info, nil
 }
