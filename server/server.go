@@ -20,11 +20,16 @@
 package server
 
 import (
+	"context"
 	gosync "sync"
 
+	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
+	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc"
 )
 
@@ -127,4 +132,18 @@ func (r *Yorkie) ShutdownCh() <-chan struct{} {
 // RPCAddr returns the address of the RPC.
 func (r *Yorkie) RPCAddr() string {
 	return r.conf.RPCAddr()
+}
+
+// DeactivateClient deactivates the given client. It is used for testing.
+func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error {
+	project, err := projects.GetProjectFromAPIKey(ctx, r.backend, "")
+	if err != nil {
+		return err
+	}
+
+	_, err = clients.Deactivate(ctx, r.backend.DB, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(c1.ID()),
+	})
+	return err
 }

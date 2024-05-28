@@ -444,6 +444,26 @@ func (c *Client) Subscribe(
 	return attachment.rch, attachment.closeWatchStream, nil
 }
 
+// Watch watches events on a given document. It is not necessary to be called
+// outside of this package, but it is exposed for testing purposes.
+func (c *Client) Watch(ctx context.Context, doc *document.Document) (
+	*connect.ServerStreamForClient[api.WatchDocumentResponse],
+	error,
+) {
+	attachment, ok := c.attachments[doc.Key()]
+	if !ok {
+		return nil, ErrDocumentNotAttached
+	}
+
+	return c.client.WatchDocument(
+		ctx,
+		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
+			ClientId:   c.id.String(),
+			DocumentId: attachment.docID.String(),
+		}), c.options.APIKey, doc.Key().String()),
+	)
+}
+
 // runWatchLoop subscribes to events on a given documentIDs.
 // If an error occurs before stream initialization, the second response, error,
 // is returned. If the context "watchCtx" is canceled or timed out, returned channel
@@ -458,13 +478,7 @@ func (c *Client) runWatchLoop(
 		return ErrDocumentNotAttached
 	}
 
-	stream, err := c.client.WatchDocument(
-		ctx,
-		withShardKey(connect.NewRequest(&api.WatchDocumentRequest{
-			ClientId:   c.id.String(),
-			DocumentId: attachment.docID.String(),
-		},
-		), c.options.APIKey, doc.Key().String()))
+	stream, err := c.Watch(ctx, doc)
 	if err != nil {
 		return err
 	}

@@ -193,6 +193,15 @@ func (i *ClientInfo) UpdateCheckpoint(
 	return nil
 }
 
+// EnsureActivated ensures the client is activated.
+func (i *ClientInfo) EnsureActivated() error {
+	if i.Status != ClientActivated {
+		return fmt.Errorf("ensure activated client(%s): %w", i.ID, ErrClientNotActivated)
+	}
+
+	return nil
+}
+
 // EnsureDocumentAttached ensures the given document is attached.
 func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 	if i.Status != ClientActivated {
