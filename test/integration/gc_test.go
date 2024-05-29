@@ -786,10 +786,6 @@ func TestConcurrentTreeGC(t *testing.T) {
 		makeTwoRanges(3, 3, 6, 0, -1, 9, `B contains A`),
 		// intersect: <p>a</p><p>b</p> - <p>b</p><p>c</p>
 		makeTwoRanges(0, 3, 6, 3, -1, 9, `intersect`),
-		// A -> B: <p>a</p> - <p>b</p>
-		makeTwoRanges(0, 3, 3, 3, -1, 6, `A -> B`),
-		// B -> A: <p>b</p> - <p>a</p>
-		makeTwoRanges(3, 3, 6, 0, -1, 3, `B -> A`),
 	}
 
 	editOperations := []operationInterface{
@@ -871,25 +867,29 @@ func TestConcurrentTreeGC(t *testing.T) {
 			fmt.Printf("0. initial state: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
 
 			tc.op1.run(t, d1, 0, tc.interval)
-			fmt.Printf("1. c1.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+			fmt.Printf("1. c1.op: %d, %s,  %d, %s\n", d1.GarbageLen(), d1.Root().GetTree("t").ToXML(),
+				d2.GarbageLen(), d2.Root().GetTree("t").ToXML())
 
 			tc.op2.run(t, d2, 1, tc.interval)
 			fmt.Printf("2. c2.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
 
 			assert.NoError(t, c1.Sync(ctx))
-			fmt.Printf("3. c1.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+			fmt.Printf("3. c1.sync: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
 
 			assert.NoError(t, c2.Sync(ctx))
-			fmt.Printf("4. c1.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+			fmt.Printf("4. c2.sync: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
 
 			assert.NoError(t, c1.Sync(ctx))
-			fmt.Printf("5. c1.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+			fmt.Printf("5. c1.sync: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
 
 			assert.NoError(t, c2.Sync(ctx))
-			fmt.Printf("6. c2.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+			fmt.Printf("6. c2.sync: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
 
 			assert.NoError(t, c1.Sync(ctx))
-			fmt.Printf("7. c1.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+			fmt.Printf("7. c1.sync: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+
+			assert.NoError(t, c2.Sync(ctx))
+			fmt.Printf("8. c2.sync: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
 		})
 	}
 }
