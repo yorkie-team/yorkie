@@ -20,6 +20,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -664,4 +665,231 @@ func TestGarbageCollection(t *testing.T) {
 		}()
 		assert.Equal(t, int(conf.Backend.SnapshotInterval), d2.GarbageLen())
 	})
+
+	t.Run("simple tree test", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "r",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "A"}}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "B"}}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "C"}}},
+				},
+			})
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<r><p>A</p><p>B</p><p>C</p></r>`, d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, 0, d1.GarbageLen())
+
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `<r><p>ABC</p></r>`, d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		// 01. c1.op
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Style(0, 6, map[string]string{"1": "k1"})
+
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<r><p 1="k1">ABC</p></r>`, d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 0, d2.GarbageLen())
+
+		//02. c2.op
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").RemoveStyle(0, 5, []string{"1"})
+
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, `<r><p>ABC</p></r>`, d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
+
+		// 03. c1.sync
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `<r><p 1="k1">ABC</p></r>`, d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, `<r><p>ABC</p></r>`, d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
+		// 04. c2.sync
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `<r><p 1="k1">ABC</p></r>`, d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, `<r><p>ABC</p></r>`, d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
+		// 05. c1.sync
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, `<r><p>ABC</p></r>`, d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, `<r><p>ABC</p></r>`, d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, 1, d1.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
+
+		// 06. c2.sync
+		err = c2.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, d1.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
+
+		// 07. c1.sync
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, d1.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
+	})
+}
+
+func TestConcurrentTreeGC(t *testing.T) {
+	//       0   1 2    3   4 5    6   7 8    9
+	// <root> <p> a </p> <p> b </p> <p> c </p> </root>
+	// 0,3 : |----------|
+	// 3,6 :            |----------|
+	// 6,9 :                       |----------|
+
+	initialState := json.TreeNode{
+		Type: "root",
+		Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "a"}}, Attributes: map[string]string{"color": "red"}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "b"}}, Attributes: map[string]string{"color": "red"}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "c"}}, Attributes: map[string]string{"color": "red"}},
+		},
+	}
+	initialXML := `<root><p color="red">a</p><p color="red">b</p><p color="red">c</p></root>`
+
+	content := &json.TreeNode{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}
+
+	ranges := []twoRangesType{
+		// equal: <p>b</p> - <p>b</p>
+		makeTwoRanges(3, 3, 6, 3, -1, 6, `equal`),
+		// equal multiple: <p>a</p><p>b</p><p>c</p> - <p>a</p><p>b</p><p>c</p>
+		makeTwoRanges(0, 3, 9, 0, 3, 9, `equal multiple`),
+		// A contains B: <p>a</p><p>b</p><p>c</p> - <p>b</p>
+		makeTwoRanges(0, 3, 9, 3, -1, 6, `A contains B`),
+		// B contains A: <p>b</p> - <p>a</p><p>b</p><p>c</p>
+		makeTwoRanges(3, 3, 6, 0, -1, 9, `B contains A`),
+		// intersect: <p>a</p><p>b</p> - <p>b</p><p>c</p>
+		makeTwoRanges(0, 3, 6, 3, -1, 9, `intersect`),
+		// A -> B: <p>a</p> - <p>b</p>
+		makeTwoRanges(0, 3, 3, 3, -1, 6, `A -> B`),
+		// B -> A: <p>b</p> - <p>a</p>
+		makeTwoRanges(3, 3, 6, 0, -1, 3, `B -> A`),
+	}
+
+	editOperations := []operationInterface{
+		editOperationType{RangeFront, EditUpdate, content, 0, `insertFront`},
+		editOperationType{RangeMiddle, EditUpdate, content, 0, `insertMiddle`},
+		editOperationType{RangeBack, EditUpdate, content, 0, `insertBack`},
+		editOperationType{RangeAll, EditUpdate, nil, 0, `delete`},
+		editOperationType{RangeAll, EditUpdate, content, 0, `replace`},
+		editOperationType{RangeAll, MergeUpdate, nil, 0, `merge`},
+	}
+
+	styleOperations := []operationInterface{
+		styleOperationType{RangeAll, StyleRemove, "color", "", `remove-bold`},
+		styleOperationType{RangeAll, StyleSet, "bold", "aa", `set-bold-aa`},
+	}
+
+	type step struct {
+		garbageLen []int
+		expectXML  []string
+	}
+
+	type test struct {
+		desc     string
+		interval twoRangesType
+		op1      operationInterface
+		op2      operationInterface
+		//steps []step
+	}
+
+	var tests []test
+
+	// 00. Compose tests
+	for _, interval := range ranges {
+		for _, op1 := range editOperations {
+			for _, op2 := range styleOperations {
+				tests = append(tests, test{
+					desc:     interval.desc + "(" + op1.getDesc() + "," + op2.getDesc() + ")",
+					interval: interval,
+					op1:      op1,
+					op2:      op2,
+					//steps : []step,
+				})
+			}
+		}
+	}
+
+	c1, err := client.Dial(defaultServer.RPCAddr())
+	assert.NoError(t, err)
+	assert.NoError(t, c1.Activate(context.Background()))
+
+	c2, err := client.Dial(defaultServer.RPCAddr())
+	assert.NoError(t, err)
+	assert.NoError(t, c2.Activate(context.Background()))
+
+	defer func() {
+		assert.NoError(t, c1.Deactivate(context.Background()))
+		assert.NoError(t, c1.Close())
+		assert.NoError(t, c2.Deactivate(context.Background()))
+		assert.NoError(t, c2.Close())
+	}()
+
+	for i, tc := range tests {
+		t.Run(fmt.Sprintf("%d. %s", i+1, tc.desc), func(t *testing.T) {
+			ctx := context.Background()
+			d1 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c1.Attach(ctx, d1))
+
+			d2 := document.New(helper.TestDocKey(t))
+			assert.NoError(t, c2.Attach(ctx, d2))
+
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewTree("t", &initialState)
+				return nil
+			}))
+			assert.NoError(t, c1.Sync(ctx))
+			assert.NoError(t, c2.Sync(ctx))
+			assert.Equal(t, initialXML, d1.Root().GetTree("t").ToXML())
+			assert.Equal(t, initialXML, d2.Root().GetTree("t").ToXML())
+			fmt.Printf("0. initial state: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+
+			tc.op1.run(t, d1, 0, tc.interval)
+			fmt.Printf("1. c1.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+
+			tc.op2.run(t, d2, 1, tc.interval)
+			fmt.Printf("2. c2.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+
+			assert.NoError(t, c1.Sync(ctx))
+			fmt.Printf("3. c1.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+
+			assert.NoError(t, c2.Sync(ctx))
+			fmt.Printf("4. c1.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+
+			assert.NoError(t, c1.Sync(ctx))
+			fmt.Printf("5. c1.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+
+			assert.NoError(t, c2.Sync(ctx))
+			fmt.Printf("6. c2.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+
+			assert.NoError(t, c1.Sync(ctx))
+			fmt.Printf("7. c1.op: %d %d\n", d1.GarbageLen(), d2.GarbageLen())
+		})
+	}
 }
