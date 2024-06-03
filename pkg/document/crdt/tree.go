@@ -641,6 +641,11 @@ func (t *Tree) Root() *TreeNode {
 	return t.IndexTree.Root().Value
 }
 
+// NodeLen returns the size of the LLRBTree.
+func (t *Tree) NodeLen() int {
+	return t.NodeMapByID.Len()
+}
+
 // ToXML returns the XML encoding of this tree.
 func (t *Tree) ToXML() string {
 	return ToXML(t.Root())

@@ -341,7 +341,7 @@ func (n *Node[V]) UpdateAncestorsSize() {
 	}
 }
 
-// UpdateDescendantsSize updates the size of ancestors. It is used when
+// UpdateDescendantsSize updates the size of descendants. It is used when
 // the tree is newly created and the size of the descendants is not calculated.
 func (n *Node[V]) UpdateDescendantsSize() int {
 	if n.Value.IsRemoved() {

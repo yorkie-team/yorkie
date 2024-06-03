@@ -290,7 +290,7 @@ func TestConverter(t *testing.T) {
 		bytes, _ := converter.ObjectToBytes(doc.RootObject())
 		obj, _ := converter.BytesToObject(bytes)
 
-		assert.Equal(t, obj.Get("t").(*crdt.Tree).NodeMapByID.Len(), doc.Root().GetTree("t").NodeMapByID.Len())
+		assert.Equal(t, obj.Get("t").(*crdt.Tree).NodeLen(), doc.Root().GetTree("t").NodeLen())
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).Root().Len(), doc.Root().GetTree("t").Len())
 	})
 }
