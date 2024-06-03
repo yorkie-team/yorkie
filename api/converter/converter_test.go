@@ -280,15 +280,15 @@ func TestConverter(t *testing.T) {
 				},
 			})
 			assert.Equal(t, "<r><p>12</p><p>34</p></r>", root.GetTree("t").ToXML())
-
 			root.GetTree("t").EditByPath([]int{0, 1}, []int{1, 1}, nil, 0)
-
 			return nil
 		}))
 		assert.Equal(t, "<r><p>14</p></r>", doc.Root().GetTree("t").ToXML())
 
-		bytes, _ := converter.ObjectToBytes(doc.RootObject())
-		obj, _ := converter.BytesToObject(bytes)
+		bytes, err := converter.ObjectToBytes(doc.RootObject())
+		assert.NoError(t, err)
+		obj, err := converter.BytesToObject(bytes)
+		assert.NoError(t, err)
 
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).NodeLen(), doc.Root().GetTree("t").NodeLen())
 		assert.Equal(t, obj.Get("t").(*crdt.Tree).Root().Len(), doc.Root().GetTree("t").Len())
