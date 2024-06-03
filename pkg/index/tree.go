@@ -325,7 +325,8 @@ func (n *Node[V]) SetChildren(children []*Node[V]) error {
 	return nil
 }
 
-// UpdateAncestorsSize updates the size of ancestors.
+// UpdateAncestorsSize updates the size of ancestors. It is used when
+// the size of the node is changed.
 func (n *Node[V]) UpdateAncestorsSize() {
 	parent := n.Parent
 	sign := 1
@@ -338,6 +339,24 @@ func (n *Node[V]) UpdateAncestorsSize() {
 
 		parent = parent.Parent
 	}
+}
+
+// UpdateDescendantsSize updates the size of ancestors. It is used when
+// the tree is newly created and the size of the descendants is not calculated.
+func (n *Node[V]) UpdateDescendantsSize() int {
+	if n.Value.IsRemoved() {
+		n.Length = 0
+		return 0
+	}
+
+	sum := 0
+	for _, child := range n.Children(true) {
+		sum += child.UpdateDescendantsSize()
+	}
+
+	n.Length += sum
+
+	return n.PaddedLength()
 }
 
 // PaddedLength returns the length of the node with padding.
@@ -496,7 +515,8 @@ func (n *Node[V]) insertAtInternal(newNode *Node[V], offset int) error {
 	return nil
 }
 
-// Prepend prepends the given nodes to the children.
+// Prepend prepends the given nodes to the children. It is only used
+// for creating a new node from shapshot.
 func (n *Node[V]) Prepend(children ...*Node[V]) error {
 	if n.IsText() {
 		return ErrInvalidMethodCallForTextNode
@@ -505,10 +525,6 @@ func (n *Node[V]) Prepend(children ...*Node[V]) error {
 	n.children = append(children, n.children...)
 	for _, node := range children {
 		node.Parent = n
-
-		if !node.Value.IsRemoved() {
-			node.UpdateAncestorsSize()
-		}
 	}
 
 	return nil
