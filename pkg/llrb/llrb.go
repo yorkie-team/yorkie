@@ -136,6 +136,11 @@ func (t *Tree[K, V]) Floor(key K) (K, V) {
 	return zeroK, zeroV
 }
 
+// Len returns the length of the tree.
+func (t *Tree[K, V]) Len() int {
+	return t.size
+}
+
 func (t *Tree[K, V]) put(node *Node[K, V], key K, value V) *Node[K, V] {
 	if node == nil {
 		t.size++

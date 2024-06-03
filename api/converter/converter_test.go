@@ -268,4 +268,29 @@ func TestConverter(t *testing.T) {
 		clone := converter.FromPresenceChange(pbChange)
 		assert.Equal(t, change, clone)
 	})
+
+	t.Run("properly encode and decode tree test", func(t *testing.T) {
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "r",
+				Children: []json.TreeNode{
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "12"}}},
+					{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "34"}}},
+				},
+			})
+			assert.Equal(t, "<r><p>12</p><p>34</p></r>", root.GetTree("t").ToXML())
+			root.GetTree("t").EditByPath([]int{0, 1}, []int{1, 1}, nil, 0)
+			return nil
+		}))
+		assert.Equal(t, "<r><p>14</p></r>", doc.Root().GetTree("t").ToXML())
+
+		bytes, err := converter.ObjectToBytes(doc.RootObject())
+		assert.NoError(t, err)
+		obj, err := converter.BytesToObject(bytes)
+		assert.NoError(t, err)
+
+		assert.Equal(t, obj.Get("t").(*crdt.Tree).NodeLen(), doc.Root().GetTree("t").NodeLen())
+		assert.Equal(t, obj.Get("t").(*crdt.Tree).Root().Len(), doc.Root().GetTree("t").Len())
+	})
 }
