@@ -7,6 +7,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.21] - 2024-06-03
+
+### Added
+
+- Handle concurrent Tree.RemoveStyle by @hackerwins in https://github.com/yorkie-team/yorkie/pull/883
+
+### Changed
+
+- Return ErrClientNotActivated for deactivated clients on WatchDocument by @hackerwins in https://github.com/yorkie-team/yorkie/pull/877
+
+### Fixed
+
+- Fix incorrect tree snapshot encoding/decoding by @raararaara in https://github.com/yorkie-team/yorkie/pull/881
+
 ## [0.4.20] - 2024-05-24
 
 ### Added
