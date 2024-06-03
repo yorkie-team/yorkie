@@ -511,21 +511,22 @@ func fromTreeStyle(pbTreeStyle *api.Operation_TreeStyle) (*operations.TreeStyle,
 		return nil, err
 	}
 
-	if len(pbTreeStyle.AttributesToRemove) > 0 {
-		return operations.NewTreeStyleRemove(
-			parentCreatedAt,
-			from,
-			to,
-			pbTreeStyle.AttributesToRemove,
-			executedAt,
-		), nil
-	}
-
 	createdAtMapByActor, err := fromCreatedAtMapByActor(
 		pbTreeStyle.CreatedAtMapByActor,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(pbTreeStyle.AttributesToRemove) > 0 {
+		return operations.NewTreeStyleRemove(
+			parentCreatedAt,
+			from,
+			to,
+			createdAtMapByActor,
+			pbTreeStyle.AttributesToRemove,
+			executedAt,
+		), nil
 	}
 
 	return operations.NewTreeStyle(

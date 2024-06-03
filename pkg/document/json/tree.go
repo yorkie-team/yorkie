@@ -262,7 +262,7 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 	}
 
 	ticket := t.context.IssueTimeTicket()
-	pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket)
+	maxCreationMapByActor, pairs, err := t.Tree.RemoveStyle(fromPos, toPos, attributesToRemove, ticket, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -275,6 +275,7 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 		t.CreatedAt(),
 		fromPos,
 		toPos,
+		maxCreationMapByActor,
 		attributesToRemove,
 		ticket,
 	))

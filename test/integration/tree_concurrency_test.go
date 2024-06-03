@@ -490,7 +490,10 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 	}
 	initialXML := `<root><p color="red">a</p><p color="red">b</p><p color="red">c</p></root>`
 
-	content := &json.TreeNode{Type: "p", Attributes: map[string]string{"italic": "true"}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}
+	content := &json.TreeNode{Type: "p", Attributes: map[string]string{
+		"italic": "true",
+		"color":  "blue",
+	}, Children: []json.TreeNode{{Type: "text", Value: `d`}}}
 
 	ranges := []twoRangesType{
 		// equal: <p>b</p> - <p>b</p>
@@ -519,7 +522,7 @@ func TestTreeConcurrencyEditStyle(t *testing.T) {
 	}
 
 	styleOperations := []operationInterface{
-		styleOperationType{RangeAll, StyleRemove, "color", "", `remove-bold`},
+		styleOperationType{RangeAll, StyleRemove, "color", "", `remove-color`},
 		styleOperationType{RangeAll, StyleSet, "bold", "aa", `set-bold-aa`},
 	}
 

@@ -71,16 +71,18 @@ func NewTreeStyleRemove(
 	parentCreatedAt *time.Ticket,
 	from *crdt.TreePos,
 	to *crdt.TreePos,
+	maxCreatedAtMapByActor map[string]*time.Ticket,
 	attributesToRemove []string,
 	executedAt *time.Ticket,
 ) *TreeStyle {
 	return &TreeStyle{
-		parentCreatedAt:    parentCreatedAt,
-		from:               from,
-		to:                 to,
-		attributes:         map[string]string{},
-		attributesToRemove: attributesToRemove,
-		executedAt:         executedAt,
+		parentCreatedAt:        parentCreatedAt,
+		from:                   from,
+		to:                     to,
+		maxCreatedAtMapByActor: maxCreatedAtMapByActor,
+		attributes:             map[string]string{},
+		attributesToRemove:     attributesToRemove,
+		executedAt:             executedAt,
 	}
 }
 
@@ -100,7 +102,7 @@ func (e *TreeStyle) Execute(root *crdt.Root) error {
 			return err
 		}
 	} else {
-		pairs, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt)
+		_, pairs, err = obj.RemoveStyle(e.from, e.to, e.attributesToRemove, e.executedAt, e.maxCreatedAtMapByActor)
 		if err != nil {
 			return err
 		}
