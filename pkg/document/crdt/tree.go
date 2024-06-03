@@ -394,6 +394,10 @@ func (n *TreeNode) canDelete(removedAt *time.Ticket, maxCreatedAt *time.Ticket) 
 }
 
 func (n *TreeNode) canStyle(editedAt *time.Ticket, maxCreatedAt *time.Ticket) bool {
+	if n.IsText() {
+		return false
+	}
+
 	return !n.id.CreatedAt.After(maxCreatedAt) &&
 		(n.removedAt == nil || editedAt.After(n.removedAt))
 }
@@ -982,7 +986,7 @@ func (t *Tree) Style(
 			}
 		}
 
-		if node.canStyle(editedAt, maxCreatedAt) && !node.IsText() && len(attrs) > 0 {
+		if node.canStyle(editedAt, maxCreatedAt) && len(attrs) > 0 {
 			maxCreatedAt = createdAtMapByActor[actorIDHex]
 			createdAt := node.id.CreatedAt
 			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
@@ -1011,37 +1015,56 @@ func (t *Tree) RemoveStyle(
 	to *TreePos,
 	attrs []string,
 	editedAt *time.Ticket,
-) ([]GCPair, error) {
+	maxCreatedAtMapByActor map[string]*time.Ticket,
+) (map[string]*time.Ticket, []GCPair, error) {
 	fromParent, fromLeft, err := t.FindTreeNodesWithSplitText(from, editedAt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	toParent, toLeft, err := t.FindTreeNodesWithSplitText(to, editedAt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var pairs []GCPair
+	createdAtMapByActor := make(map[string]*time.Ticket)
 	if err = t.traverseInPosRange(fromParent, fromLeft, toParent, toLeft, func(token index.TreeToken[*TreeNode], _ bool) {
 		node := token.Node
-		if node.IsRemoved() || node.IsText() {
-			return
+		actorIDHex := node.id.CreatedAt.ActorIDHex()
+
+		var maxCreatedAt *time.Ticket
+		if maxCreatedAtMapByActor == nil {
+			maxCreatedAt = time.MaxTicket
+		} else {
+			if createdAt, ok := maxCreatedAtMapByActor[actorIDHex]; ok {
+				maxCreatedAt = createdAt
+			} else {
+				maxCreatedAt = time.InitialTicket
+			}
 		}
 
-		for _, attr := range attrs {
-			rhtNodes := node.RemoveAttr(attr, editedAt)
-			for _, rhtNode := range rhtNodes {
-				pairs = append(pairs, GCPair{
-					Parent: node,
-					Child:  rhtNode,
-				})
+		if node.canStyle(editedAt, maxCreatedAt) && len(attrs) > 0 {
+			maxCreatedAt = createdAtMapByActor[actorIDHex]
+			createdAt := node.id.CreatedAt
+			if maxCreatedAt == nil || createdAt.After(maxCreatedAt) {
+				createdAtMapByActor[actorIDHex] = createdAt
+			}
+
+			for _, attr := range attrs {
+				rhtNodes := node.RemoveAttr(attr, editedAt)
+				for _, rhtNode := range rhtNodes {
+					pairs = append(pairs, GCPair{
+						Parent: node,
+						Child:  rhtNode,
+					})
+				}
 			}
 		}
 	}); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return pairs, nil
+	return createdAtMapByActor, pairs, nil
 }
 
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
