@@ -625,19 +625,27 @@ func FromTreeNodesWhenEdit(pbNodes []*api.TreeNodes) ([]*crdt.TreeNode, error) {
 	return treeNodes, nil
 }
 
+func fromRHT(pbRHT map[string]*api.NodeAttr) (*crdt.RHT, error) {
+	rht := crdt.NewRHT()
+	for k, pbAttr := range pbRHT {
+		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		rht.SetInternal(k, pbAttr.Value, updatedAt, pbAttr.IsRemoved)
+	}
+	return rht, nil
+}
+
 func fromTreeNode(pbNode *api.TreeNode) (*crdt.TreeNode, error) {
 	id, err := fromTreeNodeID(pbNode.Id)
 	if err != nil {
 		return nil, err
 	}
 
-	attrs := crdt.NewRHT()
-	for k, pbAttr := range pbNode.Attributes {
-		updatedAt, err := fromTimeTicket(pbAttr.UpdatedAt)
-		if err != nil {
-			return nil, err
-		}
-		attrs.Set(k, pbAttr.Value, updatedAt)
+	attrs, err := fromRHT(pbNode.Attributes)
+	if err != nil {
+		return nil, err
 	}
 
 	node := crdt.NewTreeNode(

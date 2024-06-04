@@ -297,25 +297,30 @@ func ToTreeNodesWhenEdit(treeNodes []*crdt.TreeNode) []*api.TreeNodes {
 	return pbTreeNodes
 }
 
-func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
-	var attrs map[string]*api.NodeAttr
-	if treeNode.Attrs != nil {
-		attrs = make(map[string]*api.NodeAttr)
-		for _, node := range treeNode.Attrs.Nodes() {
-			attrs[node.Key()] = &api.NodeAttr{
+func toRHT(rht *crdt.RHT) map[string]*api.NodeAttr {
+	var pbAttrs map[string]*api.NodeAttr
+	if rht != nil {
+		pbAttrs = make(map[string]*api.NodeAttr)
+		for _, node := range rht.Nodes() {
+			pbAttrs[node.Key()] = &api.NodeAttr{
 				Value:     node.Value(),
 				UpdatedAt: ToTimeTicket(node.UpdatedAt()),
+				IsRemoved: node.IsRemoved(),
 			}
 		}
 	}
 
+	return pbAttrs
+}
+
+func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 	pbNode := &api.TreeNode{
 		Id:         toTreeNodeID(treeNode.ID()),
 		Type:       treeNode.Type(),
 		Value:      treeNode.Value,
 		RemovedAt:  ToTimeTicket(treeNode.RemovedAt()),
 		Depth:      int32(depth),
-		Attributes: attrs,
+		Attributes: toRHT(treeNode.Attrs),
 	}
 
 	if treeNode.InsPrevID != nil {

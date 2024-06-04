@@ -70,6 +70,11 @@ func (n *RHTNode) RemovedAt() *time.Ticket {
 	return nil
 }
 
+// IsRemoved returns whether this node is removed or not.
+func (n *RHTNode) IsRemoved() bool {
+	return n.isRemoved
+}
+
 // RHT is a hashtable with logical clock(Replicated hashtable).
 // For more details about RHT: http://csl.skku.edu/papers/jpdc11.pdf
 // NOTE(justiceHui): RHT and ElementRHT has duplicated functions.
@@ -127,6 +132,16 @@ func (rht *RHT) Set(k, v string, executedAt *time.Ticket) *RHTNode {
 	return nil
 }
 
+// SetInternal sets the value of the given key internally.
+func (rht *RHT) SetInternal(k string, v string, updatedAt *time.Ticket, removed bool) {
+	newNode := newRHTNode(k, v, updatedAt, removed)
+	rht.nodeMapByKey[k] = newNode
+
+	if removed {
+		rht.numberOfRemovedElement++
+	}
+}
+
 // Remove removes the value of the given key.
 func (rht *RHT) Remove(k string, executedAt *time.Ticket) []*RHTNode {
 	// NOTE(hackerwins): We need to consider the logic and the policy of removing the element.
@@ -179,9 +194,7 @@ func (rht *RHT) Elements() map[string]string {
 func (rht *RHT) Nodes() []*RHTNode {
 	var nodes []*RHTNode
 	for _, node := range rht.nodeMapByKey {
-		if !node.isRemoved {
-			nodes = append(nodes, node)
-		}
+		nodes = append(nodes, node)
 	}
 
 	return nodes
@@ -197,8 +210,9 @@ func (rht *RHT) DeepCopy() *RHT {
 	instance := NewRHT()
 
 	for _, node := range rht.Nodes() {
-		instance.Set(node.key, node.val, node.updatedAt)
+		instance.SetInternal(node.key, node.val, node.updatedAt, node.isRemoved)
 	}
+
 	return instance
 }
 
