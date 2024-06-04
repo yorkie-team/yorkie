@@ -7,6 +7,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.22] - 2024-06-04
+
+## Added
+
+* Add RHTNode removal to converter for consistency by @hackerwins in https://github.com/yorkie-team/yorkie/pull/888
+
 ## [0.4.21] - 2024-06-03
 
 ### Added
