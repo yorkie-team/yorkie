@@ -226,6 +226,7 @@ message RGANode {
 message NodeAttr {
   string value = 1;
   TimeTicket updated_at = 2;
+  bool is_removed = 3;
 }
 
 message TextNode {
