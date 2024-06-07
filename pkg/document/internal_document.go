@@ -18,7 +18,6 @@ package document
 
 import (
 	"errors"
-	"fmt"
 	gosync "sync"
 
 	"github.com/yorkie-team/yorkie/api/converter"
@@ -254,10 +253,7 @@ func (d *InternalDocument) applySnapshot(snapshot []byte, serverSeq int64) error
 // ApplyChanges applies remote changes to the document.
 func (d *InternalDocument) ApplyChanges(changes ...*change.Change) ([]DocEvent, error) {
 	var events []DocEvent
-	for i, c := range changes {
-		if i == 158 {
-			fmt.Println("do sth")
-		}
+	for _, c := range changes {
 		if c.PresenceChange() != nil {
 			clientID := c.ID().ActorID().String()
 			if _, ok := d.onlineClients.Load(clientID); ok {
