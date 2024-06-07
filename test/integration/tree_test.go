@@ -20,13 +20,13 @@ package integration
 
 import (
 	"context"
-	"github.com/yorkie-team/yorkie/api/converter"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/index"
