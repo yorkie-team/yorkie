@@ -336,6 +336,9 @@ func (n *Node[V]) UpdateAncestorsSize() {
 
 	for parent != nil {
 		parent.Length += n.PaddedLength() * sign
+		if parent.Value.IsRemoved() {
+			break
+		}
 
 		parent = parent.Parent
 	}
@@ -344,17 +347,17 @@ func (n *Node[V]) UpdateAncestorsSize() {
 // UpdateDescendantsSize updates the size of descendants. It is used when
 // the tree is newly created and the size of the descendants is not calculated.
 func (n *Node[V]) UpdateDescendantsSize() int {
-	if n.Value.IsRemoved() {
-		n.Length = 0
-		return 0
-	}
-
-	sum := 0
+	size := 0
 	for _, child := range n.Children(true) {
-		sum += child.UpdateDescendantsSize()
+		childSize := child.UpdateDescendantsSize()
+		if child.Value.IsRemoved() {
+			continue
+		}
+
+		size += childSize
 	}
 
-	n.Length += sum
+	n.Length += size
 
 	return n.PaddedLength()
 }

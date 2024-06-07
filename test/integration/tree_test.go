@@ -24,7 +24,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/index"
@@ -3499,6 +3501,140 @@ func TestTree(t *testing.T) {
 		assert.NoError(t, c2.Attach(ctx, d2))
 		size := d1.Root().GetTree("t").IndexTree.Root().Len()
 		assert.Equal(t, size, d2.Root().GetTree("t").IndexTree.Root().Len())
+	})
+
+	t.Run("can calculate size of index tree correctly during concurrent editing", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "doc",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{{Type: "text", Value: "hello"}},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.Equal(t, "<doc><p>hello</p></doc>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<doc><p>hello</p></doc>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 7, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 2, &json.TreeNode{
+				Type:  "text",
+				Value: "p",
+			}, 0)
+			return nil
+		}))
+		assert.Equal(t, "<doc></doc>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, 0, d1.Root().GetTree("t").Len())
+		assert.Equal(t, "<doc><p>pello</p></doc>", d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, 7, d2.Root().GetTree("t").Len())
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.Equal(t, "<doc></doc>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<doc></doc>", d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, d1.Root().GetTree("t").Len(), d2.Root().GetTree("t").Len())
+	})
+
+	t.Run("can keep index tree consistent from snapshot", func(t *testing.T) {
+		ctx := context.Background()
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2))
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", &json.TreeNode{
+				Type: "r",
+				Children: []json.TreeNode{{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}},
+			})
+			return nil
+		}))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.Equal(t, "<r><p></p></r>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<r><p></p></r>", d2.Root().GetTree("t").ToXML())
+
+		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 2, nil, 0)
+			return nil
+		}))
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 1, &json.TreeNode{
+				Type:     "i",
+				Children: []json.TreeNode{{Type: "text", Value: "a"}},
+			}, 0)
+			root.GetTree("t").Edit(2, 3, &json.TreeNode{
+				Type:  "text",
+				Value: "b",
+			}, 0)
+			return nil
+		}))
+		assert.Equal(t, "<r></r>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, 0, d1.Root().GetTree("t").Len())
+		assert.Equal(t, "<r><p><i>b</i></p></r>", d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, 5, d2.Root().GetTree("t").Len())
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.Equal(t, "<r></r>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<r></r>", d2.Root().GetTree("t").ToXML())
+
+		type Node struct {
+			xml       string
+			len       int
+			isRemoved bool
+		}
+		var d1Nodes []Node
+		var d2Nodes []Node
+		var sNodes []Node
+
+		index.TraverseNode(d1.Root().GetTree("t").IndexTree.Root(), func(node *index.Node[*crdt.TreeNode], depth int) {
+			d1Nodes = append(d1Nodes, Node{
+				xml:       index.ToXML(node),
+				len:       node.Len(),
+				isRemoved: node.Value.IsRemoved(),
+			})
+		})
+		index.TraverseNode(d2.Root().GetTree("t").IndexTree.Root(), func(node *index.Node[*crdt.TreeNode], depth int) {
+			d2Nodes = append(d2Nodes, Node{
+				xml:       index.ToXML(node),
+				len:       node.Len(),
+				isRemoved: node.Value.IsRemoved(),
+			})
+		})
+		obj, err := converter.ObjectToBytes(d1.RootObject())
+		assert.NoError(t, err)
+		sRoot, err := converter.BytesToObject(obj)
+		assert.NoError(t, err)
+		index.TraverseNode(sRoot.Get("t").(*crdt.Tree).IndexTree.Root(), func(node *index.Node[*crdt.TreeNode], depth int) {
+			sNodes = append(sNodes, Node{
+				xml:       index.ToXML(node),
+				len:       node.Len(),
+				isRemoved: node.Value.IsRemoved(),
+			})
+		})
+		assert.ObjectsAreEqual(d1Nodes, d2Nodes)
+		assert.ObjectsAreEqual(d1Nodes, sNodes)
 	})
 
 	t.Run("can split and merge with empty paragraph: left", func(t *testing.T) {
