@@ -373,11 +373,7 @@ func (n *TreeNode) remove(removedAt *time.Ticket) bool {
 	if n.removedAt == nil || n.removedAt.Compare(removedAt) > 0 {
 		n.removedAt = removedAt
 		if justRemoved {
-			if n.Index.Parent.Value.removedAt == nil {
-				n.Index.UpdateAncestorsSize()
-			} else {
-				n.Index.Parent.Length -= n.Index.PaddedLength()
-			}
+			n.Index.UpdateAncestorsSize()
 		}
 		return justRemoved
 	}
