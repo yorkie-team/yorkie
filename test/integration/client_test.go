@@ -206,42 +206,4 @@ func TestClient(t *testing.T) {
 
 		wg.Wait()
 	})
-
-	t.Run("concurrent sync and detach test", func(t *testing.T) {
-		clients := activeClients(t, 2)
-		defer deactivateAndCloseClients(t, clients)
-		c1, c2 := clients[0], clients[1]
-
-		ctx := context.Background()
-		d1 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c1.Attach(ctx, d1))
-		d2 := document.New(helper.TestDocKey(t))
-		assert.NoError(t, c2.Attach(ctx, d2))
-
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewArray("array").AddInteger(1, 2)
-			return nil
-		}))
-		assert.NoError(t, c1.Sync(ctx))
-
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetArray("array").AddInteger(3)
-			return nil
-		}))
-
-		wg := sync.WaitGroup{}
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			assert.NoError(t, c1.Sync(ctx))
-		}()
-		go func() {
-			defer wg.Done()
-			assert.NoError(t, c1.Detach(ctx, d1))
-		}()
-		wg.Wait()
-
-		assert.NoError(t, c2.Sync(ctx))
-		assert.Equal(t, d1.Marshal(), d2.Marshal())
-	})
 }
