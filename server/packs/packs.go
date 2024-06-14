@@ -47,6 +47,15 @@ func SnapshotKey(projectID types.ID, docKey key.Key) sync.Key {
 	return sync.NewKey(fmt.Sprintf("snapshot-%s-%s", projectID, docKey))
 }
 
+// PushPullOptions represents the options for PushPull.
+type PushPullOptions struct {
+	// Mode represents the sync mode.
+	Mode types.SyncMode
+
+	// Status represents the status of the document to be updated.
+	Status document.StatusType
+}
+
 // PushPull stores the given changes and returns accumulated changes of the
 // given document.
 //
@@ -59,7 +68,7 @@ func PushPull(
 	clientInfo *database.ClientInfo,
 	docInfo *database.DocInfo,
 	reqPack *change.Pack,
-	mode types.SyncMode,
+	opts PushPullOptions,
 ) (*ServerPack, error) {
 	start := gotime.Now()
 	defer func() {
@@ -76,7 +85,7 @@ func PushPull(
 	be.Metrics.AddPushPullReceivedOperations(reqPack.OperationsLen())
 
 	// 02. pull pack: pull changes or a snapshot from the database and create a response pack.
-	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, mode)
+	respPack, err := pullPack(ctx, be, clientInfo, docInfo, reqPack, cpAfterPush, initialServerSeq, opts.Mode)
 	if err != nil {
 		return nil, err
 	}
@@ -84,12 +93,23 @@ func PushPull(
 	be.Metrics.AddPushPullSentOperations(respPack.OperationsLen())
 	be.Metrics.AddPushPullSnapshotBytes(respPack.SnapshotLen())
 
+	// 03. update the client's document and checkpoint.
 	docRefKey := docInfo.RefKey()
-	if err := clientInfo.UpdateCheckpoint(docRefKey.DocID, respPack.Checkpoint); err != nil {
-		return nil, err
+	if opts.Status == document.StatusRemoved {
+		if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
+			return nil, err
+		}
+	} else if opts.Status == document.StatusDetached {
+		if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := clientInfo.UpdateCheckpoint(docRefKey.DocID, respPack.Checkpoint); err != nil {
+			return nil, err
+		}
 	}
 
-	// 03. store pushed changes, docInfo and checkpoint of the client to DB.
+	// 04. store pushed changes, docInfo and checkpoint of the client to DB.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		if err := be.DB.CreateChangeInfos(
 			ctx,
@@ -107,7 +127,7 @@ func PushPull(
 		return nil, err
 	}
 
-	// 04. update and find min synced ticket for garbage collection.
+	// 05. update and find min synced ticket for garbage collection.
 	// NOTE(hackerwins): Since the client could not receive the response, the
 	// requested seq(reqPack) is stored instead of the response seq(resPack).
 	minSyncedTicket, err := be.DB.UpdateAndFindMinSyncedTicket(
@@ -135,7 +155,7 @@ func PushPull(
 		minSyncedTicket.ToTestString(),
 	)
 
-	// 05. publish document change event then store snapshot asynchronously.
+	// 06. publish document change event then store snapshot asynchronously.
 	if len(pushedChanges) > 0 || reqPack.IsRemoved {
 		be.Background.AttachGoroutine(func(ctx context.Context) {
 			publisherID, err := clientInfo.ID.ToActorID()

@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -160,7 +161,10 @@ func (s *yorkieServer) AttachDocument(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+		Mode:   types.SyncModePushPull,
+		Status: document.StatusAttached,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -243,18 +247,18 @@ func (s *yorkieServer) DetachDocument(
 		return nil, err
 	}
 
+	var status document.StatusType
 	if req.Msg.RemoveIfNotAttached && !isAttached {
 		pack.IsRemoved = true
-		if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
-			return nil, err
-		}
+		status = document.StatusRemoved
 	} else {
-		if err := clientInfo.DetachDocument(docInfo.ID); err != nil {
-			return nil, err
-		}
+		status = document.StatusDetached
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+		Mode:   types.SyncModePushPull,
+		Status: status,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -316,11 +320,6 @@ func (s *yorkieServer) PushPullChanges(
 		}()
 	}
 
-	syncMode := types.SyncModePushPull
-	if req.Msg.PushOnly {
-		syncMode = types.SyncModePushOnly
-	}
-
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
@@ -342,7 +341,15 @@ func (s *yorkieServer) PushPullChanges(
 		return nil, err
 	}
 
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, syncMode)
+	syncMode := types.SyncModePushPull
+	if req.Msg.PushOnly {
+		syncMode = types.SyncModePushOnly
+	}
+
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+		Mode:   syncMode,
+		Status: document.StatusAttached,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -531,11 +538,10 @@ func (s *yorkieServer) RemoveDocument(
 		return nil, err
 	}
 
-	if err := clientInfo.RemoveDocument(docInfo.ID); err != nil {
-		return nil, err
-	}
-
-	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, types.SyncModePushPull)
+	pulled, err := packs.PushPull(ctx, s.backend, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+		Mode:   types.SyncModePushPull,
+		Status: document.StatusRemoved,
+	})
 	if err != nil {
 		return nil, err
 	}
