@@ -7,6 +7,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.24] - 2024-06-14
+
+### Fixed
+
+- Fix duplicate changes when syncing and detaching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/896
+
 ## [0.4.23] - 2024-06-07
 
 ### Fixed
