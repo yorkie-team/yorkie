@@ -25,4 +25,4 @@ spec:
       k8s:
         env:
           - name: PILOT_ENABLE_PERSISTENT_SESSION_FILTER
-            value: "1"
+            value: "true"

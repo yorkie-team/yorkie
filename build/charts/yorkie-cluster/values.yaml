@@ -38,7 +38,7 @@ ingressGateway:
 
   # Connection idle timeout for WatchDocument API
   httpConnection:
-    streamIdleTimeout: 60s
+    streamIdleTimeout: 0s
 
   resources: {}
 

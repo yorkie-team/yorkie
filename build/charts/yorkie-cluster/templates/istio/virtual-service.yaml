@@ -46,10 +46,12 @@ spec:
           - authorization
           - x-api-key
           - x-shard-key
+          - x-session-key
         maxAge: 1728s
         exposeHeaders:
           - custom-header-1
           - grpc-status
           - grpc-message
           - grpc-status-details-bin
+          - x-session-key
         allowCredentials: true
