@@ -9,6 +9,7 @@ metadata:
     app.kubernetes.io/component: server
     app.kubernetes.io/part-of: {{ .Values.yorkie.name }}
     app.kubernetes.io/managed-by: istio
+    istio.io/persistent-session-header: "x-session-key"
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"

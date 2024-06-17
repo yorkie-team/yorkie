@@ -22,3 +22,7 @@ spec:
             type: NodePort
     pilot:
       enabled: true
+      k8s:
+        env:
+          - name: PILOT_ENABLE_PERSISTENT_SESSION_FILTER
+            value: "1"
