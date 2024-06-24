@@ -619,6 +619,60 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
+// UpdateClientDocumentInfo updates the client from the given clientInfo and docInfo.
+func (c *Client) UpdateClientDocumentInfo(
+	ctx context.Context,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
+) error {
+	clientDocInfoKey := getClientDocInfoKey(docInfo.ID)
+	clientDocInfo, ok := clientInfo.Documents[docInfo.ID]
+	if !ok {
+		return fmt.Errorf("client doc info: %w", database.ErrDocumentNeverAttached)
+	}
+
+	updater := bson.M{
+		"$max": bson.M{
+			clientDocInfoKey + "server_seq": clientDocInfo.ServerSeq,
+			clientDocInfoKey + "client_seq": clientDocInfo.ClientSeq,
+		},
+		"$set": bson.M{
+			clientDocInfoKey + StatusKey: clientDocInfo.Status,
+			"updated_at":                 clientInfo.UpdatedAt,
+		},
+	}
+
+	attached, err := clientInfo.IsAttached(docInfo.ID)
+	if err != nil {
+		return err
+	}
+
+	if !attached {
+		updater = bson.M{
+			"$set": bson.M{
+				clientDocInfoKey + "server_seq": 0,
+				clientDocInfoKey + "client_seq": 0,
+				clientDocInfoKey + StatusKey:    clientDocInfo.Status,
+				"updated_at":                    clientInfo.UpdatedAt,
+			},
+		}
+	}
+
+	result := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+		"project_id": clientInfo.ProjectID,
+		"_id":        clientInfo.ID,
+	}, updater)
+
+	if result.Err() != nil {
+		if result.Err() == mongo.ErrNoDocuments {
+			return fmt.Errorf("%s: %w", clientInfo.Key, database.ErrDocumentNotFound)
+		}
+		return fmt.Errorf("update client info: %w", result.Err())
+	}
+
+	return nil
+}
+
 // FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
 func (c *Client) FindDeactivateCandidatesPerProject(
 	ctx context.Context,

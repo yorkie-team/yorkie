@@ -143,6 +143,11 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
+	// UpdateClientDocumentInfo updates the client from the given clientInfo.
+	// TODO(raararaara): This method is identical to `UpdateClientInfoAfterPushPull`.
+	// I wrote this for testing first and plan to integrate it later.
+	UpdateClientDocumentInfo(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
+
 	// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
 	FindNextNCyclingProjectInfos(
 		ctx context.Context,

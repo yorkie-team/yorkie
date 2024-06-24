@@ -619,6 +619,67 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
+// UpdateClientDocumentInfo updates the client from the given clientInfo and docInfo.
+func (d *DB) UpdateClientDocumentInfo(
+	_ context.Context,
+	clientInfo *database.ClientInfo,
+	docInfo *database.DocInfo,
+) error {
+	docRefKey := docInfo.RefKey()
+	clientDocInfo := clientInfo.Documents[docRefKey.DocID]
+	attached, err := clientInfo.IsAttached(docRefKey.DocID)
+	if err != nil {
+		return err
+	}
+
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblClients, "id", clientInfo.ID.String())
+	if err != nil {
+		return fmt.Errorf("find client by id: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", clientInfo.ID, database.ErrDocumentNotFound)
+	}
+
+	loaded := raw.(*database.ClientInfo).DeepCopy()
+
+	if !attached {
+		loaded.Documents[docRefKey.DocID] = &database.ClientDocInfo{
+			Status: clientDocInfo.Status,
+		}
+		loaded.UpdatedAt = gotime.Now()
+	} else {
+		if _, ok := loaded.Documents[docRefKey.DocID]; !ok {
+			loaded.Documents[docRefKey.DocID] = &database.ClientDocInfo{}
+		}
+
+		loadedClientDocInfo := loaded.Documents[docRefKey.DocID]
+		serverSeq := loadedClientDocInfo.ServerSeq
+		if clientDocInfo.ServerSeq > loadedClientDocInfo.ServerSeq {
+			serverSeq = clientDocInfo.ServerSeq
+		}
+		clientSeq := loadedClientDocInfo.ClientSeq
+		if clientDocInfo.ClientSeq > loadedClientDocInfo.ClientSeq {
+			clientSeq = clientDocInfo.ClientSeq
+		}
+		loaded.Documents[docRefKey.DocID] = &database.ClientDocInfo{
+			ServerSeq: serverSeq,
+			ClientSeq: clientSeq,
+			Status:    clientDocInfo.Status,
+		}
+		loaded.UpdatedAt = gotime.Now()
+	}
+
+	if err := txn.Insert(tblClients, loaded); err != nil {
+		return fmt.Errorf("update client: %w", err)
+	}
+	txn.Commit()
+
+	return nil
+}
+
 // FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
 func (d *DB) FindDeactivateCandidatesPerProject(
 	_ context.Context,
