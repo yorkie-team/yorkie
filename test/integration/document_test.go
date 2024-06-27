@@ -107,6 +107,28 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, doc.Status(), document.StatusRemoved)
 	})
 
+	t.Run("reattach document after deactivated test", func(t *testing.T) {
+		// 01. create a document and attach it to c1
+		ctx := context.Background()
+		doc := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, doc)
+		assert.NoError(t, err)
+		assert.True(t, doc.IsAttached())
+
+		// 02. deactivate c1
+		err = c1.Deactivate(ctx)
+		assert.NoError(t, err)
+		assert.False(t, doc.IsAttached())
+		assert.Equal(t, doc.Status(), document.StatusDetached)
+
+		// 03. activate c1 and attach the document again
+		err = c1.Activate(ctx)
+		assert.NoError(t, err)
+		err = c1.Attach(ctx, doc)
+		assert.NoError(t, err)
+		assert.True(t, doc.IsAttached())
+	})
+
 	t.Run("concurrent complex test", func(t *testing.T) {
 		ctx := context.Background()
 		d1 := document.New(helper.TestDocKey(t))

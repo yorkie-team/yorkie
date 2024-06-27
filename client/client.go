@@ -261,6 +261,9 @@ func (c *Client) Deactivate(ctx context.Context) error {
 		return err
 	}
 
+	for _, attachment := range c.attachments {
+		attachment.doc.SetStatus(document.StatusDetached)
+	}
 	c.status = deactivated
 
 	return nil
