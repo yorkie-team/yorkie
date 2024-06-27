@@ -151,7 +151,7 @@ func TestClientInfo(t *testing.T) {
 			Status: database.ClientActivated,
 		}
 
-		err := clientInfo.AttachDocument(dummyDocID)
+		err := clientInfo.AttachDocument(dummyDocID, false)
 		assert.NoError(t, err)
 		isAttached, err := clientInfo.IsAttached(dummyDocID)
 		assert.NoError(t, err)
