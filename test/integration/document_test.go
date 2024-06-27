@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/client"
@@ -75,17 +76,35 @@ func TestDocument(t *testing.T) {
 		assert.Error(t, err)
 	})
 
+	t.Run("reattach test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. reattach a detached document
+		doc := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc))
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetString("k1", "v1")
+			return nil
+		}))
+		assert.NoError(t, c1.Detach(ctx, doc))
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(c1.Attach(ctx, doc)))
+
+		// 02. attach a new document with the same key
+		doc2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc2))
+		assert.NoError(t, c1.Detach(ctx, doc2))
+
+		// 03. reattach but without updating the document
+		doc3 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, doc3))
+		assert.NoError(t, c1.Detach(ctx, doc3))
+	})
+
 	t.Run("detach removeIfNotAttached flag test", func(t *testing.T) {
 		// 01. create a document and attach it to c1
 		ctx := context.Background()
 		doc := document.New(helper.TestDocKey(t))
-		err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetString("k1", "v1")
-			return nil
-		}, "update k1 with v1")
-		assert.NoError(t, err)
-
-		err = c1.Attach(ctx, doc)
+		err := c1.Attach(ctx, doc)
 		assert.NoError(t, err)
 		assert.True(t, doc.IsAttached())
 
@@ -96,6 +115,7 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, doc.Status(), document.StatusDetached)
 
 		// 03. attach again to c1 and check if it is attached normally
+		doc = document.New(helper.TestDocKey(t))
 		err = c1.Attach(ctx, doc)
 		assert.NoError(t, err)
 		assert.True(t, doc.IsAttached())

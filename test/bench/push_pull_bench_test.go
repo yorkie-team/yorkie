@@ -90,7 +90,7 @@ func setUpClientsAndDocs(
 		assert.NoError(b, err)
 		docInfo, err := be.DB.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
 		assert.NoError(b, err)
-		assert.NoError(b, clientInfo.AttachDocument(docInfo.ID))
+		assert.NoError(b, clientInfo.AttachDocument(docInfo.ID, false))
 		assert.NoError(b, be.DB.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
 		bytesID, _ := clientInfo.ID.Bytes()

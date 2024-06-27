@@ -65,6 +65,7 @@ var errorToCode = map[error]connect.Code{
 	database.ErrClientNotActivated:      connect.CodeFailedPrecondition,
 	database.ErrDocumentNotAttached:     connect.CodeFailedPrecondition,
 	database.ErrDocumentAlreadyAttached: connect.CodeFailedPrecondition,
+	database.ErrDocumentAlreadyDetached: connect.CodeFailedPrecondition,
 	documents.ErrDocumentAttached:       connect.CodeFailedPrecondition,
 	packs.ErrInvalidServerSeq:           connect.CodeFailedPrecondition,
 	database.ErrConflictOnUpdate:        connect.CodeFailedPrecondition,

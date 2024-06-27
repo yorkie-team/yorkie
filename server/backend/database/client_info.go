@@ -31,6 +31,7 @@ var (
 	ErrDocumentNotAttached     = errors.New("document not attached")
 	ErrDocumentNeverAttached   = errors.New("client has never attached the document")
 	ErrDocumentAlreadyAttached = errors.New("document already attached")
+	ErrDocumentAlreadyDetached = errors.New("document already detached")
 	ErrAttachedDocumentExists  = errors.New("attached document exits when deactivated")
 )
 
@@ -105,7 +106,7 @@ func (i *ClientInfo) Deactivate() {
 }
 
 // AttachDocument attaches the given document to this client.
-func (i *ClientInfo) AttachDocument(docID types.ID) error {
+func (i *ClientInfo) AttachDocument(docID types.ID, alreadyAttached bool) error {
 	if i.Status != ClientActivated {
 		return fmt.Errorf("client(%s) attaches %s: %w",
 			i.ID, docID, ErrClientNotActivated)
@@ -113,6 +114,11 @@ func (i *ClientInfo) AttachDocument(docID types.ID) error {
 
 	if i.Documents == nil {
 		i.Documents = make(map[types.ID]*ClientDocInfo)
+	}
+
+	if alreadyAttached && i.hasDocument(docID) && i.Documents[docID].Status == DocumentDetached {
+		return fmt.Errorf("client(%s) attaches %s: %w",
+			i.ID, docID, ErrDocumentAlreadyDetached)
 	}
 
 	if i.hasDocument(docID) && i.Documents[docID].Status == DocumentAttached {
