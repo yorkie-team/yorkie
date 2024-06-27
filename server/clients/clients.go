@@ -54,7 +54,7 @@ func Deactivate(
 		return nil, err
 	}
 
-	for docID, clientDocInfo := range clientInfo.Documents {
+	for docID := range clientInfo.Documents {
 		isAttached, err := clientInfo.IsAttached(docID)
 		if err != nil {
 			return nil, err
@@ -63,15 +63,34 @@ func Deactivate(
 			continue
 		}
 
+		docInfo, err := db.FindDocInfoByRefKey(ctx, types.DocRefKey{
+			ProjectID: refKey.ProjectID,
+			DocID:     docID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
 		if err := clientInfo.DetachDocument(docID); err != nil {
 			return nil, err
 		}
 
-		// TODO(hackerwins): We need to remove the presence of the client from the document.
-		// Be careful that housekeeping is executed by the leader. And documents are sharded
-		// by the servers in the cluster. So, we need to consider the case where the leader is
-		// not the same as the server that handles the document.
+		if err := db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
+			return nil, err
+		}
+	}
 
+	updatedClientInfo, err := db.DeactivateClient(ctx, refKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(hackerwins): We need to remove the presence of the client from the document.
+	// Be careful that housekeeping is executed by the leader. And documents are sharded
+	// by the servers in the cluster. So, we need to consider the case where the leader is
+	// not the same as the server that handles the document.
+
+	for docID, clientDocInfo := range clientInfo.Documents {
 		if err := db.UpdateSyncedSeq(
 			ctx,
 			clientInfo,
@@ -85,7 +104,7 @@ func Deactivate(
 		}
 	}
 
-	return db.DeactivateClient(ctx, refKey)
+	return updatedClientInfo, err
 }
 
 // FindActiveClientInfo find the active client info by the given ref key.
@@ -104,4 +123,32 @@ func FindActiveClientInfo(
 	}
 
 	return info, nil
+}
+
+func HasAttachedDocumentsWhenDeactivated(
+	ctx context.Context,
+	db database.Database,
+	refKey types.ClientRefKey,
+) (bool, error) {
+	clientInfo, err := db.FindClientInfoByRefKey(ctx, refKey)
+	if err != nil {
+		return true, err
+	}
+
+	// NOTE(raararaara): Do I need to ensure whether client is deactivated?
+	if clientInfo.EnsureActivated() == nil {
+		return true, err
+	}
+
+	for docID := range clientInfo.Documents {
+		isAttached, err := clientInfo.IsAttached(docID)
+		if err != nil {
+			return true, err
+		}
+		if isAttached {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
