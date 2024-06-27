@@ -220,10 +220,6 @@ func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 
 // EnsureDocumentsDetachedWhenDeactivated checks if there are no documents attached to the deactivated client.
 func (i *ClientInfo) EnsureDocumentsDetachedWhenDeactivated() error {
-	// NOTE(raararaara): Do I need to ensure whether client is deactivated?
-	//if i.EnsureActivated() == nil {
-	// do sth
-	//}
 	for docID := range i.Documents {
 		isAttached, err := i.IsAttached(docID)
 		if err != nil {
