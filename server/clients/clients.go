@@ -124,31 +124,3 @@ func FindActiveClientInfo(
 
 	return info, nil
 }
-
-func HasAttachedDocumentsWhenDeactivated(
-	ctx context.Context,
-	db database.Database,
-	refKey types.ClientRefKey,
-) (bool, error) {
-	clientInfo, err := db.FindClientInfoByRefKey(ctx, refKey)
-	if err != nil {
-		return true, err
-	}
-
-	// NOTE(raararaara): Do I need to ensure whether client is deactivated?
-	if clientInfo.EnsureActivated() == nil {
-		return true, err
-	}
-
-	for docID := range clientInfo.Documents {
-		isAttached, err := clientInfo.IsAttached(docID)
-		if err != nil {
-			return true, err
-		}
-		if isAttached {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
