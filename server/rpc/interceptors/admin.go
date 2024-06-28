@@ -26,6 +26,7 @@ import (
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/logging"
 	"github.com/yorkie-team/yorkie/server/projects"
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/rpc/connecthelper"
@@ -35,22 +36,25 @@ import (
 // ErrUnauthenticated is returned when authentication is failed.
 var ErrUnauthenticated = errors.New("authorization is not provided")
 
-// AdminAuthInterceptor is an interceptor for authentication.
-type AdminAuthInterceptor struct {
+// AdminServiceInterceptor is an interceptor for building additional context
+// and handling authentication for AdminService.
+type AdminServiceInterceptor struct {
 	backend      *backend.Backend
+	requestID    *RequestID
 	tokenManager *auth.TokenManager
 }
 
-// NewAdminAuthInterceptor creates a new instance of AdminAuthInterceptor.
-func NewAdminAuthInterceptor(be *backend.Backend, tokenManager *auth.TokenManager) *AdminAuthInterceptor {
-	return &AdminAuthInterceptor{
+// NewAdminServiceInterceptor creates a new instance of AdminServiceInterceptor.
+func NewAdminServiceInterceptor(be *backend.Backend, tokenManager *auth.TokenManager) *AdminServiceInterceptor {
+	return &AdminServiceInterceptor{
 		backend:      be,
+		requestID:    NewRequestID("a"),
 		tokenManager: tokenManager,
 	}
 }
 
 // WrapUnary creates a unary server interceptor for authentication.
-func (i *AdminAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+func (i *AdminServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(
 		ctx context.Context,
 		req connect.AnyRequest,
@@ -58,6 +62,8 @@ func (i *AdminAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFu
 		if !isAdminService(req.Spec().Procedure) {
 			return next(ctx, req)
 		}
+
+		ctx = logging.With(ctx, logging.New(i.requestID.Next()))
 
 		if isRequiredAuth(req.Spec().Procedure) {
 			user, err := i.authenticate(ctx, req.Header())
@@ -92,7 +98,7 @@ func (i *AdminAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFu
 }
 
 // WrapStreamingClient creates a stream client interceptor for authentication.
-func (i *AdminAuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+func (i *AdminServiceInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(
 		ctx context.Context,
 		spec connect.Spec,
@@ -102,7 +108,7 @@ func (i *AdminAuthInterceptor) WrapStreamingClient(next connect.StreamingClientF
 }
 
 // WrapStreamingHandler creates a stream server interceptor for authentication.
-func (i *AdminAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+func (i *AdminServiceInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(
 		ctx context.Context,
 		conn connect.StreamingHandlerConn,
@@ -110,6 +116,8 @@ func (i *AdminAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 		if !isAdminService(conn.Spec().Procedure) {
 			return next(ctx, conn)
 		}
+
+		ctx = logging.With(ctx, logging.New(i.requestID.Next()))
 
 		if isRequiredAuth(conn.Spec().Procedure) {
 			user, err := i.authenticate(ctx, conn.RequestHeader())
@@ -153,7 +161,7 @@ func isRequiredAuth(method string) bool {
 }
 
 // authenticate does authenticate the request.
-func (i *AdminAuthInterceptor) authenticate(
+func (i *AdminServiceInterceptor) authenticate(
 	ctx context.Context,
 	header http.Header,
 ) (*types.User, error) {
