@@ -21,6 +21,7 @@ package testcases
 import (
 	"context"
 	"fmt"
+	"github.com/yorkie-team/yorkie/server/clients"
 	"strconv"
 	"testing"
 	gotime "time"
@@ -390,6 +391,37 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		assert.NoError(t, err)
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientDeactivated, clientInfo.Status)
+	})
+
+	t.Run("ensure document detached when deactivate client test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+
+		assert.Equal(t, t.Name(), clientInfo.Key)
+		assert.Equal(t, database.ClientActivated, clientInfo.Status)
+
+		docKey := helper.TestDocKey(t)
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		clientInfo.Documents[docInfo.ID].ServerSeq = 1
+		clientInfo.Documents[docInfo.ID].ClientSeq = 1
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+		result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
+		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(1))
+		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
+		assert.NoError(t, err)
+
+		clientRefKey := types.ClientRefKey{
+			ProjectID: projectID,
+			ClientID:  clientInfo.ID,
+		}
+		result, err = clients.Deactivate(ctx, db, clientRefKey)
+		assert.NoError(t, err)
+		assert.NoError(t, result.EnsureDocumentsDetachedWhenDeactivated())
 	})
 }
 
