@@ -520,7 +520,7 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	return &clientInfo, nil
 }
 
-// DeactivateClient deactivates the client of the given refKey and updates document statuses.
+// DeactivateClient deactivates the client of the given refKey and updates document statuses as detached.
 func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
 	pipeline := mongo.Pipeline{
 		bson.D{{Key: "$set", Value: bson.D{
