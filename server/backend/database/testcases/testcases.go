@@ -409,6 +409,13 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		clientInfo.Documents[docInfo.ID].ClientSeq = 1
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
+		d2 := key.Key(t.Name() + "2")
+		docInfo, _ = db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), d2, true)
+		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+		clientInfo.Documents[docInfo.ID].ServerSeq = 1
+		clientInfo.Documents[docInfo.ID].ClientSeq = 1
+		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
 		result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
 		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
 		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(1))

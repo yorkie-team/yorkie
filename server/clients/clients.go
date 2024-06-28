@@ -49,46 +49,15 @@ func Deactivate(
 	db database.Database,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	clientInfo, err := db.FindClientInfoByRefKey(ctx, refKey)
-	if err != nil {
-		return nil, err
-	}
-
-	for docID := range clientInfo.Documents {
-		isAttached, err := clientInfo.IsAttached(docID)
-		if err != nil {
-			return nil, err
-		}
-		if !isAttached {
-			continue
-		}
-
-		docInfo, err := db.FindDocInfoByRefKey(ctx, types.DocRefKey{
-			ProjectID: refKey.ProjectID,
-			DocID:     docID,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		if err := clientInfo.DetachDocument(docID); err != nil {
-			return nil, err
-		}
-
-		if err := db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo); err != nil {
-			return nil, err
-		}
-	}
-
-	updatedClientInfo, err := db.DeactivateClient(ctx, refKey)
-	if err != nil {
-		return nil, err
-	}
-
 	// TODO(hackerwins): We need to remove the presence of the client from the document.
 	// Be careful that housekeeping is executed by the leader. And documents are sharded
 	// by the servers in the cluster. So, we need to consider the case where the leader is
 	// not the same as the server that handles the document.
+
+	clientInfo, err := db.DeactivateClient(ctx, refKey)
+	if err != nil {
+		return nil, err
+	}
 
 	for docID, clientDocInfo := range clientInfo.Documents {
 		if err := db.UpdateSyncedSeq(
@@ -104,7 +73,7 @@ func Deactivate(
 		}
 	}
 
-	return updatedClientInfo, err
+	return clientInfo, err
 }
 
 // FindActiveClientInfo find the active client info by the given ref key.

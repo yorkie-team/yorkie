@@ -520,17 +520,44 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 	return &clientInfo, nil
 }
 
-// DeactivateClient deactivates the client of the given refKey.
+// DeactivateClient deactivates the client of the given refKey and updates document statuses.
 func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
-	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$set", Value: bson.D{
+			{Key: "status", Value: "deactivated"},
+			{Key: "updated_at", Value: gotime.Now()},
+			{Key: "documents", Value: bson.D{
+				{Key: "$arrayToObject", Value: bson.D{
+					{Key: "$map", Value: bson.D{
+						{Key: "input", Value: bson.D{{Key: "$objectToArray", Value: "$documents"}}},
+						{Key: "as", Value: "doc"},
+						{Key: "in", Value: bson.D{
+							{Key: "k", Value: "$$doc.k"},
+							{Key: "v", Value: bson.D{
+								{Key: "$mergeObjects", Value: bson.A{
+									"$$doc.v",
+									bson.D{
+										{Key: "status", Value: "detached"},
+										{Key: "client_seq", Value: 0},
+										{Key: "server_seq", Value: 0},
+									},
+								}},
+							}},
+						}},
+					}},
+				}},
+			}},
+		}}},
+	}
+
+	filter := bson.M{
 		"project_id": refKey.ProjectID,
 		"_id":        refKey.ClientID,
-	}, bson.M{
-		"$set": bson.M{
-			"status":     database.ClientDeactivated,
-			"updated_at": gotime.Now(),
-		},
-	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
+	}
+
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+
+	res := c.collection(ColClients).FindOneAndUpdate(ctx, filter, pipeline, opts)
 
 	clientInfo := database.ClientInfo{}
 	if err := res.Decode(&clientInfo); err != nil {
