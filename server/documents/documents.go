@@ -126,6 +126,27 @@ func GetDocumentSummary(
 	}, nil
 }
 
+// GetDocumentSummaries returns a list of document summaries.
+func GetDocumentSummaries(
+	ctx context.Context,
+	b *backend.Backend,
+	project *types.Project,
+	keys []key.Key,
+) ([]*types.DocumentSummary, error) {
+	// TODO(hackerwins): Resolve the N+1 problem.
+	var summaries []*types.DocumentSummary
+	for _, k := range keys {
+		summary, err := GetDocumentSummary(ctx, b, project, k)
+		if err != nil {
+			return nil, err
+		}
+
+		summaries = append(summaries, summary)
+	}
+
+	return summaries, nil
+}
+
 // GetDocumentByServerSeq returns a document for the given server sequence.
 func GetDocumentByServerSeq(
 	ctx context.Context,

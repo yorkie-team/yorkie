@@ -204,6 +204,37 @@ func (s *adminServer) GetDocument(
 	}), nil
 }
 
+// GetDocuments gets the documents.
+func (s *adminServer) GetDocuments(
+	ctx context.Context,
+	req *connect.Request[api.GetDocumentsRequest],
+) (*connect.Response[api.GetDocumentsResponse], error) {
+	user := users.From(ctx)
+	project, err := projects.GetProject(ctx, s.backend, user.ID, req.Msg.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+
+	var keys []key.Key
+	for _, k := range req.Msg.DocumentKeys {
+		keys = append(keys, key.Key(k))
+	}
+
+	docs, err := documents.GetDocumentSummaries(
+		ctx,
+		s.backend,
+		project,
+		keys,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.GetDocumentsResponse{
+		Documents: converter.ToDocumentSummaries(docs),
+	}), nil
+}
+
 // GetSnapshotMeta gets the snapshot metadata that corresponds to the server sequence.
 func (s *adminServer) GetSnapshotMeta(
 	ctx context.Context,
