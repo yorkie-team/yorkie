@@ -1,15 +1,5 @@
 //go:build integration
 
-package integration
-
-import (
-	"net/http"
-	"strings"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-)
-
 /*
  * Copyright 2024 The Yorkie Authors. All rights reserved.
  *
@@ -26,14 +16,123 @@ import (
  * limitations under the License.
  */
 
-func TestRESTAPI(t *testing.T) {
-	t.Run("bulk document retrieval test", func(t *testing.T) {
-		cli := http.Client{}
+package integration
 
-		url := "http://" + defaultServer.RPCAddr() + "/yorkie.v1.AdminService/GetDocument"
-		reader := strings.NewReader(`{"project_name": "test", "document_key": "test"}`)
-		res, err := cli.Post(url, "application/json", reader)
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/test/helper"
+)
+
+// documentSummaries represents a list of document documentSummaries.
+type documentSummaries struct {
+	Documents []*types.DocumentSummary `json:"documents"`
+}
+
+// documentSummary represents a summary of a document.
+type documentSummary struct {
+	Document *types.DocumentSummary `json:"document"`
+}
+
+func TestRESTAPI(t *testing.T) {
+	project, docs := createProjectAndDocuments(t, 3)
+
+	t.Run("document retrieval test", func(t *testing.T) {
+		httpClient := http.Client{}
+
+		url := fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocument", defaultServer.RPCAddr())
+		req, err := http.NewRequest("POST", url, strings.NewReader(
+			fmt.Sprintf(`{"project_name": "%s", "document_key": "%s"}`, project.Name, docs[0].Key()),
+		))
+		assert.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", project.SecretKey)
+
+		res, err := httpClient.Do(req)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, res.StatusCode)
+
+		resBody, err := io.ReadAll(res.Body)
+		assert.NoError(t, err)
+
+		summary := &documentSummary{}
+		assert.NoError(t, json.Unmarshal(resBody, summary))
+		assert.Equal(t, docs[0].Key(), summary.Document.Key)
 	})
+
+	t.Run("bulk document retrieval test", func(t *testing.T) {
+		httpClient := http.Client{}
+
+		url := fmt.Sprintf("http://%s/yorkie.v1.AdminService/GetDocuments", defaultServer.RPCAddr())
+		req, err := http.NewRequest("POST", url, strings.NewReader(
+			fmt.Sprintf(`{"project_name": "%s", "document_keys": ["%s", "%s"]}`, project.Name, docs[0].Key(), docs[1].Key()),
+		))
+		assert.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", project.SecretKey)
+
+		res, err := httpClient.Do(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+
+		resBody, err := io.ReadAll(res.Body)
+		assert.NoError(t, err)
+
+		summaries := &documentSummaries{}
+		assert.NoError(t, json.Unmarshal(resBody, summaries))
+		assert.Len(t, summaries.Documents, 2)
+	})
+
+	t.Run("list documents test", func(t *testing.T) {
+		httpClient := http.Client{}
+
+		url := fmt.Sprintf("http://%s/yorkie.v1.AdminService/ListDocuments", defaultServer.RPCAddr())
+		req, err := http.NewRequest("POST", url, strings.NewReader(
+			fmt.Sprintf(`{"project_name": "%s", "document_key": "test"}`, project.Name),
+		))
+		assert.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", project.SecretKey)
+
+		res, err := httpClient.Do(req)
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+
+		resBody, err := io.ReadAll(res.Body)
+		assert.NoError(t, err)
+
+		summaries := &documentSummaries{}
+		assert.NoError(t, json.Unmarshal(resBody, summaries))
+		assert.Len(t, summaries.Documents, 3)
+	})
+}
+
+func createProjectAndDocuments(t *testing.T, count int) (*types.Project, []*document.Document) {
+	ctx := context.Background()
+	project, err := defaultServer.CreateProject(ctx, t.Name())
+	assert.NoError(t, err)
+
+	cli, err := client.Dial(defaultServer.RPCAddr(), client.WithAPIKey(project.PublicKey))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+
+	var docs []*document.Document
+	for i := 0; i < count; i++ {
+		doc := document.New(helper.TestDocKey(t, i))
+		assert.NoError(t, cli.Attach(ctx, doc))
+		docs = append(docs, doc)
+	}
+
+	return project, docs
 }
