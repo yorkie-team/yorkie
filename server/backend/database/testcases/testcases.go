@@ -21,7 +21,6 @@ package testcases
 import (
 	"context"
 	"fmt"
-	"github.com/yorkie-team/yorkie/server/clients"
 	"strconv"
 	"testing"
 	gotime "time"
@@ -37,6 +36,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
