@@ -273,8 +273,13 @@ func TestServer() *server.Yorkie {
 }
 
 // TestDocKey returns a new instance of document key for testing.
-func TestDocKey(t testing.TB) key.Key {
+func TestDocKey(t testing.TB, prefix ...int) key.Key {
 	name := t.Name()
+
+	if len(prefix) > 0 {
+		name = fmt.Sprintf("%d-%s", prefix[0], name)
+	}
+
 	if err := key.Key(name).Validate(); err == nil {
 		return key.Key(name)
 	}

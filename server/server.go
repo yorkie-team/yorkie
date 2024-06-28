@@ -136,7 +136,7 @@ func (r *Yorkie) RPCAddr() string {
 
 // DeactivateClient deactivates the given client. It is used for testing.
 func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error {
-	project, err := projects.GetProjectFromAPIKey(ctx, r.backend, "")
+	project, err := r.DefaultProject(ctx)
 	if err != nil {
 		return err
 	}
@@ -146,4 +146,19 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 		ClientID:  types.IDFromActorID(c1.ID()),
 	})
 	return err
+}
+
+// DefaultProject returns the default project.
+func (r *Yorkie) DefaultProject(ctx context.Context) (*types.Project, error) {
+	return projects.GetProjectFromAPIKey(ctx, r.backend, "")
+}
+
+// CreateProject creates a project with the given name.
+func (r *Yorkie) CreateProject(ctx context.Context, name string) (*types.Project, error) {
+	project, err := r.DefaultProject(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return projects.CreateProject(ctx, r.backend, project.Owner, name)
 }
