@@ -36,7 +36,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -396,39 +395,39 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 	t.Run("ensure document detached when deactivate client test", func(t *testing.T) {
 		ctx := context.Background()
 
+		// 01. Create a client
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
 		assert.NoError(t, err)
-
 		assert.Equal(t, t.Name(), clientInfo.Key)
 		assert.Equal(t, database.ClientActivated, clientInfo.Status)
 
-		docKey := helper.TestDocKey(t)
-		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
-		clientInfo.Documents[docInfo.ID].ServerSeq = 1
-		clientInfo.Documents[docInfo.ID].ClientSeq = 1
+		// 02. Create documents and attach them to the client
+		for i := 0; i < 3; i++ {
+			docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, i), true)
+			assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
+			clientInfo.Documents[docInfo.ID].ServerSeq = 1
+			clientInfo.Documents[docInfo.ID].ClientSeq = 1
+			assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
+
+			result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+			assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
+			assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(1))
+			assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
+			assert.NoError(t, err)
+		}
+		
+		// 03. Remove one document
+		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
+		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		d2 := key.Key(t.Name() + "2")
-		docInfo, _ = db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), d2, true)
-		assert.NoError(t, clientInfo.AttachDocument(docInfo.ID, false))
-		clientInfo.Documents[docInfo.ID].ServerSeq = 1
-		clientInfo.Documents[docInfo.ID].ClientSeq = 1
-		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
-
-		result, err := db.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
-		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentAttached)
-		assert.Equal(t, result.Documents[docInfo.ID].ServerSeq, int64(1))
-		assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
-		assert.NoError(t, err)
-
-		clientRefKey := types.ClientRefKey{
+		// 04. Deactivate the client
+		result, err := db.DeactivateClient(ctx, types.ClientRefKey{
 			ProjectID: projectID,
 			ClientID:  clientInfo.ID,
-		}
-		result, err = clients.Deactivate(ctx, db, clientRefKey)
+		})
 		assert.NoError(t, err)
-		assert.NoError(t, result.EnsureDocumentsDetachedWhenDeactivated())
+		assert.NoError(t, result.EnsureDocumentsNotAttachedWhenDeactivated())
 	})
 }
 
