@@ -24,15 +24,18 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"sync"
 	"testing"
-
 	gotime "time"
 
+	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/client"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/innerpresence"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
@@ -131,6 +134,37 @@ func TestHousekeeping(t *testing.T) {
 		assert.Equal(t, candidates[0].ID, clientA.ID)
 		assert.Equal(t, candidates[1].ID, clientB.ID)
 		assert.NotContains(t, candidates, clientC)
+	})
+
+	t.Run("client deactivation test", func(t *testing.T) {
+		ctx := context.Background()
+		clients := activeClients(t, 2)
+		c1, c2 := clients[0], clients[1]
+
+		// 00. Attach c1 to the document and deactivate c1 from the server side(simulate housekeeping).
+		d1 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1), client.WithPresence(innerpresence.Presence{"key": c1.Key()}))
+		assert.NoError(t, defaultServer.DeactivateClient(ctx, c1))
+
+		// 01. Check whether watch returns ErrFailedPrecondition after deactivation.
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		stream, _ := c1.Watch(ctx, d1)
+		go func() {
+			defer wg.Done()
+
+			stream.Receive()
+			if err := stream.Err(); err != nil {
+				assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+				return
+			}
+		}()
+		wg.Wait()
+
+		// 02. Check whether the presence is removed from the document after deactivation.
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c2.Attach(ctx, d2, client.WithPresence(innerpresence.Presence{"key": c2.Key()})))
+		assert.Len(t, d2.Presences(), 1)
 	})
 }
 
