@@ -159,7 +159,7 @@ func TestClientInfo(t *testing.T) {
 
 		clientInfo.Deactivate()
 
-		err = clientInfo.EnsureDocumentsDetachedWhenDeactivated()
+		err = clientInfo.EnsureDocumentsNotAttachedWhenDeactivated()
 		assert.Equal(t, database.ErrAttachedDocumentExists, err)
 	})
 }

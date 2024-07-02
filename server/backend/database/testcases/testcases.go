@@ -415,7 +415,7 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 			assert.Equal(t, result.Documents[docInfo.ID].ClientSeq, uint32(1))
 			assert.NoError(t, err)
 		}
-		
+
 		// 03. Remove one document
 		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
 		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
