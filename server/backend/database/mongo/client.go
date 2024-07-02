@@ -532,30 +532,26 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 		bson.M{
 			"$set": bson.M{
 				"documents": bson.M{
-					"$map": bson.M{
-						"input": bson.M{"$objectToArray": "$documents"},
-						"as":    "doc",
-						"in": bson.M{
-							"k": "$$doc.k",
-							"v": bson.M{
-								"$cond": bson.M{
-									"if": bson.M{"$eq": bson.A{"$$doc.v.status", "attached"}},
-									"then": bson.M{
-										"client_seq": 0,
-										"server_seq": 0,
-										"status":     "detached",
+					"$arrayToObject": bson.M{
+						"$map": bson.M{
+							"input": bson.M{"$objectToArray": "$documents"},
+							"as":    "doc",
+							"in": bson.M{
+								"k": "$$doc.k",
+								"v": bson.M{
+									"$cond": bson.M{
+										"if": bson.M{"$eq": bson.A{"$$doc.v.status", "attached"}},
+										"then": bson.M{
+											"client_seq": 0,
+											"server_seq": 0,
+											"status":     "detached",
+										},
+										"else": "$$doc.v",
 									},
-									"else": "$$doc.v",
 								},
 							},
-						},
-					},
+						}},
 				},
-			},
-		},
-		bson.M{
-			"$set": bson.M{
-				"documents": bson.M{"$arrayToObject": "$documents"},
 			},
 		},
 	}
