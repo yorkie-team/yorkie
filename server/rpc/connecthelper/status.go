@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// Package connecthelper provides helper functions for connectRPC.
 package connecthelper
 
 import (
