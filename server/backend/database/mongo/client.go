@@ -527,10 +527,6 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 			"$set": bson.M{
 				"status":     "deactivated",
 				"updated_at": gotime.Now(),
-			},
-		},
-		bson.M{
-			"$set": bson.M{
 				"documents": bson.M{
 					"$arrayToObject": bson.M{
 						"$map": bson.M{
@@ -550,7 +546,8 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 									},
 								},
 							},
-						}},
+						},
+					},
 				},
 			},
 		},
