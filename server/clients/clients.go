@@ -54,7 +54,8 @@ func Deactivate(
 	// by the servers in the cluster. So, we need to consider the case where the leader is
 	// not the same as the server that handles the document.
 
-	// When deactivating a client, we need to update three DB properties (ClientInfo.Status, ClientInfo.Documents, SyncedSeq) in DB.
+	// When deactivating a client, we need to update three DB properties
+	// (ClientInfo.Status, ClientInfo.Documents, SyncedSeq) in DB.
 	// Updating the sub-properties of ClientInfo guarantees atomicity as it involves a single MongoDB document.
 	// However, SyncedSeqs are stored in separate documents, so we can't ensure atomic updates for both.
 	// Currently, if SyncedSeqs update fails, it mainly impacts GC efficiency without causing major issues.
