@@ -524,8 +524,6 @@ func (d *DB) DeactivateClient(_ context.Context, refKey types.ClientRefKey) (*da
 	// problems when directly modifying loaded objects. So, we need to DeepCopy.
 	clientInfo = clientInfo.DeepCopy()
 	for docID := range clientInfo.Documents {
-		// TODO(raararaara): Need to think about whether a conditional statement
-		// that executes only when in the `DocumentAttached` is reasonable.
 		if clientInfo.Documents[docID].Status == database.DocumentAttached {
 			if err := clientInfo.DetachDocument(docID); err != nil {
 				return nil, err
