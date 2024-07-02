@@ -21,26 +21,22 @@ import (
 	"sync/atomic"
 )
 
-type RequestID struct {
+// requestID is used to generate a unique request ID.
+type requestID struct {
 	prefix string
 	id     int32
 }
 
-func NewRequestID(prefix string) *RequestID {
-	return &RequestID{
+// newRequestID creates a new requestID.
+func newRequestID(prefix string) *requestID {
+	return &requestID{
 		prefix: prefix,
 		id:     0,
 	}
 }
 
-func (r *RequestID) Next() string {
+// next generates a new request ID.
+func (r *requestID) next() string {
 	next := atomic.AddInt32(&r.id, 1)
 	return r.prefix + strconv.Itoa(int(next))
-}
-
-type reqID int32
-
-func (c *reqID) next() string {
-	next := atomic.AddInt32((*int32)(c), 1)
-	return "r" + strconv.Itoa(int(next))
 }

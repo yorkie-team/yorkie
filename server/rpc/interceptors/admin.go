@@ -36,11 +36,20 @@ import (
 // ErrUnauthenticated is returned when authentication is failed.
 var ErrUnauthenticated = errors.New("authorization is not provided")
 
+func isAdminService(method string) bool {
+	return strings.HasPrefix(method, "/yorkie.v1.AdminService")
+}
+
+func isRequiredAuth(method string) bool {
+	return method != "/yorkie.v1.AdminService/LogIn" &&
+		method != "/yorkie.v1.AdminService/SignUp"
+}
+
 // AdminServiceInterceptor is an interceptor for building additional context
 // and handling authentication for AdminService.
 type AdminServiceInterceptor struct {
 	backend      *backend.Backend
-	requestID    *RequestID
+	requestID    *requestID
 	tokenManager *auth.TokenManager
 }
 
@@ -48,7 +57,7 @@ type AdminServiceInterceptor struct {
 func NewAdminServiceInterceptor(be *backend.Backend, tokenManager *auth.TokenManager) *AdminServiceInterceptor {
 	return &AdminServiceInterceptor{
 		backend:      be,
-		requestID:    NewRequestID("a"),
+		requestID:    newRequestID("a"),
 		tokenManager: tokenManager,
 	}
 }
@@ -63,14 +72,9 @@ func (i *AdminServiceInterceptor) WrapUnary(next connect.UnaryFunc) connect.Unar
 			return next(ctx, req)
 		}
 
-		ctx = logging.With(ctx, logging.New(i.requestID.Next()))
-
-		if isRequiredAuth(req.Spec().Procedure) {
-			user, err := i.authenticate(ctx, req.Header())
-			if err != nil {
-				return nil, err
-			}
-			ctx = users.With(ctx, user)
+		ctx, err := i.buildContext(ctx, req.Spec().Procedure, req.Header())
+		if err != nil {
+			return nil, err
 		}
 
 		res, err := next(ctx, req)
@@ -117,17 +121,12 @@ func (i *AdminServiceInterceptor) WrapStreamingHandler(next connect.StreamingHan
 			return next(ctx, conn)
 		}
 
-		ctx = logging.With(ctx, logging.New(i.requestID.Next()))
-
-		if isRequiredAuth(conn.Spec().Procedure) {
-			user, err := i.authenticate(ctx, conn.RequestHeader())
-			if err != nil {
-				return err
-			}
-			ctx = users.With(ctx, user)
+		ctx, err := i.buildContext(ctx, conn.Spec().Procedure, conn.RequestHeader())
+		if err != nil {
+			return err
 		}
 
-		err := next(ctx, conn)
+		err = next(ctx, conn)
 
 		// TODO(hackerwins, emplam27): Consider splitting between admin and sdk metrics.
 		sdkType, sdkVersion := connecthelper.SDKTypeAndVersion(conn.RequestHeader())
@@ -151,13 +150,23 @@ func (i *AdminServiceInterceptor) WrapStreamingHandler(next connect.StreamingHan
 	}
 }
 
-func isAdminService(method string) bool {
-	return strings.HasPrefix(method, "/yorkie.v1.AdminService")
-}
+// buildContext builds a new context with the given request header.
+func (i *AdminServiceInterceptor) buildContext(
+	ctx context.Context,
+	procedure string,
+	header http.Header,
+) (context.Context, error) {
+	if isRequiredAuth(procedure) {
+		user, err := i.authenticate(ctx, header)
+		if err != nil {
+			return nil, err
+		}
+		ctx = users.With(ctx, user)
+	}
 
-func isRequiredAuth(method string) bool {
-	return method != "/yorkie.v1.AdminService/LogIn" &&
-		method != "/yorkie.v1.AdminService/SignUp"
+	ctx = logging.With(ctx, logging.New(i.requestID.next()))
+
+	return ctx, nil
 }
 
 // authenticate does authenticate the request.
@@ -171,6 +180,7 @@ func (i *AdminServiceInterceptor) authenticate(
 	}
 
 	// NOTE(raararaara): If the token is access token, return the user of the token.
+	// This is used for the case where the user uses dashboard or CLI.
 	claims, err := i.tokenManager.Verify(authorization)
 	if err == nil {
 		user, err := users.GetUserByName(ctx, i.backend, claims.Username)
@@ -180,6 +190,9 @@ func (i *AdminServiceInterceptor) authenticate(
 	}
 
 	// NOTE(raararaara): If the token is secret key, return the owner of the project.
+	// This is used for the case where the user uses REST API.
+	// TODO(hackerwins): In this case, attacker can hijack the project owner's identity.
+	// We need to separate project-wide API and user-wide API from AdminService.
 	project, err := projects.GetProjectFromSecretKey(ctx, i.backend, authorization)
 	if err == nil {
 		user, err := users.GetUserByID(ctx, i.backend, project.Owner)

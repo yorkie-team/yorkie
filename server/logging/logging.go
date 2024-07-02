@@ -30,6 +30,9 @@ import (
 // Logger is a wrapper of zap.Logger.
 type Logger = *zap.SugaredLogger
 
+// Field is a wrapper of zap.Field.
+type Field = zap.Field
+
 var defaultLogger Logger
 var logLevel = zapcore.InfoLevel
 var loggerOnce sync.Once
@@ -57,8 +60,25 @@ func SetLogLevel(level string) error {
 }
 
 // New creates a new logger with the given configuration.
-func New(name string) Logger {
-	return newLogger(name)
+func New(name string, fields ...Field) Logger {
+	logger := newLogger(name)
+
+	if len(fields) > 0 {
+		var args = make([]interface{}, len(fields))
+		for i, field := range fields {
+			args[i] = field
+		}
+
+		logger = logger.With(args...)
+	}
+
+	return logger
+}
+
+// NewField creates a new field with the given key and value.
+func NewField(key string, value string) Field {
+	return zap.String(key, value)
+
 }
 
 // DefaultLogger returns the default logger used by Yorkie.
