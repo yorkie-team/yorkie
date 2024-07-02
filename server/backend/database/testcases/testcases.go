@@ -417,7 +417,8 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 		}
 
 		// 03. Remove one document
-		docInfo, _ := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
+		docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
+		assert.NoError(t, err)
 		assert.NoError(t, clientInfo.RemoveDocument(docInfo.ID))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
@@ -427,7 +428,18 @@ func RunActivateClientDeactivateClientTest(t *testing.T, db database.Database, p
 			ClientID:  clientInfo.ID,
 		})
 		assert.NoError(t, err)
-		assert.NoError(t, result.EnsureDocumentsNotAttachedWhenDeactivated())
+
+		// 05. Check whether doc.Status is reflected properly.
+		// If it was `DocumentAttached`, it should be changed to `DocumentDetached`.
+		for i := 0; i < 2; i++ {
+			docInfo, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, i), true)
+			assert.NoError(t, err)
+			assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentDetached)
+		}
+		// If it was `DocumentRemoved`, it should be remained `DocumentRemoved`.
+		docInfo, err = db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), helper.TestDocKey(t, 2), true)
+		assert.NoError(t, err)
+		assert.Equal(t, result.Documents[docInfo.ID].Status, database.DocumentRemoved)
 	})
 }
 
