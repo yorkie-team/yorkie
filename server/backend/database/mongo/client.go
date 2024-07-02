@@ -522,10 +522,13 @@ func (c *Client) ActivateClient(ctx context.Context, projectID types.ID, key str
 
 // DeactivateClient deactivates the client of the given refKey and updates document statuses as detached.
 func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey) (*database.ClientInfo, error) {
-	update := bson.A{
+	res := c.collection(ColClients).FindOneAndUpdate(ctx, bson.M{
+		"project_id": refKey.ProjectID,
+		"_id":        refKey.ClientID,
+	}, bson.A{
 		bson.M{
 			"$set": bson.M{
-				"status":     "deactivated",
+				"status":     database.ClientDeactivated,
 				"updated_at": gotime.Now(),
 				"documents": bson.M{
 					"$arrayToObject": bson.M{
@@ -536,11 +539,11 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 								"k": "$$doc.k",
 								"v": bson.M{
 									"$cond": bson.M{
-										"if": bson.M{"$eq": bson.A{"$$doc.v.status", "attached"}},
+										"if": bson.M{"$eq": bson.A{"$$doc.v.status", database.DocumentAttached}},
 										"then": bson.M{
 											"client_seq": 0,
 											"server_seq": 0,
-											"status":     "detached",
+											"status":     database.DocumentDetached,
 										},
 										"else": "$$doc.v",
 									},
@@ -551,16 +554,7 @@ func (c *Client) DeactivateClient(ctx context.Context, refKey types.ClientRefKey
 				},
 			},
 		},
-	}
-
-	filter := bson.M{
-		"project_id": refKey.ProjectID,
-		"_id":        refKey.ClientID,
-	}
-
-	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
-
-	res := c.collection(ColClients).FindOneAndUpdate(ctx, filter, update, opts)
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After))
 
 	clientInfo := database.ClientInfo{}
 	if err := res.Decode(&clientInfo); err != nil {
