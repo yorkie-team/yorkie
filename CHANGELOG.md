@@ -7,6 +7,23 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.25] - 2024-07-03
+
+### Added
+
+- Add GetDocuments API returning document summaries by @hackerwins in https://github.com/yorkie-team/yorkie/pull/909
+
+### Changed
+
+- Update CI workflow to trigger Pull Request CI only on code-level changes by @kokodak in https://github.com/yorkie-team/yorkie/pull/906
+- Return ErrAlreadyDetached when reattaching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/908
+- Add Project field to YorkieService logs by @hackerwins in https://github.com/yorkie-team/yorkie/pull/911
+
+### Fixed
+
+- Remove commit revision in version command by @hackerwins in https://github.com/yorkie-team/yorkie/pull/905
+- Fix missing document detachments when client is deactivated by @raararaara in https://github.com/yorkie-team/yorkie/pull/907
+
 ## [0.4.24] - 2024-06-14
 
 ### Fixed
