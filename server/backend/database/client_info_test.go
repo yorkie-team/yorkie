@@ -145,4 +145,21 @@ func TestClientInfo(t *testing.T) {
 		err = clientInfo.AttachDocument(dummyDocID, false)
 		assert.ErrorIs(t, err, database.ErrDocumentAlreadyAttached)
 	})
+
+	t.Run("document detached when client deactivate test", func(t *testing.T) {
+		clientInfo := database.ClientInfo{
+			Status: database.ClientActivated,
+		}
+
+		err := clientInfo.AttachDocument(dummyDocID, false)
+		assert.NoError(t, err)
+		isAttached, err := clientInfo.IsAttached(dummyDocID)
+		assert.NoError(t, err)
+		assert.True(t, isAttached)
+
+		clientInfo.Deactivate()
+
+		err = clientInfo.EnsureDocumentsNotAttachedWhenDeactivated()
+		assert.Equal(t, database.ErrAttachedDocumentExists, err)
+	})
 }

@@ -32,6 +32,7 @@ var (
 	ErrDocumentNeverAttached   = errors.New("client has never attached the document")
 	ErrDocumentAlreadyAttached = errors.New("document already attached")
 	ErrDocumentAlreadyDetached = errors.New("document already detached")
+	ErrAttachedDocumentExists  = errors.New("attached document exits when deactivated")
 )
 
 // Below are statuses of the client.
@@ -218,6 +219,27 @@ func (i *ClientInfo) EnsureDocumentAttached(docID types.ID) error {
 	if !i.hasDocument(docID) || i.Documents[docID].Status != DocumentAttached {
 		return fmt.Errorf("ensure attached %s in client(%s): %w",
 			docID, i.ID, ErrDocumentNotAttached)
+	}
+
+	return nil
+}
+
+// EnsureDocumentsNotAttachedWhenDeactivated ensures that no documents are attached
+// when the client is deactivated.
+func (i *ClientInfo) EnsureDocumentsNotAttachedWhenDeactivated() error {
+	if i.Status != ClientDeactivated {
+		return nil
+	}
+
+	for docID := range i.Documents {
+		isAttached, err := i.IsAttached(docID)
+		if err != nil {
+			return err
+		}
+
+		if isAttached {
+			return ErrAttachedDocumentExists
+		}
 	}
 
 	return nil
