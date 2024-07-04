@@ -34,6 +34,7 @@ import (
 
 	adminClient "github.com/yorkie-team/yorkie/admin"
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/internal/validation"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -512,4 +513,24 @@ func WaitForServerToStart(addr string) error {
 	}
 
 	return fmt.Errorf("timeout for server to start: %s", addr)
+}
+
+// CreateProjectAndDocuments creates a new project and documents for the given count.
+func CreateProjectAndDocuments(t *testing.T, server *server.Yorkie, count int) (*types.Project, []*document.Document) {
+	ctx := context.Background()
+	project, err := server.CreateProject(ctx, t.Name())
+	assert.NoError(t, err)
+
+	cli, err := client.Dial(server.RPCAddr(), client.WithAPIKey(project.PublicKey))
+	assert.NoError(t, err)
+	assert.NoError(t, cli.Activate(ctx))
+
+	var docs []*document.Document
+	for i := 0; i < count; i++ {
+		doc := document.New(TestDocKey(t, i))
+		assert.NoError(t, cli.Attach(ctx, doc))
+		docs = append(docs, doc)
+	}
+
+	return project, docs
 }
