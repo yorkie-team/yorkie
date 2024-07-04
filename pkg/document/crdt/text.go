@@ -363,12 +363,6 @@ func (t *Text) ToTestString() string {
 	return t.rgaTreeSplit.ToTestString()
 }
 
-// CheckWeight returns false when there is an incorrect weight node.
-// for debugging purpose.
-func (t *Text) CheckWeight() bool {
-	return t.rgaTreeSplit.CheckWeight()
-}
-
 // TreeByIndex returns IndexTree of the text for debugging purpose.
 func (t *Text) TreeByIndex() *splay.Tree[*RGATreeSplitNode[*TextValue]] {
 	return t.rgaTreeSplit.treeByIndex

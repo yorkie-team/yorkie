@@ -20,6 +20,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
+	"github.com/yorkie-team/yorkie/pkg/llrb"
+	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
 // Text represents a text in the document. As a proxy for the CRDT
@@ -138,4 +140,14 @@ func (p *Text) Style(from, to int, attributes map[string]string) *Text {
 	))
 
 	return p
+}
+
+// TreeByIndex returns IndexTree of the text for debugging purpose.
+func (p *Text) TreeByIndex() *splay.Tree[*crdt.RGATreeSplitNode[*crdt.TextValue]] {
+	return p.Text.TreeByIndex()
+}
+
+// TreeByID returns the tree by ID for debugging purpose.
+func (p *Text) TreeByID() *llrb.Tree[*crdt.RGATreeSplitNodeID, *crdt.RGATreeSplitNode[*crdt.TextValue]] {
+	return p.Text.TreeByID()
 }

@@ -426,12 +426,6 @@ func (s *RGATreeSplit[V]) FindNode(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] 
 	return s.findFloorNode(id)
 }
 
-// CheckWeight returns false when there is an incorrect weight node.
-// for debugging purpose.
-func (s *RGATreeSplit[V]) CheckWeight() bool {
-	return s.treeByIndex.CheckWeight()
-}
-
 func (s *RGATreeSplit[V]) findFloorNode(id *RGATreeSplitNodeID) *RGATreeSplitNode[V] {
 	key, value := s.treeByID.Floor(id)
 	if key == nil {
