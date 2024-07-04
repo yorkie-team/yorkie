@@ -18,12 +18,12 @@ package crdt
 
 import (
 	"fmt"
-	"github.com/yorkie-team/yorkie/pkg/llrb"
-	"github.com/yorkie-team/yorkie/pkg/splay"
 	"strings"
 	"unicode/utf16"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/llrb"
+	"github.com/yorkie-team/yorkie/pkg/splay"
 )
 
 // TextValue is a value of Text which has an attributes that represent
@@ -369,6 +369,7 @@ func (t *Text) CheckWeight() bool {
 	return t.rgaTreeSplit.CheckWeight()
 }
 
+// TreeByIndex returns IndexTree of the text for debugging purpose.
 func (t *Text) TreeByIndex() *splay.Tree[*RGATreeSplitNode[*TextValue]] {
 	return t.rgaTreeSplit.treeByIndex
 }
