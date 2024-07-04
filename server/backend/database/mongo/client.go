@@ -1201,6 +1201,9 @@ func (c *Client) FindDocInfosByQuery(
 		"key": bson.M{"$regex": primitive.Regex{
 			Pattern: "^" + escapeRegex(query),
 		}},
+		"removed_at": bson.M{
+			"$exists": false,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("find document infos: %w", err)

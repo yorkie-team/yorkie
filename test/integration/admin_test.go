@@ -150,12 +150,12 @@ func TestAdmin(t *testing.T) {
 
 	t.Run("unauthentication test", func(t *testing.T) {
 		// 01. try to call admin API without token.
-		adminCli2, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
+		cli, err := admin.Dial(defaultServer.RPCAddr(), admin.WithInsecure(true))
 		assert.NoError(t, err)
 		defer func() {
-			adminCli2.Close()
+			cli.Close()
 		}()
-		_, err = adminCli2.GetProject(ctx, "default")
+		_, err = cli.GetProject(ctx, "default")
 
 		// 02. server should return unauthenticated error.
 		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))

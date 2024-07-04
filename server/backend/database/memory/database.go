@@ -1313,6 +1313,9 @@ func (d *DB) FindDocInfosByQuery(
 	for raw := iterator.Next(); raw != nil; raw = iterator.Next() {
 		if count < pageSize {
 			info := raw.(*database.DocInfo)
+			if info.IsRemoved() {
+				continue
+			}
 			docInfos = append(docInfos, info)
 		}
 		count++
