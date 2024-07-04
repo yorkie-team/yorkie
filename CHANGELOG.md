@@ -7,6 +7,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.26] - 2024-07-04
+
+### Fixed
+
+- Remove node from index during GC by @raararaara in https://github.com/yorkie-team/yorkie/pull/913
+
 ## [0.4.25] - 2024-07-03
 
 ### Added
