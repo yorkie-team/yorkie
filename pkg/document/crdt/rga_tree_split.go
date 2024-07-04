@@ -628,6 +628,9 @@ func (s *RGATreeSplit[V]) ToTestString() string {
 func (s *RGATreeSplit[V]) Purge(child GCChild) error {
 	node := child.(*RGATreeSplitNode[V])
 
+	s.treeByIndex.Delete(node.indexNode)
+	s.treeByID.Remove(node.id)
+
 	node.prev.next = node.next
 	if node.next != nil {
 		node.next.prev = node.prev

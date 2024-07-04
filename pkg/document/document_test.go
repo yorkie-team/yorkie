@@ -524,4 +524,31 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, "{}", doc.Marshal())
 		assert.Equal(t, 0, doc.GarbageLen())
 	})
+
+	t.Run("purge node from index during GC test", func(t *testing.T) {
+		doc := document.New("d1")
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewText("k1")
+			return nil
+		}))
+		assert.Equal(t, 1, doc.Root().GetText("k1").TreeByID().Len())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.GetText("k1")
+			text.Edit(0, 0, "ABC", nil)
+			return nil
+		}))
+		assert.Equal(t, 2, doc.Root().GetText("k1").TreeByID().Len())
+
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			text := root.GetText("k1")
+			text.Edit(1, 3, "", nil)
+			return nil
+		}))
+		assert.Equal(t, 3, doc.Root().GetText("k1").TreeByID().Len())
+
+		doc.GarbageCollect(time.MaxTicket)
+		assert.Equal(t, 2, doc.Root().GetText("k1").TreeByID().Len())
+	})
 }

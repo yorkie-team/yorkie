@@ -18,6 +18,8 @@ package crdt
 
 import (
 	"fmt"
+	"github.com/yorkie-team/yorkie/pkg/llrb"
+	"github.com/yorkie-team/yorkie/pkg/splay"
 	"strings"
 	"unicode/utf16"
 
@@ -365,4 +367,13 @@ func (t *Text) ToTestString() string {
 // for debugging purpose.
 func (t *Text) CheckWeight() bool {
 	return t.rgaTreeSplit.CheckWeight()
+}
+
+func (t *Text) TreeByIndex() *splay.Tree[*RGATreeSplitNode[*TextValue]] {
+	return t.rgaTreeSplit.treeByIndex
+}
+
+// TreeByID returns the tree by ID for debugging purpose.
+func (t *Text) TreeByID() *llrb.Tree[*RGATreeSplitNodeID, *RGATreeSplitNode[*TextValue]] {
+	return t.rgaTreeSplit.treeByID
 }
