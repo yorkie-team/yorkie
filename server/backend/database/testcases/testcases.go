@@ -71,6 +71,26 @@ func RunFindDocInfoTest(
 		assert.NoError(t, err)
 		assert.Equal(t, docKey, docInfo.Key)
 	})
+
+	t.Run("find docInfo by key test", func(t *testing.T) {
+		ctx := context.Background()
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+
+		// 01. Create a document
+		docKey := helper.TestDocKey(t)
+		info, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+		assert.NoError(t, err)
+		assert.Equal(t, docKey, info.Key)
+
+		// 02. Remove the document
+		err = db.CreateChangeInfos(ctx, projectID, info, 0, []*change.Change{}, true)
+		assert.NoError(t, err)
+
+		// 03. Find the document
+		info, err = db.FindDocInfoByKey(ctx, projectID, docKey)
+		assert.ErrorIs(t, err, database.ErrDocumentNotFound)
+	})
 }
 
 // RunFindProjectInfoBySecretKeyTest runs the FindProjectInfoBySecretKey test for the given db.
