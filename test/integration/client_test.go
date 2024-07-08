@@ -262,7 +262,7 @@ func TestClient(t *testing.T) {
 		defer deactivateAndCloseClients(t, clients)
 
 		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1)
+		err := c1.Attach(ctx, d1, client.WithManualSync())
 		assert.NoError(t, err)
 
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
@@ -279,7 +279,7 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, err)
 
 		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2)
+		err = c2.Attach(ctx, d2, client.WithManualSync())
 		assert.NoError(t, err)
 
 		// 1) c2가 presence를 업데이트하고, 그에 의해 snapshot 생성 조건을 만족
