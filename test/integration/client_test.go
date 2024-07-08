@@ -283,19 +283,24 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, err)
 
 		for i := 0; i < int(helper.SnapshotThreshold); i++ {
-			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetTree("t").Edit(1, 1, &json.TreeNode{
 					Type:  "text",
 					Value: "0",
 				}, 0)
 				return nil
-			})
+			}))
 		}
 		assert.Equal(t, "<root><p>0000000000</p></root>", d1.Root().GetTree("t").ToXML())
 
+		// remote pause
 		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
-		assert.NoError(t, c2.Sync(ctx))
 
+		// resume
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		// update after resume
 		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").Edit(1, 1, &json.TreeNode{
 				Type:  "text",
