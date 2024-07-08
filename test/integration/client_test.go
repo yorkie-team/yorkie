@@ -254,7 +254,7 @@ func TestClient(t *testing.T) {
 		assert.Equal(t, int32(11), d2.Root().GetCounter("c").Value())
 	})
 
-	t.Run("missing snapshot at counter test", func(t *testing.T) {
+	t.Run("missing snapshot at tree test", func(t *testing.T) {
 		ctx := context.Background()
 
 		clients := activeClients(t, 2)
