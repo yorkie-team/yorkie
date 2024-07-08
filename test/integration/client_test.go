@@ -283,15 +283,24 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, err)
 
 		// 1) c2가 presence를 업데이트하고, 그에 의해 snapshot 생성 조건을 만족
-		for i := 0; i < int(helper.SnapshotThreshold); i++ {
-			assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
-				p.Set("upd", "true")
+		//for i := 0; i < int(helper.SnapshotThreshold); i++ {
+		//	assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		//		p.Set("upd", "true")
+		//		return nil
+		//	}))
+		//}
+		//assert.NoError(t, c2.Sync(ctx))
+
+		// 2) c1이 remote pause 상태로 sync가 되어 c2의 변경사항을 받지 못함
+		for i := 0; i < int(helper.SnapshotThreshold)-1; i++ {
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").Edit(1, 1, &json.TreeNode{
+					Type:  "text",
+					Value: "0",
+				}, 0)
 				return nil
 			}))
 		}
-		assert.NoError(t, c2.Sync(ctx))
-
-		// 2) c1이 remote pause 상태로 sync가 되어 c2의 변경사항을 받지 못함
 		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
 
 		// 3) c1이 resume 상태로 change 발생 & sync을 시도 (c2로부터 snapshot을 받음)
@@ -307,7 +316,7 @@ func TestClient(t *testing.T) {
 		assert.NoError(t, c2.Sync(ctx))
 
 		// 4) snapshot을 받은 이후 c1에 의한 change가 반영되어 있는지 각 클라이언트에 대해 확인
-		assert.Equal(t, "<root><p>0</p></root>", d1.Root().GetTree("t").ToXML())
-		assert.Equal(t, "<root><p>0</p></root>", d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>0000000000</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>0000000000</p></root>", d2.Root().GetTree("t").ToXML())
 	})
 }
