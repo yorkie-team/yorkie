@@ -254,4 +254,60 @@ func TestClient(t *testing.T) {
 		assert.Equal(t, int32(11), d2.Root().GetCounter("c").Value())
 	})
 
+	t.Run("missing snapshot at counter test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clients := activeClients(t, 2)
+		c1, c2 := clients[0], clients[1]
+		defer deactivateAndCloseClients(t, clients)
+
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t").Edit(0, 0, &json.TreeNode{
+				Type:     "p",
+				Children: []json.TreeNode{},
+			}, 0)
+			assert.Equal(t, "<root><p></p></root>", root.GetTree("t").ToXML())
+			assert.Equal(t, `{"t":{"type":"root","children":[{"type":"p","children":[]}]}}`, root.Marshal())
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		for i := 0; i < int(helper.SnapshotThreshold); i++ {
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").Edit(1, 1, &json.TreeNode{
+					Type:  "text",
+					Value: "0",
+				}, 0)
+				return nil
+			})
+		}
+		assert.Equal(t, "<root><p>0000000000</p></root>", d1.Root().GetTree("t").ToXML())
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(1, 1, &json.TreeNode{
+				Type:  "text",
+				Value: "1",
+			}, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		// 1번; 총 11번
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.Equal(t, "<root><p>10000000000</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>10000000000</p></root>", d2.Root().GetTree("t").ToXML())
+	})
 }
