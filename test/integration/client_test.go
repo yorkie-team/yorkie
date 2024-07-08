@@ -206,4 +206,52 @@ func TestClient(t *testing.T) {
 
 		wg.Wait()
 	})
+
+	t.Run("missing snapshot at counter test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clients := activeClients(t, 2)
+		c1, c2 := clients[0], clients[1]
+		defer deactivateAndCloseClients(t, clients)
+
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1)
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("c", crdt.IntegerCnt, 0)
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx)
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2)
+		assert.NoError(t, err)
+
+		for i := 0; i < int(helper.SnapshotThreshold); i++ {
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetCounter("c").Increase(1)
+				return nil
+			})
+			assert.NoError(t, err)
+		}
+		// 10qjs
+
+		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetCounter("c").Increase(1)
+			return nil
+		})
+		assert.NoError(t, err)
+		// 1번; 총 11번
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		assert.Equal(t, int32(11), d1.Root().GetCounter("c").Value())
+		assert.Equal(t, int32(11), d2.Root().GetCounter("c").Value())
+	})
+
 }
