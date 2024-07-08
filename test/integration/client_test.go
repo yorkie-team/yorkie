@@ -293,7 +293,10 @@ func TestClient(t *testing.T) {
 		}
 		assert.Equal(t, "<root><p>0000000000</p></root>", d1.Root().GetTree("t").ToXML())
 
-		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
+		assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
+		assert.NoError(t, c2.Sync(ctx))
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").Edit(1, 1, &json.TreeNode{
 				Type:  "text",
 				Value: "0",
@@ -305,7 +308,6 @@ func TestClient(t *testing.T) {
 
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
-		assert.NoError(t, c1.Sync(ctx))
 
 		assert.Equal(t, "<root><p>00000000000</p></root>", d1.Root().GetTree("t").ToXML())
 		assert.Equal(t, "<root><p>00000000000</p></root>", d2.Root().GetTree("t").ToXML())
