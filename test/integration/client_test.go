@@ -254,7 +254,7 @@ func TestClient(t *testing.T) {
 		assert.Equal(t, int32(11), d2.Root().GetCounter("c").Value())
 	})
 
-	t.Run("missing snapshot at counter test", func(t *testing.T) {
+	t.Run("missing snapshot at tree test", func(t *testing.T) {
 		ctx := context.Background()
 
 		clients := activeClients(t, 2)
@@ -296,18 +296,18 @@ func TestClient(t *testing.T) {
 		err = d2.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetTree("t").Edit(1, 1, &json.TreeNode{
 				Type:  "text",
-				Value: "1",
+				Value: "0",
 			}, 0)
 			return nil
 		})
 		assert.NoError(t, err)
-		// 1번; 총 11번
+		// 10 + 1, total 11 number of 0s
 
 		assert.NoError(t, c1.Sync(ctx))
 		assert.NoError(t, c2.Sync(ctx))
 		assert.NoError(t, c1.Sync(ctx))
 
-		assert.Equal(t, "<root><p>10000000000</p></root>", d1.Root().GetTree("t").ToXML())
-		assert.Equal(t, "<root><p>10000000000</p></root>", d2.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>00000000000</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>00000000000</p></root>", d2.Root().GetTree("t").ToXML())
 	})
 }
