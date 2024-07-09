@@ -20,6 +20,8 @@ package integration
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -210,7 +212,7 @@ func TestClient(t *testing.T) {
 	t.Run("missing snapshot at counter test", func(t *testing.T) {
 		ctx := context.Background()
 
-		clients := activeClients(t, 2)
+		clients := activeClients(t, 3)
 		c1, c2 := clients[0], clients[1]
 		defer deactivateAndCloseClients(t, clients)
 
@@ -252,6 +254,78 @@ func TestClient(t *testing.T) {
 
 		assert.Equal(t, int32(11), d1.Root().GetCounter("c").Value())
 		assert.Equal(t, int32(11), d2.Root().GetCounter("c").Value())
+	})
+
+	t.Run("case 1 test", func(t *testing.T) {
+		ctx := context.Background()
+
+		clients := activeClients(t, 3)
+		c1, c2, c3 := clients[0], clients[1], clients[2]
+		defer deactivateAndCloseClients(t, clients)
+
+		d1 := document.New(helper.TestDocKey(t))
+		err := c1.Attach(ctx, d1, client.WithManualSync()) // serverSeq = 1
+		assert.NoError(t, err)
+
+		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t").Edit(0, 0, &json.TreeNode{
+				Type:     "p",
+				Children: []json.TreeNode{},
+			}, 0)
+			assert.Equal(t, "<root><p></p></root>", root.GetTree("t").ToXML())
+			assert.Equal(t, `{"t":{"type":"root","children":[{"type":"p","children":[]}]}}`, root.Marshal())
+			return nil
+		})
+		assert.NoError(t, err)
+		err = c1.Sync(ctx) // serverSeq = 2
+		assert.NoError(t, err)
+
+		d2 := document.New(helper.TestDocKey(t))
+		err = c2.Attach(ctx, d2, client.WithManualSync()) // serverSeq = 3
+		assert.NoError(t, err)
+
+		// serverSeq = 4, ..., 7
+		zeroCnt := 0
+		for i := 0; i < 4; i++ {
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").Edit(1, 1, &json.TreeNode{
+					Type:  "text",
+					Value: "0",
+				}, 0)
+				zeroCnt++
+				return nil
+			}))
+			assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
+		}
+
+		assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Set("presence update", "true")
+			return nil
+		}))
+		assert.NoError(t, c2.Sync(ctx)) // serverSeq = 8
+
+		// serverSeq = 9..11
+		for i := 0; i < 3; i++ {
+			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetTree("t").Edit(1, 1, &json.TreeNode{
+					Type:  "text",
+					Value: "1",
+				}, 0)
+				zeroCnt++
+				return nil
+			}))
+			assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
+		}
+		assert.NoError(t, c2.Sync(ctx))
+		assert.NoError(t, c1.Sync(ctx))
+
+		d3 := document.New(helper.TestDocKey(t))
+		err = c3.Attach(ctx, d3)
+		assert.NoError(t, err)
+
+		resStr := strconv.Itoa(1) + strconv.Itoa(1) + strconv.Itoa(1) + strings.Repeat("0", zeroCnt-3)
+		assert.Equal(t, "<root><p>"+resStr+"</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>"+resStr+"</p></root>", d2.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("missing snapshot at tree test", func(t *testing.T) {
@@ -321,37 +395,67 @@ func TestClient(t *testing.T) {
 	})
 
 	t.Run("alternating push only and sync test", func(t *testing.T) {
-		ctx := context.Background()
-
-		clients := activeClients(t, 2)
-		c1, c2 := clients[0], clients[1]
-		defer deactivateAndCloseClients(t, clients)
-
-		d1 := document.New(helper.TestDocKey(t))
-		err := c1.Attach(ctx, d1, client.WithManualSync())
-		assert.NoError(t, err)
-
-		err = d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.SetNewTree("t").Edit(0, 0, &json.TreeNode{
-				Type:     "p",
-				Children: []json.TreeNode{},
-			}, 0)
-			assert.Equal(t, "<root><p></p></root>", root.GetTree("t").ToXML())
-			assert.Equal(t, `{"t":{"type":"root","children":[{"type":"p","children":[]}]}}`, root.Marshal())
-			return nil
-		})
-		assert.NoError(t, err)
-		err = c1.Sync(ctx)
-		assert.NoError(t, err)
-
-		d2 := document.New(helper.TestDocKey(t))
-		err = c2.Attach(ctx, d2, client.WithManualSync())
-		assert.NoError(t, err)
-
-		// for loop에서 매번 c1은 withPushOnly로 sync,
-		// c2는 일반 sync 를 하고,
 		iter := int(helper.SnapshotThreshold) / 2
-		for i := 1; i <= iter; i++ {
+		for bitfield := 0; bitfield < (1 << iter); bitfield++ {
+			ctx := context.Background()
+
+			clients := activeClients(t, 2)
+			c1, c2 := clients[0], clients[1]
+			defer deactivateAndCloseClients(t, clients)
+
+			d1 := document.New(helper.TestDocKey(t, bitfield))
+			err := c1.Attach(ctx, d1, client.WithManualSync())
+			assert.NoError(t, err)
+
+			err = d1.Update(func(root *json.Object, p *presence.Presence) error {
+				root.SetNewTree("t").Edit(0, 0, &json.TreeNode{
+					Type:     "p",
+					Children: []json.TreeNode{},
+				}, 0)
+				assert.Equal(t, "<root><p></p></root>", root.GetTree("t").ToXML())
+				assert.Equal(t, `{"t":{"type":"root","children":[{"type":"p","children":[]}]}}`, root.Marshal())
+				return nil
+			})
+			assert.NoError(t, err)
+			err = c1.Sync(ctx)
+			assert.NoError(t, err)
+
+			d2 := document.New(helper.TestDocKey(t, bitfield))
+			err = c2.Attach(ctx, d2, client.WithManualSync())
+			assert.NoError(t, err)
+
+			// for loop에서 매번 c1은 withPushOnly로 sync,
+			// c2는 일반 sync 를 하고,
+
+			zeroCnt := 1
+			for i := 1; i <= iter; i++ {
+				assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+					root.GetTree("t").Edit(1, 1, &json.TreeNode{
+						Type:  "text",
+						Value: "0",
+					}, 0)
+					return nil
+				}))
+				assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
+				zeroCnt++
+
+				assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+					if ((bitfield >> i) & 1) == 1 {
+						// for loop 중 한 번 c2에서 presence update 해 봐 주시겠어요?
+						p.Set("presence updated", "true")
+					} else {
+						root.GetTree("t").Edit(1, 1, &json.TreeNode{
+							Type:  "text",
+							Value: "0",
+						}, 0)
+						zeroCnt++
+					}
+					return nil
+				}))
+				assert.NoError(t, c2.Sync(ctx))
+			}
+
+			// c1이 resume 상태로 change 발생 & sync을 시도 (c2로부터 snapshot을 받음)
 			assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetTree("t").Edit(1, 1, &json.TreeNode{
 					Type:  "text",
@@ -359,36 +463,13 @@ func TestClient(t *testing.T) {
 				}, 0)
 				return nil
 			}))
-			assert.NoError(t, c1.Sync(ctx, client.WithDocKey(d1.Key()).WithPushOnly()))
-
-			assert.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
-				if i == iter {
-					// for loop 중 한 번 c2에서 presence update 해 봐 주시겠어요?
-					p.Set("presence updated", "true")
-				} else {
-					root.GetTree("t").Edit(1, 1, &json.TreeNode{
-						Type:  "text",
-						Value: "0",
-					}, 0)
-				}
-				return nil
-			}))
+			assert.NoError(t, c1.Sync(ctx))
 			assert.NoError(t, c2.Sync(ctx))
+
+			// 4) snapshot을 받은 이후 c1에 의한 change가 반영되어 있는지 각 클라이언트에 대해 확인
+			resStr := strings.Repeat("0", zeroCnt)
+			assert.Equal(t, "<root><p>"+resStr+"</p></root>", d1.Root().GetTree("t").ToXML())
+			assert.Equal(t, "<root><p>"+resStr+"</p></root>", d2.Root().GetTree("t").ToXML())
 		}
-
-		// c1이 resume 상태로 change 발생 & sync을 시도 (c2로부터 snapshot을 받음)
-		assert.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
-			root.GetTree("t").Edit(1, 1, &json.TreeNode{
-				Type:  "text",
-				Value: "0",
-			}, 0)
-			return nil
-		}))
-		assert.NoError(t, c1.Sync(ctx))
-		assert.NoError(t, c2.Sync(ctx))
-
-		// 4) snapshot을 받은 이후 c1에 의한 change가 반영되어 있는지 각 클라이언트에 대해 확인
-		assert.Equal(t, "<root><p>0000000000</p></root>", d1.Root().GetTree("t").ToXML())
-		assert.Equal(t, "<root><p>0000000000</p></root>", d2.Root().GetTree("t").ToXML())
 	})
 }
