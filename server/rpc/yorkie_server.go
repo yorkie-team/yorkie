@@ -386,6 +386,13 @@ func (s *yorkieServer) WatchDocument(
 		DocID:     docID,
 	}
 
+	if _, err = clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
+		ProjectID: project.ID,
+		ClientID:  types.IDFromActorID(clientID),
+	}); err != nil {
+		return err
+	}
+
 	docInfo, err := documents.FindDocInfoByRefKey(
 		ctx,
 		s.backend,
@@ -398,13 +405,6 @@ func (s *yorkieServer) WatchDocument(
 	if err := auth.VerifyAccess(ctx, s.backend, &types.AccessInfo{
 		Method:     types.WatchDocuments,
 		Attributes: types.NewAccessAttributes([]key.Key{docInfo.Key}, types.Read),
-	}); err != nil {
-		return err
-	}
-
-	if _, err = clients.FindActiveClientInfo(ctx, s.backend.DB, types.ClientRefKey{
-		ProjectID: project.ID,
-		ClientID:  types.IDFromActorID(clientID),
 	}); err != nil {
 		return err
 	}
