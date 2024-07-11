@@ -7,6 +7,18 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.4.27] - 2024-07-11
+
+### Changed
+
+- Provide error codes for enhancing error handling from clients by @hackerwins in https://github.com/yorkie-team/yorkie/pull/927
+
+### Fixed
+
+- Prevent exposure of removed documents when searching by @hackerwins in https://github.com/yorkie-team/yorkie/pull/918
+- Ensure proper deletion of documents in MemDB by @hackerwins in https://github.com/yorkie-team/yorkie/pull/920
+- Handle local changes correctly when receiving snapshot by @raararaara in https://github.com/yorkie-team/yorkie/pull/923
+
 ## [0.4.26] - 2024-07-04
 
 ### Fixed
