@@ -189,23 +189,8 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 			return err
 		}
 	} else {
-		if err := d.ensureClone(); err != nil {
+		if err := d.applyChanges(pack.Changes); err != nil {
 			return err
-		}
-
-		for _, c := range pack.Changes {
-			if err := c.Execute(d.cloneRoot, d.clonePresences); err != nil {
-				return err
-			}
-		}
-
-		events, err := d.doc.ApplyChanges(pack.Changes...)
-		if err != nil {
-			return err
-		}
-
-		for _, e := range events {
-			d.events <- e
 		}
 	}
 
@@ -216,6 +201,12 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 			break
 		}
 		d.doc.localChanges = d.doc.localChanges[1:]
+	}
+
+	if len(pack.Snapshot) > 0 {
+		if err := d.applyChanges(d.doc.localChanges); err != nil {
+			return err
+		}
 	}
 
 	// 03. Update the checkpoint.
@@ -231,6 +222,28 @@ func (d *Document) ApplyChangePack(pack *change.Pack) error {
 		d.SetStatus(StatusRemoved)
 	}
 
+	return nil
+}
+
+func (d *Document) applyChanges(changes []*change.Change) error {
+	if err := d.ensureClone(); err != nil {
+		return err
+	}
+
+	for _, c := range changes {
+		if err := c.Execute(d.cloneRoot, d.clonePresences); err != nil {
+			return err
+		}
+	}
+
+	events, err := d.doc.ApplyChanges(changes...)
+	if err != nil {
+		return err
+	}
+
+	for _, e := range events {
+		d.events <- e
+	}
 	return nil
 }
 
