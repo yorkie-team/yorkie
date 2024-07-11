@@ -337,9 +337,11 @@ func (c *Client) Attach(ctx context.Context, doc *document.Document, options ...
 	c.attachments[doc.Key()].watchCtx = watchCtx
 	c.attachments[doc.Key()].closeWatchStream = cancelFunc
 
-	err = c.runWatchLoop(watchCtx, doc)
-	if err != nil {
-		return err
+	if !opts.IsManual {
+		err = c.runWatchLoop(watchCtx, doc)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

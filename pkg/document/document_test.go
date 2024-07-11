@@ -23,12 +23,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/test/helper"
 )
 
 var (
@@ -548,5 +550,35 @@ func TestDocument(t *testing.T) {
 
 		doc.GarbageCollect(time.MaxTicket)
 		assert.Equal(t, 2, doc.Root().GetText("k1").TreeByID().Len())
+	})
+
+	t.Run("handle local changes correctly when receiving snapshot test", func(t *testing.T) {
+		// 01. Create a document and a counter.
+		doc := document.New("d1")
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewCounter("c", crdt.IntegerCnt, 0)
+			return nil
+		}))
+
+		// 02. Increase the counter until the snapshot threshold and create a snapshot.
+		for i := 0; i < int(helper.SnapshotThreshold); i++ {
+			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+				root.GetCounter("c").Increase(1)
+				return nil
+			}))
+		}
+		snapshot, _ := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
+		pack := change.NewPack(doc.Key(), doc.CreateChangePack().Checkpoint, nil, snapshot)
+
+		// 03. Make a local change before applying changePack.
+		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetCounter("c").Increase(1)
+			return nil
+		}))
+		expectedCount := doc.Root().GetCounter("c").Value()
+
+		// 04. Apply the changePack and check if the counter value is correct.
+		assert.NoError(t, doc.ApplyChangePack(pack))
+		assert.Equal(t, doc.Root().GetCounter("c").Value(), expectedCount)
 	})
 }
