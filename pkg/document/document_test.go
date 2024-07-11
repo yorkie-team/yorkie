@@ -553,34 +553,31 @@ func TestDocument(t *testing.T) {
 	})
 
 	t.Run("handle local changes correctly when receiving snapshot test", func(t *testing.T) {
+		// 01. Create a document and a counter.
 		doc := document.New("d1")
-
-		// 01. Initialize
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewCounter("c", crdt.IntegerCnt, 0)
 			return nil
 		}))
 
-		// 02. Increase the counter for creating snapshot.
+		// 02. Increase the counter until the snapshot threshold and create a snapshot.
 		for i := 0; i < int(helper.SnapshotThreshold); i++ {
 			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				root.GetCounter("c").Increase(1)
 				return nil
 			}))
 		}
-
-		// 03. Create ChangePack from changes above.
 		snapshot, _ := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
-		changePack := doc.CreateChangePack()
-		pack := change.NewPack(doc.Key(), changePack.Checkpoint, nil, snapshot)
+		pack := change.NewPack(doc.Key(), doc.CreateChangePack().Checkpoint, nil, snapshot)
 
-		// 04. Make a local change before applying changePack.
+		// 03. Make a local change before applying changePack.
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.GetCounter("c").Increase(1)
 			return nil
 		}))
-
 		expectedCount := doc.Root().GetCounter("c").Value()
+
+		// 04. Apply the changePack and check if the counter value is correct.
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.Equal(t, doc.Root().GetCounter("c").Value(), expectedCount)
 	})
