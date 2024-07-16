@@ -48,6 +48,10 @@ func TestDB(t *testing.T) {
 		testcases.RunFindDocInfoTest(t, db, projectID)
 	})
 
+	t.Run("RunFindDocInfosByKeys test", func(t *testing.T) {
+		testcases.RunFindDocInfosByKeysTest(t, db, projectID)
+	})
+
 	t.Run("RunFindDocInfosByQuery test", func(t *testing.T) {
 		testcases.RunFindDocInfosByQueryTest(t, db, projectOneID)
 	})
