@@ -772,7 +772,7 @@ func (d *DB) FindDocInfosByKeys(
 			return nil, fmt.Errorf("find doc info by key: %w", err)
 		}
 		if info == nil {
-			return nil, fmt.Errorf("%s: %w", k, database.ErrDocumentNotFound)
+			continue
 		}
 
 		infos = append(infos, info.DeepCopy())

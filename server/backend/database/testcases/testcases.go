@@ -126,6 +126,36 @@ func RunFindDocInfosByKeysTest(
 		assert.ElementsMatch(t, docKeys, actualKeys)
 		assert.Len(t, infos, len(docKeys))
 	})
+
+	t.Run("find docInfos by keys where some keys are not found test", func(t *testing.T) {
+		ctx := context.Background()
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+
+		// 01. Create documents
+		docKeys := []key.Key{
+			"exist-key1", "exist-key2", "exist-key3",
+		}
+		for _, docKey := range docKeys {
+			_, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+			assert.NoError(t, err)
+		}
+
+		// 02. append a key that does not exist
+		docKeysWithNonExistKey := append(docKeys, "non-exist-key")
+
+		// 03. Find documents
+		infos, err := db.FindDocInfosByKeys(ctx, projectID, docKeysWithNonExistKey)
+		assert.NoError(t, err)
+
+		actualKeys := make([]key.Key, len(infos))
+		for i, info := range infos {
+			actualKeys[i] = info.Key
+		}
+
+		assert.ElementsMatch(t, docKeys, actualKeys)
+		assert.Len(t, infos, len(docKeys))
+	})
 }
 
 // RunFindProjectInfoBySecretKeyTest runs the FindProjectInfoBySecretKey test for the given db.
