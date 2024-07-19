@@ -24,15 +24,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/logging"
-)
-
-const (
-	deactivateCandidatesKey = "housekeeping/deactivateCandidates"
 )
 
 // Housekeeping is the housekeeping service. It periodically runs housekeeping
@@ -112,7 +107,14 @@ func (h *Housekeeping) run() {
 
 	for {
 		ctx := context.Background()
-		lastProjectID, err := h.deactivateCandidates(ctx, housekeepingLastProjectID)
+		lastProjectID, err := clients.DeactivateInactives(
+			ctx,
+			h.database,
+			h.coordinator,
+			h.candidatesLimitPerProject,
+			h.projectFetchSize,
+			housekeepingLastProjectID,
+		)
 		if err != nil {
 			logging.From(ctx).Error(err)
 			continue
@@ -125,92 +127,4 @@ func (h *Housekeeping) run() {
 			return
 		}
 	}
-}
-
-// deactivateCandidates deactivates candidates.
-func (h *Housekeeping) deactivateCandidates(
-	ctx context.Context,
-	housekeepingLastProjectID types.ID,
-) (types.ID, error) {
-	start := time.Now()
-	locker, err := h.coordinator.NewLocker(ctx, deactivateCandidatesKey)
-	if err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.From(ctx).Error(err)
-		}
-	}()
-
-	lastProjectID, candidates, err := h.FindDeactivateCandidates(
-		ctx,
-		h.candidatesLimitPerProject,
-		h.projectFetchSize,
-		housekeepingLastProjectID,
-	)
-	if err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	deactivatedCount := 0
-	for _, clientInfo := range candidates {
-		if _, err := clients.Deactivate(
-			ctx,
-			h.database,
-			clientInfo.RefKey(),
-		); err != nil {
-			return database.DefaultProjectID, err
-		}
-
-		deactivatedCount++
-	}
-
-	if len(candidates) > 0 {
-		logging.From(ctx).Infof(
-			"HSKP: candidates %d, deactivated %d, %s",
-			len(candidates),
-			deactivatedCount,
-			time.Since(start),
-		)
-	}
-
-	return lastProjectID, nil
-}
-
-// FindDeactivateCandidates finds the housekeeping candidates.
-func (h *Housekeeping) FindDeactivateCandidates(
-	ctx context.Context,
-	candidatesLimitPerProject int,
-	projectFetchSize int,
-	lastProjectID types.ID,
-) (types.ID, []*database.ClientInfo, error) {
-	projects, err := h.database.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
-	if err != nil {
-		return database.DefaultProjectID, nil, err
-	}
-
-	var candidates []*database.ClientInfo
-	for _, project := range projects {
-		infos, err := h.database.FindDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
-		if err != nil {
-			return database.DefaultProjectID, nil, err
-		}
-
-		candidates = append(candidates, infos...)
-	}
-
-	var topProjectID types.ID
-	if len(projects) < projectFetchSize {
-		topProjectID = database.DefaultProjectID
-	} else {
-		topProjectID = projects[len(projects)-1].ID
-	}
-
-	return topProjectID, candidates, nil
 }
