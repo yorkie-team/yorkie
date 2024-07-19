@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
-	"github.com/yorkie-team/yorkie/server/backend/sync"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -34,17 +34,14 @@ const (
 // long time.
 func DeactivateInactives(
 	ctx context.Context,
-	db database.Database,
-	coordinator sync.Coordinator,
+	be *backend.Backend,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
 	housekeepingLastProjectID types.ID,
 ) (types.ID, error) {
 	start := time.Now()
 
-	// TODO(hackerwins): Currently, locking is performed for a single node.
-	// If there are multiple nodes, it is necessary to lock the entire cluster.
-	locker, err := coordinator.NewLocker(ctx, deactivateCandidatesKey)
+	locker, err := be.Coordinator.NewLocker(ctx, deactivateCandidatesKey)
 	if err != nil {
 		return database.DefaultProjectID, err
 	}
@@ -59,9 +56,9 @@ func DeactivateInactives(
 		}
 	}()
 
-	lastProjectID, candidates, err := findDeactivateCandidates(
+	lastProjectID, candidates, err := FindDeactivateCandidates(
 		ctx,
-		db,
+		be,
 		candidatesLimitPerProject,
 		projectFetchSize,
 		housekeepingLastProjectID,
@@ -72,11 +69,7 @@ func DeactivateInactives(
 
 	deactivatedCount := 0
 	for _, clientInfo := range candidates {
-		if _, err := Deactivate(
-			ctx,
-			db,
-			clientInfo.RefKey(),
-		); err != nil {
+		if _, err := Deactivate(ctx, be.DB, clientInfo.RefKey()); err != nil {
 			return database.DefaultProjectID, err
 		}
 
@@ -95,22 +88,22 @@ func DeactivateInactives(
 	return lastProjectID, nil
 }
 
-// findDeactivateCandidates finds candidates to deactivate from the database.
-func findDeactivateCandidates(
+// FindDeactivateCandidates finds candidates to deactivate from the database.
+func FindDeactivateCandidates(
 	ctx context.Context,
-	db database.Database,
+	be *backend.Backend,
 	candidatesLimitPerProject int,
 	projectFetchSize int,
 	lastProjectID types.ID,
 ) (types.ID, []*database.ClientInfo, error) {
-	projects, err := db.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
+	projects, err := be.DB.FindNextNCyclingProjectInfos(ctx, projectFetchSize, lastProjectID)
 	if err != nil {
 		return database.DefaultProjectID, nil, err
 	}
 
 	var candidates []*database.ClientInfo
 	for _, project := range projects {
-		infos, err := db.FindDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
+		infos, err := be.DB.FindDeactivateCandidatesPerProject(ctx, project, candidatesLimitPerProject)
 		if err != nil {
 			return database.DefaultProjectID, nil, err
 		}
