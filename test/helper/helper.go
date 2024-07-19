@@ -64,6 +64,7 @@ var (
 
 	AdminUser                             = server.DefaultAdminUser
 	AdminPassword                         = server.DefaultAdminPassword
+	UseDefaultProject                     = true
 	HousekeepingInterval                  = 10 * gotime.Second
 	HousekeepingCandidatesLimitPerProject = 10
 	HousekeepingProjectFetchSize          = 10

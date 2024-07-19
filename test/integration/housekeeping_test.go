@@ -25,18 +25,17 @@ import (
 	"log"
 	"sort"
 	"testing"
-
 	gotime "time"
 
+	"github.com/stretchr/testify/assert"
 	monkey "github.com/undefinedlabs/go-mpatch"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
-	"github.com/yorkie-team/yorkie/server/backend/housekeeping"
-	"github.com/yorkie-team/yorkie/server/backend/sync/memory"
+	"github.com/yorkie-team/yorkie/server/clients"
+	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
@@ -46,41 +45,49 @@ const (
 	clientDeactivateThreshold = "23h"
 )
 
-func setupTest(t *testing.T) *mongo.Client {
-	config := &mongo.Config{
+func setupBackend(t *testing.T) *backend.Backend {
+	conf := helper.TestConfig()
+	conf.Backend.UseDefaultProject = false
+	conf.Mongo = &mongo.Config{
 		ConnectionTimeout: "5s",
 		ConnectionURI:     "mongodb://localhost:27017",
 		YorkieDatabase:    helper.TestDBName() + "-integration",
 		PingTimeout:       "5s",
 	}
-	assert.NoError(t, config.Validate())
 
-	cli, err := mongo.Dial(config)
+	metrics, err := prometheus.NewMetrics()
 	assert.NoError(t, err)
 
-	return cli
+	be, err := backend.New(
+		conf.Backend,
+		conf.Mongo,
+		conf.Housekeeping,
+		metrics,
+	)
+	assert.NoError(t, err)
+
+	return be
 }
 
 func TestHousekeeping(t *testing.T) {
-	config := helper.TestConfig()
-	db := setupTest(t)
+	be := setupBackend(t)
+	defer func() {
+		assert.NoError(t, be.Shutdown())
+	}()
 
-	projects := createProjects(t, db)
-
-	coordinator := memory.NewCoordinator(nil)
-
-	h, err := housekeeping.New(config.Housekeeping, db, coordinator)
-	assert.NoError(t, err)
+	projects := createProjects(t, be.DB)
 
 	t.Run("FindDeactivateCandidates return lastProjectID test", func(t *testing.T) {
 		ctx := context.Background()
 
 		fetchSize := 3
-		lastProjectID := database.DefaultProjectID
 
+		var err error
+		lastProjectID := database.DefaultProjectID
 		for i := 0; i < len(projects)/fetchSize; i++ {
-			lastProjectID, _, err = h.FindDeactivateCandidates(
+			lastProjectID, _, err = clients.FindDeactivateCandidates(
 				ctx,
+				be,
 				0,
 				fetchSize,
 				lastProjectID,
@@ -89,8 +96,9 @@ func TestHousekeeping(t *testing.T) {
 			assert.Equal(t, projects[((i+1)*fetchSize)-1].ID, lastProjectID)
 		}
 
-		lastProjectID, _, err = h.FindDeactivateCandidates(
+		lastProjectID, _, err = clients.FindDeactivateCandidates(
 			ctx,
+			be,
 			0,
 			fetchSize,
 			lastProjectID,
@@ -107,20 +115,20 @@ func TestHousekeeping(t *testing.T) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		clientA, err := db.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-A", t.Name()))
+		clientA, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-A", t.Name()))
 		assert.NoError(t, err)
-		clientB, err := db.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-B", t.Name()))
+		clientB, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-B", t.Name()))
 		assert.NoError(t, err)
-		err = patch.Unpatch()
-		if err != nil {
+		if err = patch.Unpatch(); err != nil {
 			log.Fatal(err)
 		}
 
-		clientC, err := db.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-C", t.Name()))
+		clientC, err := be.DB.ActivateClient(ctx, projects[0].ID, fmt.Sprintf("%s-C", t.Name()))
 		assert.NoError(t, err)
 
-		_, candidates, err := h.FindDeactivateCandidates(
+		_, candidates, err := clients.FindDeactivateCandidates(
 			ctx,
+			be,
 			10,
 			10,
 			database.DefaultProjectID,
@@ -134,7 +142,7 @@ func TestHousekeeping(t *testing.T) {
 	})
 }
 
-func createProjects(t *testing.T, db *mongo.Client) []*database.ProjectInfo {
+func createProjects(t *testing.T, db database.Database) []*database.ProjectInfo {
 	t.Helper()
 
 	ctx := context.Background()
