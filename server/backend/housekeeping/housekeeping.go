@@ -27,7 +27,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/sync"
-	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/logging"
 )
 
@@ -132,23 +131,23 @@ func (h *Housekeeping) deactivateCandidates(
 	ctx context.Context,
 	housekeepingLastProjectID types.ID,
 ) (types.ID, error) {
-	start := time.Now()
-	locker, err := h.coordinator.NewLocker(ctx, deactivateCandidatesKey)
-	if err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	if err := locker.Lock(ctx); err != nil {
-		return database.DefaultProjectID, err
-	}
-
-	defer func() {
-		if err := locker.Unlock(ctx); err != nil {
-			logging.From(ctx).Error(err)
-		}
-	}()
-
-	lastProjectID, candidates, err := h.FindDeactivateCandidates(
+	//start := time.Now()
+	//locker, err := h.coordinator.NewLocker(ctx, deactivateCandidatesKey)
+	//if err != nil {
+	//	return database.DefaultProjectID, err
+	//}
+	//
+	//if err := locker.Lock(ctx); err != nil {
+	//	return database.DefaultProjectID, err
+	//}
+	//
+	//defer func() {
+	//	if err := locker.Unlock(ctx); err != nil {
+	//		logging.From(ctx).Error(err)
+	//	}
+	//}()
+	//
+	lastProjectID, _, err := h.FindDeactivateCandidates(
 		ctx,
 		h.candidatesLimitPerProject,
 		h.projectFetchSize,
@@ -158,27 +157,27 @@ func (h *Housekeeping) deactivateCandidates(
 		return database.DefaultProjectID, err
 	}
 
-	deactivatedCount := 0
-	for _, clientInfo := range candidates {
-		if _, err := clients.Deactivate(
-			ctx,
-			h.database,
-			clientInfo.RefKey(),
-		); err != nil {
-			return database.DefaultProjectID, err
-		}
+	//deactivatedCount := 0
+	//for _, clientInfo := range candidates {
+	//	if _, err := clients.Deactivate(
+	//		ctx,
+	//		h.database,
+	//		clientInfo.RefKey(),
+	//	); err != nil {
+	//		return database.DefaultProjectID, err
+	//	}
+	//
+	//	deactivatedCount++
+	//}
 
-		deactivatedCount++
-	}
-
-	if len(candidates) > 0 {
-		logging.From(ctx).Infof(
-			"HSKP: candidates %d, deactivated %d, %s",
-			len(candidates),
-			deactivatedCount,
-			time.Since(start),
-		)
-	}
+	//if len(candidates) > 0 {
+	//	logging.From(ctx).Infof(
+	//		"HSKP: candidates %d, deactivated %d, %s",
+	//		len(candidates),
+	//		deactivatedCount,
+	//		time.Since(start),
+	//	)
+	//}
 
 	return lastProjectID, nil
 }

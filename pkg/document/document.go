@@ -137,6 +137,13 @@ func New(key key.Key, opts ...Option) *Document {
 	}
 }
 
+// ToDocument converts the InternalDocument to the Document.
+func ToDocument(internalDocument *InternalDocument) *Document {
+	return &Document{
+		doc: internalDocument,
+	}
+}
+
 // Update executes the given updater to update this document.
 func (d *Document) Update(
 	updater func(root *json.Object, p *presence.Presence) error,

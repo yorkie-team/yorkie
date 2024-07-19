@@ -22,7 +22,12 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
+	"github.com/yorkie-team/yorkie/server/packs"
 )
 
 var (
@@ -46,7 +51,7 @@ func Activate(
 // Deactivate deactivates the given client.
 func Deactivate(
 	ctx context.Context,
-	db database.Database,
+	be *backend.Backend,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
 	// TODO(hackerwins): We need to remove the presence of the client from the document.
@@ -60,15 +65,22 @@ func Deactivate(
 	// However, SyncedSeqs are stored in separate documents, so we can't ensure atomic updates for both.
 	// Currently, if SyncedSeqs update fails, it mainly impacts GC efficiency without causing major issues.
 	// We need to consider implementing a correction logic to remove SyncedSeqs in the future.
-	clientInfo, err := db.DeactivateClient(ctx, refKey)
+	prvClientInfo, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	if err != nil {
+		return nil, err
+	}
+	clientInfo, err := be.DB.DeactivateClient(ctx, refKey)
 	if err != nil {
 		return nil, err
 	}
 
+	projectInfo, err := be.DB.FindProjectInfoByID(ctx, clientInfo.ProjectID)
+	project := projectInfo.ToProject()
+
 	// TODO(raararaara): We're currently updating SyncedSeq one by one. This approach is similar
 	// to n+1 query problem. We need to investigate if we can optimize this process by using a single query in the future.
 	for docID, clientDocInfo := range clientInfo.Documents {
-		if err := db.UpdateSyncedSeq(
+		if err := be.DB.UpdateSyncedSeq(
 			ctx,
 			clientInfo,
 			types.DocRefKey{
@@ -77,6 +89,37 @@ func Deactivate(
 			},
 			clientDocInfo.ServerSeq,
 		); err != nil {
+			return nil, err
+		}
+
+		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
+			ProjectID: refKey.ProjectID,
+			DocID:     docID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		internalDoc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, prvClientInfo.Documents[docID].ServerSeq)
+		if err != nil {
+			return nil, err
+		}
+		doc := document.ToDocument(internalDoc)
+
+		if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Clear()
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		pack := doc.CreateChangePack()
+
+		_, err = packs.PushPull(ctx, be, project, clientInfo, docInfo, pack, packs.PushPullOptions{
+			Mode:   types.SyncModePushPull,
+			Status: document.StatusAttached,
+		})
+		if err != nil {
 			return nil, err
 		}
 	}

@@ -141,7 +141,7 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 		return err
 	}
 
-	_, err = clients.Deactivate(ctx, r.backend.DB, types.ClientRefKey{
+	_, err = clients.Deactivate(ctx, r.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(c1.ID()),
 	})
