@@ -117,6 +117,7 @@ message GetDocumentResponse {
 message GetDocumentsRequest {
   string project_name = 1;
   repeated string document_keys = 2;
+  bool include_snapshot = 3;
 }
 
 message GetDocumentsResponse {

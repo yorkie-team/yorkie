@@ -756,6 +756,31 @@ func (d *DB) FindDocInfoByKey(
 	return info.DeepCopy(), nil
 }
 
+// FindDocInfosByKeys finds the documents of the given keys.
+func (d *DB) FindDocInfosByKeys(
+	_ context.Context,
+	projectID types.ID,
+	keys []key.Key,
+) ([]*database.DocInfo, error) {
+	txn := d.db.Txn(false)
+	defer txn.Abort()
+
+	var infos []*database.DocInfo
+	for _, k := range keys {
+		info, err := d.findDocInfoByKey(txn, projectID, k)
+		if err != nil {
+			return nil, fmt.Errorf("find doc info by key: %w", err)
+		}
+		if info == nil {
+			continue
+		}
+
+		infos = append(infos, info.DeepCopy())
+	}
+
+	return infos, nil
+}
+
 // FindDocInfoByRefKey finds a docInfo of the given refKey.
 func (d *DB) FindDocInfoByRefKey(
 	_ context.Context,
