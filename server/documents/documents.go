@@ -123,8 +123,8 @@ func GetDocumentSummaries(
 	be *backend.Backend,
 	project *types.Project,
 	keys []key.Key,
+	includeSnapshot bool,
 ) ([]*types.DocumentSummary, error) {
-	// TODO(hackerwins): Resolve the N+1 problem.
 	docInfos, err := be.DB.FindDocInfosByKeys(ctx, project.ID, keys)
 	if err != nil {
 		return nil, err
@@ -132,9 +132,15 @@ func GetDocumentSummaries(
 
 	var summaries []*types.DocumentSummary
 	for _, docInfo := range docInfos {
-		doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
-		if err != nil {
-			return nil, err
+		snapshot := ""
+		if includeSnapshot {
+			// TODO(hackerwins, kokodak): Resolve the N+1 problem.
+			doc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, docInfo.ServerSeq)
+			if err != nil {
+				return nil, err
+			}
+
+			snapshot = doc.Marshal()
 		}
 
 		summary := &types.DocumentSummary{
@@ -143,7 +149,7 @@ func GetDocumentSummaries(
 			CreatedAt:  docInfo.CreatedAt,
 			AccessedAt: docInfo.AccessedAt,
 			UpdatedAt:  docInfo.UpdatedAt,
-			Snapshot:   doc.Marshal(),
+			Snapshot:   snapshot,
 		}
 
 		summaries = append(summaries, summary)

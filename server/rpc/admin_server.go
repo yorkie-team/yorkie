@@ -225,6 +225,7 @@ func (s *adminServer) GetDocuments(
 		s.backend,
 		project,
 		keys,
+		req.Msg.IncludeSnapshot,
 	)
 	if err != nil {
 		return nil, err
