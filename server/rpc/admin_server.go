@@ -55,7 +55,7 @@ func (s *adminServer) SignUp(
 	ctx context.Context,
 	req *connect.Request[api.SignUpRequest],
 ) (*connect.Response[api.SignUpResponse], error) {
-	fields := &types.SignupFields{Username: &req.Msg.Username, Password: &req.Msg.Password}
+	fields := &types.UserFields{Username: &req.Msg.Username, Password: &req.Msg.Password}
 	if err := fields.Validate(); err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (s *adminServer) ChangePassword(
 	ctx context.Context,
 	req *connect.Request[api.ChangePasswordRequest],
 ) (*connect.Response[api.ChangePasswordResponse], error) {
-	fields := &types.ChangePasswordFields{Username: &req.Msg.Username, NewPassword: &req.Msg.NewPassword}
+	fields := &types.UserFields{Username: &req.Msg.Username, Password: &req.Msg.NewPassword}
 	if err := fields.Validate(); err != nil {
 		return nil, err
 	}
