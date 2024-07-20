@@ -123,7 +123,7 @@ func (s *adminServer) ChangePassword(
 	ctx context.Context,
 	req *connect.Request[api.ChangePasswordRequest],
 ) (*connect.Response[api.ChangePasswordResponse], error) {
-	fields := &types.SignupFields{Username: &req.Msg.Username, Password: &req.Msg.NewPassword}
+	fields := &types.ChangePasswordFields{Username: &req.Msg.Username, NewPassword: &req.Msg.NewPassword}
 	if err := fields.Validate(); err != nil {
 		return nil, err
 	}
