@@ -647,7 +647,7 @@ func (d *DB) DeleteUserInfoByName(_ context.Context, username string) error {
 }
 
 // ChangePassword changes to new password.
-func (d *DB) ChangePassword(_ context.Context, username, newPassword string) error {
+func (d *DB) ChangePassword(_ context.Context, username, hashedNewPassword string) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
@@ -656,12 +656,8 @@ func (d *DB) ChangePassword(_ context.Context, username, newPassword string) err
 		return fmt.Errorf("find user by username: %w", err)
 	}
 
-	hashedPassword, err := database.HashedPassword(newPassword)
-	if err != nil {
-		return err
-	}
 	info := raw.(*database.UserInfo).DeepCopy()
-	info.HashedPassword = hashedPassword
+	info.HashedPassword = hashedNewPassword
 	if err := txn.Insert(tblUsers, info); err != nil {
 		return fmt.Errorf("change password user: %w", err)
 	}
