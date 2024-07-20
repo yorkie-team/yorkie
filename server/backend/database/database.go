@@ -143,6 +143,12 @@ type Database interface {
 	// after handling PushPull.
 	UpdateClientInfoAfterPushPull(ctx context.Context, clientInfo *ClientInfo, docInfo *DocInfo) error
 
+	// DeleteUserInfoByName deletes a user by name.
+	DeleteUserInfoByName(ctx context.Context, username string) error
+
+	// ChangePassword changes to new password.
+	ChangePassword(ctx context.Context, username, hashedNewPassword string) error
+
 	// FindNextNCyclingProjectInfos finds the next N cycling projects from the given projectID.
 	FindNextNCyclingProjectInfos(
 		ctx context.Context,

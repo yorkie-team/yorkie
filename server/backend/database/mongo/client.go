@@ -643,6 +643,35 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
+// DeleteUserInfoByName deletes a user by name.
+func (c *Client) DeleteUserInfoByName(ctx context.Context, username string) error {
+	deleteResult, err := c.collection(ColUsers).DeleteOne(ctx, bson.M{
+		"username": username,
+	})
+	if err != nil {
+		return err
+	}
+	if deleteResult.DeletedCount == 0 {
+		return fmt.Errorf("nothing has been deleted")
+	}
+	return nil
+}
+
+// ChangePassword changes to new password.
+func (c *Client) ChangePassword(ctx context.Context, username, hashedNewPassword string) error {
+	updateResult, err := c.collection(ColUsers).UpdateOne(ctx,
+		bson.M{"username": username},
+		bson.M{"$set": bson.M{"hashed_password": hashedNewPassword}},
+	)
+	if err != nil {
+		return err
+	}
+	if updateResult.ModifiedCount == 0 {
+		return fmt.Errorf("nothing has been updated")
+	}
+	return nil
+}
+
 // FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
 func (c *Client) FindDeactivateCandidatesPerProject(
 	ctx context.Context,

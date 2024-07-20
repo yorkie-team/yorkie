@@ -627,6 +627,50 @@ func (d *DB) UpdateClientInfoAfterPushPull(
 	return nil
 }
 
+// DeleteUserInfoByName deletes a user by name.
+func (d *DB) DeleteUserInfoByName(_ context.Context, username string) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", username)
+	if err != nil || raw == nil {
+		return fmt.Errorf("find user by username: %w", err)
+	}
+
+	info := raw.(*database.UserInfo).DeepCopy()
+	if err = txn.Delete(tblUsers, info); err != nil {
+		return fmt.Errorf("delete account %s: %w", info.ID, err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
+// ChangePassword changes to new password.
+func (d *DB) ChangePassword(_ context.Context, username, newPassword string) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", username)
+	if err != nil || raw == nil {
+		return fmt.Errorf("find user by username: %w", err)
+	}
+
+	hashedPassword, err := database.HashedPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	info := raw.(*database.UserInfo).DeepCopy()
+	info.HashedPassword = hashedPassword
+	if err := txn.Insert(tblUsers, info); err != nil {
+		return fmt.Errorf("change password user: %w", err)
+	}
+
+	txn.Commit()
+
+	return nil
+}
+
 // FindDeactivateCandidatesPerProject finds the clients that need housekeeping per project.
 func (d *DB) FindDeactivateCandidatesPerProject(
 	_ context.Context,

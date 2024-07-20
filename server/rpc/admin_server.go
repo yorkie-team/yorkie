@@ -95,6 +95,57 @@ func (s *adminServer) LogIn(
 	}), nil
 }
 
+// DeleteAccount deletes a user.
+func (s *adminServer) DeleteAccount(
+	ctx context.Context,
+	req *connect.Request[api.DeleteAccountRequest],
+) (*connect.Response[api.DeleteAccountResponse], error) {
+	user, err := users.IsCorrectPassword(
+		ctx,
+		s.backend,
+		req.Msg.Username,
+		req.Msg.Password,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = users.DeleteAccountByName(ctx, s.backend, user.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.DeleteAccountResponse{}), nil
+}
+
+// ChangePassword changes to new password.
+func (s *adminServer) ChangePassword(
+	ctx context.Context,
+	req *connect.Request[api.ChangePasswordRequest],
+) (*connect.Response[api.ChangePasswordResponse], error) {
+	fields := &types.SignupFields{Username: &req.Msg.Username, Password: &req.Msg.NewPassword}
+	if err := fields.Validate(); err != nil {
+		return nil, err
+	}
+
+	user, err := users.IsCorrectPassword(
+		ctx,
+		s.backend,
+		req.Msg.Username,
+		req.Msg.CurrentPassword,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = users.ChangePassword(ctx, s.backend, user.Username, req.Msg.NewPassword)
+	if err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&api.ChangePasswordResponse{}), nil
+}
+
 // CreateProject creates a new project.
 func (s *adminServer) CreateProject(
 	ctx context.Context,
