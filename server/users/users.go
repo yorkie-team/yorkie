@@ -108,7 +108,7 @@ func DeleteAccountByName(
 	return nil
 }
 
-// ChangePassword deletes a user by name.
+// ChangePassword changes the password for a user.
 func ChangePassword(
 	ctx context.Context,
 	be *backend.Backend,

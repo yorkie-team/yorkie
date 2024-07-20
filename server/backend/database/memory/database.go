@@ -633,8 +633,11 @@ func (d *DB) DeleteUserInfoByName(_ context.Context, username string) error {
 	defer txn.Abort()
 
 	raw, err := txn.First(tblUsers, "username", username)
-	if err != nil || raw == nil {
+	if err != nil {
 		return fmt.Errorf("find user by username: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
 	}
 
 	info := raw.(*database.UserInfo).DeepCopy()
@@ -652,8 +655,11 @@ func (d *DB) ChangePassword(_ context.Context, username, hashedNewPassword strin
 	defer txn.Abort()
 
 	raw, err := txn.First(tblUsers, "username", username)
-	if err != nil || raw == nil {
+	if err != nil {
 		return fmt.Errorf("find user by username: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
 	}
 
 	info := raw.(*database.UserInfo).DeepCopy()
