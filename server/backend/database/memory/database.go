@@ -900,7 +900,14 @@ func (d *DB) CreateChangeInfos(
 
 	now := gotime.Now()
 	loadedDocInfo.ServerSeq = docInfo.ServerSeq
-	loadedDocInfo.UpdatedAt = now
+
+	for _, cn := range changes {
+		if len(cn.Operations()) > 0 {
+			loadedDocInfo.UpdatedAt = now
+			break
+		}
+	}
+
 	if isRemoved {
 		loadedDocInfo.RemovedAt = now
 	}
