@@ -644,7 +644,7 @@ func RunAdminSignUpTest(
 	testAdminClient v1connect.AdminServiceClient,
 ) {
 	adminUser := helper.TestSlugName(t)
-	adminPassword := helper.AdminPassword + "123!"
+	adminPassword := helper.AdminPasswordForCreateUser
 
 	_, err := testAdminClient.SignUp(
 		context.Background(),
@@ -699,7 +699,7 @@ func RunAdminDeleteUserTest(
 	testAdminClient v1connect.AdminServiceClient,
 ) {
 	adminUser := helper.TestSlugName(t)
-	adminPassword := helper.AdminPassword + "123!"
+	adminPassword := helper.AdminPasswordForCreateUser
 
 	_, err := testAdminClient.CreateUser(
 		context.Background(),
@@ -737,7 +737,7 @@ func RunAdminChangePasswordTest(
 	testAdminClient v1connect.AdminServiceClient,
 ) {
 	adminUser := helper.TestSlugName(t)
-	adminPassword := helper.AdminPassword + "123!"
+	adminPassword := helper.AdminPasswordForCreateUser
 
 	_, err := testAdminClient.CreateUser(
 		context.Background(),
