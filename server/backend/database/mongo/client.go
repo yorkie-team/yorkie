@@ -652,7 +652,7 @@ func (c *Client) DeleteUserInfoByName(ctx context.Context, username string) erro
 		return err
 	}
 	if deleteResult.DeletedCount == 0 {
-		return fmt.Errorf("nothing has been deleted")
+		return fmt.Errorf("no user found with username %s", username)
 	}
 	return nil
 }
@@ -667,7 +667,7 @@ func (c *Client) ChangePassword(ctx context.Context, username, hashedNewPassword
 		return err
 	}
 	if updateResult.ModifiedCount == 0 {
-		return fmt.Errorf("nothing has been updated")
+		return fmt.Errorf("no user found with username %s", username)
 	}
 	return nil
 }
