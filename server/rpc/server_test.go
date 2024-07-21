@@ -183,6 +183,14 @@ func TestAdminRPCServerBackend(t *testing.T) {
 		testcases.RunAdminLoginTest(t, testAdminClient)
 	})
 
+	t.Run("admin delete user test", func(t *testing.T) {
+		testcases.RunAdminDeleteUserTest(t, testAdminClient)
+	})
+
+	t.Run("admin change password test", func(t *testing.T) {
+		testcases.RunAdminChangePasswordTest(t, testAdminClient)
+	})
+
 	t.Run("admin create project test", func(t *testing.T) {
 		testcases.RunAdminCreateProjectTest(t, testAdminClient, testAdminAuthInterceptor)
 	})

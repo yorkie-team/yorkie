@@ -693,6 +693,113 @@ func RunAdminLoginTest(
 	assert.Equal(t, connecthelper.CodeOf(database.ErrMismatchedPassword), converter.ErrorCodeOf(err))
 }
 
+// RunAdminDeleteUserTest runs the admin delete user test.
+func RunAdminDeleteUserTest(
+	t *testing.T,
+	testAdminClient v1connect.AdminServiceClient,
+) {
+	adminUser := helper.TestSlugName(t)
+	adminPassword := helper.AdminPassword + "123!"
+
+	_, err := testAdminClient.CreateUser(
+		context.Background(),
+		connect.NewRequest(&api.CreateUserRequest{
+			Username: adminUser,
+			Password: adminPassword,
+		},
+		))
+	assert.NoError(t, err)
+
+	_, err = testAdminClient.DeleteUser(
+		context.Background(),
+		connect.NewRequest(&api.DeleteUserRequest{
+			Username: adminUser,
+			Password: adminPassword,
+		},
+		))
+	assert.NoError(t, err)
+
+	// try to delete user with not existing username
+	_, err = testAdminClient.DeleteUser(
+		context.Background(),
+		connect.NewRequest(&api.DeleteUserRequest{
+			Username: adminUser,
+			Password: adminPassword,
+		},
+		))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connecthelper.CodeOf(database.ErrUserNotFound), converter.ErrorCodeOf(err))
+}
+
+// RunAdminChangePasswordTest runs the admin change password user test.
+func RunAdminChangePasswordTest(
+	t *testing.T,
+	testAdminClient v1connect.AdminServiceClient,
+) {
+	adminUser := helper.TestSlugName(t)
+	adminPassword := helper.AdminPassword + "123!"
+
+	_, err := testAdminClient.CreateUser(
+		context.Background(),
+		connect.NewRequest(&api.CreateUserRequest{
+			Username: adminUser,
+			Password: adminPassword,
+		},
+		))
+	assert.NoError(t, err)
+
+	_, err = testAdminClient.LogIn(
+		context.Background(),
+		connect.NewRequest(&api.LogInRequest{
+			Username: adminUser,
+			Password: adminPassword,
+		},
+		))
+	assert.NoError(t, err)
+
+	newAdminPassword := helper.AdminPassword + "12345!"
+	_, err = testAdminClient.ChangeUserPassword(
+		context.Background(),
+		connect.NewRequest(&api.ChangeUserPasswordRequest{
+			Username:        adminUser,
+			CurrentPassword: adminPassword,
+			NewPassword:     newAdminPassword,
+		},
+		))
+	assert.NoError(t, err)
+
+	// log in fail when try to log in with old password
+	_, err = testAdminClient.LogIn(
+		context.Background(),
+		connect.NewRequest(&api.LogInRequest{
+			Username: adminUser,
+			Password: adminPassword,
+		},
+		))
+	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	assert.Equal(t, connecthelper.CodeOf(database.ErrMismatchedPassword), converter.ErrorCodeOf(err))
+
+	_, err = testAdminClient.LogIn(
+		context.Background(),
+		connect.NewRequest(&api.LogInRequest{
+			Username: adminUser,
+			Password: newAdminPassword,
+		},
+		))
+	assert.NoError(t, err)
+
+	// try to change password with invalid password
+	_, err = testAdminClient.ChangeUserPassword(
+		context.Background(),
+		connect.NewRequest(&api.ChangeUserPasswordRequest{
+			Username:        adminUser,
+			CurrentPassword: adminPassword,
+			NewPassword:     invalidSlugName,
+		},
+		))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+}
+
 // RunAdminCreateProjectTest runs the CreateProject test in admin.
 func RunAdminCreateProjectTest(
 	t *testing.T,
