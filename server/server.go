@@ -26,6 +26,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/profiling"
 	"github.com/yorkie-team/yorkie/server/profiling/prometheus"
@@ -93,6 +94,14 @@ func (r *Yorkie) Start() error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
+	if err := r.RegisterHousekeepingTasks(r.backend); err != nil {
+		return err
+	}
+
+	if err := r.backend.Start(); err != nil {
+		return err
+	}
+
 	if r.profilingServer != nil {
 		err := r.profilingServer.Start()
 		if err != nil {
@@ -146,6 +155,31 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 		ClientID:  types.IDFromActorID(c1.ID()),
 	})
 	return err
+}
+
+// RegisterHousekeepingTasks registers housekeeping tasks.
+func (r *Yorkie) RegisterHousekeepingTasks(be *backend.Backend) error {
+	interval, err := be.Housekeeping.Config.ParseInterval()
+	if err != nil {
+		return err
+	}
+
+	housekeepingLastProjectID := database.DefaultProjectID
+	return be.Housekeeping.RegisterTask(interval, func(ctx context.Context) error {
+		lastProjectID, err := clients.DeactivateInactives(
+			ctx,
+			be,
+			be.Housekeeping.Config.CandidatesLimitPerProject,
+			be.Housekeeping.Config.ProjectFetchSize,
+			housekeepingLastProjectID,
+		)
+		if err != nil {
+			return err
+		}
+
+		housekeepingLastProjectID = lastProjectID
+		return nil
+	})
 }
 
 // DefaultProject returns the default project.
