@@ -1121,3 +1121,17 @@ func RunAdminListChangesTest(
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	assert.Equal(t, connecthelper.CodeOf(database.ErrDocumentNotFound), converter.ErrorCodeOf(err))
 }
+
+// RunAdminGetServerVersionTest runs the GetServerVersion test in admin.
+func RunAdminGetServerVersionTest(
+	t *testing.T,
+	testAdminClient v1connect.AdminServiceClient,
+) {
+	versionResponse, err := testAdminClient.GetServerVersion(
+		context.Background(),
+		connect.NewRequest(&api.Empty{}),
+	)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, versionResponse)
+}
