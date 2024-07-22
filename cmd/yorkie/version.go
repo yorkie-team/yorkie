@@ -49,28 +49,45 @@ func newVersionCmd() *cobra.Command {
 			var versionInfo types.VersionInfo
 			versionInfo.ClientVersion = getYorkieClientVersion()
 
+			serverVersionChan := make(chan *types.VersionDetail)
+			errorChan := make(chan error)
+
 			if !clientOnly {
-				rpcAddr := viper.GetString("rpcAddr")
-				auth, err := config.LoadAuth(rpcAddr)
-				if err != nil {
-					return err
-				}
+				go func() {
+					rpcAddr := viper.GetString("rpcAddr")
+					auth, err := config.LoadAuth(rpcAddr)
+					if err != nil {
+						errorChan <- err
+						return
+					}
 
-				cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
-				if err != nil {
-					return err
-				}
-				defer func() {
-					cli.Close()
+					cli, err := admin.Dial(rpcAddr, admin.WithToken(auth.Token), admin.WithInsecure(auth.Insecure))
+					if err != nil {
+						errorChan <- err
+						return
+					}
+					defer cli.Close()
+
+					ctx := context.Background()
+					sv, err := cli.GetServerVersion(ctx)
+					if err != nil {
+						errorChan <- err
+						return
+					}
+
+					serverVersionChan <- sv
 				}()
+			}
 
-				ctx := context.Background()
-				sv, err := cli.GetServerVersion(ctx)
-				if err != nil {
-					return err
+			var serverErr error
+
+			if !clientOnly {
+				select {
+				case sv := <-serverVersionChan:
+					versionInfo.ServerVersion = sv
+				case err := <-errorChan:
+					serverErr = err
 				}
-
-				versionInfo.ServerVersion = sv
 			}
 
 			switch output {
@@ -82,6 +99,8 @@ func newVersionCmd() *cobra.Command {
 					fmt.Printf("Yorkie Server: %s\n", versionInfo.ServerVersion.YorkieVersion)
 					fmt.Printf("Go: %s\n", versionInfo.ServerVersion.GoVersion)
 					fmt.Printf("Build Date: %s\n", versionInfo.ServerVersion.BuildDate)
+				} else if serverErr != nil {
+					fmt.Printf("Error fetching server version: %v\n", serverErr)
 				}
 			case "yaml":
 				marshalled, err := yaml.Marshal(&versionInfo)
