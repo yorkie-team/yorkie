@@ -867,8 +867,15 @@ func (c *Client) CreateChangeInfos(
 	now := gotime.Now()
 	updateFields := bson.M{
 		"server_seq": docInfo.ServerSeq,
-		"updated_at": now,
 	}
+
+	for _, cn := range changes {
+		if len(cn.Operations()) > 0 {
+			updateFields["updated_at"] = now
+			break
+		}
+	}
+
 	if isRemoved {
 		updateFields["removed_at"] = now
 	}
