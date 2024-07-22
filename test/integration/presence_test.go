@@ -466,4 +466,27 @@ func TestPresence(t *testing.T) {
 
 		assert.Equal(t, expected, responsePairs)
 	})
+
+	t.Run("presence clear by server test", func(t *testing.T) {
+		ctx := context.Background()
+
+		d1 := document.New(helper.TestDocKey(t))
+		d2 := document.New(helper.TestDocKey(t))
+		assert.NoError(t, c1.Attach(ctx, d1))
+		assert.NoError(t, c2.Attach(ctx, d2))
+		defer func() {
+			// No need to detach c1
+			assert.NoError(t, c2.Detach(ctx, d2))
+		}()
+
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NoError(t, c2.Sync(ctx))
+		assert.Equal(t, 2, len(d1.AllPresences()))
+		assert.Equal(t, 2, len(d2.AllPresences()))
+
+		assert.NoError(t, defaultServer.DeactivateClient(ctx, c1))
+		assert.NoError(t, c2.Sync(ctx))
+
+		assert.Equal(t, 1, len(d2.AllPresences()))
+	})
 }

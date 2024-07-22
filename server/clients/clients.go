@@ -25,6 +25,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -105,6 +106,15 @@ func Deactivate(
 			return nil, err
 		}
 		doc := document.ToDocument(internalDoc)
+		bytesID, err := clientInfo.ID.Bytes()
+		if err != nil {
+			return nil, err
+		}
+		actorID, err := time.ActorIDFromBytes(bytesID)
+		if err != nil {
+			return nil, err
+		}
+		doc.SetActor(actorID)
 
 		if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Clear()
