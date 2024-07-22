@@ -373,6 +373,11 @@ components:
           type: object
       title: DocumentSummary
       type: object
+    yorkie.v1.Empty:
+      additionalProperties: false
+      description: ""
+      title: Empty
+      type: object
     yorkie.v1.JSONElement:
       additionalProperties: false
       description: ""

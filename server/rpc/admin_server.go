@@ -19,12 +19,14 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"connectrpc.com/connect"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
+	"github.com/yorkie-team/yorkie/internal/version"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -483,5 +485,17 @@ func (s *adminServer) ListChanges(
 
 	return connect.NewResponse(&api.ListChangesResponse{
 		Changes: pbChanges,
+	}), nil
+}
+
+// GetServerVersion get the version of yorkie server.
+func (s *adminServer) GetServerVersion(
+	_ context.Context,
+	_ *connect.Request[api.Empty],
+) (*connect.Response[api.GetServerVersionResponse], error) {
+	return connect.NewResponse(&api.GetServerVersionResponse{
+		YorkieVersion: version.Version,
+		GoVersion:     runtime.Version(),
+		BuildDate:     version.BuildDate,
 	}), nil
 }

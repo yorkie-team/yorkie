@@ -44,6 +44,8 @@ service AdminService {
   rpc SearchDocuments (SearchDocumentsRequest) returns (SearchDocumentsResponse) {}
 
   rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
+
+  rpc GetServerVersion (Empty) returns (GetServerVersionResponse) {}
 }
 
 message SignUpRequest {
@@ -183,4 +185,14 @@ message ListChangesRequest {
 
 message ListChangesResponse {
   repeated Change changes = 1;
+}
+
+message GetVersionRequest {
+
+}
+
+message GetServerVersionResponse {
+  string yorkie_version = 1;
+  string go_version = 2;
+  string build_date = 3;
 }

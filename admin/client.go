@@ -354,6 +354,21 @@ func (c *Client) ListChangeSummaries(
 	return summaries, nil
 }
 
+// GetServerVersion gets the server version.
+func (c *Client) GetServerVersion(ctx context.Context,
+) (*types.VersionDetail, error) {
+	response, err := c.client.GetServerVersion(ctx, connect.NewRequest(&api.Empty{}))
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.VersionDetail{
+		YorkieVersion: response.Msg.YorkieVersion,
+		GoVersion:     response.Msg.GoVersion,
+		BuildDate:     response.Msg.BuildDate,
+	}, nil
+}
+
 /**
  * withShardKey returns a context with the given shard key in metadata.
  */

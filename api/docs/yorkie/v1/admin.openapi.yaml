@@ -82,6 +82,18 @@ paths:
           $ref: '#/components/responses/connect.error'
       tags:
       - yorkie.v1.AdminService
+  /yorkie.v1.AdminService/GetServerVersion:
+    post:
+      description: ""
+      requestBody:
+        $ref: '#/components/requestBodies/yorkie.v1.AdminService.GetServerVersion.yorkie.v1.Empty'
+      responses:
+        "200":
+          $ref: '#/components/responses/yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionResponse'
+        default:
+          $ref: '#/components/responses/connect.error'
+      tags:
+      - yorkie.v1.AdminService
   /yorkie.v1.AdminService/GetSnapshotMeta:
     post:
       description: ""
@@ -246,6 +258,15 @@ components:
           schema:
             $ref: '#/components/schemas/yorkie.v1.GetProjectRequest'
       required: true
+    yorkie.v1.AdminService.GetServerVersion.yorkie.v1.Empty:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.Empty'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.Empty'
+      required: true
     yorkie.v1.AdminService.GetSnapshotMeta.yorkie.v1.GetSnapshotMetaRequest:
       content:
         application/json:
@@ -390,6 +411,15 @@ components:
         application/proto:
           schema:
             $ref: '#/components/schemas/yorkie.v1.GetProjectResponse'
+      description: ""
+    yorkie.v1.AdminService.GetServerVersion.yorkie.v1.GetServerVersionResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetServerVersionResponse'
+        application/proto:
+          schema:
+            $ref: '#/components/schemas/yorkie.v1.GetServerVersionResponse'
       description: ""
     yorkie.v1.AdminService.GetSnapshotMeta.yorkie.v1.GetSnapshotMetaResponse:
       content:
@@ -780,6 +810,11 @@ components:
           type: object
       title: DocumentSummary
       type: object
+    yorkie.v1.Empty:
+      additionalProperties: false
+      description: ""
+      title: Empty
+      type: object
     yorkie.v1.GetDocumentRequest:
       additionalProperties: false
       description: ""
@@ -868,6 +903,27 @@ components:
           type: object
       title: GetProjectResponse
       type: object
+    yorkie.v1.GetServerVersionResponse:
+      additionalProperties: false
+      description: ""
+      properties:
+        buildDate:
+          additionalProperties: false
+          description: ""
+          title: build_date
+          type: string
+        goVersion:
+          additionalProperties: false
+          description: ""
+          title: go_version
+          type: string
+        yorkieVersion:
+          additionalProperties: false
+          description: ""
+          title: yorkie_version
+          type: string
+      title: GetServerVersionResponse
+      type: object
     yorkie.v1.GetSnapshotMetaRequest:
       additionalProperties: false
       description: ""
@@ -909,6 +965,11 @@ components:
           title: snapshot
           type: string
       title: GetSnapshotMetaResponse
+      type: object
+    yorkie.v1.GetVersionRequest:
+      additionalProperties: false
+      description: ""
+      title: GetVersionRequest
       type: object
     yorkie.v1.JSONElementSimple:
       additionalProperties: false
