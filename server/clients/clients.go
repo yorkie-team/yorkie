@@ -106,6 +106,14 @@ func Deactivate(
 			return nil, err
 		}
 		doc := document.ToDocument(internalDoc)
+
+		if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
+			p.Clear()
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
 		bytesID, err := clientInfo.ID.Bytes()
 		if err != nil {
 			return nil, err
@@ -115,13 +123,6 @@ func Deactivate(
 			return nil, err
 		}
 		doc.SetActor(actorID)
-
-		if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
-			p.Clear()
-			return nil
-		}); err != nil {
-			return nil, err
-		}
 
 		pack := doc.CreateChangePack()
 

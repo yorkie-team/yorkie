@@ -175,10 +175,16 @@ func (d *Document) Update(
 
 	if ctx.HasChange() {
 		c := ctx.ToChange()
+
+		if isClearPresenceChange(c) && hasExistingClearPresenceChange(d.doc.localChanges) {
+			c.ClearPresenceChange()
+		}
+
 		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
 			return err
 		}
 
+		// TODO(raararaara): not to push when presenceChange Clear only
 		d.doc.localChanges = append(d.doc.localChanges, c)
 		d.doc.changeID = ctx.ID()
 	}
@@ -476,4 +482,18 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 		return fmt.Sprintf(msgAndArgs[0].(string), msgAndArgs[1:]...)
 	}
 	return ""
+}
+
+func isClearPresenceChange(c *change.Change) bool {
+	return c.PresenceChange() != nil && c.PresenceChange().ChangeType == innerpresence.Clear
+}
+
+// hasExistingClearPresenceChange는 기존의 localChanges 중 clear 타입의 PresenceChange가 있는지 확인합니다.
+func hasExistingClearPresenceChange(changes []*change.Change) bool {
+	for _, ch := range changes {
+		if isClearPresenceChange(ch) {
+			return true
+		}
+	}
+	return false
 }
