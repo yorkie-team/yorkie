@@ -966,11 +966,6 @@ components:
           type: string
       title: GetSnapshotMetaResponse
       type: object
-    yorkie.v1.GetVersionRequest:
-      additionalProperties: false
-      description: ""
-      title: GetVersionRequest
-      type: object
     yorkie.v1.JSONElementSimple:
       additionalProperties: false
       description: ""

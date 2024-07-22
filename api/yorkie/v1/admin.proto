@@ -187,10 +187,6 @@ message ListChangesResponse {
   repeated Change changes = 1;
 }
 
-message GetVersionRequest {
-
-}
-
 message GetServerVersionResponse {
   string yorkie_version = 1;
   string go_version = 2;
