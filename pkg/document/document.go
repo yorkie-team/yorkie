@@ -180,7 +180,6 @@ func (d *Document) Update(
 		if merged {
 			return nil
 		}
-		// changeID에 대해서는?
 
 		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
 			return err
@@ -279,6 +278,10 @@ func (d *Document) Checkpoint() change.Checkpoint {
 // HasLocalChanges returns whether this document has local changes or not.
 func (d *Document) HasLocalChanges() bool {
 	return d.doc.HasLocalChanges()
+}
+
+func (d *Document) LocalChangesForTest() []*change.Change {
+	return d.doc.localChanges
 }
 
 // Marshal returns the JSON encoding of this document.
