@@ -138,6 +138,8 @@ func New(key key.Key, opts ...Option) *Document {
 }
 
 // ToDocument converts the InternalDocument to the Document.
+// TODO(raararaara): Currently, `ToDocument` does not receive any parameters
+// other than internalDocument, so this needs to be taken into consideration.
 func ToDocument(internalDocument *InternalDocument) *Document {
 	return &Document{
 		doc: internalDocument,

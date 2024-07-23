@@ -392,6 +392,8 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 		},
 		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
+		// TODO(raararaara): If the detach request fails, you must revert the
+		// change before creating the `presenceClear` change.
 		return err
 	}
 
