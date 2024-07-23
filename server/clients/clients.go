@@ -55,11 +55,6 @@ func Deactivate(
 	be *backend.Backend,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	// TODO(hackerwins): We need to remove the presence of the client from the document.
-	// Be careful that housekeeping is executed by the leader. And documents are sharded
-	// by the servers in the cluster. So, we need to consider the case where the leader is
-	// not the same as the server that handles the document.
-
 	// TODO(raararaara): When deactivating a client, we need to update three DB properties
 	// (ClientInfo.Status, ClientInfo.Documents, SyncedSeq) in DB.
 	// Updating the sub-properties of ClientInfo guarantees atomicity as it involves a single MongoDB document.
@@ -70,6 +65,7 @@ func Deactivate(
 	if err != nil {
 		return nil, err
 	}
+	documents := prvClientInfo.Documents
 	clientInfo, err := be.DB.DeactivateClient(ctx, refKey)
 	if err != nil {
 		return nil, err
@@ -78,8 +74,9 @@ func Deactivate(
 	projectInfo, err := be.DB.FindProjectInfoByID(ctx, clientInfo.ProjectID)
 	project := projectInfo.ToProject()
 
-	// TODO(raararaara): We're currently updating SyncedSeq one by one. This approach is similar
-	// to n+1 query problem. We need to investigate if we can optimize this process by using a single query in the future.
+	// TODO(raararaara): We're currently updating SyncedSeq one by one.
+	// This approach is similar to n+1 query problem. We need to investigate
+	// if we can optimize this process by using a single query in the future.
 	for docID, clientDocInfo := range clientInfo.Documents {
 		if err := be.DB.UpdateSyncedSeq(
 			ctx,
@@ -101,7 +98,7 @@ func Deactivate(
 			return nil, err
 		}
 
-		internalDoc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, prvClientInfo.Documents[docID].ServerSeq)
+		internalDoc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, documents[docID].ServerSeq)
 		if err != nil {
 			return nil, err
 		}

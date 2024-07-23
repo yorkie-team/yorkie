@@ -112,8 +112,3 @@ func (c *Change) SetActor(actor *time.ActorID) {
 func (c *Change) PresenceChange() *innerpresence.PresenceChange {
 	return c.presenceChange
 }
-
-// ClearPresenceChange removes the presence change of this change.
-func (c *Change) ClearPresenceChange() {
-	c.presenceChange = nil
-}

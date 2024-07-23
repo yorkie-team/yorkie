@@ -178,11 +178,8 @@ func (d *Document) Update(
 	if ctx.HasChange() {
 		c := ctx.ToChange()
 
-		merged := mergeIfPossible(d.doc.localChanges, c)
-		if merged {
-			return nil
-		}
-
+		// TODO(raararaara): If the detach request fails, you must revert the
+		// change before creating the `presenceClear` change.
 		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
 			return err
 		}
@@ -489,27 +486,4 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 		return fmt.Sprintf(msgAndArgs[0].(string), msgAndArgs[1:]...)
 	}
 	return ""
-}
-
-func mergeIfPossible(changes []*change.Change, c *change.Change) bool {
-	// NOTE(raararaara): If existing local changes have a presence clear change,
-	// and the new change only has a presence clear change, the presence change can be ignored.
-	// In the future, if there is a structure that can be merged for 'operations', it will be processed in this logic.
-	if hasExistingClearPresenceChange(changes) && isClearPresenceChange(c) && c.Operations() == nil {
-		return true
-	}
-	return false
-}
-
-func isClearPresenceChange(c *change.Change) bool {
-	return c.PresenceChange() != nil && c.PresenceChange().ChangeType == innerpresence.Clear
-}
-
-func hasExistingClearPresenceChange(changes []*change.Change) bool {
-	for _, c := range changes {
-		if isClearPresenceChange(c) {
-			return true
-		}
-	}
-	return false
 }
