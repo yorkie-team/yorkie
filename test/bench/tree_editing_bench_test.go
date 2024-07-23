@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/yorkie-team/yorkie/api/converter"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/test/helper"
 )
