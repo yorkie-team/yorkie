@@ -45,7 +45,7 @@ service AdminService {
 
   rpc ListChanges (ListChangesRequest) returns (ListChangesResponse) {}
 
-  rpc GetServerVersion (Empty) returns (GetServerVersionResponse) {}
+  rpc GetServerVersion (GetServerVersionRequest) returns (GetServerVersionResponse) {}
 }
 
 message SignUpRequest {
@@ -186,6 +186,8 @@ message ListChangesRequest {
 message ListChangesResponse {
   repeated Change changes = 1;
 }
+
+message GetServerVersionRequest {}
 
 message GetServerVersionResponse {
   string yorkie_version = 1;

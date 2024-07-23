@@ -491,7 +491,7 @@ func (s *adminServer) ListChanges(
 // GetServerVersion get the version of yorkie server.
 func (s *adminServer) GetServerVersion(
 	_ context.Context,
-	_ *connect.Request[api.Empty],
+	_ *connect.Request[api.GetServerVersionRequest],
 ) (*connect.Response[api.GetServerVersionResponse], error) {
 	return connect.NewResponse(&api.GetServerVersionResponse{
 		YorkieVersion: version.Version,

@@ -19,7 +19,6 @@ package yorkie.v1;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/wrappers.proto";
-import "google/protobuf/empty.proto";
 
 option go_package = "github.com/yorkie-team/yorkie/api/yorkie/v1;v1";
 
@@ -376,5 +375,3 @@ message DocEvent {
   string publisher = 2;
   DocEventBody body = 3;
 }
-
-message Empty {}

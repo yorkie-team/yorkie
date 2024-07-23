@@ -1129,7 +1129,7 @@ func RunAdminGetServerVersionTest(
 ) {
 	versionResponse, err := testAdminClient.GetServerVersion(
 		context.Background(),
-		connect.NewRequest(&api.Empty{}),
+		connect.NewRequest(&api.GetServerVersionRequest{}),
 	)
 
 	assert.NoError(t, err)

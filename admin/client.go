@@ -357,7 +357,7 @@ func (c *Client) ListChangeSummaries(
 // GetServerVersion gets the server version.
 func (c *Client) GetServerVersion(ctx context.Context,
 ) (*types.VersionDetail, error) {
-	response, err := c.client.GetServerVersion(ctx, connect.NewRequest(&api.Empty{}))
+	response, err := c.client.GetServerVersion(ctx, connect.NewRequest(&api.GetServerVersionRequest{}))
 	if err != nil {
 		return nil, err
 	}

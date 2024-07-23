@@ -112,7 +112,7 @@ type AdminServiceClient interface {
 	GetSnapshotMeta(context.Context, *connect.Request[v1.GetSnapshotMetaRequest]) (*connect.Response[v1.GetSnapshotMetaResponse], error)
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
-	GetServerVersion(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.GetServerVersionResponse], error)
+	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 }
 
 // NewAdminServiceClient constructs a client for the yorkie.v1.AdminService service. By default, it
@@ -200,7 +200,7 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			baseURL+AdminServiceListChangesProcedure,
 			opts...,
 		),
-		getServerVersion: connect.NewClient[v1.Empty, v1.GetServerVersionResponse](
+		getServerVersion: connect.NewClient[v1.GetServerVersionRequest, v1.GetServerVersionResponse](
 			httpClient,
 			baseURL+AdminServiceGetServerVersionProcedure,
 			opts...,
@@ -225,7 +225,7 @@ type adminServiceClient struct {
 	getSnapshotMeta       *connect.Client[v1.GetSnapshotMetaRequest, v1.GetSnapshotMetaResponse]
 	searchDocuments       *connect.Client[v1.SearchDocumentsRequest, v1.SearchDocumentsResponse]
 	listChanges           *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
-	getServerVersion      *connect.Client[v1.Empty, v1.GetServerVersionResponse]
+	getServerVersion      *connect.Client[v1.GetServerVersionRequest, v1.GetServerVersionResponse]
 }
 
 // SignUp calls yorkie.v1.AdminService.SignUp.
@@ -304,7 +304,7 @@ func (c *adminServiceClient) ListChanges(ctx context.Context, req *connect.Reque
 }
 
 // GetServerVersion calls yorkie.v1.AdminService.GetServerVersion.
-func (c *adminServiceClient) GetServerVersion(ctx context.Context, req *connect.Request[v1.Empty]) (*connect.Response[v1.GetServerVersionResponse], error) {
+func (c *adminServiceClient) GetServerVersion(ctx context.Context, req *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {
 	return c.getServerVersion.CallUnary(ctx, req)
 }
 
@@ -325,7 +325,7 @@ type AdminServiceHandler interface {
 	GetSnapshotMeta(context.Context, *connect.Request[v1.GetSnapshotMetaRequest]) (*connect.Response[v1.GetSnapshotMetaResponse], error)
 	SearchDocuments(context.Context, *connect.Request[v1.SearchDocumentsRequest]) (*connect.Response[v1.SearchDocumentsResponse], error)
 	ListChanges(context.Context, *connect.Request[v1.ListChangesRequest]) (*connect.Response[v1.ListChangesResponse], error)
-	GetServerVersion(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.GetServerVersionResponse], error)
+	GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error)
 }
 
 // NewAdminServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -517,6 +517,6 @@ func (UnimplementedAdminServiceHandler) ListChanges(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.ListChanges is not implemented"))
 }
 
-func (UnimplementedAdminServiceHandler) GetServerVersion(context.Context, *connect.Request[v1.Empty]) (*connect.Response[v1.GetServerVersionResponse], error) {
+func (UnimplementedAdminServiceHandler) GetServerVersion(context.Context, *connect.Request[v1.GetServerVersionRequest]) (*connect.Response[v1.GetServerVersionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("yorkie.v1.AdminService.GetServerVersion is not implemented"))
 }
