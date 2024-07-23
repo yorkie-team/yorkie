@@ -176,15 +176,16 @@ func (d *Document) Update(
 	if ctx.HasChange() {
 		c := ctx.ToChange()
 
-		if isClearPresenceChange(c) && hasExistingClearPresenceChange(d.doc.localChanges) {
-			c.ClearPresenceChange()
+		merged := mergeIfPossible(d.doc.localChanges, c)
+		if merged {
+			return nil
 		}
+		// changeID에 대해서는?
 
 		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
 			return err
 		}
 
-		// TODO(raararaara): not to push when presenceChange Clear only
 		d.doc.localChanges = append(d.doc.localChanges, c)
 		d.doc.changeID = ctx.ID()
 	}
@@ -484,14 +485,23 @@ func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {
 	return ""
 }
 
+func mergeIfPossible(changes []*change.Change, c *change.Change) bool {
+	// NOTE(raararaara): If existing local changes have a presence clear change,
+	// and the new change only has a presence clear change, the presence change can be ignored.
+	// In the future, if there is a structure that can be merged for 'operations', it will be processed in this logic.
+	if hasExistingClearPresenceChange(changes) && isClearPresenceChange(c) && c.Operations() == nil {
+		return true
+	}
+	return false
+}
+
 func isClearPresenceChange(c *change.Change) bool {
 	return c.PresenceChange() != nil && c.PresenceChange().ChangeType == innerpresence.Clear
 }
 
-// hasExistingClearPresenceChange는 기존의 localChanges 중 clear 타입의 PresenceChange가 있는지 확인합니다.
 func hasExistingClearPresenceChange(changes []*change.Change) bool {
-	for _, ch := range changes {
-		if isClearPresenceChange(ch) {
+	for _, c := range changes {
+		if isClearPresenceChange(c) {
 			return true
 		}
 	}
