@@ -25,7 +25,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/packs"
@@ -55,54 +54,46 @@ func Deactivate(
 	be *backend.Backend,
 	refKey types.ClientRefKey,
 ) (*database.ClientInfo, error) {
-	// TODO(raararaara): When deactivating a client, we need to update three DB properties
-	// (ClientInfo.Status, ClientInfo.Documents, SyncedSeq) in DB.
-	// Updating the sub-properties of ClientInfo guarantees atomicity as it involves a single MongoDB document.
-	// However, SyncedSeqs are stored in separate documents, so we can't ensure atomic updates for both.
-	// Currently, if SyncedSeqs update fails, it mainly impacts GC efficiency without causing major issues.
-	// We need to consider implementing a correction logic to remove SyncedSeqs in the future.
-	prvClientInfo, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
+	// NOTE(hackerwins): Before deactivating the client, we need to detach all
+	// attached documents from the client.
+	// Because detachments and deactivation are separate steps, failure of steps
+	// must be considered. If each step of detachments is failed, some documents
+	// are still attached and the client is not deactivated. In this case,
+	// the client or housekeeping process should retry the deactivation.
+	clientInfo, err := be.DB.FindClientInfoByRefKey(ctx, refKey)
 	if err != nil {
 		return nil, err
 	}
-	documents := prvClientInfo.Documents
-	clientInfo, err := be.DB.DeactivateClient(ctx, refKey)
+
+	// 01. Detach attached documents from the client.
+	actorID, err := clientInfo.ID.ToActorID()
 	if err != nil {
 		return nil, err
 	}
 
 	projectInfo, err := be.DB.FindProjectInfoByID(ctx, clientInfo.ProjectID)
+	if err != nil {
+		return nil, err
+	}
 	project := projectInfo.ToProject()
 
-	// TODO(raararaara): We're currently updating SyncedSeq one by one.
-	// This approach is similar to n+1 query problem. We need to investigate
-	// if we can optimize this process by using a single query in the future.
-	for docID, clientDocInfo := range clientInfo.Documents {
-		if err := be.DB.UpdateSyncedSeq(
-			ctx,
-			clientInfo,
-			types.DocRefKey{
-				ProjectID: refKey.ProjectID,
-				DocID:     docID,
-			},
-			clientDocInfo.ServerSeq,
-		); err != nil {
-			return nil, err
+	for docID, info := range clientInfo.Documents {
+		if info.Status != database.DocumentAttached {
+			continue
 		}
 
 		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
-			ProjectID: refKey.ProjectID,
+			ProjectID: clientInfo.ProjectID,
 			DocID:     docID,
 		})
 		if err != nil {
 			return nil, err
 		}
 
-		internalDoc, err := packs.BuildDocumentForServerSeq(ctx, be, docInfo, documents[docID].ServerSeq)
+		doc, err := packs.BuildDocForCheckpoint(ctx, be, docInfo, info.ServerSeq, info.ClientSeq, actorID)
 		if err != nil {
 			return nil, err
 		}
-		doc := document.ToDocument(internalDoc)
 
 		if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Clear()
@@ -111,28 +102,27 @@ func Deactivate(
 			return nil, err
 		}
 
-		bytesID, err := clientInfo.ID.Bytes()
-		if err != nil {
-			return nil, err
-		}
-		actorID, err := time.ActorIDFromBytes(bytesID)
-		if err != nil {
-			return nil, err
-		}
-		doc.SetActor(actorID)
-
-		pack := doc.CreateChangePack()
-
-		_, err = packs.PushPull(ctx, be, project, clientInfo, docInfo, pack, packs.PushPullOptions{
-			Mode:   types.SyncModePushPull,
-			Status: document.StatusAttached,
-		})
-		if err != nil {
+		// TODO(hackerwins): This is a temporary solution to detach the document
+		// from the client. Documents are shared between multiple servers in the
+		// cluster to simplify the implementation including the distributed lock.
+		// In the future, we need to request the detachments to the load balancer
+		// and the load balancer will forward the request to the server that has
+		// the document.
+		if _, err = packs.PushPull(ctx, be, project, clientInfo, docInfo, doc.CreateChangePack(), packs.PushPullOptions{
+			Mode:   types.SyncModePushOnly,
+			Status: document.StatusDetached,
+		}); err != nil {
 			return nil, err
 		}
 	}
 
-	return clientInfo, err
+	// 02. Deactivate the client.
+	clientInfo, err = be.DB.DeactivateClient(ctx, refKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientInfo, nil
 }
 
 // FindActiveClientInfo find the active client info by the given ref key.

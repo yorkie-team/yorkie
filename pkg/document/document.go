@@ -137,15 +137,6 @@ func New(key key.Key, opts ...Option) *Document {
 	}
 }
 
-// ToDocument converts the InternalDocument to the Document.
-// TODO(raararaara): Currently, `ToDocument` does not receive any parameters
-// other than internalDocument, so this needs to be taken into consideration.
-func ToDocument(internalDocument *InternalDocument) *Document {
-	return &Document{
-		doc: internalDocument,
-	}
-}
-
 // Update executes the given updater to update this document.
 func (d *Document) Update(
 	updater func(root *json.Object, p *presence.Presence) error,
@@ -177,9 +168,6 @@ func (d *Document) Update(
 
 	if ctx.HasChange() {
 		c := ctx.ToChange()
-
-		// TODO(raararaara): If the detach request fails, you must revert the
-		// change before creating the `presenceClear` change.
 		if err := c.Execute(d.doc.root, d.doc.presences); err != nil {
 			return err
 		}
@@ -464,6 +452,11 @@ func (d *Document) BroadcastEventHandlers() map[string]func(
 	payload []byte,
 ) error {
 	return d.broadcastEventHandlers
+}
+
+// setInternalDoc sets the given internal document to this document.
+func (d *Document) setInternalDoc(internalDoc *InternalDocument) {
+	d.doc = internalDoc
 }
 
 func messageFromMsgAndArgs(msgAndArgs ...interface{}) string {

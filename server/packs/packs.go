@@ -30,6 +30,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/key"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/units"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
@@ -210,8 +211,27 @@ func PushPull(
 	return respPack, nil
 }
 
-// BuildDocumentForServerSeq returns a new document for the given serverSeq.
-func BuildDocumentForServerSeq(
+// BuildDocForCheckpoint returns a new document for the given checkpoint.
+func BuildDocForCheckpoint(
+	ctx context.Context,
+	be *backend.Backend,
+	docInfo *database.DocInfo,
+	serverSeq int64,
+	clientSeq uint32,
+	actorID *time.ActorID,
+) (*document.Document, error) {
+	internalDoc, err := BuildInternalDocForServerSeq(ctx, be, docInfo, serverSeq)
+	if err != nil {
+		return nil, err
+	}
+
+	internalDoc.SetActor(actorID)
+	internalDoc.SyncCheckpoint(serverSeq, clientSeq)
+	return internalDoc.ToDocument(), nil
+}
+
+// BuildInternalDocForServerSeq returns a new document for the given serverSeq.
+func BuildInternalDocForServerSeq(
 	ctx context.Context,
 	be *backend.Backend,
 	docInfo *database.DocInfo,

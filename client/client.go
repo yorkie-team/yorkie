@@ -382,6 +382,8 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 		return err
 	}
 
+	// TODO(raararaara): We need to revert the presence clearing from the local
+	// changes, if the server fails to detach the document.
 	res, err := c.client.DetachDocument(
 		ctx,
 		withShardKey(connect.NewRequest(&api.DetachDocumentRequest{
@@ -392,8 +394,6 @@ func (c *Client) Detach(ctx context.Context, doc *document.Document, options ...
 		},
 		), c.options.APIKey, doc.Key().String()))
 	if err != nil {
-		// TODO(raararaara): If the detach request fails, you must revert the
-		// change before creating the `presenceClear` change.
 		return err
 	}
 
