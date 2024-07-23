@@ -279,11 +279,6 @@ func (d *Document) HasLocalChanges() bool {
 	return d.doc.HasLocalChanges()
 }
 
-// LocalChangesForTest returns the localChanges of this document. It is used for testing.
-func (d *Document) LocalChangesForTest() []*change.Change {
-	return d.doc.localChanges
-}
-
 // Marshal returns the JSON encoding of this document.
 func (d *Document) Marshal() string {
 	return d.doc.Marshal()
