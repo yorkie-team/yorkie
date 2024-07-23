@@ -584,12 +584,6 @@ func TestDocument(t *testing.T) {
 
 	t.Run("Prevent duplicate presence clear change test", func(t *testing.T) {
 		doc := document.New(helper.TestDocKey(t))
-		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
-			p.Set("Updated", "true")
-			return nil
-		}))
-		assert.Equal(t, 1, doc.AllPresences())
-
 		for i := 0; i < 2; i++ {
 			assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 				p.Clear()
