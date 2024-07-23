@@ -270,7 +270,7 @@ func (d *Document) Key() key.Key {
 	return d.doc.key
 }
 
-// Checkpoint returns the checkpoint of this document.
+// Checkpoint returns the checkpoint of this document. It is used for testing.
 func (d *Document) Checkpoint() change.Checkpoint {
 	return d.doc.checkpoint
 }
@@ -280,6 +280,7 @@ func (d *Document) HasLocalChanges() bool {
 	return d.doc.HasLocalChanges()
 }
 
+// LocalChangesForTest returns the localChanges of this document.
 func (d *Document) LocalChangesForTest() []*change.Change {
 	return d.doc.localChanges
 }
