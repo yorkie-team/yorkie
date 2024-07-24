@@ -27,26 +27,18 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-func BenchmarkTreeEditing(b *testing.B) {
-	BenchmarkTreeConverting(b)
-}
-
 // bench mark converting from protobuf tree nodes to crdt.TreeNode
 func BenchmarkTreeConverting(b *testing.B) {
-	b.Run("10 vertex tree converting test", func(b *testing.B) {
-		TreeConverting(10, b)
-	})
-
-	b.Run("100 vertex tree converting test", func(b *testing.B) {
-		TreeConverting(100, b)
-	})
-
-	b.Run("1000 vertex tree converting test", func(b *testing.B) {
-		TreeConverting(1000, b)
-	})
-
 	b.Run("10000 vertex tree converting test", func(b *testing.B) {
 		TreeConverting(10000, b)
+	})
+
+	b.Run("100000 vertex tree converting test", func(b *testing.B) {
+		TreeConverting(100000, b)
+	})
+
+	b.Run("1000000 vertex tree converting test", func(b *testing.B) {
+		TreeConverting(1000000, b)
 	})
 }
 
