@@ -20,6 +20,7 @@ package clients
 import (
 	"context"
 	"errors"
+
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
