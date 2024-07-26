@@ -777,6 +777,24 @@ func (c *Client) broadcast(ctx context.Context, doc *document.Document, topic st
 	return nil
 }
 
+// SetAttach is a temporary function.
+func (c *Client) SetAttach(doc *document.Document, docID types.ID) {
+	c.attachments[doc.Key()] = &Attachment{
+		doc:   doc,
+		docID: docID,
+	}
+}
+
+// SetActive is a temporary function.
+func (c *Client) SetActive() {
+	c.status = activated
+}
+
+// SetActorID is a temporary function.
+func (c *Client) SetActorID(id *time.ActorID) {
+	c.id = id
+}
+
 /**
 * newTLSConfigFromFile returns a new tls.Config from the given certFile.
  */

@@ -94,10 +94,11 @@ func (s *yorkieServer) DeactivateClient(
 	}
 
 	project := projects.From(ctx)
+	// TODO(raararaara): How to handle rpcAddr here?
 	_, err = clients.Deactivate(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
-	})
+	}, "http://localhost:8080")
 	if err != nil {
 		return nil, err
 	}

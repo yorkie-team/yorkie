@@ -22,7 +22,7 @@ import (
 	"errors"
 
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/pkg/document"
+	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -53,6 +53,7 @@ func Deactivate(
 	ctx context.Context,
 	be *backend.Backend,
 	refKey types.ClientRefKey,
+	rpcAddr string,
 ) (*database.ClientInfo, error) {
 	// NOTE(hackerwins): Before deactivating the client, we need to detach all
 	// attached documents from the client.
@@ -77,6 +78,12 @@ func Deactivate(
 	}
 	project := projectInfo.ToProject()
 
+	cli, err := clientInfo.ToClient(rpcAddr, project.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+	//cli, err := server.Yorkie.CreateClient(clientInfo, project.PublicKey)
+
 	for docID, info := range clientInfo.Documents {
 		if info.Status != database.DocumentAttached {
 			continue
@@ -94,6 +101,7 @@ func Deactivate(
 		if err != nil {
 			return nil, err
 		}
+		cli.SetAttach(doc, docID)
 
 		if err := doc.Update(func(root *json.Object, p *presence.Presence) error {
 			p.Clear()
@@ -108,10 +116,13 @@ func Deactivate(
 		// In the future, we need to request the detachments to the load balancer
 		// and the load balancer will forward the request to the server that has
 		// the document.
-		if _, err = packs.PushPull(ctx, be, project, clientInfo, docInfo, doc.CreateChangePack(), packs.PushPullOptions{
-			Mode:   types.SyncModePushOnly,
-			Status: document.StatusDetached,
-		}); err != nil {
+		//if _, err = packs.PushPull(ctx, be, project, clientInfo, docInfo, doc.CreateChangePack(), packs.PushPullOptions{
+		//	Mode:   types.SyncModePushOnly,
+		//	Status: document.StatusDetached,
+		//}); err != nil {
+		//	return nil, err
+		//}
+		if err = cli.Sync(ctx, client.WithDocKey(doc.Key()).WithPushOnly()); err != nil {
 			return nil, err
 		}
 	}
