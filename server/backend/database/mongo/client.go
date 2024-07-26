@@ -769,6 +769,9 @@ func (c *Client) FindDocInfosByKeys(
 	projectID types.ID,
 	docKeys []key.Key,
 ) ([]*database.DocInfo, error) {
+	if len(docKeys) == 0 {
+		return nil, nil
+	}
 	filter := bson.M{
 		"project_id": projectID,
 		"key": bson.M{
