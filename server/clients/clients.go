@@ -20,9 +20,7 @@ package clients
 import (
 	"context"
 	"errors"
-
 	"github.com/yorkie-team/yorkie/api/types"
-	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/server/backend"
@@ -122,9 +120,12 @@ func Deactivate(
 		//}); err != nil {
 		//	return nil, err
 		//}
-		if err = cli.Sync(ctx, client.WithDocKey(doc.Key()).WithPushOnly()); err != nil {
-			return nil, err
-		}
+		//if err = cli.Sync(ctx, client.WithDocKey(doc.Key()).WithPushOnly()); err != nil {
+		//	return nil, err
+		//}
+	}
+	if err = cli.Sync(ctx); err != nil {
+		return nil, err
 	}
 
 	// 02. Deactivate the client.

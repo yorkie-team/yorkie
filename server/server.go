@@ -153,7 +153,7 @@ func (r *Yorkie) DeactivateClient(ctx context.Context, c1 *client.Client) error 
 	_, err = clients.Deactivate(ctx, r.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(c1.ID()),
-	}, "http://localhost:8080")
+	}, r.RPCAddr())
 	return err
 }
 
@@ -196,25 +196,4 @@ func (r *Yorkie) CreateProject(ctx context.Context, name string) (*types.Project
 	}
 
 	return projects.CreateProject(ctx, r.backend, project.Owner, name)
-}
-
-// CreateClient wtf
-func (r *Yorkie) CreateClient(clientInfo database.ClientInfo, projectKey string) (*client.Client, error) {
-	cli, err := client.Dial(r.RPCAddr(),
-		client.WithKey(clientInfo.Key),
-		client.WithAPIKey(projectKey),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	cli.SetActive()
-
-	actorID, err := clientInfo.ID.ToActorID()
-	if err != nil {
-		return nil, err
-	}
-	cli.SetActorID(actorID)
-
-	return cli, nil
 }

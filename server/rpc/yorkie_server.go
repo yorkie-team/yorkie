@@ -19,6 +19,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"connectrpc.com/connect"
 
@@ -41,13 +42,15 @@ import (
 type yorkieServer struct {
 	backend    *backend.Backend
 	serviceCtx context.Context
+	conf       *Config
 }
 
 // newYorkieServer creates a new instance of yorkieServer
-func newYorkieServer(serviceCtx context.Context, be *backend.Backend) *yorkieServer {
+func newYorkieServer(serviceCtx context.Context, be *backend.Backend, conf *Config) *yorkieServer {
 	return &yorkieServer{
 		backend:    be,
 		serviceCtx: serviceCtx,
+		conf:       conf,
 	}
 }
 
@@ -98,7 +101,7 @@ func (s *yorkieServer) DeactivateClient(
 	_, err = clients.Deactivate(ctx, s.backend, types.ClientRefKey{
 		ProjectID: project.ID,
 		ClientID:  types.IDFromActorID(actorID),
-	}, "http://localhost:8080")
+	}, "http://localhost:"+strconv.Itoa(s.conf.Port))
 	if err != nil {
 		return nil, err
 	}

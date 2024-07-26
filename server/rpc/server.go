@@ -64,7 +64,7 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 
 	yorkieServiceCtx, yorkieServiceCancel := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
-	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be), opts...))
+	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be, conf), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager), opts...))
 	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(
 		grpchealth.HealthV1ServiceName,
