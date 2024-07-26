@@ -127,6 +127,27 @@ func RunFindDocInfosByKeysTest(
 		assert.Len(t, infos, len(docKeys))
 	})
 
+	t.Run("find docInfos by empty key slice test", func(t *testing.T) {
+		ctx := context.Background()
+		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
+		assert.NoError(t, err)
+
+		// 01. Create documents
+		docKeys := []key.Key{
+			"test", "test$3", "test123", "test$0",
+			"search$test", "abcde", "test abc",
+		}
+		for _, docKey := range docKeys {
+			_, err := db.FindDocInfoByKeyAndOwner(ctx, clientInfo.RefKey(), docKey, true)
+			assert.NoError(t, err)
+		}
+
+		// 02. Find documents
+		infos, err := db.FindDocInfosByKeys(ctx, projectID, []key.Key{})
+		assert.NoError(t, err)
+		assert.Len(t, infos, 0)
+	})
+
 	t.Run("find docInfos by keys where some keys are not found test", func(t *testing.T) {
 		ctx := context.Background()
 		clientInfo, err := db.ActivateClient(ctx, projectID, t.Name())
