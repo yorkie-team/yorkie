@@ -770,7 +770,7 @@ func (c *Client) FindDocInfosByKeys(
 	docKeys []key.Key,
 ) ([]*database.DocInfo, error) {
 	if len(docKeys) == 0 {
-		return []*database.DocInfo{}, nil
+		return nil, nil
 	}
 	filter := bson.M{
 		"project_id": projectID,
