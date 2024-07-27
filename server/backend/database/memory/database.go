@@ -402,6 +402,52 @@ func (d *DB) CreateUserInfo(
 	return info, nil
 }
 
+// DeleteUserInfoByName deletes a user by name.
+func (d *DB) DeleteUserInfoByName(_ context.Context, username string) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", username)
+	if err != nil {
+		return fmt.Errorf("find user by username: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
+	}
+
+	info := raw.(*database.UserInfo).DeepCopy()
+	if err = txn.Delete(tblUsers, info); err != nil {
+		return fmt.Errorf("delete account %s: %w", info.ID, err)
+	}
+
+	txn.Commit()
+	return nil
+}
+
+// ChangeUserPassword changes to new password.
+func (d *DB) ChangeUserPassword(_ context.Context, username, hashedNewPassword string) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	raw, err := txn.First(tblUsers, "username", username)
+	if err != nil {
+		return fmt.Errorf("find user by username: %w", err)
+	}
+	if raw == nil {
+		return fmt.Errorf("%s: %w", username, database.ErrUserNotFound)
+	}
+
+	info := raw.(*database.UserInfo).DeepCopy()
+	info.HashedPassword = hashedNewPassword
+	if err := txn.Insert(tblUsers, info); err != nil {
+		return fmt.Errorf("change password user: %w", err)
+	}
+
+	txn.Commit()
+
+	return nil
+}
+
 // FindUserInfoByID finds a user by the given ID.
 func (d *DB) FindUserInfoByID(_ context.Context, clientID types.ID) (*database.UserInfo, error) {
 	txn := d.db.Txn(false)
