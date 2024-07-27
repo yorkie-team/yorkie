@@ -424,8 +424,8 @@ func (d *DB) DeleteUserInfoByName(_ context.Context, username string) error {
 	return nil
 }
 
-// ChangePassword changes to new password.
-func (d *DB) ChangePassword(_ context.Context, username, hashedNewPassword string) error {
+// ChangeUserPassword changes to new password.
+func (d *DB) ChangeUserPassword(_ context.Context, username, hashedNewPassword string) error {
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 

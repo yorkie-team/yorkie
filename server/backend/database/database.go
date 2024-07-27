@@ -124,8 +124,8 @@ type Database interface {
 	// DeleteUserInfoByName deletes a user by name.
 	DeleteUserInfoByName(ctx context.Context, username string) error
 
-	// ChangePassword changes to new password for user.
-	ChangePassword(ctx context.Context, username, hashedNewPassword string) error
+	// ChangeUserPassword changes to new password for user.
+	ChangeUserPassword(ctx context.Context, username, hashedNewPassword string) error
 
 	// FindUserInfoByID returns a user by the given ID.
 	FindUserInfoByID(ctx context.Context, id types.ID) (*UserInfo, error)

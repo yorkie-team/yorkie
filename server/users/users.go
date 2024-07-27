@@ -120,7 +120,7 @@ func ChangePassword(
 		return fmt.Errorf("cannot hash newPassword: %w", err)
 	}
 
-	if err := be.DB.ChangePassword(ctx, username, hashedNewPassword); err != nil {
+	if err := be.DB.ChangeUserPassword(ctx, username, hashedNewPassword); err != nil {
 		return err
 	}
 
